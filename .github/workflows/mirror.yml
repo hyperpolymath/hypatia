@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Mirror to GitLab/Codeberg/Bitbucket
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  mirror-gitlab:
+    runs-on: ubuntu-latest
+    if: vars.GITLAB_MIRROR_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          fetch-depth: 0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GITLAB_SSH_KEY }}
+      - name: Mirror to GitLab
+        run: |
+          git remote add gitlab git@gitlab.com:hyperpolymath/${GITHUB_REPOSITORY#*/}.git || true
+          git push gitlab --all --force
+          git push gitlab --tags --force
+
+  mirror-codeberg:
+    runs-on: ubuntu-latest
+    if: vars.CODEBERG_MIRROR_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          fetch-depth: 0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.CODEBERG_SSH_KEY }}
+      - name: Mirror to Codeberg
+        run: |
+          git remote add codeberg git@codeberg.org:hyperpolymath/${GITHUB_REPOSITORY#*/}.git || true
+          git push codeberg --all --force
+          git push codeberg --tags --force
+
+  mirror-bitbucket:
+    runs-on: ubuntu-latest
+    if: vars.BITBUCKET_MIRROR_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          fetch-depth: 0
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BITBUCKET_SSH_KEY }}
+      - name: Mirror to Bitbucket
+        run: |
+          git remote add bitbucket git@bitbucket.org:hyperpolymath/${GITHUB_REPOSITORY#*/}.git || true
+          git push bitbucket --all --force
+          git push bitbucket --tags --force
