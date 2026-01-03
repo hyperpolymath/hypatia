@@ -1,11 +1,13 @@
+image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[MPL-2.0,link="https://opensource.org/licenses/MPL-2.0"]
+image:https://img.shields.io/badge/Philosophy-Palimpsest-purple.svg[Palimpsest,link="https://github.com/hyperpolymath/palimpsest-licence"]
+
+
 // SPDX-License-Identifier: AGPL-3.0-or-later
 = CI/CD Hyper-A: Neurosymbolic CI/CD Intelligence Platform
 :toc: macro
 :toclevels: 3
 :icons: font
 
-image:https://img.shields.io/badge/license-AGPL--3.0-blue.svg[License]
-image:https://img.shields.io/badge/philosophy-Palimpsest-purple.svg[Palimpsest,link="https://github.com/hyperpolymath/palimpsest-licence"]
 image:https://img.shields.io/badge/Logtalk-Rules-orange.svg[Logtalk]
 image:https://img.shields.io/badge/Haskell-Verification-5D4F85.svg[Haskell]
 image:https://img.shields.io/badge/ArangoDB-Graph-green.svg[ArangoDB]
@@ -450,11 +452,11 @@ cicd-hyper-a/
 * link:https://github.com/hyperpolymath/robot-repo-automaton[robot-repo-automaton] - Automated repository management
 * link:https://github.com/hyperpolymath/gitvisor[gitvisor] - CI/CD intelligence system
 * link:https://github.com/hyperpolymath/rhodium-standard-repositories[rhodium-standard-repositories] - Repository standards
-* link:https://github.com/hyperpolymath/palimpsest-licence[palimpsest-licence] - Philosophical licence
+* link:https://github.com/hyperpolymath/palimpsest-license[palimpsest-license] - Philosophical licence
 
 == License
 
 This project is dual-licensed under:
 
 * link:https://www.gnu.org/licenses/agpl-3.0[AGPL-3.0-or-later] (legal)
-* link:https://github.com/hyperpolymath/palimpsest-licence[Palimpsest Licence] (philosophical)
+* link:https://github.com/hyperpolymath/palimpsest-license[Palimpsest Licence] (philosophical)
