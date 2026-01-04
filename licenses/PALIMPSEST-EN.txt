@@ -1,0 +1,68 @@
+The Palimpsest License
+======================
+
+Version 1.0
+
+PREAMBLE
+
+This license accompanies the Mozilla Public License 2.0 (MPL-2.0) as a
+philosophical framework for understanding the nature of software as a
+palimpsest - a manuscript written over earlier, partially erased text.
+
+All software is a palimpsest. Each line of code carries the traces of
+those who came before: the ideas, the struggles, the discoveries, and
+the shared knowledge of countless contributors across time and space.
+
+PRINCIPLES
+
+1. LAYERED HISTORY
+   Software is never created in isolation. It builds upon layers of
+   prior work - languages, libraries, patterns, and practices. We
+   acknowledge and honor these layers.
+
+2. VISIBLE TRACES
+   Where possible, preserve the traces of prior contributions. Comments,
+   commit history, attribution, and documentation serve as the visible
+   record of collective authorship.
+
+3. CONTINUOUS REWRITING
+   Just as a palimpsest is rewritten, software evolves. This is natural
+   and good. The act of modification is an act of continuation, not
+   erasure.
+
+4. SHARED SURFACE
+   The medium on which we write - the computational substrate, the
+   protocols, the shared standards - belongs to no one. We write upon
+   a common surface.
+
+5. FUTURE WRITERS
+   Those who come after us will write upon our work. We build not for
+   permanence but for transformation. Our code is meant to be read,
+   modified, and improved.
+
+OBLIGATIONS
+
+In addition to the legal obligations of the MPL-2.0, we ask that you:
+
+- Consider the impact of your modifications on the historical record
+- Maintain meaningful commit messages and documentation
+- Acknowledge significant prior contributions where reasonable
+- Write code that invites future modification
+- Treat the codebase as a shared creative endeavor
+
+NON-BINDING
+
+This Palimpsest License is a philosophical companion to the MPL-2.0.
+It creates no additional legal obligations beyond those specified in
+the MPL-2.0. It is an invitation to consider the deeper nature of
+collaborative software development.
+
+ATTRIBUTION
+
+The Palimpsest concept as applied to software licensing was developed
+by Hyperpolymath in 2025.
+
+---
+
+"We are all rewriting text that has been rewritten before,
+ and will be rewritten again."

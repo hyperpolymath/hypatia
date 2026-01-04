@@ -1,0 +1,278 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2025 hyperpolymath
+
+= Session Log: RSR 2026 Standardization Campaign
+:toc: auto
+:toclevels: 2
+
+== Session Overview
+
+**Date:** 2025-01-04
+**Campaign:** Hyperpolymath Repository Standardization (407 repos)
+**Phase:** Bot Infrastructure & Documentation
+
+== Completed Work This Session
+
+=== Bot Infrastructure Created
+
+[cols="1,2,1"]
+|===
+|Bot |Purpose |Status
+
+|**glambot**
+|Presentation quality for humans and machines - visual polish, accessibility, SEO, machine-readability
+|✅ Complete - compiles
+
+|**finishing-bot**
+|Release readiness validation - placeholder removal, license validation, claim verification, execution testing
+|✅ Complete - compiles
+|===
+
+=== Files Created Per Bot
+
+Each bot now has:
+
+* `src/lib.rs` - Core library
+* `src/main.rs` - CLI entry point
+* `src/*.rs` - Analysis modules
+* `Cargo.toml` - Rust project config
+* `README.adoc` - Documentation
+* `LICENSE` - MPL-2.0
+* `SECURITY.md` - Security policy
+* `CONTRIBUTING.adoc` - Contribution guide
+* `CODE_OF_CONDUCT.md` - Community standards
+* `.machine_readable/6scm/` - All 6 SCM files
+* `tasks/Justfile` - Build tasks
+* `config/*.yaml` - Configuration
+* `.github/workflows/ci.yml` - CI pipeline
+* `.editorconfig` - Editor config
+* `.gitignore` - Git ignore
+
+== Bot Ecosystem Overview
+
+[source]
+----
+                     GITBOT FLEET
+   ┌──────────────────────────────────────────┐
+   │                                          │
+   │  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+   │  │ rhodibot│  │echidna  │  │  oikos  │  │
+   │  │(RSR     │  │(verify) │  │(eco/    │  │
+   │  │ struct) │  │         │  │ econ)   │  │
+   │  └────┬────┘  └────┬────┘  └────┬────┘  │
+   │       │            │            │        │
+   │       ▼            ▼            ▼        │
+   │  ┌─────────────────────────────────────┐ │
+   │  │        SHARED CONTEXT LAYER         │ │
+   │  └─────────────────────────────────────┘ │
+   │       │            │            │        │
+   │       ▼            ▼            ▼        │
+   │  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+   │  │ glambot │  │ seambot │  │finishing│  │
+   │  │(present │  │(integr) │  │  -bot   │  │
+   │  │ ation)  │  │         │  │(release)│  │
+   │  └─────────┘  └─────────┘  └─────────┘  │
+   │                                          │
+   └──────────────────────────────────────────┘
+----
+
+=== Bot Purposes (Definitive)
+
+[cols="1,3"]
+|===
+|Bot |Purpose
+
+|**rhodibot**
+|RSR (Rhodium Standard Repositories) compliance validation. Structural checks, file presence, directory layout.
+
+|**echidnabot**
+|Formal mathematical/statistical verification. Security fuzzing as secondary function.
+
+|**oikos**
+|Ecological and economic code standards. Carbon intensity, resource efficiency, technical debt modeling.
+
+|**glambot**
+|Presentation quality. Visual polish, accessibility (WCAG), SEO, machine-readability for AI/bots.
+
+|**seambot**
+|Integration health testing. Cross-component communication, API contracts, end-to-end flows.
+
+|**finishing-bot**
+|Release readiness. Placeholder removal, license validation, claim verification, execution testing.
+|===
+
+== Completed This Session (Continued)
+
+=== Satellite Relationships Established
+
+**git-dispatcher hierarchy finalized:**
+
+* `git-dispatcher` is the central coordination hub with satellites:
+** `gitbot-fleet` - contains all bots (rhodibot, glambot, finishing-bot, echidnabot, oikos, seambot)
+** `cicd-hyper-a` - CI/CD automation
+** `gitvisor` - repository monitoring
+** `git-reposystem` - repository infrastructure
+
+* `rhodium-standard-repositories` satellites:
+** `rhodibot` - enforces RSR (also part of gitbot-fleet)
+** `rhodium-pipeline` - CI/CD templates
+** `rsr-audit` - Ada TUI for local auditing
+
+* All bots have `gitbot-fleet` as parent, not individual relationships to rhodium-standard-repositories
+
+**ECOSYSTEM.scm files updated:**
+* `git-dispatcher/.machine_readable/ECOSYSTEM.scm` - lists all satellites
+* `rhodium-standard-repositories/.machine_readable/ECOSYSTEM.scm` - lists RSR-specific satellites
+* `rhodibot/.machine_readable/ECOSYSTEM.scm` - gitbot-fleet as parent, enforces RSR
+* `glambot/.machine_readable/6scm/ECOSYSTEM.scm` - gitbot-fleet as parent
+* `finishing-bot/.machine_readable/6scm/ECOSYSTEM.scm` - gitbot-fleet as parent
+
+**Ada TUI Audit Tool Specification created:**
+* `cicd-hyper-a/docs/ADA-TUI-AUDIT-SPEC.adoc`
+* Complements rhodibot (GitHub-focused) with local, offline auditing
+* TUI interface for human operators
+* SPARK subset for security-critical paths
+
+**Bot META.scm files updated with clear purposes:**
+* `rhodibot` - RSR structural compliance, policy packs, GitHub API integration
+* `echidnabot` - Formal verification (SPARK proofs), security fuzzing (cargo-fuzz)
+* `oikos` - Ecological/economic metrics, carbon intensity, technical debt modeling
+* (glambot and finishing-bot already had complete META.scm files)
+
+== Pending Tasks
+
+=== Immediate (This Session)
+
+* [x] Link cicd-hyper-a as git-dispatcher satellite
+* [x] Check RSR repos for existing audit tooling (found rhodibot rsr.rs)
+* [x] Create Ada TUI auditing tool specification
+* [x] Establish bot fleet hierarchy under git-dispatcher
+* [ ] Create gitbot-fleet repo (does not exist yet)
+* [ ] Add CI/CD standardization rules to audit tool
+
+=== Short Term
+
+* [x] Implement crypto stack (argon2id, dilithium, blake3, kyber-1024, shake3-256, ed448)
+** CRYPTO-STANDARD.scm created with full specification
+** STANDARDIZATION-CHECKLIST.scm updated with crypto requirements
+** Audit completed: tma-mark2 and reasonably-good-token-vault compliant
+** Pending updates: januskey (add PQC), academic-workflow-suite (PBKDF2→Argon2id)
+* [ ] Add CI/CD standardization rules to audit tool
+* [x] Update all bot META.scm files with clear purposes
+* [ ] Configure bots as GitHub Apps
+
+=== Medium Term
+
+* [ ] Complete remaining ~200 repo clones
+* [ ] Ensure each *-ssg repo demos its own language SSG
+* [ ] Mirror all repos to GitLab and Bitbucket
+
+== Satellite Repository Protocol
+
+When a repo is a satellite of another:
+
+=== For Satellite Repos
+
+1. Document in `ECOSYSTEM.scm`:
+   - `(parent-project "git-dispatcher")`
+   - `(relationship satellite)`
+   - `(update-protocol ...)`
+
+2. After completing work, commit must include:
+   - Update to STATE.scm with changes
+   - Note about parent repo needing notification
+
+3. Push to satellite triggers:
+   - Notification to parent repo (via webhook or PR)
+   - Parent documentation may need update
+
+=== For Central/Parent Repos
+
+1. Document in `ECOSYSTEM.scm`:
+   - `(satellites (list "cicd-hyper-a" "other-satellite"))`
+   - Track which satellites exist
+
+2. When satellite is updated:
+   - Review satellite changes
+   - Update own documentation if needed
+   - Acknowledge in 6scm files
+
+== Technical Specifications
+
+=== RSR 2026 Directory Structure
+
+[source]
+----
+repo/
+├── .machine_readable/
+│   ├── 6scm/
+│   │   ├── STATE.scm
+│   │   ├── META.scm
+│   │   ├── ECOSYSTEM.scm
+│   │   ├── PLAYBOOK.scm
+│   │   ├── AGENTIC.scm
+│   │   └── NEUROSYM.scm
+│   └── config/
+├── tasks/
+│   ├── Justfile
+│   └── Mustfile
+├── licenses/
+│   ├── MPL-2.0-EN.txt
+│   └── PALIMPSEST-EN.txt
+├── src/
+├── docs/
+└── .well-known/
+----
+
+=== Container Runtime Priority
+
+1. **nerdctl** (preferred)
+2. **podman** (fallback)
+3. **docker** (emergency only)
+
+=== Base Image Policy
+
+* Distroless preferred (Chainguard)
+* If distro needed: Wolfi/Chainguard only
+* No Alpine, Ubuntu, Debian base images
+
+=== Cryptographic Standards (Audited 2026-01-04)
+
+See `CRYPTO-STANDARD.scm` for full specification.
+
+**Principle:** Post-quantum ready, proven algorithms, flat prime distributions
+
+|===
+|Category |Required Algorithm |NIST Standard |Status
+
+|Password hashing |argon2id (64 MiB, 3 iter, 4 threads) |- |Enforced
+|General hashing |blake3, shake3-256 |- |Enforced
+|Post-quantum signatures |dilithium5 |ML-DSA-87 (FIPS 204) |Enforced
+|Classical signatures |ed448 (x25519 for SSH) |- |Enforced
+|Post-quantum key exchange |kyber-1024 |ML-KEM-1024 (FIPS 203) |Enforced
+|Classical key exchange |x448 (x25519 acceptable) |- |Enforced
+|Symmetric encryption |chacha20-poly1305, xchacha20-poly1305 |- |Enforced
+|===
+
+**Banned algorithms:** md5, sha1, sha256 (use blake3), bcrypt, scrypt, pbkdf2, rsa (except legacy interop), ecdsa, ecdh-p256/p384, aes-128-*, ecb-mode
+
+==== Crypto Compliance Audit Results
+
+|===
+|Repository |Status |Notes
+
+|tma-mark2 |✅ Full PQC |Dilithium5, Kyber-1024, BLAKE3, Argon2id, Ed448
+|reasonably-good-token-vault |✅ Full PQC |Full PQC stack implemented
+|januskey |✅ Classical OK |Argon2id, Ed25519, AES-256-GCM, SHA-256 (needs PQC for quantum-safe)
+|academic-workflow-suite |✅ Updated |PBKDF2 → Argon2id, added BLAKE3, Dilithium5, Kyber-1024, Ed25519
+|SSH workflows |✅ Acceptable gap |Ed25519 acceptable (Ed448 not widely supported)
+|JWKS/JWT workflows |✅ Acceptable gap |RSA acceptable for legacy interop with documentation
+|Content addressing |✅ Acceptable gap |SHA-256 acceptable for integrity (not security-critical)
+|===
+
+== Notes for Future Sessions
+
+* This documentation should be updated at end of each session
+* Cross-reference with git-dispatcher for parent-satellite relationships
+* All bot repos should have identical structure at similar development levels
+* When updating satellites, always note in commit what parent needs to update

@@ -24,6 +24,12 @@
       (description "Umbrella project for ambient computing operations")
       (integration "cicd-hyper-a is the CI/CD automation layer of ambientops"))
 
+    (project "git-dispatcher"
+      (relationship "coordinator")
+      (description "Central coordination for git operations across forges")
+      (integration "cicd-hyper-a receives dispatched events for CI/CD automation")
+      (update-protocol "When committing, notify git-dispatcher for documentation updates"))
+
     (project "gitvisor"
       (relationship "sibling")
       (description "Git repository supervision and monitoring")

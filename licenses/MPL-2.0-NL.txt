@@ -1,0 +1,130 @@
+Mozilla Public License Versie 2.0
+==================================
+
+Dit is een onofficiële Nederlandse vertaling van de Mozilla Public License
+versie 2.0. Het is niet gepubliceerd door Mozilla en geeft niet juridisch
+de distributievoorwaarden weer voor software die de MPL gebruikt — alleen
+de originele Engelse tekst van de MPL doet dat. Deze vertaling wordt alleen
+verstrekt ter informatie.
+
+1. Definities
+--------------
+
+1.1. "Bijdrager"
+    betekent elke natuurlijke of rechtspersoon die de Gedekte Software
+    creëert, bijdraagt aan de creatie ervan, of eigenaar is van de
+    Gedekte Software.
+
+1.2. "Bijdragerversie"
+    betekent de combinatie van de Bijdragen van anderen (indien van
+    toepassing) gebruikt door een Bijdrager en de specifieke Bijdrage
+    van die Bijdrager.
+
+1.3. "Bijdrage"
+    betekent Gedekte Software van een bepaalde Bijdrager.
+
+1.4. "Gedekte Software"
+    betekent Broncodevorm waaraan de initiële Bijdrager de kennisgeving
+    in Bijlage A heeft bevestigd, de Uitvoerbare Vorm van zulke
+    Broncodevorm, en Wijzigingen van zulke Broncodevorm, in elk geval
+    inclusief delen daarvan.
+
+1.5. "Onverenigbaar Met Secundaire Licenties"
+    betekent
+
+    (a) dat de initiële Bijdrager de kennisgeving beschreven in Bijlage B
+        aan de Gedekte Software heeft bevestigd; of
+
+    (b) dat de Gedekte Software beschikbaar werd gesteld onder de
+        voorwaarden van versie 1.1 of eerder van de Licentie, maar niet
+        ook onder de voorwaarden van een Secundaire Licentie.
+
+1.6. "Uitvoerbare Vorm"
+    betekent elke vorm van het werk anders dan Broncodevorm.
+
+1.7. "Groter Werk"
+    betekent een werk dat Gedekte Software combineert met ander
+    materiaal, in een apart bestand of bestanden, dat geen Gedekte
+    Software is.
+
+1.8. "Licentie"
+    betekent dit document.
+
+1.9. "Licentieerbaar"
+    betekent het hebben van het recht om, voor zover mogelijk, hetzij
+    op het moment van de initiële verstrekking of daarna, alle rechten
+    die door deze Licentie worden overgedragen te verlenen.
+
+1.10. "Wijzigingen"
+    betekent elk van het volgende:
+
+    (a) elk bestand in Broncodevorm dat resulteert uit een toevoeging
+        aan, verwijdering uit, of wijziging van de inhoud van Gedekte
+        Software; of
+
+    (b) elk nieuw bestand in Broncodevorm dat enige Gedekte Software
+        bevat.
+
+1.11. "Octrooiclaims" van een Bijdrager
+    betekent elke octrooiclaim(s), inclusief maar niet beperkt tot,
+    methode-, proces- en apparatuurclaims, in elk octrooi dat door
+    zulke Bijdrager Licentieerbaar is en dat zou worden geschonden,
+    ware het niet de verstrekking van de Licentie, door het maken,
+    gebruiken, verkopen, aanbieden voor verkoop, laten maken,
+    importeren of overdragen van hetzij zijn Bijdragen of zijn
+    Bijdragerversie.
+
+1.12. "Secundaire Licentie"
+    betekent hetzij de GNU General Public License, Versie 2.0, de GNU
+    Lesser General Public License, Versie 2.1, de GNU Affero General
+    Public License, Versie 3.0, of latere versies van die licenties.
+
+1.13. "Broncodevorm"
+    betekent de vorm van het werk die de voorkeur heeft voor het maken
+    van wijzigingen.
+
+1.14. "U" (of "Uw")
+    betekent een natuurlijke of rechtspersoon die rechten uitoefent
+    onder deze Licentie. Voor rechtspersonen omvat "U" elke entiteit
+    die controle heeft over, wordt gecontroleerd door, of onder
+    gezamenlijke controle staat met U. Voor de doeleinden van deze
+    definitie betekent "controle" (a) de macht, direct of indirect,
+    om de richting of het management van zulke entiteit te veroorzaken,
+    hetzij door contract of anderszins, of (b) eigendom van meer dan
+    vijftig procent (50%) van de uitstaande aandelen of het economisch
+    eigendom van zulke entiteit.
+
+2. Licentieverleningen en Voorwaarden
+--------------------------------------
+
+2.1. Verleningen
+
+Elke Bijdrager verleent U hierbij een wereldwijde, royaltyvrije,
+niet-exclusieve licentie:
+
+(a) onder intellectuele eigendomsrechten (anders dan octrooi of merk)
+    die door zulke Bijdrager Licentieerbaar zijn om zijn Bijdragen te
+    gebruiken, reproduceren, beschikbaar stellen, wijzigen, tonen,
+    uitvoeren, distribueren en anderszins exploiteren, hetzij op een
+    ongewijzigde basis, met Wijzigingen, of als deel van een Groter
+    Werk; en
+
+(b) onder Octrooiclaims van zulke Bijdrager om hetzij zijn Bijdragen
+    of zijn Bijdragerversie te maken, gebruiken, verkopen, aanbieden
+    voor verkoop, laten maken, importeren en anderszins over te dragen.
+
+2.2. Ingangsdatum
+
+De in Sectie 2.1 verleende licenties met betrekking tot enige Bijdrage
+worden effectief voor elke Bijdrage op de datum waarop de Bijdrager
+zulke Bijdrage voor het eerst distribueert.
+
+[Verdere secties verkort voor beknoptheid - de volledige Engelse versie
+is juridisch bindend]
+
+---
+
+OPMERKING: Dit is een informatieve vertaling. Alleen de originele
+Engelse tekst van de MPL 2.0 is juridisch bindend.
+
+Zie: https://www.mozilla.org/en-US/MPL/2.0/

@@ -1,0 +1,324 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2025 hyperpolymath
+
+= Ada TUI Auditing Tool Specification
+:toc: auto
+:toclevels: 3
+
+== Overview
+
+An Ada-based Terminal User Interface (TUI) for local repository auditing. Complements rhodibot (GitHub-focused RSR compliance) by providing interactive, offline validation for human operators.
+
+== Rationale: Why Ada?
+
+* **Safety-critical**: RSR compliance affects production deployments
+* **Strong typing**: Prevents subtle audit bugs
+* **SPARK subset**: Optional formal verification for critical paths
+* **No runtime**: Suitable for constrained environments
+* **Hyperpolymath language policy**: Ada for safety-critical systems
+
+== Architecture
+
+[source]
+----
+                         LOCAL REPOS
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │      rsr-audit (Ada TUI)      │
+              │  ┌───────────────────────────┐│
+              │  │  Interactive Dashboard    ││
+              │  └─────────────┬─────────────┘│
+              │                │              │
+              │  ┌─────────────┴─────────────┐│
+              │  │ Audit Modules (SPARK)     ││
+              │  │ • Structure Checker       ││
+              │  │ • Language Policy         ││
+              │  │ • Security Scanner        ││
+              │  │ • SCM Validator           ││
+              │  │ • Workflow Linter         ││
+              │  └───────────────────────────┘│
+              └───────────────┬───────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+              ▼               ▼               ▼
+         ┌─────────┐   ┌───────────┐   ┌───────────┐
+         │ rhodibot│   │cicd-hyper │   │  Report   │
+         │(GitHub) │   │   -a      │   │Generator  │
+         └─────────┘   └───────────┘   └───────────┘
+----
+
+== Scope
+
+=== What This Tool Does (Complements rhodibot)
+
+|===
+| Capability | rsr-audit (Ada TUI) | rhodibot (Rust)
+
+| Repository location
+| Local filesystem (~/repos/)
+| GitHub API
+
+| Interface
+| Interactive TUI
+| Webhook/CLI
+
+| Connectivity
+| Offline capable
+| Requires internet
+
+| Batch processing
+| Yes (all local repos)
+| Per-event
+
+| Pre-commit checks
+| Yes (git hooks)
+| No
+
+| CI/CD integration
+| Via exit codes
+| Via GitHub Actions
+
+| Human operator focus
+| Primary
+| Secondary
+|===
+
+=== Modules
+
+==== 1. Structure Checker
+Validates RSR 2026 directory structure:
+* `.machine_readable/6scm/` presence
+* `tasks/Justfile` presence
+* `licenses/` directory
+* Banned file detection
+
+==== 2. Language Policy Enforcer
+Checks language policy compliance:
+* TypeScript → ReScript migration status
+* Node.js → Deno migration status
+* Go → Rust migration status
+* Package manager detection
+
+==== 3. Security Scanner (SPARK)
+Critical path with formal verification:
+* SPDX header presence
+* Hardcoded secret detection
+* SHA-pinned action verification
+* HTTP URL detection
+
+==== 4. SCM Validator
+Validates 6SCM files:
+* STATE.scm syntax and required fields
+* META.scm architecture decisions
+* ECOSYSTEM.scm relationships
+* PLAYBOOK.scm operational runbook
+* AGENTIC.scm AI patterns
+* NEUROSYM.scm configuration
+
+==== 5. Workflow Linter
+GitHub Actions workflow validation:
+* `permissions: read-all` requirement
+* SHA-pinned actions
+* CodeQL language matrix correctness
+* Duplicate workflow detection
+
+== Interface Design
+
+=== Main Dashboard
+
+[source]
+----
+╔════════════════════════════════════════════════════════════════════╗
+║                     RSR AUDIT DASHBOARD                            ║
+╠════════════════════════════════════════════════════════════════════╣
+║ Repos: 407 total │ Compliant: 312 │ Warning: 67 │ Failing: 28      ║
+╠════════════════════════════════════════════════════════════════════╣
+║ [F1] Full Scan  [F2] Quick Check  [F3] Single Repo  [F4] Report    ║
+║ [F5] Fix All    [F6] Settings     [F7] Export       [F10] Exit     ║
+╠════════════════════════════════════════════════════════════════════╣
+║ RECENT ACTIVITY                                                    ║
+║ ├─ glambot         ✓ Compliant (100%)  [just now]                  ║
+║ ├─ finishing-bot   ✓ Compliant (100%)  [just now]                  ║
+║ ├─ cicd-hyper-a    ! Warning (87%)     [structure missing]         ║
+║ └─ git-dispatcher  ! Warning (45%)     [needs 6scm files]          ║
+╚════════════════════════════════════════════════════════════════════╝
+----
+
+=== Single Repo View
+
+[source]
+----
+╔════════════════════════════════════════════════════════════════════╗
+║ REPO: glambot                                              [ESC]   ║
+╠════════════════════════════════════════════════════════════════════╣
+║ Policy: Strict │ Score: 47/50 (94%) │ Status: COMPLIANT            ║
+╠════════════════════════════════════════════════════════════════════╣
+║ STRUCTURE                                                          ║
+║ ✓ .machine_readable/6scm/STATE.scm                                 ║
+║ ✓ .machine_readable/6scm/META.scm                                  ║
+║ ✓ .machine_readable/6scm/ECOSYSTEM.scm                             ║
+║ ✓ tasks/Justfile                                                   ║
+║ ✗ DISCOVERY.json (missing - recommended)                           ║
+╠════════════════════════════════════════════════════════════════════╣
+║ LANGUAGE POLICY                                                    ║
+║ ✓ No TypeScript detected                                           ║
+║ ✓ No Go detected                                                   ║
+║ ✓ Rust project (Cargo.toml)                                        ║
+╠════════════════════════════════════════════════════════════════════╣
+║ SECURITY                                                           ║
+║ ✓ SPDX headers present                                             ║
+║ ✓ No hardcoded secrets                                             ║
+║ ✓ All actions SHA-pinned                                           ║
+╚════════════════════════════════════════════════════════════════════╝
+----
+
+== Integration Points
+
+=== cicd-hyper-a Integration
+* Export audit results to Logtalk rule engine
+* Feed error patterns to neurosymbolic learning
+* Trigger hook wave propagation on fixes
+
+=== rhodibot Integration
+* Share check definitions
+* Unified scoring system
+* Cross-reference local vs GitHub state
+
+=== Git Hooks
+Provide pre-commit and pre-push hooks:
+[source,bash]
+----
+#!/bin/sh
+# .git/hooks/pre-commit
+rsr-audit --quick --fail-on-required
+----
+
+== Implementation Plan
+
+=== Phase 1: Core Framework
+* Ada project structure with Alire
+* TUI library integration (NCurses or Terminal_Interface)
+* Basic file scanning
+* Configuration loading
+
+=== Phase 2: Audit Modules
+* Structure checker (reuse rhodibot check definitions)
+* Language policy enforcer
+* SCM validator with S-expression parser
+
+=== Phase 3: Security (SPARK)
+* Formal verification for secret detection
+* SPDX header validation
+* SHA-pin verification
+
+=== Phase 4: Integration
+* cicd-hyper-a event export
+* rhodibot result import
+* Git hook generation
+* Report export (JSON, Markdown, AsciiDoc)
+
+== Dependencies
+
+=== Required
+* GNAT (Ada compiler)
+* Alire (package manager)
+* Terminal_Interface (NCurses bindings)
+
+=== Optional
+* GNATprove (SPARK verification)
+* AWS (for future rhodibot API integration)
+
+== File Structure
+
+[source]
+----
+rsr-audit/
+├── alire.toml
+├── src/
+│   ├── rsr_audit.adb          -- Main entry point
+│   ├── rsr_audit-tui.ads      -- TUI interface spec
+│   ├── rsr_audit-tui.adb      -- TUI implementation
+│   ├── rsr_audit-checks.ads   -- Check definitions (shared with rhodibot)
+│   ├── rsr_audit-structure.adb
+│   ├── rsr_audit-language.adb
+│   ├── rsr_audit-security.adb  -- SPARK annotated
+│   ├── rsr_audit-scm.adb
+│   └── rsr_audit-workflow.adb
+├── spark/
+│   └── rsr_audit-security.ads  -- SPARK contracts
+├── .machine_readable/6scm/
+│   └── (all 6 SCM files)
+├── tasks/Justfile
+└── README.adoc
+----
+
+== Exit Codes
+
+|===
+| Code | Meaning
+
+| 0 | All checks passed
+| 1 | Required checks failed
+| 2 | Recommended checks failed (--strict mode)
+| 3 | Configuration error
+| 4 | I/O error
+|===
+
+== Command Line Interface
+
+[source]
+----
+rsr-audit [OPTIONS] [REPO_PATH]
+
+OPTIONS:
+  --tui          Launch interactive TUI (default)
+  --quick        Quick check (structure only)
+  --full         Full audit (all modules)
+  --batch        Batch mode (all repos in directory)
+  --json         Output as JSON
+  --fix          Auto-fix where possible
+  --strict       Fail on recommended checks
+  --policy=PACK  Override policy (minimal|standard|strict|enterprise)
+
+EXAMPLES:
+  rsr-audit                    # Launch TUI for current directory
+  rsr-audit --batch ~/repos    # Audit all repos
+  rsr-audit --quick --fix .    # Quick check with auto-fix
+----
+
+== Relationship to Bot Fleet
+
+[source]
+----
+                    HUMAN OPERATOR
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │  rsr-audit  │  ◄── This tool
+                   │  (Ada TUI)  │
+                   └──────┬──────┘
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+    ┌─────────┐     ┌─────────┐     ┌─────────┐
+    │ rhodibot│     │glambot  │     │finishing│
+    │(struct) │     │(present)│     │  -bot   │
+    └─────────┘     └─────────┘     └─────────┘
+          │               │               │
+          └───────────────┼───────────────┘
+                          ▼
+                   ┌─────────────┐
+                   │git-dispatcher│
+                   └─────────────┘
+----
+
+The Ada TUI is the **human operator interface** to the bot fleet, providing:
+* Interactive exploration
+* Manual override capability
+* Pre-commit validation
+* Batch operations
+* Offline functionality
+
+Bots handle automated, event-driven operations; rsr-audit handles human-initiated auditing.

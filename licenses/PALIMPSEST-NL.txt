@@ -1,0 +1,69 @@
+De Palimpsest Licentie
+======================
+
+Versie 1.0
+
+INLEIDING
+
+Deze licentie vergezelt de Mozilla Public License 2.0 (MPL-2.0) als een
+filosofisch kader voor het begrijpen van de aard van software als een
+palimpsest - een manuscript geschreven over eerder, gedeeltelijk gewiste
+tekst.
+
+Alle software is een palimpsest. Elke regel code draagt de sporen van
+degenen die eerder kwamen: de ideeën, de worstelingen, de ontdekkingen,
+en de gedeelde kennis van ontelbare bijdragers door tijd en ruimte.
+
+PRINCIPES
+
+1. GELAAGDE GESCHIEDENIS
+   Software wordt nooit in isolatie gecreëerd. Het bouwt voort op lagen
+   van eerder werk - talen, bibliotheken, patronen en praktijken. Wij
+   erkennen en eren deze lagen.
+
+2. ZICHTBARE SPOREN
+   Waar mogelijk, behoud de sporen van eerdere bijdragen. Commentaar,
+   commit-geschiedenis, toeschrijving en documentatie dienen als het
+   zichtbare verslag van collectief auteurschap.
+
+3. VOORTDUREND HERSCHRIJVEN
+   Net als een palimpsest wordt herschreven, evolueert software. Dit is
+   natuurlijk en goed. De daad van wijziging is een daad van voortzetting,
+   niet van uitwissing.
+
+4. GEDEELD OPPERVLAK
+   Het medium waarop wij schrijven - het computationele substraat, de
+   protocollen, de gedeelde standaarden - behoort aan niemand. Wij
+   schrijven op een gemeenschappelijk oppervlak.
+
+5. TOEKOMSTIGE SCHRIJVERS
+   Degenen die na ons komen zullen op ons werk schrijven. Wij bouwen
+   niet voor permanentie maar voor transformatie. Onze code is bedoeld
+   om gelezen, gewijzigd en verbeterd te worden.
+
+VERPLICHTINGEN
+
+Naast de wettelijke verplichtingen van de MPL-2.0, vragen wij u:
+
+- Overweeg de impact van uw wijzigingen op het historische verslag
+- Onderhoud betekenisvolle commit-berichten en documentatie
+- Erken belangrijke eerdere bijdragen waar redelijk
+- Schrijf code die uitnodigt tot toekomstige wijziging
+- Behandel de codebase als een gedeelde creatieve onderneming
+
+NIET-BINDEND
+
+Deze Palimpsest Licentie is een filosofische metgezel van de MPL-2.0.
+Het schept geen aanvullende juridische verplichtingen naast die
+gespecificeerd in de MPL-2.0. Het is een uitnodiging om na te denken
+over de diepere aard van collaboratieve softwareontwikkeling.
+
+TOESCHRIJVING
+
+Het Palimpsest-concept zoals toegepast op softwarelicenties werd
+ontwikkeld door Hyperpolymath in 2025.
+
+---
+
+"Wij zijn allen tekst aan het herschrijven die eerder is herschreven,
+ en opnieuw zal worden herschreven."
