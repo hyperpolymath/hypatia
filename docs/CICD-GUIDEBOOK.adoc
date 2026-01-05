@@ -1,0 +1,1932 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 hyperpolymath
+= CI/CD Intelligence Platform: Complete Guidebook
+:toc: macro
+:toclevels: 4
+:icons: font
+:sectnums:
+:source-highlighter: rouge
+
+[abstract]
+This guidebook provides comprehensive documentation for the cicd-hyper-a platform and its integration with gitbot-fleet. It covers the philosophy, architecture, tooling, error patterns, and operational procedures for maintaining CI/CD compliance across the hyperpolymath repository ecosystem.
+
+toc::[]
+
+== Executive Summary
+
+=== What This System Does
+
+The cicd-hyper-a platform is a neurosymbolic CI/CD intelligence system that:
+
+1. **Learns** patterns from CI/CD failures across repositories
+2. **Distills** them into simple, fast-acting declarative rules
+3. **Applies** fixes programmatically across the entire repository fleet
+4. **Prevents** future issues through pre-commit hooks and workflow templates
+
+=== Core Philosophy
+
+[quote]
+"Dumb rules from smart learning"
+
+The system learns complex patterns through analysis, then distills them into simple rules that can be:
+
+* Pre-emptively injected into new repositories
+* Applied as cures to existing repositories
+* Executed without ML inference overhead
+* Formally verified for correctness
+
+=== Key Components
+
+[cols="1,2,1"]
+|===
+| Component | Purpose | Status
+
+| `cicd-hyper-a`
+| Central intelligence platform with error catalog and SHA pins
+| Active
+
+| `cicd-fixer`
+| Rust CLI tool for scanning and fixing workflows
+| Complete
+
+| `gitbot-fleet`
+| Bot coordination with CICD-PATTERNS.scm reference
+| Integrated
+
+| `ERROR-CATALOG.scm`
+| Machine-readable error patterns in Guile Scheme
+| 20+ patterns
+
+| `SHA-PINS.scm`
+| Verified SHA pins for GitHub Actions
+| 25+ actions
+|===
+
+== Why This System Exists
+
+=== The Problem
+
+Managing CI/CD across 400+ repositories creates several challenges:
+
+1. **Security Drift**: GitHub Actions using version tags (`@v4`) can be compromised through tag mutation attacks
+2. **Permission Creep**: Workflows without explicit permissions inherit dangerous defaults
+3. **Configuration Debt**: Templates become outdated, propagating bad patterns
+4. **Manual Burden**: Fixing issues one-by-one doesn't scale
+5. **Knowledge Loss**: Learnings from fixing one repo aren't systematically applied to others
+
+=== The Solution
+
+A centralized intelligence platform that:
+
+* Captures learnings from every fix into ERROR-CATALOG.scm
+* Maintains verified SHA pins in SHA-PINS.scm
+* Provides a CLI tool (`cicd-fixer`) for batch operations
+* Integrates with gitbot-fleet for automated enforcement
+* Documents patterns in CICD-PATTERNS.scm for bot consumption
+
+=== Security Rationale
+
+==== Why SHA Pinning Matters
+
+[source]
+----
+VULNERABLE:   uses: actions/checkout@v4
+SECURE:       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+----
+
+**The Risk**: Version tags like `@v4` are mutable. An attacker who compromises the action repository can:
+
+1. Delete the `v4` tag
+2. Push malicious code
+3. Re-create the `v4` tag pointing to malicious commit
+4. All workflows using `@v4` now execute attacker code
+
+**The Solution**: SHA pinning uses the immutable commit hash. Even if tags are manipulated, your workflows reference the exact verified commit.
+
+==== Why Explicit Permissions Matter
+
+[source,yaml]
+----
+# DANGEROUS: Inherits write permissions to everything
+name: Build
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps: ...
+
+# SECURE: Explicitly declares minimal permissions
+name: Build
+on: push
+permissions: read-all
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps: ...
+----
+
+**The Risk**: Without explicit permissions, workflows inherit the default token permissions which may include write access to:
+
+* Repository contents
+* Pull requests
+* Issues
+* Packages
+* Deployments
+
+**The Solution**: Always declare `permissions: read-all` at workflow level, then grant specific permissions per job.
+
+== Architecture
+
+=== System Overview
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────────┐
+│                      CI/CD Intelligence Platform                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │                    KNOWLEDGE LAYER                              │ │
+│  │  ERROR-CATALOG.scm │ SHA-PINS.scm │ CICD-PATTERNS.scm          │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                              │                                       │
+│                              ▼                                       │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │                    TOOL LAYER                                   │ │
+│  │  cicd-fixer CLI │ Scanner │ Fixer │ Batch Processor            │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                              │                                       │
+│                              ▼                                       │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │                    BOT LAYER (gitbot-fleet)                    │ │
+│  │  rhodibot │ echidnabot │ seambot │ finishing-bot               │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                              │                                       │
+│                              ▼                                       │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │                    REPOSITORY LAYER                            │ │
+│  │  400+ repos │ .github/workflows/ │ OpenSSF Scorecard           │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+----
+
+=== Directory Structure
+
+[source]
+----
+cicd-hyper-a/
+├── .audittraining/
+│   ├── ERROR-CATALOG.scm      # Error patterns in Guile Scheme
+│   ├── SHA-PINS.scm           # Verified SHA pins
+│   ├── prevention/            # Prevention strategies
+│   ├── security-errors/       # Security error documentation
+│   └── scripts/               # Batch fix scripts
+│
+├── fixer/                     # Rust CLI tool
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs             # Library entry point
+│       ├── main.rs            # CLI entry point
+│       ├── scanner.rs         # Issue detection
+│       ├── fixer.rs           # Fix application
+│       ├── catalog.rs         # Error catalog (Rust port)
+│       └── sha_pins.rs        # SHA pins reference (Rust port)
+│
+├── engine/                    # Logtalk rule engine
+│   └── rules/
+│       ├── cicd_rules.lgt     # Core rules
+│       ├── forge_adapters.lgt # Multi-forge support
+│       └── rule_distiller.lgt # Rule extraction
+│
+├── adapters/                  # Rust forge adapters
+│   └── src/
+│       ├── github.rs
+│       ├── gitlab.rs
+│       └── bitbucket.rs
+│
+├── registry/                  # Haskell verification (planned)
+├── hooks/                     # Git hook templates
+├── schemas/                   # Data schemas
+└── docs/
+    └── CICD-GUIDEBOOK.adoc    # This document
+----
+
+=== Data Flow
+
+[source]
+----
+1. ERROR DETECTION
+   Repository → Scanner → Issue List
+
+2. PATTERN MATCHING
+   Issue → ERROR-CATALOG.scm → Fix Strategy
+
+3. SHA LOOKUP
+   Unpinned Action → SHA-PINS.scm → Pinned Action
+
+4. FIX APPLICATION
+   Fix Strategy → Fixer → Modified Workflow
+
+5. LEARNING CAPTURE
+   New Pattern → ERROR-CATALOG.scm (updated)
+----
+
+== Error Catalog
+
+=== Structure
+
+The ERROR-CATALOG.scm file uses Guile Scheme format:
+
+[source,scheme]
+----
+(define error-catalog
+  '(
+    ;; Format: (error-id type severity auto-fixable? description fix-pattern)
+    (token-permissions-id
+     workflow-security high #t
+     "Workflow missing explicit permissions declaration"
+     "Add `permissions: read-all` at workflow level")
+
+    (pinned-dependencies-id
+     workflow-security medium #t
+     "GitHub Actions not SHA-pinned"
+     "Replace @vN with @SHA # vN format")
+    ...))
+----
+
+=== Error Categories
+
+[cols="1,2,1"]
+|===
+| Category | Description | Example
+
+| `workflow-security`
+| Security issues in GitHub Actions workflows
+| Missing permissions, unpinned actions
+
+| `code-security`
+| Vulnerabilities in source code
+| Hard-coded secrets, injection flaws
+
+| `dependency-vuln`
+| Vulnerable dependencies
+| Outdated crates with CVEs
+
+| `process-hygiene`
+| Missing security processes
+| No SECURITY.md, no branch protection
+
+| `missing-tests`
+| No test coverage
+| No CI test workflow
+
+| `missing-sast`
+| No static analysis
+| No CodeQL workflow
+
+| `missing-fuzzing`
+| No fuzz testing
+| No ClusterFuzzLite setup
+|===
+
+=== Severity Levels
+
+[cols="1,1,2,2"]
+|===
+| Level | CVSS | Response Time | Examples
+
+| Critical
+| 9.0+
+| Immediate
+| Hard-coded secrets, SQL injection
+
+| High
+| 7.0+
+| 24 hours
+| Missing permissions, property injection
+
+| Medium
+| 4.0+
+| 1 week
+| Unpinned actions, syntax errors
+
+| Low
+| 1.0+
+| When convenient
+| Missing SPDX headers, unused variables
+
+| Info
+| 0.0
+| Optional
+| Style suggestions
+|===
+
+=== Complete Error Reference
+
+==== Workflow Security Errors
+
+[cols="1,1,1,3"]
+|===
+| Error ID | Severity | Auto-fix | Description
+
+| `token-permissions-id`
+| High
+| Yes
+| Workflow missing explicit permissions declaration
+
+| `pinned-dependencies-id`
+| Medium
+| Yes
+| GitHub Actions not SHA-pinned
+
+| `missing-spdx-header`
+| Low
+| Yes
+| Workflow file missing SPDX license header
+
+| `missing-action-input`
+| Medium
+| Yes
+| GitHub Action missing required input parameter
+
+| `codeql-language-mismatch`
+| Medium
+| Yes
+| CodeQL configured for languages not in repo
+
+| `workflow-linter-self-detection`
+| Low
+| Yes
+| Workflow linter grep matches its own comments
+|===
+
+==== Code Security Errors
+
+[cols="1,1,1,3"]
+|===
+| Error ID | Severity | Auto-fix | Description
+
+| `hard-coded-cryptographic-value`
+| Critical
+| No
+| Hard-coded secret, key, or token in source
+
+| `remote-property-injection`
+| High
+| No
+| Dynamic property access without validation
+
+| `syntax-error`
+| Medium
+| No
+| JavaScript/TypeScript syntax error
+|===
+
+==== Process Hygiene Errors
+
+[cols="1,1,1,3"]
+|===
+| Error ID | Severity | Auto-fix | Description
+
+| `security-policy-id`
+| Medium
+| Yes
+| Missing SECURITY.md file
+
+| `branch-protection-id`
+| Medium
+| Yes
+| Branch protection not enabled
+
+| `code-review-id`
+| Medium
+| Yes
+| Pull requests merged without review
+
+| `cii-best-practices-id`
+| Low
+| No
+| Not registered for CII Best Practices badge
+|===
+
+== SHA Pins Reference
+
+=== Why We Maintain SHA Pins
+
+1. **Verification**: Each SHA has been verified against the official release
+2. **Consistency**: All repos use the same verified SHAs
+3. **Automation**: cicd-fixer can automatically apply correct pins
+4. **Audit Trail**: SHA-PINS.scm tracks when pins were updated
+
+=== Current SHA Pins
+
+==== GitHub Official Actions
+
+[cols="2,3,1"]
+|===
+| Action | SHA | Version
+
+| `actions/checkout`
+| `8e8c483db84b4bee98b60c0593521ed34d9990e8`
+| v6.0.1
+
+| `actions/upload-artifact`
+| `b7c566a772e6b6bfb58ed0dc250532a479d7789f`
+| v6.0.0
+
+| `actions/configure-pages`
+| `983d7736d9b0ae728b81ab479565c72886d7745b`
+| v5
+
+| `actions/upload-pages-artifact`
+| `56afc609e74202658d3ffba0e8f6dda462b719fa`
+| v3
+
+| `actions/deploy-pages`
+| `d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e`
+| v4
+
+| `actions/cache`
+| `0c45773b623bea8c8e75f6c82b208c3cf94ea4f9`
+| v4
+
+| `actions/jekyll-build-pages`
+| `44a6e6beabd48582f863aeeb6cb2151cc1716697`
+| v1
+|===
+
+==== Security Actions
+
+[cols="2,3,1"]
+|===
+| Action | SHA | Version
+
+| `github/codeql-action/init`
+| `1b168cd39490f61582a9beae412bb7057a6b2c4e`
+| v3.28.1
+
+| `github/codeql-action/analyze`
+| `1b168cd39490f61582a9beae412bb7057a6b2c4e`
+| v3.28.1
+
+| `ossf/scorecard-action`
+| `62b2cac7ed8198b15735ed49ab1e5cf35480ba46`
+| v2.4.0
+
+| `trufflesecurity/trufflehog`
+| `ef6e76c3c4023279497fab4721ffa071a722fd05`
+| v3.92.4
+
+| `editorconfig-checker/action-editorconfig-checker`
+| `9f8f6065f4db902c0c56cafa67cea18b3ebbb680`
+| main
+|===
+
+==== Language-Specific Actions
+
+[cols="2,3,1"]
+|===
+| Action | SHA | Version
+
+| `dtolnay/rust-toolchain`
+| `6d9817901c499d6b02debbb57edb38d33daa680b`
+| stable
+
+| `Swatinem/rust-cache`
+| `779680da715d629ac1d338a641029a2f4372abb5`
+| v2
+
+| `denoland/setup-deno`
+| `11b63cf76cfcafb4e43f97b6cad24d8e8438f62d`
+| v1
+
+| `erlef/setup-beam`
+| `5304e04ea2b355f03681464e683d92e3b2f18451`
+| v1.18.2
+
+| `ruby/setup-ruby`
+| `4a9ddd6f338a97768b8006bf671dfbad383215f4`
+| v1.207.0
+
+| `ocaml/setup-ocaml`
+| `4c1df9105efb7a8b996c21e052e4fb8b64a8f2fc`
+| v3
+|===
+
+==== Other Tools
+
+[cols="2,3,1"]
+|===
+| Action | SHA | Version
+
+| `extractions/setup-just`
+| `e33e0265a09d6d736e2ee1e0eb685ef1de4669ff`
+| v3.0.0
+
+| `webfactory/ssh-agent`
+| `dc588b651fe13675774614f8e6a936a468676387`
+| v0.9.0
+
+| `softprops/action-gh-release`
+| `da05d552573ad5aba039eaac05058a918a7bf631`
+| v2
+
+| `google/clusterfuzzlite/actions/build_fuzzers`
+| `884713a6c30a92e5e8544c39945cd7cb630abcd1`
+| v1
+
+| `google/clusterfuzzlite/actions/run_fuzzers`
+| `884713a6c30a92e5e8544c39945cd7cb630abcd1`
+| v1
+|===
+
+=== Updating SHA Pins
+
+When a new version of an action is released:
+
+[source,bash]
+----
+# 1. Find the SHA for the new version
+gh api repos/actions/checkout/git/refs/tags/v6.0.1 --jq '.object.sha'
+
+# 2. Verify it matches the release notes
+
+# 3. Update SHA-PINS.scm
+# 4. Update fixer/src/sha_pins.rs
+# 5. Rebuild cicd-fixer
+# 6. Run batch update across all repos
+----
+
+== The cicd-fixer Tool
+
+=== Installation
+
+[source,bash]
+----
+# Build from source
+cd /var/home/hyper/repos/cicd-hyper-a
+cargo build --release --package cicd-hyper-a-fixer
+
+# Binary location
+./target/release/cicd-fixer
+
+# Add to PATH (optional)
+cp ./target/release/cicd-fixer ~/.local/bin/
+----
+
+=== Commands
+
+==== scan - Detect Issues
+
+[source,bash]
+----
+# Scan a single repository
+cicd-fixer scan /path/to/repo
+
+# Output as JSON (for programmatic use)
+cicd-fixer scan /path/to/repo --format json
+----
+
+**Output Example:**
+[source]
+----
+Scanned 17 workflows: 3 issues (0 critical, 1 high, 2 medium, 0 low), 3 auto-fixable
+
+🟠 [✓] missing-workflow-permissions /path/to/repo/.github/workflows/ci.yml
+   Workflow missing explicit permissions declaration
+   Fix: Add 'permissions: read-all' after 'on:' block
+
+🟡 [✓] unpinned-action /path/to/repo/.github/workflows/ci.yml
+   Line 15: GitHub Action 'actions/checkout' using version tag 'v4' instead of SHA pin
+   Fix: Replace @v4 with @8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+----
+
+**Legend:**
+- 🔴 Critical | 🟠 High | 🟡 Medium | 🔵 Low | ⚪ Info
+- [✓] Auto-fixable | [✗] Manual fix required
+
+==== fix - Apply Fixes
+
+[source,bash]
+----
+# Preview fixes (dry-run)
+cicd-fixer fix /path/to/repo --dry-run
+
+# Apply fixes
+cicd-fixer fix /path/to/repo
+----
+
+**Output Example:**
+[source]
+----
+Fixing repository: /path/to/repo
+
+Fix Results:
+  ✓ Applied [missing-spdx-header] /path/to/repo/.github/workflows/ci.yml
+    Fix applied successfully
+  ✓ Applied [missing-workflow-permissions] /path/to/repo/.github/workflows/ci.yml
+    Fix applied successfully
+  ✓ Applied [unpinned-action] /path/to/repo/.github/workflows/ci.yml
+    Fix applied successfully
+
+Summary: 3 fixes applied, 3 successful
+----
+
+==== batch - Process Multiple Repos
+
+[source,bash]
+----
+# Scan all repos in directory
+cicd-fixer batch /var/home/hyper/repos
+
+# Scan with limit
+cicd-fixer batch /var/home/hyper/repos --limit 50
+
+# Scan and fix (dry-run)
+cicd-fixer batch /var/home/hyper/repos --fix --dry-run
+
+# Scan and fix (apply changes)
+cicd-fixer batch /var/home/hyper/repos --fix
+----
+
+**Output Example:**
+[source]
+----
+Batch processing: /var/home/hyper/repos
+✓ bundeno - No issues
+✓ poly-cloud-mcp - No issues
+⚠ poly-secret-mcp - 37 issues (37 auto-fixable)
+⚠ vordr - 37 issues (37 auto-fixable)
+✓ rhodibot - No issues
+
+=== Batch Summary ===
+Repos processed: 20
+Total issues found: 74
+----
+
+==== pins - List SHA Pins
+
+[source,bash]
+----
+cicd-fixer pins
+----
+
+**Output:**
+[source]
+----
+Known SHA Pins:
+==============
+
+actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+github/codeql-action/init@1b168cd39490f61582a9beae412bb7057a6b2c4e # v3.28.1
+...
+----
+
+==== catalog - List Error Patterns
+
+[source,bash]
+----
+cicd-fixer catalog
+----
+
+**Output:**
+[source]
+----
+Error Catalog:
+==============
+
+Auto-fixable patterns:
+  [High] token-permissions-id - Workflow missing explicit permissions declaration
+         Fix: Add `permissions: read-all` at workflow level
+  [Medium] pinned-dependencies-id - GitHub Actions not SHA-pinned
+         Fix: Replace @vN with @SHA # vN format
+...
+----
+
+=== Programmatic Usage (Rust Library)
+
+The cicd-fixer crate can be used as a library:
+
+[source,rust]
+----
+use cicd_fixer::CicdFixer;
+use std::path::Path;
+
+fn main() {
+    let fixer = CicdFixer::new();
+
+    // Scan a repository
+    let result = fixer.scan_repo(Path::new("/path/to/repo")).unwrap();
+    println!("{}", result.summary());
+
+    // Fix issues (dry-run)
+    let fixes = fixer.fix_repo(Path::new("/path/to/repo"), true).unwrap();
+    for fix in fixes {
+        println!("{}: {}", fix.issue_id, fix.message);
+    }
+}
+----
+
+== Integration with gitbot-fleet
+
+=== Bot Capabilities
+
+The gitbot-fleet bots can leverage cicd-hyper-a for automated fixes:
+
+[cols="1,2,2"]
+|===
+| Bot | CI/CD Capabilities | Integration
+
+| `rhodibot`
+| RSR compliance, workflow validation
+| Uses CICD-PATTERNS.scm sha-pins and error-patterns
+
+| `echidnabot`
+| CodeQL configuration, fuzzing setup
+| Uses codeql-language-detection rules
+
+| `seambot`
+| Cross-repo propagation
+| Propagates workflow templates and SHA pin updates
+|===
+
+=== CICD-PATTERNS.scm Reference
+
+The gitbot-fleet reads patterns from `.machine_readable/6scm/CICD-PATTERNS.scm`:
+
+[source,scheme]
+----
+(cicd-patterns
+  (version "1.0")
+
+  ;; SHA pins for bots to use
+  (sha-pins
+    (actions/checkout
+      "8e8c483db84b4bee98b60c0593521ed34d9990e8"
+      "v6.0.1")
+    ...)
+
+  ;; Error patterns for bots to detect
+  (error-patterns
+    (unpinned-actions
+      (id "workflow-security-001")
+      (severity "high")
+      (pattern "uses: .+@v[0-9]+")
+      (fix "Replace @vN with @SHA # vN format")
+      (auto-fixable #t))
+    ...)
+
+  ;; Bot capabilities mapping
+  (bot-capabilities
+    (rhodibot
+      (can-fix ("unpinned-actions" "missing-permissions" "missing-spdx-header"))
+      (detection-method "grep-based scanning"))
+    ...)
+
+  ;; CLI tool reference
+  (cli-tool
+    (name "cicd-fixer")
+    (commands
+      (scan (usage "cicd-fixer scan <repo-path>"))
+      (fix (usage "cicd-fixer fix <repo-path> [--dry-run]"))
+      (batch (usage "cicd-fixer batch <repos-dir> [--fix]"))
+      ...)))
+----
+
+=== Automated Workflow
+
+[source]
+----
+1. TRIGGER
+   - Scheduled (daily/weekly)
+   - On new repo creation
+   - On webhook event
+
+2. SCAN
+   Bot runs: cicd-fixer batch /repos --format json
+
+3. TRIAGE
+   Bot parses JSON, prioritizes by severity
+
+4. FIX
+   For auto-fixable issues:
+   Bot runs: cicd-fixer fix /repos/affected-repo
+
+5. COMMIT
+   Bot creates commit with standardized message
+
+6. REPORT
+   Bot updates STATE.scm with session results
+----
+
+== Operational Procedures
+
+=== Daily Operations
+
+==== Morning Health Check
+
+[source,bash]
+----
+# Quick scan of all repos
+cd /var/home/hyper/repos/cicd-hyper-a
+./target/release/cicd-fixer batch /var/home/hyper/repos --limit 100
+
+# Review repos with issues
+./target/release/cicd-fixer scan /var/home/hyper/repos/problem-repo
+----
+
+==== Fixing Issues
+
+[source,bash]
+----
+# Preview fixes
+./target/release/cicd-fixer fix /var/home/hyper/repos/problem-repo --dry-run
+
+# Apply fixes
+./target/release/cicd-fixer fix /var/home/hyper/repos/problem-repo
+
+# Commit and push
+cd /var/home/hyper/repos/problem-repo
+git add .github/workflows/
+git commit -m "fix: apply CI/CD security fixes from cicd-fixer"
+git push
+----
+
+=== Weekly Operations
+
+==== Full Fleet Scan
+
+[source,bash]
+----
+# Comprehensive scan
+./target/release/cicd-fixer batch /var/home/hyper/repos > weekly-report.txt
+
+# Count issues by severity
+grep -c "🔴" weekly-report.txt  # Critical
+grep -c "🟠" weekly-report.txt  # High
+grep -c "🟡" weekly-report.txt  # Medium
+grep -c "🔵" weekly-report.txt  # Low
+----
+
+==== SHA Pin Updates
+
+[source,bash]
+----
+# Check for new action versions
+gh api repos/actions/checkout/releases/latest --jq '.tag_name'
+
+# If new version, update SHA pins
+# 1. Get new SHA
+gh api repos/actions/checkout/git/refs/tags/v6.0.2 --jq '.object.sha'
+
+# 2. Update SHA-PINS.scm
+# 3. Update fixer/src/sha_pins.rs
+# 4. Rebuild
+cargo build --release --package cicd-hyper-a-fixer
+
+# 5. Batch update
+./target/release/cicd-fixer batch /var/home/hyper/repos --fix
+----
+
+=== Incident Response
+
+==== Security Advisory for GitHub Action
+
+1. **Assess Impact**
+   [source,bash]
+   ----
+   # Find all repos using the affected action
+   grep -r "uses: affected/action" /var/home/hyper/repos/*/github/workflows/
+   ----
+
+2. **Get Fixed SHA**
+   [source,bash]
+   ----
+   gh api repos/affected/action/releases/latest --jq '.tag_name'
+   gh api repos/affected/action/git/refs/tags/v-fixed --jq '.object.sha'
+   ----
+
+3. **Update SHA-PINS.scm**
+
+4. **Batch Fix**
+   [source,bash]
+   ----
+   ./target/release/cicd-fixer batch /var/home/hyper/repos --fix
+   ----
+
+5. **Verify and Push**
+   [source,bash]
+   ----
+   for repo in /var/home/hyper/repos/*/; do
+     cd "$repo"
+     if git diff --quiet; then
+       continue
+     fi
+     git add .github/workflows/
+     git commit -m "security: update affected/action SHA pin (CVE-XXXX)"
+     git push
+   done
+   ----
+
+== Troubleshooting
+
+=== Common Issues
+
+==== Scanner Finds False Positives
+
+**Symptom:** Scanner reports issues in commented-out lines
+
+**Cause:** Regex matching doesn't account for comments
+
+**Fix:** The scanner now filters commented lines:
+[source,rust]
+----
+if line.trim().starts_with('#') {
+    continue;
+}
+----
+
+==== Fix Not Applied
+
+**Symptom:** `cicd-fixer fix` reports success but file unchanged
+
+**Cause:** Usually one of:
+- Action not in SHA-PINS.scm (unknown action)
+- Fix type not implemented
+
+**Diagnosis:**
+[source,bash]
+----
+# Check if action has known SHA
+cicd-fixer pins | grep "action-name"
+
+# If not found, action needs to be added to SHA-PINS.scm
+----
+
+==== dtolnay/rust-toolchain Missing Input
+
+**Symptom:** Rust CI fails with "'toolchain' is a required input"
+
+**Cause:** Using SHA-pinned dtolnay/rust-toolchain without `with: toolchain:`
+
+**Fix:**
+[source,yaml]
+----
+- uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+  with:
+    toolchain: stable
+----
+
+==== CodeQL Language Mismatch
+
+**Symptom:** CodeQL workflow fails because configured languages don't exist
+
+**Cause:** Template was copied without adjusting language matrix
+
+**Diagnosis:**
+[source,bash]
+----
+# Check what languages are actually in the repo
+find /path/to/repo -name "*.rs" | head -1  # Rust
+find /path/to/repo -name "*.ts" | head -1  # TypeScript
+find /path/to/repo -name "*.py" | head -1  # Python
+----
+
+**Fix:** Update CodeQL matrix to match:
+[source,yaml]
+----
+# For Rust-only repos (CodeQL doesn't support Rust directly)
+matrix:
+  language: ['actions']
+
+# For JS/TS repos
+matrix:
+  language: ['javascript-typescript']
+
+# For multi-language repos
+matrix:
+  language: ['javascript-typescript', 'python']
+----
+
+=== Debug Mode
+
+[source,bash]
+----
+# Enable verbose logging
+RUST_LOG=debug cicd-fixer scan /path/to/repo
+
+# Trace all regex matches
+RUST_LOG=cicd_fixer::scanner=trace cicd-fixer scan /path/to/repo
+----
+
+== Future Development
+
+=== Phase 1: Foundation (Complete)
+
+* [x] Logtalk rule engine
+* [x] ERROR-CATALOG.scm
+* [x] SHA-PINS.scm
+* [x] cicd-fixer CLI
+
+=== Phase 2: Verification (In Progress)
+
+* [ ] Haskell DSL core
+* [ ] Property-based testing framework
+* [ ] Liquid Haskell integration
+* [ ] Signature verification
+
+=== Phase 3: Integration (Planned)
+
+* [x] gitbot-fleet connector
+* [ ] robot-repo-automaton connector
+* [ ] Hook injection system
+* [ ] Multi-forge adapters (GitLab, Bitbucket)
+* [ ] Dragonfly caching
+
+=== Phase 4: Scale (Future)
+
+* [ ] K8s orchestration
+* [ ] Radicle P2P federation
+* [ ] Public registry launch
+* [ ] Enterprise features
+
+== Who Is Involved
+
+=== Roles and Responsibilities
+
+==== Human Operators
+
+[cols="1,2,2"]
+|===
+| Role | Responsibilities | When to Act
+
+| *Repository Owner*
+| Final authority on CI/CD configuration
+| Review bot PRs, approve major changes
+
+| *Security Engineer*
+| SHA pin verification, CVE response
+| New action versions, security advisories
+
+| *DevOps Engineer*
+| cicd-hyper-a maintenance, bot configuration
+| Tool updates, new pattern additions
+
+| *Developer*
+| Follow CI/CD patterns, fix flagged issues
+| When scanner reports issues in your code
+|===
+
+==== Automated Actors
+
+[cols="1,2,2"]
+|===
+| Bot | Responsibilities | Trigger
+
+| *rhodibot*
+| RSR compliance checks, workflow validation
+| On push, scheduled daily
+
+| *echidnabot*
+| CodeQL config, fuzzing setup, formal verification
+| On PR, scheduled weekly
+
+| *seambot*
+| Cross-repo propagation of templates/fixes
+| On pattern update, manual trigger
+
+| *cicd-fixer*
+| Batch scanning and fixing
+| Manual invocation, cron job
+|===
+
+=== Decision Authority Matrix
+
+[source]
+----
+Decision Type              │ Who Decides      │ Who Executes
+───────────────────────────┼──────────────────┼─────────────────
+Add new SHA pin            │ Security Eng     │ DevOps/Bot
+Fix unpinned action        │ Auto-approved    │ cicd-fixer
+Fix missing permissions    │ Auto-approved    │ cicd-fixer
+Change CodeQL languages    │ Repo Owner       │ Manual/Bot
+Add new error pattern      │ DevOps Eng       │ Manual
+Respond to CVE             │ Security Eng     │ All bots
+Update workflow template   │ DevOps Eng       │ seambot
+----
+
+=== Communication Flow
+
+[source]
+----
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   GitHub    │────▶│   Scanner   │────▶│   Report    │
+│  Webhooks   │     │   (daily)   │     │  (Slack/    │
+└─────────────┘     └─────────────┘     │   Email)    │
+                           │            └─────────────┘
+                           ▼
+                    ┌─────────────┐
+                    │  Auto-fix?  │
+                    └─────────────┘
+                      │         │
+                 Yes  │         │  No
+                      ▼         ▼
+              ┌───────────┐  ┌───────────┐
+              │   Apply   │  │  Create   │
+              │    Fix    │  │   Issue   │
+              └───────────┘  └───────────┘
+                      │         │
+                      ▼         ▼
+              ┌───────────┐  ┌───────────┐
+              │   Commit  │  │   Human   │
+              │   & Push  │  │  Reviews  │
+              └───────────┘  └───────────┘
+----
+
+== How To: Step-by-Step Guides
+
+=== How To: Set Up cicd-fixer on a New Machine
+
+[source,bash]
+----
+# Step 1: Clone the repository
+git clone https://github.com/hyperpolymath/cicd-hyper-a.git
+cd cicd-hyper-a
+
+# Step 2: Install Rust (if not installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Step 3: Build the fixer
+cargo build --release --package cicd-hyper-a-fixer
+
+# Step 4: Verify installation
+./target/release/cicd-fixer --version
+
+# Step 5: Add to PATH (optional)
+mkdir -p ~/.local/bin
+cp ./target/release/cicd-fixer ~/.local/bin/
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# Step 6: Test with a scan
+cicd-fixer scan /path/to/any/repo
+----
+
+=== How To: Fix a Single Repository
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                    SINGLE REPO FIX WORKFLOW                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │  SCAN   │───▶│  REVIEW  │───▶│  FIX     │───▶│  COMMIT  │  │
+│  │         │    │  ISSUES  │    │  (DRY)   │    │  & PUSH  │  │
+│  └─────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│       │              │               │               │         │
+│       ▼              ▼               ▼               ▼         │
+│  cicd-fixer     Check each      cicd-fixer      git commit    │
+│  scan /repo     issue makes     fix /repo       git push      │
+│                 sense           --dry-run                      │
+│                                      │                         │
+│                                      ▼                         │
+│                                 Looks good?                    │
+│                                   │    │                       │
+│                              Yes  │    │  No                   │
+│                                   ▼    ▼                       │
+│                            cicd-fixer  Investigate             │
+│                            fix /repo   manually                │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+**Detailed Steps:**
+
+[source,bash]
+----
+# Step 1: Navigate to the repo
+cd /var/home/hyper/repos/my-repo
+
+# Step 2: Scan for issues
+cicd-fixer scan .
+# Review the output carefully
+
+# Step 3: Preview fixes (IMPORTANT: always dry-run first!)
+cicd-fixer fix . --dry-run
+# Verify the proposed changes make sense
+
+# Step 4: Apply fixes
+cicd-fixer fix .
+
+# Step 5: Review changes
+git diff .github/workflows/
+
+# Step 6: Commit with descriptive message
+git add .github/workflows/
+git commit -m "fix: apply CI/CD security fixes
+
+- SHA-pin GitHub Actions for security
+- Add explicit permissions declarations
+- Add SPDX license headers
+
+Applied by cicd-fixer from cicd-hyper-a."
+
+# Step 7: Push changes
+git push
+----
+
+=== How To: Fix Multiple Repositories
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                    BATCH FIX WORKFLOW                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │ BATCH   │───▶│ PRIORIT- │───▶│ FIX EACH │───▶│ BATCH    │  │
+│  │ SCAN    │    │   IZE    │    │   REPO   │    │  PUSH    │  │
+│  └─────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│       │              │               │               │         │
+│       ▼              ▼               ▼               ▼         │
+│  cicd-fixer     High ▶ Med      For each:        Push         │
+│  batch /repos   ▶ Low          - dry-run         script       │
+│                                 - apply                        │
+│                                 - commit                       │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+**Detailed Steps:**
+
+[source,bash]
+----
+# Step 1: Scan all repos
+cicd-fixer batch /var/home/hyper/repos > scan-report.txt
+
+# Step 2: Review the report
+cat scan-report.txt | grep "⚠"  # Repos with issues
+cat scan-report.txt | grep "✓"  # Clean repos
+
+# Step 3: Fix with dry-run first
+cicd-fixer batch /var/home/hyper/repos --fix --dry-run
+
+# Step 4: Apply fixes (if dry-run looked good)
+cicd-fixer batch /var/home/hyper/repos --fix
+
+# Step 5: Commit each repo individually
+for repo in /var/home/hyper/repos/*/; do
+    cd "$repo"
+    if git diff --quiet .github/workflows/; then
+        continue  # No changes
+    fi
+
+    echo "Committing: $(basename $repo)"
+    git add .github/workflows/
+    git commit -m "fix: apply CI/CD security fixes from cicd-fixer"
+done
+
+# Step 6: Push all (carefully!)
+for repo in /var/home/hyper/repos/*/; do
+    cd "$repo"
+    if git log origin/main..HEAD --oneline | grep -q "cicd-fixer"; then
+        echo "Pushing: $(basename $repo)"
+        git push
+    fi
+done
+----
+
+=== How To: Add a New SHA Pin
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                    ADD SHA PIN WORKFLOW                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │ GET SHA │───▶│  VERIFY  │───▶│  UPDATE  │───▶│ REBUILD  │  │
+│  │         │    │          │    │  FILES   │    │  & TEST  │  │
+│  └─────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│       │              │               │               │         │
+│       ▼              ▼               ▼               ▼         │
+│  gh api         Check release    SHA-PINS.scm   cargo build   │
+│  repos/.../     notes, verify    sha_pins.rs    cicd-fixer    │
+│  git/refs       authenticity                    pins          │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+**Detailed Steps:**
+
+[source,bash]
+----
+# Step 1: Find the latest version
+gh api repos/owner/action/releases/latest --jq '.tag_name'
+# Output: v2.0.0
+
+# Step 2: Get the SHA for that tag
+gh api repos/owner/action/git/refs/tags/v2.0.0 --jq '.object.sha'
+# Output: abc123def456...
+
+# Step 3: Verify (check release notes, changelog)
+gh release view v2.0.0 --repo owner/action
+
+# Step 4: Update SHA-PINS.scm
+vim /var/home/hyper/repos/cicd-hyper-a/.audittraining/SHA-PINS.scm
+# Add:
+#     (owner/action
+#      "abc123def456..."
+#      "v2.0.0")
+
+# Step 5: Update sha_pins.rs
+vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/sha_pins.rs
+# Add:
+#         pins.insert("owner/action".to_string(),
+#             ("abc123def456...".to_string(), "v2.0.0".to_string()));
+
+# Step 6: Rebuild
+cd /var/home/hyper/repos/cicd-hyper-a
+cargo build --release --package cicd-hyper-a-fixer
+
+# Step 7: Verify
+./target/release/cicd-fixer pins | grep "owner/action"
+
+# Step 8: Commit
+git add .audittraining/SHA-PINS.scm fixer/src/sha_pins.rs
+git commit -m "chore: add SHA pin for owner/action v2.0.0"
+git push
+----
+
+=== How To: Add a New Error Pattern
+
+[source,bash]
+----
+# Step 1: Document the error pattern
+# What triggers it?
+# What's the fix?
+# Is it auto-fixable?
+
+# Step 2: Update ERROR-CATALOG.scm
+vim /var/home/hyper/repos/cicd-hyper-a/.audittraining/ERROR-CATALOG.scm
+# Add:
+#     (new-error-id
+#      error-category severity #t-or-f
+#      "Description of the error"
+#      "How to fix it")
+
+# Step 3: Update catalog.rs
+vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/catalog.rs
+# Add Rust equivalent
+
+# Step 4: Update scanner.rs (if auto-detectable)
+vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/scanner.rs
+# Add detection logic
+
+# Step 5: Update fixer.rs (if auto-fixable)
+vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/fixer.rs
+# Add fix logic
+
+# Step 6: Rebuild and test
+cargo build --release --package cicd-hyper-a-fixer
+./target/release/cicd-fixer catalog  # Verify new pattern appears
+./target/release/cicd-fixer scan /path/to/test/repo  # Test detection
+
+# Step 7: Update CICD-PATTERNS.scm (for bots)
+vim /var/home/hyper/repos/gitbot-fleet/.machine_readable/6scm/CICD-PATTERNS.scm
+# Add pattern for bot consumption
+
+# Step 8: Commit both repos
+----
+
+=== How To: Respond to a Security Advisory
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                 SECURITY INCIDENT RESPONSE                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
+│  │ ASSESS  │───▶│  UPDATE  │───▶│   BATCH  │───▶│  VERIFY  │  │
+│  │ IMPACT  │    │   PINS   │    │   FIX    │    │  & PUSH  │  │
+│  └─────────┘    └──────────┘    └──────────┘    └──────────┘  │
+│       │              │               │               │         │
+│       ▼              ▼               ▼               ▼         │
+│  Find affected   Get fixed       cicd-fixer     Check CI      │
+│  repos via grep  SHA, update     batch --fix    passes,       │
+│                  SHA-PINS.scm                   push all      │
+│                                                               │
+│  TIME TARGET: < 4 HOURS FROM ADVISORY                         │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+**Detailed Steps:**
+
+[source,bash]
+----
+# IMMEDIATE: Step 1 - Assess impact (within 30 minutes)
+# Find all repos using the vulnerable action
+grep -r "uses: vulnerable/action" /var/home/hyper/repos/*/github/workflows/ 2>/dev/null
+
+# Step 2 - Get the fixed version SHA
+gh api repos/vulnerable/action/releases/latest --jq '.tag_name'
+gh api repos/vulnerable/action/git/refs/tags/v-fixed --jq '.object.sha'
+
+# Step 3 - Update SHA-PINS.scm (URGENT)
+# Edit and add the new secure SHA
+
+# Step 4 - Rebuild cicd-fixer
+cd /var/home/hyper/repos/cicd-hyper-a
+cargo build --release --package cicd-hyper-a-fixer
+
+# Step 5 - Batch fix all affected repos
+./target/release/cicd-fixer batch /var/home/hyper/repos --fix
+
+# Step 6 - Commit all with security tag
+for repo in /var/home/hyper/repos/*/; do
+    cd "$repo"
+    if git diff --quiet .github/workflows/; then continue; fi
+    git add .github/workflows/
+    git commit -m "security: update vulnerable/action (CVE-XXXX-XXXX)
+
+URGENT: This update addresses a security vulnerability.
+See: https://github.com/advisories/..."
+done
+
+# Step 7 - Push all immediately
+for repo in /var/home/hyper/repos/*/; do
+    cd "$repo"
+    if git log origin/main..HEAD --oneline | grep -q "CVE"; then
+        git push
+    fi
+done
+
+# Step 8 - Verify CI passes on all repos
+# Step 9 - Document incident in security log
+----
+
+== Process Flowcharts
+
+=== Main Decision Flowchart
+
+[source]
+----
+                           START
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Is this a new   │
+                    │ repository?     │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │ Yes          │              │ No
+              ▼              │              ▼
+     ┌─────────────────┐     │    ┌─────────────────┐
+     │ Apply workflow  │     │    │ Run cicd-fixer  │
+     │ templates from  │     │    │ scan            │
+     │ RSR             │     │    └────────┬────────┘
+     └────────┬────────┘     │             │
+              │              │             ▼
+              │              │    ┌─────────────────┐
+              │              │    │ Issues found?   │
+              │              │    └────────┬────────┘
+              │              │             │
+              │              │   ┌─────────┼─────────┐
+              │              │   │ Yes     │         │ No
+              │              │   ▼         │         ▼
+              │              │ ┌───────────────┐  ┌───────────────┐
+              │              │ │Auto-fixable?  │  │ Done! Repo    │
+              │              │ └───────┬───────┘  │ is compliant  │
+              │              │         │          └───────────────┘
+              │              │   ┌─────┼─────┐
+              │              │   │ Yes │     │ No
+              │              │   ▼     │     ▼
+              │              │ ┌───────────────┐  ┌───────────────┐
+              │              │ │ cicd-fixer    │  │ Create issue  │
+              │              │ │ fix --dry-run │  │ for manual    │
+              │              │ └───────┬───────┘  │ review        │
+              │              │         │          └───────────────┘
+              │              │         ▼
+              │              │ ┌───────────────┐
+              │              │ │ Looks correct?│
+              │              │ └───────┬───────┘
+              │              │         │
+              │              │   ┌─────┼─────┐
+              │              │   │ Yes │     │ No
+              │              │   ▼     │     ▼
+              │              │ ┌───────────────┐  ┌───────────────┐
+              │              │ │ cicd-fixer    │  │ Investigate   │
+              │              │ │ fix (apply)   │  │ manually      │
+              │              │ └───────┬───────┘  └───────────────┘
+              │              │         │
+              ▼              │         ▼
+     ┌─────────────────┐     │ ┌─────────────────┐
+     │ Run CI/CD to    │◀────┘ │ Commit & push   │
+     │ verify          │       └────────┬────────┘
+     └────────┬────────┘                │
+              │                         │
+              ▼                         ▼
+     ┌─────────────────┐       ┌─────────────────┐
+     │ CI passes?      │       │ CI passes?      │
+     └────────┬────────┘       └────────┬────────┘
+              │                         │
+        ┌─────┼─────┐             ┌─────┼─────┐
+        │ Yes │     │ No          │ Yes │     │ No
+        ▼     │     ▼             ▼     │     ▼
+      DONE    │  Investigate    DONE    │  Investigate
+              │                         │
+              └─────────────────────────┘
+----
+
+=== Severity Response Flowchart
+
+[source]
+----
+                    ┌─────────────────┐
+                    │ Issue Detected  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ What severity?  │
+                    └────────┬────────┘
+                             │
+    ┌────────────────────────┼────────────────────────┐
+    │                        │                        │
+    ▼                        ▼                        ▼
+┌─────────┐            ┌─────────┐            ┌─────────┐
+│CRITICAL │            │  HIGH   │            │MED/LOW  │
+│   🔴    │            │   🟠    │            │ 🟡/🔵   │
+└────┬────┘            └────┬────┘            └────┬────┘
+     │                      │                      │
+     ▼                      ▼                      ▼
+┌─────────────┐        ┌─────────────┐        ┌─────────────┐
+│ IMMEDIATE   │        │ FIX WITHIN  │        │ FIX WHEN    │
+│ Stop work   │        │ 24 HOURS    │        │ CONVENIENT  │
+│ Fix now     │        │             │        │             │
+│ Notify team │        │ Schedule    │        │ Add to      │
+└─────────────┘        │ for today   │        │ backlog     │
+                       └─────────────┘        └─────────────┘
+
+Examples:              Examples:              Examples:
+- Hardcoded secrets    - Missing perms        - Missing SPDX
+- SQL injection        - Unpinned actions     - Style issues
+- Active CVE           - No branch protect    - Unused vars
+----
+
+=== Bot Coordination Flowchart
+
+[source]
+----
+                    ┌─────────────────┐
+                    │   Trigger       │
+                    │ (push/schedule) │
+                    └────────┬────────┘
+                             │
+                             ▼
+            ┌────────────────────────────────┐
+            │         gitbot-fleet           │
+            │      (Orchestration Layer)     │
+            └───────────────┬────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+        ▼                   ▼                   ▼
+   ┌─────────┐        ┌─────────┐        ┌─────────┐
+   │rhodibot │        │echidna- │        │ seambot │
+   │         │        │   bot   │        │         │
+   └────┬────┘        └────┬────┘        └────┬────┘
+        │                  │                  │
+        ▼                  ▼                  ▼
+   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+   │ RSR         │   │ CodeQL      │   │ Template    │
+   │ Compliance  │   │ Config      │   │ Propagation │
+   │ - Workflow  │   │ - Language  │   │ - SHA pins  │
+   │   security  │   │   detection │   │ - Workflow  │
+   │ - SPDX      │   │ - Fuzzing   │   │   updates   │
+   │ - Perms     │   │   setup     │   │             │
+   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘
+          │                 │                 │
+          └─────────────────┼─────────────────┘
+                            │
+                            ▼
+                    ┌─────────────────┐
+                    │  cicd-fixer     │
+                    │ (Execution)     │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Apply fixes,    │
+                    │ commit, push    │
+                    └─────────────────┘
+----
+
+== Frequently Asked Questions (FAQ)
+
+=== General Questions
+
+[qanda]
+What is cicd-hyper-a?::
+cicd-hyper-a is a neurosymbolic CI/CD intelligence platform that learns from CI/CD failures, distills patterns into rules, and applies fixes programmatically across repositories.
+
+What is cicd-fixer?::
+cicd-fixer is a Rust CLI tool that scans repositories for CI/CD issues, applies automatic fixes, and can process multiple repositories in batch mode.
+
+Why not just use Dependabot?::
+Dependabot handles dependency updates but doesn't address workflow security (SHA pinning, permissions), SPDX headers, or cross-repo template propagation. cicd-hyper-a complements Dependabot.
+
+Do I need to run cicd-fixer on every commit?::
+No. Run it periodically (daily/weekly) or when you notice CI failures. The gitbot-fleet bots can automate this.
+
+=== Technical Questions
+
+[qanda]
+Why SHA pinning instead of version tags?::
+Version tags are mutable - an attacker can delete and recreate them pointing to malicious code. SHA hashes are immutable and reference a specific, verified commit.
+
+What happens if an action doesn't have a known SHA pin?::
+cicd-fixer will report the unpinned action but won't auto-fix it. You'll need to manually find the SHA and either fix it yourself or add it to SHA-PINS.scm.
+
+How do I know if a SHA pin is trustworthy?::
+We verify each SHA against the official release notes and changelog before adding it to SHA-PINS.scm. The file also includes the version tag for cross-reference.
+
+Why does CodeQL fail on Rust-only repos?::
+CodeQL doesn't support Rust directly. For Rust-only repos, configure CodeQL with `language: ['actions']` to scan workflow files instead.
+
+=== Troubleshooting Questions
+
+[qanda]
+cicd-fixer reports false positives on commented lines - is this fixed?::
+Yes, as of version 0.1.0. The scanner now filters out lines that start with `#`.
+
+The fix command says "No fix available" - why?::
+Either the action isn't in SHA-PINS.scm (unknown action), or the fix type isn't implemented yet. Check `cicd-fixer pins` to see known actions.
+
+My workflow still fails after fixing - what went wrong?::
+Common causes: (1) The fix was partial - run scan again to check for remaining issues, (2) The fix introduced a syntax error - check the YAML, (3) There's a different issue not detected by cicd-fixer.
+
+How do I undo a fix that broke something?::
+Use git to revert: `git checkout HEAD~1 -- .github/workflows/affected-file.yml`
+
+=== Process Questions
+
+[qanda]
+Who is responsible for maintaining SHA-PINS.scm?::
+The DevOps/Security team maintains the central SHA-PINS.scm. New pins should be verified before adding.
+
+How often should SHA pins be updated?::
+When new action versions are released that you want to adopt, or immediately when security advisories are published.
+
+Can bots fix critical issues automatically?::
+For auto-fixable issues (SHA pinning, permissions, SPDX), yes. For manual issues (hardcoded secrets, code changes), bots create issues for human review.
+
+What if cicd-fixer introduces a bug?::
+Report it at https://github.com/hyperpolymath/cicd-hyper-a/issues. In the meantime, revert the affected workflows and fix manually.
+
+== User's Guide: Getting Started
+
+=== Your First Scan
+
+Assuming cicd-fixer is installed (see "How To: Set Up cicd-fixer"):
+
+[source,bash]
+----
+# Navigate to any repository
+cd ~/my-project
+
+# Run your first scan
+cicd-fixer scan .
+----
+
+**Understanding the output:**
+
+[source]
+----
+Scanned 5 workflows: 3 issues (0 critical, 1 high, 2 medium, 0 low), 3 auto-fixable
+                     ─────────────────────────────────────────────────────────────
+                     │                │                                          │
+                     │                │        Breakdown by severity             │
+                     │                └──────────────────────────────────────────┘
+                     │
+                     └─── Can be fixed automatically
+----
+
+Each issue shows:
+
+[source]
+----
+🟠 [✓] missing-workflow-permissions /path/to/workflow.yml
+│   │  │                            │
+│   │  │                            └─── File location
+│   │  └─── Error ID (matches ERROR-CATALOG.scm)
+│   └─── Auto-fixable (✓) or manual (✗)
+└─── Severity: 🔴 Critical, 🟠 High, 🟡 Medium, 🔵 Low
+----
+
+=== Your First Fix
+
+**Always preview first:**
+
+[source,bash]
+----
+cicd-fixer fix . --dry-run
+----
+
+**Review the output:**
+
+[source]
+----
+Fix Results:
+  ○ Would apply [missing-spdx-header] .github/workflows/ci.yml
+    │           │                     │
+    │           │                     └─── File to be modified
+    │           └─── What fix
+    └─── ○ = Would apply (dry-run), ✓ = Applied, ✗ = Failed
+----
+
+**If it looks good, apply:**
+
+[source,bash]
+----
+cicd-fixer fix .
+----
+
+**Review changes before committing:**
+
+[source,bash]
+----
+git diff .github/workflows/
+----
+
+=== Common Workflows for Users
+
+==== Daily Check (1 minute)
+
+[source,bash]
+----
+cicd-fixer scan .
+# If issues: cicd-fixer fix . --dry-run
+# If looks good: cicd-fixer fix .
+----
+
+==== After Creating New Workflow
+
+[source,bash]
+----
+# After creating/editing .github/workflows/new-workflow.yml
+cicd-fixer scan .
+cicd-fixer fix . --dry-run
+# Review, then apply
+cicd-fixer fix .
+git add .github/workflows/new-workflow.yml
+git commit -m "feat: add new workflow (cicd-fixer validated)"
+----
+
+==== Before PR Submission
+
+[source,bash]
+----
+# Ensure CI will pass
+cicd-fixer scan .
+# If clean: You're good to go
+# If issues: Fix them first
+----
+
+=== Quick Reference Cheat Sheet
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                 CICD-FIXER CHEAT SHEET                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  SCANNING                                                       │
+│  ─────────                                                      │
+│  cicd-fixer scan .              # Scan current repo             │
+│  cicd-fixer scan /path/to/repo  # Scan specific repo            │
+│  cicd-fixer scan . --format json # JSON output for scripts      │
+│                                                                 │
+│  FIXING                                                         │
+│  ───────                                                        │
+│  cicd-fixer fix . --dry-run     # Preview fixes (ALWAYS DO)     │
+│  cicd-fixer fix .               # Apply fixes                   │
+│                                                                 │
+│  BATCH OPERATIONS                                               │
+│  ────────────────                                               │
+│  cicd-fixer batch /repos        # Scan all repos                │
+│  cicd-fixer batch /repos --fix  # Fix all repos                 │
+│  cicd-fixer batch /repos --limit 10  # Limit to 10 repos        │
+│                                                                 │
+│  REFERENCE                                                      │
+│  ─────────                                                      │
+│  cicd-fixer pins                # List known SHA pins           │
+│  cicd-fixer catalog             # List error patterns           │
+│  cicd-fixer --help              # Full help                     │
+│                                                                 │
+│  SEVERITY LEGEND                                                │
+│  ───────────────                                                │
+│  🔴 Critical - Fix IMMEDIATELY                                  │
+│  🟠 High     - Fix within 24 hours                              │
+│  🟡 Medium   - Fix within 1 week                                │
+│  🔵 Low      - Fix when convenient                              │
+│                                                                 │
+│  FIX STATUS                                                     │
+│  ──────────                                                     │
+│  ✓ Applied / Success                                            │
+│  ○ Would apply (dry-run)                                        │
+│  ✗ Failed / Manual required                                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+== Appendix A: Quick Reference Card
+
+=== Commands
+
+[source,bash]
+----
+# Scan
+cicd-fixer scan <repo>
+cicd-fixer scan <repo> --format json
+
+# Fix
+cicd-fixer fix <repo> --dry-run
+cicd-fixer fix <repo>
+
+# Batch
+cicd-fixer batch <dir>
+cicd-fixer batch <dir> --fix --dry-run
+cicd-fixer batch <dir> --fix --limit 50
+
+# Reference
+cicd-fixer pins
+cicd-fixer catalog
+----
+
+=== Fix Patterns
+
+[source,yaml]
+----
+# Add SPDX header (first line)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Add permissions (after on: block)
+permissions: read-all
+
+# SHA pin format
+uses: action/name@SHA # version
+
+# Rust toolchain with input
+uses: dtolnay/rust-toolchain@SHA
+  with:
+    toolchain: stable
+----
+
+=== Severity Response
+
+[cols="1,2"]
+|===
+| Severity | Action
+
+| Critical
+| Fix immediately, notify team
+
+| High
+| Fix within 24 hours
+
+| Medium
+| Fix within 1 week
+
+| Low
+| Fix when convenient
+|===
+
+== Appendix B: Glossary
+
+SHA Pin:: A reference to a specific, immutable commit hash instead of a mutable version tag
+OpenSSF Scorecard:: Security health metrics for open source projects
+CodeQL:: GitHub's semantic code analysis engine
+SPDX:: Software Package Data Exchange, a standard for communicating software bill of materials
+RSR:: Rhodium Standard Repositories, the hyperpolymath quality standard
+gitbot-fleet:: Collection of bots for automated repository quality enforcement
+Neurosymbolic:: Combining neural learning with symbolic reasoning
+
+== Appendix C: Related Documents
+
+* link:../README.adoc[cicd-hyper-a README]
+* link:../CII-ENFORCEMENT.adoc[CII Best Practices Enforcement]
+* link:../PALIMPSEST.adoc[Palimpsest Philosophy]
+* link:../../gitbot-fleet/.machine_readable/6scm/CICD-PATTERNS.scm[CICD-PATTERNS.scm]
+* link:../.audittraining/ERROR-CATALOG.scm[ERROR-CATALOG.scm]
+* link:../.audittraining/SHA-PINS.scm[SHA-PINS.scm]
+
+---
+
+_Generated: 2026-01-05_
+
+_This guidebook is maintained as part of cicd-hyper-a and should be updated when patterns, SHA pins, or procedures change._
