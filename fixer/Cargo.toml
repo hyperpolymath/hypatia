@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "cicd-hyper-a-fixer"
+version = "0.1.0"
+edition = "2021"
+authors = ["hyperpolymath"]
+description = "Programmatic CI/CD workflow fixer for gitbot-fleet"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/hyperpolymath/cicd-hyper-a"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Regex for pattern matching
+regex = "1.10"
+
+# File system
+walkdir = "2.4"
+glob = "0.3"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# GitHub API (for remote operations)
+octocrab = "0.32"
+
+[dev-dependencies]
+tempfile = "3.9"
+
+[[bin]]
+name = "cicd-fixer"
+path = "src/main.rs"
+
+[lib]
+name = "cicd_fixer"
+path = "src/lib.rs"
