@@ -50,6 +50,21 @@
      "GitHub Actions not SHA-pinned"
      "Replace @v4 with @SHA # v4 format")
 
+    (workflow-linter-self-detection
+     workflow-security low #t
+     "Workflow linter grep matches its own comments containing 'uses:'"
+     "Add grep -v filters for comment lines and specific patterns")
+
+    (missing-action-input
+     workflow-security medium #t
+     "GitHub Action missing required input parameter"
+     "Add 'with:' section with required inputs (e.g., toolchain: stable)")
+
+    (codeql-language-mismatch
+     workflow-security medium #t
+     "CodeQL configured for languages not present in repository"
+     "Update language matrix to match repo contents; use 'actions' for workflow scanning")
+
     (missing-workflow-permissions
      workflow-security high #t
      "Workflow does not contain permissions"
