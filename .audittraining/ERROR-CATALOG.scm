@@ -65,6 +65,28 @@
      "CodeQL configured for languages not present in repository"
      "Update language matrix to match repo contents; use 'actions' for workflow scanning")
 
+    ;; === Session 2026-01-09: New patterns discovered ===
+
+    (upload-pages-artifact-transitive-deps
+     workflow-security high #t
+     "actions/upload-pages-artifact@v3 internally uses unpinned actions/upload-artifact@v4"
+     "Update to actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b (v4) which has SHA-pinned internals")
+
+    (scorecard-run-step-restriction
+     workflow-security medium #t
+     "ossf/scorecard-action requires scorecard job to only have 'uses:' steps, no 'run:' blocks"
+     "Move any run: steps to a separate job (e.g., check-critical) outside the scorecard job")
+
+    (deno-lint-include-pattern
+     workflow-security low #t
+     "deno lint fails when exclude patterns exist but no include patterns specified"
+     "Add explicit include patterns in deno.json lint config or use 'deno task lint'")
+
+    (rust-toolchain-sha-missing-input
+     workflow-security medium #t
+     "dtolnay/rust-toolchain requires explicit 'toolchain' input when SHA-pinned"
+     "Add 'with: toolchain: stable' (or nightly/version) to the rust-toolchain step")
+
     (missing-workflow-permissions
      workflow-security high #t
      "Workflow does not contain permissions"

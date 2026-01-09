@@ -125,6 +125,12 @@
     classify_severity('BranchProtectionID', medium).
     classify_severity('CodeReviewID', medium).
     classify_severity('syntax-error', medium).
+    %% Session 2026-01-09: New severity classifications
+    classify_severity('upload-pages-artifact-transitive-deps', high).
+    classify_severity('scorecard-run-step-restriction', medium).
+    classify_severity('rust-toolchain-sha-missing-input', medium).
+    classify_severity('deno-lint-include-pattern', low).
+    classify_severity('workflow-linter-self-detection', low).
 
     classify_severity('unused-local-variable', low).
     classify_severity('MaintainedID', low).
@@ -144,6 +150,12 @@
     is_auto_fixable('BranchProtectionID').
     is_auto_fixable('unused-local-variable').
     is_auto_fixable('missing-spdx-header').
+    %% Session 2026-01-09: New auto-fixable patterns
+    is_auto_fixable('upload-pages-artifact-transitive-deps').
+    is_auto_fixable('scorecard-run-step-restriction').
+    is_auto_fixable('deno-lint-include-pattern').
+    is_auto_fixable('rust-toolchain-sha-missing-input').
+    is_auto_fixable('workflow-linter-self-detection').
 
     %% ============================================================
     %% FIX SUGGESTIONS - Distilled from 228 repo fixes
@@ -162,6 +174,17 @@
     suggest_fix('remote-property-injection', 'Add allowlist validation for dynamic property access').
     suggest_fix('unused-local-variable', 'Remove unused code or prefix with underscore').
     suggest_fix('syntax-error', 'Fix syntax error using linter output').
+    %% Session 2026-01-09: New fix suggestions
+    suggest_fix('upload-pages-artifact-transitive-deps',
+        'Update to actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b (v4)').
+    suggest_fix('scorecard-run-step-restriction',
+        'Move run: steps from scorecard job to separate check-critical job').
+    suggest_fix('deno-lint-include-pattern',
+        'Add explicit include patterns to deno.json lint config or use deno task lint').
+    suggest_fix('rust-toolchain-sha-missing-input',
+        'Add "with: toolchain: stable" to dtolnay/rust-toolchain SHA-pinned step').
+    suggest_fix('workflow-linter-self-detection',
+        'Add grep -v filters for grep commands, echo statements, and comments').
 
     %% ============================================================
     %% PREVENTION WORKFLOWS - Maps alerts to workflows
@@ -175,6 +198,11 @@
     get_prevention_workflow('SecurityPolicyID', 'scorecard-enforcer.yml').
     get_prevention_workflow('BranchProtectionID', 'scorecard-enforcer.yml').
     get_prevention_workflow('CodeReviewID', 'scorecard-enforcer.yml').
+    %% Session 2026-01-09: New prevention workflow mappings
+    get_prevention_workflow('upload-pages-artifact-transitive-deps', 'workflow-linter.yml').
+    get_prevention_workflow('scorecard-run-step-restriction', 'scorecard-enforcer.yml').
+    get_prevention_workflow('rust-toolchain-sha-missing-input', 'rust-ci.yml').
+    get_prevention_workflow('workflow-linter-self-detection', 'workflow-linter.yml').
 
     %% ============================================================
     %% SECRET PATTERNS - Learned from secret scanning
