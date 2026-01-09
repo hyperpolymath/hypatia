@@ -187,6 +187,17 @@
     secret_pattern('github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}'). % Fine-grained PAT
     secret_pattern('glpat-[a-zA-Z0-9\\-]{20}'). % GitLab PAT
     secret_pattern('AKIA[0-9A-Z]{16}'). % AWS Access Key
+    %% Additional patterns added 2026-01-09 from security scan session
+    secret_pattern('xoxb-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]+').  % Slack Bot Token
+    secret_pattern('xoxp-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]+').  % Slack User Token
+    secret_pattern('pypi-AgE[a-zA-Z0-9\\-_]{50,}').  % PyPI API Token
+    secret_pattern('-----BEGIN [A-Z]+ PRIVATE KEY-----').  % SSH/PGP Private Keys
+    secret_pattern('sk-[a-zA-Z0-9]{48}').  % OpenAI API Key
+    secret_pattern('sk-proj-[a-zA-Z0-9]{48}').  % OpenAI Project Key
+    secret_pattern('sk-ant-api[0-9]{2}-[a-zA-Z0-9\\-_]{86}').  % Anthropic API Key
+    secret_pattern('npm_[a-zA-Z0-9]{36}').  % npm Access Token
+    secret_pattern('snyk_[a-zA-Z0-9\\-]{36}').  % Snyk API Token
+    secret_pattern('SG\\.[a-zA-Z0-9\\-_]{22}\\.[a-zA-Z0-9\\-_]{43}').  % SendGrid API Key
 
     %% ============================================================
     %% RSR LANGUAGE POLICY
@@ -221,6 +232,77 @@
 
     file_in_saltstack(File) :-
         atom_concat('salt/', _, File).
+
+    %% ============================================================
+    %% CODEQL LANGUAGE DETECTION - Added 2026-01-09
+    %% Maps repo languages to valid CodeQL languages
+    %% ============================================================
+
+    %% CodeQL supported languages
+    codeql_supported('javascript-typescript').
+    codeql_supported('python').
+    codeql_supported('go').
+    codeql_supported('java-kotlin').
+    codeql_supported('ruby').
+    codeql_supported('csharp').
+    codeql_supported('cpp').
+    codeql_supported('swift').
+    codeql_supported('actions').  % GitHub Actions workflow scanning
+
+    %% CodeQL NOT supported (use 'actions' instead)
+    codeql_unsupported(rust).
+    codeql_unsupported(ocaml).
+    codeql_unsupported(haskell).
+    codeql_unsupported(ada).
+    codeql_unsupported(nickel).
+    codeql_unsupported(logtalk).
+    codeql_unsupported(julia).
+    codeql_unsupported(gleam).
+
+    %% Validate CodeQL language matrix for a repo
+    validate_codeql_matrix(RepoLanguages, ValidMatrix) :-
+        findall(Lang,
+            (member(Lang, RepoLanguages), codeql_supported(Lang)),
+            SupportedLangs),
+        ( SupportedLangs = [] ->
+            ValidMatrix = ['actions']  % Fallback to actions scanning
+        ; ValidMatrix = SupportedLangs
+        ).
+
+    %% Detect language mismatch in CodeQL config
+    detect_codeql_mismatch(RepoType, ConfiguredLang, Reason) :-
+        codeql_unsupported(RepoType),
+        ConfiguredLang \= 'actions',
+        format(atom(Reason), '~w is not supported by CodeQL, use actions instead', [RepoType]).
+
+    %% ============================================================
+    %% LICENSE HEADER VALIDATION - Added 2026-01-09
+    %% Enforces correct SPDX license identifiers
+    %% ============================================================
+
+    %% Required license for hyperpolymath org
+    required_spdx_license('AGPL-3.0-or-later').
+
+    %% Common wrong licenses found in repos
+    wrong_spdx_license('MPL-2.0').
+    wrong_spdx_license('MIT').
+    wrong_spdx_license('Apache-2.0').
+
+    %% Block commit if wrong license header
+    block_commit_if(Commit, wrong_license_header) :-
+        commit_adds_file(Commit, File),
+        file_has_spdx_header(File, License),
+        wrong_spdx_license(License).
+
+    %% Auto-fix suggestion for license headers
+    is_auto_fixable('wrong-spdx-license').
+    suggest_fix('wrong-spdx-license', 'Change SPDX-License-Identifier to AGPL-3.0-or-later').
+    classify_severity('wrong-spdx-license', high).
+
+    %% Auto-fix license header
+    auto_fix(Repo, wrong_license_header) :-
+        find_files_with_wrong_license(Repo, Files),
+        fix_license_headers(Repo, Files).
 
     %% ============================================================
     %% LEARNING INTEGRATION
