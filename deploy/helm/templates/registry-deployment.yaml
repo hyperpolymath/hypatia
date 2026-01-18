@@ -1,0 +1,104 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/}}
+{{- if .Values.registry.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-registry
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.registry.autoscaling.enabled }}
+  replicas: {{ .Values.registry.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "cicd-hyper-a.registry.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cicd-hyper-a.registry.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cicd-hyper-a.serviceAccountName" . }}-registry
+      securityContext:
+        {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
+      containers:
+        - name: registry
+          image: "{{ .Values.registry.image.repository }}:{{ .Values.registry.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.registry.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.registry.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.registry.service.targetPort | quote }}
+            - name: ARANGODB_URL
+              value: {{ include "cicd-hyper-a.arangodbUrl" . | quote }}
+            - name: ARANGODB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "cicd-hyper-a.fullname" . }}-config
+                  key: arangodb-database
+            - name: ARANGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  key: arangodb-user
+            - name: ARANGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  key: arangodb-password
+            - name: DRAGONFLY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  key: dragonfly-password
+            - name: DRAGONFLY_URL
+              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "cicd-hyper-a.fullname" . }}-dragonfly:6379"
+          resources:
+            {{- toYaml .Values.registry.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            {{- toYaml .Values.api.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cicd-hyper-a.serviceAccountName" . }}-registry
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+{{- end }}

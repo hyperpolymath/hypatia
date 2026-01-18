@@ -1,0 +1,639 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hyperpolymath.dev/schemas/cicd-hyper-a/graph-model/v2",
+  "title": "cicd-hyper-a ArangoDB Graph Model",
+  "description": "Comprehensive graph model for neurosymbolic CI/CD platform with gitbot-fleet integration",
+  "version": "2.0.0",
+  "definitions": {
+    "vertex": {
+      "repo": {
+        "type": "object",
+        "description": "Git repository being managed",
+        "properties": {
+          "_key": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$" },
+          "name": { "type": "string" },
+          "forge": { "enum": ["github", "gitlab", "bitbucket", "codeberg", "sourcehut", "gitea", "radicle"] },
+          "owner": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "visibility": { "enum": ["public", "private", "internal"] },
+          "defaultBranch": { "type": "string", "default": "main" },
+          "languages": { "type": "array", "items": { "type": "string" } },
+          "primaryLanguage": { "type": "string" },
+          "rsrCompliant": { "type": "boolean", "description": "Complies with RSR language policy" },
+          "scorecardScore": { "type": "number", "minimum": 0, "maximum": 10 },
+          "healthScore": { "type": "number", "minimum": 0, "maximum": 100 },
+          "lastScanned": { "type": "string", "format": "date-time" },
+          "lastCommit": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["_key", "name", "forge", "owner"]
+      },
+      "bot": {
+        "type": "object",
+        "description": "Gitbot-fleet bot instance",
+        "properties": {
+          "_key": { "type": "string", "pattern": "^[a-z_]+$" },
+          "name": { "type": "string" },
+          "displayName": { "type": "string" },
+          "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "tier": { "enum": ["verifier", "finisher", "executor", "engine"] },
+          "categories": {
+            "type": "array",
+            "items": {
+              "enum": ["security", "structure", "workflow", "code_quality", "licensing",
+                       "documentation", "accessibility", "seo", "release", "waste",
+                       "policy", "verification", "fuzzing", "sustainability", "efficiency",
+                       "integration", "api", "all"]
+            }
+          },
+          "canFix": { "type": "boolean", "description": "Can auto-fix issues" },
+          "enabled": { "type": "boolean", "default": true },
+          "config": { "type": "object", "description": "Bot-specific configuration" },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "totalRuns": { "type": "integer", "minimum": 0 },
+              "successfulRuns": { "type": "integer", "minimum": 0 },
+              "totalFindings": { "type": "integer", "minimum": 0 },
+              "totalFixes": { "type": "integer", "minimum": 0 },
+              "avgRunTime": { "type": "number", "minimum": 0 }
+            }
+          },
+          "lastRun": { "type": "string", "format": "date-time" }
+        },
+        "required": ["_key", "name", "tier"]
+      },
+      "session": {
+        "type": "object",
+        "description": "Fleet execution session (one analysis run)",
+        "properties": {
+          "_key": { "type": "string", "format": "uuid" },
+          "repoKey": { "type": "string" },
+          "startedAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": "string", "format": "date-time" },
+          "status": { "enum": ["pending", "running", "completed", "failed", "cancelled"] },
+          "trigger": { "enum": ["push", "pr", "schedule", "manual", "webhook"] },
+          "triggeredBy": { "type": "string" },
+          "commitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+          "branch": { "type": "string" },
+          "totalFindings": { "type": "integer", "minimum": 0 },
+          "criticalFindings": { "type": "integer", "minimum": 0 },
+          "autoFixesApplied": { "type": "integer", "minimum": 0 },
+          "releaseBlocked": { "type": "boolean" },
+          "errorMessage": { "type": "string" }
+        },
+        "required": ["_key", "repoKey", "startedAt", "status"]
+      },
+      "finding": {
+        "type": "object",
+        "description": "Issue detected by a bot",
+        "properties": {
+          "_key": { "type": "string", "format": "uuid" },
+          "ruleId": { "type": "string" },
+          "botId": { "type": "string" },
+          "sessionId": { "type": "string" },
+          "severity": { "enum": ["critical", "high", "medium", "low", "info", "suggestion"] },
+          "category": {
+            "enum": ["security", "structure", "workflow", "code_quality", "licensing",
+                     "documentation", "accessibility", "seo", "release", "waste", "policy"]
+          },
+          "message": { "type": "string" },
+          "description": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "column": { "type": "integer", "minimum": 1 },
+          "endLine": { "type": "integer", "minimum": 1 },
+          "endColumn": { "type": "integer", "minimum": 1 },
+          "element": { "type": "string", "description": "Code element (function, class, etc.)" },
+          "suggestion": { "type": "string" },
+          "fixable": { "type": "boolean" },
+          "fixed": { "type": "boolean", "default": false },
+          "fixedAt": { "type": "string", "format": "date-time" },
+          "dismissed": { "type": "boolean", "default": false },
+          "dismissedAt": { "type": "string", "format": "date-time" },
+          "dismissedBy": { "type": "string" },
+          "dismissReason": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["_key", "ruleId", "botId", "sessionId", "severity", "category", "message"]
+      },
+      "rule": {
+        "type": "object",
+        "description": "CI/CD rule definition",
+        "properties": {
+          "_key": { "type": "string", "pattern": "^[A-Z]{3,4}-\\d{3}$" },
+          "name": { "type": "string" },
+          "type": { "enum": ["preventive", "curative", "declarative", "detective", "learning"] },
+          "severity": { "enum": ["critical", "high", "medium", "low", "info", "suggestion"] },
+          "category": {
+            "enum": ["security", "structure", "workflow", "code_quality", "licensing",
+                     "documentation", "accessibility", "seo", "release", "waste", "policy"]
+          },
+          "description": { "type": "string" },
+          "detection": { "type": "object" },
+          "fix": { "type": "object" },
+          "autoFixable": { "type": "boolean" },
+          "commitMessage": { "type": "string" },
+          "preventionWorkflow": { "type": "string" },
+          "enabled": { "type": "boolean", "default": true },
+          "version": { "type": "string" },
+          "source": { "enum": ["learned", "manual", "imported"] },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "triggerCount": { "type": "integer", "minimum": 0 },
+              "fixCount": { "type": "integer", "minimum": 0 },
+              "successRate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "falsePositiveRate": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          "lastTriggered": { "type": "string", "format": "date-time" }
+        },
+        "required": ["_key", "name", "type", "severity", "category"]
+      },
+      "fix": {
+        "type": "object",
+        "description": "Fix action applied to a finding",
+        "properties": {
+          "_key": { "type": "string", "format": "uuid" },
+          "findingId": { "type": "string" },
+          "ruleId": { "type": "string" },
+          "sessionId": { "type": "string" },
+          "action": { "enum": ["delete", "modify", "create", "disable", "pin", "add_header", "replace", "inject", "configure", "enable"] },
+          "target": { "type": "string" },
+          "beforeContent": { "type": "string" },
+          "afterContent": { "type": "string" },
+          "appliedAt": { "type": "string", "format": "date-time" },
+          "appliedBy": { "enum": ["auto", "human", "hybrid"] },
+          "reverted": { "type": "boolean", "default": false },
+          "revertedAt": { "type": "string", "format": "date-time" },
+          "revertReason": { "type": "string" },
+          "commitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+          "prNumber": { "type": "integer" }
+        },
+        "required": ["_key", "findingId", "action", "target", "appliedAt"]
+      },
+      "workflow": {
+        "type": "object",
+        "description": "GitHub Actions / CI workflow",
+        "properties": {
+          "_key": { "type": "string" },
+          "repoKey": { "type": "string" },
+          "name": { "type": "string" },
+          "file": { "type": "string" },
+          "triggers": { "type": "array", "items": { "type": "string" } },
+          "hasSpdxHeader": { "type": "boolean" },
+          "hasPermissions": { "type": "boolean" },
+          "permissionsLevel": { "enum": ["read-all", "write-all", "specific", "none"] },
+          "allActionsPinned": { "type": "boolean" },
+          "unpinnedActions": { "type": "array", "items": { "type": "string" } },
+          "secretsUsed": { "type": "array", "items": { "type": "string" } },
+          "disabled": { "type": "boolean", "default": false },
+          "lastRun": { "type": "string", "format": "date-time" },
+          "lastRunStatus": { "enum": ["success", "failure", "cancelled", "skipped"] },
+          "avgRunTime": { "type": "number" }
+        },
+        "required": ["_key", "repoKey", "name", "file"]
+      },
+      "learningData": {
+        "type": "object",
+        "description": "Training data for learned rules",
+        "properties": {
+          "_key": { "type": "string", "format": "uuid" },
+          "pattern": { "type": "string" },
+          "category": { "type": "string" },
+          "occurrences": { "type": "integer", "minimum": 1 },
+          "repos": { "type": "array", "items": { "type": "string" } },
+          "firstSeen": { "type": "string", "format": "date-time" },
+          "lastSeen": { "type": "string", "format": "date-time" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "promotedToRule": { "type": "boolean", "default": false },
+          "ruleId": { "type": "string" }
+        },
+        "required": ["_key", "pattern", "category", "occurrences"]
+      },
+      "owner": {
+        "type": "object",
+        "description": "Repository owner (user or org)",
+        "properties": {
+          "_key": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "enum": ["user", "organization"] },
+          "forge": { "enum": ["github", "gitlab", "bitbucket", "codeberg", "sourcehut", "gitea", "radicle"] },
+          "url": { "type": "string", "format": "uri" },
+          "avatarUrl": { "type": "string", "format": "uri" },
+          "totalRepos": { "type": "integer", "minimum": 0 },
+          "avgHealthScore": { "type": "number", "minimum": 0, "maximum": 100 }
+        },
+        "required": ["_key", "name", "type", "forge"]
+      }
+    },
+    "edge": {
+      "repo_has_workflow": {
+        "description": "Repository contains a workflow file",
+        "from": "repos",
+        "to": "workflows",
+        "properties": {}
+      },
+      "repo_owned_by": {
+        "description": "Repository is owned by user/org",
+        "from": "repos",
+        "to": "owners",
+        "properties": {}
+      },
+      "session_scans_repo": {
+        "description": "Session scans a repository",
+        "from": "sessions",
+        "to": "repos",
+        "properties": {}
+      },
+      "session_ran_bot": {
+        "description": "Bot was executed in this session",
+        "from": "sessions",
+        "to": "bots",
+        "properties": {
+          "status": { "enum": ["pending", "running", "completed", "failed", "skipped"] },
+          "startedAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": "string", "format": "date-time" },
+          "findingsCount": { "type": "integer", "minimum": 0 },
+          "fixesApplied": { "type": "integer", "minimum": 0 },
+          "error": { "type": "string" }
+        }
+      },
+      "bot_found_finding": {
+        "description": "Bot detected this finding",
+        "from": "bots",
+        "to": "findings",
+        "properties": {}
+      },
+      "finding_in_session": {
+        "description": "Finding was detected in this session",
+        "from": "findings",
+        "to": "sessions",
+        "properties": {}
+      },
+      "finding_triggered_by": {
+        "description": "Finding was triggered by this rule",
+        "from": "findings",
+        "to": "rules",
+        "properties": {}
+      },
+      "finding_in_file": {
+        "description": "Finding is located in this file (workflow)",
+        "from": "findings",
+        "to": "workflows",
+        "properties": {}
+      },
+      "finding_fixed_by": {
+        "description": "Finding was fixed by this fix action",
+        "from": "findings",
+        "to": "fixes",
+        "properties": {}
+      },
+      "fix_applies_rule": {
+        "description": "Fix was generated by this rule",
+        "from": "fixes",
+        "to": "rules",
+        "properties": {}
+      },
+      "bot_owns_rule": {
+        "description": "Bot is the source for this rule",
+        "from": "bots",
+        "to": "rules",
+        "properties": {}
+      },
+      "bot_depends_on": {
+        "description": "Bot depends on another bot completing first",
+        "from": "bots",
+        "to": "bots",
+        "properties": {
+          "dependencyType": { "enum": ["required", "optional", "data"] },
+          "dataKeys": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "rule_learned_from": {
+        "description": "Rule was learned from training data",
+        "from": "rules",
+        "to": "learningData",
+        "properties": {}
+      },
+      "finding_related_to": {
+        "description": "Finding is related to another finding",
+        "from": "findings",
+        "to": "findings",
+        "properties": {
+          "relation": { "enum": ["duplicate", "caused_by", "blocks", "similar"] }
+        }
+      },
+      "workflow_triggers_rule": {
+        "description": "Workflow can trigger this rule's detection",
+        "from": "workflows",
+        "to": "rules",
+        "properties": {}
+      },
+      "repo_similar_to": {
+        "description": "Repositories with similar structure/issues",
+        "from": "repos",
+        "to": "repos",
+        "properties": {
+          "similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "sharedLanguages": { "type": "array", "items": { "type": "string" } },
+          "sharedIssues": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  },
+  "collections": {
+    "document": {
+      "repos": { "$ref": "#/definitions/vertex/repo" },
+      "bots": { "$ref": "#/definitions/vertex/bot" },
+      "sessions": { "$ref": "#/definitions/vertex/session" },
+      "findings": { "$ref": "#/definitions/vertex/finding" },
+      "rules": { "$ref": "#/definitions/vertex/rule" },
+      "fixes": { "$ref": "#/definitions/vertex/fix" },
+      "workflows": { "$ref": "#/definitions/vertex/workflow" },
+      "learningData": { "$ref": "#/definitions/vertex/learningData" },
+      "owners": { "$ref": "#/definitions/vertex/owner" }
+    },
+    "edge": {
+      "repo_has_workflow": { "$ref": "#/definitions/edge/repo_has_workflow" },
+      "repo_owned_by": { "$ref": "#/definitions/edge/repo_owned_by" },
+      "session_scans_repo": { "$ref": "#/definitions/edge/session_scans_repo" },
+      "session_ran_bot": { "$ref": "#/definitions/edge/session_ran_bot" },
+      "bot_found_finding": { "$ref": "#/definitions/edge/bot_found_finding" },
+      "finding_in_session": { "$ref": "#/definitions/edge/finding_in_session" },
+      "finding_triggered_by": { "$ref": "#/definitions/edge/finding_triggered_by" },
+      "finding_in_file": { "$ref": "#/definitions/edge/finding_in_file" },
+      "finding_fixed_by": { "$ref": "#/definitions/edge/finding_fixed_by" },
+      "fix_applies_rule": { "$ref": "#/definitions/edge/fix_applies_rule" },
+      "bot_owns_rule": { "$ref": "#/definitions/edge/bot_owns_rule" },
+      "bot_depends_on": { "$ref": "#/definitions/edge/bot_depends_on" },
+      "rule_learned_from": { "$ref": "#/definitions/edge/rule_learned_from" },
+      "finding_related_to": { "$ref": "#/definitions/edge/finding_related_to" },
+      "workflow_triggers_rule": { "$ref": "#/definitions/edge/workflow_triggers_rule" },
+      "repo_similar_to": { "$ref": "#/definitions/edge/repo_similar_to" }
+    }
+  },
+  "graphs": {
+    "cicd_intelligence": {
+      "description": "Main graph for CI/CD intelligence and analysis",
+      "edgeDefinitions": [
+        {
+          "collection": "repo_has_workflow",
+          "from": ["repos"],
+          "to": ["workflows"]
+        },
+        {
+          "collection": "repo_owned_by",
+          "from": ["repos"],
+          "to": ["owners"]
+        },
+        {
+          "collection": "session_scans_repo",
+          "from": ["sessions"],
+          "to": ["repos"]
+        },
+        {
+          "collection": "session_ran_bot",
+          "from": ["sessions"],
+          "to": ["bots"]
+        },
+        {
+          "collection": "bot_found_finding",
+          "from": ["bots"],
+          "to": ["findings"]
+        },
+        {
+          "collection": "finding_in_session",
+          "from": ["findings"],
+          "to": ["sessions"]
+        },
+        {
+          "collection": "finding_triggered_by",
+          "from": ["findings"],
+          "to": ["rules"]
+        },
+        {
+          "collection": "finding_in_file",
+          "from": ["findings"],
+          "to": ["workflows"]
+        },
+        {
+          "collection": "finding_fixed_by",
+          "from": ["findings"],
+          "to": ["fixes"]
+        },
+        {
+          "collection": "fix_applies_rule",
+          "from": ["fixes"],
+          "to": ["rules"]
+        },
+        {
+          "collection": "bot_owns_rule",
+          "from": ["bots"],
+          "to": ["rules"]
+        },
+        {
+          "collection": "workflow_triggers_rule",
+          "from": ["workflows"],
+          "to": ["rules"]
+        }
+      ]
+    },
+    "bot_fleet": {
+      "description": "Graph for bot dependencies and execution order",
+      "edgeDefinitions": [
+        {
+          "collection": "bot_depends_on",
+          "from": ["bots"],
+          "to": ["bots"]
+        },
+        {
+          "collection": "session_ran_bot",
+          "from": ["sessions"],
+          "to": ["bots"]
+        },
+        {
+          "collection": "bot_owns_rule",
+          "from": ["bots"],
+          "to": ["rules"]
+        }
+      ]
+    },
+    "learning_graph": {
+      "description": "Graph for rule learning and pattern detection",
+      "edgeDefinitions": [
+        {
+          "collection": "rule_learned_from",
+          "from": ["rules"],
+          "to": ["learningData"]
+        },
+        {
+          "collection": "finding_related_to",
+          "from": ["findings"],
+          "to": ["findings"]
+        },
+        {
+          "collection": "repo_similar_to",
+          "from": ["repos"],
+          "to": ["repos"]
+        }
+      ]
+    }
+  },
+  "indexes": {
+    "repos": [
+      { "type": "persistent", "fields": ["forge", "owner"] },
+      { "type": "persistent", "fields": ["scorecardScore"] },
+      { "type": "persistent", "fields": ["lastScanned"] },
+      { "type": "fulltext", "fields": ["name"] }
+    ],
+    "findings": [
+      { "type": "persistent", "fields": ["severity"] },
+      { "type": "persistent", "fields": ["category"] },
+      { "type": "persistent", "fields": ["sessionId"] },
+      { "type": "persistent", "fields": ["botId"] },
+      { "type": "persistent", "fields": ["fixed"] },
+      { "type": "persistent", "fields": ["createdAt"] }
+    ],
+    "sessions": [
+      { "type": "persistent", "fields": ["repoKey"] },
+      { "type": "persistent", "fields": ["status"] },
+      { "type": "persistent", "fields": ["startedAt"] }
+    ],
+    "rules": [
+      { "type": "persistent", "fields": ["type"] },
+      { "type": "persistent", "fields": ["category"] },
+      { "type": "persistent", "fields": ["enabled"] },
+      { "type": "fulltext", "fields": ["name", "description"] }
+    ],
+    "workflows": [
+      { "type": "persistent", "fields": ["repoKey"] },
+      { "type": "persistent", "fields": ["allActionsPinned"] }
+    ]
+  },
+  "analyzers": {
+    "text_en": {
+      "type": "text",
+      "properties": {
+        "locale": "en",
+        "case": "lower",
+        "accent": false,
+        "stemming": true,
+        "stopwords": []
+      }
+    }
+  },
+  "views": {
+    "findings_search": {
+      "type": "arangosearch",
+      "links": {
+        "findings": {
+          "includeAllFields": false,
+          "fields": {
+            "message": { "analyzers": ["text_en"] },
+            "description": { "analyzers": ["text_en"] },
+            "file": { "analyzers": ["identity"] }
+          }
+        }
+      }
+    },
+    "rules_search": {
+      "type": "arangosearch",
+      "links": {
+        "rules": {
+          "includeAllFields": false,
+          "fields": {
+            "name": { "analyzers": ["text_en"] },
+            "description": { "analyzers": ["text_en"] }
+          }
+        }
+      }
+    }
+  },
+  "seedData": {
+    "bots": [
+      {
+        "_key": "rhodibot",
+        "name": "rhodibot",
+        "displayName": "Rhodibot",
+        "version": "0.1.0",
+        "tier": "verifier",
+        "categories": ["structure", "policy", "licensing"],
+        "canFix": true
+      },
+      {
+        "_key": "echidnabot",
+        "name": "echidnabot",
+        "displayName": "Echidnabot",
+        "version": "0.1.0",
+        "tier": "verifier",
+        "categories": ["verification", "fuzzing"],
+        "canFix": false
+      },
+      {
+        "_key": "oikos",
+        "name": "oikos",
+        "displayName": "Oikos",
+        "version": "0.1.0",
+        "tier": "verifier",
+        "categories": ["sustainability", "efficiency"],
+        "canFix": false
+      },
+      {
+        "_key": "glambot",
+        "name": "glambot",
+        "displayName": "Glambot",
+        "version": "0.1.0",
+        "tier": "finisher",
+        "categories": ["accessibility", "seo", "documentation"],
+        "canFix": true
+      },
+      {
+        "_key": "seambot",
+        "name": "seambot",
+        "displayName": "Seambot",
+        "version": "0.1.0",
+        "tier": "finisher",
+        "categories": ["integration", "api"],
+        "canFix": false
+      },
+      {
+        "_key": "finishing_bot",
+        "name": "finishing_bot",
+        "displayName": "Finishing Bot",
+        "version": "0.1.0",
+        "tier": "finisher",
+        "categories": ["release", "licensing", "code_quality"],
+        "canFix": true
+      },
+      {
+        "_key": "robot_repo_automaton",
+        "name": "robot_repo_automaton",
+        "displayName": "Robot Repo Automaton",
+        "version": "0.1.0",
+        "tier": "executor",
+        "categories": ["security", "workflow", "structure"],
+        "canFix": true
+      },
+      {
+        "_key": "cicd_hyper_a",
+        "name": "cicd_hyper_a",
+        "displayName": "CICD Hyper-A",
+        "version": "0.1.0",
+        "tier": "engine",
+        "categories": ["all"],
+        "canFix": false
+      }
+    ],
+    "bot_depends_on": [
+      { "_from": "bots/glambot", "_to": "bots/rhodibot", "dependencyType": "required" },
+      { "_from": "bots/seambot", "_to": "bots/rhodibot", "dependencyType": "required" },
+      { "_from": "bots/seambot", "_to": "bots/echidnabot", "dependencyType": "required" },
+      { "_from": "bots/finishing_bot", "_to": "bots/rhodibot", "dependencyType": "required" },
+      { "_from": "bots/finishing_bot", "_to": "bots/glambot", "dependencyType": "required" }
+    ]
+  }
+}

@@ -1,0 +1,393 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# cicd-hyper-a Git Hooks Configuration
+#
+# This file controls the behavior of cicd-hyper-a git hooks.
+# Copy to .git/hooks/config.yml or set CICD_CONFIG_FILE environment variable.
+#
+# Documentation: https://github.com/hyperpolymath/cicd-hyper-a/docs/hooks.adoc
+
+# ==============================================================================
+# GLOBAL SETTINGS
+# ==============================================================================
+
+# Version of this config format
+version: "1.0"
+
+# Enable/disable all hooks globally
+enabled: true
+
+# Debug mode - enables verbose output
+debug: false
+
+# Use colors in output (auto, always, never)
+colors: auto
+
+# ==============================================================================
+# API CONFIGURATION
+# ==============================================================================
+
+api:
+  # cicd-hyper-a API endpoint
+  # Production: https://api.cicd-hyper-a.example.com  # TODO: Replace with your domain
+  url: "http://localhost:8080"
+
+  # API timeout in seconds
+  timeout: 10
+
+  # Number of retries for failed requests
+  retries: 3
+
+  # Report hook executions to API
+  report_executions: true
+
+# ==============================================================================
+# CACHE CONFIGURATION
+# ==============================================================================
+
+cache:
+  # Cache backend: redis, dragonfly, file
+  backend: file
+
+  # Redis/Dragonfly connection settings
+  redis:
+    host: localhost
+    port: 6379
+    db: 0
+    # password: ""  # Uncomment if authentication required
+
+  # Cache TTL in seconds (1 hour default)
+  ttl: 3600
+
+  # File cache directory (default: ~/.cache/cicd-hyper-a)
+  file_dir: ""
+
+# ==============================================================================
+# RULESETS
+# ==============================================================================
+
+rulesets:
+  # Default rulesets to load
+  default:
+    - security/secrets
+    - security/credentials
+    - format/spdx
+    - workflow/pinned-actions
+    - workflow/permissions
+
+  # Repository-specific overrides (matched by repo name pattern)
+  overrides:
+    "*.internal":
+      # Internal repos may have different rules
+      - security/secrets
+      - format/spdx
+
+    "lib-*":
+      # Library repos need stricter checks
+      - security/secrets
+      - security/credentials
+      - format/spdx
+      - workflow/pinned-actions
+      - workflow/permissions
+      - semver/breaking-changes
+
+# ==============================================================================
+# HOOK: PRE-COMMIT
+# ==============================================================================
+
+hooks:
+  pre-commit:
+    # Enable this hook
+    enabled: true
+
+    # Language policy (RSR compliance)
+    language_policy:
+      enabled: true
+      # Banned languages
+      banned:
+        typescript: rescript
+        go: rust
+        python: julia
+        java: rust
+        kotlin: rust
+      # Exceptions (paths that bypass language policy)
+      exceptions:
+        - "salt/*"        # SaltStack requires Python
+        - "legacy/*"      # Legacy code in migration
+        - "vendor/*"      # Vendored dependencies
+
+    # Secret detection
+    secrets:
+      enabled: true
+      # Patterns to scan for (in addition to built-in patterns)
+      extra_patterns: []
+      # Files to exclude from secret scanning
+      exclude:
+        - "*.test.*"
+        - "test/*"
+        - "*.example"
+
+    # SPDX header enforcement
+    spdx:
+      enabled: true
+      # Default license for new files
+      default_license: "AGPL-3.0-or-later"
+      # Warn only (don't fail)
+      warn_only: true
+
+    # Workflow security
+    workflow:
+      enabled: true
+      # Require SHA-pinned actions
+      require_sha_pins: true
+      # Require permissions declaration
+      require_permissions: true
+
+    # Formatting
+    formatting:
+      enabled: true
+      # Check for trailing whitespace
+      check_trailing_whitespace: true
+      # Check for tabs in specific file types
+      check_tabs:
+        - "*.py"
+        - "*.yaml"
+        - "*.yml"
+      # Warn only (don't fail)
+      warn_only: true
+
+    # File size limits
+    file_size:
+      enabled: true
+      # Maximum file size in bytes (1MB default)
+      max_size: 1048576
+      # Warn only (don't fail)
+      warn_only: true
+
+  # ============================================================================
+  # HOOK: PRE-PUSH
+  # ============================================================================
+
+  pre-push:
+    enabled: true
+
+    # Force push protection
+    force_push:
+      enabled: true
+      # Protected branch patterns (regex)
+      protected_branches:
+        - "^main$"
+        - "^master$"
+        - "^production$"
+        - "^prod$"
+        - "^release/.*"
+
+    # Signed commits
+    signed_commits:
+      enabled: false
+      # Require GPG/SSH signatures
+      require_signature: false
+      # Warn only (don't fail)
+      warn_only: true
+
+    # Large file detection
+    large_files:
+      enabled: true
+      # Maximum file size in bytes (10MB default)
+      max_size: 10485760
+
+    # Deep credential scan
+    credentials:
+      enabled: true
+      # Credential file patterns
+      patterns:
+        - "*.env"
+        - ".env.*"
+        - "*.pem"
+        - "*.key"
+        - "*.p12"
+        - ".netrc"
+        - "credentials*.json"
+        - "*secrets.yaml"
+
+    # Workflow security (deep check)
+    workflow:
+      enabled: true
+      # Check for dangerous patterns
+      check_pull_request_target: true
+      check_workflow_dispatch_injection: true
+      check_issue_comment_injection: true
+
+    # Branch naming
+    branch_naming:
+      enabled: true
+      # Conventional branch prefixes
+      prefixes:
+        - "feature/"
+        - "fix/"
+        - "bugfix/"
+        - "hotfix/"
+        - "release/"
+        - "chore/"
+        - "docs/"
+        - "test/"
+        - "refactor/"
+      # Warn only (don't fail)
+      warn_only: true
+
+    # CI simulation
+    ci_simulation:
+      enabled: false
+      # Run type checks before push
+      check_rust: true
+      check_deno: true
+      check_rescript: true
+      check_haskell: true
+
+  # ============================================================================
+  # HOOK: POST-RECEIVE
+  # ============================================================================
+
+  post-receive:
+    enabled: true
+
+    # API notifications
+    notify_api: true
+
+    # Curative actions
+    curative:
+      # Trigger workflow analysis on workflow changes
+      workflow_analysis: true
+      # Trigger dependency scan on dependency changes
+      dependency_scan: true
+      # Trigger security review on security policy changes
+      security_review: true
+
+    # Webhooks to notify (comma-separated URLs)
+    webhooks: []
+
+    # Logging
+    logging:
+      enabled: true
+      # Log directory
+      dir: "/var/log/cicd-hyper-a"
+
+  # ============================================================================
+  # HOOK: COMMIT-MSG
+  # ============================================================================
+
+  commit-msg:
+    enabled: true
+
+    # Subject line
+    subject:
+      # Maximum length
+      max_length: 72
+      # Minimum length
+      min_length: 10
+
+    # Body
+    body:
+      # Maximum line length
+      max_line_length: 100
+
+    # Conventional commits
+    conventional:
+      enabled: true
+      # Allowed types
+      types:
+        - feat
+        - fix
+        - docs
+        - style
+        - refactor
+        - perf
+        - test
+        - build
+        - ci
+        - chore
+        - revert
+
+    # Issue reference
+    issue_reference:
+      enabled: false
+      # Require issue reference in commit
+      required: false
+      # Patterns to match
+      patterns:
+        - "#[0-9]+"
+        - "[A-Z]+-[0-9]+"
+
+    # Sign-off
+    signoff:
+      enabled: false
+      # Require DCO sign-off
+      required: false
+
+  # ============================================================================
+  # HOOK: PREPARE-COMMIT-MSG
+  # ============================================================================
+
+  prepare-commit-msg:
+    enabled: true
+
+    # Add template for empty commits
+    template:
+      enabled: true
+
+    # Extract issue from branch name
+    issue_from_branch:
+      enabled: true
+      # Patterns to match
+      patterns:
+        - "[A-Z]+-[0-9]+"   # JIRA-123
+        - "/[0-9]+"         # feature/123-desc
+        - "issue-[0-9]+"    # issue-123
+
+    # Add co-author
+    coauthor:
+      enabled: false
+      name: ""
+      email: ""
+
+    # Add metadata footer
+    metadata:
+      enabled: false
+
+# ==============================================================================
+# THRESHOLDS
+# ==============================================================================
+
+thresholds:
+  # Maximum errors before aborting
+  max_errors: 10
+
+  # Maximum warnings before failing
+  max_warnings: 50
+
+  # Treat warnings as errors
+  warnings_as_errors: false
+
+# ==============================================================================
+# EXCLUSIONS
+# ==============================================================================
+
+exclusions:
+  # Global file exclusions (applied to all hooks)
+  files:
+    - "*.lock"
+    - "*.min.js"
+    - "*.min.css"
+    - "vendor/*"
+    - "node_modules/*"
+    - "dist/*"
+    - "build/*"
+    - ".git/*"
+
+  # Global path exclusions
+  paths:
+    - ".git"
+    - "node_modules"
+    - "vendor"
+    - "target"
+    - "dist"
+    - "build"

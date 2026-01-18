@@ -1,0 +1,41 @@
+{
+  "total_count": 3,
+  "workflows": [
+    {
+      "id": 1001,
+      "node_id": "W_kwDOBxxxxxx",
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "state": "active",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-18T00:00:00Z",
+      "url": "https://api.github.com/repos/hyperpolymath/test-repo/actions/workflows/1001",
+      "html_url": "https://github.com/hyperpolymath/test-repo/blob/main/.github/workflows/ci.yml",
+      "badge_url": "https://github.com/hyperpolymath/test-repo/workflows/CI/badge.svg"
+    },
+    {
+      "id": 1002,
+      "node_id": "W_kwDOBxxxxxy",
+      "name": "Security",
+      "path": ".github/workflows/security.yml",
+      "state": "active",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-18T00:00:00Z",
+      "url": "https://api.github.com/repos/hyperpolymath/test-repo/actions/workflows/1002",
+      "html_url": "https://github.com/hyperpolymath/test-repo/blob/main/.github/workflows/security.yml",
+      "badge_url": "https://github.com/hyperpolymath/test-repo/workflows/Security/badge.svg"
+    },
+    {
+      "id": 1003,
+      "node_id": "W_kwDOBxxxxxz",
+      "name": "Release",
+      "path": ".github/workflows/release.yml",
+      "state": "active",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-18T00:00:00Z",
+      "url": "https://api.github.com/repos/hyperpolymath/test-repo/actions/workflows/1003",
+      "html_url": "https://github.com/hyperpolymath/test-repo/blob/main/.github/workflows/release.yml",
+      "badge_url": "https://github.com/hyperpolymath/test-repo/workflows/Release/badge.svg"
+    }
+  ]
+}

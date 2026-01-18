@@ -1,0 +1,80 @@
+{
+  "id": "openssf-workflow-security",
+  "name": "OpenSSF Workflow Security Ruleset",
+  "version": "1.0.0",
+  "description": "Security rules for GitHub Actions workflows based on OpenSSF Scorecard requirements",
+  "rules": [
+    {
+      "id": "unpinned-action",
+      "name": "Unpinned GitHub Action",
+      "description": "GitHub Actions should be pinned to specific commit SHAs to prevent supply chain attacks",
+      "category": "workflow-security",
+      "severity": "high",
+      "pattern": "uses:\\s+[\\w-]+/[\\w-]+@(v?\\d+|main|master)",
+      "fix_template": "uses: {action}@{sha} # {version}",
+      "auto_fixable": true,
+      "references": [
+        "https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions"
+      ]
+    },
+    {
+      "id": "missing-permissions",
+      "name": "Missing Permissions Declaration",
+      "description": "Workflows should declare explicit permissions to follow the principle of least privilege",
+      "category": "workflow-security",
+      "severity": "medium",
+      "pattern": "^name:.*\\n(?!permissions:)",
+      "fix_template": "permissions: read-all",
+      "auto_fixable": true,
+      "references": [
+        "https://docs.github.com/en/actions/security-guides/automatic-token-authentication#permissions-for-the-github_token"
+      ]
+    },
+    {
+      "id": "missing-spdx-header",
+      "name": "Missing SPDX License Header",
+      "description": "Files should have SPDX license headers for license compliance",
+      "category": "process-hygiene",
+      "severity": "low",
+      "pattern": null,
+      "fix_template": "# SPDX-License-Identifier: {license}",
+      "auto_fixable": true,
+      "references": [
+        "https://spdx.dev/ids/"
+      ]
+    },
+    {
+      "id": "script-injection",
+      "name": "Potential Script Injection",
+      "description": "Using untrusted input in script blocks can lead to script injection attacks",
+      "category": "workflow-security",
+      "severity": "critical",
+      "pattern": "\\$\\{\\{\\s*github\\.event\\.(issue|pull_request|comment)\\.body",
+      "fix_template": null,
+      "auto_fixable": false,
+      "references": [
+        "https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections"
+      ]
+    },
+    {
+      "id": "dangerous-trigger",
+      "name": "Dangerous Workflow Trigger",
+      "description": "Using pull_request_target with checkout of PR code is dangerous",
+      "category": "workflow-security",
+      "severity": "critical",
+      "pattern": "on:\\s*pull_request_target",
+      "fix_template": null,
+      "auto_fixable": false,
+      "references": [
+        "https://securitylab.github.com/research/github-actions-preventing-pwn-requests/"
+      ]
+    }
+  ],
+  "metadata": {
+    "author": "hyperpolymath",
+    "license": "AGPL-3.0-or-later",
+    "tags": ["security", "github-actions", "openssf", "scorecard"],
+    "created_at": "2025-01-18T00:00:00Z",
+    "updated_at": "2025-01-18T00:00:00Z"
+  }
+}

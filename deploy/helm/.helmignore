@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Patterns to ignore when building packages.
+
+# Common VCS dirs
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+
+# Common backup files
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+
+# Various IDEs
+.project
+.idea/
+*.tmproj
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+tests/
+test/
+*_test.yaml
+*_test.go
+
+# CI files
+.travis.yml
+.gitlab-ci.yml
+.github/
+Jenkinsfile
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Development
+Makefile
+Dockerfile*
+docker-compose*.yml
+
+# Chart development
+charts/
+requirements.lock

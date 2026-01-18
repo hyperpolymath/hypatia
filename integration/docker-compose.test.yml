@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Test environment for cicd-hyper-a integration tests
+#
+# Usage:
+#   docker-compose -f docker-compose.test.yml up -d
+#   cargo test --manifest-path integration/Cargo.toml
+#   docker-compose -f docker-compose.test.yml down -v
+
+version: "3.9"
+
+services:
+  # ============================================================================
+  # ArangoDB Test Instance
+  # ============================================================================
+  arangodb:
+    image: arangodb:3.11
+    container_name: cicd-hyper-a-test-arangodb
+    environment:
+      ARANGO_ROOT_PASSWORD: testpassword
+      ARANGO_NO_AUTH: 0
+    ports:
+      - "8529:8529"
+    volumes:
+      - arangodb-test-data:/var/lib/arangodb3
+      - arangodb-test-apps:/var/lib/arangodb3-apps
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8529/_api/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cicd-test-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # Dragonfly Test Instance (Redis-compatible)
+  # ============================================================================
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: cicd-hyper-a-test-dragonfly
+    ulimits:
+      memlock: -1
+    ports:
+      - "6379:6379"
+    volumes:
+      - dragonfly-test-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - cicd-test-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # Mock GitHub API Server
+  # ============================================================================
+  mock-github:
+    image: mockserver/mockserver:5.15.0
+    container_name: cicd-hyper-a-test-github
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/github-expectations.json
+      MOCKSERVER_LOG_LEVEL: WARN
+    ports:
+      - "1080:1080"
+    volumes:
+      - ./fixtures/mock-server-config:/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1080/mockserver/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cicd-test-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # Mock GitLab API Server
+  # ============================================================================
+  mock-gitlab:
+    image: mockserver/mockserver:5.15.0
+    container_name: cicd-hyper-a-test-gitlab
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/gitlab-expectations.json
+      MOCKSERVER_LOG_LEVEL: WARN
+    ports:
+      - "1081:1080"
+    volumes:
+      - ./fixtures/mock-server-config:/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1080/mockserver/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cicd-test-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # Mock Bitbucket API Server
+  # ============================================================================
+  mock-bitbucket:
+    image: mockserver/mockserver:5.15.0
+    container_name: cicd-hyper-a-test-bitbucket
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/bitbucket-expectations.json
+      MOCKSERVER_LOG_LEVEL: WARN
+    ports:
+      - "1082:1080"
+    volumes:
+      - ./fixtures/mock-server-config:/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1080/mockserver/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cicd-test-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # Webhook Receiver (for testing webhook delivery)
+  # ============================================================================
+  webhook-receiver:
+    image: tarampampam/webhook-tester:1.2
+    container_name: cicd-hyper-a-test-webhook
+    ports:
+      - "8088:8088"
+    environment:
+      LISTEN_PORT: 8088
+      CREATE_SESSION_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8088/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - cicd-test-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # Test Runner Container
+  # ============================================================================
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: cicd-hyper-a-test-runner
+    depends_on:
+      arangodb:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    environment:
+      ARANGODB_URL: http://arangodb:8529
+      ARANGODB_PASSWORD: testpassword
+      DRAGONFLY_URL: redis://dragonfly:6379
+      MOCK_GITHUB_URL: http://mock-github:1080
+      MOCK_GITLAB_URL: http://mock-gitlab:1080
+      MOCK_BITBUCKET_URL: http://mock-bitbucket:1080
+      WEBHOOK_RECEIVER_URL: http://webhook-receiver:8088
+      RUST_LOG: info
+      RUST_BACKTRACE: 1
+    volumes:
+      - ../:/workspace:ro
+      - cargo-cache:/root/.cargo
+      - target-cache:/workspace/target
+    working_dir: /workspace/integration
+    networks:
+      - cicd-test-net
+    profiles:
+      - test
+
+networks:
+  cicd-test-net:
+    driver: bridge
+    name: cicd-hyper-a-test-network
+
+volumes:
+  arangodb-test-data:
+    name: cicd-hyper-a-test-arangodb-data
+  arangodb-test-apps:
+    name: cicd-hyper-a-test-arangodb-apps
+  dragonfly-test-data:
+    name: cicd-hyper-a-test-dragonfly-data
+  cargo-cache:
+    name: cicd-hyper-a-test-cargo-cache
+  target-cache:
+    name: cicd-hyper-a-test-target-cache

@@ -1,0 +1,232 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# cicd-hyper-a ConfigMaps
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cicd-hyper-a-config
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: cicd-hyper-a
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cicd-hyper-a
+data:
+  # Application configuration
+  rust-log: "info"
+  arangodb-database: "cicd_hyper_a"
+
+  # Feature flags
+  enable-neural-learning: "true"
+  enable-p2p-federation: "false"
+  enable-metrics: "true"
+
+  # Cache settings
+  cache-ttl-rules: "3600"
+  cache-ttl-repos: "300"
+  cache-ttl-registry: "86400"
+
+  # Rate limiting
+  rate-limit-requests: "1000"
+  rate-limit-window: "60"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cicd-hyper-a-schemas
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: cicd-hyper-a
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: cicd-hyper-a
+data:
+  arangodb.json: |
+    {
+      "collections": {
+        "repos": { "type": "document" },
+        "rules": { "type": "document" },
+        "patterns": { "type": "document" },
+        "rulesets": { "type": "document" },
+        "audit_log": { "type": "document" }
+      },
+      "edge_collections": {
+        "repo_uses_ruleset": { "from": ["repos"], "to": ["rulesets"] },
+        "ruleset_contains": { "from": ["rulesets"], "to": ["rules"] },
+        "rule_derived_from": { "from": ["rules"], "to": ["patterns"] }
+      },
+      "indexes": {
+        "repos": [
+          { "type": "persistent", "fields": ["forge", "owner", "name"], "unique": true },
+          { "type": "persistent", "fields": ["health_score"] }
+        ],
+        "rules": [
+          { "type": "persistent", "fields": ["effect"] },
+          { "type": "fulltext", "fields": ["description"] }
+        ]
+      }
+    }
+
+  dragonfly.yaml: |
+    # Compiled rules for instant execution
+    rules:
+      key: "rule:{ruleset}:{rule_id}"
+      ttl: 3600
+      data: compiled_bytecode
+
+    # Repo state for quick lookups
+    repos:
+      key: "repo:{forge}:{owner}:{name}"
+      ttl: 300
+      data: { health_score, issues, rulesets_applied }
+
+    # Registry index for fast search
+    registry:
+      key: "registry:index:{category}"
+      ttl: 86400
+      data: [ruleset_ids]
+
+  ruleset.schema.json: |
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://cicd-hyper-a.hyperpolymath.dev/schemas/ruleset",
+      "title": "Ruleset",
+      "description": "A verified CI/CD ruleset",
+      "type": "object",
+      "required": ["name", "version", "effect", "rules"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "effect": {
+          "type": "string",
+          "enum": ["preventive", "curative", "diagnostic"]
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        }
+      },
+      "$defs": {
+        "rule": {
+          "type": "object",
+          "required": ["id", "condition", "action"],
+          "properties": {
+            "id": { "type": "string" },
+            "condition": { "type": "object" },
+            "action": { "type": "object" }
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cicd-hyper-a-engine-rules
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: engine
+    app.kubernetes.io/component: engine
+    app.kubernetes.io/part-of: cicd-hyper-a
+data:
+  loader.lgt: |
+    :- initialization((
+        logtalk_load(cicd_rules),
+        logtalk_load(rule_distiller),
+        logtalk_load(forge_adapters)
+    )).
+
+  cicd_rules.lgt: |
+    :- object(cicd_rules).
+        :- public([
+            repo_must_have/2,
+            block_commit_if/2,
+            auto_fix/2,
+            is_auto_fixable/1
+        ]).
+
+        repo_must_have(Repo, 'dependabot.yml') :-
+            repo_uses_dependencies(Repo).
+        repo_must_have(Repo, 'SECURITY.md') :-
+            repo_is_public(Repo).
+
+        block_commit_if(Commit, typescript_detected) :-
+            commit_adds_file(Commit, File),
+            file_extension(File, '.ts').
+
+        auto_fix(Repo, unpinned_actions) :-
+            find_unpinned_actions(Repo, Actions),
+            pin_actions_to_sha(Repo, Actions).
+
+        is_auto_fixable('TokenPermissionsID') :- !.
+        is_auto_fixable('PinnedDependenciesID') :- !.
+        is_auto_fixable('DependabotID') :- !.
+    :- end_object.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: cicd-hyper-a
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: []
+
+    rule_files: []
+
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - cicd-hyper-a
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      - job_name: 'arangodb'
+        static_configs:
+          - targets: ['arangodb:8529']
+        metrics_path: '/_admin/metrics/v2'
+
+      - job_name: 'dragonfly'
+        static_configs:
+          - targets: ['dragonfly:6379']

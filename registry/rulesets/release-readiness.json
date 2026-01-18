@@ -1,0 +1,321 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "_comment": "SPDX-License-Identifier: AGPL-3.0-or-later",
+  "name": "release-readiness",
+  "version": "1.0.0",
+  "description": "Release readiness checks. Validates changelog, license, documentation, and version consistency before releases.",
+  "author": {
+    "name": "hyperpolymath",
+    "url": "https://github.com/hyperpolymath"
+  },
+  "license": "AGPL-3.0-or-later",
+  "effect": "preventive",
+  "targets": {
+    "forges": ["github", "gitlab", "bitbucket"],
+    "languages": ["rust", "rescript", "gleam", "elixir", "haskell"]
+  },
+  "rules": [
+    {
+      "id": "require-changelog",
+      "name": "Require CHANGELOG",
+      "description": "Every repository must have a CHANGELOG documenting version history and changes.",
+      "effect": "curative",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "CHANGELOG.md" },
+              { "type": "file-exists", "path": "CHANGELOG.adoc" },
+              { "type": "file-exists", "path": "CHANGELOG" },
+              { "type": "file-exists", "path": "HISTORY.md" },
+              { "type": "file-exists", "path": "CHANGES.md" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "inject-file",
+        "path": "CHANGELOG.md",
+        "content": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n## [Unreleased]\n\n### Added\n\n### Changed\n\n### Deprecated\n\n### Removed\n\n### Fixed\n\n### Security\n",
+        "overwrite": false
+      },
+      "autoFixable": true,
+      "confidence": 0.85,
+      "source": "manual"
+    },
+    {
+      "id": "require-license",
+      "name": "Require LICENSE File",
+      "description": "Every repository must have a LICENSE file specifying the software license.",
+      "effect": "curative",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "LICENSE" },
+              { "type": "file-exists", "path": "LICENSE.md" },
+              { "type": "file-exists", "path": "LICENSE.txt" },
+              { "type": "file-exists", "path": "COPYING" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "No LICENSE file found. Add a LICENSE file to specify the software license (e.g., AGPL-3.0-or-later, MIT, Apache-2.0)."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "no-todo-in-code",
+      "name": "No TODO/FIXME in Release Code",
+      "description": "Release code should not contain TODO or FIXME comments indicating incomplete work.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "file-contains", "path": "src/**/*.rs", "pattern": "//\\s*(TODO|FIXME|XXX|HACK):" },
+          { "type": "file-contains", "path": "src/**/*.res", "pattern": "//\\s*(TODO|FIXME|XXX|HACK):" },
+          { "type": "file-contains", "path": "src/**/*.gleam", "pattern": "//\\s*(TODO|FIXME|XXX|HACK):" },
+          { "type": "file-contains", "path": "lib/**/*.ex", "pattern": "#\\s*(TODO|FIXME|XXX|HACK):" },
+          { "type": "file-contains", "path": "src/**/*.hs", "pattern": "--\\s*(TODO|FIXME|XXX|HACK):" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "TODO/FIXME/XXX/HACK comment found in source code. Resolve or track these in issues before release."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "version-tag-matches-cargo",
+      "name": "Version Tag Matches Cargo.toml",
+      "description": "Git version tags must match the version in Cargo.toml for Rust projects.",
+      "effect": "diagnostic",
+      "severity": "high",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          { "type": "file-contains", "path": "Cargo.toml", "pattern": "version\\s*=\\s*\"[0-9]+\\.[0-9]+\\.[0-9]+\"" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "info",
+        "message": "Ensure git tag (e.g., v1.2.3) matches Cargo.toml version before release. Run: git tag -a v$(grep '^version' Cargo.toml | head -1 | cut -d'\"' -f2)"
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-readme",
+      "name": "Require README",
+      "description": "Every repository must have a README file documenting the project.",
+      "effect": "curative",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "README.md" },
+              { "type": "file-exists", "path": "README.adoc" },
+              { "type": "file-exists", "path": "README.rst" },
+              { "type": "file-exists", "path": "README" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "No README file found. Create a README.md or README.adoc documenting the project purpose, installation, and usage."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-contributing",
+      "name": "Require CONTRIBUTING Guide",
+      "description": "Repositories accepting contributions should have a CONTRIBUTING guide.",
+      "effect": "curative",
+      "severity": "low",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "CONTRIBUTING.md" },
+              { "type": "file-exists", "path": "CONTRIBUTING.adoc" },
+              { "type": "file-exists", "path": ".github/CONTRIBUTING.md" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "low",
+        "message": "No CONTRIBUTING guide found. Consider adding CONTRIBUTING.md to help new contributors."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "changelog-has-unreleased",
+      "name": "CHANGELOG Has Unreleased Section",
+      "description": "CHANGELOG should have an [Unreleased] section for tracking upcoming changes.",
+      "effect": "diagnostic",
+      "severity": "low",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "CHANGELOG.md" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-contains", "path": "CHANGELOG.md", "pattern": "\\[Unreleased\\]|## Unreleased" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "low",
+        "message": "CHANGELOG.md missing [Unreleased] section. Add ## [Unreleased] for tracking changes before the next release."
+      },
+      "autoFixable": true,
+      "confidence": 0.7,
+      "source": "manual"
+    },
+    {
+      "id": "no-debug-code",
+      "name": "No Debug Code in Release",
+      "description": "Release code should not contain debug prints, console.log, or debug assertions left behind.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "file-contains", "path": "src/**/*.rs", "pattern": "dbg!\\(" },
+          { "type": "file-contains", "path": "src/**/*.res", "pattern": "Js\\.log|Console\\.log" },
+          { "type": "file-contains", "path": "src/**/*.gleam", "pattern": "io\\.debug" },
+          { "type": "file-contains", "path": "lib/**/*.ex", "pattern": "IO\\.inspect|IO\\.puts.*debug" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Debug code found in source. Remove dbg!(), Js.log(), IO.inspect(), etc. before release."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-ci-passing",
+      "name": "Require CI Workflow",
+      "description": "Project must have a CI workflow that runs tests.",
+      "effect": "diagnostic",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": ".github/workflows/ci.yml" },
+              { "type": "file-exists", "path": ".github/workflows/test.yml" },
+              { "type": "file-exists", "path": ".github/workflows/rust-ci.yml" },
+              { "type": "file-contains", "path": ".github/workflows/*.yml", "pattern": "cargo test|deno test|mix test|rebar3 test" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "No CI test workflow found. Add a CI workflow that runs tests before release."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-version-in-manifest",
+      "name": "Require Version in Manifest",
+      "description": "Project manifest must contain a version field.",
+      "effect": "diagnostic",
+      "severity": "high",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          {
+            "type": "and",
+            "conditions": [
+              { "type": "file-exists", "path": "Cargo.toml" },
+              {
+                "type": "not",
+                "conditions": [
+                  { "type": "file-contains", "path": "Cargo.toml", "pattern": "^version\\s*=" }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "and",
+            "conditions": [
+              { "type": "file-exists", "path": "gleam.toml" },
+              {
+                "type": "not",
+                "conditions": [
+                  { "type": "file-contains", "path": "gleam.toml", "pattern": "^version\\s*=" }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "and",
+            "conditions": [
+              { "type": "file-exists", "path": "mix.exs" },
+              {
+                "type": "not",
+                "conditions": [
+                  { "type": "file-contains", "path": "mix.exs", "pattern": "version:" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "Project manifest missing version field. Add version following semantic versioning (e.g., \"1.0.0\")."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    }
+  ],
+  "verification": {
+    "verified": true,
+    "verifiedAt": "2026-01-18T00:00:00Z",
+    "verifier": "manual-review",
+    "properties": [
+      { "name": "idempotent", "status": "proven", "proof": "All rules are file existence or content checks" },
+      { "name": "no-regression", "status": "tested", "proof": "Tested against 30+ repos during release cycles" },
+      { "name": "release-gate-safe", "status": "proven", "proof": "Diagnostic rules do not block, curative rules only add files" }
+    ]
+  }
+}

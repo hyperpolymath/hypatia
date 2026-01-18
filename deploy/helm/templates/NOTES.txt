@@ -1,0 +1,136 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/}}
+================================================================================
+   ___ ___ ___ ___    _  _ _   _ ___ ___ ___     _
+  / __|_ _/ __|   \  | || | | | | _ \ __| _ \   /_\
+ | (__ | | (__| |) | | __ | |_| |  _/ _||   /  / _ \
+  \___|___\___|___/  |_||_|\__, |_| |___|_|_\ /_/ \_\
+                           |___/
+  Neurosymbolic CI/CD Intelligence Platform
+================================================================================
+
+Thank you for installing {{ .Chart.Name }}!
+
+Release: {{ .Release.Name }}
+Namespace: {{ include "cicd-hyper-a.namespace" . }}
+Version: {{ .Chart.Version }}
+
+--------------------------------------------------------------------------------
+DEPLOYED COMPONENTS
+--------------------------------------------------------------------------------
+
+{{- if .Values.api.enabled }}
+API Service:
+  - Replicas: {{ .Values.api.replicaCount }}
+  - Port: {{ .Values.api.service.port }}
+{{- end }}
+
+{{- if .Values.registry.enabled }}
+Registry Service (Haskell):
+  - Replicas: {{ .Values.registry.replicaCount }}
+  - Port: {{ .Values.registry.service.port }}
+{{- end }}
+
+{{- if .Values.engine.enabled }}
+Engine Service (Logtalk):
+  - Replicas: {{ .Values.engine.replicaCount }}
+  - Port: {{ .Values.engine.service.port }}
+{{- end }}
+
+{{- if and .Values.arangodb.enabled (not .Values.arangodb.external) }}
+ArangoDB Cluster:
+  - Replicas: {{ .Values.arangodb.replicaCount }}
+  - Port: 8529
+{{- end }}
+
+{{- if and .Values.dragonfly.enabled (not .Values.dragonfly.external) }}
+Dragonfly Cache:
+  - Port: 6379
+{{- end }}
+
+--------------------------------------------------------------------------------
+ACCESSING THE APPLICATION
+--------------------------------------------------------------------------------
+
+{{- if .Values.api.ingress.enabled }}
+The application is available at:
+{{- range .Values.api.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+
+{{- if .Values.monitoring.grafana.ingress.enabled }}
+Grafana Dashboard: https://{{ .Values.monitoring.grafana.ingress.host }}
+{{- end }}
+
+{{- else if eq .Values.api.service.type "LoadBalancer" }}
+Get the external IP address:
+  kubectl get svc {{ include "cicd-hyper-a.fullname" . }}-api -n {{ include "cicd-hyper-a.namespace" . }} -w
+
+Once the LoadBalancer has an external IP:
+  export SERVICE_IP=$(kubectl get svc {{ include "cicd-hyper-a.fullname" . }}-api -n {{ include "cicd-hyper-a.namespace" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo "API URL: http://$SERVICE_IP:{{ .Values.api.service.port }}"
+
+{{- else }}
+Access the API via port-forward:
+  kubectl port-forward svc/{{ include "cicd-hyper-a.fullname" . }}-api 8000:{{ .Values.api.service.port }} -n {{ include "cicd-hyper-a.namespace" . }}
+
+Then access: http://localhost:8000
+{{- end }}
+
+--------------------------------------------------------------------------------
+HEALTH CHECKS
+--------------------------------------------------------------------------------
+
+Check API health:
+  kubectl exec -it deploy/{{ include "cicd-hyper-a.fullname" . }}-api -n {{ include "cicd-hyper-a.namespace" . }} -- curl -s http://localhost:8000/health
+
+Check Registry health:
+  kubectl exec -it deploy/{{ include "cicd-hyper-a.fullname" . }}-registry -n {{ include "cicd-hyper-a.namespace" . }} -- curl -s http://localhost:8080/health
+
+Check ArangoDB:
+  kubectl exec -it {{ include "cicd-hyper-a.fullname" . }}-arangodb-0 -n {{ include "cicd-hyper-a.namespace" . }} -- curl -s http://localhost:8529/_api/version
+
+Check Dragonfly:
+  kubectl exec -it deploy/{{ include "cicd-hyper-a.fullname" . }}-dragonfly -n {{ include "cicd-hyper-a.namespace" . }} -- redis-cli ping
+
+--------------------------------------------------------------------------------
+USAGE EXAMPLES
+--------------------------------------------------------------------------------
+
+Deposit a ruleset:
+  cicd-hyper-a deposit ./my-ruleset.hs \
+    --name "rust-security-hardening" \
+    --sign --verify
+
+Withdraw a ruleset:
+  cicd-hyper-a withdraw rust-security-hardening \
+    --version "1.2.0" \
+    --output ./rules/
+
+Search for rulesets:
+  cicd-hyper-a search --effect preventive --language rust
+
+--------------------------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+View logs:
+  kubectl logs -f deploy/{{ include "cicd-hyper-a.fullname" . }}-api -n {{ include "cicd-hyper-a.namespace" . }}
+  kubectl logs -f deploy/{{ include "cicd-hyper-a.fullname" . }}-registry -n {{ include "cicd-hyper-a.namespace" . }}
+  kubectl logs -f deploy/{{ include "cicd-hyper-a.fullname" . }}-engine -n {{ include "cicd-hyper-a.namespace" . }}
+
+View all pods:
+  kubectl get pods -n {{ include "cicd-hyper-a.namespace" . }}
+
+Describe pod issues:
+  kubectl describe pod <pod-name> -n {{ include "cicd-hyper-a.namespace" . }}
+
+--------------------------------------------------------------------------------
+DOCUMENTATION
+--------------------------------------------------------------------------------
+
+Full documentation: https://github.com/hyperpolymath/cicd-hyper-a
+
+For support, please open an issue at:
+  https://github.com/hyperpolymath/cicd-hyper-a/issues

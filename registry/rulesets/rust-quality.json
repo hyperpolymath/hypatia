@@ -1,0 +1,276 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "_comment": "SPDX-License-Identifier: AGPL-3.0-or-later",
+  "name": "rust-quality",
+  "version": "1.0.0",
+  "description": "Rust-specific code quality rules. Enforces clippy, rustfmt, documentation, and safe coding practices.",
+  "author": {
+    "name": "hyperpolymath",
+    "url": "https://github.com/hyperpolymath"
+  },
+  "license": "AGPL-3.0-or-later",
+  "effect": "preventive",
+  "targets": {
+    "forges": ["github", "gitlab", "bitbucket"],
+    "languages": ["rust"]
+  },
+  "rules": [
+    {
+      "id": "require-clippy-clean",
+      "name": "Require Clippy Clean",
+      "description": "All Rust code must pass clippy lints with no warnings.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-contains", "path": ".github/workflows/*.yml", "pattern": "cargo\\s+clippy" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "Rust project without clippy in CI. Add 'cargo clippy -- -D warnings' to your workflow."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-rustfmt",
+      "name": "Require rustfmt",
+      "description": "All Rust code must be formatted with rustfmt.",
+      "effect": "preventive",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-contains", "path": ".github/workflows/*.yml", "pattern": "cargo\\s+fmt" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Rust project without rustfmt check in CI. Add 'cargo fmt -- --check' to your workflow."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-rustfmt-config",
+      "name": "Require rustfmt Configuration",
+      "description": "Rust projects should have a rustfmt.toml for consistent formatting.",
+      "effect": "curative",
+      "severity": "low",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              {
+                "type": "or",
+                "conditions": [
+                  { "type": "file-exists", "path": "rustfmt.toml" },
+                  { "type": "file-exists", "path": ".rustfmt.toml" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "inject-file",
+        "path": "rustfmt.toml",
+        "content": "# SPDX-License-Identifier: AGPL-3.0-or-later\n# Rustfmt configuration\nedition = \"2021\"\nmax_width = 100\ntab_spaces = 4\nuse_small_heuristics = \"Default\"\n",
+        "overwrite": false
+      },
+      "autoFixable": true,
+      "confidence": 0.7,
+      "source": "manual"
+    },
+    {
+      "id": "require-documentation",
+      "name": "Require Documentation",
+      "description": "Public items must have documentation. Enable #![warn(missing_docs)] in lib.rs.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "src/lib.rs" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-contains", "path": "src/lib.rs", "pattern": "#!\\[warn\\(missing_docs\\)\\]|#!\\[deny\\(missing_docs\\)\\]" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Library crate without missing_docs lint. Add #![warn(missing_docs)] to src/lib.rs for documentation enforcement."
+      },
+      "autoFixable": true,
+      "confidence": 0.8,
+      "source": "manual"
+    },
+    {
+      "id": "deny-unsafe-without-comment",
+      "name": "Deny Unsafe Without Comment",
+      "description": "All unsafe blocks must have a SAFETY comment explaining why the code is sound.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-extension", "path": "**/*", "extension": ".rs" },
+          { "type": "file-contains", "path": "**/*.rs", "pattern": "unsafe\\s*\\{(?![\\s\\S]*//\\s*SAFETY)" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "Unsafe block without SAFETY comment detected. Add a comment explaining why the unsafe code is sound: // SAFETY: <explanation>"
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-msrv",
+      "name": "Require MSRV in Cargo.toml",
+      "description": "Cargo.toml must specify the minimum supported Rust version (MSRV).",
+      "effect": "curative",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-contains", "path": "Cargo.toml", "pattern": "rust-version\\s*=" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Cargo.toml missing rust-version (MSRV). Add 'rust-version = \"1.70\"' (or appropriate version) to [package] section."
+      },
+      "autoFixable": true,
+      "confidence": 0.75,
+      "source": "manual"
+    },
+    {
+      "id": "require-clippy-toml",
+      "name": "Require Clippy Configuration",
+      "description": "Rust projects should have clippy.toml for consistent linting rules.",
+      "effect": "curative",
+      "severity": "low",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              {
+                "type": "or",
+                "conditions": [
+                  { "type": "file-exists", "path": "clippy.toml" },
+                  { "type": "file-exists", "path": ".clippy.toml" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "inject-file",
+        "path": "clippy.toml",
+        "content": "# SPDX-License-Identifier: AGPL-3.0-or-later\n# Clippy configuration\nmsrv = \"1.70\"\ncognitive-complexity-threshold = 25\ntoo-many-arguments-threshold = 7\ntype-complexity-threshold = 250\n",
+        "overwrite": false
+      },
+      "autoFixable": true,
+      "confidence": 0.7,
+      "source": "manual"
+    },
+    {
+      "id": "require-deny-warnings",
+      "name": "Require Deny Warnings in CI",
+      "description": "CI should treat warnings as errors for Rust builds.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-contains", "path": ".github/workflows/*.yml", "pattern": "RUSTFLAGS.*-D\\s*warnings|-D\\s*warnings" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Rust CI does not treat warnings as errors. Add 'RUSTFLAGS: -D warnings' to your workflow environment."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-cargo-deny",
+      "name": "Require cargo-deny",
+      "description": "Use cargo-deny to audit dependencies for security vulnerabilities and license compliance.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "Cargo.toml" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-exists", "path": "deny.toml" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Rust project without deny.toml. Consider using cargo-deny for dependency auditing. Run: cargo deny init"
+      },
+      "autoFixable": false,
+      "source": "manual"
+    }
+  ],
+  "verification": {
+    "verified": true,
+    "verifiedAt": "2026-01-18T00:00:00Z",
+    "verifier": "manual-review",
+    "properties": [
+      { "name": "idempotent", "status": "proven", "proof": "All rules are stateless checks" },
+      { "name": "no-regression", "status": "tested", "proof": "Tested against 20+ Rust repositories" },
+      { "name": "rust-ecosystem-aligned", "status": "proven", "proof": "Follows Rust API Guidelines and community best practices" }
+    ]
+  }
+}

@@ -1,0 +1,274 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Main CI workflow for cicd-hyper-a
+# Tests Rust (adapters, cli), Haskell (registry), and Logtalk (engine)
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Rust Jobs (adapters, cli, fixer, data)
+  # ============================================================================
+  rust-check:
+    name: Rust Check & Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        with:
+          workspaces: ". -> target"
+          cache-on-failure: true
+
+      - name: Run cargo check
+        run: cargo check --workspace --all-targets
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  rust-fmt:
+    name: Rust Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  rust-test:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    needs: [rust-check]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        with:
+          workspaces: ". -> target"
+          cache-on-failure: true
+
+      - name: Run tests
+        run: cargo test --workspace --all-targets
+
+      - name: Run doc tests
+        run: cargo test --workspace --doc
+
+  rust-test-coverage:
+    name: Rust Coverage
+    runs-on: ubuntu-latest
+    needs: [rust-test]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        with:
+          workspaces: ". -> target"
+          cache-on-failure: true
+
+      - name: Generate coverage report
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.3.1
+        with:
+          files: lcov.info
+          flags: rust
+          fail_ci_if_error: false
+
+  # ============================================================================
+  # Haskell Jobs (registry)
+  # ============================================================================
+  haskell-build:
+    name: Haskell Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        id: setup
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Configure build
+        run: |
+          cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          cabal build all --dry-run
+
+      - name: Restore cached dependencies
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        id: cache
+        env:
+          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ env.key }}-plan-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+          restore-keys: ${{ env.key }}-
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cabal build all --only-dependencies
+
+      - name: Save cached dependencies
+        uses: actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cabal build all
+
+      - name: Run tests
+        run: cabal test all
+
+      - name: Check documentation
+        run: cabal haddock all
+
+  haskell-lint:
+    name: HLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup HLint
+        uses: haskell-actions/hlint-setup@17f0f4093d35cfdbf02aab186d51d0bb8b92ddfa # v2.7.0
+        with:
+          version: '3.8'
+
+      - name: Run HLint
+        uses: haskell-actions/hlint-run@75c62c3bed4ab3e4c85c64ed8f287478c5f86ce2 # v2.4.9
+        with:
+          path: registry/
+          fail-on: warning
+
+  # ============================================================================
+  # Logtalk Jobs (engine)
+  # ============================================================================
+  logtalk-test:
+    name: Logtalk Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install SWI-Prolog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y swi-prolog
+
+      - name: Install Logtalk
+        run: |
+          curl -sSL https://logtalk.org/files/logtalk-3.78.0.tar.bz2 | tar xj
+          cd logtalk-3.78.0
+          sudo ./scripts/install.sh -p /usr/local
+          echo "LOGTALKHOME=/usr/local/share/logtalk" >> $GITHUB_ENV
+          echo "LOGTALKUSER=$HOME/logtalk" >> $GITHUB_ENV
+
+      - name: Setup Logtalk user directory
+        run: |
+          /usr/local/share/logtalk/scripts/logtalk_user_setup.sh
+
+      - name: Run Logtalk tests
+        working-directory: engine
+        run: |
+          # Load and test the engine components
+          swipl -g "['$LOGTALKHOME/adapters/swi.pl'], ['$LOGTALKHOME/paths/paths.pl'], logtalk_load([loader, 'rules/cicd_rules', 'rules/learning']), halt(0)." -t "halt(1)"
+
+      - name: Validate Logtalk syntax
+        working-directory: engine
+        run: |
+          for file in *.lgt rules/*.lgt; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+              swipl -g "['$LOGTALKHOME/adapters/swi.pl'], logtalk_load('$file'), halt(0)." -t "halt(1)" || exit 1
+            fi
+          done
+
+  # ============================================================================
+  # Combined Status Check
+  # ============================================================================
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs:
+      - rust-check
+      - rust-fmt
+      - rust-test
+      - rust-test-coverage
+      - haskell-build
+      - haskell-lint
+      - logtalk-test
+    if: always()
+    steps:
+      - name: Check all jobs status
+        run: |
+          if [[ "${{ needs.rust-check.result }}" == "failure" ]] || \
+             [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
+             [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
+             [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
+             [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.logtalk-test.result }}" == "failure" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+          echo "All CI jobs passed successfully"

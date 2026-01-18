@@ -1,0 +1,449 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// cicd-hyper-a ArangoDB Query Templates
+//
+// These AQL queries provide common operations for the cicd-hyper-a graph model.
+// Variables prefixed with @ are bind parameters.
+
+// =============================================================================
+// BOT EXECUTION ORDER
+// =============================================================================
+
+// Get execution order for bots (topological sort based on dependencies)
+// Returns bots in the order they should be executed
+LET dependencyGraph = (
+  FOR bot IN bots
+    LET deps = (
+      FOR v, e IN 1..1 OUTBOUND bot bot_depends_on
+        RETURN v._key
+    )
+    RETURN { bot: bot._key, dependencies: deps }
+)
+FOR item IN dependencyGraph
+  FILTER LENGTH(item.dependencies) == 0 OR
+         LENGTH(
+           FOR dep IN item.dependencies
+             FOR done IN @completedBots
+               FILTER dep == done
+               RETURN 1
+         ) == LENGTH(item.dependencies)
+  RETURN item.bot
+
+// Get bots that can run (all dependencies satisfied)
+FOR bot IN bots
+  LET deps = (
+    FOR v IN 1..1 OUTBOUND bot bot_depends_on
+      RETURN v._key
+  )
+  LET satisfiedDeps = (
+    FOR dep IN deps
+      FOR session IN sessions
+        FILTER session._key == @sessionId
+        FOR v, e IN 1..1 OUTBOUND session session_ran_bot
+          FILTER v._key == dep AND e.status == "completed"
+          RETURN 1
+  )
+  FILTER LENGTH(deps) == LENGTH(satisfiedDeps)
+  RETURN bot
+
+// =============================================================================
+// SESSION ANALYSIS
+// =============================================================================
+
+// Get full session details with all findings grouped by severity
+FOR session IN sessions
+  FILTER session._key == @sessionId
+  LET repo = FIRST(
+    FOR r IN 1..1 OUTBOUND session session_scans_repo
+      RETURN r
+  )
+  LET findingsBySeverity = (
+    FOR finding IN findings
+      FILTER finding.sessionId == session._key
+      COLLECT severity = finding.severity INTO grouped
+      RETURN { severity: severity, count: LENGTH(grouped), findings: grouped[*].finding }
+  )
+  LET botsRan = (
+    FOR v, e IN 1..1 OUTBOUND session session_ran_bot
+      RETURN { bot: v, execution: e }
+  )
+  RETURN {
+    session: session,
+    repo: repo,
+    findingsBySeverity: findingsBySeverity,
+    botsRan: botsRan,
+    totalFindings: SUM(findingsBySeverity[*].count)
+  }
+
+// Get sessions with critical findings (release blockers)
+FOR session IN sessions
+  FILTER session.status == "completed"
+  LET criticalCount = LENGTH(
+    FOR finding IN findings
+      FILTER finding.sessionId == session._key
+      FILTER finding.severity IN ["critical", "high"]
+      FILTER finding.fixed == false
+      RETURN 1
+  )
+  FILTER criticalCount > 0
+  SORT session.startedAt DESC
+  LIMIT @limit
+  RETURN {
+    session: session,
+    criticalFindings: criticalCount,
+    releaseBlocked: true
+  }
+
+// =============================================================================
+// FINDING QUERIES
+// =============================================================================
+
+// Get all unfixed findings for a repo
+FOR session IN sessions
+  FILTER session.repoKey == @repoKey
+  FILTER session.status == "completed"
+  SORT session.startedAt DESC
+  LIMIT 1
+  FOR finding IN findings
+    FILTER finding.sessionId == session._key
+    FILTER finding.fixed == false
+    FILTER finding.dismissed == false
+    SORT finding.severity ASC  // critical first (alphabetically)
+    RETURN finding
+
+// Get findings by category across all repos
+FOR finding IN findings
+  FILTER finding.category == @category
+  FILTER finding.fixed == false
+  COLLECT repoKey = (
+    FOR session IN sessions
+      FILTER session._key == finding.sessionId
+      RETURN session.repoKey
+  )[0] INTO grouped
+  RETURN {
+    repo: repoKey,
+    count: LENGTH(grouped),
+    severities: UNIQUE(grouped[*].finding.severity)
+  }
+
+// Find related findings (same rule, different repos)
+FOR finding IN findings
+  FILTER finding._key == @findingId
+  LET related = (
+    FOR other IN findings
+      FILTER other.ruleId == finding.ruleId
+      FILTER other._key != finding._key
+      LIMIT 10
+      RETURN other
+  )
+  RETURN {
+    finding: finding,
+    relatedFindings: related,
+    totalRelated: LENGTH(related)
+  }
+
+// Search findings by message text
+FOR finding IN findings_search
+  SEARCH ANALYZER(finding.message IN TOKENS(@searchText, "text_en"), "text_en")
+  SORT BM25(finding) DESC
+  LIMIT @limit
+  RETURN finding
+
+// =============================================================================
+// RULE EFFECTIVENESS
+// =============================================================================
+
+// Get rule statistics (trigger count, fix rate, false positive rate)
+FOR rule IN rules
+  LET findings = (
+    FOR finding IN findings
+      FILTER finding.ruleId == rule._key
+      RETURN finding
+  )
+  LET fixed = LENGTH(
+    FOR f IN findings
+      FILTER f.fixed == true
+      RETURN 1
+  )
+  LET dismissed = LENGTH(
+    FOR f IN findings
+      FILTER f.dismissed == true
+      RETURN 1
+  )
+  LET total = LENGTH(findings)
+  RETURN {
+    rule: rule._key,
+    name: rule.name,
+    category: rule.category,
+    triggerCount: total,
+    fixedCount: fixed,
+    dismissedCount: dismissed,
+    fixRate: total > 0 ? fixed / total : 0,
+    falsePositiveRate: total > 0 ? dismissed / total : 0
+  }
+
+// Get most effective rules (highest fix rate)
+FOR rule IN rules
+  FILTER rule.enabled == true
+  LET findings = (
+    FOR finding IN findings
+      FILTER finding.ruleId == rule._key
+      RETURN finding
+  )
+  LET total = LENGTH(findings)
+  FILTER total >= @minTriggers
+  LET fixed = LENGTH(
+    FOR f IN findings FILTER f.fixed == true RETURN 1
+  )
+  LET fixRate = fixed / total
+  SORT fixRate DESC
+  LIMIT @limit
+  RETURN {
+    rule: rule,
+    triggerCount: total,
+    fixRate: fixRate
+  }
+
+// =============================================================================
+// BOT PERFORMANCE
+// =============================================================================
+
+// Get bot performance metrics
+FOR bot IN bots
+  LET sessions = (
+    FOR v, e IN 1..1 INBOUND bot session_ran_bot
+      RETURN { session: v, execution: e }
+  )
+  LET successfulRuns = LENGTH(
+    FOR s IN sessions
+      FILTER s.execution.status == "completed"
+      RETURN 1
+  )
+  LET totalFindings = SUM(
+    FOR s IN sessions
+      RETURN s.execution.findingsCount || 0
+  )
+  LET totalFixes = SUM(
+    FOR s IN sessions
+      RETURN s.execution.fixesApplied || 0
+  )
+  RETURN {
+    bot: bot._key,
+    displayName: bot.displayName,
+    tier: bot.tier,
+    totalRuns: LENGTH(sessions),
+    successfulRuns: successfulRuns,
+    successRate: LENGTH(sessions) > 0 ? successfulRuns / LENGTH(sessions) : 0,
+    totalFindings: totalFindings,
+    totalFixes: totalFixes
+  }
+
+// Get bot dependency chain
+FOR bot IN bots
+  FILTER bot._key == @botId
+  LET chain = (
+    FOR v, e, p IN 1..10 OUTBOUND bot bot_depends_on
+      RETURN {
+        bot: v._key,
+        depth: LENGTH(p.edges),
+        path: p.vertices[*]._key
+      }
+  )
+  RETURN {
+    bot: bot._key,
+    dependencies: chain
+  }
+
+// =============================================================================
+// REPOSITORY HEALTH
+// =============================================================================
+
+// Get repository health overview
+FOR repo IN repos
+  LET latestSession = FIRST(
+    FOR session IN sessions
+      FILTER session.repoKey == repo._key
+      FILTER session.status == "completed"
+      SORT session.startedAt DESC
+      LIMIT 1
+      RETURN session
+  )
+  LET findings = (
+    FOR finding IN findings
+      FILTER finding.sessionId == latestSession._key
+      FILTER finding.fixed == false
+      FILTER finding.dismissed == false
+      RETURN finding
+  )
+  LET workflows = (
+    FOR w IN 1..1 OUTBOUND repo repo_has_workflow
+      RETURN w
+  )
+  RETURN {
+    repo: repo,
+    latestSession: latestSession,
+    unfixedFindings: LENGTH(findings),
+    criticalFindings: LENGTH(
+      FOR f IN findings FILTER f.severity IN ["critical", "high"] RETURN 1
+    ),
+    workflowCount: LENGTH(workflows),
+    allWorkflowsCompliant: LENGTH(
+      FOR w IN workflows
+        FILTER w.hasSpdxHeader AND w.hasPermissions AND w.allActionsPinned
+        RETURN 1
+    ) == LENGTH(workflows)
+  }
+
+// Find repos with similar issues (for pattern detection)
+FOR repo IN repos
+  FILTER repo._key == @repoKey
+  LET repoFindings = (
+    FOR session IN sessions
+      FILTER session.repoKey == repo._key
+      FOR finding IN findings
+        FILTER finding.sessionId == session._key
+        RETURN finding.ruleId
+  )
+  FOR other IN repos
+    FILTER other._key != repo._key
+    LET otherFindings = (
+      FOR session IN sessions
+        FILTER session.repoKey == other._key
+        FOR finding IN findings
+          FILTER finding.sessionId == session._key
+          RETURN finding.ruleId
+    )
+    LET commonRules = INTERSECTION(repoFindings, otherFindings)
+    LET similarity = LENGTH(commonRules) / MAX([LENGTH(repoFindings), LENGTH(otherFindings), 1])
+    FILTER similarity > @minSimilarity
+    SORT similarity DESC
+    LIMIT @limit
+    RETURN {
+      repo: other._key,
+      similarity: similarity,
+      commonIssues: commonRules
+    }
+
+// =============================================================================
+// LEARNING & PATTERN DETECTION
+// =============================================================================
+
+// Find patterns that could become rules (frequent issues)
+FOR finding IN findings
+  FILTER finding.fixed == false
+  COLLECT ruleId = finding.ruleId, category = finding.category INTO grouped
+  LET occurrences = LENGTH(grouped)
+  FILTER occurrences >= @minOccurrences
+  LET repos = UNIQUE(
+    FOR g IN grouped
+      FOR session IN sessions
+        FILTER session._key == g.finding.sessionId
+        RETURN session.repoKey
+  )
+  SORT occurrences DESC
+  LIMIT @limit
+  RETURN {
+    ruleId: ruleId,
+    category: category,
+    occurrences: occurrences,
+    affectedRepos: repos,
+    repoCount: LENGTH(repos),
+    suggestLearning: LENGTH(repos) >= 3
+  }
+
+// Get learned rules effectiveness vs manual rules
+LET learned = (
+  FOR rule IN rules
+    FILTER rule.source == "learned"
+    LET findings = (FOR f IN findings FILTER f.ruleId == rule._key RETURN f)
+    LET fixed = LENGTH(FOR f IN findings FILTER f.fixed RETURN 1)
+    RETURN { fixRate: LENGTH(findings) > 0 ? fixed / LENGTH(findings) : 0 }
+)
+LET manual = (
+  FOR rule IN rules
+    FILTER rule.source == "manual"
+    LET findings = (FOR f IN findings FILTER f.ruleId == rule._key RETURN f)
+    LET fixed = LENGTH(FOR f IN findings FILTER f.fixed RETURN 1)
+    RETURN { fixRate: LENGTH(findings) > 0 ? fixed / LENGTH(findings) : 0 }
+)
+RETURN {
+  learnedRules: {
+    count: LENGTH(learned),
+    avgFixRate: AVERAGE(learned[*].fixRate)
+  },
+  manualRules: {
+    count: LENGTH(manual),
+    avgFixRate: AVERAGE(manual[*].fixRate)
+  }
+}
+
+// =============================================================================
+// WORKFLOW ANALYSIS
+// =============================================================================
+
+// Get workflow compliance summary
+FOR workflow IN workflows
+  COLLECT compliant = (
+    workflow.hasSpdxHeader AND workflow.hasPermissions AND workflow.allActionsPinned
+  ) INTO grouped
+  RETURN {
+    compliant: compliant,
+    count: LENGTH(grouped)
+  }
+
+// Find workflows with unpinned actions
+FOR workflow IN workflows
+  FILTER workflow.allActionsPinned == false
+  FILTER LENGTH(workflow.unpinnedActions) > 0
+  LET repo = FIRST(
+    FOR r IN 1..1 INBOUND workflow repo_has_workflow
+      RETURN r
+  )
+  RETURN {
+    repo: repo._key,
+    workflow: workflow.file,
+    unpinnedActions: workflow.unpinnedActions
+  }
+
+// =============================================================================
+// GRAPH TRAVERSALS
+// =============================================================================
+
+// Trace finding to root cause (finding -> rule -> bot -> session -> repo)
+FOR finding IN findings
+  FILTER finding._key == @findingId
+  LET rule = FIRST(FOR r IN 1..1 OUTBOUND finding finding_triggered_by RETURN r)
+  LET bot = FIRST(FOR b IN 1..1 INBOUND finding bot_found_finding RETURN b)
+  LET session = FIRST(FOR s IN 1..1 OUTBOUND finding finding_in_session RETURN s)
+  LET repo = FIRST(FOR r IN 1..1 OUTBOUND session session_scans_repo RETURN r)
+  LET fix = FIRST(FOR f IN 1..1 OUTBOUND finding finding_fixed_by RETURN f)
+  RETURN {
+    finding: finding,
+    rule: rule,
+    bot: bot,
+    session: session,
+    repo: repo,
+    fix: fix
+  }
+
+// Get complete execution graph for a session
+FOR session IN sessions
+  FILTER session._key == @sessionId
+  LET repo = FIRST(FOR r IN 1..1 OUTBOUND session session_scans_repo RETURN r)
+  LET botExecutions = (
+    FOR v, e IN 1..1 OUTBOUND session session_ran_bot
+      LET botFindings = (
+        FOR f IN 1..1 OUTBOUND v bot_found_finding
+          FILTER f.sessionId == session._key
+          RETURN f
+      )
+      RETURN {
+        bot: v,
+        execution: e,
+        findings: botFindings
+      }
+  )
+  RETURN {
+    session: session,
+    repo: repo,
+    executions: botExecutions
+  }

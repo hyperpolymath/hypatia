@@ -1,0 +1,350 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Security scanning workflow for cicd-hyper-a
+# Performs dependency audit, SAST, secret detection, and SBOM generation
+
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # Rust Security Audit
+  # ============================================================================
+  rust-audit:
+    name: Rust Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit --json > rust-audit.json || true
+
+      - name: Check for vulnerabilities
+        run: |
+          if cargo audit 2>&1 | grep -q "Vulnerability"; then
+            echo "::warning::Security vulnerabilities found in Rust dependencies"
+            cargo audit
+          else
+            echo "No known vulnerabilities found"
+          fi
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: rust-audit-results
+          path: rust-audit.json
+          retention-days: 30
+
+  rust-deny:
+    name: Rust License & Ban Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        with:
+          tool: cargo-deny
+
+      - name: Check licenses and bans
+        run: cargo deny check || true
+
+  # ============================================================================
+  # Haskell Security Audit
+  # ============================================================================
+  haskell-audit:
+    name: Haskell Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Generate dependency list
+        run: |
+          cabal build all --dry-run
+          cabal freeze
+          cat cabal.project.freeze
+
+      - name: Check for outdated dependencies
+        run: cabal outdated || true
+
+  # ============================================================================
+  # Secret Detection
+  # ============================================================================
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@8a8ef8526528d8a4ff3e2c90be08e25ef8efbd9b # v3.88.22
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================================
+  # SAST Scanning
+  # ============================================================================
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1.0.0
+        with:
+          config: >-
+            p/rust
+            p/security-audit
+            p/secrets
+          generateSarif: "1"
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['actions']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        with:
+          category: "/language:${{matrix.language}}"
+
+  # ============================================================================
+  # SBOM Generation
+  # ============================================================================
+  sbom-rust:
+    name: Generate Rust SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          cargo cyclonedx --format json --output-cdx rust-sbom.cdx.json
+          cargo cyclonedx --format xml --output-cdx rust-sbom.cdx.xml
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: rust-sbom
+          path: |
+            rust-sbom.cdx.json
+            rust-sbom.cdx.xml
+          retention-days: 90
+
+  sbom-haskell:
+    name: Generate Haskell SBOM
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Generate dependency freeze
+        run: |
+          cabal build all --dry-run
+          cabal freeze
+
+      - name: Create SBOM from freeze file
+        run: |
+          # Parse cabal.project.freeze into CycloneDX format
+          cat << 'EOF' > haskell-sbom.cdx.json
+          {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "metadata": {
+              "component": {
+                "type": "application",
+                "name": "cicd-hyper-a",
+                "version": "0.1.0.0"
+              }
+            },
+            "components": []
+          }
+          EOF
+
+          # Extract dependencies from freeze file
+          if [ -f cabal.project.freeze ]; then
+            grep "any\." cabal.project.freeze | while read -r line; do
+              pkg=$(echo "$line" | sed 's/.*any\.\([^ ]*\) ==.*/\1/')
+              ver=$(echo "$line" | sed 's/.*== *\([^,]*\).*/\1/')
+              echo "  - $pkg@$ver"
+            done
+          fi
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: haskell-sbom
+          path: registry/haskell-sbom.cdx.json
+          retention-days: 90
+
+  # ============================================================================
+  # Container Security Scanning
+  # ============================================================================
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Build test image
+        run: |
+          docker build -t cicd-hyper-a:scan -f deploy/Dockerfile .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@d9cd5b1c23aaf8cb31bb09141028215828364bbb # 0.28.0
+        with:
+          image-ref: 'cicd-hyper-a:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ============================================================================
+  # Security Status Summary
+  # ============================================================================
+  security-status:
+    name: Security Status
+    runs-on: ubuntu-latest
+    needs:
+      - rust-audit
+      - rust-deny
+      - haskell-audit
+      - secret-scan
+      - semgrep
+      - codeql
+      - sbom-rust
+      - sbom-haskell
+    if: always()
+    steps:
+      - name: Check security scan status
+        run: |
+          echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          declare -A jobs=(
+            ["rust-audit"]="${{ needs.rust-audit.result }}"
+            ["rust-deny"]="${{ needs.rust-deny.result }}"
+            ["haskell-audit"]="${{ needs.haskell-audit.result }}"
+            ["secret-scan"]="${{ needs.secret-scan.result }}"
+            ["semgrep"]="${{ needs.semgrep.result }}"
+            ["codeql"]="${{ needs.codeql.result }}"
+            ["sbom-rust"]="${{ needs.sbom-rust.result }}"
+            ["sbom-haskell"]="${{ needs.sbom-haskell.result }}"
+          )
+
+          failed=false
+          for job in "${!jobs[@]}"; do
+            result="${jobs[$job]}"
+            if [[ "$result" == "success" ]]; then
+              echo "- :white_check_mark: $job: $result" >> $GITHUB_STEP_SUMMARY
+            elif [[ "$result" == "failure" ]]; then
+              echo "- :x: $job: $result" >> $GITHUB_STEP_SUMMARY
+              failed=true
+            else
+              echo "- :warning: $job: $result" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          if [[ "$failed" == "true" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Security issues detected. Please review the scan results.**" >> $GITHUB_STEP_SUMMARY
+          fi

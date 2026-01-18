@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# cicd-hyper-a CLI - Command-line interface for the neurosymbolic CI/CD platform
+
+[package]
+name = "cicd-hyper-a-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI for cicd-hyper-a neurosymbolic CI/CD intelligence platform"
+readme = "README.md"
+keywords = ["cicd", "cli", "automation", "rules", "git"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "hyper"
+path = "src/main.rs"
+
+[dependencies]
+# Argument parsing
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+toml = "0.8"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = "1.0"
+
+# Logging and tracing
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Date/time
+chrono = { workspace = true }
+
+# File system operations
+walkdir = "2.5"
+glob = "0.3"
+ignore = "0.4"
+
+# Git operations
+git2 = "0.19"
+
+# Terminal output
+colored = "2.1"
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.11"
+tabled = "0.16"
+
+# Configuration
+directories = "5.0"
+dirs = "5.0"
+config = "0.14"
+
+# HTTP client (for registry operations)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Regex for pattern matching
+regex = "1.10"
+
+# UUID generation
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# SHA256 for checksums
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3.10"
+assert_cmd = "2.0"
+predicates = "3.1"
+mockall = "0.13"
+
+[features]
+default = []
+integration-tests = []

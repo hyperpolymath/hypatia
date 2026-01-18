@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Grafana dashboard provisioning configuration for cicd-hyper-a
+# Automatically loads dashboards from the dashboards directory
+
+apiVersion: 1
+
+providers:
+  - name: 'cicd-hyper-a'
+    orgId: 1
+    folder: 'CICD-Hyper-A'
+    folderUid: 'cicd-hyper-a'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

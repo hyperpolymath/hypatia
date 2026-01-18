@@ -1,0 +1,511 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a FAQ
+:toc: left
+:toclevels: 2
+:icons: font
+:sectnums:
+:xrefstyle: short
+
+== Introduction
+
+Frequently asked questions about cicd-hyper-a, organized by topic.
+
+== General Questions
+
+=== What is cicd-hyper-a?
+
+cicd-hyper-a is a neurosymbolic CI/CD intelligence platform that combines:
+
+* *Neural learning* for pattern recognition across thousands of repositories
+* *Symbolic reasoning* (Logtalk/Prolog) for fast, deterministic rule execution
+* *Formal verification* (Haskell/Liquid Haskell) for ruleset correctness proofs
+* *Multi-forge support* for GitHub, GitLab, Bitbucket, and more
+
+The core philosophy is "dumb rules from smart learning" -- complex patterns are learned through neural analysis, then distilled into simple, fast-acting declarative rules.
+
+=== What does "neurosymbolic" mean?
+
+Neurosymbolic AI combines two approaches:
+
+. *Neural networks* excel at pattern recognition, learning from large datasets, and handling ambiguity
+. *Symbolic logic* excels at deterministic reasoning, explainability, and formal guarantees
+
+cicd-hyper-a uses neural learning to identify patterns in CI/CD failures across thousands of repositories, then converts these patterns into symbolic rules that execute in microseconds without ML inference overhead.
+
+=== How is cicd-hyper-a different from GitHub Actions / GitLab CI?
+
+cicd-hyper-a is not a CI/CD execution platform -- it's an intelligence layer that works *with* your existing CI/CD:
+
+[cols="2,3,3"]
+|===
+| Aspect | CI/CD Platforms | cicd-hyper-a
+
+| Purpose
+| Execute build/test/deploy pipelines
+| Enforce policies, detect issues, apply fixes
+
+| Rules
+| Manually written YAML
+| Learned from patterns, formally verified
+
+| Scope
+| Single repository
+| Cross-repository intelligence
+
+| Fixes
+| Manual intervention
+| Automated with confidence scoring
+|===
+
+=== What forges does cicd-hyper-a support?
+
+Currently supported:
+
+* GitHub (full support)
+* GitLab (full support)
+* Bitbucket (full support)
+* Codeberg/Gitea (community)
+* Sourcehut (community)
+* Radicle (P2P federation)
+
+=== Is cicd-hyper-a open source?
+
+Yes. cicd-hyper-a is dual-licensed under:
+
+* *AGPL-3.0-or-later* (legal)
+* *Palimpsest Licence* (philosophical)
+
+The source code is available at https://github.com/hyperpolymath/cicd-hyper-a
+
+== Installation & Setup
+
+=== What are the system requirements?
+
+Minimum requirements for the CLI:
+
+* 64-bit Linux, macOS, or Windows (WSL)
+* 100 MB disk space
+* Git 2.40+
+
+For self-hosted deployment:
+
+* 4 CPU cores
+* 8 GB RAM
+* 50 GB SSD
+* Docker or Kubernetes
+
+=== How do I install the CLI?
+
+The fastest method is downloading a pre-built binary:
+
+[source,bash]
+----
+curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-linux-x86_64 -o hyper
+chmod +x hyper
+sudo mv hyper /usr/local/bin/
+----
+
+See <<user-guide.adoc#installation,Installation Guide>> for all methods.
+
+=== Do I need to self-host?
+
+No. You can use the public registry at `registry.cicd-hyper-a.hyperpolymath.dev` without deploying any infrastructure.
+
+Self-hosting is recommended for:
+
+* Enterprise environments with compliance requirements
+* Organizations with private rulesets
+* High-volume usage exceeding public rate limits
+
+=== How do I authenticate with my forge?
+
+For GitHub, the easiest method is using the GitHub CLI:
+
+[source,bash]
+----
+gh auth login
+----
+
+The `hyper` CLI automatically uses your `gh` authentication.
+
+Alternatively, set a personal access token:
+
+[source,bash]
+----
+export GITHUB_TOKEN="ghp_your_token_here"
+----
+
+== Rules & Rulesets
+
+=== What is a ruleset?
+
+A ruleset is a collection of related rules with shared metadata. For example:
+
+* `hyperpolymath/rsr-compliance` -- RSR language policy enforcement
+* `hyperpolymath/security-baseline` -- Basic security checks
+* `hyperpolymath/openssf-scorecard` -- OpenSSF Scorecard compliance
+
+Rulesets are versioned, signed, and formally verified.
+
+=== What types of rules exist?
+
+There are three effect types:
+
+[cols="1,3"]
+|===
+| Type | Purpose
+
+| *Preventive*
+| Block policy violations before they occur (e.g., reject TypeScript files)
+
+| *Curative*
+| Fix existing issues (e.g., pin GitHub Actions to SHA)
+
+| *Diagnostic*
+| Report issues without modification (e.g., check for outdated dependencies)
+|===
+
+=== How do I create my own rules?
+
+Rules can be written in:
+
+* *Logtalk* for symbolic rules (recommended for most cases)
+* *Haskell* for type-safe rules with formal verification
+
+See <<developer-guide.adoc#writing-rules,Writing Rules>> for detailed instructions.
+
+=== Can I disable specific rules?
+
+Yes. Create `.cicd-hyper-a.toml` in your repository:
+
+[source,toml]
+----
+[disabled_rules]
+block-typescript = false  # Allow TypeScript in this repo
+require-dependabot = false
+----
+
+=== How does auto-fix confidence work?
+
+Each auto-fix has a confidence score (0.0 to 1.0) based on:
+
+* How often this fix has been applied successfully
+* The complexity of the fix
+* Whether formal verification passed
+
+Configure thresholds:
+
+[source,toml]
+----
+[automation]
+auto_fix_threshold = 0.95  # Auto-apply >95% confidence
+pr_threshold = 0.80        # Create PR for 80-95%
+alert_threshold = 0.50     # Alert human for <80%
+----
+
+== Scanning & Fixing
+
+=== How do I scan a repository?
+
+[source,bash]
+----
+# Scan current directory
+hyper scan .
+
+# Scan with specific rulesets
+hyper scan . --rulesets security-baseline,rust-strict
+
+# Show only high-severity issues
+hyper scan . --severity high
+----
+
+=== How do I apply fixes?
+
+[source,bash]
+----
+# Preview fixes (dry run)
+hyper scan . --fix --dry-run
+
+# Apply high-confidence fixes
+hyper scan . --fix --confidence 0.95
+
+# Create a pull request with fixes
+hyper scan . --fix --create-pr
+----
+
+=== What happens if a fix fails?
+
+If an auto-fix fails:
+
+1. The error is logged and reported
+2. The confidence score for that fix is decreased
+3. Future applications require higher confidence threshold
+4. The learning system may refine the fix pattern
+
+You can view failed fixes in the scan output:
+
+[source,bash]
+----
+hyper scan . --fix -v
+----
+
+=== Can I preview changes before applying?
+
+Yes. Always use `--dry-run` to preview:
+
+[source,bash]
+----
+hyper scan . --fix --dry-run
+----
+
+This shows exactly what would be modified without making changes.
+
+== Security
+
+=== Is cicd-hyper-a safe to run on my repositories?
+
+Yes, with appropriate precautions:
+
+* Use `--dry-run` before applying fixes
+* Set appropriate `--confidence` thresholds
+* Review generated pull requests
+* Limit forge token permissions to minimum required
+
+=== What permissions does the CLI need?
+
+For read-only scanning:
+
+* Repository contents (read)
+
+For applying fixes:
+
+* Repository contents (write)
+* Pull requests (write)
+* Workflows (write, if modifying workflows)
+
+=== Are my rulesets private?
+
+By default, rulesets deposited to the public registry are public.
+
+For private rulesets:
+
+* Self-host your own registry
+* Use organization-scoped rulesets with access controls
+* Store rulesets in private Git repositories
+
+=== How are rulesets verified?
+
+Rulesets undergo multiple verification layers:
+
+1. *Syntax validation* -- Valid Haskell/JSON syntax
+2. *Type checking* -- Type-safe rule definitions
+3. *Property testing* -- QuickCheck tests for correctness properties
+4. *Formal verification* -- Liquid Haskell proofs (optional)
+5. *Cryptographic signing* -- GPG/SSH/Sigstore signatures
+
+== Performance
+
+=== How fast is rule evaluation?
+
+With cached rules in Dragonfly:
+
+* Single rule evaluation: <1 microsecond
+* Full ruleset (50 rules): <1 millisecond
+* Complex repository scan: <100 milliseconds
+
+The neural → symbolic distillation ensures rules execute without ML inference overhead.
+
+=== Can cicd-hyper-a handle large organizations?
+
+Yes. cicd-hyper-a is designed for scale:
+
+* Horizontal scaling of all services
+* Distributed caching with Dragonfly
+* Batch operations for multi-repository scans
+* Rate limiting and backpressure handling
+
+=== Why is my scan slow?
+
+Common causes:
+
+1. *First scan (cold cache)* -- Rules need to be fetched from registry
+2. *Large repository* -- Many files to analyze
+3. *Network latency* -- Forge API calls
+
+Solutions:
+
+* Use `--no-cache` to diagnose cache issues
+* Narrow scope with `--severity` or specific `--rulesets`
+* Self-host for lower latency
+
+== Troubleshooting
+
+=== "Authentication failed" error
+
+Check your GitHub CLI authentication:
+
+[source,bash]
+----
+gh auth status
+----
+
+If expired, refresh:
+
+[source,bash]
+----
+gh auth refresh
+----
+
+=== "Ruleset not found" error
+
+Verify the ruleset exists:
+
+[source,bash]
+----
+hyper search my-ruleset-name
+----
+
+Check for typos in ruleset name. Full names include owner: `hyperpolymath/rsr-compliance`.
+
+=== "Verification failed" when depositing
+
+Your ruleset has failing tests or proofs. Run locally to debug:
+
+[source,bash]
+----
+cabal test
+liquid src/MyRuleset.hs
+----
+
+See <<developer-guide.adoc#property-based-testing,Property-Based Testing>> for details.
+
+=== Rules not detecting known issues
+
+1. Check if the rule is enabled:
++
+[source,bash]
+----
+hyper scan . -v
+----
+
+2. Lower severity threshold:
++
+[source,bash]
+----
+hyper scan . --severity info
+----
+
+3. Bypass cache:
++
+[source,bash]
+----
+hyper scan . --no-cache
+----
+
+4. Verify the rule condition matches your file structure.
+
+=== How do I get debug output?
+
+Increase verbosity:
+
+[source,bash]
+----
+hyper scan . -v    # Verbose
+hyper scan . -vv   # Debug
+hyper scan . -vvv  # Trace
+----
+
+== Integration
+
+=== Can I use cicd-hyper-a in CI/CD pipelines?
+
+Yes. Add to your workflow:
+
+.GitHub Actions Example
+[source,yaml]
+----
+- name: Scan with cicd-hyper-a
+  run: |
+    curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-linux-x86_64 -o hyper
+    chmod +x hyper
+    ./hyper scan . --severity high --output json > scan-results.json
+
+- name: Fail on critical issues
+  run: |
+    if jq -e '.summary.critical > 0' scan-results.json; then
+      echo "Critical issues found!"
+      exit 1
+    fi
+----
+
+=== Does cicd-hyper-a work with monorepos?
+
+Yes. Scan specific directories:
+
+[source,bash]
+----
+hyper scan ./packages/frontend --rulesets rescript-strict
+hyper scan ./services/api --rulesets rust-strict
+----
+
+Or scan the entire monorepo with per-directory rules in `.cicd-hyper-a.toml`.
+
+=== Can I use cicd-hyper-a with pre-commit hooks?
+
+Yes. Install hooks in your repository:
+
+[source,bash]
+----
+hyper hooks install --rulesets rsr-compliance,security-baseline
+----
+
+This installs a pre-commit hook that blocks policy violations.
+
+== Contributing
+
+=== How can I contribute?
+
+We welcome contributions:
+
+* *Bug reports* -- Open an issue on GitHub
+* *Feature requests* -- Start a discussion first
+* *Documentation* -- Always appreciated
+* *Rules* -- Share useful rules as rulesets
+* *Code* -- See <<developer-guide.adoc#contributing,Contributing Guide>>
+
+=== Where do I report security issues?
+
+*Do not* open public issues for security vulnerabilities.
+
+Email security@hyperpolymath.dev with:
+
+* Description of the vulnerability
+* Steps to reproduce
+* Potential impact
+
+We respond within 48 hours.
+
+== Getting Help
+
+=== Where can I find more documentation?
+
+* <<user-guide.adoc#,User Guide>> -- CLI usage and configuration
+* <<admin-guide.adoc#,Administrator Guide>> -- Deployment and operations
+* <<developer-guide.adoc#,Developer Guide>> -- Creating rules and adapters
+* <<api-reference.adoc#,API Reference>> -- REST API documentation
+* <<glossary.adoc#,Glossary>> -- Terms and concepts
+
+=== How do I get support?
+
+* *Community chat*: https://matrix.to/#/#hyperpolymath:matrix.org
+* *GitHub issues*: https://github.com/hyperpolymath/cicd-hyper-a/issues
+* *Email*: support@hyperpolymath.dev
+
+=== Is there commercial support?
+
+Contact enterprise@hyperpolymath.dev for:
+
+* Dedicated support
+* Custom ruleset development
+* Private training
+* On-premises deployment assistance

@@ -1,0 +1,931 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Developer Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:sectnums:
+:source-highlighter: rouge
+:experimental:
+:xrefstyle: short
+
+== Introduction
+
+This guide covers development of cicd-hyper-a components, including writing rules in Logtalk, creating rulesets in Haskell, developing forge adapters, and contributing to the project.
+
+=== Development Environment Setup
+
+==== Prerequisites
+
+[cols="1,2,2"]
+|===
+| Tool | Version | Purpose
+
+| Rust
+| 1.75+
+| CLI, adapters
+
+| GHC (Haskell)
+| 9.6+
+| Registry, rulesets
+
+| Cabal
+| 3.10+
+| Haskell build
+
+| SWI-Prolog
+| 9.2+
+| Logtalk runtime
+
+| Logtalk
+| 3.70+
+| Rule engine
+
+| Deno
+| 1.40+
+| Scripts, automation
+
+| Docker
+| 24.0+
+| Local development
+|===
+
+==== Initial Setup
+
+[source,bash]
+----
+# Clone repository
+git clone https://github.com/hyperpolymath/cicd-hyper-a.git
+cd cicd-hyper-a
+
+# Install Rust dependencies
+cd cli && cargo build
+cd ../adapters && cargo build
+
+# Install Haskell dependencies
+cd ../registry && cabal update && cabal build
+
+# Install Logtalk (if not already installed)
+# See https://logtalk.org/download.html
+
+# Start development environment
+cd ../deploy
+docker compose up -d arangodb dragonfly
+
+# Run tests
+cargo test --workspace
+cabal test
+----
+
+== Architecture Overview
+
+=== Component Diagram
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         cicd-hyper-a Platform                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                   VERIFICATION LAYER (Haskell)                      │ │
+│  │                                                                      │ │
+│  │   Ruleset.hs    - Type-safe GADT-based rule DSL                     │ │
+│  │   Verify.hs     - Property-based testing (QuickCheck)               │ │
+│  │   Liquid.hs     - Formal verification (Liquid Haskell)              │ │
+│  │   Registry.hs   - Git-based ruleset storage                         │ │
+│  │   API.hs        - REST API handlers                                 │ │
+│  │                                                                      │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                              │                                           │
+│                              ▼                                           │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                   SYMBOLIC LAYER (Logtalk)                          │ │
+│  │                                                                      │ │
+│  │   cicd_rules.lgt      - Core rule definitions                       │ │
+│  │   rule_distiller.lgt  - Neural→Symbolic distillation                │ │
+│  │   learning.lgt        - Feedback learning integration               │ │
+│  │   forge_adapters.lgt  - Multi-forge operations                      │ │
+│  │                                                                      │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                              │                                           │
+│                              ▼                                           │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                    ADAPTER LAYER (Rust)                             │ │
+│  │                                                                      │ │
+│  │   github.rs     - GitHub API integration                            │ │
+│  │   gitlab.rs     - GitLab API integration                            │ │
+│  │   bitbucket.rs  - Bitbucket API integration                         │ │
+│  │   radicle.rs    - Radicle P2P integration                           │ │
+│  │                                                                      │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+----
+
+=== Data Flow
+
+. *User Request*: CLI or API call
+. *Registry Lookup*: Fetch ruleset from cache or Git storage
+. *Engine Execution*: Logtalk evaluates rules against repository state
+. *Adapter Action*: Forge-specific actions (create PR, update file)
+. *Learning Feedback*: Outcomes feed back to improve rules
+
+[[writing-rules]]
+== Writing Rules (Logtalk)
+
+=== Logtalk Basics
+
+Logtalk extends Prolog with objects, protocols, and categories. Rules are defined as predicates within objects.
+
+=== Rule Object Structure
+
+[source,prolog]
+----
+%% SPDX-License-Identifier: AGPL-3.0-or-later
+%% Custom rules for my-project
+
+:- object(my_project_rules).
+
+    :- info([
+        version is 1:'0':'0',
+        author is 'Your Name',
+        date is 2026-01-18,
+        comment is 'Custom CI/CD rules for my-project'
+    ]).
+
+    %% Public predicates
+    :- public([
+        repo_must_have/2,
+        block_commit_if/2,
+        auto_fix/2,
+        classify_severity/2,
+        suggest_fix/2
+    ]).
+
+    %% --- DECLARATIVE RULES ---
+
+    %% All repos must have a README
+    repo_must_have(Repo, 'README.md') :-
+        repo_exists(Repo).
+
+    %% Public repos must have a license
+    repo_must_have(Repo, 'LICENSE') :-
+        repo_is_public(Repo).
+
+    %% --- PREVENTIVE RULES ---
+
+    %% Block commits with large files
+    block_commit_if(Commit, large_file) :-
+        commit_adds_file(Commit, File),
+        file_size(File, Size),
+        Size > 10485760.  % 10MB
+
+    %% Block secrets in code
+    block_commit_if(Commit, secret_detected) :-
+        commit_content_matches(Commit, Pattern),
+        secret_pattern(Pattern).
+
+    %% --- CURATIVE RULES ---
+
+    %% Auto-fix missing .gitignore
+    auto_fix(Repo, missing_gitignore) :-
+        \+ repo_has_file(Repo, '.gitignore'),
+        inject_gitignore(Repo).
+
+    %% --- SEVERITY CLASSIFICATION ---
+
+    classify_severity(large_file, low).
+    classify_severity(secret_detected, critical).
+    classify_severity(missing_gitignore, low).
+
+    %% --- FIX SUGGESTIONS ---
+
+    suggest_fix(large_file, 'Use Git LFS for files >10MB').
+    suggest_fix(secret_detected, 'Remove secrets and rotate credentials').
+    suggest_fix(missing_gitignore, 'Add appropriate .gitignore for your language').
+
+:- end_object.
+----
+
+=== Available Predicates
+
+These predicates are available from the core `cicd_rules` object:
+
+.Repository State Predicates
+[cols="2,3"]
+|===
+| Predicate | Description
+
+| `repo_exists(Repo)`
+| True if repository exists
+
+| `repo_is_public(Repo)`
+| True if repository is public
+
+| `repo_has_file(Repo, Path)`
+| True if file exists in repo
+
+| `repo_uses_dependencies(Repo)`
+| True if repo has dependency files
+
+| `repo_has_workflows(Repo)`
+| True if repo has GitHub Actions
+
+| `repo_languages(Repo, Languages)`
+| Unifies with list of languages
+
+| `repo_has_branch_protection(Repo)`
+| True if branch protection enabled
+|===
+
+.Commit Predicates
+[cols="2,3"]
+|===
+| Predicate | Description
+
+| `commit_adds_file(Commit, File)`
+| True if commit adds file
+
+| `commit_modifies_file(Commit, File)`
+| True if commit modifies file
+
+| `commit_deletes_file(Commit, File)`
+| True if commit deletes file
+
+| `commit_content_matches(Commit, Pattern)`
+| True if content matches regex
+
+| `commit_modifies_workflow(Commit)`
+| True if commit modifies workflows
+|===
+
+.Workflow Predicates
+[cols="2,3"]
+|===
+| Predicate | Description
+
+| `workflow_has_unpinned_action(Commit)`
+| True if workflow has unpinned actions
+
+| `workflow_missing_permissions(Commit)`
+| True if permissions not declared
+
+| `workflow_contains(Workflow, Pattern)`
+| True if workflow contains pattern
+|===
+
+=== Pattern Matching
+
+Use Prolog pattern matching for flexible conditions:
+
+[source,prolog]
+----
+%% Match any JavaScript/TypeScript file
+js_file(File) :-
+    ( file_extension(File, '.js')
+    ; file_extension(File, '.ts')
+    ; file_extension(File, '.jsx')
+    ; file_extension(File, '.tsx')
+    ).
+
+%% Match test files
+is_test_file(File) :-
+    ( atom_concat(_, '_test.go', File)
+    ; atom_concat('test_', _, File)
+    ; atom_concat(_, '.test.js', File)
+    ; atom_concat(_, '.spec.ts', File)
+    ).
+----
+
+=== Calling Learning Module
+
+Integrate with the learning system:
+
+[source,prolog]
+----
+%% Use learned fix if confidence is high
+smart_suggest_fix(Issue, Fix) :-
+    ( learning::get_confidence(Issue, Conf),
+      Conf >= 0.85,
+      learning::recommend_fix(Issue, Fix)
+    -> true
+    ; suggest_fix(Issue, Fix)  % Fallback to static
+    ).
+
+%% Record outcome for learning
+record_outcome(Issue, Fix, success) :-
+    learning::learn_from_fix(Issue, Fix, success).
+----
+
+=== Testing Rules
+
+Test rules with the Logtalk REPL:
+
+[source,bash]
+----
+# Start SWI-Prolog with Logtalk
+swipl -g "['$LOGTALKUSER/adapters/swi.pl']"
+
+# Load the engine
+?- logtalk_load(loader).
+
+# Test a predicate
+?- cicd_rules::classify_severity(secret_detected, Severity).
+Severity = critical.
+
+# Test with mock data
+?- assertz(repo_has_file(test_repo, 'README.md')),
+   cicd_rules::repo_must_have(test_repo, File).
+File = 'README.md'.
+----
+
+== Creating Rulesets (Haskell)
+
+=== Type-Safe Rule DSL
+
+cicd-hyper-a uses GADTs for type-safe rule definitions:
+
+[source,haskell]
+----
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
+module MyRuleset where
+
+import CicdHyperA.Ruleset
+
+-- | Block commits adding Makefile
+blockMakefile :: Rule 'Preventive
+blockMakefile = PreventiveRule
+  "block-makefile"
+  (FileExists "Makefile")
+  (RejectCommit "Makefiles are not allowed. Use Deno tasks instead.")
+
+-- | Require CONTRIBUTING.md for open source repos
+requireContributing :: Rule 'Preventive
+requireContributing = PreventiveRule
+  "require-contributing"
+  (Not (FileExists "CONTRIBUTING.md"))
+  (InjectFile "CONTRIBUTING.md" contributingTemplate)
+
+-- | Fix unpinned npm dependencies
+pinNpmDeps :: Rule 'Curative
+pinNpmDeps = CurativeRule
+  "pin-npm-deps"
+  "\"dependencies\":\\s*\\{[^}]*\"[^\"]+\":\\s*\"\\^"
+  (RunCommand "npm shrinkwrap")
+
+-- | Check for outdated dependencies
+checkDeps :: Rule 'Diagnostic
+checkDeps = DiagnosticRule
+  "check-outdated-deps"
+  (CheckCommand "npm outdated --json")
+  ReportToConsole
+----
+
+=== Condition Combinators
+
+Compose complex conditions:
+
+[source,haskell]
+----
+-- AND condition
+bothConditions :: Condition
+bothConditions = And
+  (FileExists ".github/workflows/ci.yml")
+  (Not (FileContains ".github/workflows/ci.yml" "permissions:"))
+
+-- OR condition
+eitherCondition :: Condition
+eitherCondition = Or
+  (LanguageUsed TypeScript)
+  (FileExtension "*" ".ts")
+
+-- Nested conditions
+complexCondition :: Condition
+complexCondition = And
+  (Or
+    (LanguageUsed Rust)
+    (FileExists "Cargo.toml"))
+  (Not (FileExists "Cargo.lock"))
+----
+
+=== Ruleset Metadata
+
+Add metadata for the registry:
+
+[source,haskell]
+----
+import Data.Time (UTCTime, getCurrentTime)
+
+myRulesetMetadata :: IO RulesetMetadata
+myRulesetMetadata = do
+  now <- getCurrentTime
+  return $ RulesetMetadata
+    { rulesetName = "my-security-rules"
+    , rulesetDescription = "Security rules for Rust projects"
+    , rulesetAuthor = "Your Name <you@example.com>"
+    , rulesetVersion = RuleVersion 1 0 0
+    , rulesetCreated = now
+    , rulesetCategory = Security
+    , rulesetTargetLanguages = [Rust]
+    , rulesetTargetForges = [GitHub, GitLab]
+    }
+----
+
+=== Property-Based Testing
+
+Use QuickCheck to verify rule properties:
+
+[source,haskell]
+----
+{-# LANGUAGE OverloadedStrings #-}
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
+module MyRulesetSpec where
+
+import Test.Hspec
+import Test.QuickCheck
+import CicdHyperA.Ruleset
+import CicdHyperA.Verify
+
+spec :: Spec
+spec = describe "MyRuleset" $ do
+
+  describe "blockMakefile" $ do
+    it "is deterministic" $ property $ \repo ->
+      evaluate blockMakefile repo == evaluate blockMakefile repo
+
+    it "only affects Makefile" $ property $ \repo ->
+      let repo' = apply blockMakefile repo
+          affected = changedFiles repo repo'
+      in all (\f -> f == "Makefile" || f == ".git/hooks/pre-commit") affected
+
+  describe "pinNpmDeps" $ do
+    it "improves or maintains health score" $ property $ \repo ->
+      let repo' = apply pinNpmDeps repo
+      in healthScore repo' >= healthScore repo
+
+    it "creates npm-shrinkwrap.json" $ property $ \repo ->
+      hasPackageJson repo ==>
+        let repo' = apply pinNpmDeps repo
+        in hasFile repo' "npm-shrinkwrap.json"
+----
+
+=== Liquid Haskell Verification
+
+Add formal verification with refinement types:
+
+[source,haskell]
+----
+{-@ LIQUID "--reflection" @-}
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
+module MyRulesetVerified where
+
+import CicdHyperA.Ruleset
+import CicdHyperA.Liquid
+
+-- | Verified: curative rules never decrease health
+{-@ pinNpmDepsVerified :: Rule 'Curative -> Repo ->
+      {r:Repo | healthScore r >= healthScore repo} @-}
+pinNpmDepsVerified :: Rule 'Curative -> Repo -> Repo
+pinNpmDepsVerified rule repo = apply rule repo
+
+-- | Verified: preventive rules don't modify existing files
+{-@ blockMakefileVerified :: Rule 'Preventive -> Repo ->
+      {r:Repo | existingFiles r `subset` existingFiles repo} @-}
+blockMakefileVerified :: Rule 'Preventive -> Repo -> Repo
+blockMakefileVerified rule repo = apply rule repo
+----
+
+=== Building and Depositing
+
+Build and submit your ruleset:
+
+[source,bash]
+----
+# Build the ruleset
+cd my-ruleset
+cabal build
+
+# Run tests
+cabal test
+
+# Run Liquid Haskell verification
+liquid src/MyRuleset.hs
+
+# Deposit to registry
+hyper deposit dist-newstyle/.../MyRuleset.hs \
+  --name "my-security-rules" \
+  --description "Security rules for Rust projects" \
+  --sign --verify
+----
+
+== Forge Adapter Development
+
+=== Adapter Interface
+
+Forge adapters implement a common interface in Rust:
+
+[source,rust]
+----
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+use async_trait::async_trait;
+use crate::types::{Repo, Alert, Workflow, PullRequest, Branch};
+
+/// Common interface for all forge adapters
+#[async_trait]
+pub trait ForgeAdapter: Send + Sync {
+    /// Get adapter name
+    fn name(&self) -> &'static str;
+
+    /// List repositories for an organization
+    async fn list_repos(&self, org: &str) -> Result<Vec<Repo>>;
+
+    /// Get security alerts for a repository
+    async fn get_alerts(&self, owner: &str, repo: &str) -> Result<Vec<Alert>>;
+
+    /// Get workflows for a repository
+    async fn get_workflows(&self, owner: &str, repo: &str) -> Result<Vec<Workflow>>;
+
+    /// Create or update a file
+    async fn upsert_file(
+        &self,
+        owner: &str,
+        repo: &str,
+        path: &str,
+        content: &str,
+        message: &str,
+        branch: &str,
+    ) -> Result<()>;
+
+    /// Create a pull request
+    async fn create_pr(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr: &PullRequest,
+    ) -> Result<String>;
+
+    /// Enable branch protection
+    async fn enable_branch_protection(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        settings: &BranchProtection,
+    ) -> Result<()>;
+
+    /// Get rate limit status
+    async fn rate_limit(&self) -> Result<RateLimit>;
+}
+----
+
+=== Implementing a New Adapter
+
+Example: Implementing a Codeberg adapter:
+
+[source,rust]
+----
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Codeberg forge adapter (Gitea-compatible)
+
+use crate::adapter::{ForgeAdapter, Result};
+use crate::types::*;
+use async_trait::async_trait;
+use reqwest::Client;
+
+pub struct CodebergAdapter {
+    client: Client,
+    token: String,
+    base_url: String,
+}
+
+impl CodebergAdapter {
+    pub fn new(token: String) -> Self {
+        Self {
+            client: Client::new(),
+            token,
+            base_url: "https://codeberg.org/api/v1".to_string(),
+        }
+    }
+
+    async fn request<T: serde::de::DeserializeOwned>(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+    ) -> Result<T> {
+        let url = format!("{}{}", self.base_url, path);
+        let response = self.client
+            .request(method, &url)
+            .header("Authorization", format!("token {}", self.token))
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "API error: {} {}",
+                response.status(),
+                response.text().await?
+            ));
+        }
+
+        Ok(response.json().await?)
+    }
+}
+
+#[async_trait]
+impl ForgeAdapter for CodebergAdapter {
+    fn name(&self) -> &'static str {
+        "codeberg"
+    }
+
+    async fn list_repos(&self, org: &str) -> Result<Vec<Repo>> {
+        #[derive(serde::Deserialize)]
+        struct GiteaRepo {
+            name: String,
+            full_name: String,
+            private: bool,
+            html_url: String,
+            default_branch: String,
+        }
+
+        let repos: Vec<GiteaRepo> = self
+            .request(reqwest::Method::GET, &format!("/orgs/{}/repos", org))
+            .await?;
+
+        Ok(repos.into_iter().map(|r| Repo {
+            name: r.name,
+            full_name: r.full_name,
+            private: r.private,
+            url: r.html_url,
+            default_branch: r.default_branch,
+        }).collect())
+    }
+
+    async fn get_alerts(&self, owner: &str, repo: &str) -> Result<Vec<Alert>> {
+        // Codeberg/Gitea doesn't have built-in security alerts
+        // Return empty for now, or integrate with external scanner
+        Ok(vec![])
+    }
+
+    async fn create_pr(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr: &PullRequest,
+    ) -> Result<String> {
+        #[derive(serde::Serialize)]
+        struct CreatePR {
+            title: String,
+            body: String,
+            head: String,
+            base: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct PRResponse {
+            number: u64,
+            html_url: String,
+        }
+
+        let request = CreatePR {
+            title: pr.title.clone(),
+            body: pr.body.clone(),
+            head: pr.head.clone(),
+            base: pr.base.clone(),
+        };
+
+        let response: PRResponse = self.client
+            .post(&format!("{}/repos/{}/{}/pulls", self.base_url, owner, repo))
+            .header("Authorization", format!("token {}", self.token))
+            .json(&request)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(response.html_url)
+    }
+
+    // ... implement other methods
+}
+----
+
+=== Registering the Adapter
+
+Register the adapter in the adapter registry:
+
+[source,rust]
+----
+// src/registry.rs
+
+use crate::adapters::{
+    github::GitHubAdapter,
+    gitlab::GitLabAdapter,
+    bitbucket::BitbucketAdapter,
+    codeberg::CodebergAdapter,
+};
+
+pub fn create_adapter(forge: &str, config: &Config) -> Result<Box<dyn ForgeAdapter>> {
+    match forge {
+        "github" => Ok(Box::new(GitHubAdapter::new(
+            config.github_token.clone().ok_or("Missing GITHUB_TOKEN")?
+        ))),
+        "gitlab" => Ok(Box::new(GitLabAdapter::new(
+            config.gitlab_token.clone().ok_or("Missing GITLAB_TOKEN")?
+        ))),
+        "bitbucket" => Ok(Box::new(BitbucketAdapter::new(
+            config.bitbucket_user.clone().ok_or("Missing BITBUCKET_USER")?,
+            config.bitbucket_password.clone().ok_or("Missing BITBUCKET_APP_PASSWORD")?,
+        ))),
+        "codeberg" => Ok(Box::new(CodebergAdapter::new(
+            config.codeberg_token.clone().ok_or("Missing CODEBERG_TOKEN")?
+        ))),
+        _ => Err(anyhow::anyhow!("Unknown forge: {}", forge)),
+    }
+}
+----
+
+=== Testing Adapters
+
+Write integration tests:
+
+[source,rust]
+----
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+
+    #[tokio::test]
+    async fn test_list_repos() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/orgs/testorg/repos"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(vec![
+                serde_json::json!({
+                    "name": "test-repo",
+                    "full_name": "testorg/test-repo",
+                    "private": false,
+                    "html_url": "https://codeberg.org/testorg/test-repo",
+                    "default_branch": "main"
+                })
+            ]))
+            .mount(&mock_server)
+            .await;
+
+        let adapter = CodebergAdapter {
+            client: reqwest::Client::new(),
+            token: "test-token".to_string(),
+            base_url: mock_server.uri(),
+        };
+
+        let repos = adapter.list_repos("testorg").await.unwrap();
+        assert_eq!(repos.len(), 1);
+        assert_eq!(repos[0].name, "test-repo");
+    }
+}
+----
+
+== Contributing
+
+=== Code Style
+
+==== Rust
+
+Follow Rust idioms and use `rustfmt`:
+
+[source,bash]
+----
+cargo fmt --all
+cargo clippy -- -D warnings
+----
+
+==== Haskell
+
+Follow the project style guide:
+
+[source,bash]
+----
+# Format with fourmolu
+fourmolu -i src/**/*.hs
+
+# Lint with hlint
+hlint src/
+----
+
+==== Logtalk
+
+Follow Logtalk coding guidelines:
+
+* Use snake_case for predicates
+* Document all public predicates with `:- info/1`
+* Keep objects focused and cohesive
+
+=== Testing Requirements
+
+All contributions must include:
+
+* Unit tests with >80% coverage
+* Integration tests for new features
+* Property-based tests for rules
+* Documentation updates
+
+=== Pull Request Process
+
+. Fork the repository
+. Create a feature branch: `git checkout -b feature/my-feature`
+. Make changes and add tests
+. Run the test suite: `make test`
+. Commit with conventional commits: `feat: add codeberg adapter`
+. Push and create a pull request
+. Ensure CI passes
+. Request review from maintainers
+
+=== Commit Message Format
+
+Use conventional commits:
+
+----
+type(scope): description
+
+[optional body]
+
+[optional footer]
+----
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+Examples:
+
+----
+feat(adapter): add Codeberg forge adapter
+
+Implements the ForgeAdapter trait for Codeberg/Gitea
+compatible forges.
+
+Closes #123
+----
+
+----
+fix(engine): prevent shell injection in forge operations
+
+Add input validation for org/repo names to prevent
+command injection attacks.
+
+Security: CVE-2026-XXXX
+----
+
+=== Development Workflow
+
+[source,bash]
+----
+# Start development environment
+make dev-up
+
+# Run all tests
+make test
+
+# Run specific test suite
+cargo test -p cicd-hyper-a-cli
+cabal test registry
+logtalk_tester -d engine/
+
+# Build release
+make build-release
+
+# Generate documentation
+make docs
+----
+
+=== API Documentation
+
+Generate API documentation:
+
+[source,bash]
+----
+# Rust docs
+cargo doc --workspace --no-deps --open
+
+# Haskell docs
+cabal haddock --open
+
+# Logtalk docs
+cd engine && logtalk_doclet -f html
+----
+
+== Reference
+
+* <<api-reference.adoc#,API Reference>>
+* <<glossary.adoc#,Glossary>>
+* https://logtalk.org/documentation.html[Logtalk Documentation]
+* https://www.haskell.org/documentation/[Haskell Documentation]
+* https://doc.rust-lang.org/book/[The Rust Book]

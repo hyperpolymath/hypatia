@@ -1,0 +1,246 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Alertmanager configuration for cicd-hyper-a
+# Routes alerts to appropriate receivers based on severity and service
+
+global:
+  # ResolveTimeout is the time after which an alert is declared resolved
+  # if it has not been updated.
+  resolve_timeout: 5m
+
+  # SMTP configuration for email alerts (configure as needed)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@cicd-hyper-a.example.com'
+  # smtp_auth_username: 'alertmanager'
+  # smtp_auth_password: '${SMTP_PASSWORD}'
+  # smtp_require_tls: true
+
+  # Slack configuration (configure as needed)
+  # slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+  # PagerDuty configuration (configure as needed)
+  # pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Inhibition rules allow to mute a set of alerts given that another alert is firing
+inhibit_rules:
+  # If a critical alert is firing, inhibit warning alerts for the same service
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal:
+      - service
+      - alertname
+
+  # If a service is down, inhibit all other alerts for that service
+  - source_matchers:
+      - alertname =~ ".*ServiceDown"
+    target_matchers:
+      - severity =~ "warning|info"
+    equal:
+      - service
+
+  # If ArangoDB is down, inhibit database-related alerts
+  - source_matchers:
+      - alertname = ArangoDBDown
+    target_matchers:
+      - service =~ "registry|adapter|engine"
+
+  # If Dragonfly is down, inhibit cache-related alerts
+  - source_matchers:
+      - alertname = DragonflyDown
+    target_matchers:
+      - alertname =~ "Cache.*"
+
+# The root route - all alerts enter here
+route:
+  # Default receiver for all alerts
+  receiver: 'default-receiver'
+
+  # Group alerts by service and alertname
+  group_by: ['service', 'alertname']
+
+  # Wait 30 seconds to group alerts before sending
+  group_wait: 30s
+
+  # Wait 5 minutes before sending updates for the same group
+  group_interval: 5m
+
+  # Wait 4 hours before re-sending an alert that has already been sent
+  repeat_interval: 4h
+
+  # Child routes for specific alert routing
+  routes:
+    # Critical alerts - page immediately
+    - matchers:
+        - severity = critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 15m
+      continue: true
+
+    # Service availability alerts
+    - matchers:
+        - alertname =~ ".*ServiceDown|.*Down"
+      receiver: 'infrastructure-receiver'
+      group_by: ['alertname']
+      group_wait: 10s
+      repeat_interval: 5m
+
+    # Rule execution alerts
+    - matchers:
+        - service = engine
+        - alertname =~ "RuleExecution.*"
+      receiver: 'engine-receiver'
+      group_by: ['alertname', 'rule_type']
+
+    # Bot execution alerts
+    - matchers:
+        - service = adapter
+        - alertname =~ "Bot.*"
+      receiver: 'adapter-receiver'
+      group_by: ['alertname', 'bot_name']
+
+    # Finding alerts
+    - matchers:
+        - alertname =~ ".*Finding.*"
+      receiver: 'findings-receiver'
+      group_by: ['severity', 'category']
+
+    # API performance alerts
+    - matchers:
+        - service = api
+      receiver: 'api-receiver'
+      group_by: ['job', 'handler']
+
+    # Cache performance alerts
+    - matchers:
+        - service = dragonfly
+      receiver: 'cache-receiver'
+
+    # Infrastructure alerts (CPU, memory, disk)
+    - matchers:
+        - service = infrastructure
+      receiver: 'infrastructure-receiver'
+      group_by: ['instance']
+
+    # Info-level alerts - send to logging only
+    - matchers:
+        - severity = info
+      receiver: 'logging-receiver'
+      group_wait: 5m
+      repeat_interval: 24h
+
+# Receivers define where alerts are sent
+receivers:
+  # Default receiver - logs to stdout
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9095/webhook'
+        send_resolved: true
+
+  # Critical alerts - high-priority channel
+  - name: 'critical-receiver'
+    # Uncomment and configure for PagerDuty
+    # pagerduty_configs:
+    #   - service_key: '${PAGERDUTY_SERVICE_KEY}'
+    #     severity: critical
+    #     description: '{{ .CommonAnnotations.summary }}'
+    #     details:
+    #       firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+    #       resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+
+    # Uncomment and configure for Slack
+    # slack_configs:
+    #   - channel: '#cicd-critical-alerts'
+    #     send_resolved: true
+    #     icon_emoji: ':fire:'
+    #     title: 'CRITICAL: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    #     actions:
+    #       - type: button
+    #         text: 'Runbook'
+    #         url: '{{ .CommonAnnotations.runbook_url }}'
+    #       - type: button
+    #         text: 'Dashboard'
+    #         url: 'http://grafana:3000/d/cicd-overview'
+
+    webhook_configs:
+      - url: 'http://localhost:9095/critical'
+        send_resolved: true
+
+  # Infrastructure alerts
+  - name: 'infrastructure-receiver'
+    # slack_configs:
+    #   - channel: '#cicd-infrastructure'
+    #     send_resolved: true
+    #     title: 'Infrastructure: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: 'http://localhost:9095/infrastructure'
+        send_resolved: true
+
+  # Engine/Rule alerts
+  - name: 'engine-receiver'
+    # slack_configs:
+    #   - channel: '#cicd-engine'
+    #     send_resolved: true
+    #     title: 'Engine: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: 'http://localhost:9095/engine'
+        send_resolved: true
+
+  # Adapter/Bot alerts
+  - name: 'adapter-receiver'
+    # slack_configs:
+    #   - channel: '#cicd-bots'
+    #     send_resolved: true
+    #     title: 'Bot: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: 'http://localhost:9095/adapter'
+        send_resolved: true
+
+  # Finding alerts
+  - name: 'findings-receiver'
+    # slack_configs:
+    #   - channel: '#cicd-findings'
+    #     send_resolved: true
+    #     title: 'Finding: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: 'http://localhost:9095/findings'
+        send_resolved: true
+
+  # API performance alerts
+  - name: 'api-receiver'
+    # slack_configs:
+    #   - channel: '#cicd-api'
+    #     send_resolved: true
+    #     title: 'API: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: 'http://localhost:9095/api'
+        send_resolved: true
+
+  # Cache performance alerts
+  - name: 'cache-receiver'
+    # slack_configs:
+    #   - channel: '#cicd-cache'
+    #     send_resolved: true
+    #     title: 'Cache: {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+    webhook_configs:
+      - url: 'http://localhost:9095/cache'
+        send_resolved: true
+
+  # Low-priority logging receiver
+  - name: 'logging-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9095/logging'
+        send_resolved: false

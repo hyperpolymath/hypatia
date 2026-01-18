@@ -1,0 +1,354 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Default values for cicd-hyper-a Helm chart
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  # Image pull secrets for private registries
+  imagePullSecrets: []
+  # Storage class for persistent volumes
+  storageClass: "standard"
+
+# Namespace configuration
+namespace:
+  create: true
+  name: cicd-hyper-a
+  labels: {}
+  annotations: {}
+
+# ============================================================
+# API Service Configuration
+# ============================================================
+api:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: ghcr.io/hyperpolymath/cicd-hyper-a
+    tag: ""  # Defaults to appVersion
+    pullPolicy: Always
+
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 8000
+    annotations: {}
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: cicd-hyper-a.example.com  # TODO: Replace with your domain
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: cicd-hyper-a-tls
+        hosts:
+          - cicd-hyper-a.example.com
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ============================================================
+# Registry Service Configuration
+# ============================================================
+registry:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/hyperpolymath/cicd-hyper-a-registry
+    tag: ""
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+# ============================================================
+# Engine Service Configuration
+# ============================================================
+engine:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/hyperpolymath/cicd-hyper-a-engine
+    tag: ""
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8082
+    targetPort: 8082
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 60
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
+# ============================================================
+# ArangoDB Configuration
+# ============================================================
+arangodb:
+  enabled: true
+  # Use external ArangoDB instead of deploying one
+  external: false
+  # External ArangoDB URL (when external: true)
+  externalUrl: ""
+
+  replicaCount: 3
+
+  image:
+    repository: arangodb
+    tag: "3.11"
+    pullPolicy: IfNotPresent
+
+  auth:
+    rootPassword: ""  # Set via secrets
+    existingSecret: ""
+    existingSecretKey: "arangodb-root-password"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+
+  metrics:
+    enabled: true
+
+# ============================================================
+# Dragonfly (Redis) Configuration
+# ============================================================
+dragonfly:
+  enabled: true
+  # Use external Redis/Dragonfly instead
+  external: false
+  externalUrl: ""
+
+  image:
+    repository: docker.dragonflydb.io/dragonflydb/dragonfly
+    tag: "v1.14.1"
+    pullPolicy: IfNotPresent
+
+  auth:
+    password: ""  # Set via secrets
+    existingSecret: ""
+    existingSecretKey: "dragonfly-password"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+
+  config:
+    maxmemory: 3gb
+    proactorThreads: 4
+    cacheMode: true
+    snapshotCron: "0 */6 * * *"
+
+# ============================================================
+# Monitoring Configuration
+# ============================================================
+monitoring:
+  prometheus:
+    enabled: true
+    retention: 30d
+    retentionSize: 10GB
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+    persistence:
+      enabled: true
+      size: 50Gi
+
+  grafana:
+    enabled: true
+    adminUser: admin
+    adminPassword: ""  # Set via secrets
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    persistence:
+      enabled: true
+      size: 10Gi
+    ingress:
+      enabled: true
+      host: grafana.cicd-hyper-a.example.com  # TODO: Replace with your domain
+
+# ============================================================
+# Secrets Configuration
+# ============================================================
+secrets:
+  # Create secrets from values (not recommended for production)
+  create: true
+  # Use existing secrets
+  existingSecret: ""
+
+  # Database credentials
+  arangodb:
+    user: root
+    password: ""  # REQUIRED: Set in your values override
+
+  dragonfly:
+    password: ""  # REQUIRED: Set in your values override
+
+  # Forge credentials
+  github:
+    token: ""
+  gitlab:
+    token: ""
+  bitbucket:
+    user: ""
+    appPassword: ""
+
+# ============================================================
+# Network Policies
+# ============================================================
+networkPolicies:
+  enabled: true
+
+# ============================================================
+# Pod Disruption Budgets
+# ============================================================
+podDisruptionBudget:
+  enabled: true
+  api:
+    minAvailable: 2
+  registry:
+    minAvailable: 1
+  engine:
+    minAvailable: 1
+  arangodb:
+    minAvailable: 2
+
+# ============================================================
+# Service Account
+# ============================================================
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ============================================================
+# Feature Flags
+# ============================================================
+features:
+  neuralLearning: true
+  p2pFederation: false
+  metrics: true
+
+# ============================================================
+# Configuration
+# ============================================================
+config:
+  rustLog: info
+  cacheTtlRules: 3600
+  cacheTtlRepos: 300
+  cacheTtlRegistry: 86400
+  rateLimitRequests: 1000
+  rateLimitWindow: 60

@@ -1,0 +1,87 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/}}
+{{- if .Values.networkPolicies.enabled }}
+# Default deny ingress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-default-deny
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow internal communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-allow-internal
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "cicd-hyper-a.namespace" . }}
+---
+# Allow ingress controller to reach API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-allow-ingress
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.service.targetPort }}
+---
+# Allow Prometheus to scrape all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-allow-prometheus
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8082
+        - protocol: TCP
+          port: 8529
+        - protocol: TCP
+          port: 6379
+{{- end }}

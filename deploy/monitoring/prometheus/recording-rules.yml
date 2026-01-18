@@ -1,0 +1,280 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Prometheus recording rules for cicd-hyper-a
+# Pre-computed metrics for dashboard performance and complex queries
+
+groups:
+  # ============================================================
+  # RULE EXECUTION METRICS
+  # ============================================================
+  - name: rule_execution_recording
+    interval: 30s
+    rules:
+      # Rule execution rate by status
+      - record: cicd:rule_execution_rate:5m
+        expr: sum(rate(cicd_rule_execution_total[5m])) by (status)
+
+      # Total rule execution rate
+      - record: cicd:rule_execution_rate_total:5m
+        expr: sum(rate(cicd_rule_execution_total[5m]))
+
+      # Rule execution success rate
+      - record: cicd:rule_execution_success_rate:5m
+        expr: |
+          sum(rate(cicd_rule_execution_total{status="success"}[5m])) /
+          sum(rate(cicd_rule_execution_total[5m]))
+
+      # Rule execution failure rate
+      - record: cicd:rule_execution_failure_rate:5m
+        expr: |
+          sum(rate(cicd_rule_execution_total{status="failure"}[5m])) /
+          sum(rate(cicd_rule_execution_total[5m]))
+
+      # Rule execution latency percentiles
+      - record: cicd:rule_execution_latency_p50:5m
+        expr: histogram_quantile(0.50, sum(rate(cicd_rule_execution_duration_seconds_bucket[5m])) by (le))
+
+      - record: cicd:rule_execution_latency_p90:5m
+        expr: histogram_quantile(0.90, sum(rate(cicd_rule_execution_duration_seconds_bucket[5m])) by (le))
+
+      - record: cicd:rule_execution_latency_p95:5m
+        expr: histogram_quantile(0.95, sum(rate(cicd_rule_execution_duration_seconds_bucket[5m])) by (le))
+
+      - record: cicd:rule_execution_latency_p99:5m
+        expr: histogram_quantile(0.99, sum(rate(cicd_rule_execution_duration_seconds_bucket[5m])) by (le))
+
+      # Average rule execution duration
+      - record: cicd:rule_execution_avg_duration:5m
+        expr: |
+          sum(rate(cicd_rule_execution_duration_seconds_sum[5m])) /
+          sum(rate(cicd_rule_execution_duration_seconds_count[5m]))
+
+      # Rule execution by rule type
+      - record: cicd:rule_execution_by_type:5m
+        expr: sum(rate(cicd_rule_execution_total[5m])) by (rule_type, status)
+
+      # Rules currently executing (gauge)
+      - record: cicd:rules_executing
+        expr: sum(cicd_rules_in_progress)
+
+  # ============================================================
+  # BOT EXECUTION METRICS
+  # ============================================================
+  - name: bot_execution_recording
+    interval: 30s
+    rules:
+      # Bot execution rate by bot name
+      - record: cicd:bot_execution_rate:5m
+        expr: sum(rate(cicd_bot_execution_total[5m])) by (bot_name, status)
+
+      # Total bot execution rate
+      - record: cicd:bot_execution_rate_total:5m
+        expr: sum(rate(cicd_bot_execution_total[5m]))
+
+      # Bot success rate by bot name
+      - record: cicd:bot_success_rate:5m
+        expr: |
+          sum(rate(cicd_bot_execution_total{status="success"}[5m])) by (bot_name) /
+          sum(rate(cicd_bot_execution_total[5m])) by (bot_name)
+
+      # Overall bot success rate
+      - record: cicd:bot_success_rate_total:5m
+        expr: |
+          sum(rate(cicd_bot_execution_total{status="success"}[5m])) /
+          sum(rate(cicd_bot_execution_total[5m]))
+
+      # Bot execution latency percentiles by bot
+      - record: cicd:bot_execution_latency_p95:5m
+        expr: histogram_quantile(0.95, sum(rate(cicd_bot_execution_duration_seconds_bucket[5m])) by (le, bot_name))
+
+      # Average bot execution duration
+      - record: cicd:bot_avg_duration:5m
+        expr: |
+          sum(rate(cicd_bot_execution_duration_seconds_sum[5m])) by (bot_name) /
+          sum(rate(cicd_bot_execution_duration_seconds_count[5m])) by (bot_name)
+
+      # Bot queue metrics
+      - record: cicd:bot_queue_length
+        expr: cicd_bot_queue_length
+
+      - record: cicd:bot_queue_wait_time_p95:5m
+        expr: histogram_quantile(0.95, sum(rate(cicd_bot_queue_wait_seconds_bucket[5m])) by (le))
+
+      # Active bots count
+      - record: cicd:active_bots
+        expr: count(cicd_bot_last_execution_timestamp > (time() - 3600))
+
+  # ============================================================
+  # FINDINGS METRICS
+  # ============================================================
+  - name: findings_recording
+    interval: 1m
+    rules:
+      # Findings rate by severity
+      - record: cicd:findings_rate:5m
+        expr: sum(rate(cicd_findings_total[5m])) by (severity)
+
+      # Total findings rate
+      - record: cicd:findings_rate_total:5m
+        expr: sum(rate(cicd_findings_total[5m]))
+
+      # Findings by category
+      - record: cicd:findings_by_category:5m
+        expr: sum(rate(cicd_findings_total[5m])) by (category, severity)
+
+      # Critical findings rate
+      - record: cicd:critical_findings_rate:5m
+        expr: sum(rate(cicd_findings_total{severity="critical"}[5m]))
+
+      # High severity findings rate
+      - record: cicd:high_findings_rate:5m
+        expr: sum(rate(cicd_findings_total{severity="high"}[5m]))
+
+      # Findings pending processing
+      - record: cicd:findings_pending
+        expr: sum(cicd_findings_pending_processing)
+
+      # Average time to process finding
+      - record: cicd:findings_processing_time_avg:5m
+        expr: |
+          sum(rate(cicd_findings_processing_duration_seconds_sum[5m])) /
+          sum(rate(cicd_findings_processing_duration_seconds_count[5m]))
+
+      # Findings auto-resolved rate
+      - record: cicd:findings_auto_resolved_rate:5m
+        expr: |
+          sum(rate(cicd_findings_total{resolution="auto_resolved"}[5m])) /
+          sum(rate(cicd_findings_total[5m]))
+
+  # ============================================================
+  # API PERFORMANCE METRICS
+  # ============================================================
+  - name: api_recording
+    interval: 30s
+    rules:
+      # Request rate by service and handler
+      - record: cicd:api_request_rate:5m
+        expr: sum(rate(http_request_total[5m])) by (job, handler, method)
+
+      # Total API request rate
+      - record: cicd:api_request_rate_total:5m
+        expr: sum(rate(http_request_total{job=~"registry|adapter"}[5m]))
+
+      # Error rate by service
+      - record: cicd:api_error_rate:5m
+        expr: |
+          sum(rate(http_request_total{status_code=~"5.."}[5m])) by (job) /
+          sum(rate(http_request_total[5m])) by (job)
+
+      # Overall API error rate
+      - record: cicd:api_error_rate_total:5m
+        expr: |
+          sum(rate(http_request_total{job=~"registry|adapter", status_code=~"5.."}[5m])) /
+          sum(rate(http_request_total{job=~"registry|adapter"}[5m]))
+
+      # Latency percentiles by service
+      - record: cicd:api_latency_p50:5m
+        expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=~"registry|adapter"}[5m])) by (le, job))
+
+      - record: cicd:api_latency_p90:5m
+        expr: histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket{job=~"registry|adapter"}[5m])) by (le, job))
+
+      - record: cicd:api_latency_p95:5m
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~"registry|adapter"}[5m])) by (le, job))
+
+      - record: cicd:api_latency_p99:5m
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=~"registry|adapter"}[5m])) by (le, job))
+
+      # Average response time
+      - record: cicd:api_avg_response_time:5m
+        expr: |
+          sum(rate(http_request_duration_seconds_sum[5m])) by (job) /
+          sum(rate(http_request_duration_seconds_count[5m])) by (job)
+
+      # Requests by status code
+      - record: cicd:api_requests_by_status:5m
+        expr: sum(rate(http_request_total[5m])) by (job, status_code)
+
+      # Rate limit hits
+      - record: cicd:api_rate_limit_hits:5m
+        expr: sum(rate(http_rate_limit_exceeded_total[5m])) by (job)
+
+  # ============================================================
+  # CACHE PERFORMANCE METRICS
+  # ============================================================
+  - name: cache_recording
+    interval: 30s
+    rules:
+      # Cache hit rate
+      - record: cicd:cache_hit_rate:5m
+        expr: |
+          sum(rate(cicd_cache_hits_total[5m])) /
+          (sum(rate(cicd_cache_hits_total[5m])) + sum(rate(cicd_cache_misses_total[5m])))
+
+      # Cache operations rate
+      - record: cicd:cache_operations_rate:5m
+        expr: sum(rate(cicd_cache_operations_total[5m])) by (operation)
+
+      # Cache latency
+      - record: cicd:cache_latency_p95:5m
+        expr: histogram_quantile(0.95, sum(rate(cicd_cache_operation_duration_seconds_bucket[5m])) by (le, operation))
+
+      # Cache memory usage ratio
+      - record: cicd:cache_memory_ratio
+        expr: dragonfly_memory_used_bytes / dragonfly_memory_max_bytes
+
+      # Cache key count
+      - record: cicd:cache_keys_count
+        expr: dragonfly_db_keys
+
+      # Cache eviction rate
+      - record: cicd:cache_eviction_rate:5m
+        expr: rate(dragonfly_evicted_keys_total[5m])
+
+  # ============================================================
+  # INFRASTRUCTURE METRICS
+  # ============================================================
+  - name: infrastructure_recording
+    interval: 30s
+    rules:
+      # CPU usage by instance
+      - record: cicd:cpu_usage_percent
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Memory usage by instance
+      - record: cicd:memory_usage_percent
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+      # Disk usage by mount
+      - record: cicd:disk_usage_percent
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100
+
+      # Network I/O rate
+      - record: cicd:network_receive_rate:5m
+        expr: sum(rate(node_network_receive_bytes_total[5m])) by (instance)
+
+      - record: cicd:network_transmit_rate:5m
+        expr: sum(rate(node_network_transmit_bytes_total[5m])) by (instance)
+
+  # ============================================================
+  # ARANGODB METRICS
+  # ============================================================
+  - name: arangodb_recording
+    interval: 30s
+    rules:
+      # ArangoDB query rate
+      - record: cicd:arangodb_query_rate:5m
+        expr: rate(arangodb_client_http_requests_total[5m])
+
+      # ArangoDB query latency
+      - record: cicd:arangodb_query_latency_avg:5m
+        expr: |
+          rate(arangodb_client_http_request_time_total_seconds[5m]) /
+          rate(arangodb_client_http_requests_total[5m])
+
+      # ArangoDB memory usage
+      - record: cicd:arangodb_memory_usage
+        expr: arangodb_process_resident_memory_bytes
+
+      # ArangoDB connections
+      - record: cicd:arangodb_connections
+        expr: arangodb_client_connection_current

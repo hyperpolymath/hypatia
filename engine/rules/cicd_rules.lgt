@@ -22,7 +22,12 @@
         %% Learning integration
         suggest_fix_with_learning/2,
         record_fix_outcome/3,
-        get_best_fix/2
+        get_best_fix/2,
+        %% CI/CD waste detection (2026-01-18)
+        detect_workflow_waste/2,
+        is_waste_pattern/1,
+        suggest_waste_fix/2,
+        repo_language_for_tool/3
     ]).
 
     %% ============================================================
@@ -331,6 +336,156 @@
     auto_fix(Repo, wrong_license_header) :-
         find_files_with_wrong_license(Repo, Files),
         fix_license_headers(Repo, Files).
+
+    %% ============================================================
+    %% CI/CD WASTE DETECTION - Added 2026-01-18
+    %% Rules for detecting wasteful/redundant CI runs
+    %% ============================================================
+
+    :- public([
+        detect_workflow_waste/2,
+        is_waste_pattern/1,
+        suggest_waste_fix/2,
+        repo_language_for_tool/3
+    ]).
+
+    %% Waste pattern detection
+    is_waste_pattern(duplicate_workflow).
+    is_waste_pattern(unused_publish_workflows).
+    is_waste_pattern(mirror_missing_secrets).
+    is_waste_pattern(npm_in_workflow).
+    is_waste_pattern(spec_repo_full_ci).
+    is_waste_pattern(semgrep_language_mismatch).
+    is_waste_pattern(excessive_workflow_count).
+    is_waste_pattern(missing_directory_workflow).
+
+    %% Severity for waste patterns
+    classify_severity(duplicate_workflow, medium).
+    classify_severity(unused_publish_workflows, low).
+    classify_severity(mirror_missing_secrets, medium).
+    classify_severity(npm_in_workflow, high).
+    classify_severity(spec_repo_full_ci, medium).
+    classify_severity(semgrep_language_mismatch, medium).
+    classify_severity(excessive_workflow_count, low).
+    classify_severity(missing_directory_workflow, low).
+
+    %% Auto-fixable waste patterns
+    is_auto_fixable(duplicate_workflow).
+    is_auto_fixable(unused_publish_workflows).
+    is_auto_fixable(mirror_missing_secrets).
+    is_auto_fixable(npm_in_workflow).
+    is_auto_fixable(spec_repo_full_ci).
+    is_auto_fixable(semgrep_language_mismatch).
+    is_auto_fixable(missing_directory_workflow).
+    %% excessive_workflow_count NOT auto-fixable (requires judgment)
+
+    %% Fix suggestions for waste patterns
+    suggest_fix(duplicate_workflow,
+        'Delete the less comprehensive duplicate workflow; keep the more complete one').
+    suggest_fix(unused_publish_workflows,
+        'Delete unused publish-*.yml files or consolidate into single workflow with matrix').
+    suggest_fix(mirror_missing_secrets,
+        'Configure GITLAB_SSH_KEY/BITBUCKET_SSH_KEY org secrets or delete mirror.yml').
+    suggest_fix(npm_in_workflow,
+        'Replace npm install/npx with Deno or pinned binary; remove pnpm/action-setup').
+    suggest_fix(spec_repo_full_ci,
+        'Reduce to minimal CI: policy checks only; remove CodeQL/Semgrep/build workflows').
+    suggest_fix(semgrep_language_mismatch,
+        'Remove semgrep.yml from repos without Python/Go/JS source files').
+    suggest_fix(excessive_workflow_count,
+        'Consolidate workflows; remove unused templates; use matrix builds').
+    suggest_fix(missing_directory_workflow,
+        'Delete workflow or create the expected directory structure').
+
+    %% Detect duplicate workflows
+    detect_workflow_waste(Repo, duplicate_workflow) :-
+        repo_has_workflow(Repo, 'rust.yml'),
+        repo_has_workflow(Repo, 'rust-ci.yml').
+    detect_workflow_waste(Repo, duplicate_workflow) :-
+        repo_has_workflow(Repo, 'codeql.yml'),
+        repo_has_workflow(Repo, 'codeql-analysis.yml').
+    detect_workflow_waste(Repo, duplicate_workflow) :-
+        repo_has_workflow(Repo, 'ci.yml'),
+        repo_has_workflow(Repo, 'build.yml').
+
+    %% Detect unused publish workflows (>5 platform-specific publish workflows)
+    detect_workflow_waste(Repo, unused_publish_workflows) :-
+        findall(W, (repo_has_workflow(Repo, W), atom_concat('publish-', _, W)), PublishWorkflows),
+        length(PublishWorkflows, Count),
+        Count >= 5.
+
+    %% Detect mirror without secrets
+    detect_workflow_waste(Repo, mirror_missing_secrets) :-
+        repo_has_workflow(Repo, 'mirror.yml'),
+        \+ repo_has_secret(Repo, 'GITLAB_SSH_KEY'),
+        \+ repo_has_secret(Repo, 'BITBUCKET_SSH_KEY').
+
+    %% Detect npm usage in workflow despite blocker
+    detect_workflow_waste(Repo, npm_in_workflow) :-
+        repo_has_workflow(Repo, Workflow),
+        workflow_contains(Workflow, 'npm install'),
+        repo_has_workflow(Repo, 'npm-bun-blocker.yml').
+    detect_workflow_waste(Repo, npm_in_workflow) :-
+        repo_has_workflow(Repo, Workflow),
+        workflow_contains(Workflow, 'pnpm/action-setup'),
+        repo_has_workflow(Repo, 'npm-bun-blocker.yml').
+
+    %% Detect spec-only repos running full CI
+    detect_workflow_waste(Repo, spec_repo_full_ci) :-
+        repo_is_spec_only(Repo),
+        repo_workflow_count(Repo, Count),
+        Count >= 10.
+
+    %% Detect Semgrep on wrong languages
+    detect_workflow_waste(Repo, semgrep_language_mismatch) :-
+        repo_has_workflow(Repo, 'semgrep.yml'),
+        repo_languages(Repo, Languages),
+        \+ member(python, Languages),
+        \+ member(javascript, Languages),
+        \+ member(typescript, Languages),
+        \+ member(go, Languages).
+
+    %% Detect excessive workflow count (>15)
+    detect_workflow_waste(Repo, excessive_workflow_count) :-
+        repo_workflow_count(Repo, Count),
+        Count > 15.
+
+    %% Detect workflows checking for missing directories
+    detect_workflow_waste(Repo, missing_directory_workflow) :-
+        repo_has_workflow(Repo, 'zig-ffi.yml'),
+        \+ repo_has_directory(Repo, 'zig').
+
+    %% Tool language support facts
+    %% repo_language_for_tool(Tool, RepoLang, ToolLang)
+    repo_language_for_tool(codeql, javascript, 'javascript-typescript').
+    repo_language_for_tool(codeql, typescript, 'javascript-typescript').
+    repo_language_for_tool(codeql, python, 'python').
+    repo_language_for_tool(codeql, go, 'go').
+    repo_language_for_tool(codeql, java, 'java-kotlin').
+    repo_language_for_tool(codeql, kotlin, 'java-kotlin').
+    repo_language_for_tool(codeql, ruby, 'ruby').
+    repo_language_for_tool(codeql, csharp, 'csharp').
+    repo_language_for_tool(codeql, cpp, 'cpp').
+    repo_language_for_tool(codeql, c, 'cpp').
+    repo_language_for_tool(codeql, swift, 'swift').
+    %% Rust, OCaml, Haskell, etc. -> use 'actions' only
+    repo_language_for_tool(codeql, rust, 'actions').
+    repo_language_for_tool(codeql, ocaml, 'actions').
+    repo_language_for_tool(codeql, haskell, 'actions').
+    repo_language_for_tool(codeql, ada, 'actions').
+    repo_language_for_tool(codeql, rescript, 'actions').
+    repo_language_for_tool(codeql, gleam, 'actions').
+
+    repo_language_for_tool(semgrep, python, python).
+    repo_language_for_tool(semgrep, javascript, javascript).
+    repo_language_for_tool(semgrep, typescript, typescript).
+    repo_language_for_tool(semgrep, go, go).
+    repo_language_for_tool(semgrep, java, java).
+    repo_language_for_tool(semgrep, ruby, ruby).
+    %% Semgrep doesn't support these well
+    repo_language_for_tool(semgrep, rust, unsupported).
+    repo_language_for_tool(semgrep, ocaml, unsupported).
+    repo_language_for_tool(semgrep, rescript, unsupported).
 
     %% ============================================================
     %% LEARNING INTEGRATION

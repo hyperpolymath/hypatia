@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# cicd-hyper-a API Service Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: cicd-hyper-a
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: cicd-hyper-a
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: cicd-hyper-a-api
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: api
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: api
+          image: ghcr.io/hyperpolymath/cicd-hyper-a:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: PORT
+              value: "8000"
+            - name: RUST_LOG
+              valueFrom:
+                configMapKeyRef:
+                  name: cicd-hyper-a-config
+                  key: rust-log
+            - name: RUST_BACKTRACE
+              value: "0"
+            - name: ARANGODB_URL
+              value: "http://arangodb-headless:8529"
+            - name: ARANGODB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: cicd-hyper-a-config
+                  key: arangodb-database
+            - name: ARANGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cicd-hyper-a-secrets
+                  key: arangodb-user
+            - name: ARANGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cicd-hyper-a-secrets
+                  key: arangodb-password
+            - name: DRAGONFLY_URL
+              value: "redis://:$(DRAGONFLY_PASSWORD)@dragonfly:6379"
+            - name: DRAGONFLY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cicd-hyper-a-secrets
+                  key: dragonfly-password
+            - name: REGISTRY_URL
+              value: "http://registry:8080"
+            - name: ENGINE_URL
+              value: "http://engine:8082"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: schemas
+              mountPath: /app/schemas
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: schemas
+          configMap:
+            name: cicd-hyper-a-schemas
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cicd-hyper-a-api
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/component: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-pdb
+  namespace: cicd-hyper-a
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api

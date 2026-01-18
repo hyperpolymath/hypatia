@@ -1,0 +1,133 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Dragonfly (Redis-compatible cache) Deployment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dragonfly
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: dragonfly
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: cicd-hyper-a
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dragonfly
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dragonfly
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: dragonfly
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: cicd-hyper-a
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dragonfly
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dragonfly
+        app.kubernetes.io/component: cache
+        app.kubernetes.io/part-of: cicd-hyper-a
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6379"
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+      containers:
+        - name: dragonfly
+          image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.14.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --maxmemory=3gb
+            - --proactor_threads=4
+            - --cache_mode=true
+            - --snapshot_cron=0 */6 * * *
+            - --dbfilename=dragonfly.rdb
+            - --dir=/data
+            - --requirepass=$(DRAGONFLY_PASSWORD)
+          env:
+            - name: DRAGONFLY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cicd-hyper-a-secrets
+                  key: dragonfly-password
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(DRAGONFLY_PASSWORD)
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(DRAGONFLY_PASSWORD)
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dragonfly-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dragonfly-data
+  namespace: cicd-hyper-a
+  labels:
+    app.kubernetes.io/name: dragonfly
+    app.kubernetes.io/component: cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 20Gi

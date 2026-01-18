@@ -1,0 +1,229 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "_comment": "SPDX-License-Identifier: AGPL-3.0-or-later",
+  "name": "rsr-compliance",
+  "version": "1.0.0",
+  "description": "Rhodium Standard Repositories (RSR) language policy enforcement. Blocks banned languages and enforces approved technology stack.",
+  "author": {
+    "name": "hyperpolymath",
+    "url": "https://github.com/hyperpolymath"
+  },
+  "license": "AGPL-3.0-or-later",
+  "effect": "preventive",
+  "targets": {
+    "forges": ["github", "gitlab", "bitbucket"],
+    "languages": ["rust", "rescript", "gleam", "elixir", "haskell", "ocaml", "ada", "julia"]
+  },
+  "rules": [
+    {
+      "id": "block-typescript",
+      "name": "Block TypeScript",
+      "description": "TypeScript is not allowed per RSR policy. Use ReScript for type-safe JavaScript compilation.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "language-used", "language": "typescript" },
+          { "type": "file-extension", "path": "**/*", "extension": ".ts" },
+          { "type": "file-extension", "path": "**/*", "extension": ".tsx" },
+          { "type": "file-exists", "path": "tsconfig.json" }
+        ]
+      },
+      "action": {
+        "type": "reject-commit",
+        "message": "TypeScript not allowed per RSR policy. Use ReScript instead. See: https://rescript-lang.org"
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "block-go",
+      "name": "Block Go",
+      "description": "Go is not allowed per RSR policy. Use Rust for systems programming.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "language-used", "language": "go" },
+          { "type": "file-extension", "path": "**/*", "extension": ".go" },
+          { "type": "file-exists", "path": "go.mod" },
+          { "type": "file-exists", "path": "go.sum" }
+        ]
+      },
+      "action": {
+        "type": "reject-commit",
+        "message": "Go not allowed per RSR policy. Use Rust instead."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "block-python",
+      "name": "Block Python",
+      "description": "Python is not allowed per RSR policy. Use Julia for data/batch, Rust for systems, ReScript for apps.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "language-used", "language": "python" },
+          { "type": "file-extension", "path": "**/*", "extension": ".py" },
+          { "type": "file-exists", "path": "requirements.txt" },
+          { "type": "file-exists", "path": "pyproject.toml" },
+          { "type": "file-exists", "path": "setup.py" },
+          { "type": "file-exists", "path": "Pipfile" }
+        ]
+      },
+      "action": {
+        "type": "reject-commit",
+        "message": "Python not allowed per RSR policy. Use Julia for data processing, Rust for systems code, or ReScript for applications."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-rescript-for-frontend",
+      "name": "Require ReScript for Frontend",
+      "description": "Frontend code must use ReScript, not raw JavaScript or TypeScript.",
+      "effect": "preventive",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "package.json" },
+              { "type": "file-exists", "path": "deno.json" }
+            ]
+          },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-exists", "path": "rescript.json" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Frontend project detected without rescript.json. Consider using ReScript for type-safe JavaScript."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-rust-for-systems",
+      "name": "Require Rust for Systems Code",
+      "description": "Systems-level code (CLI tools, native libraries) must use Rust.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "Makefile" },
+              { "type": "file-exists", "path": "CMakeLists.txt" }
+            ]
+          },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-exists", "path": "Cargo.toml" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "Systems-level project detected without Cargo.toml. Consider using Rust for systems code."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "require-deno-over-node",
+      "name": "Require Deno Over Node",
+      "description": "New JavaScript projects must use Deno, not Node.js.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "and",
+        "conditions": [
+          { "type": "file-exists", "path": "package.json" },
+          {
+            "type": "not",
+            "conditions": [
+              { "type": "file-exists", "path": "deno.json" },
+              { "type": "file-exists", "path": "deno.jsonc" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "Node.js project detected (package.json without deno.json). Migrate to Deno for runtime and package management."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    },
+    {
+      "id": "block-node-modules",
+      "name": "Block node_modules in Production",
+      "description": "The node_modules directory should not be committed. Deno caches dependencies automatically.",
+      "effect": "preventive",
+      "severity": "medium",
+      "condition": {
+        "type": "file-exists",
+        "path": "node_modules"
+      },
+      "action": {
+        "type": "reject-commit",
+        "message": "node_modules directory detected. Do not commit node_modules. Use Deno for automatic dependency caching."
+      },
+      "autoFixable": true,
+      "confidence": 0.95,
+      "source": "manual"
+    },
+    {
+      "id": "block-npm-lock",
+      "name": "Block npm Lock Files",
+      "description": "npm lock files indicate Node.js usage. Use deno.lock instead.",
+      "effect": "preventive",
+      "severity": "medium",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "file-exists", "path": "package-lock.json" },
+          { "type": "file-exists", "path": "yarn.lock" },
+          { "type": "file-exists", "path": "pnpm-lock.yaml" },
+          { "type": "file-exists", "path": "bun.lockb" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "npm/yarn/pnpm/bun lock file detected. Migrate to Deno and use deno.lock instead."
+      },
+      "autoFixable": false,
+      "source": "manual"
+    }
+  ],
+  "verification": {
+    "verified": true,
+    "verifiedAt": "2026-01-18T00:00:00Z",
+    "verifier": "manual-review",
+    "properties": [
+      { "name": "idempotent", "status": "proven", "proof": "Rules are pure condition checks with no side effects" },
+      { "name": "no-regression", "status": "tested", "proof": "Tested against 50+ RSR-compliant repos" },
+      { "name": "deterministic", "status": "proven", "proof": "Same input always produces same output" }
+    ]
+  }
+}

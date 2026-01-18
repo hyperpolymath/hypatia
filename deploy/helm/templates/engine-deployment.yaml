@@ -1,0 +1,125 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/}}
+{{- if .Values.engine.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-engine
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.engine.autoscaling.enabled }}
+  replicas: {{ .Values.engine.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "cicd-hyper-a.engine.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cicd-hyper-a.engine.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cicd-hyper-a.serviceAccountName" . }}-engine
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: engine
+          image: "{{ .Values.engine.image.repository }}:{{ .Values.engine.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.engine.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.engine.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: ARANGODB_URL
+              value: {{ include "cicd-hyper-a.arangodbUrl" . | quote }}
+            - name: DRAGONFLY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  key: dragonfly-password
+            - name: DRAGONFLY_URL
+              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "cicd-hyper-a.fullname" . }}-dragonfly:6379"
+          resources:
+            {{- toYaml .Values.engine.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - swipl
+                - -g
+                - "logtalk_load(engine/loader), cicd_rules::is_auto_fixable('TokenPermissionsID')"
+                - -t
+                - halt
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          {{- if .Values.engine.persistence.enabled }}
+          volumeMounts:
+            - name: training-data
+              mountPath: /app/training-data
+          {{- end }}
+      {{- if .Values.engine.persistence.enabled }}
+      volumes:
+        - name: training-data
+          persistentVolumeClaim:
+            claimName: {{ include "cicd-hyper-a.fullname" . }}-engine-training-data
+      {{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cicd-hyper-a.serviceAccountName" . }}-engine
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+---
+{{- if .Values.engine.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-engine-training-data
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.engine.persistence.storageClass }}
+  storageClassName: {{ .Values.engine.persistence.storageClass }}
+  {{- else if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.engine.persistence.size }}
+{{- end }}
+{{- end }}

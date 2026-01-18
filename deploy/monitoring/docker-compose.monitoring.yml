@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Docker Compose configuration for cicd-hyper-a monitoring stack
+# Includes Prometheus, Grafana, Alertmanager, and Node Exporter
+
+version: "3.8"
+
+services:
+  # ============================================================
+  # PROMETHEUS - Metrics Collection and Storage
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: cicd-hyper-a-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./prometheus/recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - cicd-network
+      - monitoring-network
+    labels:
+      - "cicd-hyper-a.service=prometheus"
+      - "cicd-hyper-a.component=monitoring"
+
+  # ============================================================
+  # GRAFANA - Visualization and Dashboards
+  # ============================================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: cicd-hyper-a-grafana
+    environment:
+      # Security
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+
+      # Server configuration
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+
+      # Alerting
+      GF_ALERTING_ENABLED: "true"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+
+      # Plugins
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-clock-panel
+
+      # Anonymous access (disable in production)
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED:-false}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+
+      # Dashboards
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/overview.json
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - monitoring-network
+    labels:
+      - "cicd-hyper-a.service=grafana"
+      - "cicd-hyper-a.component=monitoring"
+
+  # ============================================================
+  # ALERTMANAGER - Alert Routing and Management
+  # ============================================================
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: cicd-hyper-a-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.listen-address='
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - monitoring-network
+    labels:
+      - "cicd-hyper-a.service=alertmanager"
+      - "cicd-hyper-a.component=monitoring"
+
+  # ============================================================
+  # NODE EXPORTER - Host Metrics
+  # ============================================================
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: cicd-hyper-a-node-exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.netclass.ignored-devices=^(veth|docker|br-).*$$'
+      - '--collector.netdev.device-exclude=^(veth|docker|br-).*$$'
+      - '--no-collector.ipvs'
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    restart: unless-stopped
+    pid: host
+    networks:
+      - monitoring-network
+    labels:
+      - "cicd-hyper-a.service=node-exporter"
+      - "cicd-hyper-a.component=monitoring"
+
+  # ============================================================
+  # CADVISOR - Container Metrics (Optional)
+  # ============================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cicd-hyper-a-cadvisor
+    ports:
+      - "8088:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    restart: unless-stopped
+    networks:
+      - monitoring-network
+    labels:
+      - "cicd-hyper-a.service=cadvisor"
+      - "cicd-hyper-a.component=monitoring"
+    profiles:
+      - full
+
+networks:
+  # Connect to main application network
+  cicd-network:
+    external: true
+    name: cicd-hyper-a_cicd-network
+
+  # Internal monitoring network
+  monitoring-network:
+    driver: bridge
+    name: cicd-hyper-a_monitoring-network
+
+volumes:
+  prometheus_data:
+    name: cicd-hyper-a_prometheus_data
+  grafana_data:
+    name: cicd-hyper-a_grafana_data
+  alertmanager_data:
+    name: cicd-hyper-a_alertmanager_data

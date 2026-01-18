@@ -1,0 +1,62 @@
+{
+  "id": 123456789,
+  "node_id": "R_kgDOBxxxxxx",
+  "name": "test-repo",
+  "full_name": "hyperpolymath/test-repo",
+  "private": false,
+  "owner": {
+    "login": "hyperpolymath",
+    "id": 12345678,
+    "node_id": "U_kgDOBxxxxxx",
+    "avatar_url": "https://avatars.githubusercontent.com/u/12345678",
+    "type": "User",
+    "site_admin": false
+  },
+  "html_url": "https://github.com/hyperpolymath/test-repo",
+  "description": "Test repository for integration testing",
+  "fork": false,
+  "url": "https://api.github.com/repos/hyperpolymath/test-repo",
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-18T00:00:00Z",
+  "pushed_at": "2025-01-18T00:00:00Z",
+  "git_url": "git://github.com/hyperpolymath/test-repo.git",
+  "ssh_url": "git@github.com:hyperpolymath/test-repo.git",
+  "clone_url": "https://github.com/hyperpolymath/test-repo.git",
+  "size": 100,
+  "stargazers_count": 0,
+  "watchers_count": 0,
+  "language": "Rust",
+  "has_issues": true,
+  "has_projects": true,
+  "has_downloads": true,
+  "has_wiki": true,
+  "has_pages": false,
+  "forks_count": 0,
+  "archived": false,
+  "disabled": false,
+  "open_issues_count": 0,
+  "license": {
+    "key": "agpl-3.0",
+    "name": "GNU Affero General Public License v3.0",
+    "spdx_id": "AGPL-3.0-or-later",
+    "url": "https://api.github.com/licenses/agpl-3.0"
+  },
+  "visibility": "public",
+  "default_branch": "main",
+  "permissions": {
+    "admin": true,
+    "maintain": true,
+    "push": true,
+    "triage": true,
+    "pull": true
+  },
+  "topics": ["rust", "testing"],
+  "security_and_analysis": {
+    "secret_scanning": {
+      "status": "enabled"
+    },
+    "secret_scanning_push_protection": {
+      "status": "enabled"
+    }
+  }
+}

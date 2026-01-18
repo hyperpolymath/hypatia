@@ -1,0 +1,21 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-config
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+data:
+  rust-log: {{ .Values.config.rustLog | quote }}
+  arangodb-database: "cicd_hyper_a"
+  enable-neural-learning: {{ .Values.features.neuralLearning | quote }}
+  enable-p2p-federation: {{ .Values.features.p2pFederation | quote }}
+  enable-metrics: {{ .Values.features.metrics | quote }}
+  cache-ttl-rules: {{ .Values.config.cacheTtlRules | quote }}
+  cache-ttl-repos: {{ .Values.config.cacheTtlRepos | quote }}
+  cache-ttl-registry: {{ .Values.config.cacheTtlRegistry | quote }}
+  rate-limit-requests: {{ .Values.config.rateLimitRequests | quote }}
+  rate-limit-window: {{ .Values.config.rateLimitWindow | quote }}

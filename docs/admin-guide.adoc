@@ -1,0 +1,1018 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Administrator Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:sectnums:
+:source-highlighter: rouge
+:experimental:
+:xrefstyle: short
+
+== Overview
+
+This guide covers deployment, operation, and maintenance of cicd-hyper-a infrastructure for system administrators and DevOps engineers.
+
+=== Architecture Summary
+
+cicd-hyper-a consists of several interconnected components:
+
+[source]
+----
+                    ┌─────────────────────────────────────┐
+                    │         Load Balancer / Ingress      │
+                    └─────────────────────────────────────┘
+                                      │
+         ┌────────────────────────────┼────────────────────────────┐
+         ▼                            ▼                            ▼
+┌─────────────────┐        ┌─────────────────┐        ┌─────────────────┐
+│    Registry     │        │     Engine      │        │    Adapter      │
+│   (Haskell)     │        │   (Logtalk)     │        │    (Rust)       │
+│   Port: 8080    │        │   Port: 8081    │        │   Port: 8082    │
+└────────┬────────┘        └────────┬────────┘        └────────┬────────┘
+         │                          │                          │
+         └────────────────┬─────────┴────────────────────────┬─┘
+                          ▼                                  ▼
+              ┌─────────────────────┐            ┌─────────────────────┐
+              │     ArangoDB        │            │     Dragonfly       │
+              │  (Graph Database)   │            │  (Redis-compatible) │
+              │     Port: 8529      │            │     Port: 6379      │
+              └─────────────────────┘            └─────────────────────┘
+----
+
+*Registry*:: Haskell service for ruleset storage, verification, and distribution
+*Engine*:: Logtalk/SWI-Prolog service for rule execution and inference
+*Adapter*:: Rust service for forge API integration (GitHub, GitLab, etc.)
+*ArangoDB*:: Graph database for relationship modeling
+*Dragonfly*:: High-performance cache for compiled rules
+
+== Deployment Options
+
+=== Docker Compose (Development/Testing)
+
+Suitable for development, testing, and small deployments.
+
+==== Prerequisites
+
+* Docker Engine 24.0+
+* Docker Compose v2.20+
+* 4GB RAM minimum (8GB recommended)
+* 20GB disk space
+
+==== Deployment
+
+[source,bash]
+----
+# Clone the repository
+git clone https://github.com/hyperpolymath/cicd-hyper-a.git
+cd cicd-hyper-a/deploy
+
+# Configure environment
+cp .env.example .env
+vim .env  # Edit settings
+
+# Start services
+docker compose up -d
+
+# Verify deployment
+docker compose ps
+curl http://localhost:8080/health
+----
+
+==== Environment Variables
+
+Create a `.env` file:
+
+[source,bash]
+----
+# ArangoDB
+ARANGO_ROOT_PASSWORD=secure-password-here
+
+# GitHub Integration
+GITHUB_TOKEN=ghp_your_token_here
+
+# GitLab Integration (optional)
+GITLAB_TOKEN=glpat-your-token-here
+
+# Bitbucket Integration (optional)
+BITBUCKET_USER=your-username
+BITBUCKET_APP_PASSWORD=app-password-here
+
+# Monitoring
+GRAFANA_USER=admin
+GRAFANA_PASSWORD=admin-password-here
+----
+
+==== Service Ports
+
+[cols="2,1,3"]
+|===
+| Service | Port | Purpose
+
+| Registry API
+| 8080
+| REST/GraphQL API for rulesets
+
+| Engine
+| 8081
+| Logtalk rule engine
+
+| Adapter
+| 8082
+| Forge adapter API
+
+| ArangoDB Web UI
+| 8529
+| Database administration
+
+| Dragonfly
+| 6379
+| Redis-compatible cache
+
+| Prometheus
+| 9090
+| Metrics collection
+
+| Grafana
+| 3000
+| Monitoring dashboards
+|===
+
+=== Kubernetes (Production)
+
+Recommended for production deployments.
+
+==== Prerequisites
+
+* Kubernetes 1.28+
+* Helm 3.12+
+* cert-manager (for TLS)
+* NGINX Ingress Controller
+* PersistentVolume provisioner
+
+==== Helm Deployment
+
+[source,bash]
+----
+# Add the Helm repository
+helm repo add hyperpolymath https://charts.hyperpolymath.dev
+helm repo update
+
+# Create namespace
+kubectl create namespace cicd-hyper-a
+
+# Create secrets
+kubectl create secret generic cicd-hyper-a-secrets \
+  --namespace cicd-hyper-a \
+  --from-literal=arango-password=secure-password \
+  --from-literal=github-token=ghp_token \
+  --from-literal=gitlab-token=glpat-token
+
+# Install the chart
+helm install cicd-hyper-a hyperpolymath/cicd-hyper-a \
+  --namespace cicd-hyper-a \
+  --values values-production.yaml
+----
+
+==== Production Values
+
+.values-production.yaml
+[source,yaml]
+----
+# High-availability configuration
+replicaCount:
+  registry: 3
+  engine: 3
+  adapter: 2
+
+# Resource limits
+resources:
+  registry:
+    limits:
+      cpu: "2"
+      memory: 4Gi
+    requests:
+      cpu: "500m"
+      memory: 1Gi
+  engine:
+    limits:
+      cpu: "4"
+      memory: 8Gi
+    requests:
+      cpu: "1"
+      memory: 2Gi
+
+# ArangoDB cluster
+arangodb:
+  mode: cluster
+  agents: 3
+  coordinators: 3
+  dbservers: 3
+  resources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+
+# Dragonfly cluster
+dragonfly:
+  replicas: 3
+  maxmemory: 8gb
+  persistence:
+    enabled: true
+    size: 100Gi
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: registry.cicd-hyper-a.example.com
+      paths:
+        - path: /
+          service: registry
+  tls:
+    - secretName: cicd-hyper-a-tls
+      hosts:
+        - registry.cicd-hyper-a.example.com
+
+# Pod disruption budgets
+podDisruptionBudget:
+  registry:
+    minAvailable: 2
+  engine:
+    minAvailable: 2
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+----
+
+==== Namespace Structure
+
+[source,bash]
+----
+kubectl get all -n cicd-hyper-a
+----
+
+Expected output:
+----
+NAME                                    READY   STATUS    RESTARTS   AGE
+pod/cicd-hyper-a-adapter-xxx            1/1     Running   0          1h
+pod/cicd-hyper-a-engine-xxx             1/1     Running   0          1h
+pod/cicd-hyper-a-registry-xxx           1/1     Running   0          1h
+pod/arangodb-coordinator-xxx            1/1     Running   0          1h
+pod/dragonfly-xxx                       1/1     Running   0          1h
+
+NAME                              TYPE        CLUSTER-IP       PORT(S)
+service/cicd-hyper-a-registry     ClusterIP   10.96.xxx.xxx    8080/TCP
+service/cicd-hyper-a-engine       ClusterIP   10.96.xxx.xxx    8081/TCP
+service/cicd-hyper-a-adapter      ClusterIP   10.96.xxx.xxx    8082/TCP
+service/arangodb                  ClusterIP   10.96.xxx.xxx    8529/TCP
+service/dragonfly                 ClusterIP   10.96.xxx.xxx    6379/TCP
+----
+
+=== Bare Metal / VM Deployment
+
+For environments without container orchestration.
+
+==== System Requirements
+
+[cols="1,2,2"]
+|===
+| Component | Minimum | Recommended
+
+| CPU
+| 4 cores
+| 8+ cores
+
+| RAM
+| 8 GB
+| 32 GB
+
+| Disk
+| 50 GB SSD
+| 200 GB NVMe
+
+| Network
+| 100 Mbps
+| 1 Gbps
+|===
+
+==== Installation Steps
+
+. Install dependencies:
++
+[source,bash]
+----
+# Debian/Ubuntu
+apt-get update
+apt-get install -y curl wget git build-essential
+
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install GHC (Haskell)
+curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+
+# Install SWI-Prolog and Logtalk
+apt-get install -y swi-prolog
+# Download Logtalk from https://logtalk.org/download.html
+----
+
+. Build components:
++
+[source,bash]
+----
+# Build registry
+cd cicd-hyper-a/registry
+cabal build
+
+# Build adapter
+cd ../adapters
+cargo build --release
+
+# Build CLI
+cd ../cli
+cargo build --release
+----
+
+. Install and configure services:
++
+[source,bash]
+----
+# Copy binaries
+cp registry/dist-newstyle/build/.../cicd-hyper-a /usr/local/bin/
+cp adapters/target/release/cicd-hyper-a-adapter /usr/local/bin/
+cp cli/target/release/hyper /usr/local/bin/
+
+# Create systemd services
+cp deploy/systemd/*.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable cicd-hyper-a-registry cicd-hyper-a-engine cicd-hyper-a-adapter
+----
+
+== Scaling
+
+=== Horizontal Scaling
+
+==== Registry Service
+
+The registry is stateless and scales horizontally:
+
+[source,bash]
+----
+# Kubernetes
+kubectl scale deployment cicd-hyper-a-registry --replicas=5
+
+# Docker Compose
+docker compose up -d --scale registry=5
+----
+
+==== Engine Service
+
+The Logtalk engine can scale horizontally with session affinity:
+
+[source,yaml]
+----
+# Kubernetes ingress annotation for session affinity
+annotations:
+  nginx.ingress.kubernetes.io/affinity: "cookie"
+  nginx.ingress.kubernetes.io/session-cookie-name: "route"
+----
+
+==== Database Scaling
+
+*ArangoDB* scales by adding coordinators and DB servers:
+
+[source,bash]
+----
+# Add coordinator
+helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+  --set arangodb.coordinators=5
+
+# Add DB server
+helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+  --set arangodb.dbservers=5
+----
+
+*Dragonfly* scales with cluster mode:
+
+[source,bash]
+----
+# Scale Dragonfly replicas
+helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+  --set dragonfly.replicas=5
+----
+
+=== Vertical Scaling
+
+Increase resource limits for compute-intensive workloads:
+
+[source,yaml]
+----
+resources:
+  engine:
+    limits:
+      cpu: "8"
+      memory: 16Gi
+    requests:
+      cpu: "2"
+      memory: 4Gi
+----
+
+=== Performance Tuning
+
+==== Dragonfly Cache Tuning
+
+[source,yaml]
+----
+dragonfly:
+  command:
+    - --maxmemory=16gb
+    - --proactor_threads=8
+    - --cache_mode=true
+    - --hz=100
+----
+
+==== ArangoDB Tuning
+
+[source,yaml]
+----
+arangodb:
+  args:
+    - --server.statistics=true
+    - --rocksdb.block-cache-size=8589934592  # 8GB
+    - --rocksdb.total-write-buffer-size=2147483648  # 2GB
+----
+
+== Backup and Recovery
+
+=== Backup Strategy
+
+Implement the 3-2-1 backup rule:
+- *3* copies of data
+- *2* different media types
+- *1* off-site copy
+
+=== ArangoDB Backup
+
+==== Hot Backup (Enterprise)
+
+[source,bash]
+----
+# Create hot backup
+arangodump \
+  --server.endpoint tcp://localhost:8529 \
+  --server.password "${ARANGO_PASSWORD}" \
+  --output-directory /backup/$(date +%Y%m%d)
+----
+
+==== Scheduled Backups (Kubernetes)
+
+[source,yaml]
+----
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: arangodb-backup
+  namespace: cicd-hyper-a
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: arangodb/arangodb:3.11
+            command:
+            - /bin/sh
+            - -c
+            - |
+              arangodump \
+                --server.endpoint tcp://arangodb:8529 \
+                --server.password "${ARANGO_PASSWORD}" \
+                --output-directory /backup/$(date +%Y%m%d) \
+                --compress-output
+            envFrom:
+            - secretRef:
+                name: arangodb-credentials
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          restartPolicy: OnFailure
+----
+
+=== Dragonfly Backup
+
+Dragonfly supports RDB and AOF persistence:
+
+[source,yaml]
+----
+dragonfly:
+  command:
+    - --save=900 1 300 10 60 10000  # RDB snapshots
+    - --dir=/data
+----
+
+=== Registry Backup
+
+The registry uses Git-native storage. Backup the Git repository:
+
+[source,bash]
+----
+# Mirror the registry repository
+git clone --mirror https://registry.example.com/rulesets.git backup-rulesets.git
+
+# Verify integrity
+cd backup-rulesets.git
+git fsck --full
+----
+
+=== Disaster Recovery
+
+==== Recovery Procedure
+
+. Restore ArangoDB:
++
+[source,bash]
+----
+arangorestore \
+  --server.endpoint tcp://localhost:8529 \
+  --server.password "${ARANGO_PASSWORD}" \
+  --input-directory /backup/20250118
+----
+
+. Restore Dragonfly (automatic from persistence):
++
+[source,bash]
+----
+# Dragonfly loads from RDB/AOF on startup
+kubectl rollout restart statefulset/dragonfly
+----
+
+. Verify registry:
++
+[source,bash]
+----
+hyper search --limit 10  # Verify rules are accessible
+----
+
+==== Recovery Time Objectives
+
+[cols="2,1,1"]
+|===
+| Component | RTO | RPO
+
+| ArangoDB
+| 15 minutes
+| 24 hours
+
+| Dragonfly
+| 5 minutes
+| 15 minutes
+
+| Registry
+| 10 minutes
+| 0 (Git-based)
+
+| Services
+| 5 minutes
+| N/A
+|===
+
+== Monitoring
+
+=== Prometheus Metrics
+
+All services expose Prometheus metrics at `/metrics`:
+
+[cols="2,3"]
+|===
+| Metric | Description
+
+| `registry_requests_total`
+| Total API requests
+
+| `registry_request_duration_seconds`
+| Request latency histogram
+
+| `engine_rules_evaluated_total`
+| Total rules evaluated
+
+| `engine_evaluation_duration_seconds`
+| Rule evaluation latency
+
+| `adapter_forge_requests_total`
+| Forge API requests by type
+
+| `cache_hit_ratio`
+| Dragonfly cache hit ratio
+|===
+
+=== Grafana Dashboards
+
+Import pre-built dashboards from `/deploy/grafana/dashboards/`:
+
+[cols="1,3"]
+|===
+| Dashboard | Purpose
+
+| `overview.json`
+| System-wide health and throughput
+
+| `registry.json`
+| Registry service metrics
+
+| `engine.json`
+| Rule engine performance
+
+| `arangodb.json`
+| Database metrics
+
+| `dragonfly.json`
+| Cache performance
+|===
+
+=== Alerting
+
+.Prometheus Alerting Rules
+[source,yaml]
+----
+groups:
+- name: cicd-hyper-a
+  rules:
+  - alert: RegistryHighLatency
+    expr: histogram_quantile(0.99, registry_request_duration_seconds_bucket) > 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Registry p99 latency > 1s"
+
+  - alert: EngineErrorRate
+    expr: rate(engine_errors_total[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Engine error rate > 10%"
+
+  - alert: CacheLowHitRatio
+    expr: cache_hit_ratio < 0.8
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Cache hit ratio below 80%"
+
+  - alert: ArangoDBHighMemory
+    expr: arangodb_memory_usage_bytes / arangodb_memory_limit_bytes > 0.9
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "ArangoDB memory usage > 90%"
+----
+
+=== Log Aggregation
+
+Configure centralized logging with Loki or ELK:
+
+.Fluent Bit Configuration
+[source,yaml]
+----
+[INPUT]
+    Name              tail
+    Path              /var/log/containers/*cicd-hyper-a*.log
+    Parser            docker
+    Tag               cicd-hyper-a.*
+
+[OUTPUT]
+    Name              loki
+    Match             cicd-hyper-a.*
+    Host              loki.monitoring.svc.cluster.local
+    Port              3100
+    Labels            job=cicd-hyper-a
+----
+
+== Security Hardening
+
+=== Network Security
+
+==== Network Policies
+
+[source,yaml]
+----
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cicd-hyper-a-network-policy
+  namespace: cicd-hyper-a
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - port: 8080
+  - from:
+    - podSelector: {}  # Allow intra-namespace
+  egress:
+  - to:
+    - podSelector: {}  # Allow intra-namespace
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - port: 443  # HTTPS for forge APIs
+    - port: 53   # DNS
+      protocol: UDP
+----
+
+==== TLS Configuration
+
+All internal communication should use TLS:
+
+[source,yaml]
+----
+# Mutual TLS for internal services
+tls:
+  enabled: true
+  secretName: cicd-hyper-a-internal-tls
+  clientAuth: required
+----
+
+=== Authentication
+
+==== API Authentication
+
+The registry API supports multiple authentication methods:
+
+[source,yaml]
+----
+auth:
+  methods:
+    - type: bearer
+      issuer: https://auth.example.com
+      audience: cicd-hyper-a
+    - type: api-key
+      header: X-API-Key
+----
+
+==== Service Accounts
+
+Create dedicated service accounts:
+
+[source,yaml]
+----
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cicd-hyper-a
+  namespace: cicd-hyper-a
+  annotations:
+    # Workload identity (GKE)
+    iam.gke.io/gcp-service-account: cicd-hyper-a@project.iam.gserviceaccount.com
+----
+
+=== Secrets Management
+
+==== Kubernetes Secrets
+
+Use sealed secrets or external secrets operator:
+
+[source,yaml]
+----
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: cicd-hyper-a-secrets
+  namespace: cicd-hyper-a
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault
+    kind: ClusterSecretStore
+  target:
+    name: cicd-hyper-a-secrets
+  data:
+  - secretKey: github-token
+    remoteRef:
+      key: cicd-hyper-a/github
+      property: token
+----
+
+==== Vault Integration
+
+[source,yaml]
+----
+vault:
+  enabled: true
+  address: https://vault.example.com
+  authPath: kubernetes
+  role: cicd-hyper-a
+  secrets:
+    - path: secret/data/cicd-hyper-a/github
+      key: token
+      env: GITHUB_TOKEN
+----
+
+=== Security Scanning
+
+Enable security scanning in CI/CD:
+
+[source,yaml]
+----
+# Trivy container scanning
+trivy:
+  enabled: true
+  severity: CRITICAL,HIGH
+  ignoreUnfixed: true
+
+# Falco runtime security
+falco:
+  enabled: true
+  rules:
+    - Detect shell in container
+    - Detect privilege escalation
+----
+
+=== Compliance
+
+==== Audit Logging
+
+Enable comprehensive audit logging:
+
+[source,yaml]
+----
+audit:
+  enabled: true
+  level: request-response
+  maxAge: 30
+  maxBackups: 10
+  maxSize: 100
+  path: /var/log/cicd-hyper-a/audit.log
+----
+
+==== RBAC
+
+Configure role-based access control:
+
+[source,yaml]
+----
+rbac:
+  roles:
+    - name: admin
+      permissions:
+        - deposit
+        - withdraw
+        - delete
+        - audit
+    - name: developer
+      permissions:
+        - withdraw
+        - search
+    - name: readonly
+      permissions:
+        - search
+----
+
+== Maintenance
+
+=== Upgrades
+
+==== Rolling Upgrades
+
+[source,bash]
+----
+# Update Helm chart
+helm repo update
+helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+  --version 1.2.0 \
+  --namespace cicd-hyper-a
+----
+
+==== Database Migrations
+
+[source,bash]
+----
+# Run migrations
+kubectl exec -it deployment/cicd-hyper-a-registry -- \
+  cicd-hyper-a migrate --up
+----
+
+=== Health Checks
+
+==== Liveness Probes
+
+[source,yaml]
+----
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+----
+
+==== Readiness Probes
+
+[source,yaml]
+----
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 3
+----
+
+=== Routine Maintenance
+
+.Weekly Tasks
+* Review monitoring dashboards
+* Check backup integrity
+* Review security alerts
+
+.Monthly Tasks
+* Apply security patches
+* Review and rotate secrets
+* Capacity planning review
+
+.Quarterly Tasks
+* Disaster recovery drill
+* Performance benchmark
+* Dependency updates
+
+== Troubleshooting
+
+=== Service Not Starting
+
+Check container logs:
+
+[source,bash]
+----
+kubectl logs -f deployment/cicd-hyper-a-registry --tail=100
+----
+
+Common issues:
+- Database connection failure
+- Missing secrets
+- Resource limits too low
+
+=== High Latency
+
+. Check cache hit ratio:
++
+[source,bash]
+----
+kubectl exec -it deployment/dragonfly -- redis-cli info stats | grep hit
+----
+
+. Review slow queries in ArangoDB:
++
+[source,bash]
+----
+curl -u root:password http://localhost:8529/_api/query/slow
+----
+
+=== Memory Issues
+
+. Check container memory:
++
+[source,bash]
+----
+kubectl top pods -n cicd-hyper-a
+----
+
+. Review heap usage:
++
+[source,bash]
+----
+kubectl exec -it deployment/cicd-hyper-a-engine -- \
+  swipl -g "statistics(heap, H), format('Heap: ~w~n', [H]), halt"
+----
+
+== Reference
+
+* <<api-reference.adoc#,API Reference>>
+* <<developer-guide.adoc#,Developer Guide>>
+* https://docs.arangodb.com/[ArangoDB Documentation]
+* https://www.dragonflydb.io/docs[Dragonfly Documentation]

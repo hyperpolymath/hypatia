@@ -1,0 +1,1064 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a API Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:sectnums:
+:source-highlighter: rouge
+:experimental:
+:xrefstyle: short
+
+== Overview
+
+The cicd-hyper-a Registry API provides programmatic access to ruleset management, verification, and distribution.
+
+=== Base URL
+
+Production: `https://registry.YOUR-DOMAIN.com` // TODO: Replace with your domain
+
+Development: `http://localhost:8080`
+
+=== API Versioning
+
+The API uses URL path versioning. The current version is `v1`.
+
+All endpoints are prefixed with `/api/v1/`.
+
+=== Content Types
+
+The API accepts and returns JSON by default:
+
+* Request: `Content-Type: application/json`
+* Response: `Content-Type: application/json`
+
+== Authentication
+
+=== Bearer Token
+
+Most endpoints require authentication via Bearer token:
+
+[source,http]
+----
+GET /api/v1/rulesets HTTP/1.1
+Host: registry.YOUR-DOMAIN.com
+Authorization: Bearer <token>
+----
+
+=== API Key
+
+Alternatively, use an API key header:
+
+[source,http]
+----
+GET /api/v1/rulesets HTTP/1.1
+Host: registry.YOUR-DOMAIN.com
+X-API-Key: <api-key>
+----
+
+=== Obtaining Credentials
+
+Generate API credentials via the CLI:
+
+[source,bash]
+----
+hyper auth login
+hyper auth token --create --name "my-app"
+----
+
+== Endpoints
+
+=== Health Check
+
+==== GET /health
+
+Check service health status.
+
+*Authentication*: Not required
+
+.Response
+[source,json]
+----
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "uptime": 86400,
+  "checks": [
+    {
+      "name": "arangodb",
+      "status": "pass",
+      "message": null,
+      "latency": 5
+    },
+    {
+      "name": "dragonfly",
+      "status": "pass",
+      "message": null,
+      "latency": 1
+    }
+  ]
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 200
+| Service is healthy
+
+| 503
+| Service is degraded or unhealthy
+|===
+
+=== Rulesets
+
+[[deposit]]
+==== POST /api/v1/deposit
+
+Submit a new ruleset to the registry.
+
+*Authentication*: Required
+
+.Request Body
+[source,json]
+----
+{
+  "name": "my-security-rules",
+  "description": "Security rules for Rust projects",
+  "content": "-- Haskell source code here...",
+  "effect": "preventive",
+  "sign": true,
+  "verify": true
+}
+----
+
+.Request Fields
+[cols="2,1,1,3"]
+|===
+| Field | Type | Required | Description
+
+| `name`
+| string
+| Yes
+| Unique ruleset identifier (lowercase, hyphenated)
+
+| `description`
+| string
+| No
+| Human-readable description
+
+| `content`
+| string
+| Yes
+| Haskell source or JSON ruleset definition
+
+| `effect`
+| string
+| Yes
+| Primary effect: `preventive`, `curative`, or `diagnostic`
+
+| `sign`
+| boolean
+| No
+| GPG sign the ruleset (default: false)
+
+| `verify`
+| boolean
+| No
+| Run formal verification (default: false)
+|===
+
+.Response
+[source,json]
+----
+{
+  "success": true,
+  "version": "1.0.0",
+  "signature": "-----BEGIN PGP SIGNATURE-----...",
+  "verified": true,
+  "errors": []
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 201
+| Ruleset created successfully
+
+| 400
+| Invalid request body
+
+| 401
+| Authentication required
+
+| 409
+| Ruleset name already exists
+
+| 422
+| Verification failed
+|===
+
+[[withdraw]]
+==== GET /api/v1/withdraw/:name
+
+Pull a ruleset from the registry.
+
+*Authentication*: Required
+
+.Path Parameters
+[cols="1,1,3"]
+|===
+| Parameter | Type | Description
+
+| `name`
+| string
+| Ruleset name
+|===
+
+.Query Parameters
+[cols="1,1,1,3"]
+|===
+| Parameter | Type | Default | Description
+
+| `version`
+| string
+| latest
+| Specific version to retrieve
+
+| `verify`
+| boolean
+| false
+| Verify signature on download
+|===
+
+.Example Request
+[source,http]
+----
+GET /api/v1/withdraw/rust-security?version=1.2.0&verify=true HTTP/1.1
+Host: registry.YOUR-DOMAIN.com
+Authorization: Bearer <token>
+----
+
+.Response
+[source,json]
+----
+{
+  "success": true,
+  "content": "-- Haskell source code...",
+  "version": "1.2.0",
+  "signature": "-----BEGIN PGP SIGNATURE-----...",
+  "verified": true
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 200
+| Ruleset retrieved successfully
+
+| 401
+| Authentication required
+
+| 404
+| Ruleset not found
+
+| 422
+| Signature verification failed
+|===
+
+[[search]]
+==== GET /api/v1/search
+
+Search for rulesets in the registry.
+
+*Authentication*: Optional (required for private rulesets)
+
+.Query Parameters
+[cols="1,1,1,3"]
+|===
+| Parameter | Type | Default | Description
+
+| `q`
+| string
+| -
+| Free text search query
+
+| `effect`
+| string
+| -
+| Filter by effect type
+
+| `language`
+| string
+| -
+| Filter by target language
+
+| `category`
+| string
+| -
+| Filter by category
+
+| `limit`
+| integer
+| 20
+| Maximum results (1-100)
+
+| `offset`
+| integer
+| 0
+| Pagination offset
+|===
+
+.Example Request
+[source,http]
+----
+GET /api/v1/search?q=security&effect=preventive&language=rust&limit=10 HTTP/1.1
+Host: registry.YOUR-DOMAIN.com
+----
+
+.Response
+[source,json]
+----
+{
+  "results": [
+    {
+      "name": "rust-security",
+      "description": "Security rules for Rust projects",
+      "version": "1.2.0",
+      "effect": "preventive",
+      "downloads": 1542,
+      "verified": true
+    },
+    {
+      "name": "cargo-audit-rules",
+      "description": "Rules based on cargo-audit findings",
+      "version": "2.0.1",
+      "effect": "diagnostic",
+      "downloads": 892,
+      "verified": true
+    }
+  ],
+  "total": 23,
+  "hasMore": true
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 200
+| Search completed successfully
+
+| 400
+| Invalid query parameters
+|===
+
+[[audit]]
+==== GET /api/v1/audit/:name
+
+View the complete history of a ruleset.
+
+*Authentication*: Required
+
+.Path Parameters
+[cols="1,1,3"]
+|===
+| Parameter | Type | Description
+
+| `name`
+| string
+| Ruleset name
+|===
+
+.Query Parameters
+[cols="1,1,1,3"]
+|===
+| Parameter | Type | Default | Description
+
+| `full`
+| boolean
+| false
+| Include full diff for each version
+|===
+
+.Response
+[source,json]
+----
+{
+  "name": "rust-security",
+  "currentVersion": "1.2.0",
+  "created": "2025-06-15T10:30:00Z",
+  "lastModified": "2026-01-10T14:22:00Z",
+  "history": [
+    {
+      "version": "1.2.0",
+      "timestamp": "2026-01-10T14:22:00Z",
+      "action": "updated",
+      "actor": "developer@example.com",
+      "signature": "ABCD1234...",
+      "changes": "Added new memory safety rules"
+    },
+    {
+      "version": "1.1.0",
+      "timestamp": "2025-11-20T09:15:00Z",
+      "action": "verified",
+      "actor": "verifier@example.com",
+      "signature": "EFGH5678...",
+      "changes": "Passed Liquid Haskell verification"
+    },
+    {
+      "version": "1.0.0",
+      "timestamp": "2025-06-15T10:30:00Z",
+      "action": "created",
+      "actor": "author@example.com",
+      "signature": "IJKL9012...",
+      "changes": "Initial release"
+    }
+  ]
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 200
+| Audit log retrieved successfully
+
+| 401
+| Authentication required
+
+| 404
+| Ruleset not found
+|===
+
+==== DELETE /api/v1/rulesets/:name
+
+Delete a ruleset (owner only).
+
+*Authentication*: Required (owner)
+
+.Path Parameters
+[cols="1,1,3"]
+|===
+| Parameter | Type | Description
+
+| `name`
+| string
+| Ruleset name
+|===
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 204
+| Ruleset deleted successfully
+
+| 401
+| Authentication required
+
+| 403
+| Not authorized (not owner)
+
+| 404
+| Ruleset not found
+|===
+
+=== Rules
+
+==== POST /api/v1/evaluate
+
+Evaluate rules against a repository.
+
+*Authentication*: Required
+
+.Request Body
+[source,json]
+----
+{
+  "rulesets": ["rust-security", "openssf-scorecard"],
+  "repository": {
+    "forge": "github",
+    "owner": "example",
+    "name": "my-project",
+    "branch": "main"
+  },
+  "options": {
+    "severity_threshold": "low",
+    "include_diagnostic": true
+  }
+}
+----
+
+.Response
+[source,json]
+----
+{
+  "success": true,
+  "results": [
+    {
+      "rule": "pin-github-actions",
+      "ruleset": "rust-security",
+      "effect": "curative",
+      "severity": "medium",
+      "file": ".github/workflows/ci.yml",
+      "line": 15,
+      "message": "Unpinned GitHub Action: actions/checkout@v4",
+      "fix": {
+        "available": true,
+        "confidence": 0.98,
+        "suggestion": "Replace with actions/checkout@b4ffde65..."
+      }
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 2
+  }
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 200
+| Evaluation completed
+
+| 400
+| Invalid request
+
+| 401
+| Authentication required
+
+| 404
+| Repository or ruleset not found
+
+| 503
+| Forge API unavailable
+|===
+
+==== POST /api/v1/apply
+
+Apply fixes to a repository.
+
+*Authentication*: Required
+
+.Request Body
+[source,json]
+----
+{
+  "repository": {
+    "forge": "github",
+    "owner": "example",
+    "name": "my-project",
+    "branch": "main"
+  },
+  "fixes": [
+    {
+      "rule": "pin-github-actions",
+      "file": ".github/workflows/ci.yml"
+    }
+  ],
+  "options": {
+    "create_pr": true,
+    "pr_title": "fix: Pin GitHub Actions to SHA",
+    "dry_run": false
+  }
+}
+----
+
+.Response
+[source,json]
+----
+{
+  "success": true,
+  "applied": 1,
+  "skipped": 0,
+  "failed": 0,
+  "pull_request": {
+    "url": "https://github.com/example/my-project/pull/42",
+    "number": 42
+  }
+}
+----
+
+.Status Codes
+[cols="1,3"]
+|===
+| Code | Description
+
+| 200
+| Fixes applied successfully
+
+| 400
+| Invalid request
+
+| 401
+| Authentication required
+
+| 403
+| Insufficient permissions on repository
+
+| 409
+| Conflicts detected
+|===
+
+=== Metrics
+
+==== GET /metrics
+
+Prometheus metrics endpoint.
+
+*Authentication*: Not required
+
+.Response (text/plain)
+[source,prometheus]
+----
+# HELP registry_requests_total Total number of API requests
+# TYPE registry_requests_total counter
+registry_requests_total{method="GET",endpoint="/search",status="200"} 1542
+
+# HELP registry_request_duration_seconds Request duration histogram
+# TYPE registry_request_duration_seconds histogram
+registry_request_duration_seconds_bucket{endpoint="/deposit",le="0.1"} 89
+registry_request_duration_seconds_bucket{endpoint="/deposit",le="0.5"} 142
+registry_request_duration_seconds_bucket{endpoint="/deposit",le="1"} 150
+registry_request_duration_seconds_bucket{endpoint="/deposit",le="+Inf"} 152
+
+# HELP registry_rulesets_total Total number of rulesets
+# TYPE registry_rulesets_total gauge
+registry_rulesets_total 234
+
+# HELP registry_cache_hit_ratio Cache hit ratio
+# TYPE registry_cache_hit_ratio gauge
+registry_cache_hit_ratio 0.94
+----
+
+== Request/Response Formats
+
+=== Pagination
+
+List endpoints support pagination via `limit` and `offset` parameters:
+
+[source,http]
+----
+GET /api/v1/search?limit=20&offset=40 HTTP/1.1
+----
+
+Response includes pagination metadata:
+
+[source,json]
+----
+{
+  "results": [...],
+  "total": 234,
+  "hasMore": true
+}
+----
+
+=== Filtering
+
+Use query parameters for filtering:
+
+[source,http]
+----
+GET /api/v1/search?effect=preventive&language=rust&category=security HTTP/1.1
+----
+
+=== Sorting
+
+Use `sort` and `order` parameters:
+
+[source,http]
+----
+GET /api/v1/search?sort=downloads&order=desc HTTP/1.1
+----
+
+Available sort fields: `name`, `created`, `updated`, `downloads`, `version`
+
+== Error Codes
+
+=== HTTP Status Codes
+
+[cols="1,2,3"]
+|===
+| Code | Name | Description
+
+| 200
+| OK
+| Request succeeded
+
+| 201
+| Created
+| Resource created
+
+| 204
+| No Content
+| Success with no body
+
+| 400
+| Bad Request
+| Invalid request syntax
+
+| 401
+| Unauthorized
+| Authentication required
+
+| 403
+| Forbidden
+| Insufficient permissions
+
+| 404
+| Not Found
+| Resource not found
+
+| 409
+| Conflict
+| Resource conflict
+
+| 422
+| Unprocessable Entity
+| Validation error
+
+| 429
+| Too Many Requests
+| Rate limit exceeded
+
+| 500
+| Internal Server Error
+| Server error
+
+| 503
+| Service Unavailable
+| Service temporarily unavailable
+|===
+
+=== Error Response Format
+
+All errors return a consistent JSON format:
+
+[source,json]
+----
+{
+  "error": {
+    "code": "RULESET_NOT_FOUND",
+    "message": "Ruleset 'nonexistent' not found",
+    "details": {
+      "name": "nonexistent"
+    },
+    "requestId": "req_abc123xyz"
+  }
+}
+----
+
+=== Error Codes
+
+[cols="2,3"]
+|===
+| Code | Description
+
+| `INVALID_REQUEST`
+| Request body is malformed
+
+| `AUTHENTICATION_REQUIRED`
+| No valid authentication provided
+
+| `PERMISSION_DENIED`
+| User lacks required permissions
+
+| `RULESET_NOT_FOUND`
+| Requested ruleset does not exist
+
+| `RULESET_EXISTS`
+| Ruleset name already taken
+
+| `VERIFICATION_FAILED`
+| Formal verification failed
+
+| `SIGNATURE_INVALID`
+| GPG signature verification failed
+
+| `RATE_LIMIT_EXCEEDED`
+| Too many requests
+
+| `FORGE_UNAVAILABLE`
+| Cannot reach forge API
+
+| `INTERNAL_ERROR`
+| Unexpected server error
+|===
+
+== Rate Limits
+
+=== Default Limits
+
+[cols="2,1,1"]
+|===
+| Endpoint | Requests/minute | Burst
+
+| Search
+| 60
+| 10
+
+| Deposit
+| 10
+| 2
+
+| Withdraw
+| 60
+| 10
+
+| Evaluate
+| 30
+| 5
+
+| Apply
+| 10
+| 2
+|===
+
+=== Rate Limit Headers
+
+Responses include rate limit information:
+
+[source,http]
+----
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 45
+X-RateLimit-Reset: 1705600000
+----
+
+=== Handling Rate Limits
+
+When rate limited, the API returns 429 with:
+
+[source,json]
+----
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded. Retry after 30 seconds.",
+    "details": {
+      "retryAfter": 30
+    }
+  }
+}
+----
+
+Also includes `Retry-After` header:
+
+[source,http]
+----
+HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+----
+
+== SDK Examples
+
+=== cURL
+
+[source,bash]
+----
+# Deposit a ruleset
+curl -X POST https://registry.YOUR-DOMAIN.com/api/v1/deposit \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-rules",
+    "description": "My custom rules",
+    "content": "...",
+    "effect": "preventive",
+    "sign": true,
+    "verify": true
+  }'
+
+# Search rulesets
+curl "https://registry.YOUR-DOMAIN.com/api/v1/search?q=security&limit=10"
+
+# Withdraw a ruleset
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://registry.YOUR-DOMAIN.com/api/v1/withdraw/rust-security?version=1.2.0"
+----
+
+=== Deno/JavaScript
+
+[source,typescript]
+----
+// Using Deno's fetch
+const API_URL = "https://registry.YOUR-DOMAIN.com/api/v1";
+
+async function searchRulesets(query: string): Promise<SearchResponse> {
+  const response = await fetch(
+    `${API_URL}/search?q=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        "Accept": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Search failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function depositRuleset(
+  token: string,
+  ruleset: DepositRequest
+): Promise<DepositResponse> {
+  const response = await fetch(`${API_URL}/deposit`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(ruleset),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Deposit failed: ${error.error.message}`);
+  }
+
+  return response.json();
+}
+----
+
+=== Rust
+
+[source,rust]
+----
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize)]
+struct DepositRequest {
+    name: String,
+    description: String,
+    content: String,
+    effect: String,
+    sign: bool,
+    verify: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct DepositResponse {
+    success: bool,
+    version: String,
+    signature: Option<String>,
+    verified: bool,
+    errors: Vec<String>,
+}
+
+async fn deposit_ruleset(
+    client: &Client,
+    token: &str,
+    request: DepositRequest,
+) -> Result<DepositResponse, reqwest::Error> {
+    let response = client
+        .post("https://registry.YOUR-DOMAIN.com/api/v1/deposit")
+        .bearer_auth(token)
+        .json(&request)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    Ok(response)
+}
+----
+
+== Webhooks
+
+=== Webhook Events
+
+Subscribe to events for ruleset changes:
+
+[cols="2,3"]
+|===
+| Event | Description
+
+| `ruleset.created`
+| New ruleset deposited
+
+| `ruleset.updated`
+| Ruleset version updated
+
+| `ruleset.deleted`
+| Ruleset removed
+
+| `ruleset.verified`
+| Ruleset passed verification
+|===
+
+=== Webhook Payload
+
+[source,json]
+----
+{
+  "event": "ruleset.created",
+  "timestamp": "2026-01-18T10:30:00Z",
+  "data": {
+    "name": "my-rules",
+    "version": "1.0.0",
+    "author": "developer@example.com",
+    "effect": "preventive"
+  }
+}
+----
+
+=== Webhook Signature
+
+Verify webhook authenticity using the `X-Signature-256` header:
+
+[source,javascript]
+----
+const crypto = require("crypto");
+
+function verifyWebhook(payload, signature, secret) {
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(`sha256=${expected}`)
+  );
+}
+----
+
+== Changelog
+
+=== v1.0.0 (2026-01-18)
+
+* Initial API release
+* Ruleset deposit/withdraw/search/audit endpoints
+* Rule evaluation and application
+* Webhook support
+* Rate limiting
+
+== See Also
+
+* <<user-guide.adoc#,User Guide>>
+* <<developer-guide.adoc#,Developer Guide>>
+* <<admin-guide.adoc#,Administrator Guide>>

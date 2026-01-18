@@ -1,0 +1,101 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "cicd-hyper-a-integration-tests"
+version = "0.1.0"
+edition = "2021"
+authors = ["hyperpolymath"]
+description = "Integration test framework for cicd-hyper-a"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/hyperpolymath/cicd-hyper-a"
+publish = false
+
+[lib]
+name = "integration"
+path = "src/lib.rs"
+
+[dependencies]
+# Internal crates
+cicd-hyper-a-adapters = { path = "../adapters" }
+cicd-hyper-a-data = { path = "../data" }
+
+# Async runtime
+tokio = { version = "1.35", features = ["full", "test-util"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client for testing forge APIs
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID for test data generation
+uuid = { version = "1.6", features = ["v4"] }
+
+# Testcontainers for spinning up Docker containers
+testcontainers = { version = "0.23", features = ["watchdog"] }
+testcontainers-modules = { version = "0.11", features = ["redis"] }
+
+# Mock HTTP server
+wiremock = "0.6"
+
+# Temp directories for test repos
+tempfile = "3.9"
+
+# Git operations for testing hooks
+git2 = "0.19"
+
+# Command execution for testing hooks
+subprocess = "0.2"
+
+# Random data generation
+rand = "0.8"
+
+# Assertions
+assert_matches = "1.5"
+
+[dev-dependencies]
+test-log = { version = "0.2", features = ["trace"] }
+tracing-test = "0.2"
+
+[[test]]
+name = "fleet_test"
+path = "tests/fleet_test.rs"
+harness = false
+
+[[test]]
+name = "arangodb_test"
+path = "tests/arangodb_test.rs"
+harness = false
+
+[[test]]
+name = "registry_test"
+path = "tests/registry_test.rs"
+harness = false
+
+[[test]]
+name = "hooks_test"
+path = "tests/hooks_test.rs"
+harness = false
+
+[[test]]
+name = "forge_test"
+path = "tests/forge_test.rs"
+harness = false
+
+[features]
+default = []
+# Run tests against real external services (requires credentials)
+live-tests = []
+# Include slow tests that may take several minutes
+slow-tests = []

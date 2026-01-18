@@ -21,9 +21,12 @@
 (define error-types
   '(code-security        ; Vulnerabilities in code
     workflow-security    ; GitHub Actions security issues
+    workflow-waste       ; Unnecessary/wasteful CI runs
     dependency-vuln      ; Vulnerable dependencies
     process-hygiene      ; Missing policies/processes
     code-quality         ; Non-security code issues
+    language-policy      ; RSR language violations
+    license-compliance   ; SPDX/license issues
     missing-tests        ; No test coverage
     missing-sast         ; No static analysis
     missing-fuzzing))    ; No fuzz testing
@@ -164,7 +167,54 @@
     (ci-tests-id
      missing-tests medium #t
      "No automated test workflow detected"
-     "Add test workflow for project language")))
+     "Add test workflow for project language")
+
+    ;; ===== Session 2026-01-18: CI/CD Waste Patterns =====
+
+    (duplicate-workflow-id
+     workflow-security medium #t
+     "Duplicate workflows performing same function (e.g., rust.yml + rust-ci.yml)"
+     "Delete the less comprehensive duplicate; keep the more complete workflow")
+
+    (unused-publish-workflows-id
+     workflow-security low #t
+     "Platform-specific publish workflows configured but never triggered"
+     "Delete unused publish-*.yml files or consolidate into single workflow with matrix")
+
+    (mirror-missing-secrets-id
+     workflow-security medium #t
+     "Mirror workflow references secrets not configured at org/repo level"
+     "Configure GITLAB_SSH_KEY/BITBUCKET_SSH_KEY secrets or delete mirror.yml")
+
+    (npm-in-workflow-blocker-violation
+     workflow-security high #t
+     "Workflow uses npm/pnpm despite npm-bun-blocker policy"
+     "Replace npm install/npx with Deno or pinned binary; remove pnpm/action-setup")
+
+    (spec-repo-full-ci-id
+     workflow-security medium #t
+     "Specification-only repo runs full CI suite with no code to analyze"
+     "Reduce to minimal CI: policy checks only, remove CodeQL/Semgrep/build workflows")
+
+    (semgrep-language-mismatch-id
+     workflow-security medium #t
+     "Semgrep SAST configured for languages not present in repository"
+     "Remove semgrep.yml from repos without target languages (Python/Go/JS)")
+
+    (excessive-workflow-count-id
+     workflow-security low #f
+     "Repository has excessive workflows (>15) creating maintenance burden"
+     "Consolidate workflows; remove unused templates; use matrix builds")
+
+    (workflow-secret-no-guard-id
+     workflow-security medium #t
+     "Workflow references secret without conditional guard"
+     "Add 'if: secrets.X != \"\"' or 'if: vars.FEATURE_ENABLED == \"true\"' guard")
+
+    (zig-ffi-missing-directory-id
+     workflow-security low #t
+     "Workflow checks for directory that does not exist"
+     "Delete workflow or create the expected directory structure")))
 
 ;; Helper: Get error by ID
 (define (get-error id)

@@ -1,0 +1,357 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Prometheus alerting rules for cicd-hyper-a
+# Defines alerts for service health, performance, and business metrics
+
+groups:
+  # ============================================================
+  # SERVICE AVAILABILITY ALERTS
+  # ============================================================
+  - name: service_availability
+    interval: 30s
+    rules:
+      - alert: RegistryServiceDown
+        expr: up{job="registry"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: registry
+        annotations:
+          summary: "Registry service is down"
+          description: "The registry service has been unavailable for more than 1 minute."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/registry-down"
+
+      - alert: AdapterServiceDown
+        expr: up{job="adapter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: adapter
+        annotations:
+          summary: "Adapter service is down"
+          description: "The adapter service (forge integration) has been unavailable for more than 1 minute."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/adapter-down"
+
+      - alert: EngineServiceDown
+        expr: up{job="engine"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: engine
+        annotations:
+          summary: "Engine service is down"
+          description: "The Logtalk engine service has been unavailable for more than 1 minute."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/engine-down"
+
+      - alert: ArangoDBDown
+        expr: up{job="arangodb"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: arangodb
+        annotations:
+          summary: "ArangoDB is down"
+          description: "ArangoDB has been unavailable for more than 1 minute."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/arangodb-down"
+
+      - alert: DragonflyDown
+        expr: up{job="dragonfly"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: dragonfly
+        annotations:
+          summary: "Dragonfly cache is down"
+          description: "Dragonfly (Redis-compatible cache) has been unavailable for more than 1 minute."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/dragonfly-down"
+
+  # ============================================================
+  # RULE EXECUTION ALERTS
+  # ============================================================
+  - name: rule_execution
+    interval: 30s
+    rules:
+      - alert: RuleExecutionHighLatency
+        expr: histogram_quantile(0.95, rate(cicd_rule_execution_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: engine
+        annotations:
+          summary: "High rule execution latency detected"
+          description: "95th percentile rule execution latency is above 5 seconds for the past 5 minutes. Current value: {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/rule-latency"
+
+      - alert: RuleExecutionCriticalLatency
+        expr: histogram_quantile(0.95, rate(cicd_rule_execution_duration_seconds_bucket[5m])) > 30
+        for: 2m
+        labels:
+          severity: critical
+          service: engine
+        annotations:
+          summary: "Critical rule execution latency"
+          description: "95th percentile rule execution latency is above 30 seconds. Current value: {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/rule-latency-critical"
+
+      - alert: RuleExecutionHighFailureRate
+        expr: |
+          (
+            sum(rate(cicd_rule_execution_total{status="failure"}[5m])) /
+            sum(rate(cicd_rule_execution_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: engine
+        annotations:
+          summary: "High rule execution failure rate"
+          description: "More than 10% of rule executions are failing over the past 5 minutes. Failure rate: {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/rule-failures"
+
+      - alert: RuleExecutionCriticalFailureRate
+        expr: |
+          (
+            sum(rate(cicd_rule_execution_total{status="failure"}[5m])) /
+            sum(rate(cicd_rule_execution_total[5m]))
+          ) > 0.25
+        for: 2m
+        labels:
+          severity: critical
+          service: engine
+        annotations:
+          summary: "Critical rule execution failure rate"
+          description: "More than 25% of rule executions are failing. Failure rate: {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/rule-failures-critical"
+
+      - alert: NoRuleExecutions
+        expr: sum(rate(cicd_rule_execution_total[15m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: engine
+        annotations:
+          summary: "No rule executions for 30 minutes"
+          description: "No rules have been executed in the past 30 minutes. This may indicate a problem with the engine or no active bots."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/no-rules"
+
+  # ============================================================
+  # BOT EXECUTION ALERTS
+  # ============================================================
+  - name: bot_execution
+    interval: 30s
+    rules:
+      - alert: BotHighFailureRate
+        expr: |
+          (
+            sum by (bot_name) (rate(cicd_bot_execution_total{status="failure"}[5m])) /
+            sum by (bot_name) (rate(cicd_bot_execution_total[5m]))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: adapter
+        annotations:
+          summary: "Bot {{ $labels.bot_name }} has high failure rate"
+          description: "Bot {{ $labels.bot_name }} has a failure rate above 20%. Current rate: {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/bot-failures"
+
+      - alert: BotExecutionTimeout
+        expr: increase(cicd_bot_execution_timeout_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: adapter
+        annotations:
+          summary: "Multiple bot execution timeouts"
+          description: "More than 5 bot execution timeouts in the past 5 minutes."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/bot-timeouts"
+
+      - alert: BotQueueBacklog
+        expr: cicd_bot_queue_length > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: adapter
+        annotations:
+          summary: "Bot execution queue backlog"
+          description: "Bot execution queue has more than 100 pending items. Current length: {{ $value }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/bot-queue"
+
+  # ============================================================
+  # FINDING ALERTS
+  # ============================================================
+  - name: findings
+    interval: 1m
+    rules:
+      - alert: CriticalFindingsSpike
+        expr: |
+          increase(cicd_findings_total{severity="critical"}[15m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: engine
+        annotations:
+          summary: "Spike in critical findings"
+          description: "More than 10 critical findings generated in the past 15 minutes."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/findings-spike"
+
+      - alert: HighFindingsRate
+        expr: rate(cicd_findings_total[5m]) > 10
+        for: 10m
+        labels:
+          severity: info
+          service: engine
+        annotations:
+          summary: "High rate of new findings"
+          description: "More than 10 new findings per second for the past 10 minutes. This may indicate a widespread issue."
+
+      - alert: FindingsProcessingBacklog
+        expr: cicd_findings_pending_processing > 500
+        for: 15m
+        labels:
+          severity: warning
+          service: engine
+        annotations:
+          summary: "Findings processing backlog"
+          description: "More than 500 findings pending processing. Current backlog: {{ $value }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/findings-backlog"
+
+  # ============================================================
+  # API PERFORMANCE ALERTS
+  # ============================================================
+  - name: api_performance
+    interval: 30s
+    rules:
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~"registry|adapter"}[5m])) by (le, job, handler))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API latency on {{ $labels.job }}"
+          description: "95th percentile latency for {{ $labels.handler }} on {{ $labels.job }} is above 2 seconds. Current: {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/api-latency"
+
+      - alert: APIHighErrorRate
+        expr: |
+          (
+            sum by (job, handler) (rate(http_request_total{job=~"registry|adapter", status_code=~"5.."}[5m])) /
+            sum by (job, handler) (rate(http_request_total{job=~"registry|adapter"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API error rate on {{ $labels.job }}"
+          description: "Error rate for {{ $labels.handler }} on {{ $labels.job }} is above 5%. Current: {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/api-errors"
+
+      - alert: APIRateLimitExceeded
+        expr: increase(http_rate_limit_exceeded_total[5m]) > 50
+        for: 5m
+        labels:
+          severity: info
+          service: api
+        annotations:
+          summary: "API rate limiting triggered frequently"
+          description: "More than 50 rate limit exceeded events in the past 5 minutes."
+
+  # ============================================================
+  # CACHE PERFORMANCE ALERTS
+  # ============================================================
+  - name: cache_performance
+    interval: 30s
+    rules:
+      - alert: CacheLowHitRate
+        expr: |
+          (
+            sum(rate(cicd_cache_hits_total[5m])) /
+            (sum(rate(cicd_cache_hits_total[5m])) + sum(rate(cicd_cache_misses_total[5m])))
+          ) < 0.7
+        for: 15m
+        labels:
+          severity: warning
+          service: dragonfly
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is below 70%. Current rate: {{ $value | humanizePercentage }}. This may impact performance."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/cache-hit-rate"
+
+      - alert: CacheMemoryHigh
+        expr: |
+          dragonfly_memory_used_bytes / dragonfly_memory_max_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: dragonfly
+        annotations:
+          summary: "Dragonfly memory usage high"
+          description: "Dragonfly is using more than 85% of allocated memory. Consider increasing cache size or reviewing eviction policies."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/cache-memory"
+
+      - alert: CacheEvictionRateHigh
+        expr: rate(dragonfly_evicted_keys_total[5m]) > 100
+        for: 10m
+        labels:
+          severity: info
+          service: dragonfly
+        annotations:
+          summary: "High cache eviction rate"
+          description: "More than 100 keys being evicted per second from cache."
+
+  # ============================================================
+  # INFRASTRUCTURE ALERTS
+  # ============================================================
+  - name: infrastructure
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% for more than 10 minutes on {{ $labels.instance }}."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/high-cpu"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% for more than 10 minutes."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/high-memory"
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Less than 15% disk space remaining on {{ $labels.mountpoint }}."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/disk-space"
+
+      - alert: DiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 5
+        for: 5m
+        labels:
+          severity: critical
+          service: infrastructure
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Less than 5% disk space remaining. Immediate action required."
+          runbook_url: "https://docs.cicd-hyper-a/runbooks/disk-space-critical"

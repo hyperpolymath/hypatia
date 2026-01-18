@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+apiVersion: v2
+name: cicd-hyper-a
+description: |
+  Neurosymbolic CI/CD Intelligence Platform that combines neural learning,
+  symbolic reasoning (Logtalk/Prolog), formal verification (Haskell),
+  graph intelligence (ArangoDB), and distributed cache (Dragonfly).
+
+type: application
+
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - cicd
+  - devops
+  - automation
+  - neural
+  - symbolic
+  - verification
+  - arangodb
+  - dragonfly
+
+home: https://github.com/hyperpolymath/cicd-hyper-a
+sources:
+  - https://github.com/hyperpolymath/cicd-hyper-a
+
+maintainers:
+  - name: hyperpolymath
+    url: https://github.com/hyperpolymath
+
+icon: https://raw.githubusercontent.com/hyperpolymath/cicd-hyper-a/main/docs/logo.png
+
+dependencies:
+  # Optional: Use official ArangoDB Helm chart instead of built-in
+  # - name: arangodb
+  #   version: "1.2.x"
+  #   repository: "https://arangodb.github.io/kube-arangodb"
+  #   condition: arangodb.external
+
+annotations:
+  artifacthub.io/license: AGPL-3.0-or-later
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/signKey: |
+    fingerprint: TBD
+    url: https://hyperpolymath.dev/gpg-key.asc
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release
+  artifacthub.io/screenshots: |
+    - title: Dashboard
+      url: https://raw.githubusercontent.com/hyperpolymath/cicd-hyper-a/main/docs/screenshots/dashboard.png
+    - title: Rule Engine
+      url: https://raw.githubusercontent.com/hyperpolymath/cicd-hyper-a/main/docs/screenshots/engine.png

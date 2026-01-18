@@ -1,0 +1,49 @@
+{{/*
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/}}
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- if .Values.api.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-api-pdb
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.api.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.api.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if .Values.registry.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-registry-pdb
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.registry.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cicd-hyper-a.registry.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if .Values.engine.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cicd-hyper-a.fullname" . }}-engine-pdb
+  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  labels:
+    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.engine.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cicd-hyper-a.engine.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- end }}

@@ -21,6 +21,10 @@ base64 = "0.21"
 octocrab = "0.32"  # GitHub API
 tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
 
 # Internal dependencies
 data = { path = "../data", package = "cicd-hyper-a-data" }
@@ -28,6 +32,14 @@ data = { path = "../data", package = "cicd-hyper-a-data" }
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.5"
+hex = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+
+# Note: The package name differs from directory name
+[lib]
+name = "adapters"
+path = "src/lib.rs"
 
 [[bin]]
 name = "forge-adapter"

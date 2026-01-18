@@ -1,0 +1,284 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Glossary
+:toc: left
+:toclevels: 2
+:icons: font
+:sectnums:
+:xrefstyle: short
+
+== Introduction
+
+This glossary defines terms and concepts used throughout the cicd-hyper-a documentation. Terms are organized alphabetically within categories.
+
+== Core Concepts
+
+[[action]]
+Action::
+The operation performed when a rule's condition matches. Actions can inject files, reject commits, create alerts, or trigger other responses. See <<developer-guide.adoc#writing-rules,Writing Rules>>.
+
+[[adapter]]
+Adapter::
+A component that translates between cicd-hyper-a's internal operations and a specific forge's API. Each supported forge (GitHub, GitLab, etc.) has its own adapter. See <<developer-guide.adoc#forge-adapter-development,Forge Adapter Development>>.
+
+[[audit-log]]
+Audit Log::
+A chronological record of all changes to a ruleset, including versions, authors, verifications, and signatures. Provides complete provenance tracking.
+
+[[auto-fix]]
+Auto-Fix::
+The automatic application of a curative rule to resolve an issue without human intervention. Auto-fixes have a confidence score indicating reliability.
+
+[[bot-fleet]]
+Bot Fleet::
+A coordinated set of bots that work together to analyze and fix repositories. Bots execute in dependency order to avoid conflicts.
+
+[[cache]]
+Cache::
+The Dragonfly-based high-performance cache layer that stores compiled rules for sub-millisecond lookups.
+
+[[condition]]
+Condition::
+A logical expression that determines when a rule applies. Conditions can check file existence, content patterns, language usage, and more. Conditions can be combined with AND, OR, and NOT operators.
+
+[[confidence-score]]
+Confidence Score::
+A value from 0.0 to 1.0 indicating how reliable an auto-fix is. Higher scores indicate fixes learned from many successful applications. Rules with confidence below a threshold require human review.
+
+[[curative]]
+Curative::
+An effect type for rules that fix existing issues in repositories. Curative rules modify files, create pull requests, or run commands. Contrast with <<preventive,Preventive>> and <<diagnostic,Diagnostic>>.
+
+[[diagnostic]]
+Diagnostic::
+An effect type for rules that report issues without modifying the repository. Diagnostic rules produce reports, alerts, or metrics. Contrast with <<preventive,Preventive>> and <<curative,Curative>>.
+
+[[distillation]]
+Distillation::
+The process of converting complex neural network patterns into simple, fast-acting symbolic rules. The core of the "dumb rules from smart learning" philosophy.
+
+[[effect]]
+Effect::
+The category of action a rule performs. There are three effect types: <<preventive,Preventive>>, <<curative,Curative>>, and <<diagnostic,Diagnostic>>.
+
+[[engine]]
+Engine::
+The Logtalk/SWI-Prolog component that executes rules and performs inference. The symbolic reasoning core of the platform.
+
+[[forge]]
+Forge::
+A code hosting platform that provides Git repository hosting, issue tracking, CI/CD, and collaboration features. Examples: GitHub, GitLab, Bitbucket, Codeberg.
+
+[[formal-verification]]
+Formal Verification::
+Mathematical proof that a rule satisfies certain properties, such as never decreasing repository health or not modifying existing files. Implemented using Liquid Haskell.
+
+[[health-score]]
+Health Score::
+A numeric value (0-100) representing a repository's overall compliance with policies and best practices. Rules can improve, maintain, or (incorrectly) decrease this score.
+
+[[hook]]
+Hook::
+A Git hook script installed in a repository that invokes cicd-hyper-a rules at specific points in the Git workflow (pre-commit, pre-push, post-receive).
+
+[[inference]]
+Inference::
+The logical reasoning process by which the Logtalk engine derives conclusions from rules and facts. Enables complex policy evaluation.
+
+[[learning]]
+Learning::
+The process by which cicd-hyper-a improves rules based on feedback from fix outcomes. Successful fixes increase confidence; failed fixes trigger rule refinement.
+
+[[neurosymbolic]]
+Neurosymbolic::
+A hybrid approach combining neural networks (for pattern recognition and learning) with symbolic logic (for fast, deterministic rule execution). The foundational philosophy of cicd-hyper-a.
+
+[[pattern]]
+Pattern::
+A regular expression or structured query used to match content in files, commits, or repository metadata.
+
+[[preventive]]
+Preventive::
+An effect type for rules that block policy violations before they occur. Preventive rules reject commits, require approvals, or inject required files. Contrast with <<curative,Curative>> and <<diagnostic,Diagnostic>>.
+
+[[property-based-testing]]
+Property-Based Testing::
+A testing methodology where tests specify properties that must hold for all inputs, rather than specific input-output pairs. Used to verify rule correctness. Implemented with QuickCheck.
+
+[[provenance]]
+Provenance::
+The complete history and origin of a ruleset, including authorship, modifications, verifications, and signatures. Tracked in the <<audit-log,Audit Log>>.
+
+[[registry]]
+Registry::
+The central repository of verified rulesets. Provides storage, versioning, search, and distribution of rulesets.
+
+[[rule]]
+Rule::
+A declarative specification that matches a condition and performs an action. Rules are the fundamental unit of policy enforcement. See <<developer-guide.adoc#writing-rules,Writing Rules>>.
+
+[[ruleset]]
+Ruleset::
+A named collection of related rules with shared metadata. Rulesets are versioned, signed, and distributed through the registry.
+
+[[severity]]
+Severity::
+The importance level of an issue detected by a rule. Levels: Critical, High, Medium, Low, Info.
+
+[[signature]]
+Signature::
+A cryptographic signature (GPG, SSH, or Sigstore) that authenticates the author of a ruleset and ensures integrity.
+
+[[symbolic-reasoning]]
+Symbolic Reasoning::
+Logic-based reasoning using rules, facts, and inference. Provides deterministic, explainable decisions. Implemented in Logtalk/Prolog.
+
+[[verification]]
+Verification::
+The process of proving that a ruleset satisfies required properties. Can be property-based testing or formal mathematical proof.
+
+== Infrastructure Terms
+
+[[arangodb]]
+ArangoDB::
+A multi-model database used for graph storage of repository relationships, rule dependencies, and organizational structure.
+
+[[dragonfly]]
+Dragonfly::
+A Redis-compatible in-memory data store used for caching compiled rules. Provides sub-millisecond rule lookups.
+
+[[helm]]
+Helm::
+A package manager for Kubernetes used to deploy cicd-hyper-a in production environments.
+
+[[kubernetes]]
+Kubernetes (K8s)::
+A container orchestration platform used for production deployment of cicd-hyper-a services.
+
+[[prometheus]]
+Prometheus::
+A metrics and monitoring system used to track cicd-hyper-a performance, throughput, and health.
+
+[[radicle]]
+Radicle::
+A peer-to-peer code collaboration network used for decentralized ruleset distribution.
+
+== Security Terms
+
+[[branch-protection]]
+Branch Protection::
+A forge feature that restricts who can push to a branch and what conditions must be met (reviews, status checks). Often enforced by cicd-hyper-a rules.
+
+[[code-review]]
+Code Review::
+The practice of having changes reviewed by another developer before merging. A common requirement in cicd-hyper-a security rules.
+
+[[codeql]]
+CodeQL::
+A semantic code analysis engine used by GitHub for security scanning. cicd-hyper-a can configure and validate CodeQL workflows.
+
+[[openssf-scorecard]]
+OpenSSF Scorecard::
+A tool that assesses open source project security practices. Many cicd-hyper-a rules align with Scorecard checks.
+
+[[pinned-dependencies]]
+Pinned Dependencies::
+Dependencies locked to specific versions or commit hashes, rather than mutable tags. Prevents supply chain attacks.
+
+[[secret-scanning]]
+Secret Scanning::
+Detection of accidentally committed credentials, API keys, or other sensitive data in code.
+
+[[sha-pinning]]
+SHA Pinning::
+The practice of referencing GitHub Actions by commit SHA rather than version tag. Prevents tag mutation attacks.
+
+[[spdx]]
+SPDX::
+Software Package Data Exchange, a standard for license identification. cicd-hyper-a rules enforce SPDX license headers.
+
+[[supply-chain]]
+Supply Chain (Security)::
+The security of all components, dependencies, and processes involved in building and distributing software. cicd-hyper-a addresses supply chain security through dependency pinning and verification.
+
+== Language Terms
+
+[[gadt]]
+GADT (Generalized Algebraic Data Type)::
+A Haskell language feature that enables type-safe rule definitions with different behaviors for different effect types.
+
+[[haskell]]
+Haskell::
+A purely functional programming language used for the registry, ruleset DSL, and formal verification components.
+
+[[liquid-haskell]]
+Liquid Haskell::
+A refinement type system for Haskell that enables formal verification of code properties. Used to verify ruleset correctness.
+
+[[logtalk]]
+Logtalk::
+An object-oriented logic programming language extending Prolog. Used for the rule engine and symbolic reasoning.
+
+[[prolog]]
+Prolog::
+A logic programming language that forms the foundation of Logtalk. Enables declarative rule definition and inference.
+
+[[quickcheck]]
+QuickCheck::
+A property-based testing library for Haskell. Used to test ruleset properties with randomly generated inputs.
+
+[[rust]]
+Rust::
+A systems programming language used for the CLI and forge adapters. Provides memory safety without garbage collection.
+
+[[rescript]]
+ReScript::
+A typed language that compiles to JavaScript. Preferred over TypeScript in the hyperpolymath organization.
+
+== Policy Terms
+
+[[palimpsest]]
+Palimpsest::
+The philosophical license under which cicd-hyper-a is distributed, emphasizing layered, evolving contributions.
+
+[[rsr]]
+RSR (Rhodium Standard Repositories)::
+The repository standard followed by hyperpolymath projects. Defines allowed languages, required files, and quality gates.
+
+[[rsr-compliance]]
+RSR Compliance::
+Adherence to Rhodium Standard Repository policies. A core ruleset enforces RSR compliance.
+
+== Operations Terms
+
+[[deposit]]
+Deposit::
+The act of submitting a ruleset to the registry. Requires validation, optional signing, and optional verification.
+
+[[evaluate]]
+Evaluate::
+The process of running rules against a repository to identify matching conditions and issues.
+
+[[withdraw]]
+Withdraw::
+The act of retrieving a ruleset from the registry for local use or inspection.
+
+== Metrics Terms
+
+[[alert]]
+Alert::
+A notification generated when a rule detects an issue. Alerts have severity levels and suggested fixes.
+
+[[false-positive]]
+False Positive::
+A rule match that incorrectly identifies a non-issue as an issue. Reduces rule trust and should be minimized.
+
+[[true-positive]]
+True Positive::
+A rule match that correctly identifies an actual issue. Increases rule confidence through learning.
+
+== See Also
+
+* <<user-guide.adoc#,User Guide>>
+* <<developer-guide.adoc#,Developer Guide>>
+* <<api-reference.adoc#,API Reference>>
+* <<faq.adoc#,Frequently Asked Questions>>

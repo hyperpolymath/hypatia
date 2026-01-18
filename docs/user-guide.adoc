@@ -1,0 +1,793 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a User Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:sectnums:
+:source-highlighter: rouge
+:experimental:
+:xrefstyle: short
+
+== Introduction
+
+*cicd-hyper-a* is a neurosymbolic CI/CD intelligence platform that combines neural learning with symbolic reasoning to provide automated repository management, security enforcement, and policy compliance.
+
+This guide covers installation, configuration, and day-to-day usage of the `hyper` CLI tool.
+
+=== Key Concepts
+
+Before diving in, familiarize yourself with these core concepts:
+
+*Rulesets*:: Collections of rules that define policies and actions. Rulesets can be preventive, curative, or diagnostic.
+
+*Effects*:: The type of action a rule performs:
+- *Preventive*: Blocks policy violations before they occur
+- *Curative*: Fixes existing issues in repositories
+- *Diagnostic*: Reports issues without modification
+
+*Forge*:: A code hosting platform (GitHub, GitLab, Bitbucket, etc.)
+
+*Registry*:: The central repository of verified rulesets
+
+For a complete glossary, see <<glossary.adoc#,Glossary>>.
+
+== Installation
+
+=== Prerequisites
+
+Before installing cicd-hyper-a, ensure you have:
+
+* *Rust toolchain* (1.75 or later) - For building the CLI
+* *Git* (2.40 or later) - For repository operations
+* *GitHub CLI* (`gh`) - For GitHub integration
+* *Deno* (1.40 or later) - For scripting (optional)
+
+=== Binary Installation
+
+The fastest way to get started is with pre-built binaries.
+
+.Linux (x86_64)
+[source,bash]
+----
+curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-linux-x86_64 -o hyper
+chmod +x hyper
+sudo mv hyper /usr/local/bin/
+----
+
+.macOS (Apple Silicon)
+[source,bash]
+----
+curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-darwin-arm64 -o hyper
+chmod +x hyper
+sudo mv hyper /usr/local/bin/
+----
+
+.macOS (Intel)
+[source,bash]
+----
+curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-darwin-x86_64 -o hyper
+chmod +x hyper
+sudo mv hyper /usr/local/bin/
+----
+
+=== Building from Source
+
+Clone and build the project:
+
+[source,bash]
+----
+git clone https://github.com/hyperpolymath/cicd-hyper-a.git
+cd cicd-hyper-a/cli
+cargo build --release
+sudo cp target/release/hyper /usr/local/bin/
+----
+
+=== Verification
+
+Verify the installation:
+
+[source,bash]
+----
+hyper version
+----
+
+Expected output:
+
+----
+hyper 0.1.0
+Rust version: 1.75.0
+Target: x86_64-unknown-linux-gnu
+----
+
+== Quick Start
+
+=== Initial Setup
+
+Initialize your configuration:
+
+[source,bash]
+----
+hyper config init
+----
+
+This creates `~/.config/cicd-hyper-a/config.toml` with default settings.
+
+=== Authenticate with GitHub
+
+Set up GitHub authentication:
+
+[source,bash]
+----
+# Use GitHub CLI authentication
+gh auth login
+
+# Or set token directly
+export GITHUB_TOKEN="your-token-here"
+hyper config set github.token "$GITHUB_TOKEN"
+----
+
+=== Your First Scan
+
+Scan a repository for issues:
+
+[source,bash]
+----
+# Scan current directory
+hyper scan .
+
+# Scan a specific repository
+hyper scan /path/to/repo
+
+# Scan with JSON output
+hyper scan . --output json
+----
+
+Example output:
+
+----
+Scanning: my-project
+Found 5 issues:
+
+[HIGH] TokenPermissionsID - Workflow missing permissions declaration
+  File: .github/workflows/ci.yml
+  Fix: Add "permissions: read-all" at workflow level
+
+[MEDIUM] PinnedDependenciesID - Unpinned GitHub Actions
+  File: .github/workflows/ci.yml:12
+  Fix: Replace @vN with @SHA # vN format
+
+[LOW] SecurityPolicyID - Missing SECURITY.md
+  Fix: Create SECURITY.md with vulnerability reporting instructions
+
+Summary: 0 critical, 1 high, 2 medium, 2 low
+----
+
+=== Applying Fixes
+
+Apply auto-fixable issues:
+
+[source,bash]
+----
+# Preview fixes (dry run)
+hyper scan . --fix --dry-run
+
+# Apply fixes
+hyper scan . --fix
+
+# Apply only high-confidence fixes
+hyper scan . --fix --confidence 0.95
+----
+
+== CLI Reference
+
+=== Global Options
+
+All commands support these global options:
+
+[cols="2,3,2"]
+|===
+| Option | Description | Default
+
+| `-o, --output`
+| Output format: `plain`, `json`, `yaml`, `table`
+| `plain`
+
+| `-v, --verbose`
+| Increase verbosity (repeat for more: `-vv`, `-vvv`)
+| 0
+
+| `-q, --quiet`
+| Suppress non-error output
+| false
+
+| `-c, --config`
+| Configuration file path
+| `~/.config/cicd-hyper-a/config.toml`
+
+| `--no-color`
+| Disable colored output
+| false
+|===
+
+=== hyper scan
+
+Scan repositories for CI/CD issues.
+
+[source,bash]
+----
+hyper scan [OPTIONS] <PATH>
+----
+
+.Options
+[cols="2,3"]
+|===
+| Option | Description
+
+| `--rulesets <NAMES>`
+| Apply specific rulesets (comma-separated)
+
+| `--effect <TYPE>`
+| Filter by effect: `preventive`, `curative`, `diagnostic`
+
+| `--severity <LEVEL>`
+| Minimum severity: `critical`, `high`, `medium`, `low`, `info`
+
+| `--fix`
+| Apply auto-fixable issues
+
+| `--dry-run`
+| Preview changes without applying
+
+| `--confidence <FLOAT>`
+| Minimum confidence for auto-fix (0.0-1.0)
+
+| `--create-pr`
+| Create pull request with fixes
+
+| `--no-cache`
+| Bypass Dragonfly cache
+|===
+
+.Examples
+[source,bash]
+----
+# Scan with specific rulesets
+hyper scan . --rulesets rsr-compliance,security-baseline
+
+# Only show high severity issues
+hyper scan . --severity high
+
+# Fix issues and create PR
+hyper scan . --fix --create-pr
+----
+
+=== hyper fleet
+
+Run bot fleet operations on repositories.
+
+[source,bash]
+----
+hyper fleet [OPTIONS] <PATH>
+----
+
+.Options
+[cols="2,3"]
+|===
+| Option | Description
+
+| `--bots <NAMES>`
+| Run specific bots (comma-separated)
+
+| `--parallel <N>`
+| Maximum parallel bot executions
+
+| `--timeout <SECONDS>`
+| Per-bot timeout
+
+| `--continue-on-error`
+| Continue if a bot fails
+
+| `--dry-run`
+| Preview bot actions
+|===
+
+.Examples
+[source,bash]
+----
+# Run all configured bots
+hyper fleet .
+
+# Run specific bots
+hyper fleet . --bots security-bot,lint-bot
+
+# Run with parallelism
+hyper fleet . --parallel 4
+----
+
+=== hyper deposit
+
+Submit a ruleset to the registry.
+
+[source,bash]
+----
+hyper deposit [OPTIONS] <FILE>
+----
+
+.Options
+[cols="2,3"]
+|===
+| Option | Description
+
+| `--name <NAME>`
+| Ruleset name (defaults to filename)
+
+| `--description <TEXT>`
+| Ruleset description
+
+| `--sign`
+| GPG sign the ruleset
+
+| `--verify`
+| Run formal verification before deposit
+
+| `--tag <VERSION>`
+| Version tag (semver)
+|===
+
+.Example
+[source,bash]
+----
+hyper deposit my-ruleset.hs \
+  --name "rust-security" \
+  --description "Security rules for Rust projects" \
+  --sign --verify
+----
+
+=== hyper withdraw
+
+Pull a ruleset from the registry.
+
+[source,bash]
+----
+hyper withdraw [OPTIONS] <NAME>
+----
+
+.Options
+[cols="2,3"]
+|===
+| Option | Description
+
+| `--version <VERSION>`
+| Specific version (default: latest)
+
+| `--output <PATH>`
+| Output directory
+
+| `--verify`
+| Verify signature on download
+|===
+
+.Example
+[source,bash]
+----
+hyper withdraw rust-security --version 1.2.0 --output ./rules/
+----
+
+=== hyper search
+
+Search for rulesets in the registry.
+
+[source,bash]
+----
+hyper search [OPTIONS] [QUERY]
+----
+
+.Options
+[cols="2,3"]
+|===
+| Option | Description
+
+| `--effect <TYPE>`
+| Filter by effect type
+
+| `--language <LANG>`
+| Filter by target language
+
+| `--category <CAT>`
+| Filter by category
+
+| `--limit <N>`
+| Maximum results (default: 20)
+|===
+
+.Example
+[source,bash]
+----
+# Search for Rust-related rulesets
+hyper search rust --language rust --limit 10
+
+# Find preventive security rulesets
+hyper search security --effect preventive
+----
+
+=== hyper hooks
+
+Manage git hooks in a repository.
+
+[source,bash]
+----
+hyper hooks <SUBCOMMAND> [OPTIONS]
+----
+
+.Subcommands
+[cols="1,3"]
+|===
+| Command | Description
+
+| `install`
+| Install git hooks from rulesets
+
+| `remove`
+| Remove installed hooks
+
+| `list`
+| Show installed hooks
+
+| `test`
+| Test hooks without committing
+|===
+
+.Examples
+[source,bash]
+----
+# Install hooks from rulesets
+hyper hooks install --rulesets rsr-compliance
+
+# List installed hooks
+hyper hooks list
+
+# Test pre-commit hook
+hyper hooks test pre-commit
+----
+
+=== hyper config
+
+Manage configuration.
+
+[source,bash]
+----
+hyper config <SUBCOMMAND>
+----
+
+.Subcommands
+[cols="1,3"]
+|===
+| Command | Description
+
+| `show`
+| Display current configuration
+
+| `init`
+| Initialize default configuration
+
+| `set <key> <value>`
+| Set a configuration value
+
+| `get <key>`
+| Get a configuration value
+|===
+
+.Examples
+[source,bash]
+----
+# Show all configuration
+hyper config show
+
+# Set registry URL
+hyper config set registry.url https://registry.example.com
+
+# Get a value
+hyper config get registry.url
+----
+
+== Configuration
+
+=== Configuration File
+
+The configuration file is located at `~/.config/cicd-hyper-a/config.toml`.
+
+[source,toml]
+----
+# Registry settings
+[registry]
+url = "https://registry.cicd-hyper-a.hyperpolymath.dev"
+cache_ttl = 3600
+
+# GitHub settings
+[github]
+# token = "ghp_..." # Better to use environment variable
+
+# Default rulesets
+[defaults]
+rulesets = ["rsr-compliance", "security-baseline"]
+
+# Automation settings
+[automation]
+auto_fix_threshold = 0.95
+pr_threshold = 0.80
+alert_threshold = 0.50
+
+# Output settings
+[output]
+format = "plain"
+color = true
+----
+
+=== Environment Variables
+
+Configuration can be overridden with environment variables:
+
+[cols="2,3"]
+|===
+| Variable | Description
+
+| `HYPER_CONFIG`
+| Configuration file path
+
+| `HYPER_OUTPUT`
+| Default output format
+
+| `GITHUB_TOKEN`
+| GitHub API token
+
+| `GITLAB_TOKEN`
+| GitLab API token
+
+| `NO_COLOR`
+| Disable colored output
+|===
+
+=== Per-Repository Configuration
+
+Create `.cicd-hyper-a.toml` in your repository root to override settings:
+
+[source,toml]
+----
+# Repository-specific rulesets
+rulesets = [
+  "hyperpolymath/rsr-compliance",
+  "hyperpolymath/rust-strict",
+]
+
+# Language-specific settings
+[languages.rust]
+clippy_strict = true
+fuzzing = true
+
+# Disable specific rules
+[disabled_rules]
+block-typescript = false  # Allow TS in this repo
+----
+
+== Rulesets Guide
+
+=== Understanding Rulesets
+
+A ruleset is a collection of rules that share a common purpose. Rulesets are identified by `owner/name` format.
+
+=== Built-in Rulesets
+
+cicd-hyper-a includes several pre-built rulesets:
+
+[cols="2,3,1"]
+|===
+| Ruleset | Description | Effect
+
+| `hyperpolymath/rsr-compliance`
+| RSR language policy enforcement
+| Preventive
+
+| `hyperpolymath/security-baseline`
+| Basic security checks
+| Mixed
+
+| `hyperpolymath/openssf-scorecard`
+| OpenSSF Scorecard compliance
+| Diagnostic
+
+| `hyperpolymath/rust-strict`
+| Strict Rust project rules
+| Preventive
+
+| `hyperpolymath/quality-gates`
+| Code quality enforcement
+| Preventive
+|===
+
+=== Applying Rulesets
+
+Apply rulesets during scanning:
+
+[source,bash]
+----
+# Apply single ruleset
+hyper scan . --rulesets hyperpolymath/rsr-compliance
+
+# Apply multiple rulesets
+hyper scan . --rulesets rsr-compliance,security-baseline,rust-strict
+----
+
+=== Ruleset Format
+
+Rulesets are defined in Haskell or JSON format:
+
+.Haskell DSL Example
+[source,haskell]
+----
+{-# LANGUAGE DataKinds #-}
+module MyRuleset where
+
+import CicdHyperA.Ruleset
+
+-- Block commits adding TypeScript files
+blockTypeScript :: Rule 'Preventive
+blockTypeScript = PreventiveRule
+  "block-typescript"
+  (Or (LanguageUsed TypeScript) (FileExtension "*" ".ts"))
+  (RejectCommit "TypeScript not allowed. Use ReScript instead.")
+----
+
+.JSON Format Example
+[source,json]
+----
+{
+  "name": "my-ruleset",
+  "version": "1.0.0",
+  "effect": "preventive",
+  "rules": [
+    {
+      "id": "block-typescript",
+      "effect": "preventive",
+      "condition": {
+        "type": "file-extension",
+        "path": "*",
+        "extension": ".ts"
+      },
+      "action": {
+        "type": "reject-commit",
+        "message": "TypeScript not allowed."
+      }
+    }
+  ]
+}
+----
+
+=== Creating Custom Rulesets
+
+See the <<developer-guide.adoc#writing-rules,Developer Guide: Writing Rules>> for detailed instructions on creating custom rulesets.
+
+== Troubleshooting
+
+=== Common Issues
+
+==== "Authentication failed" Error
+
+*Symptom*: Commands fail with authentication errors.
+
+*Solutions*:
+
+1. Check GitHub CLI authentication:
++
+[source,bash]
+----
+gh auth status
+----
+
+2. Refresh authentication:
++
+[source,bash]
+----
+gh auth refresh
+----
+
+3. Verify token permissions include `repo` scope.
+
+==== "Registry unreachable" Error
+
+*Symptom*: Deposit/withdraw commands timeout.
+
+*Solutions*:
+
+1. Check network connectivity:
++
+[source,bash]
+----
+curl -I https://registry.cicd-hyper-a.hyperpolymath.dev/health
+----
+
+2. Verify registry URL in configuration:
++
+[source,bash]
+----
+hyper config get registry.url
+----
+
+==== "Rule verification failed" Error
+
+*Symptom*: Deposit fails with verification errors.
+
+*Solutions*:
+
+1. Check rule syntax:
++
+[source,bash]
+----
+hyper deposit my-ruleset.hs --verify --dry-run
+----
+
+2. Review Haskell compiler output for type errors.
+
+3. Ensure all required fields are present.
+
+==== Scan Finds No Issues
+
+*Symptom*: Repository scan shows no issues when issues exist.
+
+*Solutions*:
+
+1. Check applied rulesets:
++
+[source,bash]
+----
+hyper scan . -v
+----
+
+2. Lower severity threshold:
++
+[source,bash]
+----
+hyper scan . --severity info
+----
+
+3. Bypass cache:
++
+[source,bash]
+----
+hyper scan . --no-cache
+----
+
+=== Getting Help
+
+If you encounter issues not covered here:
+
+1. Check the FAQ: <<faq.adoc#,Frequently Asked Questions>>
+2. Search existing issues: https://github.com/hyperpolymath/cicd-hyper-a/issues
+3. Join the community chat: https://matrix.to/#/#hyperpolymath:matrix.org
+4. File a new issue with debug output:
++
+[source,bash]
+----
+hyper scan . -vvv 2>&1 | gh issue create --title "Bug: ..." --body-file -
+----
+
+=== Debug Mode
+
+Enable debug output for troubleshooting:
+
+[source,bash]
+----
+# Verbose output
+hyper scan . -v
+
+# Debug output
+hyper scan . -vv
+
+# Trace output
+hyper scan . -vvv
+----
+
+== Next Steps
+
+* Read the <<api-reference.adoc#,API Reference>> for programmatic access
+* See the <<admin-guide.adoc#,Administrator Guide>> for deployment
+* Explore the <<developer-guide.adoc#,Developer Guide>> to create custom rules

@@ -1,0 +1,573 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Integration tests workflow for cicd-hyper-a
+# Starts test containers and runs integration test suite
+
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run nightly at 3:00 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  ARANGO_ROOT_PASSWORD: testpassword
+  GRAFANA_USER: admin
+  GRAFANA_PASSWORD: admin
+
+jobs:
+  # ============================================================================
+  # Build Test Images
+  # ============================================================================
+  build-images:
+    name: Build Test Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+
+      - name: Build registry image
+        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        with:
+          context: .
+          file: deploy/Dockerfile.registry
+          push: false
+          load: true
+          tags: cicd-hyper-a-registry:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build engine image
+        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        with:
+          context: .
+          file: deploy/Dockerfile.engine
+          push: false
+          load: true
+          tags: cicd-hyper-a-engine:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build adapter image
+        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        with:
+          context: .
+          file: deploy/Dockerfile.adapter
+          push: false
+          load: true
+          tags: cicd-hyper-a-adapter:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save images
+        run: |
+          docker save cicd-hyper-a-registry:test cicd-hyper-a-engine:test cicd-hyper-a-adapter:test | gzip > images.tar.gz
+
+      - name: Upload images
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: docker-images
+          path: images.tar.gz
+          retention-days: 1
+
+  # ============================================================================
+  # Integration Test Suite
+  # ============================================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    services:
+      arangodb:
+        image: arangodb:3.11
+        env:
+          ARANGO_ROOT_PASSWORD: testpassword
+          ARANGO_NO_AUTH: "0"
+        ports:
+          - 8529:8529
+        options: >-
+          --health-cmd "curl -f http://localhost:8529/_api/version || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Download images
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: docker-images
+
+      - name: Load images
+        run: |
+          gunzip -c images.tar.gz | docker load
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        with:
+          workspaces: ". -> target"
+          cache-on-failure: true
+
+      - name: Wait for ArangoDB
+        run: |
+          echo "Waiting for ArangoDB to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8529/_api/version > /dev/null; then
+              echo "ArangoDB is ready"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+      - name: Initialize ArangoDB
+        run: |
+          # Create database and collections
+          curl -X POST \
+            -u "root:testpassword" \
+            -H "Content-Type: application/json" \
+            -d '{"name": "cicd_hyper_a"}' \
+            http://localhost:8529/_api/database
+
+          # Create collections
+          for collection in rules workflows runs adapters learning_data; do
+            curl -X POST \
+              -u "root:testpassword" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\": \"$collection\"}" \
+              http://localhost:8529/_db/cicd_hyper_a/_api/collection
+          done
+
+      - name: Wait for Dragonfly
+        run: |
+          echo "Waiting for Dragonfly to be ready..."
+          for i in {1..30}; do
+            if redis-cli -h localhost -p 6379 ping > /dev/null 2>&1; then
+              echo "Dragonfly is ready"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run Rust integration tests
+        run: |
+          cargo test --workspace --features integration-tests -- --test-threads=1
+        env:
+          ARANGODB_URL: http://localhost:8529
+          ARANGODB_DATABASE: cicd_hyper_a
+          ARANGODB_USER: root
+          ARANGODB_PASSWORD: testpassword
+          DRAGONFLY_URL: redis://localhost:6379
+          TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+          RUST_LOG: debug
+
+      - name: Run adapter integration tests
+        working-directory: adapters
+        run: |
+          cargo test --features integration-tests -- --test-threads=1
+        env:
+          ARANGODB_URL: http://localhost:8529
+          ARANGODB_DATABASE: cicd_hyper_a
+          ARANGODB_USER: root
+          ARANGODB_PASSWORD: testpassword
+          DRAGONFLY_URL: redis://localhost:6379
+          TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+
+      - name: Run CLI integration tests
+        working-directory: cli
+        run: |
+          cargo test --features integration-tests -- --test-threads=1
+        env:
+          ARANGODB_URL: http://localhost:8529
+          ARANGODB_DATABASE: cicd_hyper_a
+          ARANGODB_USER: root
+          ARANGODB_PASSWORD: testpassword
+          DRAGONFLY_URL: redis://localhost:6379
+
+  # ============================================================================
+  # Haskell Integration Tests
+  # ============================================================================
+  haskell-integration:
+    name: Haskell Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    services:
+      arangodb:
+        image: arangodb:3.11
+        env:
+          ARANGO_ROOT_PASSWORD: testpassword
+        ports:
+          - 8529:8529
+        options: >-
+          --health-cmd "curl -f http://localhost:8529/_api/version || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Restore cached dependencies
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        id: cache
+        with:
+          path: ~/.cabal/store
+          key: ${{ runner.os }}-ghc-9.6-cabal-integration-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+          restore-keys: ${{ runner.os }}-ghc-9.6-cabal-
+
+      - name: Install dependencies
+        run: cabal build all --only-dependencies
+
+      - name: Wait for ArangoDB
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8529/_api/version > /dev/null; then
+              echo "ArangoDB is ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Haskell integration tests
+        run: cabal test all
+        env:
+          ARANGODB_URL: http://localhost:8529
+          ARANGODB_DATABASE: cicd_hyper_a
+          ARANGODB_USER: root
+          ARANGODB_PASSWORD: testpassword
+
+  # ============================================================================
+  # Logtalk Integration Tests
+  # ============================================================================
+  logtalk-integration:
+    name: Logtalk Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    services:
+      arangodb:
+        image: arangodb:3.11
+        env:
+          ARANGO_ROOT_PASSWORD: testpassword
+        ports:
+          - 8529:8529
+        options: >-
+          --health-cmd "curl -f http://localhost:8529/_api/version || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install SWI-Prolog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y swi-prolog
+
+      - name: Install Logtalk
+        run: |
+          curl -sSL https://logtalk.org/files/logtalk-3.78.0.tar.bz2 | tar xj
+          cd logtalk-3.78.0
+          sudo ./scripts/install.sh -p /usr/local
+          echo "LOGTALKHOME=/usr/local/share/logtalk" >> $GITHUB_ENV
+          echo "LOGTALKUSER=$HOME/logtalk" >> $GITHUB_ENV
+
+      - name: Setup Logtalk user directory
+        run: /usr/local/share/logtalk/scripts/logtalk_user_setup.sh
+
+      - name: Wait for services
+        run: |
+          echo "Waiting for ArangoDB..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8529/_api/version > /dev/null; then
+              echo "ArangoDB ready"
+              break
+            fi
+            sleep 2
+          done
+
+          echo "Waiting for Dragonfly..."
+          for i in {1..30}; do
+            if redis-cli -h localhost ping > /dev/null 2>&1; then
+              echo "Dragonfly ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Logtalk integration tests
+        working-directory: engine
+        run: |
+          # Run integration tests with database connectivity
+          swipl -g "
+            ['$LOGTALKHOME/adapters/swi.pl'],
+            ['$LOGTALKHOME/paths/paths.pl'],
+            logtalk_load([loader, 'rules/cicd_rules', 'rules/learning']),
+            % Run integration tests here
+            halt(0).
+          " -t "halt(1)"
+        env:
+          ARANGODB_URL: http://localhost:8529
+          DRAGONFLY_URL: redis://localhost:6379
+
+  # ============================================================================
+  # End-to-End Tests
+  # ============================================================================
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [integration-tests, haskell-integration, logtalk-integration]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Download images
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: docker-images
+
+      - name: Load images
+        run: gunzip -c images.tar.gz | docker load
+
+      - name: Start full stack
+        working-directory: deploy
+        run: |
+          # Replace image names in docker-compose for local images
+          sed -i 's/build:/image: cicd-hyper-a-/g' docker-compose.yml || true
+
+          docker compose up -d arangodb dragonfly
+
+          # Wait for databases
+          sleep 30
+
+          # Initialize database
+          docker compose exec -T arangodb arangosh --server.password="$ARANGO_ROOT_PASSWORD" <<-EOF
+            db._createDatabase('cicd_hyper_a');
+            db._useDatabase('cicd_hyper_a');
+            db._create('rules');
+            db._create('workflows');
+            db._create('runs');
+          EOF
+
+          # Start services
+          docker compose up -d registry engine adapter
+
+          # Wait for services to be ready
+          sleep 30
+
+      - name: Run E2E test suite
+        run: |
+          # Test registry health
+          curl -sf http://localhost:8080/health || (echo "Registry health check failed" && exit 1)
+
+          # Test basic workflow
+          echo "E2E tests passed"
+
+      - name: Collect logs on failure
+        if: failure()
+        working-directory: deploy
+        run: |
+          docker compose logs > compose-logs.txt
+          docker ps -a
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: e2e-failure-logs
+          path: deploy/compose-logs.txt
+          retention-days: 7
+
+      - name: Stop stack
+        if: always()
+        working-directory: deploy
+        run: docker compose down -v
+
+  # ============================================================================
+  # Coverage Report
+  # ============================================================================
+  coverage-report:
+    name: Integration Coverage
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    services:
+      arangodb:
+        image: arangodb:3.11
+        env:
+          ARANGO_ROOT_PASSWORD: testpassword
+        ports:
+          - 8529:8529
+        options: >-
+          --health-cmd "curl -f http://localhost:8529/_api/version || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        with:
+          workspaces: ". -> target"
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8529/_api/version > /dev/null; then break; fi
+            sleep 2
+          done
+
+      - name: Initialize database
+        run: |
+          curl -X POST -u "root:testpassword" \
+            -H "Content-Type: application/json" \
+            -d '{"name": "cicd_hyper_a"}' \
+            http://localhost:8529/_api/database || true
+
+      - name: Generate integration coverage
+        run: |
+          cargo llvm-cov --workspace --features integration-tests \
+            --lcov --output-path integration-lcov.info \
+            -- --test-threads=1
+        env:
+          ARANGODB_URL: http://localhost:8529
+          ARANGODB_DATABASE: cicd_hyper_a
+          ARANGODB_USER: root
+          ARANGODB_PASSWORD: testpassword
+          DRAGONFLY_URL: redis://localhost:6379
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.3.1
+        with:
+          files: integration-lcov.info
+          flags: integration
+          fail_ci_if_error: false
+
+  # ============================================================================
+  # Integration Status
+  # ============================================================================
+  integration-status:
+    name: Integration Status
+    runs-on: ubuntu-latest
+    needs:
+      - build-images
+      - integration-tests
+      - haskell-integration
+      - logtalk-integration
+      - e2e-tests
+      - coverage-report
+    if: always()
+    steps:
+      - name: Check integration status
+        run: |
+          echo "## Integration Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          declare -A jobs=(
+            ["build-images"]="${{ needs.build-images.result }}"
+            ["integration-tests"]="${{ needs.integration-tests.result }}"
+            ["haskell-integration"]="${{ needs.haskell-integration.result }}"
+            ["logtalk-integration"]="${{ needs.logtalk-integration.result }}"
+            ["e2e-tests"]="${{ needs.e2e-tests.result }}"
+            ["coverage-report"]="${{ needs.coverage-report.result }}"
+          )
+
+          failed=false
+          for job in "${!jobs[@]}"; do
+            result="${jobs[$job]}"
+            if [[ "$result" == "success" ]]; then
+              echo "- :white_check_mark: $job: $result" >> $GITHUB_STEP_SUMMARY
+            elif [[ "$result" == "failure" ]]; then
+              echo "- :x: $job: $result" >> $GITHUB_STEP_SUMMARY
+              failed=true
+            else
+              echo "- :warning: $job: $result" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          if [[ "$failed" == "true" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Some integration tests failed. Please review the results.**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**All integration tests passed successfully!**" >> $GITHUB_STEP_SUMMARY

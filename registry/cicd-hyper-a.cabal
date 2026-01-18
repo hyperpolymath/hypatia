@@ -53,6 +53,7 @@ test-suite cicd-hyper-a-test
     main-is:          Spec.hs
     other-modules:    RulesetSpec
                     , VerifySpec
+                    , RegistrySpec
                     , LiquidSpec
                     , APISpec
                     , CLISpec

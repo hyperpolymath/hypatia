@@ -1,0 +1,281 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Git Hooks System
+:toc:
+:toc-placement: preamble
+:sectnums:
+:icons: font
+
+A comprehensive, POSIX-compatible git hooks system for enforcing security policies, language standards, and commit quality.
+
+== Quick Start
+
+[source,bash]
+----
+# Install hooks to current repository
+./installer.sh
+
+# Install hooks to specific repository
+./installer.sh /path/to/repo
+
+# Install only specific hooks
+./installer.sh --hooks=pre-commit,pre-push
+
+# Uninstall hooks
+./installer.sh --uninstall
+
+# Update existing hooks
+./installer.sh --update
+----
+
+== Directory Structure
+
+[source]
+----
+hooks/
+├── installer.sh          # Installation script
+├── config.yml            # Default configuration
+├── README.adoc           # This file
+├── templates/            # Hook templates
+│   ├── pre-commit.sh     # Pre-commit validation
+│   ├── pre-push.sh       # Pre-push validation
+│   ├── post-receive.sh   # Server-side triggers
+│   ├── commit-msg.sh     # Commit message validation
+│   └── prepare-commit-msg.sh  # Auto-populate messages
+├── lib/                  # Shared shell functions
+│   ├── common.sh         # Core utilities
+│   ├── cache.sh          # Dragonfly/Redis caching
+│   └── api.sh            # cicd-hyper-a API client
+├── pre-commit            # Legacy hook (deprecated)
+├── pre-push              # Legacy hook (deprecated)
+├── post-receive          # Legacy hook (deprecated)
+└── validate-*.sh         # Standalone validators
+----
+
+== Hook Templates
+
+=== pre-commit.sh
+
+Runs preventive checks before commits are created.
+
+**Checks performed:**
+
+* **Language Policy (RSR)**: Blocks banned languages (TypeScript, Go, Python, Java)
+* **Secret Detection**: Finds API keys, tokens, private keys
+* **SPDX Headers**: Validates license headers
+* **Workflow Security**: Checks for unpinned actions and missing permissions
+* **Formatting**: Trailing whitespace, tabs, line endings
+* **Large Files**: Warns about files exceeding size limits
+* **Credential Files**: Blocks common credential file patterns
+
+=== pre-push.sh
+
+Validates commits before pushing to remote.
+
+**Checks performed:**
+
+* **Force Push Protection**: Blocks force pushes to protected branches
+* **Signed Commits**: Optional GPG/SSH signature verification
+* **Large Files**: Blocks files exceeding size limit
+* **Deep Credential Scan**: Full secret detection on changed files
+* **Workflow Security**: Checks for dangerous patterns
+* **Branch Naming**: Validates branch naming conventions
+* **CI Simulation**: Optional compile/type checks
+
+=== post-receive.sh
+
+Server-side hook for triggering curative actions.
+
+**Actions:**
+
+* Notifies cicd-hyper-a engine of pushes
+* Triggers workflow analysis on workflow changes
+* Triggers dependency scan on dependency changes
+* Sends webhooks to external services
+* Logs push events for analytics
+
+=== commit-msg.sh
+
+Validates commit message format.
+
+**Validations:**
+
+* Subject line length (max 72 chars)
+* Conventional commit format
+* Body line length (max 100 chars)
+* Issue references
+* Sign-off requirements
+* Co-author format
+
+=== prepare-commit-msg.sh
+
+Auto-populates commit messages with metadata.
+
+**Features:**
+
+* Adds conventional commit template
+* Extracts issue number from branch name
+* Adds co-author information
+* Injects metadata footer
+
+== Configuration
+
+After installation, edit `.git/hooks/config.yml` to customize behavior.
+
+[source,yaml]
+----
+# Enable/disable specific hooks
+hooks:
+  pre-commit:
+    enabled: true
+    language_policy:
+      enabled: true
+    secrets:
+      enabled: true
+
+  pre-push:
+    enabled: true
+    force_push:
+      protected_branches:
+        - "^main$"
+        - "^master$"
+----
+
+See the full config.yml for all options.
+
+== Environment Variables
+
+[cols="1,3,1"]
+|===
+|Variable |Description |Default
+
+|`CICD_HYPER_A_API`
+|cicd-hyper-a API endpoint
+|`http://localhost:8080`
+
+|`CICD_HYPER_A_TOKEN`
+|API authentication token
+|(none)
+
+|`CICD_CACHE_HOST`
+|Redis/Dragonfly host
+|`localhost`
+
+|`CICD_CACHE_PORT`
+|Redis/Dragonfly port
+|`6379`
+
+|`CICD_DEBUG`
+|Enable debug output
+|`0`
+
+|`NO_COLOR`
+|Disable colored output
+|(unset)
+|===
+
+== Shared Libraries
+
+=== common.sh
+
+Core utilities used by all hooks:
+
+* Color output functions
+* File utilities
+* Language detection
+* Configuration parsing
+* Validation utilities
+* Secret detection patterns
+* Error tracking
+
+=== cache.sh
+
+Dragonfly/Redis cache integration:
+
+* Ruleset caching
+* File-based fallback cache
+* TTL management
+* Cache statistics
+
+=== api.sh
+
+cicd-hyper-a API client:
+
+* HTTP request functions
+* Hook execution reporting
+* Ruleset fetching
+* Webhook distribution
+
+== Caching
+
+The hooks system uses a two-tier caching strategy:
+
+1. **Redis/Dragonfly**: Primary cache for distributed environments
+2. **File cache**: Fallback when Redis is unavailable
+
+Cache is used for:
+* Ruleset definitions
+* GitHub Action SHA mappings
+* Analysis results
+
+== Exit Codes
+
+[cols="1,3"]
+|===
+|Code |Meaning
+
+|0
+|Success - proceed with git operation
+
+|1
+|Failure - abort git operation
+
+|2
+|Skip - hook disabled or not applicable
+|===
+
+== Bypass Hooks
+
+To bypass hooks (not recommended for regular use):
+
+[source,bash]
+----
+# Bypass pre-commit
+git commit --no-verify
+
+# Bypass pre-push
+git push --no-verify
+----
+
+== Compatibility
+
+* POSIX shell compatible (sh, dash, bash, zsh)
+* No external dependencies required
+* Optional features require: curl/wget, yq, redis-cli
+
+== RSR Language Policy
+
+The pre-commit hook enforces the Rhodium Standard Repositories language policy:
+
+[cols="1,1"]
+|===
+|Banned |Use Instead
+
+|TypeScript
+|ReScript
+
+|Go
+|Rust
+
+|Python
+|Julia/Rust/ReScript
+
+|Java/Kotlin
+|Rust
+
+|Node.js
+|Deno
+|===
+
+== License
+
+AGPL-3.0-or-later

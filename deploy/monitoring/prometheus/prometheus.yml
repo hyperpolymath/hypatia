@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Prometheus configuration for cicd-hyper-a monitoring stack
+# This configuration defines scrape targets for all cicd-hyper-a services
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'cicd-hyper-a'
+    environment: '{{ .Values.environment | default "development" }}'
+
+# Rule files to load for alerting and recording
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+  - "/etc/prometheus/recording-rules.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # ============================================================
+  # CICD-HYPER-A SERVICES
+  # ============================================================
+
+  # Registry service metrics - rule and bot management
+  - job_name: 'registry'
+    static_configs:
+      - targets: ['registry:8080']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'registry'
+
+  # Adapter service metrics - forge integration
+  - job_name: 'adapter'
+    static_configs:
+      - targets: ['adapter:8081']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'adapter'
+
+  # Engine service metrics - Logtalk rule execution
+  - job_name: 'engine'
+    static_configs:
+      - targets: ['engine:8082']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'engine'
+
+  # ============================================================
+  # DATA LAYER
+  # ============================================================
+
+  # ArangoDB metrics
+  - job_name: 'arangodb'
+    static_configs:
+      - targets: ['arangodb:8529']
+    metrics_path: /_admin/metrics/v2
+    scrape_interval: 30s
+    basic_auth:
+      username: root
+      password_file: /etc/prometheus/arangodb_password
+
+  # Dragonfly metrics (Redis-compatible cache)
+  - job_name: 'dragonfly'
+    static_configs:
+      - targets: ['dragonfly:6379']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # ============================================================
+  # INFRASTRUCTURE
+  # ============================================================
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node exporter for host metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # ============================================================
+  # OPTIONAL: KUBERNETES SERVICE DISCOVERY
+  # ============================================================
+
+  # Uncomment for Kubernetes deployment
+  # - job_name: 'kubernetes-pods'
+  #   kubernetes_sd_configs:
+  #     - role: pod
+  #   relabel_configs:
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #       action: keep
+  #       regex: true
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+  #       action: replace
+  #       target_label: __metrics_path__
+  #       regex: (.+)
+  #     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+  #       action: replace
+  #       regex: ([^:]+)(?::\d+)?;(\d+)
+  #       replacement: $1:$2
+  #       target_label: __address__
+  #     - action: labelmap
+  #       regex: __meta_kubernetes_pod_label_(.+)
+  #     - source_labels: [__meta_kubernetes_namespace]
+  #       action: replace
+  #       target_label: kubernetes_namespace
+  #     - source_labels: [__meta_kubernetes_pod_name]
+  #       action: replace
+  #       target_label: kubernetes_pod_name

@@ -1,0 +1,88 @@
+[
+  {
+    "number": 1,
+    "created_at": "2025-01-15T10:00:00Z",
+    "url": "https://api.github.com/repos/hyperpolymath/test-repo/code-scanning/alerts/1",
+    "html_url": "https://github.com/hyperpolymath/test-repo/security/code-scanning/1",
+    "state": "open",
+    "fixed_at": null,
+    "dismissed_at": null,
+    "dismissed_by": null,
+    "dismissed_reason": null,
+    "dismissed_comment": null,
+    "rule": {
+      "id": "unpinned-action",
+      "severity": "warning",
+      "description": "GitHub Action is not pinned to a commit SHA",
+      "name": "Unpinned Action",
+      "tags": ["security", "workflow"],
+      "full_description": "Using a version tag instead of a commit SHA for a GitHub Action can allow supply chain attacks.",
+      "help": "Pin the action to a specific commit SHA instead of using a version tag."
+    },
+    "tool": {
+      "name": "cicd-hyper-a",
+      "version": "0.1.0"
+    },
+    "most_recent_instance": {
+      "ref": "refs/heads/main",
+      "analysis_key": ".github/workflows/ci.yml",
+      "environment": "{}",
+      "category": "workflow-security",
+      "state": "open",
+      "commit_sha": "abc123def456",
+      "message": {
+        "text": "Action 'actions/checkout@v4' should be pinned to a commit SHA"
+      },
+      "location": {
+        "path": ".github/workflows/ci.yml",
+        "start_line": 8,
+        "end_line": 8,
+        "start_column": 9,
+        "end_column": 37
+      }
+    }
+  },
+  {
+    "number": 2,
+    "created_at": "2025-01-15T10:00:00Z",
+    "url": "https://api.github.com/repos/hyperpolymath/test-repo/code-scanning/alerts/2",
+    "html_url": "https://github.com/hyperpolymath/test-repo/security/code-scanning/2",
+    "state": "open",
+    "fixed_at": null,
+    "dismissed_at": null,
+    "dismissed_by": null,
+    "dismissed_reason": null,
+    "dismissed_comment": null,
+    "rule": {
+      "id": "missing-permissions",
+      "severity": "note",
+      "description": "Workflow is missing permissions declaration",
+      "name": "Missing Permissions",
+      "tags": ["security", "workflow"],
+      "full_description": "Workflows should declare explicit permissions to follow the principle of least privilege.",
+      "help": "Add 'permissions: read-all' to the workflow file."
+    },
+    "tool": {
+      "name": "cicd-hyper-a",
+      "version": "0.1.0"
+    },
+    "most_recent_instance": {
+      "ref": "refs/heads/main",
+      "analysis_key": ".github/workflows/ci.yml",
+      "environment": "{}",
+      "category": "workflow-security",
+      "state": "open",
+      "commit_sha": "abc123def456",
+      "message": {
+        "text": "Workflow is missing 'permissions' declaration"
+      },
+      "location": {
+        "path": ".github/workflows/ci.yml",
+        "start_line": 1,
+        "end_line": 1,
+        "start_column": 1,
+        "end_column": 1
+      }
+    }
+  }
+]

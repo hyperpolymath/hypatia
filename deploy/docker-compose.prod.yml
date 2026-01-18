@@ -1,0 +1,349 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# cicd-hyper-a Docker Compose - Production Overrides
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: "3.8"
+
+services:
+  # ============================================================
+  # DATA LAYER - Production Settings
+  # ============================================================
+
+  arangodb:
+    image: arangodb:3.11
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          cpus: "2.0"
+          memory: 4G
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD:?ARANGO_ROOT_PASSWORD must be set}
+      ARANGO_NO_AUTH: "0"
+      # Production optimizations
+      ARANGODB_OVERRIDE_DETECTED_TOTAL_MEMORY: "8GB"
+    volumes:
+      - arangodb_data:/var/lib/arangodb3
+      - arangodb_apps:/var/lib/arangodb3-apps
+      - ./init-arangodb.js:/docker-entrypoint-initdb.d/init.js:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8529/_api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    labels:
+      - "com.cicd-hyper-a.component=database"
+      - "com.cicd-hyper-a.tier=data"
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.14.1
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+    command: >
+      --maxmemory=3gb
+      --proactor_threads=4
+      --cache_mode=true
+      --snapshot_cron=0 */6 * * *
+      --dbfilename=dragonfly.rdb
+      --dir=/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "localhost", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    labels:
+      - "com.cicd-hyper-a.component=cache"
+      - "com.cicd-hyper-a.tier=data"
+
+  # ============================================================
+  # REGISTRY SERVICE - Production Settings
+  # ============================================================
+
+  registry:
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+      replicas: 2
+    environment:
+      ARANGODB_URL: http://arangodb:8529
+      ARANGODB_DATABASE: cicd_hyper_a
+      ARANGODB_USER: ${ARANGODB_USER:?ARANGODB_USER must be set}
+      ARANGODB_PASSWORD: ${ARANGODB_PASSWORD:?ARANGODB_PASSWORD must be set}
+      DRAGONFLY_URL: redis://dragonfly:6379
+      PORT: 8080
+      RUST_LOG: info
+      RUST_BACKTRACE: 0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    labels:
+      - "com.cicd-hyper-a.component=registry"
+      - "com.cicd-hyper-a.tier=application"
+
+  # ============================================================
+  # LOGTALK ENGINE - Production Settings
+  # ============================================================
+
+  engine:
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+      replicas: 2
+    environment:
+      ARANGODB_URL: http://arangodb:8529
+      DRAGONFLY_URL: redis://dragonfly:6379
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "swipl", "-g", "logtalk_load(engine/loader), cicd_rules::is_auto_fixable('TokenPermissionsID')", "-t", "halt"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    labels:
+      - "com.cicd-hyper-a.component=engine"
+      - "com.cicd-hyper-a.tier=application"
+
+  # ============================================================
+  # FORGE ADAPTERS - Production Settings
+  # ============================================================
+
+  adapter:
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+      replicas: 2
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?GITHUB_TOKEN must be set}
+      GITLAB_TOKEN: ${GITLAB_TOKEN}
+      BITBUCKET_USER: ${BITBUCKET_USER}
+      BITBUCKET_APP_PASSWORD: ${BITBUCKET_APP_PASSWORD}
+      ARANGODB_URL: http://arangodb:8529
+      DRAGONFLY_URL: redis://dragonfly:6379
+      RUST_LOG: info
+      RUST_BACKTRACE: 0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    labels:
+      - "com.cicd-hyper-a.component=adapter"
+      - "com.cicd-hyper-a.tier=application"
+
+  # ============================================================
+  # API SERVICE - Production Settings
+  # ============================================================
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: cicd-hyper-a-api
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+      replicas: 3
+    environment:
+      ARANGODB_URL: http://arangodb:8529
+      ARANGODB_DATABASE: cicd_hyper_a
+      ARANGODB_USER: ${ARANGODB_USER:?ARANGODB_USER must be set}
+      ARANGODB_PASSWORD: ${ARANGODB_PASSWORD:?ARANGODB_PASSWORD must be set}
+      DRAGONFLY_URL: redis://dragonfly:6379
+      REGISTRY_URL: http://registry:8080
+      ENGINE_URL: http://engine:8082
+      PORT: 8000
+      RUST_LOG: info
+      RUST_BACKTRACE: 0
+    ports:
+      - "8000:8000"
+    depends_on:
+      arangodb:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      registry:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cicd-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    labels:
+      - "com.cicd-hyper-a.component=api"
+      - "com.cicd-hyper-a.tier=application"
+
+  # ============================================================
+  # MONITORING - Production Settings
+  # ============================================================
+
+  prometheus:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    labels:
+      - "com.cicd-hyper-a.component=prometheus"
+      - "com.cicd-hyper-a.tier=monitoring"
+
+  grafana:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:?GRAFANA_USER must be set}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_LOG_MODE: "console file"
+      GF_LOG_LEVEL: "warn"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    labels:
+      - "com.cicd-hyper-a.component=grafana"
+      - "com.cicd-hyper-a.tier=monitoring"
+
+networks:
+  cicd-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+
+volumes:
+  arangodb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/arangodb
+  arangodb_apps:
+    driver: local
+  dragonfly_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/dragonfly
+  prometheus_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/prometheus
+  grafana_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/grafana

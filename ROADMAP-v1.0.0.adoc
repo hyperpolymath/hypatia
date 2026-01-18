@@ -1,0 +1,653 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a: Route to v1.0.0
+:toc: macro
+:toclevels: 3
+:icons: font
+
+toc::[]
+
+== Executive Summary
+
+This document outlines the complete path from the current alpha state (55% complete) to production-ready v1.0.0. The journey spans three milestone releases and encompasses the full neurosymbolic CI/CD vision.
+
+== Current State Assessment
+
+=== Component Status (as of 2026-01-18)
+
+[cols="2,1,1,3"]
+|===
+| Component | Completion | Status | Notes
+
+| **Rules Engine (Logtalk)**
+| 80%
+| ✅ Complete
+| Schema defined, bot protocol ready, 50+ rules
+
+| **Graph Storage (ArangoDB)**
+| 85%
+| ✅ Complete
+| Full graph model v2, queries, setup script
+
+| **Bot Fleet Integration**
+| 80%
+| ✅ Complete
+| Shared context layer, all bots wired
+
+| **Robot-Repo-Automaton**
+| 90%
+| ✅ Complete
+| Executor with catalog, detector, tests
+
+| **Verification (Haskell)**
+| 25%
+| 🔄 In Progress
+| DSL started, registry structure exists
+
+| **Learning Pipeline**
+| 10%
+| ⏳ Planned
+| Logtalk learning module exists, needs neural
+
+| **Forge Adapters (Rust)**
+| 40%
+| 🔄 In Progress
+| GitHub/GitLab/Bitbucket adapters started
+
+| **Deployment**
+| 15%
+| ⏳ Planned
+| Docker compose exists, K8s pending
+|===
+
+=== Working Features Today
+
+* Logtalk rules engine with formal schema (`rule_schema.lgt`)
+* Bot integration protocol (`bot_integration.lgt`)
+* ArangoDB graph model with 9 collections, 16 edges, 3 graphs
+* 20+ AQL query templates
+* Gitbot fleet shared context layer
+* Robot-repo-automaton Rust executor
+* Glambot/Finishing-bot with fleet integration
+* Test coverage across all components
+
+== Milestone Roadmap
+
+=== v0.1.0 — Foundation (Current → 2 weeks)
+
+**Goal**: Complete basic end-to-end pipeline
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Deploy ArangoDB
+| Run `arangodb-setup.js`, verify collections
+| 1 day
+
+| Fleet integration test
+| Run all bots through shared-context on test repo
+| 2 days
+
+| Connect rules → graph
+| Logtalk engine writes findings to ArangoDB
+| 3 days
+
+| Basic CLI
+| `cicd-hyper-a scan <repo>` command
+| 2 days
+
+| Documentation
+| Usage guide, API reference
+| 2 days
+|===
+
+**Deliverables**:
+- Working `cicd-hyper-a scan` command
+- Findings persisted in ArangoDB
+- All 8 bots execute in dependency order
+
+---
+
+=== v0.2.0 — Verification & Caching (v0.1.0 + 3 weeks)
+
+**Goal**: Add Haskell verification and Dragonfly caching
+
+==== Haskell Verification Registry
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Complete Ruleset DSL
+| Finish `CicdHyperA.Ruleset` GADT types
+| 3 days
+
+| Property testing
+| QuickCheck properties for all rule types
+| 3 days
+
+| Registry operations
+| `deposit`, `withdraw`, `search`, `audit`
+| 4 days
+
+| Signature verification
+| GPG/SSH signing for rulesets
+| 2 days
+
+| Liquid Haskell setup
+| Formal proofs for critical properties
+| 3 days
+|===
+
+==== Dragonfly Caching
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Dragonfly deployment
+| Docker/K8s config for Dragonfly instance
+| 1 day
+
+| Cache layer
+| Rule bytecode caching, repo state
+| 2 days
+
+| TTL strategy
+| Implement cache invalidation policy
+| 1 day
+
+| Performance testing
+| Benchmark rule lookup latency
+| 1 day
+|===
+
+**Deliverables**:
+- `cicd-hyper-a deposit/withdraw` commands
+- Signed rulesets with verification
+- Sub-millisecond rule lookups via Dragonfly
+
+---
+
+=== v0.3.0 — Multi-Forge & Hooks (v0.2.0 + 3 weeks)
+
+**Goal**: Full forge adapter support and git hooks
+
+==== Forge Adapters
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Complete GitHub adapter
+| PRs, checks, webhooks, Actions
+| 3 days
+
+| Complete GitLab adapter
+| MRs, pipelines, webhooks
+| 3 days
+
+| Complete Bitbucket adapter
+| PRs, pipelines, webhooks
+| 2 days
+
+| Add Codeberg/Gitea
+| Generic Gitea-based adapter
+| 2 days
+
+| Add SourceHut
+| sr.ht adapter
+| 2 days
+
+| Add Radicle
+| P2P adapter for federation
+| 3 days
+|===
+
+==== Git Hooks System
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Hook templates
+| pre-commit, pre-push, post-receive
+| 2 days
+
+| Hook injection
+| `cicd-hyper-a install-hooks` command
+| 1 day
+
+| Hook configuration
+| Per-repo hook customization
+| 1 day
+
+| CI simulation
+| Pre-push CI simulation
+| 2 days
+|===
+
+**Deliverables**:
+- 6 forge adapters (GitHub, GitLab, Bitbucket, Codeberg, sr.ht, Radicle)
+- Git hook injection and management
+- Cross-forge workflow support
+
+---
+
+=== v0.4.0 — Learning Pipeline (v0.3.0 + 4 weeks)
+
+**Goal**: Neural pattern recognition and rule distillation
+
+==== Pattern Recognition
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Training data collection
+| Gather CI/CD failures from hyperpolymath repos
+| 3 days
+
+| Pattern embedding model
+| Train/fine-tune embedding model for CI patterns
+| 5 days
+
+| Anomaly detection
+| Implement novelty detection for new patterns
+| 3 days
+
+| Pattern clustering
+| Group similar issues for rule candidates
+| 2 days
+|===
+
+==== Rule Distillation
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Distillation pipeline
+| Pattern → Logtalk rule conversion
+| 4 days
+
+| Confidence scoring
+| ML confidence for distilled rules
+| 2 days
+
+| Human review workflow
+| UI for reviewing proposed rules
+| 3 days
+
+| Auto-promotion
+| Rules above threshold auto-promoted
+| 2 days
+|===
+
+==== Learning Integration
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Graph ML features
+| ArangoDB graph features for ML
+| 2 days
+
+| Feedback loop
+| Fix success → pattern reinforcement
+| 2 days
+
+| Cross-repo learning
+| Learn patterns across organization
+| 3 days
+|===
+
+**Deliverables**:
+- Pattern recognition from CI/CD logs
+- Automatic rule distillation
+- Human-in-the-loop review workflow
+- Self-improving rule engine
+
+---
+
+=== v1.0.0 — Production Release (v0.4.0 + 4 weeks)
+
+**Goal**: Production-ready deployment with enterprise features
+
+==== Infrastructure
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Kubernetes deployment
+| Helm charts for all components
+| 4 days
+
+| High availability
+| ArangoDB cluster, Dragonfly replication
+| 3 days
+
+| Monitoring & alerting
+| Prometheus metrics, Grafana dashboards
+| 2 days
+
+| Backup & recovery
+| Automated backup strategy
+| 2 days
+|===
+
+==== Enterprise Features
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Multi-tenancy
+| Organization isolation
+| 3 days
+
+| RBAC
+| Role-based access control
+| 2 days
+
+| Audit logging
+| Complete audit trail
+| 2 days
+
+| SSO integration
+| OAuth2/SAML support
+| 2 days
+|===
+
+==== Public Registry
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Registry UI
+| Web interface for browsing rulesets
+| 4 days
+
+| API documentation
+| OpenAPI spec, SDK generation
+| 2 days
+
+| Rate limiting
+| API rate limiting and quotas
+| 1 day
+
+| Ruleset search
+| Full-text search with facets
+| 2 days
+|===
+
+==== Quality Assurance
+
+[cols="1,3,1"]
+|===
+| Task | Description | Effort
+
+| Integration tests
+| End-to-end test suite
+| 3 days
+
+| Performance tests
+| Load testing, benchmarks
+| 2 days
+
+| Security audit
+| External security review
+| 3 days
+
+| Documentation
+| Complete user and admin docs
+| 3 days
+|===
+
+**Deliverables**:
+- Production Kubernetes deployment
+- Public ruleset registry
+- Enterprise security features
+- Complete documentation
+
+== Architecture at v1.0.0
+
+[source]
+----
+                              ┌─────────────────────────────────────┐
+                              │         PUBLIC REGISTRY             │
+                              │  ┌─────────┐ ┌────────┐ ┌────────┐  │
+                              │  │ Web UI  │ │  API   │ │ Search │  │
+                              │  └────┬────┘ └───┬────┘ └───┬────┘  │
+                              │       └──────────┴──────────┘       │
+                              └─────────────────┬───────────────────┘
+                                                │
+┌───────────────────────────────────────────────┼───────────────────────────────────────────────┐
+│                                    cicd-hyper-a Core                                           │
+│                                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                          VERIFICATION LAYER (Haskell)                                    │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │ │
+│  │  │ Ruleset DSL  │  │  QuickCheck  │  │   Liquid     │  │  Signature   │               │ │
+│  │  │   (GADTs)    │  │  Properties  │  │   Haskell    │  │ Verification │               │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘               │ │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                            │                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                           LEARNING LAYER (Neural)                                        │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │ │
+│  │  │   Pattern    │  │   Anomaly    │  │     Rule     │  │  Confidence  │               │ │
+│  │  │  Embedding   │  │  Detection   │  │ Distillation │  │   Scoring    │               │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘               │ │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                            │                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                          SYMBOLIC LAYER (Logtalk)                                        │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │ │
+│  │  │ rule_schema  │  │  bot_integr  │  │  cicd_rules  │  │  distiller   │               │ │
+│  │  │    .lgt      │  │    .lgt      │  │    .lgt      │  │    .lgt      │               │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘               │ │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                            │                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                              DATA LAYER                                                  │ │
+│  │  ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────────────────┐   │ │
+│  │  │      ArangoDB        │  │      Dragonfly       │  │        Radicle            │   │ │
+│  │  │  ┌───────┐ ┌───────┐ │  │  ┌───────┐          │  │   ┌───────┐               │   │ │
+│  │  │  │ repos │ │ rules │ │  │  │ cache │ <1ms     │  │   │  P2P  │ Federation    │   │ │
+│  │  │  │ finds │ │ bots  │ │  │  │ index │          │  │   │ rules │               │   │ │
+│  │  │  └───────┘ └───────┘ │  │  └───────┘          │  │   └───────┘               │   │ │
+│  │  └──────────────────────┘  └──────────────────────┘  └────────────────────────────┘   │ │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                            │                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                            BOT FLEET LAYER                                               │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │ │
+│  │  │  rhodibot    │  │  echidnabot  │  │   glambot    │  │ finishing    │               │ │
+│  │  │  (verifier)  │  │  (verifier)  │  │  (finisher)  │  │    bot       │               │ │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘               │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────────────┐               │ │
+│  │  │    oikos     │  │   seambot    │  │   robot-repo-automaton        │               │ │
+│  │  │  (verifier)  │  │  (finisher)  │  │        (executor)             │               │ │
+│  │  └──────────────┘  └──────────────┘  └────────────────────────────────┘               │ │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                            │                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
+│  │                           FORGE ADAPTERS (Rust)                                          │ │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │ │
+│  │  │ GitHub  │ │ GitLab  │ │Bitbucket│ │Codeberg │ │  sr.ht  │ │Radicle  │              │ │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘              │ │
+│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
+----
+
+== Resource Requirements
+
+=== Development Time
+
+[cols="1,1,1"]
+|===
+| Milestone | Duration | Cumulative
+
+| v0.1.0 | 2 weeks | 2 weeks
+| v0.2.0 | 3 weeks | 5 weeks
+| v0.3.0 | 3 weeks | 8 weeks
+| v0.4.0 | 4 weeks | 12 weeks
+| v1.0.0 | 4 weeks | **16 weeks**
+|===
+
+=== Infrastructure (v1.0.0)
+
+[cols="1,2,2"]
+|===
+| Component | Minimum | Recommended
+
+| ArangoDB | 3-node cluster, 32GB RAM | 5-node, 64GB RAM
+| Dragonfly | 2-node, 16GB RAM | 4-node, 32GB RAM
+| App Servers | 2x 4 vCPU, 8GB | 4x 8 vCPU, 16GB
+| Learning GPU | 1x A10 | 2x A10
+|===
+
+== Risk Assessment
+
+=== Technical Risks
+
+[cols="2,1,2"]
+|===
+| Risk | Severity | Mitigation
+
+| Liquid Haskell complexity
+| Medium
+| Start with QuickCheck, Liquid optional
+
+| Learning pipeline accuracy
+| High
+| Human review gate, high threshold
+
+| Multi-forge API changes
+| Medium
+| Abstract adapter interface, tests
+
+| Dragonfly scaling
+| Low
+| Horizontal scaling built-in
+|===
+
+=== Schedule Risks
+
+[cols="2,1,2"]
+|===
+| Risk | Severity | Mitigation
+
+| Haskell verification delays
+| Medium
+| Can ship v0.2.0 without Liquid
+
+| Learning pipeline scope creep
+| High
+| MVP approach, iterate
+
+| External security audit
+| Medium
+| Schedule early, parallelize
+|===
+
+== Success Metrics
+
+=== v1.0.0 Criteria
+
+* [ ] All 8 bots execute in correct dependency order
+* [ ] < 50ms average scan latency (cached)
+* [ ] < 5s average full repo scan
+* [ ] 100+ verified rulesets in registry
+* [ ] 6 forge adapters operational
+* [ ] 99.9% uptime in production
+* [ ] Zero critical security vulnerabilities
+* [ ] Complete user documentation
+
+=== Performance Targets
+
+[cols="1,2,2"]
+|===
+| Metric | Target | Stretch
+
+| Rule lookup | < 1ms | < 0.5ms
+| Repo scan (cached) | < 100ms | < 50ms
+| Repo scan (cold) | < 10s | < 5s
+| Pattern learning | < 1 hour/1000 repos | < 30 min
+|===
+
+== Next Actions
+
+=== Immediate (This Week)
+
+1. Deploy ArangoDB with graph model
+2. Run initial bot fleet integration test
+3. Connect Logtalk engine to ArangoDB
+4. Create `cicd-hyper-a scan` CLI
+
+=== This Month
+
+1. Complete Haskell Ruleset DSL
+2. Implement registry operations
+3. Deploy Dragonfly caching
+4. Add QuickCheck property tests
+
+== Appendix: Dependency Graph
+
+[source]
+----
+v0.1.0 (Foundation)
+    │
+    ├── ArangoDB deployment
+    │       └── Graph model applied
+    │
+    ├── Fleet integration
+    │       └── All bots wired
+    │
+    └── Basic CLI
+            └── Rules → Graph connection
+                    │
+                    v
+v0.2.0 (Verification)
+    │
+    ├── Haskell DSL ─────────────────────┐
+    │       └── QuickCheck properties    │
+    │               └── Liquid Haskell   │
+    │                                    │
+    ├── Registry operations ─────────────┤
+    │       └── Signature verification   │
+    │                                    │
+    └── Dragonfly caching ───────────────┘
+                    │
+                    v
+v0.3.0 (Multi-Forge)
+    │
+    ├── Forge adapters (all 6)
+    │       └── Webhook handlers
+    │
+    └── Git hooks system
+            └── CI simulation
+                    │
+                    v
+v0.4.0 (Learning)
+    │
+    ├── Pattern recognition
+    │       └── Embedding model
+    │
+    ├── Rule distillation
+    │       └── Confidence scoring
+    │
+    └── Feedback loop
+                    │
+                    v
+v1.0.0 (Production)
+    │
+    ├── Kubernetes deployment
+    ├── Enterprise features
+    ├── Public registry
+    └── Quality assurance
+----
