@@ -3,6 +3,7 @@
 //!
 //! Install, remove, and manage git hooks for automated policy enforcement.
 
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -289,10 +290,13 @@ async fn execute_install(
         std::fs::write(&hook_path, &hook_content)
             .with_context(|| format!("Failed to write hook: {}", hook_path.display()))?;
 
-        // Make executable
-        let mut perms = std::fs::metadata(&hook_path)?.permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&hook_path, perms)?;
+        // Make executable (Unix only)
+        #[cfg(unix)]
+        {
+            let mut perms = std::fs::metadata(&hook_path)?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&hook_path, perms)?;
+        }
 
         installed.push(hook_type.to_string());
         messages.push(format!("Installed {}", hook_type));

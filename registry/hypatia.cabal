@@ -6,7 +6,7 @@ synopsis:           Type-safe CI/CD rule registry
 description:        Hypatia - Neurosymbolic CI/CD intelligence platform.
                     Dumb rules from smart learning.
                     Website: https://hypatia.reposystem.dev
-license:            PLMP-1.0-or-later
+license:            LicenseRef-PLMP-1.0-or-later
 license-file:       ../LICENSE
 author:             hyperpolymath
 maintainer:         security@hyperpolymath.dev
