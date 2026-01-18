@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: AGPL-3.0-or-later
+%% SPDX-License-Identifier: PLMP-1.0-or-later
 %% Learning Module - Continuous learning from audit data and feedback
 %% Enhanced with pattern storage, rule distillation, feedback loops, and cross-repo learning
 
@@ -235,7 +235,7 @@
 
     save_knowledge(FilePath) :-
         open(FilePath, write, Stream),
-        write(Stream, '%% SPDX-License-Identifier: AGPL-3.0-or-later\n'),
+        write(Stream, '%% SPDX-License-Identifier: PLMP-1.0-or-later\n'),
         write(Stream, '%% cicd-hyper-a Learned Knowledge Base (v2.0.0)\n'),
         get_time(Now),
         format(Stream, '%% Generated: ~w~n~n', [Now]),
@@ -308,7 +308,7 @@
     %% Export learned knowledge as static rules for cicd_rules
     export_as_rules(FilePath) :-
         open(FilePath, write, Stream),
-        write(Stream, '%% SPDX-License-Identifier: AGPL-3.0-or-later\n'),
+        write(Stream, '%% SPDX-License-Identifier: PLMP-1.0-or-later\n'),
         write(Stream, '%% Auto-generated rules from learning module (v2.0.0)\n'),
         write(Stream, '%% Import these into cicd_rules.lgt\n\n'),
 
@@ -706,7 +706,7 @@
     %% export_training_data(Destination)
     export_training_data(Destination) :-
         open(Destination, write, Stream),
-        write(Stream, '%% SPDX-License-Identifier: AGPL-3.0-or-later\n'),
+        write(Stream, '%% SPDX-License-Identifier: PLMP-1.0-or-later\n'),
         write(Stream, '%% cicd-hyper-a Training Data Export\n'),
         get_time(Now),
         format(Stream, '%% Exported: ~w~n~n', [Now]),

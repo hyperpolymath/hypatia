@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 [package]
 name = "cicd-hyper-a-data"
 version = "0.1.0"
 edition = "2021"
 authors = ["hyperpolymath"]
 description = "Data layer clients for cicd-hyper-a (ArangoDB, Dragonfly)"
-license = "AGPL-3.0-or-later"
+license = "PLMP-1.0-or-later"
 repository = "https://github.com/hyperpolymath/cicd-hyper-a"
 
 [dependencies]

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 // SPDX-FileCopyrightText: 2026 hyperpolymath
 = CI/CD Intelligence Platform: Complete Guidebook
 :toc: macro
@@ -1873,7 +1873,7 @@ cicd-fixer catalog
 [source,yaml]
 ----
 # Add SPDX header (first line)
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 
 # Add permissions (after on: block)
 permissions: read-all

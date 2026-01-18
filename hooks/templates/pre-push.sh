@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # cicd-hyper-a Pre-Push Hook Template
 # Validates commits before pushing to remote
 #

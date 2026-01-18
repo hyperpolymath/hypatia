@@ -260,4 +260,4 @@ curl -X POST http://localhost:9093/api/v1/alerts -d '[{"labels":{"alertname":"te
 
 ## License
 
-SPDX-License-Identifier: AGPL-3.0-or-later
+SPDX-License-Identifier: PLMP-1.0-or-later

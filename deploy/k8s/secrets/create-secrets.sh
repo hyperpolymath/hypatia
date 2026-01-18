@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # cicd-hyper-a - Create Kubernetes Secrets from Environment Variables
 #
 # This script creates Kubernetes secrets from environment variables.

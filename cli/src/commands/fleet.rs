@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Fleet command implementation.
 //!
 //! Runs bot fleets on a repository in dependency order.

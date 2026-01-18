@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
--- SPDX-License-Identifier: AGPL-3.0-or-later
+-- SPDX-License-Identifier: PLMP-1.0-or-later
 -- | Tests for Registry module
 
 module RegistrySpec (spec) where

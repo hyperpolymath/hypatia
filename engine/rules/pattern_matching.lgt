@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: AGPL-3.0-or-later
+%% SPDX-License-Identifier: PLMP-1.0-or-later
 %% Pattern Matching Module - Pattern detection utilities for the learning pipeline
 %% Provides structural, categorical, and contextual similarity analysis
 

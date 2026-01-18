@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Workflow fixer - applies fixes to CI/CD issues
 
 use crate::scanner::IssueCategory;
@@ -16,7 +16,7 @@ pub struct WorkflowFixer {
 impl WorkflowFixer {
     pub fn new() -> Self {
         Self {
-            spdx_header: "# SPDX-License-Identifier: AGPL-3.0-or-later\n".to_string(),
+            spdx_header: "# SPDX-License-Identifier: PLMP-1.0-or-later\n".to_string(),
             permissions_block: "\npermissions: read-all\n".to_string(),
         }
     }

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # cicd-hyper-a Helm Values Template
 # This file is processed by Terraform to generate Helm values
 

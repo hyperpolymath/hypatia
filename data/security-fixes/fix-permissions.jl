@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # Fix workflow permissions for repos missing `permissions: read-all`
 
 using Dates
@@ -16,7 +16,7 @@ const REPOS = [
 ]
 
 const OWNER = "hyperpolymath"
-const SPDX_HEADER = "# SPDX-License-Identifier: AGPL-3.0-or-later"
+const SPDX_HEADER = "# SPDX-License-Identifier: PLMP-1.0-or-later"
 const PERMISSIONS_LINE = "permissions: read-all"
 
 function fix_workflow_file(filepath::String)::Bool

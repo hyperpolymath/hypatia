@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/ruleset.schema.json",
-  "_comment": "SPDX-License-Identifier: AGPL-3.0-or-later",
+  "_comment": "SPDX-License-Identifier: PLMP-1.0-or-later",
   "name": "rsr-compliance",
   "version": "1.0.0",
   "description": "Rhodium Standard Repositories (RSR) language policy enforcement. Blocks banned languages and enforces approved technology stack.",

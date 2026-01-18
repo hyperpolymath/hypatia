@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! SHA pin reference for GitHub Actions
 //! Generated from .audittraining/SHA-PINS.scm
 

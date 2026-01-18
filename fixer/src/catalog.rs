@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Error catalog for CI/CD issues
 //! Generated from .audittraining/ERROR-CATALOG.scm
 
@@ -108,7 +108,7 @@ impl ErrorCatalog {
             severity: Severity::Low,
             auto_fixable: true,
             description: "Workflow file missing SPDX license header".to_string(),
-            fix_pattern: "Add '# SPDX-License-Identifier: AGPL-3.0-or-later' as first line".to_string(),
+            fix_pattern: "Add '# SPDX-License-Identifier: PLMP-1.0-or-later' as first line".to_string(),
         });
 
         // Code Security

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! SourceHut (sr.ht) adapter for cicd-hyper-a
 //!
 //! Provides integration with SourceHut's suite of services:

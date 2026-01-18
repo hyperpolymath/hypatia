@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
--- SPDX-License-Identifier: AGPL-3.0-or-later
+-- SPDX-License-Identifier: PLMP-1.0-or-later
 -- | Tests for Verify module
 
 module VerifySpec (spec) where

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Configuration handling for the cicd-hyper-a CLI.
 //!
 //! Supports loading configuration from:
@@ -384,7 +384,7 @@ impl Config {
 
         let config_file = config_dir.join("config.toml");
 
-        let default_content = r#"# SPDX-License-Identifier: AGPL-3.0-or-later
+        let default_content = r#"# SPDX-License-Identifier: PLMP-1.0-or-later
 # cicd-hyper-a CLI Configuration
 # https://github.com/hyperpolymath/cicd-hyper-a
 

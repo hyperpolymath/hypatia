@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
--- SPDX-License-Identifier: AGPL-3.0-or-later
+-- SPDX-License-Identifier: PLMP-1.0-or-later
 -- | Tests for API module
 
 module APISpec (spec) where
@@ -26,7 +26,7 @@ spec = do
             , depositSign = True
             , depositVerify = True
             , depositAuthor = Just "hyperpolymath"
-            , depositLicense = Just "AGPL-3.0-or-later"
+            , depositLicense = Just "PLMP-1.0-or-later"
             }
       (decode . encode $ req) `shouldBe` Just req
 

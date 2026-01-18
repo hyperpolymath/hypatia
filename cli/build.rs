@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Build script for cicd-hyper-a CLI.
 //!
 //! Captures build-time information like git commit hash and build date.

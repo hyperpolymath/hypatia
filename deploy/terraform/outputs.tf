@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # cicd-hyper-a Terraform Outputs
 #
 # This file defines all output values from the infrastructure deployment.

@@ -172,7 +172,7 @@ cargo test --features slow-tests
 Each test file follows this pattern:
 
 ```rust
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 
 use anyhow::Result;
 use tracing::info;
@@ -297,4 +297,4 @@ jobs:
 
 ## License
 
-AGPL-3.0-or-later
+PLMP-1.0-or-later

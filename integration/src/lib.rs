@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Integration test utilities and shared code for cicd-hyper-a
 //!
 //! This module provides common utilities used across integration tests:

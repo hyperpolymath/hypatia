@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # Prometheus recording rules for cicd-hyper-a
 # Pre-computed metrics for dashboard performance and complex queries
 

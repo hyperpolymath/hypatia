@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Service layer integrating forge adapters with data layer
 //!
 //! This module provides the seam between forge operations and persistence,

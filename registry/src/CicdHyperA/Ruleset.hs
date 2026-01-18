@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ExistentialQuantification #-}
--- SPDX-License-Identifier: AGPL-3.0-or-later
+-- SPDX-License-Identifier: PLMP-1.0-or-later
 -- | Type-safe ruleset DSL for cicd-hyper-a
 --
 -- This module provides a GADT-based DSL for defining CI/CD rules with
@@ -209,7 +209,7 @@ requireSpdxHeader = PreventiveRule
 
 dependabotTemplate :: Text
 dependabotTemplate = T.unlines
-  [ "# SPDX-License-Identifier: AGPL-3.0-or-later"
+  [ "# SPDX-License-Identifier: PLMP-1.0-or-later"
   , "version: 2"
   , "updates:"
   , "  - package-ecosystem: \"github-actions\""
@@ -292,7 +292,7 @@ mkRuleset name desc author cat = Ruleset
       , metaVersion = (1, 0, 0)
       , metaDescription = desc
       , metaAuthor = author
-      , metaLicense = "AGPL-3.0-or-later"
+      , metaLicense = "PLMP-1.0-or-later"
       , metaCategory = cat
       , metaTargets = AllLanguages
       , metaCreated = Nothing
@@ -396,7 +396,7 @@ rsrComplianceRuleset = Ruleset
       , metaVersion = (1, 2, 0)
       , metaDescription = "Rhodium Standard Repository policy enforcement"
       , metaAuthor = "hyperpolymath"
-      , metaLicense = "AGPL-3.0-or-later"
+      , metaLicense = "PLMP-1.0-or-later"
       , metaCategory = ComplianceCategory
       , metaTargets = AllLanguages
       , metaCreated = Nothing
@@ -425,7 +425,7 @@ securityBaselineRuleset = Ruleset
       , metaVersion = (1, 1, 0)
       , metaDescription = "Security hardening rules for all repositories"
       , metaAuthor = "hyperpolymath"
-      , metaLicense = "AGPL-3.0-or-later"
+      , metaLicense = "PLMP-1.0-or-later"
       , metaCategory = SecurityCategory
       , metaTargets = AllLanguages
       , metaCreated = Nothing
@@ -457,7 +457,7 @@ openssfScorecard = Ruleset
       , metaVersion = (1, 0, 0)
       , metaDescription = "Fixes for OpenSSF Scorecard checks"
       , metaAuthor = "hyperpolymath"
-      , metaLicense = "AGPL-3.0-or-later"
+      , metaLicense = "PLMP-1.0-or-later"
       , metaCategory = SecurityCategory
       , metaTargets = AllLanguages
       , metaCreated = Nothing
@@ -486,7 +486,7 @@ openssfScorecard = Ruleset
 
 codeOwnersTemplate :: Text
 codeOwnersTemplate = T.unlines
-  [ "# SPDX-License-Identifier: AGPL-3.0-or-later"
+  [ "# SPDX-License-Identifier: PLMP-1.0-or-later"
   , "# Default code owners for this repository"
   , "*  @hyperpolymath"
   ]

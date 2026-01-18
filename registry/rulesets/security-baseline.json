@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/ruleset.schema.json",
-  "_comment": "SPDX-License-Identifier: AGPL-3.0-or-later",
+  "_comment": "SPDX-License-Identifier: PLMP-1.0-or-later",
   "name": "security-baseline",
   "version": "1.0.0",
   "description": "Security baseline rules for OpenSSF Scorecard compliance. Enforces security best practices across repositories.",
@@ -99,7 +99,7 @@
       "action": {
         "type": "inject-file",
         "path": ".github/dependabot.yml",
-        "content": "# SPDX-License-Identifier: AGPL-3.0-or-later\nversion: 2\nupdates:\n  - package-ecosystem: \"github-actions\"\n    directory: \"/\"\n    schedule:\n      interval: \"weekly\"\n    commit-message:\n      prefix: \"chore(deps):\"\n",
+        "content": "# SPDX-License-Identifier: PLMP-1.0-or-later\nversion: 2\nupdates:\n  - package-ecosystem: \"github-actions\"\n    directory: \"/\"\n    schedule:\n      interval: \"weekly\"\n    commit-message:\n      prefix: \"chore(deps):\"\n",
         "overwrite": false
       },
       "autoFixable": true,

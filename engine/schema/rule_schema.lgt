@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: AGPL-3.0-or-later
+%% SPDX-License-Identifier: PLMP-1.0-or-later
 %% cicd-hyper-a Rule Schema
 %%
 %% This file defines the formal schema for CI/CD rules in the neurosymbolic

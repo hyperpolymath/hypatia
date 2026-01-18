@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
--- SPDX-License-Identifier: AGPL-3.0-or-later
+-- SPDX-License-Identifier: PLMP-1.0-or-later
 -- | cicd-hyper-a Rule Registry CLI
 --
 -- Provides commands for:
@@ -275,7 +275,7 @@ cmdAudit args = case args of
     TIO.putStrLn "Provenance:"
     TIO.putStrLn $ "  Author: hyperpolymath"
     TIO.putStrLn $ "  Source: github.com/hyperpolymath/" <> T.pack name
-    TIO.putStrLn $ "  License: AGPL-3.0-or-later"
+    TIO.putStrLn $ "  License: PLMP-1.0-or-later"
 
     exitSuccess
 
@@ -354,7 +354,7 @@ cmdHooksInstall path = do
   let preCommit = hooksDir </> "pre-commit"
   TIO.writeFile preCommit $ T.unlines
     [ "#!/bin/bash"
-    , "# SPDX-License-Identifier: AGPL-3.0-or-later"
+    , "# SPDX-License-Identifier: PLMP-1.0-or-later"
     , "# Installed by cicd-hyper-a"
     , ""
     , "cicd-hyper-a hooks pre-commit \\"
@@ -367,7 +367,7 @@ cmdHooksInstall path = do
   let prePush = hooksDir </> "pre-push"
   TIO.writeFile prePush $ T.unlines
     [ "#!/bin/bash"
-    , "# SPDX-License-Identifier: AGPL-3.0-or-later"
+    , "# SPDX-License-Identifier: PLMP-1.0-or-later"
     , "# Installed by cicd-hyper-a"
     , ""
     , "cicd-hyper-a hooks pre-push \\"

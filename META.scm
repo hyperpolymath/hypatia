@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: PMPL-1.0
+;; SPDX-License-Identifier: PLMP-1.0-or-later
 ;; META.scm - Architectural decisions and development practices for cicd-hyper-a
 
 (meta

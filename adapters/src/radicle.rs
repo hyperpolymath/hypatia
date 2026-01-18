@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Radicle adapter for cicd-hyper-a
 //!
 //! Provides integration with Radicle, a sovereign code forge built on Git.

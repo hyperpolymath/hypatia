@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # Dockerfile for cicd-hyper-a API Service
 # Multi-stage build for minimal production image
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 // cicd-hyper-a ArangoDB Initialization Script for arangosh
 //
 // Run with: arangosh --javascript.execute init-arangodb.js
