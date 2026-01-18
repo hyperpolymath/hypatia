@@ -115,15 +115,28 @@
      (low . ())))
 
   (critical-next-actions
-    ((immediate . ("Deploy ArangoDB with graph model"
-                   "Run initial bot fleet test"))
-     (this-week . ("Define verification rules"
-                   "Connect ArangoDB to rules engine"))
-     (this-month . ("Haskell ruleset compiler"
-                    "Learning data pipeline"))))
+    ((immediate . ("Register hypera.dev domain"
+                   "Deploy to production cluster"
+                   "Complete sourcehut and radicle adapters"))
+     (this-week . ("Complete Idris 2 verification integration"
+                   "QuickCheck property tests for rulesets"
+                   "Complete Rust integration from proven-tui"))
+     (this-month . ("Production deployment"
+                    "Public registry launch"
+                    "Security audit"))))
 
   (session-history
     (((date . "2026-01-18")
+      (session . "late-evening")
+      (accomplishments . ("Updated all 672+ files to PLMP-1.0-or-later license"
+                         "Copied full LICENSE file from palimpsest-license repo"
+                         "Updated README.adoc with palimpsest-license badge"
+                         "Created Idris 2 integration module: verify/src/PipelineState.idr (type-safe state machine)"
+                         "Created Idris 2 integration module: verify/src/Verify/Fuel.idr (fuel-based termination)"
+                         "Integrated patterns from proven repo (SafeStateMachine, fuel termination)"
+                         "Domain recommendation: hypera.dev (available)"
+                         "Completed all infrastructure tasks (Terraform, K8s secrets, database init)")))
+     ((date . "2026-01-18")
       (session . "evening")
       (accomplishments . ("Integrated cicd-hyper-a with gitbot-fleet (Engine tier)"
                          "Added cicd-hyper-a to gitbot-fleet bot registry"

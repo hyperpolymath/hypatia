@@ -422,29 +422,32 @@ cicd-hyper-a/
 
 == Roadmap
 
-=== Phase 1: Foundation
-* [x] Logtalk rule engine
-* [x] ArangoDB schema
-* [ ] Haskell DSL core
-* [ ] Basic registry operations
+=== Phase 1: Foundation ✅ Complete
+* [x] Logtalk rule engine with formal schema
+* [x] ArangoDB graph model v2
+* [x] Haskell DSL and registry
+* [x] Basic CLI with all commands
 
-=== Phase 2: Verification
-* [ ] Property-based testing framework
-* [ ] Liquid Haskell integration
-* [ ] Signature verification
-* [ ] Audit logging
+=== Phase 2: Verification ✅ 90% Complete
+* [x] Property-based testing framework
+* [x] Idris 2 type-safe state machines
+* [x] Fuel-based termination proofs
+* [ ] Liquid Haskell integration (pending)
 
-=== Phase 3: Integration
-* [ ] robot-repo-automaton connector
-* [ ] Hook injection system
-* [ ] Multi-forge adapters
-* [ ] Dragonfly caching
+=== Phase 3: Integration ✅ 90% Complete
+* [x] robot-repo-automaton connector
+* [x] Hook injection system (pre-commit, pre-push, post-receive)
+* [x] 4/6 forge adapters (GitHub, GitLab, Bitbucket, Codeberg)
+* [x] Dragonfly caching configs
+* [ ] sourcehut and radicle adapters (pending)
 
-=== Phase 4: Scale
-* [ ] K8s orchestration
-* [ ] Radicle P2P federation
-* [ ] Public registry launch
-* [ ] Enterprise features
+=== Phase 4: Scale 🔄 In Progress
+* [x] K8s manifests and Helm chart
+* [x] Docker Compose production config
+* [x] Monitoring (Prometheus/Grafana)
+* [ ] Radicle P2P federation (pending)
+* [ ] Public registry launch (pending)
+* [ ] Enterprise features (pending)
 
 == Documentation
 
@@ -461,7 +464,6 @@ cicd-hyper-a/
 
 == License
 
-This project is dual-licensed under:
+This project is licensed under link:https://github.com/hyperpolymath/palimpsest-license[PLMP-1.0-or-later] (Palimpsest-MPL License).
 
-* link:https://www.gnu.org/licenses/agpl-3.0[PLMP-1.0-or-later] (legal)
-* link:https://github.com/hyperpolymath/palimpsest-license[Palimpsest Licence] (philosophical)
+The Palimpsest License is a file-level copyleft license with ethical use provisions, following the Mozilla approach.

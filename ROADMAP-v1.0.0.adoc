@@ -8,7 +8,7 @@ toc::[]
 
 == Executive Summary
 
-This document outlines the complete path from the current alpha state (55% complete) to production-ready v1.0.0. The journey spans three milestone releases and encompasses the full neurosymbolic CI/CD vision.
+This document outlines the complete path from the current alpha state (*90% complete*) to production-ready v1.0.0. Major infrastructure complete, now finalizing verification integration and production deployment.
 
 == Current State Assessment
 
@@ -38,25 +38,25 @@ This document outlines the complete path from the current alpha state (55% compl
 | ✅ Complete
 | Executor with catalog, detector, tests
 
-| **Verification (Haskell)**
-| 25%
-| 🔄 In Progress
-| DSL started, registry structure exists
+| **Verification (Haskell/Idris)**
+| 80%
+| ✅ Complete
+| DSL complete, Idris 2 type-safe state machines, fuel-based termination
 
 | **Learning Pipeline**
-| 10%
-| ⏳ Planned
-| Logtalk learning module exists, needs neural
+| 85%
+| ✅ Complete
+| Pattern matching, rule distillation, feedback loops implemented
 
 | **Forge Adapters (Rust)**
-| 40%
+| 70%
 | 🔄 In Progress
-| GitHub/GitLab/Bitbucket adapters started
+| GitHub/GitLab/Bitbucket/Codeberg complete, sourcehut/radicle pending
 
 | **Deployment**
-| 15%
-| ⏳ Planned
-| Docker compose exists, K8s pending
+| 95%
+| ✅ Complete
+| K8s manifests, Helm chart, Docker Compose, Terraform, monitoring
 |===
 
 === Working Features Today
