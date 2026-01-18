@@ -12,10 +12,12 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod commands;
+mod completions;
 mod config;
+mod exit_codes;
 mod output;
 
-use commands::{deposit, fleet, hooks, scan, search, withdraw};
+use commands::{batch, deposit, fleet, hooks, scan, search, withdraw};
 use config::Config;
 use output::OutputFormat;
 
@@ -53,6 +55,10 @@ struct Cli {
     /// Disable colored output
     #[arg(long, global = true, env = "NO_COLOR")]
     no_color: bool,
+
+    /// Machine-readable output mode (implies --no-color, disables progress)
+    #[arg(long, global = true, env = "HYPER_MACHINE")]
+    machine: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -95,12 +101,27 @@ enum Commands {
     /// policy enforcement and quality checks.
     Hooks(hooks::HooksArgs),
 
+    /// Process multiple repositories in batch mode
+    ///
+    /// Scan, fix, or report on multiple repositories at once.
+    /// Supports stdin input, parallel processing, and JSON Lines output.
+    Batch(batch::BatchArgs),
+
+    /// Generate shell completion scripts
+    ///
+    /// Outputs completion scripts for bash, zsh, fish, elvish, or PowerShell.
+    Completions(completions::CompletionsArgs),
+
     /// Show or manage configuration
     #[command(subcommand)]
     Config(ConfigCommands),
 
     /// Show version and build information
     Version,
+
+    /// Show exit code documentation
+    #[command(name = "exit-codes")]
+    ExitCodes,
 }
 
 #[derive(Subcommand)]
@@ -147,8 +168,8 @@ async fn main() -> Result<()> {
     // Initialize logging
     init_logging(cli.verbose, cli.quiet);
 
-    // Disable colors if requested
-    if cli.no_color {
+    // Disable colors if requested or in machine mode
+    if cli.no_color || cli.machine {
         colored::control::set_override(false);
     }
 
@@ -178,11 +199,21 @@ async fn main() -> Result<()> {
         Commands::Hooks(args) => {
             hooks::execute(args, &config, cli.output).await?;
         }
+        Commands::Batch(args) => {
+            let code = batch::execute(args, &config, cli.output, cli.machine).await?;
+            std::process::exit(code);
+        }
+        Commands::Completions(args) => {
+            completions::generate_completions(&args)?;
+        }
         Commands::Config(cmd) => {
             handle_config_command(cmd, &config, cli.output)?;
         }
         Commands::Version => {
             print_version_info(cli.output)?;
+        }
+        Commands::ExitCodes => {
+            print_exit_codes(cli.output)?;
         }
     }
 
@@ -259,6 +290,84 @@ fn print_version_info(format: OutputFormat) -> Result<()> {
             }
             println!("Rust version: {}", info.rust_version);
             println!("Target: {}", info.target);
+        }
+    }
+
+    Ok(())
+}
+
+fn print_exit_codes(format: OutputFormat) -> Result<()> {
+    use output::Outputter;
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct ExitCodeInfo {
+        code: i32,
+        name: &'static str,
+        description: &'static str,
+        category: &'static str,
+    }
+
+    let codes = vec![
+        ExitCodeInfo { code: 0, name: "SUCCESS", description: "Operation completed successfully", category: "Success" },
+        ExitCodeInfo { code: 1, name: "GENERAL_ERROR", description: "General/unspecified error", category: "General Errors" },
+        ExitCodeInfo { code: 2, name: "INVALID_ARGUMENTS", description: "Invalid command line arguments", category: "General Errors" },
+        ExitCodeInfo { code: 3, name: "CONFIG_ERROR", description: "Configuration file error", category: "General Errors" },
+        ExitCodeInfo { code: 4, name: "IO_ERROR", description: "IO error (file read/write, network)", category: "General Errors" },
+        ExitCodeInfo { code: 5, name: "CANCELLED", description: "Operation cancelled by user", category: "General Errors" },
+        ExitCodeInfo { code: 6, name: "TIMEOUT", description: "Operation timed out", category: "General Errors" },
+        ExitCodeInfo { code: 7, name: "NOT_IMPLEMENTED", description: "Feature not implemented", category: "General Errors" },
+        ExitCodeInfo { code: 10, name: "CRITICAL_FINDINGS", description: "Critical severity findings detected", category: "Scan Results" },
+        ExitCodeInfo { code: 11, name: "HIGH_FINDINGS", description: "High severity findings detected", category: "Scan Results" },
+        ExitCodeInfo { code: 12, name: "MEDIUM_FINDINGS", description: "Medium severity findings detected", category: "Scan Results" },
+        ExitCodeInfo { code: 13, name: "LOW_FINDINGS", description: "Low severity findings detected", category: "Scan Results" },
+        ExitCodeInfo { code: 14, name: "INFO_FINDINGS", description: "Info level findings only", category: "Scan Results" },
+        ExitCodeInfo { code: 15, name: "SCAN_FAILED", description: "Scan failed to complete", category: "Scan Results" },
+        ExitCodeInfo { code: 20, name: "REGISTRY_CONNECTION_ERROR", description: "Registry connection failed", category: "Registry Errors" },
+        ExitCodeInfo { code: 21, name: "REGISTRY_AUTH_ERROR", description: "Registry authentication failed", category: "Registry Errors" },
+        ExitCodeInfo { code: 22, name: "RULESET_NOT_FOUND", description: "Ruleset not found", category: "Registry Errors" },
+        ExitCodeInfo { code: 23, name: "RULESET_CONFLICT", description: "Ruleset version conflict", category: "Registry Errors" },
+        ExitCodeInfo { code: 24, name: "RULESET_INVALID", description: "Ruleset validation failed", category: "Registry Errors" },
+        ExitCodeInfo { code: 25, name: "REGISTRY_RATE_LIMIT", description: "Registry rate limit exceeded", category: "Registry Errors" },
+        ExitCodeInfo { code: 30, name: "NOT_A_REPO", description: "Not a git repository", category: "Repository Errors" },
+        ExitCodeInfo { code: 31, name: "REPO_NOT_FOUND", description: "Repository not found", category: "Repository Errors" },
+        ExitCodeInfo { code: 32, name: "REPO_ACCESS_DENIED", description: "Repository access denied", category: "Repository Errors" },
+        ExitCodeInfo { code: 33, name: "GIT_ERROR", description: "Git operation failed", category: "Repository Errors" },
+        ExitCodeInfo { code: 34, name: "REPO_DIRTY", description: "Repository has uncommitted changes", category: "Repository Errors" },
+        ExitCodeInfo { code: 35, name: "HOOK_ERROR", description: "Hook installation/execution failed", category: "Repository Errors" },
+        ExitCodeInfo { code: 40, name: "BOT_FAILED", description: "Bot execution failed", category: "Fleet Errors" },
+        ExitCodeInfo { code: 41, name: "BOT_NOT_FOUND", description: "Bot not found", category: "Fleet Errors" },
+        ExitCodeInfo { code: 42, name: "FLEET_PARTIAL_FAILURE", description: "Fleet operation partially failed", category: "Fleet Errors" },
+        ExitCodeInfo { code: 43, name: "FLEET_TOTAL_FAILURE", description: "Fleet operation completely failed", category: "Fleet Errors" },
+        ExitCodeInfo { code: 44, name: "BOT_DEPENDENCY_ERROR", description: "Bot dependency error", category: "Fleet Errors" },
+        ExitCodeInfo { code: 50, name: "PARTIAL_FAILURE", description: "Batch operation partially succeeded", category: "Batch Results" },
+        ExitCodeInfo { code: 51, name: "TOTAL_FAILURE", description: "Batch operation completely failed", category: "Batch Results" },
+        ExitCodeInfo { code: 52, name: "NO_ITEMS", description: "No items to process", category: "Batch Results" },
+        ExitCodeInfo { code: 100, name: "INTERNAL_ERROR", description: "Internal error (panic, unexpected state)", category: "Internal Errors" },
+    ];
+
+    let outputter = Outputter::new(format);
+
+    match format {
+        OutputFormat::Json | OutputFormat::Yaml => {
+            outputter.output(&codes)?;
+        }
+        _ => {
+            println!("Exit Codes for hyper CLI");
+            println!("========================\n");
+
+            let mut current_category = "";
+            for info in &codes {
+                if info.category != current_category {
+                    if !current_category.is_empty() {
+                        println!();
+                    }
+                    println!("{}:", info.category);
+                    current_category = info.category;
+                }
+                println!("  {:3}  {:<30}  {}", info.code, info.name, info.description);
+            }
+            println!("\nFor detailed information: man hyper-exit-codes(7)");
         }
     }
 

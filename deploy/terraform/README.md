@@ -1,6 +1,6 @@
-# cicd-hyper-a Terraform Infrastructure
+# hypatia Terraform Infrastructure
 
-This directory contains Terraform/OpenTofu infrastructure-as-code configurations for deploying cicd-hyper-a to AWS, GCP, or Azure.
+This directory contains Terraform/OpenTofu infrastructure-as-code configurations for deploying hypatia to AWS, GCP, or Azure.
 
 ## Prerequisites
 
@@ -51,15 +51,15 @@ After deployment, configure kubectl to access the cluster:
 
 ```bash
 # AWS
-aws eks update-kubeconfig --region <region> --name cicd-hyper-a-<environment>
+aws eks update-kubeconfig --region <region> --name hypatia-<environment>
 
 # GCP
-gcloud container clusters get-credentials cicd-hyper-a-<environment> \
+gcloud container clusters get-credentials hypatia-<environment> \
   --region <region> --project <project-id>
 
 # Azure
 az aks get-credentials --resource-group <resource-group> \
-  --name cicd-hyper-a-<environment>
+  --name hypatia-<environment>
 ```
 
 ## Architecture
@@ -272,7 +272,7 @@ TF_LOG=DEBUG terraform apply
 kubectl cluster-info
 
 # Check pod status
-kubectl get pods -n cicd-hyper-a
+kubectl get pods -n hypatia
 ```
 
 ## State Management
@@ -284,18 +284,18 @@ Uncomment the appropriate backend in `main.tf`:
 **AWS S3:**
 ```hcl
 backend "s3" {
-  bucket         = "cicd-hyper-a-terraform-state"
+  bucket         = "hypatia-terraform-state"
   key            = "terraform.tfstate"
   region         = "us-east-1"
   encrypt        = true
-  dynamodb_table = "cicd-hyper-a-terraform-locks"
+  dynamodb_table = "hypatia-terraform-locks"
 }
 ```
 
 **GCP GCS:**
 ```hcl
 backend "gcs" {
-  bucket = "cicd-hyper-a-terraform-state"
+  bucket = "hypatia-terraform-state"
   prefix = "terraform/state"
 }
 ```
@@ -303,7 +303,7 @@ backend "gcs" {
 **Azure Blob:**
 ```hcl
 backend "azurerm" {
-  resource_group_name  = "cicd-hyper-a-terraform"
+  resource_group_name  = "hypatia-terraform"
   storage_account_name = "cicdtfstate"
   container_name       = "tfstate"
   key                  = "terraform.tfstate"

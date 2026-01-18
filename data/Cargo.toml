@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
 [package]
-name = "cicd-hyper-a-data"
+name = "hypatia-data"
 version = "0.1.0"
 edition = "2021"
 authors = ["hyperpolymath"]
-description = "Data layer clients for cicd-hyper-a (ArangoDB, Dragonfly)"
+description = "Data layer clients for Hypatia (ArangoDB, Dragonfly)"
 license = "PLMP-1.0-or-later"
-repository = "https://github.com/hyperpolymath/cicd-hyper-a"
+repository = "https://github.com/hyperpolymath/hypatia"
+homepage = "https://hypatia.reposystem.dev"
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }

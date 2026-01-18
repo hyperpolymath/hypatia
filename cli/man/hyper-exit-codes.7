@@ -1,0 +1,196 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper exit codes (section 7 - miscellaneous)
+.TH HYPER-EXIT-CODES 7 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-exit-codes \- standardized exit codes for automation
+.SH DESCRIPTION
+The
+.B hyper
+CLI uses standardized exit codes to enable precise error handling in
+scripts, CI/CD pipelines, and automation workflows. Exit codes are
+organized into categories by numeric range.
+.SH EXIT CODE CATEGORIES
+.SS SUCCESS (0)
+.TP
+.B 0 \- SUCCESS
+Operation completed successfully.
+.SS GENERAL ERRORS (1-9)
+.TP
+.B 1 \- GENERAL_ERROR
+General/unspecified error.
+.TP
+.B 2 \- INVALID_ARGUMENTS
+Invalid command line arguments.
+.TP
+.B 3 \- CONFIG_ERROR
+Configuration file error (missing, invalid, or inaccessible).
+.TP
+.B 4 \- IO_ERROR
+IO error (file read/write, network, etc.).
+.TP
+.B 5 \- CANCELLED
+Operation cancelled by user.
+.TP
+.B 6 \- TIMEOUT
+Operation timed out.
+.TP
+.B 7 \- NOT_IMPLEMENTED
+Feature not implemented.
+.SS SCAN/ANALYSIS RESULTS (10-19)
+.TP
+.B 10 \- CRITICAL_FINDINGS
+Scan found critical severity findings.
+.TP
+.B 11 \- HIGH_FINDINGS
+Scan found high severity findings.
+.TP
+.B 12 \- MEDIUM_FINDINGS
+Scan found medium severity findings.
+.TP
+.B 13 \- LOW_FINDINGS
+Scan found low severity findings.
+.TP
+.B 14 \- INFO_FINDINGS
+Scan found info level findings only.
+.TP
+.B 15 \- SCAN_FAILED
+Scan failed to complete.
+.SS REGISTRY ERRORS (20-29)
+.TP
+.B 20 \- REGISTRY_CONNECTION_ERROR
+Registry connection failed.
+.TP
+.B 21 \- REGISTRY_AUTH_ERROR
+Registry authentication failed.
+.TP
+.B 22 \- RULESET_NOT_FOUND
+Ruleset not found in registry.
+.TP
+.B 23 \- RULESET_CONFLICT
+Ruleset version conflict.
+.TP
+.B 24 \- RULESET_INVALID
+Ruleset validation failed.
+.TP
+.B 25 \- REGISTRY_RATE_LIMIT
+Registry rate limit exceeded.
+.SS REPOSITORY ERRORS (30-39)
+.TP
+.B 30 \- NOT_A_REPO
+Not a git repository.
+.TP
+.B 31 \- REPO_NOT_FOUND
+Repository path does not exist.
+.TP
+.B 32 \- REPO_ACCESS_DENIED
+Repository access denied.
+.TP
+.B 33 \- GIT_ERROR
+Git operation failed.
+.TP
+.B 34 \- REPO_DIRTY
+Repository is dirty (uncommitted changes).
+.TP
+.B 35 \- HOOK_ERROR
+Hook installation/execution failed.
+.SS FLEET/BOT ERRORS (40-49)
+.TP
+.B 40 \- BOT_FAILED
+Bot execution failed.
+.TP
+.B 41 \- BOT_NOT_FOUND
+Bot not found.
+.TP
+.B 42 \- FLEET_PARTIAL_FAILURE
+Fleet operation partially failed.
+.TP
+.B 43 \- FLEET_TOTAL_FAILURE
+Fleet operation completely failed.
+.TP
+.B 44 \- BOT_DEPENDENCY_ERROR
+Bot dependency error.
+.SS BATCH OPERATION RESULTS (50-59)
+.TP
+.B 50 \- PARTIAL_FAILURE
+Batch operation partially succeeded (some failures).
+.TP
+.B 51 \- TOTAL_FAILURE
+Batch operation completely failed (all items failed).
+.TP
+.B 52 \- NO_ITEMS
+No items to process.
+.SS INTERNAL ERRORS (100+)
+.TP
+.B 100 \- INTERNAL_ERROR
+Internal error (panic, unexpected state).
+.SH SHELL SCRIPTING
+Example bash script using exit codes:
+.PP
+.RS
+.nf
+#!/bin/bash
+hyper scan ./repo
+code=$?
+
+case $code in
+    0)  echo "No issues found" ;;
+    10) echo "CRITICAL: Immediate action required" ;;
+    11) echo "HIGH: Should be fixed soon" ;;
+    12) echo "MEDIUM: Schedule for fix" ;;
+    13) echo "LOW: Fix when convenient" ;;
+    14) echo "INFO: Informational only" ;;
+    15) echo "Scan failed" ;;
+    *)  echo "Error code: $code" ;;
+esac
+.fi
+.RE
+.SH CI/CD INTEGRATION
+.SS GitHub Actions
+.PP
+.RS
+.nf
+- name: Scan repository
+  id: scan
+  run: hyper scan . --fail-on high
+  continue-on-error: true
+
+- name: Handle findings
+  if: steps.scan.outcome == 'failure'
+  run: |
+    if [ "${{ steps.scan.outputs.exit-code }}" -eq 10 ]; then
+      echo "::error::Critical findings detected"
+      exit 1
+    fi
+.fi
+.RE
+.SS GitLab CI
+.PP
+.RS
+.nf
+scan:
+  script:
+    - hyper scan . --fail-on high || EXIT_CODE=$?
+    - |
+      if [ "$EXIT_CODE" -ge 10 ] && [ "$EXIT_CODE" -le 14 ]; then
+        echo "Findings detected at severity level $EXIT_CODE"
+      fi
+  allow_failure:
+    exit_codes:
+      - 12
+      - 13
+      - 14
+.fi
+.RE
+.SH PROGRAMMATIC ACCESS
+Get exit code description programmatically:
+.PP
+.RS
+.nf
+hyper --help-exit-codes
+hyper --explain-exit-code 10
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-scan (1),
+.BR hyper\-batch (1)

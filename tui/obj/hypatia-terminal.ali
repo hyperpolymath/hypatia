@@ -1,0 +1,605 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P SS ZX
+
+RN
+RV NO_DIRECT_BOOLEAN_OPERATORS
+RV NO_EXCEPTION_HANDLERS
+RV NO_EXCEPTIONS
+RV NO_FIXED_POINT
+RV NO_IO
+RV NO_SECONDARY_STACK
+RV NO_UNCHECKED_CONVERSION
+RV NO_DYNAMIC_SIZED_OBJECTS
+RV NO_IMPLEMENTATION_PRAGMAS
+RV NO_IMPLICIT_LOOPS
+RV NO_ELABORATION_CODE
+RV NO_OBSOLESCENT_FEATURES
+
+U hypatia.terminal%b	hypatia-terminal.adb	e74c414e NE OO PK
+W ada%s			ada.ads			ada.ali
+W ada.characters%s	a-charac.ads		a-charac.ali
+W ada.characters.latin_1%s  a-chlat1.ads	a-chlat1.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+W ada.text_io%s		a-textio.adb		a-textio.ali
+W ada.unchecked_conversion%s
+W hypatia%s		hypatia.ads		hypatia.ali
+W hypatia.posix%s	hypatia-posix.adb	hypatia-posix.ali
+W interfaces%s		interfac.ads		interfac.ali
+W interfaces.c%s	i-c.adb			i-c.ali
+W system%s		system.ads		system.ali
+Z system.arith_64%s	s-arit64.adb		s-arit64.ali
+Z system.assertions%s	s-assert.adb		s-assert.ali
+Z system.img_int%s	s-imgint.ads		s-imgint.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+
+U hypatia.terminal%s	hypatia-terminal.ads	05d33dff EE OO PK
+W ada%s			ada.ads			ada.ali
+W ada.strings%s		a-string.ads		a-string.ali
+W ada.strings.bounded%s	a-strbou.adb		a-strbou.ali
+W hypatia%s		hypatia.ads		hypatia.ali
+Z system.assertions%s	s-assert.adb		s-assert.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+
+D ada.ads		19700101000000 76789da1 ada%s
+D a-assert.ads		19700101000000 ba465f5c ada.assertions%s
+D a-charac.ads		19700101000000 2d3ec45b ada.characters%s
+D a-chlat1.ads		19700101000000 e0d72e76 ada.characters.latin_1%s
+D a-except.ads		19700101000000 e7970cd9 ada.exceptions%s
+D a-ioexce.ads		19700101000000 40018c65 ada.io_exceptions%s
+D a-numeri.ads		19700101000000 84bea7a3 ada.numerics%s
+D a-nubinu.ads		19700101000000 93f1f3d1 ada.numerics.big_numbers%s
+D a-nbnbig.ads		19700101000000 31ff4aa1 ada.numerics.big_numbers.big_integers_ghost%s
+D a-stream.ads		19700101000000 17477cbd ada.streams%s
+D a-string.ads		19700101000000 90ac6797 ada.strings%s
+D a-strbou.ads		19700101000000 6d86a9a3 ada.strings.bounded%s
+D a-strbou.adb		19700101000000 4a759692 ada.strings.bounded%b
+D a-strmap.ads		19700101000000 1f91ebb6 ada.strings.maps%s
+D a-strsea.ads		19700101000000 18c3c634 ada.strings.search%s
+D a-strsup.ads		19700101000000 8667231b ada.strings.superbounded%s
+D a-sttebu.ads		19700101000000 f1ad67a2 ada.strings.text_buffers%s
+D a-stuten.ads		19700101000000 c6ced0ae ada.strings.utf_encoding%s
+D a-tags.ads		19700101000000 fbca0ad5 ada.tags%s
+D a-textio.ads		19700101000000 34ef47de ada.text_io%s
+D a-unccon.ads		19700101000000 0e9b276f ada.unchecked_conversion%s
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-posix.ads	20260118213155 a1fa2c80 hypatia.posix%s
+D hypatia-terminal.ads	20260118213155 96279323 hypatia.terminal%s
+D hypatia-terminal.adb	20260118213156 f7564d4f hypatia.terminal%b
+D interfac.ads		19700101000000 9111f9c1 interfaces%s
+D i-c.ads		19700101000000 e94c966a interfaces.c%s
+D i-cstrea.ads		19700101000000 ffd01b9d interfaces.c_streams%s
+D system.ads		19700101000000 14286b0f system%s
+D s-arit64.ads		19700101000000 e45973b2 system.arith_64%s
+D s-assert.ads		19700101000000 9c4520c7 system.assertions%s
+D s-crtl.ads		19700101000000 beb39b9e system.crtl%s
+D s-exctab.ads		19700101000000 91bef6ef system.exception_table%s
+D s-ficobl.ads		19700101000000 dc5161d4 system.file_control_block%s
+D s-imagei.ads		19700101000000 5e131ce0 system.image_i%s
+D s-imgint.ads		19700101000000 67e4edfb system.img_int%s
+D s-parame.ads		19700101000000 3597fc11 system.parameters%s
+D s-putima.ads		19700101000000 17291fe4 system.put_images%s
+D s-secsta.ads		19700101000000 578279f5 system.secondary_stack%s
+D s-soflin.ads		19700101000000 5d88fdea system.soft_links%s
+D s-stache.ads		19700101000000 0b81c1fe system.stack_checking%s
+D s-stalib.ads		19700101000000 1c9580f6 system.standard_library%s
+D s-stoele.ads		19700101000000 ccded4e8 system.storage_elements%s
+D s-traent.ads		19700101000000 c81cbf8c system.traceback_entries%s
+D s-unstyp.ads		19700101000000 fa2a7f59 system.unsigned_types%s
+D s-valspe.ads		19700101000000 f810d31c system.val_spec%s
+D s-vaispe.ads		19700101000000 8280550e system.value_i_spec%s
+D s-vauspe.ads		19700101000000 89269ba5 system.value_u_spec%s
+D s-vs_int.ads		19700101000000 06b6b724 system.vs_int%s
+D s-vs_uns.ads		19700101000000 e7f47a27 system.vs_uns%s
+D s-wchcon.ads		19700101000000 d9032363 system.wch_con%s
+G a e
+G c Z s s [Tattribute_setBIP hypatia__terminal 42 4 none]
+G c Z s s [styleIP hypatia__terminal 46 9 none]
+G c Z s s [length hypatia__terminal__output_buffer 88 16 92_4]
+G c Z s s [to_bounded_string hypatia__terminal__output_buffer 97 16 92_4]
+G c Z s s [to_string hypatia__terminal__output_buffer 129 16 92_4]
+G c Z s s [set_bounded_string hypatia__terminal__output_buffer 138 17 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 168 16 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 213 16 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 266 16 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 317 16 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 344 16 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 376 17 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 422 17 92_4]
+G c Z s s [append hypatia__terminal__output_buffer 479 17 92_4]
+G c Z s s [Oconcat hypatia__terminal__output_buffer 510 16 92_4]
+G c Z s s [Oconcat hypatia__terminal__output_buffer 522 16 92_4]
+G c Z s s [Oconcat hypatia__terminal__output_buffer 534 16 92_4]
+G c Z s s [Oconcat hypatia__terminal__output_buffer 546 16 92_4]
+G c Z s s [Oconcat hypatia__terminal__output_buffer 555 16 92_4]
+G c Z s s [element hypatia__terminal__output_buffer 565 16 92_4]
+G c Z s s [replace_element hypatia__terminal__output_buffer 574 17 92_4]
+G c Z s s [slice hypatia__terminal__output_buffer 589 16 92_4]
+G c Z s s [bounded_slice hypatia__terminal__output_buffer 601 16 92_4]
+G c Z s s [bounded_slice hypatia__terminal__output_buffer 614 17 92_4]
+G c Z s s [Oeq hypatia__terminal__output_buffer 630 16 92_4]
+G c Z s s [Oeq hypatia__terminal__output_buffer 637 16 92_4]
+G c Z s s [Oeq hypatia__terminal__output_buffer 644 16 92_4]
+G c Z s s [Olt hypatia__terminal__output_buffer 651 16 92_4]
+G c Z s s [Olt hypatia__terminal__output_buffer 658 16 92_4]
+G c Z s s [Olt hypatia__terminal__output_buffer 665 16 92_4]
+G c Z s s [Ole hypatia__terminal__output_buffer 672 16 92_4]
+G c Z s s [Ole hypatia__terminal__output_buffer 679 16 92_4]
+G c Z s s [Ole hypatia__terminal__output_buffer 686 16 92_4]
+G c Z s s [Ogt hypatia__terminal__output_buffer 693 16 92_4]
+G c Z s s [Ogt hypatia__terminal__output_buffer 700 16 92_4]
+G c Z s s [Ogt hypatia__terminal__output_buffer 707 16 92_4]
+G c Z s s [Oge hypatia__terminal__output_buffer 714 16 92_4]
+G c Z s s [Oge hypatia__terminal__output_buffer 721 16 92_4]
+G c Z s s [Oge hypatia__terminal__output_buffer 728 16 92_4]
+G c Z s s [index hypatia__terminal__output_buffer 744 16 92_4]
+G c Z s s [index hypatia__terminal__output_buffer 797 16 92_4]
+G c Z s s [index hypatia__terminal__output_buffer 850 16 92_4]
+G c Z s s [index hypatia__terminal__output_buffer 894 16 92_4]
+G c Z s s [index hypatia__terminal__output_buffer 957 16 92_4]
+G c Z s s [index hypatia__terminal__output_buffer 1021 16 92_4]
+G c Z s s [index_non_blank hypatia__terminal__output_buffer 1079 16 92_4]
+G c Z s s [index_non_blank hypatia__terminal__output_buffer 1117 16 92_4]
+G c Z s s [count hypatia__terminal__output_buffer 1171 16 92_4]
+G c Z s s [count hypatia__terminal__output_buffer 1179 16 92_4]
+G c Z s s [count hypatia__terminal__output_buffer 1187 16 92_4]
+G c Z s s [find_token hypatia__terminal__output_buffer 1193 17 92_4]
+G c Z s s [find_token hypatia__terminal__output_buffer 1250 17 92_4]
+G c Z s s [translate hypatia__terminal__output_buffer 1317 16 92_4]
+G c Z s s [translate hypatia__terminal__output_buffer 1328 17 92_4]
+G c Z s s [translate hypatia__terminal__output_buffer 1339 16 92_4]
+G c Z s s [translate hypatia__terminal__output_buffer 1353 17 92_4]
+G c Z s s [replace_slice hypatia__terminal__output_buffer 1384 16 92_4]
+G c Z s s [replace_slice hypatia__terminal__output_buffer 1516 17 92_4]
+G c Z s s [insert hypatia__terminal__output_buffer 1640 16 92_4]
+G c Z s s [insert hypatia__terminal__output_buffer 1754 17 92_4]
+G c Z s s [overwrite hypatia__terminal__output_buffer 1867 16 92_4]
+G c Z s s [overwrite hypatia__terminal__output_buffer 1953 17 92_4]
+G c Z s s [delete hypatia__terminal__output_buffer 2038 16 92_4]
+G c Z s s [delete hypatia__terminal__output_buffer 2060 17 92_4]
+G c Z s s [trim hypatia__terminal__output_buffer 2085 16 92_4]
+G c Z s s [trim hypatia__terminal__output_buffer 2112 17 92_4]
+G c Z s s [trim hypatia__terminal__output_buffer 2139 16 92_4]
+G c Z s s [trim hypatia__terminal__output_buffer 2167 17 92_4]
+G c Z s s [head hypatia__terminal__output_buffer 2195 16 92_4]
+G c Z s s [head hypatia__terminal__output_buffer 2250 17 92_4]
+G c Z s s [tail hypatia__terminal__output_buffer 2308 16 92_4]
+G c Z s s [tail hypatia__terminal__output_buffer 2369 17 92_4]
+G c Z s s [Omultiply hypatia__terminal__output_buffer 2436 16 92_4]
+G c Z s s [Omultiply hypatia__terminal__output_buffer 2443 16 92_4]
+G c Z s s [Omultiply hypatia__terminal__output_buffer 2456 16 92_4]
+G c Z s s [replicate hypatia__terminal__output_buffer 2469 16 92_4]
+G c Z s s [replicate hypatia__terminal__output_buffer 2479 16 92_4]
+G c Z s s [replicate hypatia__terminal__output_buffer 2513 16 92_4]
+G c Z s s [output_bufferInitial_Condition hypatia__terminal__output_buffer 61 6 92_4]
+G c Z s s [from_string hypatia__terminal__output_buffer 2570 16 92_4]
+G c Z s b [initialize hypatia__terminal 99 14 none]
+G c Z s b [initialize hypatia__terminal 102 14 none]
+G c Z s b [finalize hypatia__terminal 105 14 none]
+G c Z s b [get_dimensions hypatia__terminal 108 13 none]
+G c Z s b [update_dimensions hypatia__terminal 111 14 none]
+G c Z s b [move_cursor hypatia__terminal 114 14 none]
+G c Z s b [hide_cursor hypatia__terminal 115 14 none]
+G c Z s b [show_cursor hypatia__terminal 116 14 none]
+G c Z s b [clear_screen hypatia__terminal 119 14 none]
+G c Z s b [clear_line hypatia__terminal 120 14 none]
+G c Z s b [clear_to_end_of_line hypatia__terminal 121 14 none]
+G c Z s b [set_style hypatia__terminal 124 14 none]
+G c Z s b [reset_style hypatia__terminal 125 14 none]
+G c Z s b [put hypatia__terminal 128 14 none]
+G c Z s b [put hypatia__terminal 129 14 none]
+G c Z s b [put_line hypatia__terminal 130 14 none]
+G c Z s b [new_line hypatia__terminal 131 14 none]
+G c Z s b [put_styled hypatia__terminal 134 14 none]
+G c Z s b [flush hypatia__terminal 140 14 none]
+G c Z s b [poll_input hypatia__terminal 143 13 none]
+G c Z s b [read_input hypatia__terminal 148 13 none]
+G c Z s b [has_input hypatia__terminal 151 13 none]
+G c Z s b [enable_raw_mode hypatia__terminal 154 14 none]
+G c Z s b [disable_raw_mode hypatia__terminal 155 14 none]
+G c Z s b [enter_alternate_screen hypatia__terminal 158 14 none]
+G c Z s b [leave_alternate_screen hypatia__terminal 159 14 none]
+G c Z s b [get_width hypatia__terminal 162 13 none]
+G c Z s b [get_height hypatia__terminal 163 13 none]
+G c Z s s [dimensionsIP hypatia__terminal 18 9 none]
+G c Z s s [positionIP hypatia__terminal 24 9 none]
+G c Z s s [input_eventIP hypatia__terminal 84 9 none]
+G c Z s s [Traw_termiosBIP hypatia__terminal 189 4 none]
+G c Z s s [terminal_stateIP hypatia__terminal 191 9 none]
+G c Z b b [raw_write hypatia__terminal 24 14 none]
+G c Z b b [query_terminal_size hypatia__terminal 25 13 none]
+G c Z b b [parse_escape_sequence hypatia__terminal 26 13 none]
+G c Z b b [to_raw_termios hypatia__terminal 41 13 none]
+G c Z b b [from_raw_termios hypatia__terminal 44 13 none]
+G r c none [initialize hypatia__terminal 99 14 none] [ioctl hypatia__posix 104 13 none]
+G r c none [initialize hypatia__terminal 102 14 none] [ioctl hypatia__posix 104 13 none]
+G r c none [update_dimensions hypatia__terminal 111 14 none] [ioctl hypatia__posix 104 13 none]
+G r c none [poll_input hypatia__terminal 143 13 none] [clear_fd_set hypatia__posix 149 14 none]
+G r c none [poll_input hypatia__terminal 143 13 none] [set_fd hypatia__posix 150 14 none]
+G r c none [poll_input hypatia__terminal 143 13 none] [c_select hypatia__posix 129 13 none]
+G r c none [poll_input hypatia__terminal 143 13 none] [is_fd_set hypatia__posix 151 13 none]
+G r c none [poll_input hypatia__terminal 143 13 none] [c_read hypatia__posix 111 13 none]
+G r c none [read_input hypatia__terminal 148 13 none] [c_read hypatia__posix 111 13 none]
+G r c none [has_input hypatia__terminal 151 13 none] [clear_fd_set hypatia__posix 149 14 none]
+G r c none [has_input hypatia__terminal 151 13 none] [set_fd hypatia__posix 150 14 none]
+G r c none [has_input hypatia__terminal 151 13 none] [c_select hypatia__posix 129 13 none]
+G r c none [has_input hypatia__terminal 151 13 none] [is_fd_set hypatia__posix 151 13 none]
+G r c none [enable_raw_mode hypatia__terminal 154 14 none] [tcgetattr hypatia__posix 94 13 none]
+G r c none [enable_raw_mode hypatia__terminal 154 14 none] [tcsetattr hypatia__posix 97 13 none]
+G r c none [disable_raw_mode hypatia__terminal 155 14 none] [tcsetattr hypatia__posix 97 13 none]
+G r c none [query_terminal_size hypatia__terminal 25 13 none] [ioctl hypatia__posix 104 13 none]
+G r c none [parse_escape_sequence hypatia__terminal 26 13 none] [c_read hypatia__posix 111 13 none]
+X 1 ada.ads
+18K9*Ada 22e8 24|13r6 92r33 25|6r6 7r6 8r6 15r28 34r7 41r35 44r37 155r10
+. 164r10 397r10
+X 3 a-charac.ads
+16K13*Characters 18e19 25|7r10 15r32
+X 4 a-chlat1.ads
+16K24*Latin_1 294e27 25|7w21 15r43
+23e4*NUL{character} 25|509r23
+31e4*BS{character} 25|499r23
+32e4*HT{character} 25|496r23
+33e4*LF{character} 25|374r49 493r36
+36e4*CR{character} 25|374r36 493r23
+51e4*ESC{character} 25|20r40 489r23
+128e4*DEL{character} 25|502r23
+X 11 a-string.ads
+16K13*Strings 35e16 24|13r10 92r37
+X 12 a-strbou.ads
+50K21*Bounded 3006e24 24|13w18 92r45
+57i7 Max{positive} 24|92r77
+60k12*Generic_Bounded_Length 3004e30 24|92r53
+78R12*Bounded_String<16|65R9> 24|198r26[92]
+81r7*Null_Bounded_String{78R12[24|92]} 24|198r44[92] 25|182r22[24|92] 205r22[24|92]
+. 398r25[24|92]
+86I15*Length_Range{natural}
+88V16*Length{86I15[24|92]} 25|395s10[24|92]
+129V16*To_String{string} 25|396s21[24|92]
+422U17*Append 25|257s7[24|92] 258s7[24|92] 259s7[24|92] 260s7[24|92] 261s7[24|92]
+. 266s7[24|92] 272s7[24|92] 282s7[24|92] 288s7[24|92] 293s7[24|92] 304s7[24|92]
+. 305s7[24|92] 308s10[24|92] 311s10[24|92] 314s10[24|92] 317s10[24|92] 320s10[24|92]
+. 323s10[24|92] 326s10[24|92] 329s10[24|92] 333s10[24|92] 334s10[24|92] 338s10[24|92]
+. 339s10[24|92] 342s7[24|92] 348s7[24|92] 358s7[24|92] 368s7[24|92] 374s7[24|92]
+479U17*Append 25|363s7[24|92]
+X 20 a-textio.ads
+58K13*Text_IO 785e16 25|6w10 34r11 155r14 164r14 397r14
+219U14*Flush 25|155s22 164s22 397s22
+515U14*Put 25|34s19
+X 21 a-unccon.ads
+20+9 Source 25|42r8 45r8
+21+9 Target 25|42r40 45r31
+23v14*Unchecked_Conversion 25|8w10 41r39 44r41
+X 22 hypatia.ads
+9K9*Hypatia 61e12 24|15r9 202r5 25|11r6 13r14 16r8 585r5
+22N4*Min_Terminal_Width 24|19r35 195r41 25|57r42
+23N4*Min_Terminal_Height 24|20r35 195r61 25|59r42
+24N4*Max_Terminal_Width 25|58r42
+25N4*Max_Terminal_Height 25|60r42
+28I12*Terminal_Width{positive} 24|19r16 26r16 162r54 25|62r29 234r54 255r36
+29I12*Terminal_Height{positive} 24|20r16 25r16 163r55 25|63r30 239r55 254r36
+41I9*Color_Index<short_integer> 24|47r20 48r20
+44i4*Color_Default{41I9} 24|47r37 48r37
+46i4*Color_Red{41I9} 24|55r54
+47i4*Color_Green{41I9} 24|57r54
+48i4*Color_Yellow{41I9} 24|56r54
+49i4*Color_Blue{41I9} 24|58r54
+X 23 hypatia-posix.ads
+11K17*POSIX 153e18 25|11w14 16r16 42r18 45r41 52r24 55r10 77r22 78r22 129r22
+. 415r16 483r13 537r25 538r25 544r7 545r7 550r13 556r26 568r25 569r25 573r7
+. 574r7 576r13 582r30
+16N4*STDIN_FILENO 25|55r23 87r24 116r24 139r24 415r30 483r27 545r21 550r29
+. 556r43 574r21 576r29 582r47
+24N4*BRKINT 25|97r21
+27N4*INPCK 25|97r62
+28N4*ISTRIP 25|98r21
+31N4*ICRNL 25|97r42
+33N4*IXON 25|98r42
+38N4*OPOST 25|101r52
+41N4*ISIG 25|109r42
+42N4*ICANON 25|108r40
+43N4*ECHO 25|108r21
+47N4*IEXTEN 25|109r21
+51N4*CS8 25|104r47
+57N4*TCSAFLUSH 25|116r38 139r38
+60N4*TIOCGWINSZ 25|55r52
+63N4*VMIN 25|112r17
+64N4*VTIME 25|113r17
+67M9*Cc_T<27|76M9>
+68A9*Cc_Array(67M9)<integer>
+69M9*Tcflag_T<27|71M9> 25|97r11 97r32 97r52 98r11 98r32 101r42 104r37 108r11
+. 108r30 109r11 109r32
+72R9*Termios_Record 81e14 25|42r24 45r47 77r28 78r28 129r28
+73m7*c_iflag{69M9} 25|96m11 96r26
+74m7*c_oflag{69M9} 25|101m11 101r26
+75m7*c_cflag{69M9} 25|104m11 104r26
+76m7*c_lflag{69M9} 25|107m11 107r26
+78a7*c_cc{68A9} 25|112m11 113m11
+85R9*Winsize_Record 90e14 25|52r30
+86m7*ws_row{27|72M9} 25|59r16 60r16 63r50
+87m7*ws_col{27|72M9} 25|57r16 58r16 62r48
+94V13*Tcgetattr{27|62I9} 25|87s13
+97V13*Tcsetattr{27|62I9} 25|116s13 139s13
+104V13*Ioctl{27|62I9} 25|55s16
+111V13*C_Read{27|62I9} 25|415s22 483s19
+129V13*C_Select{27|62I9} 25|550s19 576s19
+138R9*Timeval_Record 141e14 25|538r31 569r31
+139i7*tv_sec{27|64I9} 25|547m10
+140i7*tv_usec{27|64I9} 25|548m10
+145A9*FD_Set_Type(27|73M9)<integer> 25|537r31 568r31
+149U14*Clear_FD_Set 25|544s13 573s13
+150U14*Set_FD 25|545s13 574s13
+151V13*Is_FD_Set{boolean} 25|556s32 582s36
+X 24 hypatia-terminal.ads
+15K17*Terminal 22|9k9 24|189E9 202l13 202e21 25|13b22 585l13 585t21
+18R9*Dimensions 21e14 108r59 195r26 25|25r40 51r40 53r16 229r59
+19i7*Width{22|28I12} 25|62m20 236r24
+20i7*Height{22|29I12} 25|63m20 241r24
+24R9*Position 27e14 114r63 25|253r63
+25i7*Row{22|29I12} 25|254r63
+26i7*Column{22|28I12} 25|255r62
+30E9*Attribute 39e27 42r33
+31n8*Attr_Normal{30E9}
+32n8*Attr_Bold{30E9} 54r55 55r80 25|307r24
+33n8*Attr_Dim{30E9} 59r55 25|310r24
+34n8*Attr_Italic{30E9} 25|313r24
+35n8*Attr_Underline{30E9} 25|316r24
+36n8*Attr_Blink{30E9} 25|319r24
+37n8*Attr_Reverse{30E9} 25|322r24
+38n8*Attr_Hidden{30E9} 25|325r24
+39n8*Attr_Strikethrough{30E9} 25|328r24
+42A9*Attribute_Set(boolean)<30E9> 49r20
+46R9*Style 50e14 53r30 54r30 55r30 56r30 57r30 58r30 59r30 124r59 137r16
+. 197r26 25|300r59 380r16 382r28
+47i7*Foreground{22|41I9} 55m40 56m40 57m40 58m40 25|301r61 332r12
+48i7*Background{22|41I9} 25|302r61 337r12
+49a7*Attributes{42A9} 54m40 55m65 59m40 25|307r12 310r12 313r12 316r12 319r12
+. 322r12 325r12 328r12
+53r4*Style_Normal{46R9} 197r35 25|181r29 204r29 349r29
+54r4*Style_Bold{46R9}
+55r4*Style_Error{46R9}
+56r4*Style_Warning{46R9}
+57r4*Style_Success{46R9}
+58r4*Style_Info{46R9}
+59r4*Style_Muted{46R9}
+62E9*Key_Code 81e19 85r14
+63n8*Key_None{62E9} 85r26 25|481r39 559r25
+64n8*Key_Enter{62E9} 25|494r31
+65n8*Key_Tab{62E9} 25|497r31
+66n8*Key_Backspace{62E9} 25|500r31 503r31
+67n8*Key_Escape{62E9} 25|410r56
+68n8*Key_Up{62E9} 25|424r43
+69n8*Key_Down{62E9} 25|425r43
+70n8*Key_Left{62E9} 25|427r43
+71n8*Key_Right{62E9} 25|426r43
+72n8*Key_Home{62E9} 25|428r43 433r52 462r43
+73n8*Key_End{62E9} 25|429r43 443r37 463r43
+74n8*Key_Page_Up{62E9} 25|447r37
+75n8*Key_Page_Down{62E9} 25|451r37
+76n8*Key_Insert{62E9}
+77n8*Key_Delete{62E9} 25|439r37
+78n8*Key_F1{62E9} 25|458r43
+78n16*Key_F2{62E9} 25|459r43
+78n24*Key_F3{62E9} 25|460r43
+78n32*Key_F4{62E9} 25|461r43
+78n40*Key_F5{62E9}
+78n48*Key_F6{62E9}
+79n8*Key_F7{62E9}
+79n16*Key_F8{62E9}
+79n24*Key_F9{62E9}
+79n32*Key_F10{62E9}
+79n41*Key_F11{62E9}
+79n50*Key_F12{62E9}
+80n8*Key_Char{62E9} 25|507r31 511r31 517r32 523r31
+81n8*Key_Resize{62E9}
+84R9*Input_Event 89e14 145r42 148r55 25|26r42 406r42 410r33 477r55 481r16
+. 535r42
+85e7*Key{62E9} 25|410m49 424m36 425m36 426m36 427m36 428m36 429m36 433m45
+. 439m30 443m30 447m30 451m30 458m36 459m36 460m36 461m36 462m36 463m36 481m32
+. 494m24 497m24 500m24 503m24 507m24 511m24 517m24 523m24 559m18
+86e7*Char{character} 25|507m41 511m41 518m24 523m41
+87b7*Alt{boolean}
+88b7*Ctrl{boolean} 25|511m54 519m24
+92K12*Output_Buffer[12|60] 93r8
+96R9*Terminal_State 99r37 102r40 105r38 108r36 111r47 114r41 115r41 116r41
+. 119r42 120r40 121r50 124r39 125r41 128r33 129r33 130r38 131r38 135r23 140r35
+. 144r18 148r32 151r31 154r45 155r46 158r52 159r52 162r31 163r32 191c9 200e14
+. 25|76r45 128r46 151r52 160r52 173r37 194r40 214r38 229r36 234r31 239r32
+. 244r47 253r41 264r41 270r41 280r42 286r40 291r50 300r39 346r41 356r33 361r33
+. 366r38 372r38 378r23 393r35 477r32 534r18 567r31
+99U14*Initialize 99<26 99<53 25|173b14 191l8 191t18
+99r26 Term{96R9} 25|173b26 176m7 177m7 178m7 179m7 180m7 181m7 182m7 183m7
+. 185m7
+99b53 Success{boolean} 25|173b53 186m7 190m10
+102U14*Initialize 102=26 25|194b14 208l8 208t18
+102r26 Term{96R9} 25|194b26 199m7 200m7 201m7 202m7 203m7 204m7 205m7 206m7
+. 207m7
+105U14*Finalize 105=24 25|214b14 223l8 223t16
+105r24 Term{96R9} 25|214b24 216r10 217m17 218m23 219m23 220m17 221m10
+108V13*Get_Dimensions{18R9} 108>29 25|229b13 232l8 232t22
+108r29 Term{96R9} 25|229b29 231r14
+111U14*Update_Dimensions 111=33 25|244b14 247l8 247t25
+111r33 Term{96R9} 25|244b33 246m7
+114U14*Move_Cursor 114=27 114>57 25|253b14 262l8 262t19 283s7
+114r27 Term{96R9} 25|253b27 257m15 257r15 258m15 258r15 259m15 259r15 260m15
+. 260r15 261m15 261r15
+114r57 Pos{24R9} 25|253b57 254r59 255r58
+115U14*Hide_Cursor 115=27 25|264b14 268l8 268t19
+115r27 Term{96R9} 25|264b27 266m15 266r15 267m7
+116U14*Show_Cursor 116=27 25|219s10 270b14 274l8 274t19
+116r27 Term{96R9} 25|270b27 272m15 272r15 273m7
+119U14*Clear_Screen 119=28 25|280b14 284l8 284t20
+119r28 Term{96R9} 25|280b28 282m15 282r15 283m20
+120U14*Clear_Line 120=26 25|286b14 289l8 289t18
+120r26 Term{96R9} 25|286b26 288m15 288r15
+121U14*Clear_To_End_Of_Line 121=36 25|291b14 294l8 294t28
+121r36 Term{96R9} 25|291b36 293m15 293r15
+124U14*Set_Style 124=25 124>55 25|300b14 344l8 344t17 384s7 386s7
+124r25 Term{96R9} 25|300b25 304m15 304r15 305m15 305r15 308m18 308r18 311m18
+. 311r18 314m18 314r18 317m18 317r18 320m18 320r18 323m18 323r18 326m18 326r18
+. 329m18 329r18 333m18 333r18 334m18 334r18 338m18 338r18 339m18 339r18 342m15
+. 342r15 343m7
+124r55 S{46R9} 25|300b55 301r59 302r59 307r10 310r10 313r10 316r10 319r10
+. 322r10 325r10 328r10 332r10 337r10 343r29
+125U14*Reset_Style 125=27 25|218s10 346b14 350l8 350t19
+125r27 Term{96R9} 25|346b27 348m15 348r15 349m7
+128U14*Put 128=19 128>49 25|356b14 359l8 359t11 385s7
+128r19 Term{96R9} 25|356b19 358m15 358r15
+128a49 Text{string} 25|356b49 358r28
+129U14*Put 129=19 129>49 25|361b14 364l8 364t11
+129r19 Term{96R9} 25|361b19 363m15 363r15
+129e49 C{character} 25|361b49 363r28
+130U14*Put_Line 130=24 130>54 25|366b14 370l8 370t16
+130r24 Term{96R9} 25|366b24 368m15 368r15 369m17
+130a54 Text{string} 25|366b54 368r28
+131U14*New_Line 131=24 25|369s7 372b14 375l8 375t16
+131r24 Term{96R9} 25|372b24 374m15 374r15
+134U14*Put_Styled 135=8 136>8 137>8 25|377b14 387l8 387t18
+135r8 Term{96R9} 25|378b8 382r37 384m18 385m12 386m18
+136a8 Text{string} 25|379b8 385r18
+137r8 S{46R9} 25|380b8 384r24
+140U14*Flush 140=21 25|217s10 220s10 393b14 400l8 400t13
+140r21 Term{96R9} 25|393b21 395r18 396r32 398m10
+143V13*Poll_Input{84R9} 144>8 145>8 25|533b13 561l8 561t18
+144r8 Term{96R9} 25|534b8 557r29
+145o8 Timeout{duration} 25|535b8 540r56 542r35
+148V13*Read_Input{84R9} 148>25 25|477b13 527l8 527t18 557s17
+148r25 Term{96R9} 25|477b25 478r28
+151V13*Has_Input{boolean} 151>24 25|567b13 583l8 583t17
+151r24 Term{96R9} 25|567b24 571r28
+154U14*Enable_Raw_Mode 154=31 25|76b14 122l8 122t23
+154r31 Term{96R9} 25|76b31 82r10 90m7 117m7
+155U14*Disable_Raw_Mode 155=32 25|128b14 145l8 145t24
+155r32 Term{96R9} 25|128b32 133r14 138r33 140m7 144m10
+158U14*Enter_Alternate_Screen 158=38 25|151b14 158l8 158t30
+158r38 Term{96R9} 25|151b38 153r14 156m10
+159U14*Leave_Alternate_Screen 159=38 25|160b14 167l8 167t30
+159r38 Term{96R9} 25|160b38 162r10 165m10
+162V13*Get_Width{22|28I12} 162>24 25|234b13 237l8 237t17
+162r24 Term{96R9} 25|234b24 236r14
+163V13*Get_Height{22|29I12} 163>25 25|239b13 242l8 242t18
+163r25 Term{96R9} 25|239b25 241r14
+166a4*Horizontal_Line{string}
+167a4*Vertical_Line{string}
+168a4*Top_Left_Corner{string}
+169a4*Top_Right_Corner{string}
+170a4*Bottom_Left_Corner{string}
+171a4*Bottom_Right_Corner{string}
+172a4*T_Down{string}
+173a4*T_Up{string}
+174a4*T_Right{string}
+175a4*T_Left{string}
+176a4*Cross{string}
+179a4*Double_Horizontal{string}
+180a4*Double_Vertical{string}
+181a4*Double_Top_Left{string}
+182a4*Double_Top_Right{string}
+183a4*Double_Bottom_Left{string}
+184a4*Double_Bottom_Right{string}
+189A9 Raw_Termios(character)<integer> 199r26 25|42r50 45r18
+192b7*Initialized{boolean} 25|176m12 185m12 199m12 207m12 216r15 221m15
+193b7*Raw_Mode_Active{boolean} 25|82r15 117m12 133r19 140m12 144m15 177m12
+. 200m12
+194b7*Alt_Screen_Active{boolean} 25|153r19 156m15 162r15 165m15 178m12 201m12
+195r7*Dims{18R9} 25|179m12 202m12 231r19 236r19 241r19 246m12
+196b7*Cursor_Visible{boolean} 25|180m12 203m12 267m12 273m12
+197r7*Current_Style{46R9} 25|181m12 204m12 343m12 349m12 382r42
+198r7*Buffer{12|78R12[92]} 25|182m12 205m12 257m20 257r20 258m20 258r20 259m20
+. 259r20 260m20 260r20 261m20 261r20 266m20 266r20 272m20 272r20 282m20 282r20
+. 288m20 288r20 293m20 293r20 304m20 304r20 305m20 305r20 308m23 308r23 311m23
+. 311r23 314m23 314r23 317m23 317r23 320m23 320r23 323m23 323r23 326m23 326r23
+. 329m23 329r23 333m23 333r23 334m23 334r23 338m23 338r23 339m23 339r23 342m20
+. 342r20 348m20 348r20 358m20 358r20 363m20 363r20 368m20 368r20 374m20 374r20
+. 395r23 396r37 398m15
+199a7*Original_Termios{189A9} 25|90m12 138r38 183m12 206m12
+X 25 hypatia-terminal.adb
+15K12 Latin_1=15:43 20r32 374r28 374r41 489r15 493r15 493r28 496r15 499r15
+. 502r15 509r15
+20e4 ESC{character} 21r29
+21a4 CSI{string} 154r21 163r21 257r28 266r28 272r28 282r28 288r28 293r28
+. 304r28 348r28
+24U14 Raw_Write 24>25 32b14 35l8 35t17 154s10 163s10 396s10
+24a25 Text{string} 32b25 34r24
+25V13 Query_Terminal_Size{24|18R9} 51b13 70l8 70t27 179s20 202s20 246s20
+26V13 Parse_Escape_Sequence{24|84R9} 406b13 471l8 471t29 491s23
+41V13 To_Raw_Termios[21|23]{24|189A9} 90s32
+44V13 From_Raw_Termios[21|23]{23|72R9} 138s15
+52r7 ws{23|85R9} 55m65 55r65 57r13 58r13 59r13 60r13 62r45 63r47
+53r7 Result{24|18R9} 62m13 63m13 66r14 69r17
+77r7 orig{23|72R9} 87m38 87r38 90r48 93r14
+78r7 raw{23|72R9} 93m7 96m7 96r22 101m7 101r22 104m7 104r22 107m7 107r22
+. 112m7 113m7 116m49 116r49
+79i7 rc{27|62I9} 80r28 87m7 116m7
+129r7 orig{23|72R9} 138m7 139m49 139r49
+130i7 rc{27|62I9} 131r28 139m7
+195b7 Success{boolean} 196r28
+254a7 Row_Str{string} 258r28 258r37 258r58
+255a7 Col_Str{string} 260r28 260r37 260r58
+301a7 Fg_Img{string} 334r31 334r39 334r59
+302a7 Bg_Img{string} 339r31 339r39 339r59
+382r7 Old_Style{24|46R9} 386r24
+407a7 Buf{string} 415m44 415r44 422r31 423r18 432r27 438r40 442r40 446r40
+. 450r40 455r34 457r18
+408i7 Len{natural} 419m10 422r13 431r22 438r22 442r22 446r22 450r22 455r16
+409i7 rc{27|62I9} 415m10 416r13
+410r7 Default_Result{24|84R9} 470r14
+414i11 I{integer} 415r49 419r17
+479e7 C{character} 483m41 483r41 488r12 507r49 518r62 523r49
+480i7 rc{27|62I9} 483m7 484r10
+481r7 Result{24|84R9} 485r17 491m13 494m13 497m13 500m13 503m13 507m13 511m13
+. 517m13 523m13 526r14
+537a7 readfds{23|145A9} 544m27 545m35 545r35 551m29 551r29 556r57
+538r7 tv{23|138R9} 547m7 548m7 554m29 554r29
+539i7 rc{27|62I9} 550m7 556r10
+540i7 Secs{long_integer} 542r55 547r26
+541i7 USecs{long_integer} 548r27
+568a7 readfds{23|145A9} 573m27 574m35 574r35 577m29 577r29 582r61
+569r7 tv{23|138R9} 580m29 580r29
+570i7 rc{27|62I9} 576m7 582r14
+X 26 interfac.ads
+47K9*Interfaces 25|9r6 17r8 26|247e15
+68I9*Integer_64<long_long_integer>
+X 27 i-c.ads
+33K20*C 25|9w17 17r19 27|601e17
+62I9*int<integer> 25|79r14 130r14 409r24 480r16 539r17 570r17
+64I9*long<long_integer> 25|547r20 548r21
+71M9*unsigned
+72M9*unsigned_short 25|57r26 58r26 59r26 60r26
+73M9*unsigned_long 25|55r37
+76M9*unsigned_char
+X 29 system.ads
+37K9*System 25|10w6 552r29 553r29 578r29 579r29 29|155e11
+67M9*Address
+69m4*Null_Address{67M9} 25|552r36 553r36 578r36 579r36
+X 30 s-arit64.ads
+59I12*Int64{26|68I9}
+108V13*Multiply_With_Ovflo_Check64{59I12} 112i<c,__gnat_mulv64>22
+

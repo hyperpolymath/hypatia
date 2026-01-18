@@ -1,0 +1,139 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P SS ZX
+
+RN
+RV NO_DISPATCH
+RV NO_DISPATCHING_CALLS
+RV NO_ENUMERATION_MAPS
+RV NO_IMPLICIT_CONDITIONALS
+RV NO_STANDARD_STORAGE_POOLS
+RV NO_IMPLEMENTATION_PRAGMAS
+RV NO_ELABORATION_CODE
+
+U hypatia.views%b	hypatia-views.adb	9e22e78c NE OO PK
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+W hypatia%s		hypatia.ads		hypatia.ali
+
+U hypatia.views%s	hypatia-views.ads	0954e054 EE OO PK
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.streams%s		a-stream.adb		a-stream.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+Z ada.tags%s		a-tags.adb		a-tags.ali
+W hypatia%s		hypatia.ads		hypatia.ali
+W hypatia.state_machine%s  hypatia-state_machine.adb  hypatia-state_machine.ali
+W hypatia.terminal%s	hypatia-terminal.adb	hypatia-terminal.ali
+Z system%s		system.ads		system.ali
+Z system.put_images%s	s-putima.adb		s-putima.ali
+Z system.stream_attributes%s  s-stratt.adb	s-stratt.ali
+Z system.wch_stw%s	s-wchstw.adb		s-wchstw.ali
+
+D ada.ads		19700101000000 76789da1 ada%s
+D a-assert.ads		19700101000000 ba465f5c ada.assertions%s
+D a-charac.ads		19700101000000 2d3ec45b ada.characters%s
+D a-chlat1.ads		19700101000000 e0d72e76 ada.characters.latin_1%s
+D a-except.ads		19700101000000 e7970cd9 ada.exceptions%s
+D a-stream.ads		19700101000000 17477cbd ada.streams%s
+D a-string.ads		19700101000000 90ac6797 ada.strings%s
+D a-strbou.ads		19700101000000 6d86a9a3 ada.strings.bounded%s
+D a-strmap.ads		19700101000000 1f91ebb6 ada.strings.maps%s
+D a-strsea.ads		19700101000000 18c3c634 ada.strings.search%s
+D a-strsup.ads		19700101000000 8667231b ada.strings.superbounded%s
+D a-sttebu.ads		19700101000000 f1ad67a2 ada.strings.text_buffers%s
+D a-stuten.ads		19700101000000 c6ced0ae ada.strings.utf_encoding%s
+D a-tags.ads		19700101000000 fbca0ad5 ada.tags%s
+D a-unccon.ads		19700101000000 0e9b276f ada.unchecked_conversion%s
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-state_machine.ads  20260118213210 7dbfc1a7 hypatia.state_machine%s
+D hypatia-terminal.ads	20260118213155 96279323 hypatia.terminal%s
+D hypatia-views.ads	20260118214402 1cbeb5af hypatia.views%s
+D hypatia-views.adb	20260118214402 829c5223 hypatia.views%b
+D interfac.ads		19700101000000 9111f9c1 interfaces%s
+D system.ads		19700101000000 14286b0f system%s
+D s-assert.ads		19700101000000 9c4520c7 system.assertions%s
+D s-exctab.ads		19700101000000 91bef6ef system.exception_table%s
+D s-parame.ads		19700101000000 3597fc11 system.parameters%s
+D s-putima.ads		19700101000000 17291fe4 system.put_images%s
+D s-secsta.ads		19700101000000 578279f5 system.secondary_stack%s
+D s-soflin.ads		19700101000000 5d88fdea system.soft_links%s
+D s-stache.ads		19700101000000 0b81c1fe system.stack_checking%s
+D s-stalib.ads		19700101000000 1c9580f6 system.standard_library%s
+D s-stoele.ads		19700101000000 ccded4e8 system.storage_elements%s
+D s-stratt.ads		19700101000000 516607ae system.stream_attributes%s
+D s-traent.ads		19700101000000 c81cbf8c system.traceback_entries%s
+D s-unstyp.ads		19700101000000 fa2a7f59 system.unsigned_types%s
+D s-wchcon.ads		19700101000000 d9032363 system.wch_con%s
+D s-wchstw.ads		19700101000000 2d112c01 system.wch_stw%s
+G a e
+G c Z s s [on_enter hypatia__views 37 14 none]
+G c Z s s [on_exit hypatia__views 40 14 none]
+G c Z s b [resize hypatia__views 43 14 none]
+G c Z s s [viewDA hypatia__views 15 9 none]
+G c Z s s [viewDF hypatia__views 15 9 none]
+G c Z s s [viewIP hypatia__views 15 9 none]
+X 16 hypatia.ads
+9K9*Hypatia 61e12 19|9r6 9r30 10r6 12r9 48r5 20|6r14 21r5
+28I12*Terminal_Width{positive} 19|23r17 45r17 20|14r17
+29I12*Terminal_Height{positive} 19|24r17 46r17 20|15r17
+X 17 hypatia-state_machine.ads
+9K17*State_Machine 58e26 19|10w14 34r36
+26E9*Navigation_Event 39e23 19|34r50
+X 18 hypatia-terminal.ads
+15K17*Terminal 202e21 19|9w14 9r38 16r17
+18R9*Dimensions 21e14 19|16r26
+84R9*Input_Event 89e14 19|34r16
+96R9*Terminal_State 200e14 19|29r22
+X 19 hypatia-views.ads
+12K17*Views 16|9k9 19|48l13 48e18 20|6b22 21l13 21t18
+15H9*View 18e14 21p14 22r24 27p14 28r15 32p13 33r23 37p14 37r35 40p14 40r34
+. 44r24 20|13r24
+16r7*Bounds{18|18R9} 20|18m9
+17b7*Visible{boolean}
+21x14*Initialize 22=8 23>8 24>8
+22r8 V{15R9}
+23i8 Width{16|28I12}
+24i8 Height{16|29I12}
+27x14*Render 28>8 29=8
+28r8 V{15R9}
+29r8 Term{18|96R9}
+32y13*Handle_Input{17|26E9} 33=8 34>8
+33r8 V{15R9}
+34r8 Event{18|84R9}
+37U14*On_Enter 37=24
+37r24 V{15R9}
+40U14*On_Exit 40=23
+40r23 V{15R9}
+43U14*Resize 44=8 45>8 46>8 20|12b14 19l8 19t14
+44c8 V<15R9> 20|13b8 18m7
+45i8 Width{16|28I12} 20|14b8 18r20
+46i8 Height{16|29I12} 20|15b8 18r27
+

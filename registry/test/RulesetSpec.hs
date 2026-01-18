@@ -10,7 +10,7 @@ import Test.QuickCheck
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import CicdHyperA.Ruleset
+import Hypatia.Ruleset
 
 spec :: Spec
 spec = do

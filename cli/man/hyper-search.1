@@ -1,0 +1,105 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-search
+.TH HYPER-SEARCH 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-search \- search the ruleset registry
+.SH SYNOPSIS
+.B hyper search
+[\fIOPTIONS\fR]
+[\fIQUERY\fR]
+.SH DESCRIPTION
+.B hyper search
+queries the ruleset registry by various criteria including effect type,
+target language, category, tags, and author.
+.SH ARGUMENTS
+.TP
+.I QUERY
+Free-text search query. Searches names and descriptions.
+.SH OPTIONS
+.TP
+.BR \-e ", " \-\-effect =\fIEFFECT\fR
+Filter by effect type: \fBpreventive\fR, \fBcurative\fR, \fBdiagnostic\fR.
+.TP
+.BR \-l ", " \-\-language =\fILANG\fR
+Filter by target language (e.g., rust, javascript, haskell).
+.TP
+.BR \-c ", " \-\-category =\fICATEGORY\fR
+Filter by category: \fBsecurity\fR, \fBquality\fR, \fBworkflows\fR, etc.
+.TP
+.BR \-t ", " \-\-tag =\fITAG\fR
+Filter by tag. Can be specified multiple times.
+.TP
+.BR \-a ", " \-\-author =\fIAUTHOR\fR
+Filter by author username.
+.TP
+.BR \-\-sort =\fIFIELD\fR
+Sort by: \fBname\fR, \fBdownloads\fR, \fBupdated\fR, \fBcreated\fR, \fBrating\fR.
+Default is \fBdownloads\fR.
+.TP
+.BR \-\-order =\fIORDER\fR
+Sort order: \fBasc\fR or \fBdesc\fR. Default is \fBdesc\fR.
+.TP
+.BR \-\-limit =\fIN\fR
+Maximum number of results. Default is 20.
+.TP
+.BR \-\-offset =\fIN\fR
+Skip first N results (for pagination).
+.TP
+.BR \-\-registry =\fIURL\fR
+Override the default registry URL.
+.SH OUTPUT
+By default, displays a table with:
+.IP \(bu 2
+Ruleset name and author
+.IP \(bu 2
+Description (truncated)
+.IP \(bu 2
+Version and download count
+.IP \(bu 2
+Categories and tags
+.PP
+Use \fB\-\-output json\fR for machine-readable output.
+.SH EXAMPLES
+Search for security rulesets:
+.PP
+.RS
+.nf
+hyper search --category security
+.fi
+.RE
+.PP
+Search for Rust preventive rules:
+.PP
+.RS
+.nf
+hyper search --language rust --effect preventive
+.fi
+.RE
+.PP
+Free-text search:
+.PP
+.RS
+.nf
+hyper search "github actions"
+.fi
+.RE
+.PP
+Most downloaded rulesets:
+.PP
+.RS
+.nf
+hyper search --sort downloads --limit 10
+.fi
+.RE
+.PP
+JSON output for scripting:
+.PP
+.RS
+.nf
+hyper search --language rust --output json | jq '.[].name'
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-deposit (1),
+.BR hyper\-withdraw (1)

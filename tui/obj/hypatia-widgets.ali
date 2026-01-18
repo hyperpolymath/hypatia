@@ -1,0 +1,290 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P SS ZX
+
+RN
+RV NO_DISPATCH
+RV NO_DISPATCHING_CALLS
+RV NO_ENUMERATION_MAPS
+RV NO_IMPLICIT_CONDITIONALS
+RV NO_SECONDARY_STACK
+RV NO_STANDARD_STORAGE_POOLS
+RV NO_DYNAMIC_SIZED_OBJECTS
+RV NO_IMPLEMENTATION_PRAGMAS
+RV NO_IMPLICIT_LOOPS
+RV NO_ELABORATION_CODE
+
+U hypatia.widgets%b	hypatia-widgets.adb	8f2b55da NE OO PK
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+W hypatia%s		hypatia.ads		hypatia.ali
+Z system.concat_2%s	s-conca2.adb		s-conca2.ali
+Z system.concat_3%s	s-conca3.adb		s-conca3.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+
+U hypatia.widgets%s	hypatia-widgets.ads	f993ea3a EE OO PK
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.streams%s		a-stream.adb		a-stream.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+Z ada.tags%s		a-tags.adb		a-tags.ali
+W hypatia%s		hypatia.ads		hypatia.ali
+W hypatia.terminal%s	hypatia-terminal.adb	hypatia-terminal.ali
+Z system%s		system.ads		system.ali
+Z system.put_images%s	s-putima.adb		s-putima.ali
+Z system.stream_attributes%s  s-stratt.adb	s-stratt.ali
+Z system.wch_stw%s	s-wchstw.adb		s-wchstw.ali
+
+D ada.ads		19700101000000 76789da1 ada%s
+D a-assert.ads		19700101000000 ba465f5c ada.assertions%s
+D a-charac.ads		19700101000000 2d3ec45b ada.characters%s
+D a-chlat1.ads		19700101000000 e0d72e76 ada.characters.latin_1%s
+D a-except.ads		19700101000000 e7970cd9 ada.exceptions%s
+D a-stream.ads		19700101000000 17477cbd ada.streams%s
+D a-string.ads		19700101000000 90ac6797 ada.strings%s
+D a-strbou.ads		19700101000000 6d86a9a3 ada.strings.bounded%s
+D a-strmap.ads		19700101000000 1f91ebb6 ada.strings.maps%s
+D a-strsea.ads		19700101000000 18c3c634 ada.strings.search%s
+D a-strsup.ads		19700101000000 8667231b ada.strings.superbounded%s
+D a-sttebu.ads		19700101000000 f1ad67a2 ada.strings.text_buffers%s
+D a-stuten.ads		19700101000000 c6ced0ae ada.strings.utf_encoding%s
+D a-tags.ads		19700101000000 fbca0ad5 ada.tags%s
+D a-unccon.ads		19700101000000 0e9b276f ada.unchecked_conversion%s
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-terminal.ads	20260118213155 96279323 hypatia.terminal%s
+D hypatia-widgets.ads	20260118213210 91c67e66 hypatia.widgets%s
+D hypatia-widgets.adb	20260118213210 1eed2bbc hypatia.widgets%b
+D interfac.ads		19700101000000 9111f9c1 interfaces%s
+D system.ads		19700101000000 14286b0f system%s
+D s-assert.ads		19700101000000 9c4520c7 system.assertions%s
+D s-conca2.ads		19700101000000 b5fb73f7 system.concat_2%s
+D s-conca3.ads		19700101000000 8a7a19a2 system.concat_3%s
+D s-exctab.ads		19700101000000 91bef6ef system.exception_table%s
+D s-parame.ads		19700101000000 3597fc11 system.parameters%s
+D s-putima.ads		19700101000000 17291fe4 system.put_images%s
+D s-secsta.ads		19700101000000 578279f5 system.secondary_stack%s
+D s-soflin.ads		19700101000000 5d88fdea system.soft_links%s
+D s-stache.ads		19700101000000 0b81c1fe system.stack_checking%s
+D s-stalib.ads		19700101000000 1c9580f6 system.standard_library%s
+D s-stoele.ads		19700101000000 ccded4e8 system.storage_elements%s
+D s-stratt.ads		19700101000000 516607ae system.stream_attributes%s
+D s-traent.ads		19700101000000 c81cbf8c system.traceback_entries%s
+D s-unstyp.ads		19700101000000 fa2a7f59 system.unsigned_types%s
+D s-wchcon.ads		19700101000000 d9032363 system.wch_con%s
+D s-wchstw.ads		19700101000000 2d112c01 system.wch_stw%s
+G a e
+G c Z s b [set_bounds hypatia__widgets 50 14 none]
+G c Z s b [get_bounds hypatia__widgets 53 13 none]
+G c Z s b [set_visible hypatia__widgets 56 14 none]
+G c Z s b [is_visible hypatia__widgets 59 13 none]
+G c Z s b [set_focus hypatia__widgets 62 14 none]
+G c Z s b [has_focus hypatia__widgets 65 13 none]
+G c Z s b [draw_box hypatia__widgets 72 14 none]
+G c Z s b [draw_horizontal_line hypatia__widgets 79 14 none]
+G c Z s b [draw_vertical_line hypatia__widgets 86 14 none]
+G c Z s b [fill_area hypatia__widgets 93 14 none]
+G c Z s b [draw_text hypatia__widgets 99 14 none]
+G c Z s b [truncate hypatia__widgets 108 13 none]
+G c Z s b [pad hypatia__widgets 111 13 none]
+G c Z s s [boundsIP hypatia__widgets 18 9 none]
+G c Z s s [widgetDA hypatia__widgets 33 9 none]
+G c Z s s [widgetDF hypatia__widgets 33 9 none]
+G c Z s s [widgetIP hypatia__widgets 33 9 none]
+G c Z b b [get_box_chars hypatia__widgets 12 14 none]
+G r c none [draw_box hypatia__widgets 72 14 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [draw_box hypatia__widgets 72 14 none] [put hypatia__terminal 128 14 none]
+G r c none [draw_horizontal_line hypatia__widgets 79 14 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [draw_horizontal_line hypatia__widgets 79 14 none] [put hypatia__terminal 128 14 none]
+G r c none [draw_vertical_line hypatia__widgets 86 14 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [draw_vertical_line hypatia__widgets 86 14 none] [put hypatia__terminal 128 14 none]
+G r c none [fill_area hypatia__widgets 93 14 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [fill_area hypatia__widgets 93 14 none] [put hypatia__terminal 128 14 none]
+G r c none [draw_text hypatia__widgets 99 14 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [draw_text hypatia__widgets 99 14 none] [put_styled hypatia__terminal 134 14 none]
+X 16 hypatia.ads
+9K9*Hypatia 61e12 18|11r6 13r9 15r8 117r5 19|6r14 297r5
+28I12*Terminal_Width{positive} 18|19r16 21r16
+29I12*Terminal_Height{positive} 18|20r16 22r16
+X 17 hypatia-terminal.ads
+15K17*Terminal 202e21 18|11w14 15r16 105r18 19|220r18
+46R9*Style 50e14 18|105r27 19|220r27
+53r4*Style_Normal{46R9} 18|105r36 19|220r36
+84R9*Input_Event 89e14 18|47r16
+96R9*Terminal_State 200e14 18|42r22 73r24 80r24 87r24 94r22 100r25 19|101r24
+. 160r24 179r24 198r22 215r25
+114U14*Move_Cursor 19|115s7 140s10 142s10 147s7 168s7 188s10 205s10 246s7
+128U14*Put 19|116s7 124s16 126s13 128s16 133s13 136s7 141s10 143s10 148s7
+. 150s10 152s7 170s10 189s10 206s10
+134U14*Put_Styled 19|247s7
+166a4*Horizontal_Line{string} 19|72r19 87r19
+167a4*Vertical_Line{string} 19|73r19 88r19
+168a4*Top_Left_Corner{string} 19|74r19
+169a4*Top_Right_Corner{string} 19|75r19
+170a4*Bottom_Left_Corner{string} 19|76r19
+171a4*Bottom_Right_Corner{string} 19|77r19
+179a4*Double_Horizontal{string} 19|79r19
+180a4*Double_Vertical{string} 19|80r19
+181a4*Double_Top_Left{string} 19|81r19
+182a4*Double_Top_Right{string} 19|82r19
+183a4*Double_Bottom_Left{string} 19|83r19
+184a4*Double_Bottom_Right{string} 19|84r19
+X 18 hypatia-widgets.ads
+13K17*Widgets 16|9k9 18|117l13 117e20 19|6b22 297l13 297t20
+18R9*Bounds 23e14 34r17 50r58 53r50 74r17 95r15 101r18 19|22r58 27r50 102r17
+. 199r15 216r18
+19i7*X{16|28I12} 19|115r40 140r40 142r40 147r58 205r40 246r51
+20i7*Y{16|29I12} 19|115r32 139r23 139r37 147r32 204r23 204r33 246r32
+21i7*Width{16|28I12} 19|118r56 121r50 127r32 132r29 142r49 149r26 202r48
+. 222r62 231r31 233r30
+22i7*Height{16|29I12} 19|139r46 147r41 204r42 241r31 243r30
+26E9*Horizontal_Align 26e68 103r18 114r16 19|218r18 272r16
+26n30*Align_Left{26E9} 103r38 114r36 19|218r38 228r15 272r36 283r15
+26n42*Align_Center{26E9} 19|230r15 287r15
+26n56*Align_Right{26E9} 19|232r15 285r15
+27E9*Vertical_Align 27e66 104r18 19|219r18
+27n28*Align_Top{27E9} 104r36 19|219r36 238r15
+27n39*Align_Middle{27E9} 19|240r15
+27n53*Align_Bottom{27E9} 19|242r15
+30E9*Border_Style 30e84 75r17 83r17 90r17 19|13r17 57r17 103r17 163r17 182r17
+30n26*Border_None{30E9} 19|64r15 108r18
+30n39*Border_Single{30E9} 75r33 83r33 90r33 19|71r15 103r33 163r33 182r33
+30n54*Border_Double{30E9} 19|78r15
+30n69*Border_Rounded{30E9} 19|85r15
+33H9*Widget 37e14 40p14 41r15 45p13 46r23 50r37 53r29 56r38 59r29 62r36 65r28
+. 19|22r37 27r29 32r38 37r29 42r36 47r28
+34r7*Area{18R9} 19|24m9 29r16
+35b7*Visible{boolean} 19|34m9 39r16
+36b7*Focused{boolean} 19|44m9 49r16
+40x14*Render 41>8 42=8
+41r8 W{33R9}
+42r8 Term{17|96R9}
+45y13*Handle_Input{boolean} 46=8 47>8
+46r8 W{33R9}
+47r8 Event{17|84R9}
+50U14*Set_Bounds 50=26 50>51 19|22b14 25l8 25t18
+50c26 W<33R9> 19|22b26 24m7
+50r51 Area{18R9} 19|22b51 24r17
+53V13*Get_Bounds{18R9} 53>25 19|27b13 30l8 30t18
+53c25 W<33R9> 19|27b25 29r14
+56U14*Set_Visible 56=27 56>52 19|32b14 35l8 35t19
+56c27 W<33R9> 19|32b27 34m7
+56b52 Visible{boolean} 19|32b52 34r20
+59V13*Is_Visible{boolean} 59>25 19|37b13 40l8 40t18
+59c25 W<33R9> 19|37b25 39r14
+62U14*Set_Focus 62=25 62>50 19|42b14 45l8 45t17
+62c25 W<33R9> 19|42b25 44m7
+62b50 Focused{boolean} 19|42b50 44r20
+65V13*Has_Focus{boolean} 65>24 19|47b13 50l8 50t17
+65c24 W<33R9> 19|47b24 49r14
+72U14*Draw_Box 73=8 74>8 75>8 76>8 19|100b14 153l8 153t16
+73r8 Term{17|96R9} 19|101b8 115m20 116m12 124m21 126m18 128m21 133m18 136m12
+. 140m23 141m15 142m23 143m15 147m20 148m12 150m15 152m12
+74r8 Area{18R9} 19|102b8 115r27 115r35 118r51 121r45 127r27 132r24 139r18
+. 139r32 139r41 140r35 142r35 142r44 147r27 147r36 147r53 149r21
+75e8 Style{30E9} 19|103b8 108r10 112r22
+76a8 Title{string} 19|104b8 118r10 118r36 121r62 126r30 127r54
+79U14*Draw_Horizontal_Line 80=8 81>8 81>11 82>8 83>8 19|159b14 172l8 172t28
+80r8 Term{17|96R9} 19|160b8 168m20 170m15
+81i8 X{positive} 19|161b8 168r30
+81i11 Y{positive} 19|161b11 168r27
+82i8 Length{positive} 19|162b8 169r21
+83e8 Style{30E9} 19|163b8 167r22
+86U14*Draw_Vertical_Line 87=8 88>8 88>11 89>8 90>8 19|178b14 191l8 191t26
+87r8 Term{17|96R9} 19|179b8 188m23 189m15
+88i8 X{positive} 19|180b8 188r37
+88i11 Y{positive} 19|180b11 188r30
+89i8 Length{positive} 19|181b8 187r21
+90e8 Style{30E9} 19|182b8 186r22
+93U14*Fill_Area 94=8 95>8 96>8 19|197b14 208l8 208t17
+94r8 Term{17|96R9} 19|198b8 205m23 206m15
+95r8 Area{18R9} 19|199b8 202r43 204r18 204r28 204r37 205r35
+96e8 Char{character} 19|200b8 202r69
+99U14*Draw_Text 100=8 101>8 102>8 103>8 104>8 105>8 19|214b14 248l8 248t17
+100r8 Term{17|96R9} 19|215b8 246m20 247m19
+101r8 Area{18R9} 19|216b8 222r57 231r26 233r25 241r26 243r25 246r27 246r46
+102a8 Text{string} 19|217b8 222r51
+103e8 H_Align{26E9} 19|218b8 227r12
+104e8 V_Align{27E9} 19|219b8 237r12
+105r8 S{17|46R9} 19|220b8 247r39
+108V13*Truncate{string} 108>23 108>38 19|222s41 254b13 263l8 263t16 275s38
+108a23 Text{string} 19|254b23 256r10 257r17 259r17 259r23 259r37 261r17 261r23
+. 261r37
+108i38 Max_Width{positive} 19|254b38 256r25 258r13 259r50 261r50
+111V13*Pad{string} 112>8 113>8 114>8 115>8 19|269b13 295l8 295t11
+112a8 Text{string} 19|270b8 275r48
+113i8 Width{positive} 19|271b8 275r54 276r39
+114e8 Align{26E9} 19|272b8 282r12
+115e8 Fill{character} 19|273b8 284r49 286r37 292r41 292r80
+X 19 hypatia-widgets.adb
+12U14 Get_Box_Chars 13>8 14<8 14<11 15<8 15<12 16<8 16<12 56b14 94l8 94t21
+. 112s7 167s7 186s7
+13e8 Style{18|30E9} 57b8 63r12
+14a8 H{string} 58b8 65m13 72m13 79m13 87m13
+14a11 V{string} 58b11 66m13 73m13 80m13 88m13
+15a8 TL{string} 59b8 67m13 74m13 81m13 89m13
+15a12 TR{string} 59b12 68m13 75m13 82m13 90m13
+16a8 BL{string} 60b8 69m13 76m13 83m13 91m13
+16a12 BR{string} 60b12 70m13 77m13 84m13 92m13
+106a7 H{string} 112m29 124r27 128r27 133r24 150r21
+106a10 V{string} 112m32 141r21 143r21
+106a13 TL{string} 112m35 116r18
+106a17 TR{string} 112m39 136r18
+106a21 BL{string} 112m43 148r18
+106a25 BR{string} 112m47 152r18
+121i13 Padding{positive} 123r27 127r44
+123i17 I{integer}
+127i17 I{integer}
+132i14 I{integer}
+139i11 Row{integer} 140r30 142r30
+149i11 I{integer}
+165a7 H{string} 167m29 170r21
+165a10 V{string} 167m32
+165a13 TL{string} 167m35
+165a17 TR{string} 167m39
+165a21 BL{string} 167m43
+165a25 BR{string} 167m47
+169i11 I{integer}
+184a7 H{string} 186m29
+184a10 V{string} 186m32 189r21
+184a13 TL{string} 186m35
+184a17 TR{string} 186m39
+184a21 BL{string} 186m43
+184a25 BR{string} 186m47
+187i11 I{integer} 188r34
+202a7 Fill_String{string} 206r21
+204i11 Row{integer} 205r30
+222a7 Display_Text{string} 231r39 233r38 247r25
+223i7 X_Offset{natural} 229m13 231m13 233m13 246r55
+224i7 Y_Offset{natural} 239m13 241m13 243m13 246r36
+275a7 Truncated{string} 276r47 279r17 284r20 286r45 292r49
+276i7 Padding{natural} 278r10 284r38 286r26 289r48 290r48
+289i16 Left_Pad{natural} 290r58 292r29
+290i16 Right_Pad{natural} 292r67
+

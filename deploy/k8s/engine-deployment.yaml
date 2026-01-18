@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Logtalk Engine Deployment
+# hypatia Logtalk Engine Deployment
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: engine
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   replicas: 2
   strategy:
@@ -25,12 +25,12 @@ spec:
       labels:
         app.kubernetes.io/name: engine
         app.kubernetes.io/component: engine
-        app.kubernetes.io/part-of: cicd-hyper-a
+        app.kubernetes.io/part-of: hypatia
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8082"
     spec:
-      serviceAccountName: cicd-hyper-a-engine
+      serviceAccountName: hypatia-engine
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
@@ -47,7 +47,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: engine
-          image: ghcr.io/hyperpolymath/cicd-hyper-a-engine:latest
+          image: ghcr.io/hyperpolymath/hypatia-engine:latest
           imagePullPolicy: Always
           ports:
             - name: http
@@ -60,7 +60,7 @@ spec:
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: dragonfly-password
           resources:
             requests:
@@ -107,7 +107,7 @@ spec:
       volumes:
         - name: engine-rules
           configMap:
-            name: cicd-hyper-a-engine-rules
+            name: hypatia-engine-rules
         - name: training-data
           persistentVolumeClaim:
             claimName: training-data
@@ -115,8 +115,8 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cicd-hyper-a-engine
-  namespace: cicd-hyper-a
+  name: hypatia-engine
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
@@ -125,7 +125,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: training-data
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
@@ -141,7 +141,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: engine-pdb
-  namespace: cicd-hyper-a
+  namespace: hypatia
 spec:
   minAvailable: 1
   selector:

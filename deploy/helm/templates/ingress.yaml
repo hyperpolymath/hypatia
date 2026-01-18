@@ -5,10 +5,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-ingress
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-ingress
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
   {{- with .Values.api.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -37,7 +37,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "cicd-hyper-a.fullname" $ }}-api
+                name: {{ include "hypatia.fullname" $ }}-api
                 port:
                   number: {{ $.Values.api.service.targetPort }}
           {{- end }}
@@ -48,10 +48,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-grafana-ingress
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-grafana-ingress
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
   annotations:
     {{- with .Values.api.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -74,7 +74,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "cicd-hyper-a.fullname" . }}-grafana
+                name: {{ include "hypatia.fullname" . }}-grafana
                 port:
                   number: 3000
 {{- end }}

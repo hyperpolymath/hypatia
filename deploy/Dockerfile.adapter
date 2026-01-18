@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for cicd-hyper-a Rust Forge Adapters
+# Dockerfile for hypatia Rust Forge Adapters
 
 FROM rust:1.75-slim-bookworm AS builder
 
@@ -17,7 +17,7 @@ COPY adapters ./adapters
 COPY data ./data
 
 # Build release binary
-RUN cargo build --release --package cicd-hyper-a-adapters
+RUN cargo build --release --package hypatia-adapters
 
 # Runtime image
 FROM debian:bookworm-slim

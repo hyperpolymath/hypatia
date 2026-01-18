@@ -6,6 +6,7 @@
 
 #![allow(dead_code)]
 
+pub mod batch;
 pub mod deposit;
 pub mod fleet;
 pub mod hooks;

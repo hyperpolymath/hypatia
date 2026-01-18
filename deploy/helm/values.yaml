@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Default values for cicd-hyper-a Helm chart
+# Default values for hypatia Helm chart
 # This is a YAML-formatted file.
 
 # Global settings
@@ -12,7 +12,7 @@ global:
 # Namespace configuration
 namespace:
   create: true
-  name: cicd-hyper-a
+  name: hypatia
   labels: {}
   annotations: {}
 
@@ -24,7 +24,7 @@ api:
   replicaCount: 3
 
   image:
-    repository: ghcr.io/hyperpolymath/cicd-hyper-a
+    repository: ghcr.io/hyperpolymath/hypatia
     tag: ""  # Defaults to appVersion
     pullPolicy: Always
 
@@ -41,14 +41,14 @@ api:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
-      - host: cicd-hyper-a.example.com  # TODO: Replace with your domain
+      - host: hypatia.example.com  # TODO: Replace with your domain
         paths:
           - path: /
             pathType: Prefix
     tls:
-      - secretName: cicd-hyper-a-tls
+      - secretName: hypatia-tls
         hosts:
-          - cicd-hyper-a.example.com
+          - hypatia.example.com
 
   resources:
     requests:
@@ -108,7 +108,7 @@ registry:
   replicaCount: 2
 
   image:
-    repository: ghcr.io/hyperpolymath/cicd-hyper-a-registry
+    repository: ghcr.io/hyperpolymath/hypatia-registry
     tag: ""
     pullPolicy: Always
 
@@ -139,7 +139,7 @@ engine:
   replicaCount: 2
 
   image:
-    repository: ghcr.io/hyperpolymath/cicd-hyper-a-engine
+    repository: ghcr.io/hyperpolymath/hypatia-engine
     tag: ""
     pullPolicy: Always
 
@@ -278,7 +278,7 @@ monitoring:
       size: 10Gi
     ingress:
       enabled: true
-      host: grafana.cicd-hyper-a.example.com  # TODO: Replace with your domain
+      host: grafana.hypatia.example.com  # TODO: Replace with your domain
 
 # ============================================================
 # Secrets Configuration

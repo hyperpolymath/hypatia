@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a CLI - Command-line interface for the neurosymbolic CI/CD platform
+# Hypatia CLI - Command-line interface for the neurosymbolic CI/CD platform
 
 [package]
-name = "cicd-hyper-a-cli"
+name = "hypatia-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "CLI for cicd-hyper-a neurosymbolic CI/CD intelligence platform"
+description = "CLI for Hypatia neurosymbolic CI/CD intelligence platform"
+homepage = "https://hypatia.reposystem.dev"
 readme = "README.md"
 keywords = ["cicd", "cli", "automation", "rules", "git"]
 categories = ["command-line-utilities", "development-tools"]
@@ -20,6 +21,7 @@ path = "src/main.rs"
 [dependencies]
 # Argument parsing
 clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4.5"
 
 # Async runtime
 tokio = { workspace = true }

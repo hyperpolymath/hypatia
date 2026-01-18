@@ -10,8 +10,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 
-import CicdHyperA.Ruleset (Effect(..))
-import CicdHyperA.Registry
+import Hypatia.Ruleset (Effect(..))
+import Hypatia.Registry
 
 spec :: Spec
 spec = do

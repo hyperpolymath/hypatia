@@ -1,0 +1,204 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper - cicd-hyper-a CLI
+.TH HYPER 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper \- Neurosymbolic CI/CD intelligence platform CLI
+.SH SYNOPSIS
+.B hyper
+[\fB\-\-output\fR \fIFORMAT\fR]
+[\fB\-\-config\fR \fIPATH\fR]
+[\fB\-\-verbose\fR|\fB\-v\fR]
+[\fB\-\-quiet\fR|\fB\-q\fR]
+[\fB\-\-no\-color\fR]
+[\fB\-\-machine\fR]
+.I COMMAND
+[\fIARGS\fR]
+.SH DESCRIPTION
+.B hyper
+is the command-line interface for the CI/CD Hyper-A neurosymbolic intelligence
+platform. It provides tools for scanning repositories, managing bot fleets,
+and interacting with the ruleset registry.
+.PP
+The platform combines neural learning for pattern recognition with symbolic
+reasoning (Logtalk/Prolog) for fast, deterministic rule execution.
+.SH GLOBAL OPTIONS
+.TP
+.BR \-o ", " \-\-output =\fIFORMAT\fR
+Output format: \fBjson\fR, \fByaml\fR, \fBtable\fR, or \fBplain\fR.
+Default is \fBtable\fR for interactive use.
+.TP
+.BR \-c ", " \-\-config =\fIPATH\fR
+Path to configuration file. Defaults to \fB~/.config/hyper/config.toml\fR
+or \fB.hyper.toml\fR in the current directory.
+.TP
+.BR \-v ", " \-\-verbose
+Enable verbose output. Can be specified multiple times for increased verbosity.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress non-essential output. Only errors and requested data are shown.
+.TP
+.B \-\-no\-color
+Disable colored output. Automatically set when stdout is not a TTY.
+.TP
+.B \-\-machine
+Enable strict machine-readable output mode. Implies \fB\-\-no\-color\fR,
+disables progress indicators, and outputs only structured data.
+.SH COMMANDS
+.TP
+.B scan
+Scan a repository for CI/CD issues, security vulnerabilities, and
+configuration problems. See \fBhyper\-scan\fR(1).
+.TP
+.B fleet
+Manage and run bot fleets for automated repository maintenance.
+See \fBhyper\-fleet\fR(1).
+.TP
+.B deposit
+Submit a ruleset to the registry. Requires verification and signing.
+See \fBhyper\-deposit\fR(1).
+.TP
+.B withdraw
+Pull a ruleset from the registry for local use.
+See \fBhyper\-withdraw\fR(1).
+.TP
+.B search
+Search the ruleset registry by various criteria.
+See \fBhyper\-search\fR(1).
+.TP
+.B hooks
+Install, manage, and configure Git hooks for repositories.
+See \fBhyper\-hooks\fR(1).
+.TP
+.B batch
+Process multiple repositories in batch mode for automation.
+See \fBhyper\-batch\fR(1).
+.TP
+.B completions
+Generate shell completion scripts.
+See \fBhyper\-completions\fR(1).
+.TP
+.B config
+View and modify configuration settings.
+.TP
+.B version
+Display version and build information.
+.SH EXIT CODES
+.B hyper
+uses standardized exit codes for automation:
+.TP
+.B 0
+Success - operation completed successfully.
+.TP
+.B 1\-9
+General errors (invalid arguments, config errors, IO errors, etc.).
+.TP
+.B 10\-19
+Scan/analysis results (findings at various severity levels).
+.TP
+.B 20\-29
+Registry errors (connection, authentication, not found).
+.TP
+.B 30\-39
+Repository errors (not a git repo, access denied, dirty state).
+.TP
+.B 40\-49
+Fleet/bot errors (execution failures, dependencies).
+.TP
+.B 50\-59
+Batch operation results (partial failures, no items).
+.TP
+.B 100+
+Internal errors (panics, unexpected state).
+.PP
+See \fBhyper\-exit\-codes\fR(7) for the complete list.
+.SH ENVIRONMENT
+.TP
+.B HYPER_CONFIG
+Override the default configuration file path.
+.TP
+.B HYPER_REGISTRY_URL
+Override the default registry URL.
+.TP
+.B HYPER_NO_COLOR
+Disable colored output (equivalent to \fB\-\-no\-color\fR).
+.TP
+.B HYPER_LOG_LEVEL
+Set logging level: \fBerror\fR, \fBwarn\fR, \fBinfo\fR, \fBdebug\fR, \fBtrace\fR.
+.TP
+.B NO_COLOR
+Standard environment variable to disable colors (respected).
+.SH FILES
+.TP
+.I ~/.config/hyper/config.toml
+User configuration file.
+.TP
+.I .hyper.toml
+Project-level configuration file (in repository root).
+.TP
+.I ~/.cache/hyper/
+Cache directory for registry data and compiled rules.
+.SH EXAMPLES
+Scan the current repository:
+.PP
+.RS
+.nf
+hyper scan .
+.fi
+.RE
+.PP
+Scan with JSON output for piping:
+.PP
+.RS
+.nf
+hyper scan . --output json | jq '.findings[]'
+.fi
+.RE
+.PP
+Batch scan multiple repositories:
+.PP
+.RS
+.nf
+find ~/repos -maxdepth 1 -type d | hyper batch scan -
+.fi
+.RE
+.PP
+Run bots on a repository:
+.PP
+.RS
+.nf
+hyper fleet run ./my-repo --bots glambot,finishing-bot
+.fi
+.RE
+.PP
+Search for Rust security rulesets:
+.PP
+.RS
+.nf
+hyper search --language rust --category security
+.fi
+.RE
+.PP
+Install completions for bash:
+.PP
+.RS
+.nf
+hyper completions bash >> ~/.bashrc
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper\-scan (1),
+.BR hyper\-fleet (1),
+.BR hyper\-deposit (1),
+.BR hyper\-withdraw (1),
+.BR hyper\-search (1),
+.BR hyper\-hooks (1),
+.BR hyper\-batch (1),
+.BR hyper\-completions (1),
+.BR hyper\-exit\-codes (7)
+.SH BUGS
+Report bugs at: https://github.com/hyperpolymath/cicd-hyper-a/issues
+.SH AUTHORS
+Hyperpolymath <hyperpolymath@proton.me>
+.SH COPYRIGHT
+Copyright \(co 2024-2026 Hyperpolymath.
+Licensed under PLMP-1.0-or-later (Palimpsest License).

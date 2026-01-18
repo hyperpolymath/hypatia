@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Terraform Variables Example
+# hypatia Terraform Variables Example
 #
 # Copy this file to terraform.tfvars and customize for your deployment.
 # DO NOT commit terraform.tfvars to version control as it may contain secrets.
@@ -8,7 +8,7 @@
 # General Configuration
 # =============================================================================
 
-project_name = "cicd-hyper-a"
+project_name = "hypatia"
 environment  = "production"  # Options: dev, staging, production
 
 # Replace with your actual domain
@@ -18,7 +18,7 @@ domain = "YOUR-DOMAIN.example.com"
 tags = {
   Team        = "platform"
   CostCenter  = "engineering"
-  Application = "cicd-hyper-a"
+  Application = "hypatia"
 }
 
 # =============================================================================
@@ -50,7 +50,7 @@ gcp_zone       = "us-central1-a"
 # =============================================================================
 
 azure_subscription_id     = "your-azure-subscription-id"
-azure_resource_group_name = "cicd-hyper-a-rg"
+azure_resource_group_name = "hypatia-rg"
 azure_location            = "East US"
 
 # =============================================================================
@@ -80,7 +80,7 @@ max_node_count     = 10
 desired_node_count = 3
 node_disk_size_gb  = 100
 
-kubernetes_namespace = "cicd-hyper-a"
+kubernetes_namespace = "hypatia"
 
 # =============================================================================
 # Database Configuration (ArangoDB)

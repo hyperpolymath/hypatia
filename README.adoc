@@ -2,20 +2,24 @@ image:https://raw.githubusercontent.com/hyperpolymath/palimpsest-license/main/as
 
 
 // SPDX-License-Identifier: PLMP-1.0-or-later
-= CI/CD Hyper-A: Neurosymbolic CI/CD Intelligence Platform
+= Hypatia: Neurosymbolic CI/CD Intelligence Platform
 :toc: macro
 :toclevels: 3
 :icons: font
+:website: https://hypatia.reposystem.dev
 
 image:https://img.shields.io/badge/Logtalk-Rules-orange.svg[Logtalk]
 image:https://img.shields.io/badge/Haskell-Verification-5D4F85.svg[Haskell]
 image:https://img.shields.io/badge/ArangoDB-Graph-green.svg[ArangoDB]
+image:https://img.shields.io/badge/Ada_2022-TUI-blue.svg[Ada]
+
+🌐 *Website:* https://hypatia.reposystem.dev[hypatia.reposystem.dev] | Part of the link:https://reposystem.dev[reposystem] ecosystem
 
 toc::[]
 
 == Overview
 
-*cicd-hyper-a* is a neurosymbolic CI/CD intelligence platform that combines:
+*Hypatia* is a neurosymbolic CI/CD intelligence platform that combines:
 
 * *Neural Learning*: Pattern recognition from CI/CD failures across ecosystems
 * *Symbolic Reasoning*: Logtalk/Prolog rules for fast, deterministic actions
@@ -41,7 +45,7 @@ The system learns complex patterns through neural analysis, then *distills* them
 [source]
 ----
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      cicd-hyper-a Platform                           │
+│                      Hypatia Platform                           │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐ │
@@ -89,6 +93,89 @@ The system learns complex patterns through neural analysis, then *distills* them
 │  │  GitHub │ GitLab │ Bitbucket │ Codeberg │ sr.ht │ Gitea        │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
+----
+
+== Installation
+
+=== Docker (Recommended)
+
+Pull from GitHub Container Registry:
+
+[source,bash]
+----
+# Latest stable release
+docker pull ghcr.io/hyperpolymath/hypatia-cli:latest
+
+# Or specific version
+docker pull ghcr.io/hyperpolymath/hypatia-cli:0.1.0
+
+# All components
+docker pull ghcr.io/hyperpolymath/hypatia-cli:latest
+docker pull ghcr.io/hyperpolymath/hypatia-adapter:latest
+docker pull ghcr.io/hyperpolymath/hypatia-registry:latest
+docker pull ghcr.io/hyperpolymath/hypatia-engine:latest
+----
+
+Run the CLI:
+
+[source,bash]
+----
+docker run --rm ghcr.io/hyperpolymath/hypatia-cli:latest scan /repo
+----
+
+=== Binary Release
+
+Download from GitHub Releases:
+
+[source,bash]
+----
+# Linux x86_64
+curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypatia-x86_64-unknown-linux-gnu.tar.gz | tar xz
+sudo mv hyper /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypatia-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv hyper /usr/local/bin/
+
+# macOS (Intel)
+curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypatia-x86_64-apple-darwin.tar.gz | tar xz
+sudo mv hyper /usr/local/bin/
+----
+
+=== Docker Compose
+
+For full stack deployment:
+
+[source,yaml]
+----
+services:
+  hyper-cli:
+    image: ghcr.io/hyperpolymath/hypatia-cli:latest
+    volumes:
+      - ./repos:/repos
+    environment:
+      - HYPER_REGISTRY_URL=http://registry:8080
+
+  adapter:
+    image: ghcr.io/hyperpolymath/hypatia-adapter:latest
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+
+  registry:
+    image: ghcr.io/hyperpolymath/hypatia-registry:latest
+    ports:
+      - "8080:8080"
+
+  engine:
+    image: ghcr.io/hyperpolymath/hypatia-engine:latest
+----
+
+=== Kubernetes / Helm
+
+[source,bash]
+----
+helm repo add cicd-hyper-a https://hyperpolymath.github.io/cicd-hyper-a
+helm install cicd-hyper-a hypatia/hypatia
 ----
 
 == Haskell Verification Registry

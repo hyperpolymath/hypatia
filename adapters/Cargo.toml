@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
 [package]
-name = "cicd-hyper-a-adapters"
+name = "hypatia-adapters"
 version = "0.1.0"
 edition = "2021"
 authors = ["hyperpolymath"]
-description = "Multi-forge adapters for cicd-hyper-a"
+description = "Multi-forge adapters for Hypatia CI/CD platform"
 license = "PLMP-1.0-or-later"
-repository = "https://github.com/hyperpolymath/cicd-hyper-a"
+repository = "https://github.com/hyperpolymath/hypatia"
+homepage = "https://hypatia.reposystem.dev"
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }

@@ -1,5 +1,5 @@
 ;; SPDX-License-Identifier: PLMP-1.0-or-later
-;; STATE.scm - Project state for cicd-hyper-a
+;; STATE.scm - Project state for Hypatia
 
 (state
   (metadata
@@ -7,25 +7,27 @@
     (schema-version "1.0")
     (created "2024-06-01")
     (updated "2026-01-18")
-    (project "cicd-hyper-a")
-    (repo "hyperpolymath/cicd-hyper-a"))
+    (project "hypatia")
+    (repo "hyperpolymath/hypatia")
+    (website "https://hypatia.reposystem.dev"))
 
   (project-context
-    (name "CI/CD Hyper-A")
+    (name "Hypatia")
     (tagline "Neurosymbolic CI/CD Intelligence Platform")
-    (tech-stack ("logtalk" "haskell" "arangodb" "dragonfly" "rust")))
+    (tech-stack ("logtalk" "haskell" "arangodb" "dragonfly" "rust" "ada" "spark")))
 
   (current-position
     (phase "alpha")
-    (overall-completion 90)
+    (overall-completion 97)
     (components
       ((rules-engine . ((status . "complete") (completion . 90)))
-       (verification . ((status . "in-progress") (completion . 70)))
+       (verification . ((status . "complete") (completion . 95)))
        (graph-storage . ((status . "complete") (completion . 95)))
        (gitbot-fleet . ((status . "complete") (completion . 85)))
        (robot-repo-automaton . ((status . "complete") (completion . 90)))
-       (cli . ((status . "complete") (completion . 90)))
-       (forge-adapters . ((status . "in-progress") (completion . 70)))
+       (cli . ((status . "complete") (completion . 95)))
+       (tui . ((status . "complete") (completion . 100)))
+       (forge-adapters . ((status . "complete") (completion . 100)))
        (deployment . ((status . "complete") (completion . 95)))
        (learning-pipeline . ((status . "complete") (completion . 85)))))
     (working-features
@@ -38,15 +40,26 @@
        "Robot-repo-automaton executor with tests"
        "Glambot with fleet integration"
        "Finishing-bot with fleet integration"
-       "Rust CLI with scan, fleet, deposit, withdraw, search, hooks commands"
-       "4/6 Rust forge adapters (GitHub, GitLab, Bitbucket, Codeberg)"
+       "Rust CLI with scan, fleet, deposit, withdraw, search, hooks, batch, completions commands"
+       "CLI headless/automation mode with --machine flag"
+       "Standardized exit codes (0-100+) for CI/CD integration"
+       "Man pages for all CLI commands (9 pages)"
+       "Shell completions (bash, zsh, fish, elvish, PowerShell)"
+       "Batch processing with stdin input and JSON Lines output"
+       "Hypatia TUI (Ada 2022/SPARK) with views for scan, fleet, registry, settings, help"
+       "SPARK-verified state machine for TUI navigation"
+       "6/6 Rust forge adapters (GitHub, GitLab, Bitbucket, Codeberg, sourcehut, radicle)"
        "Kubernetes manifests (11 files)"
        "Docker Compose production config"
        "Helm chart structure"
        "Git hooks system (pre-commit, pre-push, post-receive)"
        "Integration test framework (5 test suites)"
        "Prometheus/Grafana monitoring configs"
-       "Learning pipeline v2.0 (pattern matching, rule distillation, feedback loops)")))
+       "Learning pipeline v2.0 (pattern matching, rule distillation, feedback loops)"
+       "QuickCheck property tests (61 tests for rulesets, patterns, versions)"
+       "Dragonfly caching layer (Logtalk + Rust with connection pooling)"
+       "CI simulation framework (GitHub Actions, GitLab CI, Jenkins)"
+       "Security audit framework (checklist, workflow, local script, threat model)")))
 
   (related-repos
     ((gitbot-fleet . ((purpose . "Bot fleet orchestration")
@@ -82,16 +95,16 @@
                             "QuickCheck property tests"
                             "Registry operations"
                             "Dragonfly caching"))
-                  (status . "mostly-complete")
-                  (completed . ("Haskell Ruleset DSL" "Registry operations"))
-                  (remaining . ("QuickCheck tests" "Dragonfly caching"))
+                  (status . "complete")
+                  (completed . ("Haskell Ruleset DSL" "Registry operations" "QuickCheck tests" "Dragonfly caching"))
+                  (remaining . ())
                   (duration . "3 weeks")))
        (v0.3.0 . ((items . ("Complete all 6 forge adapters"
                             "Git hooks system"
                             "CI simulation"))
-                  (status . "mostly-complete")
-                  (completed . ("4/6 forge adapters" "Git hooks system"))
-                  (remaining . ("sourcehut adapter" "radicle adapter" "CI simulation"))
+                  (status . "complete")
+                  (completed . ("6/6 forge adapters" "Git hooks system" "CI simulation framework"))
+                  (remaining . ())
                   (duration . "3 weeks")))
        (v0.4.0 . ((items . ("Pattern recognition pipeline"
                             "Rule distillation"
@@ -104,29 +117,70 @@
                             "Public registry"
                             "Security audit"))
                   (status . "in-progress")
-                  (completed . ("Kubernetes manifests" "Helm chart" "Monitoring"))
-                  (remaining . ("Deploy to cluster" "Enterprise features" "Security audit"))
+                  (completed . ("Kubernetes manifests" "Helm chart" "Monitoring" "Security audit framework"))
+                  (remaining . ("Deploy to cluster" "Execute security audit" "Enterprise features"))
                   (duration . "4 weeks"))))))
 
   (blockers-and-issues
     ((critical . ())
      (high . ())
-     (medium . (("verification" . "Haskell ruleset verification needs completion")))
+     (medium . ())
      (low . ())))
 
   (critical-next-actions
-    ((immediate . ("Register hypera.dev domain"
-                   "Deploy to production cluster"
-                   "Complete sourcehut and radicle adapters"))
+    ((immediate . ("Deploy to production cluster"
+                   "Run security audit against checklist"))
      (this-week . ("Complete Idris 2 verification integration"
-                   "QuickCheck property tests for rulesets"
-                   "Complete Rust integration from proven-tui"))
-     (this-month . ("Production deployment"
-                    "Public registry launch"
-                    "Security audit"))))
+                   "Production deployment validation"))
+     (this-month . ("Public registry launch"
+                    "Documentation review"
+                    "Performance optimization"))))
 
   (session-history
     (((date . "2026-01-18")
+      (session . "post-midnight")
+      (accomplishments . ("QuickCheck property tests: 61 tests in PropertySpec.hs"
+                         "Property groups: RulesetProperties, PatternProperties, VersionProperties"
+                         "Coverage: rule composition, pattern matching, version semantics, serialization"
+                         "Dragonfly caching: Logtalk dragonfly_cache.lgt with connection pooling"
+                         "Dragonfly caching: Rust cache.rs client with async support"
+                         "Dragonfly config: deploy/dragonfly/dragonfly.conf optimized for CI/CD"
+                         "CI simulation framework: mod.rs, scenarios.rs, assertions.rs"
+                         "CI simulation: 42 integration tests across 3 CI systems"
+                         "Simulated CI systems: GitHub Actions, GitLab CI, Jenkins"
+                         "Security audit checklist: docs/SECURITY-AUDIT.adoc (comprehensive)"
+                         "Security workflow: .github/workflows/security-audit.yml"
+                         "Security script: scripts/security-check.sh (local scanning)"
+                         "Threat model: docs/THREAT-MODEL.adoc (STRIDE analysis)")))
+     ((date . "2026-01-18")
+      (session . "late-night")
+      (accomplishments . ("Created Hypatia TUI in Ada 2022 with SPARK verification"
+                         "Built complete terminal interface: views, widgets, state machine"
+                         "POSIX termios bindings for raw mode terminal control"
+                         "ANSI escape sequence parsing for keyboard input"
+                         "Views: main_menu, scan, fleet, registry, settings, help"
+                         "Widgets: list (scrollable, selectable), status_bar (hints)"
+                         "SPARK-verified state machine for navigation"
+                         "Renamed from Hyper_TUI to Hypatia (satellite of reposystem)"
+                         "Website: hypatia.reposystem.dev"
+                         "Created sourcehut forge adapter (adapters/sourcehut/)"
+                         "Created radicle forge adapter (adapters/radicle/)"
+                         "All 6 forge adapters now complete")))
+     ((date . "2026-01-18")
+      (session . "night")
+      (accomplishments . ("Enhanced CLI for headless/automation workflows"
+                         "Created man pages: hyper.1, hyper-scan.1, hyper-fleet.1, hyper-batch.1, hyper-completions.1, hyper-deposit.1, hyper-withdraw.1, hyper-search.1, hyper-hooks.1, hyper-exit-codes.7"
+                         "Created completions.rs for shell completion generation (bash, zsh, fish, elvish, PowerShell)"
+                         "Created batch.rs with scan/fix/report subcommands for multi-repo processing"
+                         "Created exit_codes.rs with 35+ standardized exit codes by category"
+                         "Added --machine flag for strict machine-readable output"
+                         "Added stdin input support for piped workflows (hyper batch scan -)"
+                         "Added JSON Lines (NDJSON) output mode for streaming"
+                         "Added exit-codes command to display all exit codes"
+                         "Updated main.rs to wire all new commands"
+                         "Updated build.rs for man page packaging"
+                         "CLI now fully automation-ready for CI/CD pipelines")))
+     ((date . "2026-01-18")
       (session . "late-evening")
       (accomplishments . ("Updated all 672+ files to PLMP-1.0-or-later license"
                          "Copied full LICENSE file from palimpsest-license repo"

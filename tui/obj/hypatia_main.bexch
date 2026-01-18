@@ -1,0 +1,33 @@
+[GENERATED OBJECT FILE]
+b__hypatia_main.o
+[PROJECT FILES]
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/hypatia.gpr
+20260118213044 7cc54b83d42709cb10502c43246c536f
+[BOUND OBJECT FILES]
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-posix.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-state_machine.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-terminal.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-widgets.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-widgets-list.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-widgets-status_bar.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views-fleet.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views-help.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views-main_menu.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views-registry.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views-scan.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-views-settings.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia-application.o
+/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/hypatia_main.o
+[GENERATED SOURCE FILES]
+b__hypatia_main.ads
+b__hypatia_main.adb
+b__hypatia_main.ali
+[RESULTING OPTIONS]
+-L/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/
+-L/var/mnt/eclipse/repos/cicd-hyper-a/tui/obj/
+-L/usr/lib/gcc/x86_64-redhat-linux/15/adalib/
+-static
+-lgnat
+-ldl

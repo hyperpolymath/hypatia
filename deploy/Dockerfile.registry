@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for cicd-hyper-a Haskell Registry
+# Dockerfile for hypatia Haskell Registry
 
 FROM haskell:9.4-slim AS builder
 
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy cabal files first for caching
-COPY registry/cicd-hyper-a.cabal .
+COPY registry/hypatia.cabal .
 RUN cabal update && cabal build --only-dependencies
 
 # Copy source and build

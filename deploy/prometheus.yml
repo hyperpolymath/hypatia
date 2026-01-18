@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Prometheus configuration for cicd-hyper-a
+# Prometheus configuration for hypatia
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    monitor: 'cicd-hyper-a'
+    monitor: 'hypatia'
 
 rule_files:
   # - "alerts.yml"

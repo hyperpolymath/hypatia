@@ -14,7 +14,7 @@
 --
 -- The registry follows a deposit/withdraw model similar to a package registry.
 
-module CicdHyperA.Registry
+module Hypatia.Registry
   ( -- * Registry types
     Registry(..)
   , RegistryEntry(..)
@@ -78,7 +78,7 @@ import System.FilePath ((</>), takeExtension)
 import Control.Monad (when, forM, forM_)
 import GHC.Generics (Generic)
 
-import CicdHyperA.Ruleset (Effect(..), RulesetCategory(..), Language(..))
+import Hypatia.Ruleset (Effect(..), RulesetCategory(..), Language(..))
 
 -- ============================================================
 -- Core Types

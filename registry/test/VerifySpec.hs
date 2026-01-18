@@ -11,8 +11,8 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import CicdHyperA.Ruleset
-import CicdHyperA.Verify
+import Hypatia.Ruleset
+import Hypatia.Verify
 
 spec :: Spec
 spec = do

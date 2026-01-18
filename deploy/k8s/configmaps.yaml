@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a ConfigMaps
+# hypatia ConfigMaps
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cicd-hyper-a-config
-  namespace: cicd-hyper-a
+  name: hypatia-config
+  namespace: hypatia
   labels:
-    app.kubernetes.io/name: cicd-hyper-a
+    app.kubernetes.io/name: hypatia
     app.kubernetes.io/component: config
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 data:
   # Application configuration
   rust-log: "info"
@@ -32,12 +32,12 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cicd-hyper-a-schemas
-  namespace: cicd-hyper-a
+  name: hypatia-schemas
+  namespace: hypatia
   labels:
-    app.kubernetes.io/name: cicd-hyper-a
+    app.kubernetes.io/name: hypatia
     app.kubernetes.io/component: config
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 data:
   arangodb.json: |
     {
@@ -87,7 +87,7 @@ data:
   ruleset.schema.json: |
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://cicd-hyper-a.hyperpolymath.dev/schemas/ruleset",
+      "$id": "https://hypatia.hyperpolymath.dev/schemas/ruleset",
       "title": "Ruleset",
       "description": "A verified CI/CD ruleset",
       "type": "object",
@@ -126,12 +126,12 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cicd-hyper-a-engine-rules
-  namespace: cicd-hyper-a
+  name: hypatia-engine-rules
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 data:
   loader.lgt: |
     :- initialization((
@@ -171,11 +171,11 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/component: monitoring
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 data:
   prometheus.yml: |
     global:
@@ -199,7 +199,7 @@ data:
           - role: pod
             namespaces:
               names:
-                - cicd-hyper-a
+                - hypatia
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep

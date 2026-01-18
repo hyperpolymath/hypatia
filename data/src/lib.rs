@@ -4,13 +4,16 @@
 //! Provides unified access to:
 //! - ArangoDB: Graph database for repos, alerts, rules, relationships
 //! - Dragonfly: Redis-compatible cache for fast rule lookups
+//! - Cache: High-level caching abstraction with connection pooling
 
 pub mod arangodb;
+pub mod cache;
 pub mod dragonfly;
 pub mod error;
 pub mod models;
 
 pub use arangodb::ArangoClient;
+pub use cache::{CacheHandle, CachePrefix, CacheStats, DragonflyCache, InvalidationEvent};
 pub use dragonfly::DragonflyClient;
 pub use error::{DataError, Result};
 pub use models::*;

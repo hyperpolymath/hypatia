@@ -1,0 +1,109 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-deposit
+.TH HYPER-DEPOSIT 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-deposit \- submit a ruleset to the registry
+.SH SYNOPSIS
+.B hyper deposit
+[\fIOPTIONS\fR]
+.I PATH
+.SH DESCRIPTION
+.B hyper deposit
+submits a ruleset to the CI/CD Hyper-A registry. Rulesets must pass
+verification (property tests, type checking) and be signed before
+being accepted into the registry.
+.SH ARGUMENTS
+.TP
+.I PATH
+Path to the ruleset file (Haskell .hs or compiled format).
+.SH OPTIONS
+.TP
+.BR \-n ", " \-\-name =\fINAME\fR
+Ruleset name. Must be unique in the registry.
+.TP
+.BR \-V ", " \-\-version =\fIVERSION\fR
+Semantic version (e.g., 1.0.0). Auto-incremented if not specified.
+.TP
+.BR \-d ", " \-\-description =\fITEXT\fR
+Human-readable description of the ruleset.
+.TP
+.BR \-c ", " \-\-category =\fICATEGORY\fR
+Primary category: \fBsecurity\fR, \fBquality\fR, \fBworkflows\fR,
+\fBdependencies\fR, \fBconfiguration\fR, \fBpolicy\fR.
+.TP
+.BR \-l ", " \-\-languages =\fILANG\fR[,...]
+Target programming languages (e.g., rust, javascript, haskell).
+.TP
+.BR \-t ", " \-\-tags =\fITAG\fR[,...]
+Additional tags for discovery.
+.TP
+.BR \-p ", " \-\-private
+Mark the ruleset as private (not publicly searchable).
+.TP
+.BR \-\-no\-validate
+Skip validation (for debugging only, not recommended).
+.TP
+.BR \-\-registry =\fIURL\fR
+Override the default registry URL.
+.TP
+.BR \-\-dry\-run
+Validate and show what would be submitted without actually depositing.
+.TP
+.BR \-\-sign
+Sign the ruleset with your GPG key.
+.TP
+.BR \-\-verify
+Run full verification suite before deposit.
+.SH VERIFICATION
+Before deposit, rulesets undergo:
+.IP \(bu 2
+Type checking (Haskell type system)
+.IP \(bu 2
+Property-based testing (QuickCheck)
+.IP \(bu 2
+Determinism verification
+.IP \(bu 2
+Effect safety checking (preventive rules don't modify existing files)
+.PP
+Use \fB\-\-no\-validate\fR to skip (not recommended for production).
+.SH EXIT CODES
+.TP
+.B 0
+Ruleset deposited successfully.
+.TP
+.B 20
+Registry connection error.
+.TP
+.B 21
+Registry authentication error.
+.TP
+.B 23
+Ruleset version conflict.
+.TP
+.B 24
+Ruleset validation failed.
+.SH EXAMPLES
+Deposit a ruleset:
+.PP
+.RS
+.nf
+hyper deposit ./my-ruleset.hs \\
+  --name "rust-security" \\
+  --description "Security rules for Rust projects" \\
+  --category security \\
+  --languages rust \\
+  --sign --verify
+.fi
+.RE
+.PP
+Dry run to test validation:
+.PP
+.RS
+.nf
+hyper deposit ./rules.hs --dry-run --verify
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-withdraw (1),
+.BR hyper\-search (1)

@@ -21,7 +21,7 @@
 --   * ETags for caching
 --   * Rate limiting headers
 
-module CicdHyperA.API
+module Hypatia.API
   ( -- * API type
     RegistryAPI
   , registryAPI
@@ -75,16 +75,16 @@ import GHC.Generics (Generic)
 import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (fromMaybe)
 
-import CicdHyperA.Ruleset (Effect(..), RulesetCategory(..), Language(..))
-import CicdHyperA.Registry
+import Hypatia.Ruleset (Effect(..), RulesetCategory(..), Language(..))
+import Hypatia.Registry
   ( Registry, RegistryEntry(..), RuleVersion(..)
   , deposit, withdraw, search, audit, listRules
   , SearchQuery(..), SearchResult(..)
   , AuditLog(..), AuditAction(..)
   , showVersion, parseVersion
   )
-import qualified CicdHyperA.Registry as Reg
-import CicdHyperA.Verify (VerifyResult(..), verifyRule, VerifyError(..))
+import qualified Hypatia.Registry as Reg
+import Hypatia.Verify (VerifyResult(..), verifyRule, VerifyError(..))
 
 -- ============================================================
 -- API TYPE DEFINITION

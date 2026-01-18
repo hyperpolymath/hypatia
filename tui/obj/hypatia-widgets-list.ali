@@ -1,0 +1,514 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P SS ZX
+
+RN
+RV NO_DIRECT_BOOLEAN_OPERATORS
+RV NO_DISPATCHING_CALLS
+RV NO_ENUMERATION_MAPS
+RV NO_EXCEPTION_HANDLERS
+RV NO_EXCEPTION_PROPAGATION
+RV NO_EXCEPTIONS
+RV NO_IMPLICIT_CONDITIONALS
+RV NO_NESTED_FINALIZATION
+RV NO_SECONDARY_STACK
+RV NO_STANDARD_STORAGE_POOLS
+RV NO_DEFAULT_INITIALIZATION
+RV NO_DYNAMIC_SIZED_OBJECTS
+RV NO_IMPLEMENTATION_PRAGMAS
+RV NO_IMPLICIT_LOOPS
+RV NO_ELABORATION_CODE
+
+U hypatia.widgets.list%b  hypatia-widgets-list.adb  34ba7966 OO PK
+W ada%s			ada.ads			ada.ali
+W ada.containers%s	a-contai.ads		a-contai.ali
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+Z ada.tags%s		a-tags.adb		a-tags.ali
+W hypatia.widgets%s	hypatia-widgets.adb	hypatia-widgets.ali
+Z system%s		system.ads		system.ali
+Z system.finalization_primitives%s  s-finpri.adb  s-finpri.ali
+Z system.return_stack%s	s-retsta.ads		s-retsta.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+Z system.soft_links%s	s-soflin.adb		s-soflin.ali
+Z system.standard_library%s  s-stalib.adb	s-stalib.ali
+
+U hypatia.widgets.list%s  hypatia-widgets-list.ads  920491a9 EE OO PF PK
+W ada%s			ada.ads			ada.ali
+W ada.containers%s	a-contai.ads		a-contai.ali
+Z ada.containers.generic_array_sort%s
+Z ada.containers.helpers%s  a-conhel.adb	a-conhel.ali
+W ada.containers.vectors%s
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.finalization%s	a-finali.ads		a-finali.ali
+Z ada.iterator_interfaces%s
+Z ada.streams%s		a-stream.adb		a-stream.ali
+W ada.strings%s		a-string.ads		a-string.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+W ada.strings.unbounded%s  a-strunb.adb		a-strunb.ali
+Z ada.tags%s		a-tags.adb		a-tags.ali
+Z ada.unchecked_deallocation%s
+W hypatia.widgets%s	hypatia-widgets.adb	hypatia-widgets.ali
+Z system%s		system.ads		system.ali
+Z system.assertions%s	s-assert.adb		s-assert.ali
+Z system.finalization_primitives%s  s-finpri.adb  s-finpri.ali
+Z system.pool_global%s	s-pooglo.adb		s-pooglo.ali
+Z system.put_images%s	s-putima.adb		s-putima.ali
+Z system.return_stack%s	s-retsta.ads		s-retsta.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+Z system.soft_links%s	s-soflin.adb		s-soflin.ali
+Z system.standard_library%s  s-stalib.adb	s-stalib.ali
+Z system.storage_elements%s  s-stoele.ads	s-stoele.ali
+Z system.storage_pools%s  s-stopoo.adb		s-stopoo.ali
+Z system.storage_pools.subpools%s  s-stposu.adb	s-stposu.ali
+Z system.stream_attributes%s  s-stratt.adb	s-stratt.ali
+Z system.strings.stream_ops%s  s-ststop.adb	s-ststop.ali
+Z system.wch_stw%s	s-wchstw.adb		s-wchstw.ali
+
+D ada.ads		19700101000000 76789da1 ada%s
+D a-assert.ads		19700101000000 ba465f5c ada.assertions%s
+D a-charac.ads		19700101000000 2d3ec45b ada.characters%s
+D a-chlat1.ads		19700101000000 e0d72e76 ada.characters.latin_1%s
+D a-contai.ads		19700101000000 61e5e089 ada.containers%s
+D a-cgarso.ads		19700101000000 9129bfa8 ada.containers.generic_array_sort%s
+D a-conhel.ads		19700101000000 46fe1ce3 ada.containers.helpers%s
+D a-conhel.adb		19700101000000 854d323e ada.containers.helpers%b
+D a-convec.ads		19700101000000 91fb49f3 ada.containers.vectors%s
+D a-convec.adb		19700101000000 b2ed0168 ada.containers.vectors%b
+D a-except.ads		19700101000000 e7970cd9 ada.exceptions%s
+D a-finali.ads		19700101000000 bf4f806b ada.finalization%s
+D a-iteint.ads		19700101000000 49a8bee2 ada.iterator_interfaces%s
+D a-stream.ads		19700101000000 17477cbd ada.streams%s
+D a-string.ads		19700101000000 90ac6797 ada.strings%s
+D a-strbou.ads		19700101000000 6d86a9a3 ada.strings.bounded%s
+D a-strmap.ads		19700101000000 1f91ebb6 ada.strings.maps%s
+D a-strsea.ads		19700101000000 18c3c634 ada.strings.search%s
+D a-strsup.ads		19700101000000 8667231b ada.strings.superbounded%s
+D a-sttebu.ads		19700101000000 f1ad67a2 ada.strings.text_buffers%s
+D a-strunb.ads		19700101000000 b10770ab ada.strings.unbounded%s
+D a-stuten.ads		19700101000000 c6ced0ae ada.strings.utf_encoding%s
+D a-tags.ads		19700101000000 fbca0ad5 ada.tags%s
+D a-unccon.ads		19700101000000 0e9b276f ada.unchecked_conversion%s
+D a-uncdea.ads		19700101000000 c3a8ac65 ada.unchecked_deallocation%s
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-terminal.ads	20260118213155 96279323 hypatia.terminal%s
+D hypatia-widgets.ads	20260118213210 91c67e66 hypatia.widgets%s
+D hypatia-widgets-list.ads  20260118213210 233ed697 hypatia.widgets.list%s
+D hypatia-widgets-list.adb  20260118213210 76614f78 hypatia.widgets.list%b
+D interfac.ads		19700101000000 9111f9c1 interfaces%s
+D i-c.ads		19700101000000 e94c966a interfaces.c%s
+D system.ads		19700101000000 14286b0f system%s
+D s-assert.ads		19700101000000 9c4520c7 system.assertions%s
+D s-atocou.ads		19700101000000 dc18efc3 system.atomic_counters%s
+D s-atocou.adb		19700101000000 6fe685de system.atomic_counters%b
+D s-atopri.ads		19700101000000 e19c1d89 system.atomic_primitives%s
+D s-exctab.ads		19700101000000 91bef6ef system.exception_table%s
+D s-finpri.ads		19700101000000 5970d55a system.finalization_primitives%s
+D s-finroo.ads		19700101000000 0a7c3ed4 system.finalization_root%s
+D s-memory.ads		19700101000000 18949c1a system.memory%s
+D s-oscons.ads		19700101000000 322725c4 system.os_constants%s
+D s-oslock.ads		19700101000000 13fa6b78 system.os_locks%s
+D s-parame.ads		19700101000000 3597fc11 system.parameters%s
+D s-pooglo.ads		19700101000000 91708d21 system.pool_global%s
+D s-putima.ads		19700101000000 17291fe4 system.put_images%s
+D s-retsta.ads		19700101000000 0f6b06cb system.return_stack%s
+D s-secsta.ads		19700101000000 578279f5 system.secondary_stack%s
+D s-soflin.ads		19700101000000 5d88fdea system.soft_links%s
+D s-stache.ads		19700101000000 0b81c1fe system.stack_checking%s
+D s-stalib.ads		19700101000000 1c9580f6 system.standard_library%s
+D s-stalib.adb		19700101000000 eb464a47 system.standard_library%b
+D s-stoele.ads		19700101000000 ccded4e8 system.storage_elements%s
+D s-stopoo.ads		19700101000000 e9fa2dd8 system.storage_pools%s
+D s-stposu.ads		19700101000000 e0b9fefd system.storage_pools.subpools%s
+D s-stratt.ads		19700101000000 516607ae system.stream_attributes%s
+D s-string.ads		19700101000000 582aac7d system.strings%s
+D s-ststop.ads		19700101000000 c569db7c system.strings.stream_ops%s
+D s-traent.ads		19700101000000 c81cbf8c system.traceback_entries%s
+D s-unstyp.ads		19700101000000 fa2a7f59 system.unsigned_types%s
+D s-wchcon.ads		19700101000000 d9032363 system.wch_con%s
+D s-wchstw.ads		19700101000000 2d112c01 system.wch_stw%s
+G a e
+G c Z s s [list_itemDI hypatia__widgets__list 21 9 none]
+G c Z s s [list_itemDA hypatia__widgets__list 21 9 none]
+G c Z s s [list_itemDF hypatia__widgets__list 21 9 none]
+G c Z s s [list_itemIP hypatia__widgets__list 21 9 none]
+G c Z s s [has_element hypatia__widgets__list__item_vectors 115 13 28_4]
+G c Z s s [empty hypatia__widgets__list__item_vectors 125 13 28_4]
+G c Z s s [Oeq hypatia__widgets__list__item_vectors 127 24 28_4]
+G c Z s s [to_vector hypatia__widgets__list__item_vectors 136 13 28_4]
+G c Z s s [to_vector hypatia__widgets__list__item_vectors 139 13 28_4]
+G c Z s s [Oconcat hypatia__widgets__list__item_vectors 145 13 28_4]
+G c Z s s [Oconcat hypatia__widgets__list__item_vectors 149 13 28_4]
+G c Z s s [Oconcat hypatia__widgets__list__item_vectors 153 13 28_4]
+G c Z s s [Oconcat hypatia__widgets__list__item_vectors 157 13 28_4]
+G c Z s s [capacity hypatia__widgets__list__item_vectors 161 13 28_4]
+G c Z s s [reserve_capacity hypatia__widgets__list__item_vectors 164 14 28_4]
+G c Z s s [length hypatia__widgets__list__item_vectors 175 13 28_4]
+G c Z s s [set_length hypatia__widgets__list__item_vectors 178 14 28_4]
+G c Z s s [is_empty hypatia__widgets__list__item_vectors 187 13 28_4]
+G c Z s s [clear hypatia__widgets__list__item_vectors 190 14 28_4]
+G c Z s s [to_cursor hypatia__widgets__list__item_vectors 194 13 28_4]
+G c Z s s [to_index hypatia__widgets__list__item_vectors 201 13 28_4]
+G c Z s s [element hypatia__widgets__list__item_vectors 206 13 28_4]
+G c Z s s [element hypatia__widgets__list__item_vectors 213 13 28_4]
+G c Z s s [replace_element hypatia__widgets__list__item_vectors 217 14 28_4]
+G c Z s s [replace_element hypatia__widgets__list__item_vectors 228 14 28_4]
+G c Z s s [query_element hypatia__widgets__list__item_vectors 239 14 28_4]
+G c Z s s [query_element hypatia__widgets__list__item_vectors 250 14 28_4]
+G c Z s s [update_element hypatia__widgets__list__item_vectors 259 14 28_4]
+G c Z s s [update_element hypatia__widgets__list__item_vectors 276 14 28_4]
+G c Z s s [constant_reference hypatia__widgets__list__item_vectors 303 13 28_4]
+G c Z s s [reference hypatia__widgets__list__item_vectors 308 13 28_4]
+G c Z s s [constant_reference hypatia__widgets__list__item_vectors 313 13 28_4]
+G c Z s s [reference hypatia__widgets__list__item_vectors 318 13 28_4]
+G c Z s s [assign hypatia__widgets__list__item_vectors 323 14 28_4]
+G c Z s s [copy hypatia__widgets__list__item_vectors 325 13 28_4]
+G c Z s s [move hypatia__widgets__list__item_vectors 327 14 28_4]
+G c Z s s [new_vector hypatia__widgets__list__item_vectors 333 13 28_4]
+G c Z s s [insert_vector hypatia__widgets__list__item_vectors 337 14 28_4]
+G c Z s s [insert_vector hypatia__widgets__list__item_vectors 361 14 28_4]
+G c Z s s [insert_vector hypatia__widgets__list__item_vectors 378 14 28_4]
+G c Z s s [insert hypatia__widgets__list__item_vectors 396 14 28_4]
+G c Z s s [insert hypatia__widgets__list__item_vectors 404 14 28_4]
+G c Z s s [insert hypatia__widgets__list__item_vectors 412 14 28_4]
+G c Z s s [insert hypatia__widgets__list__item_vectors 421 14 28_4]
+G c Z s s [insert hypatia__widgets__list__item_vectors 438 14 28_4]
+G c Z s s [prepend_vector hypatia__widgets__list__item_vectors 449 14 28_4]
+G c Z s s [prepend hypatia__widgets__list__item_vectors 459 14 28_4]
+G c Z s s [append_vector hypatia__widgets__list__item_vectors 466 14 28_4]
+G c Z s s [append hypatia__widgets__list__item_vectors 476 14 28_4]
+G c Z s s [append hypatia__widgets__list__item_vectors 483 14 28_4]
+G c Z s s [insert_space hypatia__widgets__list__item_vectors 486 14 28_4]
+G c Z s s [insert_space hypatia__widgets__list__item_vectors 503 14 28_4]
+G c Z s s [delete hypatia__widgets__list__item_vectors 514 14 28_4]
+G c Z s s [delete hypatia__widgets__list__item_vectors 524 14 28_4]
+G c Z s s [delete_first hypatia__widgets__list__item_vectors 533 14 28_4]
+G c Z s s [delete_last hypatia__widgets__list__item_vectors 538 14 28_4]
+G c Z s s [reverse_elements hypatia__widgets__list__item_vectors 546 14 28_4]
+G c Z s s [swap hypatia__widgets__list__item_vectors 549 14 28_4]
+G c Z s s [swap hypatia__widgets__list__item_vectors 554 14 28_4]
+G c Z s s [first_index hypatia__widgets__list__item_vectors 560 13 28_4]
+G c Z s s [first hypatia__widgets__list__item_vectors 563 13 28_4]
+G c Z s s [first_element hypatia__widgets__list__item_vectors 567 13 28_4]
+G c Z s s [last_index hypatia__widgets__list__item_vectors 570 13 28_4]
+G c Z s s [last hypatia__widgets__list__item_vectors 574 13 28_4]
+G c Z s s [last_element hypatia__widgets__list__item_vectors 578 13 28_4]
+G c Z s s [next hypatia__widgets__list__item_vectors 581 13 28_4]
+G c Z s s [next hypatia__widgets__list__item_vectors 587 14 28_4]
+G c Z s s [previous hypatia__widgets__list__item_vectors 590 13 28_4]
+G c Z s s [previous hypatia__widgets__list__item_vectors 596 14 28_4]
+G c Z s s [find_index hypatia__widgets__list__item_vectors 599 13 28_4]
+G c Z s s [find hypatia__widgets__list__item_vectors 609 13 28_4]
+G c Z s s [reverse_find_index hypatia__widgets__list__item_vectors 623 13 28_4]
+G c Z s s [reverse_find hypatia__widgets__list__item_vectors 635 13 28_4]
+G c Z s s [contains hypatia__widgets__list__item_vectors 649 13 28_4]
+G c Z s s [iterate hypatia__widgets__list__item_vectors 654 14 28_4]
+G c Z s s [reverse_iterate hypatia__widgets__list__item_vectors 662 14 28_4]
+G c Z s s [iterate hypatia__widgets__list__item_vectors 669 13 28_4]
+G c Z s s [iterate hypatia__widgets__list__item_vectors 672 13 28_4]
+G c Z s s [adjust hypatia__widgets__list__item_vectors__implementation 90 28 726_4_28_4]
+G c Z s s [finalize hypatia__widgets__list__item_vectors__implementation 93 28 726_4_28_4]
+G c Z s s [zero_counts hypatia__widgets__list__item_vectors__implementation 96 17 726_4_28_4]
+G c Z s s [busy hypatia__widgets__list__item_vectors__implementation 100 17 726_4_28_4]
+G c Z s s [unbusy hypatia__widgets__list__item_vectors__implementation 104 17 726_4_28_4]
+G c Z s s [lock hypatia__widgets__list__item_vectors__implementation 108 17 726_4_28_4]
+G c Z s s [unlock hypatia__widgets__list__item_vectors__implementation 112 17 726_4_28_4]
+G c Z s s [tc_check hypatia__widgets__list__item_vectors__implementation 116 17 726_4_28_4]
+G c Z s s [te_check hypatia__widgets__list__item_vectors__implementation 120 17 726_4_28_4]
+G c Z s s [is_busy hypatia__widgets__list__item_vectors__implementation 136 16 726_4_28_4]
+G c Z s s [is_locked hypatia__widgets__list__item_vectors__implementation 140 16 726_4_28_4]
+G c Z s s [initialize hypatia__widgets__list__item_vectors__implementation 161 28 726_4_28_4]
+G c Z s s [finalize hypatia__widgets__list__item_vectors__implementation 162 28 726_4_28_4]
+G c Z s s [initialize hypatia__widgets__list__item_vectors__implementation 167 28 726_4_28_4]
+G c Z s s [finalize hypatia__widgets__list__item_vectors__implementation 168 28 726_4_28_4]
+G c Z s s [reference_control_typeDA hypatia__widgets__list__item_vectors__implementation 84 12 726_4_28_4]
+G c Z s s [reference_control_typeDF hypatia__widgets__list__item_vectors__implementation 84 12 726_4_28_4]
+G c Z s s [reference_control_typeIP hypatia__widgets__list__item_vectors__implementation 84 12 726_4_28_4]
+G c Z s s [with_busyDF hypatia__widgets__list__item_vectors__implementation 158 12 726_4_28_4]
+G c Z s s [with_busyIP hypatia__widgets__list__item_vectors__implementation 158 12 726_4_28_4]
+G c Z s s [with_lockDF hypatia__widgets__list__item_vectors__implementation 164 12 726_4_28_4]
+G c Z s s [with_lockIP hypatia__widgets__list__item_vectors__implementation 164 12 726_4_28_4]
+G c Z s s [put_image hypatia__widgets__list__item_vectors 747 14 28_4]
+G c Z s s [adjust hypatia__widgets__list__item_vectors 750 25 28_4]
+G c Z s s [finalize hypatia__widgets__list__item_vectors 751 25 28_4]
+G c Z s s [write hypatia__widgets__list__item_vectors 753 14 28_4]
+G c Z s s [read hypatia__widgets__list__item_vectors 759 14 28_4]
+G c Z s s [read hypatia__widgets__list__item_vectors 773 14 28_4]
+G c Z s s [write hypatia__widgets__list__item_vectors 779 14 28_4]
+G c Z s s [write hypatia__widgets__list__item_vectors 798 14 28_4]
+G c Z s s [read hypatia__widgets__list__item_vectors 804 14 28_4]
+G c Z s s [write hypatia__widgets__list__item_vectors 820 14 28_4]
+G c Z s s [read hypatia__widgets__list__item_vectors 826 14 28_4]
+G c Z s s [pseudo_reference hypatia__widgets__list__item_vectors 840 13 28_4]
+G c Z s s [get_element_access hypatia__widgets__list__item_vectors 849 13 28_4]
+G c Z s s [cursorIP hypatia__widgets__list__item_vectors 768 9 28_4]
+G c Z s s [vectorDA hypatia__widgets__list__item_vectors 741 9 28_4]
+G c Z s s [vectorDF hypatia__widgets__list__item_vectors 741 9 28_4]
+G c Z s s [vectorIP hypatia__widgets__list__item_vectors 741 9 28_4]
+G c Z s s [finalize hypatia__widgets__list__item_vectors 865 25 28_4]
+G c Z s s [first hypatia__widgets__list__item_vectors 867 24 28_4]
+G c Z s s [last hypatia__widgets__list__item_vectors 868 24 28_4]
+G c Z s s [next hypatia__widgets__list__item_vectors 870 24 28_4]
+G c Z s s [previous hypatia__widgets__list__item_vectors 874 24 28_4]
+G c Z s s [constant_reference_typeDI hypatia__widgets__list__item_vectors 788 9 28_4]
+G c Z s s [constant_reference_typeDA hypatia__widgets__list__item_vectors 788 9 28_4]
+G c Z s s [constant_reference_typeDF hypatia__widgets__list__item_vectors 788 9 28_4]
+G c Z s s [constant_reference_typeIP hypatia__widgets__list__item_vectors 788 9 28_4]
+G c Z s s [reference_typeDI hypatia__widgets__list__item_vectors 810 9 28_4]
+G c Z s s [reference_typeDA hypatia__widgets__list__item_vectors 810 9 28_4]
+G c Z s s [reference_typeDF hypatia__widgets__list__item_vectors 810 9 28_4]
+G c Z s s [reference_typeIP hypatia__widgets__list__item_vectors 810 9 28_4]
+G c Z s s [elements_arrayIP hypatia__widgets__list__item_vectors 729 9 28_4]
+G c Z s s [elements_arrayDI hypatia__widgets__list__item_vectors 729 9 28_4]
+G c Z s s [elements_arrayDA hypatia__widgets__list__item_vectors 729 9 28_4]
+G c Z s s [elements_arrayDF hypatia__widgets__list__item_vectors 729 9 28_4]
+G c Z s s [elements_typeDI hypatia__widgets__list__item_vectors 732 9 28_4]
+G c Z s s [elements_typeDF hypatia__widgets__list__item_vectors 732 9 28_4]
+G c Z s s [elements_typeIP hypatia__widgets__list__item_vectors 732 9 28_4]
+G c Z s s [iteratorDF hypatia__widgets__list__item_vectors 857 9 28_4]
+G c Z s s [iteratorIP hypatia__widgets__list__item_vectors 857 9 28_4]
+G c Z s s [free hypatia__widgets__list__item_vectors 44 14 28_4]
+G c Z s s [append_slow_path hypatia__widgets__list__item_vectors 47 14 28_4]
+G c Z s b [render hypatia__widgets__list 47 25 none]
+G c Z s b [handle_input hypatia__widgets__list 52 24 none]
+G c Z s b [add_item hypatia__widgets__list 57 14 none]
+G c Z s b [clear hypatia__widgets__list 64 14 none]
+G c Z s b [item_count hypatia__widgets__list 67 13 none]
+G c Z s b [selected hypatia__widgets__list 70 13 none]
+G c Z s b [set_selected hypatia__widgets__list 73 14 none]
+G c Z s b [get_selected_item hypatia__widgets__list 76 13 none]
+G c Z s b [select_next hypatia__widgets__list 79 14 none]
+G c Z s b [select_previous hypatia__widgets__list 80 14 none]
+G c Z s b [select_first hypatia__widgets__list 81 14 none]
+G c Z s b [select_last hypatia__widgets__list 82 14 none]
+G c Z s b [page_down hypatia__widgets__list 83 14 none]
+G c Z s b [page_up hypatia__widgets__list 84 14 none]
+G c Z s b [ensure_visible hypatia__widgets__list 87 14 none]
+G c Z s b [set_title hypatia__widgets__list 90 14 none]
+G c Z s b [visible_height hypatia__widgets__list 95 13 none]
+G c Z s s [list_widgetDA hypatia__widgets__list 33 9 none]
+G c Z s s [list_widgetDF hypatia__widgets__list 33 9 none]
+G c Z s s [list_widgetDI hypatia__widgets__list 33 9 none]
+G c Z s s [list_widgetIP hypatia__widgets__list 33 9 none]
+G r c none [render hypatia__widgets__list 47 25 none] [draw_box hypatia__widgets 72 14 none]
+G r c none [render hypatia__widgets__list 47 25 none] [draw_text hypatia__widgets 99 14 none]
+G r c none [render hypatia__widgets__list 47 25 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [render hypatia__widgets__list 47 25 none] [pad hypatia__widgets 111 13 none]
+G r s style [render hypatia__widgets__list 47 25 none] [styleIP hypatia__terminal 46 9 none]
+G r c none [render hypatia__widgets__list 47 25 none] [put_styled hypatia__terminal 134 14 none]
+G r c none [render hypatia__widgets__list 47 25 none] [put hypatia__terminal 128 14 none]
+G r s widget [list_widgetIP hypatia__widgets__list 33 9 none] [widgetIP hypatia__widgets 33 9 none]
+X 1 ada.ads
+18K9*Ada 22e8 29|12r6 13r6 13r33 28r32 30|6r6 6r26
+X 5 a-contai.ads
+16K13*Containers 28e19 29|12r10 28r36 30|6w10 6r30
+22I9*Count_Type<integer> 30|168r27
+X 9 a-convec.ads
+62I9 Index_Type 29|29r8
+63+9 Element_Type 29|30r8
+74k24*Vectors 878e27 29|12w21 28r47
+91R9*Vector<12|43R9> 29|34r38[28]
+175V13*Length{5|22I9} 30|36s61[29|28] 168s18[29|28] 189s31[29|28] 199s49[29|28]
+. 207s72[29|28] 222s46[29|28] 225s53[29|28] 230s49[29|28] 231s50[29|28] 260s53[29|28]
+. 272s47[29|28]
+187V13*Is_Empty{boolean} 30|257s22[29|28] 271s22[29|28]
+190U14*Clear 30|182s15[29|28]
+483U14*Append 30|169s18[29|28]
+X 13 a-iteint.ads
+24h9 Forward_Iterator
+32h9 Reversible_Iterator<24R9[9|119]>
+X 15 a-string.ads
+16K13*Strings 35e16 29|13r10 13r37
+X 21 a-strunb.ads
+91K21*Unbounded 1641e26 29|13w18 13r45
+105R9*Unbounded_String<12|43R9> 1620e15 29|22r17 39r25 40r25
+109r4*Null_Unbounded_String{105R9} 29|22r37 39r45 30|210r29
+122V13*To_Unbounded_String{105R9} 29|40s45 30|169s48 319s18
+135V13*To_String{string} 30|44s49 53s25 69s59
+X 26 hypatia.ads
+9K9*Hypatia 61e12 29|15r9 97r5 30|8r14 322r5
+28I12*Terminal_Width{positive} 30|32r33 34r33 93r39
+29I12*Terminal_Height{positive} 30|33r33 62r38 62r69 98r51
+X 27 hypatia-terminal.ads
+15K17*Terminal 202e21 29|41r25 42r25 43r25 30|70r35
+37n8*Attr_Reverse{30E9} 29|42r59
+42A9*Attribute_Set(boolean)<30E9>
+46R9*Style 50e14 29|41r34 42r34 43r34 30|70r44
+49a7*Attributes{42A9} 29|42m44
+53r4*Style_Normal{46R9} 29|41r43
+59r4*Style_Muted{46R9} 29|43r43 30|100r47 102r47
+68n8*Key_Up{62E9} 30|124r15
+69n8*Key_Down{62E9} 30|128r15
+72n8*Key_Home{62E9} 30|132r15
+73n8*Key_End{62E9} 30|136r15
+74n8*Key_Page_Up{62E9} 30|140r15
+75n8*Key_Page_Down{62E9} 30|144r15
+80n8*Key_Char{62E9} 30|148r15
+84R9*Input_Event 89e14 29|54r16 30|116r16
+85e7*Key{62E9} 30|123r18
+96R9*Terminal_State 200e14 29|49r22 30|30r22
+114U14*Move_Cursor 30|64s16 98s19
+128U14*Put 30|85s19
+134U14*Put_Styled 30|81s22 100s22 102s22
+X 28 hypatia-widgets.ads
+13K17*Widgets 26|9k9 28|117e20 29|15r17 97r13 30|8r22 322r13
+19i7*X{26|28I12} 30|32r58 93r64
+20i7*Y{26|29I12} 30|33r59
+21i7*Width{26|28I12} 30|34r58 93r75
+22i7*Height{26|29I12} 30|17r17 18r24
+26n30*Align_Left{26E9} 30|69r97
+26n42*Align_Center{26E9} 30|54r25
+27n39*Align_Middle{27E9} 30|55r25
+30n39*Border_Single{30E9} 30|44r34
+33H9*Widget 37e14 29|33r28
+34r7*Area{18R9} 30|17r12 18r19 32r53 33r54 34r53 44r28 93r59 93r70
+35b7*Visible{boolean} 30|38r16
+36b7*Focused{boolean} 30|75r64 119r16
+72U14*Draw_Box 30|44s10
+99U14*Draw_Text 30|50s10
+100r8 Term{27|96R9} 30|51r14
+101r8 Area{18R9} 30|52r14
+102a8 Text{string} 30|53r14
+103e8 H_Align{26E9} 30|54r14
+104e8 V_Align{27E9} 30|55r14
+105r8 S{27|46R9} 30|56r14
+111V13*Pad{string} 30|69s54
+X 29 hypatia-widgets-list.ads
+15K25*List 28|13k17 29|95E13 97l21 97e25 30|8b30 322l21 322t25
+18N4*Max_Items 30|168r39
+21R9*List_Item 25e14 30r24 76r56 30|68r44 169r26 205r56
+22r7*Text{21|105R9} 30|69r75 169m37 210m18
+23i7*Data{natural} 30|170m37 211m18
+24b7*Enabled{boolean} 30|73r34 171m37 212m18 226r47 243r47 261r47 275r47
+28K12*Item_Vectors[9|74] 34r25
+33R9*List_Widget<28|33R9> 44e14 47P25 48r15 52P24 53r23 57p14 58r22 64p14
+. 64r32 67p13 67r29 70p13 70r27 73p14 73r39 76p13 76r36 79p14 79r38 80p14
+. 80r42 81p14 81r39 82p14 82r38 83p14 83r36 84p14 84r34 87p14 87r41 90p14
+. 90r36 95p13 95r33 30|14r33 29r15 115r23 162r25 180r32 187r29 192r27 197r39
+. 205r36 220r38 237r42 255r39 269r38 283r36 291r34 299r41 317r36
+34r7*Items{9|91R9[28]} 30|36r55 68r59 168r12 169m12 182m9 189r25 199r43 207r66
+. 208r19 222r40 225r47 226r22 230r43 231r44 243r22 257r16 260r47 261r22 271r16
+. 272r41 275r22
+35i7*Selected_Index{natural} 30|75r43 174r15 175m15 183m9 194r16 200m12 207r12
+. 207r37 208r28 222r12 223m12 223r32 225r18 226r31 228m15 228r35 230r15 231m15
+. 239r12 240m12 240r32 242r18 243r31 245r18 246m18 246r38 258m12 260r18 261r31
+. 263m15 263r35 272m12 274r18 275r31 277m15 277r35 302r12 307r12 308r31 312r12
+. 313r31
+36i7*Scroll_Offset{natural} 30|61r52 95r52 184m9 307r32 308m12 312r31 313m12
+37b7*Show_Border{boolean} 30|15r49 32r68 33r69 34r72 43r12 93r89
+38b7*Show_Scrollbar{boolean} 30|34r107 91r15
+39r7*Title{21|105R9} 30|44r62 319m9
+40r7*Empty_Message{21|105R9} 30|53r38
+41r7*Normal_Style{27|46R9} 30|78r41
+42r7*Selected_Style{27|46R9} 30|76r41
+43r7*Disabled_Style{27|46R9} 30|56r27 74r41
+47U25*Render<28|40p14> 48>8 49=8 30|28b25 108l8 108t14
+48r8 W{33R9} 30|29b8 32r51 32r66 33r52 33r67 34r51 34r70 34r105 35r61 36r53
+. 38r14 43r10 44r26 44r60 53r36 56r25 61r50 68r57 74r39 75r41 75r62 76r39
+. 78r39 91r13 93r57 93r68 93r87 95r50
+49r8 Term{27|96R9} 30|30b8 44m20 51m25 64m29 81m34 85m24 98m32 100m34 102m34
+52V24*Handle_Input{boolean}<28|45p13> 53=8 54>8 30|114b24 155l8 155t20
+53r8 W{33R9} 30|115b8 119r14 125m30 129m26 133m27 137m26 141m22 145m24
+54r8 Event{27|84R9} 30|116b8 123r12
+57U14*Add_Item 58=8 59>8 60>8 61>8 30|161b14 178l8 178t16
+58r8 W{33R9} 30|162b8 168r10 169m10 169r10 174r13 175m13
+59a8 Text{string} 30|163b8 169r69
+60i8 Data{natural} 30|164b8 170r48
+61b8 Enabled{boolean} 30|165b8 171r48 174r38
+64U14*Clear 64=21 30|180b14 185l8 185t13
+64r21 W{33R9} 30|180b21 182m7 182r7 183m7 184m7
+67V13*Item_Count{natural} 67>25 30|187b13 190l8 190t18
+67r25 W{33R9} 30|187b25 189r23
+70V13*Selected{natural} 70>23 30|192b13 195l8 195t16
+70r23 W{33R9} 30|192b23 194r14
+73U14*Set_Selected 73=28 73>52 30|197b14 203l8 203t20
+73r28 W{33R9} 30|197b28 199r41 200m10 201m26
+73i52 Index{natural} 30|197b52 199r10 199r23 200r30
+76V13*Get_Selected_Item{21R9} 76>32 30|205b13 214l8 214t25
+76r32 W{33R9} 30|205b32 207r10 207r35 207r64 208r17 208r26
+79U14*Select_Next 79=27 30|129s13 220b14 235l8 235t19 287s10
+79r27 W{33R9} 30|220b27 222r10 222r38 223m10 223r30 225r16 225r45 226r20
+. 226r29 228m13 228r33 230r13 230r41 231m13 231r42 233m26
+80U14*Select_Previous 80=31 30|125s13 237b14 253l8 253t23 295s10
+80r31 W{33R9} 30|237b31 239r10 240m10 240r30 242r16 243r20 243r29 245r16
+. 246m16 246r36 251m26
+81U14*Select_First 81=28 30|133s13 255b14 267l8 267t20
+81r28 W{33R9} 30|255b28 257r14 258m10 260r16 260r45 261r20 261r29 263m13
+. 263r33 265m26
+82U14*Select_Last 82=27 30|137s13 269b14 281l8 281t19
+82r27 W{33R9} 30|269b27 271r14 272m10 272r39 274r16 275r20 275r29 277m13
+. 277r33 279m26
+83U14*Page_Down 83=25 30|145s13 283b14 289l8 289t17
+83r25 W{33R9} 30|283b25 284r56 287m23
+84U14*Page_Up 84=23 30|141s13 291b14 297l8 297t15
+84r23 W{33R9} 30|291b23 292r56 295m27
+87U14*Ensure_Visible 87=30 30|201s10 233s10 251s10 265s10 279s10 299b14 315l8
+. 315t22
+87r30 W{33R9} 30|299b30 300r57 302r10 307r10 307r30 308m10 308r29 312r10
+. 312r29 313m10 313r29
+90U14*Set_Title 90=25 90>49 30|317b14 320l8 320t17
+90r25 W{33R9} 30|317b25 319m7
+90a49 Title{string} 30|317b49 319r39
+95V13 Visible_Height{positive} 95>29 30|14b13 22l8 22t22 35s45 284s40 292s40
+. 300s41
+95r29 W{33R9} 30|14b29 15r47 17r10 18r17
+X 30 hypatia-widgets-list.adb
+15i7 Border_Adjust{natural} 17r26 18r33
+32i7 Content_X{26|28I12} 52r26 64r43
+33i7 Content_Y{26|29I12} 52r37 62r57 98r39
+34i7 Content_Width{26|28I12} 52r48 69r82 85r36
+35i7 Vis_Height{positive} 52r63 59r24 91r51 94r67 94r80 95r69 95r114 97r30
+36i7 Item_Count_Val{natural} 48r10 66r33 91r34 94r93 95r97
+59i14 I{integer} 61r68 62r86
+61i16 Item_Index{positive} 66r19 68r66 75r28
+62i16 Row_Y{26|29I12} 64r36
+68r22 Item{29|21R9} 69r70 73r29
+69a22 Item_Text{string} 81r40
+70r22 Item_Style{27|46R9} 74m25 76m25 78m25 81r51
+93i16 Scrollbar_X{26|28I12} 98r72
+94i16 Thumb_Size{positive} 95r82 99r57
+95i16 Thumb_Pos{natural} 99r27 99r45
+97i20 I{integer} 98r68 99r22 99r41
+284i7 Page_Size{positive} 286r21
+286i11 I{integer}
+292i7 Page_Size{positive} 294r21
+294i11 I{integer}
+300i7 Vis_Height{positive} 312r47 313r48
+X 33 system.ads
+67M9*Address
+X 41 s-memory.ads
+51V13*Alloc{33|67M9} 101i<c,__gnat_malloc>22
+66U14*Free 102i<c,__gnat_free>22
+74V13*Realloc{33|67M9} 103i<c,__gnat_realloc>22
+X 52 s-stalib.adb
+87U14 Break_Start 88i<c,__gnat_break_start>22
+

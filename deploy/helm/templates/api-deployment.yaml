@@ -5,10 +5,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-api
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-api
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.api.labels" . | nindent 4 }}
+    {{- include "hypatia.api.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.api.autoscaling.enabled }}
   replicas: {{ .Values.api.replicaCount }}
@@ -20,11 +20,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.api.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 8 }}
+        {{- include "hypatia.api.selectorLabels" . | nindent 8 }}
       {{- with .Values.api.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
@@ -34,7 +34,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "cicd-hyper-a.serviceAccountName" . }}-api
+      serviceAccountName: {{ include "hypatia.serviceAccountName" . }}-api
       securityContext:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
       containers:
@@ -51,38 +51,38 @@ spec:
             - name: RUST_LOG
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "cicd-hyper-a.fullname" . }}-config
+                  name: {{ include "hypatia.fullname" . }}-config
                   key: rust-log
             - name: RUST_BACKTRACE
               value: "0"
             - name: ARANGODB_URL
-              value: {{ include "cicd-hyper-a.arangodbUrl" . | quote }}
+              value: {{ include "hypatia.arangodbUrl" . | quote }}
             - name: ARANGODB_DATABASE
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "cicd-hyper-a.fullname" . }}-config
+                  name: {{ include "hypatia.fullname" . }}-config
                   key: arangodb-database
             - name: ARANGODB_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: arangodb-user
             - name: ARANGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: arangodb-password
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: dragonfly-password
             - name: DRAGONFLY_URL
-              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "cicd-hyper-a.fullname" . }}-dragonfly:6379"
+              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "hypatia.fullname" . }}-dragonfly:6379"
             - name: REGISTRY_URL
-              value: "http://{{ include "cicd-hyper-a.fullname" . }}-registry:8080"
+              value: "http://{{ include "hypatia.fullname" . }}-registry:8080"
             - name: ENGINE_URL
-              value: "http://{{ include "cicd-hyper-a.fullname" . }}-engine:8082"
+              value: "http://{{ include "hypatia.fullname" . }}-engine:8082"
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
           livenessProbe:
@@ -113,10 +113,10 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "cicd-hyper-a.serviceAccountName" . }}-api
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.serviceAccountName" . }}-api
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.api.labels" . | nindent 4 }}
+    {{- include "hypatia.api.labels" . | nindent 4 }}
   {{- with .Values.serviceAccount.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

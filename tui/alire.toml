@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+# Alire manifest for Hypatia TUI
+
+[general]
+name = "hypatia"
+description = "Terminal User Interface for Hypatia CI/CD Intelligence Platform"
+version = "0.1.0"
+authors = ["hyperpolymath"]
+maintainers = ["hyperpolymath <hyperpolymath@protonmail.com>"]
+maintainers-logins = ["hyperpolymath"]
+licenses = "PLMP-1.0-or-later"
+website = "https://hypatia.reposystem.dev"
+tags = ["tui", "terminal", "cicd", "devops", "spark", "ada2022"]
+long-description = """
+Hypatia is a terminal user interface for CI/CD Intelligence operations.
+Built in Ada 2022 with SPARK-verified state machine for reliable navigation
+between views. A satellite project of reposystem.
+
+Features:
+- SPARK-verified state machine for navigation
+- Scan view for repository analysis
+- Fleet management for multiple repositories
+- Registry browser for CI/CD rules
+- Settings configuration
+- Comprehensive help system
+
+The TUI uses ANSI escape sequences for terminal control and supports 256 colors.
+"""
+
+[gpr-set-externals]
+MODE = "release"
+
+[[executables]]
+name = "hypatia"
+
+[[depends-on]]
+gnat = ">=12"
+
+[configuration]
+disabled = true
+
+[[pins]]
+# No external dependencies - pure Ada implementation
+
+[[actions]]
+type = "post-fetch"
+command = ["mkdir", "-p", "obj", "bin"]
+
+[[actions]]
+type = "post-build"
+command = ["echo", "Build complete. Run with: ./bin/hypatia_main"]
+
+[build-switches]
+debug = ["-g", "-O0", "-gnata"]
+release = ["-O2", "-gnatn"]
+validation = ["-g", "-O0", "-gnata", "-gnatVa"]

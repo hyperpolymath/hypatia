@@ -5,15 +5,15 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-api-hpa
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-api-hpa
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.api.labels" . | nindent 4 }}
+    {{- include "hypatia.api.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "cicd-hyper-a.fullname" . }}-api
+    name: {{ include "hypatia.fullname" . }}-api
   minReplicas: {{ .Values.api.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}
   metrics:
@@ -58,15 +58,15 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-registry-hpa
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-registry-hpa
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+    {{- include "hypatia.registry.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "cicd-hyper-a.fullname" . }}-registry
+    name: {{ include "hypatia.fullname" . }}-registry
   minReplicas: {{ .Values.registry.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.registry.autoscaling.maxReplicas }}
   metrics:
@@ -97,15 +97,15 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-engine-hpa
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-engine-hpa
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+    {{- include "hypatia.engine.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "cicd-hyper-a.fullname" . }}-engine
+    name: {{ include "hypatia.fullname" . }}-engine
   minReplicas: {{ .Values.engine.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.engine.autoscaling.maxReplicas }}
   metrics:

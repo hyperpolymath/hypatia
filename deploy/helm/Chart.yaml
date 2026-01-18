@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: v2
-name: cicd-hyper-a
+name: hypatia
 description: |
-  Neurosymbolic CI/CD Intelligence Platform that combines neural learning,
+  Hypatia - Neurosymbolic CI/CD Intelligence Platform that combines neural learning,
   symbolic reasoning (Logtalk/Prolog), formal verification (Haskell),
   graph intelligence (ArangoDB), and distributed cache (Dragonfly).
+  Website: https://hypatia.reposystem.dev
 
 type: application
 
@@ -20,16 +21,17 @@ keywords:
   - verification
   - arangodb
   - dragonfly
+  - hypatia
 
-home: https://github.com/hyperpolymath/cicd-hyper-a
+home: https://hypatia.reposystem.dev
 sources:
-  - https://github.com/hyperpolymath/cicd-hyper-a
+  - https://github.com/hyperpolymath/hypatia
 
 maintainers:
   - name: hyperpolymath
     url: https://github.com/hyperpolymath
 
-icon: https://raw.githubusercontent.com/hyperpolymath/cicd-hyper-a/main/docs/logo.png
+icon: https://raw.githubusercontent.com/hyperpolymath/hypatia/main/docs/logo.png
 
 dependencies:
   # Optional: Use official ArangoDB Helm chart instead of built-in
@@ -51,6 +53,6 @@ annotations:
       description: Initial release
   artifacthub.io/screenshots: |
     - title: Dashboard
-      url: https://raw.githubusercontent.com/hyperpolymath/cicd-hyper-a/main/docs/screenshots/dashboard.png
+      url: https://raw.githubusercontent.com/hyperpolymath/hypatia/main/docs/screenshots/dashboard.png
     - title: Rule Engine
-      url: https://raw.githubusercontent.com/hyperpolymath/cicd-hyper-a/main/docs/screenshots/engine.png
+      url: https://raw.githubusercontent.com/hyperpolymath/hypatia/main/docs/screenshots/engine.png

@@ -22,10 +22,10 @@ import qualified Data.Text.IO as TIO
 import Data.Time (getCurrentTime, formatTime, defaultTimeLocale)
 import Control.Monad (when, forM_)
 
-import CicdHyperA.Ruleset
-import CicdHyperA.Verify
-import CicdHyperA.Registry
-import CicdHyperA.API
+import Hypatia.Ruleset
+import Hypatia.Verify
+import Hypatia.Registry
+import Hypatia.API
 
 -- | Main entry point
 main :: IO ()

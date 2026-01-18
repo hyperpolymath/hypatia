@@ -1,0 +1,153 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-hooks
+.TH HYPER-HOOKS 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-hooks \- manage Git hooks for repositories
+.SH SYNOPSIS
+.B hyper hooks
+.I SUBCOMMAND
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B hyper hooks
+installs and manages Git hooks that integrate with the CI/CD Hyper-A
+platform. Hooks can run preventive rules, validate commits, and
+enforce policies automatically.
+.SH SUBCOMMANDS
+.TP
+.B install
+Install hooks in a repository.
+.TP
+.B remove
+Remove installed hooks.
+.TP
+.B list
+List installed hooks.
+.TP
+.B status
+Show hook status and configuration.
+.TP
+.B update
+Update hooks to latest version.
+.SS hyper hooks install
+.B hyper hooks install
+[\fIOPTIONS\fR]
+[\fIPATH\fR]
+.TP
+.I PATH
+Repository path. Defaults to current directory.
+.TP
+.BR \-\-hooks =\fIHOOK\fR[,...]
+Specific hooks to install: \fBpre-commit\fR, \fBpre-push\fR,
+\fBcommit-msg\fR, \fBprepare-commit-msg\fR, \fBpost-receive\fR.
+Default installs all applicable hooks.
+.TP
+.BR \-\-rulesets =\fIRULESET\fR[,...]
+Rulesets to apply via hooks.
+.TP
+.BR \-\-force
+Overwrite existing hooks.
+.TP
+.BR \-\-backup
+Backup existing hooks before overwriting.
+.TP
+.BR \-\-cache\-ttl =\fISECONDS\fR
+Cache TTL for ruleset lookups. Default is 3600 (1 hour).
+.SS hyper hooks remove
+.B hyper hooks remove
+[\fIOPTIONS\fR]
+[\fIPATH\fR]
+.TP
+.BR \-\-hooks =\fIHOOK\fR[,...]
+Specific hooks to remove. Default removes all hyper hooks.
+.TP
+.BR \-\-restore
+Restore backed-up hooks if available.
+.SS hyper hooks list
+.B hyper hooks list
+[\fIPATH\fR]
+.PP
+List installed hooks and their configurations.
+.SS hyper hooks status
+.B hyper hooks status
+[\fIPATH\fR]
+.PP
+Show detailed status including:
+.IP \(bu 2
+Installed hooks
+.IP \(bu 2
+Active rulesets
+.IP \(bu 2
+Last execution times
+.IP \(bu 2
+Cache status
+.SS hyper hooks update
+.B hyper hooks update
+[\fIPATH\fR]
+.PP
+Update hooks to the latest version and refresh cached rulesets.
+.SH HOOK TYPES
+.TP
+.B pre-commit
+Runs before commit. Used for preventive rules (formatting,
+secret detection, policy enforcement).
+.TP
+.B pre-push
+Runs before push. Used for validation (tests, signature checks,
+breaking changes).
+.TP
+.B commit-msg
+Validates commit messages against conventions.
+.TP
+.B prepare-commit-msg
+Prepares commit message templates.
+.TP
+.B post-receive
+Runs on server after receive. Used for CI triggers and notifications.
+.SH EXIT CODES
+.TP
+.B 0
+Hook operation successful.
+.TP
+.B 35
+Hook installation/execution failed.
+.TP
+.B 30
+Not a git repository.
+.SH EXAMPLES
+Install all hooks:
+.PP
+.RS
+.nf
+hyper hooks install
+.fi
+.RE
+.PP
+Install specific hooks with rulesets:
+.PP
+.RS
+.nf
+hyper hooks install --hooks pre-commit,pre-push \\
+  --rulesets hyperpolymath/security-baseline
+.fi
+.RE
+.PP
+List installed hooks:
+.PP
+.RS
+.nf
+hyper hooks list
+.fi
+.RE
+.PP
+Remove and restore:
+.PP
+.RS
+.nf
+hyper hooks install --backup
+hyper hooks remove --restore
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-scan (1),
+.BR githooks (5)

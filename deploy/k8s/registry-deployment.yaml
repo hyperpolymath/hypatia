@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Registry Service (Haskell) Deployment
+# hypatia Registry Service (Haskell) Deployment
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: registry
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: registry
     app.kubernetes.io/component: registry
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   replicas: 2
   strategy:
@@ -25,13 +25,13 @@ spec:
       labels:
         app.kubernetes.io/name: registry
         app.kubernetes.io/component: registry
-        app.kubernetes.io/part-of: cicd-hyper-a
+        app.kubernetes.io/part-of: hypatia
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: cicd-hyper-a-registry
+      serviceAccountName: hypatia-registry
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
@@ -48,7 +48,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: registry
-          image: ghcr.io/hyperpolymath/cicd-hyper-a-registry:latest
+          image: ghcr.io/hyperpolymath/hypatia-registry:latest
           imagePullPolicy: Always
           ports:
             - name: http
@@ -61,24 +61,24 @@ spec:
             - name: ARANGODB_DATABASE
               valueFrom:
                 configMapKeyRef:
-                  name: cicd-hyper-a-config
+                  name: hypatia-config
                   key: arangodb-database
             - name: ARANGODB_USER
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: arangodb-user
             - name: ARANGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: arangodb-password
             - name: DRAGONFLY_URL
               value: "redis://:$(DRAGONFLY_PASSWORD)@dragonfly:6379"
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: dragonfly-password
           resources:
             requests:
@@ -122,13 +122,13 @@ spec:
           emptyDir: {}
         - name: schemas
           configMap:
-            name: cicd-hyper-a-schemas
+            name: hypatia-schemas
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cicd-hyper-a-registry
-  namespace: cicd-hyper-a
+  name: hypatia-registry
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: registry
     app.kubernetes.io/component: registry
@@ -137,7 +137,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: registry-pdb
-  namespace: cicd-hyper-a
+  namespace: hypatia
 spec:
   minAvailable: 1
   selector:

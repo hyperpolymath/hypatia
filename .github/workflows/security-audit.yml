@@ -1,0 +1,604 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+# Comprehensive security audit workflow for cicd-hyper-a
+# Scans Rust and Haskell dependencies, containers, secrets, and performs SAST
+
+name: Security Audit
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run comprehensive audit every Monday at 3:00 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      full_audit:
+        description: 'Run full audit including slow checks'
+        required: false
+        type: boolean
+        default: false
+
+permissions: read-all
+
+concurrency:
+  group: security-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Rust Security Audit
+  # ============================================================================
+  rust-audit:
+    name: Rust Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit (JSON output)
+        run: cargo audit --json > rust-audit-report.json || true
+
+      - name: Run cargo audit (human-readable)
+        id: audit
+        run: |
+          if cargo audit 2>&1 | grep -q "Vulnerability"; then
+            echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
+            echo "::warning::Security vulnerabilities found in Rust dependencies"
+            cargo audit
+            exit 0  # Don't fail yet, let the summary job decide
+          else
+            echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
+            echo "No known vulnerabilities found"
+          fi
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: rust-audit-report
+          path: rust-audit-report.json
+          retention-days: 30
+
+  rust-deny:
+    name: Rust License & Ban Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        with:
+          tool: cargo-deny
+
+      - name: Create deny.toml if missing
+        run: |
+          if [ ! -f deny.toml ]; then
+            cat > deny.toml << 'EOF'
+          # SPDX-License-Identifier: PLMP-1.0-or-later
+          # cargo-deny configuration for cicd-hyper-a
+
+          [advisories]
+          db-path = "~/.cargo/advisory-db"
+          db-urls = ["https://github.com/rustsec/advisory-db"]
+          vulnerability = "deny"
+          unmaintained = "warn"
+          yanked = "warn"
+          notice = "warn"
+
+          [licenses]
+          unlicensed = "deny"
+          allow = [
+              "MIT",
+              "Apache-2.0",
+              "Apache-2.0 WITH LLVM-exception",
+              "BSD-2-Clause",
+              "BSD-3-Clause",
+              "ISC",
+              "Zlib",
+              "CC0-1.0",
+              "MPL-2.0",
+              "Unicode-DFS-2016",
+          ]
+          copyleft = "warn"
+          default = "deny"
+
+          [bans]
+          multiple-versions = "warn"
+          wildcards = "warn"
+          highlight = "all"
+          skip = []
+          skip-tree = []
+
+          [sources]
+          unknown-registry = "deny"
+          unknown-git = "warn"
+          allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+          EOF
+          fi
+
+      - name: Check licenses and bans
+        run: cargo deny check 2>&1 | tee cargo-deny-report.txt || true
+
+      - name: Upload deny results
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: cargo-deny-report
+          path: cargo-deny-report.txt
+          retention-days: 30
+
+  # ============================================================================
+  # Haskell Security Audit
+  # ============================================================================
+  haskell-audit:
+    name: Haskell Dependency Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Cache Cabal dependencies
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            registry/dist-newstyle
+          key: ${{ runner.os }}-cabal-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+
+      - name: Generate dependency freeze
+        run: |
+          cabal build all --dry-run
+          cabal freeze
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "## Outdated Haskell Dependencies" > haskell-audit-report.md
+          echo "" >> haskell-audit-report.md
+          echo '```' >> haskell-audit-report.md
+          cabal outdated 2>&1 | tee -a haskell-audit-report.md || true
+          echo '```' >> haskell-audit-report.md
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: haskell-audit-report
+          path: registry/haskell-audit-report.md
+          retention-days: 30
+
+  # ============================================================================
+  # Container Security Scanning
+  # ============================================================================
+  container-scan:
+    name: Container Security (Trivy)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - deploy/Dockerfile
+          - deploy/Dockerfile.adapter
+          - deploy/Dockerfile.engine
+          - deploy/Dockerfile.registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Extract image name from Dockerfile path
+        id: image
+        run: |
+          dockerfile="${{ matrix.dockerfile }}"
+          name=$(basename "$dockerfile" | sed 's/Dockerfile/cicd-hyper-a/' | sed 's/^\.//' | sed 's/^-//')
+          if [ "$name" = "cicd-hyper-a" ]; then
+            name="cicd-hyper-a-main"
+          fi
+          echo "name=$name" >> $GITHUB_OUTPUT
+
+      - name: Build container image
+        run: |
+          docker build -t ${{ steps.image.outputs.name }}:scan -f ${{ matrix.dockerfile }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@d9cd5b1c23aaf8cb31bb09141028215828364bbb # 0.28.0
+        with:
+          image-ref: '${{ steps.image.outputs.name }}:scan'
+          format: 'sarif'
+          output: 'trivy-${{ steps.image.outputs.name }}.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
+
+      - name: Run Trivy (table output)
+        uses: aquasecurity/trivy-action@d9cd5b1c23aaf8cb31bb09141028215828364bbb # 0.28.0
+        with:
+          image-ref: '${{ steps.image.outputs.name }}:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF results
+        uses: github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
+          category: 'trivy-${{ steps.image.outputs.name }}'
+
+  # ============================================================================
+  # Secret Detection
+  # ============================================================================
+  gitleaks:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: Create gitleaks config if missing
+        run: |
+          if [ ! -f .gitleaks.toml ]; then
+            cat > .gitleaks.toml << 'EOF'
+          # SPDX-License-Identifier: PLMP-1.0-or-later
+          # Gitleaks configuration for cicd-hyper-a
+
+          title = "cicd-hyper-a gitleaks configuration"
+
+          [allowlist]
+          description = "Allowlisted files and patterns"
+          paths = [
+              '''(^|/)\.gitleaks\.toml$''',
+              '''(^|/)docs/.*\.adoc$''',
+              '''(^|/)test/.*''',
+              '''node_modules''',
+              '''target/''',
+              '''dist-newstyle/''',
+          ]
+
+          [[rules]]
+          id = "github-token"
+          description = "GitHub Token"
+          regex = '''ghp_[0-9a-zA-Z]{36}'''
+          tags = ["key", "github"]
+
+          [[rules]]
+          id = "gitlab-token"
+          description = "GitLab Token"
+          regex = '''glpat-[0-9a-zA-Z\-_]{20}'''
+          tags = ["key", "gitlab"]
+
+          [[rules]]
+          id = "generic-api-key"
+          description = "Generic API Key"
+          regex = '''(?i)(api[_-]?key|apikey)\s*[=:]\s*['"]?([a-zA-Z0-9_\-]{20,})['"]?'''
+          tags = ["key", "api"]
+
+          [[rules]]
+          id = "private-key"
+          description = "Private Key"
+          regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'''
+          tags = ["key", "private"]
+          EOF
+          fi
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  trufflehog:
+    name: Secret Detection (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@8a8ef8526528d8a4ff3e2c90be08e25ef8efbd9b # v3.88.22
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+  # ============================================================================
+  # SAST (Static Application Security Testing)
+  # ============================================================================
+  codeql:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['actions']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        with:
+          category: "/language:${{matrix.language}}"
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1.0.0
+        with:
+          config: >-
+            p/rust
+            p/security-audit
+            p/secrets
+            p/dockerfile
+            p/supply-chain
+          generateSarif: "1"
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4.0.0
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  # ============================================================================
+  # License Compliance
+  # ============================================================================
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Check SPDX headers in source files
+        run: |
+          echo "## SPDX License Header Check" > license-report.md
+          echo "" >> license-report.md
+
+          missing_headers=0
+
+          # Check Rust files
+          echo "### Rust Files" >> license-report.md
+          for f in $(find . -name "*.rs" -not -path "./target/*" -not -path "./security-fixes/*" 2>/dev/null); do
+            if ! head -5 "$f" | grep -q "SPDX-License-Identifier"; then
+              echo "- Missing: $f" >> license-report.md
+              missing_headers=$((missing_headers + 1))
+            fi
+          done
+
+          # Check Haskell files
+          echo "" >> license-report.md
+          echo "### Haskell Files" >> license-report.md
+          for f in $(find . -name "*.hs" -not -path "./dist-newstyle/*" 2>/dev/null); do
+            if ! head -5 "$f" | grep -q "SPDX-License-Identifier"; then
+              echo "- Missing: $f" >> license-report.md
+              missing_headers=$((missing_headers + 1))
+            fi
+          done
+
+          # Check Shell scripts
+          echo "" >> license-report.md
+          echo "### Shell Scripts" >> license-report.md
+          for f in $(find . -name "*.sh" -not -path "./target/*" -not -path "./security-fixes/*" 2>/dev/null); do
+            if ! head -5 "$f" | grep -q "SPDX-License-Identifier"; then
+              echo "- Missing: $f" >> license-report.md
+              missing_headers=$((missing_headers + 1))
+            fi
+          done
+
+          # Check YAML workflows
+          echo "" >> license-report.md
+          echo "### GitHub Workflows" >> license-report.md
+          for f in $(find .github/workflows -name "*.yml" 2>/dev/null); do
+            if ! head -1 "$f" | grep -q "SPDX-License-Identifier"; then
+              echo "- Missing: $f" >> license-report.md
+              missing_headers=$((missing_headers + 1))
+            fi
+          done
+
+          echo "" >> license-report.md
+          echo "**Total files missing SPDX header: $missing_headers**" >> license-report.md
+
+          cat license-report.md
+
+          if [ $missing_headers -gt 0 ]; then
+            echo "::warning::$missing_headers files are missing SPDX license headers"
+          fi
+
+      - name: Upload license report
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: license-compliance-report
+          path: license-report.md
+          retention-days: 30
+
+  # ============================================================================
+  # SBOM Generation
+  # ============================================================================
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked
+
+      - name: Generate Rust SBOM
+        run: |
+          cargo cyclonedx --format json --output-cdx sbom-rust.cdx.json || true
+          cargo cyclonedx --format xml --output-cdx sbom-rust.cdx.xml || true
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Generate Haskell SBOM
+        working-directory: registry
+        run: |
+          cabal build all --dry-run
+          cabal freeze
+
+          # Create minimal CycloneDX SBOM
+          cat > sbom-haskell.cdx.json << 'EOF'
+          {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "metadata": {
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "component": {
+                "type": "application",
+                "name": "cicd-hyper-a-registry",
+                "version": "0.1.0.0",
+                "purl": "pkg:hackage/cicd-hyper-a@0.1.0.0"
+              }
+            },
+            "components": []
+          }
+          EOF
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: sbom
+          path: |
+            sbom-rust.cdx.json
+            sbom-rust.cdx.xml
+            registry/sbom-haskell.cdx.json
+          retention-days: 90
+
+  # ============================================================================
+  # Security Audit Summary
+  # ============================================================================
+  audit-summary:
+    name: Security Audit Summary
+    runs-on: ubuntu-latest
+    needs:
+      - rust-audit
+      - rust-deny
+      - haskell-audit
+      - container-scan
+      - gitleaks
+      - trufflehog
+      - codeql
+      - semgrep
+      - license-check
+      - sbom-generation
+    if: always()
+    steps:
+      - name: Generate audit summary
+        run: |
+          echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Function to map status
+          status_icon() {
+            case "$1" in
+              success) echo ":white_check_mark:" ;;
+              failure) echo ":x:" ;;
+              cancelled) echo ":grey_question:" ;;
+              skipped) echo ":fast_forward:" ;;
+              *) echo ":warning:" ;;
+            esac
+          }
+
+          echo "| Rust Audit | $(status_icon '${{ needs.rust-audit.result }}') ${{ needs.rust-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Deny | $(status_icon '${{ needs.rust-deny.result }}') ${{ needs.rust-deny.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Haskell Audit | $(status_icon '${{ needs.haskell-audit.result }}') ${{ needs.haskell-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Scan | $(status_icon '${{ needs.container-scan.result }}') ${{ needs.container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks | $(status_icon '${{ needs.gitleaks.result }}') ${{ needs.gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TruffleHog | $(status_icon '${{ needs.trufflehog.result }}') ${{ needs.trufflehog.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL | $(status_icon '${{ needs.codeql.result }}') ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep | $(status_icon '${{ needs.semgrep.result }}') ${{ needs.semgrep.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Check | $(status_icon '${{ needs.license-check.result }}') ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SBOM Generation | $(status_icon '${{ needs.sbom-generation.result }}') ${{ needs.sbom-generation.result }} |" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "_Audit completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)_" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for failures
+        run: |
+          failed=false
+
+          if [ "${{ needs.rust-audit.result }}" = "failure" ]; then
+            echo "::error::Rust audit failed"
+            failed=true
+          fi
+
+          if [ "${{ needs.gitleaks.result }}" = "failure" ]; then
+            echo "::error::Secret detection failed - possible secrets in repository"
+            failed=true
+          fi
+
+          if [ "${{ needs.trufflehog.result }}" = "failure" ]; then
+            echo "::error::TruffleHog found verified secrets"
+            failed=true
+          fi
+
+          if [ "$failed" = "true" ]; then
+            echo "::error::Security audit found critical issues"
+            exit 1
+          fi

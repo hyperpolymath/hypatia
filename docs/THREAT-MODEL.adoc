@@ -1,0 +1,740 @@
+// SPDX-License-Identifier: PLMP-1.0-or-later
+= Threat Model for cicd-hyper-a
+:toc: macro
+:toclevels: 3
+:icons: font
+:sectanchors:
+:sectnums:
+
+toc::[]
+
+== Executive Summary
+
+This document describes the threat model for *cicd-hyper-a*, a neurosymbolic CI/CD intelligence platform. The system combines neural learning, symbolic reasoning, and formal verification to manage CI/CD rulesets across multiple code forges.
+
+Due to its position in the software supply chain and its access to repository credentials, cicd-hyper-a is a high-value target for attackers seeking to:
+
+* Inject malicious code into downstream repositories
+* Steal credentials for code forges
+* Disrupt CI/CD pipelines at scale
+* Tamper with security rules to bypass protections
+
+== System Overview
+
+=== Architecture Summary
+
+[source]
+----
+                           ┌─────────────────────────┐
+                           │   External Clients      │
+                           │  (API, CLI, Webhooks)   │
+                           └───────────┬─────────────┘
+                                       │
+                           ┌───────────▼─────────────┐
+                           │      API Gateway         │
+                           │  (Auth, Rate Limiting)   │
+                           └───────────┬─────────────┘
+                                       │
+┌──────────────────────────────────────┼──────────────────────────────────────┐
+│                            TRUST BOUNDARY                                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   Haskell   │  │   Logtalk   │  │    Rust     │  │    Rust     │        │
+│  │  Registry   │  │   Engine    │  │  Adapters   │  │    CLI      │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────┘        │
+│         │                │                │                                  │
+│  ┌──────▼──────────────────▼──────────────▼──────┐                          │
+│  │              Data Layer                        │                          │
+│  │  ArangoDB (Graph)  │  Dragonfly (Cache)       │                          │
+│  └───────────────────────────────────────────────┘                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                           ┌───────────▼─────────────┐
+                           │    Code Forges          │
+                           │ GitHub, GitLab, etc.    │
+                           └─────────────────────────┘
+----
+
+=== Data Flow
+
+1. **Ruleset Registration**: Verified Haskell rulesets are deposited into the registry
+2. **Rule Distribution**: Rulesets are compiled and cached in Dragonfly
+3. **Repository Scanning**: Adapters connect to forges and evaluate repository state
+4. **Action Execution**: Rules trigger preventive, curative, or diagnostic actions
+5. **Webhook Processing**: Forges send events that trigger rule evaluation
+
+== Assets
+
+=== High-Value Assets
+
+[cols="1,3,2,1"]
+|===
+| Asset ID | Description | Location | Sensitivity
+
+| A-001
+| Forge API Credentials
+| Environment variables, secrets manager
+| CRITICAL
+
+| A-002
+| Ruleset Registry Database
+| ArangoDB
+| HIGH
+
+| A-003
+| Compiled Rule Bytecode
+| Dragonfly cache
+| HIGH
+
+| A-004
+| Repository Access Tokens
+| Per-user, per-repo
+| CRITICAL
+
+| A-005
+| Webhook Secrets
+| Per-forge configuration
+| HIGH
+
+| A-006
+| TLS Private Keys
+| Certificate store
+| CRITICAL
+
+| A-007
+| Audit Logs
+| Logging infrastructure
+| HIGH
+
+| A-008
+| User Session Data
+| Dragonfly cache
+| MEDIUM
+|===
+
+=== Medium-Value Assets
+
+[cols="1,3,2,1"]
+|===
+| Asset ID | Description | Location | Sensitivity
+
+| A-101
+| Ruleset Source Code
+| Git repository
+| MEDIUM
+
+| A-102
+| Configuration Files
+| Filesystem, ConfigMaps
+| MEDIUM
+
+| A-103
+| Monitoring Data
+| Prometheus, Grafana
+| LOW
+
+| A-104
+| Container Images
+| Registry
+| MEDIUM
+|===
+
+== Threat Actors
+
+=== TA-001: External Attacker
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Motivation*
+| Financial gain, reputation damage, access to source code
+
+| *Capabilities*
+| Technical skills, automated tools, patience for reconnaissance
+
+| *Access Level*
+| External (internet-facing endpoints)
+
+| *Goals*
+a|
+* Steal forge credentials to access private repositories
+* Inject malicious rules that compromise downstream repos
+* Disrupt CI/CD operations through DoS
+* Exfiltrate proprietary rulesets
+
+| *Techniques*
+a|
+* Credential stuffing on API endpoints
+* Webhook spoofing
+* Supply chain attacks via dependencies
+* Exploitation of known CVEs
+|===
+
+=== TA-002: Malicious Insider
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Motivation*
+| Sabotage, intellectual property theft, financial gain
+
+| *Capabilities*
+| Legitimate access, knowledge of internal systems
+
+| *Access Level*
+| Internal (authenticated user or admin)
+
+| *Goals*
+a|
+* Exfiltrate forge credentials
+* Modify rules to bypass security checks
+* Create backdoors in the verification system
+* Delete or corrupt audit logs
+
+| *Techniques*
+a|
+* Privilege escalation
+* Log tampering
+* Rule injection bypassing verification
+* Credential harvesting from memory/logs
+|===
+
+=== TA-003: Compromised Forge
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Motivation*
+| Lateral movement, data access
+
+| *Capabilities*
+| Valid webhook signatures, trusted network position
+
+| *Access Level*
+| Trusted third-party (forge platform)
+
+| *Goals*
+a|
+* Inject malicious webhook payloads
+* Trigger unintended rule executions
+* Exfiltrate data via callback mechanisms
+
+| *Techniques*
+a|
+* Webhook payload manipulation
+* Replay attacks
+* Token theft via compromised forge infrastructure
+|===
+
+=== TA-004: Supply Chain Attacker
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Motivation*
+| Wide-scale compromise, persistence
+
+| *Capabilities*
+| Package maintainer access, patience, sophisticated tooling
+
+| *Access Level*
+| Dependency chain
+
+| *Goals*
+a|
+* Inject malicious code via dependencies
+* Compromise build artifacts
+* Persist across version updates
+
+| *Techniques*
+a|
+* Typosquatting
+* Dependency confusion
+* Compromised maintainer accounts
+* CI/CD pipeline injection
+|===
+
+== Attack Vectors
+
+=== AV-001: API Authentication Bypass
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| REST/GraphQL API endpoints
+
+| *Affected Assets*
+| A-001, A-002, A-003, A-004
+
+| *Attack Scenario*
+a|
+1. Attacker identifies API endpoints
+2. Attempts credential stuffing or JWT manipulation
+3. Exploits weak authentication to gain access
+4. Extracts forge credentials or modifies rulesets
+
+| *Likelihood*
+| MEDIUM
+
+| *Impact*
+| CRITICAL
+
+| *Mitigations*
+a|
+* Strong authentication (OAuth 2.0, MFA)
+* Rate limiting
+* JWT signature verification
+* Account lockout after failed attempts
+* Monitoring for anomalous access patterns
+|===
+
+=== AV-002: Webhook Spoofing
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| Webhook receiver endpoints
+
+| *Affected Assets*
+| A-002, A-005
+
+| *Attack Scenario*
+a|
+1. Attacker discovers webhook endpoint
+2. Crafts malicious payload mimicking forge events
+3. If signature verification is weak, payload is processed
+4. Triggers unintended rule execution or data modification
+
+| *Likelihood*
+| LOW (if signatures verified correctly)
+
+| *Impact*
+| HIGH
+
+| *Mitigations*
+a|
+* HMAC-SHA256 signature verification
+* Timestamp validation (prevent replay)
+* IP allowlisting for known forge IPs
+* Payload schema validation
+|===
+
+=== AV-003: Malicious Ruleset Injection
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| Ruleset deposit API
+
+| *Affected Assets*
+| A-002, A-003
+
+| *Attack Scenario*
+a|
+1. Attacker gains authenticated access
+2. Crafts ruleset that passes type checking but contains exploit
+3. Rule is deposited and distributed to downstream repos
+4. When executed, rule performs malicious actions
+
+| *Likelihood*
+| MEDIUM
+
+| *Impact*
+| CRITICAL
+
+| *Mitigations*
+a|
+* Sandboxed rule execution
+* Formal verification of rule properties
+* Code review for new rulesets
+* Gradual rollout with monitoring
+* Rollback capability
+|===
+
+=== AV-004: Credential Exfiltration
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| Container runtime, memory, logs
+
+| *Affected Assets*
+| A-001, A-004, A-006
+
+| *Attack Scenario*
+a|
+1. Attacker gains container access (via vuln or misconfiguration)
+2. Extracts credentials from environment variables
+3. Uses credentials to access forges directly
+4. Performs unauthorized actions on repositories
+
+| *Likelihood*
+| MEDIUM
+
+| *Impact*
+| CRITICAL
+
+| *Mitigations*
+a|
+* Secrets stored in external KMS
+* Short-lived tokens with rotation
+* Credentials never in logs
+* Container hardening (read-only fs, dropped capabilities)
+* Memory encryption where available
+|===
+
+=== AV-005: Dependency Vulnerability Exploitation
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| Rust/Haskell dependencies
+
+| *Affected Assets*
+| All
+
+| *Attack Scenario*
+a|
+1. Attacker identifies vulnerable dependency
+2. Exploits known CVE in deployed version
+3. Gains code execution in application context
+4. Pivots to credential theft or data exfiltration
+
+| *Likelihood*
+| MEDIUM
+
+| *Impact*
+| HIGH
+
+| *Mitigations*
+a|
+* Regular dependency audits (cargo-audit, cabal outdated)
+* Dependabot/Renovate for automated updates
+* SBOM generation for visibility
+* Pinned dependencies with integrity checks
+|===
+
+=== AV-006: Container Escape
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| Container runtime vulnerabilities
+
+| *Affected Assets*
+| All host-level assets
+
+| *Attack Scenario*
+a|
+1. Attacker gains code execution in container
+2. Exploits container runtime vulnerability
+3. Escapes to host system
+4. Accesses other containers and host resources
+
+| *Likelihood*
+| LOW
+
+| *Impact*
+| CRITICAL
+
+| *Mitigations*
+a|
+* Regular patching of container runtime
+* Minimal base images
+* Non-root container execution
+* Seccomp/AppArmor profiles
+* Pod Security Standards enforcement
+* Network policies for isolation
+|===
+
+=== AV-007: Database Injection
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| AQL queries in ArangoDB
+
+| *Affected Assets*
+| A-002
+
+| *Attack Scenario*
+a|
+1. Attacker finds input that reaches AQL query
+2. Injects malicious AQL fragment
+3. Extracts or modifies database contents
+4. Potentially gains shell access via Foxx
+
+| *Likelihood*
+| LOW (if parameterized queries used)
+
+| *Impact*
+| HIGH
+
+| *Mitigations*
+a|
+* Parameterized AQL queries
+* Input validation
+* Principle of least privilege for DB user
+* Query auditing
+|===
+
+=== AV-008: Denial of Service
+
+[cols="1,3"]
+|===
+| Attribute | Description
+
+| *Entry Point*
+| All public endpoints
+
+| *Affected Assets*
+| Service availability
+
+| *Attack Scenario*
+a|
+1. Attacker floods endpoints with requests
+2. Or crafts computationally expensive payloads
+3. System resources exhausted
+4. Legitimate users unable to access service
+
+| *Likelihood*
+| MEDIUM
+
+| *Impact*
+| MEDIUM
+
+| *Mitigations*
+a|
+* Rate limiting per-IP and per-user
+* Request size limits
+* Query complexity limits (GraphQL)
+* Rule execution timeouts
+* Horizontal scaling / auto-scaling
+* CDN/DDoS protection
+|===
+
+== Risk Matrix
+
+[cols="2,1,1,1,1,1"]
+|===
+| Attack Vector | Likelihood | Impact | Risk Score | Priority | Status
+
+| AV-001: API Auth Bypass
+| MEDIUM
+| CRITICAL
+| HIGH
+| P1
+| Mitigated
+
+| AV-002: Webhook Spoofing
+| LOW
+| HIGH
+| MEDIUM
+| P2
+| Mitigated
+
+| AV-003: Malicious Ruleset
+| MEDIUM
+| CRITICAL
+| HIGH
+| P1
+| Partial
+
+| AV-004: Credential Exfiltration
+| MEDIUM
+| CRITICAL
+| HIGH
+| P1
+| In Progress
+
+| AV-005: Dependency Vulns
+| MEDIUM
+| HIGH
+| MEDIUM
+| P2
+| Automated
+
+| AV-006: Container Escape
+| LOW
+| CRITICAL
+| MEDIUM
+| P2
+| Mitigated
+
+| AV-007: Database Injection
+| LOW
+| HIGH
+| LOW
+| P3
+| Mitigated
+
+| AV-008: DoS
+| MEDIUM
+| MEDIUM
+| MEDIUM
+| P2
+| Partial
+|===
+
+== Mitigations Summary
+
+=== Implemented
+
+[%interactive]
+* [x] JWT-based API authentication with signature verification
+* [x] Webhook HMAC-SHA256 signature validation
+* [x] Rate limiting on all public endpoints
+* [x] Parameterized database queries
+* [x] TLS 1.3 enforcement
+* [x] Container security (non-root, read-only fs, dropped caps)
+* [x] Automated dependency scanning (cargo-audit, trivy)
+* [x] Secret scanning in CI (gitleaks, trufflehog)
+* [x] SAST integration (CodeQL, Semgrep)
+* [x] Audit logging for sensitive operations
+
+=== In Progress
+
+[%interactive]
+* [ ] External secrets management (HashiCorp Vault integration)
+* [ ] mTLS for internal service communication
+* [ ] Formal verification of all rule properties (Liquid Haskell)
+* [ ] Sandboxed rule execution environment
+
+=== Planned
+
+[%interactive]
+* [ ] Web Application Firewall (WAF)
+* [ ] Intrusion Detection System (Falco)
+* [ ] Runtime application self-protection (RASP)
+* [ ] Chaos engineering for resilience testing
+* [ ] Bug bounty program
+
+== Trust Boundaries
+
+=== TB-001: External to Internal Network
+
+[cols="1,3"]
+|===
+| Boundary | Between internet and internal services
+
+| *Controls*
+a|
+* API Gateway with authentication
+* TLS termination
+* WAF (planned)
+* Rate limiting
+
+| *Data Crossing*
+a|
+* API requests (authenticated)
+* Webhook events (signature verified)
+|===
+
+=== TB-002: Application to Database
+
+[cols="1,3"]
+|===
+| Boundary | Between application layer and data stores
+
+| *Controls*
+a|
+* Database authentication
+* TLS for connections
+* Query parameterization
+* Role-based access
+
+| *Data Crossing*
+a|
+* AQL queries
+* Redis commands
+|===
+
+=== TB-003: Application to Forges
+
+[cols="1,3"]
+|===
+| Boundary | Between cicd-hyper-a and external forges
+
+| *Controls*
+a|
+* OAuth 2.0 authentication
+* Token refresh and rotation
+* Scope limitation
+* Request signing
+
+| *Data Crossing*
+a|
+* API calls to forge
+* Webhook callbacks from forge
+|===
+
+== Appendix: STRIDE Analysis
+
+[cols="1,2,3,2"]
+|===
+| Threat | Category | Example | Mitigation
+
+| Spoofing
+| S
+| Forged webhook from attacker
+| HMAC signature verification
+
+| Tampering
+| T
+| Modified ruleset in transit
+| TLS, signed releases
+
+| Repudiation
+| R
+| User denies rule modification
+| Audit logging, signed commits
+
+| Information Disclosure
+| I
+| Credential leakage in logs
+| Log sanitization, encryption
+
+| Denial of Service
+| D
+| Resource exhaustion attack
+| Rate limiting, timeouts
+
+| Elevation of Privilege
+| E
+| User gains admin access
+| RBAC, least privilege
+|===
+
+== Document History
+
+[cols="1,2,3"]
+|===
+| Version | Date | Changes
+
+| 1.0.0 | 2025-01-18 | Initial threat model
+|===
+
+== References
+
+* https://owasp.org/www-community/Threat_Modeling[OWASP Threat Modeling]
+* https://docs.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats[Microsoft STRIDE Model]
+* https://www.cisa.gov/sites/default/files/publications/ESF_SECURING_THE_SOFTWARE_SUPPLY_CHAIN_DEVELOPERS.PDF[CISA Securing the Software Supply Chain]
+* link:SECURITY-AUDIT.adoc[cicd-hyper-a Security Audit Checklist]
+* link:../SECURITY.md[Security Policy]

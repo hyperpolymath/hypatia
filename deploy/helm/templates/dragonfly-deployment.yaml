@@ -5,21 +5,21 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-dragonfly
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-dragonfly
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.dragonfly.labels" . | nindent 4 }}
+    {{- include "hypatia.dragonfly.labels" . | nindent 4 }}
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "cicd-hyper-a.dragonfly.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.dragonfly.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "cicd-hyper-a.dragonfly.selectorLabels" . | nindent 8 }}
+        {{- include "hypatia.dragonfly.selectorLabels" . | nindent 8 }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "6379"
@@ -45,7 +45,7 @@ spec:
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: dragonfly-password
           ports:
             - name: redis
@@ -91,17 +91,17 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "cicd-hyper-a.fullname" . }}-dragonfly-data
+            claimName: {{ include "hypatia.fullname" . }}-dragonfly-data
       {{- end }}
 ---
 {{- if .Values.dragonfly.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-dragonfly-data
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-dragonfly-data
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.dragonfly.labels" . | nindent 4 }}
+    {{- include "hypatia.dragonfly.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce

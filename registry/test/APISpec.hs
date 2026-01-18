@@ -7,8 +7,8 @@ module APISpec (spec) where
 import Test.Hspec
 import Data.Aeson (encode, decode, FromJSON, ToJSON)
 import qualified Data.ByteString.Lazy as LBS
-import CicdHyperA.API
-import CicdHyperA.Registry (initRegistry)
+import Hypatia.API
+import Hypatia.Registry (initRegistry)
 import System.IO.Temp (withSystemTempDirectory)
 
 spec :: Spec

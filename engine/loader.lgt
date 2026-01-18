@@ -23,11 +23,17 @@
         arangodb_connector
     ], []),
 
+    %% Load cache layer
+    logtalk_load([
+        cache(dragonfly_cache)
+    ], []),
+
     write('cicd-hyper-a rule engine loaded.\n'),
     write('Available objects:\n'),
     write('  Rules:     cicd_rules, rule_distiller, forge_adapters, learning\n'),
     write('  Schema:    rule_schema, bot_integration\n'),
     write('  Database:  arangodb_connector, http_client, json_utils\n'),
+    write('  Cache:     dragonfly_cache\n'),
 
     % Auto-load saved knowledge if available
     ( catch(learning::load_knowledge('knowledge.pl'), _, true) ->

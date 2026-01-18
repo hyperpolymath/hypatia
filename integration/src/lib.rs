@@ -6,6 +6,25 @@
 //! - Mock server helpers
 //! - Test fixture loading
 //! - Container management utilities
+//! - CI simulation framework for testing against simulated CI environments
+//!
+//! # CI Simulation Framework
+//!
+//! The `ci_simulation` module provides a comprehensive framework for testing
+//! CI/CD functionality without requiring actual CI provider connections:
+//!
+//! ```rust
+//! use integration::ci_simulation::{MockGitHubActions, SimulatedCI, BuildConfig};
+//!
+//! #[tokio::test]
+//! async fn test_build() {
+//!     let mut ci = MockGitHubActions::new().with_default_ci();
+//!     let build_id = ci.trigger_build(BuildConfig::default()).await.unwrap();
+//!     // ... test your CI logic
+//! }
+//! ```
+
+pub mod ci_simulation;
 
 use std::path::PathBuf;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

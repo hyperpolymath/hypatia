@@ -1,0 +1,423 @@
+// SPDX-License-Identifier: PLMP-1.0-or-later
+= Security Audit Checklist for cicd-hyper-a
+:toc: macro
+:toclevels: 3
+:icons: font
+:sectanchors:
+:sectnums:
+
+toc::[]
+
+== Overview
+
+This document provides a comprehensive security audit checklist for the cicd-hyper-a neurosymbolic CI/CD intelligence platform. It covers all layers of the system: Rust adapters, Haskell verification registry, Logtalk rule engine, data stores (ArangoDB, Dragonfly), container deployments, and API surfaces.
+
+=== Audit Scope
+
+[cols="2,3,1"]
+|===
+| Component | Technology | Risk Level
+
+| Forge Adapters | Rust | High
+| Verification Registry | Haskell | Medium
+| Rule Engine | Logtalk/SWI-Prolog | Medium
+| Graph Database | ArangoDB | High
+| Cache Layer | Dragonfly (Redis-compatible) | Medium
+| Container Runtime | Docker/Kubernetes | High
+| API Layer | REST/GraphQL | High
+| CLI Tool | Rust | Medium
+| Git Hooks | Shell/Rust | Medium
+|===
+
+== Authentication & Authorization
+
+=== API Authentication
+
+[%interactive]
+* [ ] *API-AUTH-001*: All API endpoints require authentication (no anonymous access to sensitive operations)
+* [ ] *API-AUTH-002*: JWT tokens are validated with proper signature verification
+* [ ] *API-AUTH-003*: Token expiration is enforced (recommended: 1 hour for access tokens)
+* [ ] *API-AUTH-004*: Refresh tokens are stored securely and rotated on use
+* [ ] *API-AUTH-005*: API keys are hashed before storage (SHA-256 or bcrypt)
+* [ ] *API-AUTH-006*: Rate limiting is applied per-user and per-IP
+* [ ] *API-AUTH-007*: Failed authentication attempts are logged with source IP
+* [ ] *API-AUTH-008*: Account lockout after configurable failed attempts (default: 5)
+
+=== Forge Authentication
+
+[%interactive]
+* [ ] *FORGE-AUTH-001*: GitHub App private keys are stored encrypted at rest
+* [ ] *FORGE-AUTH-002*: GitLab personal access tokens have minimal required scopes
+* [ ] *FORGE-AUTH-003*: Bitbucket app passwords are rotated quarterly
+* [ ] *FORGE-AUTH-004*: OAuth tokens are refreshed before expiration
+* [ ] *FORGE-AUTH-005*: Webhook secrets use cryptographically secure random generation
+* [ ] *FORGE-AUTH-006*: SSH keys for git operations are Ed25519 or RSA-4096
+* [ ] *FORGE-AUTH-007*: Service account credentials are isolated per forge
+
+=== Authorization Controls
+
+[%interactive]
+* [ ] *AUTHZ-001*: Role-Based Access Control (RBAC) is implemented for registry operations
+* [ ] *AUTHZ-002*: Ruleset ownership is enforced (only owners can modify their rulesets)
+* [ ] *AUTHZ-003*: Repository access respects forge-level permissions
+* [ ] *AUTHZ-004*: Administrative operations require elevated privileges
+* [ ] *AUTHZ-005*: Cross-tenant access is prevented in multi-tenant deployments
+* [ ] *AUTHZ-006*: Audit logs capture all authorization decisions
+
+== Input Validation
+
+=== API Input Validation
+
+[%interactive]
+* [ ] *INPUT-API-001*: All user inputs are validated against strict schemas
+* [ ] *INPUT-API-002*: JSON payloads are parsed with depth limits (max depth: 20)
+* [ ] *INPUT-API-003*: String inputs have maximum length constraints
+* [ ] *INPUT-API-004*: Numeric inputs have range validation
+* [ ] *INPUT-API-005*: File paths are canonicalized and checked for path traversal
+* [ ] *INPUT-API-006*: Regular expressions are validated for ReDoS patterns
+* [ ] *INPUT-API-007*: Content-Type headers are validated
+* [ ] *INPUT-API-008*: Request body size limits are enforced (default: 10MB)
+
+=== Ruleset Validation
+
+[%interactive]
+* [ ] *INPUT-RULE-001*: Logtalk/Prolog rules are parsed in a sandboxed environment
+* [ ] *INPUT-RULE-002*: Haskell rulesets pass type checking before acceptance
+* [ ] *INPUT-RULE-003*: Rules cannot execute arbitrary shell commands
+* [ ] *INPUT-RULE-004*: Rules cannot access network resources directly
+* [ ] *INPUT-RULE-005*: Rules cannot read files outside designated directories
+* [ ] *INPUT-RULE-006*: Recursion depth is limited to prevent stack overflow
+* [ ] *INPUT-RULE-007*: Memory allocation limits are enforced per rule execution
+* [ ] *INPUT-RULE-008*: Execution timeout prevents infinite loops (default: 30 seconds)
+
+=== Webhook Validation
+
+[%interactive]
+* [ ] *INPUT-HOOK-001*: Webhook signatures are verified (HMAC-SHA256)
+* [ ] *INPUT-HOOK-002*: Webhook payload size limits are enforced
+* [ ] *INPUT-HOOK-003*: Webhook timestamps are validated (prevent replay attacks)
+* [ ] *INPUT-HOOK-004*: Source IP validation for forge webhooks (when available)
+* [ ] *INPUT-HOOK-005*: Webhook event types are validated against allowlist
+
+== Secret Management
+
+=== Secret Storage
+
+[%interactive]
+* [ ] *SECRET-001*: All secrets are stored in encrypted form (AES-256-GCM)
+* [ ] *SECRET-002*: Encryption keys are managed via external KMS (HashiCorp Vault, AWS KMS, etc.)
+* [ ] *SECRET-003*: No secrets are committed to version control
+* [ ] *SECRET-004*: .env files are excluded from git (.gitignore verified)
+* [ ] *SECRET-005*: Container images do not contain embedded secrets
+* [ ] *SECRET-006*: Secrets are passed via environment variables or mounted volumes
+* [ ] *SECRET-007*: Secret rotation is automated with zero-downtime
+* [ ] *SECRET-008*: Old secrets are invalidated after rotation
+
+=== Secret Detection
+
+[%interactive]
+* [ ] *SECRET-DET-001*: Pre-commit hooks scan for secrets (gitleaks/trufflehog)
+* [ ] *SECRET-DET-002*: CI pipeline includes secret scanning
+* [ ] *SECRET-DET-003*: GitHub secret scanning is enabled
+* [ ] *SECRET-DET-004*: Custom patterns are defined for project-specific secrets
+* [ ] *SECRET-DET-005*: False positives are documented in allowlist
+
+=== Cryptographic Standards
+
+Reference: `/var/mnt/eclipse/repos/cicd-hyper-a/docs/CRYPTO-STANDARD.scm`
+
+[%interactive]
+* [ ] *CRYPTO-001*: TLS 1.3 is enforced for all network connections
+* [ ] *CRYPTO-002*: Deprecated algorithms are disabled (MD5, SHA-1, RC4, 3DES)
+* [ ] *CRYPTO-003*: Certificate pinning is implemented for critical connections
+* [ ] *CRYPTO-004*: HSTS headers are enabled with long max-age
+* [ ] *CRYPTO-005*: Signed commits are verified in registry operations
+* [ ] *CRYPTO-006*: SBOM signatures use Sigstore/Cosign
+
+== API Security
+
+=== REST API Security
+
+[%interactive]
+* [ ] *REST-001*: HTTPS is required for all endpoints (HTTP redirects to HTTPS)
+* [ ] *REST-002*: CORS is configured with specific allowed origins
+* [ ] *REST-003*: CSRF protection is implemented for state-changing operations
+* [ ] *REST-004*: HTTP security headers are set:
+** Content-Security-Policy
+** X-Content-Type-Options: nosniff
+** X-Frame-Options: DENY
+** Referrer-Policy: strict-origin-when-cross-origin
+* [ ] *REST-005*: API versioning prevents breaking changes
+* [ ] *REST-006*: Rate limiting protects against abuse (per-endpoint limits)
+* [ ] *REST-007*: Error responses do not leak internal details
+* [ ] *REST-008*: Request IDs are included for tracing (X-Request-ID)
+
+=== GraphQL Security (if enabled)
+
+[%interactive]
+* [ ] *GQL-001*: Query depth limiting is enforced (max: 10)
+* [ ] *GQL-002*: Query complexity limiting is enabled
+* [ ] *GQL-003*: Introspection is disabled in production
+* [ ] *GQL-004*: Batched queries are limited
+* [ ] *GQL-005*: Persisted queries are used in production
+* [ ] *GQL-006*: Field-level authorization is implemented
+
+== Dependency Vulnerabilities
+
+=== Rust Dependencies
+
+[%interactive]
+* [ ] *DEP-RUST-001*: `cargo audit` runs in CI with blocking on HIGH/CRITICAL
+* [ ] *DEP-RUST-002*: `cargo deny` checks for banned crates
+* [ ] *DEP-RUST-003*: License compliance is verified (no GPL in core components)
+* [ ] *DEP-RUST-004*: Dependabot is configured for weekly updates
+* [ ] *DEP-RUST-005*: Security advisories are monitored (RustSec)
+* [ ] *DEP-RUST-006*: Minimal feature sets are used (no unnecessary features)
+* [ ] *DEP-RUST-007*: Vendored dependencies are integrity-checked
+* [ ] *DEP-RUST-008*: SBOM is generated in CycloneDX format
+
+=== Haskell Dependencies
+
+[%interactive]
+* [ ] *DEP-HS-001*: `cabal outdated` runs in CI
+* [ ] *DEP-HS-002*: Stackage LTS is used for stable dependency sets
+* [ ] *DEP-HS-003*: Security patches are monitored via Hackage
+* [ ] *DEP-HS-004*: `cabal freeze` pins exact versions
+* [ ] *DEP-HS-005*: Custom patches are documented and tracked
+* [ ] *DEP-HS-006*: SBOM includes all transitive dependencies
+
+=== Container Base Images
+
+[%interactive]
+* [ ] *DEP-CONT-001*: Minimal base images are used (distroless, Alpine)
+* [ ] *DEP-CONT-002*: Base images are pinned to SHA256 digest
+* [ ] *DEP-CONT-003*: Base images are updated quarterly or on CVE
+* [ ] *DEP-CONT-004*: No untrusted registries are used
+
+== Container Security
+
+=== Image Security
+
+[%interactive]
+* [ ] *CONT-IMG-001*: Images are built from scratch or minimal base
+* [ ] *CONT-IMG-002*: Multi-stage builds exclude build tools from final image
+* [ ] *CONT-IMG-003*: No secrets are embedded in image layers
+* [ ] *CONT-IMG-004*: Images are signed with Cosign
+* [ ] *CONT-IMG-005*: Image provenance is attested (SLSA)
+* [ ] *CONT-IMG-006*: Trivy scans are run before deployment
+* [ ] *CONT-IMG-007*: CRITICAL vulnerabilities block deployment
+* [ ] *CONT-IMG-008*: Images are stored in private registry with access control
+
+=== Runtime Security
+
+[%interactive]
+* [ ] *CONT-RUN-001*: Containers run as non-root user
+* [ ] *CONT-RUN-002*: Read-only root filesystem where possible
+* [ ] *CONT-RUN-003*: Capabilities are dropped (no CAP_SYS_ADMIN)
+* [ ] *CONT-RUN-004*: Seccomp profiles are enabled
+* [ ] *CONT-RUN-005*: AppArmor/SELinux policies are applied
+* [ ] *CONT-RUN-006*: Resource limits (CPU, memory) are configured
+* [ ] *CONT-RUN-007*: No privileged containers in production
+* [ ] *CONT-RUN-008*: Host namespaces are not shared
+
+=== Kubernetes Security (if deployed)
+
+[%interactive]
+* [ ] *K8S-001*: Pod Security Standards are enforced (restricted profile)
+* [ ] *K8S-002*: Network policies restrict pod-to-pod communication
+* [ ] *K8S-003*: Secrets are stored in external secrets manager
+* [ ] *K8S-004*: RBAC is configured with least privilege
+* [ ] *K8S-005*: Service accounts have minimal permissions
+* [ ] *K8S-006*: Admission controllers validate security policies
+* [ ] *K8S-007*: etcd is encrypted at rest
+* [ ] *K8S-008*: Audit logging is enabled
+
+== Network Security
+
+=== Network Segmentation
+
+[%interactive]
+* [ ] *NET-001*: Database ports are not exposed to public internet
+* [ ] *NET-002*: Internal services communicate on private networks
+* [ ] *NET-003*: Firewall rules follow least-privilege principle
+* [ ] *NET-004*: Service mesh (Istio/Linkerd) provides mTLS
+* [ ] *NET-005*: Egress traffic is filtered (no unrestricted outbound)
+* [ ] *NET-006*: DNS resolution is secured (DoH/DoT where possible)
+
+=== Database Network Security
+
+[%interactive]
+* [ ] *NET-DB-001*: ArangoDB binds to internal interface only
+* [ ] *NET-DB-002*: Dragonfly binds to internal interface only
+* [ ] *NET-DB-003*: Database connections use TLS
+* [ ] *NET-DB-004*: Database authentication is required (no anonymous access)
+* [ ] *NET-DB-005*: Connection pooling limits concurrent connections
+
+== Data Protection
+
+=== Data at Rest
+
+[%interactive]
+* [ ] *DATA-REST-001*: ArangoDB data volume is encrypted
+* [ ] *DATA-REST-002*: Dragonfly persistence is encrypted
+* [ ] *DATA-REST-003*: Backup data is encrypted with separate keys
+* [ ] *DATA-REST-004*: PII is identified and labeled
+* [ ] *DATA-REST-005*: Data retention policies are implemented
+* [ ] *DATA-REST-006*: Secure deletion is used for sensitive data
+
+=== Data in Transit
+
+[%interactive]
+* [ ] *DATA-TRANS-001*: All internal communication uses TLS
+* [ ] *DATA-TRANS-002*: Certificate rotation is automated
+* [ ] *DATA-TRANS-003*: Mutual TLS is used for service-to-service
+* [ ] *DATA-TRANS-004*: No sensitive data in URL parameters
+* [ ] *DATA-TRANS-005*: Logs do not contain sensitive data
+
+=== Data Classification
+
+[%interactive]
+* [ ] *DATA-CLASS-001*: Data classification levels are defined (public, internal, confidential)
+* [ ] *DATA-CLASS-002*: Repository credentials are classified as confidential
+* [ ] *DATA-CLASS-003*: Ruleset content is classified as internal
+* [ ] *DATA-CLASS-004*: Audit logs are classified as confidential
+* [ ] *DATA-CLASS-005*: Anonymous analytics are classified as internal
+
+== Logging & Monitoring
+
+=== Security Logging
+
+[%interactive]
+* [ ] *LOG-001*: Authentication events are logged (success and failure)
+* [ ] *LOG-002*: Authorization decisions are logged
+* [ ] *LOG-003*: Configuration changes are logged
+* [ ] *LOG-004*: Ruleset modifications are logged with user attribution
+* [ ] *LOG-005*: API requests include request ID for correlation
+* [ ] *LOG-006*: Logs are shipped to centralized logging (Loki, ELK)
+* [ ] *LOG-007*: Log retention meets compliance requirements
+* [ ] *LOG-008*: Logs are immutable (append-only storage)
+
+=== Monitoring & Alerting
+
+[%interactive]
+* [ ] *MON-001*: Security-relevant metrics are exposed to Prometheus
+* [ ] *MON-002*: Alert rules exist for:
+** Failed authentication spikes
+** Unusual API patterns
+** Container security events
+** Certificate expiration
+* [ ] *MON-003*: Dashboards visualize security metrics (Grafana)
+* [ ] *MON-004*: On-call rotation is defined for security alerts
+* [ ] *MON-005*: Alert fatigue is monitored and tuned
+
+=== Audit Trail
+
+[%interactive]
+* [ ] *AUDIT-001*: All state changes are captured in audit log
+* [ ] *AUDIT-002*: Audit logs include: who, what, when, where, outcome
+* [ ] *AUDIT-003*: Audit logs are tamper-evident (signed or hashed)
+* [ ] *AUDIT-004*: Audit logs are retained for 1 year minimum
+* [ ] *AUDIT-005*: Audit log access is restricted and logged
+
+== Incident Response
+
+=== Preparation
+
+[%interactive]
+* [ ] *IR-PREP-001*: Incident response plan is documented
+* [ ] *IR-PREP-002*: Roles and responsibilities are defined
+* [ ] *IR-PREP-003*: Communication channels are established
+* [ ] *IR-PREP-004*: Forensic tools are available
+* [ ] *IR-PREP-005*: Backup restoration is tested quarterly
+
+=== Detection
+
+[%interactive]
+* [ ] *IR-DET-001*: Intrusion detection is enabled (Falco, OSSEC)
+* [ ] *IR-DET-002*: Anomaly detection baseline is established
+* [ ] *IR-DET-003*: Threat intelligence feeds are integrated
+* [ ] *IR-DET-004*: Regular vulnerability scanning is scheduled
+
+=== Response
+
+[%interactive]
+* [ ] *IR-RESP-001*: Incident severity levels are defined
+* [ ] *IR-RESP-002*: Escalation procedures are documented
+* [ ] *IR-RESP-003*: Containment procedures exist for each component
+* [ ] *IR-RESP-004*: Evidence preservation procedures are documented
+* [ ] *IR-RESP-005*: External reporting requirements are known (GDPR, etc.)
+
+=== Recovery
+
+[%interactive]
+* [ ] *IR-REC-001*: Recovery Time Objective (RTO) is defined
+* [ ] *IR-REC-002*: Recovery Point Objective (RPO) is defined
+* [ ] *IR-REC-003*: Disaster recovery runbooks exist
+* [ ] *IR-REC-004*: Post-incident review process is defined
+
+== Compliance & Standards
+
+=== OpenSSF Scorecard
+
+[%interactive]
+* [ ] *OSSF-001*: Scorecard runs in CI
+* [ ] *OSSF-002*: Score is 7.0 or higher
+* [ ] *OSSF-003*: Token-Permissions check passes
+* [ ] *OSSF-004*: Pinned-Dependencies check passes
+* [ ] *OSSF-005*: Signed-Releases check passes
+* [ ] *OSSF-006*: Branch-Protection is enabled
+
+=== CII Best Practices
+
+Reference: `/var/mnt/eclipse/repos/cicd-hyper-a/CII-ENFORCEMENT.adoc`
+
+[%interactive]
+* [ ] *CII-001*: Passing badge requirements are met
+* [ ] *CII-002*: Silver badge requirements are met
+* [ ] *CII-003*: Gold badge requirements are tracked
+
+=== Supply Chain Security
+
+[%interactive]
+* [ ] *SUPPLY-001*: SLSA Level 2 or higher is achieved
+* [ ] *SUPPLY-002*: Build provenance is generated
+* [ ] *SUPPLY-003*: Dependency provenance is verified
+* [ ] *SUPPLY-004*: SBOM is published with each release
+
+== Appendix: Audit Schedule
+
+[cols="2,2,2,2"]
+|===
+| Audit Type | Frequency | Responsible | Last Completed
+
+| Automated Security Scan | Daily (CI) | CI/CD Pipeline | -
+| Dependency Audit | Weekly | Dependabot/Renovate | -
+| Container Scan | Per-build | CI/CD Pipeline | -
+| Manual Code Review | Per-PR | Maintainers | -
+| Penetration Test | Annually | External Auditor | -
+| Compliance Review | Quarterly | Security Team | -
+|===
+
+== Appendix: Tool References
+
+[cols="2,3,2"]
+|===
+| Tool | Purpose | Configuration
+
+| cargo-audit | Rust vulnerability scanning | Cargo.lock
+| cargo-deny | License and ban checking | deny.toml
+| trivy | Container scanning | trivy.yaml
+| gitleaks | Secret detection | .gitleaks.toml
+| Semgrep | SAST | .semgrep.yaml
+| CodeQL | SAST | codeql.yml
+| OWASP Dependency-Check | Generic dependency scanning | -
+|===
+
+== Document History
+
+[cols="1,2,3"]
+|===
+| Version | Date | Changes
+
+| 1.0.0 | 2025-01-18 | Initial security audit checklist
+|===

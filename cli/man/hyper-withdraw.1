@@ -1,0 +1,94 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-withdraw
+.TH HYPER-WITHDRAW 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-withdraw \- pull a ruleset from the registry
+.SH SYNOPSIS
+.B hyper withdraw
+[\fIOPTIONS\fR]
+.I RULESET
+.SH DESCRIPTION
+.B hyper withdraw
+downloads a ruleset from the registry for local use. Includes signature
+verification and version pinning for reproducibility.
+.SH ARGUMENTS
+.TP
+.I RULESET
+Ruleset name or fully-qualified name (author/name).
+.SH OPTIONS
+.TP
+.BR \-V ", " \-\-version =\fIVERSION\fR
+Specific version to download. Default is latest.
+.TP
+.BR \-o ", " \-\-output =\fIPATH\fR
+Output directory. Default is current directory.
+.TP
+.BR \-F ", " \-\-file\-format =\fIFORMAT\fR
+Output format: \fBhs\fR (Haskell source), \fBcompiled\fR, \fBjson\fR.
+.TP
+.BR \-\-show\-only
+Display ruleset information without downloading.
+.TP
+.BR \-\-include\-content
+Include full ruleset content in \fB\-\-show\-only\fR output.
+.TP
+.BR \-\-registry =\fIURL\fR
+Override the default registry URL.
+.TP
+.BR \-\-force
+Overwrite existing files without prompting.
+.TP
+.BR \-\-verify\-signature
+Verify the ruleset signature (default: enabled).
+.TP
+.BR \-\-no\-verify
+Skip signature verification (not recommended).
+.SH EXIT CODES
+.TP
+.B 0
+Ruleset downloaded successfully.
+.TP
+.B 20
+Registry connection error.
+.TP
+.B 21
+Registry authentication error.
+.TP
+.B 22
+Ruleset not found.
+.SH EXAMPLES
+Download latest version:
+.PP
+.RS
+.nf
+hyper withdraw hyperpolymath/rust-security
+.fi
+.RE
+.PP
+Download specific version:
+.PP
+.RS
+.nf
+hyper withdraw rust-security --version 1.2.0
+.fi
+.RE
+.PP
+View ruleset info:
+.PP
+.RS
+.nf
+hyper withdraw rust-security --show-only
+.fi
+.RE
+.PP
+Download to specific directory:
+.PP
+.RS
+.nf
+hyper withdraw rust-security -o ./rules/
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-deposit (1),
+.BR hyper\-search (1)

@@ -1,0 +1,266 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P SS ZX
+
+RN
+RV NO_DIRECT_BOOLEAN_OPERATORS
+RV NO_DISPATCHING_CALLS
+RV NO_ENUMERATION_MAPS
+RV NO_EXCEPTION_HANDLERS
+RV NO_EXCEPTION_PROPAGATION
+RV NO_EXCEPTIONS
+RV NO_IMPLICIT_CONDITIONALS
+RV NO_NESTED_FINALIZATION
+RV NO_SECONDARY_STACK
+RV NO_STANDARD_STORAGE_POOLS
+RV NO_DYNAMIC_SIZED_OBJECTS
+RV NO_IMPLEMENTATION_PRAGMAS
+RV NO_IMPLICIT_LOOPS
+RV NO_ELABORATION_CODE
+
+U hypatia.widgets.status_bar%b  hypatia-widgets-status_bar.adb  a9ad2406 OO PK
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+Z ada.tags%s		a-tags.adb		a-tags.ali
+W hypatia.widgets%s	hypatia-widgets.adb	hypatia-widgets.ali
+Z system%s		system.ads		system.ali
+Z system.finalization_primitives%s  s-finpri.adb  s-finpri.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+Z system.soft_links%s	s-soflin.adb		s-soflin.ali
+Z system.standard_library%s  s-stalib.adb	s-stalib.ali
+
+U hypatia.widgets.status_bar%s  hypatia-widgets-status_bar.ads  bb409cec EE OO PF PK
+W ada%s			ada.ads			ada.ali
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.streams%s		a-stream.adb		a-stream.ali
+W ada.strings%s		a-string.ads		a-string.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+W ada.strings.unbounded%s  a-strunb.adb		a-strunb.ali
+Z ada.tags%s		a-tags.adb		a-tags.ali
+W hypatia.widgets%s	hypatia-widgets.adb	hypatia-widgets.ali
+Z system%s		system.ads		system.ali
+Z system.finalization_primitives%s  s-finpri.adb  s-finpri.ali
+Z system.put_images%s	s-putima.adb		s-putima.ali
+Z system.return_stack%s	s-retsta.ads		s-retsta.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+Z system.soft_links%s	s-soflin.adb		s-soflin.ali
+Z system.standard_library%s  s-stalib.adb	s-stalib.ali
+Z system.stream_attributes%s  s-stratt.adb	s-stratt.ali
+Z system.strings.stream_ops%s  s-ststop.adb	s-ststop.ali
+Z system.wch_stw%s	s-wchstw.adb		s-wchstw.ali
+
+D ada.ads		19700101000000 76789da1 ada%s
+D a-assert.ads		19700101000000 ba465f5c ada.assertions%s
+D a-charac.ads		19700101000000 2d3ec45b ada.characters%s
+D a-chlat1.ads		19700101000000 e0d72e76 ada.characters.latin_1%s
+D a-except.ads		19700101000000 e7970cd9 ada.exceptions%s
+D a-finali.ads		19700101000000 bf4f806b ada.finalization%s
+D a-stream.ads		19700101000000 17477cbd ada.streams%s
+D a-string.ads		19700101000000 90ac6797 ada.strings%s
+D a-strbou.ads		19700101000000 6d86a9a3 ada.strings.bounded%s
+D a-strmap.ads		19700101000000 1f91ebb6 ada.strings.maps%s
+D a-strsea.ads		19700101000000 18c3c634 ada.strings.search%s
+D a-strsup.ads		19700101000000 8667231b ada.strings.superbounded%s
+D a-sttebu.ads		19700101000000 f1ad67a2 ada.strings.text_buffers%s
+D a-strunb.ads		19700101000000 b10770ab ada.strings.unbounded%s
+D a-stuten.ads		19700101000000 c6ced0ae ada.strings.utf_encoding%s
+D a-tags.ads		19700101000000 fbca0ad5 ada.tags%s
+D a-unccon.ads		19700101000000 0e9b276f ada.unchecked_conversion%s
+D a-uncdea.ads		19700101000000 c3a8ac65 ada.unchecked_deallocation%s
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-terminal.ads	20260118213155 96279323 hypatia.terminal%s
+D hypatia-widgets.ads	20260118213210 91c67e66 hypatia.widgets%s
+D hypatia-widgets-status_bar.ads  20260118213210 9b819221 hypatia.widgets.status_bar%s
+D hypatia-widgets-status_bar.adb  20260118213210 322cb627 hypatia.widgets.status_bar%b
+D interfac.ads		19700101000000 9111f9c1 interfaces%s
+D i-c.ads		19700101000000 e94c966a interfaces.c%s
+D system.ads		19700101000000 14286b0f system%s
+D s-assert.ads		19700101000000 9c4520c7 system.assertions%s
+D s-atocou.ads		19700101000000 dc18efc3 system.atomic_counters%s
+D s-exctab.ads		19700101000000 91bef6ef system.exception_table%s
+D s-finpri.ads		19700101000000 5970d55a system.finalization_primitives%s
+D s-finroo.ads		19700101000000 0a7c3ed4 system.finalization_root%s
+D s-memory.ads		19700101000000 18949c1a system.memory%s
+D s-oscons.ads		19700101000000 322725c4 system.os_constants%s
+D s-oslock.ads		19700101000000 13fa6b78 system.os_locks%s
+D s-parame.ads		19700101000000 3597fc11 system.parameters%s
+D s-putima.ads		19700101000000 17291fe4 system.put_images%s
+D s-retsta.ads		19700101000000 0f6b06cb system.return_stack%s
+D s-secsta.ads		19700101000000 578279f5 system.secondary_stack%s
+D s-soflin.ads		19700101000000 5d88fdea system.soft_links%s
+D s-stache.ads		19700101000000 0b81c1fe system.stack_checking%s
+D s-stalib.ads		19700101000000 1c9580f6 system.standard_library%s
+D s-stalib.adb		19700101000000 eb464a47 system.standard_library%b
+D s-stoele.ads		19700101000000 ccded4e8 system.storage_elements%s
+D s-stratt.ads		19700101000000 516607ae system.stream_attributes%s
+D s-string.ads		19700101000000 582aac7d system.strings%s
+D s-ststop.ads		19700101000000 c569db7c system.strings.stream_ops%s
+D s-traent.ads		19700101000000 c81cbf8c system.traceback_entries%s
+D s-unstyp.ads		19700101000000 fa2a7f59 system.unsigned_types%s
+D s-wchcon.ads		19700101000000 d9032363 system.wch_con%s
+D s-wchstw.ads		19700101000000 2d112c01 system.wch_stw%s
+G a e
+G c Z s b [render hypatia__widgets__status_bar 36 25 none]
+G c Z s b [handle_input hypatia__widgets__status_bar 41 24 none]
+G c Z s b [set_left_text hypatia__widgets__status_bar 46 14 none]
+G c Z s b [set_right_text hypatia__widgets__status_bar 49 14 none]
+G c Z s b [clear_hints hypatia__widgets__status_bar 52 14 none]
+G c Z s b [add_hint hypatia__widgets__status_bar 55 14 none]
+G c Z s b [set_navigation_hints hypatia__widgets__status_bar 61 14 none]
+G c Z s b [set_menu_hints hypatia__widgets__status_bar 62 14 none]
+G c Z s b [set_list_hints hypatia__widgets__status_bar 63 14 none]
+G c Z s b [set_confirm_hints hypatia__widgets__status_bar 64 14 none]
+G c Z s s [key_hintDI hypatia__widgets__status_bar 14 9 none]
+G c Z s s [key_hintDA hypatia__widgets__status_bar 14 9 none]
+G c Z s s [key_hintDF hypatia__widgets__status_bar 14 9 none]
+G c Z s s [key_hintIP hypatia__widgets__status_bar 14 9 none]
+G c Z s s [Thint_arrayBIP hypatia__widgets__status_bar 23 4 none]
+G c Z s s [Thint_arrayBDI hypatia__widgets__status_bar 23 4 none]
+G c Z s s [Thint_arrayBDA hypatia__widgets__status_bar 23 4 none]
+G c Z s s [Thint_arrayBDF hypatia__widgets__status_bar 23 4 none]
+G c Z s s [status_bar_widgetDA hypatia__widgets__status_bar 26 9 none]
+G c Z s s [status_bar_widgetDF hypatia__widgets__status_bar 26 9 none]
+G c Z s s [status_bar_widgetDI hypatia__widgets__status_bar 26 9 none]
+G c Z s s [status_bar_widgetIP hypatia__widgets__status_bar 26 9 none]
+G r c none [render hypatia__widgets__status_bar 36 25 none] [move_cursor hypatia__terminal 114 14 none]
+G r c none [render hypatia__widgets__status_bar 36 25 none] [set_style hypatia__terminal 124 14 none]
+G r c none [render hypatia__widgets__status_bar 36 25 none] [put hypatia__terminal 128 14 none]
+G r c none [render hypatia__widgets__status_bar 36 25 none] [put_styled hypatia__terminal 134 14 none]
+G r c none [render hypatia__widgets__status_bar 36 25 none] [reset_style hypatia__terminal 125 14 none]
+G r s widget [status_bar_widgetIP hypatia__widgets__status_bar 26 9 none] [widgetIP hypatia__widgets 33 9 none]
+X 1 ada.ads
+18K9*Ada 22e8 22|9r6 9r33
+X 8 a-string.ads
+16K13*Strings 35e16 22|9r10 9r37
+X 14 a-strunb.ads
+91K21*Unbounded 1641e26 22|9w18 9r45
+105R9*Unbounded_String<6|43R9> 1620e15 22|15r21 16r21 27r22 28r22
+109r4*Null_Unbounded_String{105R9} 22|15r41 16r41 27r42 28r42
+111V13*Length{natural} 23|43s45 44s31
+122V13*To_Unbounded_String{105R9} 23|94s22 103s23 127s52 128s52
+135V13*To_String{string} 23|17s38 18s38 54s37 56s37
+X 19 hypatia.ads
+9K9*Hypatia 61e12 22|11r9 66r5 23|6r14 170r5
+28I12*Terminal_Width{positive} 23|40r27
+29I12*Terminal_Height{positive}
+41I9*Color_Index<short_integer>
+48i4*Color_Yellow{41I9} 22|32r57
+49i4*Color_Blue{41I9} 22|31r55
+52i4*Color_White{41I9} 22|31r81
+X 20 hypatia-terminal.ads
+15K17*Terminal 202e21 22|31r22 32r24
+32n8*Attr_Bold{30E9} 22|32r86
+42A9*Attribute_Set(boolean)<30E9>
+46R9*Style 50e14 22|31r31 32r33
+47i7*Foreground{19|41I9} 22|31m67 32m43
+48i7*Background{19|41I9} 22|31m41
+49a7*Attributes{42A9} 22|32m71
+84R9*Input_Event 89e14 22|43r16 23|81r16
+96R9*Terminal_State 200e14 22|38r22 23|14r22
+114U14*Move_Cursor 23|25s7 31s10 50s16 68s10
+124U14*Set_Style 23|26s7
+125U14*Reset_Style 23|72s7
+128U14*Put 23|27s7
+134U14*Put_Styled 23|32s10 54s19 55s19 56s19 59s22 69s10
+X 21 hypatia-widgets.ads
+13K17*Widgets 19|9k9 21|117e20 22|11r17 66r13 23|6r22 170r13
+19i7*X{19|28I12} 23|25r44 31r47 49r34 68r47
+20i7*Y{19|29I12} 23|25r34 31r37 50r43 68r37
+21i7*Width{19|28I12} 23|16r47
+33H9*Widget 37e14 22|26r34
+34r7*Area{18R9} 23|16r42 25r29 25r39 31r32 31r42 49r29 50r38 68r32 68r42
+35b7*Visible{boolean} 23|20r16
+X 22 hypatia-widgets-status_bar.ads
+11K25*Status_Bar 21|13k17 22|66l21 66e31 23|6b30 170l21 170t31
+14R9*Key_Hint 17e14 23r49
+15r7*Key{14|105R9} 23|43r65 54r60 127m37
+16r7*Description{14|105R9} 23|44r51 56r60 128m37
+20N4*Max_Hints 23r35 23|125r25
+23A9*Hint_Array(14R9)<integer> 29r22
+26R9*Status_Bar_Widget<21|33R9> 33e14 36P25 37r15 41P24 42r23 46p14 46r40
+. 49p14 49r41 52p14 52r38 55p14 56r29 61p14 61r47 62p14 62r41 63p14 63r41
+. 64p14 64r44 23|13r15 80r23 92r40 101r41 110r38 120r29 136r47 145r41 153r41
+. 162r44
+27r7*Left_Text{14|105R9} 23|17r51 94m9
+28r7*Right_Text{14|105R9} 23|18r51 103m9
+29a7*Hints{23A9} 23|43r55 44r41 54r50 56r50 127m12
+30i7*Hint_Count{natural} 23|36r12 42r29 52r32 58r28 112m9 125r12 126m12 126r28
+. 127r21
+31r7*Bar_Style{20|46R9} 23|26r26 32r40 55r44 56r76 59r48 69r41
+32r7*Hint_Key_Style{20|46R9} 23|54r68
+36U25*Render<21|40p14> 37>8 38=8 23|12b25 73l8 73t14
+37r8 W{26R9} 23|13b8 16r40 17r49 18r49 20r14 25r27 25r37 26r24 31r30 31r40
+. 32r38 36r10 42r27 43r53 44r39 49r27 50r36 52r30 54r48 54r66 55r42 56r48
+. 56r74 58r26 59r46 68r30 68r40 69r39
+38r8 Term{20|96R9} 23|14b8 25m20 26m18 27m12 31m23 32m22 50m29 54m31 55m31
+. 56m31 59m34 68m23 69m22 72m20
+41V24*Handle_Input{boolean}<21|45p13> 42=8 43>8 23|79b24 86l8 86t20
+42r8 W{26R9} 23|80b8 83r28
+43r8 Event{20|84R9} 23|81b8 83r31
+46U14*Set_Left_Text 46=29 46>59 23|92b14 95l8 95t21
+46r29 W{26R9} 23|92b29 94m7
+46a59 Text{string} 23|92b59 94r43
+49U14*Set_Right_Text 49=30 49>60 23|101b14 104l8 104t22
+49r30 W{26R9} 23|101b30 103m7
+49a60 Text{string} 23|101b60 103r44
+52U14*Clear_Hints 52=27 23|110b14 113l8 113t19 138s7 147s7 155s7 164s7
+52r27 W{26R9} 23|110b27 112m7
+55U14*Add_Hint 56=8 57>8 58>8 23|119b14 130l8 130t16 139s7 140s7 141s7 142s7
+. 148s7 149s7 150s7 156s7 157s7 158s7 159s7 165s7 166s7 167s7
+56r8 W{26R9} 23|120b8 125r10 126m10 126r26 127m10 127r19
+57a8 Key{string} 23|121b8 127r73
+58a8 Description{string} 23|122b8 128r73
+61U14*Set_Navigation_Hints 61=36 23|136b14 143l8 143t28
+61r36 W{26R9} 23|136b36 138m20 139m17 140m17 141m17 142m17
+62U14*Set_Menu_Hints 62=30 23|145b14 151l8 151t22
+62r30 W{26R9} 23|145b30 147m20 148m17 149m17 150m17
+63U14*Set_List_Hints 63=30 23|153b14 160l8 160t22
+63r30 W{26R9} 23|153b30 155m20 156m17 157m17 158m17 159m17
+64U14*Set_Confirm_Hints 64=33 23|162b14 168l8 168t25
+64r33 W{26R9} 23|162b33 164m20 165m17 166m17 167m17
+X 23 hypatia-widgets-status_bar.adb
+16i7 Bar_Width{positive} 27r24 48r30 49r39 67r54 68r51
+17a7 Left_Str{string} 30r10 32r28 48r42
+18a7 Right_Str{string} 48r60 67r10 67r35 68r63 69r28
+39i13 Total_Width{natural} 43m16 43r31 48r16 49r51
+40i13 Start_X{19|28I12} 49m16 50r46
+42i17 I{integer} 43r62 44r48
+52i20 I{integer} 54r57 56r57 58r22
+X 26 system.ads
+67M9*Address
+X 32 s-memory.ads
+51V13*Alloc{26|67M9} 101i<c,__gnat_malloc>22
+66U14*Free 102i<c,__gnat_free>22
+74V13*Realloc{26|67M9} 103i<c,__gnat_realloc>22
+X 42 s-stalib.adb
+87U14 Break_Start 88i<c,__gnat_break_start>22
+

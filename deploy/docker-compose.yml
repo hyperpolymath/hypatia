@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Docker Compose configuration
+# hypatia Docker Compose configuration
 # Local development and testing environment
 
 version: "3.8"
@@ -11,7 +11,7 @@ services:
 
   arangodb:
     image: arangodb:3.11
-    container_name: cicd-hyper-a-arangodb
+    container_name: hypatia-arangodb
     environment:
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD:-devpassword}
       ARANGO_NO_AUTH: "0"
@@ -31,15 +31,14 @@ services:
 
   dragonfly:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
-    container_name: cicd-hyper-a-dragonfly
+    container_name: hypatia-dragonfly
     command: >
-      --maxmemory=2gb
-      --proactor_threads=2
-      --cache_mode=true
+      --flagfile=/etc/dragonfly/dragonfly.conf
     ports:
       - "6379:6379"
     volumes:
       - dragonfly_data:/data
+      - ./dragonfly/dragonfly.conf:/etc/dragonfly/dragonfly.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -47,6 +46,8 @@ services:
       retries: 5
     networks:
       - cicd-network
+    ulimits:
+      memlock: -1
 
   # ============================================================
   # REGISTRY SERVICE
@@ -56,7 +57,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.registry
-    container_name: cicd-hyper-a-registry
+    container_name: hypatia-registry
     environment:
       ARANGODB_URL: http://arangodb:8529
       ARANGODB_DATABASE: cicd_hyper_a
@@ -82,7 +83,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.engine
-    container_name: cicd-hyper-a-engine
+    container_name: hypatia-engine
     environment:
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
@@ -105,7 +106,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.adapter
-    container_name: cicd-hyper-a-adapter
+    container_name: hypatia-adapter
     environment:
       GITHUB_TOKEN: ${GITHUB_TOKEN}
       GITLAB_TOKEN: ${GITLAB_TOKEN}
@@ -125,7 +126,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.48.0
-    container_name: cicd-hyper-a-prometheus
+    container_name: hypatia-prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -140,7 +141,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.2.0
-    container_name: cicd-hyper-a-grafana
+    container_name: hypatia-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}

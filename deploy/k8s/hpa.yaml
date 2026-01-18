@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Horizontal Pod Autoscaler configurations
+# hypatia Horizontal Pod Autoscaler configurations
 ---
 # API Service HPA
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: api-hpa
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -66,11 +66,11 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: registry-hpa
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: registry
     app.kubernetes.io/component: registry
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -112,11 +112,11 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: engine-hpa
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -158,11 +158,11 @@ apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
   name: api-vpa
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   targetRef:
     apiVersion: apps/v1
@@ -188,11 +188,11 @@ apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
   name: registry-vpa
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: registry
     app.kubernetes.io/component: registry
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   targetRef:
     apiVersion: apps/v1
@@ -218,11 +218,11 @@ apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
   name: engine-vpa
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   targetRef:
     apiVersion: apps/v1

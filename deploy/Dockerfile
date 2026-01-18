@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for cicd-hyper-a API Service
+# Dockerfile for hypatia API Service
 # Multi-stage build for minimal production image
 
 # ============================================================
@@ -17,8 +17,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a new empty shell project for dependency caching
-RUN USER=root cargo new --bin cicd-hyper-a
-WORKDIR /build/cicd-hyper-a
+RUN USER=root cargo new --bin hypatia
+WORKDIR /build/hypatia
 
 # Copy manifests for dependency caching
 COPY Cargo.toml Cargo.lock ./
@@ -66,7 +66,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy built binary
-COPY --from=builder /build/cicd-hyper-a/target/release/cicd-hyper-a /usr/local/bin/cicd-hyper-a
+COPY --from=builder /build/hypatia/target/release/hypatia /usr/local/bin/hypatia
 
 # Copy schemas and configuration
 COPY schemas /app/schemas
@@ -91,5 +91,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Run the application
-ENTRYPOINT ["cicd-hyper-a"]
+ENTRYPOINT ["hypatia"]
 CMD ["serve", "--port", "8000"]

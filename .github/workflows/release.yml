@@ -1,5 +1,6 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
-# Release workflow for cicd-hyper-a
+# SPDX-License-Identifier: PLMP-1.0-or-later
+# Release workflow for Hypatia
+# Website: https://hypatia.reposystem.dev
 # Builds binaries, Docker images, and publishes releases
 
 name: Release
@@ -122,13 +123,13 @@ jobs:
 
       - name: Build CLI binary
         run: |
-          cargo build --release --package cicd-hyper-a-cli --target ${{ matrix.target }}
+          cargo build --release --package hypatia-cli --target ${{ matrix.target }}
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Build adapter binary
         run: |
-          cargo build --release --package cicd-hyper-a-adapters --target ${{ matrix.target }}
+          cargo build --release --package hypatia-adapters --target ${{ matrix.target }}
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
@@ -140,7 +141,7 @@ jobs:
           cp target/${{ matrix.target }}/release/forge-adapter dist/ || true
           cp README.adoc LICENSE dist/
           cd dist
-          tar -czvf ../cicd-hyper-a-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz *
+          tar -czvf ../hypatia-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz *
 
       - name: Create archive (Windows)
         if: matrix.archive == 'zip'
@@ -150,13 +151,13 @@ jobs:
           Copy-Item target/${{ matrix.target }}/release/hyper.exe dist/
           Copy-Item target/${{ matrix.target }}/release/forge-adapter.exe dist/ -ErrorAction SilentlyContinue
           Copy-Item README.adoc,LICENSE dist/
-          Compress-Archive -Path dist/* -DestinationPath cicd-hyper-a-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip
+          Compress-Archive -Path dist/* -DestinationPath hypatia-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: cicd-hyper-a-${{ matrix.target }}
-          path: cicd-hyper-a-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
+          name: hypatia-${{ matrix.target }}
+          path: hypatia-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
           retention-days: 7
 
   # ============================================================================
@@ -188,7 +189,7 @@ jobs:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ env.key }}-plan-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+          key: ${{ env.key }}-plan-${{ hashFiles('registry/hypatia.cabal') }}
           restore-keys: ${{ env.key }}-
 
       - name: Build dependencies
@@ -203,13 +204,13 @@ jobs:
           cp $(cabal list-bin registry) dist/
           cp ../README.adoc ../LICENSE dist/
           cd dist
-          tar -czvf ../cicd-hyper-a-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz *
+          tar -czvf ../hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz *
 
       - name: Upload artifact
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: cicd-hyper-a-registry-x86_64-linux
-          path: registry/cicd-hyper-a-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz
+          name: hypatia-registry-x86_64-linux
+          path: registry/hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz
           retention-days: 7
 
   # ============================================================================
@@ -245,7 +246,7 @@ jobs:
       - name: Download Rust artifacts
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
-          pattern: cicd-hyper-a-x86_64-*
+          pattern: hypatia-x86_64-*
           path: artifacts
 
       - name: Set up Docker Buildx
@@ -312,7 +313,7 @@ jobs:
         id: release_notes
         run: |
           cat << 'EOF' > release-notes.md
-          ## cicd-hyper-a v${{ needs.prepare.outputs.version }}
+          ## Hypatia v${{ needs.prepare.outputs.version }}
 
           ### Components
           - **CLI** (`hyper`): Command-line interface for CI/CD operations
@@ -332,13 +333,13 @@ jobs:
 
           #### Linux (x86_64)
           ```bash
-          curl -sSL https://github.com/${{ github.repository }}/releases/download/v${{ needs.prepare.outputs.version }}/cicd-hyper-a-${{ needs.prepare.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          curl -sSL https://github.com/${{ github.repository }}/releases/download/v${{ needs.prepare.outputs.version }}/hypatia-${{ needs.prepare.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz | tar xz
           sudo mv hyper /usr/local/bin/
           ```
 
           #### macOS (Apple Silicon)
           ```bash
-          curl -sSL https://github.com/${{ github.repository }}/releases/download/v${{ needs.prepare.outputs.version }}/cicd-hyper-a-${{ needs.prepare.outputs.version }}-aarch64-apple-darwin.tar.gz | tar xz
+          curl -sSL https://github.com/${{ github.repository }}/releases/download/v${{ needs.prepare.outputs.version }}/hypatia-${{ needs.prepare.outputs.version }}-aarch64-apple-darwin.tar.gz | tar xz
           sudo mv hyper /usr/local/bin/
           ```
 
@@ -355,7 +356,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.1
         with:
-          name: cicd-hyper-a v${{ needs.prepare.outputs.version }}
+          name: Hypatia v${{ needs.prepare.outputs.version }}
           body_path: release-notes.md
           prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
           files: |

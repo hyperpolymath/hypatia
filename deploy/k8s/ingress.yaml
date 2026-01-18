@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Kubernetes Ingress
+# hypatia Kubernetes Ingress
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: cicd-hyper-a-ingress
-  namespace: cicd-hyper-a
+  name: hypatia-ingress
+  namespace: hypatia
   labels:
-    app.kubernetes.io/name: cicd-hyper-a
+    app.kubernetes.io/name: hypatia
     app.kubernetes.io/component: ingress
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
   annotations:
     # Ingress controller annotations (nginx-ingress)
     kubernetes.io/ingress.class: nginx
@@ -37,14 +37,14 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - cicd-hyper-a.example.com        # TODO: Replace with your domain
-        - api.cicd-hyper-a.example.com
-        - registry.cicd-hyper-a.example.com
-        - grafana.cicd-hyper-a.example.com
-      secretName: cicd-hyper-a-tls
+        - hypatia.example.com        # TODO: Replace with your domain
+        - api.hypatia.example.com
+        - registry.hypatia.example.com
+        - grafana.hypatia.example.com
+      secretName: hypatia-tls
   rules:
     # Main API endpoint
-    - host: cicd-hyper-a.example.com      # TODO: Replace with your domain
+    - host: hypatia.example.com      # TODO: Replace with your domain
       http:
         paths:
           - path: /
@@ -56,7 +56,7 @@ spec:
                   number: 8000
 
     # Explicit API subdomain
-    - host: api.cicd-hyper-a.example.com  # TODO: Replace with your domain
+    - host: api.hypatia.example.com  # TODO: Replace with your domain
       http:
         paths:
           - path: /
@@ -68,7 +68,7 @@ spec:
                   number: 8000
 
     # Registry endpoint (for ruleset operations)
-    - host: registry.cicd-hyper-a.example.com  # TODO: Replace with your domain
+    - host: registry.hypatia.example.com  # TODO: Replace with your domain
       http:
         paths:
           - path: /
@@ -80,7 +80,7 @@ spec:
                   number: 8080
 
     # Grafana monitoring dashboard
-    - host: grafana.cicd-hyper-a.example.com  # TODO: Replace with your domain
+    - host: grafana.hypatia.example.com  # TODO: Replace with your domain
       http:
         paths:
           - path: /
@@ -111,16 +111,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: cicd-hyper-a-tls
-  namespace: cicd-hyper-a
+  name: hypatia-tls
+  namespace: hypatia
 spec:
-  secretName: cicd-hyper-a-tls
+  secretName: hypatia-tls
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
-  commonName: cicd-hyper-a.example.com  # TODO: Replace with your domain
+  commonName: hypatia.example.com  # TODO: Replace with your domain
   dnsNames:
-    - cicd-hyper-a.example.com
-    - api.cicd-hyper-a.example.com
-    - registry.cicd-hyper-a.example.com
-    - grafana.cicd-hyper-a.example.com
+    - hypatia.example.com
+    - api.hypatia.example.com
+    - registry.hypatia.example.com
+    - grafana.hypatia.example.com

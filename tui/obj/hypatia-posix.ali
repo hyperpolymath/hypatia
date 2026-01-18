@@ -1,0 +1,200 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P ZX
+
+RN
+RV NO_STANDARD_STORAGE_POOLS
+RV NO_IMPLEMENTATION_PRAGMAS
+
+U hypatia.posix%b	hypatia-posix.adb	44c0827e NE OO PK
+W hypatia%s		hypatia.ads		hypatia.ali
+
+U hypatia.posix%s	hypatia-posix.ads	a2ecd69a EE NE OO PK
+W hypatia%s		hypatia.ads		hypatia.ali
+W interfaces%s		interfac.ads		interfac.ali
+W interfaces.c%s	i-c.adb			i-c.ali
+W system%s		system.ads		system.ali
+
+D ada.ads		19700101000000 76789da1 ada%s
+D a-unccon.ads		19700101000000 0e9b276f ada.unchecked_conversion%s
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-posix.ads	20260118213155 a1fa2c80 hypatia.posix%s
+D hypatia-posix.adb	20260118213156 e53aaefe hypatia.posix%b
+D interfac.ads		19700101000000 9111f9c1 interfaces%s
+D i-c.ads		19700101000000 e94c966a interfaces.c%s
+D system.ads		19700101000000 14286b0f system%s
+D s-exctab.ads		19700101000000 91bef6ef system.exception_table%s
+D s-parame.ads		19700101000000 3597fc11 system.parameters%s
+D s-stalib.ads		19700101000000 1c9580f6 system.standard_library%s
+G a e
+G c Z s s [tcgetattr hypatia__posix 94 13 none]
+G c Z s s [tcsetattr hypatia__posix 97 13 none]
+G c Z s s [ioctl hypatia__posix 104 13 none]
+G c Z s s [c_read hypatia__posix 111 13 none]
+G c Z s s [fcntl_getfl hypatia__posix 122 13 none]
+G c Z s s [fcntl_setfl hypatia__posix 125 13 none]
+G c Z s s [c_select hypatia__posix 129 13 none]
+G c Z s b [clear_fd_set hypatia__posix 149 14 none]
+G c Z s b [set_fd hypatia__posix 150 14 none]
+G c Z s b [is_fd_set hypatia__posix 151 13 none]
+G c Z s s [Tcc_arrayBIP hypatia__posix 68 4 none]
+G c Z s s [termios_recordIP hypatia__posix 72 9 none]
+G c Z s s [winsize_recordIP hypatia__posix 85 9 none]
+G c Z s s [timeval_recordIP hypatia__posix 138 9 none]
+G c Z s s [Tfd_set_typeBIP hypatia__posix 145 4 none]
+G c Z b b [bit_mask hypatia__posix 15 13 none]
+X 3 hypatia.ads
+9K9*Hypatia 61e12 4|11r9 153r5 5|6r14 52r5
+X 4 hypatia-posix.ads
+11K17*POSIX 3|9k9 4|153l13 153e18 5|6b22 52l13 52t18
+16N4*STDIN_FILENO
+17N4*STDOUT_FILENO
+20N4*NCCS 68r33
+23N4*IGNBRK
+24N4*BRKINT
+25N4*IGNPAR
+26N4*PARMRK
+27N4*INPCK
+28N4*ISTRIP
+29N4*INLCR
+30N4*IGNCR
+31N4*ICRNL
+32N4*IUCLC
+33N4*IXON
+34N4*IXANY
+35N4*IXOFF
+38N4*OPOST
+41N4*ISIG
+42N4*ICANON
+43N4*ECHO
+44N4*ECHOE
+45N4*ECHOK
+46N4*ECHONL
+47N4*IEXTEN
+50N4*CSIZE
+51N4*CS8
+52N4*PARENB
+55N4*TCSANOW
+56N4*TCSADRAIN
+57N4*TCSAFLUSH
+60N4*TIOCGWINSZ
+63N4*VMIN
+64N4*VTIME
+67M9*Cc_T<7|76M9> 68r46 77r18
+68A9*Cc_Array(67M9)<integer> 78r18
+69M9*Tcflag_T<7|71M9> 73r18 74r18 75r18 76r18
+70M9*Speed_T<7|71M9> 79r18 80r18
+72R9*Termios_Record 81e14 82r26 94r53 100r26
+73m7*c_iflag{69M9}
+74m7*c_oflag{69M9}
+75m7*c_cflag{69M9}
+76m7*c_lflag{69M9}
+77m7*c_line{67M9}
+78a7*c_cc{68A9}
+79m7*c_ispeed{70M9}
+80m7*c_ospeed{70M9}
+85R9*Winsize_Record 90e14 91r26 107r24
+86m7*ws_row{7|72M9}
+87m7*ws_col{7|72M9}
+88m7*ws_xpixel{7|72M9}
+89m7*ws_ypixel{7|72M9}
+94V13*Tcgetattr{7|62I9} 94>24 94^34 95b<c,tcgetattr>22
+94i24 fd{7|62I9}
+94p34 termios_p(72R9)
+97V13*Tcsetattr{7|62I9} 98>7 99>7 100^7 101b<c,tcsetattr>22
+98i7 fd{7|62I9}
+99i7 actions{7|62I9}
+100p7 termios_p(72R9)
+104V13*Ioctl{7|62I9} 105>7 106>7 107^7 108b<c,ioctl>22
+105i7 fd{7|62I9}
+106m7 request{7|73M9}
+107p7 arg(85R9)
+111V13*C_Read{7|62I9} 112>7 113>7 114>7 115b<c,read>22
+112i7 fd{7|62I9}
+113m7 buf{8|67M9}
+114m7 count{7|92M9}
+118N4*F_GETFL
+119N4*F_SETFL
+120N4*O_NONBLOCK
+122V13*Fcntl_Getfl{7|62I9} 122>26 122>36 123b<c,fcntl>22
+122i26 fd{7|62I9}
+122i36 cmd{7|62I9}
+125V13*Fcntl_Setfl{7|62I9} 125>26 125>36 125>47 126b<c,fcntl>22
+125i26 fd{7|62I9}
+125i36 cmd{7|62I9}
+125i47 arg{7|62I9}
+129V13*C_Select{7|62I9} 130>7 131>7 132>7 133>7 134>7 135b<c,select>22
+130i7 nfds{7|62I9}
+131m7 readfds{8|67M9}
+132m7 writefds{8|67M9}
+133m7 exceptfds{8|67M9}
+134m7 timeout{8|67M9}
+138R9*Timeval_Record 141e14 142r26
+139i7*tv_sec{7|64I9}
+140i7*tv_usec{7|64I9}
+145A9*FD_Set_Type(7|73M9)<integer> 146r26 149r38 150r45 151r40 5|27r38 32r45
+. 41r40
+149U14*Clear_FD_Set 149<28 5|27b14 30l8 30t20
+149a28 fds{145A9} 5|27b28 29m7
+150U14*Set_FD 150>22 150=32 5|32b14 39l8 39t14
+150i22 fd{7|62I9} 5|32b22 33r49 34r49
+150a32 fds{145A9} 5|32b32 36r24 37m10 37r30
+151V13*Is_FD_Set{boolean} 151>24 151>34 5|41b13 50l8 50t17
+151i24 fd{7|62I9} 5|41b24 42r49 43r49
+151a34 fds{145A9} 5|41b34 45r24 46r18
+X 5 hypatia-posix.adb
+12N4 Bits_Per_Word 33r55 34r57 42r55 43r57
+15V13 Bit_Mask{7|73M9} 15>23 18b13 25l8 25t16 37s50 46s39
+15i23 Bit_Index{natural} 18b23 21r21
+19m7 Result{7|73M9} 22m10 22r20 24r14
+21i11 I{integer}
+33i7 Word_Index{natural} 36r10 37r15 37r35
+34i7 Bit_Index{natural} 37r60
+42i7 Word_Index{natural} 45r10 46r23
+43i7 Bit_Index{natural} 46r49
+X 6 interfac.ads
+47K9*Interfaces 4|8r6 13r8 6|247e15
+X 7 i-c.ads
+33K20*C 4|8w17 13r19 7|601e17
+62I9*int<integer> 4|94r29 94r76 98r19 99r19 100r49 105r17 107r47 112r15 114r30
+. 122r31 122r42 122r54 125r31 125r42 125r53 125r65 130r19 134r42 150r27 151r29
+. 5|32r27 41r29
+64I9*long<long_integer> 4|139r17 140r17
+71M9*unsigned 4|69r25 70r24
+72M9*unsigned_short 4|86r19 87r19 88r19 89r19
+73M9*unsigned_long 4|106r17 145r43 5|12r32 15r51 18r51 19r16
+76M9*unsigned_char 4|67r21
+92M9*size_t 4|114r15
+X 8 system.ads
+37K9*System 4|9w6 113r15 131r19 132r19 133r19 134r19 8|155e11
+67M9*Address 4|113r22 131r26 132r26 133r26 134r26
+

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Terraform Main Configuration
+# hypatia Terraform Main Configuration
 #
 # This configuration supports multi-cloud deployment to AWS, GCP, or Azure.
 # Set the `cloud_provider` variable to select your target platform.
@@ -47,20 +47,20 @@ terraform {
 
   # Backend configuration - uncomment and configure for remote state
   # backend "s3" {
-  #   bucket         = "cicd-hyper-a-terraform-state"
+  #   bucket         = "hypatia-terraform-state"
   #   key            = "terraform.tfstate"
   #   region         = "us-east-1"
   #   encrypt        = true
-  #   dynamodb_table = "cicd-hyper-a-terraform-locks"
+  #   dynamodb_table = "hypatia-terraform-locks"
   # }
 
   # backend "gcs" {
-  #   bucket = "cicd-hyper-a-terraform-state"
+  #   bucket = "hypatia-terraform-state"
   #   prefix = "terraform/state"
   # }
 
   # backend "azurerm" {
-  #   resource_group_name  = "cicd-hyper-a-terraform"
+  #   resource_group_name  = "hypatia-terraform"
   #   storage_account_name = "cicdtfstate"
   #   container_name       = "tfstate"
   #   key                  = "terraform.tfstate"
@@ -151,10 +151,10 @@ provider "helm" {
 locals {
   # Common tags applied to all resources
   common_tags = merge(var.tags, {
-    Project     = "cicd-hyper-a"
+    Project     = "hypatia"
     Environment = var.environment
     ManagedBy   = "terraform"
-    Repository  = "github.com/hyperpolymath/cicd-hyper-a"
+    Repository  = "github.com/hyperpolymath/hypatia"
   })
 
   # Cluster name based on environment
@@ -379,7 +379,7 @@ module "monitoring" {
 resource "helm_release" "cicd_hyper_a" {
   count = var.deploy_application ? 1 : 0
 
-  name       = "cicd-hyper-a"
+  name       = "hypatia"
   namespace  = var.kubernetes_namespace
   chart      = "${path.module}/../helm"
 

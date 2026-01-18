@@ -1,14 +1,17 @@
 cabal-version:      3.0
 -- SPDX-License-Identifier: PLMP-1.0-or-later
-name:               cicd-hyper-a
+name:               hypatia
 version:            0.1.0.0
 synopsis:           Type-safe CI/CD rule registry
-description:        Neurosymbolic CI/CD intelligence platform.
+description:        Hypatia - Neurosymbolic CI/CD intelligence platform.
                     Dumb rules from smart learning.
+                    Website: https://hypatia.reposystem.dev
 license:            PLMP-1.0-or-later
 license-file:       ../LICENSE
 author:             hyperpolymath
 maintainer:         security@hyperpolymath.dev
+homepage:           https://hypatia.reposystem.dev
+bug-reports:        https://github.com/hyperpolymath/hypatia/issues
 category:           Development
 build-type:         Simple
 extra-doc-files:    ../README.adoc
@@ -20,11 +23,11 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  CicdHyperA.Ruleset
-                    , CicdHyperA.Verify
-                    , CicdHyperA.Registry
-                    , CicdHyperA.Liquid
-                    , CicdHyperA.API
+    exposed-modules:  Hypatia.Ruleset
+                    , Hypatia.Verify
+                    , Hypatia.Registry
+                    , Hypatia.Liquid
+                    , Hypatia.API
     build-depends:    base >=4.17 && <5
                     , text >=2.0 && <3
                     , containers >=0.6 && <1
@@ -43,11 +46,11 @@ executable registry
                     , time >=1.12 && <2
                     , directory >=1.3 && <2
                     , filepath >=1.4 && <2
-                    , cicd-hyper-a
+                    , hypatia
     hs-source-dirs:   src
     default-language: Haskell2010
 
-test-suite cicd-hyper-a-test
+test-suite hypatia-test
     import:           warnings
     type:             exitcode-stdio-1.0
     main-is:          Spec.hs
@@ -57,10 +60,12 @@ test-suite cicd-hyper-a-test
                     , LiquidSpec
                     , APISpec
                     , CLISpec
+                    , PropertySpec
     build-depends:    base >=4.17 && <5
                     , text >=2.0 && <3
-                    , cicd-hyper-a
+                    , hypatia
                     , hspec >=2.11 && <3
+                    , hspec-quickcheck >=2.0 && <3
                     , QuickCheck >=2.14 && <3
                     , aeson >=2.1 && <3
                     , bytestring >=0.11 && <1

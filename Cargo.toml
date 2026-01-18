@@ -14,7 +14,8 @@ version = "0.1.0"
 edition = "2021"
 authors = ["hyperpolymath"]
 license = "PLMP-1.0-or-later"
-repository = "https://github.com/hyperpolymath/cicd-hyper-a"
+repository = "https://github.com/hyperpolymath/hypatia"
+homepage = "https://hypatia.reposystem.dev"
 
 [workspace.dependencies]
 tokio = { version = "1.35", features = ["full"] }

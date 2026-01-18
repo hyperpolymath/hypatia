@@ -1,0 +1,93 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P ZX
+
+RN
+RV NO_DYNAMIC_SIZED_OBJECTS
+RV NO_IMPLEMENTATION_PRAGMAS
+RV NO_IMPLICIT_LOOPS
+
+U hypatia.state_machine%b  hypatia-state_machine.adb  3cf430e6 NE OO PK
+W hypatia%s		hypatia.ads		hypatia.ali
+
+U hypatia.state_machine%s  hypatia-state_machine.ads  83cdc6d8 EE NE OO PK
+W hypatia%s		hypatia.ads		hypatia.ali
+
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D hypatia-state_machine.ads  20260118213210 7dbfc1a7 hypatia.state_machine%s
+D hypatia-state_machine.adb  20260118213210 414bf141 hypatia.state_machine%b
+D system.ads		19700101000000 14286b0f system%s
+G a e
+G c Z s b [is_valid_transition hypatia__state_machine 42 13 none]
+G c Z s b [next_state hypatia__state_machine 47 13 none]
+G c Z s b [process_event hypatia__state_machine 53 14 none]
+X 1 hypatia.ads
+9K9*Hypatia 61e12 2|9r9 58r5 3|6r14 129r5
+X 2 hypatia-state_machine.ads
+9K17*State_Machine 1|9k9 2|58l13 58e26 3|6b22 129l13 129t26
+12E9*TUI_State 23e25 43r21 48r18 49r43 54r25 3|13r21 53r18 54r43 111r25
+13n8*State_Uninitialized{12E9} 3|22r15
+14n8*State_Splash{12E9} 3|25r15 62r20
+15n8*State_Main_Menu{12E9} 3|28r15 65r20 87r26 99r20
+16n8*State_Scan_View{12E9} 3|33r15 68r20 85r21
+17n8*State_Fleet_View{12E9} 3|33r33 71r20 85r39
+18n8*State_Registry_View{12E9} 3|34r15 74r20 86r21
+19n8*State_Settings_View{12E9} 3|34r37 77r20 86r43
+20n8*State_Help_View{12E9} 3|34r59 80r20 86r65
+21n8*State_Confirm_Exit{12E9} 3|37r15 93r20
+22n8*State_Exiting{12E9} 3|40r15 96r20
+23n8*State_Terminated{12E9} 3|43r15 102r20
+26E9*Navigation_Event 39e23 44r21 49r18 55r18 3|14r21 54r18 112r18
+27n8*Event_None{26E9} 3|17r18 58r15 116r18
+28n8*Event_Initialize{26E9} 3|23r28 61r15
+29n8*Event_Splash_Done{26E9} 3|26r28 64r15
+30n8*Event_Go_Scan{26E9} 3|29r29 67r15
+31n8*Event_Go_Fleet{26E9} 3|29r45 70r15
+32n8*Event_Go_Registry{26E9} 3|30r29 73r15
+33n8*Event_Go_Settings{26E9} 3|30r49 76r15
+34n8*Event_Go_Help{26E9} 3|31r29 35r66 79r15
+35n8*Event_Go_Back{26E9} 3|35r29 82r15
+36n8*Event_Request_Exit{26E9} 3|31r45 35r45 92r15
+37n8*Event_Confirm_Exit{26E9} 3|38r29 95r15
+38n8*Event_Cancel_Exit{26E9} 3|38r50 98r15
+39n8*Event_Shutdown{26E9} 3|41r28 101r15
+42V13*Is_Valid_Transition{boolean} 43>8 44>8 3|12b13 46l8 46t27 121s10
+43e8 From_State{12E9} 3|13b8 21r12
+44e8 Event{26E9} 3|14b8 17r10 23r20 26r20 29r20 35r20 38r20 41r20
+47V13*Next_State{12E9} 48>8 49>8 3|52b13 104l8 104t18 122s19
+48e8 Current{12E9} 3|53b8 59r20 84r18 89r26
+49e8 Event{26E9} 3|54b8 57r12
+53U14*Process_Event 54=8 55>8 56<8 3|110b14 127l8 127t21
+54e8 State{12E9} 3|111b8 121r31 122m10 122r31
+55e8 Event{26E9} 3|112b8 116r10 121r38 122r38
+56b8 Success{boolean} 3|113b8 117m10 123m10 125m10
+

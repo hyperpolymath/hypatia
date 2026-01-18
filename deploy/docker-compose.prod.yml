@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Docker Compose - Production Overrides
+# hypatia Docker Compose - Production Overrides
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 version: "3.8"
@@ -41,8 +41,8 @@ services:
         max-size: "100m"
         max-file: "5"
     labels:
-      - "com.cicd-hyper-a.component=database"
-      - "com.cicd-hyper-a.tier=data"
+      - "com.hypatia.component=database"
+      - "com.hypatia.tier=data"
 
   dragonfly:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.14.1
@@ -74,8 +74,8 @@ services:
         max-size: "50m"
         max-file: "3"
     labels:
-      - "com.cicd-hyper-a.component=cache"
-      - "com.cicd-hyper-a.tier=data"
+      - "com.hypatia.component=cache"
+      - "com.hypatia.tier=data"
 
   # ============================================================
   # REGISTRY SERVICE - Production Settings
@@ -113,8 +113,8 @@ services:
         max-size: "100m"
         max-file: "5"
     labels:
-      - "com.cicd-hyper-a.component=registry"
-      - "com.cicd-hyper-a.tier=application"
+      - "com.hypatia.component=registry"
+      - "com.hypatia.tier=application"
 
   # ============================================================
   # LOGTALK ENGINE - Production Settings
@@ -146,8 +146,8 @@ services:
         max-size: "100m"
         max-file: "5"
     labels:
-      - "com.cicd-hyper-a.component=engine"
-      - "com.cicd-hyper-a.tier=application"
+      - "com.hypatia.component=engine"
+      - "com.hypatia.tier=application"
 
   # ============================================================
   # FORGE ADAPTERS - Production Settings
@@ -185,8 +185,8 @@ services:
         max-size: "100m"
         max-file: "5"
     labels:
-      - "com.cicd-hyper-a.component=adapter"
-      - "com.cicd-hyper-a.tier=application"
+      - "com.hypatia.component=adapter"
+      - "com.hypatia.tier=application"
 
   # ============================================================
   # API SERVICE - Production Settings
@@ -196,7 +196,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    container_name: cicd-hyper-a-api
+    container_name: hypatia-api
     deploy:
       resources:
         limits:
@@ -241,8 +241,8 @@ services:
         max-size: "100m"
         max-file: "5"
     labels:
-      - "com.cicd-hyper-a.component=api"
-      - "com.cicd-hyper-a.tier=application"
+      - "com.hypatia.component=api"
+      - "com.hypatia.tier=application"
 
   # ============================================================
   # MONITORING - Production Settings
@@ -277,8 +277,8 @@ services:
         max-size: "50m"
         max-file: "3"
     labels:
-      - "com.cicd-hyper-a.component=prometheus"
-      - "com.cicd-hyper-a.tier=monitoring"
+      - "com.hypatia.component=prometheus"
+      - "com.hypatia.tier=monitoring"
 
   grafana:
     deploy:
@@ -310,8 +310,8 @@ services:
         max-size: "50m"
         max-file: "3"
     labels:
-      - "com.cicd-hyper-a.component=grafana"
-      - "com.cicd-hyper-a.tier=monitoring"
+      - "com.hypatia.component=grafana"
+      - "com.hypatia.tier=monitoring"
 
 networks:
   cicd-network:
@@ -326,7 +326,7 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/arangodb
+      device: ${DATA_PATH:-/var/lib/hypatia}/arangodb
   arangodb_apps:
     driver: local
   dragonfly_data:
@@ -334,16 +334,16 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/dragonfly
+      device: ${DATA_PATH:-/var/lib/hypatia}/dragonfly
   prometheus_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/prometheus
+      device: ${DATA_PATH:-/var/lib/hypatia}/prometheus
   grafana_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${DATA_PATH:-/var/lib/cicd-hyper-a}/grafana
+      device: ${DATA_PATH:-/var/lib/hypatia}/grafana

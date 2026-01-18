@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Terraform Variables
+# hypatia Terraform Variables
 #
 # This file defines all input variables for the infrastructure configuration.
 # See terraform.tfvars.example for example values.
@@ -11,7 +11,7 @@
 variable "project_name" {
   description = "Name of the project, used for resource naming"
   type        = string
-  default     = "cicd-hyper-a"
+  default     = "hypatia"
 }
 
 variable "environment" {
@@ -101,7 +101,7 @@ variable "azure_subscription_id" {
 variable "azure_resource_group_name" {
   description = "Azure resource group name"
   type        = string
-  default     = "cicd-hyper-a-rg"
+  default     = "hypatia-rg"
 }
 
 variable "azure_location" {
@@ -187,7 +187,7 @@ variable "node_disk_size_gb" {
 variable "kubernetes_namespace" {
   description = "Kubernetes namespace for the application"
   type        = string
-  default     = "cicd-hyper-a"
+  default     = "hypatia"
 }
 
 # =============================================================================

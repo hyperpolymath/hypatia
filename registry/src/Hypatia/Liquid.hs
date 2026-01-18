@@ -9,12 +9,12 @@
 -- - Preventive rules never modify existing files
 -- - Rules are deterministic and idempotent
 --
--- To verify: liquid src/CicdHyperA/Liquid.hs
+-- To verify: liquid src/Hypatia/Liquid.hs
 
 {-@ LIQUID "--reflection" @-}
 {-@ LIQUID "--ple" @-}
 
-module CicdHyperA.Liquid
+module Hypatia.Liquid
   ( -- * Refined types
     HealthScore
   , Confidence
@@ -37,7 +37,7 @@ module CicdHyperA.Liquid
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import CicdHyperA.Ruleset (Rule(..), Effect(..), Severity(..))
+import Hypatia.Ruleset (Rule(..), Effect(..), Severity(..))
 
 -- ============================================================
 -- REFINED TYPES

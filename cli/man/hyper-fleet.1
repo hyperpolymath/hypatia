@@ -1,0 +1,141 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-fleet
+.TH HYPER-FLEET 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-fleet \- manage and run bot fleets
+.SH SYNOPSIS
+.B hyper fleet
+.I SUBCOMMAND
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B hyper fleet
+manages bot fleets for automated repository maintenance. Bots perform
+specialized tasks like presentation quality checks (glambot), release
+readiness verification (finishing-bot), and more.
+.SH SUBCOMMANDS
+.TP
+.B run
+Execute bots on a repository.
+.TP
+.B list
+List available bots and their capabilities.
+.TP
+.B status
+Show status of running bot operations.
+.TP
+.B stop
+Stop running bot operations.
+.SS hyper fleet run
+.B hyper fleet run
+[\fIOPTIONS\fR]
+.I PATH
+.TP
+.I PATH
+Path to the repository to process.
+.TP
+.BR \-b ", " \-\-bots =\fIBOT\fR[,...]
+Bots to run. Default runs all applicable bots.
+.TP
+.BR \-e ", " \-\-exclude =\fIBOT\fR[,...]
+Bots to exclude from the run.
+.TP
+.BR \-n ", " \-\-dry\-run
+Show what would be done without making changes.
+.TP
+.BR \-j ", " \-\-parallel =\fIN\fR
+Number of parallel bot executions. Default is 4.
+.TP
+.BR \-\-continue\-on\-error
+Continue processing if a bot fails.
+.TP
+.BR \-t ", " \-\-timeout =\fISECONDS\fR
+Timeout for each bot operation. Default is 300 (5 minutes).
+.TP
+.BR \-\-auto\-fix
+Automatically apply fixes suggested by bots.
+.SS hyper fleet list
+.B hyper fleet list
+[\fB\-\-category\fR \fICATEGORY\fR]
+[\fB\-\-verbose\fR]
+.PP
+List available bots with their descriptions and capabilities.
+.SS hyper fleet status
+.B hyper fleet status
+[\fB\-\-watch\fR]
+.PP
+Show status of running bot operations. Use \fB\-\-watch\fR for live updates.
+.SS hyper fleet stop
+.B hyper fleet stop
+[\fB\-\-all\fR | \fIJOB_ID\fR]
+.PP
+Stop a specific job by ID or all running jobs with \fB\-\-all\fR.
+.SH AVAILABLE BOTS
+.TP
+.B glambot
+Presentation quality checker. Validates README, documentation,
+badges, and visual consistency.
+.TP
+.B finishing-bot
+Release readiness analyzer. Checks CHANGELOG, version consistency,
+license compliance, and release artifacts.
+.TP
+.B echidnabot
+Mathematical verification. Validates formal proofs and specifications.
+.TP
+.B seambot
+Integration testing. Runs comprehensive integration test suites.
+.SH EXIT CODES
+.TP
+.B 0
+All bots completed successfully.
+.TP
+.B 40
+Bot execution failed.
+.TP
+.B 41
+Bot not found.
+.TP
+.B 42
+Fleet operation partially failed (some bots succeeded).
+.TP
+.B 43
+Fleet operation completely failed (all bots failed).
+.TP
+.B 44
+Bot dependency error.
+.SH EXAMPLES
+Run all bots on a repository:
+.PP
+.RS
+.nf
+hyper fleet run ./my-repo
+.fi
+.RE
+.PP
+Run specific bots:
+.PP
+.RS
+.nf
+hyper fleet run ./my-repo --bots glambot,finishing-bot
+.fi
+.RE
+.PP
+Dry run with verbose output:
+.PP
+.RS
+.nf
+hyper fleet run ./my-repo --dry-run --verbose
+.fi
+.RE
+.PP
+List available bots:
+.PP
+.RS
+.nf
+hyper fleet list
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-scan (1),
+.BR hyper\-batch (1)

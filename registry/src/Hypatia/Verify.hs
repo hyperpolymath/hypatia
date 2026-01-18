@@ -20,7 +20,7 @@
 --   * Non-regressive: curative rules never decrease health
 --   * Safe: preventive rules don't modify existing files
 
-module CicdHyperA.Verify
+module Hypatia.Verify
   ( -- * Verification results
     VerifyResult(..)
   , VerifyError(..)
@@ -33,6 +33,7 @@ module CicdHyperA.Verify
   , checkCoverage
   , checkCompleteness
   , checkDependencies
+  , conditionsOverlap
     -- * QuickCheck properties
   , prop_ruleIdempotent
   , prop_fixResolves
@@ -55,7 +56,7 @@ import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.List (nub, intersect)
-import CicdHyperA.Ruleset
+import Hypatia.Ruleset
 
 -- ============================================================
 -- Verification Results

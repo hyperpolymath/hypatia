@@ -1,0 +1,78 @@
+V "GNAT Lib v15"
+A -O0
+A -gnatA
+A -gnat2022
+A -gnatwa
+A -gnatwe
+A -gnaty3
+A -gnatya
+A -gnatyA
+A -gnatyb
+A -gnatyc
+A -gnatyd
+A -gnatye
+A -gnatyf
+A -gnatyh
+A -gnatyi
+A -gnatyk
+A -gnatyl
+A -gnatyn
+A -gnatyO
+A -gnatyp
+A -gnatyr
+A -gnatys
+A -gnatyt
+A -gnatyu
+A -gnatyx
+A -g
+A -gnata
+A -gnatVa
+A -mtune=generic
+A -march=x86-64
+P ZX
+
+RN
+RV NO_IMPLEMENTATION_PRAGMAS
+
+U hypatia%s		hypatia.ads		fe72077f NE OO PR PK
+
+D hypatia.ads		20260118213155 fe72077f hypatia%s
+D system.ads		19700101000000 14286b0f system%s
+G a e
+X 1 hypatia.ads
+9K9*Hypatia 61l5 61e12
+13N4*Version_Major
+14N4*Version_Minor
+15N4*Version_Patch
+16a4*Version{string}
+19I9*Exit_Status<short_integer>
+22N4*Min_Terminal_Width
+23N4*Min_Terminal_Height
+24N4*Max_Terminal_Width 28r51
+25N4*Max_Terminal_Height 29r51
+28I12*Terminal_Width{positive}
+29I12*Terminal_Height{positive}
+32N4*Exit_Success
+33N4*Exit_General_Error
+34N4*Exit_Invalid_Args
+35N4*Exit_Config_Error
+36N4*Exit_IO_Error
+37N4*Exit_Cancelled
+38N4*Exit_Internal_Error
+41I9*Color_Index<short_integer> 44r32 45r32 46r32 47r32 48r32 49r32 50r32
+. 51r32 52r32 55r32 56r32 57r32 58r32 59r32
+44i4*Color_Default{41I9}
+45i4*Color_Black{41I9}
+46i4*Color_Red{41I9} 56r47
+47i4*Color_Green{41I9}
+48i4*Color_Yellow{41I9} 57r47
+49i4*Color_Blue{41I9} 59r47
+50i4*Color_Magenta{41I9} 55r47
+51i4*Color_Cyan{41I9} 58r47
+52i4*Color_White{41I9}
+55i4*Color_Critical{41I9}
+56i4*Color_High{41I9}
+57i4*Color_Medium{41I9}
+58i4*Color_Low{41I9}
+59i4*Color_Info{41I9}
+

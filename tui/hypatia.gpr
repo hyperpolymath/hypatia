@@ -1,0 +1,67 @@
+--  SPDX-License-Identifier: PLMP-1.0-or-later
+-------------------------------------------------------------------------------
+--  Hypatia - TUI for CI/CD Intelligence
+--  A satellite of the reposystem repo at hypatia.reposystem.dev
+-------------------------------------------------------------------------------
+
+project Hypatia is
+
+   for Source_Dirs use ("src", "src/widgets", "src/views", "spark");
+   for Object_Dir use "obj";
+   for Exec_Dir use "bin";
+   for Main use ("hypatia_main.adb");
+
+   type Build_Mode is ("debug", "release", "spark");
+   Mode : Build_Mode := external ("MODE", "debug");
+
+   package Compiler is
+      Common_Switches := ("-gnat2022",     -- Ada 2022 standard
+                          "-gnatwa",        -- All warnings
+                          "-gnatwe",        -- Warnings as errors
+                          "-gnaty3aAbcdefhiklnOprstux"); -- Style checks
+
+      case Mode is
+         when "debug" =>
+            for Default_Switches ("Ada") use
+               Common_Switches & ("-g", "-O0", "-gnata", "-gnatVa");
+         when "release" =>
+            for Default_Switches ("Ada") use
+               Common_Switches & ("-O2", "-gnatn", "-gnatp");
+         when "spark" =>
+            for Default_Switches ("Ada") use
+               Common_Switches & ("-g", "-O0", "-gnata");
+      end case;
+   end Compiler;
+
+   package Binder is
+      for Default_Switches ("Ada") use ("-Es"); -- Symbolic traceback
+   end Binder;
+
+   package Linker is
+      case Mode is
+         when "debug" =>
+            for Default_Switches ("Ada") use ("-g");
+         when "release" =>
+            for Default_Switches ("Ada") use ("-s"); -- Strip symbols
+         when "spark" =>
+            for Default_Switches ("Ada") use ("-g");
+      end case;
+   end Linker;
+
+   package Prove is
+      for Proof_Switches ("Ada") use
+         ("--level=2",
+          "--timeout=60",
+          "--memlimit=2000",
+          "--steps=10000");
+   end Prove;
+
+   package Pretty_Printer is
+      for Default_Switches ("Ada") use
+         ("-i3",           -- 3-space indentation
+          "-M120",         -- Max line length
+          "-c0",           -- No comment reformatting
+          "--no-separate-is");
+   end Pretty_Printer;
+
+end Hypatia;

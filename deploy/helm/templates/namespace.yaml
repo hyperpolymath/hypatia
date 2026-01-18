@@ -5,9 +5,9 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
     {{- with .Values.namespace.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

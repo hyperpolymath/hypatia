@@ -10,6 +10,7 @@ import qualified RegistrySpec
 import qualified LiquidSpec
 import qualified APISpec
 import qualified CLISpec
+import qualified PropertySpec
 
 main :: IO ()
 main = hspec $ do
@@ -19,3 +20,4 @@ main = hspec $ do
   describe "Liquid" LiquidSpec.spec
   describe "API" APISpec.spec
   describe "CLI" CLISpec.spec
+  describe "Properties" PropertySpec.spec

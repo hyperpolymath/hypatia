@@ -1,0 +1,133 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-scan
+.TH HYPER-SCAN 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-scan \- scan repositories for CI/CD issues
+.SH SYNOPSIS
+.B hyper scan
+[\fIOPTIONS\fR]
+[\fIPATH\fR]
+.SH DESCRIPTION
+.B hyper scan
+analyzes a repository for CI/CD configuration issues, security vulnerabilities,
+workflow problems, and policy violations. It applies rulesets from the registry
+and reports findings with severity levels.
+.SH OPTIONS
+.TP
+.I PATH
+Path to the repository to scan. Defaults to the current directory.
+.TP
+.BR \-s ", " \-\-min\-severity =\fISEVERITY\fR
+Minimum severity level to report: \fBcritical\fR, \fBhigh\fR, \fBmedium\fR,
+\fBlow\fR, or \fBinfo\fR. Default is \fBlow\fR.
+.TP
+.BR \-C ", " \-\-categories =\fICATEGORY\fR[,...]
+Filter by categories: \fBsecurity\fR, \fBworkflows\fR, \fBdependencies\fR,
+\fBconfiguration\fR, \fBquality\fR, \fBpolicy\fR. Can be specified multiple times.
+.TP
+.BR \-f ", " \-\-fixable\-only
+Only show issues that can be auto-fixed.
+.TP
+.BR \-d ", " \-\-detailed
+Show detailed information including suggested fixes and affected files.
+.TP
+.BR \-r ", " \-\-report\-file =\fIPATH\fR
+Write report to file instead of stdout. Format inferred from extension.
+.TP
+.BR \-\-skip =\fIPATTERN\fR[,...]
+Skip files or directories matching patterns. Supports glob syntax.
+.TP
+.BR \-\-include\-hidden
+Include hidden files and directories in the scan.
+.TP
+.BR \-\-rulesets =\fIRULESET\fR[,...]
+Specific rulesets to apply. Default uses configured rulesets.
+.TP
+.BR \-\-no\-cache
+Disable ruleset caching and fetch fresh from registry.
+.TP
+.BR \-\-fail\-on =\fISEVERITY\fR
+Exit with non-zero status if findings at or above this severity are found.
+Default is \fBhigh\fR.
+.SH OUTPUT FORMATS
+.TP
+.B table
+Human-readable table format (default for TTY).
+.TP
+.B json
+JSON object with findings array and metadata.
+.TP
+.B yaml
+YAML format, compatible with many CI/CD tools.
+.TP
+.B plain
+Plain text, one finding per line.
+.TP
+.B sarif
+SARIF format for integration with code scanning tools.
+.SH EXIT CODES
+.TP
+.B 0
+No findings at or above the \fB\-\-fail\-on\fR severity level.
+.TP
+.B 10
+Critical severity findings detected.
+.TP
+.B 11
+High severity findings detected.
+.TP
+.B 12
+Medium severity findings detected.
+.TP
+.B 13
+Low severity findings detected.
+.TP
+.B 14
+Info level findings only.
+.TP
+.B 15
+Scan failed to complete.
+.SH EXAMPLES
+Scan current directory:
+.PP
+.RS
+.nf
+hyper scan
+.fi
+.RE
+.PP
+Scan with minimum severity:
+.PP
+.RS
+.nf
+hyper scan ./repo --min-severity high
+.fi
+.RE
+.PP
+Scan security issues only, JSON output:
+.PP
+.RS
+.nf
+hyper scan ./repo -C security --output json
+.fi
+.RE
+.PP
+Scan and fail on any findings:
+.PP
+.RS
+.nf
+hyper scan ./repo --fail-on info
+.fi
+.RE
+.PP
+Generate SARIF report for GitHub:
+.PP
+.RS
+.nf
+hyper scan ./repo --output sarif -r scan-results.sarif
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-batch (1),
+.BR hyper\-exit\-codes (7)

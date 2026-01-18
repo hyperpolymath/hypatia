@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Helm Values Template
+# hypatia Helm Values Template
 # This file is processed by Terraform to generate Helm values
 
 # Global settings
@@ -10,7 +10,7 @@ global:
 # Namespace configuration
 namespace:
   create: true
-  name: cicd-hyper-a
+  name: hypatia
 
 # API Service
 api:
@@ -29,7 +29,7 @@ api:
           - path: /
             pathType: Prefix
     tls:
-      - secretName: cicd-hyper-a-api-tls
+      - secretName: hypatia-api-tls
         hosts:
           - ${api_domain}
 

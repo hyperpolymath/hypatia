@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Kubernetes Services
+# hypatia Kubernetes Services
 ---
 # API Service - LoadBalancer for external access
 apiVersion: v1
 kind: Service
 metadata:
   name: api
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
@@ -35,11 +35,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: api-internal
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   type: ClusterIP
   selector:
@@ -55,11 +55,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: registry
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: registry
     app.kubernetes.io/component: registry
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   type: ClusterIP
   selector:
@@ -75,11 +75,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: engine
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: engine
     app.kubernetes.io/component: engine
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   type: ClusterIP
   selector:
@@ -95,11 +95,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: arangodb
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: arangodb
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   type: ClusterIP
   selector:
@@ -115,11 +115,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: prometheus
     app.kubernetes.io/component: monitoring
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   type: ClusterIP
   selector:
@@ -134,11 +134,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: grafana
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: grafana
     app.kubernetes.io/component: monitoring
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   type: ClusterIP
   selector:

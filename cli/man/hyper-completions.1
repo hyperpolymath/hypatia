@@ -1,0 +1,109 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-completions
+.TH HYPER-COMPLETIONS 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-completions \- generate shell completion scripts
+.SH SYNOPSIS
+.B hyper completions
+.I SHELL
+[\fB\-\-output\fR \fIDIR\fR]
+.SH DESCRIPTION
+.B hyper completions
+generates shell completion scripts for various shells. These scripts enable
+tab-completion of commands, options, and arguments.
+.SH ARGUMENTS
+.TP
+.I SHELL
+Target shell: \fBbash\fR, \fBzsh\fR, \fBfish\fR, \fBelvish\fR, or \fBpowershell\fR.
+.SH OPTIONS
+.TP
+.BR \-o ", " \-\-output =\fIDIR\fR
+Output directory for completion file. If not specified, outputs to stdout.
+.SH INSTALLATION
+.SS Bash
+Add to \fB~/.bashrc\fR:
+.PP
+.RS
+.nf
+eval "$(hyper completions bash)"
+.fi
+.RE
+.PP
+Or pre-generate:
+.PP
+.RS
+.nf
+hyper completions bash > ~/.local/share/bash-completion/completions/hyper
+.fi
+.RE
+.SS Zsh
+Add to \fB~/.zshrc\fR:
+.PP
+.RS
+.nf
+mkdir -p ~/.zsh/completions
+hyper completions zsh > ~/.zsh/completions/_hyper
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
+.fi
+.RE
+.SS Fish
+Run once:
+.PP
+.RS
+.nf
+hyper completions fish > ~/.config/fish/completions/hyper.fish
+.fi
+.RE
+.SS Elvish
+Add to \fB~/.elvish/rc.elv\fR:
+.PP
+.RS
+.nf
+eval (hyper completions elvish | slurp)
+.fi
+.RE
+.SS PowerShell
+Add to \fB$PROFILE\fR:
+.PP
+.RS
+.nf
+Invoke-Expression (& hyper completions powershell | Out-String)
+.fi
+.RE
+.SH EXIT CODES
+.TP
+.B 0
+Completion script generated successfully.
+.TP
+.B 1
+Invalid shell or generation error.
+.SH EXAMPLES
+Output bash completions to stdout:
+.PP
+.RS
+.nf
+hyper completions bash
+.fi
+.RE
+.PP
+Generate zsh completions to file:
+.PP
+.RS
+.nf
+hyper completions zsh -o ~/.zsh/completions/
+.fi
+.RE
+.PP
+Show installation instructions:
+.PP
+.RS
+.nf
+hyper completions --help
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR bash (1),
+.BR zsh (1),
+.BR fish (1)

@@ -5,14 +5,14 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-arangodb-headless
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-arangodb-headless
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.arangodb.labels" . | nindent 4 }}
+    {{- include "hypatia.arangodb.labels" . | nindent 4 }}
 spec:
   clusterIP: None
   selector:
-    {{- include "cicd-hyper-a.arangodb.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.arangodb.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: 8529
@@ -24,23 +24,23 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-arangodb
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-arangodb
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.arangodb.labels" . | nindent 4 }}
+    {{- include "hypatia.arangodb.labels" . | nindent 4 }}
 spec:
-  serviceName: {{ include "cicd-hyper-a.fullname" . }}-arangodb-headless
+  serviceName: {{ include "hypatia.fullname" . }}-arangodb-headless
   replicas: {{ .Values.arangodb.replicaCount }}
   podManagementPolicy: OrderedReady
   updateStrategy:
     type: RollingUpdate
   selector:
     matchLabels:
-      {{- include "cicd-hyper-a.arangodb.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.arangodb.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "cicd-hyper-a.arangodb.selectorLabels" . | nindent 8 }}
+        {{- include "hypatia.arangodb.selectorLabels" . | nindent 8 }}
       {{- if .Values.arangodb.metrics.enabled }}
       annotations:
         prometheus.io/scrape: "true"
@@ -59,7 +59,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  {{- include "cicd-hyper-a.arangodb.selectorLabels" . | nindent 18 }}
+                  {{- include "hypatia.arangodb.selectorLabels" . | nindent 18 }}
               topologyKey: kubernetes.io/hostname
       containers:
         - name: arangodb
@@ -74,7 +74,7 @@ spec:
             - name: ARANGO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: arangodb-root-password
             - name: POD_NAME
               valueFrom:
@@ -88,10 +88,10 @@ spec:
               value: "0"
           args:
             - --server.endpoint=tcp://0.0.0.0:8529
-            - --cluster.my-address=tcp://$(POD_NAME).{{ include "cicd-hyper-a.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
-            - --cluster.agency-endpoint=tcp://{{ include "cicd-hyper-a.fullname" . }}-arangodb-0.{{ include "cicd-hyper-a.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
-            - --cluster.agency-endpoint=tcp://{{ include "cicd-hyper-a.fullname" . }}-arangodb-1.{{ include "cicd-hyper-a.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
-            - --cluster.agency-endpoint=tcp://{{ include "cicd-hyper-a.fullname" . }}-arangodb-2.{{ include "cicd-hyper-a.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
+            - --cluster.my-address=tcp://$(POD_NAME).{{ include "hypatia.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
+            - --cluster.agency-endpoint=tcp://{{ include "hypatia.fullname" . }}-arangodb-0.{{ include "hypatia.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
+            - --cluster.agency-endpoint=tcp://{{ include "hypatia.fullname" . }}-arangodb-1.{{ include "hypatia.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
+            - --cluster.agency-endpoint=tcp://{{ include "hypatia.fullname" . }}-arangodb-2.{{ include "hypatia.fullname" . }}-arangodb-headless.$(POD_NAMESPACE).svc.cluster.local:8530
             - --server.statistics=true
             - --log.level=info
           resources:
@@ -130,7 +130,7 @@ spec:
     - metadata:
         name: data
         labels:
-          {{- include "cicd-hyper-a.arangodb.labels" . | nindent 10 }}
+          {{- include "hypatia.arangodb.labels" . | nindent 10 }}
       spec:
         accessModes:
           - ReadWriteOnce
@@ -145,7 +145,7 @@ spec:
     - metadata:
         name: apps
         labels:
-          {{- include "cicd-hyper-a.arangodb.labels" . | nindent 10 }}
+          {{- include "hypatia.arangodb.labels" . | nindent 10 }}
       spec:
         accessModes:
           - ReadWriteOnce
@@ -163,12 +163,12 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-arangodb-pdb
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-arangodb-pdb
+  namespace: {{ include "hypatia.namespace" . }}
 spec:
   minAvailable: {{ .Values.podDisruptionBudget.arangodb.minAvailable }}
   selector:
     matchLabels:
-      {{- include "cicd-hyper-a.arangodb.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.arangodb.selectorLabels" . | nindent 6 }}
 {{- end }}
 {{- end }}

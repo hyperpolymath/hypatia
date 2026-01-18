@@ -6,10 +6,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-default-deny
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-default-deny
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:
@@ -19,10 +19,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-allow-internal
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-allow-internal
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:
@@ -31,20 +31,20 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ include "cicd-hyper-a.namespace" . }}
+              kubernetes.io/metadata.name: {{ include "hypatia.namespace" . }}
 ---
 # Allow ingress controller to reach API
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-allow-ingress
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-allow-ingress
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.api.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
   ingress:
@@ -60,10 +60,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-allow-prometheus
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-allow-prometheus
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:

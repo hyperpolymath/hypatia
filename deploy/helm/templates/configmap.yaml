@@ -4,10 +4,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-config
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-config
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.labels" . | nindent 4 }}
+    {{- include "hypatia.labels" . | nindent 4 }}
 data:
   rust-log: {{ .Values.config.rustLog | quote }}
   arangodb-database: "cicd_hyper_a"

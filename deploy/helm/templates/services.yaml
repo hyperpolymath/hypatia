@@ -7,10 +7,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-api
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-api
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.api.labels" . | nindent 4 }}
+    {{- include "hypatia.api.labels" . | nindent 4 }}
   {{- with .Values.api.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -18,7 +18,7 @@ metadata:
 spec:
   type: {{ .Values.api.service.type }}
   selector:
-    {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.api.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.api.service.port }}
@@ -29,14 +29,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-api-internal
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-api-internal
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.api.labels" . | nindent 4 }}
+    {{- include "hypatia.api.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    {{- include "cicd-hyper-a.api.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.api.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.api.service.targetPort }}
@@ -49,14 +49,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-registry
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-registry
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+    {{- include "hypatia.registry.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.registry.service.type }}
   selector:
-    {{- include "cicd-hyper-a.registry.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.registry.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.registry.service.port }}
@@ -69,14 +69,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-engine
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-engine
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+    {{- include "hypatia.engine.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.engine.service.type }}
   selector:
-    {{- include "cicd-hyper-a.engine.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.engine.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: {{ .Values.engine.service.port }}
@@ -89,14 +89,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-dragonfly
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-dragonfly
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.dragonfly.labels" . | nindent 4 }}
+    {{- include "hypatia.dragonfly.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    {{- include "cicd-hyper-a.dragonfly.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.dragonfly.selectorLabels" . | nindent 4 }}
   ports:
     - name: redis
       port: 6379
@@ -109,14 +109,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-arangodb
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-arangodb
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.arangodb.labels" . | nindent 4 }}
+    {{- include "hypatia.arangodb.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    {{- include "cicd-hyper-a.arangodb.selectorLabels" . | nindent 4 }}
+    {{- include "hypatia.arangodb.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
       port: 8529

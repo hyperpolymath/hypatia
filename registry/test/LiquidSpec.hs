@@ -6,8 +6,8 @@ module LiquidSpec (spec) where
 
 import Test.Hspec
 import Test.QuickCheck
-import CicdHyperA.Liquid
-import CicdHyperA.Ruleset
+import Hypatia.Liquid
+import Hypatia.Ruleset
 
 spec :: Spec
 spec = do

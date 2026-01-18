@@ -1,0 +1,196 @@
+.\" SPDX-License-Identifier: PLMP-1.0-or-later
+.\" Man page for hyper-batch
+.TH HYPER-BATCH 1 "January 2026" "hyper 0.1.0" "CI/CD Hyper-A Manual"
+.SH NAME
+hyper-batch \- process multiple repositories in batch mode
+.SH SYNOPSIS
+.B hyper batch
+.I SUBCOMMAND
+[\fIOPTIONS\fR]
+.I REPOS
+.SH DESCRIPTION
+.B hyper batch
+processes multiple repositories in parallel, designed for automation and
+CI/CD pipelines. It supports reading repository paths from stdin, files,
+or command-line arguments, and outputs results in machine-readable formats.
+.SH SUBCOMMANDS
+.TP
+.B scan
+Batch scan multiple repositories.
+.TP
+.B fix
+Batch apply fixes to multiple repositories.
+.TP
+.B report
+Generate aggregate reports across repositories.
+.SS Common Options
+.TP
+.I REPOS
+Repository paths. Use \fB\-\fR to read from stdin (one path per line).
+.TP
+.BR \-f ", " \-\-from\-file =\fIPATH\fR
+Read repository paths from a file (one per line).
+.TP
+.BR \-j ", " \-\-parallel =\fIN\fR
+Number of parallel operations. Default is number of CPU cores.
+.TP
+.BR \-\-jsonl
+Output JSON Lines format (one JSON object per line). Ideal for streaming.
+.TP
+.BR \-\-no\-progress
+Suppress progress indicators. Implied with \fB\-\-jsonl\fR.
+.TP
+.BR \-\-continue\-on\-error
+Continue processing remaining repositories if one fails.
+.SS hyper batch scan
+.B hyper batch scan
+[\fIOPTIONS\fR]
+.I REPOS
+.PP
+Scan multiple repositories and aggregate results.
+.TP
+.BR \-s ", " \-\-min\-severity =\fISEVERITY\fR
+Minimum severity to report.
+.TP
+.BR \-C ", " \-\-categories =\fICATEGORY\fR[,...]
+Filter by categories.
+.TP
+.BR \-\-summary\-only
+Only output the summary, not individual findings.
+.SS hyper batch fix
+.B hyper batch fix
+[\fIOPTIONS\fR]
+.I REPOS
+.PP
+Apply fixes to multiple repositories.
+.TP
+.BR \-n ", " \-\-dry\-run
+Show what would be fixed without making changes.
+.TP
+.BR \-\-commit
+Commit changes in each repository.
+.TP
+.BR \-\-commit\-message =\fIMESSAGE\fR
+Custom commit message template.
+.SS hyper batch report
+.B hyper batch report
+[\fIOPTIONS\fR]
+.I REPOS
+.PP
+Generate aggregate reports.
+.TP
+.BR \-\-format =\fIFORMAT\fR
+Report format: \fBjson\fR, \fBcsv\fR, \fBhtml\fR, \fBmarkdown\fR.
+.TP
+.BR \-r ", " \-\-report\-file =\fIPATH\fR
+Write report to file.
+.SH STDIN INPUT
+When \fB\-\fR is passed as the repos argument, paths are read from stdin,
+one per line. Empty lines and lines starting with \fB#\fR are ignored.
+.PP
+Example:
+.PP
+.RS
+.nf
+find ~/repos -maxdepth 1 -type d | hyper batch scan -
+.fi
+.RE
+.PP
+Or with a manifest file:
+.PP
+.RS
+.nf
+cat repos.txt | hyper batch scan -
+.fi
+.RE
+.SH JSON LINES OUTPUT
+With \fB\-\-jsonl\fR, each result is output as a separate JSON object on
+its own line. This enables streaming processing:
+.PP
+.RS
+.nf
+hyper batch scan - --jsonl | jq -c 'select(.findings | length > 0)'
+.fi
+.RE
+.PP
+The JSON structure for scan results:
+.PP
+.RS
+.nf
+{
+  "repo": "/path/to/repo",
+  "status": "success",
+  "findings_count": 5,
+  "findings": [...],
+  "duration_ms": 1234
+}
+.fi
+.RE
+.SH EXIT CODES
+.TP
+.B 0
+All repositories processed successfully with no issues.
+.TP
+.B 50
+Partial failure \- some repositories failed or had findings.
+.TP
+.B 51
+Total failure \- all repositories failed.
+.TP
+.B 52
+No items to process.
+.SH EXAMPLES
+Scan all repositories in a directory:
+.PP
+.RS
+.nf
+find ~/repos -maxdepth 1 -type d | hyper batch scan -
+.fi
+.RE
+.PP
+Scan from a file list with JSON Lines output:
+.PP
+.RS
+.nf
+hyper batch scan -f repos.txt --jsonl > results.jsonl
+.fi
+.RE
+.PP
+Parallel scan with 8 workers:
+.PP
+.RS
+.nf
+hyper batch scan repo1 repo2 repo3 -j 8
+.fi
+.RE
+.PP
+Batch fix with dry-run:
+.PP
+.RS
+.nf
+hyper batch fix -f repos.txt --dry-run
+.fi
+.RE
+.PP
+Generate CSV report:
+.PP
+.RS
+.nf
+hyper batch report -f repos.txt --format csv -r report.csv
+.fi
+.RE
+.PP
+Pipeline with filtering:
+.PP
+.RS
+.nf
+hyper batch scan - --jsonl | \\
+  jq -c 'select(.findings | map(select(.severity == "critical")) | length > 0)' | \\
+  jq -r '.repo'
+.fi
+.RE
+.SH SEE ALSO
+.BR hyper (1),
+.BR hyper\-scan (1),
+.BR hyper\-exit\-codes (7),
+.BR jq (1)

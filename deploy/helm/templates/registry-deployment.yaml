@@ -5,10 +5,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-registry
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-registry
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+    {{- include "hypatia.registry.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.registry.autoscaling.enabled }}
   replicas: {{ .Values.registry.replicaCount }}
@@ -20,11 +20,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "cicd-hyper-a.registry.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.registry.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "cicd-hyper-a.registry.selectorLabels" . | nindent 8 }}
+        {{- include "hypatia.registry.selectorLabels" . | nindent 8 }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
@@ -33,7 +33,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "cicd-hyper-a.serviceAccountName" . }}-registry
+      serviceAccountName: {{ include "hypatia.serviceAccountName" . }}-registry
       securityContext:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
       containers:
@@ -48,29 +48,29 @@ spec:
             - name: PORT
               value: {{ .Values.registry.service.targetPort | quote }}
             - name: ARANGODB_URL
-              value: {{ include "cicd-hyper-a.arangodbUrl" . | quote }}
+              value: {{ include "hypatia.arangodbUrl" . | quote }}
             - name: ARANGODB_DATABASE
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "cicd-hyper-a.fullname" . }}-config
+                  name: {{ include "hypatia.fullname" . }}-config
                   key: arangodb-database
             - name: ARANGODB_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: arangodb-user
             - name: ARANGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: arangodb-password
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: dragonfly-password
             - name: DRAGONFLY_URL
-              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "cicd-hyper-a.fullname" . }}-dragonfly:6379"
+              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "hypatia.fullname" . }}-dragonfly:6379"
           resources:
             {{- toYaml .Values.registry.resources | nindent 12 }}
           livenessProbe:
@@ -97,8 +97,8 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "cicd-hyper-a.serviceAccountName" . }}-registry
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.serviceAccountName" . }}-registry
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.registry.labels" . | nindent 4 }}
+    {{- include "hypatia.registry.labels" . | nindent 4 }}
 {{- end }}

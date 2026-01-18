@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a API Service Deployment
+# hypatia API Service Deployment
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/component: api
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   replicas: 3
   strategy:
@@ -25,13 +25,13 @@ spec:
       labels:
         app.kubernetes.io/name: api
         app.kubernetes.io/component: api
-        app.kubernetes.io/part-of: cicd-hyper-a
+        app.kubernetes.io/part-of: hypatia
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: cicd-hyper-a-api
+      serviceAccountName: hypatia-api
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
@@ -48,7 +48,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: api
-          image: ghcr.io/hyperpolymath/cicd-hyper-a:latest
+          image: ghcr.io/hyperpolymath/hypatia:latest
           imagePullPolicy: Always
           ports:
             - name: http
@@ -59,7 +59,7 @@ spec:
             - name: RUST_LOG
               valueFrom:
                 configMapKeyRef:
-                  name: cicd-hyper-a-config
+                  name: hypatia-config
                   key: rust-log
             - name: RUST_BACKTRACE
               value: "0"
@@ -68,24 +68,24 @@ spec:
             - name: ARANGODB_DATABASE
               valueFrom:
                 configMapKeyRef:
-                  name: cicd-hyper-a-config
+                  name: hypatia-config
                   key: arangodb-database
             - name: ARANGODB_USER
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: arangodb-user
             - name: ARANGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: arangodb-password
             - name: DRAGONFLY_URL
               value: "redis://:$(DRAGONFLY_PASSWORD)@dragonfly:6379"
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: dragonfly-password
             - name: REGISTRY_URL
               value: "http://registry:8080"
@@ -141,7 +141,7 @@ spec:
           emptyDir: {}
         - name: schemas
           configMap:
-            name: cicd-hyper-a-schemas
+            name: hypatia-schemas
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
@@ -153,8 +153,8 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cicd-hyper-a-api
-  namespace: cicd-hyper-a
+  name: hypatia-api
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: api
     app.kubernetes.io/component: api
@@ -163,7 +163,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: api-pdb
-  namespace: cicd-hyper-a
+  namespace: hypatia
 spec:
   minAvailable: 2
   selector:

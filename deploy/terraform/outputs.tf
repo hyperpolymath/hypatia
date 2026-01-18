@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# cicd-hyper-a Terraform Outputs
+# hypatia Terraform Outputs
 #
 # This file defines all output values from the infrastructure deployment.
 

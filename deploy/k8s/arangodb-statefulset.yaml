@@ -5,11 +5,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: arangodb-headless
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: arangodb
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   clusterIP: None
   selector:
@@ -26,11 +26,11 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: arangodb
-  namespace: cicd-hyper-a
+  namespace: hypatia
   labels:
     app.kubernetes.io/name: arangodb
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: cicd-hyper-a
+    app.kubernetes.io/part-of: hypatia
 spec:
   serviceName: arangodb-headless
   replicas: 3
@@ -45,7 +45,7 @@ spec:
       labels:
         app.kubernetes.io/name: arangodb
         app.kubernetes.io/component: database
-        app.kubernetes.io/part-of: cicd-hyper-a
+        app.kubernetes.io/part-of: hypatia
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8529"
@@ -72,7 +72,7 @@ spec:
             - -c
             - |
               # Wait for DNS to be available
-              until nslookup arangodb-headless.cicd-hyper-a.svc.cluster.local; do
+              until nslookup arangodb-headless.hypatia.svc.cluster.local; do
                 echo "Waiting for DNS..."
                 sleep 2
               done
@@ -98,7 +98,7 @@ spec:
             - name: ARANGO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: cicd-hyper-a-secrets
+                  name: hypatia-secrets
                   key: arangodb-root-password
             - name: POD_NAME
               valueFrom:
@@ -186,7 +186,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: arangodb-pdb
-  namespace: cicd-hyper-a
+  namespace: hypatia
 spec:
   minAvailable: 2
   selector:

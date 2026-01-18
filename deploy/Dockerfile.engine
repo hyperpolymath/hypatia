@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for cicd-hyper-a Logtalk Engine
+# Dockerfile for hypatia Logtalk Engine
 
 FROM swipl:stable AS base
 

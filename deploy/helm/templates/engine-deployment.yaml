@@ -5,10 +5,10 @@ SPDX-License-Identifier: PLMP-1.0-or-later
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-engine
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-engine
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+    {{- include "hypatia.engine.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.engine.autoscaling.enabled }}
   replicas: {{ .Values.engine.replicaCount }}
@@ -20,11 +20,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "cicd-hyper-a.engine.selectorLabels" . | nindent 6 }}
+      {{- include "hypatia.engine.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "cicd-hyper-a.engine.selectorLabels" . | nindent 8 }}
+        {{- include "hypatia.engine.selectorLabels" . | nindent 8 }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8082"
@@ -33,7 +33,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "cicd-hyper-a.serviceAccountName" . }}-engine
+      serviceAccountName: {{ include "hypatia.serviceAccountName" . }}-engine
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -49,14 +49,14 @@ spec:
               protocol: TCP
           env:
             - name: ARANGODB_URL
-              value: {{ include "cicd-hyper-a.arangodbUrl" . | quote }}
+              value: {{ include "hypatia.arangodbUrl" . | quote }}
             - name: DRAGONFLY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cicd-hyper-a.secretsName" . }}
+                  name: {{ include "hypatia.secretsName" . }}
                   key: dragonfly-password
             - name: DRAGONFLY_URL
-              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "cicd-hyper-a.fullname" . }}-dragonfly:6379"
+              value: "redis://:$(DRAGONFLY_PASSWORD)@{{ include "hypatia.fullname" . }}-dragonfly:6379"
           resources:
             {{- toYaml .Values.engine.resources | nindent 12 }}
           livenessProbe:
@@ -91,25 +91,25 @@ spec:
       volumes:
         - name: training-data
           persistentVolumeClaim:
-            claimName: {{ include "cicd-hyper-a.fullname" . }}-engine-training-data
+            claimName: {{ include "hypatia.fullname" . }}-engine-training-data
       {{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "cicd-hyper-a.serviceAccountName" . }}-engine
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.serviceAccountName" . }}-engine
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+    {{- include "hypatia.engine.labels" . | nindent 4 }}
 ---
 {{- if .Values.engine.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "cicd-hyper-a.fullname" . }}-engine-training-data
-  namespace: {{ include "cicd-hyper-a.namespace" . }}
+  name: {{ include "hypatia.fullname" . }}-engine-training-data
+  namespace: {{ include "hypatia.namespace" . }}
   labels:
-    {{- include "cicd-hyper-a.engine.labels" . | nindent 4 }}
+    {{- include "hypatia.engine.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce

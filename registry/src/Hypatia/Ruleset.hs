@@ -18,7 +18,7 @@
 -- Rules are composed into 'Ruleset's with metadata for versioning,
 -- provenance tracking, and formal verification.
 
-module CicdHyperA.Ruleset
+module Hypatia.Ruleset
   ( -- * Effect types
     Effect(..)
     -- * Rule types
