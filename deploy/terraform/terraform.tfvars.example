@@ -1,0 +1,185 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# cicd-hyper-a Terraform Variables Example
+#
+# Copy this file to terraform.tfvars and customize for your deployment.
+# DO NOT commit terraform.tfvars to version control as it may contain secrets.
+
+# =============================================================================
+# General Configuration
+# =============================================================================
+
+project_name = "cicd-hyper-a"
+environment  = "production"  # Options: dev, staging, production
+
+# Replace with your actual domain
+domain = "YOUR-DOMAIN.example.com"
+
+# Additional tags for all resources
+tags = {
+  Team        = "platform"
+  CostCenter  = "engineering"
+  Application = "cicd-hyper-a"
+}
+
+# =============================================================================
+# Cloud Provider Selection
+# =============================================================================
+
+# Choose one: "aws", "gcp", or "azure"
+cloud_provider = "aws"
+
+# =============================================================================
+# AWS Configuration (if cloud_provider = "aws")
+# =============================================================================
+
+aws_region = "us-east-1"
+
+# Leave empty for automatic AZ selection
+aws_availability_zones = []
+
+# =============================================================================
+# GCP Configuration (if cloud_provider = "gcp")
+# =============================================================================
+
+gcp_project_id = "your-gcp-project-id"
+gcp_region     = "us-central1"
+gcp_zone       = "us-central1-a"
+
+# =============================================================================
+# Azure Configuration (if cloud_provider = "azure")
+# =============================================================================
+
+azure_subscription_id     = "your-azure-subscription-id"
+azure_resource_group_name = "cicd-hyper-a-rg"
+azure_location            = "East US"
+
+# =============================================================================
+# Networking Configuration
+# =============================================================================
+
+# Set to false to use existing VPC/VNet
+create_networking = true
+
+vpc_cidr = "10.0.0.0/16"
+
+# If create_networking = false, provide existing network IDs
+# existing_vpc_id     = "vpc-xxxxxxxxx"
+# existing_subnet_ids = ["subnet-xxx1", "subnet-xxx2", "subnet-xxx3"]
+
+# =============================================================================
+# Kubernetes Cluster Configuration
+# =============================================================================
+
+kubernetes_version = "1.29"
+
+# Instance types (AWS naming, automatically mapped for GCP/Azure)
+node_instance_types = ["m6i.xlarge", "m6a.xlarge"]
+
+min_node_count     = 3
+max_node_count     = 10
+desired_node_count = 3
+node_disk_size_gb  = 100
+
+kubernetes_namespace = "cicd-hyper-a"
+
+# =============================================================================
+# Database Configuration (ArangoDB)
+# =============================================================================
+
+enable_database = true
+
+# Set to true to use cloud-managed database service
+use_managed_database = false
+
+arangodb_version       = "3.11"
+arangodb_replica_count = 3
+arangodb_storage_size  = "50Gi"
+arangodb_memory_limit  = "8Gi"
+arangodb_cpu_limit     = "2"
+
+# Leave empty to auto-generate a secure password
+# WARNING: Store this securely, you will need it to access the database
+arangodb_root_password = ""
+
+# =============================================================================
+# Cache Configuration (Dragonfly/Redis)
+# =============================================================================
+
+enable_cache = true
+
+# Set to true to use cloud-managed cache service (ElastiCache, Memorystore, Azure Cache)
+use_managed_cache = false
+
+# Options: "dragonfly" (recommended) or "redis"
+cache_engine = "dragonfly"
+
+# For managed cache (if use_managed_cache = true)
+cache_node_type = "cache.r6g.large"
+
+cache_replica_count = 1
+cache_storage_size  = "20Gi"
+cache_memory_limit  = "4Gi"
+
+dragonfly_version          = "v1.14.1"
+dragonfly_proactor_threads = 4
+
+# Leave empty to auto-generate a secure password
+cache_password = ""
+
+# =============================================================================
+# Monitoring Configuration
+# =============================================================================
+
+enable_monitoring = true
+
+prometheus_retention      = "30d"
+prometheus_retention_size = "10GB"
+prometheus_storage_size   = "50Gi"
+
+# Leave empty to auto-generate a secure password
+grafana_admin_password = ""
+grafana_storage_size   = "10Gi"
+
+enable_alertmanager   = true
+alertmanager_replicas = 2
+
+enable_monitoring_ingress = true
+
+# =============================================================================
+# Ingress Configuration
+# =============================================================================
+
+ingress_class_name = "nginx"
+cluster_issuer     = "letsencrypt-prod"
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+
+# Set to false to only provision infrastructure without deploying the app
+deploy_application = true
+
+api_replicas      = 3
+registry_replicas = 2
+engine_replicas   = 2
+
+# =============================================================================
+# Feature Flags
+# =============================================================================
+
+enable_neural_learning = true
+enable_p2p_federation  = false
+
+# =============================================================================
+# Forge Credentials (Optional)
+# =============================================================================
+
+# GitHub personal access token for API access
+# github_token = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# GitLab personal access token
+# gitlab_token = "glpat-xxxxxxxxxxxxxxxxxxxx"
+
+# Bitbucket credentials
+# bitbucket_user         = "your-username"
+# bitbucket_app_password = "your-app-password"

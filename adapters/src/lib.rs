@@ -53,9 +53,10 @@ pub mod sourcehut;
 // Re-export core types for convenience
 pub use error::AdapterError;
 pub use forge::{
-    Alert, AlertSeverity, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter,
+    Alert, AlertCategory, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter,
     Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion, RunStatus,
-    WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun,
+    Severity, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun,
+    WorkflowState,
 };
 pub use service::{ForgeService, ServiceHealth, SyncResult};
 
@@ -104,7 +105,7 @@ pub fn create_adapter(
             // Bitbucket requires username:app_password format
             let parts: Vec<&str> = token.splitn(2, ':').collect();
             if parts.len() != 2 {
-                return Err(AdapterError::Config(
+                return Err(AdapterError::ConfigError(
                     "Bitbucket token must be in 'username:app_password' format".to_string(),
                 ));
             }

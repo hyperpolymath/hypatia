@@ -1,0 +1,830 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a HTTP API Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: highlight.js
+
+== Overview
+
+The cicd-hyper-a platform exposes a REST API for programmatic access to the ruleset registry, verification services, and fleet operations. This document supplements the existing `api-reference.adoc` with additional endpoint details.
+
+== Base URL
+
+Production::
+  `https://api.cicd-hyper-a.io/v1`
+
+Local Development::
+  `http://localhost:8080/v1`
+
+== Authentication
+
+All API endpoints require authentication via Bearer token:
+
+[source,http]
+----
+Authorization: Bearer <token>
+----
+
+Obtain tokens via:
+
+1. `hyper config set registry.token <token>`
+2. Environment variable `HYPER_API_TOKEN`
+3. OAuth2 flow at `/oauth/authorize`
+
+== Endpoints
+
+=== Rulesets
+
+==== List Rulesets
+
+[source,http]
+----
+GET /rulesets
+----
+
+Query Parameters:
+
+[cols="1,1,3,1"]
+|===
+|Parameter |Type |Description |Default
+
+|`limit`
+|integer
+|Maximum results (1-100)
+|50
+
+|`offset`
+|integer
+|Pagination offset
+|0
+
+|`sort`
+|string
+|Sort field: `name`, `updated`, `downloads`
+|`updated`
+
+|`order`
+|string
+|Sort order: `asc`, `desc`
+|`desc`
+|===
+
+Response:
+
+[source,json]
+----
+{
+  "rulesets": [
+    {
+      "id": "security-basics",
+      "name": "Security Basics",
+      "version": "1.2.0",
+      "description": "Basic security rules for all repos",
+      "author": "hyperpolymath",
+      "downloads": 1523,
+      "tags": ["security", "workflow"],
+      "updated_at": "2026-01-15T10:30:00Z"
+    }
+  ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
+}
+----
+
+==== Get Ruleset
+
+[source,http]
+----
+GET /rulesets/{id}
+----
+
+Path Parameters:
+
+[cols="1,1,3"]
+|===
+|Parameter |Type |Description
+
+|`id`
+|string
+|Ruleset ID or name
+|===
+
+Query Parameters:
+
+[cols="1,1,3,1"]
+|===
+|Parameter |Type |Description |Default
+
+|`version`
+|string
+|Specific version to retrieve
+|latest
+|===
+
+Response:
+
+[source,json]
+----
+{
+  "id": "security-basics",
+  "name": "Security Basics",
+  "version": "1.2.0",
+  "description": "Basic security rules for all repos",
+  "author": {
+    "name": "hyperpolymath",
+    "email": "team@hyperpolymath.io"
+  },
+  "license": "AGPL-3.0-or-later",
+  "tags": ["security", "workflow", "permissions"],
+  "rules": {
+    "preventive": [
+      {
+        "id": "SEC-001",
+        "name": "Block unpinned actions",
+        "pattern": "uses: .*@v\\d+",
+        "message": "GitHub Actions must be pinned to SHA",
+        "severity": "high"
+      }
+    ],
+    "curative": [...],
+    "diagnostic": [...]
+  },
+  "metadata": {
+    "created_at": "2025-12-01T00:00:00Z",
+    "updated_at": "2026-01-15T10:30:00Z",
+    "downloads": 1523,
+    "verified": true
+  }
+}
+----
+
+==== Deposit Ruleset
+
+[source,http]
+----
+POST /rulesets
+----
+
+Request Body:
+
+[source,json]
+----
+{
+  "name": "my-custom-rules",
+  "version": "1.0.0",
+  "description": "Custom rules for my organization",
+  "license": "AGPL-3.0-or-later",
+  "tags": ["custom", "org-policy"],
+  "rules": {
+    "preventive": [...],
+    "curative": [...],
+    "diagnostic": [...]
+  }
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "id": "my-custom-rules",
+  "version": "1.0.0",
+  "sha256": "a1b2c3d4...",
+  "created_at": "2026-01-18T12:00:00Z",
+  "verified": false
+}
+----
+
+==== Delete Ruleset
+
+[source,http]
+----
+DELETE /rulesets/{id}
+----
+
+NOTE: Requires admin privileges. Soft-deletes by default.
+
+Query Parameters:
+
+[cols="1,1,3,1"]
+|===
+|Parameter |Type |Description |Default
+
+|`hard`
+|boolean
+|Permanently delete (no recovery)
+|false
+
+|`version`
+|string
+|Delete specific version only
+|all versions
+|===
+
+=== Search
+
+==== Search Rulesets
+
+[source,http]
+----
+GET /search
+----
+
+Query Parameters:
+
+[cols="1,1,3,1"]
+|===
+|Parameter |Type |Description |Default
+
+|`q`
+|string
+|Full-text search query
+|none
+
+|`effect`
+|string
+|Filter by effect: `preventive`, `curative`, `diagnostic`
+|all
+
+|`language`
+|string
+|Filter by target language
+|all
+
+|`category`
+|string
+|Filter by category
+|all
+
+|`tag`
+|string
+|Filter by tag (can repeat)
+|none
+
+|`author`
+|string
+|Filter by author
+|all
+
+|`min_version`
+|string
+|Minimum version
+|none
+
+|`limit`
+|integer
+|Maximum results
+|50
+|===
+
+Response:
+
+[source,json]
+----
+{
+  "results": [
+    {
+      "id": "security-basics",
+      "name": "Security Basics",
+      "version": "1.2.0",
+      "score": 0.95,
+      "matches": ["security", "permissions"],
+      "snippet": "...unpinned actions must be **pinned** to SHA..."
+    }
+  ],
+  "total": 12,
+  "query": "security permissions"
+}
+----
+
+=== Verification
+
+==== Verify Ruleset
+
+[source,http]
+----
+POST /verify
+----
+
+Request Body:
+
+[source,json]
+----
+{
+  "ruleset": {
+    "name": "test-rules",
+    "rules": {...}
+  },
+  "options": {
+    "check_conflicts": true,
+    "check_coverage": true,
+    "run_quickcheck": true,
+    "quickcheck_tests": 100
+  }
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "verified": true,
+  "checks": {
+    "conflicts": {"passed": true},
+    "coverage": {"passed": true, "percentage": 95.2},
+    "completeness": {"passed": true},
+    "dependencies": {"passed": true},
+    "quickcheck": {
+      "passed": true,
+      "tests_run": 100,
+      "properties": [
+        {"name": "idempotent", "passed": true},
+        {"name": "deterministic", "passed": true}
+      ]
+    }
+  },
+  "warnings": [],
+  "errors": []
+}
+----
+
+Failure Response:
+
+[source,json]
+----
+{
+  "verified": false,
+  "checks": {...},
+  "errors": [
+    {
+      "check": "conflicts",
+      "message": "Rules SEC-001 and SEC-002 conflict on pattern '*.yml'",
+      "details": {
+        "rule1": "SEC-001",
+        "rule2": "SEC-002",
+        "pattern": "*.yml"
+      }
+    }
+  ]
+}
+----
+
+=== Fleet Operations
+
+==== Start Fleet Run
+
+[source,http]
+----
+POST /fleet/runs
+----
+
+Request Body:
+
+[source,json]
+----
+{
+  "repository": "https://github.com/org/repo",
+  "bots": ["robot-repo-automaton", "glambot"],
+  "options": {
+    "parallel": true,
+    "timeout": 600,
+    "auto_fix": true,
+    "continue_on_error": false
+  }
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "run_id": "abc123",
+  "status": "running",
+  "started_at": "2026-01-18T12:00:00Z",
+  "bots": [
+    {"id": "robot-repo-automaton", "status": "running"},
+    {"id": "glambot", "status": "pending"}
+  ]
+}
+----
+
+==== Get Fleet Run Status
+
+[source,http]
+----
+GET /fleet/runs/{run_id}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "run_id": "abc123",
+  "status": "completed",
+  "started_at": "2026-01-18T12:00:00Z",
+  "completed_at": "2026-01-18T12:05:30Z",
+  "duration_ms": 330000,
+  "bots": [
+    {
+      "id": "robot-repo-automaton",
+      "status": "completed",
+      "findings": 5,
+      "fixes_applied": 3,
+      "duration_ms": 180000
+    },
+    {
+      "id": "glambot",
+      "status": "completed",
+      "findings": 2,
+      "fixes_applied": 2,
+      "duration_ms": 120000
+    }
+  ],
+  "summary": {
+    "total_findings": 7,
+    "total_fixes": 5,
+    "by_severity": {
+      "high": 2,
+      "medium": 3,
+      "low": 2
+    }
+  }
+}
+----
+
+==== Stop Fleet Run
+
+[source,http]
+----
+DELETE /fleet/runs/{run_id}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "run_id": "abc123",
+  "status": "stopped",
+  "stopped_at": "2026-01-18T12:03:00Z"
+}
+----
+
+==== List Available Bots
+
+[source,http]
+----
+GET /fleet/bots
+----
+
+Query Parameters:
+
+[cols="1,1,3,1"]
+|===
+|Parameter |Type |Description |Default
+
+|`category`
+|string
+|Filter by category
+|all
+|===
+
+Response:
+
+[source,json]
+----
+{
+  "bots": [
+    {
+      "id": "robot-repo-automaton",
+      "name": "Robot Repo Automaton",
+      "description": "Repository automation and standards enforcement",
+      "category": "quality",
+      "can_fix": true,
+      "checks": ["workflow-lint", "spdx-headers", "readme"],
+      "estimated_runtime": 120
+    }
+  ]
+}
+----
+
+=== Scan Operations
+
+==== Scan Repository
+
+[source,http]
+----
+POST /scan
+----
+
+Request Body:
+
+[source,json]
+----
+{
+  "repository": "https://github.com/org/repo",
+  "options": {
+    "min_severity": "low",
+    "categories": ["security", "policy"],
+    "skip_checks": [],
+    "include_hidden": false
+  }
+}
+----
+
+Response:
+
+[source,json]
+----
+{
+  "scan_id": "scan-xyz789",
+  "status": "completed",
+  "repository": "https://github.com/org/repo",
+  "timestamp": "2026-01-18T12:00:00Z",
+  "duration_ms": 5230,
+  "findings": [
+    {
+      "check_id": "unpinned-actions",
+      "title": "Unpinned GitHub Action",
+      "description": "Action 'actions/checkout' uses version 'v4' instead of SHA",
+      "severity": "high",
+      "category": "security",
+      "file_path": ".github/workflows/ci.yml",
+      "line_number": 15,
+      "auto_fixable": true,
+      "rule_id": "SEC-WF-001"
+    }
+  ],
+  "summary": {
+    "files_scanned": 42,
+    "total_findings": 8,
+    "by_severity": {
+      "high": 3,
+      "medium": 2,
+      "low": 3
+    },
+    "auto_fixable": 6
+  }
+}
+----
+
+=== Health & Status
+
+==== Health Check
+
+[source,http]
+----
+GET /health
+----
+
+Response:
+
+[source,json]
+----
+{
+  "status": "healthy",
+  "version": "0.1.0",
+  "uptime_seconds": 86400,
+  "components": {
+    "database": "healthy",
+    "cache": "healthy",
+    "registry": "healthy"
+  }
+}
+----
+
+==== Service Status
+
+[source,http]
+----
+GET /status
+----
+
+Response:
+
+[source,json]
+----
+{
+  "service": "cicd-hyper-a",
+  "version": "0.1.0",
+  "git_commit": "abc123def",
+  "build_date": "2026-01-15",
+  "statistics": {
+    "total_rulesets": 156,
+    "total_downloads": 12500,
+    "active_runs": 3
+  }
+}
+----
+
+== Error Responses
+
+All errors follow a consistent format:
+
+[source,json]
+----
+{
+  "error": {
+    "code": "RULESET_NOT_FOUND",
+    "message": "Ruleset 'unknown-ruleset' not found",
+    "details": {
+      "id": "unknown-ruleset"
+    },
+    "request_id": "req-abc123"
+  }
+}
+----
+
+=== Error Codes
+
+[cols="2,1,3"]
+|===
+|Code |HTTP Status |Description
+
+|`UNAUTHORIZED`
+|401
+|Missing or invalid authentication
+
+|`FORBIDDEN`
+|403
+|Insufficient permissions
+
+|`RULESET_NOT_FOUND`
+|404
+|Requested ruleset does not exist
+
+|`VERSION_NOT_FOUND`
+|404
+|Requested version does not exist
+
+|`VALIDATION_ERROR`
+|400
+|Request body validation failed
+
+|`CONFLICT`
+|409
+|Version already exists
+
+|`RATE_LIMITED`
+|429
+|Too many requests
+
+|`INTERNAL_ERROR`
+|500
+|Unexpected server error
+|===
+
+== Rate Limiting
+
+API requests are rate limited:
+
+- Anonymous: 60 requests/hour
+- Authenticated: 5000 requests/hour
+- Enterprise: Unlimited
+
+Rate limit headers:
+
+[source,http]
+----
+X-RateLimit-Limit: 5000
+X-RateLimit-Remaining: 4985
+X-RateLimit-Reset: 1705579200
+----
+
+== Webhooks
+
+Configure webhooks to receive notifications:
+
+[source,http]
+----
+POST /webhooks
+----
+
+Request Body:
+
+[source,json]
+----
+{
+  "url": "https://my-server.com/webhook",
+  "events": ["ruleset.deposited", "ruleset.verified", "run.completed"],
+  "secret": "my-webhook-secret"
+}
+----
+
+=== Webhook Events
+
+[cols="2,3"]
+|===
+|Event |Description
+
+|`ruleset.deposited`
+|New ruleset deposited
+
+|`ruleset.verified`
+|Ruleset verification completed
+
+|`ruleset.deleted`
+|Ruleset deleted
+
+|`run.started`
+|Fleet run started
+
+|`run.completed`
+|Fleet run completed
+
+|`run.failed`
+|Fleet run failed
+|===
+
+=== Webhook Payload
+
+[source,json]
+----
+{
+  "event": "ruleset.verified",
+  "timestamp": "2026-01-18T12:00:00Z",
+  "data": {
+    "ruleset_id": "security-basics",
+    "version": "1.2.0",
+    "verified": true
+  }
+}
+----
+
+Webhook requests include signature header:
+
+[source,http]
+----
+X-Hyper-Signature: sha256=abc123...
+----
+
+== SDK Examples
+
+=== cURL
+
+[source,bash]
+----
+# List rulesets
+curl -H "Authorization: Bearer $TOKEN" \
+     https://api.cicd-hyper-a.io/v1/rulesets
+
+# Deposit ruleset
+curl -X POST \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d @ruleset.json \
+     https://api.cicd-hyper-a.io/v1/rulesets
+
+# Start fleet run
+curl -X POST \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"repository":"https://github.com/org/repo","bots":["glambot"]}' \
+     https://api.cicd-hyper-a.io/v1/fleet/runs
+----
+
+=== Rust (reqwest)
+
+[source,rust]
+----
+use reqwest::Client;
+use serde_json::json;
+
+async fn list_rulesets(token: &str) -> Result<Vec<Ruleset>, Error> {
+    let client = Client::new();
+    let response = client
+        .get("https://api.cicd-hyper-a.io/v1/rulesets")
+        .bearer_auth(token)
+        .send()
+        .await?;
+
+    response.json().await
+}
+
+async fn start_fleet_run(token: &str, repo: &str) -> Result<FleetRun, Error> {
+    let client = Client::new();
+    let response = client
+        .post("https://api.cicd-hyper-a.io/v1/fleet/runs")
+        .bearer_auth(token)
+        .json(&json!({
+            "repository": repo,
+            "options": { "auto_fix": true }
+        }))
+        .send()
+        .await?;
+
+    response.json().await
+}
+----
+
+== See Also
+
+- xref:cli-reference.adoc[CLI Reference]
+- xref:rust-api.adoc[Rust API]
+- xref:haskell-api.adoc[Haskell Modules]

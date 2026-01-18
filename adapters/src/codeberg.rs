@@ -20,9 +20,10 @@ use sha2::Sha256;
 
 use crate::error::AdapterError;
 use crate::forge::{
-    defaults, Alert, AlertSeverity, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
+    defaults, Alert, AlertCategory, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
     ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
-    RunStatus, WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun,
+    RunStatus, Severity, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
+    WorkflowRun, WorkflowState,
 };
 
 type Result<T> = std::result::Result<T, AdapterError>;
@@ -60,26 +61,26 @@ impl CodebergAdapter {
             "Authorization",
             format!("token {}", token)
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid token format: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid token format: {}", e)))?,
         );
         headers.insert(
             "Accept",
             "application/json"
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid header: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid header: {}", e)))?,
         );
         headers.insert(
             "Content-Type",
             "application/json"
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid header: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid header: {}", e)))?,
         );
 
         let client = Client::builder()
             .default_headers(headers)
             .user_agent("cicd-hyper-a/1.0")
             .build()
-            .map_err(|e| AdapterError::Config(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
 
         Ok(Self {
             client,
@@ -111,12 +112,12 @@ impl CodebergAdapter {
                 .get(&page_url)
                 .send()
                 .await
-                .map_err(|e| AdapterError::Network(e.to_string()))?;
+                .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
             if !response.status().is_success() {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
-                return Err(AdapterError::Api(format!(
+                return Err(AdapterError::ApiError(format!(
                     "API request failed: {} - {}",
                     status, body
                 )));
@@ -125,7 +126,7 @@ impl CodebergAdapter {
             let page_results: Vec<T> = response
                 .json()
                 .await
-                .map_err(|e| AdapterError::Parse(format!("Failed to parse response: {}", e)))?;
+                .map_err(|e| AdapterError::ApiError(format!("Failed to parse response: {}", e)))?;
 
             let is_empty = page_results.is_empty();
             results.extend(page_results);
@@ -369,17 +370,26 @@ struct GiteaFileContent {
 
 impl From<GiteaRepo> for Repository {
     fn from(repo: GiteaRepo) -> Self {
+        let owner = repo
+            .full_name
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let visibility = if repo.private {
+            Visibility::Private
+        } else {
+            Visibility::Public
+        };
         Repository {
             id: repo.id.to_string(),
             name: repo.name,
-            full_name: repo.full_name,
-            description: repo.description,
+            owner,
+            forge: Forge::Codeberg,
             url: repo.html_url,
-            ssh_url: Some(repo.ssh_url),
-            clone_url: Some(repo.clone_url),
+            visibility,
             default_branch: repo.default_branch,
-            private: repo.private,
-            archived: repo.archived,
+            languages: vec![],
         }
     }
 }
@@ -398,11 +408,10 @@ impl From<GiteaPullRequest> for PullRequest {
             title: pr.title,
             body: pr.body,
             state,
-            url: pr.html_url,
             author: pr.user.login,
-            head_ref: pr.head.ref_name,
-            base_ref: pr.base.ref_name,
-            head_sha: pr.head.sha,
+            head_branch: pr.head.ref_name,
+            base_branch: pr.base.ref_name,
+            url: pr.html_url,
             mergeable: pr.mergeable,
             created_at: pr.created_at,
             updated_at: pr.updated_at,
@@ -439,13 +448,20 @@ impl From<GiteaComment> for Comment {
             body: comment.body,
             author: comment.user.login,
             created_at: comment.created_at,
-            updated_at: Some(comment.updated_at),
+            updated_at: comment.updated_at,
         }
     }
 }
 
-impl From<GiteaCommitStatus> for CheckRun {
-    fn from(status: GiteaCommitStatus) -> Self {
+/// Helper struct to convert GiteaCommitStatus with SHA context
+struct GiteaCommitStatusWithSha {
+    status: GiteaCommitStatus,
+    head_sha: String,
+}
+
+impl From<GiteaCommitStatusWithSha> for CheckRun {
+    fn from(wrapper: GiteaCommitStatusWithSha) -> Self {
+        let status = wrapper.status;
         let (check_status, conclusion) = match status.status.as_str() {
             "pending" => (CheckStatus::InProgress, None),
             "success" => (CheckStatus::Completed, Some(CheckConclusion::Success)),
@@ -460,6 +476,7 @@ impl From<GiteaCommitStatus> for CheckRun {
             name: status.context,
             status: check_status,
             conclusion,
+            head_sha: wrapper.head_sha,
             url: status.target_url,
             started_at: Some(status.created_at),
             completed_at: if check_status == CheckStatus::Completed {
@@ -494,6 +511,7 @@ impl From<GiteaHook> for WebhookConfig {
             secret: hook.config.secret,
             events,
             active: hook.active,
+            content_type: hook.config.content_type,
         }
     }
 }
@@ -516,16 +534,18 @@ impl From<GiteaActionRun> for WorkflowRun {
             _ => None,
         });
 
+        let now = chrono::Utc::now();
         WorkflowRun {
             id: run.id.to_string(),
+            workflow_id: run.workflow_id,
             name: run.title,
             status,
             conclusion,
-            url: run.html_url,
-            head_sha: run.head_sha,
             head_branch: run.head_branch,
-            started_at: run.started_at,
-            completed_at: run.completed_at,
+            head_sha: run.head_sha,
+            url: run.html_url,
+            created_at: run.started_at.unwrap_or(now),
+            updated_at: run.completed_at.unwrap_or(now),
         }
     }
 }
@@ -557,12 +577,12 @@ impl ForgeAdapter for CodebergAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get repo: {} - {}",
                 status, body
             )));
@@ -571,7 +591,7 @@ impl ForgeAdapter for CodebergAdapter {
         let repo: GiteaRepo = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse repo: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse repo: {}", e)))?;
 
         Ok(Repository::from(repo))
     }
@@ -600,8 +620,8 @@ impl ForgeAdapter for CodebergAdapter {
                     .map(|(idx, f)| Workflow {
                         id: idx.to_string(),
                         name: f.sha.clone(),
-                        path: format!(".gitea/workflows/{}", f.sha),
-                        state: "active".to_string(),
+                        file: format!(".gitea/workflows/{}", f.sha),
+                        state: WorkflowState::Active,
                     })
                     .collect()
             }
@@ -641,7 +661,7 @@ impl ForgeAdapter for CodebergAdapter {
         let response = if let Ok(resp) = existing {
             if resp.status().is_success() {
                 let file: GiteaFileContent = resp.json().await.map_err(|e| {
-                    AdapterError::Parse(format!("Failed to parse existing file: {}", e))
+                    AdapterError::ApiError(format!("Failed to parse existing file: {}", e))
                 })?;
 
                 let payload = UpdateFilePayload {
@@ -671,12 +691,12 @@ impl ForgeAdapter for CodebergAdapter {
             self.client.post(&url).json(&payload).send().await
         };
 
-        let response = response.map_err(|e| AdapterError::Network(e.to_string()))?;
+        let response = response.map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to deploy workflow: {} - {}",
                 status, body
             )));
@@ -708,12 +728,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to trigger workflow: {} - {}",
                 status, body
             )));
@@ -742,7 +762,7 @@ impl ForgeAdapter for CodebergAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             // Actions might not be enabled
@@ -757,7 +777,7 @@ impl ForgeAdapter for CodebergAdapter {
         let runs: RunsResponse = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse runs: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse runs: {}", e)))?;
 
         Ok(runs.workflow_runs.into_iter().map(WorkflowRun::from).collect())
     }
@@ -778,12 +798,12 @@ impl ForgeAdapter for CodebergAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get workflow run: {} - {}",
                 status, body
             )));
@@ -792,7 +812,7 @@ impl ForgeAdapter for CodebergAdapter {
         let run: GiteaActionRun = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse run: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse run: {}", e)))?;
 
         Ok(WorkflowRun::from(run))
     }
@@ -831,12 +851,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to enable branch protection: {} - {}",
                 status, body
             )));
@@ -869,12 +889,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create PR: {} - {}",
                 status, body
             )));
@@ -883,7 +903,7 @@ impl ForgeAdapter for CodebergAdapter {
         let pr: GiteaPullRequest = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse PR: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse PR: {}", e)))?;
 
         Ok(pr.html_url)
     }
@@ -926,12 +946,12 @@ impl ForgeAdapter for CodebergAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get PR: {} - {}",
                 status, body
             )));
@@ -940,7 +960,7 @@ impl ForgeAdapter for CodebergAdapter {
         let pr: GiteaPullRequest = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse PR: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse PR: {}", e)))?;
 
         Ok(PullRequest::from(pr))
     }
@@ -968,12 +988,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to merge PR: {} - {}",
                 status, body
             )));
@@ -995,12 +1015,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to close PR: {} - {}",
                 status, body
             )));
@@ -1050,12 +1070,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create issue: {} - {}",
                 status, body
             )));
@@ -1064,7 +1084,7 @@ impl ForgeAdapter for CodebergAdapter {
         let issue: GiteaIssue = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse issue: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse issue: {}", e)))?;
 
         Ok(Issue::from(issue))
     }
@@ -1098,12 +1118,12 @@ impl ForgeAdapter for CodebergAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get issue: {} - {}",
                 status, body
             )));
@@ -1112,7 +1132,7 @@ impl ForgeAdapter for CodebergAdapter {
         let issue: GiteaIssue = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse issue: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse issue: {}", e)))?;
 
         Ok(Issue::from(issue))
     }
@@ -1144,12 +1164,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to update issue: {} - {}",
                 status, body
             )));
@@ -1158,7 +1178,7 @@ impl ForgeAdapter for CodebergAdapter {
         let issue: GiteaIssue = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse issue: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse issue: {}", e)))?;
 
         Ok(Issue::from(issue))
     }
@@ -1191,12 +1211,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to add comment: {} - {}",
                 status, body
             )));
@@ -1205,7 +1225,7 @@ impl ForgeAdapter for CodebergAdapter {
         let comment: GiteaComment = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse comment: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse comment: {}", e)))?;
 
         Ok(Comment::from(comment))
     }
@@ -1283,12 +1303,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create status: {} - {}",
                 status, body
             )));
@@ -1297,9 +1317,12 @@ impl ForgeAdapter for CodebergAdapter {
         let git_status: GiteaCommitStatus = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse status: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse status: {}", e)))?;
 
-        Ok(CheckRun::from(git_status))
+        Ok(CheckRun::from(GiteaCommitStatusWithSha {
+            status: git_status,
+            head_sha: head_sha.to_string(),
+        }))
     }
 
     async fn update_check_run(
@@ -1327,7 +1350,15 @@ impl ForgeAdapter for CodebergAdapter {
         ));
 
         let statuses: Vec<GiteaCommitStatus> = self.get_paginated(&url, 3).await?;
-        Ok(statuses.into_iter().map(CheckRun::from).collect())
+        Ok(statuses
+            .into_iter()
+            .map(|s| {
+                CheckRun::from(GiteaCommitStatusWithSha {
+                    status: s,
+                    head_sha: ref_name.to_string(),
+                })
+            })
+            .collect())
     }
 
     async fn create_webhook(
@@ -1344,6 +1375,7 @@ impl ForgeAdapter for CodebergAdapter {
             .map(|e| match e {
                 WebhookEvent::Push => "push",
                 WebhookEvent::PullRequest => "pull_request",
+                WebhookEvent::PullRequestReview => "pull_request_review",
                 WebhookEvent::Issues => "issues",
                 WebhookEvent::IssueComment => "issue_comment",
                 WebhookEvent::Create => "create",
@@ -1352,6 +1384,7 @@ impl ForgeAdapter for CodebergAdapter {
                 WebhookEvent::WorkflowRun => "workflow_run",
                 WebhookEvent::CheckRun => "status",
                 WebhookEvent::CheckSuite => "status",
+                WebhookEvent::Custom => "custom",
             })
             .map(String::from)
             .collect();
@@ -1373,12 +1406,12 @@ impl ForgeAdapter for CodebergAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create webhook: {} - {}",
                 status, body
             )));
@@ -1387,7 +1420,7 @@ impl ForgeAdapter for CodebergAdapter {
         let hook: GiteaHook = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse webhook: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse webhook: {}", e)))?;
 
         Ok(WebhookConfig::from(hook))
     }
@@ -1406,12 +1439,12 @@ impl ForgeAdapter for CodebergAdapter {
             .delete(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to delete webhook: {} - {}",
                 status, body
             )));
@@ -1430,7 +1463,9 @@ impl ForgeAdapter for CodebergAdapter {
         // Verify signature if secret is provided
         if let (Some(sig), Some(sec)) = (signature, secret) {
             if !self.verify_signature(payload, sig, sec) {
-                return Err(AdapterError::Auth("Invalid webhook signature".to_string()));
+                return Err(AdapterError::AuthError(
+                    "Invalid webhook signature".to_string(),
+                ));
             }
         }
 
@@ -1445,7 +1480,7 @@ impl ForgeAdapter for CodebergAdapter {
             "workflow_run" => WebhookEvent::WorkflowRun,
             "status" => WebhookEvent::CheckRun,
             _ => {
-                return Err(AdapterError::Parse(format!(
+                return Err(AdapterError::ApiError(format!(
                     "Unknown event type: {}",
                     event_type
                 )))
@@ -1453,32 +1488,12 @@ impl ForgeAdapter for CodebergAdapter {
         };
 
         let body: serde_json::Value = serde_json::from_slice(payload)
-            .map_err(|e| AdapterError::Parse(format!("Invalid JSON payload: {}", e)))?;
-
-        // Extract common fields
-        let repository = body
-            .get("repository")
-            .and_then(|r| r.get("full_name"))
-            .and_then(|n| n.as_str())
-            .map(String::from);
-
-        let sender = body
-            .get("sender")
-            .and_then(|s| s.get("login"))
-            .and_then(|l| l.as_str())
-            .map(String::from);
-
-        let action = body
-            .get("action")
-            .and_then(|a| a.as_str())
-            .map(String::from);
+            .map_err(|e| AdapterError::ApiError(format!("Invalid JSON payload: {}", e)))?;
 
         Ok(WebhookPayload {
             event,
             delivery_id: uuid::Uuid::new_v4().to_string(),
-            repository,
-            sender,
-            action,
+            signature: signature.map(String::from),
             payload: body,
         })
     }

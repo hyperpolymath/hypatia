@@ -1,0 +1,647 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Haskell API Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: highlight.js
+
+== Overview
+
+The cicd-hyper-a registry is implemented in Haskell, providing a type-safe DSL for defining rulesets and a registry for storing and retrieving them. The Haskell implementation leverages GADTs (Generalized Algebraic Data Types) for precise type-level encoding of rule semantics.
+
+== Module Structure
+
+[source]
+----
+registry/src/CicdHyperA/
+├── API.hs           # REST API endpoints
+├── Ruleset.hs       # Core ruleset types and DSL
+├── Verify.hs        # Property-based verification
+└── Registry.hs      # Registry operations
+----
+
+== CicdHyperA.Ruleset
+
+The core module defining the ruleset DSL.
+
+=== Rule Effect Types
+
+Rules are categorized by their effect on the codebase:
+
+[source,haskell]
+----
+-- | Rule effect - what happens when a rule triggers
+data RuleEffect
+    = Preventive    -- ^ Blocks commits/PRs before they happen
+    | Curative      -- ^ Fixes existing issues
+    | Diagnostic    -- ^ Reports issues without fixing
+    deriving (Show, Eq, Generic)
+----
+
+=== Rule Type (GADT)
+
+[source,haskell]
+----
+-- | Type-safe rule with effect encoded at type level
+data Rule (effect :: RuleEffect) where
+    -- | Preventive rule - blocks matching patterns
+    PreventiveRule :: {
+        preventiveId :: RuleId,
+        preventiveName :: Text,
+        preventivePattern :: Pattern,
+        preventiveMessage :: Text,
+        preventiveSeverity :: Severity
+    } -> Rule 'Preventive
+
+    -- | Curative rule - applies fixes
+    CurativeRule :: {
+        curativeId :: RuleId,
+        curativeName :: Text,
+        curativeDetect :: Pattern,
+        curativeFix :: FixAction,
+        curativeVerify :: VerifyAction
+    } -> Rule 'Curative
+
+    -- | Diagnostic rule - reports findings
+    DiagnosticRule :: {
+        diagnosticId :: RuleId,
+        diagnosticName :: Text,
+        diagnosticCheck :: CheckAction,
+        diagnosticReport :: ReportFormat
+    } -> Rule 'Diagnostic
+----
+
+=== Supporting Types
+
+==== RuleId
+
+[source,haskell]
+----
+-- | Unique rule identifier
+newtype RuleId = RuleId Text
+    deriving (Show, Eq, Ord, Generic, ToJSON, FromJSON)
+----
+
+==== Severity
+
+[source,haskell]
+----
+-- | Rule severity levels
+data Severity
+    = Info
+    | Low
+    | Medium
+    | High
+    | Critical
+    deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+----
+
+==== Pattern
+
+[source,haskell]
+----
+-- | Pattern for matching code/files
+data Pattern
+    = FilePattern Glob           -- ^ Match file paths
+    | ContentPattern Regex       -- ^ Match file contents
+    | ASTPattern ASTMatcher      -- ^ Match AST nodes
+    | CompositePattern [Pattern] -- ^ Combine patterns
+    deriving (Show, Eq, Generic)
+----
+
+==== FixAction
+
+[source,haskell]
+----
+-- | Action to fix an issue
+data FixAction
+    = ReplaceContent Regex Text       -- ^ Regex replacement
+    | InsertLine LinePosition Text    -- ^ Insert at line
+    | DeleteLines LineRange           -- ^ Delete lines
+    | RunCommand Command              -- ^ Execute command
+    | ApplyPatch Patch                -- ^ Apply unified patch
+    | CompositeAction [FixAction]     -- ^ Multiple actions
+    deriving (Show, Eq, Generic)
+----
+
+=== Ruleset
+
+[source,haskell]
+----
+-- | A collection of rules
+data Ruleset = Ruleset
+    { rulesetId :: RulesetId
+    , rulesetName :: Text
+    , rulesetVersion :: Version
+    , rulesetDescription :: Text
+    , rulesetAuthor :: Author
+    , rulesetLicense :: License
+    , rulesetTags :: [Tag]
+    , rulesetPreventive :: [Rule 'Preventive]
+    , rulesetCurative :: [Rule 'Curative]
+    , rulesetDiagnostic :: [Rule 'Diagnostic]
+    , rulesetMetadata :: Metadata
+    } deriving (Show, Generic)
+----
+
+=== DSL Functions
+
+==== Creating Rules
+
+[source,haskell]
+----
+-- | Create a preventive rule
+preventive :: RuleId -> Text -> Pattern -> Text -> Severity -> Rule 'Preventive
+preventive = PreventiveRule
+
+-- | Create a curative rule
+curative :: RuleId -> Text -> Pattern -> FixAction -> VerifyAction -> Rule 'Curative
+curative = CurativeRule
+
+-- | Create a diagnostic rule
+diagnostic :: RuleId -> Text -> CheckAction -> ReportFormat -> Rule 'Diagnostic
+diagnostic = DiagnosticRule
+----
+
+==== Pattern Builders
+
+[source,haskell]
+----
+-- | Match files by glob pattern
+fileGlob :: Text -> Pattern
+fileGlob = FilePattern . parseGlob
+
+-- | Match content by regex
+contentMatch :: Text -> Pattern
+contentMatch = ContentPattern . compileRegex
+
+-- | Combine patterns with AND
+allOf :: [Pattern] -> Pattern
+allOf = CompositePattern
+
+-- | Match files with specific extension
+extension :: Text -> Pattern
+extension ext = fileGlob ("**/*." <> ext)
+
+-- | Match GitHub workflow files
+workflowFiles :: Pattern
+workflowFiles = fileGlob ".github/workflows/*.yml"
+----
+
+==== Fix Action Builders
+
+[source,haskell]
+----
+-- | Replace matching content
+replace :: Text -> Text -> FixAction
+replace pattern replacement = ReplaceContent (compileRegex pattern) replacement
+
+-- | Insert at beginning of file
+prepend :: Text -> FixAction
+prepend = InsertLine AtStart
+
+-- | Insert at end of file
+append :: Text -> FixAction
+append = InsertLine AtEnd
+
+-- | Insert after matching line
+insertAfter :: Text -> Text -> FixAction
+insertAfter pattern content = InsertLine (AfterMatch $ compileRegex pattern) content
+
+-- | Run a shell command
+runCmd :: Text -> FixAction
+runCmd = RunCommand . parseCommand
+----
+
+=== Example Ruleset
+
+[source,haskell]
+----
+exampleRuleset :: Ruleset
+exampleRuleset = Ruleset
+    { rulesetId = RulesetId "security-basics"
+    , rulesetName = "Security Basics"
+    , rulesetVersion = makeVersion [1, 0, 0]
+    , rulesetDescription = "Basic security rules for all repos"
+    , rulesetAuthor = Author "hyperpolymath" "team@hyperpolymath.io"
+    , rulesetLicense = AGPL3OrLater
+    , rulesetTags = ["security", "workflow", "permissions"]
+    , rulesetPreventive =
+        [ preventive (RuleId "SEC-001")
+            "Block unpinned actions"
+            (allOf [workflowFiles, contentMatch "uses: .*@v\\d+"])
+            "GitHub Actions must be pinned to SHA"
+            High
+
+        , preventive (RuleId "SEC-002")
+            "Block TypeScript"
+            (extension "ts")
+            "TypeScript is not allowed per RSR"
+            High
+        ]
+    , rulesetCurative =
+        [ curative (RuleId "FIX-001")
+            "Add permissions header"
+            (allOf [workflowFiles, contentMatch "^name:"])
+            (insertAfter "^name:.*" "permissions: read-all")
+            (checkOutput "grep -q 'permissions:' {file}")
+        ]
+    , rulesetDiagnostic =
+        [ diagnostic (RuleId "DIAG-001")
+            "Check SPDX headers"
+            (checkCommand "grep -l 'SPDX-License-Identifier' {files}")
+            JSONReport
+        ]
+    , rulesetMetadata = defaultMetadata
+    }
+----
+
+== CicdHyperA.Verify
+
+Property-based verification using QuickCheck.
+
+=== Verify Result
+
+[source,haskell]
+----
+-- | Result of verification
+data VerifyResult
+    = Verified                      -- ^ All properties passed
+    | VerifyFailed [VerifyError]    -- ^ Some properties failed
+    deriving (Show, Eq, Generic)
+
+-- | Verification error details
+data VerifyError = VerifyError
+    { errorProperty :: Text
+    , errorMessage :: Text
+    , errorCounterexample :: Maybe Text
+    } deriving (Show, Eq, Generic)
+----
+
+=== Verification Functions
+
+[source,haskell]
+----
+-- | Verify a single rule
+verifyRule :: Rule effect -> IO VerifyResult
+verifyRule rule = do
+    results <- sequence
+        [ checkIdempotent rule
+        , checkDeterministic rule
+        , checkNoSideEffects rule
+        ]
+    pure $ combineResults results
+
+-- | Verify an entire ruleset
+verifyRuleset :: Ruleset -> IO VerifyResult
+verifyRuleset rs = do
+    -- Verify individual rules
+    preventiveResults <- mapM verifyRule (rulesetPreventive rs)
+    curativeResults <- mapM verifyRule (rulesetCurative rs)
+    diagnosticResults <- mapM verifyRule (rulesetDiagnostic rs)
+
+    -- Verify ruleset-level properties
+    conflictCheck <- checkNoConflicts rs
+    coverageCheck <- checkCoverage rs
+    completenessCheck <- checkCompleteness rs
+    dependencyCheck <- checkDependencies rs
+
+    pure $ combineResults $
+        preventiveResults ++
+        curativeResults ++
+        diagnosticResults ++
+        [conflictCheck, coverageCheck, completenessCheck, dependencyCheck]
+
+-- | Verify a ruleset container (multiple rulesets)
+verifyRulesetContainer :: RulesetContainer -> IO VerifyResult
+----
+
+=== Property Checks
+
+[source,haskell]
+----
+-- | Check that rules don't conflict with each other
+checkNoConflicts :: Ruleset -> IO VerifyResult
+
+-- | Check coverage of rules against categories
+checkCoverage :: Ruleset -> IO VerifyResult
+
+-- | Check completeness of rule definitions
+checkCompleteness :: Ruleset -> IO VerifyResult
+
+-- | Check dependency ordering is valid
+checkDependencies :: Ruleset -> IO VerifyResult
+----
+
+=== QuickCheck Properties
+
+[source,haskell]
+----
+-- | Rule application is idempotent
+prop_ruleIdempotent :: Rule 'Curative -> Property
+prop_ruleIdempotent rule = forAll genCodebase $ \code ->
+    let once = applyRule rule code
+        twice = applyRule rule once
+    in once === twice
+
+-- | Fix actually resolves the issue
+prop_fixResolves :: Rule 'Curative -> Property
+prop_fixResolves rule = forAll genIssue $ \issue ->
+    let fixed = applyFix (curativeFix rule) issue
+    in not (matchesPattern (curativeDetect rule) fixed)
+
+-- | No rule conflicts in ruleset
+prop_noRuleConflicts :: Ruleset -> Property
+prop_noRuleConflicts rs = forAll genCodebase $ \code ->
+    let applicable = filter (canApply code) (allRules rs)
+    in length applicable <= 1 .||. noConflicts applicable
+
+-- | Rules are deterministic
+prop_deterministic :: Rule effect -> Property
+prop_deterministic rule = forAll genInput $ \input ->
+    let result1 = evaluateRule rule input
+        result2 = evaluateRule rule input
+    in result1 === result2
+
+-- | Preventive rules are safe (don't modify)
+prop_preventiveSafe :: Rule 'Preventive -> Property
+prop_preventiveSafe rule = forAll genCodebase $ \code ->
+    evaluateRule rule code `seq` code === code
+
+-- | Curative rules improve state
+prop_curativeImproves :: Rule 'Curative -> Property
+prop_curativeImproves rule = forAll genIssue $ \issue ->
+    let fixed = applyFix (curativeFix rule) issue
+    in severity fixed <= severity issue
+----
+
+== CicdHyperA.Registry
+
+Registry operations for storing and retrieving rulesets.
+
+=== Types
+
+[source,haskell]
+----
+-- | Registry state
+data Registry = Registry
+    { registryPath :: FilePath
+    , registryIndex :: Index
+    , registryConfig :: RegistryConfig
+    } deriving (Show, Generic)
+
+-- | Registry entry
+data RegistryEntry = RegistryEntry
+    { entryId :: RulesetId
+    , entryVersions :: [RuleVersion]
+    , entryLatest :: Version
+    , entryMetadata :: EntryMetadata
+    , entryAuditLog :: [AuditEntry]
+    } deriving (Show, Generic)
+
+-- | Version info for a ruleset
+data RuleVersion = RuleVersion
+    { versionNumber :: Version
+    , versionSha :: SHA256
+    , versionDate :: UTCTime
+    , versionAuthor :: Author
+    , versionChangelog :: Maybe Text
+    } deriving (Show, Generic)
+
+-- | Registry configuration
+data RegistryConfig = RegistryConfig
+    { configStoragePath :: FilePath
+    , configMaxVersions :: Int
+    , configRequireSignature :: Bool
+    , configValidationLevel :: ValidationLevel
+    } deriving (Show, Generic)
+
+-- | Audit log entry
+data AuditLog = AuditLog
+    { auditTimestamp :: UTCTime
+    , auditAction :: AuditAction
+    , auditActor :: Actor
+    , auditDetails :: Text
+    } deriving (Show, Generic)
+
+-- | Audit actions
+data AuditAction
+    = Deposited
+    | Withdrawn
+    | Updated
+    | Deleted
+    | Verified
+    | Promoted
+    deriving (Show, Eq, Generic)
+----
+
+=== Registry Operations
+
+[source,haskell]
+----
+-- | Initialize a new registry
+initRegistry :: RegistryConfig -> IO Registry
+
+-- | Load existing registry
+loadRegistry :: FilePath -> IO (Either RegistryError Registry)
+
+-- | Save registry state
+saveRegistry :: Registry -> IO ()
+
+-- | Deposit a ruleset into the registry
+deposit :: Registry -> Ruleset -> IO (Either RegistryError RegistryEntry)
+
+-- | Withdraw latest version of a ruleset
+withdrawLatest :: Registry -> RulesetId -> IO (Either RegistryError Ruleset)
+
+-- | Withdraw specific version
+withdrawVersion :: Registry -> RulesetId -> Version -> IO (Either RegistryError Ruleset)
+
+-- | Generic withdraw (latest or version)
+withdraw :: Registry -> RulesetId -> Maybe Version -> IO (Either RegistryError Ruleset)
+----
+
+=== Search Functions
+
+[source,haskell]
+----
+-- | Search query
+data SearchQuery = SearchQuery
+    { queryText :: Maybe Text
+    , queryEffect :: Maybe RuleEffect
+    , queryLanguage :: Maybe Language
+    , queryCategory :: Maybe Category
+    , queryTags :: [Tag]
+    , queryAuthor :: Maybe Author
+    , queryMinVersion :: Maybe Version
+    } deriving (Show, Generic)
+
+-- | Search result
+data SearchResult = SearchResult
+    { resultEntry :: RegistryEntry
+    , resultScore :: Double
+    , resultMatches :: [Text]
+    } deriving (Show, Generic)
+
+-- | Search the registry
+search :: Registry -> SearchQuery -> IO [SearchResult]
+
+-- | Search by effect type
+searchByEffect :: Registry -> RuleEffect -> IO [RegistryEntry]
+
+-- | Search by target language
+searchByLanguage :: Registry -> Language -> IO [RegistryEntry]
+
+-- | Search by category
+searchByCategory :: Registry -> Category -> IO [RegistryEntry]
+
+-- | Search by tags
+searchByTags :: Registry -> [Tag] -> IO [RegistryEntry]
+----
+
+=== Audit Functions
+
+[source,haskell]
+----
+-- | Audit an operation
+audit :: Registry -> RulesetId -> AuditAction -> Actor -> Text -> IO ()
+
+-- | Get audit log for a ruleset
+getAuditLog :: Registry -> RulesetId -> IO [AuditLog]
+
+-- | Record audit entry
+recordAudit :: Registry -> AuditLog -> IO ()
+----
+
+== CicdHyperA.API
+
+REST API for the registry service.
+
+=== Endpoints
+
+[cols="2,1,3"]
+|===
+|Endpoint |Method |Description
+
+|`/api/v1/rulesets`
+|GET
+|List all rulesets
+
+|`/api/v1/rulesets`
+|POST
+|Deposit a new ruleset
+
+|`/api/v1/rulesets/:id`
+|GET
+|Get ruleset by ID
+
+|`/api/v1/rulesets/:id/:version`
+|GET
+|Get specific version
+
+|`/api/v1/rulesets/:id`
+|DELETE
+|Delete ruleset (admin only)
+
+|`/api/v1/search`
+|GET
+|Search rulesets
+
+|`/api/v1/verify`
+|POST
+|Verify a ruleset
+
+|`/api/v1/health`
+|GET
+|Health check
+|===
+
+=== API Types
+
+[source,haskell]
+----
+-- | API type definition using Servant
+type API =
+    "api" :> "v1" :>
+        (    "rulesets" :> Get '[JSON] [RulesetSummary]
+        :<|> "rulesets" :> ReqBody '[JSON] Ruleset :> Post '[JSON] RegistryEntry
+        :<|> "rulesets" :> Capture "id" RulesetId :> Get '[JSON] Ruleset
+        :<|> "rulesets" :> Capture "id" RulesetId :> Capture "version" Version :> Get '[JSON] Ruleset
+        :<|> "search" :> QueryParams "q" Text :> Get '[JSON] [SearchResult]
+        :<|> "verify" :> ReqBody '[JSON] Ruleset :> Post '[JSON] VerifyResult
+        :<|> "health" :> Get '[JSON] HealthStatus
+        )
+----
+
+=== Running the Server
+
+[source,haskell]
+----
+-- | Server configuration
+data ServerConfig = ServerConfig
+    { serverPort :: Int
+    , serverHost :: HostPreference
+    , serverRegistry :: Registry
+    , serverAuth :: AuthConfig
+    } deriving (Show, Generic)
+
+-- | Start the API server
+runServer :: ServerConfig -> IO ()
+----
+
+== Dependencies
+
+Key Haskell dependencies:
+
+[cols="2,3"]
+|===
+|Package |Purpose
+
+|`servant`
+|Type-safe REST API framework
+
+|`aeson`
+|JSON serialization
+
+|`quickcheck`
+|Property-based testing
+
+|`mtl`
+|Monad transformers
+
+|`text`
+|Efficient text handling
+
+|`containers`
+|Data structures (Map, Set)
+
+|`time`
+|Date/time handling
+
+|`cryptonite`
+|SHA256 hashing
+
+|`optparse-applicative`
+|Command-line parsing
+|===
+
+== Building
+
+[source,bash]
+----
+# Build the registry
+cd registry
+cabal build
+
+# Run tests
+cabal test
+
+# Generate documentation
+cabal haddock
+----
+
+== See Also
+
+- xref:cli-reference.adoc[CLI Reference]
+- xref:rust-api.adoc[Rust API]
+- xref:logtalk-api.adoc[Logtalk Predicates]

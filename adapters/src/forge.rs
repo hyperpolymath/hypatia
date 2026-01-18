@@ -541,6 +541,11 @@ pub mod defaults {
         Ok(vec![])
     }
 
+    /// Default update_check_run for forges without native check run update support
+    pub fn update_check_run(forge: Forge) -> Result<CheckRun> {
+        not_supported("update_check_run", forge)
+    }
+
     /// Default webhook parsing for forges without complex signature validation
     pub fn simple_webhook_parse(
         event_type: &str,

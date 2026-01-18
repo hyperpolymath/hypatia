@@ -35,7 +35,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
-testcontainers = "0.15"
+testcontainers = "0.23"
 
 [features]
 default = []

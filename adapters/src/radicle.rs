@@ -25,9 +25,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AdapterError;
 use crate::forge::{
-    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
-    IssueState, PullRequest, PullRequestState, Repository, RunConclusion, RunStatus,
-    WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun,
+    Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
+    IssueState, PullRequest, PullRequestState, Repository, Visibility, WebhookConfig, WebhookEvent,
+    WebhookPayload, Workflow, WorkflowRun,
 };
 
 type Result<T> = std::result::Result<T, AdapterError>;
@@ -61,20 +61,20 @@ impl RadicleAdapter {
             "Accept",
             "application/json"
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid header: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid header: {}", e)))?,
         );
         headers.insert(
             "Content-Type",
             "application/json"
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid header: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid header: {}", e)))?,
         );
 
         let client = Client::builder()
             .default_headers(headers)
             .user_agent("cicd-hyper-a/1.0")
             .build()
-            .map_err(|e| AdapterError::Config(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
 
         Ok(Self { client, node_url })
     }
@@ -284,17 +284,20 @@ struct CreatePatchPayload {
 
 impl From<RadProject> for Repository {
     fn from(project: RadProject) -> Self {
+        let visibility = if project.visibility.visibility_type == "private" {
+            Visibility::Private
+        } else {
+            Visibility::Public
+        };
         Repository {
             id: project.id.clone(),
-            name: project.name.clone(),
-            full_name: project.name,
-            description: project.description,
+            name: project.name,
+            owner: String::new(), // Radicle projects don't have traditional owners
+            forge: Forge::Radicle,
             url: format!("rad://{}", project.id),
-            ssh_url: None, // Radicle uses its own protocol
-            clone_url: Some(format!("rad://{}", project.id)),
+            visibility,
             default_branch: project.default_branch,
-            private: project.visibility.visibility_type == "private",
-            archived: false,
+            languages: vec![],
         }
     }
 }
@@ -307,16 +310,11 @@ impl From<RadPatch> for PullRequest {
             _ => PullRequestState::Closed,
         };
 
-        let (head_sha, created_at) = patch
+        let created_at = patch
             .revisions
             .first()
-            .map(|r| {
-                (
-                    r.oid.clone(),
-                    DateTime::from_timestamp(r.timestamp, 0).unwrap_or_default(),
-                )
-            })
-            .unwrap_or_else(|| (String::new(), Utc::now()));
+            .map(|r| DateTime::from_timestamp(r.timestamp, 0).unwrap_or_default())
+            .unwrap_or_else(Utc::now);
 
         let updated_at = patch
             .revisions
@@ -330,15 +328,14 @@ impl From<RadPatch> for PullRequest {
             title: patch.title,
             body: patch.revisions.first().and_then(|r| r.description.clone()),
             state,
-            url: String::new(), // Will be set by caller
             author: patch.author.alias.unwrap_or(patch.author.id),
-            head_ref: patch
+            head_branch: patch
                 .revisions
                 .last()
                 .map(|r| r.id.clone())
                 .unwrap_or_default(),
-            base_ref: patch.target,
-            head_sha,
+            base_branch: patch.target,
+            url: String::new(), // Will be set by caller
             mergeable: None, // Radicle doesn't provide this directly
             created_at,
             updated_at,
@@ -384,12 +381,13 @@ impl From<RadIssue> for Issue {
 
 impl From<RadComment> for Comment {
     fn from(comment: RadComment) -> Self {
+        let created_at = DateTime::from_timestamp(comment.timestamp, 0).unwrap_or_default();
         Comment {
             id: comment.id,
             body: comment.body,
             author: comment.author.alias.unwrap_or(comment.author.id),
-            created_at: DateTime::from_timestamp(comment.timestamp, 0).unwrap_or_default(),
-            updated_at: None,
+            created_at,
+            updated_at: created_at, // Radicle comments don't have separate updated_at
         }
     }
 }
@@ -413,12 +411,12 @@ impl ForgeAdapter for RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to list projects: {} - {}",
                 status, body
             )));
@@ -427,7 +425,7 @@ impl ForgeAdapter for RadicleAdapter {
         let projects: Vec<RadProject> = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse projects: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse projects: {}", e)))?;
 
         // Filter by owner DID
         let repos: Vec<Repository> = projects
@@ -448,12 +446,12 @@ impl ForgeAdapter for RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get project: {} - {}",
                 status, body
             )));
@@ -462,7 +460,7 @@ impl ForgeAdapter for RadicleAdapter {
         let project: RadProject = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse project: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse project: {}", e)))?;
 
         Ok(Repository::from(project))
     }
@@ -486,7 +484,7 @@ impl ForgeAdapter for RadicleAdapter {
         _content: &str,
         _message: &str,
     ) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle doesn't have built-in CI. Use external CI systems with Radicle webhooks.".to_string(),
         ))
     }
@@ -498,7 +496,7 @@ impl ForgeAdapter for RadicleAdapter {
         _workflow: &str,
         _ref_name: &str,
     ) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle doesn't have built-in CI. Use external CI systems with Radicle webhooks.".to_string(),
         ))
     }
@@ -518,7 +516,7 @@ impl ForgeAdapter for RadicleAdapter {
         _repo: &str,
         _run_id: &str,
     ) -> Result<WorkflowRun> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle doesn't have built-in CI.".to_string(),
         ))
     }
@@ -530,7 +528,7 @@ impl ForgeAdapter for RadicleAdapter {
         _branch: &str,
     ) -> Result<()> {
         // Radicle has its own security model based on delegates and thresholds
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle uses delegate-based access control. Configure delegates and threshold in project settings.".to_string(),
         ))
     }
@@ -564,12 +562,12 @@ impl ForgeAdapter for RadicleAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create patch: {} - {}",
                 status, body
             )));
@@ -583,7 +581,7 @@ impl ForgeAdapter for RadicleAdapter {
         let patch: PatchResponse = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse patch: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse patch: {}", e)))?;
 
         Ok(patch.id)
     }
@@ -605,12 +603,12 @@ impl ForgeAdapter for RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to list patches: {} - {}",
                 status, body
             )));
@@ -619,7 +617,7 @@ impl ForgeAdapter for RadicleAdapter {
         let patches: Vec<RadPatch> = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse patches: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse patches: {}", e)))?;
 
         let prs: Vec<PullRequest> = patches
             .into_iter()
@@ -644,7 +642,7 @@ impl ForgeAdapter for RadicleAdapter {
     async fn get_pr(&self, owner: &str, repo: &str, number: u64) -> Result<PullRequest> {
         // In Radicle, patches are identified by string IDs, not numbers
         // This is a limitation of the ForgeAdapter interface
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle patches use string IDs. Use list_prs to find patches.".to_string(),
         ))
     }
@@ -657,13 +655,13 @@ impl ForgeAdapter for RadicleAdapter {
         commit_message: Option<&str>,
     ) -> Result<()> {
         // Radicle merging is done via git, not the API
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle patches are merged using git. Apply the patch locally and push.".to_string(),
         ))
     }
 
     async fn close_pr(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle patches use string IDs. Archive patches via the API with the patch ID.".to_string(),
         ))
     }
@@ -696,12 +694,12 @@ impl ForgeAdapter for RadicleAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create issue: {} - {}",
                 status, body
             )));
@@ -710,7 +708,7 @@ impl ForgeAdapter for RadicleAdapter {
         let issue: RadIssue = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse issue: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse issue: {}", e)))?;
 
         let mut result = Issue::from(issue);
         result.url = format!("{}#issues/{}", project_id, result.id);
@@ -735,12 +733,12 @@ impl ForgeAdapter for RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to list issues: {} - {}",
                 status, body
             )));
@@ -749,7 +747,7 @@ impl ForgeAdapter for RadicleAdapter {
         let issues: Vec<RadIssue> = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse issues: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse issues: {}", e)))?;
 
         let result: Vec<Issue> = issues
             .into_iter()
@@ -772,7 +770,7 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn get_issue(&self, owner: &str, repo: &str, number: u64) -> Result<Issue> {
         // Radicle uses string IDs for issues
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Use list_issues to find issues.".to_string(),
         ))
     }
@@ -787,13 +785,13 @@ impl ForgeAdapter for RadicleAdapter {
         state: Option<IssueState>,
         _labels: Option<Vec<String>>,
     ) -> Result<Issue> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Update issues via the API with the issue ID.".to_string(),
         ))
     }
 
     async fn close_issue(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Close issues via the API with the issue ID.".to_string(),
         ))
     }
@@ -805,7 +803,7 @@ impl ForgeAdapter for RadicleAdapter {
         issue_number: u64,
         body: &str,
     ) -> Result<Comment> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Add comments via the API with the issue ID.".to_string(),
         ))
     }
@@ -817,7 +815,7 @@ impl ForgeAdapter for RadicleAdapter {
         pr_number: u64,
         body: &str,
     ) -> Result<Comment> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle patches use string IDs. Add comments via the API with the patch ID.".to_string(),
         ))
     }
@@ -828,7 +826,7 @@ impl ForgeAdapter for RadicleAdapter {
         repo: &str,
         issue_number: u64,
     ) -> Result<Vec<Comment>> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle issues use string IDs. List comments via the API with the issue ID.".to_string(),
         ))
     }
@@ -839,7 +837,7 @@ impl ForgeAdapter for RadicleAdapter {
         repo: &str,
         pr_number: u64,
     ) -> Result<Vec<Comment>> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle patches use string IDs. List comments via the API with the patch ID.".to_string(),
         ))
     }
@@ -853,7 +851,7 @@ impl ForgeAdapter for RadicleAdapter {
         _status: CheckStatus,
         _conclusion: Option<CheckConclusion>,
     ) -> Result<CheckRun> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle doesn't have built-in CI. Use external CI systems.".to_string(),
         ))
     }
@@ -866,7 +864,7 @@ impl ForgeAdapter for RadicleAdapter {
         _status: Option<CheckStatus>,
         _conclusion: Option<CheckConclusion>,
     ) -> Result<CheckRun> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle doesn't have built-in CI.".to_string(),
         ))
     }
@@ -887,7 +885,7 @@ impl ForgeAdapter for RadicleAdapter {
         _config: WebhookConfig,
     ) -> Result<WebhookConfig> {
         // Radicle has a different event model - uses gossip protocol
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle uses a gossip-based event system. Configure event handlers in your Radicle node.".to_string(),
         ))
     }
@@ -897,7 +895,7 @@ impl ForgeAdapter for RadicleAdapter {
     }
 
     async fn delete_webhook(&self, _owner: &str, _repo: &str, _webhook_id: &str) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "Radicle uses a gossip-based event system.".to_string(),
         ))
     }
@@ -905,7 +903,7 @@ impl ForgeAdapter for RadicleAdapter {
     fn parse_webhook(
         &self,
         event_type: &str,
-        _signature: Option<&str>,
+        signature: Option<&str>,
         payload: &[u8],
         _secret: Option<&str>,
     ) -> Result<WebhookPayload> {
@@ -916,7 +914,7 @@ impl ForgeAdapter for RadicleAdapter {
             "issue/created" | "issue/updated" => WebhookEvent::Issues,
             "comment/created" => WebhookEvent::IssueComment,
             _ => {
-                return Err(AdapterError::Parse(format!(
+                return Err(AdapterError::ApiError(format!(
                     "Unknown event type: {}",
                     event_type
                 )))
@@ -924,31 +922,12 @@ impl ForgeAdapter for RadicleAdapter {
         };
 
         let body: serde_json::Value = serde_json::from_slice(payload)
-            .map_err(|e| AdapterError::Parse(format!("Invalid JSON payload: {}", e)))?;
-
-        let repository = body
-            .get("project")
-            .and_then(|p| p.get("id"))
-            .and_then(|i| i.as_str())
-            .map(String::from);
-
-        let sender = body
-            .get("author")
-            .and_then(|a| a.get("id"))
-            .and_then(|i| i.as_str())
-            .or_else(|| {
-                body.get("author")
-                    .and_then(|a| a.get("alias"))
-                    .and_then(|a| a.as_str())
-            })
-            .map(String::from);
+            .map_err(|e| AdapterError::ApiError(format!("Invalid JSON payload: {}", e)))?;
 
         Ok(WebhookPayload {
             event,
             delivery_id: uuid::Uuid::new_v4().to_string(),
-            repository,
-            sender,
-            action: None,
+            signature: signature.map(String::from),
             payload: body,
         })
     }
@@ -965,12 +944,12 @@ impl RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get node status: {} - {}",
                 status, body
             )));
@@ -979,7 +958,7 @@ impl RadicleAdapter {
         response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse node: {}", e)))
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse node: {}", e)))
     }
 
     /// Get a patch by its string ID
@@ -995,12 +974,12 @@ impl RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get patch: {} - {}",
                 status, body
             )));
@@ -1009,7 +988,7 @@ impl RadicleAdapter {
         let patch: RadPatch = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse patch: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse patch: {}", e)))?;
 
         let mut pr = PullRequest::from(patch);
         pr.url = format!("{}#{}", project_id, pr.id);
@@ -1030,12 +1009,12 @@ impl RadicleAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get issue: {} - {}",
                 status, body
             )));
@@ -1044,7 +1023,7 @@ impl RadicleAdapter {
         let issue: RadIssue = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse issue: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse issue: {}", e)))?;
 
         let mut result = Issue::from(issue);
         result.url = format!("{}#issues/{}", project_id, result.id);
@@ -1077,12 +1056,12 @@ impl RadicleAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to add comment: {} - {}",
                 status, body
             )));
@@ -1091,7 +1070,7 @@ impl RadicleAdapter {
         let comment: RadComment = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse comment: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse comment: {}", e)))?;
 
         Ok(Comment::from(comment))
     }
@@ -1118,12 +1097,12 @@ impl RadicleAdapter {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to close issue: {} - {}",
                 status, body
             )));

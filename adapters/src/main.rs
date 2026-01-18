@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! cicd-hyper-a forge adapter CLI
 
-use cicd_hyper_a_adapters::github::GitHubAdapter;
-use cicd_hyper_a_adapters::ForgeAdapter;
+use adapters::github::GitHubAdapter;
+use adapters::ForgeAdapter;
 use std::env;
 
 #[tokio::main]

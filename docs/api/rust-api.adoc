@@ -1,0 +1,570 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Rust API Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: highlight.js
+
+== Overview
+
+The cicd-hyper-a platform is implemented as a Rust workspace with multiple crates. This document provides an overview of the public APIs exposed by each crate.
+
+NOTE: Full rustdoc documentation can be generated with `cargo doc --workspace --no-deps`.
+
+== Workspace Crates
+
+[cols="2,1,3"]
+|===
+|Crate |Version |Description
+
+|`cicd-hyper-a-cli`
+|0.1.0
+|Command-line interface application
+
+|`cicd-hyper-a-adapters`
+|0.1.0
+|Forge adapters for GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Radicle
+
+|`cicd-hyper-a-data`
+|0.1.0
+|Data access layer with DragonflyDB support
+
+|`cicd-hyper-a-fixer`
+|0.1.0
+|Auto-fix implementations for detected issues
+|===
+
+== cicd-hyper-a-cli
+
+The CLI crate provides the `hyper` command-line tool.
+
+=== Module Structure
+
+[source]
+----
+cli/src/
+├── main.rs           # Entry point and command dispatch
+├── commands/
+│   ├── mod.rs        # Common types (Severity, Category)
+│   ├── scan.rs       # Repository scanning
+│   ├── fleet.rs      # Bot fleet operations
+│   ├── hooks.rs      # Git hooks management
+│   ├── deposit.rs    # Ruleset submission
+│   ├── withdraw.rs   # Ruleset retrieval
+│   └── search.rs     # Registry search
+├── config.rs         # Configuration handling
+└── output.rs         # Output formatting
+----
+
+=== Key Types
+
+==== Severity
+
+[source,rust]
+----
+/// Common finding severity levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    /// Informational finding
+    Info,
+    /// Low severity - minor issue
+    Low,
+    /// Medium severity - should be addressed
+    Medium,
+    /// High severity - important issue
+    High,
+    /// Critical severity - must be addressed immediately
+    Critical,
+}
+----
+
+==== Category
+
+[source,rust]
+----
+/// Common finding category
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Category {
+    /// Security-related issue
+    Security,
+    /// Policy violation
+    Policy,
+    /// Code quality issue
+    Quality,
+    /// Performance concern
+    Performance,
+    /// Maintainability issue
+    Maintainability,
+    /// Documentation issue
+    Documentation,
+    /// Configuration issue
+    Configuration,
+    /// Custom category
+    Custom(String),
+}
+----
+
+==== Finding (scan module)
+
+[source,rust]
+----
+/// A single finding from the scan
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Finding {
+    /// Unique identifier for this finding type
+    pub check_id: String,
+    /// Human-readable title
+    pub title: String,
+    /// Detailed description
+    pub description: String,
+    /// Severity level
+    pub severity: Severity,
+    /// Category of the finding
+    pub category: Category,
+    /// File path where the issue was found
+    pub file_path: Option<PathBuf>,
+    /// Line number in the file
+    pub line_number: Option<usize>,
+    /// The problematic code or configuration
+    pub snippet: Option<String>,
+    /// Suggested fix
+    pub suggestion: Option<String>,
+    /// Whether this can be auto-fixed
+    pub auto_fixable: bool,
+    /// Related documentation URL
+    pub docs_url: Option<String>,
+    /// Rule that triggered this finding
+    pub rule_id: Option<String>,
+}
+----
+
+==== ScanResults
+
+[source,rust]
+----
+/// Complete scan results
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ScanResults {
+    /// Repository path that was scanned
+    pub repository_path: PathBuf,
+    /// Timestamp of the scan
+    pub timestamp: DateTime<Utc>,
+    /// Duration of the scan in milliseconds
+    pub duration_ms: u64,
+    /// All findings
+    pub findings: Vec<Finding>,
+    /// Summary statistics
+    pub summary: ScanSummary,
+    /// Metadata about the scan
+    pub metadata: ScanMetadata,
+}
+----
+
+==== Bot (fleet module)
+
+[source,rust]
+----
+/// A bot in the fleet
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bot {
+    /// Unique bot identifier
+    pub id: String,
+    /// Human-readable name
+    pub name: String,
+    /// Description of what the bot does
+    pub description: String,
+    /// Bot category
+    pub category: BotCategory,
+    /// Dependencies on other bots (run these first)
+    pub dependencies: Vec<String>,
+    /// Checks this bot performs
+    pub checks: Vec<String>,
+    /// Whether this bot can auto-fix issues
+    pub can_fix: bool,
+    /// Estimated runtime in seconds
+    pub estimated_runtime: u32,
+}
+----
+
+==== BotCategory
+
+[source,rust]
+----
+/// Bot category for grouping
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BotCategory {
+    Security,
+    Quality,
+    Documentation,
+    Compliance,
+    Performance,
+    Release,
+}
+----
+
+==== HookType (hooks module)
+
+[source,rust]
+----
+/// Git hook types
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookType {
+    PreCommit,
+    PrePush,
+    PostReceive,
+    CommitMsg,
+    PrepareCommitMsg,
+    PostCommit,
+    PostCheckout,
+    PostMerge,
+}
+----
+
+=== Helper Functions
+
+[source,rust]
+----
+/// Validates that a path exists and is a directory
+pub fn validate_directory_path(path: &Path) -> Result<PathBuf>;
+
+/// Validates that a path is a git repository
+pub fn validate_git_repository(path: &Path) -> Result<Repository>;
+
+/// Validates that a file exists and is readable
+pub fn validate_file_path(path: &Path) -> Result<PathBuf>;
+----
+
+== cicd-hyper-a-adapters
+
+The adapters crate provides forge-agnostic interfaces for interacting with various Git hosting platforms.
+
+=== Supported Forges
+
+- GitHub
+- GitLab
+- Bitbucket
+- Codeberg (Gitea-based)
+- SourceHut
+- Radicle
+
+=== Module Structure
+
+[source]
+----
+adapters/src/
+├── lib.rs            # Public exports and factory
+├── error.rs          # Error types
+├── forge.rs          # Core traits and types
+├── defaults.rs       # Default implementations
+├── github.rs         # GitHub adapter
+├── gitlab.rs         # GitLab adapter
+├── bitbucket.rs      # Bitbucket adapter
+├── codeberg.rs       # Codeberg adapter
+├── sourcehut.rs      # SourceHut adapter
+└── radicle.rs        # Radicle adapter
+----
+
+=== Core Traits
+
+==== ForgeAdapter
+
+[source,rust]
+----
+/// Main trait for forge operations
+#[async_trait]
+pub trait ForgeAdapter: Send + Sync {
+    /// Get forge type identifier
+    fn forge(&self) -> Forge;
+
+    /// List repositories
+    async fn list_repositories(&self) -> Result<Vec<Repository>, AdapterError>;
+
+    /// Get repository details
+    async fn get_repository(
+        &self,
+        owner: &str,
+        repo: &str
+    ) -> Result<Repository, AdapterError>;
+
+    /// List pull requests
+    async fn list_pull_requests(
+        &self,
+        owner: &str,
+        repo: &str,
+        state: Option<PullRequestState>,
+    ) -> Result<Vec<PullRequest>, AdapterError>;
+
+    /// Create a pull request
+    async fn create_pull_request(
+        &self,
+        owner: &str,
+        repo: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> Result<PullRequest, AdapterError>;
+
+    /// List issues
+    async fn list_issues(
+        &self,
+        owner: &str,
+        repo: &str,
+        state: Option<IssueState>,
+    ) -> Result<Vec<Issue>, AdapterError>;
+
+    /// Create a check run
+    async fn create_check_run(
+        &self,
+        owner: &str,
+        repo: &str,
+        check: &CheckRun,
+    ) -> Result<CheckRun, AdapterError>;
+
+    /// Parse webhook payload
+    fn parse_webhook(&self, payload: &[u8]) -> Result<WebhookPayload, AdapterError>;
+}
+----
+
+=== Data Types
+
+==== Repository
+
+[source,rust]
+----
+/// Repository information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Repository {
+    pub id: String,
+    pub name: String,
+    pub full_name: String,
+    pub description: Option<String>,
+    pub default_branch: String,
+    pub private: bool,
+    pub fork: bool,
+    pub archived: bool,
+    pub clone_url: String,
+    pub ssh_url: Option<String>,
+    pub html_url: String,
+}
+----
+
+==== PullRequest
+
+[source,rust]
+----
+/// Pull request information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PullRequest {
+    pub number: u64,
+    pub title: String,
+    pub body: Option<String>,
+    pub state: PullRequestState,
+    pub head: String,
+    pub base: String,
+    pub author: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub merged: bool,
+}
+----
+
+==== CheckRun
+
+[source,rust]
+----
+/// Check run for CI status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckRun {
+    pub id: Option<String>,
+    pub name: String,
+    pub status: CheckStatus,
+    pub conclusion: Option<CheckConclusion>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub output: Option<CheckOutput>,
+}
+----
+
+=== Factory Function
+
+[source,rust]
+----
+/// Create a forge adapter for the given forge type
+pub fn create_adapter(
+    forge: Forge,
+    config: &ForgeConfig
+) -> Result<Box<dyn ForgeAdapter>, AdapterError>;
+----
+
+== cicd-hyper-a-data
+
+The data crate provides data access and caching functionality.
+
+=== Module Structure
+
+[source]
+----
+data/src/
+├── lib.rs            # Public exports
+└── dragonfly.rs      # DragonflyDB client
+----
+
+=== DragonflyClient
+
+[source,rust]
+----
+/// DragonflyDB client for caching and data storage
+pub struct DragonflyClient {
+    config: DragonflyConfig,
+    // ...
+}
+
+impl DragonflyClient {
+    /// Create a new client
+    pub fn new(config: DragonflyConfig) -> Result<Self, DataError>;
+
+    /// Get a cached value
+    pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, DataError>;
+
+    /// Set a cached value with TTL
+    pub async fn set<T: Serialize>(
+        &self,
+        key: &str,
+        value: &T,
+        ttl: Duration
+    ) -> Result<(), DataError>;
+
+    /// Delete a cached value
+    pub async fn delete(&self, key: &str) -> Result<bool, DataError>;
+
+    /// Check if key exists
+    pub async fn exists(&self, key: &str) -> Result<bool, DataError>;
+}
+----
+
+== cicd-hyper-a-fixer
+
+The fixer crate provides auto-fix implementations.
+
+=== Supported Fixes
+
+[cols="2,3,1"]
+|===
+|Fix Type |Description |Scope
+
+|`unpinned-actions`
+|Pin GitHub Actions to SHA
+|Workflow files
+
+|`missing-permissions`
+|Add `permissions: read-all`
+|Workflow files
+
+|`missing-spdx`
+|Add SPDX license headers
+|All source files
+
+|`missing-security-policy`
+|Generate SECURITY.md
+|Repository root
+
+|`branch-protection`
+|Enable branch protection via API
+|Repository settings
+|===
+
+=== Fixer Trait
+
+[source,rust]
+----
+/// Trait for implementing auto-fixes
+#[async_trait]
+pub trait Fixer: Send + Sync {
+    /// Get the fix type identifier
+    fn fix_type(&self) -> &str;
+
+    /// Check if this fixer can handle the finding
+    fn can_fix(&self, finding: &Finding) -> bool;
+
+    /// Apply the fix
+    async fn apply(&self, finding: &Finding, repo_path: &Path) -> Result<FixResult, FixerError>;
+
+    /// Preview the fix without applying
+    fn preview(&self, finding: &Finding, repo_path: &Path) -> Result<FixPreview, FixerError>;
+}
+----
+
+=== FixResult
+
+[source,rust]
+----
+/// Result of applying a fix
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixResult {
+    pub success: bool,
+    pub files_modified: Vec<PathBuf>,
+    pub message: String,
+    pub diff: Option<String>,
+}
+----
+
+== Error Handling
+
+All crates use the `anyhow` crate for error handling with contextual information.
+
+[source,rust]
+----
+use anyhow::{Context, Result};
+
+pub fn example() -> Result<()> {
+    let repo = Repository::open(&path)
+        .with_context(|| format!("Failed to open repository: {}", path.display()))?;
+    Ok(())
+}
+----
+
+== Dependencies
+
+Key dependencies used across the workspace:
+
+[cols="2,3"]
+|===
+|Crate |Purpose
+
+|`clap`
+|Command-line argument parsing
+
+|`tokio`
+|Async runtime
+
+|`serde`
+|Serialization/deserialization
+
+|`reqwest`
+|HTTP client for API calls
+
+|`git2`
+|Git operations (libgit2 bindings)
+
+|`regex`
+|Pattern matching
+
+|`walkdir`
+|Directory traversal
+
+|`tracing`
+|Structured logging
+
+|`anyhow`
+|Error handling
+
+|`chrono`
+|Date/time handling
+|===
+
+== See Also
+
+- xref:cli-reference.adoc[CLI Reference]
+- xref:logtalk-api.adoc[Logtalk Predicates]
+- xref:haskell-api.adoc[Haskell Modules]

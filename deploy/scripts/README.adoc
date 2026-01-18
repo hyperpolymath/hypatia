@@ -1,0 +1,446 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Database Scripts
+:toc:
+:toc-placement: preamble
+:sectnums:
+
+Database initialization, migration, backup, and health check scripts for the cicd-hyper-a CI/CD intelligence platform.
+
+== Overview
+
+These POSIX-compatible shell scripts manage ArangoDB and Dragonfly databases for cicd-hyper-a.
+
+[cols="1,3"]
+|===
+| Script | Purpose
+
+| `init-arangodb.sh`
+| Initialize ArangoDB with collections, indexes, graphs, and seed data
+
+| `init-arangodb.js`
+| ArangoDB initialization script for arangosh (alternative to shell script)
+
+| `init-dragonfly.sh`
+| Initialize Dragonfly/Redis with configuration and initial cache entries
+
+| `migrate.sh`
+| Database migration management with version tracking and rollback
+
+| `backup.sh`
+| Create backups of both databases with rotation and optional remote upload
+
+| `restore.sh`
+| Restore databases from backup files
+
+| `health-check.sh`
+| Health check for both databases with JSON or human-readable output
+|===
+
+== Quick Start
+
+[source,bash]
+----
+# Set environment variables
+export ARANGO_PASSWORD=your_password
+
+# Initialize databases
+./init-arangodb.sh
+./init-dragonfly.sh
+
+# Check health
+./health-check.sh
+
+# Create backup
+./backup.sh
+----
+
+== Environment Variables
+
+=== ArangoDB
+
+[cols="1,1,2"]
+|===
+| Variable | Default | Description
+
+| `ARANGO_HOST`
+| `localhost`
+| ArangoDB host
+
+| `ARANGO_PORT`
+| `8529`
+| ArangoDB port
+
+| `ARANGO_USER`
+| `root`
+| ArangoDB username
+
+| `ARANGO_PASSWORD`
+| (required)
+| ArangoDB password
+
+| `ARANGO_DATABASE`
+| `cicd_hyper_a`
+| Database name
+|===
+
+=== Dragonfly
+
+[cols="1,1,2"]
+|===
+| Variable | Default | Description
+
+| `DRAGONFLY_HOST`
+| `localhost`
+| Dragonfly host
+
+| `DRAGONFLY_PORT`
+| `6379`
+| Dragonfly port
+
+| `DRAGONFLY_PASSWORD`
+| (optional)
+| Dragonfly password
+
+| `DRAGONFLY_MAXMEM`
+| `2gb`
+| Maximum memory allocation
+|===
+
+=== Backup/Restore
+
+[cols="1,1,2"]
+|===
+| Variable | Default | Description
+
+| `BACKUP_DIR`
+| `/var/backups/cicd-hyper-a`
+| Local backup directory
+
+| `BACKUP_REMOTE`
+| (optional)
+| Remote backup destination (s3://, gs://, rsync://, or SSH)
+|===
+
+== Scripts
+
+=== init-arangodb.sh
+
+Initializes ArangoDB with the complete schema.
+
+[source,bash]
+----
+# Dry run (show what would be done)
+./init-arangodb.sh --dry-run
+
+# Full initialization
+ARANGO_PASSWORD=secret ./init-arangodb.sh
+
+# Force recreate (drops existing)
+ARANGO_PASSWORD=secret ./init-arangodb.sh --force
+
+# Skip seed data
+ARANGO_PASSWORD=secret ./init-arangodb.sh --skip-seed
+----
+
+==== Created Resources
+
+* Document collections: repos, bots, sessions, findings, rules, fixes, workflows, learningData, owners, rulesets, bot_results, alerts
+* Edge collections: repo_has_workflow, bot_depends_on, finding_fixed_by, etc.
+* Graphs: cicd_intelligence, bot_fleet, learning_graph
+* Indexes: On commonly queried fields
+* Views: findings_search, rules_search (ArangoSearch)
+* Seed data: gitbot-fleet bots and default rulesets
+
+=== init-arangodb.js
+
+Alternative initialization using arangosh.
+
+[source,bash]
+----
+arangosh \
+  --server.endpoint tcp://localhost:8529 \
+  --server.username root \
+  --server.password secret \
+  --javascript.execute init-arangodb.js
+----
+
+=== init-dragonfly.sh
+
+Initializes Dragonfly with caching configuration.
+
+[source,bash]
+----
+# Status only
+./init-dragonfly.sh --status-only
+
+# Full initialization
+./init-dragonfly.sh
+
+# Flush and reinitialize
+./init-dragonfly.sh --flush
+----
+
+==== Created Resources
+
+* Sorted sets: queue:alerts, queue:fixes, queue:scans
+* Metadata: meta:init, meta:ttl, meta:prefixes, meta:channels
+* Counters: stats:scans_total, stats:alerts_total, stats:fixes_total
+* Bot cache entries
+
+=== migrate.sh
+
+Manages database schema migrations.
+
+[source,bash]
+----
+# Show migration status
+./migrate.sh status
+
+# Apply all pending migrations
+./migrate.sh up
+
+# Rollback last migration
+./migrate.sh down
+
+# Rollback multiple migrations
+./migrate.sh rollback 3
+
+# Show current version
+./migrate.sh version
+
+# Create new migration
+./migrate.sh create add_analytics_collection
+----
+
+==== Migration Files
+
+Migrations are stored in `./migrations/` with naming convention:
+
+[source]
+----
+{VERSION}_{NAME}_{arangodb|dragonfly}.sh
+----
+
+Example: `20240115120000_add_analytics_arangodb.sh`
+
+Each migration script must implement `up` and `down` functions.
+
+=== backup.sh
+
+Creates database backups.
+
+[source,bash]
+----
+# Backup both databases
+ARANGO_PASSWORD=secret ./backup.sh
+
+# Backup only ArangoDB
+ARANGO_PASSWORD=secret ./backup.sh --db arangodb
+
+# Keep more backups
+./backup.sh --keep 14
+
+# Disable compression
+./backup.sh --no-compress
+
+# Upload to S3
+BACKUP_REMOTE=s3://bucket/path ./backup.sh
+----
+
+==== Backup Rotation
+
+By default, keeps the last 7 backups per database.
+
+=== restore.sh
+
+Restores databases from backup.
+
+[source,bash]
+----
+# List available backups
+./restore.sh --list
+
+# Restore (auto-detect type)
+ARANGO_PASSWORD=secret ./restore.sh backup.tar.gz
+
+# Restore with data drop
+ARANGO_PASSWORD=secret ./restore.sh --drop backup.tar.gz
+
+# Skip confirmation
+./restore.sh --no-confirm --drop backup.tar.gz
+----
+
+=== health-check.sh
+
+Performs health checks on both databases.
+
+[source,bash]
+----
+# Human-readable output
+./health-check.sh
+
+# JSON output
+./health-check.sh --json
+
+# Check specific database
+./health-check.sh --db arangodb
+
+# Verbose output
+./health-check.sh --verbose
+----
+
+==== Exit Codes
+
+* `0` - All checks passed
+* `1` - One or more checks failed
+* `2` - Configuration or dependency error
+
+==== Use in Docker
+
+[source,yaml]
+----
+healthcheck:
+  test: ["CMD", "/scripts/health-check.sh", "--quiet", "--db", "arangodb"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+----
+
+== Database Schema
+
+=== ArangoDB Collections
+
+==== Document Collections
+
+[cols="1,3"]
+|===
+| Collection | Purpose
+
+| `repos`
+| Repository metadata (forge, owner, scorecard score)
+
+| `bots`
+| Bot definitions (rhodibot, glambot, etc.)
+
+| `sessions`
+| Scan sessions
+
+| `findings`
+| Issues found during scans
+
+| `rules`
+| Detection and fix rules
+
+| `fixes`
+| Applied fixes
+
+| `workflows`
+| GitHub Actions workflow files
+
+| `learningData`
+| Machine learning training data
+
+| `owners`
+| Repository owners/organizations
+
+| `rulesets`
+| Rule collections (OpenSSF, RSR, etc.)
+
+| `bot_results`
+| Bot execution results
+
+| `alerts`
+| Security/quality alerts
+|===
+
+==== Edge Collections
+
+Edges represent relationships in the graph model:
+
+* `repo_has_workflow` - Repository contains workflow
+* `bot_found_finding` - Bot discovered finding
+* `finding_fixed_by` - Finding was fixed by rule
+* `bot_depends_on` - Bot dependency chain
+* And many more...
+
+==== Graphs
+
+* `cicd_intelligence` - Main intelligence graph
+* `bot_fleet` - Bot relationships and dependencies
+* `learning_graph` - ML and pattern learning
+
+=== Dragonfly Schema
+
+==== Key Prefixes
+
+[cols="1,1,2"]
+|===
+| Prefix | TTL | Purpose
+
+| `alert:`
+| 1 hour
+| Alert cache
+
+| `rule:`
+| 24 hours
+| Rule cache
+
+| `repo:`
+| 6 hours
+| Repository metadata cache
+
+| `fix:`
+| 12 hours
+| Fix suggestions
+
+| `session:`
+| 2 hours
+| Active session data
+
+| `bot:`
+| 24 hours
+| Bot metadata cache
+
+| `job:`
+| None
+| Job queue items
+
+| `rl:`
+| 1 minute
+| Rate limiting
+|===
+
+==== Sorted Sets (Priority Queues)
+
+* `queue:alerts` - Alert processing queue (score = severity)
+* `queue:fixes` - Fix execution queue (score = timestamp)
+* `queue:scans` - Scan scheduling queue
+
+== Development
+
+=== Adding New Migrations
+
+1. Create migration: `./migrate.sh create my_migration`
+2. Edit generated files in `./migrations/`
+3. Test with `--dry-run`
+4. Apply with `./migrate.sh up`
+
+=== Testing Scripts
+
+All scripts support `--dry-run` mode:
+
+[source,bash]
+----
+./init-arangodb.sh --dry-run --verbose
+./backup.sh --dry-run
+./migrate.sh --dry-run up
+----
+
+== Dependencies
+
+* `curl` - HTTP requests
+* `jq` - JSON processing
+* `redis-cli` - Dragonfly/Redis interaction
+* `gzip` - Compression
+* `tar` - Archive creation
+* `arangodump`/`arangorestore` (optional) - Native ArangoDB backup tools

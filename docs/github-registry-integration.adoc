@@ -1,0 +1,1636 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= GitHub Registry Integration for cicd-hyper-a
+:toc: left
+:toclevels: 3
+:icons: font
+:sectnums:
+:source-highlighter: rouge
+:experimental:
+:xrefstyle: short
+:author: hyperpolymath
+:revdate: 2026-01-18
+
+== Executive Summary
+
+This document evaluates GitHub's built-in registry systems as alternatives to a self-hosted registry for storing and distributing cicd-hyper-a rulesets. The analysis covers four options: GitHub Packages, GitHub Container Registry (ghcr.io), GitHub Releases, and GitHub Actions Artifacts.
+
+=== Recommendation
+
+[IMPORTANT]
+====
+*Recommended approach: GitHub Container Registry (ghcr.io) with OCI Artifacts*
+
+This provides the best balance of:
+
+* Version management with semantic tagging
+* Content-addressable storage via SHA digests
+* Fine-grained access control
+* Generous free tier (500MB public, unlimited private with Actions)
+* Industry-standard tooling (ORAS, docker/crane)
+====
+
+== Option 1: GitHub Packages (npm/Cargo)
+
+=== How It Works
+
+GitHub Packages provides package hosting for multiple ecosystems. For cicd-hyper-a rulesets, we could package them as:
+
+* *npm packages*: JSON/YAML rulesets as npm modules
+* *Cargo crates*: Rust-based ruleset loaders (not the rulesets themselves)
+
+==== npm Approach
+
+Rulesets would be published as scoped npm packages:
+
+[source,json]
+----
+{
+  "name": "@hyperpolymath/ruleset-security-workflow-pins",
+  "version": "1.0.0",
+  "description": "GitHub Actions SHA pinning rules",
+  "main": "ruleset.yaml",
+  "files": ["ruleset.yaml", "rules/*.yaml"],
+  "keywords": ["cicd-hyper-a", "ruleset", "security"],
+  "repository": "https://github.com/hyperpolymath/cicd-hyper-a",
+  "license": "AGPL-3.0-or-later"
+}
+----
+
+==== Cargo Approach
+
+Would require wrapping rulesets in Rust crates with macros:
+
+[source,rust]
+----
+// lib.rs
+pub const RULESET: &str = include_str!("../ruleset.yaml");
+
+pub fn load() -> cicd_hyper_a::Ruleset {
+    cicd_hyper_a::parse_ruleset(RULESET).unwrap()
+}
+----
+
+=== Pros and Cons
+
+[cols="1,1"]
+|===
+| Pros | Cons
+
+| Familiar npm/Cargo tooling
+| Requires ecosystem-specific packaging
+
+| Semantic versioning built-in
+| npm: Node.js dependency for install
+
+| Dependency resolution handled
+| Cargo: Only viable for Rust rulesets
+
+| Package locking (package-lock.json)
+| Overhead of package.json per ruleset
+
+| GitHub integration (GITHUB_TOKEN)
+| Not designed for generic artifacts
+
+| Free for public packages
+| Mixes package concepts with rulesets
+|===
+
+=== Authentication Requirements
+
+[source,bash]
+----
+# npm authentication
+echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> ~/.npmrc
+echo "@hyperpolymath:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+# Cargo authentication (in .cargo/config.toml)
+[registries.github]
+index = "sparse+https://github.com/hyperpolymath/cicd-hyper-a-registry/index/"
+token = "Bearer ${GITHUB_TOKEN}"
+----
+
+=== API Usage Examples
+
+==== Publishing (Deposit)
+
+[source,bash]
+----
+# npm publish
+npm publish --registry=https://npm.pkg.github.com
+
+# Via API
+curl -X PUT \
+  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @package.tgz \
+  "https://npm.pkg.github.com/@hyperpolymath/ruleset-security-workflow-pins"
+----
+
+==== Installing (Withdraw)
+
+[source,bash]
+----
+# npm install
+npm install @hyperpolymath/ruleset-security-workflow-pins
+
+# Direct download via API
+curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://npm.pkg.github.com/@hyperpolymath/ruleset-security-workflow-pins/-/ruleset-security-workflow-pins-1.0.0.tgz" \
+  -o ruleset.tgz
+----
+
+=== CLI Integration
+
+[source,rust]
+----
+// cli/src/commands/deposit.rs additions
+
+/// Submit ruleset as npm package to GitHub Packages
+async fn deposit_to_github_packages(
+    ruleset: &Ruleset,
+    content: &str,
+    config: &Config,
+) -> Result<String> {
+    let token = std::env::var("GITHUB_TOKEN")
+        .context("GITHUB_TOKEN required for GitHub Packages")?;
+
+    // Create package.json wrapper
+    let package_json = serde_json::json!({
+        "name": format!("@hyperpolymath/ruleset-{}", ruleset.metadata.name),
+        "version": ruleset.metadata.version,
+        "description": ruleset.metadata.description,
+        "main": "ruleset.yaml",
+        "files": ["ruleset.yaml"],
+        "keywords": ruleset.metadata.tags,
+        "license": ruleset.metadata.license,
+    });
+
+    // Create tarball and publish
+    // ... implementation details
+    Ok(format!("@hyperpolymath/ruleset-{}", ruleset.metadata.name))
+}
+----
+
+=== Cost Implications
+
+|===
+| Tier | Storage | Bandwidth | Notes
+
+| Free (public)
+| 500 MB
+| Unlimited
+| Sufficient for ~500 average rulesets
+
+| Free (private)
+| 500 MB
+| 1 GB/month
+| Very limited for distribution
+
+| Pro/Team
+| 2 GB
+| 10 GB/month
+| Per user/month
+
+| Enterprise
+| 50 GB
+| 100 GB/month
+| Per user/month
+|===
+
+== Option 2: GitHub Container Registry (ghcr.io)
+
+=== How It Works
+
+GitHub Container Registry (ghcr.io) supports OCI artifacts, allowing storage of any content type with container-like tagging and versioning. Rulesets can be pushed as OCI artifacts using ORAS (OCI Registry As Storage).
+
+==== OCI Artifact Structure
+
+[source]
+----
+ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0
+                  │                         │        │              │
+                  └─ org name               │        │              └─ version tag
+                                            │        └─ ruleset name
+                                            └─ category
+----
+
+==== Artifact Manifest
+
+[source,json]
+----
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.cicd-hyper-a.ruleset.config.v1+json",
+    "size": 233,
+    "digest": "sha256:abc..."
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.cicd-hyper-a.ruleset.content.v1+yaml",
+      "size": 4521,
+      "digest": "sha256:def...",
+      "annotations": {
+        "org.opencontainers.image.title": "workflow-pins.yaml",
+        "dev.cicd-hyper-a.category": "security",
+        "dev.cicd-hyper-a.version": "1.0.0"
+      }
+    }
+  ],
+  "annotations": {
+    "org.opencontainers.image.source": "https://github.com/hyperpolymath/cicd-hyper-a",
+    "org.opencontainers.image.description": "GitHub Actions SHA pinning rules",
+    "org.opencontainers.image.licenses": "AGPL-3.0-or-later"
+  }
+}
+----
+
+=== Pros and Cons
+
+[cols="1,1"]
+|===
+| Pros | Cons
+
+| *Content-addressable* (SHA digests)
+| Requires ORAS or similar tooling
+
+| OCI standard = portable
+| Slightly more complex than releases
+
+| Fine-grained visibility (public/private)
+| Learning curve for OCI concepts
+
+| Immutable tags with digest pinning
+| ghcr.io specific (not pure git)
+
+| GitHub Actions integration
+| Rate limits for unauthenticated pulls
+
+| *Unlimited storage* for public
+| No built-in search (need catalog)
+
+| Supports signatures (Cosign/Notary)
+| -
+|===
+
+=== Authentication Requirements
+
+[source,bash]
+----
+# Docker/ORAS login
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+echo $GITHUB_TOKEN | oras login ghcr.io -u USERNAME --password-stdin
+
+# Personal Access Token requirements:
+# - read:packages (for withdraw)
+# - write:packages (for deposit)
+# - delete:packages (optional, for removal)
+----
+
+=== API Usage Examples
+
+==== Publishing with ORAS (Deposit)
+
+[source,bash]
+----
+# Install ORAS
+brew install oras  # or: go install oras.land/oras/cmd/oras@latest
+
+# Push ruleset as OCI artifact
+oras push ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 \
+  --artifact-type application/vnd.cicd-hyper-a.ruleset.v1 \
+  --annotation "org.opencontainers.image.source=https://github.com/hyperpolymath/cicd-hyper-a" \
+  --annotation "dev.cicd-hyper-a.category=security" \
+  workflow-pins.yaml:application/vnd.cicd-hyper-a.ruleset.content.v1+yaml
+
+# Tag as latest
+oras tag ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 latest
+----
+
+==== Pulling with ORAS (Withdraw)
+
+[source,bash]
+----
+# Pull ruleset
+oras pull ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 \
+  --output ./rulesets/
+
+# Pull by digest (immutable)
+oras pull ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins@sha256:abc123...
+
+# List tags
+oras repo tags ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins
+----
+
+==== GitHub Container Registry API
+
+[source,bash]
+----
+# List packages
+curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/orgs/hyperpolymath/packages?package_type=container"
+
+# Get package versions
+curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/orgs/hyperpolymath/packages/container/cicd-hyper-a-rulesets%2Fsecurity%2Fworkflow-pins/versions"
+
+# Delete a version (admin only)
+curl -X DELETE -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/orgs/hyperpolymath/packages/container/cicd-hyper-a-rulesets%2Fsecurity%2Fworkflow-pins/versions/12345"
+----
+
+=== CLI Integration
+
+[source,rust]
+----
+// cli/src/registry/ghcr.rs
+
+use oci_distribution::{Client, Reference, secrets::RegistryAuth};
+
+/// OCI-based registry client for ghcr.io
+pub struct GhcrRegistry {
+    client: Client,
+    namespace: String,
+}
+
+impl GhcrRegistry {
+    pub fn new(token: &str) -> Result<Self> {
+        let auth = RegistryAuth::Basic(
+            std::env::var("GITHUB_USERNAME")?,
+            token.to_string(),
+        );
+
+        let client = Client::new(ClientConfig {
+            protocol: ClientProtocol::Https,
+            ..Default::default()
+        });
+
+        Ok(Self {
+            client,
+            namespace: "ghcr.io/hyperpolymath/cicd-hyper-a-rulesets".to_string(),
+        })
+    }
+
+    /// Deposit a ruleset to ghcr.io
+    pub async fn deposit(&self, ruleset: &Ruleset, content: &[u8]) -> Result<String> {
+        let reference = Reference::try_from(format!(
+            "{}/{}/{}:{}",
+            self.namespace,
+            ruleset.metadata.category,
+            ruleset.metadata.name,
+            ruleset.metadata.version
+        ))?;
+
+        // Create OCI manifest
+        let config = OciConfig {
+            media_type: "application/vnd.cicd-hyper-a.ruleset.config.v1+json",
+            config: serde_json::to_vec(&ruleset.metadata)?,
+        };
+
+        let layer = OciLayer {
+            media_type: "application/vnd.cicd-hyper-a.ruleset.content.v1+yaml",
+            data: content.to_vec(),
+            annotations: HashMap::from([
+                ("dev.cicd-hyper-a.category".into(), ruleset.metadata.category.to_string()),
+            ]),
+        };
+
+        let manifest = OciManifest::build()
+            .config(config)
+            .layer(layer)
+            .annotations(HashMap::from([
+                ("org.opencontainers.image.source".into(),
+                 "https://github.com/hyperpolymath/cicd-hyper-a".into()),
+            ]))
+            .build()?;
+
+        let digest = self.client.push(&reference, &manifest).await?;
+
+        Ok(format!("{}@{}", reference, digest))
+    }
+
+    /// Withdraw a ruleset from ghcr.io
+    pub async fn withdraw(&self, name: &str, version: Option<&str>) -> Result<(Ruleset, Vec<u8>)> {
+        let (category, ruleset_name, ver) = parse_ruleset_id(name)?;
+        let version = version.unwrap_or(&ver);
+
+        let reference = Reference::try_from(format!(
+            "{}/{}/{}:{}",
+            self.namespace, category, ruleset_name, version
+        ))?;
+
+        let (manifest, layers) = self.client.pull(&reference).await?;
+
+        // Parse config as RulesetMetadata
+        let config: RulesetMetadata = serde_json::from_slice(&manifest.config.data)?;
+
+        // Parse layer as ruleset content
+        let content = layers.first()
+            .context("No ruleset content in artifact")?
+            .data
+            .clone();
+
+        let ruleset = parse_ruleset_content(&content, &config)?;
+
+        Ok((ruleset, content))
+    }
+}
+----
+
+=== Cost Implications
+
+|===
+| Tier | Storage | Bandwidth | Notes
+
+| Free (public)
+| *Unlimited*
+| Unlimited
+| Best option for open source
+
+| Free (private)
+| 500 MB
+| 1 GB/month
+| Shared with Packages
+
+| Pro/Team
+| 2 GB
+| 10 GB/month
+| Per user/month
+
+| Enterprise
+| 50 GB
+| 100 GB/month
+| Per user/month
+|===
+
+== Option 3: GitHub Releases
+
+=== How It Works
+
+GitHub Releases attach binary assets to git tags, providing a simple way to distribute versioned artifacts alongside source code.
+
+==== Release Structure
+
+[source]
+----
+https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/tag/v1.0.0
+├── security-workflow-pins-1.0.0.yaml
+├── security-codeql-matrix-1.0.0.yaml
+├── policy-spdx-headers-1.0.0.yaml
+├── SHA256SUMS
+└── SHA256SUMS.sig
+----
+
+=== Pros and Cons
+
+[cols="1,1"]
+|===
+| Pros | Cons
+
+| Very simple conceptually
+| Limited versioning (per-release, not per-ruleset)
+
+| Direct download URLs (no auth for public)
+| No individual ruleset versioning
+
+| Native GitHub integration
+| Requires managing release lifecycle
+
+| GitHub Actions auto-release
+| Max 2GB per asset
+
+| Signed releases (GPG/sigstore)
+| No search/discovery mechanism
+
+| No special tooling needed
+| Bundling reduces granularity
+|===
+
+=== Authentication Requirements
+
+[source,bash]
+----
+# For private repos only
+curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  -H "Accept: application/octet-stream" \
+  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a-rulesets/releases/assets/12345"
+
+# Public repos: Direct download, no auth needed
+curl -LO "https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/download/v1.0.0/workflow-pins.yaml"
+----
+
+=== API Usage Examples
+
+==== Creating a Release (Deposit)
+
+[source,bash]
+----
+# Create release via gh CLI
+gh release create v1.0.0 \
+  --repo hyperpolymath/cicd-hyper-a-rulesets \
+  --title "Rulesets v1.0.0" \
+  --notes "Security and policy rulesets" \
+  ./rulesets/*.yaml
+
+# Via API
+curl -X POST \
+  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a-rulesets/releases" \
+  -d '{
+    "tag_name": "v1.0.0",
+    "name": "Rulesets v1.0.0",
+    "body": "Security and policy rulesets",
+    "draft": false,
+    "prerelease": false
+  }'
+
+# Upload asset
+curl -X POST \
+  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  -H "Content-Type: application/x-yaml" \
+  --data-binary @workflow-pins.yaml \
+  "https://uploads.github.com/repos/hyperpolymath/cicd-hyper-a-rulesets/releases/12345/assets?name=workflow-pins.yaml"
+----
+
+==== Downloading Assets (Withdraw)
+
+[source,bash]
+----
+# Direct download (public)
+curl -LO "https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/download/v1.0.0/workflow-pins.yaml"
+
+# Via gh CLI
+gh release download v1.0.0 \
+  --repo hyperpolymath/cicd-hyper-a-rulesets \
+  --pattern "*.yaml" \
+  --dir ./rulesets/
+
+# List releases
+gh release list --repo hyperpolymath/cicd-hyper-a-rulesets
+----
+
+=== CLI Integration
+
+[source,rust]
+----
+// cli/src/registry/github_releases.rs
+
+/// GitHub Releases-based registry
+pub struct GitHubReleasesRegistry {
+    client: reqwest::Client,
+    owner: String,
+    repo: String,
+    token: Option<String>,
+}
+
+impl GitHubReleasesRegistry {
+    /// Deposit ruleset as release asset
+    pub async fn deposit(&self, ruleset: &Ruleset, content: &[u8]) -> Result<String> {
+        let token = self.token.as_ref()
+            .context("GITHUB_TOKEN required for deposits")?;
+
+        // Check if release exists for this version, create if not
+        let release = self.get_or_create_release(&ruleset.metadata.version).await?;
+
+        // Upload asset
+        let filename = format!(
+            "{}-{}-{}.yaml",
+            ruleset.metadata.category,
+            ruleset.metadata.name,
+            ruleset.metadata.version
+        );
+
+        let upload_url = release.upload_url
+            .replace("{?name,label}", &format!("?name={}", filename));
+
+        let response = self.client
+            .post(&upload_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/x-yaml")
+            .body(content.to_vec())
+            .send()
+            .await?;
+
+        let asset: GitHubAsset = response.json().await?;
+        Ok(asset.browser_download_url)
+    }
+
+    /// Withdraw ruleset from releases
+    pub async fn withdraw(
+        &self,
+        name: &str,
+        version: Option<&str>,
+    ) -> Result<(Ruleset, Vec<u8>)> {
+        let (category, ruleset_name, ver) = parse_ruleset_id(name)?;
+        let version = version.unwrap_or(&ver);
+
+        // Find release
+        let release = self.get_release(version).await?;
+
+        // Find matching asset
+        let asset_name = format!("{}-{}-{}.yaml", category, ruleset_name, version);
+        let asset = release.assets.iter()
+            .find(|a| a.name == asset_name)
+            .context("Ruleset not found in release")?;
+
+        // Download asset
+        let content = self.download_asset(&asset.browser_download_url).await?;
+        let ruleset = parse_ruleset_yaml(&content)?;
+
+        Ok((ruleset, content))
+    }
+}
+----
+
+=== Cost Implications
+
+|===
+| Tier | Storage | Bandwidth | Notes
+
+| Free (public)
+| Unlimited (2GB/asset)
+| Unlimited
+| No restrictions
+
+| Free (private)
+| Included in repo
+| 1 GB/month Actions
+| Subject to repo limits
+
+| Pro/Team
+| Included
+| 10 GB/month
+| -
+
+| Enterprise
+| Included
+| 100 GB/month
+| -
+|===
+
+== Option 4: GitHub Actions Artifacts
+
+=== How It Works
+
+GitHub Actions artifacts store workflow outputs temporarily (90 days default). Useful for build-time ruleset generation and sharing between jobs/workflows.
+
+==== Use Case
+
+Best for:
+
+* CI/CD-generated rulesets (learned patterns)
+* Temporary sharing between workflow jobs
+* Build caching and incremental compilation
+* Testing ruleset changes in PRs
+
+==== NOT Suitable For
+
+* Long-term ruleset storage
+* Production distribution
+* Public access (artifacts are private by default)
+
+=== Pros and Cons
+
+[cols="1,1"]
+|===
+| Pros | Cons
+
+| Automatic from Actions
+| *Expires after 90 days* (configurable 1-400)
+
+| Good for CI/CD pipelines
+| Private by default
+
+| Inter-job data sharing
+| No public download URLs
+
+| Free for public repos
+| Workflow-scoped access
+
+| Large size support (500MB)
+| Not a permanent registry
+|===
+
+=== API Usage Examples
+
+==== Upload Artifact (in Actions workflow)
+
+[source,yaml]
+----
+# .github/workflows/generate-rulesets.yml
+name: Generate Rulesets
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate rulesets from learned patterns
+        run: |
+          ./scripts/generate-rulesets.sh
+
+      - name: Upload rulesets artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-rulesets-${{ github.run_id }}
+          path: ./generated-rulesets/
+          retention-days: 90
+----
+
+==== Download Artifact (via API)
+
+[source,bash]
+----
+# List artifacts
+curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a/actions/artifacts"
+
+# Download artifact (returns zip)
+curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  -H "Accept: application/vnd.github+json" \
+  -L -o artifact.zip \
+  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a/actions/artifacts/12345/zip"
+----
+
+=== When to Use
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                    Artifact Decision Tree                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Is the ruleset generated during CI/CD?                         │
+│  ├── YES → Is it needed beyond 90 days?                         │
+│  │         ├── YES → Use ghcr.io or Releases after generation   │
+│  │         └── NO  → Actions Artifacts are perfect              │
+│  └── NO  → Use ghcr.io, Releases, or Packages                   │
+│                                                                  │
+│  Is the ruleset shared between workflow jobs?                   │
+│  └── YES → Actions Artifacts (with download-artifact@v4)        │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+=== Cost Implications
+
+|===
+| Tier | Storage | Retention | Notes
+
+| Free (public)
+| Included in Actions
+| 90 days default
+| No separate billing
+
+| Free (private)
+| 500 MB
+| 90 days
+| Counts against Actions storage
+
+| Pro/Team
+| 2 GB
+| 90 days
+| -
+
+| Enterprise
+| 50 GB
+| 400 days max
+| Configurable retention
+|===
+
+== Comparison Matrix
+
+[cols="1,1,1,1,1"]
+|===
+| Feature | Packages (npm) | ghcr.io (OCI) | Releases | Artifacts
+
+| *Permanence*
+| Permanent
+| Permanent
+| Permanent
+| 90 days
+
+| *Versioning*
+| Semantic (npm)
+| Tags + Digests
+| Git tags
+| Run ID
+
+| *Immutability*
+| Version locks
+| SHA digests
+| Not guaranteed
+| No
+
+| *Search*
+| npm search
+| Catalog API
+| GitHub search
+| Workflow scope
+
+| *Auth Required*
+| Always
+| Public: No
+| Public: No
+| Always
+
+| *CLI Tooling*
+| npm
+| oras/docker
+| gh/curl
+| gh/curl
+
+| *Free (public)*
+| 500 MB
+| *Unlimited*
+| Unlimited
+| Included
+
+| *Content Type*
+| Packages
+| Any artifact
+| Binary assets
+| Zip archives
+
+| *Signatures*
+| npm audit
+| Cosign/Notary
+| GPG
+| No
+
+| *cicd-hyper-a Fit*
+| Medium
+| *Best*
+| Good
+| CI only
+|===
+
+== Recommended Architecture
+
+=== Hybrid Approach
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────────┐
+│                cicd-hyper-a Registry Architecture                    │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                 PRIMARY: ghcr.io (OCI)                       │    │
+│  │                                                               │    │
+│  │  ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/                │    │
+│  │  ├── security/workflow-pins:1.0.0                            │    │
+│  │  ├── security/codeql-matrix:1.0.0                            │    │
+│  │  ├── policy/spdx-headers:1.0.0                               │    │
+│  │  └── ...                                                      │    │
+│  │                                                               │    │
+│  │  Features:                                                    │    │
+│  │  - SHA digest pinning for reproducibility                    │    │
+│  │  - OCI annotations for metadata                              │    │
+│  │  - Cosign signatures for supply chain security               │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                              │                                       │
+│                              ▼                                       │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │              SECONDARY: GitHub Releases                       │    │
+│  │                                                               │    │
+│  │  Bundled downloads for offline/air-gapped environments:      │    │
+│  │  - cicd-hyper-a-rulesets-v1.0.0-all.tar.gz                   │    │
+│  │  - cicd-hyper-a-rulesets-v1.0.0-security.tar.gz              │    │
+│  │  - SHA256SUMS + SHA256SUMS.sig                               │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                              │                                       │
+│                              ▼                                       │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │              CI/CD: GitHub Actions Artifacts                  │    │
+│  │                                                               │    │
+│  │  - Neural-generated rulesets (temporary)                     │    │
+│  │  - PR testing artifacts                                       │    │
+│  │  - Build cache                                                │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+----
+
+== Proof of Concept Implementation Plan
+
+=== Phase 1: ghcr.io Integration (2 weeks)
+
+==== Week 1: Core Library
+
+[source]
+----
+cli/src/registry/
+├── mod.rs              # Registry trait + dispatcher
+├── ghcr.rs             # NEW: ghcr.io OCI client
+├── oci.rs              # NEW: OCI manifest handling
+└── local.rs            # Existing local cache
+----
+
+===== registry/mod.rs Changes
+
+[source,rust]
+----
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Registry abstraction for multiple backends
+
+use async_trait::async_trait;
+
+/// Registry backend types
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistryBackend {
+    /// Local filesystem cache
+    Local,
+    /// Self-hosted registry (default)
+    SelfHosted,
+    /// GitHub Container Registry (ghcr.io)
+    Ghcr,
+    /// GitHub Releases
+    GitHubReleases,
+}
+
+/// Trait for registry implementations
+#[async_trait]
+pub trait Registry: Send + Sync {
+    /// Deposit a ruleset into the registry
+    async fn deposit(&self, ruleset: &Ruleset, content: &[u8]) -> Result<DepositResult>;
+
+    /// Withdraw a ruleset from the registry
+    async fn withdraw(&self, name: &str, version: Option<&str>) -> Result<WithdrawResult>;
+
+    /// Search for rulesets
+    async fn search(&self, query: &SearchQuery) -> Result<Vec<RulesetSummary>>;
+
+    /// List all available rulesets
+    async fn list(&self, filter: Option<&RulesetFilter>) -> Result<Vec<RulesetSummary>>;
+
+    /// Get registry backend type
+    fn backend(&self) -> RegistryBackend;
+}
+
+/// Create registry client from configuration
+pub fn create_registry(config: &Config) -> Result<Box<dyn Registry>> {
+    let backend = config.registry_backend.as_deref()
+        .map(|s| match s {
+            "ghcr" | "ghcr.io" => RegistryBackend::Ghcr,
+            "releases" | "github-releases" => RegistryBackend::GitHubReleases,
+            "local" => RegistryBackend::Local,
+            _ => RegistryBackend::SelfHosted,
+        })
+        .unwrap_or(RegistryBackend::SelfHosted);
+
+    match backend {
+        RegistryBackend::Ghcr => {
+            let token = std::env::var("GITHUB_TOKEN")
+                .context("GITHUB_TOKEN required for ghcr.io")?;
+            Ok(Box::new(GhcrRegistry::new(&token)?))
+        }
+        RegistryBackend::GitHubReleases => {
+            let token = std::env::var("GITHUB_TOKEN").ok();
+            Ok(Box::new(GitHubReleasesRegistry::new(
+                "hyperpolymath",
+                "cicd-hyper-a-rulesets",
+                token.as_deref(),
+            )?))
+        }
+        RegistryBackend::Local => {
+            Ok(Box::new(LocalRegistry::new(config.cache_dir())))
+        }
+        RegistryBackend::SelfHosted => {
+            let url = config.registry_url.clone()
+                .unwrap_or_else(|| "https://registry.cicd-hyper-a.dev".into());
+            Ok(Box::new(SelfHostedRegistry::new(&url)?))
+        }
+    }
+}
+----
+
+===== registry/ghcr.rs (New File)
+
+[source,rust]
+----
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! GitHub Container Registry (ghcr.io) integration using OCI artifacts
+
+use async_trait::async_trait;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use super::{Registry, RegistryBackend, DepositResult, WithdrawResult};
+use crate::commands::deposit::{Ruleset, RulesetMetadata};
+
+const GHCR_HOST: &str = "ghcr.io";
+const NAMESPACE: &str = "hyperpolymath/cicd-hyper-a-rulesets";
+
+/// Custom media types for cicd-hyper-a rulesets
+mod media_types {
+    pub const CONFIG: &str = "application/vnd.cicd-hyper-a.ruleset.config.v1+json";
+    pub const CONTENT_YAML: &str = "application/vnd.cicd-hyper-a.ruleset.content.v1+yaml";
+    pub const CONTENT_JSON: &str = "application/vnd.cicd-hyper-a.ruleset.content.v1+json";
+}
+
+/// ghcr.io registry client
+pub struct GhcrRegistry {
+    client: Client,
+    token: String,
+    namespace: String,
+}
+
+impl GhcrRegistry {
+    pub fn new(token: &str) -> Result<Self> {
+        let client = Client::builder()
+            .user_agent("cicd-hyper-a-cli/0.1.0")
+            .build()?;
+
+        Ok(Self {
+            client,
+            token: token.to_string(),
+            namespace: NAMESPACE.to_string(),
+        })
+    }
+
+    /// Get token for ghcr.io authentication
+    async fn get_auth_token(&self, scope: &str) -> Result<String> {
+        // Exchange GitHub token for ghcr.io token
+        let url = format!(
+            "https://{}/token?service=ghcr.io&scope={}",
+            GHCR_HOST, scope
+        );
+
+        let resp = self.client
+            .get(&url)
+            .basic_auth("", Some(&self.token))
+            .send()
+            .await?;
+
+        let token_resp: TokenResponse = resp.json().await?;
+        Ok(token_resp.token)
+    }
+
+    /// Build OCI manifest for a ruleset
+    fn build_manifest(
+        &self,
+        config_digest: &str,
+        config_size: usize,
+        layer_digest: &str,
+        layer_size: usize,
+        metadata: &RulesetMetadata,
+    ) -> OciManifest {
+        OciManifest {
+            schema_version: 2,
+            media_type: "application/vnd.oci.image.manifest.v1+json".into(),
+            config: OciDescriptor {
+                media_type: media_types::CONFIG.into(),
+                size: config_size,
+                digest: config_digest.into(),
+            },
+            layers: vec![OciDescriptor {
+                media_type: media_types::CONTENT_YAML.into(),
+                size: layer_size,
+                digest: layer_digest.into(),
+            }],
+            annotations: Some(HashMap::from([
+                ("org.opencontainers.image.source".into(),
+                 "https://github.com/hyperpolymath/cicd-hyper-a".into()),
+                ("org.opencontainers.image.description".into(),
+                 metadata.description.clone()),
+                ("org.opencontainers.image.licenses".into(),
+                 metadata.license.clone()),
+                ("dev.cicd-hyper-a.category".into(),
+                 metadata.category.to_string()),
+                ("dev.cicd-hyper-a.version".into(),
+                 metadata.version.clone()),
+            ])),
+        }
+    }
+
+    /// Calculate SHA256 digest
+    fn sha256_digest(data: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        format!("sha256:{}", hex::encode(hasher.finalize()))
+    }
+}
+
+#[async_trait]
+impl Registry for GhcrRegistry {
+    async fn deposit(&self, ruleset: &Ruleset, content: &[u8]) -> Result<DepositResult> {
+        let reference = format!(
+            "{}/{}/{}:{}",
+            self.namespace,
+            ruleset.metadata.category,
+            ruleset.metadata.name,
+            ruleset.metadata.version
+        );
+
+        let scope = format!("repository:{}/{}:push,pull", self.namespace, ruleset.metadata.category);
+        let token = self.get_auth_token(&scope).await?;
+
+        // Upload config blob
+        let config_json = serde_json::to_vec(&ruleset.metadata)?;
+        let config_digest = Self::sha256_digest(&config_json);
+        self.upload_blob(&token, &reference, &config_json, &config_digest).await?;
+
+        // Upload content blob
+        let content_digest = Self::sha256_digest(content);
+        self.upload_blob(&token, &reference, content, &content_digest).await?;
+
+        // Create and upload manifest
+        let manifest = self.build_manifest(
+            &config_digest,
+            config_json.len(),
+            &content_digest,
+            content.len(),
+            &ruleset.metadata,
+        );
+
+        let manifest_digest = self.upload_manifest(&token, &reference, &manifest).await?;
+
+        Ok(DepositResult {
+            success: true,
+            ruleset_id: Some(format!("ghcr.io/{}@{}", reference, manifest_digest)),
+            content_hash: content_digest,
+            deposited_at: chrono::Utc::now(),
+            registry_url: format!("https://ghcr.io/{}", reference),
+            validation: ValidationResult { valid: true, rules_count: ruleset.rules.len(), errors: vec![], warnings: vec![] },
+            warnings: vec![],
+        })
+    }
+
+    async fn withdraw(&self, name: &str, version: Option<&str>) -> Result<WithdrawResult> {
+        let (category, ruleset_name, ver) = parse_ruleset_id(name)?;
+        let version = version.unwrap_or(&ver);
+
+        let reference = format!("{}/{}/{}:{}", self.namespace, category, ruleset_name, version);
+        let scope = format!("repository:{}/{}:pull", self.namespace, category);
+        let token = self.get_auth_token(&scope).await?;
+
+        // Fetch manifest
+        let manifest = self.fetch_manifest(&token, &reference).await?;
+
+        // Download config
+        let config_data = self.download_blob(&token, &reference, &manifest.config.digest).await?;
+        let metadata: RulesetMetadata = serde_json::from_slice(&config_data)?;
+
+        // Download content
+        let layer = manifest.layers.first().context("No content layer")?;
+        let content = self.download_blob(&token, &reference, &layer.digest).await?;
+
+        let ruleset = parse_ruleset_content(&content, &metadata)?;
+
+        Ok(WithdrawResult {
+            success: true,
+            ruleset_id: name.to_string(),
+            version: version.to_string(),
+            saved_to: None,
+            registry_url: format!("https://ghcr.io/{}", reference),
+            withdrawn_at: chrono::Utc::now(),
+            metadata: ruleset.metadata.clone(),
+            content: Some(ruleset),
+        })
+    }
+
+    async fn search(&self, query: &SearchQuery) -> Result<Vec<RulesetSummary>> {
+        // ghcr.io doesn't have native search - use GitHub API to list packages
+        // and filter locally
+        let packages = self.list_packages().await?;
+
+        Ok(packages.into_iter()
+            .filter(|p| query.matches(p))
+            .collect())
+    }
+
+    async fn list(&self, filter: Option<&RulesetFilter>) -> Result<Vec<RulesetSummary>> {
+        self.list_packages().await
+    }
+
+    fn backend(&self) -> RegistryBackend {
+        RegistryBackend::Ghcr
+    }
+}
+----
+
+==== Week 2: CLI Integration
+
+===== config.rs Additions
+
+[source,rust]
+----
+// Add to Config struct
+pub struct Config {
+    // ... existing fields ...
+
+    /// Registry backend type (ghcr, releases, local, or self-hosted URL)
+    pub registry_backend: Option<String>,
+
+    /// GitHub username (for ghcr.io authentication)
+    pub github_username: Option<String>,
+}
+----
+
+===== deposit.rs Changes
+
+[source,rust]
+----
+// Update execute function
+
+pub async fn execute(args: DepositArgs, config: &Config, format: OutputFormat) -> Result<()> {
+    // ... validation code unchanged ...
+
+    // Create registry client based on config
+    let registry = registry::create_registry(config)?;
+
+    // Log which backend we're using
+    info!("Using registry backend: {:?}", registry.backend());
+
+    // Submit to registry
+    let result = registry.deposit(&ruleset, content.as_bytes()).await?;
+
+    // ... output handling unchanged ...
+}
+----
+
+===== withdraw.rs Changes
+
+[source,rust]
+----
+// Update execute function
+
+pub async fn execute(args: WithdrawArgs, config: &Config, format: OutputFormat) -> Result<()> {
+    // Create registry client
+    let registry = registry::create_registry(config)?;
+
+    info!(
+        "Withdrawing '{}' from {:?} registry",
+        args.ruleset_name,
+        registry.backend()
+    );
+
+    // Fetch ruleset
+    let result = registry.withdraw(&args.ruleset_name, args.version.as_deref()).await?;
+
+    // ... rest unchanged ...
+}
+----
+
+=== Phase 2: GitHub Releases Backend (1 week)
+
+===== registry/github_releases.rs (New File)
+
+[source,rust]
+----
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! GitHub Releases integration for bundled ruleset distribution
+
+use async_trait::async_trait;
+use reqwest::Client;
+
+use super::{Registry, RegistryBackend};
+
+pub struct GitHubReleasesRegistry {
+    client: Client,
+    owner: String,
+    repo: String,
+    token: Option<String>,
+}
+
+impl GitHubReleasesRegistry {
+    pub fn new(owner: &str, repo: &str, token: Option<&str>) -> Result<Self> {
+        Ok(Self {
+            client: Client::builder()
+                .user_agent("cicd-hyper-a-cli/0.1.0")
+                .build()?,
+            owner: owner.to_string(),
+            repo: repo.to_string(),
+            token: token.map(String::from),
+        })
+    }
+
+    async fn get_release(&self, tag: &str) -> Result<GitHubRelease> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/releases/tags/{}",
+            self.owner, self.repo, tag
+        );
+
+        let mut req = self.client.get(&url)
+            .header("Accept", "application/vnd.github+json");
+
+        if let Some(ref token) = self.token {
+            req = req.header("Authorization", format!("Bearer {}", token));
+        }
+
+        let resp = req.send().await?;
+        resp.json().await.context("Failed to parse release")
+    }
+}
+
+#[async_trait]
+impl Registry for GitHubReleasesRegistry {
+    async fn deposit(&self, ruleset: &Ruleset, content: &[u8]) -> Result<DepositResult> {
+        let token = self.token.as_ref()
+            .context("GITHUB_TOKEN required for GitHub Releases deposits")?;
+
+        // Get or create release for this version
+        let release = match self.get_release(&format!("v{}", ruleset.metadata.version)).await {
+            Ok(r) => r,
+            Err(_) => self.create_release(&ruleset.metadata.version).await?,
+        };
+
+        // Upload asset
+        let filename = format!(
+            "{}-{}-{}.yaml",
+            ruleset.metadata.category,
+            ruleset.metadata.name,
+            ruleset.metadata.version
+        );
+
+        let upload_url = release.upload_url
+            .replace("{?name,label}", &format!("?name={}", urlencoding::encode(&filename)));
+
+        let resp = self.client
+            .post(&upload_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/x-yaml")
+            .body(content.to_vec())
+            .send()
+            .await?;
+
+        let asset: GitHubAsset = resp.json().await?;
+
+        Ok(DepositResult {
+            success: true,
+            ruleset_id: Some(filename),
+            content_hash: compute_hash(content),
+            deposited_at: chrono::Utc::now(),
+            registry_url: asset.browser_download_url,
+            validation: ValidationResult { valid: true, rules_count: ruleset.rules.len(), errors: vec![], warnings: vec![] },
+            warnings: vec![],
+        })
+    }
+
+    async fn withdraw(&self, name: &str, version: Option<&str>) -> Result<WithdrawResult> {
+        let (category, ruleset_name, ver) = parse_ruleset_id(name)?;
+        let version = version.unwrap_or(&ver);
+
+        let release = self.get_release(&format!("v{}", version)).await?;
+
+        let asset_name = format!("{}-{}-{}.yaml", category, ruleset_name, version);
+        let asset = release.assets.iter()
+            .find(|a| a.name == asset_name)
+            .context("Ruleset not found in release")?;
+
+        // Download
+        let mut req = self.client.get(&asset.browser_download_url);
+        if let Some(ref token) = self.token {
+            req = req.header("Authorization", format!("Bearer {}", token));
+        }
+
+        let resp = req.send().await?;
+        let content = resp.bytes().await?.to_vec();
+        let ruleset = parse_ruleset_yaml(&content)?;
+
+        Ok(WithdrawResult {
+            success: true,
+            ruleset_id: name.to_string(),
+            version: version.to_string(),
+            saved_to: None,
+            registry_url: asset.browser_download_url.clone(),
+            withdrawn_at: chrono::Utc::now(),
+            metadata: ruleset.metadata.clone(),
+            content: Some(ruleset),
+        })
+    }
+
+    fn backend(&self) -> RegistryBackend {
+        RegistryBackend::GitHubReleases
+    }
+}
+----
+
+=== Phase 3: Testing and Documentation (1 week)
+
+==== Integration Tests
+
+[source,rust]
+----
+// tests/integration/registry_tests.rs
+
+#[tokio::test]
+#[ignore] // Requires GITHUB_TOKEN
+async fn test_ghcr_deposit_withdraw() {
+    let token = std::env::var("GITHUB_TOKEN").unwrap();
+    let registry = GhcrRegistry::new(&token).unwrap();
+
+    let ruleset = create_test_ruleset();
+    let content = serde_yaml::to_vec(&ruleset).unwrap();
+
+    // Deposit
+    let deposit_result = registry.deposit(&ruleset, &content).await.unwrap();
+    assert!(deposit_result.success);
+
+    // Withdraw
+    let withdraw_result = registry.withdraw(
+        &format!("{}/{}", ruleset.metadata.category, ruleset.metadata.name),
+        Some(&ruleset.metadata.version),
+    ).await.unwrap();
+
+    assert!(withdraw_result.success);
+    assert_eq!(withdraw_result.content.unwrap().rules.len(), ruleset.rules.len());
+}
+----
+
+==== GitHub Actions Workflow
+
+[source,yaml]
+----
+# .github/workflows/release-rulesets.yml
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Release Rulesets
+on:
+  push:
+    tags:
+      - 'rulesets-v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Install ORAS
+        run: |
+          curl -LO https://github.com/oras-project/oras/releases/download/v1.1.0/oras_1.1.0_linux_amd64.tar.gz
+          tar xzf oras_1.1.0_linux_amd64.tar.gz
+          sudo mv oras /usr/local/bin/
+
+      - name: Login to ghcr.io
+        run: echo ${{ secrets.GITHUB_TOKEN }} | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push rulesets to ghcr.io
+        run: |
+          for file in registry/rulesets/*.yaml; do
+            name=$(basename "$file" .yaml)
+            category=$(yq '.metadata.category' "$file")
+            version=$(yq '.metadata.version' "$file")
+
+            oras push "ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/${category}/${name}:${version}" \
+              --artifact-type application/vnd.cicd-hyper-a.ruleset.v1 \
+              "$file:application/vnd.cicd-hyper-a.ruleset.content.v1+yaml"
+
+            oras tag "ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/${category}/${name}:${version}" latest
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2
+        with:
+          files: registry/rulesets/*.yaml
+          generate_release_notes: true
+----
+
+== Configuration Examples
+
+=== Using ghcr.io (Recommended)
+
+[source,toml]
+----
+# ~/.config/cicd-hyper-a/config.toml
+
+# Use GitHub Container Registry
+registry_backend = "ghcr"
+
+# Optional: Override namespace
+# registry_namespace = "hyperpolymath/cicd-hyper-a-rulesets"
+----
+
+[source,bash]
+----
+# Set token
+export GITHUB_TOKEN="ghp_xxxxx"
+
+# Deposit
+hyper deposit ./my-ruleset.yaml
+
+# Withdraw
+hyper withdraw security/workflow-pins:1.0.0
+----
+
+=== Using GitHub Releases
+
+[source,toml]
+----
+# ~/.config/cicd-hyper-a/config.toml
+
+registry_backend = "releases"
+github_owner = "hyperpolymath"
+github_repo = "cicd-hyper-a-rulesets"
+----
+
+[source,bash]
+----
+# Withdraw (public, no token needed)
+hyper withdraw security/workflow-pins --version 1.0.0
+
+# Deposit (requires token)
+export GITHUB_TOKEN="ghp_xxxxx"
+hyper deposit ./my-ruleset.yaml
+----
+
+=== Environment Variables
+
+[source,bash]
+----
+# Registry backend selection
+export HYPER_REGISTRY_BACKEND="ghcr"  # or "releases", "local", or URL
+
+# Authentication
+export GITHUB_TOKEN="ghp_xxxxx"
+export GITHUB_USERNAME="hyperpolymath"  # Optional for ghcr
+
+# Custom namespace (ghcr only)
+export HYPER_REGISTRY_NAMESPACE="myorg/my-rulesets"
+----
+
+== Migration Path
+
+=== From Self-Hosted to ghcr.io
+
+[source,bash]
+----
+#!/bin/bash
+# migrate-to-ghcr.sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+set -euo pipefail
+
+OLD_REGISTRY="https://registry.cicd-hyper-a.dev"
+NEW_NAMESPACE="ghcr.io/hyperpolymath/cicd-hyper-a-rulesets"
+
+# Export all rulesets from old registry
+hyper search --registry "$OLD_REGISTRY" --output json | jq -r '.[].id' | while read id; do
+    echo "Migrating: $id"
+
+    # Withdraw from old
+    hyper withdraw "$id" --registry "$OLD_REGISTRY" --output ./tmp/
+
+    # Deposit to new
+    HYPER_REGISTRY_BACKEND=ghcr hyper deposit ./tmp/*.yaml
+
+    rm -rf ./tmp/
+done
+
+echo "Migration complete!"
+----
+
+== Security Considerations
+
+=== Supply Chain Security with Cosign
+
+[source,bash]
+----
+# Sign artifacts during deposit
+cosign sign ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0
+
+# Verify during withdraw
+cosign verify ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 \
+  --certificate-identity https://github.com/hyperpolymath/cicd-hyper-a/.github/workflows/release-rulesets.yml@refs/tags/rulesets-v1.0.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+----
+
+=== SLSA Provenance
+
+[source,yaml]
+----
+# Add to release workflow
+- uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+  with:
+    image: ghcr.io/hyperpolymath/cicd-hyper-a-rulesets
+    digest: ${{ steps.build.outputs.digest }}
+----
+
+== Conclusion
+
+The recommended implementation uses ghcr.io as the primary registry for several key reasons:
+
+1. *Unlimited free storage* for public artifacts
+2. *Content-addressable* with SHA digests for reproducibility
+3. *Industry-standard OCI format* enables interoperability
+4. *Native GitHub Actions integration* for CI/CD automation
+5. *Signing support* via Cosign for supply chain security
+
+GitHub Releases serves as a secondary distribution mechanism for bundled downloads and air-gapped environments.
+
+The proof-of-concept implementation requires approximately 4 weeks of development effort, with the core registry abstraction providing flexibility to add additional backends in the future.

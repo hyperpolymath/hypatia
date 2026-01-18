@@ -22,9 +22,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AdapterError;
 use crate::forge::{
-    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
-    IssueState, PullRequest, PullRequestState, Repository, RunConclusion, RunStatus,
-    WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun,
+    defaults, Alert, AlertCategory, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
+    ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
+    RunStatus, Severity, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
+    WorkflowRun, WorkflowState,
 };
 
 type Result<T> = std::result::Result<T, AdapterError>;
@@ -62,26 +63,26 @@ impl SourcehutAdapter {
             "Authorization",
             format!("Bearer {}", token)
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid token format: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid token format: {}", e)))?,
         );
         headers.insert(
             "Accept",
             "application/json"
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid header: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid header: {}", e)))?,
         );
         headers.insert(
             "Content-Type",
             "application/json"
                 .parse()
-                .map_err(|e| AdapterError::Config(format!("Invalid header: {}", e)))?,
+                .map_err(|e| AdapterError::ConfigError(format!("Invalid header: {}", e)))?,
         );
 
         let client = Client::builder()
             .default_headers(headers)
             .user_agent("cicd-hyper-a/1.0")
             .build()
-            .map_err(|e| AdapterError::Config(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
 
         Ok(Self {
             client,
@@ -138,12 +139,12 @@ impl SourcehutAdapter {
                 .get(&page_url)
                 .send()
                 .await
-                .map_err(|e| AdapterError::Network(e.to_string()))?;
+                .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
             if !response.status().is_success() {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
-                return Err(AdapterError::Api(format!(
+                return Err(AdapterError::ApiError(format!(
                     "API request failed: {} - {}",
                     status, body
                 )));
@@ -152,12 +153,12 @@ impl SourcehutAdapter {
             let body: serde_json::Value = response
                 .json()
                 .await
-                .map_err(|e| AdapterError::Parse(format!("Failed to parse response: {}", e)))?;
+                .map_err(|e| AdapterError::ApiError(format!("Failed to parse response: {}", e)))?;
 
             // Extract results from the specified key
             let page_results: Vec<T> = if let Some(arr) = body.get(results_key) {
                 serde_json::from_value(arr.clone())
-                    .map_err(|e| AdapterError::Parse(format!("Failed to parse results: {}", e)))?
+                    .map_err(|e| AdapterError::ApiError(format!("Failed to parse results: {}", e)))?
             } else {
                 Vec::new()
             };
@@ -282,18 +283,21 @@ impl From<SrhtRepo> for Repository {
             .head
             .map(|h| h.name)
             .unwrap_or_else(|| "main".to_string());
+        let visibility = if repo.visibility == "public" {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        };
 
         Repository {
             id: repo.id.to_string(),
-            name: repo.name.clone(),
-            full_name: repo.name.clone(),
-            description: repo.description,
+            name: repo.name,
+            owner: String::new(), // Will be set by caller
+            forge: Forge::Sourcehut,
             url: String::new(), // Will be set by caller
-            ssh_url: None,
-            clone_url: None,
+            visibility,
             default_branch,
-            private: repo.visibility != "public",
-            archived: false,
+            languages: vec![],
         }
     }
 }
@@ -327,7 +331,7 @@ impl From<SrhtTicketComment> for Comment {
             body: comment.text,
             author: comment.submitter.name,
             created_at: comment.created,
-            updated_at: None,
+            updated_at: comment.created, // SourceHut comments don't have separate updated_at
         }
     }
 }
@@ -346,25 +350,22 @@ impl From<SrhtJob> for WorkflowRun {
 
         WorkflowRun {
             id: job.id.to_string(),
+            workflow_id: String::new(), // SourceHut doesn't have workflow IDs
             name: job.note.unwrap_or_else(|| format!("Build #{}", job.id)),
             status,
             conclusion,
-            url: String::new(), // Will be set by caller
-            head_sha: String::new(),
             head_branch: String::new(),
-            started_at: Some(job.created),
-            completed_at: if status == RunStatus::Completed {
-                Some(job.updated)
-            } else {
-                None
-            },
+            head_sha: String::new(),
+            url: String::new(), // Will be set by caller
+            created_at: job.created,
+            updated_at: job.updated,
         }
     }
 }
 
 impl From<SrhtJob> for CheckRun {
     fn from(job: SrhtJob) -> Self {
-        let (status, conclusion) = match job.status.as_str() {
+        let (check_status, conclusion) = match job.status.as_str() {
             "pending" | "queued" => (CheckStatus::Queued, None),
             "running" => (CheckStatus::InProgress, None),
             "success" => (CheckStatus::Completed, Some(CheckConclusion::Success)),
@@ -377,11 +378,12 @@ impl From<SrhtJob> for CheckRun {
         CheckRun {
             id: job.id.to_string(),
             name: job.note.unwrap_or_else(|| format!("Build #{}", job.id)),
-            status,
+            status: check_status,
             conclusion,
+            head_sha: String::new(), // SourceHut jobs don't have commit SHAs directly
             url: None,
             started_at: Some(job.created),
-            completed_at: if status == CheckStatus::Completed {
+            completed_at: if check_status == CheckStatus::Completed {
                 Some(job.updated)
             } else {
                 None
@@ -406,10 +408,10 @@ impl ForgeAdapter for SourcehutAdapter {
 
         Ok(repos
             .into_iter()
-            .map(|mut r| {
+            .map(|r| {
                 let mut repo = Repository::from(r);
                 repo.url = format!("{}/~{}/{}", self.base_url.replace("sr.ht", "git.sr.ht"), owner, &repo.name);
-                repo.full_name = format!("~{}/{}", owner, &repo.name);
+                repo.owner = owner.to_string();
                 repo
             })
             .collect())
@@ -423,12 +425,12 @@ impl ForgeAdapter for SourcehutAdapter {
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get repo: {} - {}",
                 status, body
             )));
@@ -437,7 +439,7 @@ impl ForgeAdapter for SourcehutAdapter {
         let srht_repo: SrhtRepo = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse repo: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse repo: {}", e)))?;
 
         let mut repository = Repository::from(srht_repo);
         repository.url = format!(
@@ -446,7 +448,7 @@ impl ForgeAdapter for SourcehutAdapter {
             owner,
             &repository.name
         );
-        repository.full_name = format!("~{}/{}", owner, &repository.name);
+        repository.owner = owner.to_string();
 
         Ok(repository)
     }
@@ -462,12 +464,12 @@ impl ForgeAdapter for SourcehutAdapter {
         let common_paths = vec![".build.yml", ".builds/"];
 
         let mut workflows = Vec::new();
-        for (idx, path) in common_paths.iter().enumerate() {
+        for (idx, workflow_path) in common_paths.iter().enumerate() {
             workflows.push(Workflow {
                 id: idx.to_string(),
-                name: path.to_string(),
-                path: path.to_string(),
-                state: "active".to_string(),
+                name: workflow_path.to_string(),
+                file: workflow_path.to_string(),
+                state: WorkflowState::Active,
             });
         }
 
@@ -484,7 +486,7 @@ impl ForgeAdapter for SourcehutAdapter {
     ) -> Result<()> {
         // SourceHut doesn't have a file creation API like GitHub
         // Users need to push .build.yml to their repo
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut requires pushing build manifests via git. Use git push to deploy .build.yml".to_string(),
         ))
     }
@@ -527,12 +529,12 @@ tasks:
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to trigger build: {} - {}",
                 status, body
             )));
@@ -577,12 +579,12 @@ tasks:
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get job: {} - {}",
                 status, body
             )));
@@ -591,7 +593,7 @@ tasks:
         let job: SrhtJob = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse job: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse job: {}", e)))?;
 
         let mut run = WorkflowRun::from(job);
         run.url = format!(
@@ -612,7 +614,7 @@ tasks:
     ) -> Result<()> {
         // SourceHut doesn't have branch protection in the traditional sense
         // Protection is managed via ACLs
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut uses ACL-based access control. Configure via web UI or API ACLs.".to_string(),
         ))
     }
@@ -627,7 +629,7 @@ tasks:
         base: &str,
     ) -> Result<String> {
         // SourceHut uses email-based patch review via lists.sr.ht
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review. Send patches to the project mailing list.".to_string(),
         ))
     }
@@ -643,7 +645,7 @@ tasks:
     }
 
     async fn get_pr(&self, owner: &str, repo: &str, number: u64) -> Result<PullRequest> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review instead of pull requests.".to_string(),
         ))
     }
@@ -655,13 +657,13 @@ tasks:
         number: u64,
         commit_message: Option<&str>,
     ) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review. Apply patches with git am.".to_string(),
         ))
     }
 
     async fn close_pr(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review instead of pull requests.".to_string(),
         ))
     }
@@ -691,12 +693,12 @@ tasks:
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create ticket: {} - {}",
                 status, body
             )));
@@ -705,7 +707,7 @@ tasks:
         let ticket: SrhtTicket = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse ticket: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse ticket: {}", e)))?;
 
         let mut issue = Issue::from(ticket);
         issue.url = format!(
@@ -768,12 +770,12 @@ tasks:
             .get(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to get ticket: {} - {}",
                 status, body
             )));
@@ -782,7 +784,7 @@ tasks:
         let ticket: SrhtTicket = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse ticket: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse ticket: {}", e)))?;
 
         let mut issue = Issue::from(ticket);
         issue.url = format!(
@@ -826,12 +828,12 @@ tasks:
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to update ticket: {} - {}",
                 status, body
             )));
@@ -840,7 +842,7 @@ tasks:
         let ticket: SrhtTicket = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse ticket: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse ticket: {}", e)))?;
 
         let mut issue = Issue::from(ticket);
         issue.url = format!(
@@ -883,12 +885,12 @@ tasks:
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to add comment: {} - {}",
                 status, body
             )));
@@ -897,7 +899,7 @@ tasks:
         let comment: SrhtTicketComment = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse comment: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse comment: {}", e)))?;
 
         Ok(Comment::from(comment))
     }
@@ -910,7 +912,7 @@ tasks:
         body: &str,
     ) -> Result<Comment> {
         // SourceHut doesn't have PRs - use mailing lists
-        Err(AdapterError::NotSupported(
+        Err(AdapterError::ApiError(
             "SourceHut uses mailing list discussions. Reply to the patch email instead.".to_string(),
         ))
     }
@@ -984,12 +986,12 @@ tasks:
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create build: {} - {}",
                 status, body
             )));
@@ -998,7 +1000,7 @@ tasks:
         let job: SrhtJob = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse job: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse job: {}", e)))?;
 
         Ok(CheckRun::from(job))
     }
@@ -1064,12 +1066,12 @@ tasks:
             .json(&payload)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to create webhook: {} - {}",
                 status, body
             )));
@@ -1085,7 +1087,7 @@ tasks:
         let wh: WebhookResponse = response
             .json()
             .await
-            .map_err(|e| AdapterError::Parse(format!("Failed to parse webhook: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("Failed to parse webhook: {}", e)))?;
 
         Ok(WebhookConfig {
             id: Some(wh.id.to_string()),
@@ -1093,6 +1095,7 @@ tasks:
             secret: None,
             events: config.events,
             active: true,
+            content_type: "json".to_string(),
         })
     }
 
@@ -1126,6 +1129,7 @@ tasks:
                     })
                     .collect(),
                 active: true,
+                content_type: "json".to_string(),
             })
             .collect())
     }
@@ -1141,12 +1145,12 @@ tasks:
             .delete(&url)
             .send()
             .await
-            .map_err(|e| AdapterError::Network(e.to_string()))?;
+            .map_err(|e| AdapterError::ApiError(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(AdapterError::Api(format!(
+            return Err(AdapterError::ApiError(format!(
                 "Failed to delete webhook: {} - {}",
                 status, body
             )));
@@ -1166,7 +1170,7 @@ tasks:
         let event = match event_type {
             "repo:post-update" | "push" => WebhookEvent::Push,
             _ => {
-                return Err(AdapterError::Parse(format!(
+                return Err(AdapterError::ApiError(format!(
                     "Unknown event type: {}",
                     event_type
                 )))
@@ -1174,26 +1178,12 @@ tasks:
         };
 
         let body: serde_json::Value = serde_json::from_slice(payload)
-            .map_err(|e| AdapterError::Parse(format!("Invalid JSON payload: {}", e)))?;
-
-        let repository = body
-            .get("repository")
-            .and_then(|r| r.get("name"))
-            .and_then(|n| n.as_str())
-            .map(String::from);
-
-        let sender = body
-            .get("pusher")
-            .and_then(|p| p.get("canonical_name"))
-            .and_then(|n| n.as_str())
-            .map(String::from);
+            .map_err(|e| AdapterError::ApiError(format!("Invalid JSON payload: {}", e)))?;
 
         Ok(WebhookPayload {
             event,
             delivery_id: uuid::Uuid::new_v4().to_string(),
-            repository,
-            sender,
-            action: None,
+            signature: signature.map(String::from),
             payload: body,
         })
     }

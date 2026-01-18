@@ -1,0 +1,754 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+= cicd-hyper-a Logtalk API Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: highlight.js
+
+== Overview
+
+The cicd-hyper-a rule engine is implemented in Logtalk, providing a logic programming foundation for declarative rules, pattern matching, and learning capabilities. The engine combines static rules distilled from training data with dynamically learned patterns.
+
+== Engine Architecture
+
+[source]
+----
+engine/
+├── loader.lgt              # Main loader, bootstraps engine
+├── rules/
+│   ├── cicd_rules.lgt      # Core CI/CD rules
+│   ├── learning.lgt        # Machine learning integration
+│   ├── rule_distiller.lgt  # Rule extraction from training data
+│   └── forge_adapters.lgt  # Forge-specific rule adaptations
+├── schema/
+│   ├── rule_schema.lgt     # Rule type definitions
+│   └── bot_integration.lgt # Bot communication protocol
+├── arangodb_connector.lgt  # Database operations
+├── http_client.lgt         # HTTP client for API calls
+└── json_utils.lgt          # JSON parsing utilities
+----
+
+== cicd_rules Object
+
+The main rules object containing declarative CI/CD policies.
+
+=== Loading
+
+[source,prolog]
+----
+?- logtalk_load(loader).
+% Loads all engine components
+----
+
+=== Public Predicates
+
+==== Declarative Rules
+
+===== repo_must_have/2
+
+Declares required files for repositories.
+
+[source,prolog]
+----
+repo_must_have(+Repo, +File)
+----
+
+.Arguments
+[cols="1,3"]
+|===
+|Repo |Repository identifier
+|File |Required file path or pattern
+|===
+
+.Examples
+[source,prolog]
+----
+?- cicd_rules::repo_must_have(my_repo, 'SECURITY.md').
+% true if repo is public
+
+?- cicd_rules::repo_must_have(my_repo, '.github/dependabot.yml').
+% true if repo uses dependencies
+----
+
+==== Preventive Rules
+
+===== block_commit_if/2
+
+Conditions under which commits should be blocked.
+
+[source,prolog]
+----
+block_commit_if(+Commit, -Reason)
+----
+
+.Arguments
+[cols="1,3"]
+|===
+|Commit |Commit identifier or changeset
+|Reason |Atom describing why commit is blocked
+|===
+
+.Blocking Reasons
+[cols="2,3"]
+|===
+|Reason |Description
+
+|`typescript_detected`
+|Commit adds TypeScript files
+
+|`nodejs_detected`
+|Commit adds package-lock.json
+
+|`golang_detected`
+|Commit adds Go files
+
+|`python_detected`
+|Commit adds Python files (except SaltStack)
+
+|`makefile_detected`
+|Commit adds Makefile
+
+|`secret_detected`
+|Commit contains secret patterns
+
+|`unpinned_action`
+|Workflow has unpinned GitHub Actions
+
+|`missing_permissions`
+|Workflow missing permissions declaration
+
+|`missing_spdx`
+|File missing SPDX header
+
+|`wrong_license_header`
+|SPDX header has wrong license
+|===
+
+==== Curative Rules
+
+===== auto_fix/2
+
+Automatic fixes for common issues.
+
+[source,prolog]
+----
+auto_fix(+Repo, +IssueType)
+----
+
+.Issue Types
+[cols="2,3"]
+|===
+|Issue Type |Fix Action
+
+|`unpinned_actions`
+|Pin actions to SHA
+
+|`missing_permissions`
+|Add `permissions: read-all`
+
+|`missing_spdx`
+|Add SPDX headers
+
+|`missing_security_md`
+|Generate SECURITY.md
+
+|`missing_branch_protection`
+|Enable branch protection
+
+|`unused_local_variable`
+|Prefix with underscore
+
+|`wrong_license_header`
+|Replace with correct license
+|===
+
+==== Classification
+
+===== classify_severity/2
+
+Maps alert types to severity levels.
+
+[source,prolog]
+----
+classify_severity(+AlertType, -Severity)
+----
+
+.Severity Levels
+- `critical` - Must be fixed immediately
+- `high` - Important security issue
+- `medium` - Should be addressed
+- `low` - Minor issue
+- `info` - Informational (default)
+
+.Examples
+[source,prolog]
+----
+?- cicd_rules::classify_severity('hard-coded-cryptographic-value', S).
+S = critical.
+
+?- cicd_rules::classify_severity('TokenPermissionsID', S).
+S = high.
+
+?- cicd_rules::classify_severity('unused-local-variable', S).
+S = low.
+----
+
+===== is_auto_fixable/1
+
+Check if an issue type can be auto-fixed.
+
+[source,prolog]
+----
+is_auto_fixable(+IssueType)
+----
+
+.Auto-Fixable Issues
+- `TokenPermissionsID`
+- `PinnedDependenciesID`
+- `missing-workflow-permissions`
+- `SecurityPolicyID`
+- `BranchProtectionID`
+- `unused-local-variable`
+- `missing-spdx-header`
+- `wrong-spdx-license`
+
+==== Fix Suggestions
+
+===== suggest_fix/2
+
+Get fix suggestion for an issue type.
+
+[source,prolog]
+----
+suggest_fix(+IssueType, -FixDescription)
+----
+
+.Examples
+[source,prolog]
+----
+?- cicd_rules::suggest_fix('TokenPermissionsID', Fix).
+Fix = 'Add "permissions: read-all" at workflow level'.
+
+?- cicd_rules::suggest_fix('PinnedDependenciesID', Fix).
+Fix = 'Replace @vN with @SHA # vN format'.
+----
+
+===== get_prevention_workflow/2
+
+Get workflow that prevents an issue type.
+
+[source,prolog]
+----
+get_prevention_workflow(+IssueType, -WorkflowFile)
+----
+
+.Examples
+[source,prolog]
+----
+?- cicd_rules::get_prevention_workflow('TokenPermissionsID', W).
+W = 'workflow-linter.yml'.
+
+?- cicd_rules::get_prevention_workflow('hard-coded-cryptographic-value', W).
+W = 'secret-scanner.yml'.
+----
+
+==== CI/CD Waste Detection
+
+===== detect_workflow_waste/2
+
+Detect wasteful or redundant CI configurations.
+
+[source,prolog]
+----
+detect_workflow_waste(+Repo, -WasteType)
+----
+
+.Waste Types
+[cols="2,3"]
+|===
+|Waste Type |Description
+
+|`duplicate_workflow`
+|Multiple workflows doing same job
+
+|`unused_publish_workflows`
+|5+ platform-specific publish workflows
+
+|`mirror_missing_secrets`
+|mirror.yml without required secrets
+
+|`npm_in_workflow`
+|npm usage despite blocker workflow
+
+|`spec_repo_full_ci`
+|Spec-only repo with 10+ workflows
+
+|`semgrep_language_mismatch`
+|Semgrep on unsupported languages
+
+|`excessive_workflow_count`
+|More than 15 workflows
+
+|`missing_directory_workflow`
+|Workflow for non-existent directory
+|===
+
+===== suggest_waste_fix/2
+
+Get fix suggestion for waste pattern.
+
+[source,prolog]
+----
+suggest_waste_fix(+WasteType, -FixDescription)
+----
+
+==== Language Detection
+
+===== repo_language_for_tool/3
+
+Map repo languages to tool-specific language names.
+
+[source,prolog]
+----
+repo_language_for_tool(+Tool, +RepoLanguage, -ToolLanguage)
+----
+
+.Tools Supported
+- `codeql` - GitHub CodeQL
+- `semgrep` - Semgrep static analysis
+
+.Examples
+[source,prolog]
+----
+?- cicd_rules::repo_language_for_tool(codeql, rust, Lang).
+Lang = 'actions'.  % Rust not supported by CodeQL
+
+?- cicd_rules::repo_language_for_tool(codeql, javascript, Lang).
+Lang = 'javascript-typescript'.
+
+?- cicd_rules::repo_language_for_tool(semgrep, rust, Lang).
+Lang = unsupported.
+----
+
+==== Learning Integration
+
+===== suggest_fix_with_learning/2
+
+Get fix using learned knowledge first, falling back to static rules.
+
+[source,prolog]
+----
+suggest_fix_with_learning(+IssueType, -Fix)
+----
+
+===== record_fix_outcome/3
+
+Record outcome of applying a fix (feeds learning system).
+
+[source,prolog]
+----
+record_fix_outcome(+IssueType, +Fix, +Outcome)
+----
+
+.Outcome Values
+- `success` - Fix worked correctly
+- `failure` - Fix did not resolve issue
+- `partial` - Fix partially resolved issue
+
+===== get_best_fix/2
+
+Get best fix combining static and learned knowledge.
+
+[source,prolog]
+----
+get_best_fix(+IssueType, -fix(Fix, Source, Confidence))
+----
+
+.Source Values
+- `static` - From static rules (confidence 1.0)
+- `learned` - From learning system
+- `none` - No fix available
+
+== learning Object
+
+The learning module provides machine learning integration for pattern recognition and rule improvement.
+
+=== Public Predicates (v2.0.0)
+
+==== Pattern Learning
+
+===== learn_from_fix/3
+
+Learn from a successful or failed fix.
+
+[source,prolog]
+----
+learn_from_fix(+IssueType, +Fix, +Outcome)
+----
+
+===== learn_from_alert/4
+
+Learn from an alert occurrence.
+
+[source,prolog]
+----
+learn_from_alert(+AlertType, +Context, +Severity, +Resolution)
+----
+
+===== learn_from_feedback/3
+
+Learn from user feedback on suggestions.
+
+[source,prolog]
+----
+learn_from_feedback(+Suggestion, +UserAction, +Result)
+----
+
+===== learn_pattern/4
+
+Store a new pattern with metadata.
+
+[source,prolog]
+----
+learn_pattern(+PatternType, +Pattern, +Context, +Confidence)
+----
+
+==== Pattern Storage
+
+===== store_pattern/4
+
+Store pattern in knowledge base.
+
+[source,prolog]
+----
+store_pattern(+PatternType, +Pattern, +Context, +Confidence)
+----
+
+===== get_patterns/2
+
+Retrieve patterns of a given type.
+
+[source,prolog]
+----
+get_patterns(+PatternType, -Patterns)
+----
+
+===== update_pattern_confidence/3
+
+Update confidence score for a pattern.
+
+[source,prolog]
+----
+update_pattern_confidence(+PatternId, +Delta, -NewConfidence)
+----
+
+==== Rule Distillation
+
+===== pattern_to_rule_candidate/2
+
+Convert a high-confidence pattern to rule candidate.
+
+[source,prolog]
+----
+pattern_to_rule_candidate(+Pattern, -RuleCandidate)
+----
+
+===== validate_rule_candidate/2
+
+Validate a rule candidate against test cases.
+
+[source,prolog]
+----
+validate_rule_candidate(+RuleCandidate, -ValidationResult)
+----
+
+===== promote_to_rule/2
+
+Promote validated candidate to active rule.
+
+[source,prolog]
+----
+promote_to_rule(+RuleCandidate, -Rule)
+----
+
+==== Feedback Loop
+
+===== record_fix_success/2
+
+Record successful fix application.
+
+[source,prolog]
+----
+record_fix_success(+FixId, +Context)
+----
+
+===== record_fix_failure/2
+
+Record failed fix application.
+
+[source,prolog]
+----
+record_fix_failure(+FixId, +ErrorContext)
+----
+
+===== record_false_positive/2
+
+Record false positive detection.
+
+[source,prolog]
+----
+record_false_positive(+AlertId, +Context)
+----
+
+==== Cross-Repo Learning
+
+===== find_common_patterns/2
+
+Find patterns common across multiple repositories.
+
+[source,prolog]
+----
+find_common_patterns(+RepoList, -CommonPatterns)
+----
+
+===== suggest_organization_rules/1
+
+Suggest organization-wide rules from patterns.
+
+[source,prolog]
+----
+suggest_organization_rules(-SuggestedRules)
+----
+
+===== pattern_similarity/3
+
+Calculate similarity between two patterns.
+
+[source,prolog]
+----
+pattern_similarity(+Pattern1, +Pattern2, -Similarity)
+----
+
+==== Training Data
+
+===== import_training_data/1
+
+Import training data from file.
+
+[source,prolog]
+----
+import_training_data(+FilePath)
+----
+
+===== export_training_data/1
+
+Export training data to file.
+
+[source,prolog]
+----
+export_training_data(+FilePath)
+----
+
+===== clean_training_data/0
+
+Clean stale or invalid training data.
+
+[source,prolog]
+----
+clean_training_data
+----
+
+==== Statistics
+
+===== get_learning_stats/1
+
+Get learning system statistics.
+
+[source,prolog]
+----
+get_learning_stats(-Stats)
+----
+
+.Stats Structure
+[source,prolog]
+----
+Stats = stats{
+    total_patterns: N,
+    patterns_by_type: [...],
+    avg_confidence: F,
+    rules_promoted: M,
+    false_positives: K
+}
+----
+
+===== get_confidence/2
+
+Get confidence score for an issue type.
+
+[source,prolog]
+----
+get_confidence(+IssueType, -Confidence)
+----
+
+===== recommend_fix/2
+
+Recommend a fix based on learned patterns.
+
+[source,prolog]
+----
+recommend_fix(+IssueType, -Fix)
+----
+
+== rule_distiller Object
+
+Extracts rules from training data.
+
+=== Public Predicates
+
+===== load_training_data/1
+
+Load training data from file.
+
+[source,prolog]
+----
+load_training_data(+FilePath)
+----
+
+===== distill_rules/0
+
+Distill rules from loaded training data.
+
+[source,prolog]
+----
+distill_rules
+----
+
+===== get_distilled_rules/1
+
+Get the distilled rule set.
+
+[source,prolog]
+----
+get_distilled_rules(-Rules)
+----
+
+== arangodb_connector Object
+
+Database operations for ArangoDB.
+
+=== Public Predicates
+
+===== connect/1
+
+Connect to ArangoDB instance.
+
+[source,prolog]
+----
+connect(+ConnectionConfig)
+----
+
+===== query/2
+
+Execute AQL query.
+
+[source,prolog]
+----
+query(+AQL, -Results)
+----
+
+===== insert_document/3
+
+Insert document into collection.
+
+[source,prolog]
+----
+insert_document(+Collection, +Document, -Key)
+----
+
+===== get_document/3
+
+Get document by key.
+
+[source,prolog]
+----
+get_document(+Collection, +Key, -Document)
+----
+
+== Language Policy Facts
+
+=== Allowed Languages
+
+[source,prolog]
+----
+allowed_language(rescript).
+allowed_language(rust).
+allowed_language(gleam).
+allowed_language(julia).
+allowed_language(logtalk).
+allowed_language(haskell).
+allowed_language(bash).
+allowed_language(nickel).
+allowed_language(guile).
+allowed_language(ocaml).
+allowed_language(ada).
+----
+
+=== Banned Languages
+
+[source,prolog]
+----
+banned_language(typescript).
+banned_language(nodejs).
+banned_language(golang).
+banned_language(python).  % Except SaltStack
+banned_language(java).
+banned_language(kotlin).
+banned_language(swift).
+----
+
+== Secret Patterns
+
+The engine includes patterns for detecting common secrets:
+
+[source,prolog]
+----
+secret_pattern('ghp_[a-zA-Z0-9]{36}').        % GitHub PAT
+secret_pattern('AKIA[0-9A-Z]{16}').           % AWS Access Key
+secret_pattern('sk-[a-zA-Z0-9]{48}').         % OpenAI API Key
+secret_pattern('sk-ant-api...').              % Anthropic API Key
+% ... and more
+----
+
+== Example Session
+
+[source,prolog]
+----
+?- logtalk_load(loader).
+cicd-hyper-a rule engine loaded.
+Available objects:
+  Rules:     cicd_rules, rule_distiller, forge_adapters, learning
+  Schema:    rule_schema, bot_integration
+  Database:  arangodb_connector, http_client, json_utils
+Loaded saved knowledge base.
+
+?- cicd_rules::classify_severity('TokenPermissionsID', S).
+S = high.
+
+?- cicd_rules::is_auto_fixable('TokenPermissionsID').
+true.
+
+?- cicd_rules::suggest_fix('TokenPermissionsID', Fix).
+Fix = 'Add "permissions: read-all" at workflow level'.
+
+?- cicd_rules::get_best_fix('TokenPermissionsID', Result).
+Result = fix('Add "permissions: read-all" at workflow level', static, 1.0).
+
+?- learning::get_learning_stats(Stats).
+Stats = stats{total_patterns:156, avg_confidence:0.82, ...}.
+----
+
+== See Also
+
+- xref:cli-reference.adoc[CLI Reference]
+- xref:rust-api.adoc[Rust API]
+- xref:haskell-api.adoc[Haskell Modules]
