@@ -389,9 +389,10 @@ jobs:
         run: cabal sdist
 
       - name: Publish to Hackage
-        if: ${{ secrets.HACKAGE_TOKEN != '' }}
+        if: env.HACKAGE_TOKEN != ''
         run: |
           cabal upload --publish dist-newstyle/sdist/*.tar.gz
         env:
+          HACKAGE_TOKEN: ${{ secrets.HACKAGE_TOKEN }}
           HACKAGE_USERNAME: ${{ secrets.HACKAGE_USERNAME }}
           HACKAGE_PASSWORD: ${{ secrets.HACKAGE_TOKEN }}
