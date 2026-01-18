@@ -72,6 +72,7 @@ import qualified Data.Map.Strict as Map
 import Data.Time (UTCTime, getCurrentTime, formatTime, defaultTimeLocale)
 import Data.List (sortBy, find)
 import Data.Ord (comparing, Down(..))
+import Data.Function (on)
 import Data.Maybe (mapMaybe, fromMaybe)
 import System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
 import System.FilePath ((</>), takeExtension)
@@ -383,15 +384,16 @@ matchesQuery SearchQuery{..} entry =
 -- | Sort search results
 sortResults :: Text -> Bool -> [RegistryEntry] -> [RegistryEntry]
 sortResults field desc entries = case field of
-  "name" -> sorted (comparing entryName)
-  "downloads" -> sorted (comparing entryDownloads)
-  "updated" -> sorted (comparing entryUpdated)
-  "created" -> sorted (comparing entryCreated)
-  _ -> sorted (comparing entryName)
+  "name" -> sorted entryName
+  "downloads" -> sorted entryDownloads
+  "updated" -> sorted entryUpdated
+  "created" -> sorted entryCreated
+  _ -> sorted entryName
   where
-    sorted cmp = if desc
-      then sortBy (comparing Down . cmp) entries
-      else sortBy cmp entries
+    sorted :: Ord a => (RegistryEntry -> a) -> [RegistryEntry]
+    sorted accessor = if desc
+      then sortBy (flip compare `on` accessor) entries
+      else sortBy (compare `on` accessor) entries
 
 -- | Search by effect type
 searchByEffect :: Effect -> Registry -> [RegistryEntry]

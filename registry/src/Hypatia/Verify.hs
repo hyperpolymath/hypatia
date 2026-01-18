@@ -191,12 +191,14 @@ checkCompleteness rules =
      then Verified
      else VerifyFailed $ map mkIncompleteError incomplete
   where
+    hasCompleteFix :: Rule 'Curative -> Bool
     hasCompleteFix (CurativeRule _ _ fix) = case fix of
       ReplaceInFile _ _ replacement -> not (T.null replacement)
       AddFile _ content -> not (T.null content)
       CreatePR title body -> not (T.null title) && not (T.null body)
       DeleteFile _ -> True
       RunCommand cmd -> not (T.null cmd)
+    mkIncompleteError :: Rule 'Curative -> VerifyError
     mkIncompleteError r = InvalidPattern (getRuleName r) "Incomplete fix definition"
 
 -- | Check ruleset dependencies
