@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for hypatia Haskell Registry
+# Dockerfile for Hypatia Haskell Registry
 
-FROM haskell:9.4-slim AS builder
+FROM haskell:9.6-slim AS builder
 
 WORKDIR /build
 
@@ -11,14 +11,19 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy cabal files first for caching
-COPY registry/hypatia.cabal .
+# Copy LICENSE and README at root (cabal file references ../LICENSE)
+COPY LICENSE ./LICENSE
+COPY README.adoc ./README.adoc
+
+# Copy registry directory (maintains relative path structure)
+COPY registry ./registry
+
+WORKDIR /build/registry
+
 RUN cabal update && cabal build --only-dependencies
 
-# Copy source and build
-COPY registry/src ./src
-COPY registry/test ./test
-RUN cabal build && cabal install --installdir=/build/bin
+# Build the registry executable
+RUN cabal build exe:registry && cabal install exe:registry --installdir=/build/bin
 
 # Runtime image
 FROM debian:bookworm-slim
@@ -41,4 +46,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 EXPOSE 8080
 
 ENTRYPOINT ["registry"]
-CMD ["serve", "--port", "8080"]
+CMD ["--help"]

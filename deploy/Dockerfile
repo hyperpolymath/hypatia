@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for hypatia API Service
+# Dockerfile for Hypatia CLI (hyper)
 # Multi-stage build for minimal production image
 
 # ============================================================
@@ -13,41 +13,41 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
-    libpq-dev \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a new empty shell project for dependency caching
-RUN USER=root cargo new --bin hypatia
-WORKDIR /build/hypatia
-
-# Copy manifests for dependency caching
+# Copy workspace manifest and lock file
 COPY Cargo.toml Cargo.lock ./
+
+# Copy all workspace member Cargo.toml files
+COPY cli/Cargo.toml ./cli/
 COPY adapters/Cargo.toml ./adapters/
 COPY data/Cargo.toml ./data/
 COPY fixer/Cargo.toml ./fixer/
+COPY integration/Cargo.toml ./integration/
 
 # Create dummy source files for dependency compilation
-RUN mkdir -p adapters/src data/src fixer/src && \
-    echo "fn main() {}" > src/main.rs && \
+RUN mkdir -p cli/src adapters/src data/src fixer/src integration/src && \
+    echo "fn main() {}" > cli/src/main.rs && \
     echo "pub fn dummy() {}" > adapters/src/lib.rs && \
+    echo "fn main() {}" > adapters/src/main.rs && \
     echo "pub fn dummy() {}" > data/src/lib.rs && \
-    echo "pub fn dummy() {}" > fixer/src/lib.rs
+    echo "pub fn dummy() {}" > fixer/src/lib.rs && \
+    echo "pub fn dummy() {}" > integration/src/lib.rs
 
 # Build dependencies only (this layer will be cached)
-RUN cargo build --release && \
-    rm -rf src adapters/src data/src fixer/src
+RUN cargo build --release --package hypatia-cli || true
+RUN rm -rf cli/src adapters/src data/src fixer/src integration/src
 
 # Copy actual source code
+COPY cli/src ./cli/src
 COPY adapters/src ./adapters/src
 COPY data/src ./data/src
 COPY fixer/src ./fixer/src
-COPY src ./src
+COPY integration/src ./integration/src
 
-# Touch source files to ensure rebuild
-RUN touch adapters/src/lib.rs data/src/lib.rs fixer/src/lib.rs
-
-# Build the application
-RUN cargo build --release --locked
+# Build the CLI
+RUN cargo build --release --package hypatia-cli
 
 # ============================================================
 # Stage 2: Runtime Environment
@@ -58,17 +58,17 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
-    libpq5 \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash cicd
 
 WORKDIR /app
 
 # Copy built binary
-COPY --from=builder /build/hypatia/target/release/hypatia /usr/local/bin/hypatia
+COPY --from=builder /build/target/release/hyper /usr/local/bin/hyper
 
-# Copy schemas and configuration
+# Copy schemas and hooks if they exist
 COPY schemas /app/schemas
 COPY hooks /app/hooks
 
@@ -80,16 +80,8 @@ USER cicd
 
 # Environment variables
 ENV RUST_LOG=info \
-    RUST_BACKTRACE=0 \
-    PORT=8000
-
-# Expose API port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+    RUST_BACKTRACE=0
 
 # Run the application
-ENTRYPOINT ["hypatia"]
-CMD ["serve", "--port", "8000"]
+ENTRYPOINT ["hyper"]
+CMD ["--help"]

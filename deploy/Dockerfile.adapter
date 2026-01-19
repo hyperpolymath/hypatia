@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for hypatia Rust Forge Adapters
+# Dockerfile for Hypatia Rust Forge Adapters
 
 FROM rust:1.75-slim-bookworm AS builder
 
@@ -9,12 +9,35 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy workspace files
-COPY Cargo.toml Cargo.lock* ./
-COPY adapters ./adapters
-COPY data ./data
+# Copy workspace manifest and lock file
+COPY Cargo.toml Cargo.lock ./
+
+# Copy required workspace members' Cargo.toml
+COPY adapters/Cargo.toml ./adapters/
+COPY data/Cargo.toml ./data/
+COPY cli/Cargo.toml ./cli/
+COPY fixer/Cargo.toml ./fixer/
+COPY integration/Cargo.toml ./integration/
+
+# Create dummy source files for dependency compilation
+RUN mkdir -p adapters/src data/src cli/src fixer/src integration/src && \
+    echo "pub fn dummy() {}" > adapters/src/lib.rs && \
+    echo "fn main() {}" > adapters/src/main.rs && \
+    echo "pub fn dummy() {}" > data/src/lib.rs && \
+    echo "fn main() {}" > cli/src/main.rs && \
+    echo "pub fn dummy() {}" > fixer/src/lib.rs && \
+    echo "pub fn dummy() {}" > integration/src/lib.rs
+
+# Build dependencies only
+RUN cargo build --release --package hypatia-adapters || true
+RUN rm -rf adapters/src data/src cli/src fixer/src integration/src
+
+# Copy actual source code
+COPY adapters/src ./adapters/src
+COPY data/src ./data/src
 
 # Build release binary
 RUN cargo build --release --package hypatia-adapters
@@ -39,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 EXPOSE 8081
 
 ENTRYPOINT ["forge-adapter"]
-CMD ["serve"]
+CMD ["--help"]
