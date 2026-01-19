@@ -77,12 +77,12 @@ jobs:
             os: ubuntu-latest
             artifact: hyper
             archive: tar.gz
-          # Linux ARM64
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact: hyper
-            archive: tar.gz
-            cross: true
+          # Linux ARM64 (disabled - requires cross-compilation setup)
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   artifact: hyper
+          #   archive: tar.gz
+          #   cross: true
           # macOS x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
