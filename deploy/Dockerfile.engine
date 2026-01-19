@@ -27,8 +27,7 @@ WORKDIR /app
 COPY engine /app/engine
 
 # Initialize Logtalk user directory
-RUN mkdir -p /app/logtalk && \
-    cp -r ${LOGTALKHOME}/loader-sample.lgt /app/logtalk/
+RUN mkdir -p /app/logtalk
 
 # Precompile rules (optional - may fail if loader has issues)
 RUN swipl -g "logtalk_load(engine/loader)" -t halt || echo "Warning: Precompilation skipped"
