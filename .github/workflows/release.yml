@@ -77,12 +77,12 @@ jobs:
             os: ubuntu-latest
             artifact: hyper
             archive: tar.gz
-          # Linux ARM64 (disabled - requires cross-compilation setup)
-          # - target: aarch64-unknown-linux-gnu
-          #   os: ubuntu-latest
-          #   artifact: hyper
-          #   archive: tar.gz
-          #   cross: true
+          # Linux ARM64 (cross-compiled using cross-rs)
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: hyper
+            archive: tar.gz
+            cross: true
           # macOS x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -115,23 +115,30 @@ jobs:
           workspaces: ". -> target"
           key: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.cross && matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross for cross-compilation
+        if: matrix.cross
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Build CLI binary
+      - name: Build CLI binary (native)
+        if: ${{ !matrix.cross }}
         run: |
           cargo build --release --package hypatia-cli --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - name: Build adapter binary
+      - name: Build adapter binary (native)
+        if: ${{ !matrix.cross }}
         run: |
           cargo build --release --package hypatia-adapters --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Build CLI binary (cross-compiled)
+        if: matrix.cross
+        run: |
+          cross build --release --package hypatia-cli --target ${{ matrix.target }}
+
+      - name: Build adapter binary (cross-compiled)
+        if: matrix.cross
+        run: |
+          cross build --release --package hypatia-adapters --target ${{ matrix.target }}
 
       - name: Create archive (Unix)
         if: matrix.archive == 'tar.gz'
