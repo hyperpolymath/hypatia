@@ -478,140 +478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cicd-hyper-a-adapters"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "base64 0.21.7",
- "chrono",
- "cicd-hyper-a-data",
- "hex",
- "hmac",
- "octocrab",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
- "url 2.5.7",
- "urlencoding",
- "uuid",
- "wiremock 0.5.22",
-]
-
-[[package]]
-name = "cicd-hyper-a-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "chrono",
- "clap",
- "clap_complete",
- "colored",
- "config",
- "console",
- "dialoguer",
- "directories",
- "dirs",
- "git2",
- "glob",
- "hex",
- "ignore",
- "indicatif",
- "mockall",
- "predicates",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tabled",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "walkdir",
-]
-
-[[package]]
-name = "cicd-hyper-a-data"
-version = "0.1.0"
-dependencies = [
- "arangors",
- "async-trait",
- "bb8",
- "bincode",
- "chrono",
- "deadpool-redis",
- "redis",
- "serde",
- "serde_json",
- "testcontainers",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
- "uclient 0.2.3",
-]
-
-[[package]]
-name = "cicd-hyper-a-fixer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "glob",
- "octocrab",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "walkdir",
-]
-
-[[package]]
-name = "cicd-hyper-a-integration-tests"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_matches",
- "async-trait",
- "chrono",
- "cicd-hyper-a-adapters",
- "cicd-hyper-a-data",
- "git2",
- "rand 0.8.5",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "subprocess",
- "tempfile",
- "test-log",
- "testcontainers",
- "testcontainers-modules",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "tracing-test",
- "uuid",
- "wiremock 0.6.5",
-]
-
-[[package]]
 name = "clap"
 version = "4.5.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1740,6 +1606,141 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
+name = "hypatia-adapters"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.21.7",
+ "chrono",
+ "hex",
+ "hmac",
+ "hypatia-data",
+ "octocrab",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "url 2.5.7",
+ "urlencoding",
+ "uuid",
+ "wiremock 0.5.22",
+]
+
+[[package]]
+name = "hypatia-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "colored",
+ "config",
+ "console",
+ "dialoguer",
+ "directories",
+ "dirs",
+ "git2",
+ "glob",
+ "hex",
+ "ignore",
+ "indicatif",
+ "mockall",
+ "predicates",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tabled",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "hypatia-data"
+version = "0.1.0"
+dependencies = [
+ "arangors",
+ "async-trait",
+ "bb8",
+ "bincode",
+ "chrono",
+ "deadpool-redis",
+ "openssl",
+ "redis",
+ "serde",
+ "serde_json",
+ "testcontainers",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uclient 0.2.3",
+]
+
+[[package]]
+name = "hypatia-fixer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "glob",
+ "octocrab",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+]
+
+[[package]]
+name = "hypatia-integration-tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_matches",
+ "async-trait",
+ "chrono",
+ "git2",
+ "hypatia-adapters",
+ "hypatia-data",
+ "rand 0.8.5",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "subprocess",
+ "tempfile",
+ "test-log",
+ "testcontainers",
+ "testcontainers-modules",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-test",
+ "uuid",
+ "wiremock 0.6.5",
+]
+
+[[package]]
 name = "hyper"
 version = "0.10.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2639,6 +2640,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f50d9b3dabb09ecd771ad0aa242ca6894994c130308ca3d7684634df8037391"
 
 [[package]]
+name = "openssl-src"
+version = "300.5.4+3.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a507b3792995dae9b0df8a1c1e3771e8418b7c2d9f0baeba32e6fe8b06c7cb72"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2646,6 +2656,7 @@ checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -3389,7 +3400,6 @@ dependencies = [
  "js-sys",
  "log 0.4.29",
  "mime 0.3.17",
- "mime_guess 2.0.5",
  "native-tls",
  "once_cell",
  "percent-encoding 2.3.2",
@@ -3420,6 +3430,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-core",
+ "futures-util",
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
@@ -3428,6 +3439,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log 0.4.29",
+ "mime_guess 2.0.5",
  "percent-encoding 2.3.2",
  "pin-project-lite",
  "quinn",

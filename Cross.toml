@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+# Cross-compilation configuration for Hypatia
+# Used by cross-rs for ARM64 Linux builds
+
+[build]
+# Use the official cross Docker images
+default-target = "x86_64-unknown-linux-gnu"
+
+[build.env]
+passthrough = [
+    "RUST_BACKTRACE",
+    "RUST_LOG",
+]
+
+# ARM64 Linux cross-compilation configuration
+[target.aarch64-unknown-linux-gnu]
+# Use cross-rs image with cross-compiled OpenSSL
+# The cross images include aarch64 OpenSSL libraries at /usr/aarch64-linux-gnu
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+
+[target.aarch64-unknown-linux-gnu.env]
+passthrough = [
+    "OPENSSL_DIR",
+    "OPENSSL_LIB_DIR",
+    "OPENSSL_INCLUDE_DIR",
+    "PKG_CONFIG_PATH",
+    "PKG_CONFIG_ALLOW_CROSS",
+]
+# Tell openssl-sys where to find the cross-compiled libraries
+variables = [
+    "PKG_CONFIG_ALLOW_CROSS=1",
+]

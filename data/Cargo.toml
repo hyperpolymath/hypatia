@@ -21,6 +21,10 @@ tracing = "0.1"
 arangors = "0.5"
 uclient = "0.2"
 
+# Force vendored OpenSSL for cross-compilation support
+# This is required because arangors uses reqwest with native-tls
+openssl = { version = "0.10", features = ["vendored"] }
+
 # Redis/Dragonfly
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 deadpool-redis = "0.14"
