@@ -70,13 +70,13 @@ import qualified Data.Text.IO as TIO
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Time (UTCTime, getCurrentTime, formatTime, defaultTimeLocale)
-import Data.List (sortBy, find)
+import Data.List (sortBy)
 import Data.Ord (comparing, Down(..))
 import Data.Function (on)
 import Data.Maybe (mapMaybe, fromMaybe)
 import System.Directory (doesFileExist, createDirectoryIfMissing, listDirectory)
 import System.FilePath ((</>), takeExtension)
-import Control.Monad (when, forM, forM_)
+import Control.Monad (forM, forM_)
 import GHC.Generics (Generic)
 
 import Hypatia.Ruleset (Effect(..), RulesetCategory(..), Language(..))

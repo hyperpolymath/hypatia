@@ -62,12 +62,11 @@ module Hypatia.API
   ) where
 
 import Data.Aeson
-  ( FromJSON(..), ToJSON(..), encode, decode
+  ( FromJSON(..), ToJSON(..)
   , withObject, (.:), (.:?), (.!=), object, (.=)
-  , Options(..), defaultOptions, genericToJSON, genericParseJSON
+  , Options(..), defaultOptions
   , camelTo2
   )
-import Data.Aeson.Types (Parser)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (UTCTime, getCurrentTime)
@@ -84,7 +83,7 @@ import Hypatia.Registry
   , showVersion, parseVersion
   )
 import qualified Hypatia.Registry as Reg
-import Hypatia.Verify (VerifyResult(..), verifyRule, VerifyError(..))
+import Hypatia.Verify (VerifyResult(..))
 
 -- ============================================================
 -- API TYPE DEFINITION
