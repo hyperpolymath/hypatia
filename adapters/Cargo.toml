@@ -19,7 +19,7 @@ thiserror = "1.0"
 async-trait = "0.1"
 url = "2.5"
 base64 = "0.21"
-octocrab = { version = "0.32", default-features = false, features = ["default-client", "rustls"] }  # GitHub API
+octocrab = "0.32"  # GitHub API (uses reqwest with default TLS)
 tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4"] }
