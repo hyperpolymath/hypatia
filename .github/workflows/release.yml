@@ -182,7 +182,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Setup Haskell
-        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         id: setup
         with:
           ghc-version: '9.6'
@@ -279,7 +279,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -361,7 +361,7 @@ jobs:
           cat checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.1
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.2.1
         with:
           name: Hypatia v${{ needs.prepare.outputs.version }}
           body_path: release-notes.md
@@ -386,7 +386,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Setup Haskell
-        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         with:
           ghc-version: '9.6'
           cabal-version: '3.10'
