@@ -361,7 +361,7 @@ jobs:
           cat checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.1
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.2.1
         with:
           name: Hypatia v${{ needs.prepare.outputs.version }}
           body_path: release-notes.md
