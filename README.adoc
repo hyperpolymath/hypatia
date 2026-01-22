@@ -551,6 +551,8 @@ cicd-hyper-a/
 
 == License
 
-This project is licensed under link:https://github.com/hyperpolymath/palimpsest-license[PLMP-1.0-or-later] (Palimpsest-MPL License).
+This project is licensed under link:https://github.com/hyperpolymath/palimpsest-license[PMPL-1.0-or-later] (Palimpsest-MPL License).
 
 The Palimpsest License is a file-level copyleft license with ethical use provisions, following the Mozilla approach.
+
+image::https://img.shields.io/badge/license-PMPL--1.0--or--later-blue.svg[License: PMPL-1.0-or-later, link=https://github.com/hyperpolymath/palimpsest-license]
