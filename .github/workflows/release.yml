@@ -161,7 +161,7 @@ jobs:
           Compress-Archive -Path dist/* -DestinationPath hypatia-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip
 
       - name: Upload artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: hypatia-${{ matrix.target }}
           path: hypatia-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
@@ -182,7 +182,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Setup Haskell
-        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         id: setup
         with:
           ghc-version: '9.6'
@@ -214,7 +214,7 @@ jobs:
           tar -czvf ../hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz *
 
       - name: Upload artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: hypatia-registry-x86_64-linux
           path: registry/hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz
@@ -257,11 +257,11 @@ jobs:
           path: artifacts
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to Container Registry
         if: ${{ !inputs.dry_run }}
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -279,7 +279,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -361,7 +361,7 @@ jobs:
           cat checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.1
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.2.1
         with:
           name: Hypatia v${{ needs.prepare.outputs.version }}
           body_path: release-notes.md
@@ -386,7 +386,7 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Setup Haskell
-        uses: haskell-actions/setup@dd344bc1cec854a369df8814ce17ef337d6e6170 # v2.7.6
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         with:
           ghc-version: '9.6'
           cabal-version: '3.10'

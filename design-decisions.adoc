@@ -1,0 +1,391 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+
+= VeriSimDB Design Decisions: Storage Layer Architecture
+
+== Overview
+
+This document clarifies the role of SQL/NoSQL/NewSQL in VeriSimDB's architecture and explains why certain storage decisions were made. The key insight: **VeriSimDB is a coordinator, not a monolithic database** - each modality uses the best tool for its job.
+
+== 1. SQL/NoSQL/NewSQL: Not the Main Event
+
+=== Why Storage Paradigm Doesn't Matter for VeriSimDB
+
+VeriSimDB's core (ReScript registry + Elixir orchestration) is **agnostic to underlying storage**. The "database" is distributed across specialized stores, each optimized for its data type.
+
+**Key Principle:** You don't pick one paradigm for the entire system. Instead, pick the best tool for each modality and let VeriSimDB federate them.
+
+=== Where SQL/NewSQL Actually Matters
+
+The **only** place SQL/NewSQL is relevant is the **metadata layer**:
+
+- **Registry:** UUID → store mapping
+- **KRaft Metadata Log:** Raft consensus for coordination
+
+This is purely for consistency, scalability, and coordination—NOT for storing actual data.
+
+== 2. Metadata Layer: ReScript + Raft vs CockroachDB
+
+=== Decision: Use ReScript + Raft (As Designed)
+
+[cols="1,2,2"]
+|===
+|Deployment Scale |Recommended Approach |Rationale
+
+|**≤ 5 nodes**
+|ReScript registry + Raft (in-memory, Elixir)
+|Simplest. Low latency. Matches whitepaper design.
+
+|**5-20 nodes**
+|ReScript registry + etcd (proven Raft)
+|Scales better than custom Raft. Still simple.
+
+|**20+ nodes**
+|CockroachDB (NewSQL)
+|Only if you need SQL queries on metadata. High complexity.
+|===
+
+**Recommendation:** Start with **ReScript + Raft in Elixir** (as documented in whitepaper). Only migrate to CockroachDB if you exceed 20 federated nodes AND need to run complex queries on the registry.
+
+**Why NOT CockroachDB initially:**
+- Adds operational complexity (another distributed system to manage)
+- Registry queries are simple key-value lookups (UUID → store endpoint)
+- Raft in Elixir is sufficient for <20 nodes
+- Can migrate later if needed (data model is simple)
+
+== 3. Modality Storage: Specialized, Not SQL
+
+For the six modalities, **ignore SQL/NoSQL/NewSQL** entirely. Use specialized databases:
+
+[cols="1,2,2,2"]
+|===
+|Modality |Storage Choice |Alternative |Why Specialized?
+
+|**Graph**
+|Oxigraph (RDF)
+|Neo4j (property graph)
+|Graph traversals, SPARQL queries
+
+|**Vector**
+|Milvus (HNSW)
+|Weaviate (IVF)
+|Approximate nearest neighbor (ANN) search
+
+|**Tensor**
+|Burn (ndarray)
+|TileDB
+|Multi-dimensional numeric operations
+
+|**Semantic**
+|`verisim-semantic` (CBOR) + `proven`
+|~~Fluree~~
+|ZKP integration, type proofs (Fluree too heavyweight)
+
+|**Document**
+|Tantivy
+|Elasticsearch
+|Full-text search, inverted indices
+
+|**Temporal**
+|`verisim-temporal` (Merkle trees)
+|~~TimescaleDB~~
+|Immutable audit trails, drift detection (Merkle trees > SQL time-series)
+|===
+
+=== Why NOT Generic SQL/NoSQL?
+
+**Example: Vector Search**
+
+Try implementing ANN search (e.g., HNSW algorithm) in PostgreSQL:
+
+[source,sql]
+----
+-- This is why you don't use SQL for vectors:
+SELECT * FROM embeddings
+ORDER BY embedding <-> query_vector  -- pgvector extension
+LIMIT 10;
+
+-- Problems:
+-- 1. Slow: O(n) brute force scan (no HNSW index)
+-- 2. Limited: Can't tune HNSW parameters (M, ef_construction)
+-- 3. Memory: Can't use GPU acceleration
+----
+
+**Specialized store (Milvus):**
+- HNSW indexing: O(log n) search
+- GPU acceleration
+- Tunable parameters for precision/recall tradeoff
+- Horizontal scaling for billions of vectors
+
+== 4. Key Design Decisions (Refined)
+
+=== Decision Matrix
+
+[cols="1,2,2,2"]
+|===
+|Component |Initial Plan |Refined Decision |Justification
+
+|**Registry**
+|CockroachDB?
+|**ReScript + Raft (Elixir)**
+|Already in whitepaper. Simpler. Sufficient for <20 nodes.
+
+|**KRaft Metadata Log**
+|CockroachDB?
+|**Raft in Elixir**
+|Don't need SQL for append-only log. Raft is standard.
+
+|**Semantic Modality**
+|Fluree (full stack)
+|**`verisim-semantic` (CBOR) + `proven`**
+|Lighter weight. No need for Fluree's blockchain. Just ZKP + CBOR.
+
+|**Temporal Modality**
+|TimescaleDB (SQL)
+|**`verisim-temporal` (Merkle trees)**
+|Better for drift detection. Immutable audit. No SQL overhead.
+|===
+
+=== Rationale for Custom Rust Crates
+
+**Why build `verisim-semantic` and `verisim-temporal` instead of using Fluree/TimescaleDB?**
+
+1. **Tight Integration:** Direct integration with `proven-library` (ZKP) and drift detection
+2. **No SQL Overhead:** Temporal versioning via Merkle trees, not SQL timestamps
+3. **Immutability:** Append-only Merkle chains > SQL `UPDATE` statements
+4. **Federation-Friendly:** Rust crates compile to WASM (edge deployments)
+5. **Control:** Can optimize for VeriSimDB's specific use cases (drift repair, ZKP verification)
+
+== 5. Practical Example: Neurosymbolic AI Pipeline
+
+**Scenario:** Deploy VeriSimDB for a neurosymbolic AI pipeline (one of the whitepaper use cases).
+
+**Architecture:**
+
+[source,text]
+----
+Metadata/Registry:
+  - ReScript registry (UUID mapping)
+  - Raft consensus (Elixir GenServers)
+
+Modality Stores:
+  - Graph:    Oxigraph (Rust) → symbolic reasoning (SPARQL)
+  - Vector:   Milvus → embeddings (HNSW ANN search)
+  - Semantic: verisim-semantic (CBOR) + proven → ZKP-verified type annotations
+  - Document: Tantivy → research paper full-text search
+
+Federation:
+  - Elixir orchestrator coordinates queries across all modalities
+  - proven-library verifies results without exposing raw data (Zero-Knowledge)
+
+No single SQL/NoSQL/NewSQL applies—each component uses what's best.
+----
+
+**Query Flow:**
+
+[source,text]
+----
+User Query: "Find papers similar to <embedding> that cite <paper_id>"
+
+1. Orchestrator receives query
+2. Parallel dispatch:
+   - Vector store (Milvus): ANN search for similar papers
+   - Graph store (Oxigraph): SPARQL traversal for citations
+3. Join results in orchestrator (intersection)
+4. Semantic store: Verify ZKP proofs for access control
+5. Return results with signatures (sactify-php)
+
+Each modality optimized for its task. No generic SQL could do this efficiently.
+----
+
+== 6. Federation Flexibility
+
+**Key Advantage:** Different nodes can use different stores for the same modality.
+
+**Example:**
+
+[source,text]
+----
+University A:
+  - Graph: Neo4j (property graph, already deployed)
+  - Vector: Pinecone (managed service)
+
+University B:
+  - Graph: Oxigraph (RDF, Rust)
+  - Vector: Milvus (self-hosted)
+
+VeriSimDB Registry:
+  - Doesn't care which implementation
+  - Both nodes register their endpoints
+  - Orchestrator routes queries appropriately
+----
+
+This is **impossible** with a monolithic SQL/NoSQL choice. Federation requires flexibility.
+
+== 7. When to Add CockroachDB
+
+**Only add CockroachDB if ALL of these are true:**
+
+1. **20+ federated nodes** (Raft quorum struggles at this scale)
+2. **Complex metadata queries** (e.g., "Find all stores hosting Hexads with policy_hash = X")
+3. **Multi-region deployment** (need CockroachDB's geo-partitioning)
+4. **Operational capacity** (team can manage another distributed system)
+
+**Migration Path (if needed):**
+
+[source,text]
+----
+Phase 1: ReScript + Raft (in-memory, <20 nodes)
+  - Simple, fast, matches whitepaper
+
+Phase 2: ReScript + etcd (20-50 nodes)
+  - Proven Raft implementation
+  - Minimal code changes (etcd API similar to in-memory)
+
+Phase 3: CockroachDB (50+ nodes)
+  - Requires registry data model redesign (key-value → SQL tables)
+  - Adds CockroachDB ops (backup, monitoring, scaling)
+  - Benefit: Can run complex SQL queries on registry
+----
+
+**Reality Check:** Most deployments never reach Phase 2. Start simple.
+
+== 8. Summary of Decisions
+
+=== What We're Doing (Aligned with Whitepaper)
+
+✅ **ReScript registry** with **Raft consensus** managed by Elixir (NOT CockroachDB)
+✅ **Specialized modality stores**: Oxigraph, Milvus, Tantivy, Burn, etc.
+✅ **Custom Rust crates** for Semantic and Temporal (NOT Fluree/TimescaleDB)
+✅ **Federation flexibility**: Nodes can use different implementations per modality
+
+=== What We're NOT Doing
+
+❌ **NOT** using CockroachDB for metadata (unless >20 nodes)
+❌ **NOT** using Fluree for Semantic (too heavyweight, use `verisim-semantic` + `proven`)
+❌ **NOT** using TimescaleDB for Temporal (use `verisim-temporal` Merkle trees)
+❌ **NOT** trying to fit everything into SQL/NoSQL/NewSQL paradigm
+
+=== Why These Decisions?
+
+1. **Simplicity:** Fewer moving parts (no CockroachDB ops burden)
+2. **Performance:** Specialized stores optimized for each modality
+3. **Alignment:** Matches whitepaper design (ReScript + Raft + Rust)
+4. **Flexibility:** Can migrate later if scale demands it
+5. **Control:** Custom crates integrate tightly with drift detection + ZKP
+
+== 9. Focus Areas
+
+Instead of debating SQL vs NoSQL, focus on:
+
+=== A. Federation and Coordination
+
+- **Node discovery:** ReScript registry + gossip protocol (libp2p?)
+- **Drift detection/repair:** Elixir's `VeriSim.DriftMonitor` + statistical checks
+- **Zero-Trust enforcement:** Cloudflare SDP + `sactify-php` signatures
+
+=== B. Modality-Specific Optimizations
+
+- **Graph:** RDF (Oxigraph) vs property graphs (Neo4j)?
+- **Vector:** HNSW (Milvus) vs IVF (Weaviate) for similarity search?
+- **Semantic:** ZKP integration via `proven-library` + CBOR schemas
+- **Temporal:** Merkle-tree snapshotting + deterministic replay
+
+=== C. Deployment and Isolation
+
+- **Rootless containers:** All modality stores run in `svalinn/vordr` or `nerdctl`
+- **WASM compatibility:** Tantivy/Oxigraph compile to WASM (edge deployments)
+- **Security automation:** Use `cicd-hyper-a` to automate updates across nodes
+
+== 10. Decision Alignment with Goals
+
+[cols="1,2"]
+|===
+|Goal |How This Aligns
+
+|**Non-Proprietary**
+|Oxigraph, Tantivy, Milvus all open-source. No vendor lock-in.
+
+|**ReScript Integration**
+|Registry and API in ReScript. Modalities in Rust (FFI via NIFs).
+
+|**Zero-Trust**
+|`verisim-semantic` + `proven` for ZKP. `sactify-php` for signatures.
+
+|**Federation Flexibility**
+|Nodes use different stores per modality. Registry abstracts differences.
+
+|**Simplicity**
+|No CockroachDB ops burden. Custom crates simpler than Fluree/TimescaleDB.
+|===
+
+== 11. References
+
+- link:../verisimdb/WHITEPAPER.md[VeriSimDB White Paper]
+- link:../verisimdb/docs/deployment-modes.adoc[Deployment Modes]
+- link:../verisimdb/docs/challenges-federated.adoc[Federated Challenges]
+- link:../verisimdb/docs/technical-specification-kraft-metadata-log.adoc[KRaft Metadata Log]
+
+== Appendix: SQL Anti-Pattern Example
+
+**Why NOT to use PostgreSQL for vectors:**
+
+[source,sql]
+----
+-- Attempt: Store embeddings in PostgreSQL with pgvector
+CREATE TABLE papers (
+    id UUID PRIMARY KEY,
+    title TEXT,
+    embedding vector(768)  -- pgvector extension
+);
+
+CREATE INDEX ON papers USING ivfflat (embedding vector_cosine_ops);
+
+-- Query: Find similar papers
+SELECT id, title, embedding <-> $1::vector AS distance
+FROM papers
+ORDER BY embedding <-> $1::vector
+LIMIT 10;
+
+-- Problems:
+-- 1. ivfflat is inferior to HNSW (lower recall)
+-- 2. No GPU acceleration (Milvus supports GPUs)
+-- 3. Can't tune index parameters at query time
+-- 4. Doesn't scale to billions of vectors
+-- 5. No native filtering (WHERE clauses slow down ANN)
+-- 6. No hybrid search (semantic + keyword)
+----
+
+**Solution: Use Milvus**
+
+[source,python]
+----
+# Milvus: Specialized vector database
+from pymilvus import Collection
+
+collection = Collection("papers")
+
+# HNSW index with tunable parameters
+collection.create_index("embedding", {
+    "index_type": "HNSW",
+    "metric_type": "COSINE",
+    "params": {"M": 16, "efConstruction": 200}
+})
+
+# Query with filtering
+results = collection.search(
+    data=[query_embedding],
+    anns_field="embedding",
+    param={"metric_type": "COSINE", "ef": 100},
+    limit=10,
+    expr="year >= 2020"  # Native filtering (fast)
+)
+
+# Advantages:
+# - HNSW: Superior recall compared to IVF
+# - GPU support: 10-100x faster on large datasets
+# - Tunable: Adjust ef at query time (precision/speed tradeoff)
+# - Scales: Billions of vectors across multiple nodes
+# - Hybrid: Combine semantic + keyword search natively
+----
+
+**Takeaway:** Don't force specialized workloads into generic SQL. Use the right tool.
