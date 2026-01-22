@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+# Supervised repositories - ReScript ecosystem
+
+[[repo]]
+name = "rescript-alib"
+owner = "hyperpolymath"
+full_name = "hyperpolymath/rescript-alib"
+description = "Aggregate library for ReScript with zero-cost branded types"
+language = "rescript"
+tier = "library"
+phase = "alpha"
+version = "0.1.0-alpha.2"
+
+[repo.supervision]
+enabled = true
+frequency = "on-push"  # on-push, daily, weekly
+auto_fix = false       # Manual review for alpha repos
+create_issues = true
+
+[repo.rulesets]
+global = [
+    "hyperpolymath/rsr-compliance",
+    "hyperpolymath/security-baseline",
+    "hyperpolymath/quality-gates"
+]
+language_specific = [
+    "hyperpolymath/rescript-deno",
+    "hyperpolymath/rescript-best-practices"
+]
+
+[repo.bots]
+rhodibot = { enabled = true, priority = 1 }
+echidnabot = { enabled = true, priority = 2 }
+glambot = { enabled = true, priority = 3 }
+finishing-bot = { enabled = true, priority = 4 }
+
+[[repo]]
+name = "rescript-early-return"
+owner = "hyperpolymath"
+full_name = "hyperpolymath/rescript-early-return"
+description = "Early return macro for ReScript - validation tool for compiler sugar proposal"
+language = "rescript"
+tier = "tooling"
+phase = "alpha"
+version = "0.1.0-alpha.1"
+
+[repo.supervision]
+enabled = true
+frequency = "on-push"
+auto_fix = false
+create_issues = true
+
+[repo.rulesets]
+global = [
+    "hyperpolymath/rsr-compliance",
+    "hyperpolymath/security-baseline",
+    "hyperpolymath/quality-gates"
+]
+language_specific = [
+    "hyperpolymath/rescript-deno",
+    "hyperpolymath/ocaml-ppx",  # For PPX development
+]
+
+[repo.bots]
+rhodibot = { enabled = true, priority = 1 }
+glambot = { enabled = true, priority = 2 }
+finishing-bot = { enabled = true, priority = 3 }
+
+# Common settings for all ReScript repos
+[common]
+check_interval_hours = 24
+notification_channels = ["github-issues", "github-checks"]
+require_scm_files = true  # STATE.scm, META.scm, ECOSYSTEM.scm
+enforce_rsr_2026 = true
