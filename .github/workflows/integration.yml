@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Integration tests workflow for cicd-hyper-a
 # Starts test containers and runs integration test suite
 

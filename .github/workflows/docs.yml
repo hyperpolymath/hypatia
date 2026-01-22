@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Documentation workflow for cicd-hyper-a
 # Builds AsciiDoc documentation and deploys to GitHub Pages
 
