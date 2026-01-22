@@ -1,0 +1,88 @@
+# AI.djot - AI Assistant Instructions for Hypatia
+
+## Machine-Readable Metadata
+
+**CRITICAL:** This project has 6 machine-readable SCM files in `.machine_readable/6scm/`:
+
+- **STATE.scm** - Current project state, milestones, completion status
+- **ECOSYSTEM.scm** - Position in ecosystem, relationships to other projects
+- **META.scm** - Architecture decisions (ADR format), development practices, design rationale
+- **PLAYBOOK.scm** - Operational procedures, troubleshooting, alerts, runbooks
+- **AGENTIC.scm** - AI agent interaction patterns, constraints, workflows
+- **NEUROSYM.scm** - Neurosymbolic integration config (symbolic + neural layers)
+
+**You MUST read these files at the start of each session** to understand the project context, current state, and operational guidelines.
+
+These files are the **single source of truth** for:
+- Project status and progress
+- Architectural decisions and rationale  
+- Operational procedures
+- AI agent interaction patterns
+- Integration with the broader ecosystem
+
+## File Specifications
+
+The 6 SCM files follow standardized formats:
+
+- **Format Spec:** See `hyperpolymath/meta-scm` repository for detailed specifications
+- **Schema:** Guile Scheme S-expressions
+- **Maintenance:** Update STATE.scm at end of each session, update others when decisions/architecture change
+- **Validation:** Files must be valid Scheme and parseable
+
+## Project Context
+
+**Project:** Hypatia  
+**Purpose:** Neurosymbolic CI/CD intelligence platform - coordinates fleet with verified rulesets  
+**Tier:** Gitbot Fleet member  
+**Language:** Rust (primary), Guile Scheme (config/state)
+
+## Language Policy
+
+### ALLOWED
+- Rust (primary application code)
+- Guile Scheme (SCM files only)
+- Bash (minimal scripts)
+- TOML (configuration)
+
+### BANNED
+- TypeScript, Node.js, npm
+- Python
+- Go
+- Java/Kotlin
+
+## Development Guidelines
+
+1. **Before making changes:** Read all 6 SCM files to understand context
+2. **During work:** Follow patterns in AGENTIC.scm
+3. **Operational issues:** Consult PLAYBOOK.scm
+4. **After completion:** Update STATE.scm with accomplishments
+5. **Architectural changes:** Document in META.scm as ADRs
+
+## SCM File Maintenance
+
+**When to update each file:**
+
+- **STATE.scm** - Every session (update completion %, accomplishments)
+- **ECOSYSTEM.scm** - When relationships to other projects change
+- **META.scm** - When making architectural decisions or design changes
+- **PLAYBOOK.scm** - When adding/changing operational procedures
+- **AGENTIC.scm** - When AI interaction patterns evolve
+- **NEUROSYM.scm** - When symbolic/neural integration changes
+
+## Security
+
+- SPDX License: PMPL-1.0-or-later
+- No hardcoded secrets
+- SHA-pinned dependencies
+- SPDX headers on all files
+
+## Fleet Integration
+
+This bot is part of the **gitbot-fleet** coordinated by **hypatia**.
+
+- Receives rulesets from hypatia registry
+- Reports findings back to fleet
+- Operates according to tier responsibilities
+- Coordinates with sibling bots
+
+See ECOSYSTEM.scm for detailed fleet relationships.
