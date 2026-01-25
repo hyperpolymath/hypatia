@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Hypatia Security Scan - Template workflow for repos
+# Copy this to .github/workflows/hypatia-scan.yml in each repo
+
+name: Hypatia Security Scan
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - '**.rs'
+      - '**.res'
+      - '**.ml'
+  pull_request:
+    paths:
+      - '**.rs'
+      - '**.res'
+      - '**.ml'
+
+permissions: read-all
+
+jobs:
+  hypatia-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep jq
+
+      - name: Download Hypatia scanner
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/hyperpolymath/hypatia/main/hypatia-cli.sh \
+            -o /tmp/hypatia
+          chmod +x /tmp/hypatia
+
+      - name: Run Hypatia scan
+        id: scan
+        env:
+          HYPATIA_FORMAT: github
+          HYPATIA_SEVERITY: medium
+        run: |
+          /tmp/hypatia scan . || echo "scan_failed=true" >> $GITHUB_OUTPUT
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypatia-findings
+          path: /tmp/hypatia-findings-*.json
+          retention-days: 30
+
+      - name: Fail on critical issues
+        if: steps.scan.outputs.scan_failed == 'true'
+        run: |
+          echo "::error::Hypatia scan found security issues"
+          exit 1
