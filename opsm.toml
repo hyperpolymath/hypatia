@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+[opsm]
+name = "hypatia"
+role = "dogfood-wave-1"
+policy = "strict"
+
+[paths]
+use_pathroot = true
+
+[install]
+mode = "auto"
+allow_untrusted = false
+
+[telemetry]
+enabled = false
