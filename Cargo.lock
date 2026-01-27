@@ -1699,6 +1699,7 @@ dependencies = [
  "clap",
  "glob",
  "octocrab",
+ "once_cell",
  "regex",
  "serde",
  "serde_json",
