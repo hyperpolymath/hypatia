@@ -47,7 +47,7 @@ jobs:
           toolchain: stable
 
       - name: Cache cargo registry
-        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           path: |
             ~/.cargo/registry
@@ -170,7 +170,7 @@ jobs:
           cabal-update: true
 
       - name: Cache Cabal dependencies
-        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           path: |
             ~/.cabal/packages
