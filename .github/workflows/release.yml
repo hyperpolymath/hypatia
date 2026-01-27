@@ -190,7 +190,7 @@ jobs:
           cabal-update: true
 
       - name: Restore cached dependencies
-        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        uses: actions/cache/restore@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         id: cache
         env:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
@@ -251,7 +251,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download Rust artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: hypatia-x86_64-*
           path: artifacts
@@ -269,7 +269,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
           tags: |
@@ -306,7 +306,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download all artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           path: artifacts
 
