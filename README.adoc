@@ -1,7 +1,7 @@
 image:https://raw.githubusercontent.com/hyperpolymath/palimpsest-license/main/assets/badges/svg/badge-standard.svg[PMPL-1.0,link="https://github.com/hyperpolymath/palimpsest-license"]
 
 
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0-or-later
 = Hypatia: Neurosymbolic CI/CD Intelligence Platform
 :toc: macro
 :toclevels: 3
@@ -12,6 +12,12 @@ image:https://img.shields.io/badge/Logtalk-Rules-orange.svg[Logtalk]
 image:https://img.shields.io/badge/Haskell-Verification-5D4F85.svg[Haskell]
 image:https://img.shields.io/badge/ArangoDB-Graph-green.svg[ArangoDB]
 image:https://img.shields.io/badge/Ada_2022-TUI-blue.svg[Ada]
+
+== License & Philosophy
+
+This project must declare **MPL-2.0-or-later** for platform/tooling compatibility.
+
+Philosophy: **Palimpsest**. The Palimpsest-MPL (PMPL) text is provided in `license/PMPL-1.0.txt`, and the canonical source is the palimpsest-license repository.
 
 🌐 *Website:* https://hypatia.reposystem.dev[hypatia.reposystem.dev] | Part of the link:https://reposystem.dev[reposystem] ecosystem
 
@@ -499,7 +505,7 @@ cicd-hyper-a/
 │
 ├── integration/                 # External integrations
 │   ├── robot-repo-automaton/
-│   └── gitvisor/
+│   └── git-hud/
 │
 └── deploy/                      # Deployment configs
     ├── k8s/
@@ -544,7 +550,7 @@ cicd-hyper-a/
 == Related Projects
 
 * link:https://github.com/hyperpolymath/robot-repo-automaton[robot-repo-automaton] - Automated repository management
-* link:https://github.com/hyperpolymath/gitvisor[gitvisor] - CI/CD intelligence system
+* link:https://github.com/hyperpolymath/git-hud[git-hud] - CI/CD intelligence system
 * link:https://github.com/hyperpolymath/rhodium-standard-repositories[rhodium-standard-repositories] - Repository standards
 * link:https://github.com/hyperpolymath/palimpsest-license[palimpsest-license] - Philosophical licence
 * link:https://www.bestpractices.dev[OpenSSF Best Practices Badge] - Security certification program
@@ -555,4 +561,15 @@ This project is licensed under link:https://github.com/hyperpolymath/palimpsest-
 
 The Palimpsest License is a file-level copyleft license with ethical use provisions, following the Mozilla approach.
 
-image::https://img.shields.io/badge/license-PMPL--1.0--or--later-blue.svg[License: PMPL-1.0-or-later, link=https://github.com/hyperpolymath/palimpsest-license]
+image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[MPL-2.0-or-later,link="https://opensource.org/licenses/MPL-2.0"]
+
+== OPSM Link
+
+[source]
+----
+OPSM Core
+  |
+  v
+hypatia (policy/knowledge services used by OPSM)
+
+----

@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: AGPL-3.0-or-later
+;; SPDX-License-Identifier: MPL-2.0-or-later
 ;; ECOSYSTEM.scm - Ecosystem position for cicd-hyper-a
 ;; Media-Type: application/vnd.ecosystem+scm
 
@@ -30,10 +30,10 @@
       (integration "cicd-hyper-a receives dispatched events for CI/CD automation")
       (update-protocol "When committing, notify git-dispatcher for documentation updates"))
 
-    (project "gitvisor"
+    (project "git-hud"
       (relationship "sibling")
       (description "Git repository supervision and monitoring")
-      (integration "gitvisor monitors repos, cicd-hyper-a automates fixes"))
+      (integration "git-hud monitors repos, cicd-hyper-a automates fixes"))
 
     (project ".git-private-farm"
       (relationship "infrastructure")
@@ -88,6 +88,6 @@
 
   (what-this-is-not
     ("Not a CI/CD platform replacement - works alongside GitHub Actions")
-    ("Not a monitoring tool - gitvisor handles monitoring")
+    ("Not a monitoring tool - git-hud handles monitoring")
     ("Not a secrets manager - uses existing secret stores")
     ("Not a deployment pipeline - focuses on security/quality")))
