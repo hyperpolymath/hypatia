@@ -2,10 +2,52 @@
 //! Workflow scanner for detecting CI/CD issues
 
 use crate::{ErrorCatalog, FixerError, Result, ShaPins};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
+
+// Compile regexes at compile-time (safe, no unwrap needed)
+static UNPINNED_ACTION_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)")
+        .expect("UNPINNED_ACTION_RE regex is invalid - this is a compile-time bug")
+});
+
+static SHA_PINNED_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"uses:\s*[a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+@[a-f0-9]{40}")
+        .expect("SHA_PINNED_RE regex is invalid - this is a compile-time bug")
+});
+
+static PERMISSIONS_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?m)^permissions:")
+        .expect("PERMISSIONS_RE regex is invalid - this is a compile-time bug")
+});
+
+static SPDX_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"#\s*SPDX-License-Identifier:")
+        .expect("SPDX_RE regex is invalid - this is a compile-time bug")
+});
+
+static RUST_TOOLCHAIN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"uses:\s*dtolnay/rust-toolchain@")
+        .expect("RUST_TOOLCHAIN_RE regex is invalid - this is a compile-time bug")
+});
+
+static TOOLCHAIN_WITH_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"with:\s*\n\s*toolchain:")
+        .expect("TOOLCHAIN_WITH_RE regex is invalid - this is a compile-time bug")
+});
+
+static CODEQL_LANGUAGE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"language:\s*\[([^\]]+)\]")
+        .expect("CODEQL_LANGUAGE_RE regex is invalid - this is a compile-time bug")
+});
+
+static USES_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@([a-zA-Z0-9.-]+)")
+        .expect("USES_RE regex is invalid - this is a compile-time bug")
+});
 
 /// Issue severity levels (aligned with CVSS)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -83,36 +125,11 @@ impl ScanResult {
 }
 
 /// Workflow scanner
-pub struct Scanner {
-    unpinned_action_re: Regex,
-    sha_pinned_re: Regex,
-    permissions_re: Regex,
-    spdx_re: Regex,
-    rust_toolchain_re: Regex,
-    toolchain_with_re: Regex,
-    codeql_language_re: Regex,
-    uses_re: Regex,
-}
+pub struct Scanner;
 
 impl Scanner {
     pub fn new() -> Self {
-        Self {
-            // Match uses: action/name@v1 or @main (not SHA-pinned)
-            unpinned_action_re: Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)").unwrap(),
-            // Match uses: action/name@SHA (40 hex chars)
-            sha_pinned_re: Regex::new(r"uses:\s*[a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+@[a-f0-9]{40}").unwrap(),
-            // Match permissions: at workflow level
-            permissions_re: Regex::new(r"(?m)^permissions:").unwrap(),
-            // Match SPDX header
-            spdx_re: Regex::new(r"#\s*SPDX-License-Identifier:").unwrap(),
-            // Match dtolnay/rust-toolchain without with: toolchain:
-            rust_toolchain_re: Regex::new(r"uses:\s*dtolnay/rust-toolchain@").unwrap(),
-            toolchain_with_re: Regex::new(r"with:\s*\n\s*toolchain:").unwrap(),
-            // Match CodeQL language matrix
-            codeql_language_re: Regex::new(r"language:\s*\[([^\]]+)\]").unwrap(),
-            // Match any uses: line
-            uses_re: Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@([a-zA-Z0-9.-]+)").unwrap(),
-        }
+        Self
     }
 
     /// Scan a repository for CI/CD issues
@@ -137,7 +154,7 @@ impl Scanner {
             workflows_scanned += 1;
 
             // Check for missing SPDX header
-            if !self.spdx_re.is_match(&content) {
+            if !SPDX_RE.is_match(&content) {
                 issues.push(Issue {
                     id: "missing-spdx-header".to_string(),
                     severity: IssueSeverity::Low,
@@ -151,7 +168,7 @@ impl Scanner {
             }
 
             // Check for missing permissions
-            if !self.permissions_re.is_match(&content) {
+            if !PERMISSIONS_RE.is_match(&content) {
                 issues.push(Issue {
                     id: "missing-workflow-permissions".to_string(),
                     severity: IssueSeverity::High,
@@ -165,7 +182,7 @@ impl Scanner {
             }
 
             // Check for unpinned actions
-            for cap in self.unpinned_action_re.captures_iter(&content) {
+            for cap in UNPINNED_ACTION_RE.captures_iter(&content) {
                 let action = cap.get(1).map_or("", |m| m.as_str());
                 let version = cap.get(2).map_or("", |m| m.as_str());
 
@@ -201,7 +218,7 @@ impl Scanner {
             }
 
             // Check for dtolnay/rust-toolchain missing toolchain input
-            if self.rust_toolchain_re.is_match(&content) {
+            if RUST_TOOLCHAIN_RE.is_match(&content) {
                 // Find each occurrence and check if it has with: toolchain:
                 let lines: Vec<&str> = content.lines().collect();
                 for (i, line) in lines.iter().enumerate() {
