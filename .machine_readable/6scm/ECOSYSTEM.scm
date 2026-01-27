@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: PMPL-1.0-or-later
+;; SPDX-License-Identifier: MPL-2.0-or-later
 ;; ECOSYSTEM.scm - Project relationship mapping for cicd-hyper-a
 
 (ecosystem
@@ -23,7 +23,7 @@
         (description "Fleet of bots that use cicd-hyper-a rules for specialized checks")
         (integration "Bots query ruleset registry for domain-specific rules")))
     (sibling
-      (gitvisor
+      (git-hud
         (relationship "visualization-layer")
         (description "Dashboard for visualizing rule application and repository health"))
       (rhodium-standard-repositories
@@ -73,6 +73,6 @@
   (what-this-is-not
     "Not the action executor - that is robot-repo-automaton"
     "Not a single-purpose bot - those are in gitbot-fleet"
-    "Not a dashboard - that is gitvisor"
+    "Not a dashboard - that is git-hud"
     "Not the standards definition - that is rhodium-standard-repositories"
     "Not just a linter - it learns, verifies, and evolves rules"))

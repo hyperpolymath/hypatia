@@ -150,7 +150,7 @@ jobs:
           generateSarif: "1"
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.0.0
+        uses: github/codeql-action/upload-sarif@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.0.0
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -170,13 +170,13 @@ jobs:
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.0.0
+        uses: github/codeql-action/init@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.0.0
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.0.0
+        uses: github/codeql-action/analyze@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.0.0
         with:
           category: "/language:${{matrix.language}}"
 
@@ -285,7 +285,7 @@ jobs:
           docker build -t cicd-hyper-a:scan -f deploy/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@d9cd5b1c23aaf8cb31bb09141028215828364bbb # 0.28.0
+        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac # 0.28.0
         with:
           image-ref: 'cicd-hyper-a:scan'
           format: 'sarif'
@@ -293,7 +293,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.0.0
+        uses: github/codeql-action/upload-sarif@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.0.0
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
