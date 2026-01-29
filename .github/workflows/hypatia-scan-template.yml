@@ -82,11 +82,25 @@ jobs:
           retention-days: 90
 
       - name: Submit findings to gitbot-fleet (Phase 2)
-        if: false  # Will be enabled in Week 2
+        if: steps.scan.outputs.findings_count > 0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
-          # TODO: Implement secure finding submission
-          # This will push findings to gitbot-fleet/shared-context/findings/
-          echo "Finding submission not yet implemented"
+          echo "📤 Submitting ${{ steps.scan.outputs.findings_count }} findings to gitbot-fleet..."
+
+          # Clone gitbot-fleet to temp directory
+          FLEET_DIR="/tmp/gitbot-fleet-$$"
+          git clone https://github.com/hyperpolymath/gitbot-fleet.git "$FLEET_DIR"
+
+          # Run submission script
+          bash "$FLEET_DIR/scripts/submit-finding.sh" hypatia-findings.json
+
+          # Cleanup
+          rm -rf "$FLEET_DIR"
+
+          echo "✅ Finding submission complete"
 
       - name: Check for critical issues
         if: steps.scan.outputs.critical > 0
