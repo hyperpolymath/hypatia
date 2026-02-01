@@ -1,0 +1,178 @@
+= Hypatia Roadmap
+:toc:
+:toclevels: 3
+
+== Overview
+
+This roadmap outlines the development plan for Hypatia, the neurosymbolic CI/CD orchestrator for the Hyperpolymath gitbot fleet.
+
+== v1.0 - Production Release (Current)
+
+**Target:** 2026-02
+**Status:** Active development (70-90% complete per components)
+
+=== Core Components
+* ✅ Haskell registry (template validation, type safety)
+* ✅ Logtalk rules engine (logic programming, rule synthesis)
+* ✅ Rust CLI (command execution, orchestration)
+* ⚠️ ArangoDB deployment (needs production setup)
+
+=== Features
+* ✅ Template validation and scaffolding
+* ✅ Rule-based package management
+* ✅ Multi-language architecture
+* ✅ Gitbot fleet integration hooks
+
+=== Testing & Quality
+* ✅ Unit tests
+* ✅ Integration tests
+* ✅ ClusterFuzzLite fuzzing
+* ✅ Benchmarks
+* ✅ Stress tests
+
+=== Remaining for v1.0
+* [ ] Add ROADMAP.adoc (this file)
+* [ ] Production ArangoDB deployment
+* [ ] V1 readiness validation rules (v1_readiness.lgt)
+* [ ] Complete fleet orchestration
+* [ ] Documentation and examples
+
+== v1.1 - Fleet Orchestration (Next)
+
+**Target:** 2026-03
+
+=== Bot Integration
+* Finishingbot integration (v1 readiness validation)
+* Glambot integration (presentation quality)
+* Echidnabot integration (verification)
+* Rhodibot integration (structural compliance)
+
+=== Rule Enhancements
+* V1 readiness rule set (SCM files, testing, tooling)
+* Language compliance rules (banned language detection)
+* Security policy enforcement rules
+* Quality gate rules
+
+=== Orchestration
+* Multi-bot workflow execution
+* Shared context management
+* Bot execution order optimization
+* Parallel bot execution
+
+== v1.2 - Advanced Rules
+
+**Target:** 2026-04
+
+=== Rule Synthesis
+* Machine learning-based rule extraction
+* Historical validation analysis
+* Pattern recognition
+* Automated rule generation
+
+=== Advanced Validation
+* Cross-repo dependency validation
+* Ecosystem-wide compatibility checking
+* Breaking change detection
+* Migration path validation
+
+=== Performance
+* Rule compilation optimization
+* Cached validation results
+* Incremental validation
+* Distributed rule execution
+
+== v2.0 - Neurosymbolic Intelligence
+
+**Target:** 2026-Q3
+
+=== AI Integration
+* LLM-based code analysis
+* Natural language rule definition
+* Automated reasoning
+* Explanation generation
+
+=== Formal Methods
+* Proof-carrying code validation
+* Theorem proving integration
+* Model checking
+* Formal verification of rules
+
+=== A2ML Integration
+* Attested documentation validation
+* Typed markup verification
+* Claim provenance tracking
+* Verified knowledge graphs
+
+=== K9-SVC Integration
+* Self-validating component contracts
+* Must-just-nickel validation
+* Contractiles verification
+* Interface stability checking
+
+== v2.5 - Distributed Orchestration
+
+**Target:** 2026-Q4
+
+=== Architecture
+* Distributed bot execution
+* Peer-to-peer validation network
+* Federated rule repositories
+* Multi-region deployment
+
+=== Scalability
+* Horizontal scaling
+* Load balancing
+* Resource optimization
+* Auto-scaling policies
+
+=== Observability
+* Distributed tracing
+* Metrics collection
+* Log aggregation
+* Performance monitoring
+
+== v3.0 - Autonomous Ecosystem Management
+
+**Target:** 2027
+
+=== Autonomous Features
+* Self-healing validation failures
+* Predictive quality analysis
+* Autonomous fix generation
+* Dynamic bot selection
+
+=== Ecosystem Intelligence
+* Cross-project learning
+* Best practice extraction
+* Anti-pattern detection
+* Quality trend prediction
+
+=== Advanced Orchestration
+* Intent-based orchestration
+* Policy-driven automation
+* Adaptive workflow optimization
+* Multi-objective optimization
+
+=== Integration
+* Idris library integration (proven code)
+* Proof-of-work integration
+* Blockchain-based attestation
+* Distributed trust network
+
+== Long-term Vision
+
+* Fully autonomous package ecosystem management
+* Self-improving rule synthesis
+* Formal verification of all validation logic
+* Distributed knowledge graph
+* Cross-ecosystem interoperability
+* AI-driven software development assistance
+* Integration with all Hyperpolymath tools and standards
+
+== Contributing
+
+See link:CONTRIBUTING.md[Contributing Guidelines] for how to contribute to Hypatia development.
+
+== Versioning
+
+Hypatia follows semantic versioning (SemVer). Breaking changes will only be introduced in major version releases.

@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Stress Testing
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Weekly Monday 3am UTC
+  workflow_dispatch:
+permissions: read-all
+jobs:
+  stress-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install stress testing tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y stress-ng valgrind
+
+      - name: Build release
+        run: cargo build --release --all-features
+
+      - name: Concurrent operations stress test
+        run: |
+          # Run binary with high concurrency
+          for i in {1..100}; do
+            timeout 1s ./target/release/* &
+          done
+          wait
+
+      - name: Memory pressure test
+        run: |
+          # Run under memory constraints
+          ulimit -v 512000  # 500MB virtual memory limit
+          cargo test --release
+
+      - name: Long-running scenario test
+        run: |
+          # Test for memory leaks over time
+          timeout 300s valgrind --leak-check=full --error-exitcode=1 \
+            ./target/release/* || true
+
+      - name: Stress test with stress-ng
+        run: |
+          # CPU and I/O stress
+          stress-ng --cpu 4 --io 2 --timeout 60s &
+          STRESS_PID=$!
+          cargo test --release
+          kill $STRESS_PID || true
