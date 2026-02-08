@@ -16,6 +16,7 @@ defmodule Hypatia.FleetDispatcher do
   - :fix_suggestion -> rhodibot
   - :presentation_finding -> glambot (visual, SEO, machine-readability, git-seo)
   - :accessibility_violation -> accessibilitybot
+  - :seam_finding -> seambot (seam analysis, drift detection, hidden channels, forge integration)
   """
   def dispatch_finding(finding) do
     case finding.type do
@@ -24,6 +25,7 @@ defmodule Hypatia.FleetDispatcher do
       :fix_suggestion -> dispatch_to_rhodibot(finding)
       :presentation_finding -> dispatch_to_glambot(finding)
       :accessibility_violation -> dispatch_to_accessibilitybot(finding)
+      :seam_finding -> dispatch_to_seambot(finding)
       _ -> {:error, :unknown_finding_type}
     end
   end
@@ -102,6 +104,29 @@ defmodule Hypatia.FleetDispatcher do
     """
 
     execute_graphql(mutation, "glambot")
+  end
+
+  defp dispatch_to_seambot(finding) do
+    # GraphQL mutation to seambot
+    category = Map.get(finding, :category, "seam-analysis")
+
+    mutation = """
+    mutation {
+      reportSeamFinding(
+        repo: "#{finding.repo}",
+        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        category: "#{escape_quotes(category)}",
+        issue: "#{escape_quotes(finding.issue)}",
+        driftScore: #{Map.get(finding, :drift_score, 0.0)},
+        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+      ) {
+        success
+        findingId
+      }
+    }
+    """
+
+    execute_graphql(mutation, "seambot")
   end
 
   defp dispatch_to_accessibilitybot(finding) do
