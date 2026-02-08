@@ -39,6 +39,8 @@ config = {
       "hypatia",
       "gitbot-fleet",
       "robot-repo-automaton",
+      "glambot",
+      "accessibilitybot",
     ],
     formal = [
       "absolute-zero",
