@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Fleet command implementation.
 //!
 //! Runs bot fleets on a repository in dependency order.
@@ -520,13 +520,18 @@ fn get_available_bots() -> Vec<Bot> {
         Bot {
             id: "finishing-bot".to_string(),
             name: "Finishing Bot".to_string(),
-            description: "Release readiness and completeness checks".to_string(),
+            description: "Tier 2 Finisher - completeness analysis and release readiness".to_string(),
             category: BotCategory::Release,
             dependencies: vec!["glambot".to_string()],
             checks: vec![
-                "changelog".to_string(),
-                "version-consistency".to_string(),
-                "release-notes".to_string(),
+                "completeness/license".to_string(),
+                "completeness/placeholder".to_string(),
+                "completeness/claims".to_string(),
+                "completeness/release".to_string(),
+                "completeness/scm".to_string(),
+                "completeness/testing".to_string(),
+                "completeness/tooling".to_string(),
+                "completeness/v1-readiness".to_string(),
             ],
             can_fix: true,
             estimated_runtime: 20,

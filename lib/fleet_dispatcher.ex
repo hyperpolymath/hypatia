@@ -18,6 +18,7 @@ defmodule Hypatia.FleetDispatcher do
   - :accessibility_violation -> accessibilitybot
   - :seam_finding -> seambot (seam analysis, drift detection, hidden channels, forge integration)
   - :auto_fix_request -> robot-repo-automaton (Tier 3 Executor, confidence-gated)
+  - :completeness_finding -> finishbot (completeness analysis, release readiness)
   - :fix_outcome -> learning engine (feeds neurosymbolic loop)
   """
   def dispatch_finding(finding) do
@@ -28,6 +29,7 @@ defmodule Hypatia.FleetDispatcher do
       :presentation_finding -> dispatch_to_glambot(finding)
       :accessibility_violation -> dispatch_to_accessibilitybot(finding)
       :seam_finding -> dispatch_to_seambot(finding)
+      :completeness_finding -> dispatch_to_finishbot(finding)
       :auto_fix_request -> dispatch_to_robot_repo_automaton(finding)
       :fix_outcome -> ingest_fix_outcome(finding)
       _ -> {:error, :unknown_finding_type}
@@ -131,6 +133,28 @@ defmodule Hypatia.FleetDispatcher do
     """
 
     execute_graphql(mutation, "seambot")
+  end
+
+  defp dispatch_to_finishbot(finding) do
+    # GraphQL mutation to finishbot (Tier 2 Finisher - completeness analysis)
+    category = Map.get(finding, :category, "completeness/release")
+
+    mutation = """
+    mutation {
+      reportCompletenessFinding(
+        repo: "#{finding.repo}",
+        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        category: "#{escape_quotes(category)}",
+        issue: "#{escape_quotes(finding.issue)}",
+        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+      ) {
+        success
+        findingId
+      }
+    }
+    """
+
+    execute_graphql(mutation, "finishbot")
   end
 
   defp dispatch_to_accessibilitybot(finding) do

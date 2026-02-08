@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: PLMP-1.0-or-later
+%% SPDX-License-Identifier: PMPL-1.0-or-later
 %% cicd-hyper-a Rule Schema
 %%
 %% This file defines the formal schema for CI/CD rules in the neurosymbolic
@@ -65,21 +65,29 @@
     %% ============================================================
 
     category_list([
-        security,           % Security vulnerabilities, secrets, permissions
-        structure,          % Repository structure, required files
-        workflow,           % GitHub Actions, CI/CD configuration
-        code_quality,       % Code style, best practices
-        licensing,          % License headers, SPDX compliance
-        documentation,      % README, CHANGELOG, docs
-        accessibility,      % WCAG, A11Y compliance
-        seo,                % Meta tags, Open Graph, SEO
-        release,            % Release readiness, versioning
-        waste,              % CI/CD waste, redundant workflows
-        policy,             % RSR compliance, language policy
-        seam_analysis,      % Architectural seam detection (seambot)
-        drift_detection,    % Interface drift across boundaries (seambot)
-        hidden_channels,    % Undeclared cross-boundary communication (seambot)
-        forge_integration   % Multi-forge consistency checks (seambot)
+        security,                   % Security vulnerabilities, secrets, permissions
+        structure,                  % Repository structure, required files
+        workflow,                   % GitHub Actions, CI/CD configuration
+        code_quality,               % Code style, best practices
+        licensing,                  % License headers, SPDX compliance
+        documentation,              % README, CHANGELOG, docs
+        accessibility,              % WCAG, A11Y compliance
+        seo,                        % Meta tags, Open Graph, SEO
+        release,                    % Release readiness, versioning
+        waste,                      % CI/CD waste, redundant workflows
+        policy,                     % RSR compliance, language policy
+        seam_analysis,              % Architectural seam detection (seambot)
+        drift_detection,            % Interface drift across boundaries (seambot)
+        hidden_channels,            % Undeclared cross-boundary communication (seambot)
+        forge_integration,          % Multi-forge consistency checks (seambot)
+        completeness_license,       % License completeness (finishbot)
+        completeness_placeholder,   % Placeholder detection (finishbot)
+        completeness_claims,        % Claim verification (finishbot)
+        completeness_release,       % Release readiness (finishbot)
+        completeness_scm,           % SCM file completeness (finishbot)
+        completeness_testing,       % Test coverage completeness (finishbot)
+        completeness_tooling,       % Tooling completeness (finishbot)
+        completeness_v1_readiness   % V1 readiness assessment (finishbot)
     ]).
 
     valid_category(security).
@@ -97,6 +105,14 @@
     valid_category(drift_detection).
     valid_category(hidden_channels).
     valid_category(forge_integration).
+    valid_category(completeness_license).
+    valid_category(completeness_placeholder).
+    valid_category(completeness_claims).
+    valid_category(completeness_release).
+    valid_category(completeness_scm).
+    valid_category(completeness_testing).
+    valid_category(completeness_tooling).
+    valid_category(completeness_v1_readiness).
 
     %% ============================================================
     %% BOT IDENTIFIERS (from gitbot-fleet)

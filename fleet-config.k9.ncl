@@ -41,6 +41,7 @@ config = {
       "robot-repo-automaton",
       "glambot",
       "seambot",
+      "finishingbot",
       "accessibilitybot",
     ],
     formal = [
