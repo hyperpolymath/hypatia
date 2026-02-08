@@ -17,6 +17,7 @@ defmodule Hypatia.FleetDispatcher do
   - :presentation_finding -> glambot (visual, SEO, machine-readability, git-seo)
   - :accessibility_violation -> accessibilitybot
   - :seam_finding -> seambot (seam analysis, drift detection, hidden channels, forge integration)
+  - :crypto_finding -> cipherbot (crypto hygiene, post-quantum readiness)
   - :auto_fix_request -> robot-repo-automaton (Tier 3 Executor, confidence-gated)
   - :completeness_finding -> finishbot (completeness analysis, release readiness)
   - :fix_outcome -> learning engine (feeds neurosymbolic loop)
@@ -29,6 +30,7 @@ defmodule Hypatia.FleetDispatcher do
       :presentation_finding -> dispatch_to_glambot(finding)
       :accessibility_violation -> dispatch_to_accessibilitybot(finding)
       :seam_finding -> dispatch_to_seambot(finding)
+      :crypto_finding -> dispatch_to_cipherbot(finding)
       :completeness_finding -> dispatch_to_finishbot(finding)
       :auto_fix_request -> dispatch_to_robot_repo_automaton(finding)
       :fix_outcome -> ingest_fix_outcome(finding)
@@ -133,6 +135,30 @@ defmodule Hypatia.FleetDispatcher do
     """
 
     execute_graphql(mutation, "seambot")
+  end
+
+  defp dispatch_to_cipherbot(finding) do
+    # GraphQL mutation to cipherbot (Specialist - crypto hygiene)
+    category = Map.get(finding, :category, "crypto/hashing")
+
+    mutation = """
+    mutation {
+      reportCryptoFinding(
+        repo: "#{finding.repo}",
+        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        category: "#{escape_quotes(category)}",
+        algorithm: "#{escape_quotes(Map.get(finding, :algorithm, ""))}",
+        issue: "#{escape_quotes(finding.issue)}",
+        pqReady: #{Map.get(finding, :pq_ready, false)},
+        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+      ) {
+        success
+        findingId
+      }
+    }
+    """
+
+    execute_graphql(mutation, "cipherbot")
   end
 
   defp dispatch_to_finishbot(finding) do

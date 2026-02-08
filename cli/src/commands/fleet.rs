@@ -564,6 +564,23 @@ fn get_available_bots() -> Vec<Bot> {
             estimated_runtime: 45,
         },
         Bot {
+            id: "cipherbot".to_string(),
+            name: "Cipherbot".to_string(),
+            description: "Cryptographic hygiene and post-quantum readiness specialist".to_string(),
+            category: BotCategory::Security,
+            dependencies: vec!["robot-repo-automaton".to_string(), "echidnabot".to_string()],
+            checks: vec![
+                "crypto/hashing".to_string(),
+                "crypto/symmetric".to_string(),
+                "crypto/key-exchange".to_string(),
+                "crypto/signatures".to_string(),
+                "crypto/password".to_string(),
+                "crypto/pq-readiness".to_string(),
+            ],
+            can_fix: true,
+            estimated_runtime: 40,
+        },
+        Bot {
             id: "compliance-bot".to_string(),
             name: "Compliance Bot".to_string(),
             description: "License and policy compliance checking".to_string(),

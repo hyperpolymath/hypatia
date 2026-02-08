@@ -43,6 +43,7 @@ config = {
       "seambot",
       "finishingbot",
       "accessibilitybot",
+      "cipherbot",
     ],
     formal = [
       "absolute-zero",
