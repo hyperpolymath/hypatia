@@ -6,6 +6,7 @@ defmodule Hypatia.PatternAnalyzer do
   """
 
   alias Hypatia.VerisimdbConnector
+  alias Hypatia.FleetDispatcher
 
   require Logger
 
@@ -51,5 +52,14 @@ defmodule Hypatia.PatternAnalyzer do
       total_weak_points: total_weak_points,
       repos_by_severity: repos_by_severity
     }
+  end
+
+  def process_findings(findings) do
+    Enum.each(findings, fn finding ->
+      case FleetDispatcher.dispatch_finding(finding) do
+        {:ok, _} -> :ok
+        {:error, reason} -> Logger.error("Dispatch failed: #{inspect(reason)}")
+      end
+    end)
   end
 end
