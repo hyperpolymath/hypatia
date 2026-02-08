@@ -136,7 +136,7 @@
         'Echidnabot',
         '0.1.0',
         verifier,
-        [verification, fuzzing],
+        [verification, fuzzing, proof_verification, solver_integrity, trust_bridge, axiom_tracking],
         false,
         []
     )).

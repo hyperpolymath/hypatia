@@ -87,7 +87,17 @@
         completeness_scm,           % SCM file completeness (finishbot)
         completeness_testing,       % Test coverage completeness (finishbot)
         completeness_tooling,       % Tooling completeness (finishbot)
-        completeness_v1_readiness   % V1 readiness assessment (finishbot)
+        completeness_v1_readiness,  % V1 readiness assessment (finishbot)
+        proof_verification,         % Formal proof checking (echidnabot)
+        solver_integrity,           % Solver correctness validation (echidnabot)
+        trust_bridge,               % Cross-system trust verification (echidnabot)
+        axiom_tracking,             % Axiom provenance and soundness (echidnabot)
+        crypto_hashing,             % Hash algorithm strength (cipherbot)
+        crypto_symmetric,           % Symmetric cipher selection (cipherbot)
+        crypto_key_exchange,        % Key exchange protocols (cipherbot)
+        crypto_signatures,          % Signature scheme validity (cipherbot)
+        crypto_password,            % Password hashing compliance (cipherbot)
+        crypto_pq_readiness         % Post-quantum readiness (cipherbot)
     ]).
 
     valid_category(security).
@@ -113,6 +123,16 @@
     valid_category(completeness_testing).
     valid_category(completeness_tooling).
     valid_category(completeness_v1_readiness).
+    valid_category(proof_verification).
+    valid_category(solver_integrity).
+    valid_category(trust_bridge).
+    valid_category(axiom_tracking).
+    valid_category(crypto_hashing).
+    valid_category(crypto_symmetric).
+    valid_category(crypto_key_exchange).
+    valid_category(crypto_signatures).
+    valid_category(crypto_password).
+    valid_category(crypto_pq_readiness).
 
     %% ============================================================
     %% BOT IDENTIFIERS (from gitbot-fleet)
