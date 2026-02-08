@@ -1,3 +1,20 @@
+# CLAUDE.md - Hypatia AI Assistant Instructions
+
+## Project Overview
+
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) using Logtalk rules, ArangoDB for knowledge storage, and a GraphQL API.
+
+## Architecture
+
+```
+Hypatia
+├── Logtalk rule engine       # Pattern detection, decision rules
+├── ArangoDB                  # Knowledge graph storage
+├── GraphQL API               # Fleet coordination interface
+├── Fleet dispatcher          # Routes findings to appropriate bots
+└── Integration connectors    # verisimdb, panic-attack, hardware-crash-team
+```
+
 ## Machine-Readable Artefacts
 
 The following files in `.machine_readable/` contain structured project metadata:
@@ -9,9 +26,45 @@ The following files in `.machine_readable/` contain structured project metadata:
 - `NEUROSYM.scm` - Neurosymbolic integration config
 - `PLAYBOOK.scm` - Operational runbook
 
----
+## Pending Integration: panic-attack → hypatia → gitbot-fleet (Sonnet Task)
 
-# CLAUDE.md - AI Assistant Instructions
+### Data Flow (NOT YET IMPLEMENTED)
+
+```
+panic-attack assail (scan repos)
+        ↓ JSON results
+verisimdb-data repo (git-backed flat-file store)
+        ↓ read scan results
+hypatia Logtalk rules (pattern detection)
+        ↓ actionable findings
+gitbot-fleet dispatcher
+        ├── sustainabot: EcoScore/EconScore from scan metrics
+        ├── echidnabot: proof obligations ("verify fix resolves weak points")
+        └── rhodibot: automated fix suggestions
+```
+
+### What Needs Building
+
+1. **verisimdb connector**: Logtalk rules that read scan results from verisimdb-data repo
+   - Clone/pull verisimdb-data, parse JSON scan results
+   - Transform weak points into Logtalk facts
+   - Example fact: `weak_point(echidna, "src/prover.rs", unsafe_block, high)`
+
+2. **Pattern detection rules**: Logtalk rules that fire on scan data
+   - "3+ repos share same unsafe pattern" → fleet-wide advisory
+   - "Repo X has critical weak points increasing over time" → sustainabot alert
+   - "New weak point type detected" → echidnabot proof request
+
+3. **Fleet dispatch**: Route findings to appropriate bots via GraphQL
+   - Each bot has a GraphQL mutation for receiving findings
+   - Hypatia decides which bot handles which finding type
+
+### Hardware Integration (Future)
+
+hardware-crash-team findings can also flow through hypatia:
+- Zombie device patterns across fleet machines
+- Driver conflict advisories
+- Remediation success/failure tracking
 
 ## Language Policy (Hyperpolymath Standard)
 
