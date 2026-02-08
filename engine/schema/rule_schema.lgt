@@ -127,8 +127,11 @@
         %% Tier 2 - Finishers
         glambot,            % Presentation quality
         seambot,            % Architectural seam analysis, drift detection, forge integration
-        finishing_bot,      % Release readiness
+        finishing_bot,      % Completeness analysis, release readiness
         accessibilitybot,   % WCAG accessibility compliance
+
+        %% Specialist
+        cipherbot,      % Cryptographic hygiene, post-quantum readiness
 
         %% Special
         cicd_hyper_a,   % This engine
@@ -142,6 +145,7 @@
     valid_bot_id(seambot).
     valid_bot_id(finishing_bot).
     valid_bot_id(accessibilitybot).
+    valid_bot_id(cipherbot).
     valid_bot_id(cicd_hyper_a).
     valid_bot_id(robot_repo_automaton).
 
@@ -153,6 +157,7 @@
     bot_tier(seambot, finisher).
     bot_tier(finishing_bot, finisher).
     bot_tier(accessibilitybot, finisher).
+    bot_tier(cipherbot, specialist).
     bot_tier(cicd_hyper_a, engine).
     bot_tier(robot_repo_automaton, executor).
 
