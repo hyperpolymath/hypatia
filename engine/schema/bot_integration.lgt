@@ -140,9 +140,9 @@
         []
     )).
 
-    standard_bot_info(oikos, bot_info(
-        oikos,
-        'Oikos',
+    standard_bot_info(sustainabot, bot_info(
+        sustainabot,
+        'Sustainabot',
         '0.1.0',
         verifier,
         [sustainability, efficiency],
@@ -165,7 +165,7 @@
         'Seambot',
         '0.1.0',
         finisher,
-        [integration, api],
+        [seam_analysis, drift_detection, hidden_channels, forge_integration, integration, api],
         false,
         [rhodibot, echidnabot]
     )).

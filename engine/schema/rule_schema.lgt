@@ -65,17 +65,21 @@
     %% ============================================================
 
     category_list([
-        security,       % Security vulnerabilities, secrets, permissions
-        structure,      % Repository structure, required files
-        workflow,       % GitHub Actions, CI/CD configuration
-        code_quality,   % Code style, best practices
-        licensing,      % License headers, SPDX compliance
-        documentation,  % README, CHANGELOG, docs
-        accessibility,  % WCAG, A11Y compliance
-        seo,            % Meta tags, Open Graph, SEO
-        release,        % Release readiness, versioning
-        waste,          % CI/CD waste, redundant workflows
-        policy          % RSR compliance, language policy
+        security,           % Security vulnerabilities, secrets, permissions
+        structure,          % Repository structure, required files
+        workflow,           % GitHub Actions, CI/CD configuration
+        code_quality,       % Code style, best practices
+        licensing,          % License headers, SPDX compliance
+        documentation,      % README, CHANGELOG, docs
+        accessibility,      % WCAG, A11Y compliance
+        seo,                % Meta tags, Open Graph, SEO
+        release,            % Release readiness, versioning
+        waste,              % CI/CD waste, redundant workflows
+        policy,             % RSR compliance, language policy
+        seam_analysis,      % Architectural seam detection (seambot)
+        drift_detection,    % Interface drift across boundaries (seambot)
+        hidden_channels,    % Undeclared cross-boundary communication (seambot)
+        forge_integration   % Multi-forge consistency checks (seambot)
     ]).
 
     valid_category(security).
@@ -89,6 +93,10 @@
     valid_category(release).
     valid_category(waste).
     valid_category(policy).
+    valid_category(seam_analysis).
+    valid_category(drift_detection).
+    valid_category(hidden_channels).
+    valid_category(forge_integration).
 
     %% ============================================================
     %% BOT IDENTIFIERS (from gitbot-fleet)
@@ -101,9 +109,10 @@
         oikos,          % Ecological/economic standards
 
         %% Tier 2 - Finishers
-        glambot,        % Presentation quality
-        seambot,        % Integration testing
-        finishing_bot,  % Release readiness
+        glambot,            % Presentation quality
+        seambot,            % Architectural seam analysis, drift detection, forge integration
+        finishing_bot,      % Release readiness
+        accessibilitybot,   % WCAG accessibility compliance
 
         %% Special
         cicd_hyper_a,   % This engine
@@ -116,6 +125,7 @@
     valid_bot_id(glambot).
     valid_bot_id(seambot).
     valid_bot_id(finishing_bot).
+    valid_bot_id(accessibilitybot).
     valid_bot_id(cicd_hyper_a).
     valid_bot_id(robot_repo_automaton).
 
@@ -126,6 +136,7 @@
     bot_tier(glambot, finisher).
     bot_tier(seambot, finisher).
     bot_tier(finishing_bot, finisher).
+    bot_tier(accessibilitybot, finisher).
     bot_tier(cicd_hyper_a, engine).
     bot_tier(robot_repo_automaton, executor).
 

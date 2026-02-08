@@ -544,10 +544,14 @@ fn get_available_bots() -> Vec<Bot> {
         Bot {
             id: "seambot".to_string(),
             name: "Seambot".to_string(),
-            description: "Integration testing and API compatibility".to_string(),
+            description: "Architectural seam analysis - drift detection, hidden channels, forge integration".to_string(),
             category: BotCategory::Quality,
-            dependencies: vec!["robot-repo-automaton".to_string()],
+            dependencies: vec!["robot-repo-automaton".to_string(), "echidnabot".to_string()],
             checks: vec![
+                "seam-analysis".to_string(),
+                "drift-detection".to_string(),
+                "hidden-channels".to_string(),
+                "forge-integration".to_string(),
                 "api-compatibility".to_string(),
                 "integration-tests".to_string(),
             ],

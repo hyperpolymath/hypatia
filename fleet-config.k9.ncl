@@ -40,6 +40,7 @@ config = {
       "gitbot-fleet",
       "robot-repo-automaton",
       "glambot",
+      "seambot",
       "accessibilitybot",
     ],
     formal = [

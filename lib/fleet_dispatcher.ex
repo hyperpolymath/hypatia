@@ -17,6 +17,8 @@ defmodule Hypatia.FleetDispatcher do
   - :presentation_finding -> glambot (visual, SEO, machine-readability, git-seo)
   - :accessibility_violation -> accessibilitybot
   - :seam_finding -> seambot (seam analysis, drift detection, hidden channels, forge integration)
+  - :auto_fix_request -> robot-repo-automaton (Tier 3 Executor, confidence-gated)
+  - :fix_outcome -> learning engine (feeds neurosymbolic loop)
   """
   def dispatch_finding(finding) do
     case finding.type do
@@ -26,6 +28,8 @@ defmodule Hypatia.FleetDispatcher do
       :presentation_finding -> dispatch_to_glambot(finding)
       :accessibility_violation -> dispatch_to_accessibilitybot(finding)
       :seam_finding -> dispatch_to_seambot(finding)
+      :auto_fix_request -> dispatch_to_robot_repo_automaton(finding)
+      :fix_outcome -> ingest_fix_outcome(finding)
       _ -> {:error, :unknown_finding_type}
     end
   end
@@ -149,6 +153,73 @@ defmodule Hypatia.FleetDispatcher do
     """
 
     execute_graphql(mutation, "accessibilitybot")
+  end
+
+  defp dispatch_to_robot_repo_automaton(finding) do
+    # GraphQL mutation to robot-repo-automaton (Tier 3 Executor)
+    # RRA applies fixes with confidence thresholds: high=auto, medium=review, low=skip
+    confidence = Map.get(finding, :confidence, "high")
+    fix_type = Map.get(finding, :fix_type, "compliance")
+
+    mutation = """
+    mutation {
+      requestAutoFix(
+        repo: "#{finding.repo}",
+        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        issue: "#{escape_quotes(finding.issue)}",
+        fixType: "#{escape_quotes(fix_type)}",
+        confidence: "#{escape_quotes(confidence)}",
+        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+      ) {
+        success
+        fixApplied
+        fixDecision
+      }
+    }
+    """
+
+    execute_graphql(mutation, "robot-repo-automaton")
+  end
+
+  @doc """
+  Ingest a fix outcome from robot-repo-automaton into the neurosymbolic
+  learning loop. Records whether an auto-fix succeeded or failed so the
+  learning engine can adjust confidence thresholds and propose new rules.
+  """
+  defp ingest_fix_outcome(finding) do
+    pattern = Map.get(finding, :pattern, "unknown")
+    success = Map.get(finding, :success, false)
+    repo = Map.get(finding, :repo, "unknown")
+
+    Logger.info(
+      "Learning loop: fix outcome for pattern '#{pattern}' in #{repo} - " <>
+      "success=#{success}"
+    )
+
+    # Write observation to the shared-context learning pipeline
+    observation = %{
+      type: pattern,
+      repo: repo,
+      success: success,
+      fix_type: Map.get(finding, :fix_type, "unknown"),
+      confidence: Map.get(finding, :confidence, "unknown"),
+      observed: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    learning_file = Path.expand(
+      "~/Documents/hyperpolymath-repos/gitbot-fleet/shared-context/learning/fix-outcomes.jsonl"
+    )
+
+    case Jason.encode(observation) do
+      {:ok, json_line} ->
+        File.write(learning_file, json_line <> "\n", [:append, :utf8])
+        Logger.info("Fix outcome recorded to learning pipeline: #{learning_file}")
+        {:ok, :recorded}
+
+      {:error, reason} ->
+        Logger.error("Failed to encode fix outcome: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   defp execute_graphql(query, bot_name) do
