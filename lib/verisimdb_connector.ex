@@ -45,7 +45,8 @@ defmodule Hypatia.VerisimdbConnector do
 
     weak_points
     |> Enum.map(fn wp ->
-      file = Map.get(wp, "file", "unknown")
+      # panic-attack uses "location" for file path
+      file = Map.get(wp, "location", Map.get(wp, "file", "unknown"))
       category = Map.get(wp, "category", "unknown")
       severity = Map.get(wp, "severity", "unknown")
 
