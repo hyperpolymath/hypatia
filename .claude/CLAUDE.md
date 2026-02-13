@@ -2,22 +2,33 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) using Logtalk rules, ArangoDB for knowledge storage, and a GraphQL API.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with Logtalk rules for pattern detection and ArangoDB planned for knowledge graph storage.
 
 ## Architecture
 
 ```
 Hypatia
-├── Logtalk rule engine       # Pattern detection, decision rules
-├── ArangoDB                  # Knowledge graph storage
-├── GraphQL API               # Fleet coordination interface
+├── Elixir pipeline          # 8 core modules (pattern analysis, dispatch, learning)
+├── Logtalk rule engine       # Error catalog, pattern detection rules
+├── Rust workspace            # adapters, cli, data, fixer, integration
+├── Safety triangle           # Eliminate > Substitute > Control
 ├── Fleet dispatcher          # Routes findings to appropriate bots
-└── Integration connectors    # verisimdb, panic-attack, hardware-crash-team
+└── Integration connectors    # verisimdb-data, panic-attack, gitbot-fleet
+```
+
+## Key Commands
+
+```bash
+mix deps.get    # Install Elixir deps
+mix test        # Run tests
+mix format      # Format Elixir code
+cargo build     # Build Rust workspace
+cargo test      # Test Rust workspace
 ```
 
 ## Machine-Readable Artefacts
 
-The following files in `.machine_readable/` contain structured project metadata:
+Files in `.machine_readable/` contain structured project metadata:
 
 - `STATE.scm` - Current project state and progress
 - `META.scm` - Architecture decisions and development practices
@@ -26,111 +37,76 @@ The following files in `.machine_readable/` contain structured project metadata:
 - `NEUROSYM.scm` - Neurosymbolic integration config
 - `PLAYBOOK.scm` - Operational runbook
 
-## Pending Integration: panic-attack → hypatia → gitbot-fleet (Sonnet Task)
+## Safety Triangle Pipeline (OPERATIONAL)
 
-### Data Flow (NOT YET IMPLEMENTED)
+### Data Flow
 
 ```
 panic-attack assail (scan repos)
-        ↓ JSON results
-verisimdb-data repo (git-backed flat-file store)
-        ↓ read scan results
-hypatia Logtalk rules (pattern detection)
-        ↓ actionable findings
-gitbot-fleet dispatcher
-        ├── sustainabot: EcoScore/EconScore from scan metrics
-        ├── echidnabot: proof obligations ("verify fix resolves weak points")
-        └── rhodibot: automated fix suggestions
+        | JSON results
+verisimdb-data repo (git-backed flat-file store, 292 repos scanned)
+        | read scan results
+Elixir pipeline:
+  VerisimdbConnector.fetch_all_scans()
+        |
+  PatternRegistry.sync_from_scans()     -- 954 canonical patterns
+        |
+  TriangleRouter.route()                -- Eliminate > Substitute > Control
+        |
+  FleetDispatcher.dispatch_routed_action()
+        |
+  DispatchManifest.write()              -- JSONL for execution layer
+        |
+dispatch-runner.sh (gitbot-fleet)
+  ├── auto_execute (>=0.95 confidence): robot-repo-automaton
+  ├── review (0.85-0.94): rhodibot creates PR
+  └── report_only (<0.85): sustainabot advisory
+        |
+OutcomeTracker.record_outcome()         -- Feedback loop
 ```
 
-### What Needs Building
+### Core Elixir Modules (lib/)
 
-1. **verisimdb connector**: Logtalk rules that read scan results from verisimdb-data repo
-   - Clone/pull verisimdb-data, parse JSON scan results
-   - Transform weak points into Logtalk facts
-   - Example fact: `weak_point(echidna, "src/prover.rs", unsafe_block, high)`
+| Module | Purpose |
+|--------|---------|
+| `pattern_analyzer.ex` | Full pipeline orchestrator: scan -> patterns -> triangle -> dispatch |
+| `verisimdb_connector.ex` | Reads scans, patterns, recipes from verisimdb-data |
+| `pattern_registry.ex` | Deduplicates findings into canonical patterns (PA001-PA020) |
+| `recipe_matcher.ex` | Fuzzy matching: fingerprinted IDs to clean recipe IDs |
+| `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
+| `fleet_dispatcher.ex` | Confidence-gated dispatch to fleet bots |
+| `dispatch_manifest.ex` | Writes JSONL manifests as bridge to bash execution |
+| `outcome_tracker.ex` | Records fix outcomes, updates recipe confidence |
 
-2. **Pattern detection rules**: Logtalk rules that fire on scan data
-   - "3+ repos share same unsafe pattern" → fleet-wide advisory
-   - "Repo X has critical weak points increasing over time" → sustainabot alert
-   - "New weak point type detected" → echidnabot proof request
+### Metrics (as of 2026-02-13)
 
-3. **Fleet dispatch**: Route findings to appropriate bots via GraphQL
-   - Each bot has a GraphQL mutation for receiving findings
-   - Hypatia decides which bot handles which finding type
+- 385 auto_execute fixes dispatched (0 failures)
+- 86.3% weak point reduction: 3260 -> 447
+- 282 outcomes recorded
+- 6 recipes at 0.99 confidence
+- 10 fix recipes total (12 recipe files)
+- 954 canonical patterns across 292 repos
 
-### Hardware Integration (Future)
+### Remaining Work (M4: Production Operations)
 
-hardware-crash-team findings can also flow through hypatia:
-- Zombie device patterns across fleet machines
-- Driver conflict advisories
-- Remediation success/failure tracking
+- GraphQL API for live fleet coordination (currently stub-only)
+- ArangoDB knowledge graph storage
+- Automated re-scanning and trend detection
+- SARIF output for IDE integration
+- PAT required for automated cross-repo dispatch
 
-## Language Policy (Hyperpolymath Standard)
+## Code Style
 
-### ALLOWED Languages & Tools
+- Elixir: `mix format`, SPDX headers on all files
+- Rust: `rustfmt`, `clippy`
+- Logtalk: Follow coding guidelines
+- Shell: `ShellCheck`, POSIX-compatible
+- SPDX-License-Identifier: PMPL-1.0-or-later
 
-| Language/Tool | Use Case | Notes |
-|---------------|----------|-------|
-| **ReScript** | Primary application code | Compiles to JS, type-safe |
-| **Deno** | Runtime & package management | Replaces Node/npm/bun |
-| **Rust** | Performance-critical, systems, WASM | Preferred for CLI tools |
-| **Tauri 2.0+** | Mobile apps (iOS/Android) | Rust backend + web UI |
-| **Dioxus** | Mobile apps (native UI) | Pure Rust, React-like |
-| **Gleam** | Backend services | Runs on BEAM or compiles to JS |
-| **Bash/POSIX Shell** | Scripts, automation | Keep minimal |
-| **JavaScript** | Only where ReScript cannot | MCP protocol glue, Deno APIs |
-| **Nickel** | Configuration language | For complex configs |
-| **Guile Scheme** | State/meta files | STATE.scm, META.scm, ECOSYSTEM.scm |
-| **Julia** | Batch scripts, data processing | Per RSR |
-| **OCaml** | AffineScript compiler | Language-specific |
-| **Ada** | Safety-critical systems | Where required |
-
-### BANNED - Do Not Use
-
-| Banned | Replacement |
-|--------|-------------|
-| TypeScript | ReScript |
-| Node.js | Deno |
-| npm | Deno |
-| Bun | Deno |
-| pnpm/yarn | Deno |
-| Go | Rust |
-| Python | Julia/Rust/ReScript |
-| Java/Kotlin | Rust/Tauri/Dioxus |
-| Swift | Tauri/Dioxus |
-| React Native | Tauri/Dioxus |
-| Flutter/Dart | Tauri/Dioxus |
-
-### Mobile Development
-
-**No exceptions for Kotlin/Swift** - use Rust-first approach:
-
-1. **Tauri 2.0+** - Web UI (ReScript) + Rust backend, MIT/Apache-2.0
-2. **Dioxus** - Pure Rust native UI, MIT/Apache-2.0
-
-Both are FOSS with independent governance (no Big Tech).
-
-### Enforcement Rules
-
-1. **No new TypeScript files** - Convert existing TS to ReScript
-2. **No package.json for runtime deps** - Use deno.json imports
-3. **No node_modules in production** - Deno caches deps automatically
-4. **No Go code** - Use Rust instead
-5. **No Python anywhere** - Use Julia for data/batch, Rust for systems, ReScript for apps
-6. **No Kotlin/Swift for mobile** - Use Tauri 2.0+ or Dioxus
-
-### Package Management
-
-- **Primary**: Guix (guix.scm)
-- **Fallback**: Nix (flake.nix)
-- **JS deps**: Deno (deno.json imports)
-
-### Security Requirements
+## Security Requirements
 
 - No MD5/SHA1 for security (use SHA256+)
 - HTTPS only (no HTTP URLs)
 - No hardcoded secrets
 - SHA-pinned dependencies
 - SPDX license headers on all files
-

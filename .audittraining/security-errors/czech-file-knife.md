@@ -116,7 +116,7 @@ cargo audit -p cfk-providers
 ## ClusterFuzzLite Dockerfile Fix
 
 ```dockerfile
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 
 # Pin base image with SHA256 digest
 FROM gcr.io/oss-fuzz-base/base-builder-rust@sha256:abc123...

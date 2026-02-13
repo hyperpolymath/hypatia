@@ -22,7 +22,7 @@
 
   (current-position
     (phase "operational")
-    (overall-completion 85)
+    (overall-completion 88)
     (components
       (verisimdb-connector "complete" "Reads scan data from verisimdb-data repo")
       (pattern-registry "complete" "Deduplicates findings into canonical patterns")
@@ -32,6 +32,8 @@
       (outcome-tracker "complete" "Records fix results, updates confidence")
       (fleet-dispatcher "complete" "Routes to fleet bots via GraphQL stubs")
       (pattern-analyzer "complete" "Full pipeline: scan → patterns → triangle → dispatch")
+      (elixir-tests "complete" "8 test files covering all pipeline modules")
+      (license-compliance "complete" "All SPDX headers updated to PMPL-1.0-or-later")
       (logtalk-rules "active" "Error catalog with 10+ error types")
       (graphql-api "planned" "Fleet coordination API"))
     (working-features
@@ -99,6 +101,14 @@
       ("Implement SARIF output for IDE integration")))
 
   (session-history
+    (session "2026-02-13"
+      (accomplishments
+        ("Fixed AGPL→PMPL across 32 files (29 SPDX headers + 3 SCM files)")
+        ("Updated CLAUDE.md: removed stale NOT YET IMPLEMENTED, added pipeline status")
+        ("Added .gitignore entries for Elixir (_build/, deps/, erl_crash.dump)")
+        ("Created 4 additional test files (fleet_dispatcher, verisimdb_connector, dispatch_manifest, pattern_analyzer)")
+        ("Full test coverage: 8 test files for 8 pipeline modules")
+        ("Learning loop verified complete: all 6 phases operational")))
     (session "2026-02-12/13"
       (accomplishments
         ("Built safety triangle pipeline end-to-end")
