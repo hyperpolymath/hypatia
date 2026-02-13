@@ -209,11 +209,16 @@ defmodule Hypatia.Neural.Coordinator do
     # Rebuild trust graph from latest data
     updated_graph = GraphOfTrust.build()
 
-    {:noreply, %{state |
+    updated_state = %{state |
       trust_graph: updated_graph,
       cycle_count: state.cycle_count + 1,
       last_cycle: DateTime.utc_now()
-    }}
+    }
+
+    # Persist all neural states (ArangoDB + flat file backup)
+    Hypatia.Neural.Persistence.save_all(updated_state)
+
+    {:noreply, updated_state}
   end
 
   # --- Aggregation ---

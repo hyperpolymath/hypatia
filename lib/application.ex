@@ -5,10 +5,11 @@ defmodule Hypatia.Application do
   @moduledoc """
   OTP Application for Hypatia.
 
-  Starts the supervision tree including:
-  - LearningScheduler: automatic feedback loop (polls every 5 min)
-  - SelfDiagnostics: health monitoring and self-healing
-  - Neural.Coordinator: orchestrates 5 neural network subsystems
+  Starts the supervision tree with layered dependencies:
+  1. Data layer (ArangoDB) — federated store alongside verisimdb-data
+  2. Safety layer — rate limiter, quarantine
+  3. Intelligence layer — learning scheduler, self-diagnostics
+  4. Neural layer — 5 neural networks + coordinator
   """
 
   use Application
@@ -16,11 +17,15 @@ defmodule Hypatia.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Feedback loop: polls outcomes and updates recipe confidence
+      # Layer 1: Data — ArangoDB federated store (graceful degradation if unavailable)
+      Hypatia.Data.ArangoDB,
+      # Layer 2: Safety — rate limiting and bot quarantine
+      Hypatia.Safety.RateLimiter,
+      Hypatia.Safety.Quarantine,
+      # Layer 3: Intelligence — feedback loop and health monitoring
       Hypatia.LearningScheduler,
-      # Self-diagnostics and health monitoring
       Hypatia.SelfDiagnostics,
-      # Neural network coordinator (Graph of Trust, MoE, LSM, ESN, RBF)
+      # Layer 4: Neural — 5 networks orchestrated by coordinator
       Hypatia.Neural.Coordinator
     ]
 
