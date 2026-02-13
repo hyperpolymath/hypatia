@@ -1,93 +1,93 @@
-;; SPDX-License-Identifier: MPL-2.0-or-later
-;; ECOSYSTEM.scm - Ecosystem position for cicd-hyper-a
+;; SPDX-License-Identifier: PMPL-1.0-or-later
+;; ECOSYSTEM.scm - Ecosystem position for hypatia
 ;; Media-Type: application/vnd.ecosystem+scm
 
 (ecosystem
-  (version "1.0")
-  (name "cicd-hyper-a")
+  (version "2.0")
+  (name "hypatia")
   (type "automation-engine")
-  (purpose "Neurosymbolic CI/CD automation with Logtalk rule engine for cross-repo security and quality enforcement")
+  (purpose "Neurosymbolic CI/CD intelligence with safety triangle pipeline for cross-repo security remediation")
 
   (position-in-ecosystem
     (category "devops-automation")
     (subcategory "ci-cd-security")
     (unique-value
-      ("Logtalk-based rule engine for CI/CD")
-      ("Neurosymbolic: neural learning + symbolic execution")
-      ("Cross-repo hook wave propagation")
+      ("Safety triangle: eliminate → substitute → control")
+      ("Fuzzy recipe matching with language inference")
+      ("Confidence-gated auto-execution (>=0.95 threshold)")
+      ("Feedback loop: outcomes update recipe confidence")
       ("Pan-forge support: GitHub, GitLab, Bitbucket, Codeberg")))
 
   (related-projects
-    ;; Core infrastructure
+    ;; Pipeline: data flow
+    (project "panic-attacker"
+      (relationship "data-source")
+      (description "Static analysis scanner producing weak point findings")
+      (integration "panic-attack xray scans repos, hypatia analyzes results"))
+
+    (project "verisimdb-data"
+      (relationship "data-store")
+      (description "Git-backed flat-file store for scans, patterns, recipes, outcomes")
+      (integration "Hypatia reads scans/recipes, writes patterns/outcomes/manifests"))
+
+    (project "gitbot-fleet"
+      (relationship "execution-layer")
+      (description "Bot fleet for repository quality enforcement")
+      (integration "Fleet coordinator executes dispatch manifests via fix scripts"))
+
+    (project "robot-repo-automaton"
+      (relationship "executor")
+      (description "Automated fix execution with confidence thresholds")
+      (integration "Executes auto_execute tier fixes from dispatch manifest"))
+
+    (project "proven"
+      (relationship "safety-library")
+      (description "85+ formally verified safety modules (Idris2 ABI + Zig FFI)")
+      (integration "Substitute-tier recipes suggest proven module replacements"))
+
+    ;; Fleet bots
+    (project "rhodibot"
+      (relationship "fleet-bot")
+      (description "Repository health dashboard and PR creation")
+      (integration "Processes substitute-tier findings, creates review issues"))
+
+    (project "echidnabot"
+      (relationship "fleet-bot")
+      (description "Verification and proof obligation tracking")
+      (integration "Receives proof obligations for substitute-tier fixes"))
+
+    (project "sustainabot"
+      (relationship "fleet-bot")
+      (description "Sustainability and eco-score tracking")
+      (integration "Receives control-tier advisory reports"))
+
+    ;; Infrastructure
     (project "ambientops"
       (relationship "parent")
       (description "Umbrella project for ambient computing operations")
-      (integration "cicd-hyper-a is the CI/CD automation layer of ambientops"))
+      (integration "Hypatia is the CI/CD intelligence layer of ambientops"))
 
-    (project "git-dispatcher"
-      (relationship "coordinator")
-      (description "Central coordination for git operations across forges")
-      (integration "cicd-hyper-a receives dispatched events for CI/CD automation")
-      (update-protocol "When committing, notify git-dispatcher for documentation updates"))
+    (project "echidna"
+      (relationship "verification-engine")
+      (description "Formal verification and proof management")
+      (integration "Validates that substitute fixes preserve behavior"))
 
-    (project "git-hud"
-      (relationship "sibling")
-      (description "Git repository supervision and monitoring")
-      (integration "git-hud monitors repos, cicd-hyper-a automates fixes"))
-
-    (project ".git-private-farm"
-      (relationship "infrastructure")
-      (description "Private git hook and template distribution")
-      (integration "cicd-hyper-a generates hooks, .git-private-farm distributes them"))
-
-    ;; Satellites
-    (project "repo-slm-augmentor"
-      (relationship "component")
-      (description "SLM augmentation for security knowledge")
-      (integration "Provides security_errors.lgt knowledge base"))
-
-    (project "echidnabot"
-      (relationship "satellite")
-      (description "Discord/notification bot")
-      (integration "Reports CI/CD issues from cicd-hyper-a"))
-
-    (project "rhodibot"
-      (relationship "satellite")
-      (description "Repository health dashboard bot")
-      (integration "Displays cicd-hyper-a metrics"))
-
-    ;; Planned satellites (via ambientops)
-    (project "system-freeze-ejector"
-      (relationship "planned-satellite")
-      (description "Off-machine kernel dump for system recovery")
-      (integration "Preserves state during system crashes"))
-
-    (project "system-flare"
-      (relationship "planned-satellite")
-      (description "Rapid system halt with state preservation")
-      (integration "Emergency stop with data safety"))
-
-    ;; External dependencies
+    ;; External
     (project "OpenSSF Scorecard"
       (relationship "external-standard")
       (description "Security scoring for open source")
-      (integration "cicd-hyper-a enforces Scorecard compliance"))
-
-    (project "Virtuoso Open Source"
-      (relationship "planned-database")
-      (description "RDF/SPARQL database for rule storage")
-      (integration "Will store learned rules and error patterns")))
+      (integration "Hypatia enforces Scorecard compliance")))
 
   (what-this-is
-    ("Logtalk rule engine for CI/CD automation")
-    ("Error catalog with severity classification")
-    ("Auto-fix pattern generator")
-    ("Hook wave propagation system")
-    ("Cross-repo security enforcer")
+    ("Safety triangle pipeline: eliminate → substitute → control")
+    ("Recipe-based automated fix system with confidence tracking")
+    ("Cross-repo pattern detection and deduplication")
+    ("Feedback loop: fix outcomes update recipe confidence")
+    ("Fleet coordination layer for bot dispatch")
     ("Neurosymbolic learning system"))
 
   (what-this-is-not
     ("Not a CI/CD platform replacement - works alongside GitHub Actions")
     ("Not a monitoring tool - git-hud handles monitoring")
-    ("Not a secrets manager - uses existing secret stores")
-    ("Not a deployment pipeline - focuses on security/quality")))
+    ("Not a deployment pipeline - focuses on security remediation")
+    ("Not a code scanner - panic-attacker handles scanning")))
