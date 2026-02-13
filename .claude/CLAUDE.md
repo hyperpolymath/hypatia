@@ -169,7 +169,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 - 86.3% weak point reduction: 3260 -> 447
 - 404 outcomes recorded (100% success rate)
 - 6 recipes at 0.99 confidence
-- 15 fix recipes total (298 repos scanned)
+- 22 fix recipes total (298 repos scanned)
 - 954 canonical patterns across 298 repos
 - ESN trained on 2,372 real confidence data points
 - 5 neural networks + coordinator in OTP supervision
@@ -188,9 +188,9 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 **Important (this month):**
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
 - Implement VQL federation executor (currently local-only)
-- Fix RBF training (registry.json path needs investigation — file may use different structure)
+- ~~Fix RBF training (registry.json path needs investigation)~~ DONE — 965 vectors, MSE=0.047
 - Historical trend tracking across scan cycles
-- VQL test files for client.ex, file_executor.ex, query.ex
+- ~~VQL test files for client.ex, file_executor.ex, query.ex~~ DONE — 223 tests
 
 **Planned:**
 - GraphQL API as live HTTP endpoint
@@ -204,7 +204,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
 3. **One-sided training data:** All 3,588 outcomes are "success" — ESN trained but needs failure data for balanced learning
 4. **RBF untrained:** patterns/registry.json path needs investigation
-5. **Recipe coverage 1.6%:** 15 recipes for 954 patterns — 939 patterns have no automated fix
+5. **Recipe coverage 2.3%:** 22 recipes for 954 patterns — 932 patterns have no automated fix
 6. **ArangoDB transitional:** Fills graph gap until verisim-api deployed
 7. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images (no Chainguard equivalents)
 8. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree

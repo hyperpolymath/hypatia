@@ -53,7 +53,7 @@
       (graphql-api "planned" "Fleet coordination API — live HTTP endpoint"))
     (working-features
       ("Safety triangle pipeline: eliminate → substitute → control")
-      ("15 fix recipes (6 at 0.99 confidence, 5 new for PA005/PA012/PA013/PA020)")
+      ("22 fix recipes (6 at 0.99 confidence, covering PA001-PA005/PA010-PA013/PA015/PA017/PA018/PA020)")
       ("Fuzzy recipe matching by PA rule prefix + keyword overlap")
       ("Language inference from description text")
       ("Dispatch manifest generation (JSONL)")
@@ -150,8 +150,8 @@
       ("447 weak points remaining across 175 repos")
       ("4 recipes below auto_execute threshold")
       ("ESN trained but one-sided — all outcomes are success, needs failure data")
-      ("RBF untrained — patterns/registry.json path needs investigation")
-      ("15 recipes for 954 patterns (98.4% without automated fix)")
+      ("RBF trained (965 vectors, MSE=0.047) — one-sided like ESN")
+      ("22 recipes for 954 patterns (97.7% without automated fix)")
       ("184 repos in verisimdb-data have NULL summary fields"))
     (low
       ("Codeberg/Bitbucket mirroring blocked")
@@ -165,8 +165,7 @@
       ("Generate summaries for 184 NULL-summary repos in verisimdb-data"))
     (this-week
       ("Deploy verisim-api server for native VQL store execution")
-      ("Fix RBF training — investigate patterns/registry.json location and structure")
-      ("VQL test files for client.ex, file_executor.ex, query.ex"))
+      ("Develop more recipes for remaining uncovered PA rules (PA006, PA007, PA008, PA009, PA014, PA016, PA019)"))
     (this-month
       ("Implement SARIF output for IDE integration")
       ("Build VQL language bindings (ReScript, Rust, Elixir/NIF)")
