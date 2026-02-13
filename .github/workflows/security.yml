@@ -285,7 +285,7 @@ jobs:
           docker build -t cicd-hyper-a:scan -f deploy/Containerfile .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac # 0.28.0
+        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # 0.28.0
         with:
           image-ref: 'cicd-hyper-a:scan'
           format: 'sarif'
