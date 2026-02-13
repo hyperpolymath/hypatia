@@ -409,8 +409,8 @@ defmodule Hypatia.FleetDispatcher do
     # Attempt HTTP POST — works if :httpc is available (OTP built-in)
     case :httpc.request(
            :post,
-           {String.to_charlist(url), [{'content-type', 'application/json'}],
-            'application/json', String.to_charlist(body)},
+           {String.to_charlist(url), [{~c"content-type", ~c"application/json"}],
+            ~c"application/json", String.to_charlist(body)},
            [{:timeout, 10_000}],
            []
          ) do

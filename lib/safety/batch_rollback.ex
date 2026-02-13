@@ -63,13 +63,12 @@ defmodule Hypatia.Safety.BatchRollback do
       recipe_id = Map.get(outcome, "recipe_id")
       if recipe_id do
         # Revert confidence
-        Hypatia.OutcomeTracker.record_outcome(%{
-          "recipe_id" => recipe_id,
-          "repo" => Map.get(outcome, "repo"),
-          "outcome" => "false_positive",
-          "batch_id" => batch_id,
-          "details" => "Batch rollback: #{reason}"
-        })
+        Hypatia.OutcomeTracker.record_outcome(
+          recipe_id,
+          Map.get(outcome, "repo", "unknown"),
+          Map.get(outcome, "file", ""),
+          :false_positive
+        )
       end
     end)
 

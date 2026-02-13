@@ -159,7 +159,7 @@ defmodule Hypatia.Safety.RateLimiter do
           :ok ->
             # Dispatch via fleet dispatcher
             Logger.info("Rate limiter: draining queued dispatch to #{bot}")
-            Hypatia.FleetDispatcher.dispatch_single(entry)
+            Hypatia.FleetDispatcher.dispatch_finding(entry)
             drain_queued(%{state | queue: remaining_queue})
           {:rate_limited, _, _} ->
             # Still rate limited, put back

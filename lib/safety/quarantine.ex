@@ -30,6 +30,7 @@ defmodule Hypatia.Safety.Quarantine do
   @consecutive_failure_threshold 5
   @fp_rate_threshold 0.3
   @fp_window 20  # Last N outcomes
+  # Minimum trust level for quarantined bots (used in future trust integration)
   @trust_floor 0.2
   @soft_duration_ms 24 * 60 * 60 * 1_000
   @hard_duration_ms 72 * 60 * 60 * 1_000
