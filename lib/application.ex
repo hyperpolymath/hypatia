@@ -8,6 +8,7 @@ defmodule Hypatia.Application do
   Starts the supervision tree including:
   - LearningScheduler: automatic feedback loop (polls every 5 min)
   - SelfDiagnostics: health monitoring and self-healing
+  - Neural.Coordinator: orchestrates 5 neural network subsystems
   """
 
   use Application
@@ -18,7 +19,9 @@ defmodule Hypatia.Application do
       # Feedback loop: polls outcomes and updates recipe confidence
       Hypatia.LearningScheduler,
       # Self-diagnostics and health monitoring
-      Hypatia.SelfDiagnostics
+      Hypatia.SelfDiagnostics,
+      # Neural network coordinator (Graph of Trust, MoE, LSM, ESN, RBF)
+      Hypatia.Neural.Coordinator
     ]
 
     opts = [strategy: :one_for_one, name: Hypatia.Supervisor]
