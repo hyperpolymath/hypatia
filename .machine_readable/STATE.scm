@@ -22,7 +22,7 @@
 
   (current-position
     (phase "operational")
-    (overall-completion 95)
+    (overall-completion 97)
     (components
       (verisimdb-connector "complete" "Reads scan data from verisimdb-data repo")
       (pattern-registry "complete" "Deduplicates findings into canonical patterns")
@@ -44,6 +44,9 @@
       (zig-ffi "complete" "C ABI bridge for all Hypatia API operations")
       (elixir-tests "complete" "8 test files covering all pipeline modules")
       (license-compliance "complete" "All SPDX headers updated to PMPL-1.0-or-later")
+      (vql-client "complete" "Built-in VQL parser + query cache GenServer")
+      (vql-file-executor "complete" "Executes VQL ASTs against verisimdb-data flat files")
+      (vql-query "complete" "20+ high-level query functions for pipeline modules")
       (logtalk-rules "active" "Error catalog with 10+ error types")
       (graphql-api "planned" "Fleet coordination API — live HTTP endpoint"))
     (working-features
@@ -108,24 +111,37 @@
           ("Safety: bot quarantine (auto on 5+ failures or >30% FP rate)")
           ("Safety: batch rollback with confidence revert")
           ("Neural persistence: save/load all 5 network states to ArangoDB + flat file")))
-      (m7 "Production Operations"
+      (m7 "VQL Integration"
+        (status "complete")
+        (items
+          ("VQL Client GenServer: built-in Elixir parser (no Deno/Node needed)")
+          ("VQL FileExecutor: executes ASTs against verisimdb-data flat files")
+          ("VQL Query module: 20+ high-level query functions")
+          ("VerisimdbConnector rewritten: VQL-powered with file I/O fallback")
+          ("Cross-repo analytics: pattern correlations, outcome timelines, category distribution")
+          ("Query caching: 60s TTL, automatic cache eviction")
+          ("WHERE clause engine: FIELD conditions, FULLTEXT search, AND/OR combinators")
+          ("Modality support: DOCUMENT, TEMPORAL, GRAPH, SEMANTIC sorting")
+          ("FEDERATION queries: cross-store pattern matching")
+          ("7 GenServers in OTP supervision: VQL, ArangoDB, RateLimiter, Quarantine, Learning, Diag, Neural")))
+      (m8 "Production Operations"
         (status "planned")
         (items
-          ("VQL integration: replace JSON reads with VQL queries in verisimdb_connector")
-          ("GraphQL API live HTTP endpoint")
-          ("Deploy ArangoDB + Dragonfly in production")
-          ("Automated re-scanning and trend detection")
-          ("SARIF output for IDE integration")
+          ("Deploy verisim-api server (enables native graph/vector/temporal modalities)")
+          ("Deploy ArangoDB + Dragonfly (transitional until verisim-api running)")
+          ("Wire GQL-DT Lean types to VQL PROOF clauses")
           ("Train ESN/RBF on accumulated confidence history")
-          ("GQL-DT Lean type integration with VQL runtime")
-          ("Chapel NIFs for compute-heavy neural operations")))))
+          ("GraphQL API live HTTP endpoint")
+          ("SARIF output for IDE integration")
+          ("Chapel NIFs for compute-heavy neural operations")
+          ("Cross-organization federation with VQL drift policies")))))
 
   (blockers-and-issues
     (critical ())
     (high
       ("PAT required for automated cross-repo dispatch")
-      ("VQL not integrated — Hypatia bypasses VQL entirely, reads JSON directly")
-      ("ArangoDB + Dragonfly need production deployment"))
+      ("verisim-api not deployed — VQL queries execute against flat files, not native stores")
+      ("ArangoDB + Dragonfly need production deployment (transitional until verisim-api)"))
     (medium
       ("447 weak points remaining across 175 repos")
       ("4 recipes below auto_execute threshold")
@@ -143,17 +159,28 @@
       ("Deploy ArangoDB for graph queries + neural state persistence")
       ("Generate summaries for 184 NULL-summary repos in verisimdb-data"))
     (this-week
-      ("Integrate VQL into verisimdb_connector.ex (replace raw JSON with VQL queries)")
+      ("Deploy verisim-api server for native VQL store execution")
       ("Train RBF and ESN on collected confidence history")
       ("Develop 3-5 new recipes for high-frequency substitute patterns"))
     (this-month
-      ("Wire GQL-DT Lean types to VQL runtime")
+      ("Wire GQL-DT Lean types to VQL PROOF clauses")
       ("Implement SARIF output for IDE integration")
       ("Build VQL language bindings (ReScript, Rust, Elixir/NIF)")
-      ("Implement VQL federation executor (currently stub returning empty)")
+      ("Implement multi-store VQL federation (currently local file-backed)")
       ("Historical trend tracking across multiple scan cycles")))
 
   (session-history
+    (session "2026-02-13-15"
+      (accomplishments
+        ("Built VQL Client GenServer with built-in Elixir parser (no Deno/Node dependency)")
+        ("Built VQL FileExecutor: executes VQL ASTs against verisimdb-data flat files")
+        ("Built VQL Query module: 20+ high-level functions (analytics, trending, health)")
+        ("Rewrote VerisimdbConnector: VQL-powered with graceful file I/O fallback")
+        ("Added 7 cross-repo analytics: correlations, timelines, coverage, distribution")
+        ("WHERE clause engine: FIELD conditions, FULLTEXT search, regex MATCHES")
+        ("Query caching with 60s TTL and automatic eviction")
+        ("VQL Client added to OTP supervision tree (7 GenServers total)")
+        ("Updated CLAUDE.md, STATE.scm, ECOSYSTEM.scm with VQL integration status")))
     (session "2026-02-13-14"
       (accomplishments
         ("Implemented LearningScheduler GenServer — closes feedback loop automatically")

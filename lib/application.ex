@@ -6,6 +6,7 @@ defmodule Hypatia.Application do
   OTP Application for Hypatia.
 
   Starts the supervision tree with layered dependencies:
+  0. Query layer (VQL Client) — structured query interface to verisimdb-data
   1. Data layer (ArangoDB) — federated store alongside verisimdb-data
   2. Safety layer — rate limiter, quarantine
   3. Intelligence layer — learning scheduler, self-diagnostics
@@ -17,6 +18,8 @@ defmodule Hypatia.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # Layer 0: Query — VQL client for structured data access
+      Hypatia.VQL.Client,
       # Layer 1: Data — ArangoDB federated store (graceful degradation if unavailable)
       Hypatia.Data.ArangoDB,
       # Layer 2: Safety — rate limiting and bot quarantine

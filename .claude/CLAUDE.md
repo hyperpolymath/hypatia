@@ -15,9 +15,10 @@ Hypatia
 │   ├── Liquid State Machine  # Temporal anomaly detection
 │   ├── Echo State Network    # Confidence trajectory forecasting
 │   └── Radial Neural Network # Finding similarity + novelty detection
+├── VQL query layer            # Built-in parser, file executor, query cache
 ├── Data layer                 # ArangoDB (federated) + verisimdb-data (canonical)
 ├── Safety systems             # Rate limiter, quarantine, batch rollback
-├── OTP Application           # 6 GenServers: ArangoDB, RateLimiter, Quarantine, Learning, Diag, Neural
+├── OTP Application           # 7 GenServers: VQL, ArangoDB, RateLimiter, Quarantine, Learning, Diag, Neural
 ├── Logtalk rule engine       # Error catalog, pattern detection rules
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
 ├── Zig FFI                   # C ABI bridge (7 exported functions)
@@ -81,7 +82,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | Module | Purpose |
 |--------|---------|
 | `pattern_analyzer.ex` | Full pipeline orchestrator: scan -> patterns -> triangle -> dispatch |
-| `verisimdb_connector.ex` | Reads scans, patterns, recipes from verisimdb-data |
+| `verisimdb_connector.ex` | VQL-powered data access with file I/O fallback |
 | `pattern_registry.ex` | Deduplicates findings into canonical patterns (PA001-PA020) |
 | `recipe_matcher.ex` | Fuzzy matching: fingerprinted IDs to clean recipe IDs |
 | `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
@@ -91,6 +92,14 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `learning_scheduler.ex` | GenServer: polls outcomes every 5 min, drives feedback loop |
 | `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
 | `application.ex` | OTP Application supervisor for all GenServers |
+
+### VQL Query Layer (lib/vql/)
+
+| Module | Purpose |
+|--------|---------|
+| `client.ex` | VQL Client GenServer: parser + query cache + execution routing |
+| `file_executor.ex` | Executes VQL ASTs against verisimdb-data flat files |
+| `query.ex` | High-level query functions: fetch_scans, cross_repo_patterns, pipeline_health |
 
 ### Neural Network Modules (lib/neural/)
 
@@ -154,19 +163,20 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 - 5 neural networks + coordinator in OTP supervision
 - 14 document + 9 edge ArangoDB collections defined
 - 3 safety systems: rate limiter, quarantine, batch rollback
+- VQL integrated: built-in parser, file executor, query cache, cross-repo analytics
 
 ### Remaining Work (M7: Production Operations)
 
 **Critical (this week):**
-- Integrate VQL into verisimdb_connector.ex (replace raw JSON reads with VQL queries)
+- ~~Integrate VQL into verisimdb_connector.ex~~ DONE — VQL Client + FileExecutor + Query module
 - Deploy ArangoDB + Dragonfly in production
 - Create PAT with repo scope for automated cross-repo dispatch
 - Generate summaries for 184 NULL-summary repos in verisimdb-data
 
 **Important (this month):**
 - Wire GQL-DT Lean types to VQL runtime (VQL queries verified by dependent types)
-- Build VQL language bindings (ReScript, Rust, Elixir/NIF)
-- Implement VQL federation executor (currently stub returning empty)
+- Deploy verisim-api server (enables native graph modality, replacing ArangoDB for entity graphs)
+- Implement VQL federation executor (currently local file-backed, needs multi-store coordination)
 - Train ESN/RBF on accumulated confidence history
 - Develop 3-5 new recipes for high-frequency substitute patterns
 - Historical trend tracking across multiple scan cycles
@@ -179,11 +189,12 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 
 ### Known Gaps
 
-1. **VQL bypassed:** Hypatia reads JSON directly instead of using VQL multi-modal queries
-2. **GQL-DT isolated:** No consumer application uses GQL-DT dependent types
-3. **VQL federation stubbed:** execute_federation_query() returns {:ok, []}
+1. **GQL-DT isolated:** No consumer application uses GQL-DT dependent types
+2. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
+3. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
 4. **Neural networks untrained:** Need data accumulation before ESN/RBF become useful
 5. **Only 11 recipes:** 943 of 954 patterns (98.8%) have no automated fix
+6. **ArangoDB transitional:** Fills graph gap until verisim-api deployed — then becomes optional for operational intelligence
 
 ## Code Style
 

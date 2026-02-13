@@ -79,20 +79,20 @@
     (project "verisimdb"
       (relationship "query-engine")
       (description "Multi-modal database with VQL query language and hexad storage")
-      (integration "ArangoDB federated alongside verisimdb-data; VQL integration planned for verisimdb_connector")
-      (gap "Hypatia currently bypasses VQL, reading JSON directly — should use VQL for multi-modal queries"))
+      (integration "VQL Client built into Hypatia — built-in parser executes against verisimdb-data files; ready for verisim-api native stores when deployed")
+      (status "VQL integrated — FileExecutor handles DOCUMENT/TEMPORAL/GRAPH modalities against flat files"))
 
     (project "gql-dt"
       (relationship "type-system")
       (description "Lean 4 dependent type system for query verification (production-ready)")
-      (integration "GQL-DT types should validate VQL queries before execution")
-      (gap "Completely isolated — no consumer application uses GQL-DT types"))
+      (integration "VQL PROOF clauses in Hypatia queries ready for GQL-DT validation")
+      (gap "GQL-DT types not yet wired to VQL PROOF clause verification"))
 
     ;; Database
     (project "arangodb"
       (relationship "graph-database")
-      (description "Graph query layer for trust traversal, neural state, confidence history")
-      (integration "Federated alongside verisimdb-data — ArangoDB for graph queries, verisimdb for canonical store"))
+      (description "Transitional graph query layer for trust traversal, neural state, confidence history")
+      (integration "Federated alongside verisimdb-data via VQL; transitional until verisim-api deployed for native graph/temporal stores"))
 
     ;; External
     (project "OpenSSF Scorecard"
