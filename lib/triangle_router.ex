@@ -34,18 +34,24 @@ defmodule Hypatia.TriangleRouter do
   """
   def route(pattern, repo, language) do
     category = Map.get(pattern, "category", "unknown")
-    pattern_id = Map.get(pattern, "id", "unknown")
-    tier = Map.get(pattern, "triangle_tier", "control")
+    description = Map.get(pattern, "description", "")
 
-    case tier do
-      "eliminate" ->
-        try_eliminate(pattern_id, pattern, language)
+    # Infer language from description text (e.g., .sh → shell, .idr → idris2)
+    # when repo-level language doesn't match the finding's actual language
+    effective_language = infer_language(description, language)
 
-      "substitute" ->
-        try_substitute(pattern_id, pattern, category, language)
+    # Always try eliminate first (safety triangle hierarchy),
+    # then substitute, then fall back to control
+    case try_eliminate(pattern, effective_language) do
+      {:eliminate, _, _} = result ->
+        result
 
       _ ->
-        {:control, enrich_pattern(pattern, repo)}
+        case try_substitute(pattern, category, effective_language) do
+          {:substitute, _, _} = result -> result
+          {:eliminate, _, _} = result -> result
+          _ -> {:control, enrich_pattern(pattern, repo)}
+        end
     end
   end
 
@@ -79,15 +85,17 @@ defmodule Hypatia.TriangleRouter do
 
   # --- Private ---
 
-  defp try_eliminate(pattern_id, pattern, language) do
-    case RecipeMatcher.best_recipe(pattern_id, language) do
-      nil ->
-        # No recipe — check if any eliminate recipe exists for this pattern's category
+  defp try_eliminate(pattern, language) do
+    case RecipeMatcher.best_recipe_for_pattern(pattern, language) do
+      %{"triangle_tier" => "eliminate"} = recipe ->
+        {:eliminate, recipe, pattern}
+
+      _ ->
+        # Check if there's a category-level eliminate substitution
         category = Map.get(pattern, "category", "unknown")
 
         case RecipeMatcher.substitution_for_category(category) do
           %{"triangle_tier" => "eliminate"} = sub ->
-            # There's an eliminate substitution but no specific recipe yet
             synthetic_recipe = %{
               "id" => "synthetic-eliminate-#{category}",
               "triangle_tier" => "eliminate",
@@ -100,23 +108,24 @@ defmodule Hypatia.TriangleRouter do
             {:eliminate, synthetic_recipe, pattern}
 
           _ ->
-            # Fall through to substitute or control
-            try_substitute(pattern_id, pattern, Map.get(pattern, "category", "unknown"), language)
+            nil
         end
-
-      recipe ->
-        {:eliminate, recipe, pattern}
     end
   end
 
-  defp try_substitute(pattern_id, pattern, category, language) do
-    # First check if there's a direct recipe
-    case RecipeMatcher.best_recipe(pattern_id, language) do
-      %{"triangle_tier" => "substitute"} = recipe ->
-        {:substitute, recipe, pattern}
+  defp try_substitute(pattern, category, language) do
+    # Try fuzzy recipe match (any tier — if it's eliminate, promote it)
+    case RecipeMatcher.best_recipe_for_pattern(pattern, language) do
+      %{} = recipe ->
+        tier = Map.get(recipe, "triangle_tier", "substitute")
 
-      _ ->
-        # Check proven-substitutions for this category
+        case tier do
+          "eliminate" -> {:eliminate, recipe, pattern}
+          _ -> {:substitute, recipe, pattern}
+        end
+
+      nil ->
+        # Fall back to proven-substitutions for this category
         case RecipeMatcher.substitution_for_category(category) do
           %{"proven_modules" => modules} = sub when is_list(modules) and modules != [] ->
             recipe = %{
@@ -133,8 +142,25 @@ defmodule Hypatia.TriangleRouter do
             {:substitute, recipe, pattern}
 
           _ ->
-            {:control, enrich_pattern(pattern, nil)}
+            nil
         end
+    end
+  end
+
+  defp infer_language(description, repo_language) do
+    desc_lower = String.downcase(description)
+
+    cond do
+      String.contains?(desc_lower, ".sh") -> "shell"
+      String.contains?(desc_lower, ".bash") -> "shell"
+      String.contains?(desc_lower, "shell script") -> "shell"
+      String.contains?(desc_lower, ".idr") -> "idris2"
+      String.contains?(desc_lower, "idris") -> "idris2"
+      String.contains?(desc_lower, "believe_me") -> "idris2"
+      String.contains?(desc_lower, "believe-me") -> "idris2"
+      String.contains?(desc_lower, ".yml") -> "shell"
+      String.contains?(desc_lower, ".yaml") -> "shell"
+      true -> repo_language
     end
   end
 

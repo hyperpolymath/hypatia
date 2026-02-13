@@ -113,7 +113,68 @@ defmodule Hypatia.RecipeMatcher do
     |> Enum.find(fn s -> Map.get(s, "category") == category end)
   end
 
+  @doc """
+  Find the best recipe for a pattern map (with fuzzy matching).
+
+  First tries exact pattern_id match. If that fails, falls back to
+  fuzzy matching by PA rule prefix + description keyword overlap.
+  This bridges fingerprinted registry IDs (e.g., PA009-potentially-unquoted-varia)
+  to clean recipe IDs (e.g., PA009-shell-unquoted-var).
+  """
+  def best_recipe_for_pattern(pattern, language) when is_map(pattern) do
+    pattern_id = Map.get(pattern, "id", "")
+
+    case best_recipe(pattern_id, language) do
+      nil -> fuzzy_match_recipe(pattern, language)
+      recipe -> recipe
+    end
+  end
+
   # --- Private ---
+
+  defp fuzzy_match_recipe(pattern, language) do
+    pa_rule = Map.get(pattern, "pa_rule", "")
+    description = Map.get(pattern, "description", "") |> String.downcase()
+
+    # Skip if no PA rule to match against
+    if pa_rule == "" do
+      nil
+    else
+      all_recipes()
+      |> Enum.filter(fn recipe ->
+        langs = Map.get(recipe, "languages", [])
+        lang_ok = "*" in langs or language in langs
+
+        recipe_pattern_ids = Map.get(recipe, "pattern_ids", [])
+
+        pa_match =
+          Enum.any?(recipe_pattern_ids, fn rpid ->
+            String.starts_with?(rpid, pa_rule <> "-")
+          end)
+
+        if lang_ok and pa_match do
+          # Check keyword overlap between recipe pattern_ids and finding description
+          recipe_keywords =
+            recipe_pattern_ids
+            |> Enum.flat_map(fn rpid ->
+              rpid |> String.replace(~r/^PA\d+-/, "") |> String.split("-")
+            end)
+            |> Enum.reject(&(&1 == ""))
+
+          keyword_hit_count =
+            Enum.count(recipe_keywords, fn kw ->
+              String.contains?(description, kw)
+            end)
+
+          keyword_hit_count > 0
+        else
+          false
+        end
+      end)
+      |> Enum.sort_by(fn r -> Map.get(r, "confidence", 0) end, :desc)
+      |> List.first()
+    end
+  end
 
   defp load_recipe(path) do
     with {:ok, content} <- File.read(path),

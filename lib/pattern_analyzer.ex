@@ -8,15 +8,17 @@ defmodule Hypatia.PatternAnalyzer do
   Pipeline:
   1. Fetch scans from verisimdb-data
   2. Sync pattern registry (deduplicate findings into canonical patterns)
-  3. For each pattern, find best recipe via triangle router
+  3. For each pattern+repo, route through safety triangle
   4. Dispatch routed actions to fleet bots
-  5. Return summary
+  5. Write dispatch manifest (JSONL for execution layer)
+  6. Return summary
   """
 
   alias Hypatia.VerisimdbConnector
   alias Hypatia.PatternRegistry
   alias Hypatia.TriangleRouter
   alias Hypatia.FleetDispatcher
+  alias Hypatia.DispatchManifest
 
   require Logger
 
@@ -35,22 +37,32 @@ defmodule Hypatia.PatternAnalyzer do
     # Step 2: Build repo→language map from scans
     repo_languages = build_language_map(scans)
 
-    # Step 3: Route each pattern through the safety triangle
+    # Step 3: Route each pattern+repo through the safety triangle.
+    # Tag each pattern with its routed_repo so manifest entries are 1:1.
     routed =
       Enum.flat_map(patterns, fn pattern ->
         repos = Map.get(pattern, "repos_affected_list", [])
 
         Enum.map(repos, fn repo ->
           language = Map.get(repo_languages, repo, "unknown")
-          TriangleRouter.route(pattern, repo, language)
+          tagged_pattern = Map.put(pattern, "routed_repo", repo)
+          TriangleRouter.route(tagged_pattern, repo, language)
         end)
       end)
 
     # Step 4: Dispatch routed actions to fleet
     Enum.each(routed, &FleetDispatcher.dispatch_routed_action/1)
 
-    # Step 5: Generate and return summary
-    summary = generate_summary(routed, scans)
+    # Step 5: Write dispatch manifest (JSONL — executable by dispatch-runner.sh)
+    {:ok, manifest_path, manifest_stats} = DispatchManifest.write(routed)
+
+    Logger.info(
+      "Manifest: #{manifest_stats.auto_execute} auto, #{manifest_stats.review} review, " <>
+        "#{manifest_stats.report_only} report → #{manifest_path}"
+    )
+
+    # Step 6: Generate and return summary
+    summary = generate_summary(routed, scans) |> Map.put(:manifest_path, manifest_path)
     Logger.info("Pipeline complete: #{summary.total_actions} actions dispatched")
 
     {:ok, summary}
