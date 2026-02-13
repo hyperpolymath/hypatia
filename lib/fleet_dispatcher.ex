@@ -355,9 +355,74 @@ defmodule Hypatia.FleetDispatcher do
   # ====================================================================
 
   defp execute_graphql(query, bot_name) do
-    # TODO: Actual GraphQL client call — requires fleet API deployment
-    Logger.info("Would dispatch to #{bot_name}: #{String.slice(query, 0, 100)}...")
-    {:ok, :logged}
+    # Dual dispatch: file-based (immediate) + HTTP (when fleet API available)
+    dispatch_record = %{
+      "bot" => bot_name,
+      "query" => query,
+      "dispatched_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "status" => "pending"
+    }
+
+    # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
+    manifest_path = Path.join([
+      Path.expand("~/Documents/hyperpolymath-repos/verisimdb-data"),
+      "dispatch",
+      "pending.jsonl"
+    ])
+
+    case Jason.encode(dispatch_record) do
+      {:ok, json} ->
+        File.mkdir_p!(Path.dirname(manifest_path))
+        File.write(manifest_path, json <> "\n", [:append, :utf8])
+
+      {:error, reason} ->
+        Logger.error("Failed to write dispatch manifest: #{inspect(reason)}")
+    end
+
+    # 2. Attempt HTTP dispatch to fleet API (graceful degradation if unavailable)
+    fleet_url = System.get_env("HYPATIA_FLEET_URL")
+
+    if fleet_url do
+      try do
+        # Use Finch if available, otherwise fall back to file-only dispatch
+        case http_post(fleet_url <> "/dispatch/#{bot_name}", query) do
+          {:ok, _response} ->
+            Logger.info("Live dispatch to #{bot_name} succeeded")
+            {:ok, :dispatched}
+
+          {:error, reason} ->
+            Logger.warning("Live dispatch to #{bot_name} failed (#{inspect(reason)}), file dispatch used")
+            {:ok, :file_dispatched}
+        end
+      rescue
+        e ->
+          Logger.warning("HTTP dispatch error: #{inspect(e)}, file dispatch used")
+          {:ok, :file_dispatched}
+      end
+    else
+      Logger.info("Dispatched to #{bot_name} via manifest (no fleet URL configured)")
+      {:ok, :file_dispatched}
+    end
+  end
+
+  defp http_post(url, body) do
+    # Attempt HTTP POST — works if :httpc is available (OTP built-in)
+    case :httpc.request(
+           :post,
+           {String.to_charlist(url), [{'content-type', 'application/json'}],
+            'application/json', String.to_charlist(body)},
+           [{:timeout, 10_000}],
+           []
+         ) do
+      {:ok, {{_, status, _}, _, _response_body}} when status in 200..299 ->
+        {:ok, status}
+
+      {:ok, {{_, status, _}, _, _}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp escape_quotes(str) when is_binary(str) do
