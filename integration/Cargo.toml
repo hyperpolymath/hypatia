@@ -55,7 +55,7 @@ wiremock = "0.6"
 tempfile = "3.9"
 
 # Git operations for testing hooks
-git2 = "0.19"
+git2 = "0.20"
 
 # Command execution for testing hooks
 subprocess = "0.2"
