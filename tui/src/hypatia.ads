@@ -1,4 +1,4 @@
---  SPDX-License-Identifier: PLMP-1.0-or-later
+--  SPDX-License-Identifier: PMPL-1.0-or-later
 -------------------------------------------------------------------------------
 --  Hypatia - Root package for cicd-hyper-a Text User Interface
 --

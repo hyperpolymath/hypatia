@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Git Hooks Configuration
 #
 # This file controls the behavior of cicd-hyper-a git hooks.
@@ -130,7 +130,7 @@ hooks:
     spdx:
       enabled: true
       # Default license for new files
-      default_license: "PLMP-1.0-or-later"
+      default_license: "PMPL-1.0-or-later"
       # Warn only (don't fail)
       warn_only: true
 

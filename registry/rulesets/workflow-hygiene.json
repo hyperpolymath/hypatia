@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/ruleset.schema.json",
-  "_comment": "SPDX-License-Identifier: PLMP-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
   "name": "workflow-hygiene",
   "version": "1.0.0",
   "description": "GitHub Actions workflow hygiene rules. Enforces SPDX headers, permissions, SHA-pinning, and trigger limits.",
@@ -36,7 +36,7 @@
       "action": {
         "type": "alert",
         "severity": "medium",
-        "message": "Workflow file missing SPDX header. Add '# SPDX-License-Identifier: PLMP-1.0-or-later' as the first line."
+        "message": "Workflow file missing SPDX header. Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as the first line."
       },
       "autoFixable": true,
       "confidence": 0.95,

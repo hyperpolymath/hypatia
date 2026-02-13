@@ -86,7 +86,7 @@ defmodule Hypatia.Neural.EchoStateNetwork do
 
   @doc "Train ESN on a time series (list of floats)"
   def train(%__MODULE__{} = esn, time_series) when length(time_series) > @washout + 10 do
-    size = length(esn.state)
+    _size = length(esn.state)
 
     # Collect reservoir states for all time steps
     {states, _final_esn} = Enum.reduce(time_series, {[], esn}, fn value, {states_acc, current_esn} ->

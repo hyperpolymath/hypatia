@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: PLMP-1.0-or-later
+%% SPDX-License-Identifier: PMPL-1.0-or-later
 %% cicd-hyper-a Rule Engine
 %% Learned rules from 228 repos, 1922 alerts across hyperpolymath org
 
@@ -314,7 +314,7 @@
     %% ============================================================
 
     %% Required license for hyperpolymath org
-    required_spdx_license('PLMP-1.0-or-later').
+    required_spdx_license('PMPL-1.0-or-later').
 
     %% Common wrong licenses found in repos
     wrong_spdx_license('MPL-2.0').
@@ -329,7 +329,7 @@
 
     %% Auto-fix suggestion for license headers
     is_auto_fixable('wrong-spdx-license').
-    suggest_fix('wrong-spdx-license', 'Change SPDX-License-Identifier to PLMP-1.0-or-later').
+    suggest_fix('wrong-spdx-license', 'Change SPDX-License-Identifier to PMPL-1.0-or-later').
     classify_severity('wrong-spdx-license', high).
 
     %% Auto-fix license header

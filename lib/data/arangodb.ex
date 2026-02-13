@@ -356,7 +356,7 @@ defmodule Hypatia.Data.ArangoDB do
   end
 
   defp do_upsert(state, collection, key, document) do
-    db_url = "#{state.base_url}/_db/#{state.database}"
+    _db_url = "#{state.base_url}/_db/#{state.database}"
     doc = Map.put(document, "_key", key)
     aql = """
     UPSERT {_key: @key}

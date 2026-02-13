@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+
+= Known Issues and Honest Gaps
+Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+:revdate: 2026-02-13
+:toc: left
+:toclevels: 2
+:icons: font
+
+== Overview
+
+This document is an honest accounting of known issues, incomplete
+implementations, and gaps in the Hypatia codebase as of 2026-02-13. Items are
+numbered for easy reference in issue trackers and session logs.
+
+== Issues
+
+[start=1]
+. **Zig FFI: 6 of 7 functions are stubs.** +
+Only `hypatia_dispatch_strategy` is implemented in `ffi/zig/src/main.zig`.
+The remaining 6 exported functions are stub declarations that return default
+values or do nothing. Real implementations are needed for scan ingestion,
+pattern matching, recipe execution, trust propagation, confidence calculation,
+and anomaly detection FFI entry points.
+
+. **Idris2 ABI: No build system.** +
+The Idris2 type definitions in `src/abi/` exist but there is no `.ipkg` file
+or `pack.toml` configuration. The types are defined but cannot be compiled
+or verified by the Idris2 toolchain. A build configuration must be added
+before the ABI definitions can be machine-checked.
+
+. **Logtalk: `deteriorating/1` predicate is a stub.** +
+The `deteriorating/1` predicate in the Logtalk knowledge base unconditionally
+calls `fail`. Pattern deterioration (declining confidence over time, increasing
+false positives) is therefore not detected. This predicate needs a real
+implementation that queries confidence history from the temporal data layer.
+
+. **Containerfiles: Non-Chainguard base images.** +
+The Engine Containerfile (SWI-Prolog) and Registry Containerfile (Haskell)
+use non-Chainguard base images. These are documented exceptions because
+Chainguard does not publish `swipl` or `ghc` images. When Chainguard
+equivalents become available, these should be migrated. All other
+Containerfiles use `cgr.dev/chainguard/` images as required.
+
+. **VQL: No test files yet.** +
+The VQL subsystem (`lib/vql/client.ex`, `lib/vql/file_executor.ex`,
+`lib/vql/query.ex`) has no corresponding test files in `test/`. Unit tests
+and integration tests for the VQL layer are being added.
+
+. **Neural networks: All 5 are untrained.** +
+The five neural network modules -- GraphOfTrust (`lib/neural/graph_of_trust.ex`),
+MixtureOfExperts (`lib/neural/mixture_of_experts.ex`), Liquid State Machine
+(`lib/neural/liquid_state_machine.ex`), Echo State Network
+(`lib/neural/echo_state_network.ex`), and Radial Basis Function network
+(`lib/neural/radial_neural_network.ex`) -- are implemented but contain
+only initialized (random/zero) weights. They require real scan data
+accumulation and a training pipeline before they produce meaningful outputs.
+
+. **Recipe coverage: 11 recipes for 954 patterns (98.8% uncovered).** +
+The recipe registry contains only 11 fix recipes, leaving 943 of 954 known
+patterns without automated remediation. Recipe authoring is a significant
+ongoing effort. The `recipe_coverage/0` analytics function in `lib/vql/query.ex`
+reports current coverage.
+
+. **GQL-DT: No consumer application.** +
+The GQL with dependent types (GQL-DT) definitions exist but no downstream
+application in the Hypatia pipeline consumes them. The type definitions are
+validated in isolation but not integrated into any query execution path.
+
+. **VQL federation: Local file-backed only.** +
+The FileExecutor handles `FEDERATION` queries against the local `verisimdb-data`
+clone, not against multiple remote stores. True multi-store federation (querying
+across verisim-api instances, remote verisimdb-data clones, or heterogeneous
+backends) is not implemented. All federation queries resolve locally.
+
+. **ArangoDB transitional.** +
+ArangoDB currently fills the graph query gap that flat files cannot address
+(trust propagation, confidence history, anomaly graphs). It is a transitional
+dependency that will be replaced when `verisim-api` deploys with its graph,
+temporal, and vector modalities. See `docs/migration-arangodb-to-verisimdb.adoc`
+for the full migration plan.
+
+. **Ada TUI: Compiles but not functionally integrated.** +
+The Ada terminal user interface compiles successfully but is not wired into
+the Hypatia pipeline. It cannot currently display live scan results, trigger
+dispatches, or interact with the VQL layer. Integration requires an IPC
+mechanism (likely Unix domain sockets or stdin/stdout JSON protocol) between
+the Ada binary and the Elixir supervision tree.
+
+. **verisim-api not deployed.** +
+The `verisim-api` service (built from `verisimdb/rust-core`) is not deployed
+to any environment. As a result, the HNSW vector indexing, native graph
+traversal, and temporal windowing modalities are unavailable in production.
+Hypatia operates entirely on flat-file reads (FileExecutor) and ArangoDB.
+See `docs/migration-arangodb-to-verisimdb.adoc` for deployment plans.
+
+. **PAT needed for cross-repo dispatch.** +
+The default `GITHUB_TOKEN` provided by GitHub Actions cannot trigger
+`repository_dispatch` events on other repositories. Hypatia's fleet dispatch
+(sending fix instructions to gitbot-fleet bots) requires a Personal Access
+Token (PAT) with `repo` scope, stored as a `VERISIMDB_PAT` secret. Without
+this PAT, the automated pipeline from scan to dispatch to bot action is
+broken. Manual ingestion via helper scripts (`verisimdb-data/scripts/ingest-scan.sh`)
+works as a workaround.

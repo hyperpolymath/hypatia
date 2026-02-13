@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # hypatia Docker Compose - Production Overrides
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
@@ -195,7 +195,7 @@ services:
   api:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
+      dockerfile: deploy/Containerfile
     container_name: hypatia-api
     deploy:
       resources:

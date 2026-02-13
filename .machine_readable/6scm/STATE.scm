@@ -182,7 +182,7 @@
                          "CLI now fully automation-ready for CI/CD pipelines")))
      ((date . "2026-01-18")
       (session . "late-evening")
-      (accomplishments . ("Updated all 672+ files to PLMP-1.0-or-later license"
+      (accomplishments . ("Updated all 672+ files to PMPL-1.0-or-later license"
                          "Copied full LICENSE file from palimpsest-license repo"
                          "Updated README.adoc with palimpsest-license badge"
                          "Created Idris 2 integration module: verify/src/PipelineState.idr (type-safe state machine)"

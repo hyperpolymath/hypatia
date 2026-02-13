@@ -83,7 +83,7 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   end
 
   @doc "Get prediction from current reservoir state"
-  def predict(%__MODULE__{state: state, readout_weights: weights, trained: false}) do
+  def predict(%__MODULE__{state: state, readout_weights: _weights, trained: false}) do
     # Untrained: return reservoir activation as anomaly score
     activation = dot_product(state, List.duplicate(1.0 / length(state), length(state)))
     {sigmoid(activation), :untrained}

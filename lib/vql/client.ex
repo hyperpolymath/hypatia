@@ -173,6 +173,12 @@ defmodule Hypatia.VQL.Client do
     tokenize_chars(rest, [], tokens, false)
   end
 
+  defp tokenize_chars(["," | rest], current, tokens, false) do
+    token = IO.iodata_to_binary(Enum.reverse(current))
+    tokens = if token == "", do: tokens, else: [token | tokens]
+    tokenize_chars(rest, [], tokens, false)
+  end
+
   defp tokenize_chars([char | rest], current, tokens, in_quotes) do
     tokenize_chars(rest, [char | current], tokens, in_quotes)
   end
