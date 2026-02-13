@@ -82,12 +82,6 @@
       (integration "VQL Client built into Hypatia — built-in parser executes against verisimdb-data files; ready for verisim-api native stores when deployed")
       (status "VQL integrated — FileExecutor handles DOCUMENT/TEMPORAL/GRAPH modalities against flat files"))
 
-    (project "gql-dt"
-      (relationship "type-system")
-      (description "Lean 4 dependent type system for query verification (production-ready)")
-      (integration "VQL PROOF clauses in Hypatia queries ready for GQL-DT validation")
-      (gap "GQL-DT types not yet wired to VQL PROOF clause verification"))
-
     ;; Database
     (project "arangodb"
       (relationship "graph-database")
