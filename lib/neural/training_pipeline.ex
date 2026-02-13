@@ -158,12 +158,25 @@ defmodule Hypatia.Neural.TrainingPipeline do
       case File.read(registry_path) do
         {:ok, content} ->
           case Jason.decode(content) do
-            {:ok, data} when is_list(data) -> data
-            {:ok, %{"patterns" => patterns}} when is_list(patterns) -> patterns
-            _ -> []
+            # Direct array of pattern objects
+            {:ok, data} when is_list(data) ->
+              data
+
+            # Object with "patterns" key containing an array
+            {:ok, %{"patterns" => patterns}} when is_list(patterns) ->
+              patterns
+
+            # Object with "patterns" key containing a map keyed by pattern ID
+            # (canonical verisimdb-data format: {"patterns": {"PA005-...": {...}, ...}})
+            {:ok, %{"patterns" => patterns}} when is_map(patterns) ->
+              Map.values(patterns)
+
+            _ ->
+              []
           end
 
-        _ ->
+        {:error, reason} ->
+          Logger.warning("TrainingPipeline: cannot read #{registry_path}: #{inspect(reason)}")
           []
       end
 
@@ -236,19 +249,59 @@ defmodule Hypatia.Neural.TrainingPipeline do
 
   # Convert a pattern registry entry into the finding map format expected
   # by RadialNeuralNetwork.finding_to_vector/1 (8 string-keyed fields).
+  #
+  # The canonical verisimdb-data registry format uses these fields:
+  #   severity (title-case), category, occurrences, repos_affected,
+  #   first_seen, last_seen, triangle_tier, pa_rule, recipe_id, trend
+  #
+  # We map these to the 8-D feature vector fields, using sensible
+  # defaults where the registry does not carry a direct equivalent.
   defp pattern_to_finding(pattern) do
     %{
-      "severity" => Map.get(pattern, "severity", "medium"),
+      "severity" => pattern |> Map.get("severity", "medium") |> String.downcase(),
       "confidence" => Map.get(pattern, "confidence", 0.5),
       "complexity" => Map.get(pattern, "complexity", 0.5),
       "frequency" =>
-        Map.get(pattern, "frequency", Map.get(pattern, "count", 1)) |> normalize_frequency(),
+        Map.get(pattern, "frequency", Map.get(pattern, "occurrences", Map.get(pattern, "count", 1)))
+        |> normalize_frequency(),
       "fix_rate" => Map.get(pattern, "fix_rate", 0.5),
       "category" => Map.get(pattern, "category", ""),
-      "age_days" => Map.get(pattern, "age_days", 30),
+      "age_days" => Map.get(pattern, "age_days", compute_age_days(pattern)),
       "affected_files" =>
-        Map.get(pattern, "affected_files", Map.get(pattern, "affected_repos", 1))
+        Map.get(
+          pattern,
+          "affected_files",
+          Map.get(pattern, "repos_affected", Map.get(pattern, "affected_repos", 1))
+        )
     }
+  end
+
+  # Compute age in days from the "first_seen" ISO-8601 timestamp.
+  # Returns a default of 30 days if the field is missing or unparseable.
+  defp compute_age_days(pattern) do
+    case Map.get(pattern, "first_seen") do
+      nil ->
+        30
+
+      timestamp when is_binary(timestamp) ->
+        case DateTime.from_iso8601(timestamp) do
+          {:ok, dt, _offset} ->
+            DateTime.diff(DateTime.utc_now(), dt, :day)
+
+          _ ->
+            # Try NaiveDateTime for timestamps without timezone
+            case NaiveDateTime.from_iso8601(timestamp) do
+              {:ok, ndt} ->
+                NaiveDateTime.diff(NaiveDateTime.utc_now(), ndt, :day)
+
+              _ ->
+                30
+            end
+        end
+
+      _ ->
+        30
+    end
   end
 
   # Normalize frequency values: if > 1.0 treat as raw count and scale to 0-1 range.

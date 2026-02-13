@@ -260,11 +260,20 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
 
   defp sigmoid(x), do: 1.0 / (1.0 + :math.exp(-max(min(x, 500), -500)))
 
-  defp severity_score("critical"), do: 1.0
-  defp severity_score("high"), do: 0.8
-  defp severity_score("medium"), do: 0.5
-  defp severity_score("low"), do: 0.3
-  defp severity_score("info"), do: 0.1
+  # Match severity strings case-insensitively.
+  # The verisimdb-data registry uses title-case ("Medium", "High") while
+  # other callers may use lowercase.
+  defp severity_score(sev) when is_binary(sev) do
+    case String.downcase(sev) do
+      "critical" -> 1.0
+      "high" -> 0.8
+      "medium" -> 0.5
+      "low" -> 0.3
+      "info" -> 0.1
+      _ -> 0.5
+    end
+  end
+
   defp severity_score(_), do: 0.5
 
   defp category_score(cat) do
