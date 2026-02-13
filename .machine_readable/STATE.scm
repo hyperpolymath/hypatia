@@ -96,38 +96,62 @@
           ("Dependent type proofs: all ops return ApiResponse-wrapped types")
           ("Zig C ABI bridge: 7 exported functions")
           ("OTP Application with LearningScheduler + SelfDiagnostics + Neural.Coordinator")))
-      (m6 "Production Operations"
+      (m6 "Federated Data Layer"
+        (status "complete")
+        (items
+          ("Elixir ArangoDB client with auto-sync from verisimdb-data every 10 min")
+          ("14 document + 9 edge collections in extended E-R model")
+          ("New entities: ConfidenceHistory, Contributor, Anomaly, DispatchBatch, NeuralState")
+          ("Named graph hypatia_graph for trust traversal and dependency analysis")
+          ("Graceful degradation: flat files when ArangoDB unavailable")
+          ("Safety: rate limiter (50/min/bot, 200/min global, 10/5s burst)")
+          ("Safety: bot quarantine (auto on 5+ failures or >30% FP rate)")
+          ("Safety: batch rollback with confidence revert")
+          ("Neural persistence: save/load all 5 network states to ArangoDB + flat file")))
+      (m7 "Production Operations"
         (status "planned")
         (items
+          ("VQL integration: replace JSON reads with VQL queries in verisimdb_connector")
           ("GraphQL API live HTTP endpoint")
-          ("ArangoDB knowledge graph storage")
+          ("Deploy ArangoDB + Dragonfly in production")
           ("Automated re-scanning and trend detection")
-          ("SARIF output for IDE integration")))))
+          ("SARIF output for IDE integration")
+          ("Train ESN/RBF on accumulated confidence history")
+          ("GQL-DT Lean type integration with VQL runtime")
+          ("Chapel NIFs for compute-heavy neural operations")))))
 
   (blockers-and-issues
     (critical ())
     (high
       ("PAT required for automated cross-repo dispatch")
-      ("GraphQL API needs live HTTP endpoint (currently file-based dispatch)"))
+      ("VQL not integrated — Hypatia bypasses VQL entirely, reads JSON directly")
+      ("ArangoDB + Dragonfly need production deployment"))
     (medium
       ("447 weak points remaining across 175 repos")
       ("4 recipes below auto_execute threshold")
-      ("Neural networks need training data accumulation"))
+      ("Neural networks need training data accumulation")
+      ("Only 11 recipes for 954 patterns (98.8% without automated fix)")
+      ("184 repos in verisimdb-data have NULL summary fields"))
     (low
       ("Codeberg/Bitbucket mirroring blocked")
-      ("ArangoDB not yet deployed")))
+      ("3 orphaned pattern IDs (954 in registry vs 951 in index)")
+      ("GQL-DT isolated — no consumer uses it")))
 
   (critical-next-actions
     (immediate
       ("Create PAT with repo scope for automated dispatch")
-      ("Accumulate outcome data for neural network training"))
+      ("Deploy ArangoDB for graph queries + neural state persistence")
+      ("Generate summaries for 184 NULL-summary repos in verisimdb-data"))
     (this-week
-      ("Wire GraphQL API as live HTTP endpoint")
-      ("Train RBF and ESN on collected outcome history"))
+      ("Integrate VQL into verisimdb_connector.ex (replace raw JSON with VQL queries)")
+      ("Train RBF and ESN on collected confidence history")
+      ("Develop 3-5 new recipes for high-frequency substitute patterns"))
     (this-month
-      ("Deploy ArangoDB knowledge graph")
+      ("Wire GQL-DT Lean types to VQL runtime")
       ("Implement SARIF output for IDE integration")
-      ("Add Chapel NIFs for compute-heavy neural operations")))
+      ("Build VQL language bindings (ReScript, Rust, Elixir/NIF)")
+      ("Implement VQL federation executor (currently stub returning empty)")
+      ("Historical trend tracking across multiple scan cycles")))
 
   (session-history
     (session "2026-02-13-14"

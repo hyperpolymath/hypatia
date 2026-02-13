@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with Logtalk rules for pattern detection and ArangoDB planned for knowledge graph storage.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, ArangoDB for graph queries alongside verisimdb-data (git-backed canonical store), and Logtalk rules for pattern detection.
 
 ## Architecture
 
@@ -15,7 +15,9 @@ Hypatia
 │   ├── Liquid State Machine  # Temporal anomaly detection
 │   ├── Echo State Network    # Confidence trajectory forecasting
 │   └── Radial Neural Network # Finding similarity + novelty detection
-├── OTP Application           # Supervised: LearningScheduler, SelfDiagnostics, Neural.Coordinator
+├── Data layer                 # ArangoDB (federated) + verisimdb-data (canonical)
+├── Safety systems             # Rate limiter, quarantine, batch rollback
+├── OTP Application           # 6 GenServers: ArangoDB, RateLimiter, Quarantine, Learning, Diag, Neural
 ├── Logtalk rule engine       # Error catalog, pattern detection rules
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
 ├── Zig FFI                   # C ABI bridge (7 exported functions)
@@ -122,24 +124,66 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `hypatia_get_confidence` | Get recipe confidence |
 | `hypatia_dispatch_strategy` | Map confidence to dispatch strategy |
 
+### Data Layer (lib/data/)
+
+| Module | Purpose |
+|--------|---------|
+| `arangodb.ex` | Elixir ArangoDB client, auto-sync from verisimdb-data every 10 min |
+| `models.ex` | 12 document models + 3 edge models for extended E-R schema |
+
+**Federated architecture:** verisimdb-data (git) is canonical; ArangoDB provides graph queries, trust traversal, neural state, confidence history. Auto-sync keeps them in harmony.
+
+**Collections:** repos, findings, patterns, bots, recipes, outcomes, contributors, confidence_history, anomalies, dispatch_batches, neural_states, sessions, rulesets, learning_data + 9 edge collections.
+
+### Safety Systems (lib/safety/)
+
+| Module | Purpose |
+|--------|---------|
+| `rate_limiter.ex` | Per-bot (50/min), global (200/min), burst (10/5s) dispatch limits |
+| `quarantine.ex` | Auto-quarantine on 5+ failures or >30% FP rate; 3 levels (soft/hard/permanent) |
+| `batch_rollback.ex` | Rollback entire dispatch batches with confidence revert |
+
 ### Metrics (as of 2026-02-13)
 
 - 385 auto_execute fixes dispatched (0 failures)
 - 86.3% weak point reduction: 3260 -> 447
-- 282 outcomes recorded
+- 404 outcomes recorded (100% success rate)
 - 6 recipes at 0.99 confidence
-- 10 fix recipes total (12 recipe files)
-- 954 canonical patterns across 292 repos
+- 11 fix recipes total (298 repos scanned)
+- 954 canonical patterns across 298 repos
+- 5 neural networks + coordinator in OTP supervision
+- 14 document + 9 edge ArangoDB collections defined
+- 3 safety systems: rate limiter, quarantine, batch rollback
 
-### Remaining Work (M6: Production Operations)
+### Remaining Work (M7: Production Operations)
 
-- GraphQL API as live HTTP endpoint (currently file-based dispatch)
-- ArangoDB knowledge graph storage
-- Automated re-scanning and trend detection
+**Critical (this week):**
+- Integrate VQL into verisimdb_connector.ex (replace raw JSON reads with VQL queries)
+- Deploy ArangoDB + Dragonfly in production
+- Create PAT with repo scope for automated cross-repo dispatch
+- Generate summaries for 184 NULL-summary repos in verisimdb-data
+
+**Important (this month):**
+- Wire GQL-DT Lean types to VQL runtime (VQL queries verified by dependent types)
+- Build VQL language bindings (ReScript, Rust, Elixir/NIF)
+- Implement VQL federation executor (currently stub returning empty)
+- Train ESN/RBF on accumulated confidence history
+- Develop 3-5 new recipes for high-frequency substitute patterns
+- Historical trend tracking across multiple scan cycles
+
+**Planned:**
+- GraphQL API as live HTTP endpoint
 - SARIF output for IDE integration
-- PAT required for automated cross-repo dispatch
 - Chapel NIFs for compute-heavy neural operations
-- Train RBF and ESN on accumulated outcome data
+- Cross-organization federation with VQL drift policies
+
+### Known Gaps
+
+1. **VQL bypassed:** Hypatia reads JSON directly instead of using VQL multi-modal queries
+2. **GQL-DT isolated:** No consumer application uses GQL-DT dependent types
+3. **VQL federation stubbed:** execute_federation_query() returns {:ok, []}
+4. **Neural networks untrained:** Need data accumulation before ESN/RBF become useful
+5. **Only 11 recipes:** 943 of 954 patterns (98.8%) have no automated fix
 
 ## Code Style
 
@@ -156,3 +200,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 - No hardcoded secrets
 - SHA-pinned dependencies
 - SPDX license headers on all files
+- Rate limiting on all dispatch operations
+- Bot quarantine on repeated failures
+- Batch rollback capability for auto_execute tier
+- Novelty gating: unknown findings forced to report_only

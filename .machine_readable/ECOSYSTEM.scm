@@ -75,6 +75,25 @@
       (description "Formal verification and proof management")
       (integration "Validates that substitute fixes preserve behavior"))
 
+    ;; Query Language
+    (project "verisimdb"
+      (relationship "query-engine")
+      (description "Multi-modal database with VQL query language and hexad storage")
+      (integration "ArangoDB federated alongside verisimdb-data; VQL integration planned for verisimdb_connector")
+      (gap "Hypatia currently bypasses VQL, reading JSON directly — should use VQL for multi-modal queries"))
+
+    (project "gql-dt"
+      (relationship "type-system")
+      (description "Lean 4 dependent type system for query verification (production-ready)")
+      (integration "GQL-DT types should validate VQL queries before execution")
+      (gap "Completely isolated — no consumer application uses GQL-DT types"))
+
+    ;; Database
+    (project "arangodb"
+      (relationship "graph-database")
+      (description "Graph query layer for trust traversal, neural state, confidence history")
+      (integration "Federated alongside verisimdb-data — ArangoDB for graph queries, verisimdb for canonical store"))
+
     ;; External
     (project "OpenSSF Scorecard"
       (relationship "external-standard")
