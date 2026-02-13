@@ -75,7 +75,35 @@
         ("Pro: Decouples decision from execution")
         ("Pro: Manifests are inspectable, archiveable, replayable")
         ("Pro: Works with existing fleet fix scripts")
-        ("Con: Per-line jq parsing is slow for large manifests"))))
+        ("Con: Per-line jq parsing is slow for large manifests")))
+
+    (adr-007
+      (status "accepted")
+      (date "2026-02-13")
+      (title "Five neural network architecture for multi-signal intelligence")
+      (context "Need diverse intelligence for trust routing, domain expertise, temporal patterns, trajectory forecasting, and novelty detection. Single model cannot cover all aspects.")
+      (decision "Implement 5 complementary networks: (1) Graph of Trust — PageRank for entity trust scoring, (2) Mixture of Experts — domain-specific confidence with sparse gating, (3) Liquid State Machine — reservoir computing for temporal anomaly detection, (4) Echo State Network — time-series forecasting for confidence trajectories, (5) Radial Neural Network — RBF for similarity and novelty detection. Coordinated by a GenServer in the OTP supervision tree.")
+      (consequences
+        ("Pro: Each network specializes in a different signal type")
+        ("Pro: Sparse MoE activation is efficient (top-k=2)")
+        ("Pro: Reservoir networks need no backpropagation")
+        ("Pro: RBF provides natural novelty detection via distance to centers")
+        ("Pro: Aggregated confidence more robust than single-model estimate")
+        ("Con: 5 networks have higher memory footprint than single model")
+        ("Con: Reservoir networks need sufficient data to be useful")))
+
+    (adr-008
+      (status "accepted")
+      (date "2026-02-13")
+      (title "Idris2 ABI + Zig FFI for formal interface contracts")
+      (context "Need provably correct API interface definitions that can be consumed from any language via C ABI.")
+      (decision "Define all API types and operations in Idris2 with dependent type proofs (src/abi/*.idr). Implement stable C ABI in Zig (ffi/zig/src/main.zig). Cover REST, GraphQL, and gRPC interfaces with proofs that all operations return ApiResponse-wrapped types.")
+      (consequences
+        ("Pro: Dependent types prove interface correctness at compile time")
+        ("Pro: Zig C ABI compatible with all major languages")
+        ("Pro: Triple API support: REST, GraphQL, gRPC")
+        ("Pro: ApiResponse wrapper proof ensures uniform error handling")
+        ("Con: Requires Idris2 toolchain for ABI verification"))))
 
   (development-practices
     (code-style

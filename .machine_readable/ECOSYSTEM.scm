@@ -13,9 +13,12 @@
     (subcategory "ci-cd-security")
     (unique-value
       ("Safety triangle: eliminate → substitute → control")
+      ("5 neural networks: Graph of Trust, MoE, LSM, ESN, RBF")
+      ("Idris2 ABI with dependent type proofs + Zig C ABI bridge")
       ("Fuzzy recipe matching with language inference")
       ("Confidence-gated auto-execution (>=0.95 threshold)")
-      ("Feedback loop: outcomes update recipe confidence")
+      ("Automatic feedback loop: LearningScheduler polls every 5 min")
+      ("Self-diagnostics with circuit breaker and auto-recovery")
       ("Pan-forge support: GitHub, GitLab, Bitbucket, Codeberg")))
 
   (related-projects

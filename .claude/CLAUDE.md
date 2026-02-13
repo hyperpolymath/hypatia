@@ -9,10 +9,19 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ```
 Hypatia
 ├── Elixir pipeline          # 8 core modules (pattern analysis, dispatch, learning)
+├── Neural subsystem          # 5 networks + coordinator GenServer
+│   ├── Graph of Trust        # PageRank trust over repos/bots/recipes
+│   ├── Mixture of Experts    # Domain-specific confidence (7 expert domains)
+│   ├── Liquid State Machine  # Temporal anomaly detection
+│   ├── Echo State Network    # Confidence trajectory forecasting
+│   └── Radial Neural Network # Finding similarity + novelty detection
+├── OTP Application           # Supervised: LearningScheduler, SelfDiagnostics, Neural.Coordinator
 ├── Logtalk rule engine       # Error catalog, pattern detection rules
+├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
+├── Zig FFI                   # C ABI bridge (7 exported functions)
 ├── Rust workspace            # adapters, cli, data, fixer, integration
 ├── Safety triangle           # Eliminate > Substitute > Control
-├── Fleet dispatcher          # Routes findings to appropriate bots
+├── Fleet dispatcher          # File-based + HTTP dispatch with circuit breaker
 └── Integration connectors    # verisimdb-data, panic-attack, gitbot-fleet
 ```
 
@@ -74,9 +83,44 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `pattern_registry.ex` | Deduplicates findings into canonical patterns (PA001-PA020) |
 | `recipe_matcher.ex` | Fuzzy matching: fingerprinted IDs to clean recipe IDs |
 | `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
-| `fleet_dispatcher.ex` | Confidence-gated dispatch to fleet bots |
+| `fleet_dispatcher.ex` | Confidence-gated dispatch (file-based + HTTP, circuit breaker) |
 | `dispatch_manifest.ex` | Writes JSONL manifests as bridge to bash execution |
 | `outcome_tracker.ex` | Records fix outcomes, updates recipe confidence |
+| `learning_scheduler.ex` | GenServer: polls outcomes every 5 min, drives feedback loop |
+| `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
+| `application.ex` | OTP Application supervisor for all GenServers |
+
+### Neural Network Modules (lib/neural/)
+
+| Module | Type | Purpose |
+|--------|------|---------|
+| `graph_of_trust.ex` | PageRank | Trust-weighted routing over repos/bots/recipes |
+| `mixture_of_experts.ex` | Sparse MoE | Domain-specific confidence (7 expert domains) |
+| `liquid_state_machine.ex` | Reservoir | Temporal anomaly detection in event streams |
+| `echo_state_network.ex` | Reservoir | Confidence trajectory forecasting + drift detection |
+| `radial_neural_network.ex` | RBF | Finding similarity, novelty detection, classification |
+| `coordinator.ex` | GenServer | Orchestrates all 5 networks, aggregates predictions |
+
+### Idris2 ABI (src/abi/)
+
+| File | Purpose |
+|------|---------|
+| `Types.idr` | Core types with dependent type proofs |
+| `GraphQL.idr` | Query/Mutation/Subscription operations with proofs |
+| `GRPC.idr` | gRPC service definitions (scanner, dispatch, stream, health) |
+| `REST.idr` | REST endpoint definitions (18 endpoints, 6 groups) |
+
+### Zig FFI (ffi/zig/src/)
+
+| Function | Purpose |
+|----------|---------|
+| `hypatia_health_check` | Health status of all components |
+| `hypatia_scan_repo` | Trigger scan for repository |
+| `hypatia_dispatch` | Dispatch finding to fleet |
+| `hypatia_record_outcome` | Record fix outcome |
+| `hypatia_force_learning_cycle` | Force learning cycle |
+| `hypatia_get_confidence` | Get recipe confidence |
+| `hypatia_dispatch_strategy` | Map confidence to dispatch strategy |
 
 ### Metrics (as of 2026-02-13)
 
@@ -87,13 +131,15 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 - 10 fix recipes total (12 recipe files)
 - 954 canonical patterns across 292 repos
 
-### Remaining Work (M4: Production Operations)
+### Remaining Work (M6: Production Operations)
 
-- GraphQL API for live fleet coordination (currently stub-only)
+- GraphQL API as live HTTP endpoint (currently file-based dispatch)
 - ArangoDB knowledge graph storage
 - Automated re-scanning and trend detection
 - SARIF output for IDE integration
 - PAT required for automated cross-repo dispatch
+- Chapel NIFs for compute-heavy neural operations
+- Train RBF and ESN on accumulated outcome data
 
 ## Code Style
 
