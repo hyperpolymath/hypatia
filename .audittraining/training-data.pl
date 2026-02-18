@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: AGPL-3.0-or-later
+%% SPDX-License-Identifier: PMPL-1.0-or-later
 %% cicd-hyper-a Training Data for Logtalk Learning Module
 %% Format: error(Id, Category, Severity, AutoFix, Description, FixPattern)
 %% Auto-generated from ERROR-CATALOG.scm

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Template: CodeQL workflow with proper language detection
 # Copy to repos and adjust language matrix based on repo contents
 name: CodeQL

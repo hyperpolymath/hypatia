@@ -1,0 +1,343 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+
+= VQL Usage Guide for Hypatia
+Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+:revdate: 2026-02-13
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+VQL (VeriSim Query Language) is the query layer that Hypatia uses to interrogate
+security scan data, pattern registries, recipes, outcomes, and dispatch logs.
+Hypatia's VQL implementation supports two execution backends: a *FileExecutor*
+that reads from the `verisimdb-data` Git repository's flat files, and an
+*ArangoDB* backend for graph traversal queries.
+
+== Architecture
+
+The VQL pipeline flows through the following stages:
+
+[source,text]
+----
+                          +-------------------+
+                          |   VQL Client      |
+                          |   (GenServer)     |
+                          |   lib/vql/        |
+                          |   client.ex       |
+                          +--------+----------+
+                                   |
+                             VQL string
+                                   |
+                          +--------v----------+
+                          |     Parser        |
+                          |  (built into      |
+                          |   Client)         |
+                          +--------+----------+
+                                   |
+                                  AST
+                                   |
+                     +-------------+-------------+
+                     |                           |
+            +--------v----------+       +--------v----------+
+            |   FileExecutor    |       |    ArangoDB        |
+            | lib/vql/          |       | lib/data/          |
+            | file_executor.ex  |       | arangodb.ex        |
+            +-------------------+       +--------------------+
+                     |                           |
+            verisimdb-data/             ArangoDB graph
+            (flat JSON files)           (trust, confidence,
+                                         anomalies)
+----
+
+=== Component Summary
+
+[cols="1,2,1"]
+|===
+| Component | Role | Location
+
+| VQL Client
+| GenServer with built-in parser, query cache (60s TTL), and stats tracking
+| `lib/vql/client.ex`
+
+| FileExecutor
+| Maps VQL store names to `verisimdb-data` directory paths and reads flat files
+| `lib/vql/file_executor.ex`
+
+| Query
+| 20+ high-level query functions built on top of the VQL Client
+| `lib/vql/query.ex`
+
+| VerisimdbConnector
+| VQL-powered connector with file I/O fallback
+| `lib/verisimdb_connector.ex`
+
+| ArangoDB
+| Graph traversal, trust propagation, and confidence history
+| `lib/data/arangodb.ex`
+|===
+
+== VQL Client (`lib/vql/client.ex`)
+
+The VQL Client is an Elixir GenServer that manages query execution. It provides:
+
+* **Built-in VQL parser** -- parses VQL query strings into an internal AST
+* **Query cache** -- caches results with a 60-second TTL; a GenServer timer
+  automatically evicts expired entries
+* **Stats tracking** -- counts queries executed, cache hits, and errors
+* **Pluggable executors** -- dispatches parsed ASTs to FileExecutor or ArangoDB
+
+=== Starting the Client
+
+The VQL Client starts as part of the Hypatia application supervision tree
+(see `lib/application.ex`). It can also be started manually:
+
+[source,elixir]
+----
+{:ok, pid} = Hypatia.VQL.Client.start_link([])
+----
+
+=== Executing a Raw Query
+
+[source,elixir]
+----
+{:ok, results} = Hypatia.VQL.Client.query("FROM scans SELECT * WHERE severity = 'high'")
+----
+
+== FileExecutor (`lib/vql/file_executor.ex`)
+
+The FileExecutor maps VQL store names to directories within the local
+`verisimdb-data` Git repository clone.
+
+=== Store-to-Directory Mapping
+
+[cols="1,2,2"]
+|===
+| VQL Store | Directory Path | File Format
+
+| `scans`
+| `verisimdb-data/scans/`
+| One JSON file per repository (e.g., `echidna.json`)
+
+| `patterns`
+| `verisimdb-data/patterns/registry.json`
+| Single JSON registry file
+
+| `recipes`
+| `verisimdb-data/recipes/`
+| Recipe files named `recipe-*.json`
+
+| `outcomes`
+| `verisimdb-data/outcomes/`
+| JSONL files (one JSON object per line)
+
+| `dispatch`
+| `verisimdb-data/dispatch/`
+| JSONL files (one JSON object per line)
+
+| `index`
+| `verisimdb-data/index.json`
+| Single JSON index file
+|===
+
+=== How FileExecutor Works
+
+1. The VQL Client parses the query string into an AST.
+2. The AST's `FROM` clause identifies the store name.
+3. FileExecutor resolves the store name to a filesystem path.
+4. FileExecutor reads and decodes the JSON/JSONL files.
+5. `WHERE` clause filters, `SELECT` projections, and `ORDER BY`/`LIMIT` are
+   applied in-memory.
+6. Results are returned to the VQL Client, which caches them.
+
+== Query Module (`lib/vql/query.ex`)
+
+The Query module provides 20+ high-level functions that compose VQL queries
+internally. These functions are the primary interface for Hypatia's other
+modules (pattern analyzer, recipe matcher, fleet dispatcher, etc.).
+
+=== Core Query Functions
+
+[source,elixir]
+----
+# Fetch all scans
+{:ok, scans} = Hypatia.VQL.Query.fetch_scans()
+
+# Fetch a single repository's scan
+{:ok, scan} = Hypatia.VQL.Query.fetch_scan("echidna")
+
+# Fetch the pattern registry
+{:ok, patterns} = Hypatia.VQL.Query.fetch_patterns()
+
+# Fetch all recipes
+{:ok, recipes} = Hypatia.VQL.Query.fetch_recipes()
+
+# Fetch outcomes
+{:ok, outcomes} = Hypatia.VQL.Query.fetch_outcomes()
+
+# Fetch the global index
+{:ok, index} = Hypatia.VQL.Query.fetch_index()
+
+# Fetch substitution rules
+{:ok, subs} = Hypatia.VQL.Query.fetch_substitutions()
+----
+
+=== Filtered Query Functions
+
+[source,elixir]
+----
+# Filter scans by severity level
+{:ok, high_scans} = Hypatia.VQL.Query.scans_by_severity("high")
+
+# Filter scans by category
+{:ok, injection_scans} = Hypatia.VQL.Query.scans_by_category("injection")
+
+# Filter recipes by tier
+{:ok, tier1} = Hypatia.VQL.Query.recipes_by_tier(1)
+
+# Filter recipes by language
+{:ok, elixir_recipes} = Hypatia.VQL.Query.recipes_by_language("elixir")
+
+# Filter recipes above a confidence threshold
+{:ok, confident} = Hypatia.VQL.Query.recipes_above_confidence(0.85)
+----
+
+=== Analytics Query Functions
+
+[source,elixir]
+----
+# Cross-repo pattern analysis
+{:ok, xrepo} = Hypatia.VQL.Query.cross_repo_patterns()
+
+# Correlation between patterns
+{:ok, corr} = Hypatia.VQL.Query.pattern_correlations()
+
+# Timeline of outcomes
+{:ok, timeline} = Hypatia.VQL.Query.outcome_timeline()
+
+# Recipe effectiveness metrics
+{:ok, effectiveness} = Hypatia.VQL.Query.recipe_effectiveness()
+
+# Repos ranked by vulnerability count
+{:ok, vulnerable} = Hypatia.VQL.Query.most_vulnerable_repos()
+
+# Distribution of findings by category
+{:ok, dist} = Hypatia.VQL.Query.category_distribution()
+
+# How many patterns are covered by recipes
+{:ok, coverage} = Hypatia.VQL.Query.recipe_coverage()
+
+# Overall pipeline health summary
+{:ok, health} = Hypatia.VQL.Query.pipeline_health()
+----
+
+== VerisimdbConnector (`lib/verisimdb_connector.ex`)
+
+The VerisimdbConnector is the higher-level integration point. It wraps the VQL
+Client and Query module, adding:
+
+* **VQL-first execution** -- all queries go through VQL Client by default
+* **File I/O fallback** -- if the VQL Client process is unavailable (crashed,
+  not started), the connector falls back to direct file reads using
+  `File.read!/1` and `Jason.decode!/1`, logging a warning via `Logger.warning/1`
+
+=== Fallback Behavior
+
+[source,elixir]
+----
+# Normal path (VQL Client running):
+#   VerisimdbConnector -> VQL.Client -> FileExecutor -> verisimdb-data/scans/
+#
+# Fallback path (VQL Client unavailable):
+#   VerisimdbConnector -> File.read! -> Jason.decode!
+#   Logger.warning("VQL Client unavailable, falling back to direct file read")
+----
+
+== Query Examples
+
+=== Example 1: Find All High-Severity Findings
+
+[source,elixir]
+----
+# Using the Query module (recommended)
+{:ok, results} = Hypatia.VQL.Query.scans_by_severity("high")
+
+# Using raw VQL
+{:ok, results} = Hypatia.VQL.Client.query(
+  "FROM scans SELECT * WHERE severity = 'high' ORDER BY repo ASC"
+)
+----
+
+Expected output:
+
+[source,elixir]
+----
+[
+  %{"repo" => "echidna", "severity" => "high", "category" => "injection", ...},
+  %{"repo" => "verisimdb", "severity" => "high", "category" => "config", ...}
+]
+----
+
+=== Example 2: Recipe Coverage Analysis
+
+[source,elixir]
+----
+{:ok, coverage} = Hypatia.VQL.Query.recipe_coverage()
+# => %{total_patterns: 954, covered: 11, uncovered: 943, coverage_pct: 1.2}
+----
+
+=== Example 3: Cross-Repository Patterns
+
+[source,elixir]
+----
+{:ok, xrepo} = Hypatia.VQL.Query.cross_repo_patterns()
+# => [%{pattern: "hardcoded-secret", repos: ["echidna", "verisimdb", "ambientops"], count: 3}, ...]
+----
+
+=== Example 4: Pipeline Health Check
+
+[source,elixir]
+----
+{:ok, health} = Hypatia.VQL.Query.pipeline_health()
+# => %{
+#   scans_count: 3,
+#   patterns_count: 954,
+#   recipes_count: 11,
+#   outcomes_count: 27,
+#   last_scan: "2026-02-08T...",
+#   coverage_pct: 1.2,
+#   status: :degraded
+# }
+----
+
+== Cache Behavior
+
+The VQL Client maintains an in-process query cache:
+
+* **TTL**: 60 seconds per entry
+* **Eviction**: A `Process.send_after/3` timer fires every 60 seconds,
+  triggering `handle_info(:evict_cache, state)` which removes expired entries
+* **Cache key**: The raw VQL query string (after normalization)
+* **Cache hit**: Returns cached result without hitting FileExecutor
+* **Cache miss**: Executes the query, stores the result with a timestamp
+* **Manual invalidation**: Not currently exposed (cache is time-based only)
+
+The cache is particularly useful for the analytics functions
+(`pipeline_health/0`, `cross_repo_patterns/0`, etc.) which aggregate multiple
+stores and would otherwise re-read several files per call.
+
+== Fallback Behavior
+
+If the VQL Client GenServer is not running or not responding:
+
+1. The VerisimdbConnector detects the missing process.
+2. It logs a warning: `Logger.warning("VQL Client unavailable, falling back to direct file read")`.
+3. It reads the relevant `verisimdb-data/` files directly using `File.read!/1`.
+4. It decodes with `Jason.decode!/1`.
+5. It returns results in the same format as the VQL path.
+
+This ensures Hypatia remains functional even if the VQL subsystem has issues,
+at the cost of losing caching and structured query capabilities.

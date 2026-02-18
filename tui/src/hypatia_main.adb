@@ -1,4 +1,4 @@
---  SPDX-License-Identifier: PLMP-1.0-or-later
+--  SPDX-License-Identifier: PMPL-1.0-or-later
 -------------------------------------------------------------------------------
 --  Hypatia_Main - Main entry point for Hypatia CI/CD TUI
 --

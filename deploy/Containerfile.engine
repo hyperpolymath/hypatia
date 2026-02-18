@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Containerfile for Hypatia Logtalk Engine
+# EXCEPTION: swipl:stable has no Chainguard equivalent — SWI-Prolog requires Debian base
+
+FROM swipl:stable AS base
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    bzip2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install Logtalk (use latest stable version)
+ARG LOGTALK_VERSION=3.97.1
+RUN curl -fsSL -o /tmp/logtalk.tar.bz2 https://logtalk.org/files/logtalk-${LOGTALK_VERSION}.tar.bz2 \
+    && mkdir -p /opt \
+    && tar xjf /tmp/logtalk.tar.bz2 -C /opt \
+    && ln -s /opt/logtalk-${LOGTALK_VERSION} /opt/logtalk \
+    && rm /tmp/logtalk.tar.bz2
+
+ENV LOGTALKHOME=/opt/logtalk
+ENV LOGTALKUSER=/app/logtalk
+ENV PATH="${LOGTALKHOME}/tools:${PATH}"
+
+WORKDIR /app
+
+# Copy engine files
+COPY engine /app/engine
+
+# Initialize Logtalk user directory
+RUN mkdir -p /app/logtalk
+
+# Precompile rules (optional - may fail if loader has issues)
+RUN swipl -g "logtalk_load(engine/loader)" -t halt || echo "Warning: Precompilation skipped"
+
+# Runtime
+FROM swipl:stable
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=base /opt/logtalk /opt/logtalk
+COPY --from=base /app /app
+
+ENV LOGTALKHOME=/opt/logtalk
+ENV LOGTALKUSER=/app/logtalk
+ENV PATH="${LOGTALKHOME}/tools:${PATH}"
+
+WORKDIR /app
+
+# Health check - verify Logtalk loads
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD swipl -g "logtalk_load(library(types))" -t halt || exit 1
+
+ENTRYPOINT ["swipl"]
+CMD ["-g", "logtalk_load(engine/loader)", "-t", "prolog"]

@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Git Hooks Installer
 #
 # Installs cicd-hyper-a git hooks into a repository.

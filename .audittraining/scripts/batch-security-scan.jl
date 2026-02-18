@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Batch security scanner for hyperpolymath org
 # Generates training data for cicd-hyper-a and echidna learning
 
@@ -135,7 +135,7 @@ function generate_echidna_rules(all_alerts::Vector{Alert})
 
     # Generate Logtalk-style rules
     rules = """
-    %% SPDX-License-Identifier: AGPL-3.0-or-later
+    %% SPDX-License-Identifier: PMPL-1.0-or-later
     %% Auto-generated security rules from $(length(all_alerts)) alerts across hyperpolymath org
     %% Generated: $(Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
 

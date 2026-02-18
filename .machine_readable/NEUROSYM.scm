@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: AGPL-3.0-or-later
+;; SPDX-License-Identifier: PMPL-1.0-or-later
 ;; NEUROSYM.scm - Neurosymbolic integration config for cicd-hyper-a
 ;; Media-Type: application/vnd.neurosym+scm
 
@@ -8,23 +8,53 @@
 
   (architecture
     (model "neural-learning-symbolic-execution")
-    (description "Neural models detect patterns from CI/CD failures, distilled into Logtalk rules for fast, reliable execution")
+    (description "5 neural networks detect patterns and estimate confidence; Logtalk rules execute fixes deterministically")
 
     (layers
       (neural-layer
-        (purpose "Pattern detection from CI/CD failure data")
-        (models
-          (slm "Local SLM (Qwen3-4B or similar) for privacy-preserving analysis")
-          (embedding "Sentence transformers for error similarity"))
+        (purpose "Multi-network intelligence for pattern analysis and dispatch")
+        (networks
+          (graph-of-trust
+            (type "PageRank-style")
+            (implementation "lib/neural/graph_of_trust.ex")
+            (purpose "Trust-weighted dispatch routing over repos/bots/recipes")
+            (parameters (damping-factor 0.85) (convergence-threshold 0.001) (max-iterations 50) (decay-rate 0.95)))
+          (mixture-of-experts
+            (type "Sparse MoE with gating network")
+            (implementation "lib/neural/mixture_of_experts.ex")
+            (purpose "Domain-specific confidence estimation")
+            (experts "security" "quality" "sustainability" "accessibility" "performance" "documentation" "infrastructure")
+            (parameters (top-k 2) (learning-rate 0.01) (load-balance-weight 0.01)))
+          (liquid-state-machine
+            (type "Reservoir computing")
+            (implementation "lib/neural/liquid_state_machine.ex")
+            (purpose "Temporal anomaly detection in event streams")
+            (parameters (reservoir-size 100) (spectral-radius 0.9) (leak-rate 0.3) (sparsity 0.1)))
+          (echo-state-network
+            (type "Reservoir computing / time-series")
+            (implementation "lib/neural/echo_state_network.ex")
+            (purpose "Confidence trajectory forecasting and drift detection")
+            (parameters (reservoir-size 80) (spectral-radius 0.95) (leak-rate 0.2) (washout 50)))
+          (radial-neural-network
+            (type "Radial Basis Function network")
+            (implementation "lib/neural/radial_neural_network.ex")
+            (purpose "Finding similarity, novelty detection, pattern classification")
+            (parameters (num-centers 20) (kmeans-iterations 50) (width-scale 1.5))))
+        (coordinator
+          (implementation "lib/neural/coordinator.ex")
+          (purpose "Orchestrates all 5 networks as OTP GenServer")
+          (aggregation "MoE 60% + RBF 25% + LSM 15%"))
         (inputs
-          ("GitHub Actions run logs")
-          ("Dependabot alerts")
-          ("CodeQL scan results")
-          ("OpenSSF Scorecard reports"))
+          ("verisimdb-data scan results")
+          ("Outcome records from gitbot-fleet")
+          ("Temporal event streams (scans, dispatches, outcomes)")
+          ("Finding feature vectors"))
         (outputs
-          ("Confidence-scored patterns")
-          ("Error cluster assignments")
-          ("Fix suggestions")))
+          ("Aggregated confidence scores")
+          ("Dispatch strategy recommendations")
+          ("Novelty flags for unknown findings")
+          ("Anomaly alerts from event streams")
+          ("Confidence trajectory forecasts")))
 
       (distillation-layer
         (purpose "Convert neural patterns to symbolic rules")

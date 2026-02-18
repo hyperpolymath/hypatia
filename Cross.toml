@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Cross-compilation configuration for Hypatia
 # Used by cross-rs for ARM64 Linux builds
 

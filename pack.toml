@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+#
+# Pack package manager configuration for Idris2 packages.
+# Install pack: https://github.com/stefan-hoeck/idris2-pack
+
+[custom.all.hypatia-abi]
+type   = "local"
+path   = "src/abi"
+ipkg   = "hypatia-abi.ipkg"
+
+[custom.all.hypatia-verify]
+type   = "local"
+path   = "verify"
+ipkg   = "hypatia-verify.ipkg"
+
+[custom.all.proven]
+type   = "github"
+url    = "https://github.com/hyperpolymath/proven"
+commit = "main"
+ipkg   = "proven.ipkg"

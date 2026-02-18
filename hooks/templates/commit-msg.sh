@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Commit Message Hook Template
 # Validates commit message format
 #

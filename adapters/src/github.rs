@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! GitHub forge adapter
 //!
 //! Full implementation of the ForgeAdapter trait for GitHub.

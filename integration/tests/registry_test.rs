@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Registry Integration Tests
 //!
 //! Tests Haskell registry operations:
@@ -337,7 +337,7 @@ async fn test_ruleset_registration() -> Result<()> {
         ],
         metadata: RulesetMetadata {
             author: "hyperpolymath".to_string(),
-            license: "PLMP-1.0-or-later".to_string(),
+            license: "PMPL-1.0-or-later".to_string(),
             tags: vec!["security".to_string(), "github-actions".to_string()],
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
@@ -661,7 +661,7 @@ async fn test_ruleset_json_serialization() -> Result<()> {
         }],
         metadata: RulesetMetadata {
             author: "test".to_string(),
-            license: "PLMP-1.0-or-later".to_string(),
+            license: "PMPL-1.0-or-later".to_string(),
             tags: vec!["test".to_string()],
             created_at: "2025-01-18T00:00:00Z".to_string(),
             updated_at: "2025-01-18T00:00:00Z".to_string(),

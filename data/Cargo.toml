@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 [package]
 name = "hypatia-data"
 version = "0.1.0"
 edition = "2021"
-authors = ["hyperpolymath"]
+authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
 description = "Data layer clients for Hypatia (ArangoDB, Dragonfly)"
-license = "PLMP-1.0-or-later"
+license = "PMPL-1.0-or-later"
 repository = "https://github.com/hyperpolymath/hypatia"
 homepage = "https://hypatia.reposystem.dev"
 

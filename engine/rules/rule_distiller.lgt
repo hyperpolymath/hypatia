@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: PLMP-1.0-or-later
+%% SPDX-License-Identifier: PMPL-1.0-or-later
 %% Rule Distiller - Learns patterns from audit data
 
 :- object(rule_distiller).
@@ -100,7 +100,7 @@
 
     export_rules(FilePath) :-
         open(FilePath, write, Stream),
-        write(Stream, '%% SPDX-License-Identifier: PLMP-1.0-or-later\n'),
+        write(Stream, '%% SPDX-License-Identifier: PMPL-1.0-or-later\n'),
         write(Stream, '%% Auto-distilled rules from cicd-hyper-a learning\n\n'),
         forall(
             distilled_rule(Id, Severity, Fix),

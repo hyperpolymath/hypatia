@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Containerfile for Hypatia Haskell Registry
+# EXCEPTION: haskell:9.6-slim has no Chainguard equivalent — GHC requires Debian base
+
+FROM haskell:9.6-slim AS builder
+
+WORKDIR /build
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libgmp-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy LICENSE and README at root (cabal file references ../LICENSE)
+COPY LICENSE ./LICENSE
+COPY README.adoc ./README.adoc
+
+# Copy registry directory (maintains relative path structure)
+COPY registry ./registry
+
+WORKDIR /build/registry
+
+RUN cabal update && cabal build --only-dependencies
+
+# Build the registry executable
+RUN cabal build exe:registry && cabal install exe:registry --installdir=/build/bin
+
+# Runtime image
+# EXCEPTION: Haskell binaries need libgmp — using wolfi-base for gmp availability
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+RUN apk add --no-cache \
+    gmp \
+    ca-certificates \
+    curl
+
+WORKDIR /app
+
+COPY --from=builder /build/bin/registry /usr/local/bin/registry
+COPY schemas /app/schemas
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+EXPOSE 8080
+
+ENTRYPOINT ["registry"]
+CMD ["--help"]
