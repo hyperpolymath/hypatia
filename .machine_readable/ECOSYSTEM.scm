@@ -13,9 +13,12 @@
     (subcategory "ci-cd-security")
     (unique-value
       ("Safety triangle: eliminate → substitute → control")
+      ("5 neural networks: Graph of Trust, MoE, LSM, ESN, RBF")
+      ("Idris2 ABI with dependent type proofs + Zig C ABI bridge")
       ("Fuzzy recipe matching with language inference")
       ("Confidence-gated auto-execution (>=0.95 threshold)")
-      ("Feedback loop: outcomes update recipe confidence")
+      ("Automatic feedback loop: LearningScheduler polls every 5 min")
+      ("Self-diagnostics with circuit breaker and auto-recovery")
       ("Pan-forge support: GitHub, GitLab, Bitbucket, Codeberg")))
 
   (related-projects
@@ -71,6 +74,19 @@
       (relationship "verification-engine")
       (description "Formal verification and proof management")
       (integration "Validates that substitute fixes preserve behavior"))
+
+    ;; Query Language
+    (project "verisimdb"
+      (relationship "query-engine")
+      (description "Multi-modal database with VQL query language and hexad storage")
+      (integration "VQL Client built into Hypatia — built-in parser executes against verisimdb-data files; ready for verisim-api native stores when deployed")
+      (status "VQL integrated — FileExecutor handles DOCUMENT/TEMPORAL/GRAPH modalities against flat files"))
+
+    ;; Database
+    (project "arangodb"
+      (relationship "graph-database")
+      (description "Transitional graph query layer for trust traversal, neural state, confidence history")
+      (integration "Federated alongside verisimdb-data via VQL; transitional until verisim-api deployed for native graph/temporal stores"))
 
     ;; External
     (project "OpenSSF Scorecard"

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 = cicd-hyper-a: Route to v1.0.0
 :toc: macro
 :toclevels: 3

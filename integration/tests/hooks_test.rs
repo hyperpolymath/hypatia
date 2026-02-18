@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Git Hooks Integration Tests
 //!
 //! Tests git hooks execution and validation:
@@ -175,7 +175,7 @@ impl HookTestRepo {
 /// Generate a pre-commit hook that validates SPDX headers
 fn spdx_validation_hook() -> String {
     r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Pre-commit hook to validate SPDX headers
 
 set -e
@@ -212,7 +212,7 @@ exit 0
 /// Generate a pre-commit hook that validates SHA pins in workflows
 fn sha_pin_validation_hook() -> String {
     r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Pre-commit hook to validate SHA pins in workflows
 
 set -e
@@ -250,7 +250,7 @@ exit 0
 /// Generate a pre-commit hook that validates permissions in workflows
 fn permissions_validation_hook() -> String {
     r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Pre-commit hook to validate permissions in workflows
 
 set -e
@@ -286,7 +286,7 @@ exit 0
 /// Generate a simple passing hook
 fn passing_hook() -> String {
     r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 echo "Hook executed successfully"
 exit 0
 "#
@@ -296,7 +296,7 @@ exit 0
 /// Generate a simple failing hook
 fn failing_hook() -> String {
     r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 echo "Hook failed intentionally"
 exit 1
 "#
@@ -409,7 +409,7 @@ async fn test_spdx_validation_hook() -> Result<()> {
     // Create file with SPDX header
     repo.create_file(
         "good.rs",
-        "// SPDX-License-Identifier: PLMP-1.0-or-later\nfn main() {}",
+        "// SPDX-License-Identifier: PMPL-1.0-or-later\nfn main() {}",
     )?;
     repo.stage_file("good.rs")?;
 
@@ -453,7 +453,7 @@ jobs:
     assert_ne!(code, 0, "Commit should fail with unpinned action");
 
     // Create workflow with SHA pins
-    let good_workflow = r#"# SPDX-License-Identifier: PLMP-1.0-or-later
+    let good_workflow = r#"# SPDX-License-Identifier: PMPL-1.0-or-later
 name: CI
 on: [push]
 permissions: read-all
@@ -555,7 +555,7 @@ async fn test_hook_environment_variables() -> Result<()> {
 
     // Hook that checks environment variables
     let env_hook = r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 
 # Check that GIT_DIR is set
 if [ -z "$GIT_DIR" ]; then
@@ -595,7 +595,7 @@ async fn test_hook_with_staged_changes_only() -> Result<()> {
 
     // Hook that only processes staged changes
     let staged_hook = r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 
 staged=$(git diff --cached --name-only)
 echo "Staged files: $staged"

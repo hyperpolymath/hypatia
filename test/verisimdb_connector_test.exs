@@ -67,19 +67,24 @@ defmodule Hypatia.VerisimdbConnectorTest do
   describe "to_logtalk_facts/1" do
     test "transforms scan data to Logtalk predicates" do
       scan_data = %{
-        "weak_points" => [
-          %{
-            "category" => "PanicPath",
-            "location" => "src/main.rs",
-            "severity" => "High",
-            "description" => "unwrap() call"
-          }
-        ]
+        repo: "test-repo",
+        scan: %{
+          "weak_points" => [
+            %{
+              "category" => "PanicPath",
+              "location" => "src/main.rs",
+              "severity" => "High",
+              "description" => "unwrap() call"
+            }
+          ]
+        }
       }
 
       facts = VerisimdbConnector.to_logtalk_facts(scan_data)
       assert is_binary(facts)
       assert String.contains?(facts, "weak_point")
+      assert String.contains?(facts, "test-repo")
+      assert String.contains?(facts, "PanicPath")
     end
   end
 end

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! cicd-hyper-a CLI - Command-line interface for the neurosymbolic CI/CD platform
 //!
 //! This CLI provides commands for:
