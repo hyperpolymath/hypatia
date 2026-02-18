@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Exit codes for the cicd-hyper-a CLI.
 //!
 //! Standardized exit codes for headless/workflow automation.

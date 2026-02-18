@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Comprehensive security audit workflow for cicd-hyper-a
 # Scans Rust and Haskell dependencies, containers, secrets, and performs SAST
 
@@ -47,7 +47,7 @@ jobs:
           toolchain: stable
 
       - name: Cache cargo registry
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: |
             ~/.cargo/registry
@@ -97,7 +97,7 @@ jobs:
         run: |
           if [ ! -f deny.toml ]; then
             cat > deny.toml << 'EOF'
-          # SPDX-License-Identifier: PLMP-1.0-or-later
+          # SPDX-License-Identifier: PMPL-1.0-or-later
           # cargo-deny configuration for cicd-hyper-a
 
           [advisories]
@@ -170,7 +170,7 @@ jobs:
           cabal-update: true
 
       - name: Cache Cabal dependencies
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: |
             ~/.cabal/packages
@@ -208,19 +208,19 @@ jobs:
       fail-fast: false
       matrix:
         dockerfile:
-          - deploy/Dockerfile
-          - deploy/Dockerfile.adapter
-          - deploy/Dockerfile.engine
-          - deploy/Dockerfile.registry
+          - deploy/Containerfile
+          - deploy/Containerfile.adapter
+          - deploy/Containerfile.engine
+          - deploy/Containerfile.registry
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Extract image name from Dockerfile path
+      - name: Extract image name from Containerfile path
         id: image
         run: |
           dockerfile="${{ matrix.dockerfile }}"
-          name=$(basename "$dockerfile" | sed 's/Dockerfile/cicd-hyper-a/' | sed 's/^\.//' | sed 's/^-//')
+          name=$(basename "$dockerfile" | sed 's/Containerfile/cicd-hyper-a/' | sed 's/^\.//' | sed 's/^-//')
           if [ "$name" = "cicd-hyper-a" ]; then
             name="cicd-hyper-a-main"
           fi
@@ -270,7 +270,7 @@ jobs:
         run: |
           if [ ! -f .gitleaks.toml ]; then
             cat > .gitleaks.toml << 'EOF'
-          # SPDX-License-Identifier: PLMP-1.0-or-later
+          # SPDX-License-Identifier: PMPL-1.0-or-later
           # Gitleaks configuration for cicd-hyper-a
 
           title = "cicd-hyper-a gitleaks configuration"

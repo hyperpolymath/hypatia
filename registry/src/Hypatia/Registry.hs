@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 -- | Git-based rule registry with versioning
 --
 -- This module provides a persistent registry for storing and retrieving
@@ -561,7 +561,7 @@ compareVersions = compare
 
 serializeRegistry :: Map Text RegistryEntry -> RuleVersion -> Text
 serializeRegistry entries ver = T.unlines $
-  [ "# SPDX-License-Identifier: PLMP-1.0-or-later"
+  [ "# SPDX-License-Identifier: PMPL-1.0-or-later"
   , "# cicd-hyper-a Rule Registry"
   , "# Version: " <> showVersion ver
   , ""
@@ -570,7 +570,7 @@ serializeRegistry entries ver = T.unlines $
 
 serializeEntry :: RegistryEntry -> Text
 serializeEntry RegistryEntry{..} = T.unlines
-  [ "# SPDX-License-Identifier: PLMP-1.0-or-later"
+  [ "# SPDX-License-Identifier: PMPL-1.0-or-later"
   , "name: " <> entryName
   , "version: " <> showVersion entryVersion
   , "description: " <> entryDescription

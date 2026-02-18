@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Repository scanning command implementation.
 //!
 //! Scans a repository for CI/CD issues, policy violations, and anti-patterns.
@@ -476,7 +476,7 @@ fn scan_github_workflows(
                     line_number: Some(1),
                     snippet: None,
                     suggestion: Some(
-                        "Add '# SPDX-License-Identifier: PLMP-1.0-or-later' as first line"
+                        "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line"
                             .to_string(),
                     ),
                     auto_fixable: true,

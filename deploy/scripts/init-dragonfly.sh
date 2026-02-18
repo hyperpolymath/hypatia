@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Dragonfly/Redis Initialization Script
 #
 # Initializes Dragonfly cache for the cicd-hyper-a CI/CD intelligence platform.

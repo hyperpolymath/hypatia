@@ -1,0 +1,25 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+--
+-- Hypatia verification package: type-safe pipeline state machine
+-- and fuel-bounded termination proofs.
+
+package hypatia-verify
+version = 0.5.0
+
+authors = "Jonathan D.A. Jewell"
+
+brief = "Formal verification modules for Hypatia pipeline state machine"
+
+depends = base    >= 0.6.0
+        , contrib
+        , proven
+
+sourcedir = "src"
+
+modules = PipelineState
+        , Verify.Fuel
+
+builddir = "../build/verify"
+
+opts = "--total"

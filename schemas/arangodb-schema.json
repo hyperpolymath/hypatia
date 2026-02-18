@@ -88,55 +88,69 @@
     "workflows": { "$ref": "#/definitions/workflow" }
   },
   "edges": {
-    "repo_has_alert": {
-      "from": "repos",
-      "to": "alerts"
+    "repo_has_alert": { "from": "repos", "to": "alerts" },
+    "repo_has_workflow": { "from": "repos", "to": "workflows" },
+    "alert_fixed_by": { "from": "alerts", "to": "rules" },
+    "rule_applies_fix": { "from": "rules", "to": "fixes" },
+    "workflow_triggers_rule": { "from": "workflows", "to": "rules" },
+    "trusts": { "from": ["repos", "bots", "recipes", "contributors"], "to": ["repos", "bots", "recipes", "contributors"] },
+    "depends_on": { "from": "repos", "to": "repos" },
+    "dispatches": { "from": "findings", "to": "bots" },
+    "applies_to": { "from": "recipes", "to": "patterns" },
+    "repo_has_finding": { "from": "repos", "to": "findings" },
+    "finding_matches_pattern": { "from": "findings", "to": "patterns" },
+    "bot_executes_recipe": { "from": "bots", "to": "recipes" },
+    "recipe_has_outcome": { "from": "recipes", "to": "outcomes" },
+    "contributor_fixes": { "from": "contributors", "to": "outcomes" }
+  },
+  "neural_collections": {
+    "_comment": "Collections for neural network intelligence layer",
+    "confidence_history": {
+      "type": "document",
+      "description": "Time-series of recipe confidence changes (for ESN training)",
+      "indices": [["recipe_id", "timestamp"]]
     },
-    "repo_has_workflow": {
-      "from": "repos",
-      "to": "workflows"
+    "anomalies": {
+      "type": "document",
+      "description": "Anomalies detected by LSM temporal analysis",
+      "indices": [["resolved", "timestamp"]]
     },
-    "alert_fixed_by": {
-      "from": "alerts",
-      "to": "rules"
+    "neural_states": {
+      "type": "document",
+      "description": "Persisted state of 5 neural network subsystems"
     },
-    "rule_applies_fix": {
-      "from": "rules",
-      "to": "fixes"
+    "dispatch_batches": {
+      "type": "document",
+      "description": "Batch records for rollback capability",
+      "indices": [["status", "timestamp"]]
     },
-    "workflow_triggers_rule": {
-      "from": "workflows",
-      "to": "rules"
+    "contributors": {
+      "type": "document",
+      "description": "Human and bot contributors with trust scores"
     }
   },
   "graphs": {
     "cicd_graph": {
       "edgeDefinitions": [
-        {
-          "collection": "repo_has_alert",
-          "from": ["repos"],
-          "to": ["alerts"]
-        },
-        {
-          "collection": "repo_has_workflow",
-          "from": ["repos"],
-          "to": ["workflows"]
-        },
-        {
-          "collection": "alert_fixed_by",
-          "from": ["alerts"],
-          "to": ["rules"]
-        },
-        {
-          "collection": "rule_applies_fix",
-          "from": ["rules"],
-          "to": ["fixes"]
-        },
-        {
-          "collection": "workflow_triggers_rule",
-          "from": ["workflows"],
-          "to": ["rules"]
-        }
+        { "collection": "repo_has_alert", "from": ["repos"], "to": ["alerts"] },
+        { "collection": "repo_has_workflow", "from": ["repos"], "to": ["workflows"] },
+        { "collection": "alert_fixed_by", "from": ["alerts"], "to": ["rules"] },
+        { "collection": "rule_applies_fix", "from": ["rules"], "to": ["fixes"] },
+        { "collection": "workflow_triggers_rule", "from": ["workflows"], "to": ["rules"] }
+      ]
+    },
+    "hypatia_graph": {
+      "_comment": "Neural intelligence graph — trust propagation, dispatch routing, dependency analysis",
+      "edgeDefinitions": [
+        { "collection": "trusts", "from": ["repos", "bots", "recipes", "contributors"], "to": ["repos", "bots", "recipes", "contributors"] },
+        { "collection": "depends_on", "from": ["repos"], "to": ["repos"] },
+        { "collection": "dispatches", "from": ["findings"], "to": ["bots"] },
+        { "collection": "applies_to", "from": ["recipes"], "to": ["patterns"] },
+        { "collection": "repo_has_finding", "from": ["repos"], "to": ["findings"] },
+        { "collection": "finding_matches_pattern", "from": ["findings"], "to": ["patterns"] },
+        { "collection": "bot_executes_recipe", "from": ["bots"], "to": ["recipes"] },
+        { "collection": "recipe_has_outcome", "from": ["recipes"], "to": ["outcomes"] },
+        { "collection": "contributor_fixes", "from": ["contributors"], "to": ["outcomes"] }
       ]
     }
   }

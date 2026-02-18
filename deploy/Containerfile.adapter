@@ -1,16 +1,18 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for Hypatia Rust Forge Adapters
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Containerfile for Hypatia Rust Forge Adapters
 
-FROM rust:1.85-slim-bookworm AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
 
 WORKDIR /build
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
+# Install build dependencies (Wolfi uses apk)
+RUN apk add --no-cache \
+    rust \
+    cargo \
+    pkgconf \
+    openssl-dev \
     cmake \
-    && rm -rf /var/lib/apt/lists/*
+    build-base
 
 # Copy workspace manifest and lock file
 COPY Cargo.toml Cargo.lock ./
@@ -43,13 +45,12 @@ COPY data/src ./data/src
 RUN cargo build --release --package hypatia-adapters
 
 # Runtime image
-FROM debian:bookworm-slim
+FROM cgr.dev/chainguard/wolfi-base:latest
 
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     ca-certificates \
     libssl3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    curl
 
 WORKDIR /app
 
