@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/ruleset.schema.json",
-  "_comment": "SPDX-License-Identifier: PLMP-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
   "name": "release-readiness",
   "version": "1.0.0",
   "description": "Release readiness checks. Validates changelog, license, documentation, and version consistency before releases.",

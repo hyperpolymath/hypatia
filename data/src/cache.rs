@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! High-level cache abstraction for cicd-hyper-a
 //!
 //! Provides a unified caching interface wrapping DragonflyClient with:

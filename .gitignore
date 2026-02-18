@@ -1,10 +1,20 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Build artifacts
 target/
 dist-newstyle/
 *.hi
 *.o
 *.a
+
+# Elixir
+_build/
+deps/
+erl_crash.dump
+*.ez
+*.beam
+
+# KDE
+.directory
 
 # Rust - Keep workspace Cargo.lock for reproducible builds
 
@@ -34,6 +44,19 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Zig
+.zig-cache/
+zig-out/
+
+# Idris2
+build/
+
+# AI crash captures
+ai-cli-crash-capture/
+
+# Sync artifacts
+sync_report*.txt
 
 # Local development
 .local/

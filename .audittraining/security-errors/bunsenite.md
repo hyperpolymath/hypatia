@@ -48,7 +48,7 @@ cargo audit
 #### Fix
 Pin base image with digest:
 ```dockerfile
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 FROM gcr.io/oss-fuzz-base/base-builder-rust@sha256:... # Pin digest
 ```
 

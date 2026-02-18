@@ -1,6 +1,6 @@
 {
   "$schema": "../schemas/ruleset.schema.json",
-  "_comment": "SPDX-License-Identifier: PLMP-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
   "name": "rust-quality",
   "version": "1.0.0",
   "description": "Rust-specific code quality rules. Enforces clippy, rustfmt, documentation, and safe coding practices.",
@@ -94,7 +94,7 @@
       "action": {
         "type": "inject-file",
         "path": "rustfmt.toml",
-        "content": "# SPDX-License-Identifier: PLMP-1.0-or-later\n# Rustfmt configuration\nedition = \"2021\"\nmax_width = 100\ntab_spaces = 4\nuse_small_heuristics = \"Default\"\n",
+        "content": "# SPDX-License-Identifier: PMPL-1.0-or-later\n# Rustfmt configuration\nedition = \"2021\"\nmax_width = 100\ntab_spaces = 4\nuse_small_heuristics = \"Default\"\n",
         "overwrite": false
       },
       "autoFixable": true,
@@ -203,7 +203,7 @@
       "action": {
         "type": "inject-file",
         "path": "clippy.toml",
-        "content": "# SPDX-License-Identifier: PLMP-1.0-or-later\n# Clippy configuration\nmsrv = \"1.70\"\ncognitive-complexity-threshold = 25\ntoo-many-arguments-threshold = 7\ntype-complexity-threshold = 250\n",
+        "content": "# SPDX-License-Identifier: PMPL-1.0-or-later\n# Clippy configuration\nmsrv = \"1.70\"\ncognitive-complexity-threshold = 25\ntoo-many-arguments-threshold = 7\ntype-complexity-threshold = 250\n",
         "overwrite": false
       },
       "autoFixable": true,

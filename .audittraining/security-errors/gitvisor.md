@@ -39,7 +39,7 @@ No SAST (Static Application Security Testing) configured. For a multi-language r
 #### Fix
 Add CodeQL workflow with appropriate language matrix:
 ```yaml
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 name: CodeQL
 
 permissions: read-all
@@ -81,7 +81,7 @@ No automated test workflow detected.
 #### Fix
 Add test workflow:
 ```yaml
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 name: Tests
 
 permissions: read-all

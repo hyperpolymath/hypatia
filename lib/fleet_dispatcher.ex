@@ -3,9 +3,97 @@
 defmodule Hypatia.FleetDispatcher do
   @moduledoc """
   Routes findings to appropriate gitbot-fleet bots via GraphQL.
+
+  Supports both:
+  - Legacy dispatch_finding/1 — routes by finding type
+  - Triangle-aware dispatch_routed_action/1 — routes by safety triangle tier
   """
 
+  alias Hypatia.TriangleRouter
+
   require Logger
+
+  # ====================================================================
+  # Triangle-Aware Dispatch (new — from safety triangle router)
+  # ====================================================================
+
+  @doc """
+  Dispatch a routed action from the triangle router.
+
+  Handles:
+  - {:eliminate, recipe, pattern} — auto-fix or PR depending on confidence
+  - {:substitute, recipe, pattern} — PR with proven module + proof obligation
+  - {:control, pattern} — advisory report to sustainabot
+  """
+  def dispatch_routed_action({:eliminate, recipe, pattern}) do
+    confidence = Map.get(recipe, "confidence", 0.0)
+    strategy = TriangleRouter.dispatch_strategy(confidence)
+
+    case strategy do
+      :auto_execute ->
+        dispatch_to_robot_repo_automaton(%{
+          type: :auto_fix_request,
+          repo: get_pattern_repo(pattern),
+          file: Map.get(pattern, "file", ""),
+          issue: Map.get(pattern, "description", ""),
+          fix_type: "eliminate",
+          confidence: confidence,
+          recipe_id: Map.get(recipe, "id"),
+          suggestion: Map.get(recipe, "description", "")
+        })
+
+      :review ->
+        dispatch_to_rhodibot(%{
+          type: :fix_suggestion,
+          repo: get_pattern_repo(pattern),
+          file: Map.get(pattern, "file", ""),
+          issue: Map.get(pattern, "description", ""),
+          suggestion: Map.get(recipe, "description", "")
+        })
+
+      :report_only ->
+        dispatch_to_sustainabot(%{
+          type: :eco_score,
+          repo: get_pattern_repo(pattern),
+          score: Map.get(pattern, "severity_score", 0.5),
+          details: "Low-confidence eliminate: #{Map.get(pattern, "description", "")}"
+        })
+    end
+  end
+
+  def dispatch_routed_action({:substitute, recipe, pattern}) do
+    proven_module = Map.get(recipe, "proven_module", "unknown")
+
+    # Create a fix suggestion PR via rhodibot
+    dispatch_to_rhodibot(%{
+      type: :fix_suggestion,
+      repo: get_pattern_repo(pattern),
+      file: Map.get(pattern, "file", ""),
+      issue: Map.get(pattern, "description", ""),
+      suggestion: "Replace with proven/#{proven_module}"
+    })
+
+    # Request proof obligation from echidnabot
+    dispatch_to_echidnabot(%{
+      type: :proof_obligation,
+      repo: get_pattern_repo(pattern),
+      claim: "Substitution with #{proven_module} preserves behavior",
+      context: Map.get(pattern, "description", "")
+    })
+  end
+
+  def dispatch_routed_action({:control, finding}) do
+    dispatch_to_sustainabot(%{
+      type: :eco_score,
+      repo: Map.get(finding, "routed_repo", Map.get(finding, "repo", "unknown")),
+      score: Map.get(finding, "severity_score", 0.5),
+      details: "Unresolved: #{Map.get(finding, "description", "")} (no safe fix available)"
+    })
+  end
+
+  # ====================================================================
+  # Legacy Finding Dispatch (preserved for backward compatibility)
+  # ====================================================================
 
   @doc """
   Dispatch a finding to the appropriate bot based on type.
@@ -14,13 +102,13 @@ defmodule Hypatia.FleetDispatcher do
   - :eco_score -> sustainabot
   - :proof_obligation -> echidnabot
   - :fix_suggestion -> rhodibot
-  - :presentation_finding -> glambot (visual, SEO, machine-readability, git-seo)
+  - :presentation_finding -> glambot
   - :accessibility_violation -> accessibilitybot
-  - :seam_finding -> seambot (seam analysis, drift detection, hidden channels, forge integration)
-  - :crypto_finding -> cipherbot (crypto hygiene, post-quantum readiness)
-  - :auto_fix_request -> robot-repo-automaton (Tier 3 Executor, confidence-gated)
-  - :completeness_finding -> finishbot (completeness analysis, release readiness)
-  - :fix_outcome -> learning engine (feeds neurosymbolic loop)
+  - :seam_finding -> seambot
+  - :crypto_finding -> cipherbot
+  - :auto_fix_request -> robot-repo-automaton
+  - :completeness_finding -> finishbot
+  - :fix_outcome -> learning engine
   """
   def dispatch_finding(finding) do
     case finding.type do
@@ -38,14 +126,17 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
+  # ====================================================================
+  # Bot-specific dispatch functions
+  # ====================================================================
+
   defp dispatch_to_sustainabot(finding) do
-    # GraphQL mutation to sustainabot
     mutation = """
     mutation {
       reportEcoScore(
-        repo: "#{finding.repo}",
-        score: #{finding.score},
-        details: "#{escape_quotes(finding.details)}"
+        repo: "#{finding_field(finding, :repo)}",
+        score: #{finding_field(finding, :score, 0.0)},
+        details: "#{escape_quotes(finding_field(finding, :details, ""))}"
       ) {
         success
       }
@@ -56,13 +147,12 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_echidnabot(finding) do
-    # GraphQL mutation to echidnabot
     mutation = """
     mutation {
       submitProofObligation(
-        repo: "#{finding.repo}",
-        claim: "#{escape_quotes(finding.claim)}",
-        context: "#{escape_quotes(finding.context)}"
+        repo: "#{finding_field(finding, :repo)}",
+        claim: "#{escape_quotes(finding_field(finding, :claim, ""))}",
+        context: "#{escape_quotes(finding_field(finding, :context, ""))}"
       ) {
         success
         proofId
@@ -74,14 +164,13 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_rhodibot(finding) do
-    # GraphQL mutation to rhodibot
     mutation = """
     mutation {
       suggestFix(
-        repo: "#{finding.repo}",
-        file: "#{finding.file}",
-        issue: "#{escape_quotes(finding.issue)}",
-        suggestion: "#{escape_quotes(finding.suggestion)}"
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{finding_field(finding, :file, "")}",
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         prNumber
@@ -93,17 +182,16 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_glambot(finding) do
-    # GraphQL mutation to glambot
-    category = Map.get(finding, :category, "presentation")
+    category = finding_field(finding, :category, "presentation")
 
     mutation = """
     mutation {
       reportPresentationFinding(
-        repo: "#{finding.repo}",
-        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{escape_quotes(finding_field(finding, :file, ""))}",
         category: "#{escape_quotes(category)}",
-        issue: "#{escape_quotes(finding.issue)}",
-        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         findingId
@@ -115,18 +203,17 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_seambot(finding) do
-    # GraphQL mutation to seambot
-    category = Map.get(finding, :category, "seam-analysis")
+    category = finding_field(finding, :category, "seam-analysis")
 
     mutation = """
     mutation {
       reportSeamFinding(
-        repo: "#{finding.repo}",
-        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{escape_quotes(finding_field(finding, :file, ""))}",
         category: "#{escape_quotes(category)}",
-        issue: "#{escape_quotes(finding.issue)}",
-        driftScore: #{Map.get(finding, :drift_score, 0.0)},
-        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
+        driftScore: #{finding_field(finding, :drift_score, 0.0)},
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         findingId
@@ -138,19 +225,18 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_cipherbot(finding) do
-    # GraphQL mutation to cipherbot (Specialist - crypto hygiene)
-    category = Map.get(finding, :category, "crypto/hashing")
+    category = finding_field(finding, :category, "crypto/hashing")
 
     mutation = """
     mutation {
       reportCryptoFinding(
-        repo: "#{finding.repo}",
-        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{escape_quotes(finding_field(finding, :file, ""))}",
         category: "#{escape_quotes(category)}",
-        algorithm: "#{escape_quotes(Map.get(finding, :algorithm, ""))}",
-        issue: "#{escape_quotes(finding.issue)}",
-        pqReady: #{Map.get(finding, :pq_ready, false)},
-        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+        algorithm: "#{escape_quotes(finding_field(finding, :algorithm, ""))}",
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
+        pqReady: #{finding_field(finding, :pq_ready, false)},
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         findingId
@@ -162,17 +248,16 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_finishbot(finding) do
-    # GraphQL mutation to finishbot (Tier 2 Finisher - completeness analysis)
-    category = Map.get(finding, :category, "completeness/release")
+    category = finding_field(finding, :category, "completeness/release")
 
     mutation = """
     mutation {
       reportCompletenessFinding(
-        repo: "#{finding.repo}",
-        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{escape_quotes(finding_field(finding, :file, ""))}",
         category: "#{escape_quotes(category)}",
-        issue: "#{escape_quotes(finding.issue)}",
-        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         findingId
@@ -184,17 +269,16 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_accessibilitybot(finding) do
-    # GraphQL mutation to accessibilitybot
     mutation = """
     mutation {
       reportAccessibilityViolation(
-        repo: "#{finding.repo}",
-        file: "#{finding.file}",
-        wcagLevel: "#{escape_quotes(finding.wcag_level)}",
-        criterion: "#{escape_quotes(finding.criterion)}",
-        element: "#{escape_quotes(finding.element)}",
-        issue: "#{escape_quotes(finding.issue)}",
-        suggestion: "#{escape_quotes(finding.suggestion)}"
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{finding_field(finding, :file, "")}",
+        wcagLevel: "#{escape_quotes(finding_field(finding, :wcag_level, ""))}",
+        criterion: "#{escape_quotes(finding_field(finding, :criterion, ""))}",
+        element: "#{escape_quotes(finding_field(finding, :element, ""))}",
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         findingId
@@ -206,20 +290,19 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_robot_repo_automaton(finding) do
-    # GraphQL mutation to robot-repo-automaton (Tier 3 Executor)
-    # RRA applies fixes with confidence thresholds: high=auto, medium=review, low=skip
-    confidence = Map.get(finding, :confidence, "high")
-    fix_type = Map.get(finding, :fix_type, "compliance")
+    confidence = finding_field(finding, :confidence, "high")
+    fix_type = finding_field(finding, :fix_type, "compliance")
 
     mutation = """
     mutation {
       requestAutoFix(
-        repo: "#{finding.repo}",
-        file: "#{escape_quotes(Map.get(finding, :file, ""))}",
-        issue: "#{escape_quotes(finding.issue)}",
+        repo: "#{finding_field(finding, :repo)}",
+        file: "#{escape_quotes(finding_field(finding, :file, ""))}",
+        issue: "#{escape_quotes(finding_field(finding, :issue, ""))}",
         fixType: "#{escape_quotes(fix_type)}",
-        confidence: "#{escape_quotes(confidence)}",
-        suggestion: "#{escape_quotes(Map.get(finding, :suggestion, ""))}"
+        confidence: "#{escape_quotes(to_string(confidence))}",
+        recipeId: "#{escape_quotes(finding_field(finding, :recipe_id, ""))}",
+        suggestion: "#{escape_quotes(finding_field(finding, :suggestion, ""))}"
       ) {
         success
         fixApplied
@@ -231,34 +314,29 @@ defmodule Hypatia.FleetDispatcher do
     execute_graphql(mutation, "robot-repo-automaton")
   end
 
-  @doc """
-  Ingest a fix outcome from robot-repo-automaton into the neurosymbolic
-  learning loop. Records whether an auto-fix succeeded or failed so the
-  learning engine can adjust confidence thresholds and propose new rules.
-  """
   defp ingest_fix_outcome(finding) do
-    pattern = Map.get(finding, :pattern, "unknown")
-    success = Map.get(finding, :success, false)
-    repo = Map.get(finding, :repo, "unknown")
+    pattern = finding_field(finding, :pattern, "unknown")
+    success = finding_field(finding, :success, false)
+    repo = finding_field(finding, :repo, "unknown")
 
     Logger.info(
       "Learning loop: fix outcome for pattern '#{pattern}' in #{repo} - " <>
-      "success=#{success}"
+        "success=#{success}"
     )
 
-    # Write observation to the shared-context learning pipeline
     observation = %{
       type: pattern,
       repo: repo,
       success: success,
-      fix_type: Map.get(finding, :fix_type, "unknown"),
-      confidence: Map.get(finding, :confidence, "unknown"),
+      fix_type: finding_field(finding, :fix_type, "unknown"),
+      confidence: finding_field(finding, :confidence, "unknown"),
       observed: DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
-    learning_file = Path.expand(
-      "~/Documents/hyperpolymath-repos/gitbot-fleet/shared-context/learning/fix-outcomes.jsonl"
-    )
+    learning_file =
+      Path.expand(
+        "~/Documents/hyperpolymath-repos/gitbot-fleet/shared-context/learning/fix-outcomes.jsonl"
+      )
 
     case Jason.encode(observation) do
       {:ok, json_line} ->
@@ -272,11 +350,79 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
+  # ====================================================================
+  # Helpers
+  # ====================================================================
+
   defp execute_graphql(query, bot_name) do
-    # TODO: Actual GraphQL client call
-    # For now, just log
-    Logger.info("Would dispatch to #{bot_name}: #{query}")
-    {:ok, :logged}
+    # Dual dispatch: file-based (immediate) + HTTP (when fleet API available)
+    dispatch_record = %{
+      "bot" => bot_name,
+      "query" => query,
+      "dispatched_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "status" => "pending"
+    }
+
+    # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
+    manifest_path = Path.join([
+      Path.expand("~/Documents/hyperpolymath-repos/verisimdb-data"),
+      "dispatch",
+      "pending.jsonl"
+    ])
+
+    case Jason.encode(dispatch_record) do
+      {:ok, json} ->
+        File.mkdir_p!(Path.dirname(manifest_path))
+        File.write(manifest_path, json <> "\n", [:append, :utf8])
+
+      {:error, reason} ->
+        Logger.error("Failed to write dispatch manifest: #{inspect(reason)}")
+    end
+
+    # 2. Attempt HTTP dispatch to fleet API (graceful degradation if unavailable)
+    fleet_url = System.get_env("HYPATIA_FLEET_URL")
+
+    if fleet_url do
+      try do
+        # Use Finch if available, otherwise fall back to file-only dispatch
+        case http_post(fleet_url <> "/dispatch/#{bot_name}", query) do
+          {:ok, _response} ->
+            Logger.info("Live dispatch to #{bot_name} succeeded")
+            {:ok, :dispatched}
+
+          {:error, reason} ->
+            Logger.warning("Live dispatch to #{bot_name} failed (#{inspect(reason)}), file dispatch used")
+            {:ok, :file_dispatched}
+        end
+      rescue
+        e ->
+          Logger.warning("HTTP dispatch error: #{inspect(e)}, file dispatch used")
+          {:ok, :file_dispatched}
+      end
+    else
+      Logger.info("Dispatched to #{bot_name} via manifest (no fleet URL configured)")
+      {:ok, :file_dispatched}
+    end
+  end
+
+  defp http_post(url, body) do
+    # Attempt HTTP POST — works if :httpc is available (OTP built-in)
+    case :httpc.request(
+           :post,
+           {String.to_charlist(url), [{~c"content-type", ~c"application/json"}],
+            ~c"application/json", String.to_charlist(body)},
+           [{:timeout, 10_000}],
+           []
+         ) do
+      {:ok, {{_, status, _}, _, _response_body}} when status in 200..299 ->
+        {:ok, status}
+
+      {:ok, {{_, status, _}, _, _}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp escape_quotes(str) when is_binary(str) do
@@ -284,4 +430,17 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp escape_quotes(_), do: ""
+
+  # Unified field accessor that works with both maps and keyword structs
+  defp finding_field(finding, key, default \\ nil) when is_map(finding) do
+    Map.get(finding, key) || Map.get(finding, Atom.to_string(key)) || default
+  end
+
+  defp get_pattern_repo(pattern) do
+    # Pattern may have repos_affected_list — take first repo as representative
+    case Map.get(pattern, "repos_affected_list", []) do
+      [repo | _] -> repo
+      _ -> Map.get(pattern, "routed_repo", "unknown")
+    end
+  end
 end

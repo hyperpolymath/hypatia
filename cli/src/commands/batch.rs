@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Batch command implementation.
 //!
 //! Process multiple repositories or inputs from stdin for headless/workflow automation.

@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DuplicateRecordFields #-}
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 -- | REST API for the cicd-hyper-a registry
 --
 -- Provides endpoints for:
