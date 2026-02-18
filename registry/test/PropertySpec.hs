@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
@@ -149,7 +149,7 @@ instance Arbitrary Action where
 
       genContent = elements
         [ "permissions: read-all"
-        , "# SPDX-License-Identifier: PLMP-1.0-or-later"
+        , "# SPDX-License-Identifier: PMPL-1.0-or-later"
         , "version: 2"
         ]
 
@@ -272,7 +272,7 @@ instance Arbitrary RulesetMetadata where
       , metaVersion = (major, minor, patch)
       , metaDescription = desc
       , metaAuthor = author
-      , metaLicense = "PLMP-1.0-or-later"
+      , metaLicense = "PMPL-1.0-or-later"
       , metaCategory = category
       , metaTargets = targets
       , metaCreated = Nothing
@@ -311,7 +311,7 @@ instance Arbitrary DepositRequest where
     <*> arbitrary
     <*> arbitrary
     <*> oneof [pure Nothing, Just <$> genName]
-    <*> oneof [pure Nothing, Just <$> pure "PLMP-1.0-or-later"]
+    <*> oneof [pure Nothing, Just <$> pure "PMPL-1.0-or-later"]
     where
       genName = elements ["my-ruleset", "security-policy", "code-quality"]
       genDescription = elements ["Test ruleset", "Security rules", "Quality checks"]

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Prevention workflow - ensures branch protection is enabled
 # Run periodically to detect and alert on repos without protection
 name: Branch Protection Enforcer

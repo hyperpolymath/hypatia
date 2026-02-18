@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= K9 Self-Validating Component Integration for Hypatia
+
+:toc:
+:icons: font
+
+== Overview
+
+Hypatia templates can be packaged as K9 Self-Validating Components (SVCs), enabling templates to carry their own validation contracts and deployment logic.
+
+== Why K9 for Templates?
+
+Traditional template systems rely on external validators. With K9:
+
+* **Self-Validation**: Templates validate themselves using embedded Nickel contracts
+* **Self-Documentation**: Validation rules serve as documentation
+* **Self-Deployment**: Templates know how to instantiate themselves
+* **Composability**: K9 components can reference and validate against each other
+
+== K9 Template Structure
+
+[source,nickel]
+----
+# my-template.k9
+# Self-validating template component
+
+{
+  metadata = {
+    name = "my-template",
+    version = "1.0.0",
+    schema_version = "1.0",
+  },
+
+  # Nickel contracts for validation
+  contracts = {
+    required_fields | Array String = ["name", "description"],
+    file_structure | {..} = {
+      "README.md" : Bool,
+      "src/" : Bool,
+      "tests/" : Bool,
+    },
+  },
+
+  # Template content
+  content = {
+    # ... template files ...
+  },
+
+  # Deployment logic (Just recipes)
+  deploy = {
+    instantiate = "just instantiate",
+    validate = "just validate",
+  },
+}
+----
+
+== Integration Roadmap
+
+=== v1.0 (Current)
+* Document K9 integration plan
+* Add k9-svc to related projects in ECOSYSTEM.scm
+* Design K9 template schema
+
+=== v1.5 (Next)
+* Implement K9 template parser in hypatia-cli
+* Convert sample templates to K9 format
+* Add k9-validate subcommand
+
+=== v2.0 (Future)
+* Full K9 registry support
+* K9 template marketplace
+* Automated K9 template validation in CI
+
+== Examples
+
+See link:../examples/k9-templates/[k9-templates/] for example K9-based templates.
+
+== References
+
+* link:https://github.com/hyperpolymath/k9-svc[K9 Self-Validating Component Standard]
+* link:https://nickel-lang.org[Nickel Language]
+* link:https://just.systems[Just Task Runner]

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Kubernetes Module
 #
 # This module provisions Kubernetes clusters on AWS (EKS), GCP (GKE), or Azure (AKS).

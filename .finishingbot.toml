@@ -1,0 +1,39 @@
+# .finishingbot.toml - Finishingbot configuration for hypatia
+
+[scanning]
+# Exclude dependency and build directories
+exclude_paths = [
+    "**/deps/**",           # Elixir/Erlang dependencies (elixir-scanner/deps/)
+    "**/node_modules/**",   # Node.js dependencies
+    "**/target/**",         # Rust build artifacts
+    "**/dist-newstyle/**",  # Haskell build artifacts
+    "**/_build/**",         # Elixir build artifacts
+]
+
+[placeholder]
+# Exclude test, example, and documentation files from placeholder detection
+exclude_patterns = [
+    "**/tests/**",
+    "**/test/**",
+    "**/*.example.*",
+    "**/examples/**",
+    ".machine_readable/**",
+    ".audittraining/**",
+    "**/fixtures/**",
+    "**/docker-compose*.yml",
+    "**/PLAYBOOK.scm",      # Documents operational procedures including placeholder keywords
+    "**/AGENTIC.scm",       # Documents AI integration including placeholder keywords
+    "**/NEUROSYM.scm",      # Documents neurosymbolic patterns
+]
+
+[sensitive-data]
+# Whitelist known false positives for sensitive data detection
+whitelist_files = [
+    "**/integration/**/*.rs",      # Integration test files with test credentials
+    "**/integration/**/*.sh",      # Integration test scripts
+    "**/docker-compose*.yml",      # Docker compose test configs
+    "**/.audittraining/**",        # Security audit training examples
+    "**/hooks/lib/cache.sh",       # Hook scripts with string references
+    "**/config.rs",                # Config struct definitions
+    "**/tests/**",                 # All test files
+]

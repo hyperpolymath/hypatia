@@ -1,20 +1,22 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for Hypatia CLI (hyper)
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Containerfile for Hypatia CLI (hyper)
 # Multi-stage build for minimal production image
 
 # ============================================================
 # Stage 1: Build Environment
 # ============================================================
-FROM rust:1.85-bookworm AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+# Install build dependencies (Wolfi uses apk)
+RUN apk add --no-cache \
+    rust \
+    cargo \
+    pkgconf \
+    openssl-dev \
+    cmake \
+    build-base
 
 WORKDIR /build
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    cmake \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace manifest and lock file
 COPY Cargo.toml Cargo.lock ./
@@ -52,16 +54,15 @@ RUN cargo build --release --package hypatia-cli
 # ============================================================
 # Stage 2: Runtime Environment
 # ============================================================
-FROM debian:bookworm-slim AS runtime
+FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     ca-certificates \
     libssl3 \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --shell /bin/bash cicd
+    && adduser -D -s /bin/sh cicd
 
 WORKDIR /app
 

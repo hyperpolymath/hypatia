@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 = GitHub Registry Integration for cicd-hyper-a
 :toc: left
 :toclevels: 3
@@ -52,7 +52,7 @@ Rulesets would be published as scoped npm packages:
   "files": ["ruleset.yaml", "rules/*.yaml"],
   "keywords": ["cicd-hyper-a", "ruleset", "security"],
   "repository": "https://github.com/hyperpolymath/cicd-hyper-a",
-  "license": "PLMP-1.0-or-later"
+  "license": "PMPL-1.0-or-later"
 }
 ----
 
@@ -241,7 +241,7 @@ ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0
   "annotations": {
     "org.opencontainers.image.source": "https://github.com/hyperpolymath/cicd-hyper-a",
     "org.opencontainers.image.description": "GitHub Actions SHA pinning rules",
-    "org.opencontainers.image.licenses": "PLMP-1.0-or-later"
+    "org.opencontainers.image.licenses": "PMPL-1.0-or-later"
   }
 }
 ----
@@ -940,7 +940,7 @@ cli/src/registry/
 
 [source,rust]
 ----
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Registry abstraction for multiple backends
 
 use async_trait::async_trait;
@@ -1018,7 +1018,7 @@ pub fn create_registry(config: &Config) -> Result<Box<dyn Registry>> {
 
 [source,rust]
 ----
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! GitHub Container Registry (ghcr.io) integration using OCI artifacts
 
 use async_trait::async_trait;
@@ -1289,7 +1289,7 @@ pub async fn execute(args: WithdrawArgs, config: &Config, format: OutputFormat) 
 
 [source,rust]
 ----
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! GitHub Releases integration for bundled ruleset distribution
 
 use async_trait::async_trait;
@@ -1454,7 +1454,7 @@ async fn test_ghcr_deposit_withdraw() {
 [source,yaml]
 ----
 # .github/workflows/release-rulesets.yml
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 name: Release Rulesets
 on:
   push:
@@ -1572,7 +1572,7 @@ export HYPER_REGISTRY_NAMESPACE="myorg/my-rulesets"
 ----
 #!/bin/bash
 # migrate-to-ghcr.sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 
 set -euo pipefail
 

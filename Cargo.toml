@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 [workspace]
 resolver = "2"
 members = [
@@ -12,8 +12,8 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["hyperpolymath"]
-license = "PLMP-1.0-or-later"
+authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
+license = "PMPL-1.0-or-later"
 repository = "https://github.com/hyperpolymath/hypatia"
 homepage = "https://hypatia.reposystem.dev"
 

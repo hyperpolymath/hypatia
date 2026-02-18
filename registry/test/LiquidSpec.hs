@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 -- | Tests for Liquid module (refinement types)
 
 module LiquidSpec (spec) where

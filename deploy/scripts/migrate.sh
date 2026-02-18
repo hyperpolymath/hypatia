@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Database Migration Script
 #
 # Manages database schema migrations with version tracking and rollback support.
@@ -449,7 +449,7 @@ cmd_create() {
     local arango_file="$MIGRATIONS_DIR/${version}_${name}_arangodb.sh"
     cat > "$arango_file" <<'MIGRATION'
 #!/bin/sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Migration: MIGRATION_NAME
 # Type: ArangoDB
 
@@ -499,7 +499,7 @@ MIGRATION
     local dragonfly_file="$MIGRATIONS_DIR/${version}_${name}_dragonfly.sh"
     cat > "$dragonfly_file" <<'MIGRATION'
 #!/bin/sh
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Migration: MIGRATION_NAME
 # Type: Dragonfly
 

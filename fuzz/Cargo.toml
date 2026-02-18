@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+
+[package]
+name = "hypatia-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.hypatia-data]
+path = "../crates/hypatia-data"
+
+[[bin]]
+name = "fuzz_template_validation"
+path = "fuzz_targets/fuzz_template_validation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_registry_operations"
+path = "fuzz_targets/fuzz_registry_operations.rs"
+test = false
+doc = false
+bench = false
