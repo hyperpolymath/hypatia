@@ -1,0 +1,251 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# AI Assistant Instructions for Hypatia Rule Management
+
+## Repository Focus
+- **Hypatia** is a neurosymbolic security scanner that learns patterns from fleet observations
+- Maintain `approved-rules/` as the authoritative source of truth for production rules
+- Keep `rule-proposals/` for rules pending validation
+- Sync detection patterns between Logtalk rules and `hypatia-cli.sh` bash patterns
+
+## Rule Governance
+
+### Rule Lifecycle
+1. **Pattern Detection** (hypatia-cli.sh)
+   - Bash/ripgrep patterns detect issues in code
+   - Submit findings to gitbot-fleet shared-context
+
+2. **Observation Collection** (learning loop)
+   - Aggregate findings across fleet
+   - Track pattern occurrence counts
+
+3. **Rule Proposal** (threshold: 5 observations)
+   - Generate Logtalk rule with comprehensive logic
+   - Include: CWE mapping, severity, fix suggestions
+   - Save to `rule-proposals/`
+
+4. **Validation** (ECHIDNA semantic analysis)
+   - Check logical consistency
+   - Verify pattern coverage
+   - Assess rule interactions
+   - Required: 90%+ validation score
+
+5. **Approval & Deployment**
+   - Move to `approved-rules/`
+   - Update `rule-deployment-status.json`
+   - Pattern already active in hypatia-cli.sh
+
+6. **Auto-approval** (threshold: 10 observations + 3 successful fixes)
+   - Track fix outcomes in `auto-fix-history.jsonl`
+   - Enable automated remediation when threshold reached
+
+### Rule Quality Standards
+
+**Production-Ready Rules Must Have:**
+- ✅ Comprehensive detection logic (not `fail.` stubs)
+- ✅ 100+ lines with 20+ helper predicates
+- ✅ Context-aware severity escalation (prod vs test)
+- ✅ CWE mapping for compliance
+- ✅ Actionable fix suggestions
+- ✅ Pattern-specific validation logic
+
+**Rule Severity Classification:**
+- **CRITICAL:** Code injection, RCE, authentication bypass (CWE-95, CWE-89, CWE-287)
+- **HIGH:** Memory safety, type safety bypasses (CWE-1188, CWE-704, CWE-754)
+- **MEDIUM:** Resource leaks, poor error handling (CWE-404, CWE-755)
+- **INFO:** Technical debt, style issues (CWE-1057)
+
+### File Organization
+
+```
+hypatia/
+├── hypatia-cli.sh              # Detection patterns (bash/ripgrep)
+├── approved-rules/             # Production Logtalk rules
+│   ├── technical_debt.lgt
+│   ├── unsafe_without_doc.lgt
+│   ├── eval_usage.lgt
+│   └── DEPLOYMENT-MANIFEST-*.md
+├── rule-proposals/             # Pending validation
+│   ├── *.lgt
+│   └── RULE-PROPOSALS-*.md
+├── rule-deployment-status.json # Current state
+├── fleet-config.k9.ncl         # K9 configuration
+└── rules.a2ml                  # This file
+
+gitbot-fleet/shared-context/
+├── findings/                   # Scan results per repo
+├── learning/
+│   ├── observed-patterns.jsonl
+│   ├── auto-fix-history.jsonl
+│   └── rule-proposals/
+└── auto-fixes/                 # Generated fix scripts
+```
+
+## Workflow Instructions
+
+### When Adding New Patterns
+
+1. **Add to hypatia-cli.sh:**
+   ```bash
+   # Pattern N: Description (SEVERITY)
+   while IFS=: read -r linenum line; do
+       [[ -z "$linenum" || ! "$linenum" =~ ^[0-9]+$ ]] && continue
+       [[ "$first" == "false" ]] && echo "," >> "$all_findings"
+       first=false
+
+       jq -n \
+           --arg sev "severity" \
+           --arg type "pattern_type" \
+           --arg pattern "pattern_name" \
+           --arg file "$file" \
+           --argjson line "$linenum" \
+           --arg code "$line" \
+           --arg cwe "CWE-XXXX" \
+           --arg fix "Fix suggestion" \
+           '{severity: $sev, type: $type, pattern: $pattern, file: $file, line: $line, code: $code, cwe: $cwe, fix: $fix, auto_fixable: false}' \
+           >> "$all_findings"
+       ((file_issues++)) || true
+   done < <(rg -n 'pattern_regex' "$file" 2>/dev/null || true)
+   ```
+
+2. **Deploy to fleet:**
+   ```bash
+   cd gitbot-fleet
+   ./fleet-coordinator.sh run-scan /path/to/repo
+   ```
+
+3. **Monitor observations:**
+   ```bash
+   jq -r '.type' learning/observed-patterns.jsonl | sort | uniq -c
+   ```
+
+4. **Generate rule when threshold crossed (5+ obs):**
+   - Create comprehensive Logtalk rule in `rule-proposals/`
+   - Include all required predicates: `has_issue/2`, `classify_severity/2`, `suggest_fix/2`, `auto_fixable/2`
+   - Add context-aware logic with helper predicates
+
+5. **Validate with ECHIDNA:**
+   ```bash
+   ./validate-rule-proposals.sh
+   # Required: 90%+ success rate
+   ```
+
+6. **Deploy approved rule:**
+   ```bash
+   cp rule-proposals/pattern.lgt approved-rules/
+   # Update rule-deployment-status.json
+   ```
+
+### When Modifying Existing Rules
+
+1. **Check current status:**
+   ```bash
+   jq '.approved_rules[] | select(.name == "rule_name")' rule-deployment-status.json
+   ```
+
+2. **Update both files:**
+   - Logtalk rule in `approved-rules/`
+   - Bash pattern in `hypatia-cli.sh`
+
+3. **Re-validate:**
+   ```bash
+   ./validate-rule-proposals.sh
+   ```
+
+4. **Document changes:**
+   - Update `DEPLOYMENT-MANIFEST-*.md`
+   - Increment version in rule metadata
+
+### When Creating Auto-fix Scripts
+
+**Auto-fix scripts must:**
+- Accept finding JSON via `--finding-file` parameter
+- Exit 0 on success, non-zero on failure
+- Create git commit with descriptive message
+- Include "Co-Authored-By: Hypatia Scanner <hypatia@reposystem.dev>"
+- Be idempotent (safe to run multiple times)
+
+**Template:**
+```bash
+#!/usr/bin/env bash
+# Auto-fix: Pattern Name
+set -euo pipefail
+
+FINDING_FILE="$1"
+FILE=$(jq -r '.file' "$FINDING_FILE")
+LINE=$(jq -r '.line' "$FINDING_FILE")
+
+# Perform fix
+sed -i "${LINE}s/pattern/replacement/" "$FILE"
+
+# Commit
+git add "$FILE"
+git commit -m "fix: auto-remediate pattern_name
+
+Co-Authored-By: Hypatia Scanner <hypatia@reposystem.dev>"
+```
+
+## Integration Points
+
+### With gitbot-fleet
+- Submit findings to `shared-context/findings/`
+- Read learning data from `shared-context/learning/`
+- Execute auto-fixes via `robot-repo-automaton`
+
+### With ECHIDNA
+- Validate rules with semantic analysis
+- Check logical consistency
+- Verify pattern coverage
+- 90%+ validation score required for approval
+
+### With K9 Contractiles
+- Read configuration from `fleet-config.k9.ncl`
+- Deploy scanner to repos via K9 Hunt leash
+- Coordinate with gitbot-fleet K9 components
+
+## Metrics to Track
+
+- **Observations per pattern:** Track in `observed-patterns.jsonl`
+- **Rule proposals generated:** Count in `rule-proposals/`
+- **Validation scores:** Record in rule metadata
+- **Auto-fix success rate:** Track in `auto-fix-history.jsonl`
+- **False positive rate:** Monitor user feedback
+- **Time to auto-approval:** Measure learning loop velocity
+
+## Constraints
+
+- **Never modify approved rules without re-validation**
+- **Always maintain CWE mappings for compliance**
+- **Require manual review for CRITICAL findings**
+- **Test auto-fix scripts before fleet deployment**
+- **Preserve backward compatibility in pattern detection**
+
+## Delivery Promises
+
+After any changes to rules or patterns:
+1. ✅ Update both Logtalk rule and bash pattern
+2. ✅ Update `rule-deployment-status.json`
+3. ✅ Re-run validation if rule logic changed
+4. ✅ Update deployment manifest
+5. ✅ Mention in commit message which rules changed
+
+## Current State
+
+**Active Rules:** 7 (as of 2026-02-06)
+- unsafe_panic (template, 1,150 obs)
+- type_safety_bypass (template, 477 obs)
+- unsafe_crash (template, 342 obs)
+- cors_misconfiguration (auto-fixed, 3 obs)
+- technical_debt (production, 196 obs) ⭐
+- unsafe_without_doc (production, 19 obs) ⭐
+- eval_usage (production, 7 obs) ⭐
+
+**Fleet Coverage:** 14/585 repositories (2.4%)
+**Total Observations:** 2,194
+**Learning Loop Status:** ACTIVE
+**Auto-approval Candidates:** 0 (need 10 obs + 3 fixes)
+
+---
+
+**Last Updated:** 2026-02-06T22:45:00+00:00
+**Maintained By:** Hypatia Learning Loop
+**Questions?** See `DEPLOYMENT-MANIFEST-*.md` for detailed deployment history

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Seam tests for forge adapter ↔ data layer integration
 //!
 //! These tests verify the interfaces between components work correctly,

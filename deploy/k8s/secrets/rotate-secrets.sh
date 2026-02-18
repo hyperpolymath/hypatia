@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a - Rotate Kubernetes Secrets Safely
 #
 # This script rotates secrets with zero-downtime using rolling updates.

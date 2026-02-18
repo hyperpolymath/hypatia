@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Hypatia - Build and publish container images to GitHub Container Registry
 # Website: https://hypatia.reposystem.dev
 # Publishes development builds on push to main
@@ -13,7 +13,7 @@ on:
       - 'adapters/**'
       - 'data/**'
       - 'fixer/**'
-      - 'deploy/Dockerfile*'
+      - 'deploy/Containerfile*'
       - 'Cargo.toml'
       - 'Cargo.lock'
   workflow_dispatch:
@@ -36,11 +36,11 @@ jobs:
       matrix:
         component:
           - name: cli
-            dockerfile: deploy/Dockerfile
+            dockerfile: deploy/Containerfile
           - name: adapter
-            dockerfile: deploy/Dockerfile.adapter
+            dockerfile: deploy/Containerfile.adapter
           - name: engine
-            dockerfile: deploy/Dockerfile.engine
+            dockerfile: deploy/Containerfile.engine
 
     steps:
       - name: Checkout repository
@@ -53,7 +53,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -99,7 +99,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -119,7 +119,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: deploy/Dockerfile.registry
+          file: deploy/Containerfile.registry
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

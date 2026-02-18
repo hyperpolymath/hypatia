@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 = cicd-hyper-a HTTP API Reference
 :toc: left
 :toclevels: 3
@@ -136,7 +136,7 @@ Response:
     "name": "hyperpolymath",
     "email": "team@hyperpolymath.io"
   },
-  "license": "PLMP-1.0-or-later",
+  "license": "PMPL-1.0-or-later",
   "tags": ["security", "workflow", "permissions"],
   "rules": {
     "preventive": [
@@ -175,7 +175,7 @@ Request Body:
   "name": "my-custom-rules",
   "version": "1.0.0",
   "description": "Custom rules for my organization",
-  "license": "PLMP-1.0-or-later",
+  "license": "PMPL-1.0-or-later",
   "tags": ["custom", "org-policy"],
   "rules": {
     "preventive": [...],

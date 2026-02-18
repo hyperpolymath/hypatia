@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Alire manifest for Hypatia TUI
 
 [general]
@@ -8,7 +8,7 @@ version = "0.1.0"
 authors = ["hyperpolymath"]
 maintainers = ["hyperpolymath <hyperpolymath@protonmail.com>"]
 maintainers-logins = ["hyperpolymath"]
-licenses = "PLMP-1.0-or-later"
+licenses = "PMPL-1.0-or-later"
 website = "https://hypatia.reposystem.dev"
 tags = ["tui", "terminal", "cicd", "devops", "spark", "ada2022"]
 long-description = """

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 #
 # Integration Test Runner for cicd-hyper-a
 #

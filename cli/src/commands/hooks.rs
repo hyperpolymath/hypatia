@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Hooks command implementation.
 //!
 //! Install, remove, and manage git hooks for automated policy enforcement.
@@ -892,7 +892,7 @@ fi
 
     format!(
         r#"#!/bin/bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Managed by cicd-hyper-a
 # Version: 1.0.0
 # Hook: {hook_type}

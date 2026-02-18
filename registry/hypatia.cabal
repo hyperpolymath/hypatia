@@ -1,12 +1,12 @@
 cabal-version:      3.0
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 name:               hypatia
 version:            0.1.0.0
 synopsis:           Type-safe CI/CD rule registry
 description:        Hypatia - Neurosymbolic CI/CD intelligence platform.
                     Dumb rules from smart learning.
                     Website: https://hypatia.reposystem.dev
-license:            LicenseRef-PLMP-1.0-or-later
+license:            LicenseRef-PMPL-1.0-or-later
 license-file:       ../LICENSE
 author:             hyperpolymath
 maintainer:         security@hyperpolymath.dev
