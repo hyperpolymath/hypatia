@@ -1,0 +1,27 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+--
+-- Hypatia ABI package: type-safe interface definitions for REST, GraphQL, gRPC
+-- with formal proofs of API response correctness.
+
+package hypatia-abi
+version = 0.5.0
+
+authors = "Jonathan D.A. Jewell"
+
+brief = "Idris2 ABI definitions for Hypatia neurosymbolic CI/CD pipeline"
+
+depends = base    >= 0.6.0
+        , contrib
+
+sourcedir = ".."
+
+modules = Hypatia.ABI.Types
+        , Hypatia.ABI.GraphQL
+        , Hypatia.ABI.GRPC
+        , Hypatia.ABI.REST
+        , Hypatia.ABI.FFI
+
+builddir = "../../build/abi"
+
+opts = "--total"

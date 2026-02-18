@@ -209,8 +209,16 @@ defmodule Hypatia.Neural.Coordinator do
     # Rebuild trust graph from latest data
     updated_graph = GraphOfTrust.build()
 
+    # Train ESN on accumulated confidence trajectories
+    trained_esn = Hypatia.Neural.TrainingPipeline.train_esn(state.esn)
+
+    # Train RBF on pattern registry data
+    trained_rbf = Hypatia.Neural.TrainingPipeline.train_rbf(state.rbf)
+
     updated_state = %{state |
       trust_graph: updated_graph,
+      esn: trained_esn,
+      rbf: trained_rbf,
       cycle_count: state.cycle_count + 1,
       last_cycle: DateTime.utc_now()
     }

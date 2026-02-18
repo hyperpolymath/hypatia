@@ -7,7 +7,7 @@
     (version "0.5.0")
     (schema-version "1.0")
     (created "2026-01-03")
-    (updated "2026-02-14")
+    (updated "2026-02-13")
     (project "hypatia")
     (repo "github.com/hyperpolymath/hypatia"))
 
@@ -40,9 +40,11 @@
       (liquid-state-machine "complete" "Temporal anomaly detection in event streams")
       (echo-state-network "complete" "Confidence trajectory forecasting")
       (radial-neural-network "complete" "Finding similarity and novelty detection")
-      (idris2-abi "complete" "Types, GraphQL, gRPC, REST with dependent type proofs")
-      (zig-ffi "complete" "C ABI bridge for all Hypatia API operations")
-      (elixir-tests "complete" "8 test files covering all pipeline modules")
+      (idris2-abi "complete" "Types, GraphQL, gRPC, REST, FFI with dependent type proofs + build system (ipkg + pack.toml)")
+      (zig-ffi "complete" "C ABI bridge: 7 real file-based implementations + json_writer + file_ops")
+      (ffi-idr "complete" "Idris2 FFI type signatures with GADT constructors and ffiReturnsApiResponse proof")
+      (training-pipeline "complete" "ESN/RBF training from real verisimdb-data outcomes + pattern vectors")
+      (elixir-tests "complete" "11 test files covering all pipeline modules")
       (license-compliance "complete" "All SPDX headers updated to PMPL-1.0-or-later")
       (vql-client "complete" "Built-in VQL parser + query cache GenServer")
       (vql-file-executor "complete" "Executes VQL ASTs against verisimdb-data flat files")
@@ -51,7 +53,7 @@
       (graphql-api "planned" "Fleet coordination API — live HTTP endpoint"))
     (working-features
       ("Safety triangle pipeline: eliminate → substitute → control")
-      ("10 fix recipes (6 at 0.99 confidence)")
+      ("22 fix recipes (6 at 0.99 confidence, covering PA001-PA005/PA010-PA013/PA015/PA017/PA018/PA020)")
       ("Fuzzy recipe matching by PA rule prefix + keyword overlap")
       ("Language inference from description text")
       ("Dispatch manifest generation (JSONL)")
@@ -91,13 +93,17 @@
           ("Aggregated confidence from MoE + RBF + LSM")
           ("Novelty detection flags unknown finding types")
           ("Temporal anomaly detection in event streams")
-          ("Confidence trajectory forecasting and drift detection")))
+          ("Confidence trajectory forecasting and drift detection")
+          ("Training pipeline: ESN trained on 2372 real outcome data points")
+          ("5 new fix recipes: unwrap-to-match, panic-to-result, unsafe-type-coercion, atom-exhaustion, unsafe-ffi-wrapper")))
       (m5 "Formal ABI + FFI"
         (status "complete")
         (items
           ("Idris2 ABI: Types, GraphQL, gRPC, REST definitions")
           ("Dependent type proofs: all ops return ApiResponse-wrapped types")
-          ("Zig C ABI bridge: 7 exported functions")
+          ("Zig C ABI bridge: 7 real file-based implementations + json_writer + file_ops")
+          ("FFI.idr: GADT constructors + ffiReturnsApiResponse proof for all 7 functions")
+          ("Idris2 build system: hypatia-abi.ipkg + hypatia-verify.ipkg + pack.toml")
           ("OTP Application with LearningScheduler + SelfDiagnostics + Neural.Coordinator")))
       (m6 "Federated Data Layer"
         (status "complete")
@@ -129,8 +135,6 @@
         (items
           ("Deploy verisim-api server (enables native graph/vector/temporal modalities)")
           ("Deploy ArangoDB + Dragonfly (transitional until verisim-api running)")
-          ("Wire GQL-DT Lean types to VQL PROOF clauses")
-          ("Train ESN/RBF on accumulated confidence history")
           ("GraphQL API live HTTP endpoint")
           ("SARIF output for IDE integration")
           ("Chapel NIFs for compute-heavy neural operations")
@@ -145,13 +149,14 @@
     (medium
       ("447 weak points remaining across 175 repos")
       ("4 recipes below auto_execute threshold")
-      ("Neural networks need training data accumulation")
-      ("Only 11 recipes for 954 patterns (98.8% without automated fix)")
+      ("ESN trained but one-sided — all outcomes are success, needs failure data")
+      ("RBF trained (965 vectors, MSE=0.047) — one-sided like ESN")
+      ("22 recipes for 954 patterns (97.7% without automated fix)")
       ("184 repos in verisimdb-data have NULL summary fields"))
     (low
       ("Codeberg/Bitbucket mirroring blocked")
       ("3 orphaned pattern IDs (954 in registry vs 951 in index)")
-      ("GQL-DT isolated — no consumer uses it")))
+))
 
   (critical-next-actions
     (immediate
@@ -160,16 +165,30 @@
       ("Generate summaries for 184 NULL-summary repos in verisimdb-data"))
     (this-week
       ("Deploy verisim-api server for native VQL store execution")
-      ("Train RBF and ESN on collected confidence history")
-      ("Develop 3-5 new recipes for high-frequency substitute patterns"))
+      ("Develop more recipes for remaining uncovered PA rules (PA006, PA007, PA008, PA009, PA014, PA016, PA019)"))
     (this-month
-      ("Wire GQL-DT Lean types to VQL PROOF clauses")
       ("Implement SARIF output for IDE integration")
       ("Build VQL language bindings (ReScript, Rust, Elixir/NIF)")
       ("Implement multi-store VQL federation (currently local file-backed)")
-      ("Historical trend tracking across multiple scan cycles")))
+      ("Historical trend tracking across multiple scan cycles")
+      ("Develop more fix recipes for high-frequency substitute patterns")))
 
   (session-history
+    (session "2026-02-13-16"
+      (accomplishments
+        ("Implemented all 6 Zig FFI stubs: health_check, scan_repo, dispatch, record_outcome, force_learning_cycle, get_confidence")
+        ("Created supporting Zig modules: json_writer.zig (buffer-based serializer), file_ops.zig (verisimdb-data helpers)")
+        ("Created FFI.idr: GADT constructors + ffiReturnsApiResponse proof for all 7 C ABI functions")
+        ("Set up Idris2 build system: hypatia-abi.ipkg, hypatia-verify.ipkg, pack.toml")
+        ("Created training pipeline: ESN trained on 2372 real confidence data points from outcomes")
+        ("5 new fix recipes: unwrap-to-match (PA005), panic-to-result (PA005), unsafe-type-coercion (PA020), atom-exhaustion (PA013), unsafe-ffi-wrapper (PA012)")
+        ("Updated proven-substitutions.json: PA013 and PA020 tiers changed to eliminate")
+        ("Coordinator force_cycle now calls TrainingPipeline for ESN + RBF training")
+        ("3 new test files: recipe_new_recipes_test.exs (12 tests), training_pipeline_test.exs (5 tests)")
+        ("Removed incorrect GQL-DT references from all documentation (separate project)")
+        ("Updated KNOWN-ISSUES.adoc: 4 items resolved, 2 new items added")
+        ("All 117 tests pass (1 pre-existing timeout in pattern_analyzer)")
+        ("Zig build + test pass: cd ffi/zig && zig build && zig build test")))
     (session "2026-02-13-15"
       (accomplishments
         ("Built VQL Client GenServer with built-in Elixir parser (no Deno/Node dependency)")
