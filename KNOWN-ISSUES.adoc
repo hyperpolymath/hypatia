@@ -3,7 +3,7 @@
 
 = Known Issues and Honest Gaps
 Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
-:revdate: 2026-02-13
+:revdate: 2026-02-14
 :toc: left
 :toclevels: 2
 :icons: font
@@ -11,25 +11,45 @@ Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
 == Overview
 
 This document is an honest accounting of known issues, incomplete
-implementations, and gaps in the Hypatia codebase as of 2026-02-13. Items are
+implementations, and gaps in the Hypatia codebase as of 2026-02-14. Items are
 numbered for easy reference in issue trackers and session logs.
 
-== Issues
+== Resolved
 
 [start=1]
-. **Zig FFI: 6 of 7 functions are stubs.** +
-Only `hypatia_dispatch_strategy` is implemented in `ffi/zig/src/main.zig`.
-The remaining 6 exported functions are stub declarations that return default
-values or do nothing. Real implementations are needed for scan ingestion,
-pattern matching, recipe execution, trust propagation, confidence calculation,
-and anomaly detection FFI entry points.
+. **[RESOLVED] Zig FFI: All 7 functions now implemented.** +
+All 7 exported C ABI functions in `ffi/zig/src/main.zig` are real
+implementations working against verisimdb-data flat files. Health check,
+scan repo, dispatch, record outcome, force learning, get confidence, and
+dispatch strategy are all operational. Supporting modules: `json_writer.zig`,
+`file_ops.zig`. Build: `cd ffi/zig && zig build && zig build test`.
 
-. **Idris2 ABI: No build system.** +
-The Idris2 type definitions in `src/abi/` exist but there is no `.ipkg` file
-or `pack.toml` configuration. The types are defined but cannot be compiled
-or verified by the Idris2 toolchain. A build configuration must be added
-before the ABI definitions can be machine-checked.
+. **[RESOLVED] Idris2 ABI: Build system added.** +
+`src/abi/hypatia-abi.ipkg` package file with `--total` enforcement,
+`verify/hypatia-verify.ipkg` for proofs, and `pack.toml` for the Pack
+package manager. Includes `FFI.idr` with typed GADT constructors for all
+C ABI functions and a proof (`ffiReturnsApiResponse`) that every FFI function
+returns an `ApiResponse`-wrapped type.
 
+. **[RESOLVED] Neural networks: Both ESN and RBF trained.** +
+ESN trained on 2,538 real outcome data points. RBF trained on 965 pattern
+feature vectors (MSE=0.047). Three RBF bugs fixed: registry.json map-vs-list
+structure, field name mismatches (occurrences/repos_affected/first_seen),
+and case-insensitive severity matching. Both networks are one-sided (all
+outcomes are "success") — balanced learning improves as failure data accumulates.
+
+. **[RESOLVED] Recipe coverage: 22 recipes (was 10).** +
+12 new recipes added covering PA002, PA005, PA010, PA011, PA012, PA013,
+PA015, PA017, PA018, PA020. Coverage: 22/954 (2.3%). PA006-PA009, PA014,
+PA016, PA019 remain uncovered.
+
+. **[RESOLVED] VQL: Test suite complete.** +
+223 tests across 3 files: `vql_client_test.exs` (74), `vql_file_executor_test.exs`
+(58), `vql_query_test.exs` (91). Full suite: 298 tests, 0 failures.
+
+== Open Issues
+
+[start=5]
 . **Logtalk: `deteriorating/1` predicate is a stub.** +
 The `deteriorating/1` predicate in the Logtalk knowledge base unconditionally
 calls `fail`. Pattern deterioration (declining confidence over time, increasing
@@ -42,31 +62,6 @@ use non-Chainguard base images. These are documented exceptions because
 Chainguard does not publish `swipl` or `ghc` images. When Chainguard
 equivalents become available, these should be migrated. All other
 Containerfiles use `cgr.dev/chainguard/` images as required.
-
-. **VQL: No test files yet.** +
-The VQL subsystem (`lib/vql/client.ex`, `lib/vql/file_executor.ex`,
-`lib/vql/query.ex`) has no corresponding test files in `test/`. Unit tests
-and integration tests for the VQL layer are being added.
-
-. **Neural networks: All 5 are untrained.** +
-The five neural network modules -- GraphOfTrust (`lib/neural/graph_of_trust.ex`),
-MixtureOfExperts (`lib/neural/mixture_of_experts.ex`), Liquid State Machine
-(`lib/neural/liquid_state_machine.ex`), Echo State Network
-(`lib/neural/echo_state_network.ex`), and Radial Basis Function network
-(`lib/neural/radial_neural_network.ex`) -- are implemented but contain
-only initialized (random/zero) weights. They require real scan data
-accumulation and a training pipeline before they produce meaningful outputs.
-
-. **Recipe coverage: 11 recipes for 954 patterns (98.8% uncovered).** +
-The recipe registry contains only 11 fix recipes, leaving 943 of 954 known
-patterns without automated remediation. Recipe authoring is a significant
-ongoing effort. The `recipe_coverage/0` analytics function in `lib/vql/query.ex`
-reports current coverage.
-
-. **GQL-DT: No consumer application.** +
-The GQL with dependent types (GQL-DT) definitions exist but no downstream
-application in the Hypatia pipeline consumes them. The type definitions are
-validated in isolation but not integrated into any query execution path.
 
 . **VQL federation: Local file-backed only.** +
 The FileExecutor handles `FEDERATION` queries against the local `verisimdb-data`
@@ -103,3 +98,14 @@ Token (PAT) with `repo` scope, stored as a `VERISIMDB_PAT` secret. Without
 this PAT, the automated pipeline from scan to dispatch to bot action is
 broken. Manual ingestion via helper scripts (`verisimdb-data/scripts/ingest-scan.sh`)
 works as a workaround.
+
+. **One-sided training data.** +
+All 3,588 outcomes recorded to date are "success" (auto_execute tier only
+dispatches high-confidence findings). The ESN confidence series is monotonically
+increasing. Networks need real failure data and false positive reports to
+learn meaningful classification boundaries. This improves organically as the
+pipeline runs and encounters non-trivial fixes.
+
+. **Recipe coverage at 2.3%.** +
+22 recipes cover 22 of 954 known patterns. The remaining 932 patterns
+have no automated fix. Recipe authoring is a significant ongoing effort.

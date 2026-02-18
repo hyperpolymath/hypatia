@@ -112,6 +112,14 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `radial_neural_network.ex` | RBF | Finding similarity, novelty detection, classification |
 | `coordinator.ex` | GenServer | Orchestrates all 5 networks, aggregates predictions |
 
+### Neural Training (lib/neural/)
+
+| Module | Purpose |
+|--------|---------|
+| `training_pipeline.ex` | ESN/RBF training from real verisimdb-data outcomes + pattern vectors |
+
+Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and patterns/registry.json for RBF (8-D feature vectors). Coordinator's `:force_cycle` triggers training automatically.
+
 ### Idris2 ABI (src/abi/)
 
 | File | Purpose |
@@ -120,6 +128,9 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `GraphQL.idr` | Query/Mutation/Subscription operations with proofs |
 | `GRPC.idr` | gRPC service definitions (scanner, dispatch, stream, health) |
 | `REST.idr` | REST endpoint definitions (18 endpoints, 6 groups) |
+| `FFI.idr` | GADT constructors for all C ABI functions + ffiReturnsApiResponse proof |
+
+**Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager)
 
 ### Zig FFI (ffi/zig/src/)
 
@@ -158,8 +169,9 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 - 86.3% weak point reduction: 3260 -> 447
 - 404 outcomes recorded (100% success rate)
 - 6 recipes at 0.99 confidence
-- 11 fix recipes total (298 repos scanned)
+- 22 fix recipes total (298 repos scanned)
 - 954 canonical patterns across 298 repos
+- ESN trained on 2,372 real confidence data points
 - 5 neural networks + coordinator in OTP supervision
 - 14 document + 9 edge ArangoDB collections defined
 - 3 safety systems: rate limiter, quarantine, batch rollback
@@ -174,12 +186,11 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 - Generate summaries for 184 NULL-summary repos in verisimdb-data
 
 **Important (this month):**
-- Wire GQL-DT Lean types to VQL runtime (VQL queries verified by dependent types)
-- Deploy verisim-api server (enables native graph modality, replacing ArangoDB for entity graphs)
-- Implement VQL federation executor (currently local file-backed, needs multi-store coordination)
-- Train ESN/RBF on accumulated confidence history
-- Develop 3-5 new recipes for high-frequency substitute patterns
-- Historical trend tracking across multiple scan cycles
+- Deploy verisim-api server (enables native graph/vector/temporal modalities)
+- Implement VQL federation executor (currently local-only)
+- ~~Fix RBF training (registry.json path needs investigation)~~ DONE — 965 vectors, MSE=0.047
+- Historical trend tracking across scan cycles
+- ~~VQL test files for client.ex, file_executor.ex, query.ex~~ DONE — 223 tests
 
 **Planned:**
 - GraphQL API as live HTTP endpoint
@@ -189,12 +200,14 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 
 ### Known Gaps
 
-1. **GQL-DT isolated:** No consumer application uses GQL-DT dependent types
-2. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
-3. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
-4. **Neural networks untrained:** Need data accumulation before ESN/RBF become useful
-5. **Only 11 recipes:** 943 of 954 patterns (98.8%) have no automated fix
-6. **ArangoDB transitional:** Fills graph gap until verisim-api deployed — then becomes optional for operational intelligence
+1. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
+2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
+3. **One-sided training data:** All 3,588 outcomes are "success" — ESN trained but needs failure data for balanced learning
+4. **RBF untrained:** patterns/registry.json path needs investigation
+5. **Recipe coverage 2.3%:** 22 recipes for 954 patterns — 932 patterns have no automated fix
+6. **ArangoDB transitional:** Fills graph gap until verisim-api deployed
+7. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images (no Chainguard equivalents)
+8. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
 
 ## Code Style
 
