@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Release workflow for Hypatia
 # Website: https://hypatia.reposystem.dev
 # Builds binaries, Docker images, and publishes releases
@@ -224,7 +224,7 @@ jobs:
   # Build Docker Images
   # ============================================================================
   build-docker:
-    name: Build Docker Images
+    name: Build Container Images
     runs-on: ubuntu-latest
     needs: [prepare, build-rust, build-haskell]
     permissions:
@@ -234,16 +234,16 @@ jobs:
       matrix:
         component:
           - name: cli
-            dockerfile: deploy/Dockerfile
+            dockerfile: deploy/Containerfile
             context: .
           - name: adapter
-            dockerfile: deploy/Dockerfile.adapter
+            dockerfile: deploy/Containerfile.adapter
             context: .
           - name: registry
-            dockerfile: deploy/Dockerfile.registry
+            dockerfile: deploy/Containerfile.registry
             context: .
           - name: engine
-            dockerfile: deploy/Dockerfile.engine
+            dockerfile: deploy/Containerfile.engine
             context: .
 
     steps:

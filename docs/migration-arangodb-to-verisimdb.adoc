@@ -1,0 +1,311 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+
+= Migration Path: ArangoDB to VeriSimDB
+Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+:revdate: 2026-02-13
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+Hypatia currently operates with a dual data layer. This document describes the
+current architecture, why both layers exist, and the migration plan to
+consolidate onto VeriSimDB once `verisim-api` is deployed.
+
+== Current Architecture: Dual Data Layer
+
+=== verisimdb-data (Git-Backed, Canonical)
+
+The `verisimdb-data` repository is a Git-backed flat-file store that serves as
+the canonical source of truth for security intelligence data. Hypatia reads from
+it via the VQL FileExecutor.
+
+[cols="1,2"]
+|===
+| Data Store | Contents
+
+| `scans/`
+| JSON files per repository containing panic-attack scan results
+
+| `patterns/`
+| `registry.json` -- the global pattern registry (954 patterns)
+
+| `recipes/`
+| `recipe-*.json` files defining automated fix recipes (11 recipes)
+
+| `outcomes/`
+| JSONL files recording what happened when recipes were applied
+
+| `dispatch/`
+| JSONL files recording fleet dispatch events
+
+| `index.json`
+| Global index mapping repos to scan timestamps and metadata
+|===
+
+*Strengths*: Simple, Git-versioned, auditable, no server required, works offline.
+
+*Limitations*: No graph traversal, no vector similarity, no temporal windowing.
+
+=== ArangoDB (Graph Queries)
+
+ArangoDB fills the gaps that flat files cannot address. It stores:
+
+* **Trust propagation graphs** -- how trust flows between repositories,
+  maintainers, and dependencies
+* **Confidence history** -- time-series records of how confidence scores for
+  patterns and recipes change over time
+* **Neural state** -- serialized state of the 5 neural networks
+  (GraphOfTrust, MixtureOfExperts, LSM, ESN, RBF)
+* **Anomaly detection results** -- flagged deviations from expected patterns
+* **Cross-repository relationships** -- dependency graphs, shared maintainers,
+  common vulnerability paths
+
+ArangoDB is accessed via `lib/data/arangodb.ex`.
+
+*Current collections*:
+
+* 14 document collections (scans, patterns, recipes, outcomes, dispatch,
+  neural states, confidence snapshots, anomalies, repos, maintainers,
+  dependencies, configurations, audit log, metrics)
+* 9 edge collections (trust edges, dependency edges, maintainer-repo edges,
+  pattern-recipe edges, scan-pattern edges, outcome-recipe edges,
+  anomaly-pattern edges, confidence-timeline edges, dispatch-outcome edges)
+
+== Why Both Exist
+
+The two layers serve complementary purposes:
+
+[cols="1,1,1"]
+|===
+| Capability | verisimdb-data | ArangoDB
+
+| Flat data reads
+| Yes (canonical)
+| Redundant copy
+
+| Graph traversal
+| No
+| Yes (native)
+
+| Vector similarity
+| No
+| No (external needed)
+
+| Time-series queries
+| No (JSONL only)
+| Yes (edge timestamps)
+
+| Offline operation
+| Yes (Git clone)
+| No (server required)
+
+| Auditability
+| Yes (Git history)
+| Limited (no versioning)
+
+| VQL integration
+| Yes (FileExecutor)
+| Partial (direct queries)
+|===
+
+The fundamental issue is that flat JSON files cannot express graph relationships,
+and ArangoDB cannot provide Git-level auditability. Both are needed today.
+
+== When verisim-api Deploys
+
+The `verisim-api` project (Rust, in `verisimdb/rust-core`) implements a
+multi-modal database with four modalities:
+
+=== Modality Replacements
+
+[cols="1,2,2"]
+|===
+| verisim-api Modality | Replaces | Details
+
+| **Graph modality**
+| ArangoDB graph traversal
+| Native graph storage with trust propagation algorithms built in;
+  replaces all 9 edge collections and graph query patterns
+
+| **Vector modality**
+| External similarity search
+| HNSW indexing for pattern similarity, recipe matching, and anomaly
+  clustering; no external vector DB needed
+
+| **Temporal modality**
+| ArangoDB time-series queries
+| Native temporal windowing for confidence history, outcome timelines,
+  and trend analysis; replaces timestamp-based edge traversals
+
+| **Document modality**
+| Flat-file JSON reads
+| Structured document storage with VQL-native querying; replaces
+  direct `File.read!` calls in FileExecutor
+|===
+
+=== What Becomes Unnecessary
+
+**ArangoDB entirely.** All 14 document collections and 9 edge collections map
+to VeriSimDB hexad entities (the six-dimensional data model). Specifically:
+
+* Trust propagation -> graph modality edges with weighted traversal
+* Confidence history -> temporal modality with windowed queries
+* Neural state persistence -> document modality with versioning
+* Anomaly records -> document modality + vector modality (for similarity)
+* Cross-repo relationships -> graph modality
+* Audit log -> temporal modality with append-only guarantees
+
+=== What Stays
+
+[cols="1,3"]
+|===
+| Component | Rationale
+
+| **VQL layer**
+| Already integrated, query syntax does not change. The VQL Client will gain
+  an HTTP executor (see migration step 2) but existing FileExecutor and all
+  `Hypatia.VQL.Query` functions remain compatible.
+
+| **verisimdb-data repo**
+| Keeps working as a backup and mirror. FileExecutor still reads from it.
+  Useful for offline operation, Git-based auditing, and as a fallback if
+  verisim-api is unreachable.
+|===
+
+== Migration Steps
+
+The migration follows a gradual, incremental approach -- not a big-bang cutover.
+
+=== Step 1: Deploy verisim-api
+
+Deploy `verisim-api` to Fly.io (free tier is sufficient for initial workload).
+
+* Build from `verisimdb/rust-core`
+* Configure graph, vector, temporal, and document modalities
+* Seed with existing data from `verisimdb-data` flat files
+* Validate that the API responds to basic VQL-over-HTTP queries
+
+=== Step 2: Add HTTP Executor to VQL Client
+
+Extend `lib/vql/client.ex` to support an HTTP executor alongside the existing
+FileExecutor.
+
+[source,elixir]
+----
+# The VQL Client will route queries to the appropriate executor:
+#   - FileExecutor: local verisimdb-data reads (existing)
+#   - HttpExecutor: verisim-api REST/gRPC calls (new)
+#   - ArangoDB: graph queries (transitional, to be removed)
+----
+
+The HTTP executor sends parsed VQL ASTs to the `verisim-api` endpoint and
+deserializes responses. Query syntax remains identical from the caller's
+perspective.
+
+=== Step 3: Migrate Graph Queries
+
+Move graph-dependent queries from ArangoDB to verisim-api's graph modality:
+
+* **Trust propagation** -- currently uses ArangoDB graph traversal with
+  weighted edges; migrate to verisim-api graph modality's native traversal
+* **Confidence history** -- currently uses ArangoDB edge timestamps;
+  migrate to verisim-api temporal modality
+* **Anomaly detection** -- currently stores anomaly records in ArangoDB
+  document collections; migrate to verisim-api document + vector modalities
+
+=== Step 4: Dual-Write Period
+
+Run both ArangoDB and verisim-api in parallel:
+
+* All writes go to both backends simultaneously
+* All reads come from verisim-api (primary) with ArangoDB fallback
+* Monitor for data consistency discrepancies
+* Duration: minimum 2 weeks, extended if discrepancies found
+
+=== Step 5: Validate Data Consistency
+
+* Compare query results between ArangoDB and verisim-api for all query types
+* Verify graph traversal results match (trust propagation paths, weights)
+* Verify temporal query results match (confidence timelines, outcome windows)
+* Verify vector similarity results are acceptable (HNSW is approximate)
+* Document any acceptable divergences (e.g., HNSW approximate neighbors)
+
+=== Step 6: Remove ArangoDB Dependency
+
+Once validation passes:
+
+* Remove `lib/data/arangodb.ex`
+* Remove ArangoDB connection configuration from `config/`
+* Remove ArangoDB from deployment manifests / Containerfiles
+* Update `mix.exs` to remove any ArangoDB client dependencies
+* Update VQL Client to remove ArangoDB executor routing
+* Update documentation
+
+== Risks
+
+[cols="1,3,1"]
+|===
+| Risk | Description | Mitigation
+
+| verisim-api not battle-tested
+| The Rust implementation is new and has not been run in production.
+  Edge cases in graph traversal or temporal windowing may surface.
+| Dual-write period; FileExecutor fallback remains available
+
+| HNSW indexing performance
+| Performance characteristics of HNSW at scale (thousands of patterns,
+  millions of scan results) are unknown. Memory consumption and query
+  latency may be higher than expected.
+| Benchmark before migration; tune HNSW parameters (ef_construction,
+  M, ef_search)
+
+| Data loss during migration
+| If verisim-api ingestion fails silently, data may be lost.
+| verisimdb-data Git repo retains all canonical data; can re-seed
+
+| API availability
+| Fly.io free tier has cold-start latency and limited uptime guarantees.
+| FileExecutor fallback; consider upgrading tier if Hypatia becomes
+  production-critical
+
+| VQL compatibility
+| Subtle differences in how verisim-api interprets VQL vs FileExecutor.
+| Comprehensive integration tests during dual-write period
+|===
+
+== Timeline
+
+This migration is *gradual, not big-bang*. Approximate phases:
+
+[cols="1,2,1"]
+|===
+| Phase | Work | Duration
+
+| Phase 1
+| Deploy verisim-api, add HTTP executor
+| 1-2 weeks
+
+| Phase 2
+| Migrate graph queries, begin dual-write
+| 2-3 weeks
+
+| Phase 3
+| Validation and consistency checks
+| 2 weeks minimum
+
+| Phase 4
+| Remove ArangoDB, clean up
+| 1 week
+
+| *Total*
+| *End-to-end migration*
+| *6-8 weeks*
+|===
+
+The timeline assumes verisim-api is functionally complete. If additional
+modality work is needed in `verisimdb/rust-core`, the timeline extends
+accordingly.

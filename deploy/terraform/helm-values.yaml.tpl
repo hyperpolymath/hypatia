@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # hypatia Helm Values Template
 # This file is processed by Terraform to generate Helm values
 

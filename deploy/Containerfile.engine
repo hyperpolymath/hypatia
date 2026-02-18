@@ -1,5 +1,6 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
-# Dockerfile for Hypatia Logtalk Engine
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Containerfile for Hypatia Logtalk Engine
+# EXCEPTION: swipl:stable has no Chainguard equivalent — SWI-Prolog requires Debian base
 
 FROM swipl:stable AS base
 

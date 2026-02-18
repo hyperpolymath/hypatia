@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+
+homepage: "https://github.com/hyperpolymath/hypatia"
+language: rust
+primary_contact: "jonathan.jewell@open.ac.uk"
+auto_ccs:
+  - "jonathan.jewell@open.ac.uk"
+sanitizers:
+  - address
+  - undefined
+  - memory
