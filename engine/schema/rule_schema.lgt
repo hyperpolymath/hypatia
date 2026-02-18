@@ -1,4 +1,4 @@
-%% SPDX-License-Identifier: PLMP-1.0-or-later
+%% SPDX-License-Identifier: PMPL-1.0-or-later
 %% cicd-hyper-a Rule Schema
 %%
 %% This file defines the formal schema for CI/CD rules in the neurosymbolic
@@ -65,17 +65,39 @@
     %% ============================================================
 
     category_list([
-        security,       % Security vulnerabilities, secrets, permissions
-        structure,      % Repository structure, required files
-        workflow,       % GitHub Actions, CI/CD configuration
-        code_quality,   % Code style, best practices
-        licensing,      % License headers, SPDX compliance
-        documentation,  % README, CHANGELOG, docs
-        accessibility,  % WCAG, A11Y compliance
-        seo,            % Meta tags, Open Graph, SEO
-        release,        % Release readiness, versioning
-        waste,          % CI/CD waste, redundant workflows
-        policy          % RSR compliance, language policy
+        security,                   % Security vulnerabilities, secrets, permissions
+        structure,                  % Repository structure, required files
+        workflow,                   % GitHub Actions, CI/CD configuration
+        code_quality,               % Code style, best practices
+        licensing,                  % License headers, SPDX compliance
+        documentation,              % README, CHANGELOG, docs
+        accessibility,              % WCAG, A11Y compliance
+        seo,                        % Meta tags, Open Graph, SEO
+        release,                    % Release readiness, versioning
+        waste,                      % CI/CD waste, redundant workflows
+        policy,                     % RSR compliance, language policy
+        seam_analysis,              % Architectural seam detection (seambot)
+        drift_detection,            % Interface drift across boundaries (seambot)
+        hidden_channels,            % Undeclared cross-boundary communication (seambot)
+        forge_integration,          % Multi-forge consistency checks (seambot)
+        completeness_license,       % License completeness (finishbot)
+        completeness_placeholder,   % Placeholder detection (finishbot)
+        completeness_claims,        % Claim verification (finishbot)
+        completeness_release,       % Release readiness (finishbot)
+        completeness_scm,           % SCM file completeness (finishbot)
+        completeness_testing,       % Test coverage completeness (finishbot)
+        completeness_tooling,       % Tooling completeness (finishbot)
+        completeness_v1_readiness,  % V1 readiness assessment (finishbot)
+        proof_verification,         % Formal proof checking (echidnabot)
+        solver_integrity,           % Solver correctness validation (echidnabot)
+        trust_bridge,               % Cross-system trust verification (echidnabot)
+        axiom_tracking,             % Axiom provenance and soundness (echidnabot)
+        crypto_hashing,             % Hash algorithm strength (cipherbot)
+        crypto_symmetric,           % Symmetric cipher selection (cipherbot)
+        crypto_key_exchange,        % Key exchange protocols (cipherbot)
+        crypto_signatures,          % Signature scheme validity (cipherbot)
+        crypto_password,            % Password hashing compliance (cipherbot)
+        crypto_pq_readiness         % Post-quantum readiness (cipherbot)
     ]).
 
     valid_category(security).
@@ -89,6 +111,28 @@
     valid_category(release).
     valid_category(waste).
     valid_category(policy).
+    valid_category(seam_analysis).
+    valid_category(drift_detection).
+    valid_category(hidden_channels).
+    valid_category(forge_integration).
+    valid_category(completeness_license).
+    valid_category(completeness_placeholder).
+    valid_category(completeness_claims).
+    valid_category(completeness_release).
+    valid_category(completeness_scm).
+    valid_category(completeness_testing).
+    valid_category(completeness_tooling).
+    valid_category(completeness_v1_readiness).
+    valid_category(proof_verification).
+    valid_category(solver_integrity).
+    valid_category(trust_bridge).
+    valid_category(axiom_tracking).
+    valid_category(crypto_hashing).
+    valid_category(crypto_symmetric).
+    valid_category(crypto_key_exchange).
+    valid_category(crypto_signatures).
+    valid_category(crypto_password).
+    valid_category(crypto_pq_readiness).
 
     %% ============================================================
     %% BOT IDENTIFIERS (from gitbot-fleet)
@@ -101,9 +145,13 @@
         oikos,          % Ecological/economic standards
 
         %% Tier 2 - Finishers
-        glambot,        % Presentation quality
-        seambot,        % Integration testing
-        finishing_bot,  % Release readiness
+        glambot,            % Presentation quality
+        seambot,            % Architectural seam analysis, drift detection, forge integration
+        finishing_bot,      % Completeness analysis, release readiness
+        accessibilitybot,   % WCAG accessibility compliance
+
+        %% Specialist
+        cipherbot,      % Cryptographic hygiene, post-quantum readiness
 
         %% Special
         cicd_hyper_a,   % This engine
@@ -116,6 +164,8 @@
     valid_bot_id(glambot).
     valid_bot_id(seambot).
     valid_bot_id(finishing_bot).
+    valid_bot_id(accessibilitybot).
+    valid_bot_id(cipherbot).
     valid_bot_id(cicd_hyper_a).
     valid_bot_id(robot_repo_automaton).
 
@@ -126,6 +176,8 @@
     bot_tier(glambot, finisher).
     bot_tier(seambot, finisher).
     bot_tier(finishing_bot, finisher).
+    bot_tier(accessibilitybot, finisher).
+    bot_tier(cipherbot, specialist).
     bot_tier(cicd_hyper_a, engine).
     bot_tier(robot_repo_automaton, executor).
 

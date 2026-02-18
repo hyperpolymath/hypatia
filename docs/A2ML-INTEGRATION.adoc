@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= A2ML Integration for Hypatia Documentation
+
+:toc:
+:icons: font
+
+== Overview
+
+Hypatia can use A2ML (Attested Markup Language) for template documentation, enabling progressive strictness and structural guarantees.
+
+== Why A2ML for Template Docs?
+
+Template documentation needs:
+
+* **Required Sections**: Usage, prerequisites, configuration must be present
+* **Resolved References**: Links to dependencies must be valid
+* **Unique IDs**: Template identifiers must be unique in registry
+* **Progressive Strictness**: Start lax, add strictness as templates mature
+
+== A2ML Template Documentation Structure
+
+[source,a2ml]
+----
+# Template: My Project Template
+
+@metadata:
+id: my-project-template-v1
+version: 1.0.0
+author: Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+@end
+
+@abstract:
+A production-ready project template with CI/CD, testing, and documentation.
+@end
+
+## Prerequisites
+
+@required-section:
+- Rust 1.70+
+- Just task runner
+- Git
+@end
+
+## Usage
+
+@required-section:
+```bash
+hypatia instantiate my-project-template my-new-project
+cd my-new-project
+just setup
+```
+@end
+
+## Configuration
+
+@required-section:
+Template can be configured via `template.toml`:
+@end
+
+@refs:
+[1] Hypatia Template Registry: https://github.com/hyperpolymath/hypatia
+[2] Rust Installation: https://rustup.rs
+@end
+----
+
+== Validation Levels
+
+=== Lax (v0.x templates)
+* No validation
+* Standard markdown accepted
+
+=== Checked (v1.0 templates)
+* Required sections must exist
+* References must be valid URLs
+* Metadata must be complete
+
+=== Attested (v2.0+ templates)
+* Digital signatures on template metadata
+* Provenance tracking
+* Supply chain security
+
+== Integration Roadmap
+
+=== v1.0 (Current)
+* Document A2ML integration plan
+* Add a2ml to related projects
+* Design A2ML template doc schema
+
+=== v1.5 (Next)
+* A2ML parser in hypatia-cli
+* Convert docs to A2ML format
+* Validation at import time
+
+=== v2.0 (Future)
+* Full attestation support
+* Template signing
+* Provenance verification
+
+== References
+
+* link:https://github.com/hyperpolymath/a2ml[A2ML Specification]
+* link:SPEC.adoc[Hypatia Template Specification]

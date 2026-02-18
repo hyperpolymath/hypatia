@@ -45,7 +45,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: deploy/Dockerfile.registry
+          file: deploy/Containerfile.registry
           push: false
           load: true
           tags: cicd-hyper-a-registry:test
@@ -56,7 +56,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: deploy/Dockerfile.engine
+          file: deploy/Containerfile.engine
           push: false
           load: true
           tags: cicd-hyper-a-engine:test
@@ -67,7 +67,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: deploy/Dockerfile.adapter
+          file: deploy/Containerfile.adapter
           push: false
           load: true
           tags: cicd-hyper-a-adapter:test

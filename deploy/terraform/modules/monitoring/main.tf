@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # cicd-hyper-a Monitoring Module (Prometheus/Grafana)
 #
 # This module deploys a complete monitoring stack using the kube-prometheus-stack

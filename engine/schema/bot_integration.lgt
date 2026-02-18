@@ -1,16 +1,17 @@
-%% SPDX-License-Identifier: PLMP-1.0-or-later
-%% cicd-hyper-a Bot Integration Schema
+%% SPDX-License-Identifier: PMPL-1.0-or-later
+%% Hypatia Bot Integration Schema
 %%
-%% Defines the interface between the rules engine and gitbot-fleet bots.
+%% Defines the interface between the Hypatia rules engine and gitbot-fleet bots.
 %% Each bot implements these predicates to participate in the fleet.
+%% Includes robot-repo-automaton as Tier 3 Executor with confidence thresholds.
 
 :- object(bot_integration).
 
     :- info([
-        version is 1:'0':'0',
-        author is 'cicd-hyper-a',
-        date is 2026-01-18,
-        comment is 'Bot integration protocol for gitbot-fleet'
+        version is 1:'1':'0',
+        author is 'Hypatia',
+        date is 2026-02-08,
+        comment is 'Bot integration protocol for gitbot-fleet (includes Tier 3 Executor)'
     ]).
 
     :- public([
@@ -72,7 +73,7 @@
         atom(Id),
         atom(Name),
         atom(Version),
-        member(Tier, [verifier, finisher, executor, engine]),
+        member(Tier, [verifier, finisher, specialist, executor, engine]),
         is_list(Categories),
         is_boolean(CanFix),
         is_list(DependsOn).
@@ -135,14 +136,14 @@
         'Echidnabot',
         '0.1.0',
         verifier,
-        [verification, fuzzing],
+        [verification, fuzzing, proof_verification, solver_integrity, trust_bridge, axiom_tracking],
         false,
         []
     )).
 
-    standard_bot_info(oikos, bot_info(
-        oikos,
-        'Oikos',
+    standard_bot_info(sustainabot, bot_info(
+        sustainabot,
+        'Sustainabot',
         '0.1.0',
         verifier,
         [sustainability, efficiency],
@@ -165,7 +166,7 @@
         'Seambot',
         '0.1.0',
         finisher,
-        [integration, api],
+        [seam_analysis, drift_detection, hidden_channels, forge_integration, integration, api],
         false,
         [rhodibot, echidnabot]
     )).
@@ -175,7 +176,9 @@
         'Finishing Bot',
         '0.1.0',
         finisher,
-        [release, licensing, code_quality],
+        [completeness_license, completeness_placeholder, completeness_claims,
+         completeness_release, completeness_scm, completeness_testing,
+         completeness_tooling, completeness_v1_readiness],
         true,
         [rhodibot, glambot]
     )).
@@ -190,12 +193,32 @@
         []
     )).
 
-    standard_bot_info(cicd_hyper_a, bot_info(
-        cicd_hyper_a,
-        'CICD Hyper-A',
+    standard_bot_info(accessibilitybot, bot_info(
+        accessibilitybot,
+        'Accessibilitybot',
+        '0.1.0',
+        finisher,
+        [accessibility_wcag_a, accessibility_wcag_aa, accessibility_wcag_aaa, aria, css_accessibility],
+        true,
+        [rhodibot, glambot]
+    )).
+
+    standard_bot_info(cipherbot, bot_info(
+        cipherbot,
+        'Cipherbot',
+        '0.1.0',
+        specialist,
+        [crypto_hashing, crypto_symmetric, crypto_key_exchange, crypto_signatures, crypto_password, crypto_pq_readiness],
+        true,
+        [rhodibot, echidnabot]
+    )).
+
+    standard_bot_info(hypatia, bot_info(
+        hypatia,
+        'Hypatia',
         '0.1.0',
         engine,
-        [all],
+        [rules, learning, coordination],
         false,
         []
     )).

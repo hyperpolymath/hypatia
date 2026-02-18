@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Workflow scanner for detecting CI/CD issues
 
 use crate::{ErrorCatalog, FixerError, Result, ShaPins};
@@ -161,7 +161,7 @@ impl Scanner {
                     file_path: path.display().to_string(),
                     line_number: Some(1),
                     description: "Workflow file missing SPDX license header".to_string(),
-                    fix_suggestion: "Add '# SPDX-License-Identifier: PLMP-1.0-or-later' as first line".to_string(),
+                    fix_suggestion: "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line".to_string(),
                     auto_fixable: true,
                     category: IssueCategory::MissingSpdx,
                 });

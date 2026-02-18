@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 [package]
 name = "cii-registrar"
 version = "0.1.0"
 edition = "2021"
-authors = ["hyperpolymath"]
+authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
 description = "CLI tool for registering projects with OpenSSF Best Practices Badge"
-license = "PLMP-1.0-or-later"
+license = "PMPL-1.0-or-later"
 repository = "https://github.com/hyperpolymath/cicd-hyper-a"
 keywords = ["openssf", "cii", "badge", "security", "automation"]
 categories = ["command-line-utilities", "development-tools"]

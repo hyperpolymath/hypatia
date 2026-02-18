@@ -282,7 +282,7 @@ jobs:
 
       - name: Build test image
         run: |
-          docker build -t cicd-hyper-a:scan -f deploy/Dockerfile .
+          docker build -t cicd-hyper-a:scan -f deploy/Containerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@22438a435773de8c97dc0958cc0b823c45b064ac # 0.28.0

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 = cicd-hyper-a Developer Guide
 :toc: left
 :toclevels: 3
@@ -141,7 +141,7 @@ Logtalk extends Prolog with objects, protocols, and categories. Rules are define
 
 [source,prolog]
 ----
-%% SPDX-License-Identifier: PLMP-1.0-or-later
+%% SPDX-License-Identifier: PMPL-1.0-or-later
 %% Custom rules for my-project
 
 :- object(my_project_rules).
@@ -350,7 +350,7 @@ cicd-hyper-a uses GADTs for type-safe rule definitions:
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 
 module MyRuleset where
 
@@ -442,7 +442,7 @@ Use QuickCheck to verify rule properties:
 [source,haskell]
 ----
 {-# LANGUAGE OverloadedStrings #-}
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 
 module MyRulesetSpec where
 
@@ -481,7 +481,7 @@ Add formal verification with refinement types:
 [source,haskell]
 ----
 {-@ LIQUID "--reflection" @-}
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 
 module MyRulesetVerified where
 
@@ -532,7 +532,7 @@ Forge adapters implement a common interface in Rust:
 
 [source,rust]
 ----
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 
 use async_trait::async_trait;
 use crate::types::{Repo, Alert, Workflow, PullRequest, Branch};
@@ -591,7 +591,7 @@ Example: Implementing a Codeberg adapter:
 
 [source,rust]
 ----
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Codeberg forge adapter (Gitea-compatible)
 
 use crate::adapter::{ForgeAdapter, Result};

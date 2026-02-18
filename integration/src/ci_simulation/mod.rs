@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! CI Simulation Testing Framework
 //!
 //! This module provides a comprehensive framework for testing the CI/CD

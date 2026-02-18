@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+
+= Known Issues and Honest Gaps
+Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+:revdate: 2026-02-14
+:toc: left
+:toclevels: 2
+:icons: font
+
+== Overview
+
+This document is an honest accounting of known issues, incomplete
+implementations, and gaps in the Hypatia codebase as of 2026-02-14. Items are
+numbered for easy reference in issue trackers and session logs.
+
+== Resolved
+
+[start=1]
+. **[RESOLVED] Zig FFI: All 7 functions now implemented.** +
+All 7 exported C ABI functions in `ffi/zig/src/main.zig` are real
+implementations working against verisimdb-data flat files. Health check,
+scan repo, dispatch, record outcome, force learning, get confidence, and
+dispatch strategy are all operational. Supporting modules: `json_writer.zig`,
+`file_ops.zig`. Build: `cd ffi/zig && zig build && zig build test`.
+
+. **[RESOLVED] Idris2 ABI: Build system added.** +
+`src/abi/hypatia-abi.ipkg` package file with `--total` enforcement,
+`verify/hypatia-verify.ipkg` for proofs, and `pack.toml` for the Pack
+package manager. Includes `FFI.idr` with typed GADT constructors for all
+C ABI functions and a proof (`ffiReturnsApiResponse`) that every FFI function
+returns an `ApiResponse`-wrapped type.
+
+. **[RESOLVED] Neural networks: Both ESN and RBF trained.** +
+ESN trained on 2,538 real outcome data points. RBF trained on 965 pattern
+feature vectors (MSE=0.047). Three RBF bugs fixed: registry.json map-vs-list
+structure, field name mismatches (occurrences/repos_affected/first_seen),
+and case-insensitive severity matching. Both networks are one-sided (all
+outcomes are "success") — balanced learning improves as failure data accumulates.
+
+. **[RESOLVED] Recipe coverage: 22 recipes (was 10).** +
+12 new recipes added covering PA002, PA005, PA010, PA011, PA012, PA013,
+PA015, PA017, PA018, PA020. Coverage: 22/954 (2.3%). PA006-PA009, PA014,
+PA016, PA019 remain uncovered.
+
+. **[RESOLVED] VQL: Test suite complete.** +
+223 tests across 3 files: `vql_client_test.exs` (74), `vql_file_executor_test.exs`
+(58), `vql_query_test.exs` (91). Full suite: 298 tests, 0 failures.
+
+== Open Issues
+
+[start=5]
+. **Logtalk: `deteriorating/1` predicate is a stub.** +
+The `deteriorating/1` predicate in the Logtalk knowledge base unconditionally
+calls `fail`. Pattern deterioration (declining confidence over time, increasing
+false positives) is therefore not detected. This predicate needs a real
+implementation that queries confidence history from the temporal data layer.
+
+. **Containerfiles: Non-Chainguard base images.** +
+The Engine Containerfile (SWI-Prolog) and Registry Containerfile (Haskell)
+use non-Chainguard base images. These are documented exceptions because
+Chainguard does not publish `swipl` or `ghc` images. When Chainguard
+equivalents become available, these should be migrated. All other
+Containerfiles use `cgr.dev/chainguard/` images as required.
+
+. **VQL federation: Local file-backed only.** +
+The FileExecutor handles `FEDERATION` queries against the local `verisimdb-data`
+clone, not against multiple remote stores. True multi-store federation (querying
+across verisim-api instances, remote verisimdb-data clones, or heterogeneous
+backends) is not implemented. All federation queries resolve locally.
+
+. **ArangoDB transitional.** +
+ArangoDB currently fills the graph query gap that flat files cannot address
+(trust propagation, confidence history, anomaly graphs). It is a transitional
+dependency that will be replaced when `verisim-api` deploys with its graph,
+temporal, and vector modalities. See `docs/migration-arangodb-to-verisimdb.adoc`
+for the full migration plan.
+
+. **Ada TUI: Compiles but not functionally integrated.** +
+The Ada terminal user interface compiles successfully but is not wired into
+the Hypatia pipeline. It cannot currently display live scan results, trigger
+dispatches, or interact with the VQL layer. Integration requires an IPC
+mechanism (likely Unix domain sockets or stdin/stdout JSON protocol) between
+the Ada binary and the Elixir supervision tree.
+
+. **verisim-api not deployed.** +
+The `verisim-api` service (built from `verisimdb/rust-core`) is not deployed
+to any environment. As a result, the HNSW vector indexing, native graph
+traversal, and temporal windowing modalities are unavailable in production.
+Hypatia operates entirely on flat-file reads (FileExecutor) and ArangoDB.
+See `docs/migration-arangodb-to-verisimdb.adoc` for deployment plans.
+
+. **PAT needed for cross-repo dispatch.** +
+The default `GITHUB_TOKEN` provided by GitHub Actions cannot trigger
+`repository_dispatch` events on other repositories. Hypatia's fleet dispatch
+(sending fix instructions to gitbot-fleet bots) requires a Personal Access
+Token (PAT) with `repo` scope, stored as a `VERISIMDB_PAT` secret. Without
+this PAT, the automated pipeline from scan to dispatch to bot action is
+broken. Manual ingestion via helper scripts (`verisimdb-data/scripts/ingest-scan.sh`)
+works as a workaround.
+
+. **One-sided training data.** +
+All 3,588 outcomes recorded to date are "success" (auto_execute tier only
+dispatches high-confidence findings). The ESN confidence series is monotonically
+increasing. Networks need real failure data and false positive reports to
+learn meaningful classification boundaries. This improves organically as the
+pipeline runs and encounters non-trivial fixes.
+
+. **Recipe coverage at 2.3%.** +
+22 recipes cover 22 of 954 known patterns. The remaining 932 patterns
+have no automated fix. Recipe authoring is a significant ongoing effort.

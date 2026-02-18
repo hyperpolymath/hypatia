@@ -1,4 +1,4 @@
---  SPDX-License-Identifier: PLMP-1.0-or-later
+--  SPDX-License-Identifier: PMPL-1.0-or-later
 -------------------------------------------------------------------------------
 --  Hypatia.Views.Help - Implementation
 -------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ package body Hypatia.Views.Help is
       Add_Item (V.Help_List, "  ABOUT");
       Add_Item (V.Help_List, "  ═══════════════════════════════════════════════════════");
       Add_Item (V.Help_List, "");
-      Add_Item (V.Help_List, "    License:       PLMP-1.0-or-later");
+      Add_Item (V.Help_List, "    License:       PMPL-1.0-or-later");
       Add_Item (V.Help_List, "    Homepage:      https://github.com/hyperpolymath/cicd-hyper-a");
       Add_Item (V.Help_List, "    Documentation: hyper --help");
       Add_Item (V.Help_List, "");
