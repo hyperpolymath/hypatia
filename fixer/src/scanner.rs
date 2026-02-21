@@ -14,10 +14,6 @@ static UNPINNED_ACTION_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("UNPINNED_ACTION_RE regex is invalid - this is a compile-time bug")
 });
 
-static SHA_PINNED_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"uses:\s*[a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+@[a-f0-9]{40}")
-        .expect("SHA_PINNED_RE regex is invalid - this is a compile-time bug")
-});
 
 static PERMISSIONS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?m)^permissions:")
@@ -34,20 +30,6 @@ static RUST_TOOLCHAIN_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("RUST_TOOLCHAIN_RE regex is invalid - this is a compile-time bug")
 });
 
-static TOOLCHAIN_WITH_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"with:\s*\n\s*toolchain:")
-        .expect("TOOLCHAIN_WITH_RE regex is invalid - this is a compile-time bug")
-});
-
-static CODEQL_LANGUAGE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"language:\s*\[([^\]]+)\]")
-        .expect("CODEQL_LANGUAGE_RE regex is invalid - this is a compile-time bug")
-});
-
-static USES_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@([a-zA-Z0-9.-]+)")
-        .expect("USES_RE regex is invalid - this is a compile-time bug")
-});
 
 /// Issue severity levels (aligned with CVSS)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

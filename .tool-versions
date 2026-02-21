@@ -1,4 +1,2 @@
-rust 1.70
-just 1.30.0
-haskell 9.12.2
-logtalk 3.80.0
+rust stable
+perl latest

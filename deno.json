@@ -1,0 +1,17 @@
+{
+  "tasks": {
+    "scan": "./hypatia-cli.sh scan",
+    "test": "./test-scanner.sh"
+  },
+  "imports": {},
+  "lint": {
+    "include": ["src/"],
+    "exclude": ["target/", "deps/"]
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 4,
+    "singleQuote": true
+  }
+}

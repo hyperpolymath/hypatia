@@ -573,3 +573,8 @@ OPSM Core
 hypatia (policy/knowledge services used by OPSM)
 
 ----
+
+
+== Architecture
+
+See link:TOPOLOGY.md[TOPOLOGY.md] for a visual architecture map and completion dashboard.

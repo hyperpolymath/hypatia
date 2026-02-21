@@ -44,6 +44,17 @@ pub struct AlertDoc {
     pub fix_applied: bool,
     pub created_at: String,
     pub dismissed_at: Option<String>,
+    #[serde(default)]
+    pub verisim_id: Option<String>,
+}
+
+/// VeriSimDB Hexad (knowledge unit)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HexadDoc {
+    pub hexad_id: String,
+    pub title: String,
+    pub modalities: Vec<String>,
+    pub metadata: serde_json::Value,
 }
 
 /// Rule document

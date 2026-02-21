@@ -49,6 +49,27 @@ services:
     ulimits:
       memlock: -1
 
+  verisimdb:
+    build:
+      context: ../../nextgen-databases/verisimdb
+      dockerfile: container/Containerfile
+    container_name: hypatia-verisimdb
+    environment:
+      VERISIM_HOST: "[::]"
+      VERISIM_PORT: 8080
+      VERISIM_RUST_CORE_URL: "http://[::1]:8080/api/v1"
+      ARANGODB_URL: "http://arangodb:8529"
+      DRAGONFLY_URL: "redis://dragonfly:6379"
+    ports:
+      - "8081:8080"
+    depends_on:
+      arangodb:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    networks:
+      - cicd-network
+
   # ============================================================
   # REGISTRY SERVICE
   # ============================================================
@@ -64,6 +85,7 @@ services:
       ARANGODB_USER: root
       ARANGODB_PASSWORD: ${ARANGO_ROOT_PASSWORD:-devpassword}
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
       PORT: 8080
     ports:
       - "8080:8080"
@@ -71,6 +93,8 @@ services:
       arangodb:
         condition: service_healthy
       dragonfly:
+        condition: service_healthy
+      verisimdb:
         condition: service_healthy
     networks:
       - cicd-network
@@ -87,6 +111,7 @@ services:
     environment:
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
     volumes:
       - ../engine:/app/engine:ro
       - ../training-data:/app/training-data:ro
@@ -94,6 +119,8 @@ services:
       arangodb:
         condition: service_healthy
       dragonfly:
+        condition: service_healthy
+      verisimdb:
         condition: service_healthy
     networks:
       - cicd-network
@@ -114,9 +141,11 @@ services:
       BITBUCKET_APP_PASSWORD: ${BITBUCKET_APP_PASSWORD}
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
     depends_on:
       - registry
       - engine
+      - verisimdb
     networks:
       - cicd-network
 

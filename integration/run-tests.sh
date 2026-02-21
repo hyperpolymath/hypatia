@@ -23,7 +23,7 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COMPOSE_FILE="$SCRIPT_DIR/docker-compose.test.yml"
+COMPOSE_FILE="$SCRIPT_DIR/compose.test.yaml"
 
 # Colors for output
 RED='\033[0;31m'
@@ -110,12 +110,12 @@ check_dependencies() {
 
     local missing=()
 
-    if ! command -v docker &> /dev/null; then
-        missing+=("docker")
+    if ! command -v podman &> /dev/null; then
+        missing+=("podman")
     fi
 
-    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-        missing+=("docker-compose")
+    if ! command -v podman-compose &> /dev/null; then
+        missing+=("podman-compose")
     fi
 
     if ! command -v cargo &> /dev/null; then
@@ -136,12 +136,7 @@ start_containers() {
 
     cd "$SCRIPT_DIR"
 
-    # Use docker compose v2 if available, fall back to docker-compose
-    if docker compose version &> /dev/null 2>&1; then
-        COMPOSE_CMD="docker compose"
-    else
-        COMPOSE_CMD="docker-compose"
-    fi
+    COMPOSE_CMD="podman-compose"
 
     $COMPOSE_CMD -f "$COMPOSE_FILE" up -d arangodb dragonfly
 
@@ -188,11 +183,7 @@ stop_containers() {
 
     cd "$SCRIPT_DIR"
 
-    if docker compose version &> /dev/null 2>&1; then
-        docker compose -f "$COMPOSE_FILE" down -v
-    else
-        docker-compose -f "$COMPOSE_FILE" down -v
-    fi
+    podman-compose -f "$COMPOSE_FILE" down -v
 
     log_success "Containers stopped and volumes removed"
 }
@@ -328,7 +319,7 @@ print_summary() {
         echo "  ArangoDB: http://localhost:8529"
         echo "  Dragonfly: redis://localhost:6379"
         echo ""
-        echo "To stop: docker-compose -f $COMPOSE_FILE down -v"
+        echo "To stop: podman-compose -f $COMPOSE_FILE down -v"
     fi
     echo "============================================"
 }
