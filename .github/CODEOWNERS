@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath)
+#
+# CODEOWNERS — hypatia
+
+# Default owner for all files
+* @hyperpolymath
+
+# Core Rust workspace
+/cli/ @hyperpolymath
+/adapters/ @hyperpolymath
+/data/ @hyperpolymath
+/fixer/ @hyperpolymath
+/integration/ @hyperpolymath
+
+# Elixir pipeline
+/lib/ @hyperpolymath
+/test/ @hyperpolymath
+
+# ABI/FFI layer
+/src/abi/ @hyperpolymath
+/ffi/zig/ @hyperpolymath
+
+# Neural / scanning engine
+/neural/ @hyperpolymath
+/verify/ @hyperpolymath
+
+# Security-sensitive
+/.github/workflows/ @hyperpolymath
+/.well-known/ @hyperpolymath
+/SECURITY.md @hyperpolymath
+
+# Machine-readable metadata
+/.machine_readable/ @hyperpolymath

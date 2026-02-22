@@ -103,30 +103,30 @@ The system learns complex patterns through neural analysis, then *distills* them
 
 == Installation
 
-=== Docker (Recommended)
+=== Container Runtime (Recommended)
 
 Pull from GitHub Container Registry:
 
 [source,bash]
 ----
 # Latest stable release
-docker pull ghcr.io/hyperpolymath/hypatia-cli:latest
+podman pull ghcr.io/hyperpolymath/hypatia-cli:latest
 
 # Or specific version
-docker pull ghcr.io/hyperpolymath/hypatia-cli:0.1.0
+podman pull ghcr.io/hyperpolymath/hypatia-cli:0.1.0
 
 # All components
-docker pull ghcr.io/hyperpolymath/hypatia-cli:latest
-docker pull ghcr.io/hyperpolymath/hypatia-adapter:latest
-docker pull ghcr.io/hyperpolymath/hypatia-registry:latest
-docker pull ghcr.io/hyperpolymath/hypatia-engine:latest
+podman pull ghcr.io/hyperpolymath/hypatia-cli:latest
+podman pull ghcr.io/hyperpolymath/hypatia-adapter:latest
+podman pull ghcr.io/hyperpolymath/hypatia-registry:latest
+podman pull ghcr.io/hyperpolymath/hypatia-engine:latest
 ----
 
 Run the CLI:
 
 [source,bash]
 ----
-docker run --rm ghcr.io/hyperpolymath/hypatia-cli:latest scan /repo
+podman run --rm ghcr.io/hyperpolymath/hypatia-cli:latest scan /repo
 ----
 
 === Binary Release
@@ -148,7 +148,7 @@ curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypa
 sudo mv hyper /usr/local/bin/
 ----
 
-=== Docker Compose
+=== Compose
 
 For full stack deployment:
 
@@ -509,7 +509,7 @@ cicd-hyper-a/
 │
 └── deploy/                      # Deployment configs
     ├── k8s/
-    ├── docker-compose.yml
+    ├── compose.yaml
     └── helm/
 ----
 
@@ -536,7 +536,7 @@ cicd-hyper-a/
 
 === Phase 4: Scale 🔄 In Progress
 * [x] K8s manifests and Helm chart
-* [x] Docker Compose production config
+* [x] Compose production config
 * [x] Monitoring (Prometheus/Grafana)
 * [ ] Radicle P2P federation (pending)
 * [ ] Public registry launch (pending)

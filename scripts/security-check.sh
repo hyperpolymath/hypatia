@@ -427,31 +427,31 @@ check_container_trivy() {
         return 2
     fi
 
-    if ! check_command "docker" "https://docs.docker.com/get-docker/"; then
+    if ! check_command "podman" "https://podman.io/docs/installation"; then
         return 2
     fi
 
     cd "$PROJECT_ROOT"
 
     local container_status=0
-    local dockerfiles=("deploy/Dockerfile" "deploy/Dockerfile.adapter" "deploy/Dockerfile.engine" "deploy/Dockerfile.registry")
+    local containerfiles=("deploy/Containerfile" "deploy/Containerfile.adapter" "deploy/Containerfile.engine" "deploy/Containerfile.registry")
 
-    for dockerfile in "${dockerfiles[@]}"; do
-        if [ ! -f "$dockerfile" ]; then
-            print_warning "Dockerfile not found: $dockerfile"
+    for containerfile in "${containerfiles[@]}"; do
+        if [ ! -f "$containerfile" ]; then
+            print_warning "Containerfile not found: $containerfile"
             continue
         fi
 
-        local image_name="cicd-hyper-a-$(basename "$dockerfile" | sed 's/Dockerfile//' | sed 's/^\./scan-/' | sed 's/^-//')"
+        local image_name="cicd-hyper-a-$(basename "$containerfile" | sed 's/Containerfile//' | sed 's/^\./scan-/' | sed 's/^-//')"
         if [ "$image_name" = "cicd-hyper-a-scan-" ]; then
             image_name="cicd-hyper-a-main:scan"
         else
             image_name="${image_name}:scan"
         fi
 
-        print_info "Building $dockerfile -> $image_name"
-        if ! docker build -t "$image_name" -f "$dockerfile" . > /dev/null 2>&1; then
-            print_warning "Failed to build $dockerfile, skipping"
+        print_info "Building $containerfile -> $image_name"
+        if ! podman build -t "$image_name" -f "$containerfile" . > /dev/null 2>&1; then
+            print_warning "Failed to build $containerfile, skipping"
             continue
         fi
 
