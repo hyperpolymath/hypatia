@@ -11,18 +11,21 @@ pub mod cache;
 pub mod dragonfly;
 pub mod error;
 pub mod models;
+pub mod verisimdb;
 
 pub use arangodb::ArangoClient;
 pub use cache::{CacheHandle, CachePrefix, CacheStats, DragonflyCache, InvalidationEvent};
 pub use dragonfly::DragonflyClient;
 pub use error::{DataError, Result};
 pub use models::*;
+pub use verisimdb::VerisimClient;
 
 /// Configuration for data layer connections
 #[derive(Debug, Clone)]
 pub struct DataConfig {
     pub arangodb: ArangoConfig,
     pub dragonfly: DragonflyConfig,
+    pub verisimdb: VerisimConfig,
 }
 
 /// ArangoDB configuration
@@ -65,10 +68,27 @@ impl Default for DragonflyConfig {
     }
 }
 
+/// VeriSimDB configuration
+#[derive(Debug, Clone)]
+pub struct VerisimConfig {
+    pub url: String,
+    pub api_key: Option<String>,
+}
+
+impl Default for VerisimConfig {
+    fn default() -> Self {
+        Self {
+            url: "http://localhost:8080".to_string(),
+            api_key: None,
+        }
+    }
+}
+
 /// Unified data layer client
 pub struct DataLayer {
     pub arango: ArangoClient,
     pub dragonfly: DragonflyClient,
+    pub verisim: VerisimClient,
 }
 
 impl DataLayer {
@@ -76,19 +96,26 @@ impl DataLayer {
     pub async fn new(config: DataConfig) -> Result<Self> {
         let arango = ArangoClient::new(config.arangodb).await?;
         let dragonfly = DragonflyClient::new(config.dragonfly).await?;
+        let verisim = VerisimClient::new(config.verisimdb).await?;
 
-        Ok(Self { arango, dragonfly })
+        Ok(Self {
+            arango,
+            dragonfly,
+            verisim,
+        })
     }
 
     /// Health check for all data services
     pub async fn health_check(&self) -> Result<HealthStatus> {
         let arango_ok = self.arango.ping().await.is_ok();
         let dragonfly_ok = self.dragonfly.ping().await.is_ok();
+        let verisim_ok = self.verisim.ping().await.is_ok();
 
         Ok(HealthStatus {
             arangodb: if arango_ok { "pass" } else { "fail" }.to_string(),
             dragonfly: if dragonfly_ok { "pass" } else { "fail" }.to_string(),
-            overall: if arango_ok && dragonfly_ok {
+            verisimdb: if verisim_ok { "pass" } else { "fail" }.to_string(),
+            overall: if arango_ok && dragonfly_ok && verisim_ok {
                 "healthy"
             } else {
                 "degraded"
@@ -103,5 +130,6 @@ impl DataLayer {
 pub struct HealthStatus {
     pub arangodb: String,
     pub dragonfly: String,
+    pub verisimdb: String,
     pub overall: String,
 }

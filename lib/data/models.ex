@@ -49,7 +49,7 @@ defmodule Hypatia.Data.Models do
       :_key, :repo, :pattern_id, :severity, :category,
       :location, :message, :confidence, :scan_timestamp,
       :status,  # :open, :dispatched, :fixed, :false_positive, :wont_fix
-      :fix_recipe_id, :dispatched_to_bot
+      :fix_recipe_id, :dispatched_to_bot, :verisim_id
     ]
   end
 
@@ -92,7 +92,7 @@ defmodule Hypatia.Data.Models do
       :_key, :recipe_id, :repo, :bot, :file,
       :outcome,  # :success, :failure, :false_positive
       :timestamp, :confidence_before, :confidence_after,
-      :batch_id, :details
+      :batch_id, :details, :verisim_proof_id
     ]
   end
 
@@ -141,7 +141,7 @@ defmodule Hypatia.Data.Models do
       :_key, :network,  # :trust, :moe, :lsm, :esn, :rbf
       :state_data,  # Serialized network state
       :cycle_count, :last_updated,
-      :training_samples, :accuracy_metrics
+      :training_samples, :accuracy_metrics, :verisim_tensor_id
     ]
   end
 

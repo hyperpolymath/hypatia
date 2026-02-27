@@ -324,6 +324,16 @@ defmodule Hypatia.FleetDispatcher do
         "success=#{success}"
     )
 
+    # Feed outcome to neural coordinator for continuous learning.
+    # The coordinator updates MoE, LSM, and ESN networks with this data.
+    outcome_str = if success, do: "success", else: "failure"
+
+    try do
+      Hypatia.Neural.Coordinator.record_outcome(finding, outcome_str)
+    catch
+      :exit, _ -> Logger.warning("Neural coordinator unavailable for outcome recording")
+    end
+
     observation = %{
       type: pattern,
       repo: repo,

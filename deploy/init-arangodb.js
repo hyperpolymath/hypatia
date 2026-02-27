@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // ArangoDB initialization script for cicd-hyper-a
+// Updated for Neurosymbolic integration and VeriSimDB federation
 
 const db = require('@arangodb').db;
 const graph_module = require('@arangodb/general-graph');
@@ -25,7 +26,15 @@ const documentCollections = [
   'rulesets',
   'fixes',
   'patterns',
-  'workflows'
+  'workflows',
+  'bots',
+  'outcomes',
+  'contributors',
+  'anomalies',
+  'neural_states',
+  'learning_data',
+  'confidence_history',
+  'sessions'
 ];
 
 documentCollections.forEach(name => {
@@ -47,7 +56,11 @@ const edgeCollections = [
   'ruleset_contains',
   'repo_uses_ruleset',
   'rule_derived_from',
-  'workflow_triggers_rule'
+  'workflow_triggers_rule',
+  'bot_executes_recipe',
+  'recipe_produces_outcome',
+  'repo_depends_on',
+  'verisim_links' // Federated link to VeriSimDB
 ];
 
 edgeCollections.forEach(name => {
@@ -71,7 +84,13 @@ db.alerts.ensureIndex({ type: 'persistent', fields: ['repo_key'] });
 db.alerts.ensureIndex({ type: 'persistent', fields: ['severity'] });
 db.alerts.ensureIndex({ type: 'persistent', fields: ['category'] });
 db.alerts.ensureIndex({ type: 'persistent', fields: ['fix_applied'] });
-db.alerts.ensureIndex({ type: 'persistent', fields: ['created_at'] });
+db.alerts.ensureIndex({ type: 'persistent', fields: ['verisim_id'] });
+
+// Neural indexes
+db.neural_states.ensureIndex({ type: 'persistent', fields: ['network'] });
+db.anomalies.ensureIndex({ type: 'persistent', fields: ['source_network'] });
+db.anomalies.ensureIndex({ type: 'persistent', fields: ['timestamp'] });
+db.confidence_history.ensureIndex({ type: 'persistent', fields: ['recipe_id', 'timestamp'] });
 
 // Rules indexes
 db.rules.ensureIndex({ type: 'persistent', fields: ['effect'] });
@@ -93,46 +112,18 @@ const graphName = 'cicd_graph';
 
 if (!graph_module._list().includes(graphName)) {
   const edgeDefinitions = [
-    {
-      collection: 'repo_has_alert',
-      from: ['repos'],
-      to: ['alerts']
-    },
-    {
-      collection: 'repo_has_workflow',
-      from: ['repos'],
-      to: ['workflows']
-    },
-    {
-      collection: 'alert_fixed_by',
-      from: ['alerts'],
-      to: ['rules']
-    },
-    {
-      collection: 'rule_applies_fix',
-      from: ['rules'],
-      to: ['fixes']
-    },
-    {
-      collection: 'ruleset_contains',
-      from: ['rulesets'],
-      to: ['rules']
-    },
-    {
-      collection: 'repo_uses_ruleset',
-      from: ['repos'],
-      to: ['rulesets']
-    },
-    {
-      collection: 'rule_derived_from',
-      from: ['rules'],
-      to: ['patterns']
-    },
-    {
-      collection: 'workflow_triggers_rule',
-      from: ['workflows'],
-      to: ['rules']
-    }
+    { collection: 'repo_has_alert', from: ['repos'], to: ['alerts'] },
+    { collection: 'repo_has_workflow', from: ['repos'], to: ['workflows'] },
+    { collection: 'alert_fixed_by', from: ['alerts'], to: ['rules'] },
+    { collection: 'rule_applies_fix', from: ['rules'], to: ['fixes'] },
+    { collection: 'ruleset_contains', from: ['rulesets'], to: ['rules'] },
+    { collection: 'repo_uses_ruleset', from: ['repos'], to: ['rulesets'] },
+    { collection: 'rule_derived_from', from: ['rules'], to: ['patterns'] },
+    { collection: 'workflow_triggers_rule', from: ['workflows'], to: ['rules'] },
+    { collection: 'bot_executes_recipe', from: ['bots'], to: ['recipes'] },
+    { collection: 'recipe_produces_outcome', from: ['recipes'], to: ['outcomes'] },
+    { collection: 'repo_depends_on', from: ['repos'], to: ['repos'] },
+    { collection: 'verisim_links', from: ['alerts', 'neural_states', 'outcomes'], to: ['repos'] }
   ];
 
   graph_module._create(graphName, edgeDefinitions);
@@ -163,22 +154,8 @@ if (!analyzers.analyzer('text_en')) {
 if (!db._view('rules_search')) {
   db._createView('rules_search', 'arangosearch', {
     links: {
-      rules: {
-        analyzers: ['text_en'],
-        fields: {
-          name: {},
-          description: {}
-        },
-        includeAllFields: false
-      },
-      rulesets: {
-        analyzers: ['text_en'],
-        fields: {
-          name: {},
-          description: {}
-        },
-        includeAllFields: false
-      }
+      rules: { analyzers: ['text_en'], fields: { name: {}, description: {} }, includeAllFields: false },
+      rulesets: { analyzers: ['text_en'], fields: { name: {}, description: {} }, includeAllFields: false }
     }
   });
   console.log('Created search view');

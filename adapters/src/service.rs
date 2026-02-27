@@ -278,6 +278,7 @@ impl ForgeService {
             description: alert.description.clone(),
             file: alert.file.clone(),
             line: alert.line,
+            verisim_id: None,
             fix_applied: false,
             auto_fixable: alert.auto_fixable,
             created_at: chrono::Utc::now().to_rfc3339(),

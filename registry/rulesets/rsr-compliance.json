@@ -8,7 +8,7 @@
     "name": "hyperpolymath",
     "url": "https://github.com/hyperpolymath"
   },
-  "license": "AGPL-3.0-or-later",
+  "license": "PMPL-1.0-or-later",
   "effect": "preventive",
   "targets": {
     "forges": ["github", "gitlab", "bitbucket"],
@@ -214,6 +214,149 @@
       },
       "autoFixable": false,
       "source": "manual"
+    },
+    {
+      "id": "require-codeowners",
+      "name": "Require CODEOWNERS File",
+      "description": "Every RSR repo must have a .github/CODEOWNERS file for PR review routing.",
+      "effect": "diagnostic",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          { "type": "file-exists", "path": ".github/CODEOWNERS" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "No .github/CODEOWNERS file found. Add CODEOWNERS with ownership rules for PR review routing."
+      },
+      "autoFixable": true,
+      "confidence": 0.90,
+      "source": "rsr-template-repo"
+    },
+    {
+      "id": "require-maintainers",
+      "name": "Require MAINTAINERS File",
+      "description": "Every RSR repo must have a MAINTAINERS.adoc file listing project maintainers and automated agents.",
+      "effect": "diagnostic",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "MAINTAINERS.adoc" },
+              { "type": "file-exists", "path": "MAINTAINERS.md" },
+              { "type": "file-exists", "path": "MAINTAINERS" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "No MAINTAINERS file found. Add MAINTAINERS.adoc listing project maintainers and bot agents."
+      },
+      "autoFixable": true,
+      "confidence": 0.90,
+      "source": "rsr-template-repo"
+    },
+    {
+      "id": "require-topology",
+      "name": "Require TOPOLOGY.md",
+      "description": "Every RSR repo must have a TOPOLOGY.md with ASCII architecture diagram and completion dashboard.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          { "type": "file-exists", "path": "TOPOLOGY.md" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "No TOPOLOGY.md found. Add TOPOLOGY.md with system architecture diagram and honest completion dashboard."
+      },
+      "autoFixable": false,
+      "source": "rsr-standard"
+    },
+    {
+      "id": "require-ai-manifest",
+      "name": "Require AI Manifest",
+      "description": "Every RSR repo must have an AI manifest file (0-AI-MANIFEST.a2ml or AI.a2ml) as the canonical AI entry point.",
+      "effect": "diagnostic",
+      "severity": "high",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          {
+            "type": "or",
+            "conditions": [
+              { "type": "file-exists", "path": "0-AI-MANIFEST.a2ml" },
+              { "type": "file-exists", "path": "AI.a2ml" }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "No AI manifest found. Add 0-AI-MANIFEST.a2ml as canonical entry point for all AI agents."
+      },
+      "autoFixable": true,
+      "confidence": 0.85,
+      "source": "0-ai-gatekeeper-protocol"
+    },
+    {
+      "id": "require-machine-readable-dir",
+      "name": "Require .machine_readable/ Directory",
+      "description": "SCM files (STATE.scm, META.scm, ECOSYSTEM.scm) must be in .machine_readable/, never in the repo root.",
+      "effect": "preventive",
+      "severity": "high",
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "file-exists", "path": "STATE.scm" },
+          { "type": "file-exists", "path": "META.scm" },
+          { "type": "file-exists", "path": "ECOSYSTEM.scm" },
+          { "type": "file-exists", "path": "AGENTIC.scm" },
+          { "type": "file-exists", "path": "NEUROSYM.scm" },
+          { "type": "file-exists", "path": "PLAYBOOK.scm" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "high",
+        "message": "SCM files found in repo root. Move STATE.scm/META.scm/ECOSYSTEM.scm to .machine_readable/ directory."
+      },
+      "autoFixable": true,
+      "confidence": 0.95,
+      "source": "rsr-standard"
+    },
+    {
+      "id": "require-editorconfig",
+      "name": "Require .editorconfig",
+      "description": "Every RSR repo must have an .editorconfig file for consistent formatting.",
+      "effect": "diagnostic",
+      "severity": "medium",
+      "condition": {
+        "type": "not",
+        "conditions": [
+          { "type": "file-exists", "path": ".editorconfig" }
+        ]
+      },
+      "action": {
+        "type": "alert",
+        "severity": "medium",
+        "message": "No .editorconfig found. Add .editorconfig for consistent editor formatting across contributors."
+      },
+      "autoFixable": true,
+      "confidence": 0.95,
+      "source": "rsr-template-repo"
     }
   ],
   "verification": {

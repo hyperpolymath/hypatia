@@ -7,7 +7,7 @@
     (version "0.5.0")
     (schema-version "1.0")
     (created "2026-01-03")
-    (updated "2026-02-13")
+    (updated "2026-02-22")
     (project "hypatia")
     (repo "github.com/hyperpolymath/hypatia"))
 
@@ -22,7 +22,7 @@
 
   (current-position
     (phase "operational")
-    (overall-completion 97)
+    (overall-completion 75)
     (components
       (verisimdb-connector "complete" "Reads scan data from verisimdb-data repo")
       (pattern-registry "complete" "Deduplicates findings into canonical patterns")
@@ -34,8 +34,8 @@
       (pattern-analyzer "complete" "Full pipeline: scan → patterns → triangle → dispatch")
       (learning-scheduler "complete" "GenServer polling every 5 min for feedback loop")
       (self-diagnostics "complete" "Health monitoring, circuit breaker, auto-recovery")
-      (neural-coordinator "complete" "Orchestrates 5 neural network subsystems")
-      (graph-of-trust "complete" "PageRank-style trust over repos/bots/recipes")
+      (neural-coordinator "active" "Orchestrates 5 neural networks; wired into pipeline 2026-02-22")
+      (graph-of-trust "active" "PageRank-style trust; boot crash fixed 2026-02-22")
       (mixture-of-experts "complete" "Domain-specific confidence with gating network")
       (liquid-state-machine "complete" "Temporal anomaly detection in event streams")
       (echo-state-network "complete" "Confidence trajectory forecasting")
@@ -45,7 +45,7 @@
       (ffi-idr "complete" "Idris2 FFI type signatures with GADT constructors and ffiReturnsApiResponse proof")
       (training-pipeline "complete" "ESN/RBF training from real verisimdb-data outcomes + pattern vectors")
       (elixir-tests "complete" "11 test files covering all pipeline modules")
-      (license-compliance "complete" "All SPDX headers updated to PMPL-1.0-or-later")
+      (license-compliance "complete" "All SPDX headers updated to PMPL-1.0-or-later; rulesets fixed 2026-02-22")
       (vql-client "complete" "Built-in VQL parser + query cache GenServer")
       (vql-file-executor "complete" "Executes VQL ASTs against verisimdb-data flat files")
       (vql-query "complete" "20+ high-level query functions for pipeline modules")
@@ -86,7 +86,7 @@
           ("Review processor creates per-repo GitHub issues")
           ("Fleet coordinator routes substitute findings to rhodibot")))
       (m4 "Neural Intelligence"
-        (status "complete")
+        (status "active")
         (items
           ("5 neural networks: Graph of Trust, MoE, LSM, ESN, RBF")
           ("Neural Coordinator GenServer in OTP supervision tree")
@@ -95,7 +95,11 @@
           ("Temporal anomaly detection in event streams")
           ("Confidence trajectory forecasting and drift detection")
           ("Training pipeline: ESN trained on 2372 real outcome data points")
-          ("5 new fix recipes: unwrap-to-match, panic-to-result, unsafe-type-coercion, atom-exhaustion, unsafe-ffi-wrapper")))
+          ("5 new fix recipes: unwrap-to-match, panic-to-result, unsafe-type-coercion, atom-exhaustion, unsafe-ffi-wrapper")
+          ("2026-02-22: Fixed boot crash in GraphOfTrust (empty data guard)")
+          ("2026-02-22: Wired coordinator into PatternAnalyzer pipeline (was dead code)")
+          ("2026-02-22: Wired outcome feedback into FleetDispatcher (continuous learning)")
+          ("REMAINING: One-sided training data (all outcomes are success, needs failure data)")))
       (m5 "Formal ABI + FFI"
         (status "complete")
         (items
@@ -141,22 +145,23 @@
           ("Cross-organization federation with VQL drift policies")))))
 
   (blockers-and-issues
-    (critical ())
+    (critical
+      ("gitbot-fleet cannot commit/PR — robot-repo-automaton is 5% complete for git workflow")
+      ("385 dispatched fixes never reached repos as commits (files modified locally only)"))
     (high
       ("PAT required for automated cross-repo dispatch")
       ("verisim-api not deployed — VQL queries execute against flat files, not native stores")
-      ("ArangoDB + Dragonfly need production deployment (transitional until verisim-api)"))
+      ("ArangoDB + Dragonfly need production deployment (transitional until verisim-api)")
+      ("One-sided training data — all 3588 outcomes are success, neural networks cannot learn from failures")
+      ("22 recipes for 954 patterns (97.7% without automated fix)"))
     (medium
       ("447 weak points remaining across 175 repos")
       ("4 recipes below auto_execute threshold")
-      ("ESN trained but one-sided — all outcomes are success, needs failure data")
-      ("RBF trained (965 vectors, MSE=0.047) — one-sided like ESN")
-      ("22 recipes for 954 patterns (97.7% without automated fix)")
-      ("184 repos in verisimdb-data have NULL summary fields"))
+      ("184 repos in verisimdb-data have NULL summary fields")
+      ("Logtalk error_instances.lgt and loader.lgt are stubs"))
     (low
       ("Codeberg/Bitbucket mirroring blocked")
-      ("3 orphaned pattern IDs (954 in registry vs 951 in index)")
-))
+      ("3 orphaned pattern IDs (954 in registry vs 951 in index)")))
 
   (critical-next-actions
     (immediate
@@ -174,6 +179,22 @@
       ("Develop more fix recipes for high-frequency substitute patterns")))
 
   (session-history
+    (session "2026-02-22"
+      (accomplishments
+        ("AUDIT: Neural coordinator was dead code — 0/5 networks called from main pipeline")
+        ("AUDIT: Triangle router used hardcoded thresholds (0.95/0.85), never neural predictions")
+        ("AUDIT: GraphOfTrust crashed on boot with empty outcomes (one-armed if + Enum.max_by on empty)")
+        ("AUDIT: All 5 ruleset JSONs had AGPL-3.0-or-later license (should be PMPL)")
+        ("AUDIT: Missing RSR rules for CODEOWNERS, MAINTAINERS, TOPOLOGY.md, AI manifest, .machine_readable/")
+        ("FIX: GraphOfTrust boot crash — added empty data guards (compute_trust + normalize_scores)")
+        ("FIX: Wired Neural.Coordinator into PatternAnalyzer.analyze_all_scans via enhance_with_neural/1")
+        ("FIX: Novel findings now demoted to :control tier by neural coordinator")
+        ("FIX: Neural confidence used as conservative lower bound for recipe confidence")
+        ("FIX: Wired outcome feedback into FleetDispatcher.ingest_fix_outcome/1")
+        ("FIX: All 5 ruleset JSONs corrected to PMPL-1.0-or-later")
+        ("FIX: Added 7 new RSR rules: require-codeowners, require-maintainers, require-topology, require-ai-manifest, require-machine-readable-dir, require-editorconfig")
+        ("FIX: STATE.scm updated to honest 75% (was 97% with dead neural code)")
+        ("FIX: Blockers updated to include critical gitbot-fleet actuation gap")))
     (session "2026-02-13-16"
       (accomplishments
         ("Implemented all 6 Zig FFI stubs: health_check, scan_repo, dispatch, record_outcome, force_learning_cycle, get_confidence")

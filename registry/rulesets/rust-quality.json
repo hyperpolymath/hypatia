@@ -8,7 +8,7 @@
     "name": "hyperpolymath",
     "url": "https://github.com/hyperpolymath"
   },
-  "license": "AGPL-3.0-or-later",
+  "license": "PMPL-1.0-or-later",
   "effect": "preventive",
   "targets": {
     "forges": ["github", "gitlab", "bitbucket"],
