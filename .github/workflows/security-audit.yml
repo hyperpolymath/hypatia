@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Upload audit results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: rust-audit-report
           path: rust-audit-report.json
@@ -143,7 +143,7 @@ jobs:
         run: cargo deny check 2>&1 | tee cargo-deny-report.txt || true
 
       - name: Upload deny results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cargo-deny-report
           path: cargo-deny-report.txt
@@ -192,7 +192,7 @@ jobs:
           echo '```' >> haskell-audit-report.md
 
       - name: Upload audit results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: haskell-audit-report
           path: registry/haskell-audit-report.md
@@ -456,7 +456,7 @@ jobs:
           fi
 
       - name: Upload license report
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: license-compliance-report
           path: license-report.md
@@ -518,7 +518,7 @@ jobs:
           EOF
 
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: sbom
           path: |
