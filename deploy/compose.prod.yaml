@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# hypatia Docker Compose - Production Overrides
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# hypatia Podman Compose - Production Overrides
+# Usage: podman-compose -f compose.yaml -f compose.prod.yaml up -d
 
 version: "3.8"
 
@@ -77,6 +77,41 @@ services:
       - "com.hypatia.component=cache"
       - "com.hypatia.tier=data"
 
+  verisimdb:
+    build:
+      context: ../../nextgen-databases/verisimdb
+      dockerfile: container/Containerfile
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+      replicas: 2
+    environment:
+      VERISIM_HOST: "[::]"
+      VERISIM_PORT: 8080
+      VERISIM_RUST_CORE_URL: "http://[::1]:8080/api/v1"
+      ARANGODB_URL: http://arangodb:8529
+      DRAGONFLY_URL: redis://dragonfly:6379
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    labels:
+      - "com.hypatia.component=federation"
+      - "com.hypatia.tier=data"
+
   # ============================================================
   # REGISTRY SERVICE - Production Settings
   # ============================================================
@@ -97,6 +132,7 @@ services:
       ARANGODB_USER: ${ARANGODB_USER:?ARANGODB_USER must be set}
       ARANGODB_PASSWORD: ${ARANGODB_PASSWORD:?ARANGODB_PASSWORD must be set}
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
       PORT: 8080
       RUST_LOG: info
       RUST_BACKTRACE: 0
@@ -133,6 +169,7 @@ services:
     environment:
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "swipl", "-g", "logtalk_load(engine/loader), cicd_rules::is_auto_fixable('TokenPermissionsID')", "-t", "halt"]
@@ -170,6 +207,7 @@ services:
       BITBUCKET_APP_PASSWORD: ${BITBUCKET_APP_PASSWORD}
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
       RUST_LOG: info
       RUST_BACKTRACE: 0
     restart: unless-stopped
@@ -212,6 +250,7 @@ services:
       ARANGODB_USER: ${ARANGODB_USER:?ARANGODB_USER must be set}
       ARANGODB_PASSWORD: ${ARANGODB_PASSWORD:?ARANGODB_PASSWORD must be set}
       DRAGONFLY_URL: redis://dragonfly:6379
+      VERISIMDB_URL: http://verisimdb:8080
       REGISTRY_URL: http://registry:8080
       ENGINE_URL: http://engine:8082
       PORT: 8000
@@ -225,6 +264,8 @@ services:
       dragonfly:
         condition: service_healthy
       registry:
+        condition: service_healthy
+      verisimdb:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

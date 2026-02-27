@@ -13,7 +13,6 @@ use tracing::{debug, info, warn};
 /// Dragonfly client with connection management
 pub struct DragonflyClient {
     config: DragonflyConfig,
-    client: Client,
     conn: Arc<tokio::sync::RwLock<Option<ConnectionManager>>>,
 }
 
@@ -22,16 +21,15 @@ impl DragonflyClient {
     pub async fn new(config: DragonflyConfig) -> Result<Self> {
         info!("Connecting to Dragonfly at {}", config.url);
 
-        let client = Client::open(config.url.clone())
+        let client_builder = Client::open(config.url.clone())
             .map_err(|e| DataError::ConnectionError(e.to_string()))?;
 
-        let conn_manager = ConnectionManager::new(client.clone())
+        let conn_manager = ConnectionManager::new(client_builder)
             .await
             .map_err(|e| DataError::ConnectionError(e.to_string()))?;
 
         Ok(Self {
             config,
-            client,
             conn: Arc::new(tokio::sync::RwLock::new(Some(conn_manager))),
         })
     }

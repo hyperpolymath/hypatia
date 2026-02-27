@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+FROM rust:latest
+
+WORKDIR /workspace
+
+# Install dependencies
+RUN apt-get update && apt-get install -y 
+    curl 
+    wget 
+    iputils-ping 
+    && rm -rf /var/lib/apt/lists/*
+
+# Install tarpaulin for coverage
+RUN cargo install cargo-tarpaulin
+
+# Default command
+CMD ["cargo", "test", "--manifest-path", "integration/Cargo.toml"]

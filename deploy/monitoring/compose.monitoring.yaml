@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# Docker Compose configuration for cicd-hyper-a monitoring stack
+# Podman Compose configuration for cicd-hyper-a monitoring stack
 # Includes Prometheus, Grafana, Alertmanager, and Node Exporter
 
 version: "3.8"
@@ -163,7 +163,7 @@ services:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/lib/containers/storage:/var/lib/containers/storage:ro
       - /dev/disk/:/dev/disk:ro
     privileged: true
     devices:

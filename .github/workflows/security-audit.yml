@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Upload audit results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: rust-audit-report
           path: rust-audit-report.json
@@ -143,7 +143,7 @@ jobs:
         run: cargo deny check 2>&1 | tee cargo-deny-report.txt || true
 
       - name: Upload deny results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cargo-deny-report
           path: cargo-deny-report.txt
@@ -192,7 +192,7 @@ jobs:
           echo '```' >> haskell-audit-report.md
 
       - name: Upload audit results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: haskell-audit-report
           path: registry/haskell-audit-report.md
@@ -231,7 +231,7 @@ jobs:
           docker build -t ${{ steps.image.outputs.name }}:scan -f ${{ matrix.dockerfile }} .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # 0.28.0
+        uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518 # 0.28.0
         with:
           image-ref: '${{ steps.image.outputs.name }}:scan'
           format: 'sarif'
@@ -240,7 +240,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Run Trivy (table output)
-        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # 0.28.0
+        uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518 # 0.28.0
         with:
           image-ref: '${{ steps.image.outputs.name }}:scan'
           format: 'table'
@@ -328,7 +328,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@6961f2bace57ab32b23b3ba40f8f420f6bc7e004 # v3.88.22
+        uses: trufflesecurity/trufflehog@7cdc7ef878439f74842c00422c65ab864ed83125 # v3.88.22
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -456,7 +456,7 @@ jobs:
           fi
 
       - name: Upload license report
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: license-compliance-report
           path: license-report.md
@@ -518,7 +518,7 @@ jobs:
           EOF
 
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: sbom
           path: |

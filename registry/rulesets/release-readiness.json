@@ -8,7 +8,7 @@
     "name": "hyperpolymath",
     "url": "https://github.com/hyperpolymath"
   },
-  "license": "AGPL-3.0-or-later",
+  "license": "PMPL-1.0-or-later",
   "effect": "preventive",
   "targets": {
     "forges": ["github", "gitlab", "bitbucket"],
@@ -69,7 +69,7 @@
       "action": {
         "type": "alert",
         "severity": "high",
-        "message": "No LICENSE file found. Add a LICENSE file to specify the software license (e.g., AGPL-3.0-or-later, MIT, Apache-2.0)."
+        "message": "No LICENSE file found. Add a LICENSE file to specify the software license (e.g., PMPL-1.0-or-later, MPL-2.0, MIT, Apache-2.0)."
       },
       "autoFixable": false,
       "source": "manual"

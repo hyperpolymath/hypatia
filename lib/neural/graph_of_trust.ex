@@ -83,9 +83,10 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # --- Trust Computation (PageRank-style) ---
 
+  defp compute_trust(%__MODULE__{nodes: nodes} = graph) when map_size(nodes) == 0, do: graph
+
   defp compute_trust(%__MODULE__{nodes: nodes, edges: edges} = graph) do
     n = map_size(nodes)
-    if n == 0, do: graph
 
     # Initialize all nodes to 1/n
     initial_score = 1.0 / max(n, 1)
@@ -137,8 +138,10 @@ defmodule Hypatia.Neural.GraphOfTrust do
     end
   end
 
+  defp normalize_scores(scores) when map_size(scores) == 0, do: scores
+
   defp normalize_scores(scores) do
-    max_score = Enum.max_by(scores, fn {_k, v} -> v end) |> elem(1) |> max(0.001)
+    max_score = scores |> Map.values() |> Enum.max() |> max(0.001)
     Map.new(scores, fn {k, v} -> {k, min(v / max_score, 1.0)} end)
   end
 

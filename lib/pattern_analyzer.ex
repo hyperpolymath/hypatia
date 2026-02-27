@@ -19,6 +19,7 @@ defmodule Hypatia.PatternAnalyzer do
   alias Hypatia.TriangleRouter
   alias Hypatia.FleetDispatcher
   alias Hypatia.DispatchManifest
+  alias Hypatia.Neural.Coordinator, as: NeuralCoordinator
 
   require Logger
 
@@ -50,10 +51,15 @@ defmodule Hypatia.PatternAnalyzer do
         end)
       end)
 
-    # Step 4: Dispatch routed actions to fleet
+    # Step 4: Enhance dispatch decisions with neural intelligence.
+    # The coordinator provides novelty detection, trust-weighted routing,
+    # and aggregated confidence from all 5 neural networks.
+    routed = enhance_with_neural(routed)
+
+    # Step 5: Dispatch routed actions to fleet
     Enum.each(routed, &FleetDispatcher.dispatch_routed_action/1)
 
-    # Step 5: Write dispatch manifest (JSONL — executable by dispatch-runner.sh)
+    # Step 6: Write dispatch manifest (JSONL — executable by dispatch-runner.sh)
     {:ok, manifest_path, manifest_stats} = DispatchManifest.write(routed)
 
     Logger.info(
@@ -61,7 +67,7 @@ defmodule Hypatia.PatternAnalyzer do
         "#{manifest_stats.report_only} report → #{manifest_path}"
     )
 
-    # Step 6: Generate and return summary
+    # Step 7: Generate and return summary
     summary = generate_summary(routed, scans) |> Map.put(:manifest_path, manifest_path)
     Logger.info("Pipeline complete: #{summary.total_actions} actions dispatched")
 
@@ -130,6 +136,78 @@ defmodule Hypatia.PatternAnalyzer do
   end
 
   # --- Private ---
+
+  # Enhance routed actions with neural intelligence. Consults the Neural.Coordinator
+  # for each finding to get novelty detection, trust-weighted bot preferences, and
+  # aggregated confidence from all 5 networks (MoE, RBF, LSM, ESN, Graph of Trust).
+  #
+  # Novel findings are demoted to :control (report_only) regardless of recipe confidence.
+  # For non-novel findings, the neural aggregated confidence can override the recipe's
+  # static confidence when the neural prediction is lower (conservative adjustment).
+  defp enhance_with_neural(routed_actions) do
+    Enum.map(routed_actions, fn action ->
+      pattern = extract_pattern(action)
+
+      case neural_recommendation(pattern) do
+        {:ok, rec} ->
+          apply_neural_recommendation(action, rec)
+
+        :unavailable ->
+          # Neural coordinator not running — pass through unchanged
+          action
+      end
+    end)
+  end
+
+  # Get a dispatch recommendation from the neural coordinator.
+  # Returns {:ok, recommendation} or :unavailable if the coordinator is down.
+  defp neural_recommendation(pattern) do
+    try do
+      case NeuralCoordinator.dispatch_recommendation(pattern) do
+        %{} = rec -> {:ok, rec}
+        _ -> :unavailable
+      end
+    catch
+      :exit, _ -> :unavailable
+    end
+  end
+
+  # Apply neural recommendation to a routed action.
+  # - Novel findings: demote to :control (human review required)
+  # - Non-novel: adjust confidence downward if neural prediction is lower (conservative)
+  defp apply_neural_recommendation(action, %{is_novel: true} = _rec) do
+    # Novel finding — force to control tier for human review
+    pattern = extract_pattern(action)
+    Logger.info("Neural: novel finding detected for #{Map.get(pattern, "id", "?")}, demoting to control")
+    {:control, Map.put(pattern, "neural_novel", true)}
+  end
+
+  defp apply_neural_recommendation({:eliminate, recipe, pattern}, %{confidence: neural_conf} = rec) do
+    recipe_conf = Map.get(recipe, "confidence", 0.0)
+
+    # Use the lower of recipe confidence and neural confidence (conservative)
+    effective_conf = min(recipe_conf, neural_conf)
+    updated_recipe = recipe
+      |> Map.put("confidence", effective_conf)
+      |> Map.put("neural_confidence", neural_conf)
+      |> Map.put("preferred_bots", Map.get(rec, :preferred_bots, []))
+
+    {:eliminate, updated_recipe, pattern}
+  end
+
+  defp apply_neural_recommendation({:substitute, recipe, pattern}, %{confidence: neural_conf} = rec) do
+    updated_recipe = recipe
+      |> Map.put("neural_confidence", neural_conf)
+      |> Map.put("preferred_bots", Map.get(rec, :preferred_bots, []))
+
+    {:substitute, updated_recipe, pattern}
+  end
+
+  defp apply_neural_recommendation(action, _rec), do: action
+
+  defp extract_pattern({:eliminate, _recipe, pattern}), do: pattern
+  defp extract_pattern({:substitute, _recipe, pattern}), do: pattern
+  defp extract_pattern({:control, pattern}), do: pattern
 
   defp build_language_map(scans) do
     Enum.reduce(scans, %{}, fn scan, acc ->
