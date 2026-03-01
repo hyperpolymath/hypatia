@@ -13,6 +13,9 @@ erl_crash.dump
 *.ez
 *.beam
 
+# Dependencies
+node_modules/
+
 # KDE
 .directory
 

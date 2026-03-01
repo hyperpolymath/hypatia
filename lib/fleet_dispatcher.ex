@@ -106,6 +106,7 @@ defmodule Hypatia.FleetDispatcher do
   - :accessibility_violation -> accessibilitybot
   - :seam_finding -> seambot
   - :crypto_finding -> cipherbot
+  - :panic_finding -> panicbot (fixable → auto-fix pipeline, unfixable → A2ML debt register)
   - :auto_fix_request -> robot-repo-automaton
   - :completeness_finding -> finishbot
   - :fix_outcome -> learning engine
@@ -119,6 +120,7 @@ defmodule Hypatia.FleetDispatcher do
       :accessibility_violation -> dispatch_to_accessibilitybot(finding)
       :seam_finding -> dispatch_to_seambot(finding)
       :crypto_finding -> dispatch_to_cipherbot(finding)
+      :panic_finding -> dispatch_to_panicbot(finding)
       :completeness_finding -> dispatch_to_finishbot(finding)
       :auto_fix_request -> dispatch_to_robot_repo_automaton(finding)
       :fix_outcome -> ingest_fix_outcome(finding)
@@ -245,6 +247,56 @@ defmodule Hypatia.FleetDispatcher do
     """
 
     execute_graphql(mutation, "cipherbot")
+  end
+
+  defp dispatch_to_panicbot(finding) do
+    # Route fixable findings to robot-repo-automaton via standard auto-fix pipeline.
+    # Route unfixable findings back to panicbot for A2ML debt register documentation.
+    fixable = finding_field(finding, :fixable, false)
+    confidence = finding_field(finding, :confidence, 0.0)
+
+    if fixable do
+      strategy = TriangleRouter.dispatch_strategy(confidence)
+
+      case strategy do
+        :auto_execute ->
+          dispatch_to_robot_repo_automaton(%{
+            type: :auto_fix_request,
+            repo: finding_field(finding, :repo),
+            file: finding_field(finding, :file, ""),
+            issue: finding_field(finding, :issue, ""),
+            fix_type: "panic-finding",
+            confidence: confidence,
+            recipe_id: finding_field(finding, :rule_id, ""),
+            suggestion: finding_field(finding, :suggestion, "")
+          })
+
+        :review ->
+          dispatch_to_rhodibot(%{
+            type: :fix_suggestion,
+            repo: finding_field(finding, :repo),
+            file: finding_field(finding, :file, ""),
+            issue: finding_field(finding, :issue, ""),
+            suggestion: finding_field(finding, :suggestion, "")
+          })
+
+        :report_only ->
+          dispatch_to_sustainabot(%{
+            type: :eco_score,
+            repo: finding_field(finding, :repo),
+            score: 0.5,
+            details: "Low-confidence panic finding: #{finding_field(finding, :issue, "")}"
+          })
+      end
+    else
+      # Unfixable: log as advisory via sustainabot
+      dispatch_to_sustainabot(%{
+        type: :eco_score,
+        repo: finding_field(finding, :repo),
+        score: Map.get(finding, :severity_score, 0.5),
+        details: "Unfixable (panicbot): #{finding_field(finding, :issue, "")} — documented in .panicbot/PANICBOT-FINDINGS.a2ml"
+      })
+    end
   end
 
   defp dispatch_to_finishbot(finding) do
