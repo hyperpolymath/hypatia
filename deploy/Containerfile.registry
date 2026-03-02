@@ -33,12 +33,16 @@ FROM cgr.dev/chainguard/wolfi-base:latest
 RUN apk add --no-cache \
     gmp \
     ca-certificates \
-    curl
+    curl \
+    && adduser -D -s /sbin/nologin registry
 
 WORKDIR /app
 
 COPY --from=builder /build/bin/registry /usr/local/bin/registry
 COPY schemas /app/schemas
+
+# Switch to non-root user
+USER registry
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

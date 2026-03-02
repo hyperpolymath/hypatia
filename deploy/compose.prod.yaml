@@ -1,16 +1,14 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# hypatia Podman Compose - Production Overrides
-# Usage: podman-compose -f compose.yaml -f compose.prod.yaml up -d
-
-version: "3.8"
+# Hypatia Podman Compose — Production Overrides (Stapeln style)
+# Usage: podman compose -f compose.yaml -f compose.prod.yaml up -d
 
 services:
   # ============================================================
-  # DATA LAYER - Production Settings
+  # DATA LAYER — Production Settings
   # ============================================================
 
   arangodb:
-    image: arangodb:3.11
+    image: arangodb:3.12
     deploy:
       resources:
         limits:
@@ -22,12 +20,7 @@ services:
     environment:
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD:?ARANGO_ROOT_PASSWORD must be set}
       ARANGO_NO_AUTH: "0"
-      # Production optimizations
       ARANGODB_OVERRIDE_DETECTED_TOTAL_MEMORY: "8GB"
-    volumes:
-      - arangodb_data:/var/lib/arangodb3
-      - arangodb_apps:/var/lib/arangodb3-apps
-      - ./init-arangodb.js:/docker-entrypoint-initdb.d/init.js:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8529/_api/version"]
@@ -45,7 +38,7 @@ services:
       - "com.hypatia.tier=data"
 
   dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.14.1
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.25.5
     deploy:
       resources:
         limits:
@@ -78,9 +71,6 @@ services:
       - "com.hypatia.tier=data"
 
   verisimdb:
-    build:
-      context: ../../nextgen-databases/verisimdb
-      dockerfile: container/Containerfile
     deploy:
       resources:
         limits:
@@ -97,12 +87,6 @@ services:
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -113,7 +97,7 @@ services:
       - "com.hypatia.tier=data"
 
   # ============================================================
-  # REGISTRY SERVICE - Production Settings
+  # REGISTRY SERVICE — Production Settings
   # ============================================================
 
   registry:
@@ -137,12 +121,6 @@ services:
       RUST_LOG: info
       RUST_BACKTRACE: 0
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -153,7 +131,7 @@ services:
       - "com.hypatia.tier=application"
 
   # ============================================================
-  # LOGTALK ENGINE - Production Settings
+  # ELIXIR ENGINE — Production Settings
   # ============================================================
 
   engine:
@@ -170,11 +148,15 @@ services:
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
       VERISIMDB_URL: http://verisimdb:8080
+      MIX_ENV: prod
+      RELEASE_COOKIE: ${RELEASE_COOKIE:?RELEASE_COOKIE must be set}
+      ERL_FLAGS: "+P 1000000 +Q 65536 +SDio 128"
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE must be set}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "swipl", "-g", "logtalk_load(engine/loader), cicd_rules::is_auto_fixable('TokenPermissionsID')", "-t", "halt"]
-      interval: 60s
-      timeout: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
       retries: 3
       start_period: 60s
     logging:
@@ -187,7 +169,7 @@ services:
       - "com.hypatia.tier=application"
 
   # ============================================================
-  # FORGE ADAPTERS - Production Settings
+  # FORGE ADAPTERS — Production Settings
   # ============================================================
 
   adapter:
@@ -205,18 +187,16 @@ services:
       GITLAB_TOKEN: ${GITLAB_TOKEN}
       BITBUCKET_USER: ${BITBUCKET_USER}
       BITBUCKET_APP_PASSWORD: ${BITBUCKET_APP_PASSWORD}
+      CODEBERG_TOKEN: ${CODEBERG_TOKEN}
+      SOURCEHUT_TOKEN: ${SOURCEHUT_TOKEN}
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
       VERISIMDB_URL: http://verisimdb:8080
+      ENGINE_URL: http://engine:4000
+      REGISTRY_URL: http://registry:8080
       RUST_LOG: info
       RUST_BACKTRACE: 0
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -227,7 +207,7 @@ services:
       - "com.hypatia.tier=application"
 
   # ============================================================
-  # API SERVICE - Production Settings
+  # API SERVICE — Production Settings
   # ============================================================
 
   api:
@@ -252,7 +232,7 @@ services:
       DRAGONFLY_URL: redis://dragonfly:6379
       VERISIMDB_URL: http://verisimdb:8080
       REGISTRY_URL: http://registry:8080
-      ENGINE_URL: http://engine:8082
+      ENGINE_URL: http://engine:4000
       PORT: 8000
       RUST_LOG: info
       RUST_BACKTRACE: 0
@@ -274,8 +254,13 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp:size=50M
+    security_opt:
+      - no-new-privileges:true
     networks:
-      - cicd-network
+      - hypatia-net
     logging:
       driver: "json-file"
       options:
@@ -286,7 +271,7 @@ services:
       - "com.hypatia.tier=application"
 
   # ============================================================
-  # MONITORING - Production Settings
+  # MONITORING — Production Settings
   # ============================================================
 
   prometheus:
@@ -334,6 +319,7 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:?GRAFANA_USER must be set}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
       GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
       GF_LOG_MODE: "console file"
@@ -355,7 +341,7 @@ services:
       - "com.hypatia.tier=monitoring"
 
 networks:
-  cicd-network:
+  hypatia-net:
     driver: bridge
     driver_opts:
       com.docker.network.bridge.enable_icc: "true"

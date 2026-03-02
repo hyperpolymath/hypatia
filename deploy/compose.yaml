@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# hypatia compose configuration
+# Hypatia — Full Stapeln-style compose stack
 # Local development and testing environment
-
-version: "3.8"
+#
+# Usage:
+#   podman compose up -d          # Start all services
+#   podman compose ps             # Check service health
+#   podman compose logs -f engine # Follow engine logs
+#   podman compose down -v        # Tear down with volumes
 
 services:
   # ============================================================
@@ -10,7 +14,7 @@ services:
   # ============================================================
 
   arangodb:
-    image: arangodb:3.11
+    image: arangodb:3.12
     container_name: hypatia-arangodb
     environment:
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD:-devpassword}
@@ -26,11 +30,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
     networks:
-      - cicd-network
+      - hypatia-net
 
   dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.25.5
     container_name: hypatia-dragonfly
     command: >
       --flagfile=/etc/dragonfly/dragonfly.conf
@@ -44,10 +58,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - cicd-network
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
     ulimits:
       memlock: -1
+    networks:
+      - hypatia-net
 
   verisimdb:
     build:
@@ -62,16 +86,32 @@ services:
       DRAGONFLY_URL: "redis://dragonfly:6379"
     ports:
       - "8081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
       arangodb:
         condition: service_healthy
       dragonfly:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
     networks:
-      - cicd-network
+      - hypatia-net
 
   # ============================================================
-  # REGISTRY SERVICE
+  # REGISTRY SERVICE (Haskell)
   # ============================================================
 
   registry:
@@ -96,11 +136,21 @@ services:
         condition: service_healthy
       verisimdb:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=50M
     networks:
-      - cicd-network
+      - hypatia-net
 
   # ============================================================
-  # LOGTALK ENGINE
+  # ELIXIR ENGINE (neural networks + rule evaluation)
   # ============================================================
 
   engine:
@@ -112,8 +162,12 @@ services:
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
       VERISIMDB_URL: http://verisimdb:8080
+      MIX_ENV: prod
+      RELEASE_COOKIE: ${RELEASE_COOKIE:-hypatia_dev_cookie}
+      ERL_FLAGS: "+P 1000000 +Q 65536"
+    ports:
+      - "4000:4000"
     volumes:
-      - ../engine:/app/engine:ro
       - ../training-data:/app/training-data:ro
     depends_on:
       arangodb:
@@ -122,11 +176,20 @@ services:
         condition: service_healthy
       verisimdb:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
     networks:
-      - cicd-network
+      - hypatia-net
 
   # ============================================================
-  # FORGE ADAPTERS
+  # FORGE ADAPTERS (Rust)
   # ============================================================
 
   adapter:
@@ -139,42 +202,70 @@ services:
       GITLAB_TOKEN: ${GITLAB_TOKEN}
       BITBUCKET_USER: ${BITBUCKET_USER}
       BITBUCKET_APP_PASSWORD: ${BITBUCKET_APP_PASSWORD}
+      CODEBERG_TOKEN: ${CODEBERG_TOKEN}
+      SOURCEHUT_TOKEN: ${SOURCEHUT_TOKEN}
       ARANGODB_URL: http://arangodb:8529
       DRAGONFLY_URL: redis://dragonfly:6379
       VERISIMDB_URL: http://verisimdb:8080
+      ENGINE_URL: http://engine:4000
+      REGISTRY_URL: http://registry:8080
+    ports:
+      - "8082:8081"
     depends_on:
-      - registry
-      - engine
-      - verisimdb
+      registry:
+        condition: service_healthy
+      engine:
+        condition: service_started
+      verisimdb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=50M
     networks:
-      - cicd-network
+      - hypatia-net
 
   # ============================================================
-  # MONITORING
+  # MONITORING (Prometheus + Grafana)
   # ============================================================
 
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:v2.54.0
     container_name: hypatia-prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    security_opt:
+      - no-new-privileges:true
     networks:
-      - cicd-network
+      - hypatia-net
 
   grafana:
-    image: grafana/grafana:10.2.0
+    image: grafana/grafana:11.4.0
     container_name: hypatia-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
     ports:
       - "3000:3000"
     volumes:
@@ -182,12 +273,22 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    security_opt:
+      - no-new-privileges:true
     networks:
-      - cicd-network
+      - hypatia-net
 
 networks:
-  cicd-network:
+  hypatia-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   arangodb_data:
