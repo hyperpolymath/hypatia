@@ -3,7 +3,7 @@
 #
 # security.txt — RFC 9116 compliant security contact information
 
-Contact: mailto:jonathan.jewell@open.ac.uk
+Contact: mailto:j.d.a.jewell@open.ac.uk
 Contact: https://github.com/hyperpolymath/hypatia/security/advisories
 Expires: 2027-12-31T23:59:59.000Z
 Preferred-Languages: en

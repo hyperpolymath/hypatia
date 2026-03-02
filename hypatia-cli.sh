@@ -194,6 +194,99 @@ scan_directory() {
     echo "[" > "$all_findings"
     local first=true
 
+    append_layout_finding() {
+        local sev="$1"
+        local issue_type="$2"
+        local target_file="$3"
+        local fix_msg="$4"
+        local code_snippet="${5:-repo layout check}"
+        local cwe_id="${6:-CWE-1021}"
+
+        [[ "$first" == "false" ]] && echo "," >> "$all_findings"
+        first=false
+
+        jq -n \
+            --arg sev "$sev" \
+            --arg type "$issue_type" \
+            --arg pattern "$issue_type" \
+            --arg file "$target_file" \
+            --argjson line 0 \
+            --arg code "$code_snippet" \
+            --arg cwe "$cwe_id" \
+            --arg fix "$fix_msg" \
+            '{severity: $sev, type: $type, pattern: $pattern, file: $file, line: $line, code: $code, cwe: $cwe, fix: $fix, auto_fixable: false}' \
+            >> "$all_findings"
+
+        ((total_issues++)) || true
+    }
+
+    # Repository structure and metadata layout checks
+    if [[ ! -d "$dir/.machine_readable" ]]; then
+        append_layout_finding \
+            "critical" \
+            "repo_structure_missing_machine_readable" \
+            "$dir/.machine_readable" \
+            "Create .machine_readable/ and place canonical SCM files there." \
+            ".machine_readable directory missing"
+    fi
+
+    if [[ -d "$dir/.bot_directives" ]]; then
+        append_layout_finding \
+            "high" \
+            "repo_structure_legacy_bot_directives" \
+            "$dir/.bot_directives" \
+            "Migrate .bot_directives/ to .machine_readable/bot_directives/." \
+            "Legacy root .bot_directives detected"
+    fi
+
+    if [[ ! -d "$dir/.machine_readable/bot_directives" ]]; then
+        append_layout_finding \
+            "high" \
+            "repo_structure_missing_bot_directives" \
+            "$dir/.machine_readable/bot_directives" \
+            "Create .machine_readable/bot_directives/ for per-bot policy files." \
+            "Canonical bot_directives directory missing"
+    fi
+
+    if [[ ! -d "$dir/.machine_readable/6scm" ]]; then
+        append_layout_finding \
+            "medium" \
+            "repo_structure_missing_6scm" \
+            "$dir/.machine_readable/6scm" \
+            "Create .machine_readable/6scm/ for canonical 6SCM exports." \
+            "Canonical 6scm directory missing"
+    fi
+
+    if [[ ! -f "$dir/0-AI-MANIFEST.a2ml" && ! -f "$dir/AI.a2ml" ]]; then
+        append_layout_finding \
+            "high" \
+            "repo_structure_missing_ai_gateway_manifest" \
+            "$dir/0-AI-MANIFEST.a2ml" \
+            "Add 0-AI-MANIFEST.a2ml (or AI.a2ml where explicitly configured)." \
+            "AI gateway manifest missing"
+    fi
+
+    local canonical_scm_files=("STATE.scm" "META.scm" "ECOSYSTEM.scm" "AGENTIC.scm" "NEUROSYM.scm" "PLAYBOOK.scm")
+    for scm in "${canonical_scm_files[@]}"; do
+        if [[ -f "$dir/$scm" ]]; then
+            append_layout_finding \
+                "high" \
+                "repo_structure_root_scm_legacy" \
+                "$dir/$scm" \
+                "Move $scm to .machine_readable/$scm and remove the root copy." \
+                "Legacy root SCM file detected: $scm"
+        fi
+
+        if [[ ! -f "$dir/.machine_readable/$scm" ]]; then
+            append_layout_finding \
+                "medium" \
+                "repo_structure_missing_canonical_scm" \
+                "$dir/.machine_readable/$scm" \
+                "Add canonical SCM file at .machine_readable/$scm." \
+                "Missing canonical SCM file: $scm"
+        fi
+    done
+
     for file in "${files[@]}"; do
         local file_findings="/tmp/hypatia-file-$$.json"
 

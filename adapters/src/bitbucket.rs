@@ -29,6 +29,17 @@ impl BitbucketAdapter {
 
     /// Create with custom base URL (for Bitbucket Server)
     pub fn with_base_url(username: &str, app_password: &str, base_url: &str) -> Result<Self> {
+        if username.is_empty() {
+            return Err(AdapterError::ConfigError(
+                "Bitbucket username must not be empty".into(),
+            ));
+        }
+        if app_password.is_empty() {
+            return Err(AdapterError::ConfigError(
+                "Bitbucket app password / API token must not be empty".into(),
+            ));
+        }
+
         let auth = base64::Engine::encode(
             &base64::engine::general_purpose::STANDARD,
             format!("{}:{}", username, app_password).as_bytes(),
@@ -1214,6 +1225,18 @@ mod tests {
         let adapter = adapter.unwrap();
         assert_eq!(adapter.forge(), Forge::Bitbucket);
         assert_eq!(adapter.base_url(), "https://api.bitbucket.org/2.0");
+    }
+
+    #[test]
+    fn test_bitbucket_adapter_empty_username_rejected() {
+        let result = BitbucketAdapter::new("", "password");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bitbucket_adapter_empty_password_rejected() {
+        let result = BitbucketAdapter::new("user", "");
+        assert!(result.is_err());
     }
 
     #[test]
