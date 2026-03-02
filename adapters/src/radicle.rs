@@ -1191,10 +1191,13 @@ mod tests {
 
         assert!(matches!(result.event, WebhookEvent::Push));
         assert_eq!(
-            result.repository,
-            Some("rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5".to_string())
+            result.payload["project"]["id"].as_str(),
+            Some("rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5")
         );
-        assert_eq!(result.sender, Some("alice".to_string()));
+        assert_eq!(
+            result.payload["author"]["alias"].as_str(),
+            Some("alice")
+        );
     }
 
     #[test]
@@ -1219,6 +1222,6 @@ mod tests {
         let repo = Repository::from(rad_project);
         assert_eq!(repo.id, "rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5");
         assert_eq!(repo.name, "my-project");
-        assert!(!repo.private);
+        assert_eq!(repo.visibility, Visibility::Public);
     }
 }

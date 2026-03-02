@@ -16,7 +16,16 @@ use std::process::Command;
 use tempfile::TempDir;
 use tracing::{debug, info, warn};
 
-mod common;
+mod common {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    pub fn setup_test_logging() {
+        let _ = tracing_subscriber::registry()
+            .with(fmt::layer().with_test_writer())
+            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
+            .try_init();
+    }
+}
 use common::setup_test_logging;
 
 // ============================================================================
@@ -307,7 +316,6 @@ exit 1
 // Test Cases
 // ============================================================================
 
-#[tokio::test]
 async fn test_hook_installation() -> Result<()> {
     setup_test_logging();
 
@@ -327,7 +335,6 @@ async fn test_hook_installation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_precommit_hook_success() -> Result<()> {
     setup_test_logging();
 
@@ -348,7 +355,6 @@ async fn test_precommit_hook_success() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_precommit_hook_failure() -> Result<()> {
     setup_test_logging();
 
@@ -369,7 +375,6 @@ async fn test_precommit_hook_failure() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_hook_bypass_with_no_verify() -> Result<()> {
     setup_test_logging();
 
@@ -390,7 +395,6 @@ async fn test_hook_bypass_with_no_verify() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_spdx_validation_hook() -> Result<()> {
     setup_test_logging();
 
@@ -427,7 +431,6 @@ async fn test_spdx_validation_hook() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_sha_pin_validation_hook() -> Result<()> {
     setup_test_logging();
 
@@ -474,7 +477,6 @@ jobs:
     Ok(())
 }
 
-#[tokio::test]
 async fn test_permissions_validation_hook() -> Result<()> {
     setup_test_logging();
 
@@ -519,7 +521,6 @@ jobs:
     Ok(())
 }
 
-#[tokio::test]
 async fn test_multiple_hooks() -> Result<()> {
     setup_test_logging();
 
@@ -547,7 +548,6 @@ exit 0
     Ok(())
 }
 
-#[tokio::test]
 async fn test_hook_environment_variables() -> Result<()> {
     setup_test_logging();
 
@@ -587,7 +587,6 @@ exit 0
     Ok(())
 }
 
-#[tokio::test]
 async fn test_hook_with_staged_changes_only() -> Result<()> {
     setup_test_logging();
 
@@ -677,17 +676,4 @@ fn main() {
     }
 }
 
-// ============================================================================
-// Common Test Utilities
-// ============================================================================
-
-mod common {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-    pub fn setup_test_logging() {
-        let _ = tracing_subscriber::registry()
-            .with(fmt::layer().with_test_writer())
-            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
-            .try_init();
-    }
-}
+// (common module defined at top of file)

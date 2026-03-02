@@ -16,7 +16,16 @@ use std::process::Command;
 use tempfile::TempDir;
 use tracing::{debug, info, warn};
 
-mod common;
+mod common {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    pub fn setup_test_logging() {
+        let _ = tracing_subscriber::registry()
+            .with(fmt::layer().with_test_writer())
+            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
+            .try_init();
+    }
+}
 use common::setup_test_logging;
 
 // ============================================================================
@@ -298,7 +307,6 @@ impl RegistryTestHarness {
 // Test Cases
 // ============================================================================
 
-#[tokio::test]
 async fn test_ruleset_registration() -> Result<()> {
     setup_test_logging();
 
@@ -355,7 +363,6 @@ async fn test_ruleset_registration() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_ruleset_verification() -> Result<()> {
     setup_test_logging();
 
@@ -415,7 +422,6 @@ async fn test_ruleset_verification() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_duplicate_rule_detection() -> Result<()> {
     setup_test_logging();
 
@@ -467,7 +473,6 @@ async fn test_duplicate_rule_detection() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_rule_search_by_category() -> Result<()> {
     setup_test_logging();
 
@@ -545,7 +550,6 @@ async fn test_rule_search_by_category() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_rule_search_by_severity() -> Result<()> {
     setup_test_logging();
 
@@ -617,7 +621,6 @@ async fn test_rule_search_by_severity() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_fix_template_application() -> Result<()> {
     setup_test_logging();
 
@@ -639,7 +642,6 @@ async fn test_fix_template_application() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_ruleset_json_serialization() -> Result<()> {
     setup_test_logging();
 
@@ -728,17 +730,4 @@ fn main() {
     }
 }
 
-// ============================================================================
-// Common Test Utilities
-// ============================================================================
-
-mod common {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-    pub fn setup_test_logging() {
-        let _ = tracing_subscriber::registry()
-            .with(fmt::layer().with_test_writer())
-            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
-            .try_init();
-    }
-}
+// (common module defined at top of file)

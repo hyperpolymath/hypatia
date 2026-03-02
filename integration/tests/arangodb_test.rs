@@ -16,7 +16,16 @@ use testcontainers::{core::WaitFor, runners::AsyncRunner, GenericImage, ImageExt
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
-mod common;
+mod common {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    pub fn setup_test_logging() {
+        let _ = tracing_subscriber::registry()
+            .with(fmt::layer().with_test_writer())
+            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
+            .try_init();
+    }
+}
 use common::setup_test_logging;
 
 // ============================================================================
@@ -82,13 +91,13 @@ impl ArangoDbContainer {
 
     async fn start() -> Result<(testcontainers::ContainerAsync<GenericImage>, Self)> {
         let image = GenericImage::new("arangodb", "3.11")
+            .with_wait_for(WaitFor::message_on_stdout("is ready for business"))
             .with_exposed_port(Self::DEFAULT_PORT.into())
-            .with_env_var("ARANGO_ROOT_PASSWORD", Self::DEFAULT_PASSWORD)
-            .with_wait_for(WaitFor::message_on_stdout("is ready for business"));
+            .with_env_var("ARANGO_ROOT_PASSWORD", Self::DEFAULT_PASSWORD);
 
-        let container = image.start().await.context("Failed to start ArangoDB container")?;
+        let container: testcontainers::ContainerAsync<GenericImage> = image.start().await.context("Failed to start ArangoDB container")?;
 
-        let port = container
+        let port: u16 = container
             .get_host_port_ipv4(Self::DEFAULT_PORT)
             .await
             .context("Failed to get mapped port")?;
@@ -206,7 +215,6 @@ impl MockArangoClient {
 // Test Cases
 // ============================================================================
 
-#[tokio::test]
 async fn test_mock_connection() -> Result<()> {
     setup_test_logging();
 
@@ -220,7 +228,6 @@ async fn test_mock_connection() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_repository_crud() -> Result<()> {
     setup_test_logging();
 
@@ -258,7 +265,6 @@ async fn test_repository_crud() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_alert_storage() -> Result<()> {
     setup_test_logging();
 
@@ -324,7 +330,6 @@ async fn test_alert_storage() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_rule_management() -> Result<()> {
     setup_test_logging();
 
@@ -380,7 +385,6 @@ async fn test_rule_management() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_aql_query_execution() -> Result<()> {
     setup_test_logging();
 
@@ -415,7 +419,6 @@ async fn test_aql_query_execution() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_connection_timeout() -> Result<()> {
     setup_test_logging();
 
@@ -431,7 +434,6 @@ async fn test_connection_timeout() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_bulk_insert_performance() -> Result<()> {
     setup_test_logging();
 
@@ -471,7 +473,6 @@ async fn test_bulk_insert_performance() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 #[cfg(feature = "slow-tests")]
 async fn test_with_real_container() -> Result<()> {
     setup_test_logging();
@@ -537,17 +538,4 @@ fn main() {
     }
 }
 
-// ============================================================================
-// Common Test Utilities
-// ============================================================================
-
-mod common {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-    pub fn setup_test_logging() {
-        let _ = tracing_subscriber::registry()
-            .with(fmt::layer().with_test_writer())
-            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
-            .try_init();
-    }
-}
+// (common module defined at top of file)

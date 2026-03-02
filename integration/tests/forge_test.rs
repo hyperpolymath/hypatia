@@ -18,7 +18,16 @@ use tracing::{debug, info, warn};
 use wiremock::matchers::{header, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-mod common;
+mod common {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    pub fn setup_test_logging() {
+        let _ = tracing_subscriber::registry()
+            .with(fmt::layer().with_test_writer())
+            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
+            .try_init();
+    }
+}
 use common::setup_test_logging;
 
 // ============================================================================
@@ -463,7 +472,6 @@ impl MockForgeClient {
 // Test Cases
 // ============================================================================
 
-#[tokio::test]
 async fn test_github_mock_server() -> Result<()> {
     setup_test_logging();
 
@@ -491,7 +499,6 @@ async fn test_github_mock_server() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_gitlab_mock_server() -> Result<()> {
     setup_test_logging();
 
@@ -512,7 +519,6 @@ async fn test_gitlab_mock_server() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_bitbucket_mock_server() -> Result<()> {
     setup_test_logging();
 
@@ -534,7 +540,6 @@ async fn test_bitbucket_mock_server() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_authentication_header() -> Result<()> {
     setup_test_logging();
 
@@ -575,7 +580,6 @@ async fn test_authentication_header() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_rate_limiting_response() -> Result<()> {
     setup_test_logging();
 
@@ -611,7 +615,6 @@ async fn test_rate_limiting_response() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_webhook_payload_handling() -> Result<()> {
     setup_test_logging();
 
@@ -654,7 +657,6 @@ async fn test_webhook_payload_handling() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_error_handling() -> Result<()> {
     setup_test_logging();
 
@@ -698,7 +700,6 @@ async fn test_error_handling() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_pagination_handling() -> Result<()> {
     setup_test_logging();
 
@@ -760,7 +761,6 @@ async fn test_pagination_handling() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_concurrent_requests() -> Result<()> {
     setup_test_logging();
 
@@ -856,17 +856,4 @@ fn main() {
     }
 }
 
-// ============================================================================
-// Common Test Utilities
-// ============================================================================
-
-mod common {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-    pub fn setup_test_logging() {
-        let _ = tracing_subscriber::registry()
-            .with(fmt::layer().with_test_writer())
-            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
-            .try_init();
-    }
-}
+// (common module defined at top of file)

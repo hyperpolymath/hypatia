@@ -4,8 +4,8 @@
 //! These tests verify the interfaces between components work correctly,
 //! ensuring seamless data flow through the system.
 
-use cicd_hyper_a_adapters::forge::{Alert, AlertCategory, Forge, Repository, Severity, Visibility};
-use cicd_hyper_a_adapters::SyncResult;
+use adapters::forge::{Alert, AlertCategory, Forge, Repository, Severity, Visibility};
+use adapters::SyncResult;
 
 /// Test: Repository model conversion preserves data
 #[test]

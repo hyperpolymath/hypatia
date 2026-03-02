@@ -30,14 +30,16 @@ mod creation {
         let adapter =
             GitHubAdapter::with_base_url("test-token", "https://github.enterprise.com").unwrap();
         assert!(matches!(adapter.forge(), Forge::GitHub));
-        assert_eq!(adapter.base_url(), "https://github.enterprise.com/api/v3");
+        // with_base_url stores the URL as-is (caller provides the API base)
+        assert_eq!(adapter.base_url(), "https://github.enterprise.com");
     }
 
     #[test]
     fn test_gitlab_adapter_creation() {
         let adapter = GitLabAdapter::new("test-token").unwrap();
         assert!(matches!(adapter.forge(), Forge::GitLab));
-        assert_eq!(adapter.base_url(), "https://gitlab.com");
+        // GitLabAdapter::new() sets base_url to the API endpoint
+        assert_eq!(adapter.base_url(), "https://gitlab.com/api/v4");
     }
 
     #[test]
@@ -121,7 +123,7 @@ mod factory {
     fn test_create_bitbucket_invalid_token() {
         let result = create_adapter(Forge::Bitbucket, "invalid-token", None);
         assert!(result.is_err());
-        if let Err(AdapterError::Config(msg)) = result {
+        if let Err(AdapterError::ConfigError(msg)) = result {
             assert!(msg.contains("username:app_password"));
         }
     }
@@ -284,8 +286,14 @@ mod webhooks {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.repository, Some("owner/repo".to_string()));
-        assert_eq!(result.sender, Some("testuser".to_string()));
+        assert_eq!(
+            result.payload["repository"]["full_name"].as_str(),
+            Some("owner/repo")
+        );
+        assert_eq!(
+            result.payload["sender"]["login"].as_str(),
+            Some("testuser")
+        );
     }
 
     #[test]
@@ -340,8 +348,14 @@ mod webhooks {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.repository, Some("group/project".to_string()));
-        assert_eq!(result.sender, Some("testuser".to_string()));
+        assert_eq!(
+            result.payload["project"]["path_with_namespace"].as_str(),
+            Some("group/project")
+        );
+        assert_eq!(
+            result.payload["user_username"].as_str(),
+            Some("testuser")
+        );
     }
 
     #[test]
@@ -361,7 +375,10 @@ mod webhooks {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.repository, Some("owner/repo".to_string()));
+        assert_eq!(
+            result.payload["repository"]["full_name"].as_str(),
+            Some("owner/repo")
+        );
     }
 
     #[test]
@@ -381,7 +398,10 @@ mod webhooks {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.repository, Some("owner/repo".to_string()));
+        assert_eq!(
+            result.payload["repository"]["full_name"].as_str(),
+            Some("owner/repo")
+        );
     }
 
     #[test]
@@ -401,7 +421,10 @@ mod webhooks {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.sender, Some("~testuser".to_string()));
+        assert_eq!(
+            result.payload["pusher"]["canonical_name"].as_str(),
+            Some("~testuser")
+        );
     }
 
     #[test]
@@ -422,8 +445,8 @@ mod webhooks {
 
         assert!(matches!(result.event, WebhookEvent::Push));
         assert_eq!(
-            result.repository,
-            Some("rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5".to_string())
+            result.payload["project"]["id"].as_str(),
+            Some("rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5")
         );
     }
 }
@@ -487,33 +510,33 @@ mod errors {
 
     #[test]
     fn test_adapter_error_display() {
-        let config_err = AdapterError::Config("test config error".to_string());
+        let config_err = AdapterError::ConfigError("test config error".to_string());
         assert!(format!("{}", config_err).contains("test config error"));
 
-        let network_err = AdapterError::Network("connection failed".to_string());
-        assert!(format!("{}", network_err).contains("connection failed"));
+        let api_err_network = AdapterError::ApiError("connection failed".to_string());
+        assert!(format!("{}", api_err_network).contains("connection failed"));
 
-        let api_err = AdapterError::Api("rate limited".to_string());
+        let api_err = AdapterError::ApiError("rate limited".to_string());
         assert!(format!("{}", api_err).contains("rate limited"));
 
-        let parse_err = AdapterError::Parse("invalid json".to_string());
-        assert!(format!("{}", parse_err).contains("invalid json"));
+        let api_err_parse = AdapterError::ApiError("invalid json".to_string());
+        assert!(format!("{}", api_err_parse).contains("invalid json"));
 
-        let auth_err = AdapterError::Auth("unauthorized".to_string());
+        let auth_err = AdapterError::AuthError("unauthorized".to_string());
         assert!(format!("{}", auth_err).contains("unauthorized"));
 
-        let not_supported = AdapterError::NotSupported("feature X".to_string());
+        let not_supported = AdapterError::ApiError("not supported: feature X".to_string());
         assert!(format!("{}", not_supported).contains("feature X"));
     }
 
     #[test]
     fn test_adapter_error_is_retryable() {
-        // Network errors are typically retryable
-        let network_err = AdapterError::Network("timeout".to_string());
+        // ApiError for network-type issues are typically retryable
+        let _network_err = AdapterError::ApiError("timeout".to_string());
         // This would depend on implementation
 
         // Auth errors are not retryable
-        let auth_err = AdapterError::Auth("bad token".to_string());
+        let _auth_err = AdapterError::AuthError("bad token".to_string());
         // This would depend on implementation
     }
 }

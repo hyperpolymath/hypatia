@@ -1202,6 +1202,7 @@ impl ScenarioBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ci_simulation::LogLevel;
 
     #[tokio::test]
     async fn test_happy_path_build() {

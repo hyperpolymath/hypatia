@@ -1561,7 +1561,13 @@ mod tests {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.repository, Some("owner/repo".to_string()));
-        assert_eq!(result.sender, Some("user".to_string()));
+        assert_eq!(
+            result.payload["repository"]["full_name"].as_str(),
+            Some("owner/repo")
+        );
+        assert_eq!(
+            result.payload["sender"]["login"].as_str(),
+            Some("user")
+        );
     }
 }

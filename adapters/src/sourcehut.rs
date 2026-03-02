@@ -1276,7 +1276,13 @@ mod tests {
             .unwrap();
 
         assert!(matches!(result.event, WebhookEvent::Push));
-        assert_eq!(result.repository, Some("test-repo".to_string()));
-        assert_eq!(result.sender, Some("~testuser".to_string()));
+        assert_eq!(
+            result.payload["repository"]["name"].as_str(),
+            Some("test-repo")
+        );
+        assert_eq!(
+            result.payload["pusher"]["canonical_name"].as_str(),
+            Some("~testuser")
+        );
     }
 }

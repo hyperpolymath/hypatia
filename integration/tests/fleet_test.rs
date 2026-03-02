@@ -17,7 +17,30 @@ use tempfile::TempDir;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
-mod common;
+mod common {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    /// Test context holding shared state
+    pub struct TestContext {
+        pub temp_dir: tempfile::TempDir,
+    }
+
+    impl TestContext {
+        pub fn new() -> anyhow::Result<Self> {
+            Ok(Self {
+                temp_dir: tempfile::TempDir::new()?,
+            })
+        }
+    }
+
+    /// Initialize logging for tests
+    pub fn setup_test_logging() {
+        let _ = tracing_subscriber::registry()
+            .with(fmt::layer().with_test_writer())
+            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
+            .try_init();
+    }
+}
 use common::{setup_test_logging, TestContext};
 
 /// Bot execution result containing output and metrics
@@ -172,7 +195,7 @@ jobs:
         std::fs::write(workflow_dir.join("ci.yml"), insecure_workflow)?;
 
         // Create a file with accessibility issues
-        let html_content = r#"
+        let html_content = r##"
 <!DOCTYPE html>
 <html>
 <head><title>Test</title></head>
@@ -181,7 +204,7 @@ jobs:
 <a href="#">Click here</a>
 </body>
 </html>
-"#;
+"##;
         std::fs::write(self.test_repo.path().join("index.html"), html_content)?;
 
         // Create initial commit
@@ -212,7 +235,6 @@ jobs:
 // Test Cases
 // ============================================================================
 
-#[tokio::test]
 async fn test_empty_repo_pipeline() -> Result<()> {
     setup_test_logging();
     let harness = FleetTestHarness::new()?;
@@ -224,7 +246,6 @@ async fn test_empty_repo_pipeline() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_sequential_bot_execution() -> Result<()> {
     setup_test_logging();
     let mut harness = FleetTestHarness::new()?;
@@ -246,7 +267,6 @@ async fn test_sequential_bot_execution() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_shared_context_propagation() -> Result<()> {
     setup_test_logging();
     let harness = FleetTestHarness::new()?;
@@ -277,7 +297,6 @@ async fn test_shared_context_propagation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_bot_failure_handling() -> Result<()> {
     setup_test_logging();
     let mut harness = FleetTestHarness::new()?;
@@ -292,7 +311,6 @@ async fn test_bot_failure_handling() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_pipeline_timeout_handling() -> Result<()> {
     setup_test_logging();
 
@@ -310,7 +328,6 @@ async fn test_pipeline_timeout_handling() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_alert_aggregation() -> Result<()> {
     setup_test_logging();
     let harness = FleetTestHarness::new()?;
@@ -346,7 +363,6 @@ async fn test_alert_aggregation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_fix_deduplication() -> Result<()> {
     setup_test_logging();
 
@@ -371,7 +387,6 @@ async fn test_fix_deduplication() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
 async fn test_metrics_collection() -> Result<()> {
     setup_test_logging();
 
@@ -466,31 +481,4 @@ fn main() {
     }
 }
 
-// ============================================================================
-// Common Test Utilities
-// ============================================================================
-
-mod common {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-    /// Test context holding shared state
-    pub struct TestContext {
-        pub temp_dir: tempfile::TempDir,
-    }
-
-    impl TestContext {
-        pub fn new() -> anyhow::Result<Self> {
-            Ok(Self {
-                temp_dir: tempfile::TempDir::new()?,
-            })
-        }
-    }
-
-    /// Initialize logging for tests
-    pub fn setup_test_logging() {
-        let _ = tracing_subscriber::registry()
-            .with(fmt::layer().with_test_writer())
-            .with(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
-            .try_init();
-    }
-}
+// (common module defined at top of file)
