@@ -878,8 +878,8 @@ impl ForgeAdapter for BitbucketAdapter {
 
     async fn update_check_run(
         &self,
-        owner: &str,
-        repo: &str,
+        _owner: &str,
+        _repo: &str,
         check_run_id: &str,
         status: Option<CheckStatus>,
         conclusion: Option<CheckConclusion>,

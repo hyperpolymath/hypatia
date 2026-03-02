@@ -93,7 +93,7 @@ impl RadicleAdapter {
 
     /// Parse a Radicle ID from owner/repo format
     /// Owner in Radicle context is the DID, repo is the project RID
-    fn parse_project_id(owner: &str, repo: &str) -> String {
+    fn parse_project_id(_owner: &str, repo: &str) -> String {
         // If repo starts with "rad:", use it directly
         if repo.starts_with("rad:") {
             repo.to_string()
@@ -119,8 +119,9 @@ impl Default for RadicleAdapter {
     }
 }
 
-// Radicle API response types
+// Radicle API response types — fields retained for API completeness during deserialization
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadProject {
     id: String, // rad:z3gqcJUoA1n9...
@@ -149,6 +150,7 @@ struct RadVisibility {
     visibility_type: String, // "public" or "private"
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadPatch {
     id: String,
@@ -166,6 +168,7 @@ struct RadPatchState {
     status: String, // "open", "draft", "archived", "merged"
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadRevision {
     id: String,
@@ -177,6 +180,7 @@ struct RadRevision {
     reviews: Vec<RadReview>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadReview {
     author: RadAuthor,
@@ -185,6 +189,7 @@ struct RadReview {
     timestamp: i64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadIssue {
     id: String,
@@ -196,6 +201,7 @@ struct RadIssue {
     discussion: Vec<RadComment>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadIssueState {
     status: String, // "open", "closed"
@@ -208,6 +214,7 @@ struct RadAuthor {
     alias: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadComment {
     id: String,
@@ -221,20 +228,23 @@ struct RadComment {
     embeds: Vec<RadEmbed>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadReaction {
     emoji: String,
     authors: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RadEmbed {
     name: String,
     content: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-struct RadNode {
+pub struct RadNode {
     id: String,
     agent: String,
     state: String,
@@ -647,7 +657,7 @@ impl ForgeAdapter for RadicleAdapter {
         Ok(prs)
     }
 
-    async fn get_pr(&self, owner: &str, repo: &str, number: u64) -> Result<PullRequest> {
+    async fn get_pr(&self, _owner: &str, _repo: &str, _number: u64) -> Result<PullRequest> {
         // In Radicle, patches are identified by string IDs, not numbers
         // This is a limitation of the ForgeAdapter interface
         Err(AdapterError::ApiError(
@@ -657,10 +667,10 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn merge_pr(
         &self,
-        owner: &str,
-        repo: &str,
-        number: u64,
-        commit_message: Option<&str>,
+        _owner: &str,
+        _repo: &str,
+        _number: u64,
+        _commit_message: Option<&str>,
     ) -> Result<()> {
         // Radicle merging is done via git, not the API
         Err(AdapterError::ApiError(
@@ -668,7 +678,7 @@ impl ForgeAdapter for RadicleAdapter {
         ))
     }
 
-    async fn close_pr(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
+    async fn close_pr(&self, _owner: &str, _repo: &str, _number: u64) -> Result<()> {
         Err(AdapterError::ApiError(
             "Radicle patches use string IDs. Archive patches via the API with the patch ID.".to_string(),
         ))
@@ -776,7 +786,7 @@ impl ForgeAdapter for RadicleAdapter {
         Ok(result)
     }
 
-    async fn get_issue(&self, owner: &str, repo: &str, number: u64) -> Result<Issue> {
+    async fn get_issue(&self, _owner: &str, _repo: &str, _number: u64) -> Result<Issue> {
         // Radicle uses string IDs for issues
         Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Use list_issues to find issues.".to_string(),
@@ -785,12 +795,12 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn update_issue(
         &self,
-        owner: &str,
-        repo: &str,
-        number: u64,
-        title: Option<&str>,
-        body: Option<&str>,
-        state: Option<IssueState>,
+        _owner: &str,
+        _repo: &str,
+        _number: u64,
+        _title: Option<&str>,
+        _body: Option<&str>,
+        _state: Option<IssueState>,
         _labels: Option<Vec<String>>,
     ) -> Result<Issue> {
         Err(AdapterError::ApiError(
@@ -798,7 +808,7 @@ impl ForgeAdapter for RadicleAdapter {
         ))
     }
 
-    async fn close_issue(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
+    async fn close_issue(&self, _owner: &str, _repo: &str, _number: u64) -> Result<()> {
         Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Close issues via the API with the issue ID.".to_string(),
         ))
@@ -806,10 +816,10 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn add_issue_comment(
         &self,
-        owner: &str,
-        repo: &str,
-        issue_number: u64,
-        body: &str,
+        _owner: &str,
+        _repo: &str,
+        _issue_number: u64,
+        _body: &str,
     ) -> Result<Comment> {
         Err(AdapterError::ApiError(
             "Radicle issues use string IDs. Add comments via the API with the issue ID.".to_string(),
@@ -818,10 +828,10 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn add_pr_comment(
         &self,
-        owner: &str,
-        repo: &str,
-        pr_number: u64,
-        body: &str,
+        _owner: &str,
+        _repo: &str,
+        _pr_number: u64,
+        _body: &str,
     ) -> Result<Comment> {
         Err(AdapterError::ApiError(
             "Radicle patches use string IDs. Add comments via the API with the patch ID.".to_string(),
@@ -830,9 +840,9 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn list_issue_comments(
         &self,
-        owner: &str,
-        repo: &str,
-        issue_number: u64,
+        _owner: &str,
+        _repo: &str,
+        _issue_number: u64,
     ) -> Result<Vec<Comment>> {
         Err(AdapterError::ApiError(
             "Radicle issues use string IDs. List comments via the API with the issue ID.".to_string(),
@@ -841,9 +851,9 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn list_pr_comments(
         &self,
-        owner: &str,
-        repo: &str,
-        pr_number: u64,
+        _owner: &str,
+        _repo: &str,
+        _pr_number: u64,
     ) -> Result<Vec<Comment>> {
         Err(AdapterError::ApiError(
             "Radicle patches use string IDs. List comments via the API with the patch ID.".to_string(),

@@ -114,7 +114,7 @@ impl DragonflyCache {
             .await
             .map_err(|e| DataError::ConnectionError(e.to_string()))?;
         redis::cmd("PING")
-            .query_async::<_, String>(&mut *conn)
+            .query_async::<String>(&mut *conn)
             .await
             .map_err(|e| DataError::ConnectionError(e.to_string()))?;
 
@@ -257,7 +257,7 @@ impl DragonflyCache {
             let json = serde_json::to_string(value)?;
             pipe.set_ex::<_, _>(key, json, ttl_secs);
         }
-        pipe.query_async::<_, ()>(&mut *conn).await?;
+        pipe.query_async::<()>(&mut *conn).await?;
 
         debug!("Set {} keys with TTL {}s", entries.len(), ttl_secs);
         Ok(())
@@ -619,7 +619,7 @@ impl DragonflyCache {
     pub async fn ping(&self) -> Result<()> {
         let mut conn = self.get_conn().await?;
         redis::cmd("PING")
-            .query_async::<_, String>(&mut *conn)
+            .query_async::<String>(&mut *conn)
             .await?;
         Ok(())
     }
@@ -629,7 +629,7 @@ impl DragonflyCache {
     pub async fn flush_all(&self) -> Result<()> {
         warn!("Flushing entire cache!");
         let mut conn = self.get_conn().await?;
-        redis::cmd("FLUSHDB").query_async::<_, ()>(&mut *conn).await?;
+        redis::cmd("FLUSHDB").query_async::<()>(&mut *conn).await?;
         let _ = self.invalidation_tx.send(InvalidationEvent::FlushAll);
         Ok(())
     }

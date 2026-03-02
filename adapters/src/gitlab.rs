@@ -52,7 +52,8 @@ impl GitLabAdapter {
         urlencoding::encode(path).to_string()
     }
 
-    /// Get project ID from owner/repo path
+    /// Get project ID from owner/repo path (used by extended API operations)
+    #[allow(dead_code)]
     async fn get_project_id(&self, owner: &str, repo: &str) -> Result<u64> {
         let project_path = format!("{}/{}", owner, repo);
         let url = format!(
@@ -959,8 +960,8 @@ impl ForgeAdapter for GitLabAdapter {
 
     async fn update_check_run(
         &self,
-        owner: &str,
-        repo: &str,
+        _owner: &str,
+        _repo: &str,
         _check_run_id: &str,
         status: Option<CheckStatus>,
         conclusion: Option<CheckConclusion>,

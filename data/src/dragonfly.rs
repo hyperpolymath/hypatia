@@ -46,7 +46,7 @@ impl DragonflyClient {
     pub async fn ping(&self) -> Result<()> {
         let mut conn = self.get_conn().await?;
         redis::cmd("PING")
-            .query_async::<_, String>(&mut conn)
+            .query_async::<String>(&mut conn)
             .await?;
         Ok(())
     }

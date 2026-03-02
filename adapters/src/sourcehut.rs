@@ -26,9 +26,9 @@ use crate::error::AdapterError;
 
 type HmacSha256 = Hmac<Sha256>;
 use crate::forge::{
-    defaults, Alert, AlertCategory, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
+    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
     ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
-    RunStatus, Severity, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
+    RunStatus, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
     WorkflowRun, WorkflowState,
 };
 
@@ -40,6 +40,7 @@ type Result<T> = std::result::Result<T, AdapterError>;
 /// Authentication uses OAuth2 personal access tokens.
 pub struct SourcehutAdapter {
     client: Client,
+    #[allow(dead_code)] // Token baked into client headers; retained for refresh/GraphQL
     token: String,
     base_url: String,
 }
@@ -186,8 +187,9 @@ impl SourcehutAdapter {
     }
 }
 
-// SourceHut API response types
+// SourceHut API response types — fields retained for API completeness during deserialization
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct SrhtRepo {
     id: u64,
@@ -241,6 +243,7 @@ struct SrhtJob {
     updated: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct SrhtManifest {
     id: u64,
@@ -462,7 +465,7 @@ impl ForgeAdapter for SourcehutAdapter {
         Ok(Vec::new())
     }
 
-    async fn list_workflows(&self, owner: &str, repo: &str) -> Result<Vec<Workflow>> {
+    async fn list_workflows(&self, _owner: &str, _repo: &str) -> Result<Vec<Workflow>> {
         // SourceHut uses .build.yml manifests in the repo
         // We can list them via git tree API or check known paths
         let common_paths = vec![".build.yml", ".builds/"];
@@ -482,11 +485,11 @@ impl ForgeAdapter for SourcehutAdapter {
 
     async fn deploy_workflow(
         &self,
-        owner: &str,
-        repo: &str,
-        path: &str,
-        content: &str,
-        message: &str,
+        _owner: &str,
+        _repo: &str,
+        _path: &str,
+        _content: &str,
+        _message: &str,
     ) -> Result<()> {
         // SourceHut doesn't have a file creation API like GitHub
         // Users need to push .build.yml to their repo
@@ -499,7 +502,7 @@ impl ForgeAdapter for SourcehutAdapter {
         &self,
         owner: &str,
         repo: &str,
-        workflow: &str,
+        _workflow: &str,
         ref_name: &str,
     ) -> Result<()> {
         // Submit a build job to builds.sr.ht
@@ -551,7 +554,7 @@ tasks:
         &self,
         owner: &str,
         repo: &str,
-        workflow_id: Option<&str>,
+        _workflow_id: Option<&str>,
     ) -> Result<Vec<WorkflowRun>> {
         let url = self.builds_api_url("/jobs");
         let jobs: Vec<SrhtJob> = self.get_paginated(&url, "results", 5).await?;
@@ -560,7 +563,7 @@ tasks:
         let runs: Vec<WorkflowRun> = jobs
             .into_iter()
             .filter(|j| j.tags.contains(&repo.to_string()))
-            .map(|mut j| {
+            .map(|j| {
                 let mut run = WorkflowRun::from(j);
                 run.url = format!("{}/~{}/job/{}", self.base_url.replace("sr.ht", "builds.sr.ht"), owner, &run.id);
                 run
@@ -573,7 +576,7 @@ tasks:
     async fn get_workflow_run(
         &self,
         owner: &str,
-        repo: &str,
+        _repo: &str,
         run_id: &str,
     ) -> Result<WorkflowRun> {
         let url = self.builds_api_url(&format!("/jobs/{}", run_id));
@@ -612,9 +615,9 @@ tasks:
 
     async fn enable_branch_protection(
         &self,
-        owner: &str,
-        repo: &str,
-        branch: &str,
+        _owner: &str,
+        _repo: &str,
+        _branch: &str,
     ) -> Result<()> {
         // SourceHut doesn't have branch protection in the traditional sense
         // Protection is managed via ACLs
@@ -625,12 +628,12 @@ tasks:
 
     async fn create_pr(
         &self,
-        owner: &str,
-        repo: &str,
-        title: &str,
-        body: &str,
-        head: &str,
-        base: &str,
+        _owner: &str,
+        _repo: &str,
+        _title: &str,
+        _body: &str,
+        _head: &str,
+        _base: &str,
     ) -> Result<String> {
         // SourceHut uses email-based patch review via lists.sr.ht
         Err(AdapterError::ApiError(
@@ -640,15 +643,15 @@ tasks:
 
     async fn list_prs(
         &self,
-        owner: &str,
-        repo: &str,
-        state: Option<PullRequestState>,
+        _owner: &str,
+        _repo: &str,
+        _state: Option<PullRequestState>,
     ) -> Result<Vec<PullRequest>> {
         // SourceHut doesn't have PRs - uses mailing list patches
         Ok(Vec::new())
     }
 
-    async fn get_pr(&self, owner: &str, repo: &str, number: u64) -> Result<PullRequest> {
+    async fn get_pr(&self, _owner: &str, _repo: &str, _number: u64) -> Result<PullRequest> {
         Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review instead of pull requests.".to_string(),
         ))
@@ -656,17 +659,17 @@ tasks:
 
     async fn merge_pr(
         &self,
-        owner: &str,
-        repo: &str,
-        number: u64,
-        commit_message: Option<&str>,
+        _owner: &str,
+        _repo: &str,
+        _number: u64,
+        _commit_message: Option<&str>,
     ) -> Result<()> {
         Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review. Apply patches with git am.".to_string(),
         ))
     }
 
-    async fn close_pr(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
+    async fn close_pr(&self, _owner: &str, _repo: &str, _number: u64) -> Result<()> {
         Err(AdapterError::ApiError(
             "SourceHut uses email-based patch review instead of pull requests.".to_string(),
         ))
@@ -910,10 +913,10 @@ tasks:
 
     async fn add_pr_comment(
         &self,
-        owner: &str,
-        repo: &str,
-        pr_number: u64,
-        body: &str,
+        _owner: &str,
+        _repo: &str,
+        _pr_number: u64,
+        _body: &str,
     ) -> Result<Comment> {
         // SourceHut doesn't have PRs - use mailing lists
         Err(AdapterError::ApiError(
@@ -939,9 +942,9 @@ tasks:
 
     async fn list_pr_comments(
         &self,
-        owner: &str,
-        repo: &str,
-        pr_number: u64,
+        _owner: &str,
+        _repo: &str,
+        _pr_number: u64,
     ) -> Result<Vec<Comment>> {
         // SourceHut doesn't have PRs
         Ok(Vec::new())
@@ -953,8 +956,8 @@ tasks:
         repo: &str,
         name: &str,
         head_sha: &str,
-        status: CheckStatus,
-        conclusion: Option<CheckConclusion>,
+        _status: CheckStatus,
+        _conclusion: Option<CheckConclusion>,
     ) -> Result<CheckRun> {
         // SourceHut builds can be submitted as check-like entities
         let url = self.builds_api_url("/jobs");
@@ -1011,11 +1014,11 @@ tasks:
 
     async fn update_check_run(
         &self,
-        owner: &str,
-        repo: &str,
-        check_run_id: &str,
-        status: Option<CheckStatus>,
-        conclusion: Option<CheckConclusion>,
+        _owner: &str,
+        _repo: &str,
+        _check_run_id: &str,
+        _status: Option<CheckStatus>,
+        _conclusion: Option<CheckConclusion>,
     ) -> Result<CheckRun> {
         // SourceHut builds cannot be updated after submission
         defaults::update_check_run(self.forge())
@@ -1023,8 +1026,8 @@ tasks:
 
     async fn list_check_runs(
         &self,
-        owner: &str,
-        repo: &str,
+        _owner: &str,
+        _repo: &str,
         ref_name: &str,
     ) -> Result<Vec<CheckRun>> {
         // List builds tagged with the ref
@@ -1081,6 +1084,7 @@ tasks:
             )));
         }
 
+        #[allow(dead_code)]
         #[derive(Deserialize)]
         struct WebhookResponse {
             id: u64,

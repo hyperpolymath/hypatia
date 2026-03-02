@@ -20,9 +20,9 @@ use sha2::Sha256;
 
 use crate::error::AdapterError;
 use crate::forge::{
-    defaults, Alert, AlertCategory, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
+    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
     ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
-    RunStatus, Severity, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
+    RunStatus, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
     WorkflowRun, WorkflowState,
 };
 
@@ -34,6 +34,7 @@ type Result<T> = std::result::Result<T, AdapterError>;
 /// Authentication uses personal access tokens passed via Authorization header.
 pub struct CodebergAdapter {
     client: Client,
+    #[allow(dead_code)] // Token baked into client headers; retained for refresh/API key rotation
     token: String,
     base_url: String,
 }
@@ -157,8 +158,9 @@ impl CodebergAdapter {
     }
 }
 
-// Gitea API response types
+// Gitea API response types — fields retained for API completeness during deserialization
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaRepo {
     id: u64,
@@ -173,6 +175,7 @@ struct GiteaRepo {
     archived: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaUser {
     id: u64,
@@ -199,6 +202,7 @@ struct GiteaPullRequest {
     updated_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaBranch {
     label: String,
@@ -221,6 +225,7 @@ struct GiteaIssue {
     updated_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaLabel {
     id: u64,
@@ -237,6 +242,7 @@ struct GiteaComment {
     updated_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaCommitStatus {
     id: u64,
@@ -248,6 +254,7 @@ struct GiteaCommitStatus {
     updated_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaHook {
     id: u64,
@@ -267,6 +274,7 @@ struct GiteaHookConfig {
     secret: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaAction {
     id: u64,
@@ -362,6 +370,7 @@ struct UpdateFilePayload {
     branch: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct GiteaFileContent {
     sha: String,
@@ -1327,11 +1336,11 @@ impl ForgeAdapter for CodebergAdapter {
 
     async fn update_check_run(
         &self,
-        owner: &str,
-        repo: &str,
+        _owner: &str,
+        _repo: &str,
         _check_run_id: &str,
-        status: Option<CheckStatus>,
-        conclusion: Option<CheckConclusion>,
+        _status: Option<CheckStatus>,
+        _conclusion: Option<CheckConclusion>,
     ) -> Result<CheckRun> {
         // Gitea doesn't have updatable check runs; create a new status
         // We need the SHA from context - use defaults
