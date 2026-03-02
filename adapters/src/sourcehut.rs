@@ -17,10 +17,14 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use reqwest::{header::HeaderMap, Client};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 use crate::error::AdapterError;
+
+type HmacSha256 = Hmac<Sha256>;
 use crate::forge::{
     defaults, Alert, AlertCategory, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
     ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
@@ -1166,7 +1170,33 @@ tasks:
         payload: &[u8],
         secret: Option<&str>,
     ) -> Result<WebhookPayload> {
-        // SourceHut webhooks don't have signature verification by default
+        // SourceHut webhooks use X-Webhook-Signature with HMAC-SHA256.
+        // Verify if a secret is configured.
+        if let Some(expected_secret) = secret {
+            match signature {
+                None => {
+                    return Err(AdapterError::AuthError(
+                        "Missing X-Webhook-Signature header on SourceHut webhook".to_string(),
+                    ));
+                }
+                Some(sig) => {
+                    let sig_hex = sig.strip_prefix("sha256=").unwrap_or(sig);
+                    let mut mac = HmacSha256::new_from_slice(expected_secret.as_bytes())
+                        .map_err(|_| {
+                            AdapterError::AuthError("Invalid webhook secret".to_string())
+                        })?;
+                    mac.update(payload);
+                    let computed = hex::encode(mac.finalize().into_bytes());
+
+                    if computed != sig_hex {
+                        return Err(AdapterError::AuthError(
+                            "Webhook signature verification failed".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+
         let event = match event_type {
             "repo:post-update" | "push" => WebhookEvent::Push,
             _ => {

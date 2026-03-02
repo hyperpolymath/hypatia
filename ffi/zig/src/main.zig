@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
 // Hypatia FFI — Zig C ABI Bridge
 // Implements the C-compatible interface defined by the Idris2 ABI.
@@ -111,7 +111,38 @@ pub const OutcomeRecord = extern struct {
 // ============================================================
 
 var response_buf: [8192]u8 = undefined;
-const timestamp_static = "2026-02-13T00:00:00Z";
+var timestamp_buf: [20]u8 = undefined; // "YYYY-MM-DDTHH:MM:SSZ"
+
+/// Generate an ISO 8601 UTC timestamp from the system clock.
+/// Falls back to a zeroed timestamp if the clock is unavailable.
+fn getCurrentTimestamp() []const u8 {
+    const epoch_seconds = std.time.timestamp();
+    if (epoch_seconds < 0) {
+        const fallback = "1970-01-01T00:00:00Z";
+        @memcpy(timestamp_buf[0..fallback.len], fallback);
+        return timestamp_buf[0..fallback.len];
+    }
+
+    const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(epoch_seconds) };
+    const day_seconds = es.getDaySeconds();
+    const year_day = es.getEpochDay().calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+
+    const written = std.fmt.bufPrint(&timestamp_buf, "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z", .{
+        year_day.year,
+        month_day.month.numeric(),
+        month_day.day_index + 1,
+        day_seconds.getHoursIntoDay(),
+        day_seconds.getMinutesIntoHour(),
+        day_seconds.getSecondsIntoMinute(),
+    }) catch {
+        const fallback = "1970-01-01T00:00:00Z";
+        @memcpy(timestamp_buf[0..fallback.len], fallback);
+        return timestamp_buf[0..fallback.len];
+    };
+
+    return written;
+}
 
 fn setResponse(out: *ApiResponse, success: bool, data: []const u8) void {
     out.success = success;
@@ -126,8 +157,9 @@ fn setResponse(out: *ApiResponse, success: bool, data: []const u8) void {
         out.error_ptr = data.ptr;
         out.error_len = data.len;
     }
-    out.timestamp_ptr = timestamp_static;
-    out.timestamp_len = timestamp_static.len;
+    const ts = getCurrentTimestamp();
+    out.timestamp_ptr = ts.ptr;
+    out.timestamp_len = ts.len;
 }
 
 // ============================================================
@@ -173,6 +205,12 @@ export fn hypatia_health_check(out: *ApiResponse)i32 {
     w.writeKey("data_path");
     w.writeString(data_path);
     w.endObject();
+
+    if (w.wasTruncated()) {
+        const err = "response too large for buffer";
+        setResponse(out, false, err);
+        return -4;
+    }
 
     const json = w.getWritten();
     setResponse(out, true, json);
@@ -247,8 +285,14 @@ export fn hypatia_dispatch(entry: *const DispatchEntry, out: *ApiResponse)i32 {
     w.writeKey("strategy");
     w.writeString(strategy_str);
     w.writeKey("timestamp");
-    w.writeString(timestamp_static);
+    w.writeString(getCurrentTimestamp());
     w.endObject();
+
+    if (w.wasTruncated()) {
+        const err = "dispatch entry too large for buffer";
+        setResponse(out, false, err);
+        return -4;
+    }
 
     const json = w.getWritten();
 
@@ -300,6 +344,12 @@ export fn hypatia_record_outcome(record: *const OutcomeRecord, out: *ApiResponse
     w.writeString(bot);
     w.endObject();
 
+    if (w.wasTruncated()) {
+        const err = "outcome record too large for buffer";
+        setResponse(out, false, err);
+        return -4;
+    }
+
     const json = w.getWritten();
 
     // Extract YYYY-MM from timestamp for file naming
@@ -341,7 +391,7 @@ export fn hypatia_force_learning_cycle(out: *ApiResponse)i32 {
         return -2;
     };
 
-    if (!file_ops.writeFile(signal_path, timestamp_static)) {
+    if (!file_ops.writeFile(signal_path, getCurrentTimestamp())) {
         const err = "failed to write signal file";
         setResponse(out, false, err);
         return -3;
@@ -354,6 +404,12 @@ export fn hypatia_force_learning_cycle(out: *ApiResponse)i32 {
     w.writeKey("signal_file");
     w.writeString(".force-learning");
     w.endObject();
+
+    if (w.wasTruncated()) {
+        const err = "response too large for buffer";
+        setResponse(out, false, err);
+        return -4;
+    }
 
     const json = w.getWritten();
     setResponse(out, true, json);

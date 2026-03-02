@@ -106,8 +106,16 @@ impl RadicleAdapter {
 }
 
 impl Default for RadicleAdapter {
+    /// Creates a default RadicleAdapter connecting to localhost:8080.
+    ///
+    /// Panics if the HTTP client cannot be constructed, which would indicate
+    /// a broken TLS/system configuration rather than a missing Radicle node.
+    /// For fallible construction, use `RadicleAdapter::new()` instead.
     fn default() -> Self {
-        Self::new().expect("Failed to create default RadicleAdapter")
+        Self::new().expect(
+            "Failed to construct HTTP client for RadicleAdapter — \
+             this indicates a system TLS/configuration issue, not a missing Radicle node",
+        )
     }
 }
 
@@ -907,7 +915,10 @@ impl ForgeAdapter for RadicleAdapter {
         payload: &[u8],
         _secret: Option<&str>,
     ) -> Result<WebhookPayload> {
-        // Parse Radicle node events
+        // Radicle events come from the local node via its HTTP API, not from
+        // remote webhooks over the internet. Authentication is handled by the
+        // node's own access control (localhost-only by default). No webhook
+        // signature verification is applicable here.
         let event = match event_type {
             "refs/updated" | "push" => WebhookEvent::Push,
             "patch/created" | "patch/updated" => WebhookEvent::PullRequest,

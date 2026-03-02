@@ -2,9 +2,9 @@
 
 homepage: "https://github.com/hyperpolymath/hypatia"
 language: rust
-primary_contact: "jonathan.jewell@open.ac.uk"
+primary_contact: "j.d.a.jewell@open.ac.uk"
 auto_ccs:
-  - "jonathan.jewell@open.ac.uk"
+  - "j.d.a.jewell@open.ac.uk"
 sanitizers:
   - address
   - undefined

@@ -26,7 +26,7 @@ Template documentation needs:
 @metadata:
 id: my-project-template-v1
 version: 1.0.0
-author: Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 @end
 
 @abstract:

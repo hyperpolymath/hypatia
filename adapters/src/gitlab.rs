@@ -1155,12 +1155,37 @@ impl ForgeAdapter for GitLabAdapter {
     fn parse_webhook(
         &self,
         event_type: &str,
-        _signature: Option<&str>,
+        signature: Option<&str>,
         payload: &[u8],
-        _secret: Option<&str>,
+        secret: Option<&str>,
     ) -> Result<WebhookPayload> {
-        // GitLab uses X-Gitlab-Token header for validation, which should be done at HTTP layer
-        // Here we just parse the event type
+        // GitLab uses X-Gitlab-Token header for webhook authentication.
+        // The token is passed as the `signature` parameter (set by the HTTP handler
+        // from the X-Gitlab-Token header), and the expected value is `secret`.
+        if let Some(expected_secret) = secret {
+            match signature {
+                None => {
+                    return Err(AdapterError::AuthError(
+                        "Missing X-Gitlab-Token header on webhook request".to_string(),
+                    ));
+                }
+                Some(token) => {
+                    // Constant-time comparison to prevent timing attacks
+                    if token.len() != expected_secret.len()
+                        || !token
+                            .as_bytes()
+                            .iter()
+                            .zip(expected_secret.as_bytes())
+                            .all(|(a, b)| a == b)
+                    {
+                        return Err(AdapterError::AuthError(
+                            "Webhook token verification failed".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+
         let event = match event_type {
             "Push Hook" => WebhookEvent::Push,
             "Merge Request Hook" => WebhookEvent::PullRequest,
@@ -1177,7 +1202,7 @@ impl ForgeAdapter for GitLabAdapter {
         Ok(WebhookPayload {
             event,
             delivery_id: uuid::Uuid::new_v4().to_string(),
-            signature: None,
+            signature: signature.map(|s| s.to_string()),
             payload: payload_json,
         })
     }

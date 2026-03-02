@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <jonathan.jewell@open.ac.uk>
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
 // Minimal JSON writer for FFI response serialization.
 // No allocator dependency — writes to a fixed buffer.
@@ -11,6 +11,7 @@ pub const JsonWriter = struct {
     pos: usize = 0,
     depth: usize = 0,
     needs_comma: bool = false,
+    truncated: bool = false,
 
     pub fn init(buffer: []u8) JsonWriter {
         return .{ .buf = buffer };
@@ -84,6 +85,12 @@ pub const JsonWriter = struct {
         return self.buf[0..self.pos];
     }
 
+    /// Returns true if any write was truncated due to insufficient buffer space.
+    /// Callers should check this after building JSON to detect malformed output.
+    pub fn wasTruncated(self: *const JsonWriter) bool {
+        return self.truncated;
+    }
+
     fn maybeComma(self: *JsonWriter) void {
         if (self.needs_comma) {
             self.write(",");
@@ -93,6 +100,9 @@ pub const JsonWriter = struct {
     fn write(self: *JsonWriter, data: []const u8) void {
         const remaining = self.buf.len - self.pos;
         const to_copy = @min(data.len, remaining);
+        if (to_copy < data.len) {
+            self.truncated = true;
+        }
         @memcpy(self.buf[self.pos..][0..to_copy], data[0..to_copy]);
         self.pos += to_copy;
     }
@@ -120,4 +130,15 @@ test "json array" {
     w.endArray();
     const result = w.getWritten();
     try std.testing.expectEqualStrings("[\"a\",\"b\"]", result);
+    try std.testing.expect(!w.wasTruncated());
+}
+
+test "truncation detected on small buffer" {
+    var buf: [10]u8 = undefined;
+    var w = JsonWriter.init(&buf);
+    w.beginObject();
+    w.writeKey("a_very_long_key_that_will_overflow");
+    w.writeString("value");
+    w.endObject();
+    try std.testing.expect(w.wasTruncated());
 }

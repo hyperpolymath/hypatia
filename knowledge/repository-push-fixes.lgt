@@ -9,7 +9,7 @@
 
     :- info([
         version is 1:0:0,
-        author is 'Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>',
+        author is 'Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>',
         date is 2026-02-04,
         comment is 'Knowledge about fixing repository push failures'
     ]).

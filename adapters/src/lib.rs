@@ -102,17 +102,10 @@ pub fn create_adapter(
             Ok(Box::new(adapter))
         }
         Forge::Bitbucket => {
-            // Bitbucket requires username:app_password format
-            let parts: Vec<&str> = token.splitn(2, ':').collect();
-            if parts.len() != 2 {
-                return Err(AdapterError::ConfigError(
-                    "Bitbucket token must be in 'username:app_password' format".to_string(),
-                ));
-            }
             let adapter = if let Some(url) = base_url {
-                BitbucketAdapter::with_base_url(parts[0], parts[1], url)?
+                BitbucketAdapter::from_token_with_base_url(token, url)?
             } else {
-                BitbucketAdapter::new(parts[0], parts[1])?
+                BitbucketAdapter::from_token(token)?
             };
             Ok(Box::new(adapter))
         }

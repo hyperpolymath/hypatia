@@ -27,6 +27,25 @@ impl BitbucketAdapter {
         Self::with_base_url(username, app_password, "https://api.bitbucket.org/2.0")
     }
 
+    /// Create a Bitbucket adapter from a combined "username:app_password" token.
+    ///
+    /// This is the preferred entry point from the generic `create_adapter` factory,
+    /// keeping Bitbucket-specific auth format parsing inside the adapter.
+    pub fn from_token(token: &str) -> Result<Self> {
+        Self::from_token_with_base_url(token, "https://api.bitbucket.org/2.0")
+    }
+
+    /// Create a Bitbucket adapter from a combined token with a custom base URL.
+    pub fn from_token_with_base_url(token: &str, base_url: &str) -> Result<Self> {
+        let parts: Vec<&str> = token.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err(AdapterError::ConfigError(
+                "Bitbucket token must be in 'username:app_password' format".into(),
+            ));
+        }
+        Self::with_base_url(parts[0], parts[1], base_url)
+    }
+
     /// Create with custom base URL (for Bitbucket Server)
     pub fn with_base_url(username: &str, app_password: &str, base_url: &str) -> Result<Self> {
         if username.is_empty() {
@@ -1027,6 +1046,12 @@ impl ForgeAdapter for BitbucketAdapter {
         payload: &[u8],
         _secret: Option<&str>,
     ) -> Result<WebhookPayload> {
+        // NOTE: Bitbucket Cloud webhooks have NO native signature verification.
+        // Bitbucket does not sign webhook payloads. The only mitigation is:
+        // 1. Use HTTPS webhook URLs exclusively
+        // 2. Validate the source IP belongs to Bitbucket's IP ranges
+        // 3. Use a hard-to-guess webhook URL path as a shared secret
+        // Signature and secret params are intentionally unused here.
         let event = match event_type {
             "repo:push" => WebhookEvent::Push,
             "pullrequest:created" | "pullrequest:updated" => WebhookEvent::PullRequest,
