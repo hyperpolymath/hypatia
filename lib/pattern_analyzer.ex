@@ -20,6 +20,7 @@ defmodule Hypatia.PatternAnalyzer do
   alias Hypatia.FleetDispatcher
   alias Hypatia.DispatchManifest
   alias Hypatia.Neural.Coordinator, as: NeuralCoordinator
+  alias Hypatia.ScorecardIngestor
 
   require Logger
 
@@ -37,6 +38,13 @@ defmodule Hypatia.PatternAnalyzer do
 
     # Step 2: Build repo→language map from scans
     repo_languages = build_language_map(scans)
+
+    # Step 2b: Run Scorecard local checks against scanned repos.
+    # Ingests OpenSSF's 20 well-documented checks directly rather than
+    # rediscovering them from first principles.
+    scorecard_patterns = run_scorecard_checks(scans)
+    patterns = patterns ++ scorecard_patterns
+    Logger.info("Scorecard: #{length(scorecard_patterns)} repo-level findings added (#{length(patterns)} total)")
 
     # Step 3: Route each pattern+repo through the safety triangle.
     # Tag each pattern with its routed_repo so manifest entries are 1:1.
@@ -219,5 +227,31 @@ defmodule Hypatia.PatternAnalyzer do
       language = Map.get(scan.scan, "language", "unknown")
       Map.put(acc, scan.repo, language)
     end)
+  end
+
+  # Run Scorecard local checks against all repos that have scan data.
+  # Resolves repo paths from scan program_path or falls back to standard locations.
+  defp run_scorecard_checks(scans) do
+    repo_paths =
+      scans
+      |> Enum.map(fn scan ->
+        path = Map.get(scan.scan, "program_path", "")
+        resolved = if is_binary(path) and path != "" and path != "." and File.dir?(path) do
+          path
+        else
+          "/var/mnt/eclipse/repos/#{scan.repo}"
+        end
+        {scan.repo, resolved}
+      end)
+      |> Enum.filter(fn {_repo, path} -> File.dir?(path) end)
+
+    {patterns, stats} = ScorecardIngestor.batch_local_scan(repo_paths)
+
+    Logger.info(
+      "Scorecard local scan: #{stats.total_repos} repos, " <>
+      "#{stats.total_findings} findings — #{inspect(stats.by_check)}"
+    )
+
+    patterns
   end
 end
