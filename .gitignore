@@ -60,6 +60,7 @@ ai-cli-crash-capture/
 
 # Built binaries
 hypatia-v2
+elixir-scanner/hypatia
 
 # Sync artifacts
 sync_report*.txt

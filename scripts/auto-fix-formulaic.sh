@@ -220,9 +220,37 @@ scan_repo() {
   check_editorconfig "$repo"
   local after=$FIXES_APPLIED
 
+  local fix_count=$((after - before))
+
+  # Auto-commit and push if fixes were applied
+  if [ "$fix_count" -gt 0 ] && [ "${AUTO_PUSH:-false}" = "true" ]; then
+    cd "$repo"
+    git add -A
+    git commit -m "$(cat <<EOF
+chore: hypatia auto-fix (${fix_count} formulaic fixes)
+
+Applied by auto-fix-formulaic.sh:
+- SHA-pinned unpinned GitHub Actions
+- Added missing workflow permissions
+- Fixed license headers
+
+Co-Authored-By: hypatia-autofix <noreply@hyperpolymath.github.io>
+EOF
+)" 2>/dev/null && {
+      git push origin HEAD 2>/dev/null && log "Pushed fixes for $(basename "$repo")" || warn "Push failed for $(basename "$repo")"
+    } || log "Nothing to commit in $(basename "$repo")"
+  fi
+
   # Record visit with fix count
-  record "$repo" "scan" "fixes=$((after - before))"
+  record "$repo" "scan" "fixes=${fix_count}"
 }
+
+# Parse flags
+for arg in "$@"; do
+  case "$arg" in
+    --push) export AUTO_PUSH=true; shift ;;
+  esac
+done
 
 if [ "${1:-}" = "all" ]; then
   log "Scanning all repos in ${REPOS_DIR}..."
@@ -233,9 +261,9 @@ if [ "${1:-}" = "all" ]; then
 elif [ -n "${1:-}" ]; then
   scan_repo "$1"
 else
-  echo "Usage: $0 [repo-path|all]"
+  echo "Usage: $0 [--push] [repo-path|all]"
   echo "  $0 ~/Documents/hyperpolymath-repos/aerie"
-  echo "  $0 all"
+  echo "  $0 --push all  # scan, fix, commit, and push"
   exit 1
 fi
 

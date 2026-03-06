@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Install: cp hypatia-autofix.{service,timer} ~/.config/systemd/user/
+#          systemctl --user enable --now hypatia-autofix.timer
+[Unit]
+Description=Hypatia formulaic auto-fix scan
+
+[Service]
+Type=oneshot
+ExecStart=%h/Documents/hyperpolymath-repos/hypatia/scripts/auto-fix-formulaic.sh --push all
+Environment=HOME=%h
