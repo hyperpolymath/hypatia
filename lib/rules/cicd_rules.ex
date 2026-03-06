@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+
+defmodule Hypatia.Rules.CicdRules do
+  @moduledoc """
+  CI/CD policy rules absorbed from Logtalk engine/rules/cicd_rules.lgt.
+
+  Defines repository must-have rules, commit blocking conditions,
+  auto-fix capabilities, CI/CD waste detection, and license validation.
+  """
+
+  # ---------------------------------------------------------------------------
+  # Repository Must-Have Rules
+  # ---------------------------------------------------------------------------
+
+  @repo_must_have [
+    %{file: "SECURITY.md", condition: :public_repo},
+    %{file: ".github/dependabot.yml", condition: :has_dependencies},
+    %{file: ".github/workflows/scorecard.yml", condition: :public_repo},
+    %{file: "permissions: read-all", condition: :all_workflows}
+  ]
+
+  def repo_must_have_rules, do: @repo_must_have
+
+  def check_repo_requirements(repo_info) do
+    Enum.flat_map(@repo_must_have, fn rule ->
+      if requirement_applies?(rule.condition, repo_info) and
+           not has_file?(repo_info, rule.file) do
+        [%{missing: rule.file, condition: rule.condition}]
+      else
+        []
+      end
+    end)
+  end
+
+  defp requirement_applies?(:public_repo, info), do: Map.get(info, :visibility) == "public"
+  defp requirement_applies?(:has_dependencies, info), do: Map.get(info, :has_deps, true)
+  defp requirement_applies?(:all_workflows, _info), do: true
+
+  defp has_file?(info, file), do: file in Map.get(info, :files, [])
+
+  # ---------------------------------------------------------------------------
+  # Commit Blocking Patterns
+  # ---------------------------------------------------------------------------
+
+  @blocked_patterns [
+    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned — use ReScript"},
+    %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned — use Deno"},
+    %{id: :golang_detected, glob: "*.go", reason: "Go banned — use Rust"},
+    %{id: :python_detected, glob: "*.py", reason: "Python banned — use Julia/Rust",
+      exception: "SaltStack"},
+    %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned — use justfile"},
+    %{id: :unpinned_action, pattern: ~r/uses:.*@v[0-9]/, reason: "GitHub Actions must be SHA-pinned"},
+    %{id: :missing_permissions, pattern: ~r/^permissions:/m, negative: true,
+      reason: "Workflows must declare permissions"},
+    %{id: :missing_spdx, pattern: ~r/^# SPDX-License-Identifier:/m, negative: true,
+      reason: "Files must have SPDX headers"}
+  ]
+
+  def blocked_patterns, do: @blocked_patterns
+
+  def check_commit_blocks(files_changed) do
+    Enum.flat_map(@blocked_patterns, fn pattern ->
+      matches = check_pattern(pattern, files_changed)
+      if matches != [], do: [%{rule: pattern.id, reason: pattern.reason, files: matches}], else: []
+    end)
+  end
+
+  defp check_pattern(%{glob: glob} = _pattern, files) do
+    Enum.filter(files, fn f -> String.ends_with?(f, String.replace(glob, "*", "")) end)
+  end
+
+  defp check_pattern(%{pattern: _regex}, _files), do: []
+
+  # ---------------------------------------------------------------------------
+  # CI/CD Waste Detection
+  # ---------------------------------------------------------------------------
+
+  @waste_patterns [
+    %{id: :duplicate_workflow, severity: :medium, auto_fixable: true,
+      description: "Multiple workflows doing same thing"},
+    %{id: :unused_publish_workflows, severity: :low, auto_fixable: true,
+      description: "5+ platform-specific publish workflows"},
+    %{id: :mirror_missing_secrets, severity: :medium, auto_fixable: true,
+      description: "mirror.yml exists but no GITLAB_SSH_KEY/BITBUCKET_SSH_KEY"},
+    %{id: :npm_in_workflow, severity: :high, auto_fixable: true,
+      description: "npm install/pnpm despite npm-bun-blocker.yml"},
+    %{id: :spec_repo_full_ci, severity: :medium, auto_fixable: true,
+      description: "Spec-only repo with 10+ workflows"},
+    %{id: :semgrep_language_mismatch, severity: :medium, auto_fixable: true,
+      description: "semgrep.yml in repos without Python/Go/JS"},
+    %{id: :excessive_workflow_count, severity: :low, auto_fixable: false,
+      description: "More than 15 workflows — consolidate"},
+    %{id: :missing_directory_workflow, severity: :low, auto_fixable: true,
+      description: "zig-ffi.yml workflow but no zig/ directory"}
+  ]
+
+  def waste_patterns, do: @waste_patterns
+
+  def detect_waste(repo_info) do
+    workflows = Map.get(repo_info, :workflows, [])
+    dirs = Map.get(repo_info, :directories, [])
+
+    results = []
+
+    results =
+      if length(workflows) > 15 do
+        [%{pattern: :excessive_workflow_count, count: length(workflows)} | results]
+      else
+        results
+      end
+
+    results =
+      if "zig-ffi.yml" in workflows and "zig/" not in dirs and "ffi/zig/" not in dirs do
+        [%{pattern: :missing_directory_workflow, workflow: "zig-ffi.yml"} | results]
+      else
+        results
+      end
+
+    results =
+      if "mirror.yml" in workflows do
+        secrets = Map.get(repo_info, :secrets, [])
+
+        if "GITLAB_SSH_KEY" not in secrets and "BITBUCKET_SSH_KEY" not in secrets do
+          [%{pattern: :mirror_missing_secrets} | results]
+        else
+          results
+        end
+      else
+        results
+      end
+
+    results
+  end
+
+  # ---------------------------------------------------------------------------
+  # License Validation
+  # ---------------------------------------------------------------------------
+
+  @required_spdx "PMPL-1.0-or-later"
+  @wrong_licenses ["MIT", "Apache-2.0", "AGPL-3.0-or-later", "AGPL-3.0", "GPL-3.0"]
+
+  def required_spdx, do: @required_spdx
+
+  def validate_license(spdx_id) do
+    cond do
+      spdx_id == @required_spdx -> :ok
+      spdx_id == "MPL-2.0" -> :ok_fallback
+      spdx_id in @wrong_licenses -> {:error, :wrong_license, spdx_id}
+      true -> {:warning, :unknown_license, spdx_id}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Error Catalog IDs
+  # ---------------------------------------------------------------------------
+
+  @error_catalog %{
+    "ERR-WF-001" => %{type: :unpinned_action, severity: :high,
+      detection: [:workflow_linter, :grep_pattern],
+      prevention: [:pre_commit_hook, :ci_check, :code_review]},
+    "ERR-WF-002" => %{type: :missing_permissions, severity: :high,
+      detection: [:workflow_linter, :grep_pattern],
+      prevention: [:pre_commit_hook, :ci_check, :template]},
+    "ERR-WF-003" => %{type: :missing_spdx, severity: :medium,
+      detection: [:grep_pattern],
+      prevention: [:pre_commit_hook, :template]},
+    "ERR-WF-004" => %{type: :codeql_mismatch, severity: :medium,
+      detection: [:workflow_run_failure, :manual_review],
+      prevention: [:language_detection_hook, :ci_check]},
+    "ERR-WF-005" => %{type: :duplicate_workflow, severity: :low,
+      detection: [:manual_review, :file_comparison],
+      prevention: [:template_standardization]},
+    "ERR-WF-006" => %{type: :undefined_secret, severity: :high,
+      detection: [:workflow_run_failure],
+      prevention: [:secret_validation_hook, :conditional_guards]},
+    "ERR-WF-007" => %{type: :empty_workflow, severity: :low,
+      detection: [:file_size_check],
+      prevention: [:template_cleanup]},
+    "ERR-DEP-001" => %{type: :vulnerable_dependency, severity: :critical,
+      detection: [:dependabot, :trivy_scan],
+      prevention: [:dependabot_auto_update, :renovate, :lockfile]},
+    "ERR-SEC-001" => %{type: :missing_branch_protection, severity: :high,
+      detection: [:scorecard, :gh_api_check],
+      prevention: [:ruleset, :branch_protection_api]},
+    "ERR-SEC-002" => %{type: :missing_security_md, severity: :medium,
+      detection: [:file_existence_check],
+      prevention: [:template]}
+  }
+
+  def error_catalog, do: @error_catalog
+  def error_type(id), do: get_in(@error_catalog, [id, :type])
+end

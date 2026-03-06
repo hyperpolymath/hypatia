@@ -35,7 +35,7 @@
     "license": {
       "type": "string",
       "description": "SPDX license identifier",
-      "default": "AGPL-3.0-or-later"
+      "default": "PMPL-1.0-or-later"
     },
     "effect": {
       "type": "string",
@@ -334,7 +334,7 @@
       "version": "1.0.0",
       "description": "RSR language policy enforcement",
       "author": { "name": "hyperpolymath" },
-      "license": "AGPL-3.0-or-later",
+      "license": "PMPL-1.0-or-later",
       "effect": "preventive",
       "targets": {
         "forges": ["github", "gitlab", "bitbucket"],

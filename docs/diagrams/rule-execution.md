@@ -77,7 +77,7 @@ flowchart TD
     HasSPDX -->|No| BlockSPDX[Block: missing_spdx]
     HasSPDX -->|Yes| CheckLicense[Check License]
 
-    CheckLicense --> CorrectLicense{AGPL-3.0?}
+    CheckLicense --> CorrectLicense{PMPL-1.0?}
     CorrectLicense -->|No| BlockLicense[Block: wrong_license_header]
     CorrectLicense -->|Yes| CheckSecrets
 

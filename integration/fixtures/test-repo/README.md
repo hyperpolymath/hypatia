@@ -11,4 +11,4 @@ This repository contains intentional issues for testing:
 
 ## License
 
-AGPL-3.0-or-later
+PMPL-1.0-or-later

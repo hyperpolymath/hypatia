@@ -58,6 +58,9 @@ build/
 # AI crash captures
 ai-cli-crash-capture/
 
+# Built binaries
+hypatia-v2
+
 # Sync artifacts
 sync_report*.txt
 

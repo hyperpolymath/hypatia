@@ -224,7 +224,7 @@ exampleRuleset = Ruleset
     , rulesetVersion = makeVersion [1, 0, 0]
     , rulesetDescription = "Basic security rules for all repos"
     , rulesetAuthor = Author "hyperpolymath" "team@hyperpolymath.io"
-    , rulesetLicense = AGPL3OrLater
+    , rulesetLicense = PMPL1OrLater
     , rulesetTags = ["security", "workflow", "permissions"]
     , rulesetPreventive =
         [ preventive (RuleId "SEC-001")

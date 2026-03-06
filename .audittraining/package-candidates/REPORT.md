@@ -33,7 +33,7 @@ Analysis of hyperpolymath repositories suitable for publishing to package regist
   - cfk-integrations
   - cfk-ios
 - **Description**: Universal file management tool with cloud provider integration
-- **License**: AGPL-3.0-or-later
+- **License**: PMPL-1.0-or-later
 - **Dependencies**: tokio, serde, reqwest, oauth2, blake3, lz4_flex, fuser, tantivy
 - **Blockers**:
   - Each workspace member needs its own Cargo.toml with publish metadata

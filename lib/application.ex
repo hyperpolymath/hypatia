@@ -25,7 +25,8 @@ defmodule Hypatia.Application do
       # Layer 2: Safety — rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,
-      # Layer 3: Intelligence — feedback loop and health monitoring
+      # Layer 3: Intelligence — feedback loop, rules, and health monitoring
+      Hypatia.Rules.Learning,
       Hypatia.LearningScheduler,
       Hypatia.SelfDiagnostics,
       # Layer 4: Neural — 5 networks orchestrated by coordinator
