@@ -92,6 +92,7 @@ defmodule Hypatia.DispatchManifest do
       "description" => Map.get(pattern, "description", ""),
       "severity" => Map.get(pattern, "severity", "Medium"),
       "repo" => repo,
+      "program_path" => resolve_program_path(pattern, repo),
       "recipe_id" => Map.get(recipe, "id"),
       "confidence" => confidence,
       "auto_fixable" => Map.get(recipe, "auto_fixable", false),
@@ -116,6 +117,7 @@ defmodule Hypatia.DispatchManifest do
       "description" => Map.get(pattern, "description", ""),
       "severity" => Map.get(pattern, "severity", "Medium"),
       "repo" => repo,
+      "program_path" => resolve_program_path(pattern, repo),
       "recipe_id" => Map.get(recipe, "id"),
       "confidence" => confidence,
       "auto_fixable" => false,
@@ -137,6 +139,7 @@ defmodule Hypatia.DispatchManifest do
       "description" => Map.get(finding, "description", ""),
       "severity" => Map.get(finding, "severity", "Medium"),
       "repo" => repo,
+      "program_path" => resolve_program_path(finding, repo),
       "recipe_id" => nil,
       "confidence" => 0.0,
       "auto_fixable" => false,
@@ -152,5 +155,33 @@ defmodule Hypatia.DispatchManifest do
         [r | _] -> r
         _ -> "unknown"
       end
+  end
+
+  defp resolve_program_path(pattern_or_finding, repo) do
+    # Try repo_paths map first (from PatternRegistry), fall back to repo-paths.json, then standard
+    path = case Map.get(pattern_or_finding, "repo_paths", %{}) do
+      paths when is_map(paths) and map_size(paths) > 0 ->
+        Map.get(paths, repo)
+      _ ->
+        nil
+    end
+
+    cond do
+      is_binary(path) and path != "" and path != "." -> path
+      true -> resolve_from_index(repo)
+    end
+  end
+
+  @repo_paths_file Path.join(@verisimdb_path, "repo-paths.json")
+
+  defp resolve_from_index(repo) do
+    case File.read(@repo_paths_file) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, map} -> Map.get(map, repo, "/var/mnt/eclipse/repos/#{repo}")
+          _ -> "/var/mnt/eclipse/repos/#{repo}"
+        end
+      _ -> "/var/mnt/eclipse/repos/#{repo}"
+    end
   end
 end

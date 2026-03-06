@@ -51,6 +51,8 @@ defmodule Hypatia.PatternRegistry do
       Enum.reduce(scans, registry, fn scan, reg ->
         weak_points = Map.get(scan.scan, "weak_points", [])
 
+        program_path = Map.get(scan.scan, "program_path", "")
+
         Enum.reduce(weak_points, reg, fn wp, acc ->
           category = Map.get(wp, "category", "unknown")
           description = Map.get(wp, "description", category)
@@ -77,6 +79,7 @@ defmodule Hypatia.PatternRegistry do
                   "occurrences" => 1,
                   "repos_affected" => 1,
                   "repos_affected_list" => [repo],
+                  "repo_paths" => %{repo => program_path},
                   "first_seen" => now,
                   "last_seen" => now,
                   "trend" => "new",
@@ -86,6 +89,7 @@ defmodule Hypatia.PatternRegistry do
 
               existing ->
                 repos_list = Map.get(existing, "repos_affected_list", [])
+                repo_paths = Map.get(existing, "repo_paths", %{})
 
                 {repos_list, repos_count} =
                   if repo in repos_list do
@@ -98,6 +102,7 @@ defmodule Hypatia.PatternRegistry do
                 |> Map.put("occurrences", Map.get(existing, "occurrences", 0) + 1)
                 |> Map.put("repos_affected", repos_count)
                 |> Map.put("repos_affected_list", repos_list)
+                |> Map.put("repo_paths", Map.put(repo_paths, repo, program_path))
                 |> Map.put("last_seen", now)
             end
 

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 import Config
 
-# Hypatia's own local verisimdb data store
-# This is NOT the central verisimdb-data repo — hypatia maintains its own instance
+# verisimdb-data: the canonical git-backed flat-file store (300 scans, 23 recipes)
+# Lives inside the nextgen-databases monorepo
 config :hypatia,
-  verisimdb_data_path: Path.expand("data/verisimdb", __DIR__ |> Path.dirname()),
+  verisimdb_data_path: Path.expand("~/Documents/hyperpolymath-repos/nextgen-databases/verisimdb/verisimdb-data"),
   fleet_path: Path.expand("~/Documents/hyperpolymath-repos/gitbot-fleet")

@@ -185,8 +185,13 @@ defmodule Hypatia.PatternAnalyzer do
   defp apply_neural_recommendation({:eliminate, recipe, pattern}, %{confidence: neural_conf} = rec) do
     recipe_conf = Map.get(recipe, "confidence", 0.0)
 
-    # Use the lower of recipe confidence and neural confidence (conservative)
-    effective_conf = min(recipe_conf, neural_conf)
+    # Only let neural confidence override if it's meaningfully trained.
+    # Untrained MoE returns sigmoid(1.0) ~= 0.73 — don't let that drag down
+    # a proven recipe at 0.99. Neural override kicks in once confidence
+    # diverges from the default sigmoid output (i.e., the network has learned).
+    neural_is_trained = neural_conf < 0.70 or neural_conf > 0.76
+    effective_conf = if neural_is_trained, do: min(recipe_conf, neural_conf), else: recipe_conf
+
     updated_recipe = recipe
       |> Map.put("confidence", effective_conf)
       |> Map.put("neural_confidence", neural_conf)

@@ -356,8 +356,9 @@ defmodule Hypatia.Kin.Gate do
 
   defp neural_agrees?(action) do
     try do
-      case GenServer.call(Hypatia.Neural.Coordinator, {:predict, action.pattern_id}) do
-        {:ok, %{confidence: neural_conf}} ->
+      finding = %{"id" => action.pattern_id, "category" => "unknown"}
+      case Hypatia.Neural.Coordinator.dispatch_recommendation(finding) do
+        %{confidence: neural_conf} ->
           # Neural agrees if its confidence is within 0.15 of the recipe confidence
           abs(neural_conf - Map.get(action, :confidence, 0.0)) < 0.15
         _ -> true  # if prediction fails, don't block

@@ -125,12 +125,32 @@ defmodule Hypatia.RecipeMatcher do
     pattern_id = Map.get(pattern, "id", "")
 
     case best_recipe(pattern_id, language) do
-      nil -> fuzzy_match_recipe(pattern, language)
+      nil ->
+        # Try category-based match first (most reliable), then fuzzy
+        case category_match_recipe(pattern, language) do
+          nil -> fuzzy_match_recipe(pattern, language)
+          recipe -> recipe
+        end
       recipe -> recipe
     end
   end
 
   # --- Private ---
+
+  # Match recipe by target_categories field — most reliable match
+  defp category_match_recipe(pattern, language) do
+    category = Map.get(pattern, "category", "")
+
+    all_recipes()
+    |> Enum.filter(fn recipe ->
+      cats = Map.get(recipe, "target_categories", [])
+      langs = Map.get(recipe, "languages", [])
+      lang_ok = "*" in langs or language in langs
+      lang_ok and category in cats
+    end)
+    |> Enum.sort_by(fn r -> Map.get(r, "confidence", 0) end, :desc)
+    |> List.first()
+  end
 
   defp fuzzy_match_recipe(pattern, language) do
     pa_rule = Map.get(pattern, "pa_rule", "")
