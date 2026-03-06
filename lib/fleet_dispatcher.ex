@@ -29,35 +29,44 @@ defmodule Hypatia.FleetDispatcher do
     confidence = Map.get(recipe, "confidence", 0.0)
     strategy = TriangleRouter.dispatch_strategy(confidence)
 
-    case strategy do
-      :auto_execute ->
-        dispatch_to_robot_repo_automaton(%{
-          type: :auto_fix_request,
-          repo: get_pattern_repo(pattern),
-          file: Map.get(pattern, "file", ""),
-          issue: Map.get(pattern, "description", ""),
-          fix_type: "eliminate",
-          confidence: confidence,
-          recipe_id: Map.get(recipe, "id"),
-          suggestion: Map.get(recipe, "description", "")
-        })
+    bot_id = case strategy do
+      :auto_execute -> "robot-repo-automaton"
+      :review -> "rhodibot"
+      :report_only -> "sustainabot"
+    end
 
-      :review ->
-        dispatch_to_rhodibot(%{
-          type: :fix_suggestion,
-          repo: get_pattern_repo(pattern),
-          file: Map.get(pattern, "file", ""),
-          issue: Map.get(pattern, "description", ""),
-          suggestion: Map.get(recipe, "description", "")
-        })
+    action_type = case strategy do
+      :auto_execute -> :commit_push
+      :review -> :pr_create
+      :report_only -> :advisory
+    end
 
-      :report_only ->
-        dispatch_to_sustainabot(%{
-          type: :eco_score,
-          repo: get_pattern_repo(pattern),
-          score: Map.get(pattern, "severity_score", 0.5),
-          details: "Low-confidence eliminate: #{Map.get(pattern, "description", "")}"
-        })
+    # Gate review — every action must pass through the Kin Gate
+    gate_action = %{
+      bot_id: bot_id,
+      repo: get_pattern_repo(pattern),
+      action_type: action_type,
+      confidence: confidence,
+      pattern_id: Map.get(pattern, "id", Map.get(pattern, "description", "")),
+      scan_timestamp: Map.get(pattern, "scan_timestamp"),
+      dispatch_tier: strategy
+    }
+
+    case gate_review(gate_action) do
+      {:approved, _} ->
+        do_eliminate_dispatch(strategy, recipe, pattern, confidence)
+
+      {:held, reason} ->
+        Logger.warning("Gate held eliminate dispatch: #{reason}")
+        {:ok, :held}
+
+      {:rejected, reason} ->
+        Logger.warning("Gate rejected eliminate dispatch: #{reason}")
+        {:error, :gate_rejected, reason}
+
+      {:deferred, wait_ms} ->
+        Logger.info("Gate deferred eliminate dispatch — retry in #{div(wait_ms, 1000)}s")
+        {:ok, :deferred}
     end
   end
 
@@ -88,6 +97,40 @@ defmodule Hypatia.FleetDispatcher do
       repo: Map.get(finding, "routed_repo", Map.get(finding, "repo", "unknown")),
       score: Map.get(finding, "severity_score", 0.5),
       details: "Unresolved: #{Map.get(finding, "description", "")} (no safe fix available)"
+    })
+  end
+
+  # --- Eliminate dispatch helpers (called after Gate approval) ---
+
+  defp do_eliminate_dispatch(:auto_execute, recipe, pattern, confidence) do
+    dispatch_to_robot_repo_automaton(%{
+      type: :auto_fix_request,
+      repo: get_pattern_repo(pattern),
+      file: Map.get(pattern, "file", ""),
+      issue: Map.get(pattern, "description", ""),
+      fix_type: "eliminate",
+      confidence: confidence,
+      recipe_id: Map.get(recipe, "id"),
+      suggestion: Map.get(recipe, "description", "")
+    })
+  end
+
+  defp do_eliminate_dispatch(:review, recipe, pattern, _confidence) do
+    dispatch_to_rhodibot(%{
+      type: :fix_suggestion,
+      repo: get_pattern_repo(pattern),
+      file: Map.get(pattern, "file", ""),
+      issue: Map.get(pattern, "description", ""),
+      suggestion: Map.get(recipe, "description", "")
+    })
+  end
+
+  defp do_eliminate_dispatch(:report_only, _recipe, pattern, _confidence) do
+    dispatch_to_sustainabot(%{
+      type: :eco_score,
+      repo: get_pattern_repo(pattern),
+      score: Map.get(pattern, "severity_score", 0.5),
+      details: "Low-confidence eliminate: #{Map.get(pattern, "description", "")}"
     })
   end
 
@@ -503,6 +546,54 @@ defmodule Hypatia.FleetDispatcher do
     case Map.get(pattern, "repos_affected_list", []) do
       [repo | _] -> repo
       _ -> Map.get(pattern, "routed_repo", "unknown")
+    end
+  end
+
+  # --- Kin Gate Integration ---
+
+  defp gate_review(gate_action) do
+    # Check contingency level first — if system is frozen/shutdown, reject immediately
+    case contingency_check(gate_action.dispatch_tier) do
+      :permitted ->
+        # Check if bot is isolated
+        case bot_isolation_check(gate_action.bot_id) do
+          :clear ->
+            # Full Gate review
+            if Process.whereis(Hypatia.Kin.Gate) do
+              Hypatia.Kin.Gate.review(gate_action)
+            else
+              {:approved, gate_action}  # Gate not running = pass through
+            end
+          {:isolated, reason} ->
+            {:rejected, "bot #{gate_action.bot_id} is isolated: #{reason}"}
+        end
+      {:blocked, reason} ->
+        {:rejected, reason}
+    end
+  end
+
+  defp contingency_check(dispatch_tier) do
+    if Process.whereis(Hypatia.Kin.Contingency) do
+      if Hypatia.Kin.Contingency.action_permitted?(dispatch_tier) do
+        :permitted
+      else
+        level = Hypatia.Kin.Contingency.level()
+        {:blocked, "contingency level :#{level} — actions not permitted"}
+      end
+    else
+      :permitted
+    end
+  end
+
+  defp bot_isolation_check(bot_id) do
+    if Process.whereis(Hypatia.Kin.Contingency) do
+      if Hypatia.Kin.Contingency.bot_isolated?(bot_id) do
+        {:isolated, "quarantined by contingency system"}
+      else
+        :clear
+      end
+    else
+      :clear
     end
   end
 end

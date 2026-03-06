@@ -11,6 +11,7 @@ defmodule Hypatia.Application do
   2. Safety layer — rate limiter, quarantine
   3. Intelligence layer — learning scheduler, self-diagnostics
   4. Neural layer — 5 neural networks + coordinator
+  5. Kin layer — ecosystem coordination, watchdog, self-healing
   """
 
   use Application
@@ -30,7 +31,13 @@ defmodule Hypatia.Application do
       Hypatia.LearningScheduler,
       Hypatia.SelfDiagnostics,
       # Layer 4: Neural — 5 networks orchestrated by coordinator
-      Hypatia.Neural.Coordinator
+      Hypatia.Neural.Coordinator,
+      # Layer 5: Kin — ecosystem coordination, watchdog, and self-healing
+      Hypatia.Kin.Contingency,    # must start first (emergency state persisted)
+      Hypatia.Kin.Arbiter,        # conflict resolution (stateless on startup)
+      Hypatia.Kin.Gate,           # action review checkpoint
+      Hypatia.Kin.Coordinator,    # sibling heartbeat polling
+      Hypatia.Kin.Watchdog        # internal OTP process monitoring
     ]
 
     opts = [strategy: :one_for_one, name: Hypatia.Supervisor]

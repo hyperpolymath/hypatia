@@ -268,3 +268,23 @@ else
 fi
 
 log "Done. Scanned ${REPOS_SCANNED} repos, applied ${FIXES_APPLIED} fixes."
+
+# --- Kin Protocol: write heartbeat ---
+KIN_DIR="${HOME}/.hypatia/kin"
+mkdir -p "$KIN_DIR"
+cat > "${KIN_DIR}/auto-fix.heartbeat.json" <<HEARTBEAT
+{
+  "kin_id": "auto-fix",
+  "role": "fixer",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "status": "healthy",
+  "version": "1.0.0",
+  "last_run": {
+    "repos_scanned": ${REPOS_SCANNED},
+    "fixes_applied": ${FIXES_APPLIED},
+    "auto_push": "${AUTO_PUSH:-false}"
+  },
+  "errors": [],
+  "capabilities": ["formulaic_fix", "spdx_fix", "shell_quote_fix", "sha_pin_fix"]
+}
+HEARTBEAT
