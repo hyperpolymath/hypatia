@@ -1,0 +1,898 @@
+{"pattern": "recipe-pin-github-actions", "repo": "repo-0", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-1", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-2", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-3", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-4", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-5", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-6", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-7", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-8", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-9", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-10", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-11", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-12", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-13", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-14", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-15", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-16", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-17", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-18", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-19", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-20", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-21", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-22", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-23", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-24", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-25", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-26", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-27", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-28", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-29", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-30", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-31", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-32", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-33", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-34", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-35", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-36", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-37", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-38", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-39", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-40", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-41", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-42", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-43", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-44", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-45", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-46", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-47", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-48", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-49", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-50", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-51", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-52", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-53", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-54", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-55", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-56", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-57", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-58", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-59", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-60", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-61", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-62", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-63", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-64", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-65", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-66", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-67", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-68", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-69", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-70", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-71", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-72", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-73", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-74", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-75", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-76", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-77", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-78", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-79", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-80", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-81", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-82", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-83", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-84", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-85", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-86", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-87", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-88", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-89", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-90", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-91", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-92", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-93", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-94", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-95", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-96", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-97", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-98", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-99", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-100", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-101", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-102", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-103", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-104", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-105", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-106", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-107", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-108", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-109", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-110", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-111", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-112", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-113", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-114", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-115", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-116", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-117", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-118", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-119", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-120", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-121", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-122", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-123", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-124", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-125", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-126", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-127", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-128", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-129", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-130", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-131", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-132", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-133", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-134", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-135", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-136", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-137", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-138", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-139", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-140", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-141", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-142", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-143", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-0", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-1", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-2", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-3", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-4", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-5", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-6", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-7", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-8", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-9", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-10", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-11", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-12", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-13", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-14", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-15", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-16", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-17", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-18", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-19", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-20", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-21", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-22", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-23", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-24", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-25", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-26", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-27", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-28", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-29", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-30", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-31", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-32", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-33", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-34", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-35", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-36", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-37", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-38", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-39", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-40", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-41", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-42", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-43", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-44", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-45", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-46", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-47", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-48", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-49", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-50", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-51", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-52", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-53", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-54", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-55", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-56", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-57", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-58", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-59", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-60", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-61", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-62", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-63", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-64", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-65", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-66", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-67", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-68", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-69", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-70", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-71", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-72", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-73", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-74", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-75", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-76", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-77", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-78", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-79", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-80", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-81", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-82", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-83", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-84", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-85", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-86", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-87", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-88", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-89", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-90", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-91", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-92", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-93", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-94", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-95", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-96", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-97", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-98", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-99", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-100", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-101", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-102", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-103", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-104", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-105", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-106", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-107", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-108", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-109", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-110", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-111", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-112", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-113", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-114", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-115", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-116", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-117", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-118", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-119", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-120", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-121", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-122", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-123", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-124", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-125", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-126", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-127", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-128", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-129", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-130", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-131", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-132", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-133", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-134", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-135", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-136", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-137", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-138", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-139", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-140", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-141", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-142", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-143", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-0", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-1", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-2", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-3", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-4", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-5", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-6", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-7", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-8", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-9", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-10", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-11", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-12", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-13", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-14", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-15", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-16", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-17", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-18", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-19", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-20", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-21", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-22", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-23", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-24", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-25", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-26", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-27", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-28", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-29", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-30", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-31", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-32", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-33", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-34", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-35", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-36", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-37", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-38", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-39", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-40", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-41", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-42", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-43", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-44", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-45", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-46", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-47", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-48", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-49", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-50", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-51", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-52", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-53", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-54", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-55", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-56", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-57", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-58", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-59", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-60", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-61", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-62", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-63", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-64", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-65", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-66", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-67", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-68", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-69", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-70", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-71", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-72", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-73", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-74", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-75", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-76", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-77", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-78", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-79", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-80", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-81", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-82", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-83", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-84", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-85", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-86", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-87", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-88", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-89", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-90", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-91", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-92", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-93", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-94", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-95", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-96", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-97", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-98", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-99", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-100", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-101", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-102", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-103", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-104", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-105", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-106", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-107", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-108", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-109", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-110", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-pin-github-actions", "repo": "repo-111", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-0", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-1", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-2", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-3", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-4", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-5", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-6", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-7", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-8", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-9", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-10", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-11", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-12", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-13", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-14", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-15", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-16", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-17", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-18", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-19", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-20", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-21", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-22", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-23", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-24", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-25", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-26", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-27", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-28", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-29", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-30", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-31", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-32", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-33", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-34", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-35", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-36", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-37", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-38", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-39", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-40", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-41", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-42", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-43", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-44", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-45", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-46", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-47", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-48", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-49", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-50", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-51", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-52", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-53", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-54", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-55", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-56", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-57", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-58", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-59", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-60", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-61", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-62", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-63", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-64", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-65", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-66", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-67", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-68", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-69", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-70", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-71", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-72", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-73", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-74", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-75", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-76", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-77", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-78", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-79", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-80", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-81", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-82", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-83", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-84", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-85", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-86", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-87", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-88", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-89", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-90", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-91", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-92", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-93", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-94", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-95", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-96", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-97", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-98", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-99", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-100", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-101", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-102", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-103", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-104", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-105", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-106", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-107", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-108", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-109", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-110", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-111", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-112", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-113", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-114", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-115", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-116", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-117", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-118", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-119", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-120", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-121", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-122", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-123", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-124", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-125", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-126", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-127", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-128", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-129", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-130", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-131", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-132", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-133", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-134", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-135", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-136", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-137", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-138", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-139", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-140", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-141", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-142", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-143", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-0", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-1", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-2", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-3", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-4", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-fix-spdx-license", "repo": "repo-5", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-0", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-1", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-2", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-3", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-4", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-5", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-6", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-7", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-8", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-9", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-10", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-11", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-12", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-13", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-14", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-15", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-16", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-17", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-18", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-19", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-20", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-21", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-22", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-23", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-24", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-25", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-26", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-27", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-28", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-29", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-30", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-31", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-32", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-33", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-34", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-35", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-36", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-37", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-38", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-39", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-40", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-41", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-42", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-43", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-44", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-45", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-46", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-47", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-48", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-49", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-50", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-51", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-52", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-53", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-54", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-55", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-56", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-57", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-58", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-59", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-60", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-61", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-62", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-63", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-64", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"pattern": "recipe-add-permissions", "repo": "repo-65", "bot": "hypatia-autofix", "outcome": "success", "fixed_at": "2026-03-06T15:11:32.509927Z"}
+{"bot":"hypatia","file":"ci-scripts/mirror-push.sh","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.518625Z"}
+{"bot":"hypatia","file":".github/workflows/mirror.yml","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.557141Z"}
+{"bot":"hypatia","file":"scripts/deploy.sh","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.587844Z"}
+{"bot":"hypatia","file":"src/abi/Types.idr","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.617620Z"}
+{"bot":"hypatia","file":"src/abi/Foreign.idr","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.650986Z"}
+{"bot":"hypatia","file":"src/abi/Layout.idr","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.680296Z"}
+{"bot":"hypatia","file":"justfile","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.713339Z"}
+{"bot":"hypatia","file":"src/main.rs","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.743964Z"}
+{"bot":"hypatia","file":"README.adoc","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.776086Z"}
+{"bot":"hypatia","file":"ci-scripts/setup.sh","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.808142Z"}
+{"bot":"hypatia","file":"scripts/install-deps.sh","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.837293Z"}
+{"bot":"hypatia","file":"ci-scripts/eval-config.sh","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"batch-template-fixes","timestamp":"2026-03-06T15:11:52.868584Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-tool-plugins","timestamp":"2026-03-06T15:11:52.901591Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:52.926089Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:52.952152Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:52.982712Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"blue-screen-of-app","timestamp":"2026-03-06T15:11:53.016839Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:53.056796Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"techstack-filterlist","timestamp":"2026-03-06T15:11:53.091313Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:53.131971Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"betlang","timestamp":"2026-03-06T15:11:53.169315Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:53.212338Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"wordpress-tools","timestamp":"2026-03-06T15:11:53.257851Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"nick-shells","timestamp":"2026-03-06T15:11:53.306363Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"gql-dt","timestamp":"2026-03-06T15:11:53.350752Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:53.393199Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:53.436458Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:53.473182Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"qubes-sdp","timestamp":"2026-03-06T15:11:53.510780Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"resource-record-fluctuator","timestamp":"2026-03-06T15:11:53.550464Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"nerdsafe-restart","timestamp":"2026-03-06T15:11:53.582052Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:53.620298Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"betlang","timestamp":"2026-03-06T15:11:53.659787Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"megadog","timestamp":"2026-03-06T15:11:53.701991Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:11:53.732306Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neurophone","timestamp":"2026-03-06T15:11:53.761680Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"llm-tools","timestamp":"2026-03-06T15:11:53.793469Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:11:53.830933Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:53.875157Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:53.917181Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"proven","timestamp":"2026-03-06T15:11:53.952153Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"scripts","timestamp":"2026-03-06T15:11:53.982130Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:54.018076Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"fogbinder","timestamp":"2026-03-06T15:11:54.053181Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"julia-the-viper","timestamp":"2026-03-06T15:11:54.081960Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"project-wharf","timestamp":"2026-03-06T15:11:54.111995Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"reasonably-good-token-vault","timestamp":"2026-03-06T15:11:54.146096Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"repo-batcher","timestamp":"2026-03-06T15:11:54.185265Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:54.215911Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"protocol-squisher","timestamp":"2026-03-06T15:11:54.240559Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:54.271527Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"formdb-http","timestamp":"2026-03-06T15:11:54.299369Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"resource-record-fluctuator","timestamp":"2026-03-06T15:11:54.333321Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"tma-mark2","timestamp":"2026-03-06T15:11:54.376945Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"cloud-sync-tuner","timestamp":"2026-03-06T15:11:54.414644Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"conative-gating","timestamp":"2026-03-06T15:11:54.445947Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"modshells","timestamp":"2026-03-06T15:11:54.478511Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"feedback-o-tron","timestamp":"2026-03-06T15:11:54.510996Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:54.540132Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:11:54.571342Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"eclexia","timestamp":"2026-03-06T15:11:54.607742Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:54.640322Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"vordr","timestamp":"2026-03-06T15:11:54.672390Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:54.704407Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"pimcore-fortress","timestamp":"2026-03-06T15:11:54.738849Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"cerro-torre","timestamp":"2026-03-06T15:11:54.774066Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:54.804736Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:54.840765Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:54.867579Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:54.895947Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:54.932575Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"candy-crash","timestamp":"2026-03-06T15:11:54.971906Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:55.013477Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"absolute-zero","timestamp":"2026-03-06T15:11:55.047813Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:55.092984Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"glyphbase","timestamp":"2026-03-06T15:11:55.136103Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:11:55.176742Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"total-update","timestamp":"2026-03-06T15:11:55.214655Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"verified-container-spec","timestamp":"2026-03-06T15:11:55.257399Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:55.296939Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:55.344269Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:55.392151Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"repo-batcher","timestamp":"2026-03-06T15:11:55.435123Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"ssg-collection","timestamp":"2026-03-06T15:11:55.480996Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"valence-shell","timestamp":"2026-03-06T15:11:55.533034Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"qubes-sdp","timestamp":"2026-03-06T15:11:55.583577Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:55.628633Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"_pathroot","timestamp":"2026-03-06T15:11:55.663068Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:55.700852Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"qubes-sdp","timestamp":"2026-03-06T15:11:55.733477Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:55.772906Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:55.807420Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:55.844050Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:55.875246Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"rhodium-standard-repositories","timestamp":"2026-03-06T15:11:55.908846Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:55.941440Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"idris2-ecosystem","timestamp":"2026-03-06T15:11:55.979894Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:56.019178Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:56.051723Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:56.092690Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:56.126764Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"formdb-http","timestamp":"2026-03-06T15:11:56.168691Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:56.208493Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"personal-sysadmin","timestamp":"2026-03-06T15:11:56.241932Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:56.269825Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:56.309700Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"repo-batcher","timestamp":"2026-03-06T15:11:56.347169Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:56.381774Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:56.416992Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:56.454457Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"k9-svc","timestamp":"2026-03-06T15:11:56.499971Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:56.546097Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"qubes-sdp","timestamp":"2026-03-06T15:11:56.592751Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"polystack","timestamp":"2026-03-06T15:11:56.630717Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"scripts","timestamp":"2026-03-06T15:11:56.666409Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"scripts","timestamp":"2026-03-06T15:11:56.702858Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"_pathroot","timestamp":"2026-03-06T15:11:56.739858Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"gql-dt","timestamp":"2026-03-06T15:11:56.775455Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"echidna","timestamp":"2026-03-06T15:11:56.812725Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"gql-dt","timestamp":"2026-03-06T15:11:56.849087Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:56.881986Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"ambientops","timestamp":"2026-03-06T15:11:56.915664Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:56.948807Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-tool-plugins","timestamp":"2026-03-06T15:11:56.984680Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"cloud-sync-tuner","timestamp":"2026-03-06T15:11:57.022698Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"conative-gating","timestamp":"2026-03-06T15:11:57.057277Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:57.094797Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"eclexia","timestamp":"2026-03-06T15:11:57.130384Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"flatracoon","timestamp":"2026-03-06T15:11:57.167523Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"games","timestamp":"2026-03-06T15:11:57.207277Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:57.243532Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"language-bridges","timestamp":"2026-03-06T15:11:57.276111Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:11:57.305977Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:57.342657Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"polystack","timestamp":"2026-03-06T15:11:57.379704Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:57.413734Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"verisimdb","timestamp":"2026-03-06T15:11:57.446925Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"echidnabot","timestamp":"2026-03-06T15:11:57.479498Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:57.517766Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"zotero-tools","timestamp":"2026-03-06T15:11:57.567880Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:57.642633Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:57.686666Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"ipv6-tools","timestamp":"2026-03-06T15:11:57.726088Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"modshells","timestamp":"2026-03-06T15:11:57.757223Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:57.792706Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"scripts","timestamp":"2026-03-06T15:11:57.830221Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"wordpress-tools","timestamp":"2026-03-06T15:11:57.871670Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"project-wharf","timestamp":"2026-03-06T15:11:57.907896Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:57.943685Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:57.973291Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:58.000364Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"gql-dt","timestamp":"2026-03-06T15:11:58.032653Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:58.064844Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"absolute-zero","timestamp":"2026-03-06T15:11:58.094686Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:58.126569Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"package-publishers","timestamp":"2026-03-06T15:11:58.174107Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"modshells","timestamp":"2026-03-06T15:11:58.206940Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:58.237173Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"valence-shell","timestamp":"2026-03-06T15:11:58.266306Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"cerro-torre","timestamp":"2026-03-06T15:11:58.306250Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:58.349639Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"language-bridges","timestamp":"2026-03-06T15:11:58.387284Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"zig-ffi","timestamp":"2026-03-06T15:11:58.419643Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:58.463682Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"cerro-torre","timestamp":"2026-03-06T15:11:58.512194Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:58.554498Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"polystack","timestamp":"2026-03-06T15:11:58.599355Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"ssg-collection","timestamp":"2026-03-06T15:11:58.639826Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:11:58.679672Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:11:58.713083Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:11:58.745017Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:11:58.776907Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"modshells","timestamp":"2026-03-06T15:11:58.812663Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:58.847858Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:58.884260Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"ambientops","timestamp":"2026-03-06T15:11:58.917268Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"asdf-augmenters","timestamp":"2026-03-06T15:11:58.951780Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"asdf-tool-plugins","timestamp":"2026-03-06T15:11:58.988348Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"avow-protocol","timestamp":"2026-03-06T15:11:59.019244Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"betlang","timestamp":"2026-03-06T15:11:59.054935Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"cadre-router","timestamp":"2026-03-06T15:11:59.084849Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"cerro-torre","timestamp":"2026-03-06T15:11:59.119189Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"claude-integrations","timestamp":"2026-03-06T15:11:59.152914Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"deno-ecosystem","timestamp":"2026-03-06T15:11:59.189177Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"echidna","timestamp":"2026-03-06T15:11:59.223340Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"eclexia","timestamp":"2026-03-06T15:11:59.259200Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"ephapax","timestamp":"2026-03-06T15:11:59.292679Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"flatracoon","timestamp":"2026-03-06T15:11:59.328320Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"games","timestamp":"2026-03-06T15:11:59.366624Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"glyphbase","timestamp":"2026-03-06T15:11:59.402017Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:11:59.440457Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"idris2-ecosystem","timestamp":"2026-03-06T15:11:59.473858Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"language-bridges","timestamp":"2026-03-06T15:11:59.512585Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"package-publishers","timestamp":"2026-03-06T15:11:59.550132Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"polystack","timestamp":"2026-03-06T15:11:59.589922Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:11:59.622364Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:11:59.658591Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"ssg-collection","timestamp":"2026-03-06T15:11:59.692554Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"standards","timestamp":"2026-03-06T15:11:59.723932Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"system-tools","timestamp":"2026-03-06T15:11:59.756671Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"verisimdb","timestamp":"2026-03-06T15:11:59.798560Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"vex-tools","timestamp":"2026-03-06T15:11:59.837938Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"wordpress-tools","timestamp":"2026-03-06T15:11:59.877092Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"zig-ffi","timestamp":"2026-03-06T15:11:59.918021Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"zotero-tools","timestamp":"2026-03-06T15:11:59.962077Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"ephapax","timestamp":"2026-03-06T15:11:59.997382Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"scripts","timestamp":"2026-03-06T15:12:00.033413Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:00.066665Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"glyphbase","timestamp":"2026-03-06T15:12:00.100729Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"gql-dt","timestamp":"2026-03-06T15:12:00.134445Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"proven","timestamp":"2026-03-06T15:12:00.176464Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"cerro-torre","timestamp":"2026-03-06T15:12:00.217787Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:12:00.249272Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"total-update","timestamp":"2026-03-06T15:12:00.287359Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"bitfuckit","timestamp":"2026-03-06T15:12:00.319991Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"claude-integrations","timestamp":"2026-03-06T15:12:00.354623Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"cloud-sync-tuner","timestamp":"2026-03-06T15:12:00.389697Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"personal-sysadmin","timestamp":"2026-03-06T15:12:00.440313Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:12:00.471053Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"qubes-sdp","timestamp":"2026-03-06T15:12:00.503463Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"k9-svc","timestamp":"2026-03-06T15:12:00.538507Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rhodium-standard-repositories","timestamp":"2026-03-06T15:12:00.581988Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"conative-gating","timestamp":"2026-03-06T15:12:00.618998Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"echidna","timestamp":"2026-03-06T15:12:00.656037Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"fireflag","timestamp":"2026-03-06T15:12:00.691660Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:12:00.725717Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath","timestamp":"2026-03-06T15:12:00.765724Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"ipv6-tools","timestamp":"2026-03-06T15:12:00.801420Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:12:00.837621Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:12:00.878063Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"stateful-artefacts-for-gitforges","timestamp":"2026-03-06T15:12:00.919589Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"zotero-tools","timestamp":"2026-03-06T15:12:00.957600Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"conative-gating","timestamp":"2026-03-06T15:12:01.000708Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:12:01.043505Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"cerro-torre","timestamp":"2026-03-06T15:12:01.080402Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:12:01.113646Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:01.162433Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"gql-dt","timestamp":"2026-03-06T15:12:01.201703Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:12:01.239708Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"conative-gating","timestamp":"2026-03-06T15:12:01.272081Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"fireflag","timestamp":"2026-03-06T15:12:01.307023Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:12:01.352620Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"techstack-filterlist","timestamp":"2026-03-06T15:12:01.393029Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"aletheia","timestamp":"2026-03-06T15:12:01.438258Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"nerdsafe-restart","timestamp":"2026-03-06T15:12:01.487549Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:01.524867Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"odds-and-sods-package-manager","timestamp":"2026-03-06T15:12:01.566043Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"repo-batcher","timestamp":"2026-03-06T15:12:01.604640Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:12:01.641432Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:12:01.674865Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"proven","timestamp":"2026-03-06T15:12:01.713291Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rhodium-standard-repositories","timestamp":"2026-03-06T15:12:01.748344Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:12:01.789325Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:12:01.821847Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:12:01.856210Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"echidna","timestamp":"2026-03-06T15:12:01.893845Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:12:01.931450Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"tma-mark2","timestamp":"2026-03-06T15:12:01.964072Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:02.005115Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"conative-gating","timestamp":"2026-03-06T15:12:02.038581Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"gql-dt","timestamp":"2026-03-06T15:12:02.077053Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"neural-foundations","timestamp":"2026-03-06T15:12:02.114378Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:02.154783Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:12:02.197763Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"php-aegis","timestamp":"2026-03-06T15:12:02.242932Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"wordpress-tools","timestamp":"2026-03-06T15:12:02.282960Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"zotero-tools","timestamp":"2026-03-06T15:12:02.318222Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"package-publishers","timestamp":"2026-03-06T15:12:02.355581Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"ochrance","timestamp":"2026-03-06T15:12:02.395740Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-remove-believe-me","repo":"proven","timestamp":"2026-03-06T15:12:02.440058Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"asdf-augmenters","timestamp":"2026-03-06T15:12:02.480595Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:12:02.519653Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"echidna","timestamp":"2026-03-06T15:12:02.562236Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:12:02.603561Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"rhodium-standard-repositories","timestamp":"2026-03-06T15:12:02.641575Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-heredoc-to-install","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:02.680311Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"bitfuckit","timestamp":"2026-03-06T15:12:02.714291Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"academic-workflow-suite","timestamp":"2026-03-06T15:12:02.751590Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"asdf-augmenters","timestamp":"2026-03-06T15:12:02.789991Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"hyperpolymath-archive","timestamp":"2026-03-06T15:12:02.826367Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-shell-quote-vars","repo":"odds-and-sods-package-manager","timestamp":"2026-03-06T15:12:02.864449Z"}
+{"bot":"hypatia","file":"","outcome":"success","pattern_id":null,"recipe_id":"recipe-todo-to-fill","repo":"rescript-ecosystem","timestamp":"2026-03-06T15:12:02.896400Z"}

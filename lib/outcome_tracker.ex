@@ -12,8 +12,8 @@ defmodule Hypatia.OutcomeTracker do
 
   require Logger
 
-  @verisimdb_data_path "~/Documents/hyperpolymath-repos/verisimdb-data"
-  @fleet_path "~/Documents/hyperpolymath-repos/gitbot-fleet"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
 
   # Confidence adjustment constants (from plan)
   @successful_fix_boost 0.02

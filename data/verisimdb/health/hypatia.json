@@ -1,0 +1,37 @@
+{
+  "checked_at": "2026-03-06T15:12:12.436980Z",
+  "checks": {
+    "circuit_breaker": {
+      "failures": 0,
+      "state": "closed"
+    },
+    "filesystem": {
+      "missing": [
+        "/var/mnt/eclipse/repos/hypatia/data/verisimdb/dispatch"
+      ],
+      "status": "fail"
+    },
+    "fleet_access": {
+      "last_modified": "{{2026, 3, 6}, {15, 12, 2}}",
+      "size_bytes": 945295,
+      "status": "pass"
+    },
+    "learning_scheduler": {
+      "confidence_updates": 0,
+      "last_run": "~U[2026-03-06 15:12:02.928002Z]",
+      "outcomes_processed": 6914,
+      "status": "pass"
+    },
+    "recipe_health": {
+      "low_confidence": [],
+      "status": "pass",
+      "total_recipes": 5
+    },
+    "verisimdb_data": {
+      "outcome_files": 2,
+      "recipe_files": 5,
+      "status": "pass"
+    }
+  },
+  "overall": "degraded"
+}

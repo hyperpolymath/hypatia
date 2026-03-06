@@ -1,0 +1,32 @@
+{
+  "substitutions": [
+    {
+      "pa_rule": "PA009",
+      "category": "CommandInjection",
+      "proven_modules": ["SafeCommand", "SafeSQL", "SafeGit", "SafeSSH"],
+      "confidence": 0.90,
+      "formally_proven": false
+    },
+    {
+      "pa_rule": "PA010",
+      "category": "UnsafeDeserialization",
+      "proven_modules": ["SafeJson", "SafeYAML", "SafeXML"],
+      "confidence": 0.95,
+      "formally_proven": true
+    },
+    {
+      "pa_rule": "PA016",
+      "category": "PathTraversal",
+      "proven_modules": ["SafePath"],
+      "confidence": 0.98,
+      "formally_proven": true
+    },
+    {
+      "pa_rule": "PA014",
+      "category": "InsecureProtocol",
+      "proven_modules": ["SafeUrl", "SafeNetwork"],
+      "confidence": 0.95,
+      "formally_proven": true
+    }
+  ]
+}

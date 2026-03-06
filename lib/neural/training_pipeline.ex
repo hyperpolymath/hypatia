@@ -20,7 +20,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
     RadialNeuralNetwork
   }
 
-  @verisimdb_data_path "~/Documents/hyperpolymath-repos/verisimdb-data"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
 
   # --- ESN Training ---
 

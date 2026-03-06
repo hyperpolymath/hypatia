@@ -26,7 +26,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   require Logger
 
-  @verisimdb_data_path "~/Documents/hyperpolymath-repos/verisimdb-data"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
   @damping_factor 0.85
   @convergence_threshold 0.001
   @max_iterations 50

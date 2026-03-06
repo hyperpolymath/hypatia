@@ -119,8 +119,8 @@ confidence drift).
 **File:** `lib/neural/echo_state_network.ex`
 **Purpose:** Confidence trajectory forecasting and drift detection.
 
-Trained on real outcome data (2,372 data points from `verisimdb-data/outcomes/`).
 Predicts where recipe confidence is heading (improving, stable, degrading).
+Training data source: `verisimdb-data/outcomes/*.jsonl` (confidence time series per recipe).
 
 **Outputs:**
 - `{predicted_next, updated_esn}` — next predicted confidence value
@@ -134,8 +134,8 @@ Predicts where recipe confidence is heading (improving, stable, degrading).
 **Purpose:** Finding similarity and novelty detection.
 
 Converts findings to 8-dimensional feature vectors and classifies them
-using radial basis functions. Trained on 965 pattern vectors from
-`verisimdb-data/patterns/registry.json` (MSE = 0.047).
+using radial basis functions.
+Training data source: `verisimdb-data/patterns/registry.json` (8-D feature vectors).
 
 **Outputs:**
 - `{output, confidence}` — classification result + confidence
@@ -214,56 +214,18 @@ TrainingPipeline.run_full_training()
 Triggered by: Coordinator.force_cycle()
 ```
 
-### Known Training Gap
+### Training Status
 
-All 3,588+ training outcomes are "success" (100%). The networks have
-never seen failure or false-positive data. This means:
+Networks initialize with default weights and learn from real data as it
+arrives. The `LearningScheduler` polls `verisimdb-data/outcomes/` every
+5 minutes and feeds outcomes to the coordinator via `record_outcome/2`.
 
-- ESN confidence trajectories are monotonically increasing
-- RBF has no decision boundary between success and failure
-- MoE cannot distinguish high-risk from low-risk domains
-- Confidence estimates are inflated across the board
+Training is seeded from gitbot-fleet's `fix-outcomes.jsonl` (6,000+ records)
+and hypatia's `auto-fix-formulaic.sh` scan results.
 
-**To fix:** Intentionally dispatch lower-confidence findings to generate
-failure data, or inject synthetic failure cases for balanced training.
-
----
-
-## Logtalk Symbolic Layer (Disconnected)
-
-The Logtalk `.lgt` files exist as standalone symbolic reasoning rules:
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `security_errors.lgt` | Error catalog (10 types) | Reference data |
-| `cicd_rules.lgt` | 200+ declarative rules | Many stubs |
-| `pattern_matching.lgt` | Pattern detection | Complete |
-| `learning.lgt` | Learning rule distillation | Complete |
-| `error_catalog.lgt` | Error type definitions | Mostly complete |
-| `prevention_hooks.lgt` | Pre-commit prevention | Complete |
-| `rule_distiller.lgt` | Rule extraction | Complete |
-| `forge_adapters.lgt` | Forge-specific rules | Complete |
-| `error_instances.lgt` | Error instances | **STUB** |
-| `loader.lgt` | Rule loader | **STUB** |
-
-**These are NOT loaded by the Elixir application.** There is no integration
-bridge between Logtalk rules and the Elixir pipeline. The rules exist as
-a separate knowledge base that could be integrated in the future via:
-
-1. A Logtalk-to-JSON rule compiler
-2. An Elixir NIF calling SWI-Prolog
-3. A pre-processing step that generates Elixir modules from Logtalk rules
-
-### Stub Predicates (Blocking Rule Execution)
-
-These predicates are called in rules but never defined:
-
-- `commit_adds_file/2`
-- `commit_modifies_workflow/1`
-- `file_has_spdx_header/1`
-- `workflow_has_unpinned_action/1`
-- `repo_is_spec_only/1`
-- `repo_is_public/1`
+**Note:** The Logtalk symbolic layer (`.lgt` files) was absorbed into
+Elixir modules in `lib/rules/` on 2026-03-06. The Logtalk files have
+been removed from the repository.
 
 ---
 
@@ -347,39 +309,61 @@ These are the rules that actually drive the pipeline via
 
 ### Elixir Pipeline (lib/)
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `application.ex` | 38 | OTP supervisor (7 GenServers) |
-| `pattern_analyzer.ex` | ~190 | Full pipeline orchestrator |
-| `verisimdb_connector.ex` | ~200 | VQL-powered data access |
-| `pattern_registry.ex` | ~150 | Deduplicates to canonical patterns |
-| `recipe_matcher.ex` | ~180 | Fuzzy matching with language inference |
-| `triangle_router.ex` | 179 | Safety triangle: eliminate > substitute > control |
-| `fleet_dispatcher.ex` | ~450 | Bot dispatch (file + HTTP) |
-| `dispatch_manifest.ex` | ~100 | JSONL bridge to bash execution |
-| `outcome_tracker.ex` | ~120 | Records outcomes, updates confidence |
-| `learning_scheduler.ex` | ~80 | GenServer polling every 5 min |
-| `self_diagnostics.ex` | ~100 | Health monitoring, circuit breaker |
+| Module | Purpose |
+|--------|---------|
+| `application.ex` | OTP supervisor |
+| `pattern_analyzer.ex` | Full pipeline orchestrator |
+| `verisimdb_connector.ex` | VQL-powered data access |
+| `pattern_registry.ex` | Deduplicates to canonical patterns |
+| `recipe_matcher.ex` | Fuzzy matching with language inference |
+| `triangle_router.ex` | Safety triangle: eliminate > substitute > control |
+| `fleet_dispatcher.ex` | Bot dispatch (file + HTTP) |
+| `dispatch_manifest.ex` | JSONL bridge to bash execution |
+| `outcome_tracker.ex` | Records outcomes, updates confidence |
+| `learning_scheduler.ex` | GenServer polling every 5 min |
+| `self_diagnostics.ex` | Health monitoring, circuit breaker |
+
+### Rules Engine (lib/rules/) — absorbed from Logtalk 2026-03-06
+
+| Module | Purpose |
+|--------|---------|
+| `rules.ex` | Facade: scan_file/3, scan_workflow/1 |
+| `security_errors.ex` | SHA pins, secret patterns, CWE mappings |
+| `cicd_rules.ex` | Commit blocking, waste detection, error catalog |
+| `code_safety.ex` | Per-language dangerous patterns (Rust, Idris2, Haskell, etc.) |
+| `migration_rules.ex` | ReScript API migration, merge conflict resolution |
+| `learning.ex` | GenServer: fix outcome tracking, confidence scoring |
+| `forge_adapters.ex` | Forge operations with input validation |
 
 ### Neural Subsystem (lib/neural/)
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `coordinator.ex` | 253 | Hub: orchestrates all 5 networks |
-| `graph_of_trust.ex` | 227 | PageRank trust scoring |
-| `mixture_of_experts.ex` | ~250 | Domain-specific confidence |
-| `liquid_state_machine.ex` | ~200 | Temporal anomaly detection |
-| `echo_state_network.ex` | ~200 | Confidence trajectory forecasting |
-| `radial_neural_network.ex` | ~250 | Similarity + novelty detection |
-| `training_pipeline.ex` | ~150 | ESN + RBF training |
+| Module | Purpose |
+|--------|---------|
+| `coordinator.ex` | Hub: orchestrates all 5 networks |
+| `graph_of_trust.ex` | PageRank trust scoring |
+| `mixture_of_experts.ex` | Domain-specific confidence (7 expert domains) |
+| `liquid_state_machine.ex` | Temporal anomaly detection |
+| `echo_state_network.ex` | Confidence trajectory forecasting |
+| `radial_neural_network.ex` | Similarity + novelty detection |
+| `training_pipeline.ex` | ESN + RBF training from verisimdb-data |
+| `persistence.ex` | Save/load neural state |
 
 ### Safety Systems (lib/safety/)
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `rate_limiter.ex` | ~80 | 50/min/bot, 200/min global, 10/5s burst |
-| `quarantine.ex` | ~100 | Auto on 5+ failures or >30% FP rate |
-| `batch_rollback.ex` | ~80 | Rollback dispatch batches |
+| Module | Purpose |
+|--------|---------|
+| `rate_limiter.ex` | 50/min/bot, 200/min global, 10/5s burst |
+| `quarantine.ex` | Auto on 5+ failures or >30% FP rate |
+| `batch_rollback.ex` | Rollback dispatch batches |
+
+### Rust Workspace (adapters/, cli/, data/, fixer/)
+
+| Crate | Purpose |
+|-------|---------|
+| `adapters` | GitHub/GitLab/Bitbucket forge API adapters |
+| `cli` | Command-line scanner interface |
+| `data` | ArangoDB + VeriSimDB data layer |
+| `fixer` | Programmatic CI/CD auto-fixer with SHA pin database |
 
 ---
 

@@ -20,8 +20,8 @@ defmodule Hypatia.LearningScheduler do
   require Logger
 
   @poll_interval_ms 5 * 60 * 1_000  # 5 minutes
-  @verisimdb_data_path "~/Documents/hyperpolymath-repos/verisimdb-data"
-  @fleet_path "~/Documents/hyperpolymath-repos/gitbot-fleet"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
 
   # --- Client API ---
 

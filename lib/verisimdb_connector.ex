@@ -23,7 +23,7 @@ defmodule Hypatia.VerisimdbConnector do
 
   alias Hypatia.VQL.Query, as: VQL
 
-  @verisimdb_data_path "~/Documents/hyperpolymath-repos/verisimdb-data"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
 
   require Logger
 

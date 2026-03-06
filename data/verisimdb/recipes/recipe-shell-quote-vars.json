@@ -1,0 +1,17 @@
+{
+  "auto_fixable": true,
+  "confidence": 0.99,
+  "description": "Quote all shell variable expansions",
+  "failed_fixes": 0,
+  "fix_script": "fix-shell-quoting.sh",
+  "id": "recipe-shell-quote-vars",
+  "languages": [
+    "shell"
+  ],
+  "pattern_ids": [
+    "PA-CommandInjection-shell_unquoted_var"
+  ],
+  "successful_fixes": 166,
+  "total_attempts": 166,
+  "triangle_tier": "eliminate"
+}

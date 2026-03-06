@@ -22,7 +22,7 @@ defmodule Hypatia.Neural.Persistence do
 
   require Logger
 
-  @state_dir "~/Documents/hyperpolymath-repos/verisimdb-data/neural-states"
+  @state_dir Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb") |> Path.join("neural-states")
 
   @doc "Save all neural network states"
   def save_all(coordinator_state) do

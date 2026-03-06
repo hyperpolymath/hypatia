@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
 <!-- TOPOLOGY.md — Project architecture map and completion dashboard -->
-<!-- Last updated: 2026-02-22 -->
+<!-- Last updated: 2026-03-06 -->
 
 # Hypatia — Project Topology
 
@@ -72,58 +72,71 @@ COMPONENT                          STATUS              NOTES
 ─────────────────────────────────  ──────────────────  ─────────────────────────────────
 CORE PIPELINE
   VQL Client + File Executor       ██████████ 100%    Built-in parser, 60s cache
-  Pattern Registry                 ██████████ 100%    954 canonical patterns
+  Pattern Registry                 ██████████ 100%    Code complete, needs data seeding
   Recipe Matcher                   ██████████ 100%    Fuzzy matching + language inference
   Triangle Router                  ██████████ 100%    Eliminate > Substitute > Control
-  Fleet Dispatcher                 █████████░  90%    File dispatch ✓, HTTP graceful
+  Fleet Dispatcher                 █████████░  90%    File dispatch OK, HTTP graceful
   Dispatch Manifest                ██████████ 100%    JSONL bridge to bash execution
   Pattern Analyzer                 ██████████ 100%    Full pipeline orchestrator
 
 NEURAL SUBSYSTEM (hub-and-spoke)
-  Neural Coordinator               ████████░░  80%    Wired into pipeline 2026-02-22
-  Graph of Trust (PageRank)        ████████░░  80%    Boot crash fixed 2026-02-22
+  Neural Coordinator               █████████░  90%    Wired into pipeline, needs data
+  Graph of Trust (PageRank)        █████████░  90%    Code complete, needs outcomes
   Mixture of Experts               ██████████ 100%    7 expert domains + gating
   Liquid State Machine             ██████████ 100%    Temporal anomaly detection
-  Echo State Network               ████████░░  80%    Trained (2372 pts), one-sided data
-  Radial Basis Function            ████████░░  80%    Trained (965 vecs), one-sided data
-  Training Pipeline                ██████████ 100%    ESN + RBF from real data
+  Echo State Network               ████████░░  80%    Code complete, untrained (no data)
+  Radial Basis Function            ████████░░  80%    Code complete, untrained (no data)
+  Training Pipeline                ██████████ 100%    Reads verisimdb-data automatically
+  Persistence                      ██████████ 100%    ArangoDB + flat file backup
+
+RULES ENGINE (Elixir — absorbed from Logtalk 2026-03-06)
+  security_errors.ex               ██████████ 100%    SHA pins, secrets, CWEs
+  cicd_rules.ex                    ██████████ 100%    Commit blocking, waste detection
+  code_safety.ex                   ██████████ 100%    Per-language dangerous patterns
+  migration_rules.ex               ██████████ 100%    ReScript API migration
+  learning.ex                      ██████████ 100%    GenServer: confidence scoring
+  forge_adapters.ex                ██████████ 100%    Forge ops with input validation
 
 LEARNING & SAFETY
   Outcome Tracker                  ██████████ 100%    Records outcomes, updates confidence
-  Learning Scheduler               ████████░░  80%    Polls every 5 min, one-sided data
+  Learning Scheduler               ██████████ 100%    Polls every 5 min
   Rate Limiter                     ██████████ 100%    50/min/bot, 200/min global
   Quarantine                       ██████████ 100%    Auto on 5+ failures or >30% FP
   Batch Rollback                   ██████████ 100%    Confidence revert capability
 
-RULE ENGINE
-  JSON Rulesets (5 files)          ██████████ 100%    15 RSR + 8 security + 10 workflow
-  Logtalk Rules (10 files)         ██████░░░░  60%    Many stubs, NOT loaded by Elixir
-  Recipe Coverage                  ░░░░░░░░░░   2%    22 recipes / 954 patterns
+OPERATIONAL SCRIPTS
+  auto-fix-formulaic.sh            ██████████ 100%    SHA pin, permissions, AGPL, --push
+  bot-accountability.sh            ██████████ 100%    .hypatia/activity.jsonl per repo
+  systemd timer                    ██████████ 100%    Weekly auto-fix schedule
 
 DATA LAYER
   VeriSimDB Connector              ██████████ 100%    VQL + file I/O fallback
-  ArangoDB Client                  █████░░░░░  50%    Exists, not deployed (file-only)
-  VQL Federation                   ███░░░░░░░  30%    Local files only, no multi-store
+  hypatia-local verisimdb data     ░░░░░░░░░░   0%    EMPTY — needs seeding from fleet
+
+RUST WORKSPACE
+  adapters (forge API)             ██████████ 100%    GitHub/GitLab/Bitbucket
+  cli (scanner)                    ██████████ 100%    Command-line interface
+  data (storage)                   ██████████ 100%    ArangoDB + VeriSimDB
+  fixer (auto-fix)                 ██████████ 100%    SHA pins, programmatic fixes
 
 FORMAL VERIFICATION
   Idris2 ABI                       ██████████ 100%    Types, GraphQL, gRPC, REST + proofs
   Zig FFI Bridge                   ██████████ 100%    7 C ABI exports
-  FFI.idr Proofs                   ██████████ 100%    GADT + ffiReturnsApiResponse
-
-INFRASTRUCTURE
-  OTP Supervision Tree             ██████████ 100%    7 GenServers, :one_for_one
-  Containerfile (Chainguard)       ██████████ 100%    Multi-stage, non-root
-  License Compliance               ██████████ 100%    All PMPL-1.0-or-later (fixed 2026-02-22)
-  Tests (Elixir)                   ████████░░  80%    11 test files, no neural tests
 
 CROSS-REPO INTEGRATION
-  hypatia → verisimdb-data         ██████████ 100%    Working (VQL + files)
-  hypatia → gitbot-fleet           ████████░░  80%    Dispatch works, fleet can't PR
-  .git-private-farm → hypatia      ░░░░░░░░░░   0%    Not enrolled
-  stateful-artefacts → hypatia     ░░░░░░░░░░   0%    Not connected
+  hypatia → verisimdb-data         ██████████ 100%    VQL + file I/O
+  hypatia → gitbot-fleet           ████████░░  80%    Dispatch OK, fleet can't PR
+  .git-private-farm → hypatia      ██░░░░░░░░  20%    repo-list done, HOOKSYNC_TOKEN missing
+
+REMOVED (2026-03-06)
+  Logtalk engine/ (28 .lgt files)  — absorbed into lib/rules/*.ex
+  Ada TUI (102 files)              — never compiled
+  Haskell registry (30 files)      — superseded by Elixir pipeline
+  k8s/terraform/helm deploy (94)   — over-engineered for local tool
+  static site, fuzz, clusterfuzz   — unused
 
 ─────────────────────────────────────────────────────────────────────────────
-OVERALL:                            ███████░░░  75%    Neural wired, fleet actuation missing
+OVERALL:                            ████████░░  85%    Code complete, needs data + actuation
 ```
 
 ## Key Dependencies
@@ -150,12 +163,10 @@ Neural.Coordinator
 
 ## Critical Gaps
 
-1. **Recipe coverage**: 22/954 patterns (2.3%) — 932 patterns have no automated fix
-2. **One-sided training**: All 3,588 outcomes are "success" — no failure data
-3. **gitbot-fleet**: Detects problems, never commits or creates PRs
-4. **Logtalk disconnected**: Rules exist but not loaded by Elixir app
-5. **ArangoDB not deployed**: Running in file-only degraded mode
-6. **Cross-repo integration**: .git-private-farm and stateful-artefacts not connected
+1. **Data seeding**: verisimdb-data dirs (patterns/recipes/outcomes) empty — neural networks idle
+2. **Last-mile actuation**: gitbot-fleet detects problems but never commits or creates PRs
+3. **HOOKSYNC_TOKEN**: .git-private-farm hookset propagation never tested
+4. **Recipe coverage**: Need to expand from initial seed recipes
 
 ## Update Protocol
 

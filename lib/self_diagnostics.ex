@@ -28,8 +28,8 @@ defmodule Hypatia.SelfDiagnostics do
   require Logger
 
   @health_interval_ms 10 * 60 * 1_000  # 10 minutes
-  @verisimdb_data_path "~/Documents/hyperpolymath-repos/verisimdb-data"
-  @fleet_path "~/Documents/hyperpolymath-repos/gitbot-fleet"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
   @circuit_breaker_threshold 3
   @circuit_breaker_cooldown_ms 15 * 60 * 1_000  # 15 minutes
 

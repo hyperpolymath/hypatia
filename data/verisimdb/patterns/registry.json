@@ -1,0 +1,94 @@
+{
+  "patterns": {
+    "unsafe_crash-getexn_on_external_data": {
+      "id": "PA-unsafe_crash-getexn_on_external_data",
+      "category": "unsafe_crash",
+      "description": "getexn on external data",
+      "severity": "Medium",
+      "occurrences": 7,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "type_safety_bypass-obj_magic_bypass": {
+      "id": "PA-type_safety_bypass-obj_magic_bypass",
+      "category": "type_safety_bypass",
+      "description": "obj magic bypass",
+      "severity": "Medium",
+      "occurrences": 2,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "unsafe_panic-unwrap_on_lock": {
+      "id": "PA-unsafe_panic-unwrap_on_lock",
+      "category": "unsafe_panic",
+      "description": "unwrap on lock",
+      "severity": "Medium",
+      "occurrences": 3,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "unsafe_panic-unwrap_on_systemtime": {
+      "id": "PA-unsafe_panic-unwrap_on_systemtime",
+      "category": "unsafe_panic",
+      "description": "unwrap on systemtime",
+      "severity": "Medium",
+      "occurrences": 1,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "unsafe_panic-unwrap_without_check": {
+      "id": "PA-unsafe_panic-unwrap_without_check",
+      "category": "unsafe_panic",
+      "description": "unwrap without check",
+      "severity": "Medium",
+      "occurrences": 10,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "unsafe_panic-unknown": {
+      "id": "PA-unsafe_panic-unknown",
+      "category": "unsafe_panic",
+      "description": "unknown",
+      "severity": "Medium",
+      "occurrences": 1136,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "type_safety_bypass-unknown": {
+      "id": "PA-type_safety_bypass-unknown",
+      "category": "type_safety_bypass",
+      "description": "unknown",
+      "severity": "Medium",
+      "occurrences": 475,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "unsafe_crash-unknown": {
+      "id": "PA-unsafe_crash-unknown",
+      "category": "unsafe_crash",
+      "description": "unknown",
+      "severity": "Medium",
+      "occurrences": 335,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    },
+    "cors_misconfiguration-unknown": {
+      "id": "PA-cors_misconfiguration-unknown",
+      "category": "cors_misconfiguration",
+      "description": "unknown",
+      "severity": "Medium",
+      "occurrences": 3,
+      "repos_affected": 0,
+      "triangle_tier": "control",
+      "trend": "stable"
+    }
+  }
+}

@@ -388,7 +388,7 @@ defmodule Hypatia.Data.ArangoDB do
   # --- verisimdb-data Sync ---
 
   defp do_sync(state) do
-    verisimdb_path = Path.expand("~/Documents/hyperpolymath-repos/verisimdb-data")
+    verisimdb_path = Application.get_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
 
     sync_scans(state, verisimdb_path)
     sync_outcomes(state, verisimdb_path)

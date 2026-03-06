@@ -19,7 +19,7 @@ defmodule Hypatia.DispatchManifest do
 
   require Logger
 
-  @verisimdb_path Path.expand("~/Documents/hyperpolymath-repos/verisimdb-data")
+  @verisimdb_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
 
   @doc """
   Write a dispatch manifest from a list of routed actions.

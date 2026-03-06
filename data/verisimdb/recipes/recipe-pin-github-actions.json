@@ -1,0 +1,12 @@
+{
+  "id": "recipe-pin-github-actions",
+  "triangle_tier": "eliminate",
+  "pattern_ids": ["PA-security-unpinned_action"],
+  "description": "Pin GitHub Actions to SHA-256 commit hashes",
+  "confidence": 0.99,
+  "languages": ["yaml"],
+  "auto_fixable": true,
+  "fix_script": "auto-fix-formulaic.sh",
+  "successful_fixes": 616,
+  "failed_fixes": 0
+}

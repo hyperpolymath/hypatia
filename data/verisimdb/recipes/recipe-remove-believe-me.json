@@ -1,0 +1,16 @@
+{
+  "auto_fixable": false,
+  "confidence": 0.99,
+  "description": "Remove believe_me calls from Idris2 code",
+  "failed_fixes": 0,
+  "id": "recipe-remove-believe-me",
+  "languages": [
+    "idris2"
+  ],
+  "pattern_ids": [
+    "PA-unsafe_code-believe_me_usage"
+  ],
+  "successful_fixes": 56,
+  "total_attempts": 56,
+  "triangle_tier": "eliminate"
+}

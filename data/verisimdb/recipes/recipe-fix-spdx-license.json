@@ -1,0 +1,12 @@
+{
+  "id": "recipe-fix-spdx-license",
+  "triangle_tier": "eliminate",
+  "pattern_ids": ["PA-license-wrong_spdx"],
+  "description": "Replace AGPL-3.0 SPDX headers with PMPL-1.0-or-later",
+  "confidence": 0.99,
+  "languages": ["*"],
+  "auto_fixable": true,
+  "fix_script": "auto-fix-formulaic.sh",
+  "successful_fixes": 7457,
+  "failed_fixes": 0
+}
