@@ -182,7 +182,7 @@ verisimdb-data (git-backed flat files) is the canonical data store. VQL queries 
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
 - Implement VQL federation executor (currently local-only)
 - Historical trend tracking across scan cycles
-- Generate summaries for 184 NULL-summary repos in verisimdb-data
+- ~~Generate summaries for NULL-summary repos in verisimdb-data~~ (DONE 2026-03-07: 295 summaries auto-generated)
 
 **Planned:**
 - GraphQL API as live HTTP endpoint

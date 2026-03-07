@@ -156,8 +156,8 @@
       ("22 recipes for 954 patterns (97.7% without automated fix)"))
     (medium
       ("447 weak points remaining across 175 repos")
-      ("4 recipes below auto_execute threshold")
-      ("184 repos in verisimdb-data have NULL summary fields")
+      ("13 recipes below auto_execute threshold (6 eliminate, 5 substitute, 2 control)")
+      ("Outcome key mismatch: fleet-import uses 'pattern' but OutcomeTracker filtered on 'recipe_id' — FIXED 2026-03-07")
       ("Logtalk error_instances.lgt and loader.lgt are stubs"))
     (low
       ("Codeberg/Bitbucket mirroring blocked")
@@ -166,8 +166,7 @@
   (critical-next-actions
     (immediate
       ("Create PAT with repo scope for automated dispatch")
-      ("Deploy ArangoDB for graph queries + neural state persistence")
-      ("Generate summaries for 184 NULL-summary repos in verisimdb-data"))
+      ("Deploy ArangoDB for graph queries + neural state persistence"))
     (this-week
       ("Deploy verisim-api server for native VQL store execution")
       ("Develop more recipes for remaining uncovered PA rules (PA006, PA007, PA008, PA009, PA014, PA016, PA019)"))

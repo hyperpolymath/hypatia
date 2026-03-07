@@ -306,7 +306,10 @@ defmodule Hypatia.OutcomeTracker do
                 end
               end)
               |> Enum.reject(&is_nil/1)
-              |> Enum.filter(fn r -> Map.get(r, "recipe_id") == recipe_id end)
+              |> Enum.filter(fn r ->
+                Map.get(r, "recipe_id") == recipe_id or
+                  Map.get(r, "pattern") == recipe_id
+              end)
 
             {:error, _} ->
               []
