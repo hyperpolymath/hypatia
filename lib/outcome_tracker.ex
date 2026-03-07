@@ -15,10 +15,10 @@ defmodule Hypatia.OutcomeTracker do
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
 
-  # Confidence adjustment constants (from plan)
-  @successful_fix_boost 0.02
-  @failed_fix_penalty -0.05
-  @false_positive_penalty -0.10
+  # Bayesian confidence updating via Beta distribution
+  # Prior strength controls how much weight initial confidence carries
+  # relative to observed evidence. Higher = more conservative updates.
+  @prior_strength 10
   @confidence_cap 0.99
   @confidence_floor 0.10
 
@@ -72,13 +72,6 @@ defmodule Hypatia.OutcomeTracker do
       failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
       false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
 
-      # Calculate confidence adjustment from baseline
-      adjustment =
-        successes * @successful_fix_boost +
-          failures * @failed_fix_penalty +
-          false_positives * @false_positive_penalty
-
-      # Load current recipe and apply adjustment
       recipe_path = find_recipe_file(recipe_id)
 
       if recipe_path do
@@ -88,16 +81,16 @@ defmodule Hypatia.OutcomeTracker do
               {:ok, recipe} ->
                 base_confidence = Map.get(recipe, "confidence", 0.5)
 
-                new_confidence =
-                  (base_confidence + adjustment)
-                  |> max(@confidence_floor)
-                  |> min(@confidence_cap)
+                new_confidence = bayesian_update(
+                  base_confidence, successes, failures + false_positives
+                )
 
                 updated_recipe =
                   recipe
                   |> Map.put("confidence", Float.round(new_confidence, 4))
                   |> Map.put("successful_fixes", successes)
                   |> Map.put("failed_fixes", failures)
+                  |> Map.put("false_positives", false_positives)
                   |> Map.put("total_attempts", length(outcomes))
 
                 case Jason.encode(updated_recipe, pretty: true) do
@@ -125,6 +118,38 @@ defmodule Hypatia.OutcomeTracker do
         :recipe_not_found
       end
     end
+  end
+
+  @doc """
+  Bayesian confidence update using Beta distribution conjugate prior.
+
+  The recipe's initial confidence is treated as the prior mean of a Beta(alpha, beta)
+  distribution. Each success increments alpha, each failure increments beta.
+  The posterior mean (alpha / (alpha + beta)) is the updated confidence.
+
+  Properties:
+  - With no observations, returns the prior (initial confidence)
+  - Many successes push confidence toward 1.0, but asymptotically
+  - A single failure among many successes has proportional (not outsized) impact
+  - Small sample sizes preserve uncertainty (stay close to prior)
+  - @prior_strength controls how conservative updates are
+  """
+  def bayesian_update(prior_confidence, successes, failures) do
+    # Convert prior confidence to Beta distribution parameters
+    # prior_confidence = alpha / (alpha + beta), with alpha + beta = @prior_strength
+    alpha_prior = prior_confidence * @prior_strength
+    beta_prior = (1.0 - prior_confidence) * @prior_strength
+
+    # Posterior = prior + observations (conjugate update)
+    alpha_posterior = alpha_prior + successes
+    beta_posterior = beta_prior + failures
+
+    # Posterior mean
+    posterior = alpha_posterior / (alpha_posterior + beta_posterior)
+
+    posterior
+    |> max(@confidence_floor)
+    |> min(@confidence_cap)
   end
 
   @doc """
