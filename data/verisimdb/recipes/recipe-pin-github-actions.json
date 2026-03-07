@@ -6,7 +6,7 @@
   "confidence": 0.99,
   "languages": ["yaml"],
   "auto_fixable": true,
-  "fix_script": "auto-fix-formulaic.sh",
+  "fix_script": "fix-unpinned-actions.sh",
   "successful_fixes": 616,
   "failed_fixes": 0
 }

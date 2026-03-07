@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-sorry-lean",
+  "name": "Remove sorry axioms from Lean proofs",
+  "description": "Replace sorry (incomplete proof) with actual proof terms in Lean 4 code",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA-unsafe_code-sorry_usage",
+    "PA020-sorry"
+  ],
+  "target_categories": ["IncompleteProof", "UnsafeTypeCoercion"],
+  "languages": ["lean", "lean4"],
+  "confidence": 0.80,
+  "auto_fixable": false,
+  "fix_script": "fix-sorry-lean.sh",
+  "action": "eliminate",
+  "match": "sorry",
+  "replacement": "Completed proof term",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -1,0 +1,24 @@
+{
+  "id": "recipe-unsafe-type-coercion",
+  "name": "Remove unsafe type coercions",
+  "description": "Replace Obj.magic (OCaml), unsafeCoerce (Haskell), believe_me (Idris2), transmute (Rust) with safe alternatives",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA020-obj-magic",
+    "PA020-unsafe-coerce",
+    "PA020-believe-me",
+    "PA020-transmute"
+  ],
+  "target_categories": ["UnsafeTypeCoercion", "type_safety_bypass"],
+  "languages": ["ocaml", "rust", "haskell", "idris2"],
+  "confidence": 0.80,
+  "auto_fixable": false,
+  "fix_script": "fix-unsafe-type-coercion.sh",
+  "action": "eliminate",
+  "match": "Obj.magic/unsafeCoerce/believe_me/transmute",
+  "replacement": "Type-safe alternatives with proper conversions",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

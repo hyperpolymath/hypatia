@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-resource-leak",
+  "name": "Fix resource leaks",
+  "description": "Ensure file handles, sockets, and connections are properly closed after use",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "PA006-resource-leak",
+    "PA006-unclosed-handle"
+  ],
+  "target_categories": ["ResourceLeak"],
+  "languages": ["*"],
+  "confidence": 0.70,
+  "auto_fixable": false,
+  "fix_script": "fix-resource-leak.sh",
+  "action": "report",
+  "match": "Opened resource without corresponding close",
+  "replacement": "Use with/using/defer/try-finally for resource cleanup",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

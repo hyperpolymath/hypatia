@@ -1,0 +1,21 @@
+{
+  "id": "recipe-add-security-policy",
+  "name": "Add SECURITY.md policy",
+  "description": "Add vulnerability disclosure policy (OpenSSF Scorecard SC-016)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-016-security-policy"
+  ],
+  "target_categories": ["SecurityPolicy"],
+  "languages": ["*"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-security-policy.sh",
+  "action": "create_file",
+  "match": "Missing SECURITY.md",
+  "replacement": "SECURITY.md with disclosure policy",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

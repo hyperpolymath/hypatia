@@ -1,0 +1,23 @@
+{
+  "id": "recipe-panic-to-result",
+  "name": "Replace panic macros with Result returns",
+  "description": "Replace panic!/todo!/unimplemented! macros with proper Result/Option returns",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA005-panic-macro",
+    "PA005-todo-macro",
+    "PA005-unimplemented-macro"
+  ],
+  "target_categories": ["PanicPath", "unsafe_panic"],
+  "languages": ["rust", "*"],
+  "confidence": 0.70,
+  "auto_fixable": false,
+  "fix_script": "fix-unwrap-to-match.sh",
+  "action": "substitute",
+  "match": "panic!()/todo!()/unimplemented!()",
+  "replacement": "return Err(...) or Result type",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

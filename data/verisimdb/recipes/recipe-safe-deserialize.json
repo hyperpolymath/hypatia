@@ -1,0 +1,23 @@
+{
+  "id": "recipe-safe-deserialize",
+  "name": "Replace unsafe deserialization with safe parsing",
+  "description": "Replace JSON.parseExn and unsafe deserialize calls with safe alternatives that handle errors",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA010-json-parseexn",
+    "PA010-unsafe-deserialize",
+    "PA010-yaml-load"
+  ],
+  "target_categories": ["UnsafeDeserialization"],
+  "languages": ["rescript", "javascript", "python"],
+  "confidence": 0.70,
+  "auto_fixable": false,
+  "fix_script": "fix-unsafe-deserialize.sh",
+  "action": "substitute",
+  "match": "JSON.parseExn/yaml.load/pickle.loads",
+  "replacement": "Safe parsing with error handling (try/catch, Result type)",
+  "proven_module": "SafeJson",
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

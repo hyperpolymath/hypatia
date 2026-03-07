@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-heredoc-install",
+  "name": "Fix curl-pipe-bash install patterns",
+  "description": "Replace curl | bash install patterns with verified download and checksum validation",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA007-curl-pipe-bash",
+    "PA007-heredoc-install"
+  ],
+  "target_categories": ["InsecureInstall"],
+  "languages": ["shell", "bash"],
+  "confidence": 0.90,
+  "auto_fixable": false,
+  "fix_script": "fix-heredoc-install.sh",
+  "action": "replace",
+  "match": "curl ... | bash",
+  "replacement": "Download, verify checksum, then execute",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

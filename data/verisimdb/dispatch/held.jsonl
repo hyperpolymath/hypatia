@@ -1,0 +1,12 @@
+{"action_type":"commit_push","bot_id":"robot-repo-automaton","pattern_id":"PA-test-002","reason":"confidence 0.8 below auto-execute threshold 0.95","repo":"test-repo-2","timestamp":"2026-03-06T15:39:56.769922Z"}
+{"action_type":"pr_create","bot_id":"rhodibot","pattern_id":"PA-test-003","reason":"scan data is 72h old (threshold: 48h) — rescan recommended","repo":"stale-repo","timestamp":"2026-03-06T15:39:56.773737Z"}
+{"action_type":"pr_create","bot_id":"rhodibot","pattern_id":"PA-test-003","reason":"scan data is 72h old (threshold: 48h) — rescan recommended","repo":"stale-repo","timestamp":"2026-03-06T15:40:47.423992Z"}
+{"action_type":"commit_push","bot_id":"robot-repo-automaton","pattern_id":"PA-test-002","reason":"confidence 0.8 below auto-execute threshold 0.95","repo":"test-repo-2","timestamp":"2026-03-06T15:40:47.437448Z"}
+{"action_type":"commit_push","bot_id":"robot-repo-automaton","pattern_id":"PA-test-002","reason":"confidence 0.8 below auto-execute threshold 0.95","repo":"test-repo-2","timestamp":"2026-03-06T15:43:23.290860Z"}
+{"action_type":"pr_create","bot_id":"rhodibot","pattern_id":"PA-test-003","reason":"scan data is 72h old (threshold: 48h) — rescan recommended","repo":"stale-repo","timestamp":"2026-03-06T15:43:23.295638Z"}
+{"action_type":"pr_create","bot_id":"rhodibot","pattern_id":"PA-test-003","reason":"scan data is 72h old (threshold: 48h) — rescan recommended","repo":"stale-repo","timestamp":"2026-03-06T15:43:47.431923Z"}
+{"action_type":"commit_push","bot_id":"robot-repo-automaton","pattern_id":"PA-test-002","reason":"confidence 0.8 below auto-execute threshold 0.95","repo":"test-repo-2","timestamp":"2026-03-06T15:43:47.441112Z"}
+{"action_type":"pr_create","bot_id":"rhodibot","pattern_id":"PA-test-003","reason":"scan data is 72h old (threshold: 48h) — rescan recommended","repo":"stale-repo","timestamp":"2026-03-06T15:45:18.291815Z"}
+{"action_type":"commit_push","bot_id":"robot-repo-automaton","pattern_id":"PA-test-002","reason":"confidence 0.8 below auto-execute threshold 0.95","repo":"test-repo-2","timestamp":"2026-03-06T15:45:18.293903Z"}
+{"action_type":"pr_create","bot_id":"rhodibot","pattern_id":"PA-test-003","reason":"scan data is 72h old (threshold: 48h) — rescan recommended","repo":"stale-repo","timestamp":"2026-03-06T15:46:48.811657Z"}
+{"action_type":"commit_push","bot_id":"robot-repo-automaton","pattern_id":"PA-test-002","reason":"confidence 0.8 below auto-execute threshold 0.95","repo":"test-repo-2","timestamp":"2026-03-06T15:46:48.812392Z"}

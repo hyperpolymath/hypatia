@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-todo-markers",
+  "name": "Resolve TODO/FIXME/HACK markers",
+  "description": "Track and resolve TODO, FIXME, HACK, and XXX markers in source code",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "PA001-todo-marker",
+    "PA001-fixme-marker"
+  ],
+  "target_categories": ["CodeDebt"],
+  "languages": ["*"],
+  "confidence": 0.50,
+  "auto_fixable": false,
+  "fix_script": "fix-todo-markers.sh",
+  "action": "report",
+  "match": "TODO/FIXME/HACK/XXX comment",
+  "replacement": "Resolved implementation or tracked issue",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -27,6 +27,22 @@
       "proven_modules": ["SafeUrl", "SafeNetwork"],
       "confidence": 0.95,
       "formally_proven": true
+    },
+    {
+      "pa_rule": "PA013",
+      "category": "AtomExhaustion",
+      "triangle_tier": "eliminate",
+      "proven_modules": ["SafeAtom"],
+      "confidence": 0.90,
+      "formally_proven": false
+    },
+    {
+      "pa_rule": "PA020",
+      "category": "UnsafeTypeCoercion",
+      "triangle_tier": "eliminate",
+      "proven_modules": ["SafeCoerce"],
+      "confidence": 0.80,
+      "formally_proven": false
     }
   ]
 }

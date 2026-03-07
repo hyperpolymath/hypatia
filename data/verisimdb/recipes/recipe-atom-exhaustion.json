@@ -1,0 +1,22 @@
+{
+  "id": "recipe-atom-exhaustion",
+  "name": "Fix dynamic atom creation",
+  "description": "Replace String.to_atom with String.to_existing_atom to prevent atom table exhaustion",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA013-dynamic-atom-creation",
+    "PA013-string-to-atom"
+  ],
+  "target_categories": ["AtomExhaustion"],
+  "languages": ["elixir", "erlang"],
+  "confidence": 0.90,
+  "auto_fixable": true,
+  "fix_script": "fix-atom-exhaustion.sh",
+  "action": "replace",
+  "match": "String.to_atom(",
+  "replacement": "String.to_existing_atom(",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

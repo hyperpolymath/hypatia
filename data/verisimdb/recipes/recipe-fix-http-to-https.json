@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-http-to-https",
+  "name": "Upgrade HTTP URLs to HTTPS",
+  "description": "Replace http:// URLs with https:// equivalents for transport security",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA014-insecure-protocol",
+    "PA014-http-url"
+  ],
+  "target_categories": ["InsecureProtocol"],
+  "languages": ["*"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-http-to-https.sh",
+  "action": "replace",
+  "match": "http://",
+  "replacement": "https://",
+  "proven_module": "SafeUrl",
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

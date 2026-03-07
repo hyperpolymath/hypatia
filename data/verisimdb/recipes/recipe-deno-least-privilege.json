@@ -1,0 +1,22 @@
+{
+  "id": "recipe-deno-least-privilege",
+  "name": "Replace Deno -A with least-privilege permissions",
+  "description": "Replace deno run -A (all permissions) with specific --allow-read, --allow-net, etc.",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA015-deno-a-all-permissions",
+    "PA015-deno-allow-all"
+  ],
+  "target_categories": ["ExcessivePermissions"],
+  "languages": ["javascript", "shell"],
+  "confidence": 0.75,
+  "auto_fixable": false,
+  "fix_script": "fix-deno-permissions.sh",
+  "action": "substitute",
+  "match": "deno run -A / deno run --allow-all",
+  "replacement": "deno run --allow-read=. --allow-net=api.example.com (specific permissions)",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

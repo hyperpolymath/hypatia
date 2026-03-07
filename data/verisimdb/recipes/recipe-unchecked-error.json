@@ -1,0 +1,23 @@
+{
+  "id": "recipe-unchecked-error",
+  "name": "Handle unchecked errors and ignored return values",
+  "description": "Replace ignore() calls and unchecked error returns with proper error handling",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "PA018-ignore-calls",
+    "PA018-unchecked-error",
+    "PA018-discarded-result"
+  ],
+  "target_categories": ["UncheckedError"],
+  "languages": ["rescript", "elixir", "rust"],
+  "confidence": 0.60,
+  "auto_fixable": false,
+  "fix_script": "fix-unchecked-error.sh",
+  "action": "report",
+  "match": "ignore() / _ = potentially_failing_call()",
+  "replacement": "case/match with error logging or propagation",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

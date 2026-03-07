@@ -1,0 +1,22 @@
+{
+  "id": "recipe-unbounded-loop",
+  "name": "Add bounds to unbounded loops",
+  "description": "Flag unbounded while-true loops for manual review and bounded iteration",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "PA002-unbounded-while-true-loop",
+    "PA002-infinite-loop"
+  ],
+  "target_categories": ["UnboundedLoop"],
+  "languages": ["*"],
+  "confidence": 0.55,
+  "auto_fixable": false,
+  "fix_script": null,
+  "action": "report",
+  "match": "while true / loop without break condition",
+  "replacement": "Add maximum iteration count or timeout guard",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

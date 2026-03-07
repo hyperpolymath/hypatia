@@ -1,0 +1,21 @@
+{
+  "id": "recipe-add-sast-workflow",
+  "name": "Add SAST workflow",
+  "description": "Add CodeQL or equivalent static analysis workflow (OpenSSF Scorecard SC-014)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-014-sast"
+  ],
+  "target_categories": ["StaticAnalysis"],
+  "languages": ["*"],
+  "confidence": 0.90,
+  "auto_fixable": true,
+  "fix_script": "fix-sast-workflow.sh",
+  "action": "create_file",
+  "match": "Missing SAST workflow (CodeQL/SonarCloud/Semgrep)",
+  "replacement": "CodeQL analysis workflow for detected languages",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

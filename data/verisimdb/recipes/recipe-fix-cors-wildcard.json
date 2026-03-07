@@ -1,0 +1,21 @@
+{
+  "id": "recipe-fix-cors-wildcard",
+  "name": "Replace CORS wildcard with specific origins",
+  "description": "Replace Access-Control-Allow-Origin: * with specific allowed origins",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA-cors_misconfiguration-unknown"
+  ],
+  "target_categories": ["cors_misconfiguration"],
+  "languages": ["*"],
+  "confidence": 0.85,
+  "auto_fixable": false,
+  "fix_script": "fix-cors-wildcard.sh",
+  "action": "replace",
+  "match": "Access-Control-Allow-Origin: *",
+  "replacement": "Specific origin allowlist",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

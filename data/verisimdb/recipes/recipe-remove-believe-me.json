@@ -3,6 +3,7 @@
   "confidence": 0.99,
   "description": "Remove believe_me calls from Idris2 code",
   "failed_fixes": 0,
+  "fix_script": "fix-believe-me.sh",
   "id": "recipe-remove-believe-me",
   "languages": [
     "idris2"

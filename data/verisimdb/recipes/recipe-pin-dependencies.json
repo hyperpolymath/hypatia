@@ -1,0 +1,21 @@
+{
+  "id": "recipe-pin-dependencies",
+  "name": "Pin dependencies by SHA hash",
+  "description": "Pin GitHub Actions and Docker images to SHA hashes instead of mutable tags (OpenSSF Scorecard SC-013)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-013-pinned-dependencies"
+  ],
+  "target_categories": ["DependencyPinning"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-unpinned-actions.sh",
+  "action": "replace",
+  "match": "uses: owner/repo@v1 (tag-pinned)",
+  "replacement": "uses: owner/repo@<sha256> (SHA-pinned)",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-innerHTML",
+  "name": "Replace innerHTML with safe DOM methods",
+  "description": "Replace innerHTML assignments with textContent or DOM creation APIs to prevent XSS",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA019-innerHTML-usage",
+    "PA019-xss-sink"
+  ],
+  "target_categories": ["CrossSiteScripting", "XSS"],
+  "languages": ["javascript", "rescript"],
+  "confidence": 0.85,
+  "auto_fixable": false,
+  "fix_script": "fix-innerhtml.sh",
+  "action": "replace",
+  "match": "element.innerHTML = userInput",
+  "replacement": "element.textContent = userInput (or DOM createElement)",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

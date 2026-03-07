@@ -1,0 +1,22 @@
+{
+  "id": "recipe-eval-to-safe-exec",
+  "name": "Replace eval with safe execution",
+  "description": "Replace eval/exec calls with safe alternatives that do not execute arbitrary code",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA011-eval-usage",
+    "PA011-exec-usage"
+  ],
+  "target_categories": ["DynamicCodeExecution"],
+  "languages": ["javascript", "shell", "bash"],
+  "confidence": 0.60,
+  "auto_fixable": false,
+  "fix_script": "fix-eval-to-safe.sh",
+  "action": "eliminate",
+  "match": "eval/exec of dynamic strings",
+  "replacement": "Static dispatch, JSON.parse, or allowlisted commands",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

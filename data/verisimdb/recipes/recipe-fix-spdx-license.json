@@ -6,7 +6,7 @@
   "confidence": 0.99,
   "languages": ["*"],
   "auto_fixable": true,
-  "fix_script": "auto-fix-formulaic.sh",
+  "fix_script": "fix-missing-spdx.sh",
   "successful_fixes": 7457,
   "failed_fixes": 0
 }

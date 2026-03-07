@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-proven-substitute",
+  "name": "Apply proven module substitution",
+  "description": "Replace unsafe code patterns with formally verified proven/ module equivalents",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA016-path-traversal",
+    "PA016-unsafe-path"
+  ],
+  "target_categories": ["PathTraversal"],
+  "languages": ["*"],
+  "confidence": 0.85,
+  "auto_fixable": false,
+  "fix_script": "fix-proven-substitute.sh",
+  "action": "substitute",
+  "match": "Unsafe path or I/O operation",
+  "replacement": "proven/SafePath module call",
+  "proven_module": "SafePath",
+  "formally_proven": true,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -1,0 +1,23 @@
+{
+  "id": "recipe-unsafe-ffi-wrapper",
+  "name": "Wrap unsafe FFI calls with safe boundaries",
+  "description": "Add safety wrappers around raw FFI calls to prevent memory unsafety and resource leaks",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA012-unsafe-ffi",
+    "PA012-raw-nif",
+    "PA012-unsafe-extern"
+  ],
+  "target_categories": ["UnsafeFFI"],
+  "languages": ["rust", "elixir", "zig"],
+  "confidence": 0.70,
+  "auto_fixable": false,
+  "fix_script": "fix-unsafe-ffi.sh",
+  "action": "substitute",
+  "match": "unsafe FFI call without wrapper",
+  "replacement": "Safe FFI wrapper with error handling",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

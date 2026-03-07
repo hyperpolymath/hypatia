@@ -1,0 +1,22 @@
+{
+  "id": "recipe-fix-sql-injection",
+  "name": "Parameterize SQL queries",
+  "description": "Replace string-concatenated SQL with parameterized queries to prevent injection",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA009-sql-injection",
+    "PA009-string-concat-sql"
+  ],
+  "target_categories": ["SQLInjection", "CommandInjection"],
+  "languages": ["*"],
+  "confidence": 0.90,
+  "auto_fixable": false,
+  "fix_script": "fix-sql-parameterize.sh",
+  "action": "replace",
+  "match": "String-concatenated SQL query",
+  "replacement": "Parameterized query with bound variables",
+  "proven_module": "SafeSQL",
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

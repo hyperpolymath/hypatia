@@ -1,0 +1,23 @@
+{
+  "id": "recipe-unwrap-to-match",
+  "name": "Replace unwrap with pattern match",
+  "description": "Replace .unwrap() calls with match/case expressions to handle errors safely",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA005-panic-unwrap",
+    "PA005-unwrap-on-user-input",
+    "PA005-unwrap-without-check"
+  ],
+  "target_categories": ["PanicPath", "unsafe_panic"],
+  "languages": ["rust", "rescript", "*"],
+  "confidence": 0.75,
+  "auto_fixable": false,
+  "fix_script": "fix-unwrap-to-match.sh",
+  "action": "substitute",
+  "match": ".unwrap()",
+  "replacement": "match/case with error handling",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

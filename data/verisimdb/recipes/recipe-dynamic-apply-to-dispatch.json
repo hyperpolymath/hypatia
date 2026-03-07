@@ -1,0 +1,22 @@
+{
+  "id": "recipe-dynamic-apply-to-dispatch",
+  "name": "Replace dynamic apply with explicit dispatch",
+  "description": "Replace apply/3 and dynamic module calls with explicit dispatch maps or behaviour callbacks",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "PA011-dynamic-apply",
+    "PA011-dynamic-apply-3"
+  ],
+  "target_categories": ["DynamicCodeExecution"],
+  "languages": ["elixir", "erlang"],
+  "confidence": 0.65,
+  "auto_fixable": false,
+  "fix_script": "fix-dynamic-code-exec.sh",
+  "action": "substitute",
+  "match": "apply(mod, fun, args) / Kernel.apply/3",
+  "replacement": "Explicit dispatch map or behaviour callback",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}
