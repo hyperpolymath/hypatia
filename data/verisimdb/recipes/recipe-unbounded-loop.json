@@ -11,7 +11,7 @@
   "languages": ["*"],
   "confidence": 0.55,
   "auto_fixable": false,
-  "fix_script": null,
+  "fix_script": "fix-unbounded-loop.sh",
   "action": "report",
   "match": "while true / loop without break condition",
   "replacement": "Add maximum iteration count or timeout guard",

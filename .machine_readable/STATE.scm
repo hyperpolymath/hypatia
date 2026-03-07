@@ -4,10 +4,10 @@
 
 (state
   (metadata
-    (version "0.5.0")
+    (version "0.9.0")
     (schema-version "1.0")
     (created "2026-01-03")
-    (updated "2026-02-22")
+    (updated "2026-03-07")
     (project "hypatia")
     (repo "github.com/hyperpolymath/hypatia"))
 
@@ -22,7 +22,7 @@
 
   (current-position
     (phase "operational")
-    (overall-completion 75)
+    (overall-completion 85)
     (components
       (verisimdb-connector "complete" "Reads scan data from verisimdb-data repo")
       (pattern-registry "complete" "Deduplicates findings into canonical patterns")
@@ -53,7 +53,7 @@
       (graphql-api "planned" "Fleet coordination API — live HTTP endpoint"))
     (working-features
       ("Safety triangle pipeline: eliminate → substitute → control")
-      ("22 fix recipes (6 at 0.99 confidence, covering PA001-PA005/PA010-PA013/PA015/PA017/PA018/PA020)")
+      ("34 fix recipes covering 14/20 PA rule categories + 7 Scorecard categories")
       ("Fuzzy recipe matching by PA rule prefix + keyword overlap")
       ("Language inference from description text")
       ("Dispatch manifest generation (JSONL)")
@@ -153,12 +153,11 @@
       ("verisim-api not deployed — VQL queries execute against flat files, not native stores")
       ("ArangoDB + Dragonfly need production deployment (transitional until verisim-api)")
       ("One-sided training data — all 3588 outcomes are success, neural networks cannot learn from failures")
-      ("22 recipes for 954 patterns (97.7% without automated fix)"))
+      ("34 recipes for 954 patterns — 6 PA rule categories still uncovered (PA001, PA003, PA006, PA007, PA008, PA019)"))
     (medium
       ("447 weak points remaining across 175 repos")
       ("13 recipes below auto_execute threshold (6 eliminate, 5 substitute, 2 control)")
-      ("Outcome key mismatch: fleet-import uses 'pattern' but OutcomeTracker filtered on 'recipe_id' — FIXED 2026-03-07")
-      ("Logtalk error_instances.lgt and loader.lgt are stubs"))
+      ("Outcome key mismatch: fleet-import uses 'pattern' but OutcomeTracker filtered on 'recipe_id' — FIXED 2026-03-07"))
     (low
       ("Codeberg/Bitbucket mirroring blocked")
       ("3 orphaned pattern IDs (954 in registry vs 951 in index)")))

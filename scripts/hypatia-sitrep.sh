@@ -8,7 +8,8 @@
 
 set -euo pipefail
 
-HYPATIA_DIR="/var/mnt/eclipse/repos/hypatia"
+# Derive HYPATIA_DIR from script location (relocatable)
+HYPATIA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VERISIMDB_DATA="$HOME/Documents/hyperpolymath-repos/nextgen-databases/verisimdb/verisimdb-data"
 KIN_DIR="$HOME/.hypatia/kin"
 SITREP_FILE="$VERISIMDB_DATA/health/sitrep.txt"
@@ -148,19 +149,47 @@ header "RECIPES"
 RECIPE_COUNT=$(find "$VERISIMDB_DATA/recipes/" -name "*.json" 2>/dev/null | wc -l)
 log "  $RECIPE_COUNT fix recipes available"
 
-# --- 8. Outcomes (learning feedback) ---
+# --- 8. Recipe Confidence Distribution ---
+header "RECIPE CONFIDENCE"
+if [[ -d "$VERISIMDB_DATA/recipes" ]]; then
+    CONF_99=0; CONF_95=0; CONF_90=0; CONF_BELOW=0
+    while read -r conf; do
+        # Compare as integer (confidence * 100)
+        CONF_INT=$(echo "$conf" | awk '{printf "%d", $1 * 100}')
+        if [[ $CONF_INT -ge 99 ]]; then
+            CONF_99=$((CONF_99 + 1))
+        elif [[ $CONF_INT -ge 95 ]]; then
+            CONF_95=$((CONF_95 + 1))
+        elif [[ $CONF_INT -ge 90 ]]; then
+            CONF_90=$((CONF_90 + 1))
+        else
+            CONF_BELOW=$((CONF_BELOW + 1))
+        fi
+    done < <(find "$VERISIMDB_DATA/recipes/" -name "recipe-*.json" -exec jq -r '.confidence // 0' {} \; 2>/dev/null)
+    log "  0.99 confidence:   $CONF_99 recipes (auto-execute, proven)"
+    log "  0.95+ confidence:  $CONF_95 recipes (auto-execute)"
+    log "  0.90+ confidence:  $CONF_90 recipes (near auto-execute)"
+    log "  Below 0.90:        $CONF_BELOW recipes (review/report tier)"
+fi
+
+# --- 9. Outcomes (learning feedback) ---
 header "OUTCOMES"
 OUTCOME_COUNT=0
 if [[ -d "$VERISIMDB_DATA/outcomes" ]]; then
-    OUTCOME_COUNT=$(cat "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | wc -l || true)
+    # Use wc -l directly on globs to avoid buffering entire JSONL contents
+    OUTCOME_COUNT=$(wc -l "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
     OUTCOME_COUNT="${OUTCOME_COUNT:-0}"
-    SUCCESS_COUNT=$(cat "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | grep -c '"success"' || true)
+    SUCCESS_COUNT=$(grep -c '"success"' "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | awk -F: '{s+=$2} END{print s+0}' || echo "0")
     SUCCESS_COUNT="${SUCCESS_COUNT:-0}"
-    FAIL_COUNT=$(cat "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | grep -c '"failure"' || true)
+    FAIL_COUNT=$(grep -c '"failure"' "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | awk -F: '{s+=$2} END{print s+0}' || echo "0")
     FAIL_COUNT="${FAIL_COUNT:-0}"
+    # Outcome key coverage: recipe_id (structured) vs pattern (fleet-import legacy)
+    RECIPE_ID_KEYS=$(grep -c '"recipe_id"' "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | awk -F: '{s+=$2} END{print s+0}' || echo "0")
+    PATTERN_KEYS=$(grep -c '"pattern"' "$VERISIMDB_DATA/outcomes/"*.jsonl 2>/dev/null | awk -F: '{s+=$2} END{print s+0}' || echo "0")
     log "  Total outcomes:  $OUTCOME_COUNT"
     log "  Successes:       $SUCCESS_COUNT"
     log "  Failures:        $FAIL_COUNT"
+    log "  Key format:      $RECIPE_ID_KEYS use 'recipe_id', $PATTERN_KEYS use 'pattern'"
 else
     log "  No outcomes recorded yet"
 fi
@@ -177,9 +206,17 @@ else
     log "  STATUS: OPERATIONAL"
 fi
 log "  $SCANS repos | $PATTERNS patterns | $TOTAL_ACTIONS actions | $RECIPE_COUNT recipes"
-PATTERN_DENOM=$((PATTERNS > 0 ? PATTERNS : 1))
-COVERAGE=$((RECIPE_COUNT * 100 / PATTERN_DENOM))
-log "  Coverage: $RECIPE_COUNT recipes for $PATTERNS patterns (${COVERAGE}% coverage)"
+# Coverage metric: count distinct PA rule categories covered by recipes (not raw pattern count)
+PA_CATEGORIES=20
+PA_COVERED=$(find "$VERISIMDB_DATA/recipes/" -name "recipe-*.json" \
+    -exec jq -r '.pattern_ids[]? // empty' {} \; 2>/dev/null \
+    | sed 's/-.*//' | sort -u | wc -l)
+SC_COVERED=$(find "$VERISIMDB_DATA/recipes/" -name "recipe-scorecard-*.json" \
+    -exec jq -r '.category // empty' {} \; 2>/dev/null \
+    | sort -u | wc -l)
+TOTAL_CATEGORIES=$((PA_CATEGORIES + SC_COVERED))
+TOTAL_COVERED=$((PA_COVERED + SC_COVERED))
+log "  Coverage: $RECIPE_COUNT recipes covering $TOTAL_COVERED/$TOTAL_CATEGORIES rule categories (${PA_COVERED}/${PA_CATEGORIES} PA + ${SC_COVERED} Scorecard)"
 log "  Total time: ${TOTAL_TIME}s"
 log ""
 log "  Manifest: $MANIFEST"
@@ -205,7 +242,7 @@ cat > "${KIN_DIR}/hypatia.heartbeat.json" <<HEARTBEAT
   "role": "intelligence",
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "status": "healthy",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "last_run": {
     "scans": ${SCANS},
     "patterns": ${PATTERNS},
