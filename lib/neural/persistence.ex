@@ -6,17 +6,17 @@ defmodule Hypatia.Neural.Persistence do
   Persistence layer for neural network state.
 
   Handles saving/loading neural network weights and state to/from
-  ArangoDB (when available) with fallback to flat files in verisimdb-data.
+  flat files in verisimdb-data/neural-states/.
 
   On each learning cycle:
-  1. Save trust graph edges to ArangoDB trusts collection
+  1. Save trust graph edges
   2. Save MoE expert weights and gating weights
   3. Save confidence history entries (for ESN training)
   4. Save detected anomalies (from LSM)
   5. Save RBF centers and output weights
 
   On startup:
-  1. Load saved state from ArangoDB (or flat files)
+  1. Load saved state from flat files
   2. Initialize networks with saved weights (or defaults)
   """
 
@@ -59,13 +59,6 @@ defmodule Hypatia.Neural.Persistence do
     }
 
     save_state("trust", data)
-
-    # Also persist trust edges to ArangoDB for graph queries
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Enum.each(graph.edges, fn {src, tgt, weight} ->
-        Hypatia.Data.ArangoDB.upsert_trust("repos", src, "repos", tgt, weight, 1)
-      end)
-    end
   end
 
   # --- Mixture of Experts ---
@@ -99,15 +92,6 @@ defmodule Hypatia.Neural.Persistence do
     }
 
     save_state("lsm", data)
-
-    # Persist anomalies to ArangoDB
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Enum.each(anomalies, fn anomaly ->
-        Hypatia.Data.ArangoDB.record_anomaly(
-          anomaly.event, anomaly.deviation, :lsm,
-          if(anomaly.deviation > 3.0, do: :critical, else: :warning))
-      end)
-    end
   end
 
   # --- ESN (save accuracy and drift) ---
@@ -145,13 +129,6 @@ defmodule Hypatia.Neural.Persistence do
   # --- Generic Save/Load ---
 
   defp save_state(network, data) do
-    # Save to ArangoDB
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.save_neural_state(
-        network, data, 0, %{})
-    end
-
-    # Also save to flat file as backup
     path = Path.join(Path.expand(@state_dir), "#{network}.json")
     case Jason.encode(data, pretty: true) do
       {:ok, json} -> File.write(path, json)
@@ -160,29 +137,14 @@ defmodule Hypatia.Neural.Persistence do
   end
 
   defp load_state(network) do
-    # Try ArangoDB first
-    result = if Process.whereis(Hypatia.Data.ArangoDB) do
-      case Hypatia.Data.ArangoDB.load_neural_state(network) do
-        {:ok, data} when is_map(data) -> {:ok, Map.get(data, "state_data", data)}
-        _ -> :not_found
-      end
-    else
-      :not_found
-    end
-
-    # Fall back to flat file
-    case result do
-      {:ok, data} -> {:ok, data}
-      :not_found ->
-        path = Path.join(Path.expand(@state_dir), "#{network}.json")
-        case File.read(path) do
-          {:ok, content} ->
-            case Jason.decode(content) do
-              {:ok, data} -> {:ok, data}
-              _ -> :not_found
-            end
+    path = Path.join(Path.expand(@state_dir), "#{network}.json")
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, data} -> {:ok, data}
           _ -> :not_found
         end
+      _ -> :not_found
     end
   end
 

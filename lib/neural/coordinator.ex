@@ -223,7 +223,7 @@ defmodule Hypatia.Neural.Coordinator do
       last_cycle: DateTime.utc_now()
     }
 
-    # Persist all neural states (ArangoDB + flat file backup)
+    # Persist all neural states to flat files
     Hypatia.Neural.Persistence.save_all(updated_state)
 
     {:noreply, updated_state}
