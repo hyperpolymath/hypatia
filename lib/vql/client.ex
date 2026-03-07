@@ -5,9 +5,9 @@ defmodule Hypatia.VQL.Client do
   @moduledoc """
   VQL Client for Hypatia.
 
-  Provides VQL query parsing and execution against the federated data layer
-  (verisimdb-data flat files + ArangoDB graph queries). Uses a built-in Elixir
-  parser derived from VeriSim's VQLBridge, so no external Deno/Node process needed.
+  Provides VQL query parsing and execution against verisimdb-data flat files.
+  Uses a built-in Elixir parser derived from VeriSim's VQLBridge, so no external
+  Deno/Node process needed.
 
   ## Architecture
 
@@ -16,13 +16,12 @@ defmodule Hypatia.VQL.Client do
                         ▼
                      Parsed AST
                         │
-                  ┌─────┴─────┐
-                  ▼           ▼
-           FileExecutor   ArangoDB
-           (flat files)   (graph queries)
-                  └─────┬─────┘
                         ▼
-                  Merged Results
+                  FileExecutor
+                  (flat files)
+                        │
+                        ▼
+                     Results
 
   ## Usage
 

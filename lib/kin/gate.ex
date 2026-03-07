@@ -206,6 +206,7 @@ defmodule Hypatia.Kin.Gate do
 
   defp evaluate(action, state) do
     checks = [
+      &check_bot_directives/2,
       &check_repo_lock/2,
       &check_scan_staleness/2,
       &check_confidence_floor/2,
@@ -247,6 +248,55 @@ defmodule Hypatia.Kin.Gate do
       {:deferred, wait_ms} ->
         new_state = update_stats(state, :deferred)
         {{:deferred, wait_ms}, new_state}
+    end
+  end
+
+  # Check 0: Does the target repo's .bot_directives allow this bot+action?
+  defp check_bot_directives(action, _state) do
+    repo_path = Map.get(action, :program_path, "/var/mnt/eclipse/repos/#{action.repo}")
+
+    directives_paths = [
+      Path.join([repo_path, ".bot_directives", "#{action.bot_id}.json"]),
+      Path.join([repo_path, ".machine_readable", "bot_directives.json"]),
+      Path.join([repo_path, ".bot_directives", "default.json"])
+    ]
+
+    case Enum.find_value(directives_paths, fn path ->
+      case File.read(path) do
+        {:ok, content} ->
+          case Jason.decode(content) do
+            {:ok, directives} -> directives
+            _ -> nil
+          end
+        _ -> nil
+      end
+    end) do
+      nil ->
+        # No directives file = all bots allowed (open by default)
+        :pass
+
+      directives ->
+        bot_id = to_string(action.bot_id)
+        action_type = to_string(action.action_type)
+
+        # Check if this bot is explicitly blocked
+        blocked = Map.get(directives, "blocked_bots", [])
+        if bot_id in blocked do
+          {:reject, "bot #{bot_id} blocked by .bot_directives in #{action.repo}"}
+        else
+          # Check if action type is restricted
+          allowed_actions = Map.get(directives, "allowed_actions", %{})
+          case Map.get(allowed_actions, bot_id) do
+            nil -> :pass  # no restrictions for this bot
+            actions when is_list(actions) ->
+              if action_type in actions do
+                :pass
+              else
+                {:hold, "#{action_type} not in allowed actions for #{bot_id} in #{action.repo}"}
+              end
+            _ -> :pass
+          end
+        end
     end
   end
 

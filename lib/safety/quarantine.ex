@@ -136,28 +136,11 @@ defmodule Hypatia.Safety.Quarantine do
 
     Logger.warning("Bot #{bot_name} QUARANTINED (#{level}): #{reason}")
 
-    # Persist to ArangoDB if available
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.upsert("bots", bot_name, %{
-        "quarantined" => true,
-        "quarantine_reason" => reason,
-        "quarantine_until" => q.until
-      })
-    end
-
     {:noreply, %{state | quarantined: Map.put(state.quarantined, bot_name, q)}}
   end
 
   def handle_cast({:release, bot_name}, state) do
     Logger.info("Bot #{bot_name} released from quarantine")
-
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.upsert("bots", bot_name, %{
-        "quarantined" => false,
-        "quarantine_reason" => nil,
-        "quarantine_until" => nil
-      })
-    end
 
     {:noreply, %{state |
       quarantined: Map.delete(state.quarantined, bot_name),
@@ -219,12 +202,6 @@ defmodule Hypatia.Safety.Quarantine do
 
     q = %{level: level, reason: reason, since: now, until: if(duration, do: now + duration, else: nil)}
     Logger.warning("Bot #{bot_name} AUTO-QUARANTINED (#{level}): #{reason}")
-
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.record_anomaly(
-        %{"bot" => bot_name, "action" => "auto_quarantine"},
-        0.0, :quarantine, :warning)
-    end
 
     %{state | quarantined: Map.put(state.quarantined, bot_name, q)}
   end
