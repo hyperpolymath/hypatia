@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, ArangoDB for graph queries alongside verisimdb-data (git-backed canonical store), and Logtalk rules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, verisimdb-data (git-backed canonical flat-file store) with VQL queries, Bayesian confidence updating, and Logtalk rules for pattern detection.
 
 ## Architecture
 
@@ -16,9 +16,9 @@ Hypatia
 │   ├── Echo State Network    # Confidence trajectory forecasting
 │   └── Radial Neural Network # Finding similarity + novelty detection
 ├── VQL query layer            # Built-in parser, file executor, query cache
-├── Data layer                 # ArangoDB (federated) + verisimdb-data (canonical)
+├── Data layer                 # verisimdb-data (canonical flat-file store)
 ├── Safety systems             # Rate limiter, quarantine, batch rollback
-├── OTP Application           # 7 GenServers: VQL, ArangoDB, RateLimiter, Quarantine, Learning, Diag, Neural
+├── OTP Application           # 8 GenServers: VQL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin
 ├── Logtalk rule engine       # Error catalog, pattern detection rules
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
 ├── Zig FFI                   # C ABI bridge (7 exported functions)
@@ -88,7 +88,9 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
 | `fleet_dispatcher.ex` | Confidence-gated dispatch (file-based + HTTP, circuit breaker) |
 | `dispatch_manifest.ex` | Writes JSONL manifests as bridge to bash execution |
-| `outcome_tracker.ex` | Records fix outcomes, updates recipe confidence |
+| `outcome_tracker.ex` | Records fix outcomes, Bayesian confidence updating, re-scan verification |
+| `recipe_generator.ex` | Auto-generates recipes for uncovered categories at 0.50 confidence |
+| `scorecard_ingestor.ex` | Ingests 20 OpenSSF Scorecard checks as local scan patterns |
 | `learning_scheduler.ex` | GenServer: polls outcomes every 5 min, drives feedback loop |
 | `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
 | `application.ex` | OTP Application supervisor for all GenServers |
@@ -144,16 +146,9 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `hypatia_get_confidence` | Get recipe confidence |
 | `hypatia_dispatch_strategy` | Map confidence to dispatch strategy |
 
-### Data Layer (lib/data/)
+### Data Layer
 
-| Module | Purpose |
-|--------|---------|
-| `arangodb.ex` | Elixir ArangoDB client, auto-sync from verisimdb-data every 10 min |
-| `models.ex` | 12 document models + 3 edge models for extended E-R schema |
-
-**Federated architecture:** verisimdb-data (git) is canonical; ArangoDB provides graph queries, trust traversal, neural state, confidence history. Auto-sync keeps them in harmony.
-
-**Collections:** repos, findings, patterns, bots, recipes, outcomes, contributors, confidence_history, anomalies, dispatch_batches, neural_states, sessions, rulesets, learning_data + 9 edge collections.
+verisimdb-data (git-backed flat files) is the canonical data store. VQL queries execute against it directly via FileExecutor. Neural state persists to `data/verisimdb/neural-states/`. Outcomes append to `outcomes/YYYY-MM.jsonl`.
 
 ### Safety Systems (lib/safety/)
 
@@ -163,34 +158,31 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `quarantine.ex` | Auto-quarantine on 5+ failures or >30% FP rate; 3 levels (soft/hard/permanent) |
 | `batch_rollback.ex` | Rollback entire dispatch batches with confidence revert |
 
-### Metrics (as of 2026-02-13)
+### Metrics (as of 2026-03-07)
 
-- 385 auto_execute fixes dispatched (0 failures)
-- 86.3% weak point reduction: 3260 -> 447
-- 404 outcomes recorded (100% success rate)
-- 6 recipes at 0.99 confidence
-- 22 fix recipes total (298 repos scanned)
-- 954 canonical patterns across 298 repos
-- ESN trained on 2,372 real confidence data points
+- 302 repos scanned, 3385 weak points across ecosystem
+- 1635 dispatched actions (600 auto-execute, 667 review, 368 report)
+- 16671 outcomes recorded (99% success rate, Bayesian confidence updating)
+- 46 recipes (0 uncovered categories), 20 OpenSSF Scorecard recipes
 - 5 neural networks + coordinator in OTP supervision
-- 14 document + 9 edge ArangoDB collections defined
+- Bayesian Beta-distribution confidence (prior_strength=10, floor=0.10, cap=0.99)
+- Re-scan verification via panic-attacker (confirms fix removed weak point)
+- PanLL data bridge: generates real-time JSON for dashboard panels
 - 3 safety systems: rate limiter, quarantine, batch rollback
 - VQL integrated: built-in parser, file executor, query cache, cross-repo analytics
 
 ### Remaining Work (M7: Production Operations)
 
-**Critical (this week):**
-- ~~Integrate VQL into verisimdb_connector.ex~~ DONE — VQL Client + FileExecutor + Query module
-- Deploy ArangoDB + Dragonfly in production
+**Critical:**
 - Create PAT with repo scope for automated cross-repo dispatch
-- Generate summaries for 184 NULL-summary repos in verisimdb-data
+- Write real fix scripts for the 310 null-fix-script dispatch entries
+- Push committed fixes to remotes across repos
 
-**Important (this month):**
+**Important:**
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
 - Implement VQL federation executor (currently local-only)
-- ~~Fix RBF training (registry.json path needs investigation)~~ DONE — 965 vectors, MSE=0.047
 - Historical trend tracking across scan cycles
-- ~~VQL test files for client.ex, file_executor.ex, query.ex~~ DONE — 223 tests
+- Generate summaries for 184 NULL-summary repos in verisimdb-data
 
 **Planned:**
 - GraphQL API as live HTTP endpoint
@@ -202,12 +194,11 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 
 1. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
-3. **One-sided training data:** All 3,588 outcomes are "success" — ESN trained but needs failure data for balanced learning
-4. **RBF untrained:** patterns/registry.json path needs investigation
-5. **Recipe coverage 2.3%:** 22 recipes for 954 patterns — 932 patterns have no automated fix
-6. **ArangoDB transitional:** Fills graph gap until verisim-api deployed
-7. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images (no Chainguard equivalents)
-8. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
+3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
+4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script — recipes exist but no executable script
+5. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images (no Chainguard equivalents)
+6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
+7. **Neural state persistence:** State dir exists but coordinator hasn't persisted to disk yet
 
 ## Code Style
 

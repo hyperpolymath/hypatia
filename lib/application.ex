@@ -7,11 +7,10 @@ defmodule Hypatia.Application do
 
   Starts the supervision tree with layered dependencies:
   0. Query layer (VQL Client) — structured query interface to verisimdb-data
-  1. Data layer (ArangoDB) — federated store alongside verisimdb-data
-  2. Safety layer — rate limiter, quarantine
-  3. Intelligence layer — learning scheduler, self-diagnostics
-  4. Neural layer — 5 neural networks + coordinator
-  5. Kin layer — ecosystem coordination, watchdog, self-healing
+  1. Safety layer — rate limiter, quarantine
+  2. Intelligence layer — learning scheduler, self-diagnostics
+  3. Neural layer — 5 neural networks + coordinator
+  4. Kin layer — ecosystem coordination, watchdog, self-healing
   """
 
   use Application
@@ -21,9 +20,7 @@ defmodule Hypatia.Application do
     children = [
       # Layer 0: Query — VQL client for structured data access
       Hypatia.VQL.Client,
-      # Layer 1: Data — ArangoDB federated store (graceful degradation if unavailable)
-      Hypatia.Data.ArangoDB,
-      # Layer 2: Safety — rate limiting and bot quarantine
+      # Layer 1: Safety — rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,
       # Layer 3: Intelligence — feedback loop, rules, and health monitoring

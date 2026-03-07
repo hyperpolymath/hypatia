@@ -22,7 +22,6 @@ defmodule Hypatia.Kin.Watchdog do
 
   @monitored_processes [
     {Hypatia.VQL.Client, :vql, :critical},
-    {Hypatia.Data.ArangoDB, :data, :optional},
     {Hypatia.Safety.RateLimiter, :safety, :critical},
     {Hypatia.Safety.Quarantine, :safety, :critical},
     {Hypatia.Rules.Learning, :intelligence, :important},

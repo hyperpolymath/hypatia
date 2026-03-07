@@ -15,10 +15,10 @@ defmodule Hypatia.OutcomeTracker do
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
 
-  # Confidence adjustment constants (from plan)
-  @successful_fix_boost 0.02
-  @failed_fix_penalty -0.05
-  @false_positive_penalty -0.10
+  # Bayesian confidence updating via Beta distribution
+  # Prior strength controls how much weight initial confidence carries
+  # relative to observed evidence. Higher = more conservative updates.
+  @prior_strength 10
   @confidence_cap 0.99
   @confidence_floor 0.10
 
@@ -59,6 +59,75 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   @doc """
+  Verify a fix by re-scanning the target repo and checking if the weak point is gone.
+
+  Runs panic-attacker assail on the specific repo, then checks if the original
+  pattern still appears in the results. Returns :verified (gone), :still_present,
+  or :scan_failed.
+  """
+  def verify_fix(repo_path, pattern_id, category) do
+    case System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
+           stderr_to_stdout: true) do
+      {output, 0} ->
+        case Jason.decode(output) do
+          {:ok, scan} ->
+            weak_points = Map.get(scan, "weak_points", [])
+            still_found = Enum.any?(weak_points, fn wp ->
+              Map.get(wp, "category", "") == category
+            end)
+
+            if still_found do
+              Logger.warning("Verification FAILED for #{pattern_id} in #{repo_path} — pattern still present")
+              :still_present
+            else
+              Logger.info("Verification PASSED for #{pattern_id} in #{repo_path} — pattern removed")
+              :verified
+            end
+
+          {:error, _} ->
+            Logger.error("Failed to parse re-scan output for #{repo_path}")
+            :scan_failed
+        end
+
+      {_output, _code} ->
+        Logger.error("Re-scan failed for #{repo_path}")
+        :scan_failed
+    end
+  end
+
+  @doc """
+  Record an outcome and optionally verify the fix by re-scanning.
+
+  If verify: true is passed, runs panic-attacker against the repo after
+  recording the outcome. If the pattern is still present, records a
+  :false_positive to correct the confidence.
+  """
+  def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
+    {:ok, record} = record_outcome(recipe_id, repo, file, outcome)
+
+    if Keyword.get(opts, :verify, false) and outcome == :success do
+      repo_path = Keyword.get(opts, :repo_path, "/var/mnt/eclipse/repos/#{repo}")
+      category = Keyword.get(opts, :category, "")
+      pattern_id = Keyword.get(opts, :pattern_id, "")
+
+      case verify_fix(repo_path, pattern_id, category) do
+        :verified ->
+          {:ok, record, :verified}
+
+        :still_present ->
+          Logger.warning("Fix claimed success but pattern still present — recording false_positive")
+          record_outcome(recipe_id, repo, file, :false_positive)
+          {:ok, record, :false_positive}
+
+        :scan_failed ->
+          {:ok, record, :scan_unavailable}
+      end
+    else
+      {:ok, record, :not_verified}
+    end
+  end
+
+  @doc """
   Recalculate confidence for a recipe based on all recorded outcomes.
   Updates the recipe JSON file in verisimdb-data/recipes/.
   """
@@ -72,13 +141,6 @@ defmodule Hypatia.OutcomeTracker do
       failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
       false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
 
-      # Calculate confidence adjustment from baseline
-      adjustment =
-        successes * @successful_fix_boost +
-          failures * @failed_fix_penalty +
-          false_positives * @false_positive_penalty
-
-      # Load current recipe and apply adjustment
       recipe_path = find_recipe_file(recipe_id)
 
       if recipe_path do
@@ -88,16 +150,16 @@ defmodule Hypatia.OutcomeTracker do
               {:ok, recipe} ->
                 base_confidence = Map.get(recipe, "confidence", 0.5)
 
-                new_confidence =
-                  (base_confidence + adjustment)
-                  |> max(@confidence_floor)
-                  |> min(@confidence_cap)
+                new_confidence = bayesian_update(
+                  base_confidence, successes, failures + false_positives
+                )
 
                 updated_recipe =
                   recipe
                   |> Map.put("confidence", Float.round(new_confidence, 4))
                   |> Map.put("successful_fixes", successes)
                   |> Map.put("failed_fixes", failures)
+                  |> Map.put("false_positives", false_positives)
                   |> Map.put("total_attempts", length(outcomes))
 
                 case Jason.encode(updated_recipe, pretty: true) do
@@ -125,6 +187,38 @@ defmodule Hypatia.OutcomeTracker do
         :recipe_not_found
       end
     end
+  end
+
+  @doc """
+  Bayesian confidence update using Beta distribution conjugate prior.
+
+  The recipe's initial confidence is treated as the prior mean of a Beta(alpha, beta)
+  distribution. Each success increments alpha, each failure increments beta.
+  The posterior mean (alpha / (alpha + beta)) is the updated confidence.
+
+  Properties:
+  - With no observations, returns the prior (initial confidence)
+  - Many successes push confidence toward 1.0, but asymptotically
+  - A single failure among many successes has proportional (not outsized) impact
+  - Small sample sizes preserve uncertainty (stay close to prior)
+  - @prior_strength controls how conservative updates are
+  """
+  def bayesian_update(prior_confidence, successes, failures) do
+    # Convert prior confidence to Beta distribution parameters
+    # prior_confidence = alpha / (alpha + beta), with alpha + beta = @prior_strength
+    alpha_prior = prior_confidence * @prior_strength
+    beta_prior = (1.0 - prior_confidence) * @prior_strength
+
+    # Posterior = prior + observations (conjugate update)
+    alpha_posterior = alpha_prior + successes
+    beta_posterior = beta_prior + failures
+
+    # Posterior mean
+    posterior = alpha_posterior / (alpha_posterior + beta_posterior)
+
+    posterior
+    |> max(@confidence_floor)
+    |> min(@confidence_cap)
   end
 
   @doc """

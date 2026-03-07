@@ -12,7 +12,7 @@ defmodule Hypatia.Safety.BatchRollback do
   1. Marking all outcomes in the batch as false_positive
   2. Reverting recipe confidence to pre-batch levels
   3. Generating rollback instructions for the fleet
-  4. Recording the rollback in ArangoDB for learning
+  4. Recording the rollback for learning
 
   This is a safety net for the auto_execute tier.
   """
@@ -34,12 +34,6 @@ defmodule Hypatia.Safety.BatchRollback do
       "status" => "pending"
     }
 
-    # Persist to ArangoDB if available
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.upsert("dispatch_batches", batch_id, batch)
-    end
-
-    # Also write to verisimdb-data dispatch directory
     batch_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "batches.jsonl"])
     File.write(batch_path, Jason.encode!(batch) <> "\n", [:append, :utf8])
 
@@ -62,7 +56,6 @@ defmodule Hypatia.Safety.BatchRollback do
     Enum.each(outcomes, fn outcome ->
       recipe_id = Map.get(outcome, "recipe_id")
       if recipe_id do
-        # Revert confidence
         Hypatia.OutcomeTracker.record_outcome(
           recipe_id,
           Map.get(outcome, "repo", "unknown"),
@@ -94,52 +87,18 @@ defmodule Hypatia.Safety.BatchRollback do
     # 4. Update batch status
     update_batch_status(batch_id, "rolled_back")
 
-    # 5. Record anomaly
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.record_anomaly(
-        %{"batch_id" => batch_id, "reason" => reason},
-        0.0, :rollback, :critical)
-    end
-
     Logger.warning("Rollback complete: #{length(outcomes)} outcomes reverted for batch #{batch_id}")
     {:ok, length(outcomes)}
   end
 
   @doc "List recent batches with their status"
   def list_batches(limit \\ 20) do
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      case Hypatia.Data.ArangoDB.query("""
-        FOR b IN dispatch_batches
-          SORT b.timestamp DESC
-          LIMIT @limit
-          RETURN b
-      """, %{"limit" => limit}) do
-        {:ok, batches} -> batches
-        _ -> list_batches_from_file(limit)
-      end
-    else
-      list_batches_from_file(limit)
-    end
+    list_batches_from_file(limit)
   end
 
   # --- Internal ---
 
   defp find_batch_outcomes(batch_id) do
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      case Hypatia.Data.ArangoDB.query("""
-        FOR o IN outcomes
-          FILTER o.batch_id == @batch_id
-          RETURN o
-      """, %{"batch_id" => batch_id}) do
-        {:ok, outcomes} -> outcomes
-        _ -> find_outcomes_from_file(batch_id)
-      end
-    else
-      find_outcomes_from_file(batch_id)
-    end
-  end
-
-  defp find_outcomes_from_file(batch_id) do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -165,13 +124,13 @@ defmodule Hypatia.Safety.BatchRollback do
   end
 
   defp update_batch_status(batch_id, status) do
-    if Process.whereis(Hypatia.Data.ArangoDB) do
-      Hypatia.Data.ArangoDB.upsert("dispatch_batches", batch_id, %{
-        "batch_id" => batch_id,
-        "status" => status,
-        "updated" => DateTime.utc_now() |> DateTime.to_iso8601()
-      })
-    end
+    batch_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "batches.jsonl"])
+    update = Jason.encode!(%{
+      "batch_id" => batch_id,
+      "status" => status,
+      "updated" => DateTime.utc_now() |> DateTime.to_iso8601()
+    })
+    File.write(batch_path, update <> "\n", [:append, :utf8])
   end
 
   defp list_batches_from_file(limit) do
