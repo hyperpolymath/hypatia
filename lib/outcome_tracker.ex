@@ -59,6 +59,75 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   @doc """
+  Verify a fix by re-scanning the target repo and checking if the weak point is gone.
+
+  Runs panic-attacker assail on the specific repo, then checks if the original
+  pattern still appears in the results. Returns :verified (gone), :still_present,
+  or :scan_failed.
+  """
+  def verify_fix(repo_path, pattern_id, category) do
+    case System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
+           stderr_to_stdout: true) do
+      {output, 0} ->
+        case Jason.decode(output) do
+          {:ok, scan} ->
+            weak_points = Map.get(scan, "weak_points", [])
+            still_found = Enum.any?(weak_points, fn wp ->
+              Map.get(wp, "category", "") == category
+            end)
+
+            if still_found do
+              Logger.warning("Verification FAILED for #{pattern_id} in #{repo_path} — pattern still present")
+              :still_present
+            else
+              Logger.info("Verification PASSED for #{pattern_id} in #{repo_path} — pattern removed")
+              :verified
+            end
+
+          {:error, _} ->
+            Logger.error("Failed to parse re-scan output for #{repo_path}")
+            :scan_failed
+        end
+
+      {_output, _code} ->
+        Logger.error("Re-scan failed for #{repo_path}")
+        :scan_failed
+    end
+  end
+
+  @doc """
+  Record an outcome and optionally verify the fix by re-scanning.
+
+  If verify: true is passed, runs panic-attacker against the repo after
+  recording the outcome. If the pattern is still present, records a
+  :false_positive to correct the confidence.
+  """
+  def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
+    {:ok, record} = record_outcome(recipe_id, repo, file, outcome)
+
+    if Keyword.get(opts, :verify, false) and outcome == :success do
+      repo_path = Keyword.get(opts, :repo_path, "/var/mnt/eclipse/repos/#{repo}")
+      category = Keyword.get(opts, :category, "")
+      pattern_id = Keyword.get(opts, :pattern_id, "")
+
+      case verify_fix(repo_path, pattern_id, category) do
+        :verified ->
+          {:ok, record, :verified}
+
+        :still_present ->
+          Logger.warning("Fix claimed success but pattern still present — recording false_positive")
+          record_outcome(recipe_id, repo, file, :false_positive)
+          {:ok, record, :false_positive}
+
+        :scan_failed ->
+          {:ok, record, :scan_unavailable}
+      end
+    else
+      {:ok, record, :not_verified}
+    end
+  end
+
+  @doc """
   Recalculate confidence for a recipe based on all recorded outcomes.
   Updates the recipe JSON file in verisimdb-data/recipes/.
   """
