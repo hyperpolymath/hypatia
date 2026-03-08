@@ -365,9 +365,49 @@ scan_code_patterns() {
         "critical" "hardcoded_secret" "private_key_in_source" "CWE-798" \
         "Never commit private keys to source control"
 
+    # Anthropic API keys
+    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,yml,yaml,toml,json,env}" 'sk-ant-[a-zA-Z0-9\-]{20,}' \
+        "critical" "hardcoded_secret" "anthropic_api_key" "CWE-798" \
+        "Remove hardcoded Anthropic API key; use environment variables"
+
+    # Stripe keys (publishable ok, secret NOT ok)
+    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,yml,yaml,toml,json,env}" 'sk_(live|test)_[a-zA-Z0-9]{20,}' \
+        "critical" "hardcoded_secret" "stripe_secret_key" "CWE-798" \
+        "Remove hardcoded Stripe secret key"
+
+    # Twilio Account SID + Auth Token
+    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,yml,yaml,toml,json,env}" 'AC[a-f0-9]{32}' \
+        "critical" "hardcoded_secret" "twilio_sid" "CWE-798" \
+        "Remove hardcoded Twilio SID; use environment variables"
+
+    # SendGrid API key
+    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,yml,yaml,toml,json,env}" 'SG\.[a-zA-Z0-9\-]{22,}\.[a-zA-Z0-9\-]{22,}' \
+        "critical" "hardcoded_secret" "sendgrid_key" "CWE-798" \
+        "Remove hardcoded SendGrid API key"
+
+    # GCP service account JSON (detect the private_key field)
+    run_pattern "$dir" "*.{json,env}" '"private_key"\s*:\s*"-----BEGIN' \
+        "critical" "hardcoded_secret" "gcp_service_account" "CWE-798" \
+        "Never commit GCP service account JSON; use workload identity or env vars"
+
+    # Azure connection strings
+    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,yml,yaml,toml,json,env}" 'AccountKey=[a-zA-Z0-9+/=]{40,}' \
+        "critical" "hardcoded_secret" "azure_connection_string" "CWE-798" \
+        "Remove hardcoded Azure connection string"
+
+    # Database connection URIs with passwords (postgres://, mysql://, mongodb://, redis://)
+    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,yml,yaml,toml,json,env}" '(postgres|mysql|mongodb|redis|amqp)://[^:]+:[^@]{3,}@' \
+        "critical" "hardcoded_secret" "database_uri_with_password" "CWE-798" \
+        "Remove hardcoded database credentials from connection URI"
+
+    # .env files committed to source (should be in .gitignore)
+    run_pattern "$dir" ".env*" '(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY)\s*=' \
+        "critical" "hardcoded_secret" "env_file_secrets" "CWE-798" \
+        "Never commit .env files with secrets; add to .gitignore and use a vault"
+
     # Generic password/secret assignment (broad — allows type annotations between name and value)
     run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,sh,toml,json}" '(?i)(password|passwd|secret|credential)[^=]*=\s*"[^"]{8,}"' \
-        "high" "hardcoded_secret" "generic_password" "CWE-798" \
+        "critical" "hardcoded_secret" "generic_password" "CWE-798" \
         "Move passwords/secrets to environment variables or a vault"
 
     # ── 6. XSS / DOM SAFETY ───────────────────────────────────────
