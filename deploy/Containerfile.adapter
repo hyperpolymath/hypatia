@@ -22,15 +22,17 @@ COPY data/Cargo.toml ./data/
 COPY cli/Cargo.toml ./cli/
 COPY fixer/Cargo.toml ./fixer/
 COPY integration/Cargo.toml ./integration/
+COPY tools/cii-registrar/Cargo.toml ./tools/cii-registrar/
 
 # Create dummy source files for dependency compilation
-RUN mkdir -p adapters/src data/src cli/src fixer/src integration/src && \
+RUN mkdir -p adapters/src data/src cli/src fixer/src integration/src tools/cii-registrar/src && \
     echo "pub fn dummy() {}" > adapters/src/lib.rs && \
     echo "fn main() {}" > adapters/src/main.rs && \
     echo "pub fn dummy() {}" > data/src/lib.rs && \
     echo "fn main() {}" > cli/src/main.rs && \
     echo "pub fn dummy() {}" > fixer/src/lib.rs && \
-    echo "pub fn dummy() {}" > integration/src/lib.rs
+    echo "pub fn dummy() {}" > integration/src/lib.rs && \
+    echo "fn main() {}" > tools/cii-registrar/src/main.rs
 
 # Build dependencies only
 RUN cargo build --release --package hypatia-adapters || true
