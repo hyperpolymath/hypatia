@@ -5,16 +5,15 @@
 # ============================================================
 # Stage 1: Build Environment
 # ============================================================
-FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+FROM docker.io/library/rust:1.85-slim-bookworm AS builder
 
-# Install build dependencies (Wolfi uses apk)
-RUN apk add --no-cache \
-    rust \
-    cargo \
-    pkgconf \
-    openssl-dev \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
     cmake \
-    build-base
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 

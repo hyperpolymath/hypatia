@@ -1,18 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Containerfile for Hypatia Rust Forge Adapters
 
-FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+FROM docker.io/library/rust:1.85-slim-bookworm AS builder
 
 WORKDIR /build
 
-# Install build dependencies (Wolfi uses apk)
-RUN apk add --no-cache \
-    rust \
-    cargo \
-    pkgconf \
-    openssl-dev \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
     cmake \
-    build-base
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace manifest and lock file
 COPY Cargo.toml Cargo.lock ./
