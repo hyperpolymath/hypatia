@@ -91,7 +91,37 @@ defmodule Hypatia.Rules.CicdRules do
     %{id: :excessive_workflow_count, severity: :low, auto_fixable: false,
       description: "More than 15 workflows — consolidate"},
     %{id: :missing_directory_workflow, severity: :low, auto_fixable: true,
-      description: "zig-ffi.yml workflow but no zig/ directory"}
+      description: "zig-ffi.yml workflow but no zig/ directory"},
+
+    # Workflow hygiene: irrelevant template workflows
+    %{id: :irrelevant_ts_blocker, severity: :low, auto_fixable: true,
+      description: "ts-blocker.yml in repo with no TypeScript or JavaScript"},
+    %{id: :irrelevant_npm_blocker, severity: :low, auto_fixable: true,
+      description: "npm-bun-blocker.yml in repo with no JS package ecosystem"},
+    %{id: :irrelevant_jekyll, severity: :low, auto_fixable: true,
+      description: "Jekyll workflow in repo with no _config.yml or Gemfile"},
+    %{id: :irrelevant_guix_nix, severity: :low, auto_fixable: true,
+      description: "guix-nix-policy.yml in repo with no Guix or Nix configuration"},
+    %{id: :irrelevant_wellknown, severity: :low, auto_fixable: true,
+      description: "wellknown-enforcement.yml in repo with no .well-known/ directory"},
+    %{id: :irrelevant_rsr_antipattern, severity: :low, auto_fixable: true,
+      description: "rsr-antipattern.yml in repo without RSR markers"},
+    %{id: :redundant_scorecard_enforcer, severity: :low, auto_fixable: true,
+      description: "scorecard-enforcer.yml redundant with scorecard.yml"},
+    %{id: :redundant_instant_sync, severity: :low, auto_fixable: true,
+      description: "instant-sync.yml redundant with mirror.yml"},
+    %{id: :redundant_security_policy_wf, severity: :info, auto_fixable: true,
+      description: "security-policy.yml checking for SECURITY.md that already exists"},
+
+    # Missing language-appropriate CI
+    %{id: :missing_julia_ci, severity: :high, auto_fixable: true,
+      description: "Julia package without CI running Pkg.test()"},
+    %{id: :missing_rust_ci, severity: :high, auto_fixable: true,
+      description: "Rust crate without CI running cargo test"},
+    %{id: :missing_elixir_ci, severity: :medium, auto_fixable: true,
+      description: "Elixir project without CI running mix test"},
+    %{id: :missing_zig_ci, severity: :medium, auto_fixable: true,
+      description: "Zig project without CI running zig build test"}
   ]
 
   def waste_patterns, do: @waste_patterns
@@ -125,6 +155,62 @@ defmodule Hypatia.Rules.CicdRules do
         else
           results
         end
+      else
+        results
+      end
+
+    # Workflow hygiene: detect irrelevant workflows based on repo tech stack
+    languages = Map.get(repo_info, :languages, [])
+    files = Map.get(repo_info, :files, [])
+
+    irrelevant_checks = [
+      {:irrelevant_ts_blocker, "ts-blocker.yml",
+        fn -> "typescript" not in languages and "javascript" not in languages end},
+      {:irrelevant_npm_blocker, "npm-bun-blocker.yml",
+        fn -> "package.json" not in files and "package-lock.json" not in files end},
+      {:irrelevant_jekyll, "jekyll.yml",
+        fn -> "_config.yml" not in files and "Gemfile" not in files end},
+      {:irrelevant_jekyll, "jekyll-gh-pages.yml",
+        fn -> "_config.yml" not in files and "Gemfile" not in files end},
+      {:irrelevant_guix_nix, "guix-nix-policy.yml",
+        fn -> "flake.nix" not in files and "manifest.scm" not in files end},
+      {:irrelevant_wellknown, "wellknown-enforcement.yml",
+        fn -> ".well-known" not in dirs end},
+      {:redundant_scorecard_enforcer, "scorecard-enforcer.yml",
+        fn -> "scorecard.yml" in workflows end},
+      {:redundant_instant_sync, "instant-sync.yml",
+        fn -> "mirror.yml" in workflows end}
+    ]
+
+    results =
+      Enum.reduce(irrelevant_checks, results, fn {pattern, wf, check_fn}, acc ->
+        if wf in workflows and check_fn.() do
+          [%{pattern: pattern, workflow: wf, auto_fixable: true} | acc]
+        else
+          acc
+        end
+      end)
+
+    # Missing language-appropriate CI
+    has_ci = Enum.any?(workflows, fn w -> w in ["ci.yml", "CI.yml", "test.yml"] end)
+
+    results =
+      if "Project.toml" in files and not has_ci do
+        [%{pattern: :missing_julia_ci, auto_fixable: true} | results]
+      else
+        results
+      end
+
+    results =
+      if "Cargo.toml" in files and not has_ci and "rust.yml" not in workflows and "build.yml" not in workflows do
+        [%{pattern: :missing_rust_ci, auto_fixable: true} | results]
+      else
+        results
+      end
+
+    results =
+      if "mix.exs" in files and not has_ci and "elixir.yml" not in workflows do
+        [%{pattern: :missing_elixir_ci, auto_fixable: true} | results]
       else
         results
       end
@@ -176,6 +262,15 @@ defmodule Hypatia.Rules.CicdRules do
     "ERR-WF-007" => %{type: :empty_workflow, severity: :low,
       detection: [:file_size_check],
       prevention: [:template_cleanup]},
+    "ERR-WF-008" => %{type: :irrelevant_workflow, severity: :low,
+      detection: [:workflow_hygiene_scan, :language_detection],
+      prevention: [:template_customization, :hypatia_scan]},
+    "ERR-WF-009" => %{type: :redundant_workflow, severity: :low,
+      detection: [:workflow_hygiene_scan],
+      prevention: [:template_customization]},
+    "ERR-WF-010" => %{type: :missing_language_ci, severity: :high,
+      detection: [:workflow_hygiene_scan, :language_detection],
+      prevention: [:template_ci_generation, :hypatia_scan]},
     "ERR-DEP-001" => %{type: :vulnerable_dependency, severity: :critical,
       detection: [:dependabot, :trivy_scan],
       prevention: [:dependabot_auto_update, :renovate, :lockfile]},

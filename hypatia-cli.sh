@@ -600,9 +600,6 @@ scan_workflows() {
     for wf in "$dir/.github/workflows"/*.yml "$dir/.github/workflows"/*.yaml; do
         [[ -f "$wf" ]] || continue
 
-        # Unpinned actions (already handled by run_pattern, but this catches edge cases)
-        # Expression injection is handled by run_pattern above
-
         # pull_request_target with checkout is extremely dangerous
         if grep -q 'pull_request_target' "$wf" && grep -q 'actions/checkout' "$wf"; then
             emit_finding "critical" "supply_chain" "pr_target_checkout" \
@@ -610,6 +607,195 @@ scan_workflows() {
                 "Do not checkout PR code in pull_request_target; use pull_request instead"
         fi
     done
+
+    # ── WORKFLOW HYGIENE — detect irrelevant workflows per repo ────────
+    scan_workflow_hygiene "$dir"
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Workflow hygiene: detect workflows irrelevant to the repo's languages
+# and tech stack. Emits findings for each unnecessary workflow.
+# ─────────────────────────────────────────────────────────────────────
+scan_workflow_hygiene() {
+    local dir="$1"
+    local wf_dir="$dir/.github/workflows"
+    [[ -d "$wf_dir" ]] || return 0
+
+    # ── Detect repo languages/tech from file extensions and markers ──
+    local has_ts=false has_js=false has_py=false has_rs=false
+    local has_go=false has_jl=false has_zig=false has_idr=false
+    local has_ex=false has_hs=false has_ml=false has_rb=false
+    local has_node=false has_jekyll=false has_npm=false has_bun=false
+    local has_guix=false has_nix=false has_wellknown=false
+
+    # Language detection via file extensions (fast find, no deep traversal)
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.ts' -o -name '*.tsx' 2>/dev/null | head -1)" ]] && has_ts=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.js' -o -name '*.jsx' -o -name '*.mjs' 2>/dev/null | head -1)" ]] && has_js=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.py' 2>/dev/null | head -1)" ]] && has_py=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.rs' 2>/dev/null | head -1)" ]] && has_rs=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.go' 2>/dev/null | head -1)" ]] && has_go=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.jl' 2>/dev/null | head -1)" ]] && has_jl=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.zig' 2>/dev/null | head -1)" ]] && has_zig=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.idr' 2>/dev/null | head -1)" ]] && has_idr=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.ex' -o -name '*.exs' 2>/dev/null | head -1)" ]] && has_ex=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.hs' 2>/dev/null | head -1)" ]] && has_hs=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.ml' -o -name '*.mli' 2>/dev/null | head -1)" ]] && has_ml=true
+    [[ -n "$(find "$dir" -maxdepth 4 -name '*.rb' 2>/dev/null | head -1)" ]] && has_rb=true
+
+    # Tech stack markers
+    [[ -f "$dir/package.json" || -f "$dir/package-lock.json" ]] && has_npm=true
+    [[ -f "$dir/bun.lockb" || -f "$dir/bunfig.toml" ]] && has_bun=true
+    [[ -f "$dir/_config.yml" || -f "$dir/Gemfile" ]] && has_jekyll=true
+    [[ -f "$dir/node_modules/.package-lock.json" || -f "$dir/package-lock.json" ]] && has_node=true
+    [[ -d "$dir/guix" || -f "$dir/manifest.scm" || -f "$dir/channels.scm" ]] && has_guix=true
+    [[ -f "$dir/flake.nix" || -f "$dir/shell.nix" || -f "$dir/default.nix" ]] && has_nix=true
+    [[ -d "$dir/.well-known" ]] && has_wellknown=true
+
+    # ── Check each potentially-irrelevant workflow ───────────────────
+
+    # TypeScript blocker: useless if no TS/JS in repo
+    if [[ -f "$wf_dir/ts-blocker.yml" ]] && [[ "$has_ts" == false && "$has_js" == false ]]; then
+        emit_finding "low" "workflow_hygiene" "irrelevant_ts_blocker" \
+            "$wf_dir/ts-blocker.yml" 0 \
+            "ts-blocker.yml present but repo has no TypeScript or JavaScript files" "CWE-1059" \
+            "Remove ts-blocker.yml — no TS/JS to block" "true"
+    fi
+
+    # npm/bun blocker: useless if no package.json or JS ecosystem
+    if [[ -f "$wf_dir/npm-bun-blocker.yml" ]] && [[ "$has_npm" == false && "$has_bun" == false && "$has_node" == false ]]; then
+        emit_finding "low" "workflow_hygiene" "irrelevant_npm_blocker" \
+            "$wf_dir/npm-bun-blocker.yml" 0 \
+            "npm-bun-blocker.yml present but repo has no JS package ecosystem" "CWE-1059" \
+            "Remove npm-bun-blocker.yml — no npm/bun/node to block" "true"
+    fi
+
+    # Jekyll workflows: useless if no Jekyll config
+    for jkwf in "jekyll.yml" "jekyll-gh-pages.yml"; do
+        if [[ -f "$wf_dir/$jkwf" ]] && [[ "$has_jekyll" == false ]]; then
+            emit_finding "low" "workflow_hygiene" "irrelevant_jekyll" \
+                "$wf_dir/$jkwf" 0 \
+                "$jkwf present but repo has no _config.yml or Gemfile" "CWE-1059" \
+                "Remove $jkwf — no Jekyll site in this repo" "true"
+        fi
+    done
+
+    # Guix/Nix policy: useless if no Guix or Nix config
+    if [[ -f "$wf_dir/guix-nix-policy.yml" ]] && [[ "$has_guix" == false && "$has_nix" == false ]]; then
+        emit_finding "low" "workflow_hygiene" "irrelevant_guix_nix" \
+            "$wf_dir/guix-nix-policy.yml" 0 \
+            "guix-nix-policy.yml present but repo has no Guix or Nix configuration" "CWE-1059" \
+            "Remove guix-nix-policy.yml — not a Guix/Nix project" "true"
+    fi
+
+    # .well-known enforcement: useless if no .well-known directory
+    if [[ -f "$wf_dir/wellknown-enforcement.yml" ]] && [[ "$has_wellknown" == false ]]; then
+        emit_finding "low" "workflow_hygiene" "irrelevant_wellknown" \
+            "$wf_dir/wellknown-enforcement.yml" 0 \
+            "wellknown-enforcement.yml present but repo has no .well-known/ directory" "CWE-1059" \
+            "Remove wellknown-enforcement.yml — no .well-known/ to enforce" "true"
+    fi
+
+    # RSR antipattern: template boilerplate, only useful in RSR-compliant repos
+    if [[ -f "$wf_dir/rsr-antipattern.yml" ]]; then
+        if [[ ! -f "$dir/.machine_readable/STATE.scm" && ! -f "$dir/justfile" ]]; then
+            emit_finding "low" "workflow_hygiene" "irrelevant_rsr_antipattern" \
+                "$wf_dir/rsr-antipattern.yml" 0 \
+                "rsr-antipattern.yml present but repo lacks RSR markers (no STATE.scm or justfile)" "CWE-1059" \
+                "Remove rsr-antipattern.yml — not an RSR-structured repo" "true"
+        fi
+    fi
+
+    # Scorecard enforcer: redundant if scorecard.yml already present
+    if [[ -f "$wf_dir/scorecard-enforcer.yml" && -f "$wf_dir/scorecard.yml" ]]; then
+        emit_finding "low" "workflow_hygiene" "redundant_scorecard_enforcer" \
+            "$wf_dir/scorecard-enforcer.yml" 0 \
+            "scorecard-enforcer.yml is redundant when scorecard.yml already exists" "CWE-1059" \
+            "Remove scorecard-enforcer.yml — scorecard.yml already provides this" "true"
+    fi
+
+    # Workflow linter: meta-linting is rarely actionable, often just noise
+    if [[ -f "$wf_dir/workflow-linter.yml" ]]; then
+        local wf_count
+        wf_count=$(find "$wf_dir" -name '*.yml' -o -name '*.yaml' 2>/dev/null | wc -l)
+        if [[ "$wf_count" -le 5 ]]; then
+            emit_finding "info" "workflow_hygiene" "unnecessary_workflow_linter" \
+                "$wf_dir/workflow-linter.yml" 0 \
+                "workflow-linter.yml present but repo has $wf_count or fewer workflows" "CWE-1059" \
+                "Remove workflow-linter.yml — not needed for small workflow sets" "true"
+        fi
+    fi
+
+    # instant-sync: redundant with mirror.yml
+    if [[ -f "$wf_dir/instant-sync.yml" && -f "$wf_dir/mirror.yml" ]]; then
+        emit_finding "low" "workflow_hygiene" "redundant_instant_sync" \
+            "$wf_dir/instant-sync.yml" 0 \
+            "instant-sync.yml is redundant when mirror.yml already handles forge sync" "CWE-1059" \
+            "Remove instant-sync.yml — mirror.yml already provides forge syncing" "true"
+    fi
+
+    # security-policy.yml: redundant check if SECURITY.md exists
+    if [[ -f "$wf_dir/security-policy.yml" && -f "$dir/SECURITY.md" ]]; then
+        emit_finding "info" "workflow_hygiene" "redundant_security_policy_wf" \
+            "$wf_dir/security-policy.yml" 0 \
+            "security-policy.yml checks for SECURITY.md but it already exists" "CWE-1059" \
+            "Remove security-policy.yml — SECURITY.md already present" "true"
+    fi
+
+    # Julia package repos: should have Julia CI, flag if missing
+    if [[ -f "$dir/Project.toml" ]]; then
+        local has_julia_ci=false
+        for ci_name in "ci.yml" "CI.yml" "test.yml"; do
+            [[ -f "$wf_dir/$ci_name" ]] && has_julia_ci=true
+        done
+        if [[ "$has_julia_ci" == false ]]; then
+            emit_finding "high" "workflow_hygiene" "missing_julia_ci" \
+                "$dir/Project.toml" 0 \
+                "Julia package detected (Project.toml) but no CI workflow runs Pkg.test()" "CWE-1059" \
+                "Add ci.yml with julia-actions/setup-julia and Pkg.test()" "true"
+        fi
+    fi
+
+    # Rust repos: should have Rust CI, flag if missing
+    if [[ -f "$dir/Cargo.toml" ]]; then
+        local has_rust_ci=false
+        for ci_name in "ci.yml" "CI.yml" "rust.yml" "test.yml" "build.yml"; do
+            [[ -f "$wf_dir/$ci_name" ]] && has_rust_ci=true
+        done
+        if [[ "$has_rust_ci" == false ]]; then
+            emit_finding "high" "workflow_hygiene" "missing_rust_ci" \
+                "$dir/Cargo.toml" 0 \
+                "Rust crate detected (Cargo.toml) but no CI workflow runs cargo test" "CWE-1059" \
+                "Add ci.yml with dtolnay/rust-toolchain and cargo test" "true"
+        fi
+    fi
+
+    # Elixir repos: should have Elixir CI, flag if missing
+    if [[ -f "$dir/mix.exs" ]]; then
+        local has_elixir_ci=false
+        for ci_name in "ci.yml" "CI.yml" "test.yml" "elixir.yml"; do
+            [[ -f "$wf_dir/$ci_name" ]] && has_elixir_ci=true
+        done
+        if [[ "$has_elixir_ci" == false ]]; then
+            emit_finding "medium" "workflow_hygiene" "missing_elixir_ci" \
+                "$dir/mix.exs" 0 \
+                "Elixir project detected (mix.exs) but no CI workflow runs mix test" "CWE-1059" \
+                "Add ci.yml with erlef/setup-beam and mix test" "true"
+        fi
+    fi
+
+    # Zig repos: should have Zig CI, flag if missing
+    if [[ -f "$dir/build.zig" || -d "$dir/ffi/zig" ]]; then
+        local has_zig_ci=false
+        for ci_name in "ci.yml" "CI.yml" "zig.yml" "zig-test.yml" "zig-ffi.yml"; do
+            [[ -f "$wf_dir/$ci_name" ]] && has_zig_ci=true
+        done
+        if [[ "$has_zig_ci" == false ]]; then
+            emit_finding "medium" "workflow_hygiene" "missing_zig_ci" \
+                "$dir" 0 \
+                "Zig project detected but no CI workflow runs zig build test" "CWE-1059" \
+                "Add zig-test.yml with goto-bus-stop/setup-zig and zig build test" "true"
+        fi
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────
