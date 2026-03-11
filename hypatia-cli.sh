@@ -580,6 +580,38 @@ scan_repo_structure() {
         done
     fi
 
+    # License hygiene: REUSE-compliant dual-license setup
+    if [[ -f "$dir/LICENSE" ]]; then
+        local first_line
+        first_line=$(head -1 "$dir/LICENSE")
+        if [[ "$first_line" != "Mozilla Public License Version 2.0" ]]; then
+            emit_finding "medium" "license_hygiene" "license_not_mpl2" \
+                "$dir/LICENSE" 1 "LICENSE file is not standard MPL-2.0 text (detected: ${first_line:0:60})" "CWE-1059" \
+                "Replace LICENSE with standard MPL-2.0 text for machine detection" "true"
+        fi
+    else
+        emit_finding "high" "license_hygiene" "missing_license_file" \
+            "$dir" 0 "No LICENSE file found" "CWE-1059" \
+            "Add LICENSE with standard MPL-2.0 text" "true"
+    fi
+
+    if [[ ! -d "$dir/LICENSES" ]]; then
+        emit_finding "medium" "license_hygiene" "missing_licenses_dir" \
+            "$dir" 0 "No LICENSES/ directory (REUSE standard)" "CWE-1059" \
+            "Add LICENSES/ with MPL-2.0.txt and PMPL-1.0-or-later.txt" "true"
+    else
+        [[ ! -f "$dir/LICENSES/PMPL-1.0-or-later.txt" ]] && \
+            emit_finding "medium" "license_hygiene" "missing_pmpl_text" \
+                "$dir/LICENSES" 0 "LICENSES/ missing PMPL-1.0-or-later.txt" "CWE-1059" \
+                "Add LICENSES/PMPL-1.0-or-later.txt" "true"
+    fi
+
+    if [[ ! -f "$dir/NOTICE" ]]; then
+        emit_finding "low" "license_hygiene" "missing_notice" \
+            "$dir" 0 "No NOTICE file explaining dual-license setup" "CWE-1059" \
+            "Add NOTICE explaining MPL-2.0 + PMPL-1.0-or-later relationship" "true"
+    fi
+
     # Dependabot config
     if [[ ! -f "$dir/.github/dependabot.yml" && ! -f "$dir/.github/dependabot.yaml" ]]; then
         if [[ -f "$dir/Cargo.toml" || -f "$dir/mix.exs" || -f "$dir/deno.json" || -f "$dir/package.json" ]]; then
