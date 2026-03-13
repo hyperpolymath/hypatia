@@ -7,7 +7,7 @@
     (version "0.9.0")
     (schema-version "1.0")
     (created "2026-01-03")
-    (updated "2026-03-07")
+    (updated "2026-03-13")
     (project "hypatia")
     (repo "github.com/hyperpolymath/hypatia"))
 
@@ -53,7 +53,7 @@
       (graphql-api "planned" "Fleet coordination API — live HTTP endpoint"))
     (working-features
       ("Safety triangle pipeline: eliminate → substitute → control")
-      ("34 fix recipes covering 14/20 PA rule categories + 7 Scorecard categories")
+      ("34 fix recipes covering 14/20 PA rule categories + 7 Scorecard categories + 5 RSR compliance rules")
       ("Fuzzy recipe matching by PA rule prefix + keyword overlap")
       ("Language inference from description text")
       ("Dispatch manifest generation (JSONL)")
@@ -177,6 +177,16 @@
       ("Develop more fix recipes for high-frequency substitute patterns")))
 
   (session-history
+    (session "2026-03-13"
+      (accomplishments
+        ("POC scanner: added 5 new RSR compliance rule categories")
+        ("  - Banned language detection (Python, TypeScript, Go files)")
+        ("  - SCM file location enforcement (.machine_readable/ only)")
+        ("  - Missing required files (SECURITY.md, .editorconfig, LICENSE, AI manifest)")
+        ("  - Dockerfile naming (must be Containerfile)")
+        ("Elixir pipeline: added matching rules in code_safety.ex")
+        ("  - banned_file_extensions/0, check_scm_locations/1, check_dockerfile_naming/1")
+        ("Validated rules against svalinn — caught Python file, misplaced STATE.scm, missing SECURITY.md")))
     (session "2026-02-22"
       (accomplishments
         ("AUDIT: Neural coordinator was dead code — 0/5 networks called from main pipeline")

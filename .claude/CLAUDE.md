@@ -163,7 +163,7 @@ verisimdb-data (git-backed flat files) is the canonical data store. VQL queries 
 - 302 repos scanned, 3385 weak points across ecosystem
 - 1635 dispatched actions (600 auto-execute, 667 review, 368 report)
 - 16671 outcomes recorded (99% success rate, Bayesian confidence updating)
-- 46 recipes (0 uncovered categories), 20 OpenSSF Scorecard recipes
+- 46 recipes (0 uncovered categories), 20 OpenSSF Scorecard recipes, 5 RSR compliance rules
 - 5 neural networks + coordinator in OTP supervision
 - Bayesian Beta-distribution confidence (prior_strength=10, floor=0.10, cap=0.99)
 - Re-scan verification via panic-attacker (confirms fix removed weak point)
@@ -182,6 +182,7 @@ verisimdb-data (git-backed flat files) is the canonical data store. VQL queries 
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
 - Implement VQL federation executor (currently local-only)
 - Historical trend tracking across scan cycles
+- 5 new RSR compliance rules cover structural compliance (banned languages, SCM locations, required files, Containerfile naming) — distinct from PA rule recipes
 - ~~Generate summaries for NULL-summary repos in verisimdb-data~~ (DONE 2026-03-07: 295 summaries auto-generated)
 
 **Planned:**
