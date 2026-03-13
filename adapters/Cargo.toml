@@ -19,7 +19,7 @@ thiserror = "1.0"
 async-trait = "0.1"
 url = "2.5"
 base64 = "0.21"
-octocrab = "0.32"  # GitHub API (uses reqwest with default TLS)
+octocrab = "0.49"  # GitHub API (hyper 1.x, jsonwebtoken 10.x)
 tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4"] }
@@ -32,7 +32,7 @@ data = { path = "../data", package = "hypatia-data" }
 
 [dev-dependencies]
 tokio-test = "0.4"
-wiremock = "0.5"
+wiremock = "0.6"
 hex = "0.4"
 hmac = "0.12"
 sha2 = "0.10"
