@@ -93,6 +93,114 @@ scan_pattern "HIGH" \
     "Command execution with env var (injection risk)" \
     "*.rs"
 
+# ---------------------------------------------------------------------------
+# RSR Compliance: Banned Language Detection
+# ---------------------------------------------------------------------------
+
+scan_banned_language() {
+    local severity="$1"
+    local extension="$2"
+    local language="$3"
+    local replacement="$4"
+
+    echo -e "${YELLOW}[${severity}]${NC} Scanning for: Banned language files (${language})"
+
+    results=$(find "$TARGET_REPO" -name "$extension" \
+        -not -path '*/.git/*' \
+        -not -path '*/node_modules/*' \
+        -not -path '*/vendor/*' \
+        -not -path '*/.lake/packages/*' 2>/dev/null || true)
+
+    if [ -n "$results" ]; then
+        echo -e "${RED}  ✗ FOUND: ${language} files (banned — use ${replacement}):${NC}"
+        echo "$results" | while IFS= read -r line; do
+            echo "    $line"
+            ((ISSUE_COUNT++)) || true
+        done
+    else
+        echo -e "${GREEN}  ✓ No issues found${NC}"
+    fi
+    echo ""
+}
+
+# Rule 9: Python files (CRITICAL — banned language)
+scan_banned_language "CRITICAL" "*.py" "Python" "Julia/Rust/ReScript"
+
+# Rule 10: TypeScript files (CRITICAL — banned language)
+scan_banned_language "CRITICAL" "*.ts" "TypeScript" "ReScript"
+
+# Rule 11: Go files (CRITICAL — banned language)
+scan_banned_language "CRITICAL" "*.go" "Go" "Rust"
+
+# ---------------------------------------------------------------------------
+# RSR Compliance: SCM File Location Enforcement
+# ---------------------------------------------------------------------------
+
+echo -e "${YELLOW}[CRITICAL]${NC} Scanning for: SCM files outside .machine_readable/"
+
+scm_misplaced=0
+for scm_file in STATE.scm META.scm ECOSYSTEM.scm AGENTIC.scm NEUROSYM.scm PLAYBOOK.scm LANGUAGES.scm; do
+    # Check root
+    if [ -f "$TARGET_REPO/$scm_file" ]; then
+        echo -e "${RED}  ✗ FOUND: $scm_file in repo root (must be in .machine_readable/)${NC}"
+        ((scm_misplaced++)) || true
+    fi
+    # Check .meta/ (wrong location)
+    if [ -f "$TARGET_REPO/.meta/$scm_file" ]; then
+        echo -e "${RED}  ✗ FOUND: .meta/$scm_file (must be in .machine_readable/, not .meta/)${NC}"
+        ((scm_misplaced++)) || true
+    fi
+done
+if [ "$scm_misplaced" -eq 0 ]; then
+    echo -e "${GREEN}  ✓ No issues found${NC}"
+else
+    ISSUE_COUNT=$((ISSUE_COUNT + scm_misplaced))
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
+# RSR Compliance: Missing Required Files
+# ---------------------------------------------------------------------------
+
+echo -e "${YELLOW}[MEDIUM]${NC} Scanning for: Missing RSR required files"
+
+missing_files=0
+for required in "SECURITY.md" ".editorconfig" "LICENSE"; do
+    if [ ! -f "$TARGET_REPO/$required" ]; then
+        echo -e "${RED}  ✗ MISSING: $required${NC}"
+        ((missing_files++)) || true
+    fi
+done
+# AI manifest check
+if [ ! -f "$TARGET_REPO/0-AI-MANIFEST.a2ml" ] && [ ! -f "$TARGET_REPO/AI.a2ml" ]; then
+    echo -e "${RED}  ✗ MISSING: AI manifest (0-AI-MANIFEST.a2ml or AI.a2ml)${NC}"
+    ((missing_files++)) || true
+fi
+if [ "$missing_files" -eq 0 ]; then
+    echo -e "${GREEN}  ✓ No issues found${NC}"
+else
+    ISSUE_COUNT=$((ISSUE_COUNT + missing_files))
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
+# RSR Compliance: Dockerfile vs Containerfile
+# ---------------------------------------------------------------------------
+
+echo -e "${YELLOW}[HIGH]${NC} Scanning for: Dockerfile instead of Containerfile"
+
+dockerfile_results=$(find "$TARGET_REPO" -name "Dockerfile" -not -path '*/.git/*' 2>/dev/null || true)
+if [ -n "$dockerfile_results" ]; then
+    echo -e "${RED}  ✗ FOUND: Dockerfile (must be named Containerfile):${NC}"
+    echo "$dockerfile_results" | while IFS= read -r line; do
+        echo "    $line"
+        ((ISSUE_COUNT++)) || true
+    done
+else
+    echo -e "${GREEN}  ✓ No issues found${NC}"
+fi
+echo ""
+
 echo "================================================"
 echo -e "Total issues found: ${RED}${ISSUE_COUNT}${NC}"
 echo ""

@@ -137,6 +137,58 @@ defmodule Hypatia.Rules.CodeSafety do
 
   def container_patterns, do: @container_patterns
 
+  # ---------------------------------------------------------------------------
+  # RSR Compliance Patterns (structural, not content-based)
+  # ---------------------------------------------------------------------------
+
+  @banned_file_extensions [
+    %{id: :python_file, severity: :critical, glob: "*.py",
+      language: "Python", replacement: "Julia/Rust/ReScript",
+      description: "Python file detected — banned language"},
+    %{id: :typescript_file, severity: :critical, glob: "*.ts",
+      language: "TypeScript", replacement: "ReScript",
+      description: "TypeScript file detected — banned language"},
+    %{id: :golang_file, severity: :critical, glob: "*.go",
+      language: "Go", replacement: "Rust",
+      description: "Go file detected — banned language"}
+  ]
+
+  @scm_canonical_dir ".machine_readable"
+  @scm_file_names ~w(STATE.scm META.scm ECOSYSTEM.scm AGENTIC.scm NEUROSYM.scm PLAYBOOK.scm LANGUAGES.scm)
+
+  def banned_file_extensions, do: @banned_file_extensions
+  def scm_file_names, do: @scm_file_names
+
+  @doc "Check if any SCM files exist outside .machine_readable/"
+  def check_scm_locations(file_list) do
+    Enum.flat_map(@scm_file_names, fn scm ->
+      file_list
+      |> Enum.filter(fn f ->
+        String.ends_with?(f, "/" <> scm) and
+          not String.contains?(f, @scm_canonical_dir <> "/" <> scm)
+      end)
+      |> Enum.map(fn f ->
+        %{rule: :scm_wrong_location, severity: :critical,
+          description: "#{scm} found outside #{@scm_canonical_dir}/",
+          file: f, expected_dir: @scm_canonical_dir}
+      end)
+    end)
+  end
+
+  @doc "Check for Dockerfile instead of Containerfile"
+  def check_dockerfile_naming(file_list) do
+    file_list
+    |> Enum.filter(fn f ->
+      basename = Path.basename(f)
+      basename == "Dockerfile" or String.starts_with?(basename, "Dockerfile.")
+    end)
+    |> Enum.map(fn f ->
+      %{rule: :dockerfile_not_containerfile, severity: :high,
+        description: "Dockerfile detected — must be named Containerfile",
+        file: f}
+    end)
+  end
+
   def scan_container_code(content) do
     Enum.flat_map(@container_patterns, fn rule ->
       if Regex.match?(rule.pattern, content) do
