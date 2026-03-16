@@ -71,7 +71,7 @@ Hypatia is a neurosymbolic CI/CD engine that scans repos. It has:
 
 **Partially done (25/149 repos audited manually 2026-03-02):**
 
-- Template placeholder replacement ({{REPO}}, {{OWNER}}, {{FORGE}})
+- Template placeholder replacement (hypatia, hyperpolymath, github.com)
 - SPDX header correctness (AGPL → PMPL migration)
 - Author/email correctness
 - .machine_readable/ directory structure
