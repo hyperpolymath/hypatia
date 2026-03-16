@@ -7,6 +7,7 @@
 //! - SHA pin management using SHA-PINS.scm reference
 //! - Integration points for gitbot-fleet bots
 
+#![forbid(unsafe_code)]
 pub mod catalog;
 pub mod fixer;
 pub mod scanner;

@@ -7,6 +7,7 @@
 //! - Managing rulesets (deposit, withdraw, search)
 //! - Installing and managing git hooks
 
+#![forbid(unsafe_code)]
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

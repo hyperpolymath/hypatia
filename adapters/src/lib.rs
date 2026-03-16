@@ -40,6 +40,7 @@
 //! ```
 
 // Core adapters
+#![forbid(unsafe_code)]
 pub mod bitbucket;
 pub mod codeberg;
 pub mod error;

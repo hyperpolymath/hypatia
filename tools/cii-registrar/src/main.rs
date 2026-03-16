@@ -10,6 +10,7 @@
 //!   Required for `register` and `batch` commands.
 //! * `GITHUB_TOKEN` — GitHub personal access token (for `list` command).
 
+#![forbid(unsafe_code)]
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde::Deserialize;

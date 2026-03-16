@@ -10,6 +10,7 @@
 //! ArangoDB was 0% deployed and transitional. If needed in future, use a direct
 //! HTTP client (reqwest) against ArangoDB's REST API instead of the arangors crate.
 
+#![forbid(unsafe_code)]
 pub mod cache;
 pub mod dragonfly;
 pub mod error;

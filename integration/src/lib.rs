@@ -24,6 +24,7 @@
 //! }
 //! ```
 
+#![forbid(unsafe_code)]
 pub mod ci_simulation;
 
 use std::path::PathBuf;
