@@ -223,7 +223,7 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @required_spdx "PMPL-1.0-or-later"
-  @wrong_licenses ["MIT", "Apache-2.0", "AGPL-3.0-or-later", "AGPL-3.0", "GPL-3.0"]
+  @wrong_licenses ["MIT", "Apache-2.0", "PMPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
 
   def required_spdx, do: @required_spdx
 

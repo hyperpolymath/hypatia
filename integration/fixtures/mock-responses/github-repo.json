@@ -38,7 +38,7 @@
   "license": {
     "key": "agpl-3.0",
     "name": "GNU Affero General Public License v3.0",
-    "spdx_id": "AGPL-3.0-or-later",
+    "spdx_id": "PMPL-1.0-or-later",
     "url": "https://api.github.com/licenses/agpl-3.0"
   },
   "visibility": "public",
