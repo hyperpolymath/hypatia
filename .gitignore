@@ -65,6 +65,9 @@ elixir-scanner/hypatia
 # Sync artifacts
 sync_report*.txt
 
+# Machine-readable locks
+.machine_readable/.locks/
+
 # Local development
 .local/
 tmp/

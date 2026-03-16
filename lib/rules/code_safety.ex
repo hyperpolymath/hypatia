@@ -154,7 +154,7 @@ defmodule Hypatia.Rules.CodeSafety do
   ]
 
   @scm_canonical_dir ".machine_readable"
-  @scm_file_names ~w(STATE.scm META.scm ECOSYSTEM.scm AGENTIC.scm NEUROSYM.scm PLAYBOOK.scm LANGUAGES.scm)
+  @scm_file_names ~w(STATE.a2ml META.a2ml ECOSYSTEM.a2ml AGENTIC.a2ml NEUROSYM.a2ml PLAYBOOK.a2ml LANGUAGES.a2ml)
 
   def banned_file_extensions, do: @banned_file_extensions
   def scm_file_names, do: @scm_file_names

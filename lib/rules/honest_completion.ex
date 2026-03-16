@@ -58,7 +58,7 @@ defmodule Hypatia.Rules.HonestCompletion do
       has_ci: File.dir?(Path.join(repo_path, ".github/workflows")),
       has_tests_dir: File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
       has_state_file: File.exists?(Path.join(repo_path, ".machine_readable/STATE.a2ml")) or
-                      File.exists?(Path.join(repo_path, ".machine_readable/STATE.scm"))
+                      File.exists?(Path.join(repo_path, ".machine_readable/STATE.scm")) # DEPRECATED: .scm fallback — will be removed once all repos migrate to .a2ml
     }
   end
 
@@ -197,10 +197,11 @@ defmodule Hypatia.Rules.HonestCompletion do
 
   defp find_state_file(repo_path) do
     a2ml = Path.join(repo_path, ".machine_readable/STATE.a2ml")
+    # DEPRECATED: .scm fallback — will be removed once all repos migrate to .a2ml
     scm = Path.join(repo_path, ".machine_readable/STATE.scm")
     cond do
       File.exists?(a2ml) -> a2ml
-      File.exists?(scm) -> scm
+      File.exists?(scm) -> scm  # DEPRECATED: .scm fallback path
       true -> nil
     end
   end
