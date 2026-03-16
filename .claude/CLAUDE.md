@@ -42,12 +42,12 @@ cargo test      # Test Rust workspace
 
 Files in `.machine_readable/` contain structured project metadata:
 
-- `STATE.scm` - Current project state and progress
-- `META.scm` - Architecture decisions and development practices
-- `ECOSYSTEM.scm` - Position in the ecosystem and related projects
-- `AGENTIC.scm` - AI agent interaction patterns
-- `NEUROSYM.scm` - Neurosymbolic integration config
-- `PLAYBOOK.scm` - Operational runbook
+- `.machine_readable/6a2/STATE.a2ml` - Current project state and progress
+- `.machine_readable/6a2/META.a2ml` - Architecture decisions and development practices
+- `.machine_readable/6a2/ECOSYSTEM.a2ml` - Position in the ecosystem and related projects
+- `.machine_readable/6a2/AGENTIC.a2ml` - AI agent interaction patterns
+- `.machine_readable/6a2/NEUROSYM.a2ml` - Neurosymbolic integration config
+- `.machine_readable/6a2/PLAYBOOK.a2ml` - Operational runbook
 
 ## Safety Triangle Pipeline (OPERATIONAL)
 
