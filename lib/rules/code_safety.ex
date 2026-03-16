@@ -90,6 +90,37 @@ defmodule Hypatia.Rules.CodeSafety do
       description: "sorry leaves proof hole"}
   ]
 
+  # ---------------------------------------------------------------------------
+  # Nickel Patterns — config-time security and RSR policy enforcement
+  # ---------------------------------------------------------------------------
+
+  @nickel_patterns [
+    %{id: :ncl_http_url, severity: :high,
+      pattern: ~r/=\s*"http:\/\//, cwe: "CWE-319",
+      description: "HTTP URL in Nickel config — must use HTTPS"},
+    %{id: :ncl_weak_hash, severity: :high,
+      pattern: ~r/(md5:|sha1:)[a-fA-F0-9]+/, cwe: "CWE-328",
+      description: "Weak hash (MD5/SHA-1) in config — use SHA-256+"},
+    %{id: :ncl_action_version_tag, severity: :medium,
+      pattern: ~r/uses\s*=\s*"[^@]+@v\d+/, cwe: "CWE-829",
+      description: "GitHub Action pinned by tag not SHA — supply chain risk"},
+    %{id: :ncl_banned_language_ref, severity: :high,
+      pattern: ~r/language\s*=\s*"(typescript|go|python|java|kotlin|swift|dart)"/, cwe: "CWE-1104",
+      description: "Banned language referenced in Nickel build target"},
+    %{id: :ncl_missing_spdx, severity: :medium,
+      pattern: ~r/\A(?!.*SPDX-License-Identifier).{0,500}\z/s, cwe: "CWE-1104",
+      description: "Nickel file missing SPDX-License-Identifier header"},
+    %{id: :ncl_k9_missing_pedigree, severity: :high,
+      pattern: ~r/\AK9!(?!.*pedigree\s*=).+\z/s, cwe: "CWE-1104",
+      description: "K9 contractile missing pedigree section"},
+    %{id: :ncl_hardcoded_secret, severity: :critical,
+      pattern: ~r/password\s*=\s*"[^"]+"|api_key\s*=\s*"[^"]+"|secret\s*=\s*"[^"]+"/, cwe: "CWE-798",
+      description: "Hardcoded credential in Nickel config — use SecretRef"},
+    %{id: :ncl_docker_not_podman, severity: :medium,
+      pattern: ~r/docker\s|docker\.io|dockerfile/i, cwe: "CWE-1104",
+      description: "Docker reference in Nickel config — RSR requires Podman/Containerfile"}
+  ]
+
   def patterns_for_language("rust"), do: @rust_patterns
   def patterns_for_language("rescript"), do: @rescript_patterns
   def patterns_for_language("idris2"), do: @idris2_banned
@@ -97,6 +128,7 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language("ocaml"), do: @ocaml_banned
   def patterns_for_language("coq"), do: @coq_banned
   def patterns_for_language("lean"), do: @lean_banned
+  def patterns_for_language("nickel"), do: @nickel_patterns
   def patterns_for_language(_), do: []
 
   def scan_content(content, language) do
