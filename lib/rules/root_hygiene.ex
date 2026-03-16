@@ -104,7 +104,13 @@ defmodule Hypatia.Rules.RootHygiene do
     %{pattern: "go.mod", reason: "Go banned — use Rust", severity: :high,
       action: :flag},
     %{pattern: "go.sum", reason: "Go banned — use Rust", severity: :high,
-      action: :flag}
+      action: :flag},
+    %{pattern: "AI.a2ml", reason: "Stray AI.a2ml in root — use 0-AI-MANIFEST.a2ml only", severity: :high,
+      action: :delete},
+    %{pattern: "Trustfile.hs", reason: "Legacy Haskell Trustfile — use Trustfile.a2ml", severity: :high,
+      action: :convert},
+    %{pattern: "AI.djot", reason: "Superseded by 0-AI-MANIFEST.a2ml", severity: :high,
+      action: :delete}
   ]
 
   # ─── Stale file patterns ───────────────────────────────────────────────
