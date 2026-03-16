@@ -17,14 +17,9 @@ thiserror = "1.0"
 async-trait = "0.1"
 tracing = "0.1"
 
-# ArangoDB (optional — uclient 0.2 pulls hyper 0.10 which has critical CVEs)
-# Enable with: cargo build -p hypatia-data --features arangodb
-arangors = { version = "0.6", optional = true }
-uclient = { version = "0.2", optional = true }
-
-# Force vendored OpenSSL for cross-compilation support
-# This is required because arangors uses reqwest with native-tls
-openssl = { version = "0.10", features = ["vendored"], optional = true }
+# ArangoDB removed — uclient 0.2 pulls hyper 0.10 (CVE-vulnerable, unmaintained).
+# ArangoDB itself was 0% deployed and transitional. If needed in future, use
+# arangors 0.7+ (once it drops hyper 0.10 dependency) or a direct HTTP client.
 
 # Redis/Dragonfly
 redis = { version = "1.0", features = ["tokio-comp", "connection-manager"] }
@@ -47,5 +42,4 @@ testcontainers = "0.27"
 default = []
 # Enable for integration tests with real databases
 integration-tests = []
-# ArangoDB client (pulls hyper 0.10 via uclient — disabled by default until uclient updates)
-arangodb = ["arangors", "uclient", "openssl"]
+# ArangoDB removed — see comment above

@@ -2,18 +2,19 @@
 //! Data layer clients for cicd-hyper-a
 //!
 //! Provides unified access to:
-//! - ArangoDB: Graph database for repos, alerts, rules, relationships
 //! - Dragonfly: Redis-compatible cache for fast rule lookups
 //! - Cache: High-level caching abstraction with connection pooling
+//! - VeriSimDB: Versioned 8-modality database
+//!
+//! ArangoDB support removed — uclient 0.2 pulls hyper 0.10 (CVE-vulnerable).
+//! ArangoDB was 0% deployed and transitional. If needed, use direct HTTP client.
 
-pub mod arangodb;
 pub mod cache;
 pub mod dragonfly;
 pub mod error;
 pub mod models;
 pub mod verisimdb;
 
-pub use arangodb::ArangoClient;
 pub use cache::{CacheHandle, CachePrefix, CacheStats, DragonflyCache, InvalidationEvent};
 pub use dragonfly::DragonflyClient;
 pub use error::{DataError, Result};
