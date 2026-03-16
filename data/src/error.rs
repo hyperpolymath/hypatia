@@ -5,8 +5,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DataError {
-    #[error("ArangoDB error: {0}")]
-    ArangoError(String),
+    #[error("VeriSimDB error: {0}")]
+    VerisimError(String),
 
     #[error("Dragonfly/Redis error: {0}")]
     DragonflyError(#[from] redis::RedisError),

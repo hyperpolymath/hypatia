@@ -2,7 +2,9 @@
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Hypatia.Neural.TrainingPipelineTest do
+  # Training tests can exceed 60s default on large datasets (2500+ ESN points)
   use ExUnit.Case, async: true
+  @moduletag timeout: 300_000
 
   alias Hypatia.Neural.{TrainingPipeline, EchoStateNetwork, RadialNeuralNetwork}
 

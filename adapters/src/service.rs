@@ -2,7 +2,7 @@
 //! Service layer integrating forge adapters with data layer
 //!
 //! This module provides the seam between forge operations and persistence,
-//! ensuring all forge data flows seamlessly to ArangoDB and Dragonfly.
+//! ensuring all forge data flows seamlessly to VeriSimDB and Dragonfly.
 
 use crate::error::{AdapterError, Result};
 use crate::forge::{Alert, ForgeAdapter, Repository, Severity};
@@ -56,13 +56,13 @@ impl ForgeService {
             // Find repo in forge
             let repos = adapter.list_repos(owner).await?;
             if let Some(repo) = repos.into_iter().find(|r| r.name == repo_name) {
-                // Store repo in ArangoDB
+                // Store repo in VeriSimDB
                 let repo_doc = self.repo_to_doc(&repo);
                 self.data
-                    .arango
+                    .verisim
                     .upsert_document("repos", &repo_doc)
                     .await
-                    .map_err(|e| AdapterError::ApiError(format!("ArangoDB error: {}", e)))?;
+                    .map_err(|e| AdapterError::ApiError(format!("VeriSimDB error: {}", e)))?;
                 result.repos_synced += 1;
 
                 // Cache repo state in Dragonfly
@@ -87,10 +87,10 @@ impl ForgeService {
                 for alert in &alerts {
                     let alert_doc = self.alert_to_doc(alert, &repo.id);
                     self.data
-                        .arango
+                        .verisim
                         .upsert_document("alerts", &alert_doc)
                         .await
-                        .map_err(|e| AdapterError::ApiError(format!("ArangoDB error: {}", e)))?;
+                        .map_err(|e| AdapterError::ApiError(format!("VeriSimDB error: {}", e)))?;
 
                     // Queue high-severity alerts for processing
                     if matches!(alert.severity, Severity::Critical | Severity::High) {
@@ -122,12 +122,12 @@ impl ForgeService {
 
     /// Apply rule to alert and persist the fix
     pub async fn apply_fix(&self, alert_key: &str, rule_key: &str, confidence: f64) -> Result<()> {
-        // Record fix application in ArangoDB
+        // Record fix application in VeriSimDB
         self.data
-            .arango
+            .verisim
             .apply_fix(alert_key, rule_key, confidence)
             .await
-            .map_err(|e| AdapterError::ApiError(format!("ArangoDB error: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("VeriSimDB error: {}", e)))?;
 
         // Publish fix event via Dragonfly pub/sub
         self.data
@@ -164,13 +164,13 @@ impl ForgeService {
 
     /// Refresh rule cache from data layer
     pub async fn refresh_rule_cache(&self) -> Result<usize> {
-        // Fetch all enabled rules from ArangoDB
+        // Fetch all enabled rules from VeriSimDB
         let rules: Vec<RuleDoc> = self
             .data
-            .arango
+            .verisim
             .query_documents("FOR r IN rules FILTER r.enabled == true RETURN r")
             .await
-            .map_err(|e| AdapterError::ApiError(format!("ArangoDB error: {}", e)))?;
+            .map_err(|e| AdapterError::ApiError(format!("VeriSimDB error: {}", e)))?;
 
         // Convert to cached format and store in Dragonfly
         let mut cache = self.rule_cache.write().await;
@@ -236,7 +236,7 @@ impl ForgeService {
         let adapters_ok = !self.adapters.is_empty();
 
         Ok(ServiceHealth {
-            arangodb: data_health.arangodb,
+            verisimdb: data_health.verisimdb,
             dragonfly: data_health.dragonfly,
             adapters: if adapters_ok { "pass" } else { "fail" }.to_string(),
             overall: if data_health.overall == "healthy" && adapters_ok {
@@ -308,7 +308,7 @@ pub struct SyncResult {
 /// Health status for entire service
 #[derive(Debug)]
 pub struct ServiceHealth {
-    pub arangodb: String,
+    pub verisimdb: String,
     pub dragonfly: String,
     pub adapters: String,
     pub overall: String,

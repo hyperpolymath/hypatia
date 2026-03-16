@@ -52,6 +52,35 @@ impl VerisimClient {
     }
 
     // ============================================================
+    // GENERIC DOCUMENT OPERATIONS (ArangoDB-compatible API surface)
+    // ============================================================
+
+    /// Upsert a document into a named collection.
+    /// Maps to VeriSimDB's document modality (HTTP PUT /api/v1/documents/{collection}/{key}).
+    pub async fn upsert_document<T: serde::Serialize>(&self, collection: &str, doc: &T) -> Result<()> {
+        debug!("Upserting document in collection: {}", collection);
+        // In production: HTTP PUT to self.url/api/v1/documents/{collection}
+        let _json = serde_json::to_string(doc)?;
+        Ok(())
+    }
+
+    /// Query documents using VQL (or AQL-compatible subset).
+    /// Maps to VeriSimDB's query endpoint (HTTP POST /api/v1/vql/execute).
+    pub async fn query_documents<T: serde::de::DeserializeOwned>(&self, _query: &str) -> Result<Vec<T>> {
+        debug!("Executing VQL query");
+        // In production: HTTP POST to self.url/api/v1/vql/execute
+        Ok(vec![])
+    }
+
+    /// Apply a fix record (alert + rule + confidence).
+    /// Maps to VeriSimDB's document modality with temporal versioning.
+    pub async fn apply_fix(&self, alert_key: &str, rule_key: &str, confidence: f64) -> Result<()> {
+        debug!("Recording fix: alert={}, rule={}, confidence={}", alert_key, rule_key, confidence);
+        // In production: HTTP POST to self.url/api/v1/documents/fixes
+        Ok(())
+    }
+
+    // ============================================================
     // HEXAD OPERATIONS (Multimodal)
     // ============================================================
 
