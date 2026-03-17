@@ -98,5 +98,5 @@ Template can be configured via `template.toml`:
 
 == References
 
-* link:https://github.com/hyperpolymath/a2ml[A2ML Specification]
+* link:https://github.com/hyperpolymath/standards/tree/main/a2ml[A2ML Specification]
 * link:SPEC.adoc[Hypatia Template Specification]

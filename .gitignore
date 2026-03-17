@@ -1,3 +1,4 @@
+# RSR-compliant .gitignore
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Build artifacts
 target/
@@ -71,3 +72,74 @@ sync_report*.txt
 # Local development
 .local/
 tmp/
+
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+
+# Build
+/target/
+/_build/
+/build/
+/dist/
+/out/
+/zig-out/
+/zig-cache/
+
+
+# Rust
+
+# Cargo.lock  # Keep for binaries
+
+
+# Julia
+*.jl.cov
+*.jl.mem
+/Manifest.toml
+
+
+# ReScript
+/lib/bs/
+/.bsb.lock
+
+
+# Python (SaltStack only)
+__pycache__/
+*.py[cod]
+.venv/
+
+
+# Ada/SPARK
+*.ali
+/obj/
+/bin/
+
+
+# Chapel
+*.chpl.tmp.*
+
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+
+# Test/Coverage
+/coverage/
+htmlcov/
+
+
+# Temp
+/tmp/
+*.tmp
+*.bak
