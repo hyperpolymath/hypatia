@@ -77,6 +77,6 @@ See link:../examples/k9-templates/[k9-templates/] for example K9-based templates
 
 == References
 
-* link:https://github.com/hyperpolymath/k9-svc[K9 Self-Validating Component Standard]
+* link:https://github.com/hyperpolymath/standards/tree/main/k9-svc[K9 Self-Validating Component Standard]
 * link:https://nickel-lang.org[Nickel Language]
 * link:https://just.systems[Just Task Runner]
