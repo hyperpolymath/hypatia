@@ -487,6 +487,11 @@ scan_code_patterns() {
         "high" "supply_chain" "pr_target_trigger" "CWE-829" \
         "pull_request_target runs in privileged context; do not checkout PR code"
 
+    # Flawed action pinning check (grep -rn "uses:" matches itself)
+    run_pattern "$dir" "*.{yml,yaml,sh}" 'grep.*-rn.*"uses:"' \
+        "medium" "workflow_security" "flawed_linter_regex" "CWE-1021" \
+        "Use anchored regex for action pinning check: grep -rnE \"^[[:space:]]+uses:\"" "true"
+
     # ── 10. TIMING / COMPARISON SAFETY ─────────────────────────────
 
     # Non-constant-time comparison for secrets (Rust)
@@ -619,6 +624,21 @@ scan_repo_structure() {
                 "$dir" 0 "No dependabot.yml but project has dependencies" "CWE-1104" \
                 "Add .github/dependabot.yml for automated dependency updates" "true"
         fi
+    fi
+
+    # Rust: Missing forbid(unsafe_code)
+    if [[ -f "$dir/Cargo.toml" ]]; then
+        local entry_points=()
+        [[ -f "$dir/src/lib.rs" ]] && entry_points+=("$dir/src/lib.rs")
+        [[ -f "$dir/src/main.rs" ]] && entry_points+=("$dir/src/main.rs")
+        
+        for ep in "${entry_points[@]}"; do
+            if ! grep -q "#!\[forbid(unsafe_code)\]" "$ep"; then
+                emit_finding "low" "code_quality" "missing_forbid_unsafe" \
+                    "$ep" 1 "Rust entry point missing #![forbid(unsafe_code)]" "CWE-1188" \
+                    "Add #![forbid(unsafe_code)] at the top of $ep to enforce memory safety" "true"
+            fi
+        done
     fi
 }
 
