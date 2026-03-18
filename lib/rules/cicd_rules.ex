@@ -141,7 +141,13 @@ defmodule Hypatia.Rules.CicdRules do
     %{id: :missing_elixir_ci, severity: :medium, auto_fixable: true,
       description: "Elixir project without CI running mix test"},
     %{id: :missing_zig_ci, severity: :medium, auto_fixable: true,
-      description: "Zig project without CI running zig build test"}
+      description: "Zig project without CI running zig build test"},
+
+    # --- Rules derived from 2026-03-18 session: Maximize Value ---
+    %{id: :missing_github_actions_dependabot, severity: :medium, auto_fixable: true,
+      description: "Dependabot missing github-actions ecosystem"},
+    %{id: :missing_workflow_caching, severity: :low, auto_fixable: true,
+      description: "Setup action missing built-in caching (setup-node, setup-python, setup-zig, etc.)"}
   ]
 
   def waste_patterns, do: @waste_patterns
@@ -299,6 +305,12 @@ defmodule Hypatia.Rules.CicdRules do
       prevention: [:ruleset, :branch_protection_api]},
     "ERR-SEC-002" => %{type: :missing_security_md, severity: :medium,
       detection: [:file_existence_check],
+      prevention: [:template]},
+    "ERR-WF-011" => %{type: :missing_github_actions_dependabot, severity: :medium,
+      detection: [:file_existence_check, :content_scan],
+      prevention: [:template]},
+    "ERR-WF-012" => %{type: :missing_workflow_caching, severity: :low,
+      detection: [:workflow_audit, :content_scan],
       prevention: [:template]}
   }
 

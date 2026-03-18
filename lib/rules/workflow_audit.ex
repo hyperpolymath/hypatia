@@ -68,14 +68,16 @@ defmodule Hypatia.Rules.WorkflowAudit do
     wrong_pins = check_wrong_pins(workflow_contents)
     permission_issues = check_permissions(workflow_contents)
     duplicates = check_duplicates(workflow_files, workflow_contents)
+    caching_issues = check_caching(workflow_contents)
 
     %{
-      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates,
+      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++ caching_issues,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
       permission_issues: length(permission_issues),
       duplicate_count: length(duplicates),
+      caching_issues: length(caching_issues),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -170,6 +172,32 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end
 
       findings
+    end)
+  end
+
+  @doc """
+  Check for setup actions that could use built-in caching but don't.
+  """
+  def check_caching(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      # Patterns for setup actions that support 'cache:'
+      cacheable_actions = [
+        {~r/uses:\s*actions\/setup-node@v\d+/, "setup-node"},
+        {~r/uses:\s*actions\/setup-python@v\d+/, "setup-python"},
+        {~r/uses:\s*actions\/setup-go@v\d+/, "setup-go"},
+        {~r/uses:\s*actions\/setup-java@v\d+/, "setup-java"},
+        {~r/uses:\s*mlugg\/setup-zig@v\d+/, "setup-zig"}
+      ]
+
+      Enum.flat_map(cacheable_actions, fn {pattern, name} ->
+        if Regex.match?(pattern, content) and not String.contains?(content, "cache:") do
+          [%{type: :missing_caching, file: filename,
+             detail: "#{name} missing built-in caching (e.g., cache: 'npm' or cache: true)",
+             severity: :low, action: :enable_caching}]
+        else
+          []
+        end
+      end)
     end)
   end
 
