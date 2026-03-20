@@ -29,17 +29,17 @@ defmodule Hypatia.Diagnostics.Monitor do
   # Public API
   # ====================================================================
 
-  @doc """Start the diagnostics monitor."""
+  @doc "Start the diagnostics monitor."
   def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %, name: __MODULE__)
+    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
-  @doc """Get current diagnostics status."""
+  @doc "Get current diagnostics status."
   def status do
     GenServer.call(__MODULE__, :status)
   end
 
-  @doc """Force an immediate health check."""
+  @doc "Force an immediate health check."
   def check_now do
     GenServer.cast(__MODULE__, :check_now)
   end
@@ -66,12 +66,12 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   @impl true
   def handle_cast(:check_now, state) do
-    run_health_check(state)
+    {:noreply, do_health_check(state)}
   end
 
   @impl true
   def handle_info(:run_checks, state) do
-    run_health_check(state)
+    {:noreply, do_health_check(state)}
   end
 
   @impl true
@@ -83,18 +83,17 @@ defmodule Hypatia.Diagnostics.Monitor do
   # Health Check Core
   # ====================================================================
 
-  defp run_health_check(state) do
+  defp do_health_check(state) do
     try do
       components = check_all_components()
       failures = detect_failures(components)
-      
+
+      Process.send_after(self(), :run_checks, @check_interval)
+
       if failures != [] do
         notify_failures(failures)
-        new_state = attempt_recoveries(failures, state)
-        Process.send_after(self(), :run_checks, @check_interval)
-        new_state
+        attempt_recoveries(failures, state)
       else
-        Process.send_after(self(), :run_checks, @check_interval)
         %{state | components: components, failures: [], last_check: DateTime.utc_now()}
       end
     rescue
@@ -124,46 +123,51 @@ defmodule Hypatia.Diagnostics.Monitor do
   end
 
   defp check_pipeline() do
-    case GenServer.call(Hypatia.Dispatch.Pipeline, :get_metrics, 1000) do
-      nil -> {:error, :pipeline_unresponsive}
-      metrics -> {:ok, {:pipeline, metrics}}
+    try do
+      case GenServer.call(Hypatia.Dispatch.Pipeline, :get_metrics, 1000) do
+        nil -> {:error, :pipeline_unresponsive}
+        metrics -> {:ok, {:pipeline, metrics}}
+      end
     rescue
       _ -> {:error, :pipeline_crashed}
     end
   end
 
   defp check_learning() do
-    case GenServer.call(Hypatia.Rules.Learning, :get_stats, 1000) do
-      nil -> {:error, :learning_unresponsive}
-      stats -> {:ok, {:learning, stats}}
+    try do
+      case GenServer.call(Hypatia.Rules.Learning, :get_stats, 1000) do
+        nil -> {:error, :learning_unresponsive}
+        stats -> {:ok, {:learning, stats}}
+      end
     rescue
       _ -> {:error, :learning_crashed}
     end
   end
 
   defp check_neural() do
-    case GenServer.call(Hypatia.Neural.Coordinator, :status, 1000) do
-      nil -> {:error, :neural_unresponsive}
-      status -> {:ok, {:neural, status}}
+    try do
+      case GenServer.call(Hypatia.Neural.Coordinator, :status, 1000) do
+        nil -> {:error, :neural_unresponsive}
+        status -> {:ok, {:neural, status}}
+      end
     rescue
       _ -> {:error, :neural_crashed}
     end
   end
 
   defp check_kin() do
-    case Hypatia.Kin.Coordinator.status() do
-      {:ok, status} -> {:ok, {:kin, status}}
-      _ -> {:error, :kin_unresponsive}
+    try do
+      case Hypatia.Kin.Coordinator.status() do
+        {:ok, status} -> {:ok, {:kin, status}}
+        _ -> {:error, :kin_unresponsive}
+      end
     rescue
       _ -> {:error, :kin_crashed}
     end
   end
 
   defp check_diagnostics() do
-    # Self-check
     {:ok, {:diagnostics, %{status: :healthy}}}
-  rescue
-    _ -> {:error, :diagnostics_crashed}
   end
 
   # ====================================================================
@@ -340,7 +344,7 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   defp attempt_recoveries(failures, state) do
     Enum.reduce(failures, state, fn {:failure, reason}, acc ->
-      recovery_result = attempt_recovery(reason)
+      _recovery_result = attempt_recovery(reason)
       
       # Track recovery attempts
       attempt_count = Map.get(acc.recovery_attempts, reason, 0) + 1
@@ -348,7 +352,7 @@ defmodule Hypatia.Diagnostics.Monitor do
       
       # Give up after max attempts
       if attempt_count >= @max_recovery_attempts do
-        Logger.warn("Max recovery attempts reached for: #{inspect(reason)}")
+        Logger.warning("Max recovery attempts reached for: #{inspect(reason)}")
       end
       
       %{acc | recovery_attempts: attempts}
@@ -359,19 +363,18 @@ defmodule Hypatia.Diagnostics.Monitor do
   # Metrics Tracking
   # ====================================================================
 
-  defp track_metrics(state, components) do
-    # Store metrics history for trend analysis
+  defp track_metrics(state, _components) do
     timestamps = state.metrics_history
-    
-    if length(timestamps) > 100 do
-      # Keep only last 100 entries
-      {_, recent} = Enum.split(timestamps, length(timestamps) - 100)
-      metrics_history = [DateTime.utc_now() | recent]
-    else
-      metrics_history = [DateTime.utc_now() | timestamps]
-    end
-    
-    %{state | metrics_history: metrics_history}
+
+    updated =
+      if length(timestamps) > 100 do
+        {_, recent} = Enum.split(timestamps, length(timestamps) - 100)
+        [DateTime.utc_now() | recent]
+      else
+        [DateTime.utc_now() | timestamps]
+      end
+
+    %{state | metrics_history: updated}
   end
 end
 

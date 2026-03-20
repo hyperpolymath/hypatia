@@ -106,15 +106,14 @@ defmodule Hypatia.CLI do
       ["help"] ->
         print_usage()
 
-      [] when opts[:version] == true ->
-        IO.puts("hypatia #{@version}")
-
-      [] when opts[:help] == true ->
-        print_usage()
-
       [] ->
-        IO.puts(:stderr, "Error: no command specified. Run 'hypatia help' for usage.")
-        System.halt(2)
+        cond do
+          opts[:version] -> IO.puts("hypatia #{@version}")
+          opts[:help] -> print_usage()
+          true ->
+            IO.puts(:stderr, "Error: no command specified. Run 'hypatia help' for usage.")
+            System.halt(2)
+        end
 
       [unknown | _] ->
         IO.puts(:stderr, "Error: unknown command '#{unknown}'. Run 'hypatia help' for usage.")

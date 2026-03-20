@@ -30,7 +30,9 @@ defmodule Hypatia.MixProject do
 
   defp deps do
     [
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:gen_stage, "~> 1.2"},
+      {:phoenix, "~> 1.7"}
     ]
   end
 end

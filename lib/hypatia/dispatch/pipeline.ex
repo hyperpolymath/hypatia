@@ -15,32 +15,6 @@ defmodule Hypatia.Dispatch.Pipeline do
 
   require Logger
 
-  # Application Integration
-  # ====================================================================
-
-  @doc """
-  Start the complete dispatch system (pipeline + builtin consumer).
-  """
-  def start_system() do
-    {:ok, _pipeline} = start_link()
-    {:ok, _consumer} = start_builtin_consumer()
-    
-    # Schedule periodic metrics logging
-    Process.send_after(self(), :log_metrics, 30_000)
-    
-    :ok
-  end
-
-  def handle_info(:log_metrics, state) do
-    case get_metrics() do
-      nil -> :noreply
-      metrics -> 
-        log_metrics(metrics)
-        Process.send_after(self(), :log_metrics, 30_000)
-        :noreply
-    end
-  end
-=======
   # ====================================================================
   # Event Broadcasting
   # ====================================================================
@@ -124,26 +98,29 @@ defmodule Hypatia.Dispatch.Pipeline do
 
   def handle_info(:log_metrics, state) do
     case get_metrics() do
-      nil -> :noreply
-      metrics -> 
+      nil ->
+        {:noreply, [], state}
+
+      metrics ->
         log_metrics(metrics)
-        
-        # Broadcast metrics via events
+
         broadcast_event(%{
           type: :system_metrics,
           data: metrics
         })
-        
+
         Process.send_after(self(), :log_metrics, 30_000)
-        :noreply
+        {:noreply, [], state}
     end
-  endConfiguration - can be overridden via Application config
+  end
+
+  # Configuration - can be overridden via Application config
   @default_concurrency 10
   @max_demand 100
   @batch_size 5
   @max_buffer 1000
 
-  def start_link(opts \ []) do
+  def start_link(opts \\ []) do
     initial_state = Keyword.merge([
       concurrency: @default_concurrency,
       max_demand: @max_demand,
@@ -225,10 +202,11 @@ defmodule Hypatia.Dispatch.Pipeline do
     count = length(events)
     metrics = update_metrics(state.metrics, :received, count)
     
-    {accepted, rejected} = Enum.split_with(events, fn _, i -> i < state.max_buffer - length(state.buffer) end)
-    
+    capacity = state.max_buffer - length(state.buffer)
+    {accepted, rejected} = Enum.split(events, capacity)
+
     buffer = accepted ++ state.buffer
-n    metrics = update_metrics(metrics, :buffered, length(accepted))
+    metrics = update_metrics(metrics, :buffered, length(accepted))
     metrics = update_metrics(metrics, :dropped, length(rejected))
     
     if length(rejected) > 0 do
@@ -241,7 +219,7 @@ n    metrics = update_metrics(metrics, :buffered, length(accepted))
   @impl true
   def handle_demand(demand, state) when demand > 0 do
     # Calculate how many events we can send
-    to_send = min([demand, length(state.buffer), state.batch_size])
+    to_send = Enum.min([demand, length(state.buffer), state.batch_size])
     
     if to_send > 0 do
       {events, remaining_buffer} = Enum.split(state.buffer, to_send)
@@ -312,17 +290,19 @@ n    metrics = update_metrics(metrics, :buffered, length(accepted))
     end
 
     defp process_event(event) do
-      case FleetDispatcher.dispatch_routed_action(event) do
-        {:ok, _} -> :ok
-        {:error, _reason} -> :error
-        other ->
-          Logger.error("Unexpected dispatch result: #{inspect(other)}")
+      try do
+        case FleetDispatcher.dispatch_routed_action(event) do
+          {:ok, _} -> :ok
+          {:error, _reason} -> :error
+          other ->
+            Logger.error("Unexpected dispatch result: #{inspect(other)}")
+            :error
+        end
+      rescue
+        e ->
+          Logger.error("Dispatch failed with exception: #{inspect(e)}")
           :error
       end
-    rescue
-      e ->
-        Logger.error("Dispatch failed with exception: #{inspect(e)}")
-        :error
     end
   end
 
@@ -373,37 +353,4 @@ n    metrics = update_metrics(metrics, :buffered, length(accepted))
   # Application Integration
   # ====================================================================
 
-  @doc """
-  Start the complete dispatch system (pipeline + builtin consumer).
-  """
-  def start_system() do
-    {:ok, _pipeline} = start_link()
-    {:ok, _consumer} = start_builtin_consumer()
-    
-    # Schedule periodic metrics logging
-    Process.send_after(self(), :log_metrics, 30_000)
-    
-    :ok
-  end
-
-  def handle_info(:log_metrics, state) do
-    case get_metrics() do
-      nil -> :noreply
-      metrics -> 
-        log_metrics(metrics)
-        Process.send_after(self(), :log_metrics, 30_000)
-        :noreply
-    end
-  end
 end
-
-# ====================================================================
-# Application Configuration
-# ====================================================================
-
-# Add to config/config.exs:
-# config :hypatia, Hypatia.Dispatch.Pipeline,
-#   concurrency: 15,
-#   max_demand: 200,
-#   batch_size: 10,
-#   max_buffer: 2000

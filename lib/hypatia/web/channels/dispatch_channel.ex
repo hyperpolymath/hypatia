@@ -222,34 +222,6 @@ defmodule Hypatia.Web.DispatchChannel do
     end
   end
 
-  # ====================================================================
-  # Endpoint Integration
-  # ====================================================================
-
-  @doc """
-  Phoenix endpoint for SSE connection.
-  """
-  def sse_connection(conn, _params) do
-    conn
-    |> put_layout(false)
-    |> put_root_layout(false)
-    |> Phoenix.Controller.text(conn, "")
-    |> halt()
-  end
-
-  @doc """
-  Health check endpoint (HTTP fallback).
-  """
-  def health_check(conn, _params) do
-    metrics = Pipeline.get_metrics()
-    health = if Contingency.available?(), do: "healthy", else: "degraded"
-    
-    json(conn, %{
-      status: health,
-      metrics: metrics,
-      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-    })
-  end
 end
 
 # ====================================================================
