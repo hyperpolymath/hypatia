@@ -67,15 +67,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
     unpinned = check_unpinned_actions(workflow_contents)
     wrong_pins = check_wrong_pins(workflow_contents)
     permission_issues = check_permissions(workflow_contents)
+    flawed_regexes = check_flawed_regex(workflow_contents)
     duplicates = check_duplicates(workflow_files, workflow_contents)
     caching_issues = check_caching(workflow_contents)
 
     %{
-      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++ caching_issues,
+      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ flawed_regexes ++ duplicates ++ caching_issues,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
       permission_issues: length(permission_issues),
+      flawed_regex_count: length(flawed_regexes),
       duplicate_count: length(duplicates),
       caching_issues: length(caching_issues),
       workflow_count: length(workflow_files),
@@ -198,6 +200,21 @@ defmodule Hypatia.Rules.WorkflowAudit do
           []
         end
       end)
+    end)
+  end
+
+  @doc """
+  Check for flawed grep regexes in workflow files.
+  """
+  def check_flawed_regex(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if String.contains?(content, "grep -rn \"uses:\"") do
+        [%{type: :flawed_grep_regex, file: filename,
+           detail: "Unanchored 'grep -rn \"uses:\"' matches its own script lines — use grep -rnE \"^[[:space:]]+uses:\"",
+           severity: :medium, action: :fix_regex}]
+      else
+        []
+      end
     end)
   end
 
