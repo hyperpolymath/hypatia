@@ -90,12 +90,26 @@ defmodule Hypatia.Rules.Learning do
       else
         successes = Enum.count(fixes, &(&1.outcome == :success))
         fp_count = length(Map.get(state.false_positives, issue_type, []))
-        base = successes / total
+        
+        # Apply recency weighting
+        weighted_successes = Enum.reduce(fixes, 0, fn fix, acc ->
+          age_hours = calculate_age_hours(fix.timestamp)
+          weight = :math.exp(-age_hours / 24.0)
+          if fix.outcome == :success, do: acc + weight, else: acc
+        end)
+        
+        base = weighted_successes / total
         penalty = min(fp_count * 0.15, 0.5)
         max(base - penalty, 0.0)
       end
 
     {:reply, confidence, state}
+  end
+
+  defp calculate_age_hours(timestamp) do
+    now = DateTime.utc_now()
+    diff = DateTime.diff(now, timestamp)
+    diff.hour + diff.minute / 60 + diff.second / 3600
   end
 
   @impl true
@@ -176,5 +190,25 @@ defmodule Hypatia.Rules.Learning do
 
     new_promoted = Map.merge(state.promoted_rules, promotable)
     {:reply, {:ok, map_size(promotable)}, %{state | promoted_rules: new_promoted}}
+  end
+
+  # ====================================================================
+  # False Positive Decay
+  # ====================================================================
+
+  defp decay_false_positives(state) do
+    thirty_days_ago = DateTime.add(DateTime.utc_now(), -30)
+    
+    Map.map(state.false_positives, fn {issue_type, contexts} ->
+      {issue_type, Enum.reject(contexts, fn ctx ->
+        # Assume context has timestamp if it's a map
+        # If not, keep it (backward compatibility)
+        if is_map(ctx) && Map.has_key?(ctx, :timestamp) do
+          ctx.timestamp < thirty_days_ago
+        else
+          false  # Keep non-timestamped contexts
+        end
+      end)}
+    end)
   end
 end

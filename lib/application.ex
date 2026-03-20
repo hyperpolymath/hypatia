@@ -20,6 +20,10 @@ defmodule Hypatia.Application do
     children = [
       # Layer 0: Query — VQL client for structured data access
       Hypatia.VQL.Client,
+      # Layer 0.5: Dispatch — GenStage pipeline for controlled parallel processing
+      Hypatia.Dispatch.Pipeline,
+      # Layer 0.7: Diagnostics — system health monitoring and auto-recovery
+      Hypatia.Diagnostics.Monitor,
       # Layer 1: Safety — rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,

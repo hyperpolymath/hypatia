@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+syntax = "proto3";
+
+package hypatia.dispatch.v1;
+
+option go_package = "./;dispatch";
+option java_package = "com.hypatia.dispatch.v1";
+option java_multiple_files = true;
+
+// DispatchRequest represents a single dispatch event
+message DispatchRequest {
+  string request_id = 1;
+  string tier = 2;              // eliminate, substitute, control
+  string strategy = 3;          // auto_execute, review, report_only
+  string repo = 4;
+  string pattern_id = 5;
+  string recipe_id = 6;
+  double confidence = 7;
+  bool auto_fixable = 8;
+  string file = 9;
+  string issue = 10;
+  string suggestion = 11;
+  map<string, string> metadata = 12;
+}
+
+// DispatchResponse represents the result of a dispatch operation
+message DispatchResponse {
+  string request_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string bot_id = 4;
+  string action_taken = 5;
+  map<string, string> result_data = 6;
+}
+
+// DispatchBatchRequest for bulk operations
+message DispatchBatchRequest {
+  repeated DispatchRequest requests = 1;
+  int32 priority = 2;
+  string correlation_id = 3;
+}
+
+// DispatchBatchResponse for bulk results
+message DispatchBatchResponse {
+  repeated DispatchResponse responses = 1;
+  string correlation_id = 2;
+  int32 success_count = 3;
+  int32 failure_count = 4;
+}
+
+// HealthCheck request
+message HealthCheckRequest {
+  string service = 1;
+}
+
+// HealthCheck response
+message HealthCheckResponse {
+  string service = 1;
+  string status = 2;           // healthy, degraded, unavailable
+  string version = 3;
+  int64 timestamp = 4;
+  map<string, string> metrics = 5;
+}
+
+// DispatchService provides gRPC interface for dispatch operations
+service DispatchService {
+  // Unary dispatch - single request/response
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+  
+  // Server-side streaming - process multiple requests
+  rpc StreamDispatch(stream DispatchRequest) returns (stream DispatchResponse);
+  
+  // Batch dispatch - process multiple requests atomically
+  rpc BatchDispatch(DispatchBatchRequest) returns (DispatchBatchResponse);
+  
+  // Health check endpoint
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  
+  // Bidirectional streaming for real-time processing
+  rpc BidirectionalDispatch(stream DispatchRequest) returns (stream DispatchResponse);
+}
+
+// Event types for pub/sub
+enum DispatchEventType {
+  EVENT_UNKNOWN = 0;
+  EVENT_DISPATCH_STARTED = 1;
+  EVENT_DISPATCH_COMPLETED = 2;
+  EVENT_DISPATCH_FAILED = 3;
+  EVENT_BOT_HEALTH_CHANGED = 4;
+  EVENT_SYSTEM_STATUS = 5;
+}
+
+// DispatchEvent for event streaming
+message DispatchEvent {
+  string event_id = 1;
+  DispatchEventType event_type = 2;
+  int64 timestamp = 3;
+  string correlation_id = 4;
+  string repo = 5;
+  string pattern_id = 6;
+  string bot_id = 7;
+  string status = 8;
+  map<string, string> metadata = 9;
+}
+
+// EventService for event streaming
+service EventService {
+  // Server-side event stream
+  rpc SubscribeToEvents(stream DispatchEventType) returns (stream DispatchEvent);
+  
+  // Health event stream
+  rpc SubscribeToHealthEvents() returns (stream DispatchEvent);
+}
