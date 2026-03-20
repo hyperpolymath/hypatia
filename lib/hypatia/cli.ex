@@ -21,7 +21,8 @@ defmodule Hypatia.CLI do
 
       --rules <list>    Comma-separated rule modules to run (default: all)
                         Available: root_hygiene,honest_completion,workflow_audit,
-                                   cicd_rules,code_safety,migration_rules,scorecard
+                                   cicd_rules,code_safety,migration_rules,scorecard,
+                                   green_web
       --format <fmt>    Output format: json (default), text, github
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -41,7 +42,8 @@ defmodule Hypatia.CLI do
     :cicd_rules,
     :code_safety,
     :migration_rules,
-    :scorecard
+    :scorecard,
+    :green_web
   ]
 
   @severity_order %{
@@ -436,6 +438,58 @@ defmodule Hypatia.CLI do
         results
       end
 
+    # Green Web Foundation checks
+    results =
+      if :green_web in rules do
+        root_files = list_root_files(repo_path)
+
+        # Collect file contents for workflow and deployment files
+        workflows_dir = Path.join(repo_path, ".github/workflows")
+
+        wf_contents =
+          if File.dir?(workflows_dir) do
+            case File.ls(workflows_dir) do
+              {:ok, wf_files} ->
+                wf_files
+                |> Enum.filter(fn f ->
+                  String.ends_with?(f, ".yml") or String.ends_with?(f, ".yaml")
+                end)
+                |> Enum.map(fn f ->
+                  path = Path.join(workflows_dir, f)
+                  case File.read(path) do
+                    {:ok, content} -> {f, content}
+                    _ -> nil
+                  end
+                end)
+                |> Enum.reject(&is_nil/1)
+                |> Map.new()
+
+              _ ->
+                %{}
+            end
+          else
+            %{}
+          end
+
+        findings = Hypatia.Rules.GreenWeb.audit(repo_path, root_files, wf_contents)
+
+        normalized =
+          Enum.map(findings, fn f ->
+            %{
+              rule_module: "green_web",
+              severity: to_string(Map.get(f, :severity, :info)),
+              type: to_string(Map.get(f, :type, :unknown)),
+              file: Map.get(f, :file, ""),
+              reason: Map.get(f, :detail, ""),
+              action: "flag"
+            }
+          end)
+
+        results ++ normalized
+      else
+        results
+      end
+
     results
   end
 
@@ -645,6 +699,7 @@ defmodule Hypatia.CLI do
   defp format_module_name("code_safety"), do: "Code Safety"
   defp format_module_name("migration_rules"), do: "Migration Rules"
   defp format_module_name("scorecard"), do: "OpenSSF Scorecard"
+  defp format_module_name("green_web"), do: "Green Web Foundation"
   defp format_module_name(other), do: other
 
   defp print_usage do
@@ -664,7 +719,7 @@ defmodule Hypatia.CLI do
         --rules, -r <list>      Comma-separated rule modules (default: all)
                                 Available: root_hygiene,honest_completion,
                                 workflow_audit,cicd_rules,code_safety,
-                                migration_rules,scorecard
+                                migration_rules,scorecard,green_web
         --format, -f <fmt>      Output format: json (default), text, github
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
