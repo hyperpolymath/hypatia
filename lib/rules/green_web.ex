@@ -131,7 +131,7 @@ defmodule Hypatia.Rules.GreenWeb do
   Detect cloud/hosting providers from workflow files and deployment configs.
   Cross-reference with known green/non-green provider lists.
   """
-  def check_hosting_provider(file_list, file_contents) do
+  def check_hosting_provider(_file_list, file_contents) do
     # Scan workflow files for provider references
     workflow_contents =
       file_contents
@@ -294,7 +294,7 @@ defmodule Hypatia.Rules.GreenWeb do
   Check container image registries for green hosting status.
   ghcr.io (GitHub/Azure) and gcr.io (Google) are green-certified.
   """
-  def check_container_registry(file_list, file_contents) do
+  def check_container_registry(_file_list, file_contents) do
     container_files =
       file_contents
       |> Enum.filter(fn {name, _} ->
@@ -370,7 +370,7 @@ defmodule Hypatia.Rules.GreenWeb do
   @doc """
   Detect CDN usage and verify green certification status.
   """
-  def check_cdn_provider(file_list, file_contents) do
+  def check_cdn_provider(_file_list, file_contents) do
     # Look for CDN references in deployment and config files
     relevant_contents =
       file_contents
@@ -383,7 +383,7 @@ defmodule Hypatia.Rules.GreenWeb do
       |> Enum.map(fn {_, content} -> String.downcase(content) end)
       |> Enum.join("\n")
 
-    green_cdns = ["cloudflare", "fastly", "akamai", "bunny.net"]
+    # Green CDNs: cloudflare, fastly, akamai, bunny.net (informational only)
     non_green_cdns = ["cloudfront", "stackpath", "keycdn"]
 
     used_non_green =

@@ -10,15 +10,10 @@ defmodule Hypatia.Rules.ScorecardCompliance do
   """
 
   # ─── Scorecard Critical Metrics ──────────────────────────────────────
-
-  @high_risk_metrics [
-    :token_permissions,
-    :pinned_dependencies,
-    :dependency_update_tool,
-    :code_review_enforcement,
-    :maintained_status,
-    :fuzzing_integration
-  ]
+  #
+  # High-risk metric categories tracked by this module:
+  # :token_permissions, :pinned_dependencies, :dependency_update_tool,
+  # :code_review_enforcement, :maintained_status, :fuzzing_integration
 
   @doc """
   Audits a repository for Scorecard compliance markers.

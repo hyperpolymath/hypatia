@@ -124,12 +124,14 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   defp check_pipeline() do
     try do
-      case GenServer.call(Hypatia.Dispatch.Pipeline, :get_metrics, 1000) do
+      case Hypatia.Dispatch.Pipeline.get_metrics() do
         nil -> {:error, :pipeline_unresponsive}
         metrics -> {:ok, {:pipeline, metrics}}
       end
     rescue
       _ -> {:error, :pipeline_crashed}
+    catch
+      :exit, _ -> {:error, :pipeline_crashed}
     end
   end
 
@@ -157,9 +159,9 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   defp check_kin() do
     try do
-      case Hypatia.Kin.Coordinator.status() do
-        {:ok, status} -> {:ok, {:kin, status}}
-        _ -> {:error, :kin_unresponsive}
+      case GenServer.call(Hypatia.Kin.Coordinator, :ecosystem_health, 1000) do
+        nil -> {:error, :kin_unresponsive}
+        status -> {:ok, {:kin, status}}
       end
     rescue
       _ -> {:error, :kin_crashed}
@@ -295,26 +297,27 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   defp recover_learning() do
     Logger.info("Attempting learning system recovery...")
-    
-    case GenServer.call(Hypatia.Rules.Learning, :get_stats, 1000) do
-      _ ->
-        # If it responds, it's probably ok
-        :ok
-      
-      nil ->
+
+    try do
+      _stats = GenServer.call(Hypatia.Rules.Learning, :get_stats, 1000)
+      # If it responds, it's healthy
+      :ok
+    catch
+      :exit, _ ->
         Logger.info("Learning system unresponsive, attempting restart...")
-        
-        case GenServer.stop(Hypatia.Rules.Learning, :normal, 5000) do
-          :ok ->
-            case Hypatia.Rules.Learning.start_link() do
-              {:ok, _} ->
-                Logger.info("Learning system restarted successfully")
-                :ok
-              _ ->
-                Logger.error("Learning system restart failed")
-                :error
-            end
-          _ ->
+
+        try do
+          GenServer.stop(Hypatia.Rules.Learning, :normal, 5000)
+          case Hypatia.Rules.Learning.start_link() do
+            {:ok, _} ->
+              Logger.info("Learning system restarted successfully")
+              :ok
+            _ ->
+              Logger.error("Learning system restart failed")
+              :error
+          end
+        catch
+          :exit, _ ->
             Logger.error("Learning system stop failed")
             :error
         end
@@ -323,20 +326,34 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   defp recover_neural() do
     Logger.info("Attempting neural coordinator recovery...")
-    
-    case Hypatia.Neural.Coordinator.health_check() do
-      :ok ->
-        :ok  # Healthy
-      
-      _ ->
-        Logger.info("Neural coordinator unhealthy, attempting restart...")
-        
-        case Hypatia.Neural.Coordinator.restart() do
-          :ok ->
-            Logger.info("Neural coordinator restarted successfully")
-            :ok
-          _ ->
-            Logger.error("Neural coordinator restart failed")
+
+    try do
+      case GenServer.call(Hypatia.Neural.Coordinator, :health_report, 2000) do
+        %{} ->
+          Logger.info("Neural coordinator responding — healthy")
+          :ok
+
+        _ ->
+          Logger.warning("Neural coordinator returned unexpected status")
+          :ok
+      end
+    catch
+      :exit, _ ->
+        Logger.info("Neural coordinator unresponsive, attempting restart...")
+
+        try do
+          GenServer.stop(Hypatia.Neural.Coordinator, :normal, 5000)
+          case Hypatia.Neural.Coordinator.start_link() do
+            {:ok, _} ->
+              Logger.info("Neural coordinator restarted successfully")
+              :ok
+            _ ->
+              Logger.error("Neural coordinator restart failed")
+              :error
+          end
+        catch
+          :exit, _ ->
+            Logger.error("Neural coordinator stop/restart failed")
             :error
         end
     end
@@ -359,23 +376,6 @@ defmodule Hypatia.Diagnostics.Monitor do
     end)
   end
 
-  # ====================================================================
-  # Metrics Tracking
-  # ====================================================================
-
-  defp track_metrics(state, _components) do
-    timestamps = state.metrics_history
-
-    updated =
-      if length(timestamps) > 100 do
-        {_, recent} = Enum.split(timestamps, length(timestamps) - 100)
-        [DateTime.utc_now() | recent]
-      else
-        [DateTime.utc_now() | timestamps]
-      end
-
-    %{state | metrics_history: updated}
-  end
 end
 
 # ====================================================================

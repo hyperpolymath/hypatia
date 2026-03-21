@@ -12,8 +12,8 @@ defmodule Hypatia.Web.DispatchChannel do
 
   use Phoenix.Channel
 
-  alias Hypatia.{Dispatch.Pipeline, FleetDispatcher}
-  alias Hypatia.Kin.{Contingency, Gate, Coordinator}
+  alias Hypatia.Dispatch.Pipeline
+  alias Hypatia.Kin.Contingency
 
   # Client-side channel name
   @channel_name "dispatch:events"
@@ -57,7 +57,7 @@ defmodule Hypatia.Web.DispatchChannel do
   @doc """
   Handle channel termination.
   """
-  def terminate(_reason, socket) do
+  def terminate(_reason, _socket) do
     # Unsubscribe from events
     Pipeline.unsubscribe_events(self())
     :ok
@@ -68,25 +68,16 @@ defmodule Hypatia.Web.DispatchChannel do
   # ====================================================================
 
   @doc """
-  Handle incoming dispatch events from the pipeline.
+  Handle incoming channel messages.
+
+  Supports `"subscribe"` for filtering event types and `"health_check"`
+  for on-demand system status pushes.
   """
   def handle_in("subscribe", %{"types" => event_types}, socket) do
     # Filter subscription to specific event types
     {:ok, %{socket | private: %{filtered_types: event_types}}}
   end
 
-  @doc """
-  Handle dispatch events from the pipeline.
-  """
-  def handle_event("dispatch", %{"event" => event}, socket) do
-    # Filter if client specified event types
-    if should_deliver?(event, socket), do: broadcast_event(event)
-    {:noreply, socket}
-  end
-
-  @doc """
-  Handle health check requests.
-  """
   def handle_in("health_check", _params, socket) do
     push_system_status(socket)
     {:reply, :ok, socket}
@@ -171,17 +162,6 @@ defmodule Hypatia.Web.DispatchChannel do
   # ====================================================================
   # Utility Functions
   # ====================================================================
-
-  defp should_deliver?(event, socket) do
-    case socket.assigns[:private] do
-      %{filtered_types: types} when is_list(types) ->
-        event_type = Map.get(event, "type") || @event_types.dispatch_started
-        event_type in types
-      
-      _ ->
-        true  # No filter, deliver all events
-    end
-  end
 
   defp push_system_status(socket) do
     metrics = Pipeline.get_metrics() || %{

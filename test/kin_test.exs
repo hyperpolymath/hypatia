@@ -199,5 +199,9 @@ defmodule Hypatia.KinTest do
 
       Contingency.set_level(:normal, "unfreeze")
     end
+
+    test "available?/0 returns true when GenServer is running" do
+      assert Contingency.available?()
+    end
   end
 end
