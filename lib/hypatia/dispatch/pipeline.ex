@@ -250,7 +250,17 @@ defmodule Hypatia.Dispatch.Pipeline do
   @impl true
   def terminate(reason, state) do
     Logger.info("Dispatch pipeline terminating: #{inspect(reason)}")
-    Logger.info("Final metrics: #{inspect(state.metrics)}")
+
+    # GenStage may pass state as a keyword list during termination,
+    # so we handle both map and keyword list forms defensively.
+    metrics =
+      cond do
+        is_map(state) and Map.has_key?(state, :metrics) -> state.metrics
+        is_list(state) -> Keyword.get(state, :metrics, %{})
+        true -> %{}
+      end
+
+    Logger.info("Final metrics: #{inspect(metrics)}")
     :ok
   end
 
