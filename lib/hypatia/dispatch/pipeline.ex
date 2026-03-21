@@ -170,6 +170,11 @@ defmodule Hypatia.Dispatch.Pipeline do
     {:reply, metrics, [], state}
   end
 
+  # Catch-all for any other call message (prevents UndefinedFunctionError)
+  def handle_call(_msg, _from, state) do
+    {:reply, nil, [], state}
+  end
+
   # All handle_cast clauses grouped together
   @impl true
   def handle_cast({:subscribe, pid}, state) do

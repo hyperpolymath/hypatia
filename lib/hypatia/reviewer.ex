@@ -152,6 +152,7 @@ defmodule Hypatia.Reviewer do
         nil
 
       header ->
+        header = String.trim(header)
         case Regex.run(~r{\sb/(.+)$}, header) do
           [_, path] ->
             # Extract only added lines with their line numbers
@@ -252,7 +253,7 @@ defmodule Hypatia.Reviewer do
   defp run_file_scan(content, path, language) do
     try do
       result = Rules.scan_file(content, path, language)
-      if is_list(result), do: result, else: []
+      normalize_findings(result)
     rescue
       _ -> []
     end
@@ -262,8 +263,8 @@ defmodule Hypatia.Reviewer do
     try do
       workflow_contents = %{path => content}
       case WorkflowAudit.audit([path], workflow_contents) do
-        %{findings: findings} when is_list(findings) -> findings
-        _ -> []
+        %{findings: findings} -> normalize_findings(findings)
+        result -> normalize_findings(result)
       end
     rescue
       _ -> []
@@ -273,7 +274,7 @@ defmodule Hypatia.Reviewer do
   defp run_scorecard_checks(path, content) do
     try do
       file_contents = %{path => content}
-      ScorecardCompliance.check_least_privilege(file_contents)
+      normalize_findings(ScorecardCompliance.check_least_privilege(file_contents))
     rescue
       _ -> []
     end
@@ -282,12 +283,24 @@ defmodule Hypatia.Reviewer do
   defp run_green_web_checks(path, content) do
     try do
       file_contents = %{path => content}
-      GreenWeb.check_hosting_provider([], file_contents) ++
-        GreenWeb.check_container_registry([], file_contents)
+      normalize_findings(GreenWeb.check_hosting_provider([], file_contents)) ++
+        normalize_findings(GreenWeb.check_container_registry([], file_contents))
     rescue
       _ -> []
     end
   end
+
+  # Ensure findings are always a flat list of maps, safe for ++
+  defp normalize_findings(result) when is_list(result) do
+    Enum.flat_map(result, fn
+      item when is_map(item) -> [item]
+      _ -> []
+    end)
+  end
+  defp normalize_findings(%{findings: findings}) when is_list(findings) do
+    normalize_findings(findings)
+  end
+  defp normalize_findings(_), do: []
 
   # ─── Helpers ───────────────────────────────────────────────────────
 
