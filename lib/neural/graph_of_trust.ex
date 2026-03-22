@@ -182,25 +182,27 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
+        # Stream JSONL files line-by-line to avoid loading entire files
+        # into memory. Prevents timeout cascades on large datasets.
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
         |> Enum.flat_map(fn f ->
           path = Path.join(outcomes_dir, f)
-          case File.read(path) do
-            {:ok, content} ->
-              content
-              |> String.split("\n", trim: true)
-              |> Enum.map(fn line ->
-                case Jason.decode(line) do
-                  {:ok, record} -> record
-                  _ -> nil
-                end
-              end)
-              |> Enum.reject(&is_nil/1)
-            _ -> []
-          end
+
+          path
+          |> File.stream!()
+          |> Stream.map(fn line ->
+            case Jason.decode(String.trim(line)) do
+              {:ok, record} -> record
+              _ -> nil
+            end
+          end)
+          |> Stream.reject(&is_nil/1)
+          |> Enum.to_list()
         end)
-      _ -> []
+
+      _ ->
+        []
     end
   end
 

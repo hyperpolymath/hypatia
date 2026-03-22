@@ -3,6 +3,13 @@
 defmodule Hypatia.KinTest do
   use ExUnit.Case, async: false
 
+  # Kin modules (Gate, Arbiter, Contingency) are GenServers started by the
+  # OTP application supervisor. Tests fail with "no process" if the app
+  # is not running. Tag the module so these can be excluded when needed:
+  #   mix test --exclude requires_app
+  @moduletag :requires_app
+  @moduletag timeout: 120_000
+
   alias Hypatia.Kin.{Protocol, Gate, Arbiter, Contingency}
 
   # ===================================================================

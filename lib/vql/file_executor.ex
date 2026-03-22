@@ -357,24 +357,24 @@ defmodule Hypatia.VQL.FileExecutor do
   defp load_jsonl_directory(path) do
     case File.ls(path) do
       {:ok, files} ->
+        # Stream JSONL files line-by-line to avoid loading entire files
+        # into memory. This prevents timeout cascades on large datasets
+        # (e.g. 6,900+ outcome records).
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
         |> Enum.flat_map(fn f ->
           full_path = Path.join(path, f)
-          case File.read(full_path) do
-            {:ok, content} ->
-              content
-              |> String.split("\n", trim: true)
-              |> Enum.map(fn line ->
-                case Jason.decode(line) do
-                  {:ok, record} -> record
-                  {:error, _} -> nil
-                end
-              end)
-              |> Enum.reject(&is_nil/1)
 
-            {:error, _} -> []
-          end
+          full_path
+          |> File.stream!()
+          |> Stream.map(fn line ->
+            case Jason.decode(String.trim(line)) do
+              {:ok, record} -> record
+              {:error, _} -> nil
+            end
+          end)
+          |> Stream.reject(&is_nil/1)
+          |> Enum.to_list()
         end)
 
       {:error, _} ->

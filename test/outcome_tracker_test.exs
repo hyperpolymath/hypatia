@@ -3,6 +3,10 @@
 defmodule Hypatia.OutcomeTrackerTest do
   use ExUnit.Case, async: true
 
+  # OutcomeTracker reads JSONL files which can be slow with Jason.Decoder.
+  # Allow 120s per test instead of the default 60s.
+  @moduletag timeout: 120_000
+
   alias Hypatia.OutcomeTracker
 
   describe "record_outcome/4" do

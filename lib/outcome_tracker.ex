@@ -295,25 +295,24 @@ defmodule Hypatia.OutcomeTracker do
         |> Enum.flat_map(fn f ->
           path = Path.join(outcomes_dir, f)
 
-          case File.read(path) do
-            {:ok, content} ->
-              content
-              |> String.split("\n", trim: true)
-              |> Enum.map(fn line ->
-                case Jason.decode(line) do
-                  {:ok, record} -> record
-                  {:error, _} -> nil
-                end
-              end)
-              |> Enum.reject(&is_nil/1)
-              |> Enum.filter(fn r ->
-                Map.get(r, "recipe_id") == recipe_id or
-                  Map.get(r, "pattern") == recipe_id
-              end)
-
-            {:error, _} ->
-              []
-          end
+          # Stream lines and pre-filter by string containment before
+          # JSON decoding. This avoids parsing thousands of irrelevant
+          # JSONL records and prevents timeout cascades on large datasets.
+          path
+          |> File.stream!()
+          |> Stream.filter(&String.contains?(&1, recipe_id))
+          |> Stream.map(fn line ->
+            case Jason.decode(String.trim(line)) do
+              {:ok, record} -> record
+              {:error, _} -> nil
+            end
+          end)
+          |> Stream.reject(&is_nil/1)
+          |> Stream.filter(fn r ->
+            Map.get(r, "recipe_id") == recipe_id or
+              Map.get(r, "pattern") == recipe_id
+          end)
+          |> Enum.to_list()
         end)
 
       {:error, _} ->
