@@ -17,7 +17,11 @@ defmodule Hypatia.MixProject do
   defp escript do
     [
       main_module: Hypatia.CLI,
-      name: :hypatia
+      name: :hypatia,
+      # Do not start the OTP supervision tree for CLI scans.
+      # The rule modules are pure functions that don't need GenServers.
+      # This avoids the SelfDiagnostics/LearningScheduler timeout hang.
+      app: nil
     ]
   end
 
