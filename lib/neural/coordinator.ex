@@ -91,6 +91,16 @@ defmodule Hypatia.Neural.Coordinator do
 
   # --- GenServer Callbacks ---
 
+  def handle_call(:status, _from, state) do
+    status = %{
+      networks: [:graph_of_trust, :mixture_of_experts, :liquid_state_machine,
+                 :echo_state_network, :radial_neural_network],
+      status: :running,
+      cycle_count: Map.get(state, :cycle_count, 0)
+    }
+    {:reply, {:ok, status}, state}
+  end
+
   def handle_call({:analyze, finding}, _from, state) do
     # MoE: domain-specific confidence
     {moe_confidence, experts} = MixtureOfExperts.predict(state.moe, finding)

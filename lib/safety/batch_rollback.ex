@@ -23,7 +23,7 @@ defmodule Hypatia.Safety.BatchRollback do
 
   @doc "Create a new batch and return its ID"
   def create_batch(dispatch_count, strategy) do
-    batch_id = "batch_#{System.system_time(:millisecond)}"
+    batch_id = "batch_#{System.system_time(:millisecond)}_#{System.unique_integer([:positive])}"
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
 
     batch = %{
