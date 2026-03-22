@@ -58,7 +58,7 @@ tempfile = "3.9"
 git2 = "0.20"
 
 # Command execution for testing hooks
-subprocess = "0.2"
+subprocess = "1.0"
 
 # Random data generation
 rand = "0.8"
