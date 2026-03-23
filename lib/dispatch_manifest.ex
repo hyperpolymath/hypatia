@@ -20,6 +20,7 @@ defmodule Hypatia.DispatchManifest do
   require Logger
 
   @verisimdb_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @fix_scripts_dir Application.compile_env(:hypatia, :fix_scripts_dir, "scripts/fix-scripts")
 
   @doc """
   Write a dispatch manifest from a list of routed actions.
@@ -96,7 +97,7 @@ defmodule Hypatia.DispatchManifest do
       "recipe_id" => Map.get(recipe, "id"),
       "confidence" => confidence,
       "auto_fixable" => Map.get(recipe, "auto_fixable", false),
-      "fix_script" => Map.get(recipe, "fix_script"),
+      "fix_script" => resolve_fix_script(Map.get(recipe, "fix_script")),
       "action" => Map.get(recipe, "action", "unknown"),
       "match" => Map.get(recipe, "match"),
       "replacement" => Map.get(recipe, "replacement"),
@@ -169,6 +170,29 @@ defmodule Hypatia.DispatchManifest do
     cond do
       is_binary(path) and path != "" and path != "." -> path
       true -> resolve_from_index(repo)
+    end
+  end
+
+  @doc false
+  defp resolve_fix_script(nil), do: nil
+  defp resolve_fix_script(""), do: nil
+
+  defp resolve_fix_script(script_name) do
+    # Resolve bare script names (e.g. "fix-unpinned-actions.sh") to full paths
+    # under the fix-scripts directory. Already-absolute paths pass through.
+    cond do
+      String.starts_with?(script_name, "/") ->
+        script_name
+
+      true ->
+        full_path = Path.join(@fix_scripts_dir, script_name)
+
+        if File.exists?(full_path) do
+          Path.expand(full_path)
+        else
+          Logger.warning("Fix script not found: #{full_path} — passing through raw name")
+          script_name
+        end
     end
   end
 

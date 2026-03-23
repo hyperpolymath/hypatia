@@ -6,6 +6,7 @@ defmodule Hypatia.Application do
   OTP Application for Hypatia.
 
   Starts the supervision tree with layered dependencies:
+  0. HTTP layer (Bandit + Plug.Router) — groove endpoint, health on port 9090
   0. Query layer (VQL Client) — structured query interface to verisimdb-data
   1. Safety layer — rate limiter, quarantine
   2. Intelligence layer — learning scheduler, self-diagnostics
@@ -18,6 +19,8 @@ defmodule Hypatia.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # Layer 0: HTTP — public endpoints (groove, health) on port 9090
+      {Bandit, plug: Hypatia.Web.Router, port: 9090, scheme: :http},
       # Layer 0: Query — VQL client for structured data access
       Hypatia.VQL.Client,
       # Layer 0.5: Dispatch — GenStage pipeline for controlled parallel processing

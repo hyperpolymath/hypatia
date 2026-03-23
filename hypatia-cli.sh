@@ -4,7 +4,7 @@
 #
 # hypatia-cli.sh — Shell wrapper for the Hypatia neurosymbolic scanner escript.
 #
-# This script locates the compiled escript (hypatia-v2) and forwards all
+# This script locates the compiled escript (hypatia) and forwards all
 # arguments to it. If the escript has not been built yet, it attempts to
 # build it via `mix escript.build`. If Elixir is unavailable, it falls
 # back to the standalone bash scanner (hypatia-cli-bash.sh).
@@ -22,7 +22,7 @@
 set -euo pipefail
 
 HYPATIA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ESCRIPT="${HYPATIA_DIR}/hypatia-v2"
+ESCRIPT="${HYPATIA_DIR}/hypatia"
 BASH_FALLBACK="${HYPATIA_DIR}/hypatia-cli-bash.sh"
 
 # ─── Build escript if missing ───────────────────────────────────────────
@@ -33,10 +33,6 @@ build_escript() {
         cd "${HYPATIA_DIR}"
         mix deps.get --quiet 2>/dev/null || true
         mix escript.build 2>&1 >&2
-        # mix escript.build produces ./hypatia; rename to hypatia-v2
-        if [[ -f "${HYPATIA_DIR}/hypatia" && ! -f "${ESCRIPT}" ]]; then
-            mv "${HYPATIA_DIR}/hypatia" "${ESCRIPT}"
-        fi
     )
 }
 
