@@ -18,9 +18,13 @@ defmodule Hypatia.Application do
 
   @impl true
   def start(_type, _args) do
+    # Port is configurable via :hypatia, :http_port (default 9090).
+    # Tests use a different port to avoid collisions with the running dev server.
+    http_port = Application.get_env(:hypatia, :http_port, 9090)
+
     children = [
-      # Layer 0: HTTP — public endpoints (groove, health) on port 9090
-      {Bandit, plug: Hypatia.Web.Router, port: 9090, scheme: :http},
+      # Layer 0: HTTP — public endpoints (groove, health)
+      {Bandit, plug: Hypatia.Web.Router, port: http_port, scheme: :http},
       # Layer 0: Query — VQL client for structured data access
       Hypatia.VQL.Client,
       # Layer 0.5: Dispatch — GenStage pipeline for controlled parallel processing
