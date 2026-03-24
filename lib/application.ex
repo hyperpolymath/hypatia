@@ -10,7 +10,7 @@ defmodule Hypatia.Application do
   0. Query layer (VQL Client) — structured query interface to verisimdb-data
   1. Safety layer — rate limiter, quarantine
   2. Intelligence layer — learning scheduler, self-diagnostics
-  3. Neural layer — 5 neural networks + coordinator
+  3. Neural layer — blackboard + 8 networks + coordinator (phased execution)
   4. Kin layer — ecosystem coordination, watchdog, self-healing
   """
 
@@ -38,7 +38,14 @@ defmodule Hypatia.Application do
       Hypatia.Rules.Learning,
       Hypatia.LearningScheduler,
       Hypatia.SelfDiagnostics,
-      # Layer 4: Neural — 5 networks orchestrated by coordinator
+      # Layer 4: Neural — blackboard + 8 networks, phased execution
+      # Blackboard MUST start before coordinator and network GenServers
+      Hypatia.Neural.Blackboard,
+      # New network GenServers (GNN, VAE, SequenceModel)
+      Hypatia.Neural.GraphNeuralNetwork,
+      Hypatia.Neural.VariationalAutoencoder,
+      Hypatia.Neural.SequenceModel,
+      # Coordinator orchestrates all 8 networks via blackboard
       Hypatia.Neural.Coordinator,
       # Layer 5: Kin — ecosystem coordination, watchdog, and self-healing
       Hypatia.Kin.Contingency,    # must start first (emergency state persisted)
