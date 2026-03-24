@@ -152,6 +152,10 @@ defmodule Hypatia.Diagnostics.Monitor do
         nil -> {:error, :neural_unresponsive}
         status -> {:ok, {:neural, status}}
       end
+    catch
+      # Training cycles can take minutes — a timeout means busy, not crashed
+      :exit, {:timeout, _} -> {:ok, {:neural, :training_in_progress}}
+      :exit, _ -> {:error, :neural_crashed}
     rescue
       _ -> {:error, :neural_crashed}
     end
