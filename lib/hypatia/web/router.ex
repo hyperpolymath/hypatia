@@ -11,40 +11,13 @@ defmodule Hypatia.Web.Router do
 
   use Plug.Router
 
+  # GroovePlug handles /.well-known/groove/* before the router's own
+  # match/dispatch cycle.  It halts on groove paths, so the router
+  # never sees them.
+  plug Hypatia.Web.GroovePlug
+
   plug :match
   plug :dispatch
-
-  @doc """
-  GET /.well-known/groove — Groove capability manifest for service discovery.
-
-  Returns Hypatia's scanning and analysis capabilities in the standard
-  Groove manifest format. See Groove.idr hypatiaManifest for the canonical
-  ABI definition.
-  """
-  get "/.well-known/groove" do
-    manifest = %{
-      service_id: "hypatia",
-      groove_version: "1.0.0",
-      capabilities: [
-        %{
-          name: "scanning",
-          protocol: "http",
-          endpoint: "/api/v1/scan"
-        },
-        %{
-          name: "static-analysis",
-          protocol: "http",
-          endpoint: "/api/v1/analyze"
-        }
-      ],
-      consumes: ["octad-storage", "workflow"],
-      port: 9090
-    }
-
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(manifest))
-  end
 
   @doc """
   GET /health — Basic health check for the HTTP endpoint.
