@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-TARGET_REPO="${1:-/var/mnt/eclipse/repos/svalinn}"
+TARGET_REPO="${1:?Usage: $0 <path-to-repo>}"
 ISSUE_COUNT=0
 
 echo "=== Hypatia POC Scanner ==="
@@ -199,6 +199,35 @@ if [ -n "$dockerfile_results" ]; then
 else
     echo -e "${GREEN}  ✓ No issues found${NC}"
 fi
+echo ""
+
+# === UX Patterns (UX001-UX010) ===
+echo "--- UX001: Hardcoded Absolute Paths ---"
+HARDCODED=$(rg -c '/home/hyper|/mnt/eclipse|/var/mnt/eclipse' \
+    --glob '!.git' --glob '!target' --glob '!node_modules' --glob '!lib/bs' \
+    "$TARGET_REPO" 2>/dev/null | wc -l)
+if [ "$HARDCODED" -gt 0 ]; then
+    echo -e "${RED}  [UX001] $HARDCODED files contain hardcoded absolute paths${NC}"
+    ISSUE_COUNT=$((ISSUE_COUNT + HARDCODED))
+else
+    echo -e "${GREEN}  [OK] No hardcoded absolute paths${NC}"
+fi
+
+echo "--- UX002-UX010: Structure Checks ---"
+[ ! -f "$TARGET_REPO/QUICKSTART-USER.adoc" ] && echo -e "${YELLOW}  [UX002] Missing QUICKSTART-USER.adoc${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+if [ -f "$TARGET_REPO/Justfile" ]; then
+    grep -q "^doctor:" "$TARGET_REPO/Justfile" 2>/dev/null || { echo -e "${YELLOW}  [UX003] Missing 'doctor' recipe in Justfile${NC}"; ISSUE_COUNT=$((ISSUE_COUNT + 1)); }
+    grep -q "^heal:" "$TARGET_REPO/Justfile" 2>/dev/null || { echo -e "${YELLOW}  [UX004] Missing 'heal' recipe in Justfile${NC}"; ISSUE_COUNT=$((ISSUE_COUNT + 1)); }
+fi
+[ ! -f "$TARGET_REPO/.machine_readable/MUST.contractile" ] && echo -e "${YELLOW}  [UX005] Missing MUST.contractile${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+[ ! -f "$TARGET_REPO/guix.scm" ] && [ ! -f "$TARGET_REPO/flake.nix" ] && echo -e "${YELLOW}  [UX006] Missing guix.scm AND flake.nix${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+[ ! -f "$TARGET_REPO/llm-warmup-user.md" ] && echo -e "${YELLOW}  [UX007] Missing llm-warmup-user.md${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+[ ! -f "$TARGET_REPO/EXPLAINME.adoc" ] && echo -e "${YELLOW}  [UX008] Missing EXPLAINME.adoc${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+if [ -f "$TARGET_REPO/0-AI-MANIFEST.a2ml" ]; then
+    MANIFEST_LINES=$(wc -l < "$TARGET_REPO/0-AI-MANIFEST.a2ml")
+    [ "$MANIFEST_LINES" -gt 500 ] && echo -e "${YELLOW}  [UX009] AI manifest oversized ($MANIFEST_LINES lines > 500)${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+fi
+[ ! -f "$TARGET_REPO/.machine_readable/ADJUST.contractile" ] && echo -e "${YELLOW}  [UX010] Missing ADJUST.contractile (accessibility)${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
 echo ""
 
 echo "================================================"

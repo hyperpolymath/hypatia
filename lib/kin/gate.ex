@@ -253,7 +253,8 @@ defmodule Hypatia.Kin.Gate do
 
   # Check 0: Does the target repo's .bot_directives allow this bot+action?
   defp check_bot_directives(action, _state) do
-    repo_path = Map.get(action, :program_path, "/var/mnt/eclipse/repos/#{action.repo}")
+    repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
+    repo_path = Map.get(action, :program_path, Path.join(repos_dir, action.repo))
 
     directives_paths = [
       Path.join([repo_path, ".bot_directives", "#{action.bot_id}.json"]),

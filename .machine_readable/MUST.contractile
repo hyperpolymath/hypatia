@@ -1,0 +1,90 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+; MUST.contractile — Baseline invariants for hypatia
+; These constraints MUST NOT be violated. K9 validators enforce them.
+
+(must-contractile
+  (version "1.0.0")
+  (repo "hypatia")
+
+  ; === Universal Invariants (apply to ALL repos) ===
+
+  (invariants
+    ; Paths
+    (must "no hardcoded absolute paths (/home/*, /mnt/*, /var/mnt/*)")
+    (must "all paths use env vars, XDG dirs, or relative references")
+
+    ; Language policy
+    (must "no new TypeScript files")
+    (must "no new Python files")
+    (must "no new Go files")
+    (must "no npm/bun/yarn/pnpm dependencies — Deno only")
+
+    ; Dangerous patterns
+    (must "no believe_me (Idris2)")
+    (must "no assert_total (Idris2)")
+    (must "no Admitted (Coq)")
+    (must "no sorry (Lean)")
+    (must "no unsafeCoerce (Haskell)")
+    (must "no Obj.magic (OCaml)")
+    (must "no unsafe {} blocks without safety comment (Rust)")
+
+    ; License
+    (must "SPDX-License-Identifier header on every source file")
+    (must "no removal or modification of LICENSE file")
+
+    ; Structure
+    (must ".machine_readable/ directory preserved")
+    (must "0-AI-MANIFEST.a2ml preserved")
+    (must "no SCM files in repo root — only in .machine_readable/")
+
+    ; CI
+    (must "no removal of CI workflows without explicit approval")
+    (must "all GitHub Actions SHA-pinned")
+
+    ; Code quality
+    (must "tests must not be deleted or weakened")
+    (must "generated code in generated/ directory only")
+    (must "no introduction of OWASP top 10 vulnerabilities")
+
+    ; ABI/FFI (if applicable)
+    (must "no modification of ABI contracts without proof update")
+    (must "no removal of formal verification proofs")
+  )
+
+  ; === Project-Specific Invariants (hypatia) ===
+
+  (invariants
+    ; Safety triangle pipeline
+    (must "safety triangle routing (Eliminate > Substitute > Control) must not be reordered")
+    (must "confidence thresholds for auto-execute (>=0.95), review (0.85-0.94), report (<0.85) must not be lowered")
+    (must "dispatch manifests must be JSONL format for execution layer compatibility")
+
+    ; Neural subsystem
+    (must "5 neural networks (Graph of Trust, MoE, LSM, ESN, RNN) must not be reduced")
+    (must "neural coordinator GenServer must remain the sole entry point for neural dispatch")
+    (must "Bayesian confidence updating must not be replaced with simpler heuristics")
+
+    ; Data integrity
+    (must "verisimdb-data connector must remain the canonical data source")
+    (must "VQL query layer must not be replaced with raw SQL or direct file access")
+    (must "954 canonical patterns in PatternRegistry must not be bulk-deleted")
+
+    ; Fleet dispatch
+    (must "gitbot-fleet dispatch must respect circuit breaker patterns")
+    (must "rate limiter, quarantine, and batch rollback safety systems must remain enabled")
+    (must "outcome tracking feedback loop must not be disabled")
+
+    ; OTP supervision
+    (must "8 GenServers (VQL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin, Fleet) must be supervised")
+    (must "Logtalk rule engine for error catalog and pattern detection must be preserved")
+
+    ; Idris2 ABI / Zig FFI
+    (must "Idris2 ABI definitions (Types, GraphQL, gRPC, REST) must maintain dependent type proofs")
+    (must "Zig FFI (7 exported functions) must maintain C ABI compatibility")
+  )
+
+  (enforcement
+    (k9-validator "contractiles/k9/must-check.k9.ncl")
+    (ci "quality.yml runs must-check on every PR")
+  )
+)

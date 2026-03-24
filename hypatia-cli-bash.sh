@@ -972,7 +972,7 @@ scan_file() {
 
 submit_findings_to_fleet() {
     local findings_json="$1"
-    local gitbot_fleet_dir="${2:-/var/mnt/eclipse/repos/gitbot-fleet}"
+    local gitbot_fleet_dir="${2:-${GITBOT_FLEET_DIR:-$(dirname "$(realpath "$0")")/../gitbot-fleet}}"
 
     if [[ ! -d "$gitbot_fleet_dir" ]]; then
         log_warn "gitbot-fleet not found at $gitbot_fleet_dir, skipping submission"

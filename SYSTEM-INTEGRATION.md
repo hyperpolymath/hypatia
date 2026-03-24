@@ -132,7 +132,7 @@ git push
 ./hypatia-cli.sh scan src/auth/JWT.res
 
 # Entire repo
-./hypatia-cli.sh scan /var/mnt/eclipse/repos/svalinn
+./hypatia-cli.sh scan /path/to/your/repos/svalinn
 
 # Generate JSON report
 HYPATIA_FORMAT=json ./hypatia-cli.sh scan . > report.json
@@ -155,7 +155,7 @@ cd gitbot-fleet
 ./fleet-coordinator.sh deploy-bots
 
 # Run full scan on repo
-./fleet-coordinator.sh run-scan /var/mnt/eclipse/repos/svalinn
+./fleet-coordinator.sh run-scan /path/to/your/repos/svalinn
 
 # Process pending findings
 ./fleet-coordinator.sh process-findings

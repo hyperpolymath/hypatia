@@ -1,0 +1,45 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+; TRUST.contractile — Trust boundaries for hypatia
+; Defines what LLM/SLM agents are trusted to do without asking.
+
+(trust-contractile
+  (version "1.0.0")
+  (repo "hypatia")
+
+  (trust-level "maximal")  ; maximal | standard | restricted | minimal
+
+  ; === Maximal Trust (default) ===
+  ; LLM may freely do these without asking:
+  (trust-actions
+    "read"          ; Read any file in the repo
+    "build"         ; Run build commands
+    "test"          ; Run test suites
+    "lint"          ; Run linters and formatters
+    "format"        ; Auto-format code
+    "doctor"        ; Run self-diagnostics
+    "heal"          ; Attempt automatic repair
+    "git-status"    ; Check git status
+    "git-diff"      ; View diffs
+    "git-log"       ; View history
+  )
+
+  ; === Denied Actions (always require human approval) ===
+  (trust-deny
+    "delete-branch"           ; Could lose work
+    "force-push"              ; Overwrites history
+    "modify-ci-secrets"       ; Security sensitive
+    "publish"                 ; External visibility
+    "push-to-main"            ; Protected branch
+    "delete-files-bulk"       ; More than 5 files at once
+    "modify-license"          ; Legal implications
+    "modify-security-policy"  ; Security implications
+    "remove-proofs"           ; Formal verification regression
+    "disable-ci-checks"       ; Safety regression
+    "lower-confidence-thresholds" ; Weakening auto-execute/review/report boundaries
+    "disable-safety-systems"  ; Rate limiter, quarantine, batch rollback
+    "bulk-delete-patterns"    ; Removing canonical patterns from PatternRegistry
+  )
+
+  ; === Trust Boundary ===
+  (trust-boundary "repo")  ; LLM confined to this repo unless explicitly told otherwise
+)

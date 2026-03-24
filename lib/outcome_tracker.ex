@@ -106,7 +106,8 @@ defmodule Hypatia.OutcomeTracker do
     {:ok, record} = record_outcome(recipe_id, repo, file, outcome)
 
     if Keyword.get(opts, :verify, false) and outcome == :success do
-      repo_path = Keyword.get(opts, :repo_path, "/var/mnt/eclipse/repos/#{repo}")
+      repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
+      repo_path = Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
       category = Keyword.get(opts, :category, "")
       pattern_id = Keyword.get(opts, :pattern_id, "")
 

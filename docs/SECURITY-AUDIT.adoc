@@ -124,7 +124,7 @@ This document provides a comprehensive security audit checklist for the cicd-hyp
 
 === Cryptographic Standards
 
-Reference: `/var/mnt/eclipse/repos/cicd-hyper-a/docs/CRYPTO-STANDARD.scm`
+Reference: `CRYPTO-STANDARD.scm` in the cicd-hyper-a repo (`docs/CRYPTO-STANDARD.scm`)
 
 [%interactive]
 * [ ] *CRYPTO-001*: TLS 1.3 is enforced for all network connections
@@ -369,7 +369,7 @@ Reference: `/var/mnt/eclipse/repos/cicd-hyper-a/docs/CRYPTO-STANDARD.scm`
 
 === CII Best Practices
 
-Reference: `/var/mnt/eclipse/repos/cicd-hyper-a/CII-ENFORCEMENT.adoc`
+Reference: `CII-ENFORCEMENT.adoc` in the cicd-hyper-a repo
 
 [%interactive]
 * [ ] *CII-001*: Passing badge requirements are met

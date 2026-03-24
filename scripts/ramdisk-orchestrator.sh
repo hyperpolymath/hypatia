@@ -38,9 +38,9 @@ set -euo pipefail
 VERSION="1.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HYPATIA_DIR="${HYPATIA_DIR:-$(dirname "$SCRIPT_DIR")}"
-FLEET_DIR="${FLEET_DIR:-/var/mnt/eclipse/repos/gitbot-fleet}"
-FARM_DIR="${FARM_DIR:-/var/mnt/eclipse/repos/.git-private-farm}"
-ECLIPSE_REPOS="/var/mnt/eclipse/repos"
+FLEET_DIR="${FLEET_DIR:-${HYPATIA_DIR}/../gitbot-fleet}"
+FARM_DIR="${FARM_DIR:-${HYPATIA_DIR}/../.git-private-farm}"
+ECLIPSE_REPOS="${HYPATIA_REPOS_DIR:-$(dirname "$HYPATIA_DIR")}"
 
 # Defaults
 MOUNT_POINT="/tmp/hypatia-workspace"

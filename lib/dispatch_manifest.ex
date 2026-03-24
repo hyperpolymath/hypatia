@@ -199,13 +199,15 @@ defmodule Hypatia.DispatchManifest do
   @repo_paths_file Path.join(@verisimdb_path, "repo-paths.json")
 
   defp resolve_from_index(repo) do
+    repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
+    default_path = Path.join(repos_dir, repo)
     case File.read(@repo_paths_file) do
       {:ok, content} ->
         case Jason.decode(content) do
-          {:ok, map} -> Map.get(map, repo, "/var/mnt/eclipse/repos/#{repo}")
-          _ -> "/var/mnt/eclipse/repos/#{repo}"
+          {:ok, map} -> Map.get(map, repo, default_path)
+          _ -> default_path
         end
-      _ -> "/var/mnt/eclipse/repos/#{repo}"
+      _ -> default_path
     end
   end
 end

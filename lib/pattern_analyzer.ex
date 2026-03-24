@@ -340,7 +340,7 @@ defmodule Hypatia.PatternAnalyzer do
         resolved = if is_binary(path) and path != "" and path != "." and File.dir?(path) do
           path
         else
-          "/var/mnt/eclipse/repos/#{scan.repo}"
+          Path.join(System.get_env("HYPATIA_REPOS_DIR", File.cwd!()), scan.repo)
         end
         {scan.repo, resolved}
       end)

@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Hypatia: Quickstart Guide
+:toc: macro
+:icons: font
+:source-highlighter: rouge
+
+Neurosymbolic CI/CD intelligence layer. Coordinates gitbot-fleet via a safety
+triangle pipeline with 5 neural networks, VQL queries, Bayesian confidence, and
+Logtalk pattern detection.
+
+toc::[]
+
+== Prerequisites
+
+[cols="1,1,2"]
+|===
+| Tool | Version | Install
+
+| Elixir
+| >= 1.14
+| `asdf install elixir latest` or https://elixir-lang.org/install.html
+
+| Erlang/OTP
+| >= 25
+| `asdf install erlang latest`
+
+| Rust
+| nightly (>= 1.80)
+| `asdf install rust nightly` or https://rustup.rs
+
+| just
+| >= 1.0
+| `cargo install just` or https://just.systems
+
+| pkg-config + openssl-devel
+| system
+| `dnf install pkg-config openssl-devel` / `apt install pkg-config libssl-dev`
+|===
+
+Optional (for ABI/FFI layers):
+
+* Idris2 >= 0.7.0 (for ABI definitions in `src/abi/`)
+* Zig >= 0.13.0 (for FFI bridge in `ffi/zig/`)
+
+== Clone and build
+
+[source,bash]
+----
+cd ~/Documents/hyperpolymath-repos
+git clone https://github.com/hyperpolymath/hypatia.git
+cd hypatia
+
+# Build everything (Rust workspace + Elixir)
+just build-all
+----
+
+Expected output:
+
+----
+   Compiling hypatia-cli v0.1.0
+   Compiling hypatia-data v0.1.0
+   ...
+    Finished `release` profile [optimized] target(s) in 30s
+Resolving Hex packages...
+...
+Compiling 15 files (.ex)
+Generated hypatia app
+----
+
+== Run tests
+
+[source,bash]
+----
+# Rust workspace tests
+just test
+
+# Elixir tests
+just test-elixir
+----
+
+Expected:
+
+----
+running 42 tests
+test result: ok. 42 passed; 0 failed
+
+..
+Finished in 1.2 seconds
+15 tests, 0 failures
+----
+
+== Run a scan
+
+[source,bash]
+----
+# Scan a local repository
+just scan /path/to/some-repo
+
+# Or via cargo directly
+cargo run --bin hyper -- scan ../proven --verbose
+----
+
+Expected:
+
+----
+[hypatia] Scanning ../proven ...
+  Found 3 weak points (0 critical, 1 high, 2 medium)
+  Patterns matched: PA003, PA007, PA012
+  Triangle routing: 1 eliminate, 1 substitute, 1 control
+----
+
+== Build the ABI/FFI layers
+
+[source,bash]
+----
+# Compile Idris2 ABI type definitions
+just compile-abi
+
+# Build Zig FFI bridge (7 exported C functions)
+just build-ffi
+----
+
+== Quick reference
+
+[cols="1,2"]
+|===
+| Command | Purpose
+
+| `just build`
+| Build Rust workspace (release)
+
+| `just build-all`
+| Build Rust + Elixir
+
+| `just test`
+| Run Rust tests
+
+| `just test-elixir`
+| Run Elixir tests
+
+| `just fmt`
+| Format Rust + Elixir code
+
+| `just lint`
+| Run clippy lints
+
+| `just scan <path>`
+| Scan a repo for weak points
+
+| `just compile-abi`
+| Compile Idris2 ABI definitions
+
+| `just build-ffi`
+| Build Zig FFI bridge
+
+| `just panic-scan`
+| Run panic-attacker analysis
+
+| `just assail`
+| Run panic-attacker pre-commit scan
+
+| `just doctor`
+| Check all required tools are installed
+
+| `just tour`
+| Guided walkthrough of the repo
+|===
+
+== Troubleshooting
+
+`openssl-sys build failure`::
+  Install `openssl-devel` (Fedora) or `libssl-dev` (Debian/Ubuntu).
+
+`mix: command not found`::
+  Install Elixir via asdf: `asdf plugin add elixir && asdf install elixir latest`.
+
+`** (Mix) Could not find Hex`::
+  Run `mix local.hex --force && mix local.rebar --force`.
+
+Elixir tests hang::
+  The OTP supervision tree starts GenServers. Set `MIX_ENV=test` and ensure
+  no other Hypatia instance is running.
+
+`idris2 not found` (for ABI work)::
+  Install via pack: https://github.com/stefan-hoeck/idris2-pack

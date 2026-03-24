@@ -1,122 +1,117 @@
-# ⚠️ STOP - CRITICAL READING REQUIRED
+; SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath)
+;
+; 0-AI-MANIFEST.a2ml — Universal AI entry point for Hypatia
+; Media-Type: application/a2ml
 
-**THIS FILE MUST BE READ FIRST BY ALL AI AGENTS**
+; THIS FILE MUST BE READ FIRST BY ALL AI AGENTS
 
-## WHAT IS THIS?
+(manifest
+  (identity
+    (name "hypatia")
+    (full-name "Hypatia — Neurosymbolic CI/CD Intelligence")
+    (version "0.7.x")
+    (repo "https://github.com/hyperpolymath/hypatia")
+    (license "PMPL-1.0-or-later")
+    (author "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"))
 
-This is the AI manifest for **hypatia**. It declares:
-- Canonical file locations (where things MUST be, and nowhere else)
-- Critical invariants (rules that must NEVER be violated)
-- Repository structure and organization
+  (purpose
+    "Neurosymbolic CI/CD intelligence layer. Coordinates gitbot-fleet
+     (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot)
+     via safety triangle pipeline (Eliminate > Substitute > Control).
+     5 neural networks, VQL queries over verisimdb-data, Bayesian confidence,
+     Logtalk rules for pattern detection. Scans 300+ repos.")
 
-## CANONICAL LOCATIONS (UNIVERSAL RULE)
+  ;; ===================================================================
+  ;; CONTEXT TIERS
+  ;; ===================================================================
 
-### Machine-Readable Metadata: `.machine_readable/` ONLY
+  (context-tiers
+    ; Tier 0 (always load): This file + .claude/CLAUDE.md — orientation only
+    ; Tier 1 (load if working on code): README.adoc, EXPLAINME.adoc, Justfile, mix.exs
+    ; Tier 2 (load on demand): .machine_readable/6a2/*.a2ml, docs/
+    ; Tier 3 (never load unless asked): test/, _build/, deps/, generated/
+    ;
+    ; DO NOT READ unless specifically asked:
+    ;   test/           — test files (run them, don't read them)
+    ;   _build/         — Elixir build output
+    ;   deps/           — Elixir dependencies
+    ;   target/         — Rust build output
+    ;   generated/      — auto-generated code
+    ;   *.lock          — lock files
+    )
 
-These 6 SCM files MUST exist in `.machine_readable/` directory ONLY:
-1. **.machine_readable/6a2/STATE.a2ml** - Project state, progress, blockers
-2. **.machine_readable/6a2/META.a2ml** - Architecture decisions, governance
-3. **.machine_readable/6a2/ECOSYSTEM.a2ml** - Position in ecosystem, relationships
-4. **.machine_readable/6a2/AGENTIC.a2ml** - AI agent interaction patterns
-5. **.machine_readable/6a2/NEUROSYM.a2ml** - Neurosymbolic integration config
-6. **.machine_readable/6a2/PLAYBOOK.a2ml** - Operational runbook
+  ;; ===================================================================
+  ;; CANONICAL LOCATIONS
+  ;; ===================================================================
 
-**CRITICAL:** If ANY of these files exist in the root directory, this is an ERROR.
+  (canonical-locations
+    (ai-manifest     "0-AI-MANIFEST.a2ml"           "THIS FILE")
+    (ai-instructions ".claude/CLAUDE.md"             "Claude-specific patterns — DETAILED")
+    (state           ".machine_readable/6a2/STATE.a2ml")
+    (meta            ".machine_readable/6a2/META.a2ml")
+    (ecosystem       ".machine_readable/6a2/ECOSYSTEM.a2ml")
+    (bot-directives  ".machine_readable/bot_directives/"))
 
-### Bot Directives: `.machine_readable/bot_directives/` ONLY
+  ;; ===================================================================
+  ;; ARCHITECTURE SUMMARY
+  ;; ===================================================================
 
-Bot-specific instructions for:
-- rhodibot - Git operations
-- echidnabot - Code quality
-- sustainabot - Dependency updates
-- glambot - Documentation
-- seambot - Integration
-- finishbot - Task completion
+  (architecture
+    (description "Safety triangle pipeline with neural dispatch")
+    (layers
+      (elixir-pipeline "lib/"       "8 core modules — pattern analysis, dispatch, learning")
+      (neural          "lib/neural/" "5 networks + coordinator GenServer")
+      (vql             "lib/vql/"    "Built-in VQL parser, file executor, query cache")
+      (idris2-abi      "src/abi/"    "Types, GraphQL, gRPC, REST with proofs")
+      (zig-ffi         "ffi/zig/"    "7 exported C ABI functions")
+      (rust            "src/rust/"   "Adapters, CLI, data, fixer, integration"))
+    (data-flow
+      "panic-attack scan -> verisimdb-data -> Elixir pipeline -> triangle route -> fleet dispatch"))
 
-### Canonical Machine-Readable Subdirs
+  ;; ===================================================================
+  ;; STRUCTURE OVERVIEW (detail in CLAUDE.md)
+  ;; ===================================================================
 
-- `.machine_readable/6scm/` — canonical 6SCM exports and related generated forms
+  (structure
+    "hypatia/
+     ├── 0-AI-MANIFEST.a2ml         # THIS FILE
+     ├── lib/                        # Elixir pipeline (8 core + VQL + neural + safety)
+     ├── src/abi/                    # Idris2 ABI (Types, GraphQL, gRPC, REST, FFI)
+     ├── ffi/zig/                    # Zig FFI bridge (7 functions)
+     ├── src/rust/                   # Rust workspace (adapters, cli, data, fixer)
+     ├── .machine_readable/          # State, meta, ecosystem, bot directives
+     └── .bot_directives/            # Bot instructions")
 
-### Agent Instructions
+  ;; ===================================================================
+  ;; CRITICAL INVARIANTS
+  ;; ===================================================================
 
-- `.claude/CLAUDE.md` - Claude-specific patterns (if exists)
-- `0-AI-MANIFEST.a2ml` - THIS FILE (universal entry point)
+  (critical-invariants
+    (rule "SCM files ONLY in .machine_readable/ — never in root")
+    (rule "Safety triangle: Eliminate > Substitute > Control — order matters")
+    (rule "Confidence gates: >=0.95 auto-execute, 0.85-0.94 review, <0.85 report")
+    (rule "PMPL-1.0-or-later on all source files")
+    (rule "Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"))
 
-## CORE INVARIANTS
+  ;; ===================================================================
+  ;; SESSION LIFECYCLE
+  ;; ===================================================================
 
-1. **No SCM duplication** - Root must NOT contain .machine_readable/6a2/STATE.a2ml, .machine_readable/6a2/META.a2ml, etc.
-2. **Single source of truth** - `.machine_readable/` is authoritative
-3. **No stale metadata** - If root SCMs exist, they are OUT OF DATE
-4. **License consistency** - All code PMPL-1.0-or-later unless platform requires MPL-2.0
-5. **Author attribution** - Always "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
-6. **AI gateway manifest required** - Repository should contain `0-AI-MANIFEST.a2ml` (or `AI.a2ml` where explicitly configured)
+  (lifecycle
+    (on-enter
+      (step "Read THIS file first")
+      (step "Read .claude/CLAUDE.md — contains detailed architecture tables")
+      (step "Read .machine_readable/6a2/STATE.a2ml for current status"))
 
-## REPOSITORY STRUCTURE
+    (on-exit
+      (step "Update .machine_readable/6a2/STATE.a2ml if changes made")
+      (step "Summarise outcomes")))
 
-<!-- CUSTOMIZE THIS SECTION FOR YOUR REPO -->
-
-This repo contains:
-
-```
-hypatia/
-├── 0-AI-MANIFEST.a2ml         # THIS FILE (start here)
-├── README.md                   # Project overview
-├── [your source files]         # Main code
-├── .machine_readable/          # SCM files (6 files)
-│   ├── .machine_readable/6a2/STATE.a2ml
-│   ├── .machine_readable/6a2/META.a2ml
-│   ├── .machine_readable/6a2/ECOSYSTEM.a2ml
-│   ├── .machine_readable/6a2/AGENTIC.a2ml
-│   ├── .machine_readable/6a2/NEUROSYM.a2ml
-│   ├── .machine_readable/6a2/PLAYBOOK.a2ml
-│   ├── 6scm/                   # Canonical 6SCM exports
-│   └── bot_directives/         # Bot instructions
-```
-
-## SESSION STARTUP CHECKLIST
-
-✅ Read THIS file (0-AI-MANIFEST.a2ml) first
-✅ Understand canonical locations (.machine_readable/, .machine_readable/bot_directives/, .machine_readable/6scm/)
-✅ Know the invariants (no SCM duplication, etc.)
-✅ Check for MCP enforcement (if applicable)
-✅ Read `.machine_readable/6a2/STATE.a2ml` for current status
-✅ Read `.machine_readable/6a2/AGENTIC.a2ml` for interaction patterns
-
-## LIFECYCLE HOOKS
-
-### on-enter (Session Start)
-
-When starting a new session:
-
-1. Read and acknowledge this manifest
-2. Log session start (optional but recommended)
-   - Format: `[YYYY-MM-DD HH:MM:SS] Session started: [agent-name]`
-   - Location: `.machine_readable/session-log.txt`
-3. Read `.machine_readable/6a2/STATE.a2ml`
-4. Check for blockers
-5. State understanding of canonical locations
-
-### on-exit (Session End)
-
-When ending a session:
-
-1. Update `.machine_readable/6a2/STATE.a2ml` if changes made
-2. Log session end (optional but recommended)
-   - Format: `[YYYY-MM-DD HH:MM:SS] Session ended: [summary]`
-   - Location: `.machine_readable/session-log.txt`
-3. Document new blockers
-4. Summarize outcomes
-
-## ATTESTATION PROOF
-
-After reading this file, demonstrate understanding by stating:
-
-**"I have read the AI manifest. SCM files are located in `.machine_readable/` ONLY, bot directives in `.machine_readable/bot_directives/`, and I will not create duplicate files in the root directory."**
-
-## META
-
-- **Format Version:** 1.0.0
-- **Created:** [DATE]
-- **Maintained By:** [YOUR-NAME/ORG]
-- **License:** PMPL-1.0-or-later
-- **Protocol:** https://github.com/hyperpolymath/0-ai-gatekeeper-protocol
+  (format-meta
+    (version "2.1.0")
+    (media-type "application/a2ml")
+    (created "2026-02-15")
+    (last-updated "2026-03-24")
+    (maintained-by "Jonathan D.A. Jewell / hyperpolymath")
+    (protocol "https://github.com/hyperpolymath/0-ai-gatekeeper-protocol")))

@@ -17,8 +17,10 @@
 
 set -euo pipefail
 
-VERISIMDB="${VERISIMDB_DATA_PATH:-/var/mnt/eclipse/repos/nextgen-databases/verisimdb/verisimdb-data}"
-HYPATIA_STATE="${HYPATIA_STATE_DIR:-/var/mnt/eclipse/repos/hypatia/data/verisimdb/neural-states}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HYPATIA_DIR="${HYPATIA_DIR:-$(dirname "$SCRIPT_DIR")}"
+VERISIMDB="${VERISIMDB_DATA_PATH:-${HYPATIA_DIR}/../nextgen-databases/verisimdb/verisimdb-data}"
+HYPATIA_STATE="${HYPATIA_STATE_DIR:-${HYPATIA_DIR}/data/verisimdb/neural-states}"
 OUTCOMES_DIR="$VERISIMDB/outcomes"
 RECIPES_DIR="$VERISIMDB/recipes"
 SCANS_DIR="$VERISIMDB/scans"

@@ -5,7 +5,7 @@
 set -euo pipefail
 
 HYPATIA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_REPO="${1:-/var/mnt/eclipse/repos/svalinn}"
+TARGET_REPO="${1:?Usage: $0 <path-to-repo>}"
 
 echo "=== Hypatia Scanner Test ==="
 echo "Target repo: $TARGET_REPO"
