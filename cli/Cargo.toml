@@ -52,7 +52,7 @@ ignore = "0.4"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2", "vendored-openssl"] }
 
 # Terminal output
-colored = "2.1"
+colored = "3.1"
 indicatif = "0.18"
 console = "0.15"
 dialoguer = "0.12"
