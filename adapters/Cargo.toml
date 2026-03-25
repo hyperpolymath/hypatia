@@ -15,7 +15,7 @@ reqwest = { version = "0.13", features = ["json", "multipart", "rustls"], defaul
 urlencoding = "2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 async-trait = "0.1"
 url = "2.5"
 base64 = "0.22"
