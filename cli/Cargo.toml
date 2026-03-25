@@ -59,7 +59,7 @@ dialoguer = "0.12"
 tabled = "0.16"
 
 # Configuration
-directories = "5.0"
+directories = "6.0"
 dirs = "6.0"
 config = "0.14"
 
