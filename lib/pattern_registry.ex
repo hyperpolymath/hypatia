@@ -33,7 +33,18 @@ defmodule Hypatia.PatternRegistry do
     "HardcodedSecret" => "PA017",
     "UncheckedError" => "PA018",
     "InfiniteRecursion" => "PA019",
-    "UnsafeTypeCoercion" => "PA020"
+    "UnsafeTypeCoercion" => "PA020",
+    # UX patterns — from cross-platform container test harness
+    "HardcodedAbsolutePath" => "UX001",
+    "MissingQuickstart" => "UX002",
+    "MissingDoctorRecipe" => "UX003",
+    "MissingHealRecipe" => "UX004",
+    "MissingContractiles" => "UX005",
+    "MissingGuixNix" => "UX006",
+    "MissingLlmWarmup" => "UX007",
+    "MissingExplainme" => "UX008",
+    "OversizedManifest" => "UX009",
+    "MissingAdjustContractile" => "UX010"
   }
 
   @doc """

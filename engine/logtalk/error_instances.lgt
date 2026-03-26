@@ -1,6 +1,10 @@
 %% SPDX-License-Identifier: PMPL-1.0-or-later
 %% Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 %%
+%% DEPRECATED: This file is part of the legacy Logtalk rules system.
+%% All new development should use the Elixir rules in lib/rules/.
+%% This file is maintained for reference only and may be removed in future.
+%%
 %% error_instances.lgt - Concrete error instance definitions for Hypatia PA rules
 %%
 %% Each PA rule (PA001-PA020) is defined as an object implementing the

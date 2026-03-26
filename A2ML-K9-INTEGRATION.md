@@ -402,7 +402,7 @@ The `rules.a2ml` file is human-readable documentation. Validate by:
 **Before (hardcoded in hypatia-cli.sh):**
 ```bash
 SEVERITY="medium"
-SHARED_CONTEXT="/var/mnt/eclipse/repos/gitbot-fleet/shared-context"
+SHARED_CONTEXT="/absolute/path/to/gitbot-fleet/shared-context"
 ```
 
 **After (read from K9):**
@@ -414,7 +414,7 @@ fi
 
 # Use env vars (with fallback to defaults)
 SEVERITY="${HYPATIA_SEVERITY:-medium}"
-SHARED_CONTEXT="${HYPATIA_SHARED_CONTEXT:-/var/mnt/eclipse/repos/gitbot-fleet/shared-context}"
+SHARED_CONTEXT="${HYPATIA_SHARED_CONTEXT:-../gitbot-fleet/shared-context}"
 ```
 
 ---

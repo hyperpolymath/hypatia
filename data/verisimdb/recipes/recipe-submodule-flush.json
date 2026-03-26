@@ -1,0 +1,35 @@
+{
+  "id": "recipe-submodule-flush",
+  "name": "Flush dirty submodule pointers bottom-up",
+  "description": "Detects repos with dirty submodule pointers (` M submodule-path` in git status) and recursively commits from leaves upward using git-submodule-flush",
+  "pattern_ids": ["PA-DIRTY-SUBMODULE"],
+  "category": "submodule-hygiene",
+  "confidence": 0.90,
+  "tier": "substitute",
+  "fix_script": "git-submodule-flush --execute --panic-attack --skip idaptik --message 'chore: flush submodule changes' --author 'Jonathan D.A. Jewell <6759885+hyperpolymath@users.noreply.github.com>' {{repo_path}}",
+  "fix_script_json_mode": "git-submodule-flush --execute --json --panic-attack --skip idaptik --message 'chore: flush submodule changes' --author 'Jonathan D.A. Jewell <6759885+hyperpolymath@users.noreply.github.com>' {{repo_path}}",
+  "rollback": "git reset HEAD~1 (per repo, bottom-up order reversed to top-down)",
+  "guards": {
+    "dry_run_default": true,
+    "max_depth": 5,
+    "large_threshold": 50,
+    "secret_scan": true,
+    "panic_attack": true,
+    "pre_commit_hook_warning": true
+  },
+  "detection_rule": {
+    "trigger": "git status --porcelain shows ` M <path>` where <path>/.git exists",
+    "severity": "low",
+    "auto_fix_eligible": true,
+    "confidence_requirement": 0.85
+  },
+  "created": "2026-03-22",
+  "created_by": "Claude Opus 4.6 + Jonathan D.A. Jewell",
+  "tool": {
+    "binary": "git-submodule-flush",
+    "source": "reposystem/tools/git-submodule-flush/",
+    "install": "cargo install --path reposystem/tools/git-submodule-flush/",
+    "standalone": true,
+    "my_lang_graduation_target": true
+  }
+}

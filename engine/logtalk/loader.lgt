@@ -1,3 +1,7 @@
+%% DEPRECATED: This file is part of the legacy Logtalk rules system.
+%% All new development should use the Elixir rules in lib/rules/.
+%% This file is maintained for reference only and may be removed in future.
+%%
 %% SPDX-License-Identifier: PMPL-1.0-or-later
 %% Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 %%

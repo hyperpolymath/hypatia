@@ -207,7 +207,7 @@ config = {
     # Fleet coordinator
     fleet_coordinator = {
       url | String = "tcp://localhost:5000",
-      shared_context_path | String = "/var/mnt/eclipse/repos/gitbot-fleet/shared-context",
+      shared_context_path | String = "%{std.getenv "GITBOT_FLEET_DIR" or "../gitbot-fleet"}/shared-context",
       findings_dir | String = "findings",
       learning_dir | String = "learning",
     },
@@ -223,7 +223,7 @@ config = {
     # Robot-repo-automaton (auto-fix execution)
     automaton = {
       url | String = "tcp://localhost:5001",
-      auto_fix_dir | String = "/var/mnt/eclipse/repos/gitbot-fleet/shared-context/auto-fixes",
+      auto_fix_dir | String = "%{std.getenv "GITBOT_FLEET_DIR" or "../gitbot-fleet"}/shared-context/auto-fixes",
       execution_mode | String = "supervised",  # supervised | autonomous
     },
 

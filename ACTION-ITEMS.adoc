@@ -33,7 +33,7 @@ cannot be automated. Everything else is done and documented.
 | **Bitbucket repos**
 | `bitfuckit repo create` has a confirmed bug (reports "done!" but repos
   not created). Either debug the tool, create repos via Bitbucket web UI,
-  or use direct API calls. See `/var/mnt/eclipse/repos/bitfuckit/BITFUCKIT-BUG-REPORT.md`.
+  or use direct API calls. See the `BITFUCKIT-BUG-REPORT.md` in the bitfuckit repo.
 | LOW
 |===
 

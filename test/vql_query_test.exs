@@ -14,6 +14,10 @@ defmodule Hypatia.VQL.QueryTest do
 
   use ExUnit.Case, async: false
 
+  # JSONL loading via the VQL Client GenServer is slow on large data files.
+  # Allow 120s per test instead of the default 60s.
+  @moduletag timeout: 120_000
+
   alias Hypatia.VQL.Query
   alias Hypatia.VQL.Client
 

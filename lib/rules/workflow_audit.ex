@@ -67,6 +67,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     unpinned = check_unpinned_actions(workflow_contents)
     wrong_pins = check_wrong_pins(workflow_contents)
     permission_issues = check_permissions(workflow_contents)
+    flawed_regexes = check_flawed_regex(workflow_contents)
     duplicates = check_duplicates(workflow_files, workflow_contents)
     caching_issues = check_caching(workflow_contents)
 
@@ -76,6 +77,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
       permission_issues: length(permission_issues),
+      flawed_regex_count: length(flawed_regexes),
       duplicate_count: length(duplicates),
       caching_issues: length(caching_issues),
       workflow_count: length(workflow_files),

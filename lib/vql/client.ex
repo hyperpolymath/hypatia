@@ -35,7 +35,7 @@ defmodule Hypatia.VQL.Client do
   use GenServer
   require Logger
 
-  @default_timeout 10_000
+  @default_timeout 30_000
 
   # ---------------------------------------------------------------------------
   # Client API

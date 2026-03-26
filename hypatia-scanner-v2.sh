@@ -92,7 +92,7 @@ scan_file() {
                 "CWE-754" \
                 "Replace getExn with switch/match or getWithDefault")
             findings+=("$finding")
-        done < <(rg -n "getExn" "$file" 2>/dev/null || true)
+        done < <(rg -nH "getExn" "$file" 2>/dev/null || true)
     fi
 
     # Pattern 2: Rust unwrap (HIGH)
@@ -110,7 +110,7 @@ scan_file() {
                 "CWE-754" \
                 "Replace unwrap() with ? operator or match")
             findings+=("$finding")
-        done < <(rg -n "\.unwrap\(\)" "$file" 2>/dev/null || true)
+        done < <(rg -nH "\.unwrap\(\)" "$file" 2>/dev/null || true)
     fi
 
     # Pattern 3: Obj.magic (HIGH)
@@ -128,7 +128,7 @@ scan_file() {
                 "CWE-704" \
                 "Remove Obj.magic and use proper type conversions")
             findings+=("$finding")
-        done < <(rg -n "Obj\.magic" "$file" 2>/dev/null || true)
+        done < <(rg -nH "Obj\.magic" "$file" 2>/dev/null || true)
     fi
 
     # Pattern 4: CORS wildcard (CRITICAL)
@@ -145,7 +145,7 @@ scan_file() {
             "CWE-942" \
             "Replace '*' with environment-based origin whitelist")
         findings+=("$finding")
-    done < <(rg -n 'Access-Control-Allow-Origin.*"\*"' "$file" 2>/dev/null || true)
+    done < <(rg -nH 'Access-Control-Allow-Origin.*"\*"' "$file" 2>/dev/null || true)
 
     # Pattern 5: Unverified JWT decode (CRITICAL)
     while IFS= read -r match; do
@@ -161,7 +161,237 @@ scan_file() {
             "CWE-347" \
             "Always verify JWT signatures before trusting payload")
         findings+=("$finding")
-    done < <(rg -n 'decodeJWT' "$file" | rg -v 'verifyJWT' 2>/dev/null || true)
+    done < <(rg -nH 'decodeJWT' "$file" | rg -v 'verifyJWT' 2>/dev/null || true)
+
+    # Pattern 6: Google API Key (CRITICAL)
+    while IFS= read -r match; do
+        IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+        local finding
+        finding=$(make_finding \
+            "critical" \
+            "secret_leak" \
+            "google_api_key" \
+            "$filepath" \
+            "$linenum" \
+            "$content" \
+            "CWE-798" \
+            "Revoke/Rotate the secret immediately and purge git history using git-filter-repo")
+        findings+=("$finding")
+    done < <(rg -nH "AIza[0-9A-Za-z\-_]{35}" "$file" 2>/dev/null || true)
+
+    # Pattern 7: Vulnerable Rust versions in Cargo.lock (MEDIUM/HIGH)
+    if [[ "$file" == *Cargo.lock ]]; then
+        # protobuf recursion crash
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "protobuf_recursion_crash" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-674" \
+                "Update protobuf to >= 3.7.2")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "(2\.|3\.[0-6]\.|3\.7\.[01])"' "$file" | rg 'name = "protobuf"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # idna punycode mishandling
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "idna_punycode_mishandling" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-20" \
+                "Update idna to >= 1.0.0")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "0\.[0-4]\."' "$file" | rg 'name = "idna"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # jsonwebtoken type confusion
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "jsonwebtoken_type_confusion" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-843" \
+                "Update jsonwebtoken to >= 10.3.0")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "[0-9]\."' "$file" | rg 'name = "jsonwebtoken"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # lru stacked borrows violation
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "low" \
+                "vulnerability" \
+                "lru_itermut_stacked_borrows" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-416" \
+                "Update lru to >= 0.16.3")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "0\.(9\.|1[0-5]\.|16\.[0-2])"' "$file" | rg 'name = "lru"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # glib variantstriter unsoundness
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "glib_variantstriter_unsoundness" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-754" \
+                "Update glib to >= 0.18.6, 0.19.10, 0.20.7 or 0.22.3")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "0\.(15|16|17|18\.[0-5]|19\.[0-9])"' "$file" | rg 'name = "glib"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # crossbeam-utils atomiccell unsoundness
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "high" \
+                "vulnerability" \
+                "crossbeam_utils_atomiccell_unsoundness" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-754" \
+                "Update crossbeam-utils to >= 0.8.7")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "0\.[678]\.[0-6]"' "$file" | rg 'name = "crossbeam-utils"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # lock_api data race
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "lock_api_data_race" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-362" \
+                "Update lock_api to >= 0.4.2")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "0\.[1234]\.[01]"' "$file" | rg 'name = "lock_api"' -A 1 | rg 'version =' 2>/dev/null || true)
+
+        # crossbeam-queue segqueue unsoundness
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "crossbeam_queue_segqueue_unsoundness" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-754" \
+                "Update crossbeam-queue to >= 0.2.3")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version = "0\.(1\.|2\.[0-2])"' "$file" | rg 'name = "crossbeam-queue"' -A 1 | rg 'version =' 2>/dev/null || true)
+    fi
+
+    # Pattern 8: Vulnerable npm versions in yarn.lock (MEDIUM/HIGH)
+    if [[ "$file" == *yarn.lock ]]; then
+        # serialize-javascript
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "high" \
+                "vulnerability" \
+                "npm_serialize_javascript_vulnerability" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-79" \
+                "Update serialize-javascript to >= 6.0.2 or 7.0.0")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version: ([0-5]\.|6\.0\.[01])' "$file" | rg 'serialize-javascript@npm:' -A 1 | rg 'version:' 2>/dev/null || true)
+
+        # minimatch
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "high" \
+                "vulnerability" \
+                "npm_minimatch_vulnerability" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-1333" \
+                "Update minimatch to >= 9.0.5 or 10.0.0")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version: ([0-8]\.|9\.0\.[0-4])' "$file" | rg 'minimatch@npm:' -A 1 | rg 'version:' 2>/dev/null || true)
+
+        # glob
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "high" \
+                "vulnerability" \
+                "npm_glob_vulnerability" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-78" \
+                "Update glob to >= 11.0.0")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version: ([0-9]\.|10\.[0-5]\.0)' "$file" | rg 'glob@npm:' -A 1 | rg 'version:' 2>/dev/null || true)
+
+        # js-yaml
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "medium" \
+                "vulnerability" \
+                "npm_js_yaml_vulnerability" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-1321" \
+                "Update js-yaml to >= 3.14.2 or 4.1.1")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version: ([0-2]\.|3\.(1[0-3]\.[0]|14\.[01]))' "$file" | rg 'js-yaml@npm:' -A 1 | rg 'version:' 2>/dev/null || true)
+
+        # h3
+        while IFS= read -r match; do
+            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
+            local finding
+            finding=$(make_finding \
+                "high" \
+                "vulnerability" \
+                "npm_h3_vulnerability" \
+                "$filepath" \
+                "$linenum" \
+                "$content" \
+                "CWE-22" \
+                "Update h3 to >= 2.0.1-rc.15")
+            findings+=("$finding")
+        done < <(rg -nH -B 1 'version: 2\.0\.1-rc\.( [0-9]|1[0-4])' "$file" | rg 'h3@npm:' -A 1 | rg 'version:' 2>/dev/null || true)
+    fi
 
     # Output findings as JSON array
     if [ ${#findings[@]} -gt 0 ]; then

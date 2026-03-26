@@ -3,6 +3,10 @@
 defmodule Hypatia.VerisimdbConnectorTest do
   use ExUnit.Case, async: true
 
+  # JSONL and large JSON loading via Jason.Decoder is slow on big data files.
+  # Allow 120s per test instead of the default 60s.
+  @moduletag timeout: 120_000
+
   alias Hypatia.VerisimdbConnector
 
   describe "fetch_all_scans/0" do

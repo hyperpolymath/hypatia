@@ -14,6 +14,10 @@ defmodule Hypatia.VQL.FileExecutorTest do
 
   use ExUnit.Case, async: true
 
+  # JSONL loading via Jason.Decoder is slow on large verisimdb-data files.
+  # Allow 120s per test instead of the default 60s.
+  @moduletag timeout: 120_000
+
   alias Hypatia.VQL.FileExecutor
 
   # ---------------------------------------------------------------------------

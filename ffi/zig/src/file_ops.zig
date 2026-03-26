@@ -6,11 +6,9 @@
 
 const std = @import("std");
 
-const default_data_path = "/var/mnt/eclipse/repos/verisimdb-data";
-
-/// Get the verisimdb-data path from VERISIMDB_DATA_PATH env or use default.
+/// Get the verisimdb-data path from VERISIMDB_DATA_PATH env or working dir fallback.
 pub fn getDataPath() []const u8 {
-    return std.posix.getenv("VERISIMDB_DATA_PATH") orelse default_data_path;
+    return std.posix.getenv("VERISIMDB_DATA_PATH") orelse "verisimdb-data";
 }
 
 /// Build a full path into the data directory. Caller owns returned memory.

@@ -72,6 +72,21 @@ defmodule Hypatia.Kin.Contingency do
     GenServer.call(__MODULE__, {:rollback_wave, repo_list, reason})
   end
 
+  @doc """
+  Check whether the contingency system is running and available.
+
+  Returns `true` if the GenServer is alive and responding, `false` otherwise.
+  Used by the dispatch channel to report system health status.
+  """
+  def available? do
+    case GenServer.whereis(__MODULE__) do
+      nil -> false
+      pid ->
+        Process.alive?(pid) and
+          match?({:ok, _}, safe_call(:level))
+    end
+  end
+
   @doc "Get contingency event log."
   def event_log do
     GenServer.call(__MODULE__, :event_log)
@@ -278,6 +293,14 @@ defmodule Hypatia.Kin.Contingency do
     case DateTime.from_iso8601(ts) do
       {:ok, dt, _} -> dt
       _ -> nil
+    end
+  end
+
+  defp safe_call(msg) do
+    try do
+      {:ok, GenServer.call(__MODULE__, msg, 2_000)}
+    catch
+      :exit, _ -> :error
     end
   end
 end

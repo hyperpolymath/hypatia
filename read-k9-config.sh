@@ -38,7 +38,7 @@ export HYPATIA_AUTO_APPROVAL_OBS=$(echo "$CONFIG_JSON" | jq -r '.config.learning
 export HYPATIA_AUTO_APPROVAL_FIXES=$(echo "$CONFIG_JSON" | jq -r '.config.learning_loop.auto_approval_threshold.successful_fixes // 3')
 
 # Export integration endpoints
-export HYPATIA_SHARED_CONTEXT=$(echo "$CONFIG_JSON" | jq -r '.config.integration.fleet_coordinator.shared_context_path // "/var/mnt/eclipse/repos/gitbot-fleet/shared-context"')
+export HYPATIA_SHARED_CONTEXT=$(echo "$CONFIG_JSON" | jq -r ".config.integration.fleet_coordinator.shared_context_path // \"${GITBOT_FLEET_DIR:-$(dirname "$(realpath "$0")")/../gitbot-fleet}/shared-context\"")
 export HYPATIA_ECHIDNA_URL=$(echo "$CONFIG_JSON" | jq -r '.config.integration.echidna.url // "http://localhost:8080"')
 
 # Export performance settings

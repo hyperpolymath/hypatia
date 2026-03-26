@@ -332,19 +332,19 @@ The ultimate validation: If hypatia can't fix itself, it can't fix anything. **I
 
 ```bash
 # Scan self
-cd /var/mnt/eclipse/repos/hypatia
+cd $REPOS_DIR/hypatia
 ./hypatia-v2 . 2>/dev/null | jq '.scan_info'
 
 # Scan specific file
 ./hypatia-v2 fixer/src/scanner.rs 2>/dev/null | jq '.findings'
 
 # Check learning stats
-cd /var/mnt/eclipse/repos/gitbot-fleet/shared-context/learning
+cd $REPOS_DIR/gitbot-fleet/shared-context/learning
 cat observed-patterns.jsonl | jq -r .pattern | sort | uniq -c
 cat fix-outcomes.jsonl | jq -r '.pattern + " " + .outcome' | sort | uniq -c
 
 # Verify fix compiles
-cargo check --manifest-path /var/mnt/eclipse/repos/hypatia/fixer/Cargo.toml
+cargo check --manifest-path $REPOS_DIR/hypatia/fixer/Cargo.toml
 
 # Re-scan to verify improvement
 ./hypatia-v2 fixer/src/scanner.rs 2>/dev/null | jq '.findings[] | .severity' | sort | uniq -c

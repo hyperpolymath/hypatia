@@ -1,0 +1,58 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+; INTENT.contractile — Purpose and scope for hypatia
+; Helps LLM/SLM agents understand what this repo IS and IS NOT.
+
+(intent-contractile
+  (version "1.0.0")
+  (repo "hypatia")
+
+  ; === Purpose (what this repo IS) ===
+  (purpose
+    "Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath
+     ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot,
+     glambot, seambot, finishbot) via a safety triangle pipeline (Eliminate > Substitute
+     > Control). It uses 5 neural networks for intelligent dispatch, VQL queries over
+     verisimdb-data, Bayesian confidence updating, and Logtalk rules for pattern
+     detection. It is the brain that decides which automated actions to take across
+     all repositories."
+  )
+
+  ; === Anti-Purpose (what this repo is NOT — prevents scope creep) ===
+  (anti-purpose
+    "Hypatia is NOT a theorem prover (that is ECHIDNA). It is NOT a repository scanner
+     (that is panic-attacker). It is NOT a bot itself (those are in gitbot-fleet). It is
+     NOT a database (that is VeriSimDB). Hypatia orchestrates and dispatches — it does
+     not directly modify repositories, scan code, prove theorems, or store data. It reads
+     scan results, makes intelligent routing decisions, and dispatches work to the fleet."
+  )
+
+  ; === Key Architectural Decisions That Must Not Be Reversed ===
+  (architectural-invariants
+    "Elixir/OTP for the core pipeline — 8 supervised GenServers"
+    "Safety triangle routing: Eliminate > Substitute > Control (order matters)"
+    "Confidence thresholds: auto-execute >=0.95, review 0.85-0.94, report <0.85"
+    "5 neural networks (Graph of Trust, MoE, LSM, ESN, RNN) in coordinator GenServer"
+    "VQL as the query interface to verisimdb-data — no raw SQL or direct file reads"
+    "JSONL dispatch manifests for fleet execution layer"
+    "Logtalk rule engine for error catalog and pattern detection"
+    "Idris2 ABI for Types, GraphQL, gRPC, REST with dependent type proofs"
+    "Zig FFI with 7 exported functions for C ABI bridge"
+  )
+
+  ; === Sensitive Areas (if in doubt, ask) ===
+  (ask-before-touching
+    "lib/ — Elixir pipeline modules; incorrect routing can cause fleet misdispatch"
+    "src/abi/ — Idris2 formal proofs; changes require re-verification"
+    "ffi/zig/ — C ABI boundary; changes affect all language consumers"
+    "config/ — dispatch thresholds and neural network parameters"
+    ".machine_readable/ — checkpoint files, format is specified"
+    "data/ — Logtalk rules and pattern registry; 954 canonical patterns"
+  )
+
+  ; === Ecosystem Position ===
+  (ecosystem
+    (belongs-to "standalone")
+    (depends-on ("verisimdb" "panic-attacker" "proven" "idris2" "zig"))
+    (depended-on-by ("gitbot-fleet" "robot-repo-automaton" "ambientops"))
+  )
+)

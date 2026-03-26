@@ -62,8 +62,18 @@ defmodule Hypatia.Rules.Learning do
     GenServer.call(__MODULE__, :promote_patterns)
   end
 
+  @doc """
+  Decay false positives older than 30 days.
+
+  Removes stale false-positive records so that confidence scores
+  recover over time. Call periodically (e.g. from a scheduled task).
+  """
+  def decay_false_positives do
+    GenServer.call(__MODULE__, :decay_false_positives)
+  end
+
   # ---------------------------------------------------------------------------
-  # GenServer Callbacks
+  # GenServer Callbacks — handle_cast
   # ---------------------------------------------------------------------------
 
   @impl true
@@ -79,6 +89,10 @@ defmodule Hypatia.Rules.Learning do
     {:noreply, %{state | false_positives: fps}}
   end
 
+  # ---------------------------------------------------------------------------
+  # GenServer Callbacks — handle_call (grouped)
+  # ---------------------------------------------------------------------------
+
   @impl true
   def handle_call({:get_confidence, issue_type}, _from, state) do
     fixes = Map.get(state.fixes, issue_type, [])
@@ -88,9 +102,16 @@ defmodule Hypatia.Rules.Learning do
       if total == 0 do
         0.5
       else
-        successes = Enum.count(fixes, &(&1.outcome == :success))
         fp_count = length(Map.get(state.false_positives, issue_type, []))
-        base = successes / total
+
+        # Apply recency weighting
+        weighted_successes = Enum.reduce(fixes, 0, fn fix, acc ->
+          age_hours = calculate_age_hours(fix.timestamp)
+          weight = :math.exp(-age_hours / 24.0)
+          if fix.outcome == :success, do: acc + weight, else: acc
+        end)
+
+        base = weighted_successes / total
         penalty = min(fp_count * 0.15, 0.5)
         max(base - penalty, 0.0)
       end
@@ -176,5 +197,34 @@ defmodule Hypatia.Rules.Learning do
 
     new_promoted = Map.merge(state.promoted_rules, promotable)
     {:reply, {:ok, map_size(promotable)}, %{state | promoted_rules: new_promoted}}
+  end
+
+  @impl true
+  def handle_call(:decay_false_positives, _from, state) do
+    thirty_days_ago = DateTime.add(DateTime.utc_now(), -30, :day)
+
+    decayed_fps =
+      Map.new(state.false_positives, fn {issue_type, contexts} ->
+        filtered = Enum.reject(contexts, fn ctx ->
+          if is_map(ctx) && Map.has_key?(ctx, :timestamp) do
+            DateTime.compare(ctx.timestamp, thirty_days_ago) == :lt
+          else
+            false
+          end
+        end)
+        {issue_type, filtered}
+      end)
+
+    {:reply, :ok, %{state | false_positives: decayed_fps}}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private Helpers
+  # ---------------------------------------------------------------------------
+
+  defp calculate_age_hours(timestamp) do
+    now = DateTime.utc_now()
+    diff_seconds = DateTime.diff(now, timestamp, :second)
+    diff_seconds / 3600.0
   end
 end

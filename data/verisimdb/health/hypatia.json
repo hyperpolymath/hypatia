@@ -7,7 +7,7 @@
     },
     "filesystem": {
       "missing": [
-        "/var/mnt/eclipse/repos/hypatia/data/verisimdb/dispatch"
+        "data/verisimdb/dispatch"
       ],
       "status": "fail"
     },

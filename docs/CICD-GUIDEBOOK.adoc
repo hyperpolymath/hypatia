@@ -566,7 +566,7 @@ gh api repos/actions/checkout/git/refs/tags/v6.0.1 --jq '.object.sha'
 [source,bash]
 ----
 # Build from source
-cd /var/home/hyper/repos/cicd-hyper-a
+cd $REPOS_DIR/cicd-hyper-a
 cargo build --release --package cicd-hyper-a-fixer
 
 # Binary location
@@ -639,22 +639,22 @@ Summary: 3 fixes applied, 3 successful
 [source,bash]
 ----
 # Scan all repos in directory
-cicd-fixer batch /var/home/hyper/repos
+cicd-fixer batch $REPOS_DIR
 
 # Scan with limit
-cicd-fixer batch /var/home/hyper/repos --limit 50
+cicd-fixer batch $REPOS_DIR --limit 50
 
 # Scan and fix (dry-run)
-cicd-fixer batch /var/home/hyper/repos --fix --dry-run
+cicd-fixer batch $REPOS_DIR --fix --dry-run
 
 # Scan and fix (apply changes)
-cicd-fixer batch /var/home/hyper/repos --fix
+cicd-fixer batch $REPOS_DIR --fix
 ----
 
 **Output Example:**
 [source]
 ----
-Batch processing: /var/home/hyper/repos
+Batch processing: $REPOS_DIR
 ✓ bundeno - No issues
 ✓ poly-cloud-mcp - No issues
 ⚠ poly-secret-mcp - 37 issues (37 auto-fixable)
@@ -831,11 +831,11 @@ The gitbot-fleet reads patterns from `.machine_readable/6scm/CICD-PATTERNS.scm`:
 [source,bash]
 ----
 # Quick scan of all repos
-cd /var/home/hyper/repos/cicd-hyper-a
-./target/release/cicd-fixer batch /var/home/hyper/repos --limit 100
+cd $REPOS_DIR/cicd-hyper-a
+./target/release/cicd-fixer batch $REPOS_DIR --limit 100
 
 # Review repos with issues
-./target/release/cicd-fixer scan /var/home/hyper/repos/problem-repo
+./target/release/cicd-fixer scan $REPOS_DIR/problem-repo
 ----
 
 ==== Fixing Issues
@@ -843,13 +843,13 @@ cd /var/home/hyper/repos/cicd-hyper-a
 [source,bash]
 ----
 # Preview fixes
-./target/release/cicd-fixer fix /var/home/hyper/repos/problem-repo --dry-run
+./target/release/cicd-fixer fix $REPOS_DIR/problem-repo --dry-run
 
 # Apply fixes
-./target/release/cicd-fixer fix /var/home/hyper/repos/problem-repo
+./target/release/cicd-fixer fix $REPOS_DIR/problem-repo
 
 # Commit and push
-cd /var/home/hyper/repos/problem-repo
+cd $REPOS_DIR/problem-repo
 git add .github/workflows/
 git commit -m "fix: apply CI/CD security fixes from cicd-fixer"
 git push
@@ -862,7 +862,7 @@ git push
 [source,bash]
 ----
 # Comprehensive scan
-./target/release/cicd-fixer batch /var/home/hyper/repos > weekly-report.txt
+./target/release/cicd-fixer batch $REPOS_DIR > weekly-report.txt
 
 # Count issues by severity
 grep -c "🔴" weekly-report.txt  # Critical
@@ -888,7 +888,7 @@ gh api repos/actions/checkout/git/refs/tags/v6.0.2 --jq '.object.sha'
 cargo build --release --package cicd-hyper-a-fixer
 
 # 5. Batch update
-./target/release/cicd-fixer batch /var/home/hyper/repos --fix
+./target/release/cicd-fixer batch $REPOS_DIR --fix
 ----
 
 === Incident Response
@@ -899,7 +899,7 @@ cargo build --release --package cicd-hyper-a-fixer
    [source,bash]
    ----
    # Find all repos using the affected action
-   grep -r "uses: affected/action" /var/home/hyper/repos/*/github/workflows/
+   grep -r "uses: affected/action" $REPOS_DIR/*/github/workflows/
    ----
 
 2. **Get Fixed SHA**
@@ -914,13 +914,13 @@ cargo build --release --package cicd-hyper-a-fixer
 4. **Batch Fix**
    [source,bash]
    ----
-   ./target/release/cicd-fixer batch /var/home/hyper/repos --fix
+   ./target/release/cicd-fixer batch $REPOS_DIR --fix
    ----
 
 5. **Verify and Push**
    [source,bash]
    ----
-   for repo in /var/home/hyper/repos/*/; do
+   for repo in $REPOS_DIR/*/; do
      cd "$repo"
      if git diff --quiet; then
        continue
@@ -1209,7 +1209,7 @@ cicd-fixer scan /path/to/any/repo
 [source,bash]
 ----
 # Step 1: Navigate to the repo
-cd /var/home/hyper/repos/my-repo
+cd $REPOS_DIR/my-repo
 
 # Step 2: Scan for issues
 cicd-fixer scan .
@@ -1265,20 +1265,20 @@ git push
 [source,bash]
 ----
 # Step 1: Scan all repos
-cicd-fixer batch /var/home/hyper/repos > scan-report.txt
+cicd-fixer batch $REPOS_DIR > scan-report.txt
 
 # Step 2: Review the report
 cat scan-report.txt | grep "⚠"  # Repos with issues
 cat scan-report.txt | grep "✓"  # Clean repos
 
 # Step 3: Fix with dry-run first
-cicd-fixer batch /var/home/hyper/repos --fix --dry-run
+cicd-fixer batch $REPOS_DIR --fix --dry-run
 
 # Step 4: Apply fixes (if dry-run looked good)
-cicd-fixer batch /var/home/hyper/repos --fix
+cicd-fixer batch $REPOS_DIR --fix
 
 # Step 5: Commit each repo individually
-for repo in /var/home/hyper/repos/*/; do
+for repo in $REPOS_DIR/*/; do
     cd "$repo"
     if git diff --quiet .github/workflows/; then
         continue  # No changes
@@ -1290,7 +1290,7 @@ for repo in /var/home/hyper/repos/*/; do
 done
 
 # Step 6: Push all (carefully!)
-for repo in /var/home/hyper/repos/*/; do
+for repo in $REPOS_DIR/*/; do
     cd "$repo"
     if git log origin/main..HEAD --oneline | grep -q "cicd-fixer"; then
         echo "Pushing: $(basename $repo)"
@@ -1335,20 +1335,20 @@ gh api repos/owner/action/git/refs/tags/v2.0.0 --jq '.object.sha'
 gh release view v2.0.0 --repo owner/action
 
 # Step 4: Update SHA-PINS.scm
-vim /var/home/hyper/repos/cicd-hyper-a/.audittraining/SHA-PINS.scm
+vim $REPOS_DIR/cicd-hyper-a/.audittraining/SHA-PINS.scm
 # Add:
 #     (owner/action
 #      "abc123def456..."
 #      "v2.0.0")
 
 # Step 5: Update sha_pins.rs
-vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/sha_pins.rs
+vim $REPOS_DIR/cicd-hyper-a/fixer/src/sha_pins.rs
 # Add:
 #         pins.insert("owner/action".to_string(),
 #             ("abc123def456...".to_string(), "v2.0.0".to_string()));
 
 # Step 6: Rebuild
-cd /var/home/hyper/repos/cicd-hyper-a
+cd $REPOS_DIR/cicd-hyper-a
 cargo build --release --package cicd-hyper-a-fixer
 
 # Step 7: Verify
@@ -1370,7 +1370,7 @@ git push
 # Is it auto-fixable?
 
 # Step 2: Update ERROR-CATALOG.scm
-vim /var/home/hyper/repos/cicd-hyper-a/.audittraining/ERROR-CATALOG.scm
+vim $REPOS_DIR/cicd-hyper-a/.audittraining/ERROR-CATALOG.scm
 # Add:
 #     (new-error-id
 #      error-category severity #t-or-f
@@ -1378,15 +1378,15 @@ vim /var/home/hyper/repos/cicd-hyper-a/.audittraining/ERROR-CATALOG.scm
 #      "How to fix it")
 
 # Step 3: Update catalog.rs
-vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/catalog.rs
+vim $REPOS_DIR/cicd-hyper-a/fixer/src/catalog.rs
 # Add Rust equivalent
 
 # Step 4: Update scanner.rs (if auto-detectable)
-vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/scanner.rs
+vim $REPOS_DIR/cicd-hyper-a/fixer/src/scanner.rs
 # Add detection logic
 
 # Step 5: Update fixer.rs (if auto-fixable)
-vim /var/home/hyper/repos/cicd-hyper-a/fixer/src/fixer.rs
+vim $REPOS_DIR/cicd-hyper-a/fixer/src/fixer.rs
 # Add fix logic
 
 # Step 6: Rebuild and test
@@ -1395,7 +1395,7 @@ cargo build --release --package cicd-hyper-a-fixer
 ./target/release/cicd-fixer scan /path/to/test/repo  # Test detection
 
 # Step 7: Update CICD-PATTERNS.scm (for bots)
-vim /var/home/hyper/repos/gitbot-fleet/.machine_readable/6scm/CICD-PATTERNS.scm
+vim $REPOS_DIR/gitbot-fleet/.machine_readable/6scm/CICD-PATTERNS.scm
 # Add pattern for bot consumption
 
 # Step 8: Commit both repos
@@ -1429,7 +1429,7 @@ vim /var/home/hyper/repos/gitbot-fleet/.machine_readable/6scm/CICD-PATTERNS.scm
 ----
 # IMMEDIATE: Step 1 - Assess impact (within 30 minutes)
 # Find all repos using the vulnerable action
-grep -r "uses: vulnerable/action" /var/home/hyper/repos/*/github/workflows/ 2>/dev/null
+grep -r "uses: vulnerable/action" $REPOS_DIR/*/github/workflows/ 2>/dev/null
 
 # Step 2 - Get the fixed version SHA
 gh api repos/vulnerable/action/releases/latest --jq '.tag_name'
@@ -1439,14 +1439,14 @@ gh api repos/vulnerable/action/git/refs/tags/v-fixed --jq '.object.sha'
 # Edit and add the new secure SHA
 
 # Step 4 - Rebuild cicd-fixer
-cd /var/home/hyper/repos/cicd-hyper-a
+cd $REPOS_DIR/cicd-hyper-a
 cargo build --release --package cicd-hyper-a-fixer
 
 # Step 5 - Batch fix all affected repos
-./target/release/cicd-fixer batch /var/home/hyper/repos --fix
+./target/release/cicd-fixer batch $REPOS_DIR --fix
 
 # Step 6 - Commit all with security tag
-for repo in /var/home/hyper/repos/*/; do
+for repo in $REPOS_DIR/*/; do
     cd "$repo"
     if git diff --quiet .github/workflows/; then continue; fi
     git add .github/workflows/
@@ -1457,7 +1457,7 @@ See: https://github.com/advisories/..."
 done
 
 # Step 7 - Push all immediately
-for repo in /var/home/hyper/repos/*/; do
+for repo in $REPOS_DIR/*/; do
     cd "$repo"
     if git log origin/main..HEAD --oneline | grep -q "CVE"; then
         git push

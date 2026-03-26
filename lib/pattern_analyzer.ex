@@ -83,6 +83,107 @@ defmodule Hypatia.PatternAnalyzer do
   end
 
   @doc """
+  Run the analysis pipeline in configurable batches.
+
+  Options:
+    - `:batch_size` — number of repos to process per batch (default: 50)
+    - `:max_concurrency` — parallel workers per batch (default: 4)
+    - `:on_batch_complete` — callback `fn batch_num, batch_result -> :ok` (optional)
+    - `:repos` — specific repo list to process (default: all from scans)
+
+  Returns `{:ok, %{batches: N, total_actions: N, summary: ...}}`.
+  """
+  def analyze_batch(opts \\ []) do
+    batch_size = Keyword.get(opts, :batch_size, 50)
+    max_concurrency = Keyword.get(opts, :max_concurrency, 4)
+    on_complete = Keyword.get(opts, :on_batch_complete, fn _n, _r -> :ok end)
+    repo_filter = Keyword.get(opts, :repos, nil)
+
+    scans = VerisimdbConnector.fetch_all_scans()
+    Logger.info("[Batch] Loaded #{length(scans)} scan results")
+
+    # Filter repos if specified
+    scans =
+      if repo_filter do
+        Enum.filter(scans, fn s -> Map.get(s, :repo, "") in repo_filter end)
+      else
+        scans
+      end
+
+    # Build shared state
+    {:ok, registry} = PatternRegistry.sync_from_scans(scans)
+    patterns = Map.get(registry, "patterns", %{}) |> Map.values()
+    repo_languages = build_language_map(scans)
+    scorecard_patterns = run_scorecard_checks(scans)
+    all_patterns = patterns ++ scorecard_patterns
+
+    # Chunk repos and process in batches
+    all_repos =
+      all_patterns
+      |> Enum.flat_map(fn p -> Map.get(p, "repos_affected_list", []) end)
+      |> Enum.uniq()
+
+    batches = Enum.chunk_every(all_repos, batch_size)
+    Logger.info("[Batch] Processing #{length(all_repos)} repos in #{length(batches)} batches (size=#{batch_size}, workers=#{max_concurrency})")
+
+    all_routed =
+      batches
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn {batch_repos, batch_num} ->
+        Logger.info("[Batch #{batch_num}/#{length(batches)}] Processing #{length(batch_repos)} repos")
+
+        # Filter patterns to those affecting this batch's repos
+        batch_patterns =
+          Enum.filter(all_patterns, fn p ->
+            repos = Map.get(p, "repos_affected_list", [])
+            Enum.any?(repos, &(&1 in batch_repos))
+          end)
+
+        # Process repos in parallel within the batch
+        routed =
+          batch_patterns
+          |> Task.async_stream(
+            fn pattern ->
+              repos = Map.get(pattern, "repos_affected_list", [])
+              |> Enum.filter(&(&1 in batch_repos))
+
+              Enum.map(repos, fn repo ->
+                language = Map.get(repo_languages, repo, "unknown")
+                tagged = Map.put(pattern, "routed_repo", repo)
+                TriangleRouter.route(tagged, repo, language)
+              end)
+            end,
+            max_concurrency: max_concurrency,
+            timeout: 30_000,
+            on_timeout: :kill_task
+          )
+          |> Enum.flat_map(fn
+            {:ok, results} -> results
+            {:exit, _reason} -> []
+          end)
+
+        on_complete.(batch_num, %{repo_count: length(batch_repos), actions: length(routed)})
+        routed
+      end)
+
+    # Neural enhancement + dispatch
+    all_routed = enhance_with_neural(all_routed)
+    Enum.each(all_routed, &FleetDispatcher.dispatch_routed_action/1)
+    {:ok, manifest_path, manifest_stats} = DispatchManifest.write(all_routed)
+
+    summary = generate_summary(all_routed, scans)
+    |> Map.merge(%{
+      manifest_path: manifest_path,
+      batches: length(batches),
+      batch_size: batch_size,
+      manifest_stats: manifest_stats
+    })
+
+    Logger.info("[Batch] Complete: #{length(batches)} batches, #{summary.total_actions} actions")
+    {:ok, summary}
+  end
+
+  @doc """
   Generate a summary of the analysis pipeline results.
   """
   def generate_summary(routed_actions, scans) do
@@ -239,7 +340,7 @@ defmodule Hypatia.PatternAnalyzer do
         resolved = if is_binary(path) and path != "" and path != "." and File.dir?(path) do
           path
         else
-          "/var/mnt/eclipse/repos/#{scan.repo}"
+          Path.join(System.get_env("HYPATIA_REPOS_DIR", File.cwd!()), scan.repo)
         end
         {scan.repo, resolved}
       end)

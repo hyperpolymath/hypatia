@@ -191,6 +191,25 @@ defmodule Hypatia.Rules.CodeSafety do
   def banned_file_extensions, do: @banned_file_extensions
   def scm_file_names, do: @scm_file_names
 
+  @doc "Check for missing forbid(unsafe_code) in Rust entry points"
+  def check_rust_safety(file_list, file_contents \\ %{}) do
+    Enum.flat_map(file_list, fn f ->
+      basename = Path.basename(f)
+      if basename in ["lib.rs", "main.rs"] do
+        content = Map.get(file_contents, f, "")
+        if content != "" and not String.contains?(content, "#![forbid(unsafe_code)]") do
+          [%{rule: :missing_forbid_unsafe, severity: :low,
+             description: "Rust entry point missing #![forbid(unsafe_code)]",
+             file: f}]
+        else
+          []
+        end
+      else
+        []
+      end
+    end)
+  end
+
   @doc "Check if any SCM files exist outside .machine_readable/"
   def check_scm_locations(file_list) do
     Enum.flat_map(@scm_file_names, fn scm ->

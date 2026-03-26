@@ -252,16 +252,23 @@ defmodule Hypatia.SelfDiagnostics do
   defp check_learning_scheduler do
     case Process.whereis(Hypatia.LearningScheduler) do
       nil ->
-        %{"status" => "fail", "message" => "LearningScheduler not running"}
+        %{"status" => "warn", "message" => "LearningScheduler not running"}
       pid ->
         if Process.alive?(pid) do
-          status = Hypatia.LearningScheduler.status()
-          %{
-            "status" => "pass",
-            "last_run" => inspect(Map.get(status, :last_run)),
-            "outcomes_processed" => Map.get(status, :total_outcomes_processed, 0),
-            "confidence_updates" => Map.get(status, :total_confidence_updates, 0)
-          }
+          try do
+            status = GenServer.call(pid, :status, 2_000)
+            %{
+              "status" => "pass",
+              "last_run" => inspect(Map.get(status, :last_run)),
+              "outcomes_processed" => Map.get(status, :total_outcomes_processed, 0),
+              "confidence_updates" => Map.get(status, :total_confidence_updates, 0)
+            }
+          catch
+            :exit, {:timeout, _} ->
+              %{"status" => "warn", "message" => "LearningScheduler unresponsive (timeout)"}
+            :exit, _ ->
+              %{"status" => "warn", "message" => "LearningScheduler unavailable"}
+          end
         else
           %{"status" => "fail", "message" => "LearningScheduler process dead"}
         end
