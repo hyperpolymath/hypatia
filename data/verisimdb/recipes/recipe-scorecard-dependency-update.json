@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-dependency-update",
+  "name": "Enable automated dependency updates",
+  "description": "Adds Dependabot or Renovate configuration for automated dependency updates (OpenSSF Scorecard SC-008)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-008-dependency-update"
+  ],
+  "target_categories": ["DependencyUpdateTool"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-dependabot.sh",
+  "action": "insert",
+  "match": "Repository lacks automated dependency update configuration",
+  "replacement": "Dependabot configuration added for detected package ecosystems",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

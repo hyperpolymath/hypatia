@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-branch-protection",
+  "name": "Enforce branch protection settings",
+  "description": "Ensures default branch has protection rules enabled (OpenSSF Scorecard SC-002)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-002-branch-protection"
+  ],
+  "target_categories": ["BranchProtection"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-workflow-permissions.sh",
+  "action": "configure",
+  "match": "Default branch lacks protection rules",
+  "replacement": "Branch protection enabled with required reviews and status checks",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

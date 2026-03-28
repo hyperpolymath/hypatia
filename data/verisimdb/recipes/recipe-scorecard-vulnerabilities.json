@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-vulnerabilities",
+  "name": "Detect known vulnerabilities in dependencies",
+  "description": "Flags dependencies with known CVEs via OSV database (OpenSSF Scorecard SC-019)",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "SC-019-vulnerabilities"
+  ],
+  "target_categories": ["Vulnerabilities"],
+  "languages": ["any"],
+  "confidence": 0.95,
+  "auto_fixable": false,
+  "fix_script": "none",
+  "action": "report",
+  "match": "Dependencies contain known security vulnerabilities",
+  "replacement": "Manual dependency update to patched versions required",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-binary-artifacts",
+  "name": "Detect binary artifacts in repository",
+  "description": "Flags repositories containing checked-in binary artifacts (OpenSSF Scorecard SC-001)",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "SC-001-binary-artifacts"
+  ],
+  "target_categories": ["BinaryArtifacts"],
+  "languages": ["any"],
+  "confidence": 0.95,
+  "auto_fixable": false,
+  "fix_script": "none",
+  "action": "report",
+  "match": "Binary artifacts detected in repository tree",
+  "replacement": "Manual removal of binary artifacts required",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

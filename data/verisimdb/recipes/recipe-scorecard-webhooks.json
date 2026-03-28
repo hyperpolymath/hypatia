@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-webhooks",
+  "name": "Detect insecure webhook configurations",
+  "description": "Flags webhooks lacking authentication secrets or using HTTP (OpenSSF Scorecard SC-020)",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "SC-020-webhooks"
+  ],
+  "target_categories": ["Webhooks"],
+  "languages": ["any"],
+  "confidence": 0.95,
+  "auto_fixable": false,
+  "fix_script": "none",
+  "action": "report",
+  "match": "Webhooks configured without authentication or over insecure transport",
+  "replacement": "Manual webhook security configuration required",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-token-permissions",
+  "name": "Restrict workflow token permissions to least privilege",
+  "description": "Adds explicit permissions: read-all to workflows lacking token restrictions (OpenSSF Scorecard SC-018)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-018-token-permissions"
+  ],
+  "target_categories": ["TokenPermissions"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-workflow-permissions.sh",
+  "action": "insert",
+  "match": "Workflow missing explicit permissions declaration",
+  "replacement": "permissions: read-all added at workflow level",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

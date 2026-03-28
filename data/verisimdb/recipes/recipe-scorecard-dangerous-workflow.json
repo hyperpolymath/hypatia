@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-dangerous-workflow",
+  "name": "Detect dangerous workflow patterns",
+  "description": "Flags workflows using dangerous triggers like pull_request_target with checkout (OpenSSF Scorecard SC-007)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-007-dangerous-workflow"
+  ],
+  "target_categories": ["DangerousWorkflow"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-workflow-permissions.sh",
+  "action": "replace",
+  "match": "Workflow uses dangerous trigger or pattern allowing code injection",
+  "replacement": "Workflow permissions restricted and dangerous triggers removed",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

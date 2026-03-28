@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-license",
+  "name": "Add or fix repository license file",
+  "description": "Ensures repository contains a valid LICENSE file (OpenSSF Scorecard SC-010)",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-010-license"
+  ],
+  "target_categories": ["License"],
+  "languages": ["any"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-license-file.sh",
+  "action": "insert",
+  "match": "Repository missing LICENSE file or license not detected",
+  "replacement": "LICENSE file added with PMPL-1.0-or-later text",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

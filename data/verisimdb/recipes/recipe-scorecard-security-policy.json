@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-security-policy",
+  "name": "Add SECURITY.md security policy",
+  "description": "Adds a SECURITY.md file with vulnerability disclosure instructions (OpenSSF Scorecard SC-016)",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "SC-016-security-policy"
+  ],
+  "target_categories": ["SecurityPolicy"],
+  "languages": ["any"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-security-policy.sh",
+  "action": "insert",
+  "match": "Repository missing SECURITY.md or security policy",
+  "replacement": "SECURITY.md added with vulnerability reporting instructions",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

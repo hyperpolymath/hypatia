@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-pinned-deps",
+  "name": "Pin third-party dependencies by hash",
+  "description": "Pins GitHub Actions and other dependencies to immutable SHA hashes (OpenSSF Scorecard SC-013)",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "SC-013-pinned-dependencies"
+  ],
+  "target_categories": ["PinnedDependencies"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-unpinned-actions.sh",
+  "action": "replace",
+  "match": "Dependencies referenced by mutable tag instead of SHA hash",
+  "replacement": "Dependencies pinned to immutable SHA-256 commit hashes",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

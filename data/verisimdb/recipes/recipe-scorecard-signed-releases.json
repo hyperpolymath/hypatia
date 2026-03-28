@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-signed-releases",
+  "name": "Detect unsigned release artifacts",
+  "description": "Flags releases that lack cryptographic signatures or provenance attestations (OpenSSF Scorecard SC-017)",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "SC-017-signed-releases"
+  ],
+  "target_categories": ["SignedReleases"],
+  "languages": ["any"],
+  "confidence": 0.95,
+  "auto_fixable": false,
+  "fix_script": "none",
+  "action": "report",
+  "match": "Release artifacts lack cryptographic signatures or SLSA provenance",
+  "replacement": "Manual signing and provenance attestation required",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

@@ -1,0 +1,21 @@
+{
+  "id": "recipe-scorecard-sast",
+  "name": "Add static analysis security testing workflow",
+  "description": "Adds CodeQL or equivalent SAST workflow to repository (OpenSSF Scorecard SC-014)",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "SC-014-sast"
+  ],
+  "target_categories": ["SAST"],
+  "languages": ["yaml"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-sast-workflow.sh",
+  "action": "insert",
+  "match": "Repository lacks static analysis security testing workflow",
+  "replacement": "CodeQL analysis workflow added for detected languages",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}
