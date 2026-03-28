@@ -35,7 +35,12 @@ defmodule Hypatia.Rules.SecurityErrors do
     "crossbeam-utils-atomiccell-unsoundness": "Unsoundness in crossbeam-utils AtomicCell",
     "lock-api-data-race": "Data race in lock_api",
     "crossbeam-queue-segqueue-unsoundness": "Unsoundness in crossbeam-queue SegQueue",
-    empty_workflow: "Empty or stub workflow file"
+    empty_workflow: "Empty or stub workflow file",
+    stub_crypto: "Stub/placeholder cryptographic implementation",
+    wildcard_cors_web: "Wildcard CORS in web application code",
+    elixir_code_injection: "Elixir code injection risk",
+    elixir_deserialization: "Unsafe Erlang term deserialization",
+    js_eval_usage: "JavaScript eval() usage"
   }
 
   def error_categories, do: @error_categories
@@ -97,7 +102,22 @@ defmodule Hypatia.Rules.SecurityErrors do
     "FuzzingID" => :low,
     "CIIBestPracticesID" => :low,
     "deno-lint-include-pattern" => :low,
-    "workflow-linter-self-detection" => :low
+    "workflow-linter-self-detection" => :low,
+    "stub-crypto-function" => :critical,
+    "stub-hash-return" => :critical,
+    "todo-crypto" => :high,
+    "fake-signature" => :critical,
+    "js-wildcard-cors" => :high,
+    "js-eval" => :critical,
+    "js-innerhtml" => :high,
+    "js-document-write" => :high,
+    "js-hardcoded-secret" => :critical,
+    "elixir-system-cmd-interpolation" => :critical,
+    "elixir-code-eval" => :critical,
+    "elixir-send-unsanitised" => :high,
+    "elixir-atom-from-user" => :high,
+    "elixir-no-ssl-verify" => :high,
+    "elixir-port-open-shell" => :high
   }
 
   def issue_severity(issue_type), do: Map.get(@issue_severity, issue_type, :info)
@@ -166,7 +186,22 @@ defmodule Hypatia.Rules.SecurityErrors do
     "missing_permissions" => "Add \"permissions: read-all\" at workflow level",
     "missing_spdx" => "Add SPDX-License-Identifier header to file",
     "missing-workflow-permissions" => "Add \"permissions: read-all\" at workflow level",
-    "missing-spdx-header" => "Add SPDX-License-Identifier header to file"
+    "missing-spdx-header" => "Add SPDX-License-Identifier header to file",
+    "stub-crypto-function" => "Replace stub with real cryptographic implementation or add compile_error! guard",
+    "stub-hash-return" => "Replace format!(\"stub:...\") with real hash computation",
+    "todo-crypto" => "Implement the cryptographic function before deployment",
+    "fake-signature" => "Replace fake/placeholder crypto value with real implementation",
+    "js-wildcard-cors" => "Replace Access-Control-Allow-Origin: * with specific origin or env var",
+    "js-eval" => "Remove eval() — use structured alternatives (JSON.parse, Function constructor if needed)",
+    "js-innerhtml" => "Use textContent, Trusted Types, or rescript-dom-mounter SafeDOM",
+    "js-document-write" => "Use DOM manipulation methods instead of document.write",
+    "js-hardcoded-secret" => "Move credentials to environment variables or secrets manager",
+    "elixir-system-cmd-interpolation" => "Pass arguments as list to System.cmd, not interpolated string",
+    "elixir-code-eval" => "Replace Code.eval_* with structured dispatch or compiled modules",
+    "elixir-send-unsanitised" => "Use :erlang.binary_to_term(data, [:safe]) to restrict atom creation",
+    "elixir-atom-from-user" => "Use String.to_existing_atom/1 instead — atom table is finite",
+    "elixir-no-ssl-verify" => "Set verify: :verify_peer with cacertfile or cacerts option",
+    "elixir-port-open-shell" => "Validate and sanitize command before Port.open spawn"
   }
 
   def fix_suggestion(issue_type), do: Map.get(@fix_suggestions, issue_type)
@@ -359,7 +394,14 @@ defmodule Hypatia.Rules.SecurityErrors do
     "command_injection_risk" => {"CWE-78", "OS Command Injection"},
     "unwrap_without_check" => {"CWE-754", "Improper Check for Unusual Conditions"},
     "getexn_on_external_data" => {"CWE-754", "Improper Check for Unusual Conditions"},
-    "sql_injection" => {"CWE-89", "SQL Injection"}
+    "sql_injection" => {"CWE-89", "SQL Injection"},
+    "stub_crypto" => {"CWE-327", "Use of Broken or Risky Cryptographic Algorithm"},
+    "js_eval" => {"CWE-94", "Improper Control of Code Generation"},
+    "elixir_code_eval" => {"CWE-94", "Improper Control of Code Generation"},
+    "elixir_deserialization" => {"CWE-502", "Deserialization of Untrusted Data"},
+    "elixir_atom_exhaustion" => {"CWE-400", "Uncontrolled Resource Consumption"},
+    "ssl_verify_none" => {"CWE-295", "Improper Certificate Validation"},
+    "wildcard_cors_web" => {"CWE-942", "Permissive Cross-domain Policy"}
   }
 
   def cwe_for(issue_type), do: Map.get(@cwe_mappings, issue_type)

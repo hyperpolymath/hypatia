@@ -503,7 +503,10 @@ defmodule Hypatia.CLI do
     "ocaml" => [".ml", ".mli"],
     "coq" => [".v"],
     "lean" => [".lean"],
-    "nickel" => [".ncl"]
+    "nickel" => [".ncl"],
+    "elixir" => [".ex", ".exs"],
+    "javascript" => [".js", ".mjs"],
+    "typescript" => [".ts", ".tsx"]
   }
 
   defp scan_code_safety(repo_path) do

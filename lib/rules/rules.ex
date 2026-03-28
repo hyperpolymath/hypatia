@@ -74,6 +74,30 @@ defmodule Hypatia.Rules do
         findings
       end
 
+    # Stub/placeholder crypto detection (all languages)
+    findings = findings ++ CodeSafety.scan_stub_crypto(content)
+
+    # Web security patterns for JS/TS files not already covered by language patterns
+    findings =
+      if language not in ["javascript", "typescript"] and
+           (String.ends_with?(file_path, ".js") or
+            String.ends_with?(file_path, ".ts") or
+            String.ends_with?(file_path, ".mjs")) do
+        findings ++ CodeSafety.scan_web_security(content)
+      else
+        findings
+      end
+
+    # Container code patterns for Containerfiles and shell scripts
+    findings =
+      if String.ends_with?(file_path, "Containerfile") or
+           String.ends_with?(file_path, "Dockerfile") or
+           String.ends_with?(file_path, ".sh") do
+        findings ++ CodeSafety.scan_container_code(content)
+      else
+        findings
+      end
+
     # Cargo.lock vulnerability check
     findings =
       if String.ends_with?(file_path, "Cargo.lock") do

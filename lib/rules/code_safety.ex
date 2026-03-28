@@ -91,6 +91,87 @@ defmodule Hypatia.Rules.CodeSafety do
   ]
 
   # ---------------------------------------------------------------------------
+  # Elixir Patterns — runtime safety for BEAM code
+  # ---------------------------------------------------------------------------
+
+  @elixir_patterns [
+    %{id: :elixir_system_cmd_interpolation, severity: :critical,
+      pattern: ~r/System\.cmd\(.*#\{/, cwe: "CWE-78",
+      description: "System.cmd with string interpolation — command injection risk"},
+    %{id: :elixir_code_eval, severity: :critical,
+      pattern: ~r/Code\.eval_string|Code\.eval_quoted|Code\.eval_file/, cwe: "CWE-94",
+      description: "Code.eval_* — arbitrary code execution risk"},
+    %{id: :elixir_send_unsanitised, severity: :high,
+      pattern: ~r/:erlang\.binary_to_term\(/, cwe: "CWE-502",
+      description: "binary_to_term without :safe option — deserialization attack"},
+    %{id: :elixir_atom_from_user, severity: :high,
+      pattern: ~r/String\.to_atom\(/, cwe: "CWE-400",
+      description: "String.to_atom with user input exhausts atom table — use to_existing_atom"},
+    %{id: :elixir_wildcard_plug_cors, severity: :high,
+      pattern: ~r/origin:\s*"\*"/, cwe: "CWE-942",
+      description: "Plug CORS origin wildcard — restrict to known origins"},
+    %{id: :elixir_no_ssl_verify, severity: :high,
+      pattern: ~r/verify:\s*:verify_none|ssl:\s*\[verify:\s*:verify_none\]/, cwe: "CWE-295",
+      description: "SSL verify_none disables certificate validation — MITM risk"},
+    %{id: :elixir_port_open_shell, severity: :high,
+      pattern: ~r/Port\.open\(\{:spawn,/, cwe: "CWE-78",
+      description: "Port.open spawn — validate command before execution"},
+    %{id: :elixir_send_resp_no_escape, severity: :medium,
+      pattern: ~r/send_resp\(.*#\{/, cwe: "CWE-79",
+      description: "send_resp with interpolation — potential XSS if HTML content type"}
+  ]
+
+  # ---------------------------------------------------------------------------
+  # JavaScript/Web Security Patterns — general JS/TS/Deno files
+  # ---------------------------------------------------------------------------
+
+  @javascript_patterns [
+    %{id: :js_wildcard_cors, severity: :high,
+      pattern: ~r/Access-Control-Allow-Origin["':\s]+\*/, cwe: "CWE-942",
+      description: "Wildcard CORS — restrict to specific origins or use env var"},
+    %{id: :js_eval, severity: :critical,
+      pattern: ~r/\beval\s*\(/, cwe: "CWE-94",
+      description: "eval() — arbitrary code execution"},
+    %{id: :js_innerhtml, severity: :high,
+      pattern: ~r/\.innerHTML\s*=/, cwe: "CWE-79",
+      description: "innerHTML assignment — XSS risk, use textContent or SafeDOM"},
+    %{id: :js_document_write, severity: :high,
+      pattern: ~r/document\.write\s*\(/, cwe: "CWE-79",
+      description: "document.write — XSS risk"},
+    %{id: :js_exec_sync, severity: :high,
+      pattern: ~r/execSync\s*\(|child_process/, cwe: "CWE-78",
+      description: "Shell execution — validate input before passing to shell"},
+    %{id: :js_deno_all_perms, severity: :high,
+      pattern: ~r/deno\s+run\s+(-A|--allow-all)\b/, cwe: "CWE-250",
+      description: "Deno -A grants all permissions — use specific --allow-* flags"},
+    %{id: :js_http_url_in_code, severity: :medium,
+      pattern: ~r/["']http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/, cwe: "CWE-319",
+      description: "HTTP URL in code — use HTTPS for non-localhost"},
+    %{id: :js_hardcoded_secret, severity: :critical,
+      pattern: ~r/(api_key|apiKey|secret|password|token)\s*[:=]\s*["'][a-zA-Z0-9+\/=]{8,}["']/, cwe: "CWE-798",
+      description: "Possible hardcoded credential — use environment variable"}
+  ]
+
+  # ---------------------------------------------------------------------------
+  # Cross-Language Patterns — stub/placeholder detection
+  # ---------------------------------------------------------------------------
+
+  @stub_crypto_patterns [
+    %{id: :stub_crypto_function, severity: :critical,
+      pattern: ~r/stub:(sha|blake|argon|dilithium|kyber|chacha|hkdf|shake)/, cwe: "CWE-327",
+      description: "Stub cryptographic implementation — must not ship to production"},
+    %{id: :stub_hash_return, severity: :critical,
+      pattern: ~r/format!\("stub:/, cwe: "CWE-327",
+      description: "Rust function returning stub value — placeholder not real implementation"},
+    %{id: :todo_crypto, severity: :high,
+      pattern: ~r/TODO.*(?:Replace with real|implement|stub).*(?:hash|crypt|sign|verify|kdf)/i, cwe: "CWE-327",
+      description: "TODO marker on cryptographic function — not yet implemented"},
+    %{id: :fake_signature, severity: :critical,
+      pattern: ~r/fake|placeholder|dummy.*(?:signature|key|hash|cert|token)/i, cwe: "CWE-327",
+      description: "Fake/placeholder cryptographic value"}
+  ]
+
+  # ---------------------------------------------------------------------------
   # Nickel Patterns — config-time security and RSR policy enforcement
   # ---------------------------------------------------------------------------
 
@@ -129,6 +210,9 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language("coq"), do: @coq_banned
   def patterns_for_language("lean"), do: @lean_banned
   def patterns_for_language("nickel"), do: @nickel_patterns
+  def patterns_for_language("elixir"), do: @elixir_patterns
+  def patterns_for_language("javascript"), do: @javascript_patterns
+  def patterns_for_language("typescript"), do: @javascript_patterns
   def patterns_for_language(_), do: []
 
   def scan_content(content, language) do
@@ -250,4 +334,31 @@ defmodule Hypatia.Rules.CodeSafety do
       end
     end)
   end
+
+  @doc "Scan for stub/placeholder cryptographic implementations"
+  def scan_stub_crypto(content) do
+    Enum.flat_map(@stub_crypto_patterns, fn rule ->
+      case Regex.scan(rule.pattern, content) do
+        [] -> []
+        matches -> [%{rule: rule.id, severity: rule.severity, cwe: rule.cwe,
+                       description: rule.description, occurrences: length(matches)}]
+      end
+    end)
+  end
+
+  def stub_crypto_patterns, do: @stub_crypto_patterns
+
+  @doc "Scan JavaScript/TypeScript content for web security issues"
+  def scan_web_security(content) do
+    Enum.flat_map(@javascript_patterns, fn rule ->
+      case Regex.scan(rule.pattern, content) do
+        [] -> []
+        matches -> [%{rule: rule.id, severity: rule.severity, cwe: rule.cwe,
+                       description: rule.description, occurrences: length(matches)}]
+      end
+    end)
+  end
+
+  def javascript_patterns, do: @javascript_patterns
+  def elixir_patterns, do: @elixir_patterns
 end

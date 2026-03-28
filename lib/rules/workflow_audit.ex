@@ -245,4 +245,37 @@ defmodule Hypatia.Rules.WorkflowAudit do
       _ -> :low
     end
   end
+
+  @doc """
+  Check for flawed regex patterns in workflow files.
+  Detects common mistakes like unescaped dots, overly broad matches,
+  and regex patterns that could cause false positives in CI checks.
+  """
+  def check_flawed_regex(workflow_contents) when is_map(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      flaws = []
+
+      # Detect unescaped dots in grep patterns (e.g., grep "foo.bar" matches "fooXbar")
+      flaws =
+        if Regex.match?(~r/grep\s+(-[a-zA-Z]*\s+)*["'][^"']*(?<!\\)\.[^"']*["']/, content) do
+          [%{rule: "flawed_regex", severity: :low, file: filename,
+             description: "grep with unescaped dot — may match unintended characters"} | flaws]
+        else
+          flaws
+        end
+
+      # Detect grep -E with * quantifier without preceding atom
+      flaws =
+        if Regex.match?(~r/grep\s+-[a-zA-Z]*E[a-zA-Z]*\s+["'][^"']*(?<![.\w\\])\*/, content) do
+          [%{rule: "flawed_regex", severity: :low, file: filename,
+             description: "grep -E with bare * quantifier — likely needs .* or \\w*"} | flaws]
+        else
+          flaws
+        end
+
+      flaws
+    end)
+  end
+
+  def check_flawed_regex(_), do: []
 end
