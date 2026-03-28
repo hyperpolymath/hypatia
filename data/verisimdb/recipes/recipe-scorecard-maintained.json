@@ -1,0 +1,19 @@
+{
+  "id": "recipe-scorecard-maintained",
+  "name": "Check repository maintenance activity",
+  "description": "Assesses whether repository shows recent maintenance activity (OpenSSF Scorecard SC-011). Informational — measures commit/issue/PR activity over 90 days.",
+  "triangle_tier": "control",
+  "pattern_ids": ["SC-011-maintained"],
+  "target_categories": ["Maintained"],
+  "languages": ["any"],
+  "confidence": 0.80,
+  "auto_fixable": false,
+  "fix_script": null,
+  "action": "report",
+  "match": "Repository shows low recent maintenance activity",
+  "replacement": "Address open issues, merge pending PRs, or archive if abandoned",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

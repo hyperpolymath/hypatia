@@ -1,0 +1,19 @@
+{
+  "id": "recipe-scorecard-contributors",
+  "name": "Check contributor diversity",
+  "description": "Assesses contributor diversity for bus factor (OpenSSF Scorecard SC-006). Informational — cannot be automated.",
+  "triangle_tier": "control",
+  "pattern_ids": ["SC-006-contributors"],
+  "target_categories": ["Contributors"],
+  "languages": ["any"],
+  "confidence": 0.80,
+  "auto_fixable": false,
+  "fix_script": null,
+  "action": "report",
+  "match": "Repository has low contributor diversity (bus factor risk)",
+  "replacement": "Encourage contributions via CONTRIBUTING.md, good-first-issue labels, mentoring",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

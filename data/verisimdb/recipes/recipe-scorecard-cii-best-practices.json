@@ -1,0 +1,19 @@
+{
+  "id": "recipe-scorecard-cii-best-practices",
+  "name": "Register for CII Best Practices badge",
+  "description": "Checks for CII/OpenSSF Best Practices badge registration (OpenSSF Scorecard SC-004). Informational — registration is manual at bestpractices.dev.",
+  "triangle_tier": "control",
+  "pattern_ids": ["SC-004-cii-best-practices"],
+  "target_categories": ["CIIBestPractices"],
+  "languages": ["any"],
+  "confidence": 0.80,
+  "auto_fixable": false,
+  "fix_script": null,
+  "action": "report",
+  "match": "Repository not registered at bestpractices.dev",
+  "replacement": "Register at https://bestpractices.dev/en/projects — requires manual questionnaire",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}
