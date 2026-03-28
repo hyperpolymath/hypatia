@@ -1,0 +1,30 @@
+{
+  "groove_version": "1",
+  "service_id": "hypatia",
+  "service_version": "0.1.0",
+  "capabilities": {
+    "scanning": {
+      "type": "scanning",
+      "description": "Neurosymbolic CI/CD security and quality scanning",
+      "protocol": "http",
+      "endpoint": "/api/scan",
+      "requires_auth": false,
+      "panel_compatible": true
+    },
+    "static-analysis": {
+      "type": "static-analysis",
+      "description": "Pattern-based static analysis with ESN/RBF neural backends",
+      "protocol": "http",
+      "endpoint": "/api/analyze",
+      "requires_auth": false,
+      "panel_compatible": true
+    }
+  },
+  "consumes": ["octad-storage", "workflow"],
+  "endpoints": {
+    "health": "/health",
+    "groove": "/.well-known/groove"
+  },
+  "health": "/health",
+  "applicability": ["individual", "team"]
+}
