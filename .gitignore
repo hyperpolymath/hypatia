@@ -143,3 +143,5 @@ htmlcov/
 /tmp/
 *.tmp
 *.bak
+# asdf version manager
+.tool-versions
