@@ -31,10 +31,13 @@ defmodule Hypatia.Web.GroovePlug do
   ## Manifest fields
 
   - `service_id` — Unique identifier for this service (`"hypatia"`)
-  - `groove_version` — Protocol version (`"1.0.0"`)
-  - `port` — The port this service listens on (`9090`)
-  - `capabilities` — List of capabilities this service provides
-  - `consumes` — Service IDs this service depends on
+  - `groove_version` — Protocol version (`"1"`)
+  - `service_version` — Semantic version of this service
+  - `capabilities` — Map of capability names to their configuration (object, not array)
+  - `consumes` — Capability IDs this service would benefit from
+  - `endpoints` — Named endpoints this service exposes
+  - `health` — Health check endpoint path
+  - `applicability` — Scale levels supported
 
   ## Message passing
 
@@ -53,19 +56,27 @@ defmodule Hypatia.Web.GroovePlug do
   # -------------------------------------------------------------------
 
   @groove_manifest %{
+    groove_version: "1",
     service_id: "hypatia",
-    groove_version: "1.0.0",
-    port: 9090,
-    capabilities: [
-      %{
-        name: "neurosymbolic-scanning",
+    service_version: "0.1.0",
+    capabilities: %{
+      neurosymbolic_scanning: %{
+        type: "scanning",
         description:
           "Neurosymbolic CI/CD intelligence with rule-based scanning and VQL integration",
         protocol: "http",
-        endpoint: "/api/v1/scan"
+        endpoint: "/api/v1/scan",
+        requires_auth: false,
+        panel_compatible: true
       }
-    ],
-    consumes: ["octad-storage", "static-analysis"]
+    },
+    consumes: ["octad-storage", "static-analysis"],
+    endpoints: %{
+      api: "http://localhost:9090/api/v1",
+      health: "http://localhost:9090/health"
+    },
+    health: "/health",
+    applicability: ["individual", "team"]
   }
 
   # Pre-encode the manifest at compile time so we never re-encode on
