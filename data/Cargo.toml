@@ -29,7 +29,7 @@ deadpool-redis = "0.23"
 bb8 = "0.9"
 
 # Serialization
-bincode = "3.0"
+bincode = "2.0"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
