@@ -43,7 +43,9 @@ defmodule Hypatia.CLI do
     :code_safety,
     :migration_rules,
     :scorecard,
-    :green_web
+    :green_web,
+    :git_state,
+    :dependabot_alerts
   ]
 
   @severity_order %{
@@ -490,6 +492,58 @@ defmodule Hypatia.CLI do
         results
       end
 
+    # Git State
+    results =
+      if :git_state in rules do
+        case Hypatia.Rules.GitState.scan(repo_path) do
+          %{findings: findings} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "git_state",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, "."),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          _ -> results
+        end
+      else
+        results
+      end
+
+    # Dependabot Alerts
+    results =
+      if :dependabot_alerts in rules do
+        case Hypatia.Rules.DependabotAlerts.scan_from_path(repo_path) do
+          {:ok, %{findings: findings}} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "dependabot_alerts",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, ""),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          {:error, reason} ->
+            IO.puts(:stderr, "Warning: Dependabot alerts unavailable: #{reason}")
+            results
+        end
+      else
+        results
+      end
+
     results
   end
 
@@ -703,6 +757,8 @@ defmodule Hypatia.CLI do
   defp format_module_name("migration_rules"), do: "Migration Rules"
   defp format_module_name("scorecard"), do: "OpenSSF Scorecard"
   defp format_module_name("green_web"), do: "Green Web Foundation"
+  defp format_module_name("git_state"), do: "Git State Sync"
+  defp format_module_name("dependabot_alerts"), do: "Dependabot Alerts"
   defp format_module_name(other), do: other
 
   defp print_usage do
@@ -722,7 +778,8 @@ defmodule Hypatia.CLI do
         --rules, -r <list>      Comma-separated rule modules (default: all)
                                 Available: root_hygiene,honest_completion,
                                 workflow_audit,cicd_rules,code_safety,
-                                migration_rules,scorecard,green_web
+                                migration_rules,scorecard,green_web,
+                                git_state,dependabot_alerts
         --format, -f <fmt>      Output format: json (default), text, github
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)

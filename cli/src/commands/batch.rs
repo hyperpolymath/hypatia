@@ -320,16 +320,19 @@ async fn execute_scan(args: BatchScanArgs, config: &Config, format: OutputFormat
     }
 }
 
-/// Process a single repository scan
+/// Process a single repository scan by invoking the Elixir scanner.
+///
+/// Calls `hypatia-cli.sh scan <repo> --format json --severity <min>` and
+/// parses the JSON output. Falls back to file-presence heuristics if the
+/// Elixir escript is unavailable.
 async fn process_scan_repo(
     repo: &str,
     _config: &Config,
-    _min_severity: &str,
+    min_severity: &str,
     _categories: &str,
 ) -> BatchItemResult {
     let start = std::time::Instant::now();
 
-    // Simplified scan - in real implementation, would call full scan logic
     let path = PathBuf::from(repo);
 
     if !path.exists() {
@@ -344,19 +347,228 @@ async fn process_scan_repo(
         };
     }
 
-    // Simulate scan - in real implementation, would run actual scan
-    // For now, check for basic files
-    let workflows_dir = path.join(".github/workflows");
-    let findings = if workflows_dir.exists() {
-        // Count workflow files as proxy for findings
-        std::fs::read_dir(&workflows_dir)
-            .map(|entries| entries.filter_map(|e| e.ok()).count())
-            .unwrap_or(0)
-    } else {
-        0
-    };
+    if !path.is_dir() {
+        return BatchItemResult {
+            repo: repo.to_string(),
+            status: BatchStatus::Failed,
+            findings_count: 0,
+            fixes_count: 0,
+            error: Some(format!("Not a directory: {}", repo)),
+            duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: Utc::now(),
+        };
+    }
 
-    let status = if findings > 5 {
+    // Locate hypatia-cli.sh relative to this binary's grandparent directory,
+    // or fall back to well-known paths.
+    let cli_script = find_hypatia_cli();
+
+    match cli_script {
+        Some(script) => {
+            // Invoke the real Elixir scanner
+            let output = tokio::process::Command::new(&script)
+                .args(["scan", repo, "--format", "json", "--severity", min_severity])
+                .env("HYPATIA_FORMAT", "json")
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await;
+
+            match output {
+                Ok(out) => {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+
+                    // Exit 0 = clean, exit 1 = findings found, exit 2 = error
+                    match out.status.code() {
+                        Some(0) => BatchItemResult {
+                            repo: repo.to_string(),
+                            status: BatchStatus::Success,
+                            findings_count: 0,
+                            fixes_count: 0,
+                            error: None,
+                            duration_ms: start.elapsed().as_millis() as u64,
+                            timestamp: Utc::now(),
+                        },
+                        Some(1) => {
+                            // Parse JSON findings
+                            let findings_count = parse_findings_count(&stdout);
+                            let status = if findings_count > 0 {
+                                BatchStatus::Warning
+                            } else {
+                                BatchStatus::Success
+                            };
+
+                            BatchItemResult {
+                                repo: repo.to_string(),
+                                status,
+                                findings_count,
+                                fixes_count: 0,
+                                error: None,
+                                duration_ms: start.elapsed().as_millis() as u64,
+                                timestamp: Utc::now(),
+                            }
+                        }
+                        Some(code) => BatchItemResult {
+                            repo: repo.to_string(),
+                            status: BatchStatus::Failed,
+                            findings_count: 0,
+                            fixes_count: 0,
+                            error: Some(format!(
+                                "Scanner exited with code {}: {}",
+                                code,
+                                stderr.trim()
+                            )),
+                            duration_ms: start.elapsed().as_millis() as u64,
+                            timestamp: Utc::now(),
+                        },
+                        None => BatchItemResult {
+                            repo: repo.to_string(),
+                            status: BatchStatus::Failed,
+                            findings_count: 0,
+                            fixes_count: 0,
+                            error: Some("Scanner process killed by signal".to_string()),
+                            duration_ms: start.elapsed().as_millis() as u64,
+                            timestamp: Utc::now(),
+                        },
+                    }
+                }
+                Err(e) => BatchItemResult {
+                    repo: repo.to_string(),
+                    status: BatchStatus::Failed,
+                    findings_count: 0,
+                    fixes_count: 0,
+                    error: Some(format!("Failed to execute scanner: {}", e)),
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    timestamp: Utc::now(),
+                },
+            }
+        }
+        None => {
+            // Fallback: basic file-presence scan when Elixir scanner unavailable
+            process_scan_repo_fallback(repo, &start)
+        }
+    }
+}
+
+/// Parse the number of findings from scanner JSON output.
+fn parse_findings_count(json_str: &str) -> usize {
+    // Scanner outputs a JSON array of findings
+    serde_json::from_str::<Vec<serde_json::Value>>(json_str)
+        .map(|arr| arr.len())
+        .unwrap_or(0)
+}
+
+/// Locate hypatia-cli.sh in well-known paths.
+fn find_hypatia_cli() -> Option<PathBuf> {
+    let candidates = [
+        // Relative to binary
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("../../hypatia-cli.sh"))),
+        // Well-known development paths
+        Some(PathBuf::from("/var/mnt/eclipse/repos/hypatia/hypatia-cli.sh")),
+        Some(dirs::home_dir()
+            .unwrap_or_default()
+            .join("Documents/hyperpolymath-repos/hypatia/hypatia-cli.sh")),
+        // In PATH
+        std::process::Command::new("which")
+            .arg("hypatia-cli.sh")
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(PathBuf::from(
+                        String::from_utf8_lossy(&o.stdout).trim(),
+                    ))
+                } else {
+                    None
+                }
+            }),
+    ];
+
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|p| p.exists() && p.is_file())
+}
+
+/// Fallback scan when the Elixir scanner is unavailable.
+/// Checks for basic RSR compliance issues using file presence.
+fn process_scan_repo_fallback(repo: &str, start: &std::time::Instant) -> BatchItemResult {
+    let path = PathBuf::from(repo);
+    let mut findings = 0;
+
+    // Check for required files
+    let required = [
+        "LICENSE",
+        "SECURITY.md",
+        ".editorconfig",
+        ".gitignore",
+    ];
+    for file in &required {
+        if !path.join(file).exists() {
+            // LICENSE.txt is an alternative
+            if *file == "LICENSE" && path.join("LICENSE.txt").exists() {
+                continue;
+            }
+            findings += 1;
+        }
+    }
+
+    // Check for banned files
+    let banned = [
+        "Dockerfile",
+        "docker-compose.yml",
+        "package-lock.json",
+        "yarn.lock",
+        "bun.lockb",
+        "SONNET-TASKS.md",
+    ];
+    for file in &banned {
+        if path.join(file).exists() {
+            findings += 1;
+        }
+    }
+
+    // Check for .github/workflows
+    let wf_dir = path.join(".github/workflows");
+    if wf_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&wf_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.ends_with(".yml") || name_str.ends_with(".yaml") {
+                    // Check for unpinned actions (basic grep)
+                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        let unpinned = content
+                            .lines()
+                            .filter(|l| {
+                                l.contains("uses:") && l.contains("@v") && !l.contains("@v")
+                            })
+                            .count();
+                        // Actually check for @vN pattern without SHA
+                        let unpinned_real = content
+                            .lines()
+                            .filter(|l| {
+                                if let Some(pos) = l.find("uses:") {
+                                    let rest = &l[pos..];
+                                    rest.contains('@')
+                                        && !rest.chars().skip_while(|c| *c != '@').skip(1).take(40).all(|c| c.is_ascii_hexdigit())
+                                } else {
+                                    false
+                                }
+                            })
+                            .count();
+                        findings += unpinned_real;
+                        let _ = unpinned; // suppress warning
+                    }
+                }
+            }
+        }
+    }
+
+    let status = if findings > 0 {
         BatchStatus::Warning
     } else {
         BatchStatus::Success
@@ -393,23 +605,133 @@ async fn execute_fix(args: BatchFixArgs, _config: &Config, format: OutputFormat,
         eprintln!("Processing {} repositories...", repos.len());
     }
 
-    // Simplified implementation - would call actual fix logic
-    let mut results = Vec::new();
-    for repo in &repos {
-        let result = BatchItemResult {
-            repo: repo.clone(),
-            status: BatchStatus::Success,
-            findings_count: 0,
-            fixes_count: if args.dry_run { 0 } else { 1 },
-            error: None,
-            duration_ms: 100,
-            timestamp: Utc::now(),
-        };
+    // Scan each repo, then apply fixes for findings that have fix scripts
+    let semaphore = Arc::new(Semaphore::new(args.parallel));
+    let completed = Arc::new(AtomicUsize::new(0));
+    let total_repos = repos.len();
+    let mut handles = Vec::new();
 
-        if args.jsonl {
-            println!("{}", serde_json::to_string(&result)?);
+    for repo in repos.clone() {
+        let sem = semaphore.clone();
+        let completed_clone = completed.clone();
+        let dry_run = args.dry_run;
+        let no_progress = suppress_progress;
+        let jsonl = args.jsonl;
+        let fix_only = args.fix_only.clone();
+
+        handles.push(tokio::spawn(async move {
+            let _permit = sem.acquire().await.unwrap();
+            let start = std::time::Instant::now();
+            let path = PathBuf::from(&repo);
+
+            if !path.is_dir() {
+                let result = BatchItemResult {
+                    repo: repo.clone(),
+                    status: BatchStatus::Failed,
+                    findings_count: 0,
+                    fixes_count: 0,
+                    error: Some(format!("Not a directory: {}", repo)),
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    timestamp: Utc::now(),
+                };
+                return result;
+            }
+
+            // First scan to find issues
+            let cli_script = find_hypatia_cli();
+            let mut findings_count = 0;
+            let mut fixes_count = 0;
+
+            if let Some(script) = cli_script {
+                // Run scanner
+                let scan_output = tokio::process::Command::new(&script)
+                    .args(["scan", &repo, "--format", "json", "--severity", "low"])
+                    .env("HYPATIA_FORMAT", "json")
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .output()
+                    .await;
+
+                if let Ok(out) = scan_output {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    findings_count = parse_findings_count(&stdout);
+
+                    // Filter to fixable findings
+                    if let Ok(findings) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
+                        for finding in &findings {
+                            let action = finding.get("action").and_then(|v| v.as_str()).unwrap_or("");
+                            let rule_type = finding.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+                            // Skip if fix_only filter is set and this type doesn't match
+                            if let Some(ref filter) = fix_only {
+                                if !filter.split(',').any(|f| f.trim() == rule_type) {
+                                    continue;
+                                }
+                            }
+
+                            // Only attempt auto-fixable actions
+                            if action == "auto_fix" || action == "delete" || action == "create" {
+                                if !dry_run {
+                                    // Apply the fix based on action type
+                                    let file = finding.get("file").and_then(|v| v.as_str()).unwrap_or("");
+                                    let applied = apply_fix(&repo, file, action);
+                                    if applied {
+                                        fixes_count += 1;
+                                    }
+                                } else {
+                                    fixes_count += 1; // Count what would be fixed
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let done = completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
+            let status = if fixes_count > 0 {
+                BatchStatus::Success
+            } else if findings_count > 0 {
+                BatchStatus::Warning
+            } else {
+                BatchStatus::Success
+            };
+
+            let result = BatchItemResult {
+                repo: repo.clone(),
+                status,
+                findings_count,
+                fixes_count,
+                error: None,
+                duration_ms: start.elapsed().as_millis() as u64,
+                timestamp: Utc::now(),
+            };
+
+            if !no_progress {
+                eprintln!(
+                    "[{}/{}] {} - {} findings, {} fixes",
+                    done, total_repos, repo, findings_count, fixes_count
+                );
+            }
+
+            if jsonl {
+                let json = serde_json::to_string(&result).unwrap_or_default();
+                println!("{}", json);
+            }
+
+            result
+        }));
+    }
+
+    let mut results = Vec::new();
+    for handle in handles {
+        match handle.await {
+            Ok(result) => results.push(result),
+            Err(e) => {
+                if !args.continue_on_error {
+                    return Err(anyhow::anyhow!("Task failed: {}", e));
+                }
+            }
         }
-        results.push(result);
     }
 
     let summary = build_summary(&results, 0);
@@ -550,6 +872,51 @@ fn print_summary(summary: &BatchSummary) {
     eprintln!("  Total findings:  {}", summary.total_findings);
     eprintln!("  Total fixes:     {}", summary.total_fixes);
     eprintln!("  Duration:        {} ms", summary.total_duration_ms);
+}
+
+/// Apply a single fix to a repository file.
+/// Returns true if the fix was successfully applied.
+fn apply_fix(repo: &str, file: &str, action: &str) -> bool {
+    let repo_path = PathBuf::from(repo);
+
+    match action {
+        "delete" => {
+            let target = repo_path.join(file);
+            if target.exists() {
+                std::fs::remove_file(&target).is_ok()
+            } else {
+                false
+            }
+        }
+        "create" => {
+            // For "create" actions, we generate minimal templates
+            let target = repo_path.join(file);
+            if target.exists() {
+                return false; // Already exists
+            }
+
+            match file {
+                "SECURITY.md" => {
+                    let content = "# Security Policy\n\n## Reporting a Vulnerability\n\nPlease report security vulnerabilities to j.d.a.jewell@open.ac.uk.\n";
+                    std::fs::write(&target, content).is_ok()
+                }
+                ".editorconfig" => {
+                    let content = "root = true\n\n[*]\nend_of_line = lf\ninsert_final_newline = true\ncharset = utf-8\ntrim_trailing_whitespace = true\nindent_style = space\nindent_size = 2\n";
+                    std::fs::write(&target, content).is_ok()
+                }
+                ".gitignore" => {
+                    let content = "# Build outputs\ntarget/\n_build/\ndeps/\nnode_modules/\nzig-cache/\nzig-out/\n.lake/\n\n# Editor\n*.swp\n*.swo\n*~\n.vscode/\n.idea/\n\n# OS\n.DS_Store\nThumbs.db\n";
+                    std::fs::write(&target, content).is_ok()
+                }
+                _ => false,
+            }
+        }
+        "auto_fix" => {
+            // Generic auto-fix — handled by specific fix scripts if available
+            false
+        }
+        _ => false,
+    }
 }
 
 /// Generate Markdown report

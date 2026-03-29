@@ -105,8 +105,7 @@ jobs:
         run: |
           echo "⚠️  Critical security issues found!"
           echo "Review hypatia-findings.json for details"
-          # Don't fail the build yet - just warn
-          # exit 1
+          exit 1
 
       - name: Generate scan report
         run: |

@@ -365,6 +365,111 @@ defmodule Hypatia.Rules.StructuralDrift do
     end)
   end
 
+  # ─── SD010: Tracked node_modules ────────────────────────────────────────
+
+  @doc """
+  SD010: Detect node_modules/ directories that are tracked in git.
+  These should ALWAYS be in .gitignore and never committed.
+  Severity: high (bloats repo, security risk from vendored deps).
+  Action: add to .gitignore, remove from tracking.
+  """
+  def sd010_tracked_node_modules(repo_path) do
+    # Check if node_modules exists as a directory in the repo
+    node_modules_path = Path.join(repo_path, "node_modules")
+
+    if File.dir?(node_modules_path) do
+      # Check if it's tracked by git (not in .gitignore)
+      case System.cmd("git", ["ls-files", "node_modules"], cd: repo_path, stderr_to_stdout: true) do
+        {output, 0} when output != "" ->
+          tracked_count =
+            output |> String.split("\n", trim: true) |> length()
+
+          [%{
+            rule: "SD010",
+            file: "node_modules/",
+            severity: :high,
+            reason: "node_modules/ is tracked in git (#{tracked_count} files) — must be in .gitignore",
+            action: :untrack_and_gitignore,
+            trigger_intensive: true
+          }]
+
+        _ -> []
+      end
+    else
+      # Also check for node_modules in subdirectories (monorepo packages)
+      case System.cmd("find", [repo_path, "-maxdepth", "3", "-type", "d",
+                               "-name", "node_modules",
+                               "-not", "-path", "*/.git/*"],
+                      cd: repo_path, stderr_to_stdout: true) do
+        {output, 0} when output != "" ->
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.flat_map(fn dir ->
+            case System.cmd("git", ["ls-files", Path.relative_to(dir, repo_path)],
+                           cd: repo_path, stderr_to_stdout: true) do
+              {tracked, 0} when tracked != "" ->
+                [%{
+                  rule: "SD010",
+                  file: Path.relative_to(dir, repo_path) <> "/",
+                  severity: :high,
+                  reason: "Nested node_modules/ tracked in git — must be in .gitignore",
+                  action: :untrack_and_gitignore,
+                  trigger_intensive: true
+                }]
+
+              _ -> []
+            end
+          end)
+
+        _ -> []
+      end
+    end
+  end
+
+  # ─── SD011: Missing .gitignore entries ─────────────────────────────────
+
+  @required_gitignore_patterns [
+    {"node_modules", "node_modules/"},
+    {"_build", "_build/"},
+    {"target", "target/"},
+    {"deps", "deps/"},
+    {"zig-cache", "zig-cache/"},
+    {"zig-out", "zig-out/"},
+    {".lake", ".lake/"}
+  ]
+
+  @doc """
+  SD011: Detect directories that exist but aren't in .gitignore.
+  Severity: medium.
+  Action: add to .gitignore.
+  """
+  def sd011_missing_gitignore(repo_path) do
+    gitignore_path = Path.join(repo_path, ".gitignore")
+
+    gitignore_content =
+      case File.read(gitignore_path) do
+        {:ok, content} -> content
+        _ -> ""
+      end
+
+    @required_gitignore_patterns
+    |> Enum.flat_map(fn {dir_name, pattern} ->
+      dir_path = Path.join(repo_path, dir_name)
+
+      if File.dir?(dir_path) and not String.contains?(gitignore_content, dir_name) do
+        [%{
+          rule: "SD011",
+          file: ".gitignore",
+          severity: :medium,
+          reason: "#{dir_name}/ directory exists but is not in .gitignore — add '#{pattern}'",
+          action: :add_gitignore_entry
+        }]
+      else
+        []
+      end
+    end)
+  end
+
   # ─── Comprehensive scan (triggered by any finding) ─────────────────────
 
   @doc """
@@ -382,7 +487,9 @@ defmodule Hypatia.Rules.StructuralDrift do
       sd006_trustfile_examples(repo_path) ++
       sd007_stale_references(repo_path) ++
       sd008_unsound_patterns(repo_path) ++
-      sd009_missing_spdx(repo_path)
+      sd009_missing_spdx(repo_path) ++
+      sd010_tracked_node_modules(repo_path) ++
+      sd011_missing_gitignore(repo_path)
 
     needs_intensive = Enum.any?(findings, & &1[:trigger_intensive])
     needs_alert = Enum.any?(findings, & &1[:alert_user])

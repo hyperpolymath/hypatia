@@ -133,6 +133,12 @@ defmodule Hypatia.Rules.RootHygiene do
     %{regex: ~r/^.*\.tmp$/i, reason: "Temporary file in root",
       severity: :medium, action: :delete},
     %{regex: ~r/^.*\.orig$/i, reason: "Merge artifact in root",
+      severity: :medium, action: :delete},
+    %{regex: ~r/^SONNET-TASKS\.md$/i, reason: "Stale AI task file — delete or move to docs/",
+      severity: :high, action: :delete},
+    %{regex: ~r/^GEMINI\.md$/i, reason: "Stale AI session file — delete",
+      severity: :medium, action: :delete},
+    %{regex: ~r/^CLAUDE-WORK.*\.md$/i, reason: "AI work file in repo root — should not be committed",
       severity: :medium, action: :delete}
   ]
 
