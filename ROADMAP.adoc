@@ -1,178 +1,191 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
 = Hypatia Roadmap
 :toc:
 :toclevels: 3
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 == Overview
 
-This roadmap outlines the development plan for Hypatia, the neurosymbolic CI/CD orchestrator for the Hyperpolymath gitbot fleet.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks, VQL query layer, Bayesian confidence updating, and Logtalk rules for pattern detection.
 
-== v1.0 - Production Release (Current)
+== Current State (2026-03-29)
 
-**Target:** 2026-02
-**Status:** Active development (70-90% complete per components)
+=== Operational Metrics
 
-=== Core Components
-* ✅ Haskell registry (template validation, type safety)
-* ✅ Logtalk rules engine (logic programming, rule synthesis)
-* ✅ Rust CLI (command execution, orchestration)
-* ⚠️ ArangoDB deployment (needs production setup)
+* 302 repos scanned, 3385 weak points tracked
+* 1635 dispatched actions (600 auto-execute, 667 review, 368 report)
+* 16671 outcomes recorded (99% success rate, Bayesian confidence updating)
+* 46 recipes (0 uncovered categories), 20 OpenSSF Scorecard recipes, 5 RSR compliance rules
+* 954 canonical patterns (PA001-PA020+)
+* 295 summaries auto-generated for verisimdb-data repos
 
-=== Features
-* ✅ Template validation and scaffolding
-* ✅ Rule-based package management
-* ✅ Multi-language architecture
-* ✅ Gitbot fleet integration hooks
+=== Architecture (OPERATIONAL)
 
-=== Testing & Quality
-* ✅ Unit tests
-* ✅ Integration tests
-* ✅ ClusterFuzzLite fuzzing
-* ✅ Benchmarks
-* ✅ Stress tests
+[cols="1,3"]
+|===
+| Layer | Details
 
-=== Remaining for v1.0
-* [ ] Add ROADMAP.adoc (this file)
-* [ ] Production ArangoDB deployment
-* [ ] V1 readiness validation rules (v1_readiness.lgt)
-* [ ] Complete fleet orchestration
-* [ ] Documentation and examples
+| Elixir pipeline
+| 12+ core modules: PatternAnalyzer, VerisimdbConnector, PatternRegistry, RecipeMatcher, TriangleRouter, FleetDispatcher, DispatchManifest, OutcomeTracker, RecipeGenerator, ScorecardIngestor, LearningScheduler, SelfDiagnostics
 
-== v1.1 - Fleet Orchestration (Next)
+| Neural subsystem
+| 5 networks + coordinator GenServer: Graph of Trust (PageRank), Mixture of Experts (7 domains), Liquid State Machine (temporal anomaly), Echo State Network (trajectory forecast), Radial Neural Network (similarity/novelty)
 
-**Target:** 2026-03
+| VQL query layer
+| Built-in parser, file executor, query cache, cross-repo analytics
 
-=== Bot Integration
-* Finishingbot integration (v1 readiness validation)
-* Glambot integration (presentation quality)
-* Echidnabot integration (verification)
-* Rhodibot integration (structural compliance)
+| Safety systems
+| Rate limiter (per-bot 50/min, global 200/min, burst 10/5s), quarantine (3 levels: soft/hard/permanent), batch rollback
 
-=== Rule Enhancements
-* V1 readiness rule set (SCM files, testing, tooling)
-* Language compliance rules (banned language detection)
-* Security policy enforcement rules
-* Quality gate rules
+| OTP supervision
+| 8 GenServers: VQL, RateLimiter, Quarantine, Learning, Diagnostics, Neural, Kin, Application
 
-=== Orchestration
-* Multi-bot workflow execution
-* Shared context management
-* Bot execution order optimization
-* Parallel bot execution
+| Idris2 ABI
+| Types, GraphQL, gRPC, REST endpoint definitions with dependent type proofs
 
-== v1.2 - Advanced Rules
+| Zig FFI
+| 7 exported C ABI functions (health, scan, dispatch, outcome, learning, confidence, strategy)
 
-**Target:** 2026-04
+| Rust workspace
+| adapters, cli, data, fixer, integration crates
 
-=== Rule Synthesis
-* Machine learning-based rule extraction
-* Historical validation analysis
-* Pattern recognition
-* Automated rule generation
+| Logtalk rules
+| Error catalog, pattern detection, RSR compliance rules
 
-=== Advanced Validation
-* Cross-repo dependency validation
-* Ecosystem-wide compatibility checking
-* Breaking change detection
-* Migration path validation
+| Data layer
+| verisimdb-data (git-backed flat-file store), neural state persistence, JSONL outcomes
+|===
 
-=== Performance
-* Rule compilation optimization
-* Cached validation results
-* Incremental validation
-* Distributed rule execution
+=== Safety Triangle Pipeline (OPERATIONAL)
 
-== v2.0 - Neurosymbolic Intelligence
+```
+panic-attack assail (scan repos)
+        | JSON results
+verisimdb-data (git-backed flat-file store, 302 repos)
+        | VQL queries
+Elixir pipeline:
+  PatternRegistry → TriangleRouter (Eliminate > Substitute > Control)
+        |
+  FleetDispatcher (confidence-gated, circuit breaker)
+        |
+  dispatch-runner.sh (gitbot-fleet)
+    ├── auto_execute (>=0.95): robot-repo-automaton
+    ├── review (0.85-0.94): rhodibot creates PR
+    └── report_only (<0.85): sustainabot advisory
+        |
+  OutcomeTracker (Bayesian Beta-distribution, re-scan verification)
+```
 
-**Target:** 2026-Q3
+== Milestones
 
-=== AI Integration
-* LLM-based code analysis
-* Natural language rule definition
-* Automated reasoning
-* Explanation generation
+=== v1.0 — Safety Triangle MVP (COMPLETE)
 
-=== Formal Methods
-* Proof-carrying code validation
-* Theorem proving integration
-* Model checking
-* Formal verification of rules
+* [x] Elixir pipeline (pattern analysis, dispatch, learning)
+* [x] verisimdb-data integration (git-backed flat-file store)
+* [x] VQL query layer (parser, file executor, query cache)
+* [x] Safety triangle routing (Eliminate > Substitute > Control)
+* [x] Fleet dispatcher (file-based + HTTP, circuit breaker)
+* [x] Confidence-gated dispatch (auto_execute >= 0.95, review 0.85-0.94, report < 0.85)
+* [x] Outcome tracking with Bayesian confidence updating
+* [x] Re-scan verification via panic-attacker
+* [x] Dispatch manifest (JSONL bridge to bash execution)
+* [x] Logtalk rule engine (error catalog, pattern detection)
 
-=== A2ML Integration
-* Attested documentation validation
-* Typed markup verification
-* Claim provenance tracking
-* Verified knowledge graphs
+=== v2.0 — Neural Intelligence (COMPLETE)
 
-=== K9-SVC Integration
-* Self-validating component contracts
-* Must-just-nickel validation
-* Contractiles verification
-* Interface stability checking
+* [x] Graph of Trust (PageRank over repos/bots/recipes)
+* [x] Mixture of Experts (7 expert domains, sparse gating)
+* [x] Liquid State Machine (temporal anomaly detection)
+* [x] Echo State Network (confidence trajectory forecasting, drift detection)
+* [x] Radial Neural Network (similarity, novelty detection, classification)
+* [x] Neural coordinator GenServer (orchestrates all 5 networks)
+* [x] Training pipeline (ESN from outcomes, RBF from pattern vectors)
+* [x] Novelty gating (unknown findings forced to report_only)
 
-== v2.5 - Distributed Orchestration
+=== v3.0 — Safety Systems (COMPLETE)
 
-**Target:** 2026-Q4
+* [x] Rate limiter (per-bot, global, burst limits)
+* [x] Quarantine (auto-quarantine on 5+ failures or >30% FP rate, 3 levels)
+* [x] Batch rollback (entire dispatch batches with confidence revert)
+* [x] Self-diagnostics (health monitoring, circuit breaker, auto-recovery)
+* [x] OTP Application supervisor for all GenServers
 
-=== Architecture
-* Distributed bot execution
-* Peer-to-peer validation network
-* Federated rule repositories
-* Multi-region deployment
+=== v4.0 — Recipe Coverage (COMPLETE)
 
-=== Scalability
-* Horizontal scaling
-* Load balancing
-* Resource optimization
-* Auto-scaling policies
+* [x] 46 recipes covering all categories (0 uncovered)
+* [x] Recipe generator (auto-generates recipes at 0.50 confidence)
+* [x] 20 OpenSSF Scorecard recipes (ingested from scorecard checks)
+* [x] 5 RSR compliance rules (banned languages, SCM locations, required files, Containerfile naming)
+* [x] Fuzzy recipe matcher (fingerprinted IDs to clean recipe IDs)
+* [x] 295 repo summaries auto-generated
 
-=== Observability
-* Distributed tracing
-* Metrics collection
-* Log aggregation
-* Performance monitoring
+=== v5.0 — ABI/FFI Layer (COMPLETE)
 
-== v3.0 - Autonomous Ecosystem Management
+* [x] Idris2 ABI: Types, GraphQL, gRPC, REST with dependent type proofs
+* [x] Idris2 FFI GADT constructors for all C ABI functions + ffiReturnsApiResponse proof
+* [x] Zig FFI: 7 exported functions (health, scan, dispatch, outcome, learning, confidence, strategy)
+* [x] Build system: hypatia-abi.ipkg, hypatia-verify.ipkg, pack.toml
 
-**Target:** 2027
+=== v6.0 — PanLL Data Bridge (COMPLETE)
 
-=== Autonomous Features
-* Self-healing validation failures
-* Predictive quality analysis
-* Autonomous fix generation
-* Dynamic bot selection
+* [x] Generates real-time JSON for PanLL dashboard panels
+* [x] Cross-repo analytics via VQL
+* [x] Learning scheduler (polls outcomes every 5 min)
 
-=== Ecosystem Intelligence
-* Cross-project learning
-* Best practice extraction
-* Anti-pattern detection
-* Quality trend prediction
+=== v7.0 — Production Operations (IN PROGRESS)
 
-=== Advanced Orchestration
-* Intent-based orchestration
-* Policy-driven automation
-* Adaptive workflow optimization
-* Multi-objective optimization
+==== Critical
 
-=== Integration
-* Idris library integration (proven code)
-* Proof-of-work integration
-* Blockchain-based attestation
-* Distributed trust network
+* [ ] Create PAT with repo scope for automated cross-repo dispatch
+* [ ] Write real fix scripts for 310 null-fix-script dispatch entries
+* [ ] Push committed fixes to remotes across repos
 
-== Long-term Vision
+==== Important
 
-* Fully autonomous package ecosystem management
-* Self-improving rule synthesis
-* Formal verification of all validation logic
-* Distributed knowledge graph
-* Cross-ecosystem interoperability
-* AI-driven software development assistance
-* Integration with all Hyperpolymath tools and standards
+* [ ] Deploy verisim-api server (enables native graph/vector/temporal modalities)
+* [ ] VQL federation executor (currently local-only)
+* [ ] Historical trend tracking across scan cycles
+* [ ] Wire Ada TUI into Elixir supervision tree
 
-== Contributing
+==== Planned
 
-See link:CONTRIBUTING.md[Contributing Guidelines] for how to contribute to Hypatia development.
+* [ ] GraphQL API as live HTTP endpoint
+* [ ] SARIF output for IDE integration
+* [ ] Chapel NIFs for compute-heavy neural operations
+* [ ] Cross-organization federation with VQL drift policies
 
-== Versioning
+=== v8.0 — Neural Maturity (PLANNED)
 
-Hypatia follows semantic versioning (SemVer). Breaking changes will only be introduced in major version releases.
+* [ ] Balanced training data (currently 99%+ success — needs failure data)
+* [ ] Neural state persistence to disk (coordinator has state dir but not yet persisting)
+* [ ] GNN + VAE + Seq models for 007 trace integration (per blackboard architecture plan)
+* [ ] Prover Wars integration (dodeca-API, VeriSimDB, ABI, VQL-UT)
+
+=== v9.0 — Ecosystem Scale (PLANNED)
+
+* [ ] verisim-api deployment (full graph/vector/temporal modalities)
+* [ ] Multi-store VQL federation
+* [ ] Cross-ecosystem interoperability
+* [ ] Chainguard base images for SWI-Prolog and Haskell containers
+
+== Known Gaps
+
+1. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
+2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal via flat files only
+3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
+4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script
+5. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images
+6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
+7. **Neural state persistence:** State dir exists but coordinator has not persisted to disk yet
+
+== License & Governance
+
+**License:** PMPL-1.0-or-later (Palimpsest License)
+
+**Author:** Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+**Repository:** https://github.com/hyperpolymath/hypatia
+
+---
+
+_Last Updated: 2026-03-29_
