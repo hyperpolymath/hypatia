@@ -63,11 +63,13 @@ Chainguard does not publish `swipl` or `ghc` images. When Chainguard
 equivalents become available, these should be migrated. All other
 Containerfiles use `cgr.dev/chainguard/` images as required.
 
-. **VQL federation: Local file-backed only.** +
-The FileExecutor handles `FEDERATION` queries against the local `verisimdb-data`
-clone, not against multiple remote stores. True multi-store federation (querying
-across verisim-api instances, remote verisimdb-data clones, or heterogeneous
-backends) is not implemented. All federation queries resolve locally.
+. **[PARTIAL] VQL federation: Git-clone-based multi-store implemented.** +
+The FileExecutor now supports `{:remote, url}` sources via `RemoteCache`, which
+clones or pulls remote verisimdb-data repos into a TTL-managed local cache
+(`/tmp/hypatia-vql-cache/`). VQL syntax: `FROM FEDERATION REMOTE "url"` or
+`FROM REMOTE "url" STORE scans`. Thread-safe via ETS locking. +
+*Remaining:* Federation across verisim-api HTTP instances and heterogeneous
+backends (non-git stores) is not yet implemented.
 
 . **ArangoDB transitional.** +
 ArangoDB currently fills the graph query gap that flat files cannot address

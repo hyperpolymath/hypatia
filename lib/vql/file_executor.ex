@@ -48,7 +48,22 @@ defmodule Hypatia.VQL.FileExecutor do
   # Public API
   # ---------------------------------------------------------------------------
 
-  @doc "Execute a parsed VQL AST against verisimdb-data files."
+  @doc """
+  Execute a parsed VQL AST against verisimdb-data files.
+
+  Supports four source types:
+
+  | Source                        | Description                                    |
+  |-------------------------------|------------------------------------------------|
+  | `{:store, store_id}`          | Query a named local store (scans, patterns, …) |
+  | `{:federation, pattern, dp}`  | Cross-store federation with drift policy        |
+  | `{:hexad, entity_id}`         | Single-entity lookup by ID                      |
+  | `{:remote, url}`              | Clone/pull a remote verisimdb-data repo, query it |
+
+  The `:remote` source uses `Hypatia.VQL.RemoteCache` to maintain a local
+  git clone, then delegates to the standard store/federation logic with the
+  cloned path as the data root.
+  """
   def execute(ast, opts \\ []) do
     case ast.source do
       {:store, store_id} ->
@@ -59,6 +74,12 @@ defmodule Hypatia.VQL.FileExecutor do
 
       {:hexad, entity_id} ->
         execute_hexad_query(entity_id, ast, opts)
+
+      {:remote, url} ->
+        execute_remote_query(url, ast, opts)
+
+      {:remote, url, sub_source} ->
+        execute_remote_query(url, ast, opts, sub_source)
     end
   end
 
@@ -130,6 +151,139 @@ defmodule Hypatia.VQL.FileExecutor do
           store_name == "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
           true -> load_json_directory(base_path, ".json")
         end
+
+        filtered = apply_where(results, ast.where)
+        drifted = apply_drift_policy(filtered, drift_policy)
+        paginated = apply_pagination(drifted, ast.limit, ast.offset)
+        {:ok, paginated}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Remote Queries (multi-store federation via git clone cache)
+  # ---------------------------------------------------------------------------
+
+  # Execute a query against a remote verisimdb-data repository. The remote
+  # repo is cloned (or refreshed) via RemoteCache, then queried using the
+  # same store/federation logic as local data. If `sub_source` is provided
+  # it specifies what to query within the remote clone; otherwise the query
+  # defaults to a full federation across all stores in the clone.
+  defp execute_remote_query(url, ast, opts, sub_source \\ nil) do
+    cache_opts = Keyword.get(opts, :cache_opts, [])
+
+    case Hypatia.VQL.RemoteCache.cache_remote_store(url, cache_opts) do
+      {:ok, local_path} ->
+        # Build a new AST that targets the appropriate source within the clone.
+        remote_ast =
+          case sub_source do
+            {:store, store_id} ->
+              %{ast | source: {:store, store_id}}
+
+            {:federation, pattern, drift_policy} ->
+              %{ast | source: {:federation, pattern, drift_policy}}
+
+            nil ->
+              # Default: federate across all stores in the remote clone.
+              %{ast | source: {:federation, "*", nil}}
+          end
+
+        # Temporarily override the data path to point at the remote clone.
+        # We pass the override through opts so that path-resolution helpers
+        # can pick it up without mutating module-level state.
+        remote_opts = Keyword.put(opts, :data_path_override, local_path)
+        execute_with_path(remote_ast, remote_opts)
+
+      {:error, reason} ->
+        {:error, "Remote cache failed for #{url}: #{reason}"}
+    end
+  end
+
+  # Execute a query with an explicit data path override. Dispatches to the
+  # same store/federation/hexad logic but resolves paths against the override
+  # directory instead of the default @verisimdb_data_path.
+  defp execute_with_path(ast, opts) do
+    case ast.source do
+      {:store, store_id} ->
+        execute_store_query_at(store_id, ast, opts)
+
+      {:federation, pattern, drift_policy} ->
+        execute_federation_query_at(pattern, drift_policy, ast, opts)
+
+      {:hexad, entity_id} ->
+        execute_hexad_query(entity_id, ast, opts)
+    end
+  end
+
+  # Store query against an arbitrary base path (used for remote clones).
+  defp execute_store_query_at(store_id, ast, opts) do
+    base = Keyword.get(opts, :data_path_override, expand_path())
+
+    case Map.get(@store_map, store_id) do
+      nil ->
+        {:error, "Unknown store: #{store_id}"}
+
+      dir ->
+        base_path = Path.join(base, dir)
+
+        results =
+          case store_id do
+            "scans" -> load_json_directory(base_path, ".json")
+            "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
+            "recipes" -> load_json_directory(base_path, ".json", "recipe-")
+            "outcomes" -> load_jsonl_directory(base_path)
+            "dispatch" -> load_jsonl_directory(base_path)
+            "index" -> load_single_json(Path.join(base_path, "index.json"))
+            _ -> load_json_directory(base_path, ".json")
+          end
+
+        filtered = apply_where(results, ast.where)
+        sorted = apply_modality_sort(filtered, ast.modalities)
+        paginated = apply_pagination(sorted, ast.limit, ast.offset)
+
+        {:ok, paginated}
+    end
+  end
+
+  # Federation query against an arbitrary base path (used for remote clones).
+  defp execute_federation_query_at(pattern, drift_policy, ast, opts) do
+    base = Keyword.get(opts, :data_path_override, expand_path())
+
+    store_name =
+      pattern
+      |> String.trim_leading("/")
+      |> String.split("/")
+      |> List.first()
+
+    case Map.get(@store_map, store_name) do
+      nil ->
+        # Query across ALL stores in the remote clone.
+        results =
+          Enum.flat_map(["scans", "patterns", "recipes", "outcomes"], fn store ->
+            base_path = Path.join(base, store)
+
+            case store do
+              "scans" -> load_json_directory(base_path, ".json")
+              "patterns" -> load_single_json(Path.join(base, "patterns/registry.json"))
+              "recipes" -> load_json_directory(base_path, ".json", "recipe-")
+              "outcomes" -> load_jsonl_directory(base_path)
+              _ -> []
+            end
+          end)
+
+        filtered = apply_where(results, ast.where)
+        drifted = apply_drift_policy(filtered, drift_policy)
+        paginated = apply_pagination(drifted, ast.limit, ast.offset)
+        {:ok, paginated}
+
+      dir ->
+        base_path = Path.join(base, dir)
+
+        results =
+          cond do
+            store_name in ["outcomes", "dispatch"] -> load_jsonl_directory(base_path)
+            store_name == "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
+            true -> load_json_directory(base_path, ".json")
+          end
 
         filtered = apply_where(results, ast.where)
         drifted = apply_drift_policy(filtered, drift_policy)

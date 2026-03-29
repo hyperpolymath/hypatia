@@ -228,6 +228,24 @@ defmodule Hypatia.VQL.Client do
     {:ok, {:store, normalize_token(store_id)}, rest}
   end
 
+  # FROM FEDERATION REMOTE "https://github.com/org/verisimdb-data"
+  # Clones the remote repo via RemoteCache, then federates across all stores.
+  defp parse_from(["FROM", "FEDERATION", "REMOTE", url | rest]) do
+    {:ok, {:remote, normalize_token(url)}, rest}
+  end
+
+  # FROM REMOTE "https://github.com/org/verisimdb-data" STORE scans
+  # Clones the remote repo, then queries a specific store within it.
+  defp parse_from(["FROM", "REMOTE", url, "STORE", store_id | rest]) do
+    {:ok, {:remote, normalize_token(url), {:store, normalize_token(store_id)}}, rest}
+  end
+
+  # FROM REMOTE "https://github.com/org/verisimdb-data"
+  # Bare remote — federates across all stores in the clone.
+  defp parse_from(["FROM", "REMOTE", url | rest]) do
+    {:ok, {:remote, normalize_token(url)}, rest}
+  end
+
   defp parse_from(["FROM", "FEDERATION", pattern | rest]) do
     {drift_policy, rest} = parse_drift_policy(rest)
     {:ok, {:federation, normalize_token(pattern), drift_policy}, rest}
@@ -237,7 +255,7 @@ defmodule Hypatia.VQL.Client do
     {:ok, {:hexad, normalize_token(uuid)}, rest}
   end
 
-  defp parse_from(_), do: {:error, "Expected FROM clause (STORE, FEDERATION, or HEXAD)"}
+  defp parse_from(_), do: {:error, "Expected FROM clause (STORE, FEDERATION, HEXAD, or REMOTE)"}
 
   defp parse_drift_policy(["WITH", "DRIFT", policy | rest]) do
     drift = case String.upcase(policy) do

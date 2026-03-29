@@ -10,8 +10,13 @@ defmodule Hypatia.FleetDispatcher do
   """
 
   alias Hypatia.TriangleRouter
+  alias Hypatia.DirectGitHubPR
 
   require Logger
+
+  # When HYPATIA_DIRECT_PR=true, scorecard findings with supported fix scripts
+  # bypass the fleet dispatch pipeline and create PRs directly via `gh` CLI.
+  @direct_pr_enabled System.get_env("HYPATIA_DIRECT_PR") == "true"
 
   # ====================================================================
   # Triangle-Aware Dispatch (new — from safety triangle router)
@@ -26,6 +31,20 @@ defmodule Hypatia.FleetDispatcher do
   - {:control, pattern} — advisory report to sustainabot
   """
   def dispatch_routed_action({:eliminate, recipe, pattern}) do
+    # Direct PR path: when HYPATIA_DIRECT_PR=true and the finding is a
+    # scorecard check with a supported fix script, bypass the fleet pipeline
+    # and create a PR directly via `gh` CLI. This is the fast path for
+    # well-understood scorecard fixes (SC-013, SC-018).
+    if direct_pr_enabled?() and is_direct_pr_candidate?(pattern) do
+      Logger.info("Direct PR path: #{Map.get(pattern, "id", "unknown")}")
+      DirectGitHubPR.create_fix_pr(pattern)
+    else
+      dispatch_eliminate_via_fleet(recipe, pattern)
+    end
+  end
+
+  # Standard fleet dispatch path for eliminate tier.
+  defp dispatch_eliminate_via_fleet(recipe, pattern) do
     confidence = Map.get(recipe, "confidence", 0.0)
     strategy = TriangleRouter.dispatch_strategy(confidence)
 
@@ -595,5 +614,29 @@ defmodule Hypatia.FleetDispatcher do
     else
       :clear
     end
+  end
+
+  # --- Direct PR Helpers ---
+
+  # Check if direct PR mode is enabled (compile-time default + runtime override).
+  defp direct_pr_enabled? do
+    @direct_pr_enabled or System.get_env("HYPATIA_DIRECT_PR") == "true"
+  end
+
+  # A pattern is a direct PR candidate if it has a scorecard source and a
+  # supported fix script in DirectGitHubPR.
+  defp is_direct_pr_candidate?(pattern) do
+    source = Map.get(pattern, "source", "")
+    check_id = Map.get(pattern, "pa_rule", "")
+
+    # Normalize compact format (SC013 -> SC-013) for lookup
+    normalized_id =
+      if Regex.match?(~r/^SC\d{3}$/, check_id) do
+        String.replace(check_id, ~r/^SC(\d{3})$/, "SC-\\1")
+      else
+        check_id
+      end
+
+    source == "scorecard" and Map.has_key?(DirectGitHubPR.supported_checks(), normalized_id)
   end
 end
