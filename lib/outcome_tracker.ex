@@ -12,6 +12,8 @@ defmodule Hypatia.OutcomeTracker do
 
   require Logger
 
+  alias Hypatia.ConfidenceAnnealing
+
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
 
@@ -21,6 +23,12 @@ defmodule Hypatia.OutcomeTracker do
   @prior_strength 10
   @confidence_cap 0.99
   @confidence_floor 0.10
+
+  # Path for persisted annealing states (per-recipe temperature tracking)
+  @annealing_state_path Application.compile_env(
+    :hypatia, :annealing_state_path,
+    "data/verisimdb/annealing-states"
+  )
 
   @doc """
   Record an outcome from a fix attempt.
@@ -51,7 +59,10 @@ defmodule Hypatia.OutcomeTracker do
     # Write to fleet learning pipeline
     write_fleet_outcome(record)
 
-    # Update recipe confidence
+    # Update annealing state for this recipe
+    update_annealing_state(recipe_id, outcome)
+
+    # Update recipe confidence (now annealing-aware)
     update_recipe_confidence(recipe_id)
 
     Logger.info("Outcome recorded: #{recipe_id} in #{repo}/#{file} -> #{outcome_str}")
@@ -151,17 +162,26 @@ defmodule Hypatia.OutcomeTracker do
               {:ok, recipe} ->
                 base_confidence = Map.get(recipe, "confidence", 0.5)
 
-                new_confidence = bayesian_update(
+                raw_confidence = bayesian_update(
                   base_confidence, successes, failures + false_positives
                 )
+
+                # Apply temperature-based annealing to the raw confidence.
+                # This flattens confidence toward 0.5 when the recipe has
+                # few outcomes, and lets it sharpen as evidence accumulates.
+                annealing_state = load_annealing_state(recipe_id)
+                new_confidence = ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
+                annealing_summary = ConfidenceAnnealing.summary(annealing_state)
 
                 updated_recipe =
                   recipe
                   |> Map.put("confidence", Float.round(new_confidence, 4))
+                  |> Map.put("confidence_raw", Float.round(raw_confidence, 4))
                   |> Map.put("successful_fixes", successes)
                   |> Map.put("failed_fixes", failures)
                   |> Map.put("false_positives", false_positives)
                   |> Map.put("total_attempts", length(outcomes))
+                  |> Map.put("annealing", annealing_summary)
 
                 case Jason.encode(updated_recipe, pretty: true) do
                   {:ok, json} ->
@@ -350,5 +370,134 @@ defmodule Hypatia.OutcomeTracker do
       {:error, _} ->
         false
     end
+  end
+
+  # --- Annealing State Management ---
+
+  @doc """
+  Get the annealing state for a recipe, computing the max dispatch tier.
+
+  Returns {:ok, strategy} where strategy is the annealing-clamped
+  dispatch tier for the given raw strategy.
+  """
+  def annealed_strategy(recipe_id, raw_strategy) do
+    state = load_annealing_state(recipe_id)
+    ConfidenceAnnealing.clamp_strategy(raw_strategy, state)
+  end
+
+  @doc """
+  Get annealing-adjusted confidence for a recipe in a cross-repo context.
+
+  When repo A's outcome data is used to inform dispatch in repo B,
+  this applies a higher effective temperature (more conservative).
+  """
+  def cross_repo_confidence(recipe_id, raw_confidence) do
+    state = load_annealing_state(recipe_id)
+    ConfidenceAnnealing.anneal_cross_repo(raw_confidence, state)
+  end
+
+  @doc "Get the full annealing state for a recipe (for diagnostics)."
+  def get_annealing_state(recipe_id) do
+    load_annealing_state(recipe_id)
+  end
+
+  defp update_annealing_state(recipe_id, outcome) do
+    state = load_annealing_state(recipe_id)
+
+    outcome_atom = case outcome do
+      :success -> :success
+      :failure -> :failure
+      :false_positive -> :false_positive
+      _ -> :failure
+    end
+
+    new_state = ConfidenceAnnealing.record_outcome(state, outcome_atom)
+    save_annealing_state(recipe_id, new_state)
+    new_state
+  end
+
+  defp load_annealing_state(recipe_id) do
+    path = annealing_state_path(recipe_id)
+
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, data} -> deserialize_annealing_state(data)
+          {:error, _} -> bootstrap_annealing_state(recipe_id)
+        end
+
+      {:error, _} ->
+        bootstrap_annealing_state(recipe_id)
+    end
+  end
+
+  # Bootstrap annealing state from existing outcome data for recipes
+  # that predate the annealing system.
+  defp bootstrap_annealing_state(recipe_id) do
+    outcomes = load_outcomes_for_recipe(recipe_id)
+
+    if Enum.empty?(outcomes) do
+      ConfidenceAnnealing.new_state()
+    else
+      successes = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
+      failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
+      false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
+
+      state = ConfidenceAnnealing.from_existing(successes, failures, false_positives)
+      save_annealing_state(recipe_id, state)
+      state
+    end
+  end
+
+  defp save_annealing_state(recipe_id, state) do
+    path = annealing_state_path(recipe_id)
+    dir = Path.dirname(path)
+    File.mkdir_p!(dir)
+
+    serialized = %{
+      "temperature" => state.temperature,
+      "outcome_count" => state.outcome_count,
+      "stage" => Atom.to_string(state.stage),
+      "recent_outcomes" => Enum.map(state.recent_outcomes, &Atom.to_string/1),
+      "last_reheat" => if(state.last_reheat, do: DateTime.to_iso8601(state.last_reheat)),
+      "created_at" => DateTime.to_iso8601(state.created_at),
+      "updated_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    case Jason.encode(serialized, pretty: true) do
+      {:ok, json} -> File.write!(path, json <> "\n")
+      {:error, reason} -> Logger.error("Failed to save annealing state: #{inspect(reason)}")
+    end
+  end
+
+  defp deserialize_annealing_state(data) do
+    %{
+      temperature: Map.get(data, "temperature", 1.0),
+      outcome_count: Map.get(data, "outcome_count", 0),
+      stage: String.to_existing_atom(Map.get(data, "stage", "nascent")),
+      recent_outcomes:
+        data
+        |> Map.get("recent_outcomes", [])
+        |> Enum.map(&String.to_existing_atom/1),
+      last_reheat:
+        case Map.get(data, "last_reheat") do
+          nil -> nil
+          ts -> case DateTime.from_iso8601(ts) do
+            {:ok, dt, _} -> dt
+            _ -> nil
+          end
+        end,
+      created_at:
+        case DateTime.from_iso8601(Map.get(data, "created_at", "")) do
+          {:ok, dt, _} -> dt
+          _ -> DateTime.utc_now()
+        end
+    }
+  end
+
+  defp annealing_state_path(recipe_id) do
+    # Sanitise recipe_id for filesystem safety
+    safe_id = String.replace(recipe_id, ~r/[^a-zA-Z0-9_\-]/, "_")
+    Path.join(Path.expand(@annealing_state_path), "#{safe_id}.json")
   end
 end

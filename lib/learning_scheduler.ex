@@ -19,9 +19,15 @@ defmodule Hypatia.LearningScheduler do
   use GenServer
   require Logger
 
+  alias Hypatia.ConfidenceAnnealing
+
   @poll_interval_ms 5 * 60 * 1_000  # 5 minutes
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
+  @annealing_state_path Application.compile_env(
+    :hypatia, :annealing_state_path,
+    "data/verisimdb/annealing-states"
+  )
 
   # --- Client API ---
 
@@ -48,6 +54,7 @@ defmodule Hypatia.LearningScheduler do
       last_outcome_positions: %{},  # filename => byte offset of last read
       total_outcomes_processed: 0,
       total_confidence_updates: 0,
+      total_annealing_reheats: 0,
       started_at: DateTime.utc_now(),
       errors: []
     }
@@ -90,13 +97,21 @@ defmodule Hypatia.LearningScheduler do
 
     report_confidence_drift()
 
+    # Report annealing state across all tracked recipes
+    annealing_report = report_annealing_state()
+
     now = DateTime.utc_now()
     total = outcomes_count + fleet_outcomes_count
 
     if total > 0 do
       Logger.info(
         "LearningScheduler: processed #{total} new outcomes, " <>
-        "updated #{confidence_updates} recipes"
+        "updated #{confidence_updates} recipes, " <>
+        "annealing: #{annealing_report.nascent} nascent, " <>
+        "#{annealing_report.adolescent} adolescent, " <>
+        "#{annealing_report.mature} mature, " <>
+        "#{annealing_report.veteran} veteran, " <>
+        "#{annealing_report.reheated} reheated"
       )
     end
 
@@ -104,7 +119,8 @@ defmodule Hypatia.LearningScheduler do
       last_run: now,
       last_outcome_positions: new_positions,
       total_outcomes_processed: state.total_outcomes_processed + total,
-      total_confidence_updates: state.total_confidence_updates + confidence_updates
+      total_confidence_updates: state.total_confidence_updates + confidence_updates,
+      total_annealing_reheats: state.total_annealing_reheats + annealing_report.reheated
     }
   end
 
@@ -261,6 +277,55 @@ defmodule Hypatia.LearningScheduler do
 
       {:error, _} ->
         :ok
+    end
+  end
+
+  # --- Annealing State Reporting ---
+
+  # Scans all persisted annealing state files and produces a summary
+  # of stage distribution and drift/reheat counts.
+  defp report_annealing_state do
+    annealing_dir = Path.expand(@annealing_state_path)
+
+    stage_counts = %{nascent: 0, adolescent: 0, mature: 0, veteran: 0}
+    reheated = 0
+
+    case File.ls(annealing_dir) do
+      {:ok, files} ->
+        Enum.reduce(
+          Enum.filter(files, &String.ends_with?(&1, ".json")),
+          %{stages: stage_counts, reheated: reheated},
+          fn file, acc ->
+            path = Path.join(annealing_dir, file)
+
+            case File.read(path) do
+              {:ok, content} ->
+                case Jason.decode(content) do
+                  {:ok, data} ->
+                    stage = String.to_existing_atom(Map.get(data, "stage", "nascent"))
+                    drift = ConfidenceAnnealing.drift_detected?(
+                      data
+                      |> Map.get("recent_outcomes", [])
+                      |> Enum.map(&String.to_existing_atom/1)
+                    )
+
+                    stages = Map.update!(acc.stages, stage, &(&1 + 1))
+                    reheated = if drift, do: acc.reheated + 1, else: acc.reheated
+                    %{acc | stages: stages, reheated: reheated}
+
+                  {:error, _} -> acc
+                end
+
+              {:error, _} -> acc
+            end
+          end
+        )
+        |> then(fn acc ->
+          Map.merge(acc.stages, %{reheated: acc.reheated})
+        end)
+
+      {:error, _} ->
+        Map.merge(stage_counts, %{reheated: 0})
     end
   end
 end

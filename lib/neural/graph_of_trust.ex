@@ -32,11 +32,12 @@ defmodule Hypatia.Neural.GraphOfTrust do
   @max_iterations 50
   # Future: trust decays 5% per cycle without new data — @decay_rate 0.95
 
-  defstruct nodes: %{}, edges: [], trust_scores: %{}, last_computed: nil
+  defstruct nodes: %{}, edges: [], trust_scores: %{}, last_computed: nil,
+            cross_repo_edges: [], language_clusters: %{}
 
   # --- Public API ---
 
-  @doc "Build the trust graph from outcome data"
+  @doc "Build the trust graph from outcome data, including cross-repo edges."
   def build do
     outcomes = load_all_outcomes()
     recipes = load_all_recipes()
@@ -44,10 +45,26 @@ defmodule Hypatia.Neural.GraphOfTrust do
     nodes = build_nodes(outcomes, recipes)
     edges = build_edges(outcomes)
 
-    graph = %__MODULE__{nodes: nodes, edges: edges}
+    # Build cross-repo learning edges: repos that share successful
+    # recipes are connected, weighted by shared success count
+    cross_repo_edges = build_cross_repo_edges(outcomes)
+
+    # Build language clusters: group repos by primary language family
+    language_clusters = build_language_clusters(nodes)
+
+    graph = %__MODULE__{
+      nodes: nodes,
+      edges: edges ++ cross_repo_edges,
+      cross_repo_edges: cross_repo_edges,
+      language_clusters: language_clusters
+    }
+
     graph = compute_trust(graph)
 
-    Logger.info("Graph of Trust built: #{map_size(graph.nodes)} nodes, #{length(graph.edges)} edges")
+    Logger.info(
+      "Graph of Trust built: #{map_size(graph.nodes)} nodes, " <>
+      "#{length(graph.edges)} edges (#{length(cross_repo_edges)} cross-repo)"
+    )
     graph
   end
 
@@ -79,6 +96,45 @@ defmodule Hypatia.Neural.GraphOfTrust do
     |> Enum.map(fn {id, _} -> {id, Map.get(scores, id, 0.5)} end)
     |> Enum.filter(fn {_id, score} -> score < 0.4 end)
     |> Enum.sort_by(fn {_id, score} -> score end)
+  end
+
+  @doc """
+  Find repos similar to the given repo based on shared successful recipes.
+
+  Returns [{repo, similarity_score}] sorted by similarity descending.
+  Uses the cross-repo edge weights: repos that share many successful
+  recipes are considered more similar.
+  """
+  def similar_repos(%__MODULE__{cross_repo_edges: edges, trust_scores: scores}, repo) do
+    edges
+    |> Enum.filter(fn {src, _tgt, _w} -> src == repo end)
+    |> Enum.map(fn {_src, tgt, weight} ->
+      trust = Map.get(scores, tgt, 0.5)
+      {tgt, weight * trust}
+    end)
+    |> Enum.sort_by(fn {_repo, score} -> -score end)
+  end
+
+  @doc """
+  Get repos in the same language cluster as the given repo.
+
+  Returns the list of repo names that share the same language family,
+  useful for language-aware drift policies.
+  """
+  def repos_in_language_cluster(%__MODULE__{language_clusters: clusters}, repo) do
+    Enum.find_value(clusters, [], fn {_family, repos} ->
+      if repo in repos, do: repos -- [repo], else: nil
+    end)
+  end
+
+  @doc """
+  Get the cross-repo learning edges for a specific repo.
+
+  Returns [{source_repo, target_repo, weight}] where weight represents
+  the strength of the learning transfer relationship.
+  """
+  def cross_repo_edges_for(%__MODULE__{cross_repo_edges: edges}, repo) do
+    Enum.filter(edges, fn {src, tgt, _w} -> src == repo or tgt == repo end)
   end
 
   # --- Trust Computation (PageRank-style) ---
@@ -176,6 +232,95 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   # --- Data Loading ---
+
+  # Build edges between repos that share successful recipe applications.
+  # Weight = number of shared successful recipes between two repos,
+  # normalized by total unique recipes each repo has used.
+  defp build_cross_repo_edges(outcomes) do
+    # Group successful outcomes by repo, collecting recipe sets
+    repo_recipes =
+      outcomes
+      |> Enum.filter(&(Map.get(&1, "outcome") == "success"))
+      |> Enum.group_by(&Map.get(&1, "repo", "unknown"))
+      |> Enum.map(fn {repo, repo_outcomes} ->
+        recipes =
+          repo_outcomes
+          |> Enum.map(&(Map.get(&1, "recipe_id", Map.get(&1, "pattern", "unknown"))))
+          |> MapSet.new()
+        {repo, recipes}
+      end)
+      |> Enum.reject(fn {repo, _} -> repo == "unknown" end)
+
+    # Build pairwise edges based on recipe overlap (Jaccard similarity)
+    for {repo_a, recipes_a} <- repo_recipes,
+        {repo_b, recipes_b} <- repo_recipes,
+        repo_a < repo_b do
+      intersection = MapSet.intersection(recipes_a, recipes_b) |> MapSet.size()
+
+      if intersection > 0 do
+        union = MapSet.union(recipes_a, recipes_b) |> MapSet.size()
+        jaccard = intersection / max(union, 1)
+
+        # Bidirectional edges with Jaccard similarity as weight
+        [{repo_a, repo_b, jaccard}, {repo_b, repo_a, jaccard}]
+      else
+        []
+      end
+    end
+    |> List.flatten()
+  end
+
+  # Build language clusters from repo scan data.
+  # Groups repos by their detected primary language family.
+  defp build_language_clusters(nodes) do
+    language_families = Hypatia.CrossRepoLearning.language_families()
+
+    repos =
+      nodes
+      |> Enum.filter(fn {_id, type} -> type == :repo end)
+      |> Enum.map(fn {id, _} -> id end)
+
+    repos
+    |> Enum.reduce(%{}, fn repo, clusters ->
+      lang = detect_repo_language(repo)
+      family = Map.get(language_families, lang, :unknown)
+
+      if family != :unknown do
+        Map.update(clusters, family, [repo], fn existing -> [repo | existing] end)
+      else
+        clusters
+      end
+    end)
+  end
+
+  # Detect primary language for a repo from scan data
+  defp detect_repo_language(repo) do
+    scan_path = Path.join([Path.expand(@verisimdb_data_path), "scans", "#{repo}.json"])
+
+    case File.read(scan_path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, data} ->
+            cond do
+              Map.has_key?(data, "primary_language") ->
+                String.downcase(Map.get(data, "primary_language", "unknown"))
+
+              Map.has_key?(data, "languages") ->
+                data
+                |> Map.get("languages", %{})
+                |> Enum.max_by(fn {_lang, count} -> count end, fn -> {"unknown", 0} end)
+                |> elem(0)
+                |> String.downcase()
+
+              true -> "unknown"
+            end
+
+          {:error, _} -> "unknown"
+        end
+
+      {:error, _} -> "unknown"
+    end
+  end
 
   defp load_all_outcomes do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")

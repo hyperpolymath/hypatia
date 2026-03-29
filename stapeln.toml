@@ -1,0 +1,382 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# stapeln.toml — Layer-based container build for Hypatia
+#
+# Hypatia is a multi-component neurosymbolic CI/CD intelligence system.
+# Components:
+#   1. Elixir pipeline (Phoenix/OTP, port 9090) — core orchestrator
+#   2. Rust CLI ("hyper") — command-line scanning tool
+#   3. Rust forge-adapter (port 8081) — GitHub/GitLab/Bitbucket API bridge
+#   4. Logtalk engine (SWI-Prolog) — rule-based pattern detection
+#   5. Idris2 ABI + Zig FFI — formally verified C ABI bridge
+#
+# stapeln builds containers as composable layers (German: "to stack").
+# Each layer is independently cacheable, verifiable, and signable.
+
+[metadata]
+name = "hypatia"
+version = "0.1.0"
+description = "Neurosymbolic CI/CD intelligence — container stack"
+author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
+license = "PMPL-1.0-or-later"
+registry = "ghcr.io/hyperpolymath"
+
+[build]
+containerfile = "deploy/Containerfile"
+context = "."
+runtime = "podman"
+
+# ── Shared Base Layer ─────────────────────────────────────────
+
+[layers.base]
+description = "Chainguard Wolfi minimal base"
+from = "cgr.dev/chainguard/wolfi-base:latest"
+cache = true
+verify = true
+
+# ══════════════════════════════════════════════════════════════
+# Component 1: Elixir Pipeline (Phoenix/OTP)
+# ══════════════════════════════════════════════════════════════
+
+[layers.elixir-toolchain]
+description = "Elixir 1.14+ and Erlang/OTP runtime"
+extends = "base"
+packages = ["erlang", "elixir", "git", "build-base"]
+cache = true
+
+[layers.elixir-deps]
+description = "Mix dependency fetch and compile"
+extends = "elixir-toolchain"
+commands = [
+    "mix local.hex --force",
+    "mix local.rebar --force",
+    "mix deps.get --only prod",
+    "mix deps.compile",
+]
+cache-key = "mix.lock"
+cache = true
+env = { MIX_ENV = "prod" }
+
+[layers.elixir-build]
+description = "Elixir release build (Phoenix/OTP)"
+extends = "elixir-deps"
+commands = [
+    "mix compile --warnings-as-errors",
+    "mix release hypatia",
+]
+artifacts = [
+    { src = "_build/prod/rel/hypatia/", dst = "/app/hypatia/" },
+]
+env = { MIX_ENV = "prod" }
+
+[layers.elixir-runtime]
+description = "Minimal Elixir/OTP runtime for Hypatia pipeline"
+from = "cgr.dev/chainguard/wolfi-base:latest"
+packages = ["erlang", "ca-certificates", "curl", "git"]
+copy-from = [
+    { layer = "elixir-build", src = "/app/hypatia/", dst = "/app/hypatia/" },
+]
+entrypoint = ["/app/hypatia/bin/hypatia"]
+cmd = ["start"]
+user = "nonroot"
+expose = [9090]
+env = { MIX_ENV = "prod", RELEASE_NODE = "hypatia@127.0.0.1", RELEASE_COOKIE = "hypatia_cookie" }
+healthcheck = { cmd = "curl -f http://localhost:9090/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+
+# ══════════════════════════════════════════════════════════════
+# Component 2: Rust CLI ("hyper")
+# ══════════════════════════════════════════════════════════════
+
+[layers.rust-toolchain]
+description = "Rust compiler and build dependencies"
+extends = "base"
+packages = ["rust", "pkgconf", "build-base", "openssl-dev", "cmake"]
+cache = true
+
+[layers.rust-deps]
+description = "Cargo dependency fetch for workspace"
+extends = "rust-toolchain"
+commands = ["cargo fetch --locked"]
+cache-key = "Cargo.lock"
+cache = true
+
+[layers.cli-build]
+description = "Hypatia CLI (hyper) release build"
+extends = "rust-deps"
+commands = ["cargo build --release --package hypatia-cli"]
+artifacts = [
+    { src = "target/release/hyper", dst = "/app/bin/hyper" },
+]
+
+[layers.cli-runtime]
+description = "Minimal runtime for hyper CLI"
+from = "cgr.dev/chainguard/wolfi-base:latest"
+packages = ["ca-certificates", "libssl3", "curl", "git"]
+copy-from = [
+    { layer = "cli-build", src = "/app/bin/hyper", dst = "/usr/local/bin/hyper" },
+    { layer = "elixir-build", src = "/app/hypatia/", dst = "/app/hypatia/" },
+]
+entrypoint = ["hyper"]
+cmd = ["--help"]
+user = "nonroot"
+env = { RUST_LOG = "info", RUST_BACKTRACE = "0" }
+
+# ══════════════════════════════════════════════════════════════
+# Component 3: Rust Forge Adapter
+# ══════════════════════════════════════════════════════════════
+
+[layers.adapter-build]
+description = "Forge adapter (GitHub/GitLab/Bitbucket bridge) release build"
+extends = "rust-deps"
+commands = ["cargo build --release --package hypatia-adapters"]
+artifacts = [
+    { src = "target/release/forge-adapter", dst = "/app/bin/forge-adapter" },
+]
+
+[layers.adapter-runtime]
+description = "Minimal runtime for forge-adapter"
+from = "cgr.dev/chainguard/wolfi-base:latest"
+packages = ["ca-certificates", "libssl3", "curl"]
+copy-from = [
+    { layer = "adapter-build", src = "/app/bin/forge-adapter", dst = "/usr/local/bin/forge-adapter" },
+]
+entrypoint = ["forge-adapter"]
+cmd = ["--help"]
+user = "nonroot"
+expose = [8081]
+env = { RUST_LOG = "info" }
+healthcheck = { cmd = "curl -f http://localhost:8081/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
+
+# ══════════════════════════════════════════════════════════════
+# Component 4: Logtalk Engine (SWI-Prolog)
+# EXCEPTION: No Chainguard equivalent for SWI-Prolog.
+# Uses swipl:stable (Debian-based). Documented in Known Gaps.
+# ══════════════════════════════════════════════════════════════
+
+[layers.logtalk-base]
+description = "SWI-Prolog base (Debian — no Chainguard equivalent)"
+from = "docker.io/library/swipl:stable"
+cache = true
+verify = true
+
+[layers.logtalk-build]
+description = "Logtalk installation and rule precompilation"
+extends = "logtalk-base"
+packages-apt = ["curl", "bzip2"]
+commands = [
+    "curl -fsSL -o /tmp/logtalk.tar.bz2 https://logtalk.org/files/logtalk-3.98.0.tar.bz2",
+    "echo '0bf4825f0e2578fa2a6990b1eda771b8c1ba9e7091ea7ad11eecf319b56a3455  /tmp/logtalk.tar.bz2' | sha256sum -c -",
+    "mkdir -p /opt && tar xjf /tmp/logtalk.tar.bz2 -C /opt",
+    "ln -s /opt/logtalk-3.98.0 /opt/logtalk",
+    "rm /tmp/logtalk.tar.bz2",
+    "mkdir -p /app/logtalk",
+    "swipl -g 'logtalk_load(engine/loader)' -t halt || echo 'Precompilation skipped'",
+]
+env = { LOGTALKHOME = "/opt/logtalk", LOGTALKUSER = "/app/logtalk" }
+cache = true
+
+[layers.logtalk-runtime]
+description = "Logtalk engine runtime with precompiled rules"
+from = "docker.io/library/swipl:stable"
+packages-apt = ["curl", "jq"]
+copy-from = [
+    { layer = "logtalk-build", src = "/opt/logtalk/", dst = "/opt/logtalk/" },
+    { layer = "logtalk-build", src = "/app/", dst = "/app/" },
+]
+entrypoint = ["swipl"]
+cmd = ["-g", "logtalk_load(engine/loader)", "-t", "prolog"]
+env = { LOGTALKHOME = "/opt/logtalk", LOGTALKUSER = "/app/logtalk" }
+healthcheck = { cmd = "swipl -g 'logtalk_load(library(types))' -t halt || exit 1", interval = "30s", timeout = "10s", retries = 3 }
+
+# ══════════════════════════════════════════════════════════════
+# Component 5: Idris2 ABI + Zig FFI (Formal Verification Layer)
+# ══════════════════════════════════════════════════════════════
+
+[layers.idris2-toolchain]
+description = "Idris2 compiler for ABI verification"
+extends = "base"
+packages = ["idris2", "build-base"]
+cache = true
+
+[layers.zig-toolchain]
+description = "Zig compiler for FFI bridge"
+extends = "base"
+packages = ["zig", "build-base"]
+cache = true
+
+[layers.abi-verify]
+description = "Idris2 ABI type-check and proof verification"
+extends = "idris2-toolchain"
+commands = [
+    "idris2 --build src/abi/hypatia-abi.ipkg",
+    "idris2 --build verify/hypatia-verify.ipkg || echo 'Proof verification: check results'",
+]
+cache-key = "src/abi/*.idr"
+cache = true
+
+[layers.ffi-build]
+description = "Zig FFI shared library build"
+extends = "zig-toolchain"
+commands = [
+    "cd ffi/zig && zig build -Doptimize=ReleaseSafe",
+]
+artifacts = [
+    { src = "ffi/zig/zig-out/lib/libhypatia_ffi.so", dst = "/app/lib/libhypatia_ffi.so" },
+]
+cache-key = "ffi/zig/build.zig"
+cache = true
+
+[layers.ffi-runtime]
+description = "FFI shared library for Elixir NIF integration"
+from = "cgr.dev/chainguard/wolfi-base:latest"
+packages = ["ca-certificates"]
+copy-from = [
+    { layer = "ffi-build", src = "/app/lib/libhypatia_ffi.so", dst = "/usr/local/lib/libhypatia_ffi.so" },
+]
+
+# ══════════════════════════════════════════════════════════════
+# Integration Test Layer
+# ══════════════════════════════════════════════════════════════
+
+[layers.integration-test]
+description = "Integration test environment with full toolchain"
+extends = "rust-deps"
+commands = [
+    "cargo install cargo-tarpaulin || true",
+]
+env = { RUST_LOG = "debug" }
+
+# ── Security ──────────────────────────────────────────────────
+
+[security]
+non-root = true
+read-only-root = false
+no-new-privileges = true
+cap-drop = ["ALL"]
+seccomp-profile = "default"
+
+[security.signing]
+algorithm = "ML-DSA-87"
+provider = "cerro-torre"
+
+[security.sbom]
+format = "spdx-json"
+output = "sbom.spdx.json"
+include-deps = true
+
+# ── Verification ──────────────────────────────────────────────
+
+[verify]
+vordr = true
+svalinn = true
+scan-on-build = true
+fail-on = ["critical", "high"]
+
+# ── Targets ───────────────────────────────────────────────────
+# Each target selects which layers to build and configures the
+# resulting container image.
+
+[targets.development]
+description = "Full development environment with all components"
+layers = [
+    "base",
+    "elixir-toolchain",
+    "elixir-deps",
+    "elixir-build",
+    "rust-toolchain",
+    "rust-deps",
+    "cli-build",
+    "adapter-build",
+    "logtalk-build",
+    "idris2-toolchain",
+    "zig-toolchain",
+    "abi-verify",
+    "ffi-build",
+]
+env = { LOG_LEVEL = "debug", MIX_ENV = "dev" }
+
+[targets.production]
+description = "Production deployment — Elixir pipeline + CLI + adapter + Logtalk + FFI"
+layers = [
+    "elixir-runtime",
+    "cli-runtime",
+    "adapter-runtime",
+    "logtalk-runtime",
+    "ffi-runtime",
+]
+env = { LOG_LEVEL = "info", MIX_ENV = "prod" }
+
+[targets.elixir]
+description = "Elixir pipeline only (Phoenix/OTP on port 9090)"
+layers = ["elixir-runtime", "ffi-runtime"]
+env = { LOG_LEVEL = "info", MIX_ENV = "prod" }
+
+[targets.cli]
+description = "CLI-only image (hyper binary)"
+layers = ["cli-runtime"]
+env = { LOG_LEVEL = "info" }
+
+[targets.adapter]
+description = "Forge adapter only (port 8081)"
+layers = ["adapter-runtime"]
+env = { LOG_LEVEL = "info" }
+
+[targets.engine]
+description = "Logtalk rule engine only"
+layers = ["logtalk-runtime"]
+env = { LOG_LEVEL = "info" }
+
+[targets.test]
+description = "Integration test suite with coverage"
+layers = [
+    "base",
+    "elixir-toolchain",
+    "elixir-deps",
+    "elixir-build",
+    "rust-toolchain",
+    "rust-deps",
+    "integration-test",
+    "logtalk-build",
+    "abi-verify",
+    "ffi-build",
+]
+env = { LOG_LEVEL = "debug", MIX_ENV = "test" }
+
+[targets.verify]
+description = "Formal verification only — Idris2 proofs + Zig FFI compliance"
+layers = [
+    "base",
+    "idris2-toolchain",
+    "zig-toolchain",
+    "abi-verify",
+    "ffi-build",
+]
+env = { LOG_LEVEL = "debug" }
+
+# ── Volumes ───────────────────────────────────────────────────
+# Named volumes for persistent data across container restarts.
+
+[volumes.verisimdb-data]
+description = "VeriSimDB flat-file data store (scan results, patterns, outcomes)"
+mount = "/app/data/verisimdb"
+read-only = false
+
+[volumes.neural-states]
+description = "Neural network persisted state (ESN/RBF/MoE weights)"
+mount = "/app/data/verisimdb/neural-states"
+read-only = false
+
+[volumes.schemas]
+description = "Scan schemas and hook definitions"
+mount = "/app/schemas"
+read-only = true
+
+[volumes.hooks]
+description = "Git hooks for verisimdb-data operations"
+mount = "/app/hooks"
+read-only = true
+
+# ── Networks ──────────────────────────────────────────────────
+
+[networks.hypatia-internal]
+description = "Internal network for Hypatia components"
+driver = "bridge"

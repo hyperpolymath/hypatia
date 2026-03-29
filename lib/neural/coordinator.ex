@@ -217,7 +217,7 @@ defmodule Hypatia.Neural.Coordinator do
     trusted_bots = GraphOfTrust.trusted_bots(state.trust_graph)
     trusted_recipes = GraphOfTrust.trusted_recipes(state.trust_graph)
 
-    strategy =
+    raw_strategy =
       cond do
         novel -> :report_only
         confidence >= 0.95 -> :auto_execute
@@ -225,13 +225,21 @@ defmodule Hypatia.Neural.Coordinator do
         true -> :report_only
       end
 
+    # Annealing gate: clamp strategy based on recipe's outcome maturity.
+    # A recipe with only 3 outcomes cannot reach :auto_execute regardless
+    # of neural confidence — it must accumulate evidence first.
+    recipe_id = Map.get(finding, "recipe_id", Map.get(finding, "pattern_id", ""))
+    strategy = Hypatia.OutcomeTracker.annealed_strategy(recipe_id, raw_strategy)
+
     recommendation = %{
       strategy: strategy,
+      raw_strategy: raw_strategy,
       confidence: confidence,
       preferred_bots: Enum.take(trusted_bots, 3),
       preferred_recipes: Enum.take(trusted_recipes, 5),
       is_novel: novel,
       reason: dispatch_reason(strategy, confidence, novel),
+      annealing_clamped: strategy != raw_strategy,
       architecture: :blackboard,
       networks_consulted: @network_count
     }

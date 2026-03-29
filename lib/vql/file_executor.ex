@@ -96,7 +96,7 @@ defmodule Hypatia.VQL.FileExecutor do
   # Federation Queries (cross-store)
   # ---------------------------------------------------------------------------
 
-  defp execute_federation_query(pattern, _drift_policy, ast, _opts) do
+  defp execute_federation_query(pattern, drift_policy, ast, _opts) do
     # Federation patterns like /scans/*, /recipes/*, etc.
     store_name = pattern
       |> String.trim_leading("/")
@@ -118,7 +118,8 @@ defmodule Hypatia.VQL.FileExecutor do
         end)
 
         filtered = apply_where(results, ast.where)
-        paginated = apply_pagination(filtered, ast.limit, ast.offset)
+        drifted = apply_drift_policy(filtered, drift_policy)
+        paginated = apply_pagination(drifted, ast.limit, ast.offset)
         {:ok, paginated}
 
       dir ->
@@ -131,7 +132,8 @@ defmodule Hypatia.VQL.FileExecutor do
         end
 
         filtered = apply_where(results, ast.where)
-        paginated = apply_pagination(filtered, ast.limit, ast.offset)
+        drifted = apply_drift_policy(filtered, drift_policy)
+        paginated = apply_pagination(drifted, ast.limit, ast.offset)
         {:ok, paginated}
     end
   end
@@ -268,6 +270,131 @@ defmodule Hypatia.VQL.FileExecutor do
   end
 
   defp compare_values(_, _), do: :lt
+
+  # ---------------------------------------------------------------------------
+  # Drift Policy Application
+  # ---------------------------------------------------------------------------
+
+  # Apply drift policies to cross-repo federation query results.
+  # Drift policies control how cross-repo confidence data is weighted
+  # when queried through VQL FEDERATION queries.
+  #
+  # | Policy          | Effect                                              |
+  # |-----------------|-----------------------------------------------------|
+  # | nil / ""        | No modification (pass-through)                      |
+  # | "conservative"  | Discount confidence by 50%                          |
+  # | "moderate"      | Discount confidence by 25%                          |
+  # | "aggressive"    | No discount (trust cross-repo equally)              |
+  # | "language_aware"| Full within language family, 70% discount otherwise |
+
+  defp apply_drift_policy(results, nil), do: results
+  defp apply_drift_policy(results, ""), do: results
+
+  defp apply_drift_policy(results, policy_str) when is_binary(policy_str) do
+    policy = parse_drift_policy(policy_str)
+
+    case policy do
+      :aggressive ->
+        # No modification — trust cross-repo data equally
+        results
+
+      :conservative ->
+        apply_confidence_discount(results, 0.5)
+
+      :moderate ->
+        apply_confidence_discount(results, 0.75)
+
+      :language_aware ->
+        apply_language_aware_discount(results)
+
+      _ ->
+        results
+    end
+  end
+
+  defp apply_drift_policy(results, _), do: results
+
+  defp parse_drift_policy(str) do
+    case String.downcase(String.trim(str)) do
+      "conservative" -> :conservative
+      "moderate" -> :moderate
+      "aggressive" -> :aggressive
+      "language_aware" -> :language_aware
+      "language-aware" -> :language_aware
+      _ -> :moderate
+    end
+  end
+
+  # Apply a flat discount to any confidence values in the results.
+  # Looks for "confidence" keys at any level of the result map.
+  defp apply_confidence_discount(results, factor) do
+    Enum.map(results, fn item ->
+      discount_confidence_in_map(item, factor)
+    end)
+  end
+
+  defp discount_confidence_in_map(item, factor) when is_map(item) do
+    Enum.reduce(item, %{}, fn {key, value}, acc ->
+      new_value =
+        cond do
+          key in ["confidence", "confidence_raw"] and is_number(value) ->
+            Float.round(value * factor, 4)
+
+          is_map(value) ->
+            discount_confidence_in_map(value, factor)
+
+          true ->
+            value
+        end
+
+      Map.put(acc, key, new_value)
+    end)
+  end
+
+  defp discount_confidence_in_map(item, _factor), do: item
+
+  # For language-aware policy, group results by repo language family
+  # and apply full confidence within-family, discounted cross-family.
+  # Results without a detectable repo get moderate discount.
+  defp apply_language_aware_discount(results) do
+    language_families = Hypatia.CrossRepoLearning.language_families()
+
+    Enum.map(results, fn item ->
+      repo = Map.get(item, "repo", "")
+      lang = detect_item_language(item, repo)
+      family = Map.get(language_families, lang, :unknown)
+
+      # Tag each result with its language family for downstream use
+      item
+      |> Map.put("_language_family", Atom.to_string(family))
+      |> Map.put("_drift_discount",
+        if(family == :unknown, do: 0.75, else: 1.0))
+    end)
+  end
+
+  # Try to determine language from the item itself or from scan data
+  defp detect_item_language(item, repo) do
+    cond do
+      Map.has_key?(item, "primary_language") ->
+        String.downcase(Map.get(item, "primary_language", "unknown"))
+
+      repo != "" ->
+        Hypatia.CrossRepoLearning.drift_discount(:language_aware, repo, repo)
+        # We just need the language, not the discount — detect via scan
+        scan_path = Path.join([expand_path(), "scans", "#{repo}.json"])
+        case File.read(scan_path) do
+          {:ok, content} ->
+            case Jason.decode(content) do
+              {:ok, data} ->
+                String.downcase(Map.get(data, "primary_language", "unknown"))
+              _ -> "unknown"
+            end
+          _ -> "unknown"
+        end
+
+      true -> "unknown"
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Modality-Based Sorting
