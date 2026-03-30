@@ -88,4 +88,82 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert findings == []
     end
   end
+
+  describe "sd010_tracked_node_modules/1" do
+    test "returns empty when no node_modules directory exists", %{repo: repo} do
+      # Initialise a git repo so the git commands work
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["config", "user.email", "test@test.com"], cd: repo)
+      System.cmd("git", ["config", "user.name", "Test"], cd: repo)
+      File.write!(Path.join(repo, "README.md"), "# test")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init"], cd: repo)
+
+      findings = StructuralDrift.sd010_tracked_node_modules(repo)
+      assert findings == []
+    end
+
+    test "detects tracked node_modules directory", %{repo: repo} do
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["config", "user.email", "test@test.com"], cd: repo)
+      System.cmd("git", ["config", "user.name", "Test"], cd: repo)
+
+      nm_dir = Path.join(repo, "node_modules")
+      File.mkdir_p!(nm_dir)
+      File.write!(Path.join(nm_dir, "package.json"), "{}")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "add nm"], cd: repo)
+
+      findings = StructuralDrift.sd010_tracked_node_modules(repo)
+      assert length(findings) >= 1
+      assert hd(findings).rule == "SD010"
+      assert hd(findings).severity == :high
+    end
+  end
+
+  describe "sd011_missing_gitignore/1" do
+    test "returns empty when directory and gitignore entry both exist", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, "target"))
+      File.write!(Path.join(repo, ".gitignore"), "target/\n")
+
+      findings = StructuralDrift.sd011_missing_gitignore(repo)
+      target_findings = Enum.filter(findings, &String.contains?(&1.reason, "target"))
+      assert target_findings == []
+    end
+
+    test "detects directory present but missing from gitignore", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, "target"))
+      File.write!(Path.join(repo, ".gitignore"), "# empty\n")
+
+      findings = StructuralDrift.sd011_missing_gitignore(repo)
+      target_findings = Enum.filter(findings, &String.contains?(&1.reason, "target"))
+      assert length(target_findings) == 1
+      assert hd(target_findings).rule == "SD011"
+      assert hd(target_findings).severity == :medium
+    end
+
+    test "returns empty when directory does not exist", %{repo: repo} do
+      File.write!(Path.join(repo, ".gitignore"), "# empty\n")
+
+      findings = StructuralDrift.sd011_missing_gitignore(repo)
+      assert findings == []
+    end
+  end
+
+  describe "scan/1" do
+    test "returns structured result with all expected keys", %{repo: repo} do
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["config", "user.email", "test@test.com"], cd: repo)
+      System.cmd("git", ["config", "user.name", "Test"], cd: repo)
+      File.write!(Path.join(repo, "README.md"), "# test")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init"], cd: repo)
+
+      result = StructuralDrift.scan(repo)
+      assert Map.has_key?(result, :findings)
+      assert Map.has_key?(result, :total)
+      assert Map.has_key?(result, :trigger_intensive)
+      assert Map.has_key?(result, :dispatch)
+    end
+  end
 end

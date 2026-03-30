@@ -22,7 +22,8 @@ defmodule Hypatia.CLI do
       --rules <list>    Comma-separated rule modules to run (default: all)
                         Available: root_hygiene,honest_completion,workflow_audit,
                                    cicd_rules,code_safety,migration_rules,scorecard,
-                                   green_web
+                                   green_web,git_state,dependabot_alerts,
+                                   structural_drift
       --format <fmt>    Output format: json (default), text, github
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -45,7 +46,8 @@ defmodule Hypatia.CLI do
     :scorecard,
     :green_web,
     :git_state,
-    :dependabot_alerts
+    :dependabot_alerts,
+    :structural_drift
   ]
 
   @severity_order %{
@@ -539,6 +541,31 @@ defmodule Hypatia.CLI do
           {:error, reason} ->
             IO.puts(:stderr, "Warning: Dependabot alerts unavailable: #{reason}")
             results
+        end
+      else
+        results
+      end
+
+    # Structural Drift
+    results =
+      if :structural_drift in rules do
+        case Hypatia.Rules.StructuralDrift.scan(repo_path) do
+          %{findings: findings} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "structural_drift",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, "."),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          _ -> results
         end
       else
         results

@@ -100,10 +100,10 @@ jobs:
 
           echo "✅ Finding submission complete"
 
-      - name: Check for critical issues
-        if: steps.scan.outputs.critical > 0
+      - name: Check for critical or high-severity issues
+        if: steps.scan.outputs.critical > 0 || steps.scan.outputs.high > 0
         run: |
-          echo "⚠️  Critical security issues found!"
+          echo "Security issues found: ${{ steps.scan.outputs.critical }} critical, ${{ steps.scan.outputs.high }} high"
           echo "Review hypatia-findings.json for details"
           exit 1
 

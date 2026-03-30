@@ -53,6 +53,25 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert length(findings) == 2
     end
 
+    test "flags SONNET-TASKS.md in root" do
+      findings = RootHygiene.scan_stale(["SONNET-TASKS.md"])
+      assert length(findings) == 1
+      assert hd(findings).action == :delete
+      assert hd(findings).severity == :high
+    end
+
+    test "flags GEMINI.md in root" do
+      findings = RootHygiene.scan_stale(["GEMINI.md"])
+      assert length(findings) == 1
+      assert hd(findings).action == :delete
+    end
+
+    test "flags CLAUDE-WORK files in root" do
+      findings = RootHygiene.scan_stale(["CLAUDE-WORK-2026-03-14.md"])
+      assert length(findings) == 1
+      assert hd(findings).action == :delete
+    end
+
     test "ignores normal files" do
       findings = RootHygiene.scan_stale(["README.adoc", "LICENSE"])
       assert findings == []
