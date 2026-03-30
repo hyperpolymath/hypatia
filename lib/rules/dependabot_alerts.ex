@@ -55,7 +55,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
           created = alert["created_at"]
           age_days = age_in_days(created)
 
-          stale_threshold = Map.get(@stale_thresholds, String.to_atom(severity), 90)
+          stale_threshold = Map.get(@stale_thresholds, String.to_existing_atom(severity), 90)
           is_stale = age_days > stale_threshold
 
           mapped_severity = case severity do
@@ -181,14 +181,14 @@ defmodule Hypatia.Rules.DependabotAlerts do
         |> Enum.filter(&(&1["state"] == "open"))
         |> Enum.filter(fn alert ->
           severity = get_in(alert, ["security_advisory", "severity"]) || "medium"
-          threshold = Map.get(@stale_thresholds, String.to_atom(severity), 90)
+          threshold = Map.get(@stale_thresholds, String.to_existing_atom(severity), 90)
           age_in_days(alert["created_at"]) > threshold
         end)
         |> Enum.map(fn alert ->
           severity = get_in(alert, ["security_advisory", "severity"]) || "medium"
           package = get_in(alert, ["security_vulnerability", "package", "name"]) || "unknown"
           age = age_in_days(alert["created_at"])
-          threshold = Map.get(@stale_thresholds, String.to_atom(severity), 90)
+          threshold = Map.get(@stale_thresholds, String.to_existing_atom(severity), 90)
 
           %{
             rule: "DA003",

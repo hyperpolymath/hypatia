@@ -712,7 +712,7 @@ defmodule Hypatia.CLI do
     rules_str
     |> String.split(",", trim: true)
     |> Enum.map(&String.trim/1)
-    |> Enum.map(&String.to_atom/1)
+    |> Enum.map(&String.to_existing_atom/1)
     |> Enum.filter(&(&1 in @all_rule_modules))
     |> case do
       [] -> @all_rule_modules

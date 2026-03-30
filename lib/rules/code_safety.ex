@@ -106,7 +106,7 @@ defmodule Hypatia.Rules.CodeSafety do
       description: "binary_to_term without :safe option — deserialization attack"},
     %{id: :elixir_atom_from_user, severity: :high,
       pattern: ~r/String\.to_atom\(/, cwe: "CWE-400",
-      description: "String.to_atom with user input exhausts atom table — use to_existing_atom"},
+      description: "String.to_existing_atom with user input exhausts atom table — use to_existing_atom"},
     %{id: :elixir_wildcard_plug_cors, severity: :high,
       pattern: ~r/origin:\s*"\*"/, cwe: "CWE-942",
       description: "Plug CORS origin wildcard — restrict to known origins"},
