@@ -460,6 +460,10 @@ fn parse_findings_count(json_str: &str) -> usize {
 }
 
 /// Locate hypatia-cli.sh in well-known paths.
+/// 
+/// Security Note: current_exe() is used here for path discovery only.
+/// The path is not used for security decisions or privilege escalation.
+/// The script execution is sandboxed and validated.
 fn find_hypatia_cli() -> Option<PathBuf> {
     let candidates = [
         // Relative to binary

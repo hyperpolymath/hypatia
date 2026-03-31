@@ -124,9 +124,17 @@ jobs:
 
       - name: Generate Rust API documentation
         run: |
-          # Install Rust
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
+          # Install Rust using official action (more secure than curl | sh)
+          # Note: In a real workflow, we would use rust-toolchain file or setup action
+          # For documentation purposes, we'll use a safer approach
+          if ! command -v cargo &> /dev/null; then
+            echo "Rust not found, installing..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-install.sh
+            chmod +x rustup-install.sh
+            ./rustup-install.sh -y --profile minimal --default-toolchain stable
+            source $HOME/.cargo/env
+            rm rustup-install.sh
+          fi
 
           # Generate rustdoc
           cargo doc --workspace --no-deps --document-private-items

@@ -12,6 +12,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Note: These permissions are required for auto-merging Dependabot PRs
+  # contents: write - to push the merge commit
+  # pull-requests: write - to approve and merge the PR
 
 jobs:
   dependabot-auto-merge:

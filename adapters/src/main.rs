@@ -5,9 +5,34 @@ use adapters::github::GitHubAdapter;
 use adapters::ForgeAdapter;
 use std::env;
 
+/// Validate command line arguments for safety
+/// Prevents argument injection attacks by validating format
+fn validate_args(args: &[String]) -> bool {
+    // Basic validation - ensure no suspicious characters in arguments
+    for arg in args.iter().skip(1) { // Skip program name
+        if arg.contains(char::is_control) || 
+           arg.contains(';') || 
+           arg.contains('|') || 
+           arg.contains('&') ||
+           arg.contains('$') ||
+           arg.contains('`') ||
+           arg.contains('\\') {
+            return false;
+        }
+    }
+    true
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
+
+    // Security: Validate arguments before processing
+    if !validate_args(&args) {
+        eprintln!("Error: Invalid characters in arguments");
+        print_usage();
+        return Ok(());
+    }
 
     if args.len() < 2 {
         print_usage();
