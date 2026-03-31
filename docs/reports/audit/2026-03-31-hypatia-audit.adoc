@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Hypatia Audit 2026-03-31
+:revdate: 2026-03-31
+
+== Summary
+
+Status: `fail` (full proofs/tests running but integration suite still fails and warnings remain)
+
+Hypatia is the neurosymbolic CI/CD intelligence layer. The README promises
+prover-backed rule enforcement, severity classification, neuron-guided
+confidence, and integrator/resolver trust. The audit checks whether the repo
+delivers the claimed invariants, tests, and build signals before any stable/publication
+claim advances.
+
+== Evidence log
+
+* README/arcvix-neurosymbolic-ci-intelligence.tex, Roadmap, DESIGN-NARRATIVE, and
+  ACTION-ITEMS documents describe the solver-level rule system, multi-prover
+  trust, and integrated Hypatia scanner. Security and contractile docs describe
+  enforcement gating (deploy-security-scan.k9.ncl, A2ML-K9-INTEGRATION).
+* `PROOF-NEEDS.md` enumerates the missing machine-checked artefacts: rule engine
+  determinism, severity classification monotonicity, scanner composition behavior,
+  neurosymbolic confidence bounds, and triangle router determinism. The ABI layer
+  already ships Idris2 definitions (`Types`, `FFI`, `GraphQL`, `GRPC`, `REST`).
+* `just test` runs `OPENSSL_NO_VENDOR=1 cargo test` and compiles dozens of dependencies,
+  but the integration suite aborts at `integration/tests/hooks_test.rs:428` because
+  the SPDX validation hook expects commits with an SPDX header and the test
+  currently sees only 0/1 passes. All preceding tests (adapters, hook/fleet/forge
+  flows) passed, but the final `hooks_test` failure stops the script with exit 101.
+* Warnings documented:
+  - `unused import`/`unused variable`/`dead_code` in integration tests (ci_simulation,
+    fleet, registry, arangodb, forge/hooks modules).
+  - `unexpected cfg` for the integration feature.
+  - Hypatia builds produce warnings in `hypatia-cli`, `hypatia-adapters`, and tests
+    due to unused imports/methods.
+
+== Confirmed blockers
+
+* `integration/tests/hooks_test.rs` currently fails because the SPDX validation hook
+  introduces an extra commit (left count 1 vs right 0). Until the hook test is
+  adjusted or the tested commit includes the SPDX header, the `just test` command
+  cannot finish, blocking the release gate.
+* The proof backlog from `PROOF-NEEDS.md` remains untouched: no machine-checked proofs
+  for rule determinism, severity scoring, scanner composition, or confidence
+  metrics exist yet, even though the README claims the scanner is built on
+  trust-hardened rules.
+* Integration test warnings flag unused helpers/methods and module-level dead code;
+  they must be cleaned or documented to keep `cargo test` clean for the stable release.
+
+== Containment actions taken
+
+* `README`, `DESIGN-NARRATIVE`, `ROADMAP`, and `SECURITY` emphasise the research-grade
+  posture while highlighting the trust-hardening pipeline.
+* `PROOF-NEEDS` surfaces the proof backlog so the next plenary Claude session knows
+  which statements need Idris2/Lean proofs before any publication.
+* The failing hooks test and warnings are documented so reviewers know why `just test`
+  currently exits with 101 despite running hundreds of other tests.
+
+== Immediate next actions
+
+* Fix `integration/tests/hooks_test.rs` so the SPDX hook sees a valid commit (or adjust
+  the test to expect the instrumentation result). Without that fix, the whole `just test`
+  command keeps failing and blocks any stable label.
+* Close the proof backlog from `PROOF-NEEDS` with Idris2 or Lean4 proofs tied to
+  rule engine correctness, severity classification bounds, scanner composition,
+  neurosymbolic confidence, and routing determinism.
+* Clean the unused imports/variables flagged in the integration tests and helper modules
+  so that future runs produce zero warnings under `cargo test`.
+* Document the Hypatia-to-Hypatia integration concerns (A2ML-K9/contractile) in the
+  release note and ensure the contractile invariants map to actual pipeline checks.
+
+== Invitation for review
+
+If you can help rewrite the SPDX hook test, remove the dead code warnings, or
+  mechanize any of the missing proofs, annotate this doc or open an issue.
+  Hypatia is meant to be the safest gate; challenge these blockers so the platform
+  can graduate from `alpha` to `beta` safely.
