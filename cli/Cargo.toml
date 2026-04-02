@@ -54,7 +54,7 @@ git2 = { version = "0.20", default-features = false, features = ["vendored-libgi
 # Terminal output
 colored = "3.1"
 indicatif = "0.18"
-console = "0.15"
+console = "0.16"
 dialoguer = "0.12"
 tabled = "0.16"
 
@@ -80,7 +80,7 @@ hex = "0.4"
 tempfile = "3.10"
 assert_cmd = "2.0"
 predicates = "3.1"
-mockall = "0.13"
+mockall = "0.14"
 
 [features]
 default = []

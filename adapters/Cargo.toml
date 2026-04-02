@@ -33,7 +33,7 @@ data = { path = "../data", package = "hypatia-data" }
 tokio-test = "0.4"
 wiremock = "0.6"
 hex = "0.4"
-hmac = "0.12"
+hmac = "0.13"
 sha2 = "0.10"
 
 # Note: The package name differs from directory name
