@@ -54,7 +54,7 @@ git2 = { version = "0.20", default-features = false, features = ["vendored-libgi
 # Terminal output
 colored = "3.1"
 indicatif = "0.18"
-console = "0.15"
+console = "0.16"
 dialoguer = "0.12"
 tabled = "0.16"
 
