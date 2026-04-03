@@ -70,9 +70,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     flawed_regexes = check_flawed_regex(workflow_contents)
     duplicates = check_duplicates(workflow_files, workflow_contents)
     caching_issues = check_caching(workflow_contents)
+    nperm_typos = check_npermissions_typo(workflow_contents)
 
     %{
-      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++ caching_issues,
+      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++ caching_issues ++ nperm_typos,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -80,6 +81,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       flawed_regex_count: length(flawed_regexes),
       duplicate_count: length(duplicates),
       caching_issues: length(caching_issues),
+      npermissions_typo_count: length(nperm_typos),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -220,6 +222,32 @@ defmodule Hypatia.Rules.WorkflowAudit do
         names = Enum.map(entries, fn {name, _} -> name end)
         [%{type: :duplicate_workflow, files: names,
            severity: :low, action: :consolidate}]
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── WF013: npermissions typo ───────────────────────────────────────────
+
+  @doc """
+  WF013: Detect 'npermissions:' typo in workflow files.
+  GitHub Actions silently ignores unknown top-level keys, so a typo like
+  'npermissions:' means the workflow runs with overly broad default permissions.
+  Severity: high.
+  Action: rename to 'permissions:'.
+  """
+  def check_npermissions_typo(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if Regex.match?(~r/^npermissions:/m, content) do
+        [%{
+          rule: "WF013",
+          type: :npermissions_typo,
+          file: filename,
+          severity: :high,
+          reason: "Workflow has 'npermissions' typo — should be 'permissions'. GitHub Actions silently ignores this, running with overly broad defaults.",
+          action: :fix_typo
+        }]
       else
         []
       end

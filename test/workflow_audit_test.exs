@@ -102,6 +102,58 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     end
   end
 
+  describe "check_npermissions_typo/1" do
+    test "detects npermissions typo" do
+      content = """
+      name: CI
+      npermissions:
+        contents: read
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+      findings = WorkflowAudit.check_npermissions_typo(%{"ci.yml" => content})
+      assert length(findings) == 1
+      assert hd(findings).rule == "WF013"
+      assert hd(findings).type == :npermissions_typo
+      assert hd(findings).severity == :high
+      assert String.contains?(hd(findings).reason, "npermissions")
+    end
+
+    test "returns empty when permissions is correct" do
+      content = """
+      name: CI
+      permissions:
+        contents: read
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+      findings = WorkflowAudit.check_npermissions_typo(%{"ci.yml" => content})
+      assert findings == []
+    end
+
+    test "returns empty when no permissions key at all" do
+      content = """
+      name: CI
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+      findings = WorkflowAudit.check_npermissions_typo(%{"ci.yml" => content})
+      assert findings == []
+    end
+
+    test "detects npermissions across multiple files" do
+      contents = %{
+        "ci.yml" => "npermissions:\n  contents: read\n",
+        "deploy.yml" => "npermissions:\n  contents: write\n"
+      }
+      findings = WorkflowAudit.check_npermissions_typo(contents)
+      assert length(findings) == 2
+    end
+  end
+
   describe "audit/2" do
     test "returns comprehensive report" do
       report = WorkflowAudit.audit(["hypatia-scan.yml", "codeql.yml"], %{})

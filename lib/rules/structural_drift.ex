@@ -470,6 +470,52 @@ defmodule Hypatia.Rules.StructuralDrift do
     end)
   end
 
+  # ─── SD013: Path-specific gitignore patterns ───────────────────────────
+
+  @path_specific_artifacts [
+    {".zig-cache/", ~r|[^\s]*/.zig-cache/|},
+    {"zig-out/", ~r|[^\s]*/zig-out/|},
+    {"node_modules/", ~r|[^\s]*/node_modules/|},
+    {"_build/", ~r|[^\s]*/_build/|},
+    {"target/", ~r|[^\s]*/target/|}
+  ]
+
+  @doc """
+  SD013: Detect path-specific gitignore patterns for build artifacts that
+  should be global. For example, `src/path/.zig-cache/` should be `.zig-cache/`
+  globally instead.
+  Severity: low.
+  Action: replace path-specific pattern with global pattern.
+  """
+  def sd013_path_specific_gitignore(repo_path) do
+    gitignore_path = Path.join(repo_path, ".gitignore")
+
+    case File.read(gitignore_path) do
+      {:ok, content} ->
+        @path_specific_artifacts
+        |> Enum.flat_map(fn {global_pattern, path_regex} ->
+          matches =
+            content
+            |> String.split("\n", trim: true)
+            |> Enum.reject(&String.starts_with?(String.trim(&1), "#"))
+            |> Enum.filter(&Regex.match?(path_regex, &1))
+
+          Enum.map(matches, fn line ->
+            %{
+              rule: "SD013",
+              file: ".gitignore",
+              severity: :low,
+              reason: "Path-specific gitignore pattern '#{String.trim(line)}' — use global '#{global_pattern}' instead",
+              action: :globalise_gitignore_pattern,
+              detail: %{current: String.trim(line), recommended: global_pattern}
+            }
+          end)
+        end)
+
+      _ -> []
+    end
+  end
+
   # ─── Comprehensive scan (triggered by any finding) ─────────────────────
 
   @doc """
@@ -489,7 +535,8 @@ defmodule Hypatia.Rules.StructuralDrift do
       sd008_unsound_patterns(repo_path) ++
       sd009_missing_spdx(repo_path) ++
       sd010_tracked_node_modules(repo_path) ++
-      sd011_missing_gitignore(repo_path)
+      sd011_missing_gitignore(repo_path) ++
+      sd013_path_specific_gitignore(repo_path)
 
     needs_intensive = Enum.any?(findings, & &1[:trigger_intensive])
     needs_alert = Enum.any?(findings, & &1[:alert_user])

@@ -150,6 +150,65 @@ defmodule Hypatia.Rules.StructuralDriftTest do
     end
   end
 
+  describe "sd013_path_specific_gitignore/1" do
+    test "detects path-specific .zig-cache pattern", %{repo: repo} do
+      File.write!(Path.join(repo, ".gitignore"), "src/ffi/.zig-cache/\n")
+
+      findings = StructuralDrift.sd013_path_specific_gitignore(repo)
+      assert length(findings) == 1
+      assert hd(findings).rule == "SD013"
+      assert hd(findings).severity == :low
+      assert hd(findings).detail.recommended == ".zig-cache/"
+      assert String.contains?(hd(findings).reason, "src/ffi/.zig-cache/")
+    end
+
+    test "detects path-specific node_modules pattern", %{repo: repo} do
+      File.write!(Path.join(repo, ".gitignore"), "packages/web/node_modules/\n")
+
+      findings = StructuralDrift.sd013_path_specific_gitignore(repo)
+      assert length(findings) == 1
+      assert hd(findings).detail.recommended == "node_modules/"
+    end
+
+    test "detects multiple path-specific patterns", %{repo: repo} do
+      content = """
+      src/.zig-cache/
+      lib/app/_build/
+      packages/web/node_modules/
+      """
+      File.write!(Path.join(repo, ".gitignore"), content)
+
+      findings = StructuralDrift.sd013_path_specific_gitignore(repo)
+      assert length(findings) == 3
+    end
+
+    test "ignores global patterns (no path prefix)", %{repo: repo} do
+      content = """
+      .zig-cache/
+      zig-out/
+      node_modules/
+      _build/
+      target/
+      """
+      File.write!(Path.join(repo, ".gitignore"), content)
+
+      findings = StructuralDrift.sd013_path_specific_gitignore(repo)
+      assert findings == []
+    end
+
+    test "ignores comments", %{repo: repo} do
+      File.write!(Path.join(repo, ".gitignore"), "# src/.zig-cache/\n")
+
+      findings = StructuralDrift.sd013_path_specific_gitignore(repo)
+      assert findings == []
+    end
+
+    test "returns empty when no .gitignore exists", %{repo: repo} do
+      findings = StructuralDrift.sd013_path_specific_gitignore(repo)
+      assert findings == []
+    end
+  end
+
   describe "scan/1" do
     test "returns structured result with all expected keys", %{repo: repo} do
       System.cmd("git", ["init"], cd: repo)

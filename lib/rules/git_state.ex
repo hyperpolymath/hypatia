@@ -14,7 +14,7 @@ defmodule Hypatia.Rules.GitState do
   - sustainabot: advisory for unpushed changes
   - seambot: verify sync after push
 
-  Rule IDs: GS001-GS006
+  Rule IDs: GS001-GS007
   """
 
   # ─── GS001: Uncommitted changes ────────────────────────────────────────
@@ -254,6 +254,46 @@ defmodule Hypatia.Rules.GitState do
     end
   end
 
+  # ─── GS007: Stale remote branches ───────────────────────────────────────
+
+  @doc """
+  GS007: Detect non-main remote branches.
+  Policy: single main branch only. Other remote branches are stale and
+  should be deleted after merging.
+  Severity: medium.
+  Action: delete remote branches after merge verification.
+  """
+  def gs007_stale_remote_branches(repo_path) do
+    case System.cmd("git", ["branch", "-r"], cd: repo_path, stderr_to_stdout: true) do
+      {output, 0} when output != "" ->
+        branches =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(fn branch ->
+            branch == "origin/main" or
+            branch == "origin/master" or
+            branch == "origin/HEAD" or
+            String.contains?(branch, "->")
+          end)
+
+        if branches != [] do
+          [%{
+            rule: "GS007",
+            file: ".",
+            severity: :medium,
+            reason: "Repository has #{length(branches)} non-main remote branch(es). Policy: single main branch only.",
+            action: :delete_remote_branches,
+            detail: %{stale_branches: branches, count: length(branches)}
+          }]
+        else
+          []
+        end
+
+      _ -> []
+    end
+  end
+
   # ─── Comprehensive scan ───────────────────────────────────────────────
 
   @doc """
@@ -271,7 +311,8 @@ defmodule Hypatia.Rules.GitState do
         gs003_branch_divergence(repo_path) ++
         gs004_stale_remote_refs(repo_path) ++
         gs005_detached_head(repo_path) ++
-        gs006_not_on_default_branch(repo_path)
+        gs006_not_on_default_branch(repo_path) ++
+        gs007_stale_remote_branches(repo_path)
 
       %{
         findings: findings,

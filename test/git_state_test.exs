@@ -129,6 +129,54 @@ defmodule Hypatia.Rules.GitStateTest do
     end
   end
 
+  # ─── GS007: Stale remote branches ───────────────────────────────────
+
+  describe "gs007_stale_remote_branches/1" do
+    test "returns empty when no remote branches exist", %{repo: repo} do
+      findings = GitState.gs007_stale_remote_branches(repo)
+      assert findings == []
+    end
+
+    test "detects non-main remote branches", %{repo: repo} do
+      # Create a bare remote and push main to it
+      remote = Path.join(@tmp_dir, "gs007_remote_#{System.unique_integer([:positive])}")
+      System.cmd("git", ["init", "--bare", remote])
+      System.cmd("git", ["remote", "add", "origin", remote], cd: repo)
+      System.cmd("git", ["push", "-u", "origin", "main"], cd: repo)
+
+      # Create and push a feature branch
+      System.cmd("git", ["checkout", "-b", "feature-stale"], cd: repo)
+      File.write!(Path.join(repo, "stale.txt"), "stale")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "stale branch"], cd: repo)
+      System.cmd("git", ["push", "origin", "feature-stale"], cd: repo)
+
+      # Go back to main
+      System.cmd("git", ["checkout", "main"], cd: repo)
+
+      on_exit(fn -> File.rm_rf!(remote) end)
+
+      findings = GitState.gs007_stale_remote_branches(repo)
+      assert length(findings) == 1
+      assert hd(findings).rule == "GS007"
+      assert hd(findings).severity == :medium
+      assert hd(findings).detail.count == 1
+      assert String.contains?(hd(findings).reason, "1 non-main remote branch")
+    end
+
+    test "returns empty when only main branch exists on remote", %{repo: repo} do
+      remote = Path.join(@tmp_dir, "gs007_clean_#{System.unique_integer([:positive])}")
+      System.cmd("git", ["init", "--bare", remote])
+      System.cmd("git", ["remote", "add", "origin", remote], cd: repo)
+      System.cmd("git", ["push", "-u", "origin", "main"], cd: repo)
+
+      on_exit(fn -> File.rm_rf!(remote) end)
+
+      findings = GitState.gs007_stale_remote_branches(repo)
+      assert findings == []
+    end
+  end
+
   # ─── scan/1: Comprehensive check ──────────────────────────────────
 
   describe "scan/1" do
