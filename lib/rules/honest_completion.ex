@@ -54,6 +54,11 @@ defmodule Hypatia.Rules.HonestCompletion do
       believe_me_count: count_pattern(repo_path, "believe_me"),
       sorry_count: count_pattern(repo_path, "sorry"),
       assert_total_count: count_pattern(repo_path, "assert_total"),
+      admitted_count: count_pattern(repo_path, "Admitted"),
+      unsafe_coerce_count: count_pattern(repo_path, "unsafeCoerce"),
+      obj_magic_count: count_pattern(repo_path, "Obj.magic"),
+      postulate_count: count_pattern(repo_path, "postulate"),
+      really_believe_me_count: count_pattern(repo_path, "really_believe_me"),
       stub_count: count_stubs(repo_path),
       has_ci: File.dir?(Path.join(repo_path, ".github/workflows")),
       has_tests_dir: File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
@@ -116,6 +121,41 @@ defmodule Hypatia.Rules.HonestCompletion do
 
     findings = if evidence.sorry_count > 0 do
       [%{type: :dangerous_pattern, detail: "#{evidence.sorry_count} sorry (Lean) found",
+         severity: :critical, deduction: 15} | findings]
+    else
+      findings
+    end
+
+    findings = if evidence.admitted_count > 0 do
+      [%{type: :dangerous_pattern, detail: "#{evidence.admitted_count} Admitted (Coq/Rocq) found",
+         severity: :critical, deduction: 15} | findings]
+    else
+      findings
+    end
+
+    findings = if evidence.unsafe_coerce_count > 0 do
+      [%{type: :dangerous_pattern, detail: "#{evidence.unsafe_coerce_count} unsafeCoerce (Haskell) found",
+         severity: :critical, deduction: 15} | findings]
+    else
+      findings
+    end
+
+    findings = if evidence.obj_magic_count > 0 do
+      [%{type: :dangerous_pattern, detail: "#{evidence.obj_magic_count} Obj.magic (OCaml/ReScript) found",
+         severity: :critical, deduction: 15} | findings]
+    else
+      findings
+    end
+
+    findings = if evidence.postulate_count > 0 do
+      [%{type: :dangerous_pattern, detail: "#{evidence.postulate_count} postulate (Idris2/Agda) found — check if intentional axioms",
+         severity: :high, deduction: 10} | findings]
+    else
+      findings
+    end
+
+    findings = if evidence.really_believe_me_count > 0 do
+      [%{type: :dangerous_pattern, detail: "#{evidence.really_believe_me_count} really_believe_me found",
          severity: :critical, deduction: 15} | findings]
     else
       findings
@@ -246,7 +286,7 @@ defmodule Hypatia.Rules.HonestCompletion do
   end
 
   defp count_pattern(repo_path, pattern) do
-    case System.cmd("grep", ["-r", "--include=*.{res,rs,ex,idr,zig,v,gleam,jl,hs}",
+    case System.cmd("grep", ["-r", "--include=*.{res,rs,ex,idr,zig,v,gleam,jl,hs,agda,lean,ml}",
                               "-c", pattern, repo_path],
                      stderr_to_stdout: true) do
       {output, _} ->
