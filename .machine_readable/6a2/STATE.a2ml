@@ -12,3 +12,7 @@ status = "active"
 name = "hypatia"
 completion-percentage = 0
 phase = "In development"
+
+[session-history]
+# 2026-04-03: Added 3 new rules: WF013 (permissions typo detection), GS007 (stale branch detection),
+#             SD013 (gitignore path-scope detection). 279 lines of new rule code, 13 tests.
