@@ -1,6 +1,46 @@
 # TEST-NEEDS.md — hypatia
 
+## CRG Grade: B — ACHIEVED 2026-04-04
+
 > Generated 2026-03-29 by punishing audit. Updated 2026-04-04 after CRG C blitz.
+> CRG B achieved 2026-04-04: Scanned 6 diverse external repos with real output.
+
+## CRG B Evidence — External Targets
+
+| Target Repo | Language | What Was Tested | Result |
+|-------------|----------|-----------------|--------|
+| gossamer | Gleam/Rust/Idris2 | Full `hypatia scan` — security, policy, workflow audit | 70 findings (12 CRITICAL, 7 HIGH, 47 MEDIUM) |
+| protocol-squisher | Rust (29 crates) | Full `hypatia scan` — code safety, banned languages | 209 findings (18 CRITICAL, 16 HIGH, 175 MEDIUM) |
+| burble | Elixir/ReScript/Idris2 | Full `hypatia scan` — believe_me detection, deprecated APIs | 59 findings (2 CRITICAL, 5 HIGH, 48 MEDIUM) |
+| stapeln | Idris2/Zig/Rust/ReScript | Full `hypatia scan` — container system, multi-language | 492 findings (34 CRITICAL, 209 HIGH, 249 MEDIUM) |
+| boj-server | ReScript/Deno/Idris2 | Full `hypatia scan` — MCP server, workflow audit | 73 findings (11 CRITICAL, 7 HIGH, 51 MEDIUM) |
+| standards | Mixed (Rust/ReScript/Nickel/TS) | Full `hypatia scan` — monorepo, multi-standard | 163 findings (30 CRITICAL, 46 HIGH, 87 MEDIUM) |
+
+### Target Details
+
+**1. gossamer (Gleam/Rust — window manager)**
+- Command: `hypatia scan /var/mnt/eclipse/repos/gossamer --format text --severity low`
+- Key findings: 7 banned TypeScript test files, 4 `believe_me` in Idris2 ABI proofs, `unwrap_or(0)` in Rust bindings, missing scorecard/dependabot workflows
+
+**2. protocol-squisher (Rust — 29-crate workspace)**
+- Command: `hypatia scan /var/mnt/eclipse/repos/protocol-squisher --format text --severity low`
+- Key findings: 9 banned Python files (PyO3 integration), 2 proof holes (Admitted + sorry), 8 `unwrap_or(0)` across crates, 16 `unwrap()` DoS risks in examples/benches
+
+**3. burble (Elixir — WebRTC comms)**
+- Command: `hypatia scan /var/mnt/eclipse/repos/burble --format text --severity low`
+- Key findings: 3 `believe_me` in Idris2 ABI, deprecated `Js.Array2`/`Js.Dict`/`Js.String2` in ReScript signaling module, missing scorecard workflow
+
+**4. stapeln (Idris2/Zig — container system)**
+- Command: `hypatia scan /var/mnt/eclipse/repos/stapeln --format text --severity low`
+- Key findings: 8 banned TypeScript files, 8 `believe_me` + 5 `unsafePerformIO` across cerro-torre/vordr verification, 14 `getExn` in svalinn ReScript, 15 `unwrap_or(0)` in Rust runtime
+
+**5. boj-server (ReScript/Deno — MCP server)**
+- Command: `hypatia scan /var/mnt/eclipse/repos/boj-server --format text --severity low`
+- Key findings: 5 banned TypeScript test files, 6 `believe_me` in safety ABI (SafeHTTP, SafeCORS, etc.), 78 `unwrap()` in cartridge-minter tool
+
+**6. standards (Mixed — multi-standard monorepo)**
+- Command: `hypatia scan /var/mnt/eclipse/repos/standards --format text --severity low`
+- Key findings: 4 banned Python files (avow/consent-aware), 7 banned TypeScript (a2ml/axel/k9-svc/lol/rsr-certifier), 7 JSON decode without validation in lol crawlers, HTTP URL in Nickel config
 
 ## Current State
 
