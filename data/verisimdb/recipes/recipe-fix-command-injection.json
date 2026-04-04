@@ -6,7 +6,9 @@
   "pattern_ids": [
     "PA009-command-injection",
     "PA009-unquoted-shell-variable",
-    "PA009-shell-interpolation"
+    "PA009-shell-interpolation",
+    "PA009-elixir-system-cmd",
+    "PA009-elixir-port-open"
   ],
   "target_categories": ["CommandInjection"],
   "languages": ["*"],

@@ -51,10 +51,13 @@ defmodule Hypatia.Rules do
       end
 
     # License check (if SPDX present)
+    # Extract repo name from file path for AGPL exception handling.
+    # Matches repo name from paths like /mnt/eclipse/repos/<repo>/ or */<repo>/src/*.
+    repo_name = extract_repo_name(file_path)
     findings =
       case Regex.run(~r/SPDX-License-Identifier:\s*(.+)/, content) do
         [_, spdx_id] ->
-          case CicdRules.validate_license(String.trim(spdx_id)) do
+          case CicdRules.validate_license(String.trim(spdx_id), repo_name) do
             {:error, :wrong_license, bad} ->
               [%{rule: "wrong_license", severity: :high,
                  description: "Wrong license #{bad} — should be PMPL-1.0-or-later"} | findings]
@@ -239,6 +242,59 @@ defmodule Hypatia.Rules do
         findings
       end
 
+    # mix.lock vulnerability check (Elixir/BEAM ecosystem)
+    findings =
+      if String.ends_with?(file_path, "mix.lock") do
+        # Plug (HTTP adapter) — arbitrary code execution via malformed multipart
+        findings =
+          if Regex.match?(~r/"plug":\s*\{[^}]*"version":\s*"(1\.[0-9]\.|1\.1[0-5]\.)/, content) do
+            [%{rule: "hex-plug-vulnerability", severity: :high,
+               description: "Vulnerable plug version in mix.lock — update to >= 1.16.0 for multipart fixes"} | findings]
+          else
+            findings
+          end
+
+        # HTTPoison / Hackney — TLS cert verification issues
+        findings =
+          if Regex.match?(~r/"hackney":\s*\{[^}]*"version":\s*"1\.(1[0-7]\.)/, content) do
+            [%{rule: "hex-hackney-vulnerability", severity: :medium,
+               description: "Vulnerable hackney version in mix.lock — update to >= 1.18.0 for TLS improvements"} | findings]
+          else
+            findings
+          end
+
+        # Poison (JSON parser) — prototype-style atom exhaustion via keys
+        findings =
+          if Regex.match?(~r/"poison":\s*\{[^}]*"version":\s*"[1-4]\."/, content) do
+            [%{rule: "hex-poison-atom-risk", severity: :medium,
+               description: "Poison < 5.0 in mix.lock may create atoms from JSON keys — update to >= 5.0 or switch to Jason"} | findings]
+          else
+            findings
+          end
+
+        # ex_doc — older versions have XSS in generated docs
+        findings =
+          if Regex.match?(~r/"ex_doc":\s*\{[^}]*"version":\s*"0\.(2[0-9]\.|30\.[0-5])"/, content) do
+            [%{rule: "hex-ex-doc-xss", severity: :low,
+               description: "ex_doc < 0.31.0 may generate docs with XSS — update to >= 0.31.0"} | findings]
+          else
+            findings
+          end
+
+        # nimble_parsec — stack overflow on deeply nested input
+        findings =
+          if Regex.match?(~r/"nimble_parsec":\s*\{[^}]*"version":\s*"0\."/, content) do
+            [%{rule: "hex-nimble-parsec-stack-overflow", severity: :medium,
+               description: "nimble_parsec 0.x may stack-overflow on deeply nested input — update to >= 1.0.0"} | findings]
+          else
+            findings
+          end
+
+        findings
+      else
+        findings
+      end
+
     findings
   end
 
@@ -306,4 +362,26 @@ defmodule Hypatia.Rules do
   Detect CI/CD waste patterns.
   """
   defdelegate detect_waste(repo_info), to: CicdRules
+
+  # ---------------------------------------------------------------------------
+  # Private Helpers
+  # ---------------------------------------------------------------------------
+
+  # Extract repo name from a file path. Checks for known repo root markers
+  # (e.g., /repos/<name>/) and falls back to the first non-empty path segment.
+  defp extract_repo_name(file_path) when is_binary(file_path) do
+    parts = Path.split(file_path)
+
+    # Look for "repos" directory marker — repo name is the next segment
+    case Enum.find_index(parts, &(&1 == "repos")) do
+      nil ->
+        # Fallback: use basename of parent dirs (best effort)
+        Enum.find(Enum.reverse(Path.split(Path.dirname(file_path))), & &1 != "")
+
+      idx ->
+        Enum.at(parts, idx + 1)
+    end
+  end
+
+  defp extract_repo_name(_), do: nil
 end

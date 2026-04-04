@@ -6,10 +6,11 @@
   "pattern_ids": [
     "PA010-json-parseexn",
     "PA010-unsafe-deserialize",
-    "PA010-yaml-load"
+    "PA010-yaml-load",
+    "PA010-elixir-binary-to-term"
   ],
   "target_categories": ["UnsafeDeserialization"],
-  "languages": ["rescript", "javascript", "python"],
+  "languages": ["rescript", "javascript", "python", "elixir"],
   "confidence": 0.70,
   "auto_fixable": false,
   "fix_script": "fix-unsafe-deserialize.sh",

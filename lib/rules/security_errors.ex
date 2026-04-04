@@ -40,7 +40,30 @@ defmodule Hypatia.Rules.SecurityErrors do
     wildcard_cors_web: "Wildcard CORS in web application code",
     elixir_code_injection: "Elixir code injection risk",
     elixir_deserialization: "Unsafe Erlang term deserialization",
-    js_eval_usage: "JavaScript eval() usage"
+    js_eval_usage: "JavaScript eval() usage",
+    rust_panic_macro: "Rust panic! causes unrecoverable crash",
+    rust_todo_macro: "Rust todo! marks incomplete implementation",
+    rust_unimplemented_macro: "Rust unimplemented! marks unfinished code",
+    rust_transmute: "Rust mem::transmute bypasses type safety",
+    rust_mem_forget: "Rust mem::forget leaks memory",
+    rust_manually_drop: "Rust ManuallyDrop risk of resource leaks",
+    rust_from_raw: "Rust from_raw unsafe pointer construction",
+    rust_as_ptr: "Rust as_ptr raw pointer exposure",
+    agda_postulate: "Agda postulate — unproven assumption",
+    agda_type_in_type: "Agda --type-in-type unsoundness",
+    isabelle_oops: "Isabelle oops — incomplete proof",
+    hol4_mk_thm: "HOL4 mk_thm kernel bypass",
+    zig_ptr_cast: "Zig @ptrCast unchecked pointer conversion",
+    zig_align_cast: "Zig @alignCast unchecked alignment cast",
+    zig_int_to_ptr: "Zig @intToPtr unsafe integer-to-pointer",
+    zig_bit_cast: "Zig @bitCast unchecked bit reinterpretation",
+    zig_ptr_to_int: "Zig @ptrToInt raw pointer address exposure",
+    fstar_admit: "F* admit — unproven goal acceptance",
+    fstar_assume: "F* assume — unverified assumption",
+    ada_pragma_suppress: "Ada pragma Suppress disables runtime checks",
+    ada_unchecked_conversion: "Ada Unchecked_Conversion type safety bypass",
+    ada_unchecked_deallocation: "Ada Unchecked_Deallocation manual memory management",
+    ada_unchecked_access: "Ada Unchecked_Access accessibility bypass"
   }
 
   def error_categories, do: @error_categories

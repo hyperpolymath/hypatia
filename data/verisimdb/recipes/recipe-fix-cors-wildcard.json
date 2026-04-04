@@ -4,7 +4,8 @@
   "description": "Replace Access-Control-Allow-Origin: * with specific allowed origins",
   "triangle_tier": "eliminate",
   "pattern_ids": [
-    "PA-cors_misconfiguration-unknown"
+    "PA-cors_misconfiguration-unknown",
+    "PA014-elixir-wildcard-plug-cors"
   ],
   "target_categories": ["cors_misconfiguration"],
   "languages": ["*"],

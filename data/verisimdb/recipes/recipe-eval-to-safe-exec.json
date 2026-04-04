@@ -5,10 +5,11 @@
   "triangle_tier": "eliminate",
   "pattern_ids": [
     "PA011-eval-usage",
-    "PA011-exec-usage"
+    "PA011-exec-usage",
+    "PA011-elixir-code-eval"
   ],
   "target_categories": ["DynamicCodeExecution"],
-  "languages": ["javascript", "shell", "bash"],
+  "languages": ["javascript", "shell", "bash", "elixir"],
   "confidence": 0.60,
   "auto_fixable": false,
   "fix_script": "fix-eval-to-safe.sh",

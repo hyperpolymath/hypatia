@@ -1,0 +1,21 @@
+{
+  "id": "recipe-add-elixir-ci",
+  "name": "Add Elixir CI workflow",
+  "description": "Add .github/workflows/elixir.yml with mix test for Elixir/Phoenix projects missing CI",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "missing_elixir_ci"
+  ],
+  "target_categories": ["MissingCI"],
+  "languages": ["elixir"],
+  "confidence": 0.90,
+  "auto_fixable": true,
+  "fix_script": "fix-add-elixir-ci.sh",
+  "action": "create_file",
+  "match": "mix.exs present but no CI workflow running mix test",
+  "replacement": ".github/workflows/elixir.yml with mix deps.get + mix test",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

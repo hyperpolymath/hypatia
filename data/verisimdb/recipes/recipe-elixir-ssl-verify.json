@@ -1,0 +1,21 @@
+{
+  "id": "recipe-elixir-ssl-verify",
+  "name": "Fix SSL verify_none in Elixir HTTP clients",
+  "description": "Replace verify: :verify_none with verify: :verify_peer + cacertfile to prevent MITM attacks",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "PA014-elixir-no-ssl-verify"
+  ],
+  "target_categories": ["InsecureProtocol"],
+  "languages": ["elixir"],
+  "confidence": 0.80,
+  "auto_fixable": false,
+  "fix_script": "fix-elixir-ssl-verify.sh",
+  "action": "replace",
+  "match": "verify: :verify_none or ssl: [verify: :verify_none]",
+  "replacement": "verify: :verify_peer with cacertfile: CAStore.file_path() or system cacerts",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}

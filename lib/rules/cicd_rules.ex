@@ -56,7 +56,8 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "Files must have SPDX headers"},
     # --- Rules derived from 2026-03-16 session dogfooding ---
     %{id: :agpl_license, pattern: ~r/SPDX-License-Identifier:\s*AGPL-3\.0/,
-      reason: "AGPL-3.0 replaced by PMPL-1.0-or-later"},
+      reason: "AGPL-3.0 replaced by PMPL-1.0-or-later",
+      exception_repos: ["game-server-admin", "idaptik", "airborne-submarine-squadron"]},
     %{id: :innerhtml_usage, pattern: ~r/\.innerHTML\s*=|document\.write\(/,
       reason: "innerHTML/document.write banned — use rescript-dom-mounter SafeDOM",
       applies_to: ["*.js", "*.res"]},
@@ -235,7 +236,9 @@ defmodule Hypatia.Rules.CicdRules do
       end
 
     results =
-      if "mix.exs" in files and not has_ci and "elixir.yml" not in workflows do
+      if "mix.exs" in files and not has_ci and
+           "elixir.yml" not in workflows and "mix.yml" not in workflows and
+           "beam.yml" not in workflows and "elixir-ci.yml" not in workflows do
         [%{pattern: :missing_elixir_ci, auto_fixable: true} | results]
       else
         results
@@ -251,12 +254,24 @@ defmodule Hypatia.Rules.CicdRules do
   @required_spdx "PMPL-1.0-or-later"
   @wrong_licenses ["MIT", "Apache-2.0", "PMPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
 
-  def required_spdx, do: @required_spdx
+  # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
+  @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
 
-  def validate_license(spdx_id) do
+  def required_spdx, do: @required_spdx
+  def agpl_exception_repos, do: @agpl_exception_repos
+
+  @doc """
+  Validate a license SPDX identifier, optionally scoped to a repo name.
+  AGPL-3.0-or-later is permitted for repos in @agpl_exception_repos.
+  """
+  def validate_license(spdx_id, repo_name \\ nil)
+
+  def validate_license(spdx_id, repo_name) do
     cond do
       spdx_id == @required_spdx -> :ok
       spdx_id == "MPL-2.0" -> :ok_fallback
+      spdx_id in ["AGPL-3.0", "AGPL-3.0-or-later"] and repo_name in @agpl_exception_repos ->
+        :ok_agpl_exception
       spdx_id in @wrong_licenses -> {:error, :wrong_license, spdx_id}
       true -> {:warning, :unknown_license, spdx_id}
     end

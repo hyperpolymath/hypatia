@@ -25,9 +25,36 @@ defmodule Hypatia.Rules.CodeSafety do
     %{id: :lock_unwrap, severity: :high,
       pattern: ~r/\.lock\(\)\.unwrap\(\)/, cwe: "CWE-754",
       description: "Lock.unwrap() without poison handling"},
+    %{id: :rwlock_unwrap, severity: :high,
+      pattern: ~r/\.(read|write)\(\)\.unwrap\(\)/, cwe: "CWE-754",
+      description: "RwLock read/write unwrap — poison will cascade panic"},
     %{id: :unsafe_block, severity: :medium,
       pattern: ~r/unsafe\s*\{/, cwe: "CWE-676",
-      description: "unsafe block — requires SAFETY comment"}
+      description: "unsafe block — requires SAFETY comment"},
+    %{id: :panic_macro, severity: :high,
+      pattern: ~r/panic!\s*\(/, cwe: "CWE-754",
+      description: "panic! macro causes unrecoverable crash"},
+    %{id: :todo_macro, severity: :high,
+      pattern: ~r/todo!\s*\(/, cwe: "CWE-754",
+      description: "todo! macro marks incomplete implementation that will panic"},
+    %{id: :unimplemented_macro, severity: :high,
+      pattern: ~r/unimplemented!\s*\(/, cwe: "CWE-754",
+      description: "unimplemented! macro marks unfinished code that will panic"},
+    %{id: :transmute, severity: :critical,
+      pattern: ~r/transmute/, cwe: "CWE-704",
+      description: "mem::transmute bypasses type safety with unchecked bit reinterpretation"},
+    %{id: :mem_forget, severity: :high,
+      pattern: ~r/mem::forget/, cwe: "CWE-401",
+      description: "mem::forget leaks memory by skipping Drop"},
+    %{id: :manually_drop, severity: :medium,
+      pattern: ~r/ManuallyDrop/, cwe: "CWE-401",
+      description: "ManuallyDrop requires manual resource management, risk of leaks"},
+    %{id: :from_raw, severity: :high,
+      pattern: ~r/from_raw/, cwe: "CWE-676",
+      description: "from_raw constructs types from raw pointers without safety checks"},
+    %{id: :as_ptr, severity: :medium,
+      pattern: ~r/as_ptr/, cwe: "CWE-676",
+      description: "as_ptr exposes raw pointer that may dangle or alias unsafely"}
   ]
 
   @rescript_patterns [
@@ -81,13 +108,88 @@ defmodule Hypatia.Rules.CodeSafety do
   @coq_banned [
     %{id: :admitted, severity: :critical,
       pattern: ~r/\bAdmitted\b/, cwe: "CWE-704",
-      description: "Admitted leaves proof hole"}
+      description: "Admitted leaves proof hole"},
+    %{id: :coq_admit_tactic, severity: :critical,
+      pattern: ~r/\badmit\b/, cwe: "CWE-704",
+      description: "Coq admit tactic leaves goal unproven"},
+    %{id: :coq_axiom, severity: :medium,
+      pattern: ~r/\bAxiom\s/, cwe: "CWE-704",
+      description: "User-defined Coq axiom — not verified by kernel"}
   ]
 
   @lean_banned [
     %{id: :sorry, severity: :critical,
       pattern: ~r/\bsorry\b/, cwe: "CWE-704",
-      description: "sorry leaves proof hole"}
+      description: "sorry leaves proof hole"},
+    %{id: :lean_native_decide, severity: :high,
+      pattern: ~r/\bnative_decide\b/, cwe: "CWE-704",
+      description: "native_decide bypasses kernel checking via native code evaluation"},
+    %{id: :lean_axiom, severity: :medium,
+      pattern: ~r/\baxiom\s/, cwe: "CWE-704",
+      description: "User-defined axiom — not verified by Lean kernel"}
+  ]
+
+  @agda_banned [
+    %{id: :agda_postulate, severity: :critical,
+      pattern: ~r/\bpostulate\b/, cwe: "CWE-704",
+      description: "Agda postulate assumes without proof — potential soundness hole"},
+    %{id: :agda_type_in_type, severity: :critical,
+      pattern: ~r/--type-in-type/, cwe: "CWE-704",
+      description: "UNSOUND: --type-in-type collapses type hierarchy (Girard's paradox)"}
+  ]
+
+  @isabelle_banned [
+    %{id: :isabelle_oops, severity: :high,
+      pattern: ~r/\boops\b/, cwe: "CWE-704",
+      description: "Isabelle oops — intentionally incomplete proof"}
+  ]
+
+  @hol4_banned [
+    %{id: :hol4_mk_thm, severity: :critical,
+      pattern: ~r/\bmk_thm\b/, cwe: "CWE-704",
+      description: "UNSOUND: mk_thm bypasses HOL4 kernel entirely"}
+  ]
+
+  @zig_patterns [
+    %{id: :zig_ptr_cast, severity: :high,
+      pattern: ~r/@ptrCast/, cwe: "CWE-704",
+      description: "Zig @ptrCast performs unchecked pointer type conversion"},
+    %{id: :zig_align_cast, severity: :high,
+      pattern: ~r/@alignCast/, cwe: "CWE-704",
+      description: "Zig @alignCast performs unchecked alignment cast"},
+    %{id: :zig_int_to_ptr, severity: :high,
+      pattern: ~r/@intToPtr/, cwe: "CWE-676",
+      description: "Zig @intToPtr converts integer to pointer without safety checks"},
+    %{id: :zig_bit_cast, severity: :medium,
+      pattern: ~r/@bitCast/, cwe: "CWE-704",
+      description: "Zig @bitCast reinterprets bits without type checking"},
+    %{id: :zig_ptr_to_int, severity: :medium,
+      pattern: ~r/@ptrToInt/, cwe: "CWE-676",
+      description: "Zig @ptrToInt exposes raw pointer address"}
+  ]
+
+  @fstar_banned [
+    %{id: :fstar_admit, severity: :critical,
+      pattern: ~r/\badmit\b/, cwe: "CWE-704",
+      description: "F* admit accepts goal without proof"},
+    %{id: :fstar_assume, severity: :critical,
+      pattern: ~r/\bassume\b/, cwe: "CWE-704",
+      description: "F* assume introduces unverified assumption"}
+  ]
+
+  @ada_spark_patterns [
+    %{id: :ada_pragma_suppress, severity: :high,
+      pattern: ~r/pragma\s+Suppress/, cwe: "CWE-704",
+      description: "Ada pragma Suppress disables runtime checks"},
+    %{id: :ada_unchecked_conversion, severity: :high,
+      pattern: ~r/Unchecked_Conversion/, cwe: "CWE-704",
+      description: "Ada Unchecked_Conversion bypasses type safety"},
+    %{id: :ada_unchecked_deallocation, severity: :high,
+      pattern: ~r/Unchecked_Deallocation/, cwe: "CWE-401",
+      description: "Ada Unchecked_Deallocation manual memory management"},
+    %{id: :ada_unchecked_access, severity: :high,
+      pattern: ~r/Unchecked_Access/, cwe: "CWE-676",
+      description: "Ada Unchecked_Access bypasses accessibility checks"}
   ]
 
   # ---------------------------------------------------------------------------
@@ -209,6 +311,13 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language("ocaml"), do: @ocaml_banned
   def patterns_for_language("coq"), do: @coq_banned
   def patterns_for_language("lean"), do: @lean_banned
+  def patterns_for_language("agda"), do: @agda_banned
+  def patterns_for_language("isabelle"), do: @isabelle_banned
+  def patterns_for_language("hol4"), do: @hol4_banned
+  def patterns_for_language("zig"), do: @zig_patterns
+  def patterns_for_language("fstar"), do: @fstar_banned
+  def patterns_for_language("ada"), do: @ada_spark_patterns
+  def patterns_for_language("spark"), do: @ada_spark_patterns
   def patterns_for_language("nickel"), do: @nickel_patterns
   def patterns_for_language("elixir"), do: @elixir_patterns
   def patterns_for_language("javascript"), do: @javascript_patterns
