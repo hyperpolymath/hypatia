@@ -22,7 +22,14 @@
 set -euo pipefail
 
 HYPATIA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ESCRIPT="${HYPATIA_DIR}/hypatia"
+# Check for hypatia-v2 first (legacy name from workflow mv), then hypatia (mix escript.build output)
+if [[ -x "${HYPATIA_DIR}/hypatia-v2" ]]; then
+    ESCRIPT="${HYPATIA_DIR}/hypatia-v2"
+elif [[ -x "${HYPATIA_DIR}/hypatia" ]]; then
+    ESCRIPT="${HYPATIA_DIR}/hypatia"
+else
+    ESCRIPT="${HYPATIA_DIR}/hypatia"
+fi
 BASH_FALLBACK="${HYPATIA_DIR}/hypatia-cli-bash.sh"
 
 # ─── Build escript if missing ───────────────────────────────────────────

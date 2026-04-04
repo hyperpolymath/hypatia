@@ -11,6 +11,7 @@
   "confidence": 0.95,
   "auto_fixable": true,
   "fix_script": "fix-license-file.sh",
+  "exclude_repos": ["game-server-admin", "idaptik", "airborne-submarine-squadron"],
   "action": "create_file",
   "match": "Missing LICENSE file",
   "replacement": "PMPL-1.0-or-later LICENSE file",

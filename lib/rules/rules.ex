@@ -384,4 +384,17 @@ defmodule Hypatia.Rules do
   end
 
   defp extract_repo_name(_), do: nil
+
+  @doc """
+  Run repo-level dogfooding compliance checks (HYP-DOG-001 through HYP-DOG-010).
+
+  Unlike `scan_file/3` which checks individual files, this checks the repo
+  as a whole for dogfooding compliance — template placeholders, Groove presence,
+  VeriSimDB wiring, stale tool names, etc.
+
+  Returns a list of findings in the standard format.
+  """
+  def scan_repo_dogfooding(repo_path) when is_binary(repo_path) do
+    Hypatia.Rules.Dogfooding.check(repo_path)
+  end
 end

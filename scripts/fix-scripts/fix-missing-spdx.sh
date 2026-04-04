@@ -52,8 +52,10 @@ fix_file() {
 
   # Fix 1: Replace AGPL-3.0 with PMPL-1.0-or-later
   if grep -q "AGPL-3.0" "$file" 2>/dev/null; then
-    # Don't fix files in IDApTIK (legitimately AGPL)
-    if [[ "$file" != */idaptik/* ]]; then
+    # Don't fix files in repos that legitimately use AGPL-3.0-or-later
+    if [[ "$file" != */idaptik/* ]] \
+    && [[ "$file" != */game-server-admin/* ]] \
+    && [[ "$file" != */airborne-submarine-squadron/* ]]; then
       sed -i 's/AGPL-3.0-or-later/PMPL-1.0-or-later/g; s/AGPL-3.0/PMPL-1.0-or-later/g' "$file"
       echo "[fix-missing-spdx] Replaced AGPL-3.0 → PMPL-1.0-or-later in ${file}"
       FIXES=$((FIXES + 1))
