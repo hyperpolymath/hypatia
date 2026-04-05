@@ -1,0 +1,197 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+defmodule Hypatia.Rules.ProofStrategySelection do
+  @moduledoc """
+  Prover-strategy selection from VeriSimDB historical outcomes.
+
+  Closes the proof learning loop: echidna writes every attempt to
+  VeriSimDB's `proof_attempts` table; the `mv_prover_success_by_class`
+  materialised view aggregates success rates per (obligation_class,
+  prover_used); this module queries that view to recommend the prover
+  most likely to succeed for a given obligation class.
+
+  Called by `Hypatia.FleetDispatcher` before dispatching a
+  :proof_obligation finding, so echidnabot can be hinted toward the
+  historically-best prover rather than defaulting to Lean.
+
+  Data flow:
+
+      echidna attempt → verisim-api POST /api/v1/proof_attempts
+                      → ClickHouse proof_attempts table
+                      → mv_prover_success_by_class (auto-maintained)
+                      → GET /api/v1/proof_attempts/strategy?class=X
+                      → this module's recommend/2
+                      → fleet_dispatcher routes with prover hint
+                      → echidnabot runs recommended prover first
+
+  Graceful degradation: if VeriSimDB is unreachable, `recommend/2`
+  returns `{:error, reason}`. The caller should fall back to the
+  configured default prover rather than failing the dispatch.
+
+  Rule IDs: PS001-PS010
+  """
+
+  require Logger
+
+  @default_limit 5
+  @default_timeout_ms 5_000
+  @verisim_url_env "HYPATIA_VERISIMDB_URL"
+  @default_verisim_url "http://localhost:8080"
+
+  @doc """
+  PS001: Recommend provers for a given obligation class.
+
+  Returns `{:ok, recommendations}` where recommendations is a list of
+  maps:
+
+      [
+        %{
+          "prover" => "coq",
+          "success_rate" => 0.95,
+          "avg_duration_ms" => 4521,
+          "total_attempts" => 20
+        },
+        ...
+      ]
+
+  Options:
+    - `:limit` (default 5) — maximum recommendations to return
+    - `:timeout` (default 5000ms) — HTTP request timeout
+    - `:base_url` — override VeriSimDB URL (else HYPATIA_VERISIMDB_URL env or default)
+
+  Returns `{:error, :not_configured}` if VeriSimDB URL is missing,
+  `{:error, {:http_status, code}}` on non-2xx response,
+  `{:error, {:transport, reason}}` on network failure,
+  `{:error, {:decode, reason}}` on malformed JSON.
+  """
+  def recommend(obligation_class, opts \\ []) when is_binary(obligation_class) do
+    limit = Keyword.get(opts, :limit, @default_limit)
+    timeout_ms = Keyword.get(opts, :timeout, @default_timeout_ms)
+    base_url = resolve_base_url(opts)
+
+    path = "/api/v1/proof_attempts/strategy?class=" <> uri_encode(obligation_class)
+          <> "&limit=" <> Integer.to_string(limit)
+
+    url = base_url <> path
+
+    case http_get(url, timeout_ms) do
+      {:ok, body} ->
+        case Jason.decode(body) do
+          {:ok, %{"recommendations" => recs}} when is_list(recs) ->
+            {:ok, recs}
+
+          {:ok, other} ->
+            {:error, {:decode, {:unexpected_shape, other}}}
+
+          {:error, reason} ->
+            {:error, {:decode, reason}}
+        end
+
+      {:error, {:http_status, code}} ->
+        Logger.warning("ProofStrategySelection: VeriSimDB returned #{code} for class=#{obligation_class}")
+        {:error, {:http_status, code}}
+
+      {:error, reason} ->
+        {:error, {:transport, reason}}
+    end
+  end
+
+  @doc """
+  PS002: Classify a free-text claim into an obligation class.
+
+  Heuristic keyword matcher. Returns one of the canonical classes used
+  by echidna's verisimdb_bridge and the `obligation_class` enum in the
+  proof_attempts table:
+
+    - "linearity"   — linear/affine/ownership claims
+    - "termination" — halting, totality, structural recursion
+    - "equiv"       — equivalence, behaviour preservation, bisimulation
+    - "safety"      — invariants, non-interference, memory safety
+    - "unknown"     — nothing matched
+
+  Intentionally simple: exact classification is echidna's job, this is
+  just a fast-path for strategy lookup.
+  """
+  def classify_obligation(claim) when is_binary(claim) do
+    lower = String.downcase(claim)
+
+    cond do
+      String.contains?(lower, ["linear", "affine", "ownership", "borrow"]) ->
+        "linearity"
+
+      String.contains?(lower, ["terminat", "halt", "total", "recursi", "well-founded"]) ->
+        "termination"
+
+      String.contains?(lower, ["equiv", "bisimul", "preserves behavior", "preserves behaviour", "refine"]) ->
+        "equiv"
+
+      String.contains?(lower, ["safe", "invariant", "non-interference", "memory-safe", "crash-free"]) ->
+        "safety"
+
+      true ->
+        "unknown"
+    end
+  end
+
+  @doc """
+  PS003: Format recommendations into a human-readable hint string.
+
+  Used when surfacing strategy recommendations in log lines, dispatch
+  manifests, and PR comments.
+  """
+  def explain_strategy([]), do: "no historical data available"
+
+  def explain_strategy([top | _] = recommendations) do
+    top_line =
+      "recommend #{Map.get(top, "prover")} " <>
+        "(#{format_pct(Map.get(top, "success_rate", 0.0))} success " <>
+        "over #{Map.get(top, "total_attempts", 0)} attempts)"
+
+    rest_line =
+      recommendations
+      |> Enum.drop(1)
+      |> Enum.take(2)
+      |> Enum.map(fn r ->
+        "#{Map.get(r, "prover")}:#{format_pct(Map.get(r, "success_rate", 0.0))}"
+      end)
+      |> case do
+        [] -> ""
+        others -> "; fallbacks: " <> Enum.join(others, ", ")
+      end
+
+    top_line <> rest_line
+  end
+
+  # ─── internals ──────────────────────────────────────────────────────
+
+  defp resolve_base_url(opts) do
+    case Keyword.get(opts, :base_url) do
+      nil -> System.get_env(@verisim_url_env) || @default_verisim_url
+      url -> url
+    end
+  end
+
+  defp http_get(url, timeout_ms) do
+    request = {String.to_charlist(url), [{~c"accept", ~c"application/json"}]}
+
+    case :httpc.request(:get, request, [{:timeout, timeout_ms}], []) do
+      {:ok, {{_version, status, _reason}, _headers, body}} when status in 200..299 ->
+        {:ok, List.to_string(body)}
+
+      {:ok, {{_version, status, _reason}, _headers, _body}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp uri_encode(s) when is_binary(s), do: URI.encode_www_form(s)
+
+  defp format_pct(rate) when is_float(rate) do
+    :erlang.float_to_binary(rate * 100.0, [{:decimals, 1}]) <> "%"
+  end
+
+  defp format_pct(_), do: "?%"
+end

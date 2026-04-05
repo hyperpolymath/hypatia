@@ -486,6 +486,7 @@ defmodule Hypatia.Rules.Dogfooding do
       "verisimdb" => 8080,
       "gitbot-fleet" => 8080,
       "echidna" => 9000,
+      "echidnabot" => 9001,
       "hypatia" => 9090
     }
     |> Map.get(service_id)

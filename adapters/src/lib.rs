@@ -59,7 +59,7 @@ pub use forge::{
     Severity, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun,
     WorkflowState,
 };
-pub use service::{ForgeService, ServiceHealth, SyncResult};
+pub use service::{ServiceHealth, SyncResult};
 
 // Re-export adapters for convenient access
 pub use bitbucket::BitbucketAdapter;

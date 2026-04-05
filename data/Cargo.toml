@@ -28,8 +28,6 @@ deadpool-redis = "0.23"
 # Connection pooling
 bb8 = "0.9"
 
-# Serialization
-bincode = "3.0"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }

@@ -1,23 +1,37 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! VeriSimDB client for cicd-hyper-a multimodal database federation
+//! VeriSimDB client for hypatia.
+//!
+//! **Status:** Minimal stub retained only for `DataLayer::health_check`.
+//!
+//! History: this module previously exposed an ArangoDB-shaped document API
+//! (upsert_document, query_documents, apply_fix, create_hexad, etc.) whose
+//! endpoints never existed in VeriSimDB. ArangoDB was removed (see
+//! `data/src/lib.rs:9`) and its API never replaced. The document methods
+//! were never called from production code — `ForgeService` was the only
+//! consumer and was never instantiated. They have been deleted.
+//!
+//! When hypatia's Rust layer needs to call VeriSimDB, use the shared Zig
+//! client at `verisimdb/connectors/clients/zig/` via FFI. See H1a.
 
 use crate::error::{DataError, Result};
-use crate::models::HexadDoc;
 use crate::VerisimConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::info;
 
-/// VeriSimDB client with federation management
+/// Minimal VeriSimDB client.
+///
+/// Tracks connection state. Only `ping()` does anything beyond bookkeeping.
 pub struct VerisimClient {
     connected: Arc<RwLock<bool>>,
-    url: String, // Store URL if needed for future operations
+    #[allow(dead_code)]
+    url: String,
 }
 
 impl VerisimClient {
-    /// Create new VeriSimDB client
+    /// Create a new VeriSimDB client and mark it connected.
     pub async fn new(config: VerisimConfig) -> Result<Self> {
-        info!("Connecting to VeriSimDB at {}", config.url);
+        info!("Initialising VeriSimDB client for {}", config.url);
 
         let client = Self {
             connected: Arc::new(RwLock::new(false)),
@@ -25,130 +39,30 @@ impl VerisimClient {
         };
 
         client.connect().await?;
-
         Ok(client)
     }
 
-    /// Connect to VeriSimDB
+    /// Mark the client as connected. No transport is established here.
     async fn connect(&self) -> Result<()> {
-        // In production: establish connection pool and verify auth
         let mut connected = self.connected.write().await;
         *connected = true;
-        info!("Connected to VeriSimDB federation node");
         Ok(())
     }
 
-    /// Ping the federation node
+    /// Health check. Returns Ok(()) if the client is in the connected state.
+    ///
+    /// This currently does NOT make a real HTTP request to VeriSimDB. It
+    /// only checks the in-memory connected flag. A real ping will land when
+    /// H1a wires this to the Zig VeriSimDB client via FFI.
     pub async fn ping(&self) -> Result<()> {
         let connected = self.connected.read().await;
         if *connected {
-            // In production: make actual HTTP GET request to self.url/health
             Ok(())
         } else {
             Err(DataError::ConnectionError(
                 "Not connected to VeriSimDB".into(),
             ))
         }
-    }
-
-    // ============================================================
-    // GENERIC DOCUMENT OPERATIONS (ArangoDB-compatible API surface)
-    // ============================================================
-
-    /// Upsert a document into a named collection.
-    /// Maps to VeriSimDB's document modality (HTTP PUT /api/v1/documents/{collection}/{key}).
-    pub async fn upsert_document<T: serde::Serialize>(&self, collection: &str, doc: &T) -> Result<()> {
-        debug!("Upserting document in collection: {}", collection);
-        // In production: HTTP PUT to self.url/api/v1/documents/{collection}
-        let _json = serde_json::to_string(doc)?;
-        Ok(())
-    }
-
-    /// Query documents using VQL (or AQL-compatible subset).
-    /// Maps to VeriSimDB's query endpoint (HTTP POST /api/v1/vql/execute).
-    pub async fn query_documents<T: serde::de::DeserializeOwned>(&self, _query: &str) -> Result<Vec<T>> {
-        debug!("Executing VQL query");
-        // In production: HTTP POST to self.url/api/v1/vql/execute
-        Ok(vec![])
-    }
-
-    /// Apply a fix record (alert + rule + confidence).
-    /// Maps to VeriSimDB's document modality with temporal versioning.
-    pub async fn apply_fix(&self, alert_key: &str, rule_key: &str, confidence: f64) -> Result<()> {
-        debug!("Recording fix: alert={}, rule={}, confidence={}", alert_key, rule_key, confidence);
-        // In production: HTTP POST to self.url/api/v1/documents/fixes
-        Ok(())
-    }
-
-    // ============================================================
-    // HEXAD OPERATIONS (Multimodal)
-    // ============================================================
-
-    /// Create a new Hexad in VeriSimDB
-    pub async fn create_hexad(&self, hexad: &HexadDoc) -> Result<String> {
-        debug!("Creating Hexad: {}", hexad.hexad_id);
-        // In production: HTTP POST to self.url/api/v1/hexads
-        // For now, we simulate success
-        Ok(hexad.hexad_id.clone())
-    }
-
-    /// Register a Hexad in the global registry
-    pub async fn register_hexad(&self, id: &str, modalities: Vec<&str>) -> Result<()> {
-        debug!(
-            "Registering Hexad {} at {} with modalities {:?}",
-            id, format!("{:?}", modalities), self.url
-
-
-
-
-
-
-
-
-
-        );
-        // In production: HTTP POST to self.url/api/v1/registry/hexads
-        Ok(())
-    }
-
-    /// Get Hexad by ID (Federated search)
-    pub async fn get_hexad(&self, id: &str) -> Result<HexadDoc> {
-        debug!("Fetching Hexad: {}", id);
-        // In production: HTTP GET to /api/v1/federation/search?hexad_id=...
-        Err(DataError::NotFound(format!("Hexad {}", id)))
-    }
-
-    /// Verify a ZKP witness for a Hexad
-    pub async fn verify_proof(&self, id: &str, contract: &str, _witness: &str) -> Result<bool> {
-        debug!("Verifying proof for {} via {} contract", id, contract);
-        // In production: HTTP POST to /api/v1/verify/zkp
-        Ok(true)
-    }
-
-    // ============================================================
-    // MODALITY SPECIFIC
-    // ============================================================
-
-    /// Add a semantic proof to a Hexad
-    pub async fn add_semantic_proof(
-        &self,
-        id: &str,
-        proof_blob: &[u8],
-        contract: &str,
-    ) -> Result<()> {
-        debug!(
-            "Adding semantic proof to {} (size: {} bytes) for contract {}",
-            id,
-            proof_blob.len(),
-            contract
-        );
-        Ok(())
-    }
-
-    /// Get temporal version history for a Hexad
-    pub async fn get_version_history(&self, id: &str) -> Result<Vec<serde_json::Value>> {
-        debug!("Getting version history for {}", id);
-        Ok(vec![])
     }
 }
 

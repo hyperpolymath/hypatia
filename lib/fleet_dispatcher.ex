@@ -211,20 +211,98 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp dispatch_to_echidnabot(finding) do
-    mutation = """
+    # Closes the proof learning loop: classify this obligation, ask VeriSimDB
+    # which prover has historically worked best on that class, and pass the
+    # recommendation as a hint to echidnabot so it runs the winning prover
+    # first instead of always defaulting to Lean.
+    #
+    # If VeriSimDB is unreachable or has no data for this class, dispatch
+    # proceeds without a prover hint (echidnabot falls back to Lean default).
+    claim = finding_field(finding, :claim, "")
+    context = finding_field(finding, :context, "")
+    obligation_class = Hypatia.Rules.ProofStrategySelection.classify_obligation(claim)
+
+    prover_hint = lookup_prover_hint(obligation_class)
+
+    mutation = build_proof_obligation_mutation(
+      finding_field(finding, :repo),
+      claim,
+      context,
+      prover_hint
+    )
+
+    execute_graphql(mutation, "echidnabot")
+  end
+
+  # Look up the historically-best prover for an obligation class from
+  # VeriSimDB's proof_attempts MV. Returns the lowercase prover name
+  # (e.g. "coq") or nil if no data / VeriSimDB unreachable.
+  defp lookup_prover_hint(obligation_class) do
+    case Hypatia.Rules.ProofStrategySelection.recommend(obligation_class, limit: 3) do
+      {:ok, [top | _]} ->
+        prover = Map.get(top, "prover")
+        explanation = Hypatia.Rules.ProofStrategySelection.explain_strategy([top])
+        Logger.info("echidnabot strategy (#{obligation_class}): #{explanation}")
+        prover
+
+      {:ok, []} ->
+        Logger.debug("echidnabot strategy (#{obligation_class}): no historical data")
+        nil
+
+      {:error, reason} ->
+        Logger.debug("echidnabot strategy lookup failed (#{obligation_class}): #{inspect(reason)}")
+        nil
+    end
+  end
+
+  # Build the submitProofObligation mutation using the input-object syntax
+  # that ProofObligationInput expects. The prover field is omitted when
+  # prover_hint is nil OR the hint names a prover echidnabot's GraphQL
+  # schema doesn't know about (VeriSimDB tracks more provers than echidnabot
+  # currently exposes). In either case echidnabot uses its own default.
+  defp build_proof_obligation_mutation(repo, claim, context, prover_hint) do
+    prover_line =
+      case normalise_prover_hint(prover_hint) do
+        nil -> ""
+        enum_value -> "        prover: #{enum_value},\n"
+      end
+
+    """
     mutation {
-      submitProofObligation(
-        repo: "#{finding_field(finding, :repo)}",
-        claim: "#{escape_quotes(finding_field(finding, :claim, ""))}",
-        context: "#{escape_quotes(finding_field(finding, :context, ""))}"
-      ) {
+      submitProofObligation(input: {
+        repo: "#{repo}",
+        claim: "#{escape_quotes(claim)}",
+        context: "#{escape_quotes(context)}",
+    #{prover_line}  }) {
         success
         proofId
       }
     }
     """
+  end
 
-    execute_graphql(mutation, "echidnabot")
+  # Map a VeriSimDB prover string to echidnabot's GraphQL ProverKind enum
+  # variant name. Returns nil for provers echidnabot doesn't expose (idris2,
+  # fstar, altergo, dafny, why3, tlaps, vampire, eprover, other) — caller
+  # falls back to echidnabot's own default (Lean).
+  defp normalise_prover_hint(nil), do: nil
+
+  defp normalise_prover_hint(hint) when is_binary(hint) do
+    case hint do
+      "coq" -> "COQ"
+      "lean" -> "LEAN"
+      "agda" -> "AGDA"
+      "isabelle" -> "ISABELLE"
+      "z3" -> "Z3"
+      "cvc5" -> "CVC5"
+      "metamath" -> "METAMATH"
+      "hol_light" -> "HOL_LIGHT"
+      "mizar" -> "MIZAR"
+      "pvs" -> "PVS"
+      "acl2" -> "ACL2"
+      "hol4" -> "HOL4"
+      _ -> nil
+    end
   end
 
   defp dispatch_to_rhodibot(finding) do
@@ -503,15 +581,24 @@ defmodule Hypatia.FleetDispatcher do
         Logger.error("Failed to write dispatch manifest: #{inspect(reason)}")
     end
 
-    # 2. Attempt HTTP dispatch to fleet API (graceful degradation if unavailable)
-    fleet_url = System.get_env("HYPATIA_FLEET_URL")
+    # 2. Attempt HTTP dispatch (graceful degradation if unavailable).
+    #
+    # URL resolution precedence:
+    #   a. HYPATIA_{BOT}_URL      → POST {url}/graphql directly (per-bot override)
+    #   b. HYPATIA_FLEET_URL      → POST {url}/dispatch/{bot_name} (fleet coordinator)
+    #   c. (neither set)          → file-only dispatch
+    #
+    # Per-bot URLs are preferred: they let hypatia talk directly to each bot's
+    # GraphQL endpoint instead of routing through a fleet coordinator that may
+    # not exist. The fleet-coordinator path is kept as a fallback for
+    # deployments that front multiple bots behind one dispatcher.
+    {target_url, description, body} = resolve_dispatch_url(bot_name, query)
 
-    if fleet_url do
+    if target_url do
       try do
-        # Use Finch if available, otherwise fall back to file-only dispatch
-        case http_post(fleet_url <> "/dispatch/#{bot_name}", query) do
+        case http_post(target_url, body) do
           {:ok, _response} ->
-            Logger.info("Live dispatch to #{bot_name} succeeded")
+            Logger.info("Live dispatch to #{bot_name} succeeded (#{description})")
             {:ok, :dispatched}
 
           {:error, reason} ->
@@ -524,8 +611,34 @@ defmodule Hypatia.FleetDispatcher do
           {:ok, :file_dispatched}
       end
     else
-      Logger.info("Dispatched to #{bot_name} via manifest (no fleet URL configured)")
+      Logger.info("Dispatched to #{bot_name} via manifest (no URL configured)")
       {:ok, :file_dispatched}
+    end
+  end
+
+  # Resolve the HTTP dispatch target for a bot.
+  # Returns {url, description, body} on success, {nil, _, _} when no URL configured.
+  #
+  # - Per-bot URLs hit the bot's own GraphQL endpoint, so we wrap the query in
+  #   a GraphQL-over-HTTP JSON envelope: {"query": "..."}.
+  # - Fleet-coordinator URLs hit /dispatch/{bot_name} with the raw query as
+  #   body, preserving legacy fleet-coordinator semantics.
+  defp resolve_dispatch_url(bot_name, query) do
+    per_bot_env = "HYPATIA_" <> String.upcase(bot_name) <> "_URL"
+
+    case System.get_env(per_bot_env) do
+      nil ->
+        case System.get_env("HYPATIA_FLEET_URL") do
+          nil ->
+            {nil, :none, nil}
+
+          fleet_url ->
+            {fleet_url <> "/dispatch/" <> bot_name, "via fleet coordinator", query}
+        end
+
+      bot_url ->
+        envelope = Jason.encode!(%{"query" => query})
+        {bot_url <> "/graphql", "via per-bot URL #{per_bot_env}", envelope}
     end
   end
 
