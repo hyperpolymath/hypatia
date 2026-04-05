@@ -5,7 +5,7 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-03-15"
+last-updated = "2026-04-05"
 status = "active"
 
 [project-context]
@@ -14,6 +14,19 @@ completion-percentage = 0
 phase = "In development"
 
 [session-history]
+# 2026-04-05: V4e + V4f + ProverRecommender landed. recommend_with_certs/2
+#             enriches strategy output with PROVEN/PENDING from the new
+#             /certificates endpoint and re-sorts (cert-status primary key).
+#             Hypatia.VCL.ProofResolver parses PROOF PROVEN(class, prover)
+#             and PROOF SANCTIFY(class) expressions and resolves them via
+#             /api/v1/proof_attempts/certificates. Hypatia.Neural.ProverRecommender
+#             trains 1 global + 8 per-class RBF networks on 1108 samples from
+#             verisim-api (unfolded from strategy aggregates). Verified live:
+#             safety/cvc5 pred=0.535 matches real 1.0×42 rate.
+# 2026-04-05: VQL → VCL + verisimdb → verisim rename (ecosystem-wide).
+#             HYPATIA_VERISIMDB_URL env var → HYPATIA_VERISIM_URL.
+#             VerisimdbConnector → VerisimConnector. lib/vql/ → lib/vcl/.
+#             141 files renamed, mix compile passes.
 # 2026-04-05: Proof learning loop closed — fleet_dispatcher routes per-bot via
 #             GraphQL envelope, classifies obligation, fetches strategy from
 #             verisim-api/proof_attempts/strategy, passes prover hint in

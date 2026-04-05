@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+= Hypatia Changelog
+:toc: left
+:toclevels: 2
+
+All notable changes to Hypatia are documented here. This project uses
+https://semver.org/[Semantic Versioning].
+
+== [Unreleased]
+
+=== Changed
+
+==== VQL → VCL + verisimdb → verisim Rename (2026-04-05)
+
+Matches the ecosystem-wide rename landed in Verisim on the same day.
+
+- `HYPATIA_VERISIMDB_URL` env var → `HYPATIA_VERISIM_URL`.
+- `VerisimdbConnector` Elixir module → `VerisimConnector`.
+- `lib/vql/` directory → `lib/vcl/`.
+- `data/verisimdb/` → `data/verisim/`.
+- VCL query layer now reads from `verisim-data` (git-backed flat-file
+  store) using VCL statements instead of VQL queries.
+- 141 files, 492 lines renamed; `mix compile` + live integration with
+  verisim-api verified.
+
+=== Added
+
+==== V4f: PROOF PROVEN / SANCTIFY Resolver (2026-04-05)
+
+`Hypatia.VCL.ProofResolver` (lib/vcl/proof_resolver.ex) parses
+`PROOF PROVEN(class, prover)` and `PROOF SANCTIFY(class)` expressions
+inside VCL statements and resolves them against Verisim's
+`/api/v1/proof_attempts/certificates` endpoint. Supports quoted and
+unquoted identifiers. Returns structured resolutions:
+
+  {:proven,     "proven",     cert_id, success_rate, total_attempts}
+  {:sanctified, "sanctified", cert_id, proven_provers, combined_attempts}
+  {:pending,    cert_type,    "no data for ..."}
+
+Also provides `resolve_all/1` which scans a VCL statement for every
+PROVEN/SANCTIFY clause — suitable for the VCL executor's proof-obligation
+pass.
+
+Other proof types (EXISTENCE/INTEGRITY/PROVENANCE/CITATION/ACCESS/CUSTOM/
+ZKP) continue to route through the existing proven_bridge pipeline.
+
+==== V4e: Certified-Pair Preference in Strategy Rule (2026-04-05)
+
+`Hypatia.Rules.ProofStrategySelection.recommend_with_certs/2` enriches
+strategy output with PROVEN/PENDING status from
+`/api/v1/proof_attempts/certificates` and re-sorts so PROVEN pairs
+surface above uncertified ones at equal success rate.
+
+Sort order: `cert_status` (proven > pending), then `success_rate`
+(descending), then `avg_duration_ms` (ascending).
+
+Graceful degradation: if the certs endpoint is unreachable, falls
+through to plain `recommend/2` behaviour.
+
+==== Hypatia.Neural.ProverRecommender — RBF from Live proof_attempts (2026-04-05)
+
+First Hypatia neural module that consumes *real* post-V4 training data
+instead of synthetic fixtures or findings. Trains a per-class RBF network
+plus a global fallback on ~1000 samples fetched from verisim-api
+(unfolded from `/strategy` aggregates since a row-level GET endpoint is
+not yet implemented). Recommends provers for new obligations with
+predicted success rate and confidence.
+
+Feature vector (6-dim): `[class_score, prover_score, claim_length,
+confidence, log_duration, retry_flag]`.
+Target mapping: success→1.0, failure→0.0, timeout→0.25, unknown→0.5.
+
+Live verification against 7 PROVEN certificates:
+  safety/cvc5       pred=0.535 conf=0.284  (matches real 1.0×42)
+  correctness/cvc5  pred=0.574 conf=0.323  (matches real 1.0×75)
+
+Known limitations: synthetic unfolding from aggregates (row-level
+endpoint pending); k-means centres collapse on homogeneous data;
+no time-based decay.
