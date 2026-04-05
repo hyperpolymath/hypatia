@@ -14,6 +14,14 @@ completion-percentage = 0
 phase = "In development"
 
 [session-history]
+# 2026-04-05: Proof learning loop closed — fleet_dispatcher routes per-bot via
+#             GraphQL envelope, classifies obligation, fetches strategy from
+#             verisim-api/proof_attempts/strategy, passes prover hint in
+#             submitProofObligation mutation to echidnabot. New rule module
+#             proof_strategy_selection (10/10 tests). Shrunk data/verisimdb.rs
+#             stubs 165→89 LoC, deleted dead adapters/service.rs ForgeService
+#             322→26 LoC. Fixed hmac/digest conflict + bincode 3.0 breakage.
+#             Test status: 688 tests, 124 pre-existing failures (unchanged).
 # 2026-04-04: CRG C blitz — added 70 new tests across 4 files:
 #             test/e2e_pipeline_test.exs (15 tests: all 6 pipeline stages with real data)
 #             test/p2p_recipe_vql_test.exs (26 tests: RecipeMatcher/VQL invariants, property-based style)
