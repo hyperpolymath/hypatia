@@ -19,7 +19,7 @@ defmodule Hypatia.DispatchManifest do
 
   require Logger
 
-  @verisimdb_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @fix_scripts_dir Application.compile_env(:hypatia, :fix_scripts_dir, "scripts/fix-scripts")
 
   @doc """

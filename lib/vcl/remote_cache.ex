@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.RemoteCache do
+defmodule Hypatia.VCL.RemoteCache do
   @moduledoc """
-  VQL Remote Cache — git-clone-based cache for remote verisimdb-data stores.
+  VCL Remote Cache — git-clone-based cache for remote verisim-data stores.
 
-  Enables VQL multi-store federation by cloning or pulling remote verisimdb-data
+  Enables VCL multi-store federation by cloning or pulling remote verisim-data
   repositories into a local cache directory. Each remote URL maps to a unique
   subdirectory under the cache root. Clones are reused within their TTL window;
   after expiry the next access triggers a `git pull` to refresh.
 
   ## Cache Layout
 
-      /tmp/hypatia-vql-cache/
+      /tmp/hypatia-vcl-cache/
       ├── <sha256-of-url-1>/    # git clone of remote store 1
       ├── <sha256-of-url-2>/    # git clone of remote store 2
       └── ...
@@ -32,7 +32,7 @@ defmodule Hypatia.VQL.RemoteCache do
 
   require Logger
 
-  @default_cache_dir "/tmp/hypatia-vql-cache"
+  @default_cache_dir "/tmp/hypatia-vcl-cache"
   @default_ttl_seconds 300
   @ets_table :hypatia_remote_cache
   # Note: System.cmd/3 does not support :timeout in Elixir 1.19+.
@@ -43,7 +43,7 @@ defmodule Hypatia.VQL.RemoteCache do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Ensure a remote verisimdb-data repository is cached locally.
+  Ensure a remote verisim-data repository is cached locally.
 
   Clones the repository on first access, or runs `git pull` if the existing
   clone has exceeded its TTL. Returns the absolute path to the local clone
@@ -52,12 +52,12 @@ defmodule Hypatia.VQL.RemoteCache do
   ## Options
 
     * `:ttl` — time-to-live in seconds before a pull is triggered (default: 300)
-    * `:cache_dir` — override the cache root directory (default: `/tmp/hypatia-vql-cache`)
+    * `:cache_dir` — override the cache root directory (default: `/tmp/hypatia-vcl-cache`)
 
   ## Examples
 
-      {:ok, "/tmp/hypatia-vql-cache/a1b2c3..."} =
-        RemoteCache.cache_remote_store("https://github.com/org/verisimdb-data")
+      {:ok, "/tmp/hypatia-vcl-cache/a1b2c3..."} =
+        RemoteCache.cache_remote_store("https://github.com/org/verisim-data")
 
   ## Returns
 
@@ -200,7 +200,7 @@ defmodule Hypatia.VQL.RemoteCache do
     case :ets.lookup(@ets_table, url_hash) do
       [{^url_hash, %{fetched_at: fetched_at}}] when now - fetched_at < ttl ->
         # Cache hit — still within TTL.
-        Logger.debug("VQL RemoteCache: cache hit for #{url_hash} (age: #{now - fetched_at}s)")
+        Logger.debug("VCL RemoteCache: cache hit for #{url_hash} (age: #{now - fetched_at}s)")
         {:ok, local_path}
 
       _ ->
@@ -219,18 +219,18 @@ defmodule Hypatia.VQL.RemoteCache do
 
     # Use --depth 1 to minimise bandwidth and disk usage. The federation
     # layer only reads HEAD files, not history.
-    Logger.info("VQL RemoteCache: cloning #{clone_url} -> #{local_path}")
+    Logger.info("VCL RemoteCache: cloning #{clone_url} -> #{local_path}")
 
     case System.cmd("git", ["clone", "--depth", "1", "--single-branch", clone_url, local_path],
            stderr_to_stdout: true
          ) do
       {_output, 0} ->
         :ets.insert(@ets_table, {url_hash, %{fetched_at: now, path: local_path, url: clone_url}})
-        Logger.info("VQL RemoteCache: clone complete for #{url_hash}")
+        Logger.info("VCL RemoteCache: clone complete for #{url_hash}")
         {:ok, local_path}
 
       {output, code} ->
-        Logger.error("VQL RemoteCache: git clone failed (exit #{code}): #{String.trim(output)}")
+        Logger.error("VCL RemoteCache: git clone failed (exit #{code}): #{String.trim(output)}")
         # Clean up partial clone on failure.
         File.rm_rf(local_path)
         {:error, "git clone failed (exit #{code}): #{String.trim(output)}"}
@@ -239,7 +239,7 @@ defmodule Hypatia.VQL.RemoteCache do
 
   # Pull latest changes into an existing clone.
   defp pull_existing(clone_url, local_path, url_hash, now) do
-    Logger.info("VQL RemoteCache: pulling #{clone_url} in #{local_path}")
+    Logger.info("VCL RemoteCache: pulling #{clone_url} in #{local_path}")
 
     case System.cmd("git", ["pull", "--ff-only"],
            cd: local_path,
@@ -247,14 +247,14 @@ defmodule Hypatia.VQL.RemoteCache do
          ) do
       {_output, 0} ->
         :ets.insert(@ets_table, {url_hash, %{fetched_at: now, path: local_path, url: clone_url}})
-        Logger.info("VQL RemoteCache: pull complete for #{url_hash}")
+        Logger.info("VCL RemoteCache: pull complete for #{url_hash}")
         {:ok, local_path}
 
       {output, code} ->
         # Pull failed — the clone may be in a bad state. Log but still return
         # the path so that stale data can be queried (better than nothing).
         Logger.warning(
-          "VQL RemoteCache: git pull failed (exit #{code}): #{String.trim(output)}; using stale clone"
+          "VCL RemoteCache: git pull failed (exit #{code}): #{String.trim(output)}; using stale clone"
         )
 
         :ets.insert(@ets_table, {url_hash, %{fetched_at: now, path: local_path, url: clone_url}})
@@ -333,7 +333,7 @@ defmodule Hypatia.VQL.RemoteCache do
   @max_lock_wait_attempts 120
 
   defp wait_for_lock(lock_key, local_path, attempts) when attempts >= @max_lock_wait_attempts do
-    Logger.warning("VQL RemoteCache: lock wait timeout for #{inspect(lock_key)}, proceeding with existing data")
+    Logger.warning("VCL RemoteCache: lock wait timeout for #{inspect(lock_key)}, proceeding with existing data")
 
     if File.dir?(Path.join(local_path, ".git")) do
       {:ok, local_path}

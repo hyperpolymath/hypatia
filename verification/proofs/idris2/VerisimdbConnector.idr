@@ -22,7 +22,7 @@ import Data.String
 -- Section 1: Raw Data Representation
 ------------------------------------------------------------------------
 
-||| A raw finding as it might appear in a VeriSimDB JSON/VQL response.
+||| A raw finding as it might appear in a VeriSimDB JSON/VCL response.
 ||| Fields are Maybe because the DB schema is more flexible than our ABI.
 public export
 record RawFinding where

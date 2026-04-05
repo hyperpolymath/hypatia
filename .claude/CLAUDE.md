@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, verisimdb-data (git-backed canonical flat-file store) with VQL queries, Bayesian confidence updating, and Logtalk rules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and Logtalk rules for pattern detection.
 
 ## Architecture
 
@@ -15,17 +15,17 @@ Hypatia
 │   ├── Liquid State Machine  # Temporal anomaly detection
 │   ├── Echo State Network    # Confidence trajectory forecasting
 │   └── Radial Neural Network # Finding similarity + novelty detection
-├── VQL query layer            # Built-in parser, file executor, query cache
-├── Data layer                 # verisimdb-data (canonical flat-file store)
+├── VCL query layer            # Built-in parser, file executor, query cache
+├── Data layer                 # verisim-data (canonical flat-file store)
 ├── Safety systems             # Rate limiter, quarantine, batch rollback
-├── OTP Application           # 8 GenServers: VQL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin
+├── OTP Application           # 8 GenServers: VCL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin
 ├── Logtalk rule engine       # Error catalog, pattern detection rules
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
 ├── Zig FFI                   # C ABI bridge (7 exported functions)
 ├── Rust workspace            # adapters, cli, data, fixer, integration
 ├── Safety triangle           # Eliminate > Substitute > Control
 ├── Fleet dispatcher          # File-based + HTTP dispatch with circuit breaker
-└── Integration connectors    # verisimdb-data, panic-attack, gitbot-fleet
+└── Integration connectors    # verisim-data, panic-attack, gitbot-fleet
 ```
 
 ## Key Commands
@@ -56,7 +56,7 @@ Files in `.machine_readable/` contain structured project metadata:
 ```
 panic-attack assail (scan repos)
         | JSON results
-verisimdb-data repo (git-backed flat-file store, 292 repos scanned)
+verisim-data repo (git-backed flat-file store, 292 repos scanned)
         | read scan results
 Elixir pipeline:
   VerisimdbConnector.fetch_all_scans()
@@ -82,7 +82,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | Module | Purpose |
 |--------|---------|
 | `pattern_analyzer.ex` | Full pipeline orchestrator: scan -> patterns -> triangle -> dispatch |
-| `verisimdb_connector.ex` | VQL-powered data access with file I/O fallback |
+| `verisimdb_connector.ex` | VCL-powered data access with file I/O fallback |
 | `pattern_registry.ex` | Deduplicates findings into canonical patterns (PA001-PA020) |
 | `recipe_matcher.ex` | Fuzzy matching: fingerprinted IDs to clean recipe IDs |
 | `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
@@ -95,12 +95,12 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
 | `application.ex` | OTP Application supervisor for all GenServers |
 
-### VQL Query Layer (lib/vql/)
+### VCL Query Layer (lib/vcl/)
 
 | Module | Purpose |
 |--------|---------|
-| `client.ex` | VQL Client GenServer: parser + query cache + execution routing |
-| `file_executor.ex` | Executes VQL ASTs against verisimdb-data flat files |
+| `client.ex` | VCL Client GenServer: parser + query cache + execution routing |
+| `file_executor.ex` | Executes VCL ASTs against verisim-data flat files |
 | `query.ex` | High-level query functions: fetch_scans, cross_repo_patterns, pipeline_health |
 
 ### Neural Network Modules (lib/neural/)
@@ -118,7 +118,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 
 | Module | Purpose |
 |--------|---------|
-| `training_pipeline.ex` | ESN/RBF training from real verisimdb-data outcomes + pattern vectors |
+| `training_pipeline.ex` | ESN/RBF training from real verisim-data outcomes + pattern vectors |
 
 Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and patterns/registry.json for RBF (8-D feature vectors). Coordinator's `:force_cycle` triggers training automatically.
 
@@ -148,7 +148,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 
 ### Data Layer
 
-verisimdb-data (git-backed flat files) is the canonical data store. VQL queries execute against it directly via FileExecutor. Neural state persists to `data/verisimdb/neural-states/`. Outcomes append to `outcomes/YYYY-MM.jsonl`.
+verisim-data (git-backed flat files) is the canonical data store. VCL queries execute against it directly via FileExecutor. Neural state persists to `data/verisim/neural-states/`. Outcomes append to `outcomes/YYYY-MM.jsonl`.
 
 ### Safety Systems (lib/safety/)
 
@@ -169,7 +169,7 @@ verisimdb-data (git-backed flat files) is the canonical data store. VQL queries 
 - Re-scan verification via panic-attacker (confirms fix removed weak point)
 - PanLL data bridge: generates real-time JSON for dashboard panels
 - 3 safety systems: rate limiter, quarantine, batch rollback
-- VQL integrated: built-in parser, file executor, query cache, cross-repo analytics
+- VCL integrated: built-in parser, file executor, query cache, cross-repo analytics
 
 ### Remaining Work (M7: Production Operations)
 
@@ -180,20 +180,20 @@ verisimdb-data (git-backed flat files) is the canonical data store. VQL queries 
 
 **Important:**
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
-- Implement VQL federation executor (currently local-only)
+- Implement VCL federation executor (currently local-only)
 - Historical trend tracking across scan cycles
 - 5 new RSR compliance rules cover structural compliance (banned languages, SCM locations, required files, Containerfile naming) — distinct from PA rule recipes
-- ~~Generate summaries for NULL-summary repos in verisimdb-data~~ (DONE 2026-03-07: 295 summaries auto-generated)
+- ~~Generate summaries for NULL-summary repos in verisim-data~~ (DONE 2026-03-07: 295 summaries auto-generated)
 
 **Planned:**
 - GraphQL API as live HTTP endpoint
 - SARIF output for IDE integration
 - Chapel NIFs for compute-heavy neural operations
-- Cross-organization federation with VQL drift policies
+- Cross-organization federation with VCL drift policies
 
 ### Known Gaps
 
-1. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
+1. **VCL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
 3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
 4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script — recipes exist but no executable script

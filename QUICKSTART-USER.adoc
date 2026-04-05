@@ -6,7 +6,7 @@
 :source-highlighter: rouge
 
 Neurosymbolic CI/CD intelligence layer. Coordinates gitbot-fleet via a safety
-triangle pipeline with 5 neural networks, VQL queries, Bayesian confidence, and
+triangle pipeline with 5 neural networks, VCL queries, Bayesian confidence, and
 Logtalk pattern detection.
 
 toc::[]

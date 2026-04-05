@@ -63,7 +63,7 @@ defmodule Hypatia.Web.GroovePlug do
       neurosymbolic_scanning: %{
         type: "scanning",
         description:
-          "Neurosymbolic CI/CD intelligence with rule-based scanning and VQL integration",
+          "Neurosymbolic CI/CD intelligence with rule-based scanning and VCL integration",
         protocol: "http",
         endpoint: "/api/v1/scan",
         requires_auth: false,

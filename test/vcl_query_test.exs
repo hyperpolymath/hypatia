@@ -1,28 +1,28 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.QueryTest do
+defmodule Hypatia.VCL.QueryTest do
   @moduledoc """
-  Comprehensive tests for the VQL Query module.
+  Comprehensive tests for the VCL Query module.
 
   Tests cover all high-level query functions that replace raw file reads
-  with structured VQL queries. Includes core data access, filtered queries,
+  with structured VCL queries. Includes core data access, filtered queries,
   cross-repo analytics, and pipeline health reporting.
 
-  Uses async: false because these functions route through the VQL Client GenServer.
+  Uses async: false because these functions route through the VCL Client GenServer.
   """
 
   use ExUnit.Case, async: false
 
-  # JSONL loading via the VQL Client GenServer is slow on large data files.
+  # JSONL loading via the VCL Client GenServer is slow on large data files.
   # Allow 120s per test instead of the default 60s.
   @moduletag timeout: 120_000
 
-  alias Hypatia.VQL.Query
-  alias Hypatia.VQL.Client
+  alias Hypatia.VCL.Query
+  alias Hypatia.VCL.Client
 
   setup do
-    # Ensure the VQL Client GenServer is running. It may already be started
+    # Ensure the VCL Client GenServer is running. It may already be started
     # by the OTP Application supervisor, so we check before starting.
     case GenServer.whereis(Client) do
       nil -> start_supervised!(Client)

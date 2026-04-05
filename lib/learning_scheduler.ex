@@ -6,7 +6,7 @@ defmodule Hypatia.LearningScheduler do
   GenServer that automatically closes the feedback loop.
 
   Periodically:
-  1. Checks verisimdb-data/outcomes/ for new JSONL entries
+  1. Checks verisim-data/outcomes/ for new JSONL entries
   2. Calls OutcomeTracker.update_recipe_confidence/1 for affected recipes
   3. Checks gitbot-fleet fix-outcomes.jsonl for fleet-reported outcomes
   4. Ingests fleet outcomes back into hypatia's learning pipeline
@@ -22,11 +22,11 @@ defmodule Hypatia.LearningScheduler do
   alias Hypatia.ConfidenceAnnealing
 
   @poll_interval_ms 5 * 60 * 1_000  # 5 minutes
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
   @annealing_state_path Application.compile_env(
     :hypatia, :annealing_state_path,
-    "data/verisimdb/annealing-states"
+    "data/verisim/annealing-states"
   )
 
   # --- Client API ---
@@ -124,7 +124,7 @@ defmodule Hypatia.LearningScheduler do
     }
   end
 
-  # --- Ingest new outcomes from verisimdb-data/outcomes/*.jsonl ---
+  # --- Ingest new outcomes from verisim-data/outcomes/*.jsonl ---
 
   defp ingest_new_outcomes(last_positions) do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")

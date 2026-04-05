@@ -6,7 +6,7 @@ defmodule Hypatia.SelfDiagnostics do
   Self-diagnostics, health monitoring, and fault tolerance for Hypatia.
 
   Periodically checks:
-  - Filesystem access (verisimdb-data, gitbot-fleet, dispatch manifests)
+  - Filesystem access (verisim-data, gitbot-fleet, dispatch manifests)
   - Rule engine health (can Logtalk rules be loaded?)
   - Recipe confidence drift (recipes dropping below threshold)
   - Fleet connectivity (dispatch-runner reachable?)
@@ -15,7 +15,7 @@ defmodule Hypatia.SelfDiagnostics do
   When issues detected:
   - Logs warnings with structured diagnostics
   - Attempts auto-recovery (reconnect, clear stale locks, retry)
-  - Writes health report to verisimdb-data/health/hypatia.json
+  - Writes health report to verisim-data/health/hypatia.json
   - Degrades gracefully (continue scanning even if dispatch is down)
 
   Circuit breaker pattern:
@@ -28,7 +28,7 @@ defmodule Hypatia.SelfDiagnostics do
   require Logger
 
   @health_interval_ms 10 * 60 * 1_000  # 10 minutes
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
   @circuit_breaker_threshold 3
   @circuit_breaker_cooldown_ms 15 * 60 * 1_000  # 15 minutes

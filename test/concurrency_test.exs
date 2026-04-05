@@ -8,7 +8,7 @@
 # - TriangleRouter handles parallel routing without contention
 # - RateLimiter GenServer handles concurrent calls correctly
 # - Quarantine GenServer handles concurrent quarantine/release without crash
-# - VQL Client handles concurrent queries correctly
+# - VCL Client handles concurrent queries correctly
 
 defmodule Hypatia.Concurrency.RecipeMatcherTest do
   @moduledoc """
@@ -267,9 +267,9 @@ end
 
 defmodule Hypatia.Concurrency.VQLClientTest do
   @moduledoc """
-  Concurrency tests for VQL Client GenServer.
+  Concurrency tests for VCL Client GenServer.
 
-  VQL Client is a GenServer (serial message processing), so concurrent
+  VCL Client is a GenServer (serial message processing), so concurrent
   callers queue up. These tests verify:
   - No deadlock or crash under parallel query load
   - Query count increments correctly
@@ -278,7 +278,7 @@ defmodule Hypatia.Concurrency.VQLClientTest do
 
   use ExUnit.Case, async: false
 
-  alias Hypatia.VQL.Client
+  alias Hypatia.VCL.Client
 
   setup do
     case GenServer.whereis(Client) do
@@ -288,7 +288,7 @@ defmodule Hypatia.Concurrency.VQLClientTest do
     :ok
   end
 
-  describe "VQL Client under concurrent query load" do
+  describe "VCL Client under concurrent query load" do
     test "concurrent queries to different stores all return results" do
       queries = [
         "SELECT DOCUMENT FROM STORE scans LIMIT 3",
@@ -308,7 +308,7 @@ defmodule Hypatia.Concurrency.VQLClientTest do
 
       Enum.each(results, fn result ->
         assert match?({:ok, _}, result) or match?({:error, _}, result),
-               "Concurrent VQL query returned unexpected value: #{inspect(result)}"
+               "Concurrent VCL query returned unexpected value: #{inspect(result)}"
       end)
 
       # GenServer must still be alive

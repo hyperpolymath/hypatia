@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 
-defmodule Hypatia.VerisimdbConnectorTest do
+defmodule Hypatia.VerisimConnectorTest do
   use ExUnit.Case, async: true
 
   # JSONL and large JSON loading via Jason.Decoder is slow on big data files.
   # Allow 120s per test instead of the default 60s.
   @moduletag timeout: 120_000
 
-  alias Hypatia.VerisimdbConnector
+  alias Hypatia.VerisimConnector
 
   describe "fetch_all_scans/0" do
-    test "loads scan files from verisimdb-data/scans/" do
-      scans = VerisimdbConnector.fetch_all_scans()
+    test "loads scan files from verisim-data/scans/" do
+      scans = VerisimConnector.fetch_all_scans()
       assert is_list(scans)
       assert length(scans) >= 3
 
@@ -23,7 +23,7 @@ defmodule Hypatia.VerisimdbConnectorTest do
     end
 
     test "scan data includes weak_points" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       # At least one scan should have weak points
       has_wp = Enum.any?(scans, fn scan ->
         wp = Map.get(scan.scan, "weak_points", [])
@@ -36,7 +36,7 @@ defmodule Hypatia.VerisimdbConnectorTest do
 
   describe "fetch_pattern_registry/0" do
     test "loads pattern registry JSON" do
-      {:ok, registry} = VerisimdbConnector.fetch_pattern_registry()
+      {:ok, registry} = VerisimConnector.fetch_pattern_registry()
       assert is_map(registry)
       assert Map.has_key?(registry, "patterns")
       assert map_size(Map.get(registry, "patterns", %{})) >= 100
@@ -45,7 +45,7 @@ defmodule Hypatia.VerisimdbConnectorTest do
 
   describe "fetch_all_recipes/0" do
     test "loads recipe files" do
-      recipes = VerisimdbConnector.fetch_all_recipes()
+      recipes = VerisimConnector.fetch_all_recipes()
       assert is_list(recipes)
       assert length(recipes) >= 4
     end
@@ -53,7 +53,7 @@ defmodule Hypatia.VerisimdbConnectorTest do
 
   describe "fetch_substitutions/0" do
     test "loads proven-substitutions.json" do
-      subs = VerisimdbConnector.fetch_substitutions()
+      subs = VerisimConnector.fetch_substitutions()
       assert is_list(subs)
       assert length(subs) == 20
     end
@@ -61,7 +61,7 @@ defmodule Hypatia.VerisimdbConnectorTest do
 
   describe "fetch_index/0" do
     test "loads master index" do
-      {:ok, index} = VerisimdbConnector.fetch_index()
+      {:ok, index} = VerisimConnector.fetch_index()
       assert is_map(index)
       assert Map.has_key?(index, "total_scans")
       assert Map.has_key?(index, "repos")
@@ -84,7 +84,7 @@ defmodule Hypatia.VerisimdbConnectorTest do
         }
       }
 
-      facts = VerisimdbConnector.to_logtalk_facts(scan_data)
+      facts = VerisimConnector.to_logtalk_facts(scan_data)
       assert is_binary(facts)
       assert String.contains?(facts, "weak_point")
       assert String.contains?(facts, "test-repo")

@@ -6,7 +6,7 @@
 
 == Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks, VQL query layer, Bayesian confidence updating, and Logtalk rules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks, VCL query layer, Bayesian confidence updating, and Logtalk rules for pattern detection.
 
 == Current State (2026-03-29)
 
@@ -17,7 +17,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 * 16671 outcomes recorded (99% success rate, Bayesian confidence updating)
 * 46 recipes (0 uncovered categories), 20 OpenSSF Scorecard recipes, 5 RSR compliance rules
 * 954 canonical patterns (PA001-PA020+)
-* 295 summaries auto-generated for verisimdb-data repos
+* 295 summaries auto-generated for verisim-data repos
 
 === Architecture (OPERATIONAL)
 
@@ -31,14 +31,14 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 | Neural subsystem
 | 5 networks + coordinator GenServer: Graph of Trust (PageRank), Mixture of Experts (7 domains), Liquid State Machine (temporal anomaly), Echo State Network (trajectory forecast), Radial Neural Network (similarity/novelty)
 
-| VQL query layer
+| VCL query layer
 | Built-in parser, file executor, query cache, cross-repo analytics
 
 | Safety systems
 | Rate limiter (per-bot 50/min, global 200/min, burst 10/5s), quarantine (3 levels: soft/hard/permanent), batch rollback
 
 | OTP supervision
-| 8 GenServers: VQL, RateLimiter, Quarantine, Learning, Diagnostics, Neural, Kin, Application
+| 8 GenServers: VCL, RateLimiter, Quarantine, Learning, Diagnostics, Neural, Kin, Application
 
 | Idris2 ABI
 | Types, GraphQL, gRPC, REST endpoint definitions with dependent type proofs
@@ -53,7 +53,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 | Error catalog, pattern detection, RSR compliance rules
 
 | Data layer
-| verisimdb-data (git-backed flat-file store), neural state persistence, JSONL outcomes
+| verisim-data (git-backed flat-file store), neural state persistence, JSONL outcomes
 |===
 
 === Safety Triangle Pipeline (OPERATIONAL)
@@ -61,8 +61,8 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ```
 panic-attack assail (scan repos)
         | JSON results
-verisimdb-data (git-backed flat-file store, 302 repos)
-        | VQL queries
+verisim-data (git-backed flat-file store, 302 repos)
+        | VCL queries
 Elixir pipeline:
   PatternRegistry → TriangleRouter (Eliminate > Substitute > Control)
         |
@@ -81,8 +81,8 @@ Elixir pipeline:
 === v1.0 — Safety Triangle MVP (COMPLETE)
 
 * [x] Elixir pipeline (pattern analysis, dispatch, learning)
-* [x] verisimdb-data integration (git-backed flat-file store)
-* [x] VQL query layer (parser, file executor, query cache)
+* [x] verisim-data integration (git-backed flat-file store)
+* [x] VCL query layer (parser, file executor, query cache)
 * [x] Safety triangle routing (Eliminate > Substitute > Control)
 * [x] Fleet dispatcher (file-based + HTTP, circuit breaker)
 * [x] Confidence-gated dispatch (auto_execute >= 0.95, review 0.85-0.94, report < 0.85)
@@ -129,7 +129,7 @@ Elixir pipeline:
 === v6.0 — PanLL Data Bridge (COMPLETE)
 
 * [x] Generates real-time JSON for PanLL dashboard panels
-* [x] Cross-repo analytics via VQL
+* [x] Cross-repo analytics via VCL
 * [x] Learning scheduler (polls outcomes every 5 min)
 
 === v7.0 — Production Operations (IN PROGRESS)
@@ -143,7 +143,7 @@ Elixir pipeline:
 ==== Important
 
 * [ ] Deploy verisim-api server (enables native graph/vector/temporal modalities)
-* [ ] VQL federation executor (currently local-only)
+* [ ] VCL federation executor (currently local-only)
 * [ ] Historical trend tracking across scan cycles
 * [ ] Wire Ada TUI into Elixir supervision tree
 
@@ -152,25 +152,25 @@ Elixir pipeline:
 * [ ] GraphQL API as live HTTP endpoint
 * [ ] SARIF output for IDE integration
 * [ ] Chapel NIFs for compute-heavy neural operations
-* [ ] Cross-organization federation with VQL drift policies
+* [ ] Cross-organization federation with VCL drift policies
 
 === v8.0 — Neural Maturity (PLANNED)
 
 * [ ] Balanced training data (currently 99%+ success — needs failure data)
 * [ ] Neural state persistence to disk (coordinator has state dir but not yet persisting)
 * [ ] GNN + VAE + Seq models for 007 trace integration (per blackboard architecture plan)
-* [ ] Prover Wars integration (dodeca-API, VeriSimDB, ABI, VQL-UT)
+* [ ] Prover Wars integration (dodeca-API, VeriSimDB, ABI, VCL-UT)
 
 === v9.0 — Ecosystem Scale (PLANNED)
 
 * [ ] verisim-api deployment (full graph/vector/temporal modalities)
-* [ ] Multi-store VQL federation
+* [ ] Multi-store VCL federation
 * [ ] Cross-ecosystem interoperability
 * [ ] Chainguard base images for SWI-Prolog and Haskell containers
 
 == Known Gaps
 
-1. **VQL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
+1. **VCL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal via flat files only
 3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
 4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script

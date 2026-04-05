@@ -4,14 +4,14 @@ defmodule Hypatia.PatternRegistry do
   @moduledoc """
   Deduplicates findings into canonical patterns and tracks them across repos.
 
-  Reads and writes to verisimdb-data/patterns/registry.json.
+  Reads and writes to verisim-data/patterns/registry.json.
   Groups scan weak_points by (category, description_fingerprint),
   assigns pattern IDs, tracks occurrence counts, and detects trends.
   """
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   @pa_rule_map %{
     "UncheckedAllocation" => "PA001",
@@ -50,7 +50,7 @@ defmodule Hypatia.PatternRegistry do
   @doc """
   Build/update the pattern registry from scan data.
 
-  Takes a list of scan results (from VerisimdbConnector.fetch_all_scans/0)
+  Takes a list of scan results (from VerisimConnector.fetch_all_scans/0)
   and groups weak_points into canonical patterns tracked in registry.json.
   """
   def sync_from_scans(scans) do

@@ -25,7 +25,7 @@ defmodule Hypatia.RecipeGenerator do
 
   alias Hypatia.RecipeMatcher
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   @doc """
   Scan the pattern registry for categories with no matching recipe.

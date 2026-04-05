@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.Client do
+defmodule Hypatia.VCL.Client do
   @moduledoc """
-  VQL Client for Hypatia.
+  VCL Client for Hypatia.
 
-  Provides VQL query parsing and execution against verisimdb-data flat files.
+  Provides VCL query parsing and execution against verisim-data flat files.
   Uses a built-in Elixir parser derived from VeriSim's VQLBridge, so no external
   Deno/Node process needed.
 
   ## Architecture
 
-      VQL String ──► Client.parse/1 (built-in Elixir parser)
+      VCL String ──► Client.parse/1 (built-in Elixir parser)
                         │
                         ▼
                      Parsed AST
@@ -25,11 +25,11 @@ defmodule Hypatia.VQL.Client do
 
   ## Usage
 
-      {:ok, ast} = Hypatia.VQL.Client.parse("SELECT DOCUMENT FROM STORE scans LIMIT 10")
-      {:ok, results} = Hypatia.VQL.Client.execute(ast)
+      {:ok, ast} = Hypatia.VCL.Client.parse("SELECT DOCUMENT FROM STORE scans LIMIT 10")
+      {:ok, results} = Hypatia.VCL.Client.execute(ast)
 
       # Or combined:
-      {:ok, results} = Hypatia.VQL.Client.query("SELECT DOCUMENT FROM STORE scans")
+      {:ok, results} = Hypatia.VCL.Client.query("SELECT DOCUMENT FROM STORE scans")
   """
 
   use GenServer
@@ -45,17 +45,17 @@ defmodule Hypatia.VQL.Client do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Parse a VQL query string into an AST."
+  @doc "Parse a VCL query string into an AST."
   def parse(query_string) do
     GenServer.call(__MODULE__, {:parse, query_string}, @default_timeout)
   end
 
-  @doc "Execute a pre-parsed VQL AST."
+  @doc "Execute a pre-parsed VCL AST."
   def execute(ast, opts \\ []) do
     GenServer.call(__MODULE__, {:execute, ast, opts}, @default_timeout)
   end
 
-  @doc "Parse and execute a VQL query in one call."
+  @doc "Parse and execute a VCL query in one call."
   def query(query_string, opts \\ []) do
     GenServer.call(__MODULE__, {:query, query_string, opts}, @default_timeout)
   end
@@ -78,7 +78,7 @@ defmodule Hypatia.VQL.Client do
       last_cache_clean: System.monotonic_time(:millisecond)
     }
 
-    Logger.info("VQL Client initialized (built-in Elixir parser)")
+    Logger.info("VCL Client initialized (built-in Elixir parser)")
     {:ok, state}
   end
 
@@ -90,7 +90,7 @@ defmodule Hypatia.VQL.Client do
 
   @impl true
   def handle_call({:execute, ast, opts}, _from, state) do
-    result = Hypatia.VQL.FileExecutor.execute(ast, opts)
+    result = Hypatia.VCL.FileExecutor.execute(ast, opts)
     {:reply, result, %{state | query_count: state.query_count + 1}}
   end
 
@@ -107,7 +107,7 @@ defmodule Hypatia.VQL.Client do
       _ ->
         result =
           with {:ok, ast} <- parse_vql(query_string) do
-            Hypatia.VQL.FileExecutor.execute(ast, opts)
+            Hypatia.VCL.FileExecutor.execute(ast, opts)
           end
 
         cache = maybe_clean_cache(state.cache, now, state.last_cache_clean, state.cache_ttl)
@@ -131,7 +131,7 @@ defmodule Hypatia.VQL.Client do
   end
 
   # ---------------------------------------------------------------------------
-  # Built-in VQL Parser (derived from VeriSim.Query.VQLBridge)
+  # Built-in VCL Parser (derived from VeriSim.Query.VQLBridge)
   # ---------------------------------------------------------------------------
 
   defp parse_vql(query_string) do
@@ -228,19 +228,19 @@ defmodule Hypatia.VQL.Client do
     {:ok, {:store, normalize_token(store_id)}, rest}
   end
 
-  # FROM FEDERATION REMOTE "https://github.com/org/verisimdb-data"
+  # FROM FEDERATION REMOTE "https://github.com/org/verisim-data"
   # Clones the remote repo via RemoteCache, then federates across all stores.
   defp parse_from(["FROM", "FEDERATION", "REMOTE", url | rest]) do
     {:ok, {:remote, normalize_token(url)}, rest}
   end
 
-  # FROM REMOTE "https://github.com/org/verisimdb-data" STORE scans
+  # FROM REMOTE "https://github.com/org/verisim-data" STORE scans
   # Clones the remote repo, then queries a specific store within it.
   defp parse_from(["FROM", "REMOTE", url, "STORE", store_id | rest]) do
     {:ok, {:remote, normalize_token(url), {:store, normalize_token(store_id)}}, rest}
   end
 
-  # FROM REMOTE "https://github.com/org/verisimdb-data"
+  # FROM REMOTE "https://github.com/org/verisim-data"
   # Bare remote — federates across all stores in the clone.
   defp parse_from(["FROM", "REMOTE", url | rest]) do
     {:ok, {:remote, normalize_token(url)}, rest}

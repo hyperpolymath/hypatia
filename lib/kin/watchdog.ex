@@ -21,7 +21,7 @@ defmodule Hypatia.Kin.Watchdog do
   # within the periodic decay window (~10 check cycles = ~10 minutes)
 
   @monitored_processes [
-    {Hypatia.VQL.Client, :vql, :critical},
+    {Hypatia.VCL.Client, :vcl, :critical},
     {Hypatia.Safety.RateLimiter, :safety, :critical},
     {Hypatia.Safety.Quarantine, :safety, :critical},
     {Hypatia.Rules.Learning, :intelligence, :important},

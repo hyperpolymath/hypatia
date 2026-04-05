@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 defmodule Hypatia.Paths do
-  @moduledoc "Central path resolution for hypatia's local verisimdb data store."
+  @moduledoc "Central path resolution for hypatia's local verisim data store."
 
   def verisimdb_data do
     Application.get_env(:hypatia, :verisimdb_data_path,
-      Path.expand("data/verisimdb", File.cwd!()))
+      Path.expand("data/verisim", File.cwd!()))
   end
 
   def fleet do

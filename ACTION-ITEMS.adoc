@@ -16,7 +16,7 @@ cannot be automated. Everything else is done and documented.
 
 | **GitHub PAT**
 | Create a Personal Access Token with `repo` scope. Add as `VERISIMDB_PAT`
-  secret to both `hypatia` and `verisimdb-data` repos on GitHub. This unblocks
+  secret to both `hypatia` and `verisim-data` repos on GitHub. This unblocks
   automated cross-repo dispatch (scan -> pattern -> recipe -> bot action).
   Without it, the pipeline works but dispatch requires manual
   `scripts/ingest-scan.sh` invocation.
@@ -45,8 +45,8 @@ cannot be automated. Everything else is done and documented.
 
 | **Deploy verisim-api**
 | The VeriSimDB Rust API server needs deployment to enable native graph,
-  vector, and temporal query modalities. Currently all VQL queries execute
-  against flat files (FileExecutor). Build: `cd verisimdb && cargo build -p verisim-api`.
+  vector, and temporal query modalities. Currently all VCL queries execute
+  against flat files (FileExecutor). Build: `cd verisim && cargo build -p verisim-api`.
 | MEDIUM
 
 | **Deploy ArangoDB + Dragonfly**
@@ -60,7 +60,7 @@ cannot be automated. Everything else is done and documented.
 * **298 tests, 0 failures** (1 pre-existing timeout in pattern_analyzer_test)
 * **22 fix recipes** covering PA001-PA005, PA010-PA013, PA015, PA017-PA018, PA020
 * **Both ESN and RBF trained** (ESN: 2,538 points, RBF: 965 vectors/MSE=0.047)
-* **223 VQL tests** (client, file_executor, query)
+* **223 VCL tests** (client, file_executor, query)
 * **7 Zig FFI functions** fully implemented (no stubs)
 * **Idris2 build system** operational (ipkg + pack.toml)
 * **All pushed** to GitHub + GitLab
@@ -72,6 +72,6 @@ These are the next engineering items (no credentials needed):
 * More fix recipes for uncovered PA rules (PA006-PA009, PA014, PA016, PA019)
 * Historical trend tracking across scan cycles
 * SARIF output for IDE integration
-* VQL federation executor (multi-store)
+* VCL federation executor (multi-store)
 * Chapel NIFs for compute-heavy neural operations
 * Idris2 database connectors for VeriSimDB (PostgreSQL, SQLite, ODBC)

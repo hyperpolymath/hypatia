@@ -19,7 +19,7 @@ numbered for easy reference in issue trackers and session logs.
 [start=1]
 . **[RESOLVED] Zig FFI: All 7 functions now implemented.** +
 All 7 exported C ABI functions in `ffi/zig/src/main.zig` are real
-implementations working against verisimdb-data flat files. Health check,
+implementations working against verisim-data flat files. Health check,
 scan repo, dispatch, record outcome, force learning, get confidence, and
 dispatch strategy are all operational. Supporting modules: `json_writer.zig`,
 `file_ops.zig`. Build: `cd ffi/zig && zig build && zig build test`.
@@ -43,9 +43,9 @@ outcomes are "success") — balanced learning improves as failure data accumulat
 PA015, PA017, PA018, PA020. Coverage: 22/954 (2.3%). PA006-PA009, PA014,
 PA016, PA019 remain uncovered.
 
-. **[RESOLVED] VQL: Test suite complete.** +
-223 tests across 3 files: `vql_client_test.exs` (74), `vql_file_executor_test.exs`
-(58), `vql_query_test.exs` (91). Full suite: 298 tests, 0 failures.
+. **[RESOLVED] VCL: Test suite complete.** +
+223 tests across 3 files: `vcl_client_test.exs` (74), `vcl_file_executor_test.exs`
+(58), `vcl_query_test.exs` (91). Full suite: 298 tests, 0 failures.
 
 == Open Issues
 
@@ -63,10 +63,10 @@ Chainguard does not publish `swipl` or `ghc` images. When Chainguard
 equivalents become available, these should be migrated. All other
 Containerfiles use `cgr.dev/chainguard/` images as required.
 
-. **[PARTIAL] VQL federation: Git-clone-based multi-store implemented.** +
+. **[PARTIAL] VCL federation: Git-clone-based multi-store implemented.** +
 The FileExecutor now supports `{:remote, url}` sources via `RemoteCache`, which
-clones or pulls remote verisimdb-data repos into a TTL-managed local cache
-(`/tmp/hypatia-vql-cache/`). VQL syntax: `FROM FEDERATION REMOTE "url"` or
+clones or pulls remote verisim-data repos into a TTL-managed local cache
+(`/tmp/hypatia-vcl-cache/`). VCL syntax: `FROM FEDERATION REMOTE "url"` or
 `FROM REMOTE "url" STORE scans`. Thread-safe via ETS locking. +
 *Remaining:* Federation across verisim-api HTTP instances and heterogeneous
 backends (non-git stores) is not yet implemented.
@@ -75,22 +75,22 @@ backends (non-git stores) is not yet implemented.
 ArangoDB currently fills the graph query gap that flat files cannot address
 (trust propagation, confidence history, anomaly graphs). It is a transitional
 dependency that will be replaced when `verisim-api` deploys with its graph,
-temporal, and vector modalities. See `docs/migration-arangodb-to-verisimdb.adoc`
+temporal, and vector modalities. See `docs/migration-arangodb-to-verisim.adoc`
 for the full migration plan.
 
 . **Ada TUI: Compiles but not functionally integrated.** +
 The Ada terminal user interface compiles successfully but is not wired into
 the Hypatia pipeline. It cannot currently display live scan results, trigger
-dispatches, or interact with the VQL layer. Integration requires an IPC
+dispatches, or interact with the VCL layer. Integration requires an IPC
 mechanism (likely Unix domain sockets or stdin/stdout JSON protocol) between
 the Ada binary and the Elixir supervision tree.
 
 . **verisim-api not deployed.** +
-The `verisim-api` service (built from `verisimdb/rust-core`) is not deployed
+The `verisim-api` service (built from `verisim/rust-core`) is not deployed
 to any environment. As a result, the HNSW vector indexing, native graph
 traversal, and temporal windowing modalities are unavailable in production.
 Hypatia operates entirely on flat-file reads (FileExecutor) and ArangoDB.
-See `docs/migration-arangodb-to-verisimdb.adoc` for deployment plans.
+See `docs/migration-arangodb-to-verisim.adoc` for deployment plans.
 
 . **PAT needed for cross-repo dispatch.** +
 The default `GITHUB_TOKEN` provided by GitHub Actions cannot trigger
@@ -98,7 +98,7 @@ The default `GITHUB_TOKEN` provided by GitHub Actions cannot trigger
 (sending fix instructions to gitbot-fleet bots) requires a Personal Access
 Token (PAT) with `repo` scope, stored as a `VERISIMDB_PAT` secret. Without
 this PAT, the automated pipeline from scan to dispatch to bot action is
-broken. Manual ingestion via helper scripts (`verisimdb-data/scripts/ingest-scan.sh`)
+broken. Manual ingestion via helper scripts (`verisim-data/scripts/ingest-scan.sh`)
 works as a workaround.
 
 . **One-sided training data.** +

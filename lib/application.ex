@@ -7,7 +7,7 @@ defmodule Hypatia.Application do
 
   Starts the supervision tree with layered dependencies:
   0. HTTP layer (Bandit + Plug.Router) — groove endpoint, health on port 9090
-  0. Query layer (VQL Client) — structured query interface to verisimdb-data
+  0. Query layer (VCL Client) — structured query interface to verisim-data
   1. Safety layer — rate limiter, quarantine
   2. Intelligence layer — learning scheduler, self-diagnostics
   3. Neural layer — blackboard + 8 networks + coordinator (phased execution)
@@ -25,8 +25,8 @@ defmodule Hypatia.Application do
     children = [
       # Layer 0: HTTP — public endpoints (groove, health)
       {Bandit, plug: Hypatia.Web.Router, port: http_port, scheme: :http},
-      # Layer 0: Query — VQL client for structured data access
-      Hypatia.VQL.Client,
+      # Layer 0: Query — VCL client for structured data access
+      Hypatia.VCL.Client,
       # Layer 0.5: Dispatch — GenStage pipeline for controlled parallel processing
       Hypatia.Dispatch.Pipeline,
       # Layer 0.7: Diagnostics — system health monitoring and auto-recovery

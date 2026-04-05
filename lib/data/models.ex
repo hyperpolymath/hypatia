@@ -6,7 +6,7 @@ defmodule Hypatia.Data.Models do
   Data models for the Hypatia intelligence layer.
 
   These models map to ArangoDB document and edge collections in the
-  federated architecture. verisimdb-data (git) remains the canonical
+  federated architecture. verisim-data (git) remains the canonical
   source of truth; ArangoDB provides graph query, trust traversal,
   and neural state persistence alongside it.
 

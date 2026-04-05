@@ -16,7 +16,7 @@ Core OTP application with 8 GenServers supervised by `Hypatia.Application`.
 | Module | Purpose |
 |--------|---------|
 | `pattern_analyzer.ex` | Full pipeline orchestrator: scan -> patterns -> triangle -> dispatch |
-| `verisimdb_connector.ex` | VQL-powered data access with file I/O fallback |
+| `verisimdb_connector.ex` | VCL-powered data access with file I/O fallback |
 | `pattern_registry.ex` | Deduplicates findings into canonical patterns (PA001-PA020) |
 | `recipe_matcher.ex` | Fuzzy matching: fingerprinted IDs to clean recipe IDs |
 | `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
@@ -29,15 +29,15 @@ Core OTP application with 8 GenServers supervised by `Hypatia.Application`.
 | `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
 | `application.ex` | OTP Application supervisor for all GenServers |
 
-### VQL Query Layer (lib/vql/)
+### VCL Query Layer (lib/vcl/)
 
 | Module | Purpose |
 |--------|---------|
 | `client.ex` | GenServer: parser + query cache + execution routing |
-| `file_executor.ex` | Executes VQL ASTs against verisimdb-data flat files |
+| `file_executor.ex` | Executes VCL ASTs against verisim-data flat files |
 | `query.ex` | High-level: fetch_scans, cross_repo_patterns, pipeline_health |
 
-VQL is a custom query language for verisimdb-data. Currently local-only
+VCL is a custom query language for verisim-data. Currently local-only
 (federation not yet implemented).
 
 ### Neural Subsystem (lib/neural/)
@@ -105,13 +105,13 @@ Training reads `outcomes/*.jsonl` for ESN time series and
 
 ## Data Layer
 
-verisimdb-data is a separate git-backed flat-file repo. Hypatia reads it via
-`VerisimdbConnector` using VQL queries.
+verisim-data is a separate git-backed flat-file repo. Hypatia reads it via
+`VerisimdbConnector` using VCL queries.
 
 - Scan results: `scans/<repo>/<date>.json`
 - Patterns: `patterns/registry.json`
 - Outcomes: `outcomes/YYYY-MM.jsonl`
-- Neural state: `data/verisimdb/neural-states/`
+- Neural state: `data/verisim/neural-states/`
 
 ## Safety Triangle
 
@@ -172,7 +172,7 @@ From `mix.exs`:
 
 ## Known Gaps (for context)
 
-1. VQL federation local-only (FileExecutor, not multi-store)
+1. VCL federation local-only (FileExecutor, not multi-store)
 2. verisim-api not deployed (graph/vector/temporal via flat files only)
 3. One-sided training data (99%+ success — needs failure data)
 4. 310/600 auto-execute entries have null fix_script

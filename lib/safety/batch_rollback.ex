@@ -19,7 +19,7 @@ defmodule Hypatia.Safety.BatchRollback do
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   @doc "Create a new batch and return its ID"
   def create_batch(dispatch_count, strategy) do

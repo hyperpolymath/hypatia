@@ -57,7 +57,7 @@ anything. The loop was broken at four points simultaneously:
 
 3. **Wrong data path**: Hypatia was reading from an empty local directory
    instead of the real 300-scan data store.
-   Fix: pointed `config.exs` at the actual verisimdb-data location.
+   Fix: pointed `config.exs` at the actual verisim-data location.
 
 4. **Repo path resolution**: Dispatch manifest said "fix repo X" but the
    runner couldn't find repo X because monorepo subdirectories have different

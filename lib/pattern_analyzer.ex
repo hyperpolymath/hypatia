@@ -2,11 +2,11 @@
 
 defmodule Hypatia.PatternAnalyzer do
   @moduledoc """
-  Analyzes scan results from verisimdb, detects patterns, routes through
+  Analyzes scan results from verisim, detects patterns, routes through
   the safety triangle, and dispatches to the gitbot-fleet.
 
   Pipeline:
-  1. Fetch scans from verisimdb-data
+  1. Fetch scans from verisim-data
   2. Sync pattern registry (deduplicate findings into canonical patterns)
   3. For each pattern+repo, route through safety triangle
   4. Dispatch routed actions to fleet bots
@@ -14,7 +14,7 @@ defmodule Hypatia.PatternAnalyzer do
   6. Return summary
   """
 
-  alias Hypatia.VerisimdbConnector
+  alias Hypatia.VerisimConnector
   alias Hypatia.PatternRegistry
   alias Hypatia.TriangleRouter
   alias Hypatia.FleetDispatcher
@@ -28,7 +28,7 @@ defmodule Hypatia.PatternAnalyzer do
   Run the full analysis pipeline: scan → patterns → triangle → dispatch.
   """
   def analyze_all_scans do
-    scans = VerisimdbConnector.fetch_all_scans()
+    scans = VerisimConnector.fetch_all_scans()
     Logger.info("Loaded #{length(scans)} scan results")
 
     # Step 1: Sync pattern registry from scan data
@@ -99,7 +99,7 @@ defmodule Hypatia.PatternAnalyzer do
     on_complete = Keyword.get(opts, :on_batch_complete, fn _n, _r -> :ok end)
     repo_filter = Keyword.get(opts, :repos, nil)
 
-    scans = VerisimdbConnector.fetch_all_scans()
+    scans = VerisimConnector.fetch_all_scans()
     Logger.info("[Batch] Loaded #{length(scans)} scan results")
 
     # Filter repos if specified

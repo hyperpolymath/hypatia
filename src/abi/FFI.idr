@@ -21,7 +21,7 @@ CResult = Int
 ||| Each constructor corresponds to an `export fn` in ffi/zig/src/main.zig.
 public export
 data FFIFunction : Type where
-  ||| Health check — reads verisimdb-data dirs, counts files, returns JSON.
+  ||| Health check — reads verisim-data dirs, counts files, returns JSON.
   ||| Corresponds to: GET /health, GET /status
   HealthCheck : FFIFunction
 

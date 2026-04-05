@@ -18,13 +18,13 @@
                         │  scans/*.json  patterns/  recipes/       │
                         │  outcomes/*.jsonl  index.json             │
                         └───────────────────┬─────────────────────┘
-                                            │ VQL + file I/O
+                                            │ VCL + file I/O
                                             ▼
  ┌──────────────────────────────────────────────────────────────────────────┐
  │                         HYPATIA PLATFORM (Elixir/OTP)                   │
  │                                                                          │
  │  ┌────────────────┐   ┌──────────────┐   ┌──────────────────────────┐  │
- │  │ VQL Client     │   │ Pattern      │   │ Recipe Matcher           │  │
+ │  │ VCL Client     │   │ Pattern      │   │ Recipe Matcher           │  │
  │  │ (query cache)  │──►│ Registry     │──►│ (fuzzy + language infer) │  │
  │  └────────────────┘   └──────┬───────┘   └────────────┬─────────────┘  │
  │                              │                         │                │
@@ -71,7 +71,7 @@
 COMPONENT                          STATUS              NOTES
 ─────────────────────────────────  ──────────────────  ─────────────────────────────────
 CORE PIPELINE
-  VQL Client + File Executor       ██████████ 100%    Built-in parser, 60s cache
+  VCL Client + File Executor       ██████████ 100%    Built-in parser, 60s cache
   Pattern Registry                 ██████████ 100%    Code complete, needs data seeding
   Recipe Matcher                   ██████████ 100%    Fuzzy matching + language inference
   Triangle Router                  ██████████ 100%    Eliminate > Substitute > Control
@@ -86,7 +86,7 @@ NEURAL SUBSYSTEM (hub-and-spoke)
   Liquid State Machine             ██████████ 100%    Temporal anomaly detection
   Echo State Network               ████████░░  80%    Code complete, untrained (no data)
   Radial Basis Function            ████████░░  80%    Code complete, untrained (no data)
-  Training Pipeline                ██████████ 100%    Reads verisimdb-data automatically
+  Training Pipeline                ██████████ 100%    Reads verisim-data automatically
   Persistence                      ██████████ 100%    ArangoDB + flat file backup
 
 RULES ENGINE (Elixir — absorbed from Logtalk 2026-03-06)
@@ -110,8 +110,8 @@ OPERATIONAL SCRIPTS
   systemd timer                    ██████████ 100%    Weekly auto-fix schedule
 
 DATA LAYER
-  VeriSimDB Connector              ██████████ 100%    VQL + file I/O fallback
-  hypatia-local verisimdb data     ░░░░░░░░░░   0%    EMPTY — needs seeding from fleet
+  VeriSimDB Connector              ██████████ 100%    VCL + file I/O fallback
+  hypatia-local verisim data     ░░░░░░░░░░   0%    EMPTY — needs seeding from fleet
 
 RUST WORKSPACE
   adapters (forge API)             ██████████ 100%    GitHub/GitLab/Bitbucket
@@ -124,7 +124,7 @@ FORMAL VERIFICATION
   Zig FFI Bridge                   ██████████ 100%    7 C ABI exports
 
 CROSS-REPO INTEGRATION
-  hypatia → verisimdb-data         ██████████ 100%    VQL + file I/O
+  hypatia → verisim-data         ██████████ 100%    VCL + file I/O
   hypatia → gitbot-fleet           ████████░░  80%    Dispatch OK, fleet can't PR
   .git-private-farm → hypatia      ██░░░░░░░░  20%    repo-list done, HOOKSYNC_TOKEN missing
 
@@ -142,7 +142,7 @@ OVERALL:                            ████████░░  85%    Code 
 ## Key Dependencies
 
 ```
-verisimdb-data (canonical store)
+verisim-data (canonical store)
        │
        ▼
 PatternAnalyzer ──► TriangleRouter ──► Neural.Coordinator
@@ -163,7 +163,7 @@ Neural.Coordinator
 
 ## Critical Gaps
 
-1. **Data seeding**: verisimdb-data dirs (patterns/recipes/outcomes) empty — neural networks idle
+1. **Data seeding**: verisim-data dirs (patterns/recipes/outcomes) empty — neural networks idle
 2. **Last-mile actuation**: gitbot-fleet detects problems but never commits or creates PRs
 3. **HOOKSYNC_TOKEN**: .git-private-farm hookset propagation never tested
 4. **Recipe coverage**: Need to expand from initial seed recipes

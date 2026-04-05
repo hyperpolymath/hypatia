@@ -86,7 +86,7 @@ and convergence threshold 0.001.
 - `trusted_recipes()` — ranked list of recipes by trust
 - `repos_needing_attention()` — repos with trust < 0.4
 
-**Data source:** `verisimdb-data/outcomes/*.jsonl` + `verisimdb-data/recipes/*.json`
+**Data source:** `verisim-data/outcomes/*.jsonl` + `verisim-data/recipes/*.json`
 
 ### 2. Mixture of Experts (MoE)
 
@@ -120,7 +120,7 @@ confidence drift).
 **Purpose:** Confidence trajectory forecasting and drift detection.
 
 Predicts where recipe confidence is heading (improving, stable, degrading).
-Training data source: `verisimdb-data/outcomes/*.jsonl` (confidence time series per recipe).
+Training data source: `verisim-data/outcomes/*.jsonl` (confidence time series per recipe).
 
 **Outputs:**
 - `{predicted_next, updated_esn}` — next predicted confidence value
@@ -135,7 +135,7 @@ Training data source: `verisimdb-data/outcomes/*.jsonl` (confidence time series 
 
 Converts findings to 8-dimensional feature vectors and classifies them
 using radial basis functions.
-Training data source: `verisimdb-data/patterns/registry.json` (8-D feature vectors).
+Training data source: `verisim-data/patterns/registry.json` (8-D feature vectors).
 
 **Outputs:**
 - `{output, confidence}` — classification result + confidence
@@ -201,12 +201,12 @@ handles this transparently.
 TrainingPipeline.run_full_training()
   │
   ├── train_esn()
-  │     reads: verisimdb-data/outcomes/*.jsonl
+  │     reads: verisim-data/outcomes/*.jsonl
   │     builds: confidence time series per recipe
   │     trains: ESN reservoir weights
   │
   └── train_rbf()
-        reads: verisimdb-data/patterns/registry.json
+        reads: verisim-data/patterns/registry.json
         builds: 8-dimensional feature vectors (965 patterns)
         trains: RBF centers + widths + output weights
         MSE: 0.047
@@ -217,7 +217,7 @@ Triggered by: Coordinator.force_cycle()
 ### Training Status
 
 Networks initialize with default weights and learn from real data as it
-arrives. The `LearningScheduler` polls `verisimdb-data/outcomes/` every
+arrives. The `LearningScheduler` polls `verisim-data/outcomes/` every
 5 minutes and feeds outcomes to the coordinator via `record_outcome/2`.
 
 Training is seeded from gitbot-fleet's `fix-outcomes.jsonl` (6,000+ records)
@@ -257,7 +257,7 @@ These are the rules that actually drive the pipeline via
 ┌─────────────────────────▼──────────────────────────────┐
 │                      HYPATIA                            │
 │                                                         │
-│  verisimdb-data ──► PatternAnalyzer ──► TriangleRouter │
+│  verisim-data ──► PatternAnalyzer ──► TriangleRouter │
 │       │                    │                    │       │
 │       │              Neural.Coordinator         │       │
 │       │              (hub-and-spoke)             │       │
@@ -295,7 +295,7 @@ These are the rules that actually drive the pipeline via
 
 | Link | Status | Notes |
 |------|--------|-------|
-| hypatia → verisimdb-data | Working | VQL + file I/O |
+| hypatia → verisim-data | Working | VCL + file I/O |
 | hypatia → gitbot-fleet | Working | Dispatch manifest JSONL |
 | hypatia neural → pipeline | **Fixed 2026-02-22** | Was dead code |
 | gitbot-fleet → repos | **BROKEN** | Never commits or PRs |
@@ -313,7 +313,7 @@ These are the rules that actually drive the pipeline via
 |--------|---------|
 | `application.ex` | OTP supervisor |
 | `pattern_analyzer.ex` | Full pipeline orchestrator |
-| `verisimdb_connector.ex` | VQL-powered data access |
+| `verisimdb_connector.ex` | VCL-powered data access |
 | `pattern_registry.ex` | Deduplicates to canonical patterns |
 | `recipe_matcher.ex` | Fuzzy matching with language inference |
 | `triangle_router.ex` | Safety triangle: eliminate > substitute > control |
@@ -345,7 +345,7 @@ These are the rules that actually drive the pipeline via
 | `liquid_state_machine.ex` | Temporal anomaly detection |
 | `echo_state_network.ex` | Confidence trajectory forecasting |
 | `radial_neural_network.ex` | Similarity + novelty detection |
-| `training_pipeline.ex` | ESN + RBF training from verisimdb-data |
+| `training_pipeline.ex` | ESN + RBF training from verisim-data |
 | `persistence.ex` | Save/load neural state |
 
 ### Safety Systems (lib/safety/)
@@ -371,7 +371,7 @@ These are the rules that actually drive the pipeline via
 
 ```
 Hypatia.Supervisor (:one_for_one)
-├── Layer 0: Hypatia.VQL.Client
+├── Layer 0: Hypatia.VCL.Client
 ├── Layer 1: Hypatia.Data.ArangoDB
 ├── Layer 2: Hypatia.Safety.RateLimiter
 ├── Layer 3: Hypatia.Safety.Quarantine

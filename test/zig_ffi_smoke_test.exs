@@ -11,7 +11,7 @@
 # These smoke tests validate:
 # 1. The Zig FFI source and build files are present and well-formed
 # 2. The Elixir-layer logic that mirrors the FFI dispatch strategy is correct
-# 3. The verisimdb-data directory structure that the Zig FFI reads from is accessible
+# 3. The verisim-data directory structure that the Zig FFI reads from is accessible
 # 4. The confidence + dispatch strategy mappings match between Elixir and Zig spec
 #
 # If the Zig shared library is compiled (zig build in ffi/zig/), these tests also
@@ -31,7 +31,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
   @zig_ffi_dir "/var/mnt/eclipse/repos/hypatia/ffi/zig"
   @zig_src_dir "#{@zig_ffi_dir}/src"
-  @data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   # ---------------------------------------------------------------------------
   # Smoke: FFI source files are present and non-empty
@@ -89,19 +89,19 @@ defmodule Hypatia.ZigFFI.SmokeTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Smoke: verisimdb-data directory structure accessible to Zig FFI
+  # Smoke: verisim-data directory structure accessible to Zig FFI
   # ---------------------------------------------------------------------------
 
-  describe "verisimdb-data structure (Zig FFI data path)" do
+  describe "verisim-data structure (Zig FFI data path)" do
     # The Zig FFI reads from these stores directly.
     # Note: 'index' is index.json (a file, not a directory) in this data layout.
     @required_store_dirs ~w(scans patterns recipes outcomes dispatch)
     @required_store_files ~w(index.json)
 
-    test "verisimdb-data root directory exists" do
+    test "verisim-data root directory exists" do
       expanded = Path.expand(@data_path)
       assert File.exists?(expanded),
-             "verisimdb-data root not found at #{expanded} (VERISIMDB_DATA_PATH or compile_env)"
+             "verisim-data root not found at #{expanded} (VERISIMDB_DATA_PATH or compile_env)"
     end
 
     test "all 5 required store directories exist for hypatia_health_check" do
@@ -122,7 +122,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
         file_path = Path.join(expanded, file)
         assert File.exists?(file_path),
                "Store file '#{file}' not found at #{file_path} — " <>
-                 "VQL index queries would fail"
+                 "VCL index queries would fail"
       end)
     end
 

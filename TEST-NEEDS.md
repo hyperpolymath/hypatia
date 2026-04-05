@@ -46,15 +46,15 @@
 
 | Category     | Count | Notes |
 |-------------|-------|-------|
-| Unit tests   | 32    | Elixir: recipe_matcher, triangle_router, fleet_dispatcher, neural, vql, safety, etc. |
+| Unit tests   | 32    | Elixir: recipe_matcher, triangle_router, fleet_dispatcher, neural, vcl, safety, etc. |
 | Integration  | 7     | Rust: ci_simulation, arangodb, fleet, forge, hooks, registry + adapter/seam tests |
-| E2E          | 15    | `test/e2e_pipeline_test.exs` — all 6 pipeline stages wired with real verisimdb-data |
-| P2P (property-based) | 26 | `test/p2p_recipe_vql_test.exs` — RecipeMatcher invariants, VQL parser totality, dispatch_strategy monotonicity |
-| Concurrency  | 16    | `test/concurrency_test.exs` — parallel recipe evaluation, RateLimiter/Quarantine/VQL under load |
+| E2E          | 15    | `test/e2e_pipeline_test.exs` — all 6 pipeline stages wired with real verisim-data |
+| P2P (property-based) | 26 | `test/p2p_recipe_vql_test.exs` — RecipeMatcher invariants, VCL parser totality, dispatch_strategy monotonicity |
+| Concurrency  | 16    | `test/concurrency_test.exs` — parallel recipe evaluation, RateLimiter/Quarantine/VCL under load |
 | Smoke        | 13    | `test/zig_ffi_smoke_test.exs` — Zig FFI source integrity, data path structure, dispatch strategy spec |
 | Benchmarks   | 1 file (7 real benches) | `fixer/benches/hypatia_bench.rs` — catalog construction/lookup, SHA pins, scan result summary, fixer construction |
 
-**Source modules:** ~66 Elixir modules (15 rules, 7 neural networks, VQL, safety, data, fleet) + Rust adapters + 10 Idris2 ABI + 5 Zig FFI.
+**Source modules:** ~66 Elixir modules (15 rules, 7 neural networks, VCL, safety, data, fleet) + Rust adapters + 10 Idris2 ABI + 5 Zig FFI.
 
 **Total new tests added (2026-04-04):** 70 tests across 4 new files. All pass.
 
@@ -64,18 +64,18 @@
 - [x] Unit tests: 32 (existing, Elixir)
 - [x] Integration tests: 7 (Rust adapters)
 - [x] E2E tests: 15 (all 6 pipeline stages)
-- [x] P2P property-based tests: 26 (RecipeMatcher + VQL invariants)
+- [x] P2P property-based tests: 26 (RecipeMatcher + VCL invariants)
 - [x] Concurrency tests: 16 (parallel evaluation, GenServer safety)
 - [x] Smoke tests: 13 (Zig FFI, data path, ABI files)
 - [x] Benchmarks: real (7 benches in fixer/benches/hypatia_bench.rs)
-- [x] No mocks — all tests use real ExUnit contexts + verisimdb-data on disk
+- [x] No mocks — all tests use real ExUnit contexts + verisim-data on disk
 
 **Benchmark note:** The root `benches/hypatia_bench.rs` stub is intentional (workspace has no
 `[package]`). Real benchmarks run via `cargo bench -p hypatia-fixer`.
 
 ## Known Pre-existing Failures (do not fix here)
 
-- `recipe_matcher_test.exs`: 3 failures — `recipe-shell-quote-vars.json` is empty/corrupted in verisimdb-data
+- `recipe_matcher_test.exs`: 3 failures — `recipe-shell-quote-vars.json` is empty/corrupted in verisim-data
 - `triangle_router_test.exs`: 1 failure — depends on the corrupted recipe above
 - `safety_test.exs`: 1 flaky failure — RateLimiter enqueue timing under OTP load
 

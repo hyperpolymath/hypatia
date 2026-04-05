@@ -36,7 +36,7 @@ defmodule Hypatia.Rules.ProofStrategySelection do
 
   @default_limit 5
   @default_timeout_ms 5_000
-  @verisim_url_env "HYPATIA_VERISIMDB_URL"
+  @verisim_url_env "HYPATIA_VERISIM_URL"
   @default_verisim_url "http://localhost:8080"
 
   @doc """
@@ -58,7 +58,7 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   Options:
     - `:limit` (default 5) — maximum recommendations to return
     - `:timeout` (default 5000ms) — HTTP request timeout
-    - `:base_url` — override VeriSimDB URL (else HYPATIA_VERISIMDB_URL env or default)
+    - `:base_url` — override VeriSimDB URL (else HYPATIA_VERISIM_URL env or default)
 
   Returns `{:error, :not_configured}` if VeriSimDB URL is missing,
   `{:error, {:http_status, code}}` on non-2xx response,
@@ -196,7 +196,7 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   PS002: Classify a free-text claim into an obligation class.
 
   Heuristic keyword matcher. Returns one of the canonical classes used
-  by echidna's verisimdb_bridge and the `obligation_class` enum in the
+  by echidna's verisim_bridge and the `obligation_class` enum in the
   proof_attempts table:
 
     - "linearity"   — linear/affine/ownership claims

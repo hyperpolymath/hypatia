@@ -7,7 +7,7 @@
     },
     "filesystem": {
       "missing": [
-        "data/verisimdb/dispatch"
+        "data/verisim/dispatch"
       ],
       "status": "fail"
     },

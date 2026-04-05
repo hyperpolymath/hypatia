@@ -15,7 +15,7 @@ The system learns complex patterns through neural analysis, then *distills* them
 ____
 
 *Evidence:* The learning pipeline (CLAUDE.md line 77-101) demonstrates this cycle:
-1. **Learning** — 5 neural networks (Graph of Trust, Mixture of Experts, Liquid State Machine, Echo State Network, Radial Neural Network) analyze verisimdb-data
+1. **Learning** — 5 neural networks (Graph of Trust, Mixture of Experts, Liquid State Machine, Echo State Network, Radial Neural Network) analyze verisim-data
 2. **Distillation** — PatternRegistry deduplicates findings into 46 canonical recipes (PA001-PA046 + 20 OpenSSF Scorecard recipes)
 3. **Symbolic** — Recipes execute as fast Logtalk rules (no ML at runtime)
 4. **Verification** — Idris2 ABI proofs formally verify recipe correctness
@@ -46,7 +46,7 @@ The safety triangle (CLAUDE.md lines 53-73) routes findings through:
 
 This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), and circuit breaker safety systems.
 
-*Caveat:* The P2P federation (Radicle) is integrated in architecture but not deployed in production; currently uses git-backed verisimdb-data flat files.
+*Caveat:* The P2P federation (Radicle) is integrated in architecture but not deployed in production; currently uses git-backed verisim-data flat files.
 
 == Technology Choices
 
@@ -74,8 +74,8 @@ Hypatia-specific:
 - `src/abi/` — Idris2 formal specs for GraphQL, gRPC, REST API with dependent type proofs
 - `ffi/zig/src/` — 7 C-compatible exported functions
 - 5 neural networks + coordinator GenServer (ESN training, RBF learning, PageRank trust)
-- VQL query layer (built-in parser, file executor, query caching)
-- verisimdb-data integration (git-backed flat-file canonical store)
+- VCL query layer (built-in parser, file executor, query caching)
+- verisim-data integration (git-backed flat-file canonical store)
 
 == File Map: Key Modules
 
@@ -84,7 +84,7 @@ Hypatia-specific:
 | Path | What's There
 
 | `lib/pattern_analyzer.ex` | Full pipeline orchestrator (scan → patterns → triangle → dispatch)
-| `lib/verisimdb_connector.ex` | VQL queries with file I/O fallback
+| `lib/verisimdb_connector.ex` | VCL queries with file I/O fallback
 | `lib/pattern_registry.ex` | Deduplicates findings into 46 canonical recipes
 | `lib/triangle_router.ex` | Routes through Eliminate > Substitute > Control
 | `lib/fleet_dispatcher.ex` | Confidence-gated dispatch (file-based + HTTP, circuit breaker)
@@ -95,7 +95,7 @@ Hypatia-specific:
 | `lib/learning_scheduler.ex` | GenServer: polls outcomes, drives feedback loop
 | `lib/self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery
 | `lib/neural/` | 5 networks (graph-of-trust, moe, lsm, esn, rbf) + coordinator
-| `lib/vql/` | VQL client, file executor, query functions
+| `lib/vcl/` | VCL client, file executor, query functions
 | `src/abi/` | Idris2 specs (Types, GraphQL, gRPC, REST, FFI)
 | `ffi/zig/src/` | 7 C-compatible exported functions
 | `src/rust/` | Adapters, CLI, data layer, fixer (workspace)
@@ -112,8 +112,8 @@ Hypatia-specific:
 - Bayesian Beta-distribution confidence (prior_strength=10, floor=0.10, cap=0.99)
 - Re-scan verification via panic-attacker
 - 3 safety systems: rate limiter (50/bot/min, 200/global/min), quarantine (soft/hard/permanent), batch rollback
-- VQL integrated with file executor, query cache, cross-repo analytics
+- VCL integrated with file executor, query cache, cross-repo analytics
 
 == Questions?
 
-Open an issue in the hyperpolymath/hypatia repository for questions about the safety triangle routing, neural network architecture, recipe distillation, or verisimdb-data integration for cross-repo CI/CD intelligence.
+Open an issue in the hyperpolymath/hypatia repository for questions about the safety triangle routing, neural network architecture, recipe distillation, or verisim-data integration for cross-repo CI/CD intelligence.

@@ -42,7 +42,7 @@ defmodule Hypatia.Kin.Protocol do
   @known_kin %{
     "hypatia" => %{
       role: :coordinator,
-      capabilities: [:neural, :triangle, :dispatch, :learning, :vql],
+      capabilities: [:neural, :triangle, :dispatch, :learning, :vcl],
       health_check: :internal
     },
     "panic-attacker" => %{
@@ -95,7 +95,7 @@ defmodule Hypatia.Kin.Protocol do
       "role" => "coordinator",
       "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
       "version" => Mix.Project.config()[:version] || "0.1.0",
-      "capabilities" => ["neural", "triangle", "dispatch", "learning", "vql"]
+      "capabilities" => ["neural", "triangle", "dispatch", "learning", "vcl"]
     })
 
     case Jason.encode(heartbeat, pretty: true) do

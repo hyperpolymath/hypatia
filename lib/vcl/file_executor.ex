@@ -1,26 +1,26 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.FileExecutor do
+defmodule Hypatia.VCL.FileExecutor do
   @moduledoc """
-  VQL File Executor — executes parsed VQL ASTs against verisimdb-data flat files.
+  VCL File Executor — executes parsed VCL ASTs against verisim-data flat files.
 
   This is the primary executor in Hypatia's federated data layer. It translates
-  VQL queries into file operations against the verisimdb-data git-backed store,
+  VCL queries into file operations against the verisim-data git-backed store,
   providing structured query semantics over flat JSON/JSONL files.
 
   ## Store Mapping
 
-  VQL STORE names map to verisimdb-data directories:
+  VCL STORE names map to verisim-data directories:
 
   | Store Name  | Directory                    | Format |
   |-------------|------------------------------|--------|
-  | scans       | verisimdb-data/scans/        | JSON   |
-  | patterns    | verisimdb-data/patterns/     | JSON   |
-  | recipes     | verisimdb-data/recipes/      | JSON   |
-  | outcomes    | verisimdb-data/outcomes/     | JSONL  |
-  | dispatch    | verisimdb-data/dispatch/     | JSONL  |
-  | index       | verisimdb-data/index.json    | JSON   |
+  | scans       | verisim-data/scans/        | JSON   |
+  | patterns    | verisim-data/patterns/     | JSON   |
+  | recipes     | verisim-data/recipes/      | JSON   |
+  | outcomes    | verisim-data/outcomes/     | JSONL  |
+  | dispatch    | verisim-data/dispatch/     | JSONL  |
+  | index       | verisim-data/index.json    | JSON   |
 
   ## Supported Modalities
 
@@ -32,7 +32,7 @@ defmodule Hypatia.VQL.FileExecutor do
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   @store_map %{
     "scans" => "scans",
@@ -41,7 +41,7 @@ defmodule Hypatia.VQL.FileExecutor do
     "outcomes" => "outcomes",
     "dispatch" => "dispatch",
     "index" => ".",
-    "verisimdb-data" => "."
+    "verisim-data" => "."
   }
 
   # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ defmodule Hypatia.VQL.FileExecutor do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Execute a parsed VQL AST against verisimdb-data files.
+  Execute a parsed VCL AST against verisim-data files.
 
   Supports four source types:
 
@@ -58,9 +58,9 @@ defmodule Hypatia.VQL.FileExecutor do
   | `{:store, store_id}`          | Query a named local store (scans, patterns, …) |
   | `{:federation, pattern, dp}`  | Cross-store federation with drift policy        |
   | `{:hexad, entity_id}`         | Single-entity lookup by ID                      |
-  | `{:remote, url}`              | Clone/pull a remote verisimdb-data repo, query it |
+  | `{:remote, url}`              | Clone/pull a remote verisim-data repo, query it |
 
-  The `:remote` source uses `Hypatia.VQL.RemoteCache` to maintain a local
+  The `:remote` source uses `Hypatia.VCL.RemoteCache` to maintain a local
   git clone, then delegates to the standard store/federation logic with the
   cloned path as the data root.
   """
@@ -163,7 +163,7 @@ defmodule Hypatia.VQL.FileExecutor do
   # Remote Queries (multi-store federation via git clone cache)
   # ---------------------------------------------------------------------------
 
-  # Execute a query against a remote verisimdb-data repository. The remote
+  # Execute a query against a remote verisim-data repository. The remote
   # repo is cloned (or refreshed) via RemoteCache, then queried using the
   # same store/federation logic as local data. If `sub_source` is provided
   # it specifies what to query within the remote clone; otherwise the query
@@ -171,7 +171,7 @@ defmodule Hypatia.VQL.FileExecutor do
   defp execute_remote_query(url, ast, opts, sub_source \\ nil) do
     cache_opts = Keyword.get(opts, :cache_opts, [])
 
-    case Hypatia.VQL.RemoteCache.cache_remote_store(url, cache_opts) do
+    case Hypatia.VCL.RemoteCache.cache_remote_store(url, cache_opts) do
       {:ok, local_path} ->
         # Build a new AST that targets the appropriate source within the clone.
         remote_ast =
@@ -431,7 +431,7 @@ defmodule Hypatia.VQL.FileExecutor do
 
   # Apply drift policies to cross-repo federation query results.
   # Drift policies control how cross-repo confidence data is weighted
-  # when queried through VQL FEDERATION queries.
+  # when queried through VCL FEDERATION queries.
   #
   # | Policy          | Effect                                              |
   # |-----------------|-----------------------------------------------------|
@@ -616,7 +616,7 @@ defmodule Hypatia.VQL.FileExecutor do
         |> Enum.reject(&is_nil/1)
 
       {:error, reason} ->
-        Logger.warning("VQL FileExecutor: cannot read #{path}: #{inspect(reason)}")
+        Logger.warning("VCL FileExecutor: cannot read #{path}: #{inspect(reason)}")
         []
     end
   end

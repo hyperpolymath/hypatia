@@ -129,7 +129,7 @@ Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/C
 | Quarantine logic | `Quarantine.idr` | Full |
 | Batch rollback | `BatchRollback.idr` | Full |
 | VeriSimDB connector | `VerisimdbConnector.idr` | Full |
-| VQL query correctness | - | Partial |
+| VCL query correctness | - | Partial |
 | Neural network convergence | - | Not yet proven |
 
 ## File Locations

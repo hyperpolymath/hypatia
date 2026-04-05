@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VerisimdbConnector do
+defmodule Hypatia.VerisimConnector do
   @moduledoc """
-  Reads scan results, pattern registry, and recipes from verisimdb-data.
+  Reads scan results, pattern registry, and recipes from verisim-data.
 
-  Now powered by VQL — queries go through Hypatia.VQL.Client instead of raw
-  file I/O. Falls back to direct file reads if VQL Client is unavailable
+  Now powered by VCL — queries go through Hypatia.VCL.Client instead of raw
+  file I/O. Falls back to direct file reads if VCL Client is unavailable
   (e.g., during testing or before OTP supervision tree starts).
 
-  ## VQL Migration
+  ## VCL Migration
 
-  | Old (file I/O)           | New (VQL)                                         |
+  | Old (file I/O)           | New (VCL)                                         |
   |--------------------------|---------------------------------------------------|
   | File.ls + File.read      | SELECT DOCUMENT FROM STORE scans                  |
   | Jason.decode(registry)   | SELECT DOCUMENT FROM STORE patterns               |
@@ -21,150 +21,150 @@ defmodule Hypatia.VerisimdbConnector do
   Direct file reads preserved as fallback for graceful degradation.
   """
 
-  alias Hypatia.VQL.Query, as: VQL
+  alias Hypatia.VCL.Query, as: VCL
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   require Logger
 
   # ====================================================================
-  # Scan Access (VQL-powered)
+  # Scan Access (VCL-powered)
   # ====================================================================
 
-  @doc "Fetch all scan results from verisimdb-data/scans/ via VQL."
+  @doc "Fetch all scan results from verisim-data/scans/ via VCL."
   def fetch_all_scans do
-    case VQL.fetch_scans() do
+    case VCL.fetch_scans() do
       {:ok, scans} -> scans
       {:error, reason} ->
-        Logger.warning("VQL scan fetch failed (#{inspect(reason)}), falling back to file I/O")
+        Logger.warning("VCL scan fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_all_scans_fallback()
     end
   end
 
   @doc "Fetch scan for a specific repo."
   def fetch_scan(repo_name) do
-    case VQL.fetch_scan(repo_name) do
+    case VCL.fetch_scan(repo_name) do
       {:ok, scan} -> scan
       {:error, _} -> load_scan_fallback("#{repo_name}.json")
     end
   end
 
   # ====================================================================
-  # Pattern Registry Access (VQL-powered)
+  # Pattern Registry Access (VCL-powered)
   # ====================================================================
 
-  @doc "Load the pattern registry from verisimdb-data/patterns/registry.json via VQL."
+  @doc "Load the pattern registry from verisim-data/patterns/registry.json via VCL."
   def fetch_pattern_registry do
-    case VQL.fetch_pattern_registry() do
+    case VCL.fetch_pattern_registry() do
       {:ok, [registry | _]} -> {:ok, registry}
       {:ok, []} -> {:error, :empty}
       {:error, reason} ->
-        Logger.warning("VQL pattern fetch failed (#{inspect(reason)}), falling back to file I/O")
+        Logger.warning("VCL pattern fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_pattern_registry_fallback()
     end
   end
 
   # ====================================================================
-  # Recipe Access (VQL-powered)
+  # Recipe Access (VCL-powered)
   # ====================================================================
 
-  @doc "Load all recipe files from verisimdb-data/recipes/ via VQL."
+  @doc "Load all recipe files from verisim-data/recipes/ via VCL."
   def fetch_all_recipes do
-    case VQL.fetch_recipes() do
+    case VCL.fetch_recipes() do
       {:ok, recipes} -> recipes
       {:error, reason} ->
-        Logger.warning("VQL recipe fetch failed (#{inspect(reason)}), falling back to file I/O")
+        Logger.warning("VCL recipe fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_all_recipes_fallback()
     end
   end
 
   @doc "Load the proven-substitutions mapping."
   def fetch_substitutions do
-    case VQL.fetch_substitutions() do
+    case VCL.fetch_substitutions() do
       {:ok, subs} -> subs
       {:error, _} -> fetch_substitutions_fallback()
     end
   end
 
   # ====================================================================
-  # Index Access (VQL-powered)
+  # Index Access (VCL-powered)
   # ====================================================================
 
-  @doc "Load the master index from verisimdb-data/index.json via VQL."
+  @doc "Load the master index from verisim-data/index.json via VCL."
   def fetch_index do
-    case VQL.fetch_index() do
+    case VCL.fetch_index() do
       {:ok, [index | _]} -> {:ok, index}
       {:ok, []} -> {:error, :not_found}
       {:error, reason} ->
-        Logger.warning("VQL index fetch failed (#{inspect(reason)}), falling back to file I/O")
+        Logger.warning("VCL index fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_index_fallback()
     end
   end
 
   # ====================================================================
-  # Outcome Access (VQL-powered)
+  # Outcome Access (VCL-powered)
   # ====================================================================
 
-  @doc "Load all outcome records from verisimdb-data/outcomes/ via VQL."
+  @doc "Load all outcome records from verisim-data/outcomes/ via VCL."
   def fetch_all_outcomes do
-    case VQL.fetch_outcomes() do
+    case VCL.fetch_outcomes() do
       {:ok, outcomes} -> outcomes
       {:error, reason} ->
-        Logger.warning("VQL outcome fetch failed (#{inspect(reason)}), falling back to file I/O")
+        Logger.warning("VCL outcome fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_all_outcomes_fallback()
     end
   end
 
-  @doc "Load outcomes for a specific recipe via VQL."
+  @doc "Load outcomes for a specific recipe via VCL."
   def fetch_outcomes_for_recipe(recipe_id) do
-    case VQL.outcomes_for_recipe(recipe_id) do
+    case VCL.outcomes_for_recipe(recipe_id) do
       {:ok, outcomes} -> outcomes
       {:error, _} -> []
     end
   end
 
   # ====================================================================
-  # Cross-Repo Analytics (NEW — VQL-only, no file I/O equivalent)
+  # Cross-Repo Analytics (NEW — VCL-only, no file I/O equivalent)
   # ====================================================================
 
   @doc "Find patterns appearing across 3+ repos."
   def cross_repo_patterns(min_repos \\ 3) do
-    VQL.cross_repo_patterns(min_repos)
+    VCL.cross_repo_patterns(min_repos)
   end
 
   @doc "Find correlated patterns (tend to appear together)."
   def pattern_correlations(min_shared \\ 2) do
-    VQL.pattern_correlations(min_shared)
+    VCL.pattern_correlations(min_shared)
   end
 
   @doc "Get outcome timeline for a recipe."
   def outcome_timeline(recipe_id) do
-    VQL.outcome_timeline(recipe_id)
+    VCL.outcome_timeline(recipe_id)
   end
 
   @doc "Get recipe effectiveness metrics."
   def recipe_effectiveness(recipe_id) do
-    VQL.recipe_effectiveness(recipe_id)
+    VCL.recipe_effectiveness(recipe_id)
   end
 
   @doc "Get most vulnerable repos."
   def most_vulnerable_repos(limit \\ 20) do
-    VQL.most_vulnerable_repos(limit)
+    VCL.most_vulnerable_repos(limit)
   end
 
   @doc "Get category distribution across all scans."
   def category_distribution do
-    VQL.category_distribution()
+    VCL.category_distribution()
   end
 
   @doc "Get recipe coverage report."
   def recipe_coverage do
-    VQL.recipe_coverage()
+    VCL.recipe_coverage()
   end
 
   @doc "Get full pipeline health summary."
   def pipeline_health do
-    VQL.pipeline_health()
+    VCL.pipeline_health()
   end
 
   # ====================================================================

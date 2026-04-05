@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# P2P (property-based style) tests for recipe matching and VQL query parsing.
+# P2P (property-based style) tests for recipe matching and VCL query parsing.
 #
 # These tests exercise invariants that must hold across a wide input space
 # using parameterized test tables and randomized spot-checks, without
@@ -10,7 +10,7 @@
 # Invariants tested:
 # - RecipeMatcher: return-type stability, language fallback, tier membership
 # - TriangleRouter: dispatch_strategy monotonicity, tier coverage
-# - VQL Client: parse -> execute round-trip, error handling, modality coverage
+# - VCL Client: parse -> execute round-trip, error handling, modality coverage
 
 defmodule Hypatia.P2P.RecipeMatcherTest do
   @moduledoc """
@@ -278,7 +278,7 @@ end
 
 defmodule Hypatia.P2P.VQLParserTest do
   @moduledoc """
-  Property-based style tests for VQL parser invariants.
+  Property-based style tests for VCL parser invariants.
 
   Exercises the parser over a structured input space: all 6 modalities,
   all FROM clause variants, all WHERE operators, all LIMIT/OFFSET combos.
@@ -288,7 +288,7 @@ defmodule Hypatia.P2P.VQLParserTest do
 
   use ExUnit.Case, async: false
 
-  alias Hypatia.VQL.Client
+  alias Hypatia.VCL.Client
 
   setup do
     case GenServer.whereis(Client) do

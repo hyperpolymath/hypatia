@@ -60,7 +60,7 @@ defmodule Hypatia.CrossRepoLearning do
   | :aggressive     | 1.0                | Trust cross-repo equally           |
   | :language_aware | 1.0 same / 0.3 diff | Full within language family        |
 
-  ## VQL Integration
+  ## VCL Integration
 
   Cross-repo queries use the FEDERATION modality with drift_policy:
 
@@ -71,10 +71,10 @@ defmodule Hypatia.CrossRepoLearning do
 
   alias Hypatia.ConfidenceAnnealing
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @cross_repo_index_path Application.compile_env(
     :hypatia, :cross_repo_index_path,
-    "data/verisimdb/cross-repo-index"
+    "data/verisim/cross-repo-index"
   )
 
   # Drift policy discount factors for cross-repo confidence transfer

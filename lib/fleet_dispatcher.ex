@@ -567,7 +567,7 @@ defmodule Hypatia.FleetDispatcher do
 
     # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
     manifest_path = Path.join([
-      Application.get_env(:hypatia, :verisimdb_data_path, "data/verisimdb"),
+      Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
       "dispatch",
       "pending.jsonl"
     ])

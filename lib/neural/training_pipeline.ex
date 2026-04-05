@@ -5,7 +5,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
   @moduledoc """
   Training data extraction and network training for ESN and RBF.
 
-  Reads real outcome and pattern data from verisimdb-data,
+  Reads real outcome and pattern data from verisim-data,
   transforms it into training format, and trains the networks.
 
   Data sources:
@@ -20,7 +20,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
     RadialNeuralNetwork
   }
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   # --- ESN Training ---
 
@@ -167,7 +167,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
               patterns
 
             # Object with "patterns" key containing a map keyed by pattern ID
-            # (canonical verisimdb-data format: {"patterns": {"PA005-...": {...}, ...}})
+            # (canonical verisim-data format: {"patterns": {"PA005-...": {...}, ...}})
             {:ok, %{"patterns" => patterns}} when is_map(patterns) ->
               Map.values(patterns)
 
@@ -226,7 +226,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Run full training pipeline for both ESN and RBF.
 
   Initializes fresh network instances, trains both on available data
-  from verisimdb-data, and returns a map with :esn and :rbf keys.
+  from verisim-data, and returns a map with :esn and :rbf keys.
   """
   def run_full_training do
     Logger.info("TrainingPipeline: starting full training run")
@@ -250,7 +250,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
   # Convert a pattern registry entry into the finding map format expected
   # by RadialNeuralNetwork.finding_to_vector/1 (8 string-keyed fields).
   #
-  # The canonical verisimdb-data registry format uses these fields:
+  # The canonical verisim-data registry format uses these fields:
   #   severity (title-case), category, occurrences, repos_affected,
   #   first_seen, last_seen, triangle_tier, pa_rule, recipe_id, trend
   #

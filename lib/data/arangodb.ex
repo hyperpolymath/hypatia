@@ -5,7 +5,7 @@ defmodule Hypatia.Data.ArangoDB do
   @moduledoc """
   Elixir client for ArangoDB in the federated Hypatia architecture.
 
-  Sits alongside verisimdb-data (git-backed canonical store) providing:
+  Sits alongside verisim-data (git-backed canonical store) providing:
   - Graph traversal for trust propagation
   - Time-series queries for confidence history
   - Neural state persistence
@@ -24,7 +24,7 @@ defmodule Hypatia.Data.ArangoDB do
 
   @default_url "http://localhost:8529"
   @default_db "hypatia"
-  @sync_interval_ms 10 * 60 * 1_000  # Sync from verisimdb-data every 10 min
+  @sync_interval_ms 10 * 60 * 1_000  # Sync from verisim-data every 10 min
 
   # All collections in the extended schema
   @document_collections [
@@ -233,7 +233,7 @@ defmodule Hypatia.Data.ArangoDB do
     """)
   end
 
-  @doc "Sync data from verisimdb-data flat files into ArangoDB"
+  @doc "Sync data from verisim-data flat files into ArangoDB"
   def sync_from_verisimdb do
     GenServer.cast(__MODULE__, :sync_from_verisimdb)
   end
@@ -385,16 +385,16 @@ defmodule Hypatia.Data.ArangoDB do
     end
   end
 
-  # --- verisimdb-data Sync ---
+  # --- verisim-data Sync ---
 
   defp do_sync(state) do
-    verisimdb_path = Application.get_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+    verisimdb_path = Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
     sync_scans(state, verisimdb_path)
     sync_outcomes(state, verisimdb_path)
     sync_recipes(state, verisimdb_path)
 
-    Logger.info("ArangoDB sync from verisimdb-data complete")
+    Logger.info("ArangoDB sync from verisim-data complete")
   rescue
     e -> Logger.error("ArangoDB sync failed: #{inspect(e)}")
   end

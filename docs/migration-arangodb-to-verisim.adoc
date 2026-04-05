@@ -17,11 +17,11 @@ consolidate onto VeriSimDB once `verisim-api` is deployed.
 
 == Current Architecture: Dual Data Layer
 
-=== verisimdb-data (Git-Backed, Canonical)
+=== verisim-data (Git-Backed, Canonical)
 
-The `verisimdb-data` repository is a Git-backed flat-file store that serves as
+The `verisim-data` repository is a Git-backed flat-file store that serves as
 the canonical source of truth for security intelligence data. Hypatia reads from
-it via the VQL FileExecutor.
+it via the VCL FileExecutor.
 
 [cols="1,2"]
 |===
@@ -81,7 +81,7 @@ The two layers serve complementary purposes:
 
 [cols="1,1,1"]
 |===
-| Capability | verisimdb-data | ArangoDB
+| Capability | verisim-data | ArangoDB
 
 | Flat data reads
 | Yes (canonical)
@@ -107,7 +107,7 @@ The two layers serve complementary purposes:
 | Yes (Git history)
 | Limited (no versioning)
 
-| VQL integration
+| VCL integration
 | Yes (FileExecutor)
 | Partial (direct queries)
 |===
@@ -117,7 +117,7 @@ and ArangoDB cannot provide Git-level auditability. Both are needed today.
 
 == When verisim-api Deploys
 
-The `verisim-api` project (Rust, in `verisimdb/rust-core`) implements a
+The `verisim-api` project (Rust, in `verisim/rust-core`) implements a
 multi-modal database with four modalities:
 
 === Modality Replacements
@@ -143,7 +143,7 @@ multi-modal database with four modalities:
 
 | **Document modality**
 | Flat-file JSON reads
-| Structured document storage with VQL-native querying; replaces
+| Structured document storage with VCL-native querying; replaces
   direct `File.read!` calls in FileExecutor
 |===
 
@@ -165,12 +165,12 @@ to VeriSimDB hexad entities (the six-dimensional data model). Specifically:
 |===
 | Component | Rationale
 
-| **VQL layer**
-| Already integrated, query syntax does not change. The VQL Client will gain
+| **VCL layer**
+| Already integrated, query syntax does not change. The VCL Client will gain
   an HTTP executor (see migration step 2) but existing FileExecutor and all
-  `Hypatia.VQL.Query` functions remain compatible.
+  `Hypatia.VCL.Query` functions remain compatible.
 
-| **verisimdb-data repo**
+| **verisim-data repo**
 | Keeps working as a backup and mirror. FileExecutor still reads from it.
   Useful for offline operation, Git-based auditing, and as a fallback if
   verisim-api is unreachable.
@@ -184,25 +184,25 @@ The migration follows a gradual, incremental approach -- not a big-bang cutover.
 
 Deploy `verisim-api` to Fly.io (free tier is sufficient for initial workload).
 
-* Build from `verisimdb/rust-core`
+* Build from `verisim/rust-core`
 * Configure graph, vector, temporal, and document modalities
-* Seed with existing data from `verisimdb-data` flat files
-* Validate that the API responds to basic VQL-over-HTTP queries
+* Seed with existing data from `verisim-data` flat files
+* Validate that the API responds to basic VCL-over-HTTP queries
 
-=== Step 2: Add HTTP Executor to VQL Client
+=== Step 2: Add HTTP Executor to VCL Client
 
-Extend `lib/vql/client.ex` to support an HTTP executor alongside the existing
+Extend `lib/vcl/client.ex` to support an HTTP executor alongside the existing
 FileExecutor.
 
 [source,elixir]
 ----
-# The VQL Client will route queries to the appropriate executor:
-#   - FileExecutor: local verisimdb-data reads (existing)
+# The VCL Client will route queries to the appropriate executor:
+#   - FileExecutor: local verisim-data reads (existing)
 #   - HttpExecutor: verisim-api REST/gRPC calls (new)
 #   - ArangoDB: graph queries (transitional, to be removed)
 ----
 
-The HTTP executor sends parsed VQL ASTs to the `verisim-api` endpoint and
+The HTTP executor sends parsed VCL ASTs to the `verisim-api` endpoint and
 deserializes responses. Query syntax remains identical from the caller's
 perspective.
 
@@ -242,7 +242,7 @@ Once validation passes:
 * Remove ArangoDB connection configuration from `config/`
 * Remove ArangoDB from deployment manifests / Containerfiles
 * Update `mix.exs` to remove any ArangoDB client dependencies
-* Update VQL Client to remove ArangoDB executor routing
+* Update VCL Client to remove ArangoDB executor routing
 * Update documentation
 
 == Risks
@@ -265,15 +265,15 @@ Once validation passes:
 
 | Data loss during migration
 | If verisim-api ingestion fails silently, data may be lost.
-| verisimdb-data Git repo retains all canonical data; can re-seed
+| verisim-data Git repo retains all canonical data; can re-seed
 
 | API availability
 | Fly.io free tier has cold-start latency and limited uptime guarantees.
 | FileExecutor fallback; consider upgrading tier if Hypatia becomes
   production-critical
 
-| VQL compatibility
-| Subtle differences in how verisim-api interprets VQL vs FileExecutor.
+| VCL compatibility
+| Subtle differences in how verisim-api interprets VCL vs FileExecutor.
 | Comprehensive integration tests during dual-write period
 |===
 
@@ -307,5 +307,5 @@ This migration is *gradual, not big-bang*. Approximate phases:
 |===
 
 The timeline assumes verisim-api is functionally complete. If additional
-modality work is needed in `verisimdb/rust-core`, the timeline extends
+modality work is needed in `verisim/rust-core`, the timeline extends
 accordingly.

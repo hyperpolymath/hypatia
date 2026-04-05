@@ -15,19 +15,19 @@ pub mod cache;
 pub mod dragonfly;
 pub mod error;
 pub mod models;
-pub mod verisimdb;
+pub mod verisim;
 
 pub use cache::{CacheHandle, CachePrefix, CacheStats, DragonflyCache, InvalidationEvent};
 pub use dragonfly::DragonflyClient;
 pub use error::{DataError, Result};
 pub use models::*;
-pub use verisimdb::VerisimClient;
+pub use verisim::VerisimClient;
 
 /// Configuration for data layer connections
 #[derive(Debug, Clone)]
 pub struct DataConfig {
     pub dragonfly: DragonflyConfig,
-    pub verisimdb: VerisimConfig,
+    pub verisim: VerisimConfig,
 }
 
 /// Dragonfly configuration
@@ -74,7 +74,7 @@ impl DataLayer {
     /// Create new data layer with configuration
     pub async fn new(config: DataConfig) -> Result<Self> {
         let dragonfly = DragonflyClient::new(config.dragonfly).await?;
-        let verisim = VerisimClient::new(config.verisimdb).await?;
+        let verisim = VerisimClient::new(config.verisim).await?;
 
         Ok(Self {
             dragonfly,
@@ -89,7 +89,7 @@ impl DataLayer {
 
         Ok(HealthStatus {
             dragonfly: if dragonfly_ok { "pass" } else { "fail" }.to_string(),
-            verisimdb: if verisim_ok { "pass" } else { "fail" }.to_string(),
+            verisim: if verisim_ok { "pass" } else { "fail" }.to_string(),
             overall: if dragonfly_ok && verisim_ok {
                 "healthy"
             } else {
@@ -104,6 +104,6 @@ impl DataLayer {
 #[derive(Debug, Clone)]
 pub struct HealthStatus {
     pub dragonfly: String,
-    pub verisimdb: String,
+    pub verisim: String,
     pub overall: String,
 }

@@ -252,7 +252,7 @@ defmodule Hypatia.Safety.BatchRollbackTest do
 
   alias Hypatia.Safety.BatchRollback
 
-  @data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   setup do
     dispatch_dir = Path.join([Path.expand(@data_path), "dispatch"])

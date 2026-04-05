@@ -188,7 +188,7 @@ defmodule Hypatia.NeuralTest do
       assert got.trust_scores == %{}
     end
 
-    test "build/0 constructs graph from verisimdb data" do
+    test "build/0 constructs graph from verisim data" do
       got = GraphOfTrust.build()
       assert is_struct(got, GraphOfTrust)
       assert map_size(got.nodes) >= 0

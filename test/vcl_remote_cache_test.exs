@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.RemoteCacheTest do
+defmodule Hypatia.VCL.RemoteCacheTest do
   @moduledoc """
-  Tests for the VQL RemoteCache module — git-clone-based caching for
+  Tests for the VCL RemoteCache module — git-clone-based caching for
   multi-store federation.
 
   Uses a temporary directory for the cache root so that tests never write
-  to `/tmp/hypatia-vql-cache/`. Creates lightweight bare git repos as
-  stand-ins for real remote verisimdb-data stores.
+  to `/tmp/hypatia-vcl-cache/`. Creates lightweight bare git repos as
+  stand-ins for real remote verisim-data stores.
 
   Tests cover:
   - Fresh clone creation and ETS metadata
@@ -24,7 +24,7 @@ defmodule Hypatia.VQL.RemoteCacheTest do
   # Git operations can be slow on CI runners.
   @moduletag timeout: 120_000
 
-  alias Hypatia.VQL.RemoteCache
+  alias Hypatia.VCL.RemoteCache
 
   # ---------------------------------------------------------------------------
   # Setup: create a temp dir and a local bare git repo that acts as "remote"
@@ -42,7 +42,7 @@ defmodule Hypatia.VQL.RemoteCacheTest do
     # Create a bare git repo to serve as the "remote" store.
     {_, 0} = System.cmd("git", ["init", "--bare", remote_dir], stderr_to_stdout: true)
 
-    # Create a working clone, add verisimdb-data-like content, push.
+    # Create a working clone, add verisim-data-like content, push.
     work_dir = Path.join(tmp_root, "work")
     {_, 0} = System.cmd("git", ["clone", remote_dir, work_dir], stderr_to_stdout: true)
 
@@ -257,7 +257,7 @@ defmodule Hypatia.VQL.RemoteCacheTest do
 
   describe "federation query across local + remote" do
     test "FileExecutor can query a remote clone via {:remote, url}", ctx do
-      alias Hypatia.VQL.FileExecutor
+      alias Hypatia.VCL.FileExecutor
 
       ast = %{
         modalities: [:document],
@@ -279,7 +279,7 @@ defmodule Hypatia.VQL.RemoteCacheTest do
     end
 
     test "FileExecutor can query a specific store in a remote clone", ctx do
-      alias Hypatia.VQL.FileExecutor
+      alias Hypatia.VCL.FileExecutor
 
       ast = %{
         modalities: [:document],
@@ -298,7 +298,7 @@ defmodule Hypatia.VQL.RemoteCacheTest do
     end
 
     test "WHERE filtering works on remote results", ctx do
-      alias Hypatia.VQL.FileExecutor
+      alias Hypatia.VCL.FileExecutor
 
       ast = %{
         modalities: [:document],
@@ -316,7 +316,7 @@ defmodule Hypatia.VQL.RemoteCacheTest do
     end
 
     test "LIMIT works on remote results", ctx do
-      alias Hypatia.VQL.FileExecutor
+      alias Hypatia.VCL.FileExecutor
 
       ast = %{
         modalities: [:document],
@@ -333,10 +333,10 @@ defmodule Hypatia.VQL.RemoteCacheTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Integration (VQL string -> remote query)
+  # Parser Integration (VCL string -> remote query)
   # ---------------------------------------------------------------------------
 
-  describe "VQL parser REMOTE syntax" do
+  describe "VCL parser REMOTE syntax" do
     test "parses FROM FEDERATION REMOTE with quoted URL" do
       # Test the parser directly (does not need GenServer).
       # We replicate the parse logic to verify AST shape.

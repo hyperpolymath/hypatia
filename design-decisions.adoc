@@ -320,10 +320,10 @@ Instead of debating SQL vs NoSQL, focus on:
 
 == 11. References
 
-- link:../verisimdb/WHITEPAPER.md[VeriSimDB White Paper]
-- link:../verisimdb/docs/deployment-modes.adoc[Deployment Modes]
-- link:../verisimdb/docs/challenges-federated.adoc[Federated Challenges]
-- link:../verisimdb/docs/technical-specification-kraft-metadata-log.adoc[KRaft Metadata Log]
+- link:../verisim/WHITEPAPER.md[VeriSimDB White Paper]
+- link:../verisim/docs/deployment-modes.adoc[Deployment Modes]
+- link:../verisim/docs/challenges-federated.adoc[Federated Challenges]
+- link:../verisim/docs/technical-specification-kraft-metadata-log.adoc[KRaft Metadata Log]
 
 == Appendix: SQL Anti-Pattern Example
 

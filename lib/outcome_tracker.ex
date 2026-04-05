@@ -5,8 +5,8 @@ defmodule Hypatia.OutcomeTracker do
   Closes the feedback loop by recording fix outcomes and updating recipe confidence.
 
   Writes to:
-  - verisimdb-data/outcomes/YYYY-MM.jsonl (append-only outcome log)
-  - verisimdb-data/recipes/{id}.json (updated confidence scores)
+  - verisim-data/outcomes/YYYY-MM.jsonl (append-only outcome log)
+  - verisim-data/recipes/{id}.json (updated confidence scores)
   - gitbot-fleet/shared-context/learning/fix-outcomes.jsonl (fleet learning feed)
   """
 
@@ -14,7 +14,7 @@ defmodule Hypatia.OutcomeTracker do
 
   alias Hypatia.ConfidenceAnnealing
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
 
   # Bayesian confidence updating via Beta distribution
@@ -27,7 +27,7 @@ defmodule Hypatia.OutcomeTracker do
   # Path for persisted annealing states (per-recipe temperature tracking)
   @annealing_state_path Application.compile_env(
     :hypatia, :annealing_state_path,
-    "data/verisimdb/annealing-states"
+    "data/verisim/annealing-states"
   )
 
   @doc """
@@ -53,7 +53,7 @@ defmodule Hypatia.OutcomeTracker do
       "bot" => "hypatia"
     }
 
-    # Write to verisimdb-data outcomes (append-only JSONL per month)
+    # Write to verisim-data outcomes (append-only JSONL per month)
     write_outcome_log(record)
 
     # Write to fleet learning pipeline
@@ -141,7 +141,7 @@ defmodule Hypatia.OutcomeTracker do
 
   @doc """
   Recalculate confidence for a recipe based on all recorded outcomes.
-  Updates the recipe JSON file in verisimdb-data/recipes/.
+  Updates the recipe JSON file in verisim-data/recipes/.
   """
   def update_recipe_confidence(recipe_id) do
     outcomes = load_outcomes_for_recipe(recipe_id)

@@ -6,7 +6,7 @@ defmodule Hypatia.Neural.Persistence do
   Persistence layer for neural network state.
 
   Handles saving/loading neural network weights and state to/from
-  flat files in verisimdb-data/neural-states/.
+  flat files in verisim-data/neural-states/.
 
   On each learning cycle:
   1. Save trust graph edges
@@ -22,7 +22,7 @@ defmodule Hypatia.Neural.Persistence do
 
   require Logger
 
-  @state_dir Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb") |> Path.join("neural-states")
+  @state_dir Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim") |> Path.join("neural-states")
 
   @doc "Save all neural network states"
   def save_all(coordinator_state) do

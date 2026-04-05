@@ -16,7 +16,7 @@ fleet of bots with Bayesian confidence scoring.
 ```
 panic-attack assail (scan repos)
         |
-verisimdb-data (git-backed flat-file store)
+verisim-data (git-backed flat-file store)
         |
 Elixir pipeline:
   PatternRegistry → TriangleRouter → FleetDispatcher
@@ -36,13 +36,13 @@ OutcomeTracker (Bayesian feedback loop)
 | Path | Purpose |
 |------|---------|
 | `lib/pattern_analyzer.ex` | Full pipeline orchestrator |
-| `lib/verisimdb_connector.ex` | VQL-powered data access |
+| `lib/verisimdb_connector.ex` | VCL-powered data access |
 | `lib/pattern_registry.ex` | 954 canonical patterns (PA001-PA020) |
 | `lib/triangle_router.ex` | Safety triangle routing |
 | `lib/fleet_dispatcher.ex` | Confidence-gated dispatch |
 | `lib/outcome_tracker.ex` | Bayesian confidence updating |
 | `lib/neural/` | 5 neural networks + coordinator |
-| `lib/vql/` | VQL query layer (parser + file executor) |
+| `lib/vcl/` | VCL query layer (parser + file executor) |
 | `lib/safety/` | Rate limiter, quarantine, batch rollback |
 | `adapters/` | Rust adapter crate |
 | `cli/` | Rust CLI crate |
@@ -109,6 +109,6 @@ PMPL-1.0-or-later. Author: Jonathan D.A. Jewell.
 
 ## Ecosystem position
 
-- **Depends on**: panic-attacker (scanning), verisimdb-data (data), proven (verified safety)
+- **Depends on**: panic-attacker (scanning), verisim-data (data), proven (verified safety)
 - **Coordinates**: gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot)
 - **Downstream**: All hyperpolymath repos benefit from automated scanning + fixing

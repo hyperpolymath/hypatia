@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # E2E pipeline test: exercises the full scan -> analysis -> recipe match ->
-# action dispatch round-trip against the real verisimdb-data on disk.
+# action dispatch round-trip against the real verisim-data on disk.
 #
 # These tests validate each pipeline stage in isolation using real data,
 # and combine them into a simulated E2E flow that completes in < 30s.
@@ -19,39 +19,39 @@ defmodule Hypatia.E2E.PipelineTest do
   and that the stages compose correctly when wired together with real data.
 
   Stages tested:
-  1. VerisimdbConnector.fetch_all_scans/0 — reads real scan JSON files
+  1. VerisimConnector.fetch_all_scans/0 — reads real scan JSON files
   2. PatternRegistry.sync_from_scans/1 — deduplicates into canonical patterns
   3. TriangleRouter.route/3 — routes patterns through safety triangle
   4. RecipeMatcher.find_recipes/1 — finds fix recipes for patterns
   5. DispatchManifest.write/1 — writes JSONL for execution layer
-  6. VQL.Client.query/1 — cross-stage data access
+  6. VCL.Client.query/1 — cross-stage data access
   """
 
   use ExUnit.Case, async: false
 
   @moduletag timeout: 60_000
 
-  alias Hypatia.VerisimdbConnector
+  alias Hypatia.VerisimConnector
   alias Hypatia.PatternRegistry
   alias Hypatia.TriangleRouter
   alias Hypatia.RecipeMatcher
   alias Hypatia.DispatchManifest
-  alias Hypatia.VQL.Client, as: VQLClient
+  alias Hypatia.VCL.Client, as: VQLClient
 
   # ---------------------------------------------------------------------------
-  # Stage 1: data loading from verisimdb-data
+  # Stage 1: data loading from verisim-data
   # ---------------------------------------------------------------------------
 
-  describe "Stage 1 — verisimdb data loading" do
+  describe "Stage 1 — verisim data loading" do
     test "fetch_all_scans/0 returns at least 3 scan maps" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       assert is_list(scans)
       assert length(scans) >= 3,
-             "Expected >= 3 scans from verisimdb-data, got #{length(scans)}"
+             "Expected >= 3 scans from verisim-data, got #{length(scans)}"
     end
 
     test "each scan has a :repo key and a :scan map" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
 
       Enum.each(scans, fn scan_entry ->
         assert Map.has_key?(scan_entry, :repo),
@@ -64,7 +64,7 @@ defmodule Hypatia.E2E.PipelineTest do
     end
 
     test "scan data contains weak_points or scan_results" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
 
       # At least one scan should have actual findings
       scans_with_findings = Enum.filter(scans, fn entry ->
@@ -83,7 +83,7 @@ defmodule Hypatia.E2E.PipelineTest do
 
   describe "Stage 2 — pattern registry sync" do
     test "sync_from_scans/1 returns {:ok, registry} with patterns map" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
 
       assert is_map(registry)
@@ -97,7 +97,7 @@ defmodule Hypatia.E2E.PipelineTest do
     end
 
     test "registry patterns have id and repos_affected_list" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
 
       patterns = Map.get(registry, "patterns", %{}) |> Map.values()
@@ -117,7 +117,7 @@ defmodule Hypatia.E2E.PipelineTest do
 
   describe "Stage 3 — triangle routing (mini-pipeline)" do
     test "routing real patterns from registry produces valid tuples" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
       patterns = Map.get(registry, "patterns", %{}) |> Map.values()
 
@@ -135,7 +135,7 @@ defmodule Hypatia.E2E.PipelineTest do
     end
 
     test "routing produces all three tiers across real pattern set" do
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
       patterns = Map.get(registry, "patterns", %{}) |> Map.values()
 
@@ -253,10 +253,10 @@ defmodule Hypatia.E2E.PipelineTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Stage 6: VQL cross-stage data access
+  # Stage 6: VCL cross-stage data access
   # ---------------------------------------------------------------------------
 
-  describe "Stage 6 — VQL cross-stage data access" do
+  describe "Stage 6 — VCL cross-stage data access" do
     setup do
       case GenServer.whereis(VQLClient) do
         nil -> start_supervised!(VQLClient)
@@ -265,25 +265,25 @@ defmodule Hypatia.E2E.PipelineTest do
       :ok
     end
 
-    test "VQL can query scan data from stage 1" do
+    test "VCL can query scan data from stage 1" do
       {:ok, results} = VQLClient.query("SELECT DOCUMENT FROM STORE scans LIMIT 5")
       assert is_list(results)
       assert length(results) >= 1
     end
 
-    test "VQL can query recipe data from stage 4" do
+    test "VCL can query recipe data from stage 4" do
       {:ok, results} = VQLClient.query("SELECT DOCUMENT FROM STORE recipes LIMIT 5")
       assert is_list(results)
       assert length(results) >= 1
     end
 
-    test "VQL FEDERATION query spans multiple stores" do
+    test "VCL FEDERATION query spans multiple stores" do
       {:ok, results} = VQLClient.query("SELECT DOCUMENT FROM FEDERATION /scans/* LIMIT 3")
       assert is_list(results)
       assert length(results) >= 1
     end
 
-    test "VQL WHERE filter narrows results compared to full query" do
+    test "VCL WHERE filter narrows results compared to full query" do
       {:ok, all} = VQLClient.query("SELECT DOCUMENT FROM STORE scans")
       {:ok, filtered} = VQLClient.query(
         "SELECT DOCUMENT FROM STORE scans WHERE FIELD _source == echidna.json"
@@ -299,7 +299,7 @@ defmodule Hypatia.E2E.PipelineTest do
   describe "E2E composition — stages 1-4 wired together" do
     test "scan → registry → route → recipe produces a full pipeline result" do
       # Stage 1
-      scans = VerisimdbConnector.fetch_all_scans()
+      scans = VerisimConnector.fetch_all_scans()
       assert length(scans) >= 1
 
       # Stage 2

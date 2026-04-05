@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.ClientTest do
+defmodule Hypatia.VCL.ClientTest do
   @moduledoc """
-  Comprehensive tests for the VQL Client GenServer.
+  Comprehensive tests for the VCL Client GenServer.
 
   Tests cover three main areas:
-  1. VQL parser — tokenization, AST construction, error handling
-  2. Query execution — routing through FileExecutor against real verisimdb-data
+  1. VCL parser — tokenization, AST construction, error handling
+  2. Query execution — routing through FileExecutor against real verisim-data
   3. Cache behaviour — TTL, eviction, stats tracking
 
   These tests use async: false because they interact with a named GenServer.
@@ -15,10 +15,10 @@ defmodule Hypatia.VQL.ClientTest do
 
   use ExUnit.Case, async: false
 
-  alias Hypatia.VQL.Client
+  alias Hypatia.VCL.Client
 
   setup do
-    # Ensure the VQL Client GenServer is running. It may already be started
+    # Ensure the VCL Client GenServer is running. It may already be started
     # by the OTP Application supervisor, so we check before starting.
     case GenServer.whereis(Client) do
       nil -> start_supervised!(Client)
@@ -381,7 +381,7 @@ defmodule Hypatia.VQL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Query Execution Tests (uses real verisimdb-data)
+  # Query Execution Tests (uses real verisim-data)
   # ---------------------------------------------------------------------------
 
   describe "query/1 — store execution" do
@@ -457,7 +457,7 @@ defmodule Hypatia.VQL.ClientTest do
 
     test "WHERE FULLTEXT MATCHES filters by regex" do
       {:ok, results} = Client.query(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT MATCHES "echidna|verisimdb")
+        ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT MATCHES "echidna|verisim")
       )
       assert is_list(results)
       assert length(results) >= 1

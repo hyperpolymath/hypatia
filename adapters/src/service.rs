@@ -3,7 +3,7 @@
 //!
 //! **Status:** `ForgeService` (ArangoDB-era coordinator) was removed — it
 //! was never instantiated anywhere in the codebase, and depended on the
-//! dead `VerisimClient` document stubs (see `data/src/verisimdb.rs` header).
+//! dead `VerisimClient` document stubs (see `data/src/verisim.rs` header).
 //!
 //! The two data types below remain because `SyncResult` is exercised by
 //! `tests/seam_tests.rs` and `ServiceHealth` is a public re-export. They
@@ -20,7 +20,7 @@ pub struct SyncResult {
 /// Health status for a data-backed service.
 #[derive(Debug)]
 pub struct ServiceHealth {
-    pub verisimdb: String,
+    pub verisim: String,
     pub dragonfly: String,
     pub adapters: String,
     pub overall: String,

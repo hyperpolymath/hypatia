@@ -1,10 +1,10 @@
-# Test Hypatia integration with verisimdb-data
+# Test Hypatia integration with verisim-data
 
 IO.puts("=== Hypatia VeriSimDB Integration Test ===\n")
 
 # Fetch all scans
 scans = Hypatia.VerisimdbConnector.fetch_all_scans()
-IO.puts("✓ Loaded #{length(scans)} scans from verisimdb-data")
+IO.puts("✓ Loaded #{length(scans)} scans from verisim-data")
 
 # Generate summary
 summary = Hypatia.PatternAnalyzer.generate_summary(scans)

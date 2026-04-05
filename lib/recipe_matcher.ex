@@ -2,7 +2,7 @@
 
 defmodule Hypatia.RecipeMatcher do
   @moduledoc """
-  Matches patterns to fix recipes from verisimdb-data/recipes/.
+  Matches patterns to fix recipes from verisim-data/recipes/.
 
   For a given pattern_id, finds applicable recipe(s), ranks by confidence
   score, and checks if proven module bindings exist for the repo's language.
@@ -10,7 +10,7 @@ defmodule Hypatia.RecipeMatcher do
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisimdb")
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   @doc """
   Find all recipes matching a pattern_id.
@@ -64,7 +64,7 @@ defmodule Hypatia.RecipeMatcher do
   end
 
   @doc """
-  Load all recipe files from verisimdb-data/recipes/.
+  Load all recipe files from verisim-data/recipes/.
   Caches nothing — always reads fresh from disk.
   """
   def all_recipes do

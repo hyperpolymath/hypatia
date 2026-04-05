@@ -11,7 +11,7 @@
 //! consumer and was never instantiated. They have been deleted.
 //!
 //! When hypatia's Rust layer needs to call VeriSimDB, use the shared Zig
-//! client at `verisimdb/connectors/clients/zig/` via FFI. See H1a.
+//! client at `verisim/connectors/clients/zig/` via FFI. See H1a.
 
 use crate::error::{DataError, Result};
 use crate::VerisimConfig;

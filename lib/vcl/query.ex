@@ -1,32 +1,32 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.Query do
+defmodule Hypatia.VCL.Query do
   @moduledoc """
-  High-level VQL query functions for the Hypatia pipeline.
+  High-level VCL query functions for the Hypatia pipeline.
 
-  Replaces raw file I/O in pipeline modules with structured VQL queries,
+  Replaces raw file I/O in pipeline modules with structured VCL queries,
   enabling cross-modal analytics, temporal trending, and graph-based
   pattern detection that weren't possible with direct JSON reads.
 
   ## Usage
 
       # Simple queries
-      {:ok, scans} = Hypatia.VQL.Query.fetch_scans()
-      {:ok, patterns} = Hypatia.VQL.Query.fetch_patterns()
-      {:ok, recipes} = Hypatia.VQL.Query.fetch_recipes()
+      {:ok, scans} = Hypatia.VCL.Query.fetch_scans()
+      {:ok, patterns} = Hypatia.VCL.Query.fetch_patterns()
+      {:ok, recipes} = Hypatia.VCL.Query.fetch_recipes()
 
       # Filtered queries
-      {:ok, critical} = Hypatia.VQL.Query.scans_by_severity("Critical")
-      {:ok, shell_recipes} = Hypatia.VQL.Query.recipes_by_language("shell")
+      {:ok, critical} = Hypatia.VCL.Query.scans_by_severity("Critical")
+      {:ok, shell_recipes} = Hypatia.VCL.Query.recipes_by_language("shell")
 
       # Cross-repo analytics (NEW — not possible with raw JSON)
-      {:ok, trending} = Hypatia.VQL.Query.trending_patterns(:increasing)
-      {:ok, correlations} = Hypatia.VQL.Query.cross_repo_pattern_correlation("PA009")
-      {:ok, timeline} = Hypatia.VQL.Query.outcome_timeline("recipe-shell-quote-vars")
+      {:ok, trending} = Hypatia.VCL.Query.trending_patterns(:increasing)
+      {:ok, correlations} = Hypatia.VCL.Query.cross_repo_pattern_correlation("PA009")
+      {:ok, timeline} = Hypatia.VCL.Query.outcome_timeline("recipe-shell-quote-vars")
   """
 
-  alias Hypatia.VQL.Client
+  alias Hypatia.VCL.Client
 
   require Logger
 
@@ -34,7 +34,7 @@ defmodule Hypatia.VQL.Query do
   # Core Data Access (replaces raw file reads)
   # ---------------------------------------------------------------------------
 
-  @doc "Fetch all scan results. Replaces VerisimdbConnector.fetch_all_scans/0."
+  @doc "Fetch all scan results. Replaces VerisimConnector.fetch_all_scans/0."
   def fetch_scans(opts \\ []) do
     limit = Keyword.get(opts, :limit)
     query = if limit do
@@ -57,7 +57,7 @@ defmodule Hypatia.VQL.Query do
     end
   end
 
-  @doc "Fetch scan for a specific repo. Replaces VerisimdbConnector.load_scan/1."
+  @doc "Fetch scan for a specific repo. Replaces VerisimConnector.load_scan/1."
   def fetch_scan(repo_name) do
     case Client.query("SELECT DOCUMENT FROM HEXAD #{repo_name}") do
       {:ok, [scan | _]} -> {:ok, %{repo: repo_name, scan: scan}}
@@ -66,7 +66,7 @@ defmodule Hypatia.VQL.Query do
     end
   end
 
-  @doc "Fetch the pattern registry. Replaces VerisimdbConnector.fetch_pattern_registry/0."
+  @doc "Fetch the pattern registry. Replaces VerisimConnector.fetch_pattern_registry/0."
   def fetch_pattern_registry do
     Client.query("SELECT DOCUMENT FROM STORE patterns")
   end
@@ -114,7 +114,7 @@ defmodule Hypatia.VQL.Query do
 
   @doc "Fetch proven substitutions."
   def fetch_substitutions do
-    path = Path.join(Application.get_env(:hypatia, :verisimdb_data_path, "data/verisimdb"), "recipes/proven-substitutions.json")
+    path = Path.join(Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"), "recipes/proven-substitutions.json")
     case File.read(path) do
       {:ok, content} ->
         case Jason.decode(content) do
@@ -125,7 +125,7 @@ defmodule Hypatia.VQL.Query do
     end
   end
 
-  @doc "Fetch all outcomes. Replaces VerisimdbConnector.fetch_all_outcomes/0."
+  @doc "Fetch all outcomes. Replaces VerisimConnector.fetch_all_outcomes/0."
   def fetch_outcomes(opts \\ []) do
     recipe_id = Keyword.get(opts, :recipe_id)
     limit = Keyword.get(opts, :limit)

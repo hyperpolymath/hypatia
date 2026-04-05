@@ -6,7 +6,7 @@ defmodule Hypatia.RecipeMatcherTest do
   alias Hypatia.RecipeMatcher
 
   describe "all_recipes/0" do
-    test "loads recipe files from verisimdb-data" do
+    test "loads recipe files from verisim-data" do
       recipes = RecipeMatcher.all_recipes()
       assert is_list(recipes)
       assert length(recipes) >= 4

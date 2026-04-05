@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-defmodule Hypatia.VQL.FileExecutorTest do
+defmodule Hypatia.VCL.FileExecutorTest do
   @moduledoc """
-  Comprehensive tests for the VQL FileExecutor module.
+  Comprehensive tests for the VCL FileExecutor module.
 
-  Tests execute parsed VQL ASTs directly against verisimdb-data flat files,
+  Tests execute parsed VCL ASTs directly against verisim-data flat files,
   bypassing the Client GenServer. Covers store queries, WHERE filtering,
   pagination, HEXAD lookups, federation queries, and modality sorting.
 
@@ -14,11 +14,11 @@ defmodule Hypatia.VQL.FileExecutorTest do
 
   use ExUnit.Case, async: true
 
-  # JSONL loading via Jason.Decoder is slow on large verisimdb-data files.
+  # JSONL loading via Jason.Decoder is slow on large verisim-data files.
   # Allow 120s per test instead of the default 60s.
   @moduletag timeout: 120_000
 
-  alias Hypatia.VQL.FileExecutor
+  alias Hypatia.VCL.FileExecutor
 
   # ---------------------------------------------------------------------------
   # Helper — builds an AST map for concise test construction
@@ -39,7 +39,7 @@ defmodule Hypatia.VQL.FileExecutorTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Store Query Tests (real verisimdb-data)
+  # Store Query Tests (real verisim-data)
   # ---------------------------------------------------------------------------
 
   describe "execute/2 — STORE scans" do
@@ -65,7 +65,7 @@ defmodule Hypatia.VQL.FileExecutorTest do
       ast = make_ast()
       {:ok, results} = FileExecutor.execute(ast)
 
-      # At minimum, echidna and verisimdb have weak_points
+      # At minimum, echidna and verisim have weak_points
       with_wp = Enum.filter(results, &Map.has_key?(&1, "weak_points"))
       assert length(with_wp) >= 1
     end
@@ -247,7 +247,7 @@ defmodule Hypatia.VQL.FileExecutorTest do
   describe "execute/2 — WHERE FIELD :matches" do
     test "regex matching on field value" do
       ast = make_ast(%{
-        where: {:field, "_source", :matches, "echidna|verisimdb"}
+        where: {:field, "_source", :matches, "echidna|verisim"}
       })
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) >= 1
@@ -294,7 +294,7 @@ defmodule Hypatia.VQL.FileExecutorTest do
 
   describe "execute/2 — WHERE FULLTEXT MATCHES" do
     test "regex matching across serialized JSON" do
-      ast = make_ast(%{where: {:fulltext, :matches, "echidna|verisimdb"}})
+      ast = make_ast(%{where: {:fulltext, :matches, "echidna|verisim"}})
       {:ok, results} = FileExecutor.execute(ast)
       assert is_list(results)
       assert length(results) >= 1
@@ -329,7 +329,7 @@ defmodule Hypatia.VQL.FileExecutorTest do
       ast = make_ast(%{
         where: {:and, [
           {:field, "_source", :eq, "echidna.json"},
-          {:field, "_source", :eq, "verisimdb.json"}
+          {:field, "_source", :eq, "verisim.json"}
         ]}
       })
       {:ok, results} = FileExecutor.execute(ast)

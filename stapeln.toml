@@ -355,14 +355,14 @@ env = { LOG_LEVEL = "debug" }
 # ── Volumes ───────────────────────────────────────────────────
 # Named volumes for persistent data across container restarts.
 
-[volumes.verisimdb-data]
+[volumes.verisim-data]
 description = "VeriSimDB flat-file data store (scan results, patterns, outcomes)"
-mount = "/app/data/verisimdb"
+mount = "/app/data/verisim"
 read-only = false
 
 [volumes.neural-states]
 description = "Neural network persisted state (ESN/RBF/MoE weights)"
-mount = "/app/data/verisimdb/neural-states"
+mount = "/app/data/verisim/neural-states"
 read-only = false
 
 [volumes.schemas]
@@ -371,7 +371,7 @@ mount = "/app/schemas"
 read-only = true
 
 [volumes.hooks]
-description = "Git hooks for verisimdb-data operations"
+description = "Git hooks for verisim-data operations"
 mount = "/app/hooks"
 read-only = true
 

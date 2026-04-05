@@ -361,7 +361,7 @@ defmodule Hypatia.Rules.Dogfooding do
       |> Enum.reject(&String.contains?(&1, "/node_modules/"))
       |> Enum.any?(fn filepath ->
         content = File.read!(filepath)
-        String.contains?(content, "verisimdb") or String.contains?(content, "VeriSimDB")
+        String.contains?(content, "verisim") or String.contains?(content, "VeriSimDB")
       end)
 
     # Check for state storage patterns
@@ -483,7 +483,7 @@ defmodule Hypatia.Rules.Dogfooding do
       "conflow" => 7700,
       "rpa-elysium" => 7800,
       "panll" => 8000,
-      "verisimdb" => 8080,
+      "verisim" => 8080,
       "gitbot-fleet" => 8080,
       "echidna" => 9000,
       "echidnabot" => 9001,
