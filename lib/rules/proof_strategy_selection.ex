@@ -39,6 +39,23 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   @verisim_url_env "HYPATIA_VERISIM_URL"
   @default_verisim_url "http://localhost:8080"
 
+  # Tier-1 provers for novelty gating: when an obligation_class has no
+  # historical data, route to a Tier-1 prover from the same family rather
+  # than letting the strategy endpoint pick from sparse/no evidence.
+  # Mirrors echidna's ProverKind tier assignments (src/rust/provers/mod.rs).
+  @tier1_provers ~w(coq lean agda isabelle z3 cvc5 idris2)
+
+  # Quarantine thresholds: a prover is auto-disabled for a given class
+  # when its success_rate drops below :quarantine_rate after at least
+  # :quarantine_min_attempts invocations. The quarantined pair is
+  # filtered out of recommendations until fresh evidence rehabilitates it.
+  @quarantine_rate 0.10
+  @quarantine_min_attempts 50
+
+  # Tiny sample tolerance: if a (class, prover) has fewer than this many
+  # attempts, we don't quarantine — not enough evidence yet.
+  @quarantine_gate_n 50
+
   @doc """
   PS001: Recommend provers for a given obligation class.
 
@@ -190,6 +207,81 @@ defmodule Hypatia.Rules.ProofStrategySelection do
       {:error, reason} ->
         {:error, {:certs_unavailable, reason}}
     end
+  end
+
+  @doc """
+  PS004 (N1): Recommend with novelty gating + quarantine filtering.
+
+  Wraps `recommend/2` with two additional policies:
+
+    * *Novelty gating*: if the obligation_class has no historical data
+      (empty recommendations from /strategy), return a Tier-1 fallback
+      prover list rather than an empty result. Caller can exploit this
+      to force exploration on novel classes.
+
+    * *Quarantine*: filters out (class, prover) pairs whose success
+      rate has dropped below #{@quarantine_rate * 100}% after
+      ≥#{@quarantine_min_attempts} attempts. Prevents the dispatcher
+      from repeatedly routing obligations to a prover that's clearly
+      underperforming for that class.
+
+  Returns `{:ok, recommendations}` where recommendations is the same
+  shape as `recommend/2`, plus a `"tier"` field (`"novelty"` when the
+  result is Tier-1 fallback, `"learned"` when derived from real data).
+
+  ## Novelty fallback behaviour
+
+  When `recommend/2` returns `{:ok, []}`, this function returns seven
+  Tier-1 provers in a stable order, each with
+  `{"total_attempts" => 0, "success_rate" => nil, "tier" => "novelty"}`.
+  The caller should interpret absence of data as "explore" rather than
+  "fail", and pick the first prover the echidnabot can dispatch to.
+  """
+  def recommend_with_novelty(obligation_class, opts \\ []) when is_binary(obligation_class) do
+    case recommend(obligation_class, opts) do
+      {:ok, []} ->
+        {:ok, novelty_fallback()}
+
+      {:ok, recs} ->
+        learned = Enum.map(recs, &Map.put(&1, "tier", "learned"))
+        filtered = Enum.reject(learned, &quarantined?/1)
+
+        case filtered do
+          [] ->
+            # All provers quarantined — fall back to novelty exploration.
+            {:ok, novelty_fallback()}
+
+          kept ->
+            {:ok, kept}
+        end
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @doc """
+  PS005 (N2): Returns `true` when the given recommendation row meets
+  the quarantine criteria. Exposed for unit tests and external callers
+  that want to apply the same policy.
+  """
+  def quarantined?(rec) when is_map(rec) do
+    n = Map.get(rec, "total_attempts") || 0
+    rate = Map.get(rec, "success_rate") || 0.0
+
+    n >= @quarantine_min_attempts and rate < @quarantine_rate
+  end
+
+  defp novelty_fallback do
+    Enum.map(@tier1_provers, fn prover ->
+      %{
+        "prover" => prover,
+        "success_rate" => nil,
+        "avg_duration_ms" => nil,
+        "total_attempts" => 0,
+        "tier" => "novelty"
+      }
+    end)
   end
 
   @doc """
