@@ -100,6 +100,9 @@ defmodule Hypatia.LearningScheduler do
     # Report annealing state across all tracked recipes
     annealing_report = report_annealing_state()
 
+    # N4: Detect strategy-shift events and re-queue candidates.
+    shift_events = detect_and_requeue_strategy_shifts()
+
     now = DateTime.utc_now()
     total = outcomes_count + fleet_outcomes_count
 
@@ -115,13 +118,127 @@ defmodule Hypatia.LearningScheduler do
       )
     end
 
+    if length(shift_events) > 0 do
+      Logger.info("LearningScheduler: detected #{length(shift_events)} strategy shifts")
+    end
+
     %{state |
       last_run: now,
       last_outcome_positions: new_positions,
       total_outcomes_processed: state.total_outcomes_processed + total,
       total_confidence_updates: state.total_confidence_updates + confidence_updates,
-      total_annealing_reheats: state.total_annealing_reheats + annealing_report.reheated
+      total_annealing_reheats: state.total_annealing_reheats + annealing_report.reheated,
+      total_strategy_shifts: Map.get(state, :total_strategy_shifts, 0) + length(shift_events)
     }
+  end
+
+  # --- N4: Strategy-shift detection + re-queueing ----------------------
+
+  # Runs StrategyDrift.check_all_shifts/1 on each tick. For each shift
+  # event, enqueues the candidate failed-attempt IDs via echidnabot's
+  # submitProofObligation mutation with the new top prover as hint.
+  # Logs but does not block on re-queueing errors.
+  defp detect_and_requeue_strategy_shifts do
+    base_url = System.get_env("HYPATIA_VERISIM_URL") || "http://localhost:8080"
+
+    try do
+      events = Hypatia.Rules.StrategyDrift.check_all_shifts(base_url: base_url)
+
+      Enum.each(events, fn {:shift, class, old_top, new_top, candidates} ->
+        Logger.info(
+          "strategy shift: class=#{class} #{old_top} → #{new_top} " <>
+            "(#{length(candidates)} candidates to re-queue)"
+        )
+        requeue_candidates(class, new_top, candidates)
+      end)
+
+      events
+    rescue
+      e ->
+        Logger.warning("StrategyDrift check failed: #{inspect(e)}")
+        []
+    end
+  end
+
+  # Re-queue each candidate attempt_id via echidnabot. We construct a
+  # fresh submitProofObligation mutation with the class and new prover
+  # hint. Failures logged but non-fatal — the scheduler must keep
+  # running even if echidnabot is unreachable.
+  defp requeue_candidates(_class, _new_top, []), do: :ok
+
+  defp requeue_candidates(class, new_top, candidates) do
+    echidnabot_url = System.get_env("HYPATIA_ECHIDNABOT_URL") || "http://localhost:9001/graphql"
+
+    success_count =
+      candidates
+      |> Enum.take(20)  # rate-limit: max 20 re-queues per tick
+      |> Enum.count(fn attempt_id ->
+        submit_requeue(echidnabot_url, class, new_top, attempt_id)
+      end)
+
+    if success_count > 0 do
+      Logger.info("  re-queued #{success_count}/#{length(candidates)} attempts via echidnabot (capped at 20/tick)")
+    end
+
+    :ok
+  end
+
+  defp submit_requeue(url, class, prover, attempt_id) do
+    # Best-effort GraphQL mutation. The prover field is an enum in
+    # echidnabot's schema; we send it unquoted as the enum literal.
+    prover_upper = prover |> String.upcase() |> String.replace("-", "_")
+
+    claim = "requeue-of-#{attempt_id}"
+    context = "strategy-shift class=#{class}"
+
+    mutation = """
+    mutation {
+      submitProofObligation(input: {
+        repo: "hyperpolymath/requeue",
+        claim: "#{claim}",
+        context: "#{context}",
+        prover: #{prover_upper},
+        inline: true
+      }) { success proofId }
+    }
+    """
+
+    body = Jason.encode!(%{query: mutation})
+
+    case http_post_json(url, body, 5_000) do
+      {:ok, response_body} ->
+        case Jason.decode(response_body) do
+          {:ok, %{"data" => %{"submitProofObligation" => %{"success" => true}}}} -> true
+          _ -> false
+        end
+
+      {:error, _} ->
+        false
+    end
+  end
+
+  defp http_post_json(url, body, timeout_ms) do
+    Application.ensure_all_started(:inets)
+    Application.ensure_all_started(:ssl)
+
+    case :httpc.request(
+           :post,
+           {String.to_charlist(url),
+            [{~c"accept", ~c"application/json"}],
+            ~c"application/json",
+            body},
+           [{:timeout, timeout_ms}],
+           []
+         ) do
+      {:ok, {{_, status, _}, _headers, resp_body}} when status in 200..299 ->
+        {:ok, List.to_string(resp_body)}
+
+      {:ok, {{_, status, _}, _, _}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, {:transport, reason}}
+    end
   end
 
   # --- Ingest new outcomes from verisim-data/outcomes/*.jsonl ---

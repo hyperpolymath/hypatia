@@ -52,9 +52,9 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   @quarantine_rate 0.10
   @quarantine_min_attempts 50
 
-  # Tiny sample tolerance: if a (class, prover) has fewer than this many
-  # attempts, we don't quarantine — not enough evidence yet.
-  @quarantine_gate_n 50
+  # Tiny sample tolerance: the minimum-attempts threshold is baked into
+  # quarantined?/1 via @quarantine_min_attempts; this constant remained
+  # as a no-op after refactoring (kept documented here for future use).
 
   @doc """
   PS001: Recommend provers for a given obligation class.
