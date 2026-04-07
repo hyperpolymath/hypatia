@@ -139,6 +139,7 @@ Elixir pipeline:
 * [ ] Create PAT with repo scope for automated cross-repo dispatch
 * [ ] Write real fix scripts for 310 null-fix-script dispatch entries
 * [ ] Push committed fixes to remotes across repos
+* [ ] Fix `hypatia-scan.yml` template so `${{ env.HOME }}` does not collapse to empty in GitHub Actions (Issue #141: https://github.com/hyperpolymath/hypatia/issues/141)
 
 ==== Important
 
