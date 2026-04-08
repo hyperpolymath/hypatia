@@ -73,7 +73,7 @@ regex = "1.10"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 
 # SHA256 for checksums
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 
 [dev-dependencies]
