@@ -22,11 +22,12 @@
 set -euo pipefail
 
 HYPATIA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Check for hypatia-v2 first (legacy name from workflow mv), then hypatia (mix escript.build output)
-if [[ -x "${HYPATIA_DIR}/hypatia-v2" ]]; then
-    ESCRIPT="${HYPATIA_DIR}/hypatia-v2"
-elif [[ -x "${HYPATIA_DIR}/hypatia" ]]; then
+# Prefer the canonical escript name produced by `mix escript.build` (`hypatia`).
+# Keep `hypatia-v2` as a backward-compatible fallback for older deployments.
+if [[ -x "${HYPATIA_DIR}/hypatia" ]]; then
     ESCRIPT="${HYPATIA_DIR}/hypatia"
+elif [[ -x "${HYPATIA_DIR}/hypatia-v2" ]]; then
+    ESCRIPT="${HYPATIA_DIR}/hypatia-v2"
 else
     ESCRIPT="${HYPATIA_DIR}/hypatia"
 fi
@@ -39,7 +40,7 @@ build_escript() {
     (
         cd "${HYPATIA_DIR}"
         mix deps.get --quiet 2>/dev/null || true
-        mix escript.build 2>&1 >&2
+        MIX_NO_PUBSUB="${MIX_NO_PUBSUB:-1}" mix escript.build 2>&1 >&2
     )
 }
 

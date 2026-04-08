@@ -15,7 +15,7 @@ impl ShaPins {
 
         // GitHub Official Actions
         pins.insert("actions/checkout".to_string(),
-            ("8e8c483db84b4bee98b60c0593521ed34d9990e8".to_string(), "v6.0.1".to_string()));
+            ("34e114876b0b11c390a56381ad16ebd13914f8d5".to_string(), "v4".to_string()));
         pins.insert("actions/upload-artifact".to_string(),
             ("b7c566a772e6b6bfb58ed0dc250532a479d7789f".to_string(), "v6.0.0".to_string()));
         pins.insert("actions/configure-pages".to_string(),
@@ -31,11 +31,11 @@ impl ShaPins {
 
         // Security Actions
         pins.insert("github/codeql-action/init".to_string(),
-            ("1b168cd39490f61582a9beae412bb7057a6b2c4e".to_string(), "v3.28.1".to_string()));
+            ("d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e".to_string(), "v4".to_string()));
         pins.insert("github/codeql-action/analyze".to_string(),
-            ("1b168cd39490f61582a9beae412bb7057a6b2c4e".to_string(), "v3.28.1".to_string()));
+            ("d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e".to_string(), "v4".to_string()));
         pins.insert("github/codeql-action/upload-sarif".to_string(),
-            ("1b168cd39490f61582a9beae412bb7057a6b2c4e".to_string(), "v3.28.1".to_string()));
+            ("d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e".to_string(), "v4".to_string()));
         pins.insert("ossf/scorecard-action".to_string(),
             ("62b2cac7ed8198b15735ed49ab1e5cf35480ba46".to_string(), "v2.4.0".to_string()));
         pins.insert("trufflesecurity/trufflehog".to_string(),
@@ -51,7 +51,7 @@ impl ShaPins {
 
         // Deno
         pins.insert("denoland/setup-deno".to_string(),
-            ("11b63cf76cfcafb4e43f97b6cad24d8e8438f62d".to_string(), "v1".to_string()));
+            ("909cc5acb0fdd60627fb858598759246509fa755".to_string(), "v2".to_string()));
 
         // Erlang/Elixir
         pins.insert("erlef/setup-beam".to_string(),
@@ -70,6 +70,14 @@ impl ShaPins {
             ("dc588b651fe13675774614f8e6a936a468676387".to_string(), "v0.9.0".to_string()));
         pins.insert("softprops/action-gh-release".to_string(),
             ("da05d552573ad5aba039eaac05058a918a7bf631".to_string(), "v2".to_string()));
+
+        // Internal Hyperpolymath actions/workflows
+        pins.insert("hyperpolymath/a2ml-validate-action".to_string(),
+            ("cb3c1e298169dc5ac2b42e257068b0fb5920cd5e".to_string(), "main".to_string()));
+        pins.insert("hyperpolymath/k9-validate-action".to_string(),
+            ("236f0035cc159051c8dd5dc7cd8af1e8cf961462".to_string(), "main".to_string()));
+        pins.insert("hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml".to_string(),
+            ("21fc3f00a088c954912936f4a68970621b82c2e6".to_string(), "main".to_string()));
 
         // ClusterFuzzLite
         pins.insert("google/clusterfuzzlite/actions/build_fuzzers".to_string(),

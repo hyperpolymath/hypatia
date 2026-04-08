@@ -308,6 +308,8 @@ defmodule Hypatia.Reviewer do
     case Path.extname(path) |> String.downcase() do
       ".ex" -> :elixir
       ".exs" -> :elixir
+      ".erl" -> :erlang
+      ".hrl" -> :erlang
       ".rs" -> :rust
       ".res" -> :rescript
       ".resi" -> :rescript

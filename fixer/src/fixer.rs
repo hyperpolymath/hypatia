@@ -120,7 +120,7 @@ impl WorkflowFixer {
 
     /// Pin unpinned actions to SHA
     fn fix_unpinned_action(&self, content: &str, sha_pins: &ShaPins) -> Option<String> {
-        let uses_re = Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)").ok()?;
+        let uses_re = Regex::new(r"uses:\s*([a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)").ok()?;
         let mut new_content = content.to_string();
         let mut made_change = false;
 

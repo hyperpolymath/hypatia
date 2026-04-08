@@ -58,6 +58,10 @@ defmodule Hypatia.CLI do
     "info" => 5
   }
 
+  # Skip very large blobs during generic secret scanning to keep CLI latency
+  # bounded on large monorepos.
+  @max_secret_scan_bytes 1_000_000
+
   # ─── Escript entry point ──────────────────────────────────────────────
 
   @doc """
@@ -586,38 +590,71 @@ defmodule Hypatia.CLI do
     "lean" => [".lean"],
     "nickel" => [".ncl"],
     "elixir" => [".ex", ".exs"],
+    "erlang" => [".erl", ".hrl"],
+    "shell" => [".sh"],
     "javascript" => [".js", ".mjs"],
     "typescript" => [".ts", ".tsx"]
   }
 
   defp scan_code_safety(repo_path) do
-    Enum.flat_map(@language_extensions, fn {language, exts} ->
-      files =
-        Enum.flat_map(exts, fn ext ->
-          find_files_by_ext(repo_path, ext)
+    language_findings =
+      Enum.flat_map(@language_extensions, fn {language, exts} ->
+        files =
+          Enum.flat_map(exts, fn ext ->
+            find_files_by_ext(repo_path, ext)
+          end)
+
+        Enum.flat_map(files, fn file ->
+          case File.read(file) do
+            {:ok, content} ->
+              findings = Hypatia.Rules.CodeSafety.scan_content(content, language)
+
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "code_safety",
+                  severity: to_string(f.severity),
+                  type: to_string(f.rule),
+                  file: file,
+                  reason: "#{f.description} (#{f.occurrences} occurrences, #{f.cwe})",
+                  action: "flag"
+                }
+              end)
+
+            _ ->
+              []
+          end
         end)
-
-      Enum.flat_map(files, fn file ->
-        case File.read(file) do
-          {:ok, content} ->
-            findings = Hypatia.Rules.CodeSafety.scan_content(content, language)
-
-            Enum.map(findings, fn f ->
-              %{
-                rule_module: "code_safety",
-                severity: to_string(f.severity),
-                type: to_string(f.rule),
-                file: file,
-                reason: "#{f.description} (#{f.occurrences} occurrences, #{f.cwe})",
-                action: "flag"
-              }
-            end)
-
-          _ ->
-            []
-        end
       end)
-    end)
+
+    # Native secret scanning across generic text files (including .scm and
+    # non-language-specific configs/docs) so leaks are not extension-gated.
+    secret_findings =
+      repo_path
+      |> list_all_files()
+      |> Enum.flat_map(&scan_file_for_secrets/1)
+
+    language_findings ++ secret_findings
+  end
+
+  defp scan_file_for_secrets(file) do
+    with {:ok, %File.Stat{type: :regular, size: size}} when size <= @max_secret_scan_bytes <- File.stat(file),
+         {:ok, content} <- File.read(file),
+         true <- not String.contains?(content, <<0>>) do
+      Hypatia.Rules.SecurityErrors.detect_secrets(content)
+      |> Enum.uniq()
+      |> Enum.map(fn label ->
+        %{
+          rule_module: "security_errors",
+          severity: "critical",
+          type: "secret_detected",
+          file: file,
+          reason: "Secret found: #{label}",
+          action: "revoke_rotate_and_purge"
+        }
+      end)
+    else
+      _ -> []
+    end
   end
 
   # ─── Output formatting ───────────────────────────────────────────────

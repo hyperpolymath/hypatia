@@ -411,6 +411,8 @@
 
     detection_pattern('System\\.cmd\\(').
     detection_pattern('os\\.system\\(').
+    detection_pattern('os:cmd\\(').
+    detection_pattern('open_port\\s*\\(\\s*\\{spawn,').
     detection_pattern('subprocess\\.call.*shell=True').
     detection_pattern('eval\\s*\\(').
     detection_pattern('exec\\s*\\(').
@@ -422,7 +424,7 @@
 
     proven_modules(['SafeCommand', 'SafeSQL', 'SafeGit', 'SafeSSH']).
 
-    affected_languages([shell, python, ruby, elixir, c, rust, javascript]).
+    affected_languages([shell, python, ruby, elixir, erlang, c, rust, javascript]).
 
     classify_severity(_, critical).
 
@@ -448,14 +450,16 @@
     detection_pattern('yaml\\.load\\(').
     detection_pattern('Marshal\\.load').
     detection_pattern('ObjectInputStream').
+    detection_pattern('erlang:binary_to_term\\(').
     detection_pattern(':erlang\\.binary_to_term').
+    detection_pattern('binary_to_term\\(').
     detection_pattern('JSON\\.parse.*eval').
 
     remediation('Use safe deserialization: yaml.safe_load in Python, Jason.decode in Elixir, serde with deny_unknown_fields in Rust. Never deserialize untrusted data with full object instantiation.').
 
     proven_modules(['SafeJson', 'SafeYAML', 'SafeXML']).
 
-    affected_languages([python, ruby, java, elixir, javascript, rust]).
+    affected_languages([python, ruby, java, elixir, erlang, javascript, rust]).
 
     classify_severity(_, critical).
 

@@ -286,6 +286,26 @@ scan_code_patterns() {
         "critical" "graphql_injection" "elixir_graphql_interpolation" "CWE-943" \
         "Use GraphQL variables instead of string interpolation in mutations"
 
+    # Unsafe Erlang term deserialization
+    run_pattern "$dir" "*.erl" '\b(erlang:)?binary_to_term\(' \
+        "critical" "deserialization" "erlang_binary_to_term_unsafe" "CWE-502" \
+        "Use safe decoding options or trusted-only inputs for binary_to_term"
+
+    # Atom exhaustion via dynamic atom creation (Erlang)
+    run_pattern "$dir" "*.erl" '\b(erlang:)?(binary_to_atom|list_to_atom)\(' \
+        "high" "resource_exhaustion" "erlang_atom_exhaustion" "CWE-400" \
+        "Avoid creating atoms from untrusted input; prefer existing atoms or maps"
+
+    # Command execution in Erlang
+    run_pattern "$dir" "*.erl" 'os:cmd\(|open_port\(\s*\{spawn,' \
+        "high" "command_injection" "erlang_command_exec" "CWE-78" \
+        "Avoid shell execution with untrusted input; validate and use safe APIs"
+
+    # TLS verification disabled in Erlang
+    run_pattern "$dir" "*.erl" 'ssl:connect\([^)]*\{verify,\s*verify_none\}' \
+        "high" "insecure_transport" "erlang_tls_verify_none" "CWE-295" \
+        "Enable peer certificate verification in ssl:connect options"
+
     # Shell injection via unquoted variables in bash
     run_pattern "$dir" "*.sh" 'exec\s+\$[A-Z_]+[^"]' \
         "critical" "command_injection" "shell_unquoted_var" "CWE-78" \
@@ -309,12 +329,12 @@ scan_code_patterns() {
     # ── 4. CRYPTOGRAPHIC WEAKNESSES ────────────────────────────────
 
     # MD5 for anything (any language)
-    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js,py,rb,go}" '\b(md5|MD5|Md5)\b' \
+    run_pattern "$dir" "*.{rs,ex,exs,erl,hs,ml,res,js,py,rb,go}" '\b(md5|MD5|Md5)\b' \
         "high" "weak_crypto" "md5_usage" "CWE-328" \
         "MD5 is cryptographically broken; use SHA-256 or better"
 
     # SHA-1 for security purposes
-    run_pattern "$dir" "*.{rs,ex,exs,hs,ml,res,js}" '\b(sha1|SHA1|Sha1|SHA-1)\b' \
+    run_pattern "$dir" "*.{rs,ex,exs,erl,hs,ml,res,js}" '\b(sha1|SHA1|Sha1|SHA-1)\b' \
         "high" "weak_crypto" "sha1_usage" "CWE-328" \
         "SHA-1 is vulnerable to collision attacks; use SHA-256 or better"
 
@@ -427,6 +447,11 @@ scan_code_patterns() {
         "high" "xss" "document_write" "CWE-79" \
         "Replace document.write with DOM API methods"
 
+    # Math.random in security-sensitive contexts
+    run_pattern "$dir" "*.{js,jsx,mjs,ts}" '(?i)(session|token|nonce|secret|auth|csrf)[A-Za-z0-9_]*\s*[:=].*Math\.random\(' \
+        "high" "insecure_randomness" "js_insecure_random_security_context" "CWE-338" \
+        "Use crypto.randomUUID()/crypto.getRandomValues() for security-sensitive randomness"
+
     # ── 7. FILE / PATH SAFETY ─────────────────────────────────────
 
     # Path traversal — user input joined to path (Rust)
@@ -468,19 +493,23 @@ scan_code_patterns() {
 
     # ── 9. WORKFLOW / CI SECURITY ──────────────────────────────────
 
-    # Unpinned GitHub Actions (uses: owner/repo@vN instead of @sha)
-    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+@v[0-9]' \
+    # Unpinned GitHub Actions/reusable workflows (version tag or mutable branch)
+    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@(v[0-9][a-zA-Z0-9._-]*|main|master)' \
         "high" "supply_chain" "unpinned_action" "CWE-829" \
-        "Pin GitHub Actions to full SHA, not version tags" "true"
+        "Pin GitHub Actions/reusable workflows to full commit SHA" "true"
 
     # Missing permissions in workflows
     # (This is checked structurally below, not via regex)
 
-    # GitHub Actions expression injection (${{ github.event... }})
-    # Catches any event data used directly in run: context (title, body, labels, head_ref, etc.)
-    run_pattern "$dir" "*.{yml,yaml}" '\$\{\{.*github\.event\.' \
+    # GitHub Actions expression injection inside scripts (${{ github.* }})
+    run_pattern "$dir" "*.{yml,yaml}" '\$\{\{.*github\.(event\.|repository|ref_name|head_ref|actor)' \
         "critical" "code_injection" "actions_expression_injection" "CWE-94" \
-        "Do not use event data in run: steps; assign to env var with safe quoting"
+        "Do not interpolate GitHub context directly in run steps; pass via env and quote safely"
+
+    # Download-and-execute anti-pattern in workflows/scripts
+    run_pattern "$dir" "*.{yml,yaml,sh}" '\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b' \
+        "high" "supply_chain" "download_then_run" "CWE-494" \
+        "Download scripts, verify checksum/signature, then execute (do not pipe directly to shell)"
 
     # Workflow uses pull_request_target with checkout (dangerous)
     run_pattern "$dir" "*.{yml,yaml}" 'pull_request_target' \

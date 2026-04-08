@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 
 // Compile regexes at compile-time (safe, no unwrap needed)
 static UNPINNED_ACTION_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"uses:\s*([a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)")
+    Regex::new(r"uses:\s*([a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)")
         .expect("UNPINNED_ACTION_RE regex is invalid - this is a compile-time bug")
 });
 
@@ -28,6 +28,11 @@ static SPDX_RE: Lazy<Regex> = Lazy::new(|| {
 static RUST_TOOLCHAIN_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"uses:\s*dtolnay/rust-toolchain@")
         .expect("RUST_TOOLCHAIN_RE regex is invalid - this is a compile-time bug")
+});
+
+static DOWNLOAD_THEN_RUN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b")
+        .expect("DOWNLOAD_THEN_RUN_RE regex is invalid - this is a compile-time bug")
 });
 
 
@@ -187,12 +192,24 @@ impl Scanner {
                     .map(|(sha, ver)| format!("@{} # {}", sha, ver))
                     .unwrap_or_else(|| format!("@SHA # {}", version));
 
+                let severity = if version == "main" || version == "master" {
+                    IssueSeverity::High
+                } else {
+                    IssueSeverity::Medium
+                };
+
+                let description = if version == "main" || version == "master" {
+                    format!("GitHub Action/workflow '{}' uses mutable ref '{}' instead of SHA pin", action, version)
+                } else {
+                    format!("GitHub Action '{}' uses version tag '{}' instead of SHA pin", action, version)
+                };
+
                 issues.push(Issue {
                     id: "unpinned-action".to_string(),
-                    severity: IssueSeverity::Medium,
+                    severity,
                     file_path: path.display().to_string(),
                     line_number: line_num,
-                    description: format!("GitHub Action '{}' using version tag '{}' instead of SHA pin", action, version),
+                    description,
                     fix_suggestion: format!("Replace @{} with {}", version, sha_suggestion),
                     auto_fixable: true,
                     category: IssueCategory::UnpinnedAction,
@@ -225,6 +242,21 @@ impl Scanner {
                         }
                     }
                 }
+            }
+
+            // Check for download-and-execute shell patterns
+            if let Some(mat) = DOWNLOAD_THEN_RUN_RE.find(&content) {
+                let line_number = content[..mat.start()].chars().filter(|&c| c == '\n').count() + 1;
+                issues.push(Issue {
+                    id: "download-then-run".to_string(),
+                    severity: IssueSeverity::High,
+                    file_path: path.display().to_string(),
+                    line_number: Some(line_number),
+                    description: "Workflow executes remote script directly via curl/wget pipe to shell".to_string(),
+                    fix_suggestion: "Download script to file, verify checksum/signature, then execute".to_string(),
+                    auto_fixable: false,
+                    category: IssueCategory::Other,
+                });
             }
         }
 

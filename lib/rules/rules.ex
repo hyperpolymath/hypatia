@@ -184,6 +184,36 @@ defmodule Hypatia.Rules do
             findings
           end
 
+        # Detect vulnerable ring versions (AES overflow panic)
+        # Fixed in: 0.17.12
+        findings =
+          if Regex.match?(~r/name = "ring"\s+version = "0\.17\.(?:[0-9]|1[01])"/, content) do
+            [%{rule: "ring-aes-overflow-panic", severity: :high,
+               description: "Vulnerable ring version detected in Cargo.lock — update to >= 0.17.12"} | findings]
+          else
+            findings
+          end
+
+        # Detect vulnerable yamux versions (remote panic)
+        # Fixed in: 0.13.10 (and 0.13.9 for GHSA-4w32-2493-32g7)
+        findings =
+          if Regex.match?(~r/name = "yamux"\s+version = "(0\.12\.[0-9]+|0\.13\.[0-9])"/, content) do
+            [%{rule: "yamux-remote-panic", severity: :high,
+               description: "Vulnerable yamux version detected in Cargo.lock — update to >= 0.13.10"} | findings]
+          else
+            findings
+          end
+
+        # Detect vulnerable atty versions (potential unaligned read)
+        # No upstream patched version available for GHSA-g98v-hv3f-hcfr
+        findings =
+          if Regex.match?(~r/name = "atty"\s+version = "0\.2\.(?:[0-9]|1[0-4])"/, content) do
+            [%{rule: "atty-unaligned-read", severity: :medium,
+               description: "Vulnerable atty version detected in Cargo.lock — replace atty usage or migrate to is-terminal"} | findings]
+          else
+            findings
+          end
+
         findings
       else
         findings

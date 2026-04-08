@@ -5,7 +5,7 @@ defmodule Hypatia.Rules.CodeSafety do
   Code safety rules absorbed from Logtalk code-safety-lessons.lgt and
   container-security-lessons.lgt.
 
-  Detects dangerous patterns in Rust, ReScript, and container code.
+  Detects dangerous patterns in Rust, ReScript, BEAM, and container code.
   """
 
   # ---------------------------------------------------------------------------
@@ -224,6 +224,28 @@ defmodule Hypatia.Rules.CodeSafety do
   ]
 
   # ---------------------------------------------------------------------------
+  # Erlang Patterns — runtime safety for BEAM code
+  # ---------------------------------------------------------------------------
+
+  @erlang_patterns [
+    %{id: :erlang_binary_to_term_unsafe, severity: :critical,
+      pattern: ~r/\b(?:erlang:)?binary_to_term\(/, cwe: "CWE-502",
+      description: "binary_to_term without safe decoding options — deserialization attack"},
+    %{id: :erlang_atom_from_untrusted, severity: :high,
+      pattern: ~r/\b(?:erlang:)?(?:binary_to_atom|list_to_atom)\(/, cwe: "CWE-400",
+      description: "Atom creation from untrusted input may exhaust atom table"},
+    %{id: :erlang_command_exec, severity: :high,
+      pattern: ~r/\bos:cmd\(|open_port\(\s*\{spawn,|erlang:open_port\(\s*\{spawn,/, cwe: "CWE-78",
+      description: "Shell command execution from Erlang runtime — validate input and avoid shell"},
+    %{id: :erlang_tls_verify_none, severity: :high,
+      pattern: ~r/ssl:connect\([^)]*\{verify,\s*verify_none\}/s, cwe: "CWE-295",
+      description: "TLS verification disabled in ssl:connect — MITM risk"},
+    %{id: :erlang_insecure_httpc, severity: :medium,
+      pattern: ~r/httpc:request\(\s*\"http:\/\//, cwe: "CWE-319",
+      description: "Insecure HTTP request in Erlang code — use HTTPS"}
+  ]
+
+  # ---------------------------------------------------------------------------
   # JavaScript/Web Security Patterns — general JS/TS/Deno files
   # ---------------------------------------------------------------------------
 
@@ -251,7 +273,19 @@ defmodule Hypatia.Rules.CodeSafety do
       description: "HTTP URL in code — use HTTPS for non-localhost"},
     %{id: :js_hardcoded_secret, severity: :critical,
       pattern: ~r/(api_key|apiKey|secret|password|token)\s*[:=]\s*["'][a-zA-Z0-9+\/=]{8,}["']/, cwe: "CWE-798",
-      description: "Possible hardcoded credential — use environment variable"}
+      description: "Possible hardcoded credential — use environment variable"},
+    %{id: :js_insecure_random_security_context, severity: :high,
+      pattern: ~r/(?i)\b(?:session|token|nonce|secret|auth|csrf)\w*\b\s*[:=][^\n]*Math\.random\(/, cwe: "CWE-338",
+      description: "Math.random() used for security-sensitive identifier/token generation — use crypto.randomUUID or getRandomValues"}
+  ]
+
+  @shell_patterns [
+    %{id: :shell_download_then_run, severity: :high,
+      pattern: ~r/\b(?:curl|wget)\b[^\n|;]*\|\s*(?:sh|bash)\b/, cwe: "CWE-494",
+      description: "Download-and-execute pattern (curl|wget pipe to shell) — verify integrity before execution"},
+    %{id: :shell_process_substitution_download_exec, severity: :high,
+      pattern: ~r/\b(?:sh|bash)\s+<\(\s*(?:curl|wget)\b/, cwe: "CWE-494",
+      description: "Process-substitution download-and-execute detected — avoid executing remote scripts directly"}
   ]
 
   # ---------------------------------------------------------------------------
@@ -320,8 +354,11 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language("spark"), do: @ada_spark_patterns
   def patterns_for_language("nickel"), do: @nickel_patterns
   def patterns_for_language("elixir"), do: @elixir_patterns
+  def patterns_for_language("erlang"), do: @erlang_patterns
   def patterns_for_language("javascript"), do: @javascript_patterns
   def patterns_for_language("typescript"), do: @javascript_patterns
+  def patterns_for_language("shell"), do: @shell_patterns
+  def patterns_for_language("bash"), do: @shell_patterns
   def patterns_for_language(_), do: []
 
   def scan_content(content, language) do
@@ -470,4 +507,5 @@ defmodule Hypatia.Rules.CodeSafety do
 
   def javascript_patterns, do: @javascript_patterns
   def elixir_patterns, do: @elixir_patterns
+  def shell_patterns, do: @shell_patterns
 end

@@ -38,6 +38,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
     "actions/checkout@v4" => "34e114876b0b11c390a56381ad16ebd13914f8d5",
     "actions/checkout@v5" => "93cb6efe18208431cddfb8368fd83d5badbf9bfd",
     "github/codeql-action@v3" => "6624720a57d4c312633c7b953db2f2da5bcb4c3a",
+    "github/codeql-action@v4" => "d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e",
+    "denoland/setup-deno@v2" => "909cc5acb0fdd60627fb858598759246509fa755",
     "ossf/scorecard-action@v2.4.0" => "62b2cac7ed8198b15735ed49ab1e5cf35480ba46",
     "trufflesecurity/trufflehog@main" => "7ee2e0fdffec27d19ccbb8fb3dcf8a83b9d7f9e8",
     "dtolnay/rust-toolchain@stable" => "4be9e76fd7c4901c61fb841f559994984270fce7",
@@ -50,7 +52,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
     "actions/jekyll-build-pages@v1" => "44a6e6beabd48582f863aeeb6cb2151cc1716697",
     "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
     "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
-    "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd"
+    "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
+    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
+    "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
+    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" =>
+      "21fc3f00a088c954912936f4a68970621b82c2e6"
   }
 
   def standard_workflows, do: @standard_workflows
@@ -70,10 +76,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
     flawed_regexes = check_flawed_regex(workflow_contents)
     duplicates = check_duplicates(workflow_files, workflow_contents)
     caching_issues = check_caching(workflow_contents)
+    run_context_issues = check_github_context_in_run(workflow_contents)
+    download_then_run_issues = check_download_then_run(workflow_contents)
     nperm_typos = check_npermissions_typo(workflow_contents)
 
     %{
-      findings: missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++ caching_issues ++ nperm_typos,
+      findings:
+        missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
+          caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -81,6 +91,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
       flawed_regex_count: length(flawed_regexes),
       duplicate_count: length(duplicates),
       caching_issues: length(caching_issues),
+      run_context_issues: length(run_context_issues),
+      download_then_run_issues: length(download_then_run_issues),
       npermissions_typo_count: length(nperm_typos),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
@@ -107,12 +119,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
   """
   def check_unpinned_actions(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      # Match uses: owner/repo@vN.N.N (tag, not SHA)
-      Regex.scan(~r/uses:\s*([^\s]+)@(v[\d.]+)\s*$/m, content)
-      |> Enum.map(fn [_full, action, tag] ->
-        %{type: :unpinned_action, file: filename, action_ref: "#{action}@#{tag}",
-          severity: :high, action: :pin_sha,
-          known_sha: Map.get(@known_good_shas, "#{action}@#{tag}")}
+      # Match uses: owner/repo@vN.N.N or @main/@master (tag/branch, not SHA)
+      Regex.scan(~r/uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+)@((?:v[\d][\w.-]*|main|master))\s*$/m, content)
+      |> Enum.map(fn [_full, action, ref] ->
+        severity = if ref in ["main", "master"], do: :high, else: :medium
+
+        %{
+          type: :unpinned_action,
+          file: filename,
+          action_ref: "#{action}@#{ref}",
+          severity: severity,
+          action: :pin_sha,
+          known_sha: Map.get(@known_good_shas, "#{action}@#{ref}")
+        }
       end)
     end)
   end
@@ -247,6 +266,73 @@ defmodule Hypatia.Rules.WorkflowAudit do
           severity: :high,
           reason: "Workflow has 'npermissions' typo — should be 'permissions'. GitHub Actions silently ignores this, running with overly broad defaults.",
           action: :fix_typo
+        }]
+      else
+        []
+      end
+    end)
+  end
+
+  @doc """
+  Detect direct GitHub context interpolation inside run blocks.
+  These patterns are repeatedly implicated in workflow command/script injection alerts.
+  """
+  def check_github_context_in_run(workflow_contents) do
+    run_context_re =
+      ~r/run:\s*\|(?:(?:\n[ \t]+[^\n]*)*?\n[ \t]+[^\n]*\$\{\{\s*github\.(?:event\.repository\.name|repository|ref_name|head_ref|actor|event\.pull_request\.|event\.issue\.|event\.comment\.)[^}]*\}\})/m
+
+    unsafe_json_payload_re = ~r/-d\s*".*\$\{\{\s*github\./s
+
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      findings = []
+
+      findings =
+        if Regex.match?(run_context_re, content) do
+          [%{
+            type: :actions_expression_injection,
+            file: filename,
+            detail:
+              "GitHub context value is interpolated directly inside a run block. Move context into env and use jq/quoted variables.",
+            severity: :critical,
+            action: :sanitize_context
+          } | findings]
+        else
+          findings
+        end
+
+      findings =
+        if Regex.match?(unsafe_json_payload_re, content) do
+          [%{
+            type: :unsafe_curl_payload,
+            file: filename,
+            detail:
+              "curl JSON payload is assembled with inline GitHub context interpolation. Build payload with jq --arg.",
+            severity: :high,
+            action: :use_jq_payload
+          } | findings]
+        else
+          findings
+        end
+
+      findings
+    end)
+  end
+
+  @doc """
+  Detect download-and-execute shell patterns in workflow run blocks.
+  """
+  def check_download_then_run(workflow_contents) do
+    download_then_run_re = ~r/\b(?:curl|wget)\b[^\n|;]*\|\s*(?:sh|bash)\b/
+
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if Regex.match?(download_then_run_re, content) do
+        [%{
+          type: :download_then_run,
+          file: filename,
+          detail:
+            "Workflow executes remote script directly (curl/wget piped to shell). Download, verify checksum/signature, then execute.",
+          severity: :high,
+          action: :verify_download_integrity
         }]
       else
         []
