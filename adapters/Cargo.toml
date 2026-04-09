@@ -10,7 +10,7 @@ repository = "https://github.com/hyperpolymath/hypatia"
 homepage = "https://hypatia.reposystem.dev"
 
 [dependencies]
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.51", features = ["full"] }
 reqwest = { version = "0.13", features = ["json", "multipart", "rustls"], default-features = false }
 urlencoding = "2.1"
 serde = { version = "1.0", features = ["derive"] }
