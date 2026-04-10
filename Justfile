@@ -46,6 +46,10 @@ cli *ARGS:
 scan target *ARGS:
     cargo run --bin hyper -- scan "{{target}}" {{ARGS}}
 
+# Run Invariant Path overlay tools for this repository
+invariant-path *ARGS:
+    ./scripts/invariant-path.sh {{ARGS}}
+
 # Compile Idris2 ABI definitions
 compile-abi:
     cd src/abi && idris2 --build hypatia-abi.ipkg
