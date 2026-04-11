@@ -5,15 +5,53 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-04-05"
+last-updated = "2026-04-11"
 status = "active"
 
 [project-context]
 name = "hypatia"
-completion-percentage = 0
-phase = "In development"
+completion-percentage = 76
+phase = "implementation"
+maturity = "alpha"
+
+[route-to-mvp]
+milestones = [
+  { id = "M1", title = "Safety Triangle + FleetDispatcher pipeline", status = "done" },
+  { id = "M2", title = "5 neural networks (RBF, ESN, LSM, MoE, GoT)", status = "done" },
+  { id = "M3", title = "VCL query layer + verisim-data connector", status = "done" },
+  { id = "M4", title = "ProofStrategySelection (PS001–PS010)", status = "done" },
+  { id = "M5", title = "ProofObligation recipe type (PO001–PO006)", status = "done" },
+  { id = "M6", title = "LearningScheduler N5 — ProverRecommender retrain", status = "done" },
+  { id = "M7", title = "GitHub PAT for live cross-repo dispatch", status = "planned" },
+  { id = "M8", title = "Write real fix scripts (310 null-fix-script entries)", status = "planned" },
+]
+
+[blockers-and-issues]
+issues = [
+  { id = "B1", description = "GitHub PAT not yet configured — automated cross-repo dispatch blocked", severity = "high" },
+  { id = "B2", description = "310/600 auto-execute entries still have null fix_script", severity = "medium" },
+  { id = "B3", description = "Logtalk rule engine files removed (engine/logtalk/) — no replacement yet; pattern detection relies on Elixir rules only", severity = "medium" },
+]
+
+[critical-next-actions]
+actions = [
+  "Configure GitHub PAT with repo scope for live dispatch",
+  "Write fix scripts for the 310 null-fix-script auto-execute entries",
+  "Decide whether Logtalk engine will be replaced or Elixir rules are sufficient",
+]
 
 [session-history]
+# 2026-04-11: ECHIDNA↔Hypatia coupling — three pieces:
+#             1. ProofObligation recipe type (lib/rules/proof_obligation.ex, PO001–PO006):
+#                classify/2 pure function across Safety Triangle (Eliminate/Substitute/Control)
+#                with confidence scoring (0.90/0.93/0.96). Prover-agnostic.
+#             2. FleetDispatcher extended: dispatch_routed_action/1 for {:proof_obligation, recipe, pattern}
+#                routes eliminate (≥0.90 conf) → robot-repo-automaton, substitute → echidnabot,
+#                control → sustainabot. Avoids redundant VeriSimDB round-trip via :prover_hint_override.
+#             3. LearningScheduler N5 step: retrain_prover_recommender/0 polls VeriSimDB every 5 min,
+#                updates ProverRecommender via :persistent_term atomic hot-swap.
+#             Deleted engine/logtalk/error_instances.lgt + loader.lgt (no-Logtalk constraint).
+#             All Elixir code mix-format clean.
 # 2026-04-05: V4e + V4f + ProverRecommender landed. recommend_with_certs/2
 #             enriches strategy output with PROVEN/PENDING from the new
 #             /certificates endpoint and re-sorts (cert-status primary key).
