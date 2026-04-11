@@ -11,6 +11,7 @@ defmodule Hypatia.FleetDispatcher do
 
   alias Hypatia.TriangleRouter
   alias Hypatia.DirectGitHubPR
+  alias Hypatia.Rules.ProofObligation
 
   require Logger
 
@@ -48,17 +49,19 @@ defmodule Hypatia.FleetDispatcher do
     confidence = Map.get(recipe, "confidence", 0.0)
     strategy = TriangleRouter.dispatch_strategy(confidence)
 
-    bot_id = case strategy do
-      :auto_execute -> "robot-repo-automaton"
-      :review -> "rhodibot"
-      :report_only -> "sustainabot"
-    end
+    bot_id =
+      case strategy do
+        :auto_execute -> "robot-repo-automaton"
+        :review -> "rhodibot"
+        :report_only -> "sustainabot"
+      end
 
-    action_type = case strategy do
-      :auto_execute -> :commit_push
-      :review -> :pr_create
-      :report_only -> :advisory
-    end
+    action_type =
+      case strategy do
+        :auto_execute -> :commit_push
+        :review -> :pr_create
+        :report_only -> :advisory
+      end
 
     # Gate review — every action must pass through the Kin Gate
     gate_action = %{
@@ -117,6 +120,85 @@ defmodule Hypatia.FleetDispatcher do
       score: Map.get(finding, "severity_score", 0.5),
       details: "Unresolved: #{Map.get(finding, "description", "")} (no safe fix available)"
     })
+  end
+
+  @doc """
+  Dispatch a ProofObligation recipe through the Safety Triangle.
+
+  Called by `ProofObligation.obligations_from_patterns/2` and any code
+  that constructs `{:proof_obligation, recipe, pattern}` tuples.
+
+  Triangle routing for proof obligations:
+  - `:eliminate` (auto-provable, confidence >= 0.90) →
+      robot-repo-automaton applies tactic inline
+  - `:eliminate` (confidence < 0.90) →
+      echidnabot with eliminate-tier hint
+  - `:substitute` →
+      echidnabot with VeriSimDB-recommended prover hint
+  - `:control` →
+      sustainabot advisory (sorry/Admitted present, human required)
+  """
+  def dispatch_routed_action({:proof_obligation, recipe, pattern}) do
+    tier = Map.get(recipe, "triangle_tier", "substitute")
+    claim = Map.get(recipe, "claim", Map.get(pattern, "description", ""))
+    context = Map.get(recipe, "context", "")
+    repo = Map.get(recipe, "repo", get_pattern_repo(pattern))
+    prover_hint = Map.get(recipe, "prover_hint")
+    tactic_hint = Map.get(recipe, "tactic_hint")
+    confidence = Map.get(recipe, "confidence", 0.75)
+
+    Logger.info("ProofObligation dispatch: #{ProofObligation.summary(recipe)}")
+
+    case tier do
+      "eliminate" when confidence >= 0.90 ->
+        # Auto-provable: robot-repo-automaton applies the tactic inline
+        dispatch_to_robot_repo_automaton(%{
+          type: :auto_fix_request,
+          repo: repo,
+          file: Map.get(pattern, "file", ""),
+          issue: claim,
+          fix_type: "proof_tactic",
+          confidence: confidence,
+          recipe_id: Map.get(recipe, "id"),
+          suggestion: "Apply tactic: #{tactic_hint}"
+        })
+
+      "eliminate" ->
+        # Eliminate-tier but below auto-execute threshold — ask echidnabot
+        dispatch_to_echidnabot(%{
+          type: :proof_obligation,
+          repo: repo,
+          claim: claim,
+          context: context,
+          prover_hint_override: prover_hint,
+          tactic_hint: tactic_hint
+        })
+
+      "substitute" ->
+        # Standard ECHIDNA routing — prover hint from VeriSimDB history
+        dispatch_to_echidnabot(%{
+          type: :proof_obligation,
+          repo: repo,
+          claim: claim,
+          context: context,
+          prover_hint_override: prover_hint
+        })
+
+      "control" ->
+        # Genuinely hard — sorry/Admitted present, human review required
+        dispatch_to_sustainabot(%{
+          type: :eco_score,
+          repo: repo,
+          score: 0.3,
+          details:
+            "Proof obligation requires human review: #{claim} " <>
+              "(sorry/Admitted detected — formal proof not yet possible)"
+        })
+
+      unknown ->
+        Logger.warning("ProofObligation: unknown tier '#{unknown}', routing to sustainabot")
+        {:error, :unknown_proof_tier}
+    end
   end
 
   # --- Eliminate dispatch helpers (called after Gate approval) ---
@@ -216,20 +298,34 @@ defmodule Hypatia.FleetDispatcher do
     # recommendation as a hint to echidnabot so it runs the winning prover
     # first instead of always defaulting to Lean.
     #
+    # If `prover_hint_override` is already set (from ProofObligation.to_recipe/2,
+    # which pre-fetches the hint), skip the VeriSimDB lookup to avoid a
+    # redundant round trip.
+    #
     # If VeriSimDB is unreachable or has no data for this class, dispatch
     # proceeds without a prover hint (echidnabot falls back to Lean default).
     claim = finding_field(finding, :claim, "")
     context = finding_field(finding, :context, "")
-    obligation_class = Hypatia.Rules.ProofStrategySelection.classify_obligation(claim)
 
-    prover_hint = lookup_prover_hint(obligation_class)
+    prover_hint =
+      case Map.get(finding, :prover_hint_override) do
+        nil ->
+          obligation_class = Hypatia.Rules.ProofStrategySelection.classify_obligation(claim)
+          lookup_prover_hint(obligation_class)
 
-    mutation = build_proof_obligation_mutation(
-      finding_field(finding, :repo),
-      claim,
-      context,
-      prover_hint
-    )
+        override ->
+          # Already resolved by ProofObligation.to_recipe/2 — pass through
+          # the lowercase string; normalise_prover_hint/1 handles the mapping.
+          override
+      end
+
+    mutation =
+      build_proof_obligation_mutation(
+        finding_field(finding, :repo),
+        claim,
+        context,
+        prover_hint
+      )
 
     execute_graphql(mutation, "echidnabot")
   end
@@ -250,7 +346,10 @@ defmodule Hypatia.FleetDispatcher do
         nil
 
       {:error, reason} ->
-        Logger.debug("echidnabot strategy lookup failed (#{obligation_class}): #{inspect(reason)}")
+        Logger.debug(
+          "echidnabot strategy lookup failed (#{obligation_class}): #{inspect(reason)}"
+        )
+
         nil
     end
   end
@@ -434,7 +533,8 @@ defmodule Hypatia.FleetDispatcher do
         type: :eco_score,
         repo: finding_field(finding, :repo),
         score: Map.get(finding, :severity_score, 0.5),
-        details: "Unfixable (panicbot): #{finding_field(finding, :issue, "")} — documented in .panicbot/PANICBOT-FINDINGS.a2ml"
+        details:
+          "Unfixable (panicbot): #{finding_field(finding, :issue, "")} — documented in .panicbot/PANICBOT-FINDINGS.a2ml"
       })
     end
   end
@@ -566,11 +666,12 @@ defmodule Hypatia.FleetDispatcher do
     }
 
     # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
-    manifest_path = Path.join([
-      Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
-      "dispatch",
-      "pending.jsonl"
-    ])
+    manifest_path =
+      Path.join([
+        Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
+        "dispatch",
+        "pending.jsonl"
+      ])
 
     case Jason.encode(dispatch_record) do
       {:ok, json} ->
@@ -602,7 +703,10 @@ defmodule Hypatia.FleetDispatcher do
             {:ok, :dispatched}
 
           {:error, reason} ->
-            Logger.warning("Live dispatch to #{bot_name} failed (#{inspect(reason)}), file dispatch used")
+            Logger.warning(
+              "Live dispatch to #{bot_name} failed (#{inspect(reason)}), file dispatch used"
+            )
+
             {:ok, :file_dispatched}
         end
       rescue
@@ -694,11 +798,14 @@ defmodule Hypatia.FleetDispatcher do
             if Process.whereis(Hypatia.Kin.Gate) do
               Hypatia.Kin.Gate.review(gate_action)
             else
-              {:approved, gate_action}  # Gate not running = pass through
+              # Gate not running = pass through
+              {:approved, gate_action}
             end
+
           {:isolated, reason} ->
             {:rejected, "bot #{gate_action.bot_id} is isolated: #{reason}"}
         end
+
       {:blocked, reason} ->
         {:rejected, reason}
     end

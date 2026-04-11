@@ -21,13 +21,19 @@ defmodule Hypatia.LearningScheduler do
 
   alias Hypatia.ConfidenceAnnealing
 
-  @poll_interval_ms 5 * 60 * 1_000  # 5 minutes
+  # 5 minutes
+  @poll_interval_ms 5 * 60 * 1_000
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
-  @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
+  @fleet_path Application.compile_env(
+                :hypatia,
+                :fleet_path,
+                "~/Documents/hyperpolymath-repos/gitbot-fleet"
+              )
   @annealing_state_path Application.compile_env(
-    :hypatia, :annealing_state_path,
-    "data/verisim/annealing-states"
-  )
+                          :hypatia,
+                          :annealing_state_path,
+                          "data/verisim/annealing-states"
+                        )
 
   # --- Client API ---
 
@@ -51,7 +57,8 @@ defmodule Hypatia.LearningScheduler do
   def init(_opts) do
     state = %{
       last_run: nil,
-      last_outcome_positions: %{},  # filename => byte offset of last read
+      # filename => byte offset of last read
+      last_outcome_positions: %{},
       total_outcomes_processed: 0,
       total_confidence_updates: 0,
       total_annealing_reheats: 0,
@@ -103,18 +110,25 @@ defmodule Hypatia.LearningScheduler do
     # N4: Detect strategy-shift events and re-queue candidates.
     shift_events = detect_and_requeue_strategy_shifts()
 
+    # N5: Retrain ProverRecommender from VeriSimDB proof_attempts.
+    # Reads the growing proof_attempts table (written by echidnabot's
+    # VeriSimWriter) and re-fits per-class RBF networks. This closes the
+    # echidna → VeriSimDB → Hypatia learning loop: new attempts from
+    # echidnabot immediately influence the next prover hint recommendation.
+    proof_model_updated = retrain_prover_recommender()
+
     now = DateTime.utc_now()
     total = outcomes_count + fleet_outcomes_count
 
     if total > 0 do
       Logger.info(
         "LearningScheduler: processed #{total} new outcomes, " <>
-        "updated #{confidence_updates} recipes, " <>
-        "annealing: #{annealing_report.nascent} nascent, " <>
-        "#{annealing_report.adolescent} adolescent, " <>
-        "#{annealing_report.mature} mature, " <>
-        "#{annealing_report.veteran} veteran, " <>
-        "#{annealing_report.reheated} reheated"
+          "updated #{confidence_updates} recipes, " <>
+          "annealing: #{annealing_report.nascent} nascent, " <>
+          "#{annealing_report.adolescent} adolescent, " <>
+          "#{annealing_report.mature} mature, " <>
+          "#{annealing_report.veteran} veteran, " <>
+          "#{annealing_report.reheated} reheated"
       )
     end
 
@@ -122,14 +136,65 @@ defmodule Hypatia.LearningScheduler do
       Logger.info("LearningScheduler: detected #{length(shift_events)} strategy shifts")
     end
 
-    %{state |
-      last_run: now,
-      last_outcome_positions: new_positions,
-      total_outcomes_processed: state.total_outcomes_processed + total,
-      total_confidence_updates: state.total_confidence_updates + confidence_updates,
-      total_annealing_reheats: state.total_annealing_reheats + annealing_report.reheated,
-      total_strategy_shifts: Map.get(state, :total_strategy_shifts, 0) + length(shift_events)
+    if proof_model_updated do
+      Logger.info("LearningScheduler: prover recommender retrained from VeriSimDB proof_attempts")
+    end
+
+    %{
+      state
+      | last_run: now,
+        last_outcome_positions: new_positions,
+        total_outcomes_processed: state.total_outcomes_processed + total,
+        total_confidence_updates: state.total_confidence_updates + confidence_updates,
+        total_annealing_reheats: state.total_annealing_reheats + annealing_report.reheated,
+        total_strategy_shifts: Map.get(state, :total_strategy_shifts, 0) + length(shift_events),
+        proof_model_retrain_count:
+          Map.get(state, :proof_model_retrain_count, 0) + if(proof_model_updated, do: 1, else: 0)
     }
+  end
+
+  # --- N5: ProverRecommender retraining from VeriSimDB proof_attempts --------
+
+  # Fetches proof_attempts from VeriSimDB and re-fits ProverRecommender's
+  # per-class RBF networks. Returns true if training succeeded, false if
+  # VeriSimDB was unreachable or returned too few samples.
+  #
+  # Minimum sample threshold (50) prevents overfitting on early sparse data.
+  # The existing in-memory models continue serving recommendations until
+  # a successful retrain replaces them.
+  defp retrain_prover_recommender do
+    base_url = System.get_env("HYPATIA_VERISIM_URL") || "http://localhost:8080"
+
+    try do
+      case Hypatia.Neural.ProverRecommender.train_from_verisim(base_url: base_url) do
+        {:ok, models} ->
+          sample_size = Map.get(models, :sample_size, 0)
+
+          if sample_size >= 50 do
+            # Store the retrained models in the ProverRecommender agent/GenServer.
+            # ProverRecommender.update_models/1 swaps the live model atomically.
+            :ok = Hypatia.Neural.ProverRecommender.update_models(models)
+            true
+          else
+            Logger.debug(
+              "LearningScheduler: prover_recommender skip (only #{sample_size} samples, need 50)"
+            )
+
+            false
+          end
+
+        {:error, reason} ->
+          Logger.debug(
+            "LearningScheduler: prover_recommender retrain skipped — #{inspect(reason)}"
+          )
+
+          false
+      end
+    rescue
+      e ->
+        Logger.warning("LearningScheduler: prover_recommender retrain error: #{inspect(e)}")
+        false
+    end
   end
 
   # --- N4: Strategy-shift detection + re-queueing ----------------------
@@ -149,6 +214,7 @@ defmodule Hypatia.LearningScheduler do
           "strategy shift: class=#{class} #{old_top} → #{new_top} " <>
             "(#{length(candidates)} candidates to re-queue)"
         )
+
         requeue_candidates(class, new_top, candidates)
       end)
 
@@ -171,13 +237,16 @@ defmodule Hypatia.LearningScheduler do
 
     success_count =
       candidates
-      |> Enum.take(20)  # rate-limit: max 20 re-queues per tick
+      # rate-limit: max 20 re-queues per tick
+      |> Enum.take(20)
       |> Enum.count(fn attempt_id ->
         submit_requeue(echidnabot_url, class, new_top, attempt_id)
       end)
 
     if success_count > 0 do
-      Logger.info("  re-queued #{success_count}/#{length(candidates)} attempts via echidnabot (capped at 20/tick)")
+      Logger.info(
+        "  re-queued #{success_count}/#{length(candidates)} attempts via echidnabot (capped at 20/tick)"
+      )
     end
 
     :ok
@@ -223,9 +292,7 @@ defmodule Hypatia.LearningScheduler do
 
     case :httpc.request(
            :post,
-           {String.to_charlist(url),
-            [{~c"accept", ~c"application/json"}],
-            ~c"application/json",
+           {String.to_charlist(url), [{~c"accept", ~c"application/json"}], ~c"application/json",
             body},
            [{:timeout, timeout_ms}],
            []
@@ -250,7 +317,8 @@ defmodule Hypatia.LearningScheduler do
       {:ok, files} ->
         jsonl_files = Enum.filter(files, &String.ends_with?(&1, ".jsonl"))
 
-        Enum.reduce(jsonl_files, {last_positions, 0, MapSet.new()}, fn file, {positions, count, recipes} ->
+        Enum.reduce(jsonl_files, {last_positions, 0, MapSet.new()}, fn file,
+                                                                       {positions, count, recipes} ->
           path = Path.join(outcomes_dir, file)
           last_offset = Map.get(positions, file, 0)
 
@@ -280,7 +348,8 @@ defmodule Hypatia.LearningScheduler do
                     |> Enum.reject(&is_nil/1)
                     |> MapSet.new()
 
-                  {Map.put(positions, file, size), count + length(new_records), MapSet.union(recipes, new_recipe_ids)}
+                  {Map.put(positions, file, size), count + length(new_records),
+                   MapSet.union(recipes, new_recipe_ids)}
 
                 {:error, _} ->
                   {positions, count, recipes}
@@ -299,10 +368,11 @@ defmodule Hypatia.LearningScheduler do
   # --- Ingest outcomes from fleet fix-outcomes.jsonl ---
 
   defp ingest_fleet_outcomes do
-    fleet_file = Path.join([
-      Path.expand(@fleet_path),
-      "shared-context/learning/fix-outcomes.jsonl"
-    ])
+    fleet_file =
+      Path.join([
+        Path.expand(@fleet_path),
+        "shared-context/learning/fix-outcomes.jsonl"
+      ])
 
     case File.read(fleet_file) do
       {:ok, content} ->
@@ -382,10 +452,14 @@ defmodule Hypatia.LearningScheduler do
               confidence <= 0.3 ->
                 Logger.warning(
                   "DRIFT ALERT: Recipe #{recipe_id} confidence dropped to #{confidence} — " <>
-                  "consider disabling auto-execute"
+                    "consider disabling auto-execute"
                 )
+
               confidence >= 0.95 ->
-                Logger.info("Recipe #{recipe_id} at high confidence #{confidence} — auto-execute eligible")
+                Logger.info(
+                  "Recipe #{recipe_id} at high confidence #{confidence} — auto-execute eligible"
+                )
+
               true ->
                 :ok
             end
@@ -420,20 +494,24 @@ defmodule Hypatia.LearningScheduler do
                 case Jason.decode(content) do
                   {:ok, data} ->
                     stage = String.to_existing_atom(Map.get(data, "stage", "nascent"))
-                    drift = ConfidenceAnnealing.drift_detected?(
-                      data
-                      |> Map.get("recent_outcomes", [])
-                      |> Enum.map(&String.to_existing_atom/1)
-                    )
+
+                    drift =
+                      ConfidenceAnnealing.drift_detected?(
+                        data
+                        |> Map.get("recent_outcomes", [])
+                        |> Enum.map(&String.to_existing_atom/1)
+                      )
 
                     stages = Map.update!(acc.stages, stage, &(&1 + 1))
                     reheated = if drift, do: acc.reheated + 1, else: acc.reheated
                     %{acc | stages: stages, reheated: reheated}
 
-                  {:error, _} -> acc
+                  {:error, _} ->
+                    acc
                 end
 
-              {:error, _} -> acc
+              {:error, _} ->
+                acc
             end
           end
         )
