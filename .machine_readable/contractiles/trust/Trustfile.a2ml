@@ -1,22 +1,25 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# Trustfile — Integrity and Provenance Contract
+# Trustfile (A2ML Canonical)
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 
-[trustfile]
-version = "1.0.0"
-format = "a2ml"
+@abstract:
+Trust and provenance verification for Hypatia.
+Maximal trust by default — LLM may read, build, test, lint, format.
+@end
 
-[provenance]
-source-control = "git"
-forge = "github"
-ci-verified = true
-signing-policy = "commit-signing-preferred"
+@trust-level: maximal
+@trust-boundary: repo
+@trust-actions: [read, build, test, lint, format]
+@trust-deny: [delete-branch, force-push, modify-ci-secrets, publish]
 
-[integrity]
-spdx-compliant = true
-license-audit = "required"
-dependency-pinning = "sha-pinned"
+## Integrity
 
-[verification]
-reproducible-builds = "goal"
-sbom-generation = "required"
-attestation = "sigstore-preferred"
+### license-content
+- description: LICENSE contains expected SPDX identifier
+- run: grep -q 'SPDX\|License\|MIT\|Apache\|PMPL\|MPL' LICENSE
+- severity: critical
+
+### no-secrets-committed
+- description: No .env or credential files in repo
+- run: test ! -f .env && test ! -f credentials.json && test ! -f .env.local
+- severity: critical
