@@ -18,23 +18,23 @@
 | `verification/proofs/idris2/Quarantine.idr` | Quarantine trigger exclusivity + release time correctness | H5 ✅ |
 | `verification/proofs/idris2/VerisimdbConnector.idr` | VeriSimDB connector data integrity | — |
 | `verification/proofs/idris2/BatchRollback.idr` | Batch rollback safety (dispatch reversal correctness) | — |
+| `verification/proofs/lean4/RateLimiting.lean` | Window counters never exceed configured bounds; 7 theorems | H4 ✅ |
+| `verification/proofs/lean4/BayesianUpdate.lean` | Posterior validity: in (0,1), monotone in successes/failures, zero-obs identity | H7 ✅ |
+| `verification/proofs/agda/OutcomeLog.agda` | Timestamps strictly increasing; append preserves MonotoneLog | H6 ✅ |
 
 ## What Still Needs Proving
 
 | # | Component | Prover | Priority |
 |---|-----------|--------|----------|
-| H4 | Rate limit enforcement (window counters never exceed bounds) | L4 | P0 |
-| H6 | Outcome log monotonicity (timestamps strictly increasing) | Agda | P1 |
-| H7 | Bayesian confidence update soundness (posterior validity) | L4 | P1 |
 | H8 | Kin gate atomicity (repo locks prevent concurrent bot actions) | TLA+ | P1 |
 | H9 | Neural consensus aggregation soundness | Agda | P2 |
 
-Note: H4/H7 require Lean4; H6/H9 require Agda; H8 requires TLA+. Not actionable in this I2 sweep.
+Note: H8 requires TLA+; H9 requires Agda.
 
 ## Recommended Prover
 
-**Idris2** — Already in use for H1-H5. Remaining items require different provers.
+**Idris2** for ABI. **Lean4** for algorithmic properties. **Agda** for structural invariants.
 
 ## Priority
 
-**LOW** (was HIGH) — H1, H2, H3, H5 complete. H4/H6/H7/H8/H9 require L4/Agda/TLA+ — different prover specialists needed.
+**LOW** — H1-H7 complete 2026-04-11. H8 requires TLA+; H9 is P2 Agda.
