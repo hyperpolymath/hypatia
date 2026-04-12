@@ -68,14 +68,34 @@ This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), a
 
 == Dogfooded Across The Account
 
-Uses the hyperpolymath ABI/FFI standard (Idris2 + Zig). Same pattern across proven, burble, and gossamer.
+[cols="1,2,2", options="header"]
+|===
+| Technology | Role in Hypatia | Also Used In
 
-Hypatia-specific:
-- `src/abi/` — Idris2 formal specs for GraphQL, gRPC, REST API with dependent type proofs
-- `ffi/zig/src/` — 7 C-compatible exported functions
-- 5 neural networks + coordinator GenServer (ESN training, RBF learning, PageRank trust)
-- VCL query layer (built-in parser, file executor, query caching)
-- verisim-data integration (git-backed flat-file canonical store)
+| *Idris2 ABI* (hyperpolymath standard)
+| `src/abi/` — formal specs for GraphQL, gRPC, REST with dependent type proofs; `ffiReturnsApiResponse` proof in `FFI.idr`
+| gossamer (`src/interface/abi/`), burble (`src/Burble/ABI/`), verisimdb, proven, typed-wasm — every repo with an FFI layer
+
+| *Zig FFI* (hyperpolymath standard)
+| `ffi/zig/src/` — 7 C-compatible exported functions (`hypatia_health_check`, `hypatia_scan_repo`, `hypatia_dispatch`, etc.)
+| gossamer (`src/interface/ffi/`), burble (`ffi/zig/src/ffi.zig`), tangle, ephapax — same Idris2→Zig→C pattern
+
+| *VeriSimDB + VCL query layer*
+| Built-in Elixir VCL parser + FileExecutor; queries verisim-data flat-file store; 954 patterns tracked across 298 repos
+| burble (state and session storage), idaptik (game state), boj-server (scan results), nextgen-databases monorepo
+
+| *panic-attack*
+| Re-scan verification after dispatch — confirms fixes removed weak points; `diagnostics.ex` watches for binary on `$PATH`
+| Used estate-wide as pre-commit gate (`panic-attack assail`); panicbot wraps it in CI
+
+| *Elixir/OTP*
+| 8 GenServers (VCL, RateLimiter, Quarantine, LearningScheduler, Diagnostics, Neural, Kin, Application supervisor); fault isolation
+| burble (P2P voice control plane), gitbot-fleet (bot orchestration)
+
+| *Julia neural networks*
+| 5 networks (Graph of Trust, MoE, LSM, ESN, RBF) + training pipeline from real verisim-data outcomes
+| KnotTheory.jl (topology data processing), batch scripts estate-wide
+|===
 
 == File Map: Key Modules
 
