@@ -1,6 +1,49 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
+// # Safety
+//
+// This file contains thirteen `unsafe` blocks. Every one is a load-bearing
+// FFI boundary call across the C ABI exported by `libhypatia_ffi.so`. They
+// are NOT the kind of `unsafe` that hides a partial cast or a banned
+// `Obj.magic`-style escape (per estate memory: panic-attack's `unsafe_blocks`
+// category conflates banned partial casts with legitimate FFI try/catch).
+//
+// The invariants that justify each `unsafe`:
+//
+//   1. `Library::new(path)` — libloading is unsafe because loading a shared
+//      object runs its constructors. Hypatia's `libhypatia_ffi.so` has no
+//      constructors with side effects (verified by inspection of
+//      `hypatia/ffi/zig/src/main.zig`).
+//
+//   2. `lib.get(b"hypatia_*\0")` — symbol lookup is unsafe because the
+//      caller asserts the type signature. Each lookup matches the exact
+//      `extern "C"` signature exported by `main.zig` and pinned by the
+//      Idris2 ABI dependent-type proofs in `src/abi/Types.idr`. Renumbering
+//      the Connector enum or changing any exported function's signature
+//      breaks the build at the Idris2 layer first.
+//
+//   3. `Symbol::into_raw()` — detaches the symbol's lifetime from the
+//      `Library` handle. Safe because we keep the `Library` alive for the
+//      lifetime of `FfiTransport` via the `_lib` field — symbols become
+//      invalid only when `_lib` is dropped, which is after every method
+//      that uses them.
+//
+//   4. Calling the looked-up function pointers — safe because the type
+//      signatures match the C ABI exports (see invariant 2). The Zig side
+//      guarantees that `ApiResponse.data_ptr`/`error_ptr` point into a
+//      static buffer that lives until the next ABI call, which is why we
+//      copy out immediately rather than holding the slice.
+//
+//   5. `slice::from_raw_parts(data_ptr, data_len)` — safe because the Zig
+//      side has just populated those fields with a successful return
+//      (`rc == 0`) and the buffer is the static `response_buf` in
+//      `main.zig`, which is `[8192]u8` and lives for program lifetime.
+//
+// The safety analysis above is the *reason* the unsafe is necessary, not a
+// claim that it can be removed. There is no safe alternative to dlopen in
+// Rust today; the only way to talk to a Zig shared library is unsafe FFI.
+//
 // FFI transport — wraps `libhypatia_ffi.so` via `libloading`.
 //
 // This is the *primary* transport. Loading the shared library is

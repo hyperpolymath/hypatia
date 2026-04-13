@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# cargo-mutants configuration for hypatia-client.
+#
+# Mutation testing verifies that the test suite would catch a bug if one
+# were introduced — every mutation that compiles but isn't killed by a
+# test indicates an untested code path.
+#
+# `cargo mutants` is intentionally not in CI yet because the FFI module
+# requires a live `libhypatia_ffi.so`; we run it manually before
+# tagging releases. Add to CI once the .so is artifact-published.
+
+# Skip the FFI module — every mutation in it would require a live
+# shared library to validate, which mutation runs do not have.
+exclude_globs = [
+    "src/ffi.rs",
+]
+
+# Skip mutating test code itself.
+examine_globs = [
+    "src/**/*.rs",
+]
+
+# Timeout per mutation: cargo-mutants default times out generous tests
+# that exercise libloading. Hypatia-client's pure tests are sub-second.
+timeout = 20
+
+# Run with default test profile.
+test_tool = "cargo"
