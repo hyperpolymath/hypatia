@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+[package]
+name = "hypatia-client"
+description = "Rust client for the Hypatia hexadeca-connector surface (FFI primary, subprocess fallback)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+libloading = "0.8"
+
+[features]
+default = ["ffi", "subprocess"]
+# Compile the libloading-based FFI transport. Disable in builds that
+# never have hypatia_ffi.so available.
+ffi = []
+# Compile the `panic-attack`-style subprocess transport that shells
+# out to the `hypatia` CLI binary. The fallback used when the .so
+# isn't loadable.
+subprocess = []
+
+[dev-dependencies]
+tempfile = "3.3"

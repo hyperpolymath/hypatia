@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "adapters",
     "cli",
+    "clients/rust/hypatia-client",
     "data",
     "fixer",
     "integration",

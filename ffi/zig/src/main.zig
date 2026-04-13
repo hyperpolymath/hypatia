@@ -9,6 +9,11 @@
 const std = @import("std");
 const json_writer = @import("json_writer");
 const file_ops = @import("file_ops");
+const hexadeca = @import("hexadeca.zig");
+
+pub const Connector = hexadeca.Connector;
+pub const HexadecaSuite = hexadeca.HexadecaSuite;
+pub const CONNECTOR_COUNT = hexadeca.CONNECTOR_COUNT;
 
 // ============================================================
 // Type mappings from Idris2 ABI
@@ -488,6 +493,74 @@ export fn hypatia_dispatch_strategy(confidence: f64)DispatchStrategy {
     if (confidence >= 0.95) return .auto_execute;
     if (confidence >= 0.85) return .review;
     return .report_only;
+}
+
+// ============================================================
+// Hexadeca-Connector exported surface
+// ============================================================
+//
+// Replaces the V-lang client at api/v/hypatia.v (deleted 2026-04-13).
+// All sixteen protocol adapters route through the same C ABI core
+// above; these exports give external consumers (Rust client, Idris2
+// proofs, panll panels) a stable way to enumerate and start the suite.
+
+/// Returns the total number of connectors. Always 16; checked by a
+/// `comptime` assertion in `hexadeca.zig`.
+export fn hypatia_connector_count() usize {
+    return CONNECTOR_COUNT;
+}
+
+/// Returns the canonical name of a connector by its wire id (0..15).
+/// Returns NULL for out-of-range ids — Rust client must check before
+/// dereferencing.
+export fn hypatia_connector_name(id: u8) ?[*:0]const u8 {
+    if (id >= CONNECTOR_COUNT) return null;
+    const c: Connector = @enumFromInt(id);
+    return c.name();
+}
+
+/// Returns the bound port for a connector under a given base port.
+/// Layout follows the V-lang reference: base + id + 1.
+/// Returns 0 for out-of-range ids.
+export fn hypatia_connector_port(id: u8, base_port: u16) u16 {
+    if (id >= CONNECTOR_COUNT) return 0;
+    const suite = HexadecaSuite.init(base_port);
+    const c: Connector = @enumFromInt(id);
+    return suite.portFor(c);
+}
+
+/// Start every connector in the hexadeca suite. At today's stub
+/// fidelity each `start` is a log-only announcement; sockets land
+/// per-connector without changing this surface.
+export fn hypatia_hexadeca_start_all(base_port: u16) void {
+    const suite = HexadecaSuite.init(base_port);
+    suite.startAll();
+}
+
+// ============================================================
+// Hexadeca tests
+// ============================================================
+
+test "hypatia_connector_count is sixteen" {
+    try std.testing.expectEqual(@as(usize, 16), hypatia_connector_count());
+}
+
+test "hypatia_connector_name round-trip" {
+    const grpc_name = hypatia_connector_name(0).?;
+    try std.testing.expectEqualStrings("grpc", std.mem.span(grpc_name));
+    const arrow_name = hypatia_connector_name(15).?;
+    try std.testing.expectEqualStrings("arrow-flight", std.mem.span(arrow_name));
+}
+
+test "hypatia_connector_name out of range returns null" {
+    try std.testing.expect(hypatia_connector_name(16) == null);
+    try std.testing.expect(hypatia_connector_name(255) == null);
+}
+
+test "hypatia_connector_port matches v-lang layout" {
+    try std.testing.expectEqual(@as(u16, 8001), hypatia_connector_port(0, 8000));
+    try std.testing.expectEqual(@as(u16, 8016), hypatia_connector_port(15, 8000));
+    try std.testing.expectEqual(@as(u16, 0), hypatia_connector_port(16, 8000));
 }
 
 // ============================================================
