@@ -6,7 +6,9 @@
 // CI scripts) only ever talk to this struct.
 
 use crate::error::HypatiaError;
-use crate::types::{ScanRequest, ScanResponse};
+use crate::types::{
+    DispatchEntry, DispatchStrategy, HealthReport, OutcomeRecord, ScanRequest, ScanResponse,
+};
 
 #[cfg(feature = "ffi")]
 use crate::ffi::FfiTransport;
@@ -173,14 +175,107 @@ impl Client {
             ActiveTransport::Ffi(t) => t.scan(req),
             #[cfg(feature = "subprocess")]
             ActiveTransport::Subprocess(t) => t.scan(req),
+            ActiveTransport::None { .. } => Err(self.unavailable_error()),
+        }
+    }
+
+    /// Run a health check. FFI-only — the subprocess transport
+    /// would have to shell `hypatia health` and parse the output;
+    /// for now we return `FfiUnavailable` if FFI is not active.
+    /// Adding a subprocess fallback is one match arm and a
+    /// `Command::new("hypatia")` call once that CLI subcommand is
+    /// confirmed.
+    pub fn health_check(&self) -> Result<HealthReport, HypatiaError> {
+        match &self.transport {
+            #[cfg(feature = "ffi")]
+            ActiveTransport::Ffi(t) => t.health_check(),
+            #[cfg(feature = "subprocess")]
+            ActiveTransport::Subprocess(_) => Err(HypatiaError::FfiUnavailable(
+                "health_check requires the FFI transport (subprocess fallback not yet wired)".into(),
+            )),
+            ActiveTransport::None { .. } => Err(self.unavailable_error()),
+        }
+    }
+
+    /// Dispatch a fix entry to the fleet.
+    pub fn dispatch(&self, entry: &DispatchEntry) -> Result<(), HypatiaError> {
+        match &self.transport {
+            #[cfg(feature = "ffi")]
+            ActiveTransport::Ffi(t) => t.dispatch(entry),
+            #[cfg(feature = "subprocess")]
+            ActiveTransport::Subprocess(_) => Err(HypatiaError::FfiUnavailable(
+                "dispatch requires the FFI transport (subprocess fallback not yet wired)".into(),
+            )),
+            ActiveTransport::None { .. } => Err(self.unavailable_error()),
+        }
+    }
+
+    /// Record an outcome for the learning loop.
+    pub fn record_outcome(&self, record: &OutcomeRecord) -> Result<(), HypatiaError> {
+        match &self.transport {
+            #[cfg(feature = "ffi")]
+            ActiveTransport::Ffi(t) => t.record_outcome(record),
+            #[cfg(feature = "subprocess")]
+            ActiveTransport::Subprocess(_) => Err(HypatiaError::FfiUnavailable(
+                "record_outcome requires the FFI transport (subprocess fallback not yet wired)"
+                    .into(),
+            )),
+            ActiveTransport::None { .. } => Err(self.unavailable_error()),
+        }
+    }
+
+    /// Force a learning cycle.
+    pub fn force_learning_cycle(&self) -> Result<(), HypatiaError> {
+        match &self.transport {
+            #[cfg(feature = "ffi")]
+            ActiveTransport::Ffi(t) => t.force_learning_cycle(),
+            #[cfg(feature = "subprocess")]
+            ActiveTransport::Subprocess(_) => Err(HypatiaError::FfiUnavailable(
+                "force_learning_cycle requires the FFI transport (subprocess fallback not yet wired)"
+                    .into(),
+            )),
+            ActiveTransport::None { .. } => Err(self.unavailable_error()),
+        }
+    }
+
+    /// Look up the current confidence for a recipe id.
+    pub fn get_confidence(&self, recipe_id: &str) -> Result<f64, HypatiaError> {
+        match &self.transport {
+            #[cfg(feature = "ffi")]
+            ActiveTransport::Ffi(t) => t.get_confidence(recipe_id),
+            #[cfg(feature = "subprocess")]
+            ActiveTransport::Subprocess(_) => Err(HypatiaError::FfiUnavailable(
+                "get_confidence requires the FFI transport (subprocess fallback not yet wired)"
+                    .into(),
+            )),
+            ActiveTransport::None { .. } => Err(self.unavailable_error()),
+        }
+    }
+
+    /// Map a confidence to a dispatch strategy. Falls back to the
+    /// pure-Rust `DispatchStrategy::from_confidence` if no FFI is
+    /// active — this method is total, never returns an error.
+    pub fn dispatch_strategy(&self, confidence: f64) -> DispatchStrategy {
+        match &self.transport {
+            #[cfg(feature = "ffi")]
+            ActiveTransport::Ffi(t) => t.dispatch_strategy_for(confidence),
+            _ => DispatchStrategy::from_confidence(confidence),
+        }
+    }
+
+    /// Build a `FfiUnavailable` describing why no transport is up.
+    /// Centralised so the six new wrappers above stay tidy.
+    fn unavailable_error(&self) -> HypatiaError {
+        match &self.transport {
             ActiveTransport::None { ffi_error, subprocess_error } => {
                 let combined = format!(
                     "ffi: {} | subprocess: {}",
                     ffi_error.clone().unwrap_or_else(|| "n/a".into()),
                     subprocess_error.clone().unwrap_or_else(|| "n/a".into()),
                 );
-                Err(HypatiaError::FfiUnavailable(combined))
+                HypatiaError::FfiUnavailable(combined)
             }
+            _ => HypatiaError::FfiUnavailable("transport active — call routed incorrectly".into()),
         }
     }
 }
@@ -210,6 +305,57 @@ mod tests {
                 .scan(&ScanRequest { repo_path: "/tmp/x".into(), rules: vec![] })
                 .unwrap_err();
             assert!(matches!(err, HypatiaError::FfiUnavailable(_)));
+        }
+    }
+
+    #[test]
+    fn unavailable_client_returns_errors_from_all_six_new_methods() {
+        let client = Client::new();
+        if !client.is_unavailable() {
+            // We have a live transport — skip; the structural test
+            // is only meaningful when no transport is up.
+            return;
+        }
+
+        use crate::types::{
+            BotId, DispatchEntry, Outcome, OutcomeRecord, TriangleTier,
+        };
+
+        assert!(matches!(client.health_check(), Err(HypatiaError::FfiUnavailable(_))));
+
+        let entry = DispatchEntry {
+            bot: BotId::Rhodibot,
+            repo: "test/repo".into(),
+            file: "src/main.rs".into(),
+            recipe_id: "PA001".into(),
+            tier: TriangleTier::Eliminate,
+            strategy: DispatchStrategy::Review,
+        };
+        assert!(matches!(client.dispatch(&entry), Err(HypatiaError::FfiUnavailable(_))));
+
+        let outcome = OutcomeRecord {
+            recipe_id: "PA001".into(),
+            repo: "test/repo".into(),
+            file: "src/main.rs".into(),
+            outcome: Outcome::Success,
+            timestamp: "2026-04-13T00:00:00Z".into(),
+            bot: "rhodibot".into(),
+        };
+        assert!(matches!(client.record_outcome(&outcome), Err(HypatiaError::FfiUnavailable(_))));
+        assert!(matches!(client.force_learning_cycle(), Err(HypatiaError::FfiUnavailable(_))));
+        assert!(matches!(client.get_confidence("PA001"), Err(HypatiaError::FfiUnavailable(_))));
+    }
+
+    #[test]
+    fn dispatch_strategy_falls_back_to_pure_rust_when_no_ffi() {
+        // dispatch_strategy is the one method that never returns an
+        // error — when FFI is unavailable it falls through to the
+        // pure-Rust DispatchStrategy::from_confidence implementation.
+        let client = Client::new();
+        if client.is_unavailable() {
+            assert_eq!(client.dispatch_strategy(0.99), DispatchStrategy::AutoExecute);
+            assert_eq!(client.dispatch_strategy(0.90), DispatchStrategy::Review);
+            assert_eq!(client.dispatch_strategy(0.50), DispatchStrategy::ReportOnly);
         }
     }
 }

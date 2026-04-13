@@ -74,7 +74,45 @@ use libloading::{Library, Symbol};
 
 use crate::connector::{Connector, CONNECTOR_COUNT};
 use crate::error::HypatiaError;
-use crate::types::{Finding, ScanRequest, ScanResponse, ScanResult};
+use crate::types::{
+    DispatchEntry, DispatchStrategy, Finding, HealthReport,
+    OutcomeRecord, ScanRequest, ScanResponse, ScanResult,
+};
+
+/// Mirror of the `DispatchEntry` extern struct in `main.zig`. The
+/// pointer fields borrow into the caller's strings — they MUST live
+/// for the duration of the FFI call. We construct one of these
+/// inside `dispatch()` from a typed `crate::types::DispatchEntry`
+/// and never let it escape the call frame.
+#[repr(C)]
+struct CDispatchEntry {
+    bot: u8,
+    repo_ptr: *const u8,
+    repo_len: usize,
+    file_ptr: *const u8,
+    file_len: usize,
+    recipe_id_ptr: *const u8,
+    recipe_id_len: usize,
+    tier: u8,
+    strategy: u8,
+}
+
+/// Mirror of the `OutcomeRecord` extern struct in `main.zig`. Same
+/// pointer-borrowing rules as `CDispatchEntry`.
+#[repr(C)]
+struct COutcomeRecord {
+    recipe_id_ptr: *const u8,
+    recipe_id_len: usize,
+    repo_ptr: *const u8,
+    repo_len: usize,
+    file_ptr: *const u8,
+    file_len: usize,
+    outcome: u8,
+    timestamp_ptr: *const u8,
+    timestamp_len: usize,
+    bot_ptr: *const u8,
+    bot_len: usize,
+}
 
 /// Mirror of the `ApiResponse` struct in
 /// `hypatia/ffi/zig/src/main.zig`. The Zig side guarantees that
@@ -132,6 +170,12 @@ pub struct FfiTransport {
     connector_name: unsafe extern "C" fn(u8) -> *const c_char,
     connector_port: unsafe extern "C" fn(u8, u16) -> u16,
     scan_repo: unsafe extern "C" fn(*const u8, usize, *mut ApiResponse) -> c_int,
+    health_check: unsafe extern "C" fn(*mut ApiResponse) -> c_int,
+    dispatch: unsafe extern "C" fn(*const CDispatchEntry, *mut ApiResponse) -> c_int,
+    record_outcome: unsafe extern "C" fn(*const COutcomeRecord, *mut ApiResponse) -> c_int,
+    force_learning_cycle: unsafe extern "C" fn(*mut ApiResponse) -> c_int,
+    get_confidence: unsafe extern "C" fn(*const u8, usize, *mut f64) -> c_int,
+    dispatch_strategy: unsafe extern "C" fn(f64) -> u8,
 }
 
 impl FfiTransport {
@@ -181,10 +225,50 @@ impl FfiTransport {
                 HypatiaError::FfiUnavailable(format!("missing hypatia_scan_repo: {}", e))
             })?;
 
+            let health_check: Symbol<unsafe extern "C" fn(*mut ApiResponse) -> c_int> =
+                lib.get(b"hypatia_health_check\0").map_err(|e| {
+                    HypatiaError::FfiUnavailable(format!("missing hypatia_health_check: {}", e))
+                })?;
+            let dispatch: Symbol<
+                unsafe extern "C" fn(*const CDispatchEntry, *mut ApiResponse) -> c_int,
+            > = lib.get(b"hypatia_dispatch\0").map_err(|e| {
+                HypatiaError::FfiUnavailable(format!("missing hypatia_dispatch: {}", e))
+            })?;
+            let record_outcome: Symbol<
+                unsafe extern "C" fn(*const COutcomeRecord, *mut ApiResponse) -> c_int,
+            > = lib.get(b"hypatia_record_outcome\0").map_err(|e| {
+                HypatiaError::FfiUnavailable(format!("missing hypatia_record_outcome: {}", e))
+            })?;
+            let force_learning_cycle: Symbol<unsafe extern "C" fn(*mut ApiResponse) -> c_int> =
+                lib.get(b"hypatia_force_learning_cycle\0").map_err(|e| {
+                    HypatiaError::FfiUnavailable(format!(
+                        "missing hypatia_force_learning_cycle: {}",
+                        e
+                    ))
+                })?;
+            let get_confidence: Symbol<
+                unsafe extern "C" fn(*const u8, usize, *mut f64) -> c_int,
+            > = lib.get(b"hypatia_get_confidence\0").map_err(|e| {
+                HypatiaError::FfiUnavailable(format!("missing hypatia_get_confidence: {}", e))
+            })?;
+            let dispatch_strategy: Symbol<unsafe extern "C" fn(f64) -> u8> =
+                lib.get(b"hypatia_dispatch_strategy\0").map_err(|e| {
+                    HypatiaError::FfiUnavailable(format!(
+                        "missing hypatia_dispatch_strategy: {}",
+                        e
+                    ))
+                })?;
+
             let connector_count_fn = *connector_count.into_raw();
             let connector_name_fn = *connector_name.into_raw();
             let connector_port_fn = *connector_port.into_raw();
             let scan_repo_fn = *scan_repo.into_raw();
+            let health_check_fn = *health_check.into_raw();
+            let dispatch_fn = *dispatch.into_raw();
+            let record_outcome_fn = *record_outcome.into_raw();
+            let force_learning_cycle_fn = *force_learning_cycle.into_raw();
+            let get_confidence_fn = *get_confidence.into_raw();
+            let dispatch_strategy_fn = *dispatch_strategy.into_raw();
 
             Ok(FfiTransport {
                 _lib: lib,
@@ -192,6 +276,12 @@ impl FfiTransport {
                 connector_name: connector_name_fn,
                 connector_port: connector_port_fn,
                 scan_repo: scan_repo_fn,
+                health_check: health_check_fn,
+                dispatch: dispatch_fn,
+                record_outcome: record_outcome_fn,
+                force_learning_cycle: force_learning_cycle_fn,
+                get_confidence: get_confidence_fn,
+                dispatch_strategy: dispatch_strategy_fn,
             })
         }
     }
@@ -245,6 +335,110 @@ impl FfiTransport {
         // JSON document; we shape it into a `ScanResponse`. If the
         // store schema diverges, this is the seam to update.
         parse_scan_payload(data)
+    }
+
+    /// Run a health check. Parses the JSON envelope produced by
+    /// `hypatia_health_check` into a typed `HealthReport`.
+    pub fn health_check(&self) -> Result<HealthReport, HypatiaError> {
+        let mut resp = ApiResponse::empty();
+        let rc = unsafe { (self.health_check)(&mut resp) };
+        if rc != 0 {
+            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() };
+            return Err(HypatiaError::NonZero { code: rc, message: msg });
+        }
+        let data = unsafe { resp.data() };
+        let report: HealthReport = serde_json::from_slice(data)?;
+        Ok(report)
+    }
+
+    /// Dispatch one fix entry to the fleet. The strings in `entry`
+    /// must outlive this call (which they do trivially because
+    /// `entry` is borrowed for the call frame).
+    pub fn dispatch(&self, entry: &DispatchEntry) -> Result<(), HypatiaError> {
+        let c_entry = CDispatchEntry {
+            bot: entry.bot as u8,
+            repo_ptr: entry.repo.as_ptr(),
+            repo_len: entry.repo.len(),
+            file_ptr: entry.file.as_ptr(),
+            file_len: entry.file.len(),
+            recipe_id_ptr: entry.recipe_id.as_ptr(),
+            recipe_id_len: entry.recipe_id.len(),
+            tier: entry.tier as u8,
+            strategy: entry.strategy as u8,
+        };
+        let mut resp = ApiResponse::empty();
+        let rc = unsafe { (self.dispatch)(&c_entry, &mut resp) };
+        if rc != 0 {
+            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() };
+            return Err(HypatiaError::NonZero { code: rc, message: msg });
+        }
+        Ok(())
+    }
+
+    /// Record an outcome for the learning loop.
+    pub fn record_outcome(&self, record: &OutcomeRecord) -> Result<(), HypatiaError> {
+        let c_record = COutcomeRecord {
+            recipe_id_ptr: record.recipe_id.as_ptr(),
+            recipe_id_len: record.recipe_id.len(),
+            repo_ptr: record.repo.as_ptr(),
+            repo_len: record.repo.len(),
+            file_ptr: record.file.as_ptr(),
+            file_len: record.file.len(),
+            outcome: record.outcome as u8,
+            timestamp_ptr: record.timestamp.as_ptr(),
+            timestamp_len: record.timestamp.len(),
+            bot_ptr: record.bot.as_ptr(),
+            bot_len: record.bot.len(),
+        };
+        let mut resp = ApiResponse::empty();
+        let rc = unsafe { (self.record_outcome)(&c_record, &mut resp) };
+        if rc != 0 {
+            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() };
+            return Err(HypatiaError::NonZero { code: rc, message: msg });
+        }
+        Ok(())
+    }
+
+    /// Force the Hypatia learning loop to run a cycle now.
+    pub fn force_learning_cycle(&self) -> Result<(), HypatiaError> {
+        let mut resp = ApiResponse::empty();
+        let rc = unsafe { (self.force_learning_cycle)(&mut resp) };
+        if rc != 0 {
+            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() };
+            return Err(HypatiaError::NonZero { code: rc, message: msg });
+        }
+        Ok(())
+    }
+
+    /// Look up the current confidence for a recipe id. Returns the
+    /// raw `f64` from the FFI; non-zero return code becomes an
+    /// `Err` so the caller can distinguish "no recipe" from a
+    /// confidence of 0.0.
+    pub fn get_confidence(&self, recipe_id: &str) -> Result<f64, HypatiaError> {
+        let bytes = recipe_id.as_bytes();
+        let mut out: f64 = 0.0;
+        let rc = unsafe { (self.get_confidence)(bytes.as_ptr(), bytes.len(), &mut out) };
+        if rc != 0 {
+            return Err(HypatiaError::NonZero {
+                code: rc,
+                message: format!("get_confidence({}) failed", recipe_id),
+            });
+        }
+        Ok(out)
+    }
+
+    /// Pure FFI call to `hypatia_dispatch_strategy`. The same logic
+    /// is also available locally via `DispatchStrategy::from_confidence`;
+    /// calling through the FFI guarantees you use whatever thresholds
+    /// the running Hypatia exposes, even if they drift from the
+    /// Rust constants.
+    pub fn dispatch_strategy_for(&self, confidence: f64) -> DispatchStrategy {
+        let raw = unsafe { (self.dispatch_strategy)(confidence) };
+        match raw {
+            0 => DispatchStrategy::AutoExecute,
+            1 => DispatchStrategy::Review,
+            _ => DispatchStrategy::ReportOnly,
+        }
     }
 }
 
