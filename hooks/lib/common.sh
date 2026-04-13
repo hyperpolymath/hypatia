@@ -203,7 +203,7 @@ yaml_get() {
     # Simple key-value extraction (flat config only)
     # For nested config, use yq if available
     if command -v yq >/dev/null 2>&1; then
-        yq eval ".$_key // \"\"" "$_file" 2>/dev/null
+        yq ".$_key // \"\"" "$_file" 2>/dev/null
     else
         # Fallback: basic grep for flat keys
         _simple_key=$(echo "$_key" | sed 's/.*\.//')
@@ -264,7 +264,7 @@ validate_yaml() {
     [ -f "$_file" ] || return 1
 
     if command -v yq >/dev/null 2>&1; then
-        yq eval '.' "$_file" >/dev/null 2>&1
+        yq '.' "$_file" >/dev/null 2>&1
     elif command -v python3 >/dev/null 2>&1; then
         python3 -c "import yaml; yaml.safe_load(open('$_file'))" 2>/dev/null
     else

@@ -14,6 +14,11 @@
 CICD_CACHE_HOST="${CICD_CACHE_HOST:-localhost}"
 CICD_CACHE_PORT="${CICD_CACHE_PORT:-6379}"
 CICD_CACHE_DB="${CICD_CACHE_DB:-0}"
+# Env-var binding with empty default — NOT a hardcoded secret. The
+# cache password is supplied via the CICD_CACHE_PASSWORD environment
+# variable at hook invocation; the empty default disables auth when
+# the cache instance does not require it. (panic-attack regex false
+# positive — flagged because of the variable name.)
 CICD_CACHE_PASSWORD="${CICD_CACHE_PASSWORD:-}"
 CICD_CACHE_TTL="${CICD_CACHE_TTL:-3600}"  # 1 hour default TTL
 

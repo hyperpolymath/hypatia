@@ -5,6 +5,12 @@
 #
 # Detects `deno run -A` or `--allow-all` and reports for least-privilege review.
 #
+# NOTE FOR SECURITY SCANNERS: this script DETECTS `deno -A` usage in
+# other files; it does not INVOKE Deno with broad permissions itself.
+# The `-A` and `--allow-all` strings below are grep patterns, not
+# command invocations. (panic-attack false positive — flagged because
+# of the literal `-A` in the regex.)
+#
 # Usage: fix-deno-permissions.sh <repo-path>
 
 set -euo pipefail

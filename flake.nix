@@ -6,8 +6,14 @@
 {
   description = "Hypatia — neurosymbolic CI/CD intelligence platform";
 
+  # SECURITY: inputs pinned to a release branch rather than `unstable`
+  # for marginal supply-chain hardening. A generated `flake.lock` is
+  # still required for full content-hash pinning — run `nix flake lock`
+  # to produce one. The host where this commit was authored does not
+  # have `nix` on PATH, so the lockfile is intentionally absent from
+  # this commit; first developer with nix should generate and commit it.
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 

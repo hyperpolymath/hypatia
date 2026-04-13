@@ -192,7 +192,11 @@ stop_containers() {
 init_database() {
     log_info "Initializing test database..."
 
-    # Create database and collections using ArangoDB HTTP API
+    # Create database and collections using ArangoDB HTTP API.
+    # NOTE: `testpassword` is the documented integration-test fixture
+    # — see integration/compose.test.yaml, integration/README.md, and
+    # integration/tests/arangodb_test.rs. It is NOT a production secret;
+    # the local containerized ArangoDB is set up to use this exact value.
     local arango_url="http://localhost:8529"
     local auth="root:testpassword"
 
@@ -260,6 +264,7 @@ run_tests() {
     export ARANGODB_URL="http://localhost:8529"
     export ARANGODB_DATABASE="cicd_hyper_a_test"
     export ARANGODB_USERNAME="root"
+    # See note above re: `testpassword` being the documented fixture, not a real secret.
     export ARANGODB_PASSWORD="testpassword"
     export DRAGONFLY_URL="redis://localhost:6379"
     export RUST_LOG="${RUST_LOG:-info}"

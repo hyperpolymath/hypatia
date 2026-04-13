@@ -100,7 +100,7 @@ while read local_ref local_sha remote_ref remote_sha; do
         if [ -f "$wf" ]; then
             # Validate YAML syntax
             if command -v yq &> /dev/null; then
-                if ! yq eval '.' "$wf" > /dev/null 2>&1; then
+                if ! yq '.' "$wf" > /dev/null 2>&1; then
                     echo -e "${RED}ERROR: Invalid YAML syntax in $wf${NC}"
                     ERRORS=$((ERRORS + 1))
                 fi
