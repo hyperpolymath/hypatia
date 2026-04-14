@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypatia Intelligence</title>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: #0a0a0a;
+            color: #e0e0e0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #app {
+            background: linear-gradient(145deg, #1a1a1a, #141414);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 700px;
+            margin-bottom: 40px;
+            text-align: center;
+            font-size: 1.4em;
+            letter-spacing: 0.05em;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            width: 100%;
+            max-width: 700px;
+        }
+        button {
+            background-color: #222;
+            color: #aaa;
+            border: 1px solid #444;
+            padding: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+        button:hover {
+            background-color: #333;
+            color: #fff;
+            border-color: #666;
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        }
+        #btn-back {
+            grid-column: span 2;
+            background-color: #2a1a1a;
+            border-color: #4a2a2a;
+            color: #c66;
+        }
+        #btn-back:hover {
+            background-color: #3a1a1a;
+            border-color: #6a2a2a;
+            color: #f88;
+        }
+        h1 {
+            color: #fff;
+            font-weight: 200;
+            letter-spacing: 0.2em;
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+<body>
+    <h1>HYPATIA</h1>
+    <div id="app">System Initialising...</div>
+    
+    <div class="controls">
+        <button id="btn-learning">Learning</button>
+        <button id="btn-symbolic">Symbolic</button>
+        <button id="btn-verification">Verification</button>
+        <button id="btn-triangle">Safety Triangle</button>
+        <button id="btn-back">Step Back (History)</button>
+    </div>
+
+    <script type="module">
+        import { load, Msg, Department } from '../tea/hypatia_tea.js';
+
+        async function main() {
+            try {
+                const tea = await load('./assets/wasm/hypatia_gui.wasm');
+                
+                let currentModel = tea.init();
+                const appDiv = document.getElementById('app');
+                
+                function render() {
+                    appDiv.textContent = tea.view(currentModel);
+                }
+
+                function dispatch(msg) {
+                    currentModel = tea.update(msg, currentModel);
+                    render();
+                }
+
+                document.getElementById('btn-learning').addEventListener('click', () => dispatch(Msg.Navigate(Department.Learning)));
+                document.getElementById('btn-symbolic').addEventListener('click', () => dispatch(Msg.Navigate(Department.Symbolic)));
+                document.getElementById('btn-verification').addEventListener('click', () => dispatch(Msg.Navigate(Department.Verification)));
+                document.getElementById('btn-triangle').addEventListener('click', () => dispatch(Msg.Navigate(Department.Triangle)));
+                document.getElementById('btn-back').addEventListener('click', () => dispatch(Msg.PopState()));
+
+                render();
+            } catch (err) {
+                console.error("Hypatia Loader Error:", err);
+                document.getElementById('app').textContent = "ERROR: " + err.message;
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
