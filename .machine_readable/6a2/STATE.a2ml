@@ -10,7 +10,7 @@ status = "active"
 
 [project-context]
 name = "hypatia"
-completion-percentage = 76
+completion-percentage = 78
 phase = "implementation"
 maturity = "alpha"
 
@@ -30,17 +30,20 @@ milestones = [
 issues = [
   { id = "B1", description = "GitHub PAT not yet configured — automated cross-repo dispatch blocked", severity = "high" },
   { id = "B2", description = "310/600 auto-execute entries still have null fix_script", severity = "medium" },
-  { id = "B3", description = "Logtalk rule engine files removed (engine/logtalk/) — no replacement yet; pattern detection relies on Elixir rules only", severity = "medium" },
 ]
 
 [critical-next-actions]
 actions = [
   "Configure GitHub PAT with repo scope for live dispatch",
   "Write fix scripts for the 310 null-fix-script auto-execute entries",
-  "Decide whether Logtalk engine will be replaced or Elixir rules are sufficient",
 ]
 
 [session-history]
+# 2026-04-14: Final Logtalk purge — Deep sweep complete.
+#             1. Purged legacy Logtalk CI/CD jobs and artifacts (engine/ gone).
+#             2. Promoted Elixir rules to primary status across all documentation.
+#             3. Updated architecture diagrams and state files to reflect pure-Elixir logic.
+#             4. Removed SWI-Prolog dependencies from stapeln.toml and Containerfiles.
 # 2026-04-11: ECHIDNA↔Hypatia coupling — three pieces:
 #             1. ProofObligation recipe type (lib/rules/proof_obligation.ex, PO001–PO006):
 #                classify/2 pure function across Safety Triangle (Eliminate/Substitute/Control)

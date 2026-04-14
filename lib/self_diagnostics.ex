@@ -7,7 +7,6 @@ defmodule Hypatia.SelfDiagnostics do
 
   Periodically checks:
   - Filesystem access (verisim-data, gitbot-fleet, dispatch manifests)
-  - Rule engine health (can Logtalk rules be loaded?)
   - Recipe confidence drift (recipes dropping below threshold)
   - Fleet connectivity (dispatch-runner reachable?)
   - Learning scheduler health (is it running? last successful cycle?)

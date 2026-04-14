@@ -2,8 +2,7 @@
 
 defmodule Hypatia.Rules.CodeSafety do
   @moduledoc """
-  Code safety rules absorbed from Logtalk code-safety-lessons.lgt and
-  container-security-lessons.lgt.
+  Primary Elixir rules for code safety (migrated from legacy Logtalk engine).
 
   Detects dangerous patterns in Rust, ReScript, BEAM, and container code.
   """

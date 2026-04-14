@@ -2,8 +2,8 @@
 
 defmodule Hypatia.Rules.CicdRules do
   @moduledoc """
-  CI/CD policy rules absorbed from Logtalk engine/rules/cicd_rules.lgt.
-
+  Primary Elixir CI/CD policy rules (migrated from legacy Logtalk engine).
+  """
   Defines repository must-have rules, commit blocking conditions,
   auto-fix capabilities, CI/CD waste detection, and license validation.
   """

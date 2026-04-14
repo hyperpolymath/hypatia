@@ -2,8 +2,7 @@
 
 defmodule Hypatia.Rules.MigrationRules do
   @moduledoc """
-  ReScript migration rules absorbed from Logtalk engine/rules/migration_rules.lgt
-  and merge_rules.lgt.
+  Primary Elixir ReScript migration rules (migrated from legacy Logtalk engine).
 
   Tracks deprecated API usage, migration readiness, and merge conflict resolution.
   """

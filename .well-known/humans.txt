@@ -11,5 +11,5 @@ Location: United Kingdom
 /* SITE */
 Software: Hypatia — Neurosymbolic CI/CD Intelligence Platform
 Standards: PMPL-1.0-or-later, RSR (Rhodium Standard Repository)
-Components: hypatia-engine (Elixir OTP), hypatia-cli (Rust), hypatia-adapter (Rust), logtalk-engine, idris2-abi, zig-ffi
-Languages: Elixir, Rust, Logtalk, Idris2, Zig, Haskell, Bash
+Components: hypatia-engine (Elixir OTP), hypatia-cli (Rust), hypatia-adapter (Rust), elixir-rules, idris2-abi, zig-ffi
+Languages: Elixir, Rust, Idris2, Zig, Haskell, Bash

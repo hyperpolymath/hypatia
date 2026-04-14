@@ -8,8 +8,7 @@ image:https://raw.githubusercontent.com/hyperpolymath/palimpsest-license/main/as
 :icons: font
 :website: https://hypatia.reposystem.dev
 
-image:https://img.shields.io/badge/Logtalk-Rules-orange.svg[Logtalk]
-image:https://img.shields.io/badge/Haskell-Verification-5D4F85.svg[Haskell]
+image:https://img.shields.io/badge/Elixir-Rules-purple.svg[Elixir]
 image:https://img.shields.io/badge/ArangoDB-Graph-green.svg[ArangoDB]
 image:https://img.shields.io/badge/Ada_2022-TUI-blue.svg[Ada]
 
@@ -28,8 +27,7 @@ toc::[]
 *Hypatia* is a neurosymbolic CI/CD intelligence platform that combines:
 
 * *Neural Learning*: Pattern recognition from CI/CD failures across ecosystems
-* *Symbolic Reasoning*: Logtalk/Prolog rules for fast, deterministic actions
-* *Formal Verification*: Haskell-based ruleset validation and registry
+* *Symbolic Reasoning*: High-performance Elixir rules for fast, deterministic actions
 * *Graph Intelligence*: ArangoDB for relationship modeling
 * *Distributed Cache*: Dragonfly for sub-millisecond rule lookups
 * *P2P Federation*: Radicle for decentralized ruleset distribution
@@ -44,7 +42,6 @@ The system learns complex patterns through neural analysis, then *distills* them
 * Pre-emptively injected into new repositories
 * Applied as cures to existing repositories  
 * Executed without ML inference overhead
-* Formally verified for correctness
 
 == Architecture
 
@@ -55,29 +52,13 @@ The system learns complex patterns through neural analysis, then *distills* them
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                 VERIFICATION LAYER (Haskell)                    │ │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────┐   │ │
-│  │  │ Type-Safe   │  │ Property    │  │ Formal Proof          │   │ │
-│  │  │ Ruleset DSL │  │ Testing     │  │ (Liquid Haskell)      │   │ │
-│  │  └─────────────┘  └─────────────┘  └───────────────────────┘   │ │
-│  │                          │                                      │ │
-│  │  ┌─────────────────────────────────────────────────────────┐   │ │
-│  │  │              RULESET REGISTRY (Git-Native)               │   │ │
-│  │  │  - Deposit: Submit verified rulesets                     │   │ │
-│  │  │  - Withdraw: Pull rulesets for local use                 │   │ │
-│  │  │  - Authority: Signed, versioned, auditable               │   │ │
-│  │  └─────────────────────────────────────────────────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
 │  │                 LEARNING LAYER (Neural)                        │ │
 │  │  Pattern Recognition → Anomaly Detection → Rule Distillation   │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │                              │                                       │
 │                              ▼                                       │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │              SYMBOLIC LAYER (Logtalk + Prolog)                 │ │
+│  │              SYMBOLIC LAYER (Elixir Rules)                     │ │
 │  │  Declarative Rules │ Imperative Procedures │ Inference Engine  │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │                              │                                       │

@@ -6,8 +6,7 @@
 #   1. Elixir pipeline (Phoenix/OTP, port 9090) — core orchestrator
 #   2. Rust CLI ("hyper") — command-line scanning tool
 #   3. Rust forge-adapter (port 8081) — GitHub/GitLab/Bitbucket API bridge
-#   4. Logtalk engine (SWI-Prolog) — rule-based pattern detection
-#   5. Idris2 ABI + Zig FFI — formally verified C ABI bridge
+#   4. Idris2 ABI + Zig FFI — formally verified C ABI bridge
 #
 # stapeln builds containers as composable layers (German: "to stack").
 # Each layer is independently cacheable, verifiable, and signable.
@@ -147,48 +146,7 @@ env = { RUST_LOG = "info" }
 healthcheck = { cmd = "curl -f http://localhost:8081/health || exit 1", interval = "30s", timeout = "5s", retries = 3 }
 
 # ══════════════════════════════════════════════════════════════
-# Component 4: Logtalk Engine (SWI-Prolog)
-# EXCEPTION: No Chainguard equivalent for SWI-Prolog.
-# Uses swipl:stable (Debian-based). Documented in Known Gaps.
-# ══════════════════════════════════════════════════════════════
-
-[layers.logtalk-base]
-description = "SWI-Prolog base (Debian — no Chainguard equivalent)"
-from = "docker.io/library/swipl:stable"
-cache = true
-verify = true
-
-[layers.logtalk-build]
-description = "Logtalk installation and rule precompilation"
-extends = "logtalk-base"
-packages-apt = ["curl", "bzip2"]
-commands = [
-    "curl -fsSL -o /tmp/logtalk.tar.bz2 https://logtalk.org/files/logtalk-3.98.0.tar.bz2",
-    "echo '0bf4825f0e2578fa2a6990b1eda771b8c1ba9e7091ea7ad11eecf319b56a3455  /tmp/logtalk.tar.bz2' | sha256sum -c -",
-    "mkdir -p /opt && tar xjf /tmp/logtalk.tar.bz2 -C /opt",
-    "ln -s /opt/logtalk-3.98.0 /opt/logtalk",
-    "rm /tmp/logtalk.tar.bz2",
-    "mkdir -p /app/logtalk",
-    "swipl -g 'logtalk_load(engine/loader)' -t halt || echo 'Precompilation skipped'",
-]
-env = { LOGTALKHOME = "/opt/logtalk", LOGTALKUSER = "/app/logtalk" }
-cache = true
-
-[layers.logtalk-runtime]
-description = "Logtalk engine runtime with precompiled rules"
-from = "docker.io/library/swipl:stable"
-packages-apt = ["curl", "jq"]
-copy-from = [
-    { layer = "logtalk-build", src = "/opt/logtalk/", dst = "/opt/logtalk/" },
-    { layer = "logtalk-build", src = "/app/", dst = "/app/" },
-]
-entrypoint = ["swipl"]
-cmd = ["-g", "logtalk_load(engine/loader)", "-t", "prolog"]
-env = { LOGTALKHOME = "/opt/logtalk", LOGTALKUSER = "/app/logtalk" }
-healthcheck = { cmd = "swipl -g 'logtalk_load(library(types))' -t halt || exit 1", interval = "30s", timeout = "10s", retries = 3 }
-
-# ══════════════════════════════════════════════════════════════
-# Component 5: Idris2 ABI + Zig FFI (Formal Verification Layer)
+# Component 4: Idris2 ABI + Zig FFI (Formal Verification Layer)
 # ══════════════════════════════════════════════════════════════
 
 [layers.idris2-toolchain]
@@ -286,7 +244,6 @@ layers = [
     "rust-deps",
     "cli-build",
     "adapter-build",
-    "logtalk-build",
     "idris2-toolchain",
     "zig-toolchain",
     "abi-verify",
@@ -295,12 +252,11 @@ layers = [
 env = { LOG_LEVEL = "debug", MIX_ENV = "dev" }
 
 [targets.production]
-description = "Production deployment — Elixir pipeline + CLI + adapter + Logtalk + FFI"
+description = "Production deployment — Elixir pipeline + CLI + adapter + FFI"
 layers = [
     "elixir-runtime",
     "cli-runtime",
     "adapter-runtime",
-    "logtalk-runtime",
     "ffi-runtime",
 ]
 env = { LOG_LEVEL = "info", MIX_ENV = "prod" }
@@ -320,11 +276,6 @@ description = "Forge adapter only (port 8081)"
 layers = ["adapter-runtime"]
 env = { LOG_LEVEL = "info" }
 
-[targets.engine]
-description = "Logtalk rule engine only"
-layers = ["logtalk-runtime"]
-env = { LOG_LEVEL = "info" }
-
 [targets.test]
 description = "Integration test suite with coverage"
 layers = [
@@ -335,7 +286,6 @@ layers = [
     "rust-toolchain",
     "rust-deps",
     "integration-test",
-    "logtalk-build",
     "abi-verify",
     "ffi-build",
 ]

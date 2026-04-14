@@ -2,8 +2,8 @@
 
 defmodule Hypatia.Rules.SecurityErrors do
   @moduledoc """
-  Security error database absorbed from Logtalk engine/rules/security_errors.lgt.
-
+  Primary Elixir security error database (migrated from legacy Logtalk engine).
+  """
   Defines error categories, severity levels, prevention mechanisms,
   SHA pin database, CodeQL language support, and secret detection patterns.
   """

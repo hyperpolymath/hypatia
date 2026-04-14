@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and Logtalk rules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and Elixir rules for pattern detection.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ Hypatia
 ├── Data layer                 # verisim-data (canonical flat-file store)
 ├── Safety systems             # Rate limiter, quarantine, batch rollback
 ├── OTP Application           # 8 GenServers: VCL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin
-├── Logtalk rule engine       # Error catalog, pattern detection rules
+├── Elixir rules engine       # Error catalog, pattern detection rules (lib/rules/)
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
 ├── Zig FFI                   # C ABI bridge (7 exported functions)
 ├── Rust workspace            # adapters, cli, data, fixer, integration
@@ -197,7 +197,7 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
 3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
 4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script — recipes exist but no executable script
-5. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images (no Chainguard equivalents)
+5. **Containerfiles:** Haskell still uses non-Chainguard base images (no Chainguard equivalents)
 6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
 7. **Neural state persistence:** State dir exists but coordinator hasn't persisted to disk yet
 
@@ -205,7 +205,6 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 
 - Elixir: `mix format`, SPDX headers on all files
 - Rust: `rustfmt`, `clippy`
-- Logtalk: Follow coding guidelines
 - Shell: `ShellCheck`, POSIX-compatible
 - SPDX-License-Identifier: PMPL-1.0-or-later
 

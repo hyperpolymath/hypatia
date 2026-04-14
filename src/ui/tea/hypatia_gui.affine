@@ -91,7 +91,7 @@ fn hypatia_update(@linear msg: Msg, @linear model: Model) -> Model {
 fn hypatia_view(model: Model) -> String {
   match model.current_dept {
     Learning     => "NEURAL LEARNING (Julia Pipeline)",
-    Symbolic     => "SYMBOLIC REASONING (Logtalk Rules)",
+    Symbolic     => "SYMBOLIC REASONING (Elixir Rules)",
     Verification => "FORMAL VERIFICATION (Idris2/Haskell)",
     Triangle     => "SAFETY TRIANGLE (Eliminate/Substitute/Control)"
   }

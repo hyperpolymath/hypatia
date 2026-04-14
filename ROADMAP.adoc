@@ -175,7 +175,7 @@ Elixir pipeline:
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal via flat files only
 3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
 4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script
-5. **Containerfiles:** SWI-Prolog and Haskell still use non-Chainguard base images
+5. **Containerfiles:** Haskell still uses non-Chainguard base images (Logtalk removed)
 6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
 7. **Neural state persistence:** State dir exists but coordinator has not persisted to disk yet
 
@@ -190,3 +190,4 @@ Elixir pipeline:
 ---
 
 _Last Updated: 2026-03-29_
+Last Updated: 2026-03-29_
