@@ -20,8 +20,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Argument parsing
-clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
-clap_complete = "4.5"
+clap = { version = "4.6", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4.6"
 
 # Async runtime
 tokio = { workspace = true }
