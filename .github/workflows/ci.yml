@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Main CI workflow for hypatia
-# Tests Rust (adapters, cli, fixer, data)
+# Tests Rust (adapters, cli, fixer, data), Haskell (registry), and Logtalk (engine)
 
 name: CI
 
@@ -128,6 +128,123 @@ jobs:
           fail_ci_if_error: false
 
   # ============================================================================
+  # Haskell Jobs (registry)
+  # ============================================================================
+  haskell-build:
+    name: Haskell Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
+        id: setup
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Configure build
+        run: |
+          cabal configure --enable-tests --enable-benchmarks --disable-documentation
+          cabal build all --dry-run
+
+      - name: Restore cached dependencies
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        id: cache
+        env:
+          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ env.key }}-plan-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+          restore-keys: ${{ env.key }}-
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cabal build all --only-dependencies
+
+      - name: Save cached dependencies
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cabal build all
+
+      - name: Run tests
+        run: cabal test all
+
+      - name: Check documentation
+        run: cabal haddock all
+
+  haskell-lint:
+    name: HLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup HLint
+        uses: haskell-actions/hlint-setup@17f0f4093d35cfdbf02aab186d51d0bb8b92ddfa # v2.7.0
+        with:
+          version: '3.8'
+
+      - name: Run HLint
+        uses: haskell-actions/hlint-run@75c62c3bed4ab3e4c85c64ed8f287478c5f86ce2 # v2.4.9
+        with:
+          path: registry/
+          fail-on: warning
+
+  # ============================================================================
+  # Logtalk Jobs (engine)
+  # ============================================================================
+  logtalk-test:
+    name: Logtalk Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install SWI-Prolog
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y swi-prolog
+
+      - name: Install Logtalk
+        run: |
+          curl -sSL https://logtalk.org/files/logtalk-3.78.0.tar.bz2 | tar xj
+          cd logtalk-3.78.0
+          sudo ./scripts/install.sh -p /usr/local
+          echo "LOGTALKHOME=/usr/local/share/logtalk" >> $GITHUB_ENV
+          echo "LOGTALKUSER=$HOME/logtalk" >> $GITHUB_ENV
+
+      - name: Setup Logtalk user directory
+        run: |
+          /usr/local/share/logtalk/scripts/logtalk_user_setup.sh
+
+      - name: Run Logtalk tests
+        working-directory: engine
+        run: |
+          # Load and test the engine components
+          swipl -g "['$LOGTALKHOME/adapters/swi.pl'], ['$LOGTALKHOME/paths/paths.pl'], logtalk_load([loader, 'rules/cicd_rules', 'rules/learning']), halt(0)." -t "halt(1)"
+
+      - name: Validate Logtalk syntax
+        working-directory: engine
+        run: |
+          for file in *.lgt rules/*.lgt; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+              swipl -g "['$LOGTALKHOME/adapters/swi.pl'], logtalk_load('$file'), halt(0)." -t "halt(1)" || exit 1
+            fi
+          done
+
+  # ============================================================================
   # Combined Status Check
   # ============================================================================
   ci-status:
@@ -138,13 +255,19 @@ jobs:
       - rust-fmt
       - rust-test
       - rust-test-coverage
+      - haskell-build
+      - haskell-lint
+      - logtalk-test
     if: always()
     steps:
       - name: Check all jobs status
         run: |
           if [[ "${{ needs.rust-check.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
-             [[ "${{ needs.rust-test.result }}" == "failure" ]]; then
+             [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
+             [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
+             [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.logtalk-test.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi

@@ -12,7 +12,7 @@ repository.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-libloading = "0.8"
+libloading = "0.9"
 
 [features]
 default = ["ffi", "subprocess"]
