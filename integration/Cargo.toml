@@ -20,7 +20,7 @@ hypatia-adapters = { path = "../adapters" }
 hypatia-data = { path = "../data" }
 
 # Async runtime
-tokio = { version = "1.51", features = ["full", "test-util"] }
+tokio = { version = "1.52", features = ["full", "test-util"] }
 async-trait = "0.1"
 
 # Serialization
