@@ -3,9 +3,8 @@
 
 ## Repository Focus
 - **Hypatia** is a neurosymbolic security scanner that learns patterns from fleet observations
-- Maintain `approved-rules/` as the authoritative source of truth for production rules
-- Keep `rule-proposals/` for rules pending validation
-- Sync detection patterns between Logtalk rules and `hypatia-cli.sh` bash patterns
+- Maintain `lib/rules/` as the authoritative source of truth for production rules
+- Sync detection patterns between Elixir rules and `hypatia-cli.sh` bash patterns
 
 ## Rule Governance
 
@@ -19,9 +18,9 @@
    - Track pattern occurrence counts
 
 3. **Rule Proposal** (threshold: 5 observations)
-   - Generate Logtalk rule with comprehensive logic
+   - Generate Elixir rule module with comprehensive logic
    - Include: CWE mapping, severity, fix suggestions
-   - Save to `rule-proposals/`
+   - Add to `lib/rules/` (pre-production status)
 
 4. **Validation** (ECHIDNA semantic analysis)
    - Check logical consistency
@@ -30,7 +29,7 @@
    - Required: 90%+ validation score
 
 5. **Approval & Deployment**
-   - Move to `approved-rules/`
+   - Promote to production status in `lib/rules/`
    - Update `rule-deployment-status.json`
    - Pattern already active in hypatia-cli.sh
 
@@ -41,8 +40,8 @@
 ### Rule Quality Standards
 
 **Production-Ready Rules Must Have:**
-- ✅ Comprehensive detection logic (not `fail.` stubs)
-- ✅ 100+ lines with 20+ helper predicates
+- ✅ Comprehensive detection logic (not empty stubs)
+- ✅ Standard Elixir module structure with `classify/2` function
 - ✅ Context-aware severity escalation (prod vs test)
 - ✅ CWE mapping for compliance
 - ✅ Actionable fix suggestions
@@ -59,14 +58,11 @@
 ```
 hypatia/
 ├── hypatia-cli.sh              # Detection patterns (bash/ripgrep)
-├── approved-rules/             # Production Logtalk rules
-│   ├── technical_debt.lgt
-│   ├── unsafe_without_doc.lgt
-│   ├── eval_usage.lgt
-│   └── DEPLOYMENT-MANIFEST-*.md
-├── rule-proposals/             # Pending validation
-│   ├── *.lgt
-│   └── RULE-PROPOSALS-*.md
+├── lib/rules/                  # Production Elixir rules
+│   ├── code_safety.ex
+│   ├── security_errors.ex
+│   ├── cicd_rules.ex
+│   └── ...
 ├── rule-deployment-status.json # Current state
 ├── fleet-config.k9.ncl         # K9 configuration
 └── rules.a2ml                  # This file
@@ -119,9 +115,9 @@ gitbot-fleet/shared-context/
    ```
 
 4. **Generate rule when threshold crossed (5+ obs):**
-   - Create comprehensive Logtalk rule in `rule-proposals/`
-   - Include all required predicates: `has_issue/2`, `classify_severity/2`, `suggest_fix/2`, `auto_fixable/2`
-   - Add context-aware logic with helper predicates
+   - Create comprehensive Elixir rule module in `lib/rules/`
+   - Include all required logic: `classify/2`, CWE mapping, and fix suggestions
+   - Add context-aware logic with helper functions
 
 5. **Validate with ECHIDNA:**
    ```bash
@@ -130,8 +126,8 @@ gitbot-fleet/shared-context/
    ```
 
 6. **Deploy approved rule:**
+   - Mark as production in `rule-deployment-status.json`
    ```bash
-   cp rule-proposals/pattern.lgt approved-rules/
    # Update rule-deployment-status.json
    ```
 
@@ -143,7 +139,7 @@ gitbot-fleet/shared-context/
    ```
 
 2. **Update both files:**
-   - Logtalk rule in `approved-rules/`
+   - Elixir rule in `lib/rules/`
    - Bash pattern in `hypatia-cli.sh`
 
 3. **Re-validate:**
@@ -205,7 +201,7 @@ Co-Authored-By: Hypatia Scanner <hypatia@reposystem.dev>"
 ## Metrics to Track
 
 - **Observations per pattern:** Track in `observed-patterns.jsonl`
-- **Rule proposals generated:** Count in `rule-proposals/`
+- **Rule proposals generated:** Count in `lib/rules/`
 - **Validation scores:** Record in rule metadata
 - **Auto-fix success rate:** Track in `auto-fix-history.jsonl`
 - **False positive rate:** Monitor user feedback
@@ -222,7 +218,7 @@ Co-Authored-By: Hypatia Scanner <hypatia@reposystem.dev>"
 ## Delivery Promises
 
 After any changes to rules or patterns:
-1. ✅ Update both Logtalk rule and bash pattern
+1. ✅ Update both Elixir rule and bash pattern
 2. ✅ Update `rule-deployment-status.json`
 3. ✅ Re-run validation if rule logic changed
 4. ✅ Update deployment manifest
@@ -230,7 +226,7 @@ After any changes to rules or patterns:
 
 ## Current State
 
-**Active Rules:** 7 (as of 2026-02-06)
+**Active Rules:** 7 (as of 2026-04-14)
 - unsafe_panic (template, 1,150 obs)
 - type_safety_bypass (template, 477 obs)
 - unsafe_crash (template, 342 obs)
@@ -246,6 +242,6 @@ After any changes to rules or patterns:
 
 ---
 
-**Last Updated:** 2026-02-06T22:45:00+00:00
+**Last Updated:** 2026-04-14T17:15:00+00:00
 **Maintained By:** Hypatia Learning Loop
 **Questions?** See `DEPLOYMENT-MANIFEST-*.md` for detailed deployment history
