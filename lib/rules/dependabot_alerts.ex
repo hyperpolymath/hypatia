@@ -58,7 +58,25 @@ defmodule Hypatia.Rules.DependabotAlerts do
           stale_threshold = Map.get(@stale_thresholds, String.to_existing_atom(severity), 90)
           is_stale = age_days > stale_threshold
 
+          # Floor the exported severity at :medium so fresh low-severity
+          # alerts are NOT silently filtered out by the CLI's default
+          # severity threshold (which is "medium" — rank 3). Native
+          # severity from the GitHub advisory is preserved in
+          # detail.severity below for downstream consumers that want to
+          # see the raw classification. Three low-severity Dependabot
+          # alerts on 007 sat open for weeks because this floor was not
+          # in place — every `:low` finding was dropped by the CLI
+          # filter before reaching any consumer (2026-04-17 audit, see
+          # 007-lang/audits/audit-dependabot-automation-gap-2026-04-17.md).
           mapped_severity = case severity do
+            "critical" -> :critical
+            "high" -> :high
+            "medium" -> :medium
+            "low" -> :medium
+            _ -> :medium
+          end
+
+          native_severity = case severity do
             "critical" -> :critical
             "high" -> :high
             "medium" -> :medium
@@ -66,9 +84,10 @@ defmodule Hypatia.Rules.DependabotAlerts do
             _ -> :medium
           end
 
-          # Escalate stale alerts
+          # Escalate stale alerts (using native severity for the
+          # "stale + low/medium" test so we don't double-promote).
           escalated_severity =
-            if is_stale and mapped_severity in [:medium, :low] do
+            if is_stale and native_severity in [:medium, :low] do
               :high
             else
               mapped_severity
@@ -79,7 +98,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
             file: "#{ecosystem}/#{package}",
             severity: escalated_severity,
             reason: build_alert_reason(severity, package, cve, age_days, is_stale),
-            action: determine_action(mapped_severity, is_stale),
+            action: determine_action(native_severity, is_stale),
             detail: %{
               alert_number: alert["number"],
               cve: cve,
