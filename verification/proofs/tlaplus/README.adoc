@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+= Hypatia TLA+ proofs
+:toc:
+
+== H8: Kin gate atomicity
+
+Specification: `KinGate.tla` +
+Configuration: `KinGate.cfg` +
+Source being verified: `lib/kin/gate.ex`
+
+Models the Kin Gate's per-repo lock protocol (Acquire / Release / Expire)
+and states four safety invariants plus one liveness property:
+
+* `MutualExclusionByType` -- the lock map is a function (type-level mutex).
+* `MutualExclusionBotView` -- no two distinct bots believe they hold the
+  same repo lock at the same state (the real application-level mutex).
+* `ViewCoherentWithLocks` -- each bot's belief agrees with the Gate.
+* `NoOrphanView` -- unlocked repos appear in no bot's view.
+* `GrantsAreWellBracketed` -- every pair of grants for the same repo
+  has an intervening release or expire (temporal form of mutex).
+* `Liveness` -- every queued request eventually processes.
+
+== Running TLC
+
+Not yet runnable from this machine: no Java toolchain installed.
+
+On any host with a JRE and `tla2tools.jar`:
+
+[source,bash]
+----
+cd verification/proofs/tlaplus/
+java -cp /path/to/tla2tools.jar tlc2.TLC -config KinGate.cfg KinGate.tla
+----
+
+The default config bounds the model to 3 bots, 2 repos, and 4 queued
+requests -- state space ~10^5, finishes in seconds.
+
+== Installing TLA+
+
+=== Fedora Atomic (this host, not yet done)
+
+[source,bash]
+----
+# Option A (system install, requires reboot on rpm-ostree):
+rpm-ostree install java-21-openjdk-headless
+# reboot, then:
+curl -L -o ~/.local/share/tla2tools.jar \
+  https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+
+# Option B (rootless, no reboot):
+toolbox create --release f43 -c tla
+toolbox enter tla
+sudo dnf install -y java-21-openjdk-headless
+curl -L -o /tmp/tla2tools.jar \
+  https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+----
+
+=== CI
+
+Any runner with the `tla2tools.jar` available can verify this spec. See
+the `just verify-tla+` recipe in the top-level `Justfile` once wired up.
+
+== Cross-references
+
+* `standards/docs/proofs/spec-templates/T1-critical/hypatia.md` -- H8
+* `/home/hyper/Desktop/proof-debt-plan.md` -- Dependability / hypatia H8
