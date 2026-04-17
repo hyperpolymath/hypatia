@@ -24,9 +24,22 @@ and states four safety invariants plus one liveness property:
 
 == Running TLC
 
-Not yet runnable from this machine: no Java toolchain installed.
+Verified 2026-04-17 via an ephemeral Eclipse Temurin 21 JRE container
+(no host-wide Java install required). `tla2tools.jar` lives at
+`~/.local/share/tla2tools.jar`.
 
-On any host with a JRE and `tla2tools.jar`:
+[source,bash]
+----
+cd verification/proofs/tlaplus/
+podman run --rm \
+  -v "$PWD":/work:Z \
+  -v "$HOME/.local/share/tla2tools.jar":/tla2tools.jar:ro,Z \
+  -w /work docker.io/library/eclipse-temurin:21-jre \
+  java -XX:+UseParallelGC -cp /tla2tools.jar tlc2.TLC \
+    -workers auto -config KinGate.cfg KinGate.tla
+----
+
+On any host with a JRE already installed:
 
 [source,bash]
 ----
@@ -34,27 +47,36 @@ cd verification/proofs/tlaplus/
 java -cp /path/to/tla2tools.jar tlc2.TLC -config KinGate.cfg KinGate.tla
 ----
 
-The default config bounds the model to 3 bots, 2 repos, and 4 queued
-requests -- state space ~10^5, finishes in seconds.
+The default config bounds the model to 3 bots, 2 repos, `MaxRequests=4`
+(bounds both queue depth and total lifetime requests -- the latter is
+what gives `EveryRequestProcessed` a meaningful termination point).
+State space: 1,778,860 distinct states at depth 13, ~51s on 8 cores.
 
 == Installing TLA+
 
-=== Fedora Atomic (this host, not yet done)
+=== Fedora Atomic (this host)
+
+Fetch `tla2tools.jar` and run TLC from an ephemeral container (chosen
+for this host -- no rpm-ostree layering, no reboot, no toolbox state):
 
 [source,bash]
 ----
-# Option A (system install, requires reboot on rpm-ostree):
-rpm-ostree install java-21-openjdk-headless
-# reboot, then:
 curl -L -o ~/.local/share/tla2tools.jar \
   https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+# then use the podman one-liner above.
+----
 
-# Option B (rootless, no reboot):
+Alternative host-install options:
+
+[source,bash]
+----
+# System install (rpm-ostree, requires reboot):
+rpm-ostree install java-21-openjdk-headless && systemctl reboot
+
+# Rootless toolbox (no reboot):
 toolbox create --release f43 -c tla
 toolbox enter tla
 sudo dnf install -y java-21-openjdk-headless
-curl -L -o /tmp/tla2tools.jar \
-  https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
 ----
 
 === CI

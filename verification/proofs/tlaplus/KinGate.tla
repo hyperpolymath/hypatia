@@ -38,9 +38,12 @@ VARIABLES
     locks,         \* [Repos -> Bots \cup {NONE}] -- Gate's authoritative state
     botView,       \* [Bots -> SUBSET Repos] -- each bot's current belief
     requests,      \* Seq(Bots \X Repos) -- pending review() calls
-    grantHistory   \* Seq(<<Bots, Repos, STATE>>) -- audit log for safety property
+    grantHistory,  \* Seq(<<Bots, Repos, STATE>>) -- audit log for safety property
+    requestsMade   \* total number of Request actions ever issued (bounds the model
+                   \* for finite model-checking; mirrors real-world workload finitude
+                   \* so that liveness properties have a meaningful termination).
 
-vars == <<locks, botView, requests, grantHistory>>
+vars == <<locks, botView, requests, grantHistory, requestsMade>>
 
 TypeOK ==
     /\ locks \in [Repos -> Bots \cup {NONE}]
@@ -48,20 +51,24 @@ TypeOK ==
     /\ requests \in Seq(Bots \X Repos)
     /\ Len(requests) <= MaxRequests
     /\ grantHistory \in Seq(Bots \X Repos \X {"GRANT", "RELEASE", "EXPIRE"})
+    /\ requestsMade \in 0..MaxRequests
 
 Init ==
     /\ locks = [r \in Repos |-> NONE]
     /\ botView = [b \in Bots |-> {}]
     /\ requests = << >>
     /\ grantHistory = << >>
+    /\ requestsMade = 0
 
 --------------------------------------------------------------------------------
 \* Bot submits a review() request. The Gate queues it but does not commit.
 \* Modelled as pure enqueue so that Process encodes the atomic transition.
 --------------------------------------------------------------------------------
 Request(bot, repo) ==
-    /\ Len(requests) < MaxRequests
+    /\ requestsMade < MaxRequests       \* bound total lifetime requests
+    /\ Len(requests) < MaxRequests      \* bound instantaneous queue depth
     /\ requests' = Append(requests, <<bot, repo>>)
+    /\ requestsMade' = requestsMade + 1
     /\ UNCHANGED <<locks, botView, grantHistory>>
 
 --------------------------------------------------------------------------------
@@ -81,11 +88,12 @@ Process ==
               /\ botView' = [botView EXCEPT ![bot] = @ \cup {repo}]
               /\ requests' = Tail(requests)
               /\ grantHistory' = Append(grantHistory, <<bot, repo, "GRANT">>)
+              /\ UNCHANGED requestsMade
            \/ \* Deferral: another bot holds the lock; the request drops.
               /\ locks[repo] \notin {NONE, bot}
               /\ UNCHANGED <<locks, botView>>
               /\ requests' = Tail(requests)
-              /\ UNCHANGED grantHistory
+              /\ UNCHANGED <<grantHistory, requestsMade>>
 
 --------------------------------------------------------------------------------
 \* Bot finishes its action and casts release_lock.
@@ -95,7 +103,7 @@ Release(bot, repo) ==
     /\ repo \in botView[bot]
     /\ locks' = [locks EXCEPT ![repo] = NONE]
     /\ botView' = [botView EXCEPT ![bot] = @ \ {repo}]
-    /\ UNCHANGED requests
+    /\ UNCHANGED <<requests, requestsMade>>
     /\ grantHistory' = Append(grantHistory, <<bot, repo, "RELEASE">>)
 
 --------------------------------------------------------------------------------
@@ -110,7 +118,7 @@ Expire(repo) ==
     /\ LET b == locks[repo]
        IN  /\ locks' = [locks EXCEPT ![repo] = NONE]
            /\ botView' = [botView EXCEPT ![b] = @ \ {repo}]
-           /\ UNCHANGED requests
+           /\ UNCHANGED <<requests, requestsMade>>
            /\ grantHistory' = Append(grantHistory, <<b, repo, "EXPIRE">>)
 
 Next ==
@@ -149,15 +157,19 @@ NoOrphanView ==
         (locks[r] = NONE) => (\A b \in Bots: r \notin botView[b])
 
 \* I5. The grantHistory audit log is consistent with the invariant: between
-\*     two "GRANT" entries for the same (bot, repo) there must be an
-\*     intervening "RELEASE" or "EXPIRE" for that repo. (Temporal form
-\*     of mutex -- useful for liveness and no-double-book-keeping.)
-\*     Phrased as a safety invariant over the log tail.
+\*     two "GRANT" entries on the same repo held by *different* bots there
+\*     must be an intervening "RELEASE" or "EXPIRE" for that repo. Reentrant
+\*     re-grants by the same bot are permitted by the Process step
+\*     (locks[repo] \in {NONE, bot}) and so are excluded from the antecedent.
+\*     (Temporal form of mutex -- useful for liveness and no-double-book-keeping.)
 GrantsAreWellBracketed ==
     \A i, j \in 1..Len(grantHistory):
         LET ei == grantHistory[i]
             ej == grantHistory[j]
-        IN  (i < j /\ ei[3] = "GRANT" /\ ej[3] = "GRANT" /\ ei[2] = ej[2])
+        IN  (i < j
+             /\ ei[3] = "GRANT" /\ ej[3] = "GRANT"
+             /\ ei[2] = ej[2]
+             /\ ei[1] /= ej[1])
               => \E k \in (i+1)..(j-1):
                    /\ grantHistory[k][2] = ei[2]
                    /\ grantHistory[k][3] \in {"RELEASE", "EXPIRE"}

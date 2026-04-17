@@ -40,9 +40,9 @@ Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/C
 | `verification/proofs/idris2/BatchRollback.idr` | Idris2 | ~85 | Transactionality (all-or-nothing), Reversibility (snapshot restoration), Fault tolerance (failure handling) | COMPLETE |
 | `verification/proofs/lean4/RateLimiting.lean` | Lean 4 | ~175 | Counter never exceeds configured bound, tryAccept preserves invariant, prune preserves invariant, inductive sequence processing, rejection guarantee, concrete configs (per-bot/global/burst) | COMPLETE |
 | `verification/proofs/idris2/NeuralConsensus.idr` | Idris2 | ~170 | H9: uniform-mean aggregation of Vect n Prediction is in [0,1], bounded below by n * min(inputs), denominator > 0 for non-empty ensembles, 8-network specialization | COMPLETE |
-| `verification/proofs/tlaplus/KinGate.tla` | TLA+ | ~120 | H8: Kin gate atomicity. Acquire/Release/Expire transitions + MutualExclusionByType + MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView + GrantsAreWellBracketed + Liveness | SPEC COMPLETE, model-check pending TLA+ tooling install |
+| `verification/proofs/tlaplus/KinGate.tla` | TLA+ | ~130 | H8: Kin gate atomicity. Acquire/Release/Expire transitions + MutualExclusionByType + MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView + GrantsAreWellBracketed + EveryRequestProcessed (liveness) | COMPLETE — TLC model-check 2026-04-17 passed on 3 bots × 2 repos × MaxRequests=4: 1,778,860 distinct states, depth 13, no errors in 51s (Eclipse Temurin 21 JRE, tla2tools 2.19) |
 
-**New total: ~1,400 LOC of proven code (TLA+ spec pending TLC verification)**
+**New total: ~1,400 LOC of proven code (all TLC-verified or Idris2/Lean4-typechecked)**
 
 ## Properties Proven
 

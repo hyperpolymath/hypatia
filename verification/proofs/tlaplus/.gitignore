@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# TLC model-checker scratch output (per-run fingerprints/state-queue/counter-example dumps).
+states/
