@@ -146,3 +146,6 @@ htmlcov/
 # asdf version manager
 .tool-versions
 verification/proofs/agda/*.agdai
+.elixir_ls/
+.cache/
+dist/
