@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Confidence Annealing — temperature-scheduled confidence calibration
+# Confidence Annealing -- temperature-scheduled confidence calibration
 #
 # Inspired by simulated annealing: early in a recipe's lifecycle (high
 # temperature), confidence spreads are flattened toward 0.5 (conservative).
@@ -19,10 +19,10 @@ defmodule Hypatia.ConfidenceAnnealing do
   ## How it works
 
   Each recipe tracks an annealing state:
-  - `temperature` — controls how much confidence is flattened toward 0.5
-  - `outcome_count` — total observations (successes + failures + FPs)
-  - `stage` — dispatch tier lock based on outcome count thresholds
-  - `last_reheat` — timestamp of most recent drift-triggered reheat
+  - `temperature` -- controls how much confidence is flattened toward 0.5
+  - `outcome_count` -- total observations (successes + failures + FPs)
+  - `stage` -- dispatch tier lock based on outcome count thresholds
+  - `last_reheat` -- timestamp of most recent drift-triggered reheat
 
   Temperature decays exponentially with each outcome:
 
@@ -60,18 +60,18 @@ defmodule Hypatia.ConfidenceAnnealing do
 
   # --- Configuration ---
 
-  # Starting temperature — high means "flatten confidence toward 0.5"
+  # Starting temperature -- high means "flatten confidence toward 0.5"
   @initial_temperature 1.0
 
-  # Exponential decay rate — higher = faster cooling
+  # Exponential decay rate -- higher = faster cooling
   # At 0.05, T drops to ~0.37 after 20 outcomes, ~0.08 after 50
   @decay_rate 0.05
 
-  # Minimum temperature — prevents complete crystallisation, allows
+  # Minimum temperature -- prevents complete crystallisation, allows
   # small corrections even for veteran recipes
   @min_temperature 0.01
 
-  # Reheat multiplier — how much temperature rises on drift detection
+  # Reheat multiplier -- how much temperature rises on drift detection
   @reheat_multiplier 3.0
 
   # Maximum temperature after reheat (never exceeds initial)
@@ -90,7 +90,7 @@ defmodule Hypatia.ConfidenceAnnealing do
     {:veteran, 50}
   ]
 
-  # Cross-repo discount — transferred confidence uses higher effective
+  # Cross-repo discount -- transferred confidence uses higher effective
   # temperature (more conservative)
   @cross_repo_temperature_multiplier 2.0
 
@@ -174,7 +174,7 @@ defmodule Hypatia.ConfidenceAnnealing do
     # Base temperature from decay curve
     base_temp = compute_temperature(new_count)
 
-    # Check for drift — if detected, reheat
+    # Check for drift -- if detected, reheat
     {temperature, last_reheat} =
       if drift_detected?(recent) do
         reheated = min(base_temp * @reheat_multiplier, @reheat_cap)

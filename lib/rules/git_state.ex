@@ -7,7 +7,7 @@ defmodule Hypatia.Rules.GitState do
 
   Detects repos that are out of sync with their remotes: uncommitted changes,
   unpushed commits, diverged branches, and stale tracking references.
-  This is critical for fleet-wide visibility — if a repo isn't pushed,
+  This is critical for fleet-wide visibility -- if a repo isn't pushed,
   other sessions and CI can't see the changes.
 
   Dispatches to:
@@ -40,7 +40,7 @@ defmodule Hypatia.Rules.GitState do
               rule: "GS001",
               file: ".",
               severity: :medium,
-              reason: "#{staged} staged but uncommitted change(s) — commit needed",
+              reason: "#{staged} staged but uncommitted change(s) -- commit needed",
               action: :commit,
               detail: %{staged: staged}
             } | findings]
@@ -54,7 +54,7 @@ defmodule Hypatia.Rules.GitState do
               rule: "GS001",
               file: ".",
               severity: :medium,
-              reason: "#{unstaged} unstaged modification(s) — stage and commit needed",
+              reason: "#{unstaged} unstaged modification(s) -- stage and commit needed",
               action: :commit,
               detail: %{unstaged: unstaged}
             } | findings]
@@ -68,7 +68,7 @@ defmodule Hypatia.Rules.GitState do
               rule: "GS001",
               file: ".",
               severity: :low,
-              reason: "#{untracked} untracked file(s) — review and add or .gitignore",
+              reason: "#{untracked} untracked file(s) -- review and add or .gitignore",
               action: :review,
               detail: %{untracked: untracked}
             } | findings]
@@ -107,7 +107,7 @@ defmodule Hypatia.Rules.GitState do
               rule: "GS002",
               file: ".",
               severity: :high,
-              reason: "#{count} unpushed commit(s) on #{branch} — push to remote",
+              reason: "#{count} unpushed commit(s) on #{branch} -- push to remote",
               action: :push,
               detail: %{branch: branch, unpushed: count}
             }]
@@ -122,7 +122,7 @@ defmodule Hypatia.Rules.GitState do
               rule: "GS002",
               file: ".",
               severity: :high,
-              reason: "Branch #{branch} has no upstream tracking — push with -u",
+              reason: "Branch #{branch} has no upstream tracking -- push with -u",
               action: :push_set_upstream,
               detail: %{branch: branch}
             }]
@@ -160,7 +160,7 @@ defmodule Hypatia.Rules.GitState do
                 rule: "GS003",
                 file: ".",
                 severity: :high,
-                reason: "Branch #{branch} diverged: #{ahead} ahead, #{behind} behind upstream — rebase or merge needed",
+                reason: "Branch #{branch} diverged: #{ahead} ahead, #{behind} behind upstream -- rebase or merge needed",
                 action: :rebase_or_merge,
                 detail: %{branch: branch, ahead: ahead, behind: behind}
               }]
@@ -196,7 +196,7 @@ defmodule Hypatia.Rules.GitState do
             rule: "GS004",
             file: ".",
             severity: :low,
-            reason: "#{length(stale_refs)} stale remote tracking ref(s) — run git remote prune origin",
+            reason: "#{length(stale_refs)} stale remote tracking ref(s) -- run git remote prune origin",
             action: :prune_remote,
             detail: %{stale_count: length(stale_refs)}
           }]
@@ -224,7 +224,7 @@ defmodule Hypatia.Rules.GitState do
           rule: "GS005",
           file: ".",
           severity: :high,
-          reason: "HEAD is detached — commits will be lost. Create a branch or checkout an existing one.",
+          reason: "HEAD is detached -- commits will be lost. Create a branch or checkout an existing one.",
           action: :create_branch
         }]
     end
@@ -234,7 +234,7 @@ defmodule Hypatia.Rules.GitState do
 
   @doc """
   GS006: Detect repos on non-default branch (feature branches left checked out).
-  Severity: low (informational — may be intentional).
+  Severity: low (informational -- may be intentional).
   Action: review if branch should be merged.
   """
   def gs006_not_on_default_branch(repo_path) do
@@ -245,7 +245,7 @@ defmodule Hypatia.Rules.GitState do
         rule: "GS006",
         file: ".",
         severity: :low,
-        reason: "On branch '#{branch}' instead of main/master — review if merge is needed",
+        reason: "On branch '#{branch}' instead of main/master -- review if merge is needed",
         action: :review,
         detail: %{branch: branch}
       }]

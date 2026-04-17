@@ -65,7 +65,7 @@ defmodule Hypatia.RecipeMatcher do
 
   @doc """
   Load all recipe files from verisim-data/recipes/.
-  Caches nothing — always reads fresh from disk.
+  Caches nothing -- always reads fresh from disk.
   """
   def all_recipes do
     recipes_dir = Path.join(Path.expand(@verisimdb_data_path), "recipes")
@@ -137,7 +137,7 @@ defmodule Hypatia.RecipeMatcher do
 
   # --- Private ---
 
-  # Match recipe by target_categories field — most reliable match
+  # Match recipe by target_categories field -- most reliable match
   defp category_match_recipe(pattern, language) do
     category = Map.get(pattern, "category", "")
 

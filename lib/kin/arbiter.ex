@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Kin.Arbiter do
   @moduledoc """
-  Kin Arbiter — conflict resolution and priority arbitration between bots.
+  Kin Arbiter -- conflict resolution and priority arbitration between bots.
 
   When multiple bots want to act on the same repo or the same finding, the Arbiter
   decides who goes first and whether actions are compatible. It also handles:
@@ -16,17 +16,17 @@ defmodule Hypatia.Kin.Arbiter do
 
   ## Bot Priority Order (highest to lowest)
 
-  1. echidnabot — formal verification (safety-critical, always wins)
-  2. rhodibot — RSR compliance (structural, high impact)
-  3. panicbot — security scanning (vulnerability fixes)
-  4. sustainabot — sustainability/supply chain
-  5. glambot — accessibility
-  6. seambot — integration/API
-  7. finishingbot — polish/cleanup
-  8. cipherbot — cryptography
-  9. gsbot — general
-  10. accessibilitybot — a11y
-  11. the-hotchocolabot — comfort/DX
+  1. echidnabot -- formal verification (safety-critical, always wins)
+  2. rhodibot -- RSR compliance (structural, high impact)
+  3. panicbot -- security scanning (vulnerability fixes)
+  4. sustainabot -- sustainability/supply chain
+  5. glambot -- accessibility
+  6. seambot -- integration/API
+  7. finishingbot -- polish/cleanup
+  8. cipherbot -- cryptography
+  9. gsbot -- general
+  10. accessibilitybot -- a11y
+  11. the-hotchocolabot -- comfort/DX
   """
 
   use GenServer
@@ -107,7 +107,7 @@ defmodule Hypatia.Kin.Arbiter do
     GenServer.call(__MODULE__, :resolution_history)
   end
 
-  @doc "Detect synergies — actions that reinforce each other."
+  @doc "Detect synergies -- actions that reinforce each other."
   def detect_synergies do
     GenServer.call(__MODULE__, :detect_synergies)
   end
@@ -122,7 +122,7 @@ defmodule Hypatia.Kin.Arbiter do
       synergy_log: []          # detected synergies between bot actions
     }
 
-    Logger.info("Kin.Arbiter started — bot conflict resolution active.")
+    Logger.info("Kin.Arbiter started -- bot conflict resolution active.")
     {:ok, state}
   end
 
@@ -216,7 +216,7 @@ defmodule Hypatia.Kin.Arbiter do
           end
       end
 
-    Logger.info("Arbiter: #{winner.bot_id} wins over #{loser.bot_id} on #{winner.repo} — #{reason}")
+    Logger.info("Arbiter: #{winner.bot_id} wins over #{loser.bot_id} on #{winner.repo} -- #{reason}")
 
     result = {:winner, winner, loser, reason}
     new_state = log_resolution(state, action_a, action_b, :priority_resolved, reason)

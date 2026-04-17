@@ -5,8 +5,8 @@ defmodule Hypatia.FleetDispatcher do
   Routes findings to appropriate gitbot-fleet bots via GraphQL.
 
   Supports both:
-  - Legacy dispatch_finding/1 — routes by finding type
-  - Triangle-aware dispatch_routed_action/1 — routes by safety triangle tier
+  - Legacy dispatch_finding/1 -- routes by finding type
+  - Triangle-aware dispatch_routed_action/1 -- routes by safety triangle tier
   """
 
   alias Hypatia.TriangleRouter
@@ -20,16 +20,16 @@ defmodule Hypatia.FleetDispatcher do
   @direct_pr_enabled System.get_env("HYPATIA_DIRECT_PR") == "true"
 
   # ====================================================================
-  # Triangle-Aware Dispatch (new — from safety triangle router)
+  # Triangle-Aware Dispatch (new -- from safety triangle router)
   # ====================================================================
 
   @doc """
   Dispatch a routed action from the triangle router.
 
   Handles:
-  - {:eliminate, recipe, pattern} — auto-fix or PR depending on confidence
-  - {:substitute, recipe, pattern} — PR with proven module + proof obligation
-  - {:control, pattern} — advisory report to sustainabot
+  - {:eliminate, recipe, pattern} -- auto-fix or PR depending on confidence
+  - {:substitute, recipe, pattern} -- PR with proven module + proof obligation
+  - {:control, pattern} -- advisory report to sustainabot
   """
   def dispatch_routed_action({:eliminate, recipe, pattern}) do
     # Direct PR path: when HYPATIA_DIRECT_PR=true and the finding is a
@@ -63,7 +63,7 @@ defmodule Hypatia.FleetDispatcher do
         :report_only -> :advisory
       end
 
-    # Gate review — every action must pass through the Kin Gate
+    # Gate review -- every action must pass through the Kin Gate
     gate_action = %{
       bot_id: bot_id,
       repo: get_pattern_repo(pattern),
@@ -87,7 +87,7 @@ defmodule Hypatia.FleetDispatcher do
         {:error, :gate_rejected, reason}
 
       {:deferred, wait_ms} ->
-        Logger.info("Gate deferred eliminate dispatch — retry in #{div(wait_ms, 1000)}s")
+        Logger.info("Gate deferred eliminate dispatch -- retry in #{div(wait_ms, 1000)}s")
         {:ok, :deferred}
     end
   end
@@ -164,7 +164,7 @@ defmodule Hypatia.FleetDispatcher do
         })
 
       "eliminate" ->
-        # Eliminate-tier but below auto-execute threshold — ask echidnabot
+        # Eliminate-tier but below auto-execute threshold -- ask echidnabot
         dispatch_to_echidnabot(%{
           type: :proof_obligation,
           repo: repo,
@@ -175,7 +175,7 @@ defmodule Hypatia.FleetDispatcher do
         })
 
       "substitute" ->
-        # Standard ECHIDNA routing — prover hint from VeriSimDB history
+        # Standard ECHIDNA routing -- prover hint from VeriSimDB history
         dispatch_to_echidnabot(%{
           type: :proof_obligation,
           repo: repo,
@@ -185,14 +185,14 @@ defmodule Hypatia.FleetDispatcher do
         })
 
       "control" ->
-        # Genuinely hard — sorry/Admitted present, human review required
+        # Genuinely hard -- sorry/Admitted present, human review required
         dispatch_to_sustainabot(%{
           type: :eco_score,
           repo: repo,
           score: 0.3,
           details:
             "Proof obligation requires human review: #{claim} " <>
-              "(sorry/Admitted detected — formal proof not yet possible)"
+              "(sorry/Admitted detected -- formal proof not yet possible)"
         })
 
       unknown ->
@@ -314,7 +314,7 @@ defmodule Hypatia.FleetDispatcher do
           lookup_prover_hint(obligation_class)
 
         override ->
-          # Already resolved by ProofObligation.to_recipe/2 — pass through
+          # Already resolved by ProofObligation.to_recipe/2 -- pass through
           # the lowercase string; normalise_prover_hint/1 handles the mapping.
           override
       end
@@ -382,7 +382,7 @@ defmodule Hypatia.FleetDispatcher do
 
   # Map a VeriSimDB prover string to echidnabot's GraphQL ProverKind enum
   # variant name. Returns nil for provers echidnabot doesn't expose (idris2,
-  # fstar, altergo, dafny, why3, tlaps, vampire, eprover, other) — caller
+  # fstar, altergo, dafny, why3, tlaps, vampire, eprover, other) -- caller
   # falls back to echidnabot's own default (Lean).
   defp normalise_prover_hint(nil), do: nil
 
@@ -534,7 +534,7 @@ defmodule Hypatia.FleetDispatcher do
         repo: finding_field(finding, :repo),
         score: Map.get(finding, :severity_score, 0.5),
         details:
-          "Unfixable (panicbot): #{finding_field(finding, :issue, "")} — documented in .panicbot/PANICBOT-FINDINGS.a2ml"
+          "Unfixable (panicbot): #{finding_field(finding, :issue, "")} -- documented in .panicbot/PANICBOT-FINDINGS.a2ml"
       })
     end
   end
@@ -747,7 +747,7 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp http_post(url, body) do
-    # Attempt HTTP POST — works if :httpc is available (OTP built-in)
+    # Attempt HTTP POST -- works if :httpc is available (OTP built-in)
     case :httpc.request(
            :post,
            {String.to_charlist(url), [{~c"content-type", ~c"application/json"}],
@@ -778,7 +778,7 @@ defmodule Hypatia.FleetDispatcher do
   end
 
   defp get_pattern_repo(pattern) do
-    # Pattern may have repos_affected_list — take first repo as representative
+    # Pattern may have repos_affected_list -- take first repo as representative
     case Map.get(pattern, "repos_affected_list", []) do
       [repo | _] -> repo
       _ -> Map.get(pattern, "routed_repo", "unknown")
@@ -788,7 +788,7 @@ defmodule Hypatia.FleetDispatcher do
   # --- Kin Gate Integration ---
 
   defp gate_review(gate_action) do
-    # Check contingency level first — if system is frozen/shutdown, reject immediately
+    # Check contingency level first -- if system is frozen/shutdown, reject immediately
     case contingency_check(gate_action.dispatch_tier) do
       :permitted ->
         # Check if bot is isolated
@@ -817,7 +817,7 @@ defmodule Hypatia.FleetDispatcher do
         :permitted
       else
         level = Hypatia.Kin.Contingency.level()
-        {:blocked, "contingency level :#{level} — actions not permitted"}
+        {:blocked, "contingency level :#{level} -- actions not permitted"}
       end
     else
       :permitted

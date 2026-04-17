@@ -33,7 +33,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_scans
+  # Core Data Access -- fetch_scans
   # ---------------------------------------------------------------------------
 
   describe "fetch_scans/1" do
@@ -95,7 +95,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_scan
+  # Core Data Access -- fetch_scan
   # ---------------------------------------------------------------------------
 
   describe "fetch_scan/1" do
@@ -122,7 +122,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_pattern_registry
+  # Core Data Access -- fetch_pattern_registry
   # ---------------------------------------------------------------------------
 
   describe "fetch_pattern_registry/0" do
@@ -140,7 +140,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_patterns
+  # Core Data Access -- fetch_patterns
   # ---------------------------------------------------------------------------
 
   describe "fetch_patterns/0" do
@@ -160,7 +160,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_recipes
+  # Core Data Access -- fetch_recipes
   # ---------------------------------------------------------------------------
 
   describe "fetch_recipes/1" do
@@ -198,7 +198,7 @@ defmodule Hypatia.VCL.QueryTest do
     end
   end
 
-  describe "fetch_recipes/1 — language filter" do
+  describe "fetch_recipes/1 -- language filter" do
     test "filters recipes by language" do
       {:ok, shell_recipes} = Query.fetch_recipes(language: "shell")
       assert is_list(shell_recipes)
@@ -215,7 +215,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_recipe
+  # Core Data Access -- fetch_recipe
   # ---------------------------------------------------------------------------
 
   describe "fetch_recipe/1" do
@@ -231,7 +231,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_substitutions
+  # Core Data Access -- fetch_substitutions
   # ---------------------------------------------------------------------------
 
   describe "fetch_substitutions/0" do
@@ -262,7 +262,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_outcomes
+  # Core Data Access -- fetch_outcomes
   # ---------------------------------------------------------------------------
 
   describe "fetch_outcomes/1" do
@@ -300,7 +300,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Core Data Access — fetch_index
+  # Core Data Access -- fetch_index
   # ---------------------------------------------------------------------------
 
   describe "fetch_index/0" do
@@ -324,7 +324,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — scans_by_severity
+  # Filtered Queries -- scans_by_severity
   # ---------------------------------------------------------------------------
 
   describe "scans_by_severity/1" do
@@ -361,7 +361,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — scans_by_category
+  # Filtered Queries -- scans_by_category
   # ---------------------------------------------------------------------------
 
   describe "scans_by_category/1" do
@@ -384,7 +384,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — recipes_by_tier
+  # Filtered Queries -- recipes_by_tier
   # ---------------------------------------------------------------------------
 
   describe "recipes_by_tier/1" do
@@ -395,7 +395,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — recipes_by_language
+  # Filtered Queries -- recipes_by_language
   # ---------------------------------------------------------------------------
 
   describe "recipes_by_language/1" do
@@ -412,7 +412,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — recipes_above_confidence
+  # Filtered Queries -- recipes_above_confidence
   # ---------------------------------------------------------------------------
 
   describe "recipes_above_confidence/1" do
@@ -449,7 +449,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — outcomes_for_recipe
+  # Filtered Queries -- outcomes_for_recipe
   # ---------------------------------------------------------------------------
 
   describe "outcomes_for_recipe/1" do
@@ -465,7 +465,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Filtered Queries — outcomes_by_result
+  # Filtered Queries -- outcomes_by_result
   # ---------------------------------------------------------------------------
 
   describe "outcomes_by_result/1" do
@@ -481,7 +481,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — cross_repo_patterns
+  # Cross-Repo Analytics -- cross_repo_patterns
   # ---------------------------------------------------------------------------
 
   describe "cross_repo_patterns/1" do
@@ -519,7 +519,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — pattern_correlations
+  # Cross-Repo Analytics -- pattern_correlations
   # ---------------------------------------------------------------------------
 
   describe "pattern_correlations/1" do
@@ -565,7 +565,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — outcome_timeline
+  # Cross-Repo Analytics -- outcome_timeline
   # ---------------------------------------------------------------------------
 
   describe "outcome_timeline/1" do
@@ -616,7 +616,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — recipe_effectiveness
+  # Cross-Repo Analytics -- recipe_effectiveness
   # ---------------------------------------------------------------------------
 
   describe "recipe_effectiveness/1" do
@@ -651,7 +651,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — most_vulnerable_repos
+  # Cross-Repo Analytics -- most_vulnerable_repos
   # ---------------------------------------------------------------------------
 
   describe "most_vulnerable_repos/1" do
@@ -708,7 +708,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — category_distribution
+  # Cross-Repo Analytics -- category_distribution
   # ---------------------------------------------------------------------------
 
   describe "category_distribution/0" do
@@ -755,7 +755,7 @@ defmodule Hypatia.VCL.QueryTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics — recipe_coverage
+  # Cross-Repo Analytics -- recipe_coverage
   # ---------------------------------------------------------------------------
 
   describe "recipe_coverage/0" do

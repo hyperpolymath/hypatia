@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Hypatia Neural Blackboard — shared ETS state for blackboard architecture
+# Hypatia Neural Blackboard -- shared ETS state for blackboard architecture
 #
 # Replaces the fixed-weight aggregation in Coordinator with a shared ETS table.
 # Each network reads the blackboard before computing, writes after.
@@ -19,17 +19,17 @@ defmodule Hypatia.Neural.Blackboard do
   reads and writes go directly to ETS for performance.
 
   Each analysis round:
-  1. `start_round/0` — clears the blackboard, increments round counter
+  1. `start_round/0` -- clears the blackboard, increments round counter
   2. Networks execute in phased order, reading/writing the blackboard
-  3. `end_round/0` — freezes the round, returns the complete reasoning trace
+  3. `end_round/0` -- freezes the round, returns the complete reasoning trace
 
   Phase order (6 phases, 8 networks):
-    1. RBF (novelty) — everything benefits from knowing novel vs known
-    2. PageRank + GNN (parallel) — graph structure
-    3. MoE (domain routing) — reads novelty + trust
-    4. ESN + LSM (parallel) — temporal, reads domain + novelty
-    5. VAE (interpretation clustering) — reads everything
-    6. Sequence model (choreography prediction) — reads everything
+    1. RBF (novelty) -- everything benefits from knowing novel vs known
+    2. PageRank + GNN (parallel) -- graph structure
+    3. MoE (domain routing) -- reads novelty + trust
+    4. ESN + LSM (parallel) -- temporal, reads domain + novelty
+    5. VAE (interpretation clustering) -- reads everything
+    6. Sequence model (choreography prediction) -- reads everything
   """
 
   use GenServer
@@ -54,7 +54,7 @@ defmodule Hypatia.Neural.Blackboard do
   """
   @spec init() :: :ok
   def init do
-    # Convenience wrapper — the real init happens in GenServer init/1.
+    # Convenience wrapper -- the real init happens in GenServer init/1.
     # This is a no-op if the GenServer is already running.
     case GenServer.whereis(__MODULE__) do
       nil -> {:error, :not_started}

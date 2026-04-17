@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 #
-# Sequence Model — choreography trace prediction
+# Sequence Model -- choreography trace prediction
 # Phase 6 in blackboard execution order (last)
 
 defmodule Hypatia.Neural.SequenceModel do
@@ -60,7 +60,7 @@ defmodule Hypatia.Neural.SequenceModel do
     # Read full blackboard context
     _blackboard = Hypatia.Neural.Blackboard.snapshot()
 
-    # Predict from sequence buffer (placeholder — needs training)
+    # Predict from sequence buffer (placeholder -- needs training)
     prediction = case state.sequence_buffer do
       [] -> %{next_step: "unknown", confidence: 0.0}
       [last | _] -> %{next_step: last, confidence: 0.3}

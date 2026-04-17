@@ -11,12 +11,12 @@ defmodule Hypatia.Rules do
 
   ## Submodules
 
-  - `SecurityErrors` — Error categories, SHA pins, secret detection, CodeQL, CWE mappings
-  - `CicdRules` — Repo requirements, commit blocking, waste detection, license validation
-  - `CodeSafety` — Language-specific dangerous pattern detection
-  - `MigrationRules` — ReScript v12→v13 migration, merge conflict resolution
-  - `Learning` — Fix outcome tracking, confidence, pattern promotion (GenServer)
-  - `ForgeAdapters` — Multi-forge operations with input validation
+  - `SecurityErrors` -- Error categories, SHA pins, secret detection, CodeQL, CWE mappings
+  - `CicdRules` -- Repo requirements, commit blocking, waste detection, license validation
+  - `CodeSafety` -- Language-specific dangerous pattern detection
+  - `MigrationRules` -- ReScript v12→v13 migration, merge conflict resolution
+  - `Learning` -- Fix outcome tracking, confidence, pattern promotion (GenServer)
+  - `ForgeAdapters` -- Multi-forge operations with input validation
   """
 
   alias Hypatia.Rules.SecurityErrors
@@ -60,7 +60,7 @@ defmodule Hypatia.Rules do
           case CicdRules.validate_license(String.trim(spdx_id), repo_name) do
             {:error, :wrong_license, bad} ->
               [%{rule: "wrong_license", severity: :high,
-                 description: "Wrong license #{bad} — should be PMPL-1.0-or-later"} | findings]
+                 description: "Wrong license #{bad} -- should be PMPL-1.0-or-later"} | findings]
             _ -> findings
           end
         _ -> findings
@@ -71,7 +71,7 @@ defmodule Hypatia.Rules do
       if language == "rescript" do
         findings ++ Enum.map(MigrationRules.scan_deprecated_usage(content), fn dep ->
           %{rule: "deprecated_api", severity: dep.severity,
-            description: "#{dep.api} deprecated — use #{dep.replacement} (#{dep.count} occurrences)"}
+            description: "#{dep.api} deprecated -- use #{dep.replacement} (#{dep.count} occurrences)"}
         end)
       else
         findings
@@ -109,7 +109,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "glib"\s+version = "0\.(15|16|17|18\.[0-5]|19\.[0-9])"/, content) do
             [%{rule: "glib-variantstriter-unsoundness", severity: :medium,
-               description: "Vulnerable glib version detected in Cargo.lock — update to >= 0.18.6, 0.19.10, 0.20.7 or 0.22.3"} | findings]
+               description: "Vulnerable glib version detected in Cargo.lock -- update to >= 0.18.6, 0.19.10, 0.20.7 or 0.22.3"} | findings]
           else
             findings
           end
@@ -119,7 +119,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "crossbeam-utils"\s+version = "0\.(6\.|7\.|8\.[0-6])"/, content) do
             [%{rule: "crossbeam-utils-atomiccell-unsoundness", severity: :high,
-               description: "Vulnerable crossbeam-utils version detected in Cargo.lock — update to >= 0.8.7"} | findings]
+               description: "Vulnerable crossbeam-utils version detected in Cargo.lock -- update to >= 0.8.7"} | findings]
           else
             findings
           end
@@ -129,7 +129,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "lock_api"\s+version = "0\.(1\.|2\.|3\.|4\.[0-1])"/, content) do
             [%{rule: "lock-api-data-race", severity: :medium,
-               description: "Vulnerable lock_api version detected in Cargo.lock — update to >= 0.4.2"} | findings]
+               description: "Vulnerable lock_api version detected in Cargo.lock -- update to >= 0.4.2"} | findings]
           else
             findings
           end
@@ -139,7 +139,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "crossbeam-queue"\s+version = "0\.(1\.|2\.[0-2])"/, content) do
             [%{rule: "crossbeam-queue-segqueue-unsoundness", severity: :medium,
-               description: "Vulnerable crossbeam-queue version detected in Cargo.lock — update to >= 0.2.3"} | findings]
+               description: "Vulnerable crossbeam-queue version detected in Cargo.lock -- update to >= 0.2.3"} | findings]
           else
             findings
           end
@@ -149,7 +149,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "protobuf"\s+version = "(2\.|3\.[0-6]\.|3\.7\.[01])"/, content) do
             [%{rule: "protobuf-recursion-crash", severity: :medium,
-               description: "Vulnerable protobuf version detected in Cargo.lock — update to >= 3.7.2"} | findings]
+               description: "Vulnerable protobuf version detected in Cargo.lock -- update to >= 3.7.2"} | findings]
           else
             findings
           end
@@ -159,7 +159,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "idna"\s+version = "0\.[0-4]\."/, content) do
             [%{rule: "idna-punycode-mishandling", severity: :medium,
-               description: "Vulnerable idna version detected in Cargo.lock — update to >= 1.0.0"} | findings]
+               description: "Vulnerable idna version detected in Cargo.lock -- update to >= 1.0.0"} | findings]
           else
             findings
           end
@@ -169,7 +169,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "jsonwebtoken"\s+version = "[0-9]\."/, content) do
             [%{rule: "jsonwebtoken-type-confusion", severity: :medium,
-               description: "Vulnerable jsonwebtoken version detected in Cargo.lock — update to >= 10.3.0"} | findings]
+               description: "Vulnerable jsonwebtoken version detected in Cargo.lock -- update to >= 10.3.0"} | findings]
           else
             findings
           end
@@ -179,7 +179,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "lru"\s+version = "0\.(9\.|1[0-5]\.|16\.[0-2])"/, content) do
             [%{rule: "lru-itermut-stacked-borrows", severity: :low,
-               description: "Vulnerable lru version detected in Cargo.lock — update to >= 0.16.3"} | findings]
+               description: "Vulnerable lru version detected in Cargo.lock -- update to >= 0.16.3"} | findings]
           else
             findings
           end
@@ -189,7 +189,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "ring"\s+version = "0\.17\.(?:[0-9]|1[01])"/, content) do
             [%{rule: "ring-aes-overflow-panic", severity: :high,
-               description: "Vulnerable ring version detected in Cargo.lock — update to >= 0.17.12"} | findings]
+               description: "Vulnerable ring version detected in Cargo.lock -- update to >= 0.17.12"} | findings]
           else
             findings
           end
@@ -199,7 +199,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "yamux"\s+version = "(0\.12\.[0-9]+|0\.13\.[0-9])"/, content) do
             [%{rule: "yamux-remote-panic", severity: :high,
-               description: "Vulnerable yamux version detected in Cargo.lock — update to >= 0.13.10"} | findings]
+               description: "Vulnerable yamux version detected in Cargo.lock -- update to >= 0.13.10"} | findings]
           else
             findings
           end
@@ -209,7 +209,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/name = "atty"\s+version = "0\.2\.(?:[0-9]|1[0-4])"/, content) do
             [%{rule: "atty-unaligned-read", severity: :medium,
-               description: "Vulnerable atty version detected in Cargo.lock — replace atty usage or migrate to is-terminal"} | findings]
+               description: "Vulnerable atty version detected in Cargo.lock -- replace atty usage or migrate to is-terminal"} | findings]
           else
             findings
           end
@@ -226,7 +226,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/serialize-javascript@npm:[^:]+\s+version: ([0-5]\.|6\.0\.[01])/, content) do
             [%{rule: "npm-serialize-javascript-vulnerability", severity: :high,
-               description: "Vulnerable serialize-javascript version detected in yarn.lock — update to >= 6.0.2 or 7.0.0"} | findings]
+               description: "Vulnerable serialize-javascript version detected in yarn.lock -- update to >= 6.0.2 or 7.0.0"} | findings]
           else
             findings
           end
@@ -235,7 +235,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/minimatch@npm:[^:]+\s+version: ([0-8]\.|9\.0\.[0-4])/, content) do
             [%{rule: "npm-minimatch-vulnerability", severity: :high,
-               description: "Vulnerable minimatch version detected in yarn.lock — update to >= 9.0.5 or 10.0.0"} | findings]
+               description: "Vulnerable minimatch version detected in yarn.lock -- update to >= 9.0.5 or 10.0.0"} | findings]
           else
             findings
           end
@@ -244,7 +244,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/glob@npm:[^:]+\s+version: ([0-9]\.|10\.[0-5]\.0)/, content) do
             [%{rule: "npm-glob-vulnerability", severity: :high,
-               description: "Vulnerable glob version detected in yarn.lock — update to >= 11.0.0"} | findings]
+               description: "Vulnerable glob version detected in yarn.lock -- update to >= 11.0.0"} | findings]
           else
             findings
           end
@@ -253,7 +253,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/js-yaml@npm:[^:]+\s+version: ([0-2]\.|3\.(1[0-3]\.[0]|14\.[01]))/, content) do
             [%{rule: "npm-js-yaml-vulnerability", severity: :medium,
-               description: "Vulnerable js-yaml version detected in yarn.lock — update to >= 3.14.2 or 4.1.1"} | findings]
+               description: "Vulnerable js-yaml version detected in yarn.lock -- update to >= 3.14.2 or 4.1.1"} | findings]
           else
             findings
           end
@@ -262,7 +262,7 @@ defmodule Hypatia.Rules do
         findings =
           if Regex.match?(~r/h3@npm:[^:]+\s+version: 2\.0\.1-rc\.( [0-9]|1[0-4])/, content) do
             [%{rule: "npm-h3-vulnerability", severity: :high,
-               description: "Vulnerable h3 version detected in yarn.lock — update to >= 2.0.1-rc.15"} | findings]
+               description: "Vulnerable h3 version detected in yarn.lock -- update to >= 2.0.1-rc.15"} | findings]
           else
             findings
           end
@@ -275,47 +275,47 @@ defmodule Hypatia.Rules do
     # mix.lock vulnerability check (Elixir/BEAM ecosystem)
     findings =
       if String.ends_with?(file_path, "mix.lock") do
-        # Plug (HTTP adapter) — arbitrary code execution via malformed multipart
+        # Plug (HTTP adapter) -- arbitrary code execution via malformed multipart
         findings =
           if Regex.match?(~r/"plug":\s*\{[^}]*"version":\s*"(1\.[0-9]\.|1\.1[0-5]\.)/, content) do
             [%{rule: "hex-plug-vulnerability", severity: :high,
-               description: "Vulnerable plug version in mix.lock — update to >= 1.16.0 for multipart fixes"} | findings]
+               description: "Vulnerable plug version in mix.lock -- update to >= 1.16.0 for multipart fixes"} | findings]
           else
             findings
           end
 
-        # HTTPoison / Hackney — TLS cert verification issues
+        # HTTPoison / Hackney -- TLS cert verification issues
         findings =
           if Regex.match?(~r/"hackney":\s*\{[^}]*"version":\s*"1\.(1[0-7]\.)/, content) do
             [%{rule: "hex-hackney-vulnerability", severity: :medium,
-               description: "Vulnerable hackney version in mix.lock — update to >= 1.18.0 for TLS improvements"} | findings]
+               description: "Vulnerable hackney version in mix.lock -- update to >= 1.18.0 for TLS improvements"} | findings]
           else
             findings
           end
 
-        # Poison (JSON parser) — prototype-style atom exhaustion via keys
+        # Poison (JSON parser) -- prototype-style atom exhaustion via keys
         findings =
           if Regex.match?(~r/"poison":\s*\{[^}]*"version":\s*"[1-4]\."/, content) do
             [%{rule: "hex-poison-atom-risk", severity: :medium,
-               description: "Poison < 5.0 in mix.lock may create atoms from JSON keys — update to >= 5.0 or switch to Jason"} | findings]
+               description: "Poison < 5.0 in mix.lock may create atoms from JSON keys -- update to >= 5.0 or switch to Jason"} | findings]
           else
             findings
           end
 
-        # ex_doc — older versions have XSS in generated docs
+        # ex_doc -- older versions have XSS in generated docs
         findings =
           if Regex.match?(~r/"ex_doc":\s*\{[^}]*"version":\s*"0\.(2[0-9]\.|30\.[0-5])"/, content) do
             [%{rule: "hex-ex-doc-xss", severity: :low,
-               description: "ex_doc < 0.31.0 may generate docs with XSS — update to >= 0.31.0"} | findings]
+               description: "ex_doc < 0.31.0 may generate docs with XSS -- update to >= 0.31.0"} | findings]
           else
             findings
           end
 
-        # nimble_parsec — stack overflow on deeply nested input
+        # nimble_parsec -- stack overflow on deeply nested input
         findings =
           if Regex.match?(~r/"nimble_parsec":\s*\{[^}]*"version":\s*"0\."/, content) do
             [%{rule: "hex-nimble-parsec-stack-overflow", severity: :medium,
-               description: "nimble_parsec 0.x may stack-overflow on deeply nested input — update to >= 1.0.0"} | findings]
+               description: "nimble_parsec 0.x may stack-overflow on deeply nested input -- update to >= 1.0.0"} | findings]
           else
             findings
           end
@@ -339,7 +339,7 @@ defmodule Hypatia.Rules do
     unpinned = Regex.scan(~r/uses:\s*([^\s]+@v\d+)/, content)
     findings = findings ++ Enum.map(unpinned, fn [_full, action_ref] ->
       suggestion = case SecurityErrors.pin_action(action_ref) do
-        {:ok, pinned} -> " — fix: #{pinned}"
+        {:ok, pinned} -> " -- fix: #{pinned}"
         _ -> ""
       end
       %{rule: "unpinned_action", severity: :high,
@@ -350,7 +350,7 @@ defmodule Hypatia.Rules do
     findings =
       if not Regex.match?(~r/^permissions:/m, content) do
         [%{rule: "missing_permissions", severity: :high,
-           description: "Workflow missing permissions declaration — add permissions: read-all"} | findings]
+           description: "Workflow missing permissions declaration -- add permissions: read-all"} | findings]
       else
         findings
       end
@@ -402,7 +402,7 @@ defmodule Hypatia.Rules do
   defp extract_repo_name(file_path) when is_binary(file_path) do
     parts = Path.split(file_path)
 
-    # Look for "repos" directory marker — repo name is the next segment
+    # Look for "repos" directory marker -- repo name is the next segment
     case Enum.find_index(parts, &(&1 == "repos")) do
       nil ->
         # Fallback: use basename of parent dirs (best effort)
@@ -419,7 +419,7 @@ defmodule Hypatia.Rules do
   Run repo-level dogfooding compliance checks (HYP-DOG-001 through HYP-DOG-010).
 
   Unlike `scan_file/3` which checks individual files, this checks the repo
-  as a whole for dogfooding compliance — template placeholders, Groove presence,
+  as a whole for dogfooding compliance -- template placeholders, Groove presence,
   VeriSimDB wiring, stale tool names, etc.
 
   Returns a list of findings in the standard format.

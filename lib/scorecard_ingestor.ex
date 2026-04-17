@@ -80,7 +80,7 @@ defmodule Hypatia.ScorecardIngestor do
       id: "SC-006", pa_rule: "SC006", risk: :low, auto_fixable: false,
       category: "ContributorDiversity",
       description: "Limited organizational diversity in contributors",
-      remediation: "Informational only — no remediation needed."
+      remediation: "Informational only -- no remediation needed."
     },
     "Dangerous-Workflow" => %{
       id: "SC-007", pa_rule: "SC007", risk: :critical, auto_fixable: true,
@@ -110,7 +110,7 @@ defmodule Hypatia.ScorecardIngestor do
       id: "SC-011", pa_rule: "SC011", risk: :high, auto_fixable: false,
       category: "ProjectMaintenance",
       description: "Repository shows insufficient maintenance activity",
-      remediation: "Informational — indicates project health."
+      remediation: "Informational -- indicates project health."
     },
     "Packaging" => %{
       id: "SC-012", pa_rule: "SC012", risk: :medium, auto_fixable: false,
@@ -233,7 +233,7 @@ defmodule Hypatia.ScorecardIngestor do
   @doc """
   Generate Scorecard patterns for a repo by inspecting local files directly.
 
-  This is faster than running the full scorecard CLI — it checks for the
+  This is faster than running the full scorecard CLI -- it checks for the
   most common/fixable issues by looking at the repo's file structure:
   - SECURITY.md present?
   - Workflow permissions set to read-all?

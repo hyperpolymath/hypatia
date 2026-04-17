@@ -29,7 +29,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
   alias Hypatia.TriangleRouter
 
-  @zig_ffi_dir "/var/mnt/eclipse/repos/hypatia/ffi/zig"
+  @zig_ffi_dir "/var/mnt/eclipse/repos/verification-ecosystem/hypatia/ffi/zig"
   @zig_src_dir "#{@zig_ffi_dir}/src"
   @data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
@@ -110,7 +110,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
       Enum.each(@required_store_dirs, fn store ->
         store_path = Path.join(expanded, store)
         assert File.exists?(store_path),
-               "Store directory '#{store}' not found at #{store_path} — " <>
+               "Store directory '#{store}' not found at #{store_path} -- " <>
                  "hypatia_health_check would return degraded"
       end)
     end
@@ -121,7 +121,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
       Enum.each(@required_store_files, fn file ->
         file_path = Path.join(expanded, file)
         assert File.exists?(file_path),
-               "Store file '#{file}' not found at #{file_path} — " <>
+               "Store file '#{file}' not found at #{file_path} -- " <>
                  "VCL index queries would fail"
       end)
     end
@@ -215,7 +215,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
   # ---------------------------------------------------------------------------
 
   describe "Idris2 ABI source integrity" do
-    @abi_dir "/var/mnt/eclipse/repos/hypatia/src/abi"
+    @abi_dir "/var/mnt/eclipse/repos/verification-ecosystem/hypatia/src/abi"
 
     test "src/abi directory exists" do
       assert File.exists?(@abi_dir),

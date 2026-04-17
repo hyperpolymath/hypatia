@@ -137,7 +137,7 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       """
 
       findings = CodeSafety.scan_content(code, "rust")
-      # unwrap_or_else is fine — only unwrap() and unwrap_or(0) are flagged
+      # unwrap_or_else is fine -- only unwrap() and unwrap_or(0) are flagged
       refute Enum.any?(findings, &(&1.rule == :unwrap_without_check))
     end
 

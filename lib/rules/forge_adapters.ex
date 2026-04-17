@@ -3,7 +3,6 @@
 defmodule Hypatia.Rules.ForgeAdapters do
   @moduledoc """
   Primary Elixir forge adapter rules (migrated from legacy Logtalk engine).
-  """
   Provides validated operations against multiple forges (GitHub, GitLab, Bitbucket).
   Enforces input validation to prevent shell injection.
   """

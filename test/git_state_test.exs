@@ -78,7 +78,7 @@ defmodule Hypatia.Rules.GitStateTest do
 
   describe "gs002_unpushed_commits/1" do
     test "returns finding when no upstream configured", %{repo: repo} do
-      # No remote set up — should detect "no upstream"
+      # No remote set up -- should detect "no upstream"
       findings = GitState.gs002_unpushed_commits(repo)
 
       # Should detect no upstream OR return empty (depends on git version

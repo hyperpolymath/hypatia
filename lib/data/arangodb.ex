@@ -73,7 +73,7 @@ defmodule Hypatia.Data.ArangoDB do
       Logger.info("ArangoDB connected: #{url}/#{db}")
       {:ok, %{state | sync_timer: timer}}
     else
-      Logger.warning("ArangoDB not available at #{url} — running in degraded mode (flat files only)")
+      Logger.warning("ArangoDB not available at #{url} -- running in degraded mode (flat files only)")
       {:ok, state}
     end
   end

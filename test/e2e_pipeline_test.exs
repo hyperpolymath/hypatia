@@ -19,12 +19,12 @@ defmodule Hypatia.E2E.PipelineTest do
   and that the stages compose correctly when wired together with real data.
 
   Stages tested:
-  1. VerisimConnector.fetch_all_scans/0 — reads real scan JSON files
-  2. PatternRegistry.sync_from_scans/1 — deduplicates into canonical patterns
-  3. TriangleRouter.route/3 — routes patterns through safety triangle
-  4. RecipeMatcher.find_recipes/1 — finds fix recipes for patterns
-  5. DispatchManifest.write/1 — writes JSONL for execution layer
-  6. VCL.Client.query/1 — cross-stage data access
+  1. VerisimConnector.fetch_all_scans/0 -- reads real scan JSON files
+  2. PatternRegistry.sync_from_scans/1 -- deduplicates into canonical patterns
+  3. TriangleRouter.route/3 -- routes patterns through safety triangle
+  4. RecipeMatcher.find_recipes/1 -- finds fix recipes for patterns
+  5. DispatchManifest.write/1 -- writes JSONL for execution layer
+  6. VCL.Client.query/1 -- cross-stage data access
   """
 
   use ExUnit.Case, async: false
@@ -42,7 +42,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Stage 1: data loading from verisim-data
   # ---------------------------------------------------------------------------
 
-  describe "Stage 1 — verisim data loading" do
+  describe "Stage 1 -- verisim data loading" do
     test "fetch_all_scans/0 returns at least 3 scan maps" do
       scans = VerisimConnector.fetch_all_scans()
       assert is_list(scans)
@@ -81,7 +81,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Stage 2: pattern registry sync
   # ---------------------------------------------------------------------------
 
-  describe "Stage 2 — pattern registry sync" do
+  describe "Stage 2 -- pattern registry sync" do
     test "sync_from_scans/1 returns {:ok, registry} with patterns map" do
       scans = VerisimConnector.fetch_all_scans()
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
@@ -115,7 +115,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Stage 3: triangle routing (simulated mini-pipeline)
   # ---------------------------------------------------------------------------
 
-  describe "Stage 3 — triangle routing (mini-pipeline)" do
+  describe "Stage 3 -- triangle routing (mini-pipeline)" do
     test "routing real patterns from registry produces valid tuples" do
       scans = VerisimConnector.fetch_all_scans()
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
@@ -161,7 +161,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Stage 4: recipe matching
   # ---------------------------------------------------------------------------
 
-  describe "Stage 4 — recipe matching" do
+  describe "Stage 4 -- recipe matching" do
     test "RecipeMatcher can match real PA patterns to recipes" do
       # PA patterns that are known to have recipes
       test_cases = [
@@ -173,9 +173,9 @@ defmodule Hypatia.E2E.PipelineTest do
         result = RecipeMatcher.best_recipe(pattern_id, lang)
         # Log if recipe not found (data may be temporarily broken) but don't fail
         if result == nil do
-          IO.warn("Recipe not found for #{pattern_id}/#{lang} — data may have quality issues")
+          IO.warn("Recipe not found for #{pattern_id}/#{lang} -- data may have quality issues")
         end
-        # Either found or nil — must not crash
+        # Either found or nil -- must not crash
         assert is_nil(result) or is_map(result)
       end)
     end
@@ -191,7 +191,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Stage 5: dispatch manifest writing
   # ---------------------------------------------------------------------------
 
-  describe "Stage 5 — dispatch manifest writing" do
+  describe "Stage 5 -- dispatch manifest writing" do
     @tag :tmp_dir
 
     test "write/1 accepts a list of routed actions and writes JSONL" do
@@ -256,7 +256,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Stage 6: VCL cross-stage data access
   # ---------------------------------------------------------------------------
 
-  describe "Stage 6 — VCL cross-stage data access" do
+  describe "Stage 6 -- VCL cross-stage data access" do
     setup do
       case GenServer.whereis(VQLClient) do
         nil -> start_supervised!(VQLClient)
@@ -296,7 +296,7 @@ defmodule Hypatia.E2E.PipelineTest do
   # Pipeline composition: wire stages 1-4 manually
   # ---------------------------------------------------------------------------
 
-  describe "E2E composition — stages 1-4 wired together" do
+  describe "E2E composition -- stages 1-4 wired together" do
     test "scan → registry → route → recipe produces a full pipeline result" do
       # Stage 1
       scans = VerisimConnector.fetch_all_scans()
@@ -324,7 +324,7 @@ defmodule Hypatia.E2E.PipelineTest do
         assert valid_route_tuple?(result)
       end)
 
-      # Stage 4 — sample eliminate actions and check for recipes
+      # Stage 4 -- sample eliminate actions and check for recipes
       eliminate_patterns =
         routed
         |> Enum.filter(&match?({:eliminate, _, _}, &1))

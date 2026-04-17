@@ -21,7 +21,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   alias Hypatia.VCL.FileExecutor
 
   # ---------------------------------------------------------------------------
-  # Helper — builds an AST map for concise test construction
+  # Helper -- builds an AST map for concise test construction
   # ---------------------------------------------------------------------------
 
   defp make_ast(overrides \\ %{}) do
@@ -42,7 +42,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # Store Query Tests (real verisim-data)
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — STORE scans" do
+  describe "execute/2 -- STORE scans" do
     test "loads all scan files" do
       ast = make_ast()
       {:ok, results} = FileExecutor.execute(ast)
@@ -71,7 +71,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — STORE patterns" do
+  describe "execute/2 -- STORE patterns" do
     test "loads pattern registry" do
       ast = make_ast(%{source: {:store, "patterns"}})
       {:ok, [registry]} = FileExecutor.execute(ast)
@@ -86,7 +86,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — STORE recipes" do
+  describe "execute/2 -- STORE recipes" do
     test "loads recipe files" do
       ast = make_ast(%{source: {:store, "recipes"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -114,7 +114,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — STORE index" do
+  describe "execute/2 -- STORE index" do
     test "loads the master index" do
       ast = make_ast(%{source: {:store, "index"}})
       {:ok, [index]} = FileExecutor.execute(ast)
@@ -134,7 +134,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — STORE outcomes" do
+  describe "execute/2 -- STORE outcomes" do
     test "loads JSONL outcome files" do
       ast = make_ast(%{source: {:store, "outcomes"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -152,7 +152,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — STORE dispatch" do
+  describe "execute/2 -- STORE dispatch" do
     test "loads JSONL dispatch files" do
       ast = make_ast(%{source: {:store, "dispatch"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -160,7 +160,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — unknown store" do
+  describe "execute/2 -- unknown store" do
     test "returns error for unknown store name" do
       ast = make_ast(%{source: {:store, "nonexistent"}})
       assert {:error, "Unknown store: nonexistent"} = FileExecutor.execute(ast)
@@ -173,10 +173,10 @@ defmodule Hypatia.VCL.FileExecutorTest do
   end
 
   # ---------------------------------------------------------------------------
-  # WHERE Clause Tests — FIELD Conditions
+  # WHERE Clause Tests -- FIELD Conditions
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — WHERE FIELD equality (:eq)" do
+  describe "execute/2 -- WHERE FIELD equality (:eq)" do
     test "filters scans by _source filename" do
       ast = make_ast(%{where: {:field, "_source", :eq, "echidna.json"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -191,7 +191,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — WHERE FIELD inequality (:neq)" do
+  describe "execute/2 -- WHERE FIELD inequality (:neq)" do
     test "excludes matching records" do
       ast_all = make_ast()
       {:ok, all} = FileExecutor.execute(ast_all)
@@ -203,7 +203,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — WHERE FIELD comparison operators" do
+  describe "execute/2 -- WHERE FIELD comparison operators" do
     test "greater-than (:gt) compares string values" do
       ast = make_ast(%{
         source: {:store, "scans"},
@@ -224,7 +224,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — WHERE FIELD :contains" do
+  describe "execute/2 -- WHERE FIELD :contains" do
     test "checks string containment" do
       ast = make_ast(%{
         where: {:field, "_source", :contains, "echidna"}
@@ -234,7 +234,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — WHERE FIELD :like" do
+  describe "execute/2 -- WHERE FIELD :like" do
     test "case-insensitive substring match" do
       ast = make_ast(%{
         where: {:field, "_source", :like, "ECHIDNA"}
@@ -244,7 +244,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — WHERE FIELD :matches" do
+  describe "execute/2 -- WHERE FIELD :matches" do
     test "regex matching on field value" do
       ast = make_ast(%{
         where: {:field, "_source", :matches, "echidna|verisim"}
@@ -264,10 +264,10 @@ defmodule Hypatia.VCL.FileExecutorTest do
   end
 
   # ---------------------------------------------------------------------------
-  # WHERE Clause Tests — FULLTEXT Conditions
+  # WHERE Clause Tests -- FULLTEXT Conditions
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — WHERE FULLTEXT CONTAINS" do
+  describe "execute/2 -- WHERE FULLTEXT CONTAINS" do
     test "matches content across entire JSON serialization" do
       ast = make_ast(%{where: {:fulltext, :contains, "weak_points"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -292,7 +292,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — WHERE FULLTEXT MATCHES" do
+  describe "execute/2 -- WHERE FULLTEXT MATCHES" do
     test "regex matching across serialized JSON" do
       ast = make_ast(%{where: {:fulltext, :matches, "echidna|verisim"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -309,10 +309,10 @@ defmodule Hypatia.VCL.FileExecutorTest do
   end
 
   # ---------------------------------------------------------------------------
-  # WHERE Clause Tests — AND Conditions
+  # WHERE Clause Tests -- AND Conditions
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — WHERE AND compound conditions" do
+  describe "execute/2 -- WHERE AND compound conditions" do
     test "both conditions must match" do
       ast = make_ast(%{
         where: {:and, [
@@ -358,7 +358,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # Deep Field Access Tests
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — deep field access (dotted paths)" do
+  describe "execute/2 -- deep field access (dotted paths)" do
     test "WHERE on dotted field path accesses nested maps" do
       # Scans may have nested structures; this tests that deep_get works
       # Even if the path does not exist, it should not crash
@@ -374,7 +374,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # Modality Sorting Tests
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — modality sorting" do
+  describe "execute/2 -- modality sorting" do
     test "TEMPORAL modality sorts by timestamp descending" do
       ast = make_ast(%{
         modalities: [:temporal],
@@ -431,7 +431,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # Pagination Tests
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — LIMIT pagination" do
+  describe "execute/2 -- LIMIT pagination" do
     test "LIMIT restricts result count" do
       ast = make_ast(%{limit: 2})
       {:ok, results} = FileExecutor.execute(ast)
@@ -455,7 +455,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — OFFSET pagination" do
+  describe "execute/2 -- OFFSET pagination" do
     test "OFFSET skips first N results" do
       ast_all = make_ast()
       {:ok, all} = FileExecutor.execute(ast_all)
@@ -483,7 +483,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
   end
 
-  describe "execute/2 — LIMIT and OFFSET combined" do
+  describe "execute/2 -- LIMIT and OFFSET combined" do
     test "LIMIT and OFFSET together window results" do
       ast = make_ast(%{limit: 1, offset: 1})
       {:ok, results} = FileExecutor.execute(ast)
@@ -519,7 +519,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # HEXAD Query Tests
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — HEXAD queries" do
+  describe "execute/2 -- HEXAD queries" do
     test "finds repo by name in scans directory" do
       ast = make_ast(%{source: {:hexad, "echidna"}})
       {:ok, results} = FileExecutor.execute(ast)
@@ -563,7 +563,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # Federation Query Tests
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — FEDERATION queries" do
+  describe "execute/2 -- FEDERATION queries" do
     test "cross-store query returns results from multiple stores" do
       ast = make_ast(%{
         source: {:federation, "/all/*", nil},
@@ -618,7 +618,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   # Integration: WHERE + Pagination + Modality Combined
   # ---------------------------------------------------------------------------
 
-  describe "execute/2 — combined WHERE, LIMIT, and modality" do
+  describe "execute/2 -- combined WHERE, LIMIT, and modality" do
     test "WHERE + LIMIT + OFFSET work together" do
       ast = make_ast(%{
         where: {:fulltext, :contains, "weak_points"},

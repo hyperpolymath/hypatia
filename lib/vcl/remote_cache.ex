@@ -3,7 +3,7 @@
 
 defmodule Hypatia.VCL.RemoteCache do
   @moduledoc """
-  VCL Remote Cache — git-clone-based cache for remote verisim-data stores.
+  VCL Remote Cache -- git-clone-based cache for remote verisim-data stores.
 
   Enables VCL multi-store federation by cloning or pulling remote verisim-data
   repositories into a local cache directory. Each remote URL maps to a unique
@@ -21,7 +21,7 @@ defmodule Hypatia.VCL.RemoteCache do
 
   An ETS table (`hypatia_remote_cache`) tracks per-URL metadata (clone path,
   last-fetched timestamp). A per-URL lock prevents concurrent clones of the
-  same repository — the first caller clones while others wait.
+  same repository -- the first caller clones while others wait.
 
   ## Supported URL Schemes
 
@@ -51,8 +51,8 @@ defmodule Hypatia.VCL.RemoteCache do
 
   ## Options
 
-    * `:ttl` — time-to-live in seconds before a pull is triggered (default: 300)
-    * `:cache_dir` — override the cache root directory (default: `/tmp/hypatia-vcl-cache`)
+    * `:ttl` -- time-to-live in seconds before a pull is triggered (default: 300)
+    * `:cache_dir` -- override the cache root directory (default: `/tmp/hypatia-vcl-cache`)
 
   ## Examples
 
@@ -61,8 +61,8 @@ defmodule Hypatia.VCL.RemoteCache do
 
   ## Returns
 
-    * `{:ok, local_path}` — the local clone is ready for querying
-    * `{:error, reason}` — clone or pull failed
+    * `{:ok, local_path}` -- the local clone is ready for querying
+    * `{:error, reason}` -- clone or pull failed
   """
   @spec cache_remote_store(String.t(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def cache_remote_store(url, opts \\ []) do
@@ -102,8 +102,8 @@ defmodule Hypatia.VCL.RemoteCache do
 
   ## Returns
 
-    * `:ok` — entry removed (or was not present)
-    * `{:error, reason}` — filesystem removal failed
+    * `:ok` -- entry removed (or was not present)
+    * `{:error, reason}` -- filesystem removal failed
   """
   @spec evict(String.t(), keyword()) :: :ok | {:error, String.t()}
   def evict(url, opts \\ []) do
@@ -199,12 +199,12 @@ defmodule Hypatia.VCL.RemoteCache do
 
     case :ets.lookup(@ets_table, url_hash) do
       [{^url_hash, %{fetched_at: fetched_at}}] when now - fetched_at < ttl ->
-        # Cache hit — still within TTL.
+        # Cache hit -- still within TTL.
         Logger.debug("VCL RemoteCache: cache hit for #{url_hash} (age: #{now - fetched_at}s)")
         {:ok, local_path}
 
       _ ->
-        # Cache miss or expired — clone or pull.
+        # Cache miss or expired -- clone or pull.
         if File.dir?(Path.join(local_path, ".git")) do
           pull_existing(clone_url, local_path, url_hash, now)
         else
@@ -251,7 +251,7 @@ defmodule Hypatia.VCL.RemoteCache do
         {:ok, local_path}
 
       {output, code} ->
-        # Pull failed — the clone may be in a bad state. Log but still return
+        # Pull failed -- the clone may be in a bad state. Log but still return
         # the path so that stale data can be queried (better than nothing).
         Logger.warning(
           "VCL RemoteCache: git pull failed (exit #{code}): #{String.trim(output)}; using stale clone"
@@ -306,7 +306,7 @@ defmodule Hypatia.VCL.RemoteCache do
     end
   rescue
     # Another process may have created the table between the info check and
-    # the new call — that is fine.
+    # the new call -- that is fine.
     ArgumentError -> :ok
   end
 
@@ -348,7 +348,7 @@ defmodule Hypatia.VCL.RemoteCache do
 
     case :ets.lookup(@ets_table, lock_key) do
       [] ->
-        # Lock released — the clone/pull is done.
+        # Lock released -- the clone/pull is done.
         if File.dir?(Path.join(local_path, ".git")) do
           {:ok, local_path}
         else

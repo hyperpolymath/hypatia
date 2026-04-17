@@ -179,7 +179,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Check for missing permissions declaration entirely
       findings = if not Regex.match?(~r/^permissions:/m, content) do
         [%{type: :missing_permissions, file: filename,
-           detail: "No permissions declaration — add permissions: read-all",
+           detail: "No permissions declaration -- add permissions: read-all",
            severity: :medium, action: :add_permissions} | findings]
       else
         findings
@@ -264,7 +264,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           type: :npermissions_typo,
           file: filename,
           severity: :high,
-          reason: "Workflow has 'npermissions' typo — should be 'permissions'. GitHub Actions silently ignores this, running with overly broad defaults.",
+          reason: "Workflow has 'npermissions' typo -- should be 'permissions'. GitHub Actions silently ignores this, running with overly broad defaults.",
           action: :fix_typo
         }]
       else
@@ -373,7 +373,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       flaws =
         if Regex.match?(~r/grep\s+(-[a-zA-Z]*\s+)*["'][^"']*(?<!\\)\.[^"']*["']/, content) do
           [%{rule: "flawed_regex", severity: :low, file: filename,
-             description: "grep with unescaped dot — may match unintended characters"} | flaws]
+             description: "grep with unescaped dot -- may match unintended characters"} | flaws]
         else
           flaws
         end
@@ -382,7 +382,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       flaws =
         if Regex.match?(~r/grep\s+-[a-zA-Z]*E[a-zA-Z]*\s+["'][^"']*(?<![.\w\\])\*/, content) do
           [%{rule: "flawed_regex", severity: :low, file: filename,
-             description: "grep -E with bare * quantifier — likely needs .* or \\w*"} | flaws]
+             description: "grep -E with bare * quantifier -- likely needs .* or \\w*"} | flaws]
         else
           flaws
         end

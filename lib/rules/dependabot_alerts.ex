@@ -60,12 +60,12 @@ defmodule Hypatia.Rules.DependabotAlerts do
 
           # Floor the exported severity at :medium so fresh low-severity
           # alerts are NOT silently filtered out by the CLI's default
-          # severity threshold (which is "medium" — rank 3). Native
+          # severity threshold (which is "medium" -- rank 3). Native
           # severity from the GitHub advisory is preserved in
           # detail.severity below for downstream consumers that want to
           # see the raw classification. Three low-severity Dependabot
           # alerts on 007 sat open for weeks because this floor was not
-          # in place — every `:low` finding was dropped by the CLI
+          # in place -- every `:low` finding was dropped by the CLI
           # filter before reaching any consumer (2026-04-17 audit, see
           # 007-lang/audits/audit-dependabot-automation-gap-2026-04-17.md).
           mapped_severity = case severity do
@@ -145,7 +145,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
               rule: "DA002",
               file: "#{owner}/#{repo}",
               severity: :critical,
-              reason: "#{critical_count} critical Dependabot alert(s) — immediate patching required",
+              reason: "#{critical_count} critical Dependabot alert(s) -- immediate patching required",
               action: :escalate,
               detail: %{critical: critical_count, high: high_count, total: total}
             } | findings]
@@ -159,7 +159,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
               rule: "DA002",
               file: "#{owner}/#{repo}",
               severity: :high,
-              reason: "#{high_count} high-severity Dependabot alert(s) — batch update recommended",
+              reason: "#{high_count} high-severity Dependabot alert(s) -- batch update recommended",
               action: :batch_update,
               detail: %{high: high_count, total: total}
             } | findings]
@@ -173,7 +173,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
               rule: "DA002",
               file: "#{owner}/#{repo}",
               severity: :medium,
-              reason: "#{total} total open Dependabot alert(s) — dependency hygiene review needed",
+              reason: "#{total} total open Dependabot alert(s) -- dependency hygiene review needed",
               action: :review,
               detail: %{total: total, by_severity: Map.new(by_severity, fn {k, v} -> {k, length(v)} end)}
             } | findings]
@@ -213,7 +213,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
             rule: "DA003",
             file: package,
             severity: :high,
-            reason: "Dependabot alert for #{package} (#{severity}) is #{age} days old (threshold: #{threshold} days) — overdue for remediation",
+            reason: "Dependabot alert for #{package} (#{severity}) is #{age} days old (threshold: #{threshold} days) -- overdue for remediation",
             action: :escalate,
             detail: %{
               alert_number: alert["number"],
@@ -253,7 +253,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
             rule: "DA004",
             file: package,
             severity: :medium,
-            reason: "Dependabot alert for #{package} (#{severity}) dismissed as '#{reason}' — ensure risk is documented",
+            reason: "Dependabot alert for #{package} (#{severity}) dismissed as '#{reason}' -- ensure risk is documented",
             action: :review,
             detail: %{
               alert_number: alert["number"],
@@ -281,7 +281,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
     token = System.get_env("GITHUB_TOKEN")
 
     if token == nil or token == "" do
-      {:error, "GITHUB_TOKEN not set — cannot query Dependabot alerts"}
+      {:error, "GITHUB_TOKEN not set -- cannot query Dependabot alerts"}
     else
       findings =
         da001_open_alerts(owner, repo) ++
@@ -289,7 +289,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
         da003_stale_alerts(owner, repo) ++
         da004_dismissed_without_fix(owner, repo)
 
-      # Deduplicate — DA001 and DA003 may overlap
+      # Deduplicate -- DA001 and DA003 may overlap
       deduped =
         findings
         |> Enum.uniq_by(fn f ->
@@ -306,7 +306,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
   end
 
   @doc """
-  Scan from a local repo path — extracts owner/repo from git remote.
+  Scan from a local repo path -- extracts owner/repo from git remote.
   """
   def scan_from_path(repo_path) do
     case extract_owner_repo(repo_path) do
@@ -396,7 +396,7 @@ defmodule Hypatia.Rules.DependabotAlerts do
   defp build_alert_reason(severity, package, cve, age_days, is_stale) do
     base = "Dependabot: #{severity} vulnerability in #{package}"
     cve_part = if cve, do: " (#{cve})", else: ""
-    age_part = " — #{age_days} day(s) old"
+    age_part = " -- #{age_days} day(s) old"
     stale_part = if is_stale, do: " [STALE]", else: ""
     base <> cve_part <> age_part <> stale_part
   end

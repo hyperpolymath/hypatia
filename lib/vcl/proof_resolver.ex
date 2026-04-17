@@ -6,7 +6,7 @@ defmodule Hypatia.VCL.ProofResolver do
   V4f: resolves `PROOF PROVEN(class, prover)` and `PROOF SANCTIFY(class)`
   expressions inside VCL statements against the Verisim certificate views.
 
-  These two proof types are special — unlike EXISTENCE/INTEGRITY/etc.
+  These two proof types are special -- unlike EXISTENCE/INTEGRITY/etc.
   which operate on octad modalities, PROVEN and SANCTIFY consult the
   `proof_attempts` learning loop via the `/api/v1/proof_attempts/certificates`
   endpoint and return `status: "proven" | "sanctified" | "pending"`

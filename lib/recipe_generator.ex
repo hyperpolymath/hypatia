@@ -66,7 +66,7 @@ defmodule Hypatia.RecipeGenerator do
   Generate a recipe for an uncovered category.
 
   The generated recipe:
-  - Starts at confidence 0.50 (low — needs evidence to rise)
+  - Starts at confidence 0.50 (low -- needs evidence to rise)
   - Is NOT auto_fixable (requires manual fix script development)
   - Routes to "control" tier (report only)
   - Includes remediation guidance derived from pattern descriptions
@@ -181,7 +181,7 @@ defmodule Hypatia.RecipeGenerator do
     |> Enum.uniq()
     |> length()
 
-    "#{humanize(category)} — #{count} patterns across #{repos} repos. " <>
+    "#{humanize(category)} -- #{count} patterns across #{repos} repos. " <>
     "Auto-generated recipe for triage and tracking."
   end
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 #
-# Graph Neural Network — agent interaction patterns
+# Graph Neural Network -- agent interaction patterns
 # Phase 2 in blackboard execution order (parallel with PageRank)
 
 defmodule Hypatia.Neural.GraphNeuralNetwork do
@@ -15,7 +15,7 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
   Writes to blackboard: agent cluster membership, graph centrality,
   interaction strength between agent pairs.
 
-  Supports 007's attested spawn — verifies agent trust through
+  Supports 007's attested spawn -- verifies agent trust through
   graph structure, not just sentinel hashes.
   """
 

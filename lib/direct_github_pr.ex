@@ -16,7 +16,7 @@ defmodule Hypatia.DirectGitHubPR do
       finding = %{"id" => "SC-013-myrepo", "scorecard_check" => "Pinned-Dependencies", ...}
       {:ok, pr_url} = Hypatia.DirectGitHubPR.create_fix_pr(finding)
 
-      # Batch mode — reads JSONL, creates PRs with rate limiting
+      # Batch mode -- reads JSONL, creates PRs with rate limiting
       {:ok, results} = Hypatia.DirectGitHubPR.batch_create_prs("findings.jsonl")
 
   ## Fix Script Mapping
@@ -59,8 +59,8 @@ defmodule Hypatia.DirectGitHubPR do
   Create a fix PR for a single scorecard finding.
 
   The finding map must include:
-  - `"scorecard_check"` or `"pa_rule"` — identifies which fix to apply
-  - `"repos_affected_list"` — list of repo names (uses the first)
+  - `"scorecard_check"` or `"pa_rule"` -- identifies which fix to apply
+  - `"repos_affected_list"` -- list of repo names (uses the first)
 
   Returns `{:ok, pr_url}` on success or `{:error, reason}` on failure.
   """
@@ -94,14 +94,14 @@ defmodule Hypatia.DirectGitHubPR do
   Batch-create PRs from a JSONL file of scorecard findings.
 
   Each line in the JSONL file is a JSON-encoded finding map. Only findings with
-  a supported fix script (SC-013, SC-018) are processed — others are skipped.
+  a supported fix script (SC-013, SC-018) are processed -- others are skipped.
 
   ## Options
 
-  - `:delay_ms` — milliseconds to wait between PRs (default: #{@default_delay_ms})
-  - `:dry_run` — if true, log what would be done without creating PRs (default: false)
-  - `:max_prs` — maximum number of PRs to create (default: unlimited)
-  - `:filter_check` — only process findings matching this check ID (e.g., "SC-013")
+  - `:delay_ms` -- milliseconds to wait between PRs (default: #{@default_delay_ms})
+  - `:dry_run` -- if true, log what would be done without creating PRs (default: false)
+  - `:max_prs` -- maximum number of PRs to create (default: unlimited)
+  - `:filter_check` -- only process findings matching this check ID (e.g., "SC-013")
 
   Returns `{:ok, results}` where results is a list of `{finding_id, outcome}` tuples.
   """
@@ -301,7 +301,7 @@ defmodule Hypatia.DirectGitHubPR do
     check_name = Map.get(finding, "scorecard_check", check_id)
 
     commit_msg = """
-    fix(scorecard): #{check_name} — #{short_description(check_id)}
+    fix(scorecard): #{check_name} -- #{short_description(check_id)}
 
     Automated fix applied by Hypatia neurosymbolic CI/CD intelligence.
 
@@ -353,7 +353,7 @@ defmodule Hypatia.DirectGitHubPR do
     check_name = Map.get(finding, "scorecard_check", check_id)
     repo_name = Map.get(finding, "repos_affected_list", ["unknown"]) |> List.first()
 
-    title = "fix(scorecard): #{check_name} — automated #{short_description(check_id)}"
+    title = "fix(scorecard): #{check_name} -- automated #{short_description(check_id)}"
 
     # Truncate title to 72 chars for GitHub conventions
     title =
@@ -454,7 +454,7 @@ defmodule Hypatia.DirectGitHubPR do
   # --- Internal: Cleanup ---
 
   defp cleanup_tmp(tmp_dir) do
-    # Best-effort cleanup — don't fail if it doesn't work
+    # Best-effort cleanup -- don't fail if it doesn't work
     File.rm_rf(tmp_dir)
   end
 

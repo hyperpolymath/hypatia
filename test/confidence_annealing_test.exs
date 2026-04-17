@@ -134,7 +134,7 @@ defmodule Hypatia.ConfidenceAnnealingTest do
       assert_in_delta ConfidenceAnnealing.anneal(0.5, cold), 0.5, 0.01
     end
 
-    test "preserves ordering — higher raw always produces higher annealed" do
+    test "preserves ordering -- higher raw always produces higher annealed" do
       state = ConfidenceAnnealing.from_existing(10, 1, 0)
 
       low = ConfidenceAnnealing.anneal(0.3, state)

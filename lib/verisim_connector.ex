@@ -5,7 +5,7 @@ defmodule Hypatia.VerisimConnector do
   @moduledoc """
   Reads scan results, pattern registry, and recipes from verisim-data.
 
-  Now powered by VCL — queries go through Hypatia.VCL.Client instead of raw
+  Now powered by VCL -- queries go through Hypatia.VCL.Client instead of raw
   file I/O. Falls back to direct file reads if VCL Client is unavailable
   (e.g., during testing or before OTP supervision tree starts).
 
@@ -124,7 +124,7 @@ defmodule Hypatia.VerisimConnector do
   end
 
   # ====================================================================
-  # Cross-Repo Analytics (NEW — VCL-only, no file I/O equivalent)
+  # Cross-Repo Analytics (NEW -- VCL-only, no file I/O equivalent)
   # ====================================================================
 
   @doc "Find patterns appearing across 3+ repos."

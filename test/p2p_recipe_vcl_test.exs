@@ -18,7 +18,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
 
   Each describe block establishes an invariant and verifies it holds
   across a representative sample of inputs. These are not unit tests for
-  a single function call — they verify structural properties of the module.
+  a single function call -- they verify structural properties of the module.
   """
 
   use ExUnit.Case, async: true
@@ -303,7 +303,7 @@ defmodule Hypatia.P2P.VQLParserTest do
   @limit_values [1, 5, 10, 100, 1000]
 
   # ---------------------------------------------------------------------------
-  # Invariant: parser is total — never raises, always returns ok/error tuple
+  # Invariant: parser is total -- never raises, always returns ok/error tuple
   # ---------------------------------------------------------------------------
 
   describe "parser totality invariant" do
@@ -391,7 +391,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       Enum.each(valid_store_queries, fn query ->
         {:ok, ast} = Client.parse(query)
         result = Client.execute(ast)
-        # Either ok list or error — must not raise
+        # Either ok list or error -- must not raise
         assert match?({:ok, _}, result) or match?({:error, _}, result),
                "execute/1 did not return ok/error tuple for #{inspect(query)}: #{inspect(result)}"
       end)

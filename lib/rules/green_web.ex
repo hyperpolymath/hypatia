@@ -11,14 +11,14 @@ defmodule Hypatia.Rules.GreenWeb do
 
   ## Checks performed
 
-  1. **Domain green hosting** — queries the Green Web Foundation API for
+  1. **Domain green hosting** -- queries the Green Web Foundation API for
      domains found in deployment configs, CNAME records, and workflow files.
-  2. **Hosting provider detection** — identifies cloud providers from
+  2. **Hosting provider detection** -- identifies cloud providers from
      workflow files and container registries, cross-references with the
      Green Web Foundation's green hosting directory.
-  3. **Carbon badge presence** — checks for a Green Web badge in README
+  3. **Carbon badge presence** -- checks for a Green Web badge in README
      or documentation files.
-  4. **CDN green status** — verifies CDN providers (Cloudflare, Fastly, etc.)
+  4. **CDN green status** -- verifies CDN providers (Cloudflare, Fastly, etc.)
      against the green hosting list.
 
   ## Data sources
@@ -109,10 +109,10 @@ defmodule Hypatia.Rules.GreenWeb do
   Run all Green Web checks against a repository.
 
   Returns a list of finding maps with keys:
-  - `:type` — finding type atom
-  - `:severity` — `:info`, `:low`, `:medium`, or `:high`
-  - `:detail` — human-readable description
-  - `:file` — relevant file path (if applicable)
+  - `:type` -- finding type atom
+  - `:severity` -- `:info`, `:low`, `:medium`, or `:high`
+  - `:detail` -- human-readable description
+  - `:file` -- relevant file path (if applicable)
   """
   def audit(repo_path, file_list, file_contents \\ %{}) do
     [
@@ -169,7 +169,7 @@ defmodule Hypatia.Rules.GreenWeb do
         end)
 
       if detected_green != [] do
-        # Informational — hosting is green
+        # Informational -- hosting is green
         [
           %{
             type: :green_hosting_confirmed,
@@ -412,7 +412,7 @@ defmodule Hypatia.Rules.GreenWeb do
 
   Returns `{:ok, green?}` where `green?` is a boolean, or `{:error, reason}`.
 
-  Note: This makes an HTTP call — use sparingly during CI scans.
+  Note: This makes an HTTP call -- use sparingly during CI scans.
   Prefer the local provider lists for batch scanning.
   """
   def check_domain_api(domain) do

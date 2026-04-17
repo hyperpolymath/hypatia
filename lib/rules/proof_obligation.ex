@@ -13,7 +13,7 @@ defmodule Hypatia.Rules.ProofObligation do
   | Tier        | Meaning                                       | Action                                    |
   |-------------|-----------------------------------------------|-------------------------------------------|
   | `:eliminate`  | Auto-provable: `simp`/`omega`/`decide`/`ring` | Robot-repo-automaton applies tactic inline |
-  | `:substitute` | Needs premise selection — ECHIDNA routes this | echidnabot with prover hint from VeriSimDB |
+  | `:substitute` | Needs premise selection -- ECHIDNA routes this | echidnabot with prover hint from VeriSimDB |
   | `:control`    | Genuinely hard: `sorry`/`Admitted` present    | sustainabot advisory + human review required |
 
   The tier assignment is prover-agnostic: the same `classify/2` function
@@ -66,13 +66,13 @@ defmodule Hypatia.Rules.ProofObligation do
   PO001: Classify a proof obligation claim through the Safety Triangle.
 
   Returns one of:
-  - `{:eliminate, confidence}` — auto-provable by a decision tactic
-  - `{:substitute, obligation_class}` — needs premise selection via ECHIDNA
-  - `{:control, reason}` — genuinely hard, `sorry` or human review required
+  - `{:eliminate, confidence}` -- auto-provable by a decision tactic
+  - `{:substitute, obligation_class}` -- needs premise selection via ECHIDNA
+  - `{:control, reason}` -- genuinely hard, `sorry` or human review required
 
   ## Options
 
-  - `:context` — surrounding code text for richer classification (default: `""`)
+  - `:context` -- surrounding code text for richer classification (default: `""`)
 
   ## Examples
 
@@ -96,7 +96,7 @@ defmodule Hypatia.Rules.ProofObligation do
     cond do
       control_marker_present?(combined) ->
         marker = first_control_marker(combined)
-        {:control, "#{marker} found — human review required"}
+        {:control, "#{marker} found -- human review required"}
 
       eliminate_candidate?(combined) ->
         confidence = eliminate_confidence(combined)
@@ -115,18 +115,18 @@ defmodule Hypatia.Rules.ProofObligation do
   when wrapped as `{:proof_obligation, recipe, pattern}`.
 
   Fields set by this function:
-  - `"id"` — deterministic recipe ID from claim hash
-  - `"type"` — `"proof_obligation"`
-  - `"triangle_tier"` — `"eliminate"` | `"substitute"` | `"control"`
-  - `"obligation_class"` — mathematical obligation class
-  - `"prover_hint"` — best prover from VeriSimDB history (or `nil`)
-  - `"confidence"` — routing confidence
-  - `"claim"` — the obligation text
-  - `"context"` — surrounding code context
-  - `"repo"` — repository slug
-  - `"auto_fixable"` — `true` only for eliminate tier
-  - `"tactic_hint"` — tactic suggestion for eliminate tier (`nil` otherwise)
-  - `"requires_human"` — `true` for control tier
+  - `"id"` -- deterministic recipe ID from claim hash
+  - `"type"` -- `"proof_obligation"`
+  - `"triangle_tier"` -- `"eliminate"` | `"substitute"` | `"control"`
+  - `"obligation_class"` -- mathematical obligation class
+  - `"prover_hint"` -- best prover from VeriSimDB history (or `nil`)
+  - `"confidence"` -- routing confidence
+  - `"claim"` -- the obligation text
+  - `"context"` -- surrounding code context
+  - `"repo"` -- repository slug
+  - `"auto_fixable"` -- `true` only for eliminate tier
+  - `"tactic_hint"` -- tactic suggestion for eliminate tier (`nil` otherwise)
+  - `"requires_human"` -- `true` for control tier
   """
   @spec to_recipe(map(), keyword()) :: map()
   def to_recipe(finding, opts \\ []) when is_map(finding) do
@@ -184,7 +184,7 @@ defmodule Hypatia.Rules.ProofObligation do
   keywords that indicate a formal correctness obligation (not merely a
   style or security issue resolvable by a fix script).
 
-  This is the gate before `to_recipe/2` — non-proof patterns are
+  This is the gate before `to_recipe/2` -- non-proof patterns are
   silently skipped so the proof obligation pipeline stays focused.
   """
   @spec proof_relevant?(map()) :: boolean()
@@ -291,7 +291,7 @@ defmodule Hypatia.Rules.ProofObligation do
   end
 
   defp expand_classification({:control, reason}, _claim, _opts) do
-    Logger.info("ProofObligation :control — #{reason}")
+    Logger.info("ProofObligation :control -- #{reason}")
     {"control", "hard_obligation", 0.50, false, nil, true}
   end
 

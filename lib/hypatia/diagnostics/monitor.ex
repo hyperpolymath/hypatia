@@ -153,7 +153,7 @@ defmodule Hypatia.Diagnostics.Monitor do
         status -> {:ok, {:neural, status}}
       end
     catch
-      # Training cycles can take minutes — a timeout means busy, not crashed
+      # Training cycles can take minutes -- a timeout means busy, not crashed
       :exit, {:timeout, _} -> {:ok, {:neural, :training_in_progress}}
       :exit, _ -> {:error, :neural_crashed}
     rescue
@@ -334,7 +334,7 @@ defmodule Hypatia.Diagnostics.Monitor do
     try do
       case GenServer.call(Hypatia.Neural.Coordinator, :health_report, 2000) do
         %{} ->
-          Logger.info("Neural coordinator responding — healthy")
+          Logger.info("Neural coordinator responding -- healthy")
           :ok
 
         _ ->

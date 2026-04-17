@@ -3,7 +3,7 @@
 
 defmodule Hypatia.VCL.RemoteCacheTest do
   @moduledoc """
-  Tests for the VCL RemoteCache module — git-clone-based caching for
+  Tests for the VCL RemoteCache module -- git-clone-based caching for
   multi-store federation.
 
   Uses a temporary directory for the cache root so that tests never write
@@ -95,7 +95,7 @@ defmodule Hypatia.VCL.RemoteCacheTest do
   # Cache Creation Tests
   # ---------------------------------------------------------------------------
 
-  describe "cache_remote_store/2 — fresh clone" do
+  describe "cache_remote_store/2 -- fresh clone" do
     test "clones a remote repo and returns the local path", ctx do
       {:ok, local_path} =
         RemoteCache.cache_remote_store(ctx.remote_dir, cache_dir: ctx.cache_dir)
@@ -124,7 +124,7 @@ defmodule Hypatia.VCL.RemoteCacheTest do
       {:ok, path2} =
         RemoteCache.cache_remote_store(ctx.remote_dir, cache_dir: ctx.cache_dir, ttl: 300)
 
-      # Same path both times — the second call hit the cache.
+      # Same path both times -- the second call hit the cache.
       assert path1 == path2
     end
 
@@ -342,7 +342,7 @@ defmodule Hypatia.VCL.RemoteCacheTest do
       # We replicate the parse logic to verify AST shape.
       query = ~s(SELECT DOCUMENT FROM FEDERATION REMOTE "https://github.com/org/data")
 
-      # Use the Client module's query path — but since the GenServer may not
+      # Use the Client module's query path -- but since the GenServer may not
       # be started in test, we test the parse indirectly via the token flow.
       # The FROM FEDERATION REMOTE clause should produce a {:remote, url} source.
       tokens = tokenize_for_test(query)

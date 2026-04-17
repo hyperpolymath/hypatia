@@ -73,7 +73,7 @@ defmodule Hypatia.Rules.Learning do
   end
 
   # ---------------------------------------------------------------------------
-  # GenServer Callbacks — handle_cast
+  # GenServer Callbacks -- handle_cast
   # ---------------------------------------------------------------------------
 
   @impl true
@@ -90,7 +90,7 @@ defmodule Hypatia.Rules.Learning do
   end
 
   # ---------------------------------------------------------------------------
-  # GenServer Callbacks — handle_call (grouped)
+  # GenServer Callbacks -- handle_call (grouped)
   # ---------------------------------------------------------------------------
 
   @impl true

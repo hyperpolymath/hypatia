@@ -114,7 +114,7 @@ defmodule Hypatia.DirectGitHubPRTest do
         "repos_affected_list" => ["some-repo"]
       }
 
-      # Should get past parsing — will fail at clone
+      # Should get past parsing -- will fail at clone
       result = DirectGitHubPR.create_fix_pr(finding)
 
       assert match?({:error, {:clone_failed, _, _}}, result) or
@@ -333,7 +333,7 @@ defmodule Hypatia.DirectGitHubPRTest do
       File.rm_rf!(tmp_dir)
     end
 
-    test "is idempotent — running twice produces same result" do
+    test "is idempotent -- running twice produces same result" do
       tmp_dir = create_test_repo_with_workflow("""
       name: CI
       on: push

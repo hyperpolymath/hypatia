@@ -10,7 +10,7 @@ defmodule Hypatia.Rules.StructuralDrift do
   orphan gitlinks, and stale references in documentation/manifests.
 
   When a violation is found, triggers an INTENSIVE SCAN of the entire
-  repo to check for other drift patterns — because where there's one
+  repo to check for other drift patterns -- because where there's one
   cockroach, there are usually more.
 
   Dispatches to:
@@ -52,7 +52,7 @@ defmodule Hypatia.Rules.StructuralDrift do
             rule: "SD001",
             file: Path.relative_to(path, repo_path),
             severity: :critical,
-            reason: "Legacy .scm state file — must be .a2ml in .machine_readable/6a2/",
+            reason: "Legacy .scm state file -- must be .a2ml in .machine_readable/6a2/",
             action: :convert_and_move,
             trigger_intensive: true
           }
@@ -80,7 +80,7 @@ defmodule Hypatia.Rules.StructuralDrift do
             rule: "SD002",
             file: Path.relative_to(path, repo_path),
             severity: :high,
-            reason: "Legacy Trustfile.hs — must be Trustfile.a2ml in .machine_readable/contractiles/trust/",
+            reason: "Legacy Trustfile.hs -- must be Trustfile.a2ml in .machine_readable/contractiles/trust/",
             action: :convert_and_move,
             trigger_intensive: true
           }
@@ -105,7 +105,7 @@ defmodule Hypatia.Rules.StructuralDrift do
             rule: "SD003",
             file: Path.relative_to(path, repo_path),
             severity: :high,
-            reason: "AI.djot superseded by 0-AI-MANIFEST.a2ml — merge and delete",
+            reason: "AI.djot superseded by 0-AI-MANIFEST.a2ml -- merge and delete",
             action: :merge_and_delete,
             trigger_intensive: true
           }
@@ -141,7 +141,7 @@ defmodule Hypatia.Rules.StructuralDrift do
           rule: "SD004",
           file: Path.relative_to(path, repo_path),
           severity: :critical,
-          reason: "6a2ml file outside canonical location — must be in .machine_readable/6a2/",
+          reason: "6a2ml file outside canonical location -- must be in .machine_readable/6a2/",
           action: :move,
           target: ".machine_readable/6a2/#{a2ml_file}"
         }
@@ -156,7 +156,7 @@ defmodule Hypatia.Rules.StructuralDrift do
   This is how stray repos-inside-repos (like svalinn in ats2-tui) happen.
   Bot `git add -A` catches stray clones and creates orphan submodule refs.
   Severity: critical (data corruption risk).
-  Action: investigate — move nested repo to canonical location, remove gitlink.
+  Action: investigate -- move nested repo to canonical location, remove gitlink.
   Triggers: intensive scan + alert user.
   """
   def sd005_orphan_gitlinks(repo_path) do
@@ -191,7 +191,7 @@ defmodule Hypatia.Rules.StructuralDrift do
                 rule: "SD005",
                 file: path,
                 severity: :critical,
-                reason: "Orphan gitlink — submodule ref without .gitmodules entry. Likely a stray clone caught by bot git-add-all.",
+                reason: "Orphan gitlink -- submodule ref without .gitmodules entry. Likely a stray clone caught by bot git-add-all.",
                 action: :investigate,
                 trigger_intensive: true,
                 alert_user: true
@@ -219,7 +219,7 @@ defmodule Hypatia.Rules.StructuralDrift do
         rule: "SD006",
         file: Path.relative_to(path, repo_path),
         severity: :low,
-        reason: "Trustfile example/template file — should be deleted after customisation",
+        reason: "Trustfile example/template file -- should be deleted after customisation",
         action: :delete
       }
     end)
@@ -228,16 +228,16 @@ defmodule Hypatia.Rules.StructuralDrift do
   # ─── SD007: Stale references in 0-AI-MANIFEST.a2ml ────────────────────
 
   @stale_reference_patterns [
-    {~r/STATE\.scm/, "References STATE.scm — should be .machine_readable/6a2/STATE.a2ml"},
-    {~r/META\.scm/, "References META.scm — should be .machine_readable/6a2/META.a2ml"},
-    {~r/ECOSYSTEM\.scm/, "References ECOSYSTEM.scm — should be .machine_readable/6a2/ECOSYSTEM.a2ml"},
-    {~r/AGENTIC\.scm/, "References AGENTIC.scm — should be .machine_readable/6a2/AGENTIC.a2ml"},
-    {~r/NEUROSYM\.scm/, "References NEUROSYM.scm — should be .machine_readable/6a2/NEUROSYM.a2ml"},
-    {~r/PLAYBOOK\.scm/, "References PLAYBOOK.scm — should be .machine_readable/6a2/PLAYBOOK.a2ml"},
-    {~r/AI\.djot/, "References AI.djot — file has been superseded by 0-AI-MANIFEST.a2ml"},
-    {~r/Trustfile\.hs/, "References Trustfile.hs — should be Trustfile.a2ml"},
-    {~r/\.machine_readable\/STATE\.a2ml/, "References .machine_readable/STATE.a2ml — should be .machine_readable/6a2/STATE.a2ml"},
-    {~r/\.machine_readable\/META\.a2ml/, "References .machine_readable/META.a2ml — should be .machine_readable/6a2/META.a2ml"}
+    {~r/STATE\.scm/, "References STATE.scm -- should be .machine_readable/6a2/STATE.a2ml"},
+    {~r/META\.scm/, "References META.scm -- should be .machine_readable/6a2/META.a2ml"},
+    {~r/ECOSYSTEM\.scm/, "References ECOSYSTEM.scm -- should be .machine_readable/6a2/ECOSYSTEM.a2ml"},
+    {~r/AGENTIC\.scm/, "References AGENTIC.scm -- should be .machine_readable/6a2/AGENTIC.a2ml"},
+    {~r/NEUROSYM\.scm/, "References NEUROSYM.scm -- should be .machine_readable/6a2/NEUROSYM.a2ml"},
+    {~r/PLAYBOOK\.scm/, "References PLAYBOOK.scm -- should be .machine_readable/6a2/PLAYBOOK.a2ml"},
+    {~r/AI\.djot/, "References AI.djot -- file has been superseded by 0-AI-MANIFEST.a2ml"},
+    {~r/Trustfile\.hs/, "References Trustfile.hs -- should be Trustfile.a2ml"},
+    {~r/\.machine_readable\/STATE\.a2ml/, "References .machine_readable/STATE.a2ml -- should be .machine_readable/6a2/STATE.a2ml"},
+    {~r/\.machine_readable\/META\.a2ml/, "References .machine_readable/META.a2ml -- should be .machine_readable/6a2/META.a2ml"}
   ]
 
   @doc """
@@ -279,13 +279,13 @@ defmodule Hypatia.Rules.StructuralDrift do
   # ─── SD008: Unsound formal verification patterns ───────────────────────
 
   @unsound_patterns [
-    {~r/believe_me/, [".idr"], :critical, "Idris2 believe_me — bypasses type checker"},
-    {~r/assert_total/, [".idr"], :critical, "Idris2 assert_total — hides non-termination"},
-    {~r/\bsorry\b/, [".idr", ".lean"], :critical, "Incomplete proof (sorry) — admits unproven goal"},
-    {~r/\bAdmitted\b/, [".v"], :critical, "Coq Admitted — incomplete proof"},
-    {~r/unsafeCoerce/, [".hs"], :critical, "Haskell unsafeCoerce — bypasses type system"},
-    {~r/Obj\.magic/, [".ml"], :critical, "OCaml Obj.magic — bypasses type system"},
-    {~r/pragma\s+Suppress/, [".ads", ".adb"], :high, "Ada pragma Suppress — disables runtime checks"}
+    {~r/believe_me/, [".idr"], :critical, "Idris2 believe_me -- bypasses type checker"},
+    {~r/assert_total/, [".idr"], :critical, "Idris2 assert_total -- hides non-termination"},
+    {~r/\bsorry\b/, [".idr", ".lean"], :critical, "Incomplete proof (sorry) -- admits unproven goal"},
+    {~r/\bAdmitted\b/, [".v"], :critical, "Coq Admitted -- incomplete proof"},
+    {~r/unsafeCoerce/, [".hs"], :critical, "Haskell unsafeCoerce -- bypasses type system"},
+    {~r/Obj\.magic/, [".ml"], :critical, "OCaml Obj.magic -- bypasses type system"},
+    {~r/pragma\s+Suppress/, [".ads", ".adb"], :high, "Ada pragma Suppress -- disables runtime checks"}
   ]
 
   @doc """
@@ -342,7 +342,7 @@ defmodule Hypatia.Rules.StructuralDrift do
     source_extensions
     |> Enum.flat_map(fn ext ->
       find_files_with_extension(repo_path, ext)
-      |> Enum.take(5)  # Sample — don't scan every file
+      |> Enum.take(5)  # Sample -- don't scan every file
       |> Enum.flat_map(fn file_path ->
         case File.read(file_path) do
           {:ok, content} ->
@@ -388,7 +388,7 @@ defmodule Hypatia.Rules.StructuralDrift do
             rule: "SD010",
             file: "node_modules/",
             severity: :high,
-            reason: "node_modules/ is tracked in git (#{tracked_count} files) — must be in .gitignore",
+            reason: "node_modules/ is tracked in git (#{tracked_count} files) -- must be in .gitignore",
             action: :untrack_and_gitignore,
             trigger_intensive: true
           }]
@@ -412,7 +412,7 @@ defmodule Hypatia.Rules.StructuralDrift do
                   rule: "SD010",
                   file: Path.relative_to(dir, repo_path) <> "/",
                   severity: :high,
-                  reason: "Nested node_modules/ tracked in git — must be in .gitignore",
+                  reason: "Nested node_modules/ tracked in git -- must be in .gitignore",
                   action: :untrack_and_gitignore,
                   trigger_intensive: true
                 }]
@@ -461,7 +461,7 @@ defmodule Hypatia.Rules.StructuralDrift do
           rule: "SD011",
           file: ".gitignore",
           severity: :medium,
-          reason: "#{dir_name}/ directory exists but is not in .gitignore — add '#{pattern}'",
+          reason: "#{dir_name}/ directory exists but is not in .gitignore -- add '#{pattern}'",
           action: :add_gitignore_entry
         }]
       else
@@ -505,7 +505,7 @@ defmodule Hypatia.Rules.StructuralDrift do
               rule: "SD013",
               file: ".gitignore",
               severity: :low,
-              reason: "Path-specific gitignore pattern '#{String.trim(line)}' — use global '#{global_pattern}' instead",
+              reason: "Path-specific gitignore pattern '#{String.trim(line)}' -- use global '#{global_pattern}' instead",
               action: :globalise_gitignore_pattern,
               detail: %{current: String.trim(line), recommended: global_pattern}
             }

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Hypatia.Web.GroovePlug — HTTP handler for groove discovery endpoints.
+# Hypatia.Web.GroovePlug -- HTTP handler for groove discovery endpoints.
 #
 # Handles the /.well-known/groove path that Gossamer (and other
 # groove-aware systems) probe to discover Hypatia's capabilities.
@@ -30,14 +30,14 @@ defmodule Hypatia.Web.GroovePlug do
 
   ## Manifest fields
 
-  - `service_id` — Unique identifier for this service (`"hypatia"`)
-  - `groove_version` — Protocol version (`"1"`)
-  - `service_version` — Semantic version of this service
-  - `capabilities` — Map of capability names to their configuration (object, not array)
-  - `consumes` — Capability IDs this service would benefit from
-  - `endpoints` — Named endpoints this service exposes
-  - `health` — Health check endpoint path
-  - `applicability` — Scale levels supported
+  - `service_id` -- Unique identifier for this service (`"hypatia"`)
+  - `groove_version` -- Protocol version (`"1"`)
+  - `service_version` -- Semantic version of this service
+  - `capabilities` -- Map of capability names to their configuration (object, not array)
+  - `consumes` -- Capability IDs this service would benefit from
+  - `endpoints` -- Named endpoints this service exposes
+  - `health` -- Health check endpoint path
+  - `applicability` -- Scale levels supported
 
   ## Message passing
 
@@ -52,7 +52,7 @@ defmodule Hypatia.Web.GroovePlug do
   @behaviour Plug
 
   # -------------------------------------------------------------------
-  # Manifest — static JSON describing Hypatia's groove surface
+  # Manifest -- static JSON describing Hypatia's groove surface
   # -------------------------------------------------------------------
 
   @groove_manifest %{
@@ -147,7 +147,7 @@ defmodule Hypatia.Web.GroovePlug do
   def init(opts), do: opts
 
   @impl true
-  # GET /.well-known/groove — Return the capability manifest.
+  # GET /.well-known/groove -- Return the capability manifest.
   def call(
         %Plug.Conn{method: "GET", path_info: [".well-known", "groove"]} = conn,
         _opts
@@ -158,7 +158,7 @@ defmodule Hypatia.Web.GroovePlug do
     |> halt()
   end
 
-  # POST /.well-known/groove/message — Receive a message from a consumer.
+  # POST /.well-known/groove/message -- Receive a message from a consumer.
   #
   # Plug.Parsers may or may not have consumed the body depending on
   # pipeline ordering, so we handle both parsed and raw bodies.
@@ -202,7 +202,7 @@ defmodule Hypatia.Web.GroovePlug do
     end
   end
 
-  # GET /.well-known/groove/recv — Drain pending messages.
+  # GET /.well-known/groove/recv -- Drain pending messages.
   def call(
         %Plug.Conn{method: "GET", path_info: [".well-known", "groove", "recv"]} = conn,
         _opts
@@ -220,7 +220,7 @@ defmodule Hypatia.Web.GroovePlug do
     |> halt()
   end
 
-  # Pass through everything else — this plug only handles groove paths.
+  # Pass through everything else -- this plug only handles groove paths.
   def call(conn, _opts), do: conn
 
   # -------------------------------------------------------------------

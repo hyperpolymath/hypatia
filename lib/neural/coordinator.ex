@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Neural Coordinator — blackboard architecture with phased execution
+# Neural Coordinator -- blackboard architecture with phased execution
 #
 # Migrated from hub-and-spoke (5 networks, fixed weights) to blackboard
 # architecture (8 networks, 6 phases, shared ETS state).
@@ -21,7 +21,7 @@ defmodule Hypatia.Neural.Coordinator do
 
   | Network   | Phase | Role                                      |
   |-----------|-------|-------------------------------------------|
-  | RBF       | 1     | Novelty detection — novel vs known        |
+  | RBF       | 1     | Novelty detection -- novel vs known        |
   | PageRank  | 2     | Trust-weighted routing over graph          |
   | GNN       | 2     | Agent interaction graph structure          |
   | MoE       | 3     | Domain-specific confidence estimation      |
@@ -32,12 +32,12 @@ defmodule Hypatia.Neural.Coordinator do
 
   ## Phase execution order
 
-  1. RBF (novelty) — everything benefits from knowing novel vs known
-  2. PageRank + GNN (parallel) — graph structure and trust
-  3. MoE (domain routing) — reads novelty + trust context
-  4. ESN + LSM (parallel) — temporal dynamics, reads domain + novelty
-  5. VAE (interpretation clustering) — reads full context
-  6. Sequence model (choreography prediction) — reads full context
+  1. RBF (novelty) -- everything benefits from knowing novel vs known
+  2. PageRank + GNN (parallel) -- graph structure and trust
+  3. MoE (domain routing) -- reads novelty + trust context
+  4. ESN + LSM (parallel) -- temporal dynamics, reads domain + novelty
+  5. VAE (interpretation clustering) -- reads full context
+  6. Sequence model (choreography prediction) -- reads full context
 
   ## Architecture change
 
@@ -227,7 +227,7 @@ defmodule Hypatia.Neural.Coordinator do
 
     # Annealing gate: clamp strategy based on recipe's outcome maturity.
     # A recipe with only 3 outcomes cannot reach :auto_execute regardless
-    # of neural confidence — it must accumulate evidence first.
+    # of neural confidence -- it must accumulate evidence first.
     recipe_id = Map.get(finding, "recipe_id", Map.get(finding, "pattern_id", ""))
     strategy = Hypatia.OutcomeTracker.annealed_strategy(recipe_id, raw_strategy)
 
@@ -354,22 +354,22 @@ defmodule Hypatia.Neural.Coordinator do
     # Write the input finding to the blackboard
     Blackboard.write(:input, :finding, finding)
 
-    # Phase 1: RBF (novelty detection) — sequential, everything depends on this
+    # Phase 1: RBF (novelty detection) -- sequential, everything depends on this
     state = run_phase_1_rbf(finding, state)
 
-    # Phase 2: PageRank + GNN (parallel) — graph structure
+    # Phase 2: PageRank + GNN (parallel) -- graph structure
     run_phase_2_graph(finding, state)
 
-    # Phase 3: MoE (domain routing) — reads novelty + trust
+    # Phase 3: MoE (domain routing) -- reads novelty + trust
     state = run_phase_3_moe(finding, state)
 
-    # Phase 4: ESN + LSM (parallel) — temporal dynamics
+    # Phase 4: ESN + LSM (parallel) -- temporal dynamics
     state = run_phase_4_temporal(finding, state)
 
-    # Phase 5: VAE (interpretation clustering) — reads everything
+    # Phase 5: VAE (interpretation clustering) -- reads everything
     run_phase_5_vae(finding)
 
-    # Phase 6: Sequence model (choreography) — reads everything
+    # Phase 6: Sequence model (choreography) -- reads everything
     run_phase_6_sequence(finding)
 
     # End the round and capture the reasoning trace
@@ -489,14 +489,14 @@ defmodule Hypatia.Neural.Coordinator do
 
   # Phase 5: VAE interpretation clustering
   defp run_phase_5_vae(finding) do
-    # VAE is a GenServer — calls it to cluster the finding
+    # VAE is a GenServer -- calls it to cluster the finding
     VariationalAutoencoder.cluster(finding)
     :ok
   end
 
   # Phase 6: Sequence model choreography prediction
   defp run_phase_6_sequence(finding) do
-    # Sequence model is a GenServer — calls it to predict next step
+    # Sequence model is a GenServer -- calls it to predict next step
     SequenceModel.predict(finding)
     :ok
   end

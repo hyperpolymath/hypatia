@@ -67,7 +67,7 @@ defmodule Hypatia.PatternAnalyzer do
     # Step 5: Dispatch routed actions to fleet
     Enum.each(routed, &FleetDispatcher.dispatch_routed_action/1)
 
-    # Step 6: Write dispatch manifest (JSONL — executable by dispatch-runner.sh)
+    # Step 6: Write dispatch manifest (JSONL -- executable by dispatch-runner.sh)
     {:ok, manifest_path, manifest_stats} = DispatchManifest.write(routed)
 
     Logger.info(
@@ -86,10 +86,10 @@ defmodule Hypatia.PatternAnalyzer do
   Run the analysis pipeline in configurable batches.
 
   Options:
-    - `:batch_size` — number of repos to process per batch (default: 50)
-    - `:max_concurrency` — parallel workers per batch (default: 4)
-    - `:on_batch_complete` — callback `fn batch_num, batch_result -> :ok` (optional)
-    - `:repos` — specific repo list to process (default: all from scans)
+    - `:batch_size` -- number of repos to process per batch (default: 50)
+    - `:max_concurrency` -- parallel workers per batch (default: 4)
+    - `:on_batch_complete` -- callback `fn batch_num, batch_result -> :ok` (optional)
+    - `:repos` -- specific repo list to process (default: all from scans)
 
   Returns `{:ok, %{batches: N, total_actions: N, summary: ...}}`.
   """
@@ -262,7 +262,7 @@ defmodule Hypatia.PatternAnalyzer do
           apply_neural_recommendation(action, rec)
 
         :unavailable ->
-          # Neural coordinator not running — pass through unchanged
+          # Neural coordinator not running -- pass through unchanged
           action
       end
     end)
@@ -285,7 +285,7 @@ defmodule Hypatia.PatternAnalyzer do
   # - Novel findings: demote to :control (human review required)
   # - Non-novel: adjust confidence downward if neural prediction is lower (conservative)
   defp apply_neural_recommendation(action, %{is_novel: true} = _rec) do
-    # Novel finding — force to control tier for human review
+    # Novel finding -- force to control tier for human review
     pattern = extract_pattern(action)
     Logger.info("Neural: novel finding detected for #{Map.get(pattern, "id", "?")}, demoting to control")
     {:control, Map.put(pattern, "neural_novel", true)}
@@ -295,7 +295,7 @@ defmodule Hypatia.PatternAnalyzer do
     recipe_conf = Map.get(recipe, "confidence", 0.0)
 
     # Only let neural confidence override if it's meaningfully trained.
-    # Untrained MoE returns sigmoid(1.0) ~= 0.73 — don't let that drag down
+    # Untrained MoE returns sigmoid(1.0) ~= 0.73 -- don't let that drag down
     # a proven recipe at 0.99. Neural override kicks in once confidence
     # diverges from the default sigmoid output (i.e., the network has learned).
     neural_is_trained = neural_conf < 0.70 or neural_conf > 0.76
@@ -350,7 +350,7 @@ defmodule Hypatia.PatternAnalyzer do
 
     Logger.info(
       "Scorecard local scan: #{stats.total_repos} repos, " <>
-      "#{stats.total_findings} findings — #{inspect(stats.by_check)}"
+      "#{stats.total_findings} findings -- #{inspect(stats.by_check)}"
     )
 
     patterns

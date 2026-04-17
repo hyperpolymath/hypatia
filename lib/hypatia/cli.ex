@@ -400,7 +400,7 @@ defmodule Hypatia.CLI do
                     severity: to_string(d.severity),
                     type: "deprecated_api",
                     file: file,
-                    reason: "#{d.api} deprecated — use #{d.replacement} (#{d.count} occurrences)",
+                    reason: "#{d.api} deprecated -- use #{d.replacement} (#{d.count} occurrences)",
                     action: to_string(d.strategy)
                   }
                 end)

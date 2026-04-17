@@ -44,7 +44,7 @@ defmodule Hypatia.PatternRegistryTest do
       assert "CommandInjection" in categories
       assert "PanicPath" in categories
 
-      # Verify structure — find the PA009 pattern that includes test-repo
+      # Verify structure -- find the PA009 pattern that includes test-repo
       cmd_patterns =
         Enum.filter(pattern_values, fn p ->
           Map.get(p, "category") == "CommandInjection" and
@@ -102,7 +102,7 @@ defmodule Hypatia.PatternRegistryTest do
 
   describe "all_patterns/0" do
     test "returns list of patterns" do
-      # This reads from disk — ensure registry exists from previous sync
+      # This reads from disk -- ensure registry exists from previous sync
       patterns = PatternRegistry.all_patterns()
       assert is_list(patterns)
     end

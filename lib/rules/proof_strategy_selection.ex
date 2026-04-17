@@ -73,9 +73,9 @@ defmodule Hypatia.Rules.ProofStrategySelection do
       ]
 
   Options:
-    - `:limit` (default 5) — maximum recommendations to return
-    - `:timeout` (default 5000ms) — HTTP request timeout
-    - `:base_url` — override VeriSimDB URL (else HYPATIA_VERISIM_URL env or default)
+    - `:limit` (default 5) -- maximum recommendations to return
+    - `:timeout` (default 5000ms) -- HTTP request timeout
+    - `:base_url` -- override VeriSimDB URL (else HYPATIA_VERISIM_URL env or default)
 
   Returns `{:error, :not_configured}` if VeriSimDB URL is missing,
   `{:error, {:http_status, code}}` on non-2xx response,
@@ -248,7 +248,7 @@ defmodule Hypatia.Rules.ProofStrategySelection do
 
         case filtered do
           [] ->
-            # All provers quarantined — fall back to novelty exploration.
+            # All provers quarantined -- fall back to novelty exploration.
             {:ok, novelty_fallback()}
 
           kept ->
@@ -291,11 +291,11 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   by echidna's verisim_bridge and the `obligation_class` enum in the
   proof_attempts table:
 
-    - "linearity"   — linear/affine/ownership claims
-    - "termination" — halting, totality, structural recursion
-    - "equiv"       — equivalence, behaviour preservation, bisimulation
-    - "safety"      — invariants, non-interference, memory safety
-    - "unknown"     — nothing matched
+    - "linearity"   -- linear/affine/ownership claims
+    - "termination" -- halting, totality, structural recursion
+    - "equiv"       -- equivalence, behaviour preservation, bisimulation
+    - "safety"      -- invariants, non-interference, memory safety
+    - "unknown"     -- nothing matched
 
   Intentionally simple: exact classification is echidna's job, this is
   just a fast-path for strategy lookup.

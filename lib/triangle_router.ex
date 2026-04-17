@@ -28,9 +28,9 @@ defmodule Hypatia.TriangleRouter do
   Route a single pattern to the appropriate triangle tier action.
 
   Returns one of:
-  - {:eliminate, recipe, pattern} — hazard can be removed
-  - {:substitute, recipe, pattern} — replace with proven-safe module
-  - {:control, pattern} — add guards/documentation only
+  - {:eliminate, recipe, pattern} -- hazard can be removed
+  - {:substitute, recipe, pattern} -- replace with proven-safe module
+  - {:control, pattern} -- add guards/documentation only
   """
   def route(pattern, repo, language) do
     category = Map.get(pattern, "category", "unknown")
@@ -69,9 +69,9 @@ defmodule Hypatia.TriangleRouter do
   Determine the dispatch strategy based on confidence level.
 
   Returns:
-  - :auto_execute — confidence >= 0.95, robot-repo-automaton
-  - :review — confidence 0.85-0.94, rhodibot creates PR
-  - :report_only — confidence < 0.85, sustainabot advisory
+  - :auto_execute -- confidence >= 0.95, robot-repo-automaton
+  - :review -- confidence 0.85-0.94, rhodibot creates PR
+  - :report_only -- confidence < 0.85, sustainabot advisory
   """
   def dispatch_strategy(confidence) when is_number(confidence) do
     cond do
@@ -114,7 +114,7 @@ defmodule Hypatia.TriangleRouter do
   end
 
   defp try_substitute(pattern, category, language) do
-    # Try fuzzy recipe match (any tier — if it's eliminate, promote it)
+    # Try fuzzy recipe match (any tier -- if it's eliminate, promote it)
     case RecipeMatcher.best_recipe_for_pattern(pattern, language) do
       %{} = recipe ->
         tier = Map.get(recipe, "triangle_tier", "substitute")

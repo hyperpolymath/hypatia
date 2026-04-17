@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Cross-Repo Learning — pattern transfer and ecosystem-level intelligence
+# Cross-Repo Learning -- pattern transfer and ecosystem-level intelligence
 #
 # When repo A fixes a pattern successfully, repo B shouldn't have to
 # relearn the same lesson from scratch. This module enables confidence
@@ -85,7 +85,7 @@ defmodule Hypatia.CrossRepoLearning do
     language_aware: :language_dependent
   }
 
-  # Language family groupings — repos in the same family transfer at
+  # Language family groupings -- repos in the same family transfer at
   # full strength; cross-family transfers are discounted
   @language_families %{
     "rust" => :systems,

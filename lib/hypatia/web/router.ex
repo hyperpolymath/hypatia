@@ -20,7 +20,7 @@ defmodule Hypatia.Web.Router do
   plug :dispatch
 
   @doc """
-  GET /health — Basic health check for the HTTP endpoint.
+  GET /health -- Basic health check for the HTTP endpoint.
   """
   get "/health" do
     health = %{

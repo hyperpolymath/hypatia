@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Kin.Protocol do
   @moduledoc """
-  Kin Protocol — the coordination contract between Hypatia ecosystem components.
+  Kin Protocol -- the coordination contract between Hypatia ecosystem components.
 
   Each kin sibling (panic-attacker, gitbot-fleet, auto-fix pipeline) reports its
   health via heartbeat files in `~/.hypatia/kin/`. Hypatia's Kin.Coordinator reads

@@ -190,7 +190,7 @@ defmodule Hypatia.DispatchManifest do
         if File.exists?(full_path) do
           Path.expand(full_path)
         else
-          Logger.warning("Fix script not found: #{full_path} — passing through raw name")
+          Logger.warning("Fix script not found: #{full_path} -- passing through raw name")
           script_name
         end
     end

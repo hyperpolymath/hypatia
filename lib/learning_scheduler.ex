@@ -185,7 +185,7 @@ defmodule Hypatia.LearningScheduler do
 
         {:error, reason} ->
           Logger.debug(
-            "LearningScheduler: prover_recommender retrain skipped — #{inspect(reason)}"
+            "LearningScheduler: prover_recommender retrain skipped -- #{inspect(reason)}"
           )
 
           false
@@ -228,7 +228,7 @@ defmodule Hypatia.LearningScheduler do
 
   # Re-queue each candidate attempt_id via echidnabot. We construct a
   # fresh submitProofObligation mutation with the class and new prover
-  # hint. Failures logged but non-fatal — the scheduler must keep
+  # hint. Failures logged but non-fatal -- the scheduler must keep
   # running even if echidnabot is unreachable.
   defp requeue_candidates(_class, _new_top, []), do: :ok
 
@@ -451,13 +451,13 @@ defmodule Hypatia.LearningScheduler do
             cond do
               confidence <= 0.3 ->
                 Logger.warning(
-                  "DRIFT ALERT: Recipe #{recipe_id} confidence dropped to #{confidence} — " <>
+                  "DRIFT ALERT: Recipe #{recipe_id} confidence dropped to #{confidence} -- " <>
                     "consider disabling auto-execute"
                 )
 
               confidence >= 0.95 ->
                 Logger.info(
-                  "Recipe #{recipe_id} at high confidence #{confidence} — auto-execute eligible"
+                  "Recipe #{recipe_id} at high confidence #{confidence} -- auto-execute eligible"
                 )
 
               true ->

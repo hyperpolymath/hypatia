@@ -143,13 +143,13 @@ defmodule Hypatia.Kin.Watchdog do
     # Log storms
     new_storm_entries = MapSet.difference(new_storms, state.restart_storms)
     Enum.each(new_storm_entries, fn mod ->
-      Logger.error("Watchdog: RESTART STORM detected for #{inspect(mod)} — backing off supervision")
+      Logger.error("Watchdog: RESTART STORM detected for #{inspect(mod)} -- backing off supervision")
     end)
 
     # Handle critical failures
     Enum.each(events, fn
       {:down, mod, _layer, :critical} ->
-        Logger.error("Watchdog: CRITICAL process #{inspect(mod)} is down — system degraded")
+        Logger.error("Watchdog: CRITICAL process #{inspect(mod)} is down -- system degraded")
       _ -> :ok
     end)
 

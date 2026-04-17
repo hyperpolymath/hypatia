@@ -5,7 +5,7 @@ defmodule Hypatia.Safety.Quarantine do
   @moduledoc """
   Bot quarantine system for Hypatia.
 
-  Bots that consistently fail are quarantined — they receive no new
+  Bots that consistently fail are quarantined -- they receive no new
   dispatches until manually reviewed or the quarantine expires.
 
   Quarantine triggers:
@@ -14,9 +14,9 @@ defmodule Hypatia.Safety.Quarantine do
   - Trust score drops below 0.2
 
   Quarantine levels:
-  - :soft — bot still receives report_only dispatches
-  - :hard — bot receives nothing, all dispatches rerouted
-  - :permanent — requires manual intervention to lift
+  - :soft -- bot still receives report_only dispatches
+  - :hard -- bot receives nothing, all dispatches rerouted
+  - :permanent -- requires manual intervention to lift
 
   Auto-release:
   - :soft quarantine expires after 24 hours
@@ -30,7 +30,7 @@ defmodule Hypatia.Safety.Quarantine do
   @consecutive_failure_threshold 5
   @fp_rate_threshold 0.3
   @fp_window 20  # Last N outcomes
-  # Future: minimum trust level for quarantined bots — @trust_floor 0.2
+  # Future: minimum trust level for quarantined bots -- @trust_floor 0.2
   @soft_duration_ms 24 * 60 * 60 * 1_000
   @hard_duration_ms 72 * 60 * 60 * 1_000
   @check_interval_ms 15 * 60 * 1_000  # Check every 15 min

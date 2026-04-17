@@ -3,7 +3,7 @@
 
 defmodule Hypatia.VCL.FileExecutor do
   @moduledoc """
-  VCL File Executor — executes parsed VCL ASTs against verisim-data flat files.
+  VCL File Executor -- executes parsed VCL ASTs against verisim-data flat files.
 
   This is the primary executor in Hypatia's federated data layer. It translates
   VCL queries into file operations against the verisim-data git-backed store,
@@ -449,7 +449,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
     case policy do
       :aggressive ->
-        # No modification — trust cross-repo data equally
+        # No modification -- trust cross-repo data equally
         results
 
       :conservative ->
@@ -534,7 +534,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
       repo != "" ->
         Hypatia.CrossRepoLearning.drift_discount(:language_aware, repo, repo)
-        # We just need the language, not the discount — detect via scan
+        # We just need the language, not the discount -- detect via scan
         scan_path = Path.join([expand_path(), "scans", "#{repo}.json"])
         case File.read(scan_path) do
           {:ok, content} ->

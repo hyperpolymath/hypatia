@@ -88,10 +88,10 @@ defmodule Hypatia.OutcomeTracker do
             end)
 
             if still_found do
-              Logger.warning("Verification FAILED for #{pattern_id} in #{repo_path} — pattern still present")
+              Logger.warning("Verification FAILED for #{pattern_id} in #{repo_path} -- pattern still present")
               :still_present
             else
-              Logger.info("Verification PASSED for #{pattern_id} in #{repo_path} — pattern removed")
+              Logger.info("Verification PASSED for #{pattern_id} in #{repo_path} -- pattern removed")
               :verified
             end
 
@@ -127,7 +127,7 @@ defmodule Hypatia.OutcomeTracker do
           {:ok, record, :verified}
 
         :still_present ->
-          Logger.warning("Fix claimed success but pattern still present — recording false_positive")
+          Logger.warning("Fix claimed success but pattern still present -- recording false_positive")
           record_outcome(recipe_id, repo, file, :false_positive)
           {:ok, record, :false_positive}
 

@@ -6,9 +6,9 @@ defmodule Hypatia.VCL.ClientTest do
   Comprehensive tests for the VCL Client GenServer.
 
   Tests cover three main areas:
-  1. VCL parser — tokenization, AST construction, error handling
-  2. Query execution — routing through FileExecutor against real verisim-data
-  3. Cache behaviour — TTL, eviction, stats tracking
+  1. VCL parser -- tokenization, AST construction, error handling
+  2. Query execution -- routing through FileExecutor against real verisim-data
+  3. Cache behaviour -- TTL, eviction, stats tracking
 
   These tests use async: false because they interact with a named GenServer.
   """
@@ -29,10 +29,10 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Tests — Basic SELECT + Modalities
+  # Parser Tests -- Basic SELECT + Modalities
   # ---------------------------------------------------------------------------
 
-  describe "parse/1 — SELECT and modalities" do
+  describe "parse/1 -- SELECT and modalities" do
     test "parses basic STORE query with single modality" do
       {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans")
       assert ast.modalities == [:document]
@@ -107,10 +107,10 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Tests — FROM Clauses
+  # Parser Tests -- FROM Clauses
   # ---------------------------------------------------------------------------
 
-  describe "parse/1 — FROM clause variants" do
+  describe "parse/1 -- FROM clause variants" do
     test "parses FROM STORE" do
       {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans")
       assert ast.source == {:store, "scans"}
@@ -160,10 +160,10 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Tests — WHERE Clauses
+  # Parser Tests -- WHERE Clauses
   # ---------------------------------------------------------------------------
 
-  describe "parse/1 — WHERE clause" do
+  describe "parse/1 -- WHERE clause" do
     test "parses FIELD equality condition" do
       {:ok, ast} = Client.parse(
         "SELECT DOCUMENT FROM STORE scans WHERE FIELD category == PanicPath"
@@ -256,10 +256,10 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Tests — PROOF, LIMIT, OFFSET
+  # Parser Tests -- PROOF, LIMIT, OFFSET
   # ---------------------------------------------------------------------------
 
-  describe "parse/1 — PROOF clause" do
+  describe "parse/1 -- PROOF clause" do
     test "parses PROOF clause" do
       {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans PROOF EXISTENCE")
       assert %{raw: "EXISTENCE"} = ast.proof
@@ -278,7 +278,7 @@ defmodule Hypatia.VCL.ClientTest do
     end
   end
 
-  describe "parse/1 — LIMIT and OFFSET" do
+  describe "parse/1 -- LIMIT and OFFSET" do
     test "parses LIMIT" do
       {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans LIMIT 5")
       assert ast.limit == 5
@@ -317,10 +317,10 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Tests — Edge Cases and Error Handling
+  # Parser Tests -- Edge Cases and Error Handling
   # ---------------------------------------------------------------------------
 
-  describe "parse/1 — error handling" do
+  describe "parse/1 -- error handling" do
     test "fails without SELECT keyword" do
       assert {:error, "Expected SELECT"} = Client.parse("DOCUMENT FROM STORE scans")
     end
@@ -350,10 +350,10 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Parser Tests — Complex Combined Queries
+  # Parser Tests -- Complex Combined Queries
   # ---------------------------------------------------------------------------
 
-  describe "parse/1 — complex combined queries" do
+  describe "parse/1 -- complex combined queries" do
     test "parses full query with all clauses" do
       query = ~s(SELECT DOCUMENT, TEMPORAL FROM STORE outcomes WHERE FIELD recipe_id == "recipe-shell-quote-vars" LIMIT 100 OFFSET 10)
       {:ok, ast} = Client.parse(query)
@@ -384,7 +384,7 @@ defmodule Hypatia.VCL.ClientTest do
   # Query Execution Tests (uses real verisim-data)
   # ---------------------------------------------------------------------------
 
-  describe "query/1 — store execution" do
+  describe "query/1 -- store execution" do
     test "queries scans store and returns list" do
       {:ok, results} = Client.query("SELECT DOCUMENT FROM STORE scans")
       assert is_list(results)
@@ -436,7 +436,7 @@ defmodule Hypatia.VCL.ClientTest do
     end
   end
 
-  describe "query/1 — filtered execution" do
+  describe "query/1 -- filtered execution" do
     test "WHERE FIELD equality filters results" do
       {:ok, all} = Client.query("SELECT DOCUMENT FROM STORE scans")
       {:ok, filtered} = Client.query(
@@ -464,7 +464,7 @@ defmodule Hypatia.VCL.ClientTest do
     end
   end
 
-  describe "query/1 — FEDERATION execution" do
+  describe "query/1 -- FEDERATION execution" do
     test "FEDERATION cross-store query returns results" do
       {:ok, results} = Client.query(
         "SELECT DOCUMENT FROM FEDERATION /all/* LIMIT 10"
@@ -483,7 +483,7 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   # ---------------------------------------------------------------------------
-  # execute/2 — Pre-parsed AST Execution
+  # execute/2 -- Pre-parsed AST Execution
   # ---------------------------------------------------------------------------
 
   describe "execute/2" do

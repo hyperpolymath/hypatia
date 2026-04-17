@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Kin.Gate do
   @moduledoc """
-  Kin Gate — the second-opinion checkpoint before any bot action reaches production.
+  Kin Gate -- the second-opinion checkpoint before any bot action reaches production.
 
   Every PR, commit, or push from the gitbot-fleet must pass through the Gate.
   The Gate enforces:
@@ -17,10 +17,10 @@ defmodule Hypatia.Kin.Gate do
 
   ## Decision outcomes
 
-  - `:approved` — action proceeds immediately
-  - `:held` — action queued for human review (written to held.jsonl)
-  - `:rejected` — action blocked with reason (written to rejected.jsonl)
-  - `:deferred` — action delayed until a condition clears (e.g. repo lock released)
+  - `:approved` -- action proceeds immediately
+  - `:held` -- action queued for human review (written to held.jsonl)
+  - `:rejected` -- action blocked with reason (written to rejected.jsonl)
+  - `:deferred` -- action delayed until a condition clears (e.g. repo lock released)
 
   ## Usage
 
@@ -52,13 +52,13 @@ defmodule Hypatia.Kin.Gate do
   Submit an action for Gate review. Returns the decision.
 
   Action map must contain:
-  - `bot_id` — which bot is requesting (e.g. "rhodibot")
-  - `repo` — target repository name
-  - `action_type` — :pr_create, :commit_push, :issue_create, :advisory
-  - `confidence` — recipe confidence (0.0-1.0)
-  - `pattern_id` — the pattern being fixed (e.g. "PA-CommandInjection-shell_unquoted_var")
-  - `scan_timestamp` — when the underlying scan data was generated
-  - `dispatch_tier` — :auto_execute, :review, :report_only
+  - `bot_id` -- which bot is requesting (e.g. "rhodibot")
+  - `repo` -- target repository name
+  - `action_type` -- :pr_create, :commit_push, :issue_create, :advisory
+  - `confidence` -- recipe confidence (0.0-1.0)
+  - `pattern_id` -- the pattern being fixed (e.g. "PA-CommandInjection-shell_unquoted_var")
+  - `scan_timestamp` -- when the underlying scan data was generated
+  - `dispatch_tier` -- :auto_execute, :review, :report_only
   """
   def review(action) do
     GenServer.call(__MODULE__, {:review, action}, 10_000)
@@ -113,7 +113,7 @@ defmodule Hypatia.Kin.Gate do
 
     # Periodic cleanup of stale locks
     Process.send_after(self(), :cleanup_locks, 60_000)
-    Logger.info("Kin.Gate started — all bot actions require Gate approval.")
+    Logger.info("Kin.Gate started -- all bot actions require Gate approval.")
     {:ok, state}
   end
 
@@ -320,7 +320,7 @@ defmodule Hypatia.Kin.Gate do
           {:ok, dt, _} ->
             age_hours = DateTime.diff(DateTime.utc_now(), dt, :hour)
             if age_hours > @stale_scan_threshold_hours do
-              {:hold, "scan data is #{age_hours}h old (threshold: #{@stale_scan_threshold_hours}h) — rescan recommended"}
+              {:hold, "scan data is #{age_hours}h old (threshold: #{@stale_scan_threshold_hours}h) -- rescan recommended"}
             else
               :pass
             end
@@ -390,7 +390,7 @@ defmodule Hypatia.Kin.Gate do
           # Ask the neural coordinator for a confidence assessment
           case neural_agrees?(action) do
             true -> :pass
-            false -> {:hold, "neural network disagrees with dispatch confidence — human review recommended"}
+            false -> {:hold, "neural network disagrees with dispatch confidence -- human review recommended"}
           end
       end
     else

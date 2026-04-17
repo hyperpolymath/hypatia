@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Rules.HonestCompletion do
   @moduledoc """
-  Honest completion audit — cross-references claimed completion percentages
+  Honest completion audit -- cross-references claimed completion percentages
   against detectable evidence from the repository.
 
   This is the antidote to inflated self-assessments. Parses STATE.a2ml
@@ -63,7 +63,7 @@ defmodule Hypatia.Rules.HonestCompletion do
       has_ci: File.dir?(Path.join(repo_path, ".github/workflows")),
       has_tests_dir: File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
       has_state_file: File.exists?(Path.join(repo_path, ".machine_readable/STATE.a2ml")) or
-                      File.exists?(Path.join(repo_path, ".machine_readable/STATE.scm")) # DEPRECATED: .scm fallback — will be removed once all repos migrate to .a2ml
+                      File.exists?(Path.join(repo_path, ".machine_readable/STATE.scm")) # DEPRECATED: .scm fallback -- will be removed once all repos migrate to .a2ml
     }
   end
 
@@ -148,7 +148,7 @@ defmodule Hypatia.Rules.HonestCompletion do
     end
 
     findings = if evidence.postulate_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.postulate_count} postulate (Idris2/Agda) found — check if intentional axioms",
+      [%{type: :dangerous_pattern, detail: "#{evidence.postulate_count} postulate (Idris2/Agda) found -- check if intentional axioms",
          severity: :high, deduction: 10} | findings]
     else
       findings
@@ -237,7 +237,7 @@ defmodule Hypatia.Rules.HonestCompletion do
 
   defp find_state_file(repo_path) do
     a2ml = Path.join(repo_path, ".machine_readable/STATE.a2ml")
-    # DEPRECATED: .scm fallback — will be removed once all repos migrate to .a2ml
+    # DEPRECATED: .scm fallback -- will be removed once all repos migrate to .a2ml
     scm = Path.join(repo_path, ".machine_readable/STATE.scm")
     cond do
       File.exists?(a2ml) -> a2ml

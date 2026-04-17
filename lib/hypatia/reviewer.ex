@@ -3,12 +3,12 @@
 
 defmodule Hypatia.Reviewer do
   @moduledoc """
-  PR reviewer mode — second-opinion code review via Hypatia rule modules.
+  PR reviewer mode -- second-opinion code review via Hypatia rule modules.
 
   Given a PR diff (from the GitHub API), runs all applicable rule modules
   against the changed files and produces structured findings suitable for
   posting as PR review comments. This module comments but does NOT
-  approve or reject — it is strictly advisory.
+  approve or reject -- it is strictly advisory.
 
   ## Usage
 
@@ -40,11 +40,11 @@ defmodule Hypatia.Reviewer do
     @moduledoc """
     A single review comment to post on a PR.
 
-    - `path` — file path relative to repo root
-    - `line` — line number in the diff (1-based)
-    - `body` — Markdown comment body
-    - `severity` — `:info`, `:low`, `:medium`, `:high`, or `:critical`
-    - `rule` — rule identifier string
+    - `path` -- file path relative to repo root
+    - `line` -- line number in the diff (1-based)
+    - `body` -- Markdown comment body
+    - `severity` -- `:info`, `:low`, `:medium`, `:high`, or `:critical`
+    - `rule` -- rule identifier string
     """
     defstruct [:path, :line, :body, :severity, :rule]
 
@@ -117,14 +117,14 @@ defmodule Hypatia.Reviewer do
 
           detail_lines = Enum.map(items, fn c ->
             loc = if c.line, do: ":#{c.line}", else: ""
-            "- **`#{c.path}#{loc}`** — #{c.body} (`#{c.rule}`)"
+            "- **`#{c.path}#{loc}`** -- #{c.body} (`#{c.rule}`)"
           end)
 
           [header | detail_lines] ++ [""]
         end)
 
       [
-        "> **Hypatia Review** — #{length(comments)} finding(s)\n",
+        "> **Hypatia Review** -- #{length(comments)} finding(s)\n",
         "---\n"
         | lines
       ]

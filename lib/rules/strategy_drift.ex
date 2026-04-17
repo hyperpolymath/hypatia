@@ -9,7 +9,7 @@ defmodule Hypatia.Rules.StrategyDrift do
   The learning loop's strategy endpoint returns the current best prover
   per obligation_class. When that top recommendation changes for a
   class, attempts that previously failed with the old top prover may now
-  succeed with the new one — they're worth re-queuing.
+  succeed with the new one -- they're worth re-queuing.
 
   This module tracks the last-seen top prover per class in an ETS
   table (`:hypatia_strategy_drift`) and compares against the current
@@ -68,11 +68,11 @@ defmodule Hypatia.Rules.StrategyDrift do
   @doc """
   Check a single class for strategy shift. Returns one of:
 
-    * `{:no_shift, class, top_prover}` — same top prover as last time (or
+    * `{:no_shift, class, top_prover}` -- same top prover as last time (or
       first observation)
-    * `{:shift, class, old_top, new_top, failed_attempt_ids}` — top prover
+    * `{:shift, class, old_top, new_top, failed_attempt_ids}` -- top prover
       changed; failed_attempt_ids are candidates for re-queueing
-    * `{:error, reason}` — couldn't reach strategy endpoint
+    * `{:error, reason}` -- couldn't reach strategy endpoint
 
   Pass `:hypatia_strategy_drift` or set up the ETS table via `init_table/0`
   before calling.
@@ -96,7 +96,7 @@ defmodule Hypatia.Rules.StrategyDrift do
             {:no_shift, class, new_top}
 
           [{^class, ^new_top, _since, _}] ->
-            # Unchanged — update last_checked
+            # Unchanged -- update last_checked
             :ets.update_element(@table, class, {4, DateTime.utc_now()})
             {:no_shift, class, new_top}
 
@@ -158,12 +158,12 @@ defmodule Hypatia.Rules.StrategyDrift do
 
   defp fetch_failed_attempts(class, prover, opts) do
     # ClickHouse query: attempt_ids where outcome='failure' for (class, prover).
-    # We query verisim-api's raw SQL endpoint — if it doesn't exist we return [].
+    # We query verisim-api's raw SQL endpoint -- if it doesn't exist we return [].
     base_url = Keyword.get(opts, :base_url, @default_base_url)
     timeout_ms = Keyword.get(opts, :timeout, 5_000)
 
     # Use the /certificates endpoint with evidence_limit to pull failed rows.
-    # This is an approximation — the certs view returns the most recent N
+    # This is an approximation -- the certs view returns the most recent N
     # attempts per (class, prover), not specifically the failures. For a
     # proper implementation, a /failures endpoint should be added.
     url =

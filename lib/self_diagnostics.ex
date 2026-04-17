@@ -123,7 +123,7 @@ defmodule Hypatia.SelfDiagnostics do
     new_state =
       case state.circuit do
         :half_open ->
-          Logger.info("Circuit breaker CLOSED — dispatch recovered.")
+          Logger.info("Circuit breaker CLOSED -- dispatch recovered.")
           %{state | circuit: :closed, consecutive_failures: 0, circuit_opened_at: nil}
         _ ->
           %{state | consecutive_failures: 0}

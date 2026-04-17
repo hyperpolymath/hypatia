@@ -30,7 +30,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
   @damping_factor 0.85
   @convergence_threshold 0.001
   @max_iterations 50
-  # Future: trust decays 5% per cycle without new data — @decay_rate 0.95
+  # Future: trust decays 5% per cycle without new data -- @decay_rate 0.95
 
   defstruct nodes: %{}, edges: [], trust_scores: %{}, last_computed: nil,
             cross_repo_edges: [], language_clusters: %{}

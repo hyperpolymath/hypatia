@@ -3,7 +3,7 @@
 defmodule Hypatia.Rules.SecurityErrors do
   @moduledoc """
   Primary Elixir security error database (migrated from legacy Logtalk engine).
-  """
+
   Defines error categories, severity levels, prevention mechanisms,
   SHA pin database, CodeQL language support, and secret detection patterns.
   """
@@ -49,17 +49,17 @@ defmodule Hypatia.Rules.SecurityErrors do
     rust_manually_drop: "Rust ManuallyDrop risk of resource leaks",
     rust_from_raw: "Rust from_raw unsafe pointer construction",
     rust_as_ptr: "Rust as_ptr raw pointer exposure",
-    agda_postulate: "Agda postulate — unproven assumption",
+    agda_postulate: "Agda postulate -- unproven assumption",
     agda_type_in_type: "Agda --type-in-type unsoundness",
-    isabelle_oops: "Isabelle oops — incomplete proof",
+    isabelle_oops: "Isabelle oops -- incomplete proof",
     hol4_mk_thm: "HOL4 mk_thm kernel bypass",
     zig_ptr_cast: "Zig @ptrCast unchecked pointer conversion",
     zig_align_cast: "Zig @alignCast unchecked alignment cast",
     zig_int_to_ptr: "Zig @intToPtr unsafe integer-to-pointer",
     zig_bit_cast: "Zig @bitCast unchecked bit reinterpretation",
     zig_ptr_to_int: "Zig @ptrToInt raw pointer address exposure",
-    fstar_admit: "F* admit — unproven goal acceptance",
-    fstar_assume: "F* assume — unverified assumption",
+    fstar_admit: "F* admit -- unproven goal acceptance",
+    fstar_assume: "F* assume -- unverified assumption",
     ada_pragma_suppress: "Ada pragma Suppress disables runtime checks",
     ada_unchecked_conversion: "Ada Unchecked_Conversion type safety bypass",
     ada_unchecked_deallocation: "Ada Unchecked_Deallocation manual memory management",
@@ -215,14 +215,14 @@ defmodule Hypatia.Rules.SecurityErrors do
     "todo-crypto" => "Implement the cryptographic function before deployment",
     "fake-signature" => "Replace fake/placeholder crypto value with real implementation",
     "js-wildcard-cors" => "Replace Access-Control-Allow-Origin: * with specific origin or env var",
-    "js-eval" => "Remove eval() — use structured alternatives (JSON.parse, Function constructor if needed)",
+    "js-eval" => "Remove eval() -- use structured alternatives (JSON.parse, Function constructor if needed)",
     "js-innerhtml" => "Use textContent, Trusted Types, or rescript-dom-mounter SafeDOM",
     "js-document-write" => "Use DOM manipulation methods instead of document.write",
     "js-hardcoded-secret" => "Move credentials to environment variables or secrets manager",
     "elixir-system-cmd-interpolation" => "Pass arguments as list to System.cmd, not interpolated string",
     "elixir-code-eval" => "Replace Code.eval_* with structured dispatch or compiled modules",
     "elixir-send-unsanitised" => "Use :erlang.binary_to_term(data, [:safe]) to restrict atom creation",
-    "elixir-atom-from-user" => "Use String.to_existing_atom/1 instead — atom table is finite",
+    "elixir-atom-from-user" => "Use String.to_existing_atom/1 instead -- atom table is finite",
     "elixir-no-ssl-verify" => "Set verify: :verify_peer with cacertfile or cacerts option",
     "elixir-port-open-shell" => "Validate and sanitize command before Port.open spawn"
   }

@@ -241,7 +241,7 @@ defmodule Hypatia.VCL.Client do
   end
 
   # FROM REMOTE "https://github.com/org/verisim-data"
-  # Bare remote — federates across all stores in the clone.
+  # Bare remote -- federates across all stores in the clone.
   defp parse_from(["FROM", "REMOTE", url | rest]) do
     {:ok, {:remote, normalize_token(url)}, rest}
   end

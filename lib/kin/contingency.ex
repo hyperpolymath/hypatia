@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Kin.Contingency do
   @moduledoc """
-  Kin Contingency — emergency procedures and graceful degradation.
+  Kin Contingency -- emergency procedures and graceful degradation.
 
   Handles system-wide failure scenarios:
 
@@ -15,10 +15,10 @@ defmodule Hypatia.Kin.Contingency do
 
   ## Emergency levels
 
-  1. `:advisory` — log warning, continue normally
-  2. `:caution` — hold all auto-execute actions, allow review-tier
-  3. `:freeze` — hold ALL actions, nothing proceeds without human approval
-  4. `:shutdown` — immediately stop all bot operations
+  1. `:advisory` -- log warning, continue normally
+  2. `:caution` -- hold all auto-execute actions, allow review-tier
+  3. `:freeze` -- hold ALL actions, nothing proceeds without human approval
+  4. `:shutdown` -- immediately stop all bot operations
   """
 
   use GenServer
@@ -47,7 +47,7 @@ defmodule Hypatia.Kin.Contingency do
     GenServer.call(__MODULE__, {:permitted, dispatch_tier})
   end
 
-  @doc "Isolate a specific bot — all its actions are held."
+  @doc "Isolate a specific bot -- all its actions are held."
   def isolate_bot(bot_id, reason) do
     GenServer.call(__MODULE__, {:isolate, bot_id, reason})
   end
@@ -109,10 +109,10 @@ defmodule Hypatia.Kin.Contingency do
     state = load_persisted_state(state)
 
     if state.level != :normal do
-      Logger.warning("Contingency: loaded persisted emergency level :#{state.level} — #{state.level_reason}")
+      Logger.warning("Contingency: loaded persisted emergency level :#{state.level} -- #{state.level_reason}")
     end
 
-    Logger.info("Kin.Contingency started — emergency level: :#{state.level}")
+    Logger.info("Kin.Contingency started -- emergency level: :#{state.level}")
     {:ok, state}
   end
 
@@ -126,7 +126,7 @@ defmodule Hypatia.Kin.Contingency do
     old_level = state.level
 
     if new_level != old_level do
-      Logger.warning("Contingency: level changed :#{old_level} -> :#{new_level} — #{reason}")
+      Logger.warning("Contingency: level changed :#{old_level} -> :#{new_level} -- #{reason}")
     end
 
     new_state = %{state |
@@ -154,7 +154,7 @@ defmodule Hypatia.Kin.Contingency do
 
   @impl true
   def handle_call({:isolate, bot_id, reason}, _from, state) do
-    Logger.warning("Contingency: ISOLATING bot #{bot_id} — #{reason}")
+    Logger.warning("Contingency: ISOLATING bot #{bot_id} -- #{reason}")
     entry = %{reason: reason, isolated_at: DateTime.utc_now()}
     new_isolated = Map.put(state.isolated_bots, bot_id, entry)
     new_state = %{state | isolated_bots: new_isolated}
@@ -191,7 +191,7 @@ defmodule Hypatia.Kin.Contingency do
 
   @impl true
   def handle_call({:rollback_wave, repo_list, reason}, _from, state) do
-    Logger.error("Contingency: ROLLBACK WAVE initiated for #{length(repo_list)} repos — #{reason}")
+    Logger.error("Contingency: ROLLBACK WAVE initiated for #{length(repo_list)} repos -- #{reason}")
 
     results = Enum.map(repo_list, fn repo ->
       result = attempt_rollback(repo)

@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Kin.Coordinator do
   @moduledoc """
-  Kin Coordinator — higher-order orchestration of the Hypatia ecosystem.
+  Kin Coordinator -- higher-order orchestration of the Hypatia ecosystem.
 
   Maintains awareness of all kin siblings (panic-attacker, gitbot-fleet, auto-fix)
   via heartbeat polling. Provides:
@@ -50,7 +50,7 @@ defmodule Hypatia.Kin.Coordinator do
     GenServer.call(__MODULE__, :dispatch_ready)
   end
 
-  @doc "Get degraded mode status — what's working, what's falling back."
+  @doc "Get degraded mode status -- what's working, what's falling back."
   def degraded_status do
     GenServer.call(__MODULE__, :degraded_status)
   end

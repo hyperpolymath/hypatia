@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Tests for the Hypatia Neural Blackboard — ETS-backed shared state
+# Tests for the Hypatia Neural Blackboard -- ETS-backed shared state
 # for the blackboard architecture (8 networks, 6 phases).
 
 defmodule Hypatia.BlackboardTest do

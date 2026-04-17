@@ -234,7 +234,7 @@ defmodule Hypatia.Safety.QuarantineTest do
       for _ <- 1..3 do
         Quarantine.record_outcome("fpbot", :success)
       end
-      # 4/7 = 57% FP rate — should trigger soft quarantine
+      # 4/7 = 57% FP rate -- should trigger soft quarantine
       # But outcomes are stored newest-first, so consecutive_failures check runs first
       # Let's ensure the ordering is right: successes first, then FPs
       :timer.sleep(100)

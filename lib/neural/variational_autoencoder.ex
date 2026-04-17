@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 #
-# Variational Autoencoder — hermeneutic clustering for Layer 4
+# Variational Autoencoder -- hermeneutic clustering for Layer 4
 # Phase 5 in blackboard execution order
 
 defmodule Hypatia.Neural.VariationalAutoencoder do
@@ -16,7 +16,7 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
   Writes to blackboard: latent coordinates, cluster ID,
   interpretation style label.
 
-  This IS Layer 4 analysis — the VAE's latent space is the
+  This IS Layer 4 analysis -- the VAE's latent space is the
   telescope's first image of agent interpretive patterns.
   """
 
@@ -56,7 +56,7 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
     # Read full blackboard context
     blackboard = Hypatia.Neural.Blackboard.snapshot()
 
-    # Encode to latent space (placeholder — needs training)
+    # Encode to latent space (placeholder -- needs training)
     latent = List.duplicate(0.0, state.latent_dim)
 
     # Find nearest cluster

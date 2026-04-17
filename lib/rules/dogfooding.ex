@@ -3,7 +3,7 @@
 
 defmodule Hypatia.Rules.Dogfooding do
   @moduledoc """
-  Dogfooding compliance rules — HYP-DOG-001 through HYP-DOG-010.
+  Dogfooding compliance rules -- HYP-DOG-001 through HYP-DOG-010.
 
   These rules detect silent failures in the hyperpolymath tool ecosystem.
   Derived from the 2026-04-04 estate-wide dogfooding audit which found
@@ -20,7 +20,7 @@ defmodule Hypatia.Rules.Dogfooding do
   @stale_names %{
     "panic-attacker" => {"panic-attack", "renamed 2026-02-08"},
     "xray" => {"assail", "subcommand renamed 2026-02-08"},
-    "AGPL-3.0" => {"PMPL-1.0-or-later", "license changed — except idaptik and airborne-submarine-squadron"}
+    "AGPL-3.0" => {"PMPL-1.0-or-later", "license changed -- except idaptik and airborne-submarine-squadron"}
   }
 
   # ─── Template placeholders that must be resolved ─────────────────────
@@ -79,7 +79,7 @@ defmodule Hypatia.Rules.Dogfooding do
             file: filepath,
             line: line,
             description:
-              "Unfilled template placeholder '#{placeholder}' — CI tools will silently skip"
+              "Unfilled template placeholder '#{placeholder}' -- CI tools will silently skip"
           }
         end)
       end)
@@ -121,7 +121,7 @@ defmodule Hypatia.Rules.Dogfooding do
                 file: filepath,
                 line: line,
                 description:
-                  "Stale reference '#{old_name}' — now '#{new_name}' (#{reason})"
+                  "Stale reference '#{old_name}' -- now '#{new_name}' (#{reason})"
               }
             ]
           else
@@ -208,7 +208,7 @@ defmodule Hypatia.Rules.Dogfooding do
                 file: filepath,
                 line: line,
                 description:
-                  "Uses 'docker' CLI — policy requires 'podman'. Replace docker commands with podman equivalents."
+                  "Uses 'docker' CLI -- policy requires 'podman'. Replace docker commands with podman equivalents."
               }
             ]
 
@@ -227,7 +227,7 @@ defmodule Hypatia.Rules.Dogfooding do
             file: Path.join(repo_path, "Dockerfile"),
             line: nil,
             description:
-              "File named 'Dockerfile' — policy requires 'Containerfile'. Rename the file."
+              "File named 'Dockerfile' -- policy requires 'Containerfile'. Rename the file."
           }
         ]
       else
@@ -241,7 +241,7 @@ defmodule Hypatia.Rules.Dogfooding do
 
   defp check_consumer_field_names(findings, repo_path) do
     # Check if any jq expressions in workflows reference .file when panic-attack
-    # uses .location (the old pattern — now fixed, but check for the wrong field)
+    # uses .location (the old pattern -- now fixed, but check for the wrong field)
     walk_files(repo_path, [".yml", ".sh"], 3)
     |> Enum.reject(&String.contains?(&1, "/.git/"))
     |> Enum.flat_map(fn filepath ->
@@ -249,7 +249,7 @@ defmodule Hypatia.Rules.Dogfooding do
 
       if String.contains?(content, "panic-attack") or
            String.contains?(content, "panic-attacker") do
-        # Check for .location.file pattern (treats string as object — always null)
+        # Check for .location.file pattern (treats string as object -- always null)
         if String.contains?(content, ".location.file") do
           line = find_line_number(content, ".location.file")
 

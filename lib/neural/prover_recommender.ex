@@ -12,18 +12,18 @@ defmodule Hypatia.Neural.ProverRecommender do
   vector against the learned centres.
 
   This is the first module in Hypatia's neural subsystem that consumes
-  *real* post-V4 training data — previous networks either used synthetic
+  *real* post-V4 training data -- previous networks either used synthetic
   fixtures or trained on the 'findings' data shape. Here the RBF is
   trained directly on the same aggregates that feed the PROVEN/SANCTIFY
   certificate pipeline.
 
   Feature extraction (6 dimensions):
-    1. class_score     — obligation_class mapped to a scalar (one value per class)
-    2. prover_score    — prover mapped to a scalar
-    3. claim_length    — normalized to [0,1] by 2000-char cap
-    4. confidence      — stored confidence from the attempt row
-    5. duration_log    — log10(duration_ms + 1) / 5.0  (≈0 for instant, ≈1 for ~100s)
-    6. retry_flag      — 1.0 if parent_attempt_id is non-null, else 0.0
+    1. class_score     -- obligation_class mapped to a scalar (one value per class)
+    2. prover_score    -- prover mapped to a scalar
+    3. claim_length    -- normalized to [0,1] by 2000-char cap
+    4. confidence      -- stored confidence from the attempt row
+    5. duration_log    -- log10(duration_ms + 1) / 5.0  (≈0 for instant, ≈1 for ~100s)
+    6. retry_flag      -- 1.0 if parent_attempt_id is non-null, else 0.0
 
   Target: outcome mapped to a probability:
     success → 1.0   failure → 0.0   timeout → 0.25   unknown → 0.5
@@ -123,7 +123,7 @@ defmodule Hypatia.Neural.ProverRecommender do
   defp fetch_attempts(limit, base_url \\ nil) do
     resolved_url = base_url || @verisim_base_url
     url = "#{resolved_url}/api/v1/proof_attempts?limit=#{limit}"
-    # verisim-api /proof_attempts GET doesn't exist yet — fall back to ClickHouse
+    # verisim-api /proof_attempts GET doesn't exist yet -- fall back to ClickHouse
     # strategy endpoint aggregates when the row-level endpoint is absent.
     case http_get(url) do
       {:ok, body} -> Jason.decode(body)

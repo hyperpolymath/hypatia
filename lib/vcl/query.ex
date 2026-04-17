@@ -20,7 +20,7 @@ defmodule Hypatia.VCL.Query do
       {:ok, critical} = Hypatia.VCL.Query.scans_by_severity("Critical")
       {:ok, shell_recipes} = Hypatia.VCL.Query.recipes_by_language("shell")
 
-      # Cross-repo analytics (NEW — not possible with raw JSON)
+      # Cross-repo analytics (NEW -- not possible with raw JSON)
       {:ok, trending} = Hypatia.VCL.Query.trending_patterns(:increasing)
       {:ok, correlations} = Hypatia.VCL.Query.cross_repo_pattern_correlation("PA009")
       {:ok, timeline} = Hypatia.VCL.Query.outcome_timeline("recipe-shell-quote-vars")
@@ -219,7 +219,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   # ---------------------------------------------------------------------------
-  # Cross-Repo Analytics (NEW — not possible with raw JSON reads)
+  # Cross-Repo Analytics (NEW -- not possible with raw JSON reads)
   # ---------------------------------------------------------------------------
 
   @doc """
@@ -239,7 +239,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   @doc """
-  Analyze pattern correlation — which patterns tend to appear together in the same repos.
+  Analyze pattern correlation -- which patterns tend to appear together in the same repos.
   Returns a list of {pattern_a, pattern_b, shared_repo_count} tuples.
   """
   def pattern_correlations(min_shared \\ 2) do
@@ -274,7 +274,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   @doc """
-  Get outcome timeline for a recipe — success/failure rates over time.
+  Get outcome timeline for a recipe -- success/failure rates over time.
   Returns a list of %{date, successes, failures, total} per day.
   """
   def outcome_timeline(recipe_id) do
@@ -303,7 +303,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   @doc """
-  Compute recipe effectiveness — success rate, total attempts, trend.
+  Compute recipe effectiveness -- success rate, total attempts, trend.
   """
   def recipe_effectiveness(recipe_id) do
     case outcomes_for_recipe(recipe_id) do
@@ -373,7 +373,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   @doc """
-  Category distribution — how many findings per PA category across all repos.
+  Category distribution -- how many findings per PA category across all repos.
   """
   def category_distribution do
     case fetch_scans() do
@@ -404,7 +404,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   @doc """
-  Recipe coverage — what percentage of patterns have automated fix recipes.
+  Recipe coverage -- what percentage of patterns have automated fix recipes.
   """
   def recipe_coverage do
     with {:ok, patterns} <- fetch_patterns(),
@@ -436,7 +436,7 @@ defmodule Hypatia.VCL.Query do
   end
 
   @doc """
-  Pipeline health summary — comprehensive status of the entire system.
+  Pipeline health summary -- comprehensive status of the entire system.
   """
   def pipeline_health do
     with {:ok, scans} <- fetch_scans(),

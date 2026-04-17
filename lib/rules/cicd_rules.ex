@@ -3,7 +3,7 @@
 defmodule Hypatia.Rules.CicdRules do
   @moduledoc """
   Primary Elixir CI/CD policy rules (migrated from legacy Logtalk engine).
-  """
+
   Defines repository must-have rules, commit blocking conditions,
   auto-fix capabilities, CI/CD waste detection, and license validation.
   """
@@ -43,12 +43,12 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @blocked_patterns [
-    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned — use ReScript"},
-    %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned — use Deno"},
-    %{id: :golang_detected, glob: "*.go", reason: "Go banned — use Rust"},
-    %{id: :python_detected, glob: "*.py", reason: "Python banned — use Julia/Rust",
+    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned -- use ReScript"},
+    %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
+    %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
+    %{id: :python_detected, glob: "*.py", reason: "Python banned -- use Julia/Rust",
       exception: "SaltStack"},
-    %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned — use justfile"},
+    %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
     %{id: :unpinned_action,
       pattern: ~r/uses:\s+[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+@(v[0-9][a-zA-Z0-9.-]*|main|master)/,
       reason: "GitHub Actions and reusable workflows must be SHA-pinned"},
@@ -61,26 +61,26 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "AGPL-3.0 replaced by PMPL-1.0-or-later",
       exception_repos: ["game-server-admin", "idaptik", "airborne-submarine-squadron"]},
     %{id: :innerhtml_usage, pattern: ~r/\.innerHTML\s*=|document\.write\(/,
-      reason: "innerHTML/document.write banned — use rescript-dom-mounter SafeDOM",
+      reason: "innerHTML/document.write banned -- use rescript-dom-mounter SafeDOM",
       applies_to: ["*.js", "*.res"]},
     %{id: :eval_in_shell, pattern: ~r/\beval\b/,
-      reason: "eval banned in shell scripts — use direct expansion or arrays",
+      reason: "eval banned in shell scripts -- use direct expansion or arrays",
       applies_to: ["*.sh"]},
     %{id: :download_then_run_shell, pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
-      reason: "download-then-run banned — verify checksum/signature before execution",
+      reason: "download-then-run banned -- verify checksum/signature before execution",
       applies_to: ["*.sh", "*.yml", "*.yaml"]},
     %{id: :js_insecure_random_security_context,
       pattern: ~r/(?i)\b(session|token|nonce|secret|auth|csrf)\w*\b\s*[:=][^\n]*Math\.random\(/,
-      reason: "Math.random in security-sensitive context — use crypto.randomUUID/getRandomValues",
+      reason: "Math.random in security-sensitive context -- use crypto.randomUUID/getRandomValues",
       applies_to: ["*.js", "*.ts"]},
     %{id: :hardcoded_tmp, pattern: ~r/["'\/]tmp\//,
-      reason: "Hardcoded /tmp/ paths — use mktemp",
+      reason: "Hardcoded /tmp/ paths -- use mktemp",
       applies_to: ["*.sh"], exception: "Containerfile"},
     %{id: :template_placeholder, pattern: ~r/\{\{(REPO|OWNER|FORGE|AUTHOR)\}\}/,
       reason: "Unfilled RSR template placeholder",
       exception: "rsr-template-repo"},
     %{id: :deno_all_perms, pattern: ~r/deno\s+run\s+-A\b/,
-      reason: "Deno -A (all permissions) banned — use specific --allow-* flags"},
+      reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"},
     %{id: :mu_plugin_no_guard, pattern: ~r/define\(\s*['"]WP_DEBUG['"]/,
       reason: "WordPress mu-plugins must guard constants with defined() check",
       applies_to: ["*/mu-plugins/*.php"]}
@@ -119,7 +119,7 @@ defmodule Hypatia.Rules.CicdRules do
     %{id: :semgrep_language_mismatch, severity: :medium, auto_fixable: true,
       description: "semgrep.yml in repos without Python/Go/JS"},
     %{id: :excessive_workflow_count, severity: :low, auto_fixable: false,
-      description: "More than 15 workflows — consolidate"},
+      description: "More than 15 workflows -- consolidate"},
     %{id: :missing_directory_workflow, severity: :low, auto_fixable: true,
       description: "zig-ffi.yml workflow but no zig/ directory"},
 
