@@ -1,5 +1,5 @@
 {"manifest_version": "1.0.0", "generated": "2026-03-29", "description": "Target repos for Hypatia scorecard batch deployment", "repos": [
-  {"local": "007-lang", "github": "hyperpolymath/007"},
+  {"local": "007-lang", "github": "The-Metadatastician/007"},
   {"local": "a2ml-deno", "github": "hyperpolymath/a2ml-deno"},
   {"local": "a2ml_gleam", "github": "hyperpolymath/a2ml_gleam"},
   {"local": "a2ml-haskell", "github": "hyperpolymath/a2ml-haskell"},
