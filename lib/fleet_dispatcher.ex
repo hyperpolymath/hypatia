@@ -12,6 +12,7 @@ defmodule Hypatia.FleetDispatcher do
   alias Hypatia.TriangleRouter
   alias Hypatia.DirectGitHubPR
   alias Hypatia.Rules.ProofObligation
+  alias Hypatia.Rules.DependabotAlerts
 
   require Logger
 
@@ -200,6 +201,72 @@ defmodule Hypatia.FleetDispatcher do
         {:error, :unknown_proof_tier}
     end
   end
+
+  @doc """
+  Dispatch a DependabotAlerts recipe through the Safety Triangle.
+
+  Called by `DependabotAlerts.fixes_from_alerts/3` and any code that
+  constructs `{:dependabot_fix, recipe, pattern}` tuples.
+
+  Triangle routing for Dependabot alerts:
+  - `:eliminate` + confidence >= 0.95 -> robot-repo-automaton auto-bumps
+    (subject to Kin Gate, rate limiter, exclusion registry)
+  - `:eliminate` + confidence in [0.85, 0.95) -> rhodibot opens a PR
+  - `:substitute` -> rhodibot opens a PR (major bump / breaking change)
+  - `:control` -> sustainabot advisory (no auto-fix path)
+  """
+  def dispatch_routed_action({:dependabot_fix, recipe, pattern}) do
+    tier = Map.get(recipe, "triangle_tier", "control")
+    confidence = Map.get(recipe, "confidence", 0.5)
+
+    Logger.info("DependabotFix dispatch: #{DependabotAlerts.summary(recipe)}")
+
+    case tier do
+      "eliminate" ->
+        dispatch_eliminate_via_fleet(
+          %{
+            "confidence" => confidence,
+            "description" => Map.get(recipe, "description", ""),
+            "id" => Map.get(recipe, "id"),
+            "auto_fixable" => Map.get(recipe, "auto_fixable", false)
+          },
+          Map.merge(pattern, %{"dependabot_recipe" => recipe})
+        )
+
+      "substitute" ->
+        dispatch_to_rhodibot(%{
+          type: :fix_suggestion,
+          repo: get_pattern_repo(pattern),
+          file: Map.get(pattern, "file", Map.get(recipe, "manifest_path", "dependencies")),
+          issue:
+            "Dependabot #{Map.get(recipe, "severity", "?")} alert on " <>
+              "#{Map.get(recipe, "ecosystem")}/#{Map.get(recipe, "package")}" <>
+              maybe_cve(Map.get(recipe, "cve")),
+          suggestion: Map.get(recipe, "description", "Bump to #{Map.get(recipe, "to_version")}")
+        })
+
+      "control" ->
+        dispatch_to_sustainabot(%{
+          type: :eco_score,
+          repo: get_pattern_repo(pattern),
+          score: Map.get(pattern, "severity_score", 0.5),
+          details: Map.get(recipe, "description", "Dependabot alert requires human review")
+        })
+
+      unknown ->
+        Logger.warning("DependabotFix: unknown tier '#{unknown}', routing to sustainabot")
+        dispatch_to_sustainabot(%{
+          type: :eco_score,
+          repo: get_pattern_repo(pattern),
+          score: 0.5,
+          details: "Unknown dependabot_fix tier: #{unknown}"
+        })
+    end
+  end
+
+  defp maybe_cve(nil), do: ""
+  defp maybe_cve(""), do: ""
+  defp maybe_cve(cve), do: " (#{cve})"
 
   # --- Eliminate dispatch helpers (called after Gate approval) ---
 

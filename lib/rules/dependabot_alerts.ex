@@ -315,6 +315,299 @@ defmodule Hypatia.Rules.DependabotAlerts do
     end
   end
 
+  # ─── Safety Triangle dispatch (DA005-DA008) ───────────────────────────
+  #
+  # Classifies a Dependabot alert through the Safety Triangle so the
+  # FleetDispatcher can route it to the right bot at the right confidence.
+  # Mirrors `Hypatia.Rules.ProofObligation`'s recipe shape: the returned
+  # map is wrapped as `{:dependabot_fix, recipe, pattern}` and consumed
+  # by `FleetDispatcher.dispatch_routed_action/1`.
+  #
+  #   eliminate  -> robot-repo-automaton auto-bumps the dep (auto_execute)
+  #                 or rhodibot opens a PR (review) depending on confidence
+  #   substitute -> rhodibot opens a PR for human review (major bump /
+  #                 breaking change suspected)
+  #   control    -> sustainabot advisory (no auto-fix: dismissed-without-fix,
+  #                 no patched upstream version, transitive-only)
+  #
+  # Confidence floor 0.85 (review), ceiling 0.98; auto-execute threshold
+  # is FleetDispatcher's 0.95 -- so "eliminate" alone does not guarantee
+  # auto-execute; the bump type and severity jointly decide.
+
+  # Ecosystems where semver is strictly enforced -- patch/minor bumps are
+  # almost always non-breaking, so we rate them with higher confidence.
+  @strict_semver_ecosystems ~w(rust npm pip pypi composer nuget maven packagist)
+
+  @doc """
+  DA005: Classify a raw Dependabot alert through the Safety Triangle.
+
+  Returns one of:
+  - `{:eliminate, confidence}` -- safe auto-bump (patch/minor within semver)
+  - `{:substitute, reason}` -- needs PR review (major bump / breaking change)
+  - `{:control, reason}` -- no safe fix (dismissed, no upstream patch, etc.)
+
+  This is prover-agnostic -- the same classifier works across all
+  ecosystems (npm/rust/pypi/go/maven/etc.). Confidence is tuned so that
+  patch bumps on strict-semver ecosystems land in auto-execute, minor
+  bumps in review, and anything looking like a major bump falls out of
+  the auto-fix path entirely.
+  """
+  @spec classify_alert(map()) ::
+          {:eliminate, float()}
+          | {:substitute, String.t()}
+          | {:control, String.t()}
+  def classify_alert(alert) when is_map(alert) do
+    state = Map.get(alert, "state", "open")
+    severity = get_in(alert, ["security_advisory", "severity"]) || "medium"
+    ecosystem = get_in(alert, ["security_vulnerability", "package", "ecosystem"]) || ""
+    from_range = get_in(alert, ["security_vulnerability", "vulnerable_version_range"])
+    to_version = get_in(alert, ["security_vulnerability", "first_patched_version", "identifier"])
+    dismissed_reason = Map.get(alert, "dismissed_reason")
+
+    cond do
+      state == "dismissed" and dismissed_reason in ["tolerable_risk", "no_bandwidth", nil] ->
+        {:control, "dismissed as '#{dismissed_reason || "no reason"}' -- human acceptance of risk"}
+
+      state == "fixed" ->
+        {:control, "already fixed upstream -- no action needed"}
+
+      is_nil(to_version) or to_version == "" ->
+        {:control, "no upstream patch available yet"}
+
+      true ->
+        bump = classify_bump(from_range, to_version)
+        confidence = eliminate_confidence(severity, bump, ecosystem)
+
+        case {bump, confidence} do
+          {:major, _} ->
+            {:substitute, "major version bump -- potentially breaking"}
+
+          {_, c} when c >= 0.85 ->
+            {:eliminate, c}
+
+          {_, _} ->
+            {:substitute, "low-confidence patch -- review before applying"}
+        end
+    end
+  end
+
+  @doc """
+  DA006: Convert a raw Dependabot alert into a recipe map compatible with
+  `FleetDispatcher.dispatch_routed_action/1`.
+
+  The returned map is wrapped as `{:dependabot_fix, recipe, pattern}` by
+  `fixes_from_alerts/3`. Fields:
+
+  - `"id"` -- deterministic recipe ID (`da-` + hash of alert number + repo)
+  - `"type"` -- `"dependabot_fix"`
+  - `"triangle_tier"` -- `"eliminate" | "substitute" | "control"`
+  - `"confidence"` -- 0.0..1.0
+  - `"ecosystem"`, `"package"`, `"from_version"`, `"to_version"`, `"cve"`,
+    `"severity"`, `"manifest_path"`, `"alert_number"`, `"alert_url"`
+  - `"auto_fixable"` -- true iff eliminate tier and confidence >= 0.95
+  - `"requires_human"` -- true for control tier
+  - `"description"` -- log/PR-body summary line
+  - `"repo"` -- `owner/repo`
+  """
+  @spec to_recipe(map(), keyword()) :: map()
+  def to_recipe(alert, opts \\ []) when is_map(alert) do
+    repo = Keyword.get(opts, :repo, "unknown")
+    classification = classify_alert(alert)
+
+    {tier, confidence, reason} =
+      case classification do
+        {:eliminate, c} -> {"eliminate", c, nil}
+        {:substitute, r} -> {"substitute", 0.85, r}
+        {:control, r} -> {"control", 0.50, r}
+      end
+
+    severity = get_in(alert, ["security_advisory", "severity"]) || "unknown"
+    package = get_in(alert, ["security_vulnerability", "package", "name"]) || "unknown"
+    ecosystem = get_in(alert, ["security_vulnerability", "package", "ecosystem"]) || "unknown"
+    from_range = get_in(alert, ["security_vulnerability", "vulnerable_version_range"])
+    to_version = get_in(alert, ["security_vulnerability", "first_patched_version", "identifier"])
+    cve = get_in(alert, ["security_advisory", "cve_id"])
+    manifest_path = get_in(alert, ["dependency", "manifest_path"])
+    alert_number = alert["number"]
+    alert_url = alert["html_url"]
+
+    auto_fixable = tier == "eliminate" and confidence >= 0.95
+
+    description =
+      case tier do
+        "eliminate" ->
+          "Bump #{ecosystem}/#{package} from #{from_range || "?"} to #{to_version} (#{severity})"
+
+        "substitute" ->
+          "Review #{ecosystem}/#{package} bump to #{to_version} -- #{reason}"
+
+        "control" ->
+          "Dependabot alert #{alert_number} on #{ecosystem}/#{package} -- #{reason}"
+      end
+
+    %{
+      "id" => recipe_id(alert_number, repo),
+      "type" => "dependabot_fix",
+      "triangle_tier" => tier,
+      "confidence" => confidence,
+      "ecosystem" => ecosystem,
+      "package" => package,
+      "from_version" => from_range,
+      "to_version" => to_version,
+      "cve" => cve,
+      "severity" => severity,
+      "manifest_path" => manifest_path,
+      "alert_number" => alert_number,
+      "alert_url" => alert_url,
+      "auto_fixable" => auto_fixable,
+      "requires_human" => tier == "control",
+      "description" => description,
+      "repo" => repo
+    }
+  end
+
+  @doc """
+  DA007: Convert a list of raw alerts into `{:dependabot_fix, recipe, pattern}`
+  tuples ready for `FleetDispatcher.dispatch_routed_action/1`.
+
+  `pattern` is a pared-down shape matching what FleetDispatcher expects:
+  it carries `file`, `description`, `severity_score`, and `routed_repo`
+  so downstream helpers can log / dispatch uniformly.
+  """
+  @spec fixes_from_alerts([map()], String.t(), String.t()) :: [
+          {:dependabot_fix, map(), map()}
+        ]
+  def fixes_from_alerts(alerts, owner, repo) when is_list(alerts) do
+    full_repo = "#{owner}/#{repo}"
+
+    alerts
+    |> Enum.filter(&(&1["state"] == "open"))
+    |> Enum.map(fn alert ->
+      recipe = to_recipe(alert, repo: full_repo)
+
+      pattern = %{
+        "id" => Map.get(recipe, "id"),
+        "file" => Map.get(recipe, "manifest_path") || "dependencies",
+        "description" => Map.get(recipe, "description"),
+        "severity" => Map.get(recipe, "severity"),
+        "severity_score" => severity_to_score(Map.get(recipe, "severity")),
+        "routed_repo" => full_repo,
+        "source" => "dependabot"
+      }
+
+      {:dependabot_fix, recipe, pattern}
+    end)
+  end
+
+  @doc """
+  DA008: Fetch alerts for a repo and produce routable dispatch tuples.
+
+  Returns `{:ok, [tuples]}` or `{:error, reason}`. Does not dispatch --
+  callers pipe the tuples into `FleetDispatcher.dispatch_routed_action/1`
+  (or the batched dispatcher) so gate review, rate limiting, and
+  exclusion-registry checks apply uniformly.
+  """
+  @spec fixes_from_repo(String.t(), String.t()) ::
+          {:ok, [{:dependabot_fix, map(), map()}]} | {:error, String.t()}
+  def fixes_from_repo(owner, repo) do
+    case fetch_alerts(owner, repo) do
+      {:ok, alerts} -> {:ok, fixes_from_alerts(alerts, owner, repo)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Human-readable summary of a dependabot_fix recipe for logs.
+  """
+  @spec summary(map()) :: String.t()
+  def summary(recipe) when is_map(recipe) do
+    tier = Map.get(recipe, "triangle_tier", "unknown")
+    pkg = Map.get(recipe, "package", "?")
+    eco = Map.get(recipe, "ecosystem", "?")
+    conf = Map.get(recipe, "confidence", 0.0)
+    "DependabotFix[#{tier}] #{eco}/#{pkg} conf=#{:erlang.float_to_binary(conf, decimals: 2)}"
+  end
+
+  # Classify the kind of version bump from the vulnerable range and the
+  # first patched version. This is a heuristic: if either string is
+  # missing or un-parseable, default to :minor (the safer middle bucket).
+  defp classify_bump(nil, _), do: :minor
+  defp classify_bump(_, nil), do: :minor
+
+  defp classify_bump(from_range, to_version) when is_binary(from_range) and is_binary(to_version) do
+    from = extract_first_major(from_range)
+    to_major = first_semver_part(to_version)
+
+    cond do
+      is_nil(from) or is_nil(to_major) -> :minor
+      to_major > from -> :major
+      to_major == from -> :patch_or_minor
+      true -> :minor
+    end
+  end
+
+  # Pull the first major version integer out of a range like
+  # ">= 1.2.0, < 1.2.5" or "< 3.0.0" or "1.2.3 - 1.2.5".
+  defp extract_first_major(range_str) do
+    case Regex.run(~r/(\d+)\./, range_str) do
+      [_, n] -> String.to_integer(n)
+      _ -> nil
+    end
+  end
+
+  defp first_semver_part(version) do
+    case String.split(version, ".", parts: 2) do
+      [maj | _] ->
+        case Integer.parse(String.trim_leading(maj, "v")) do
+          {n, _} -> n
+          :error -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  # Eliminate-tier confidence based on severity, bump kind, and ecosystem
+  # semver strictness. Patch-only bumps on strict-semver ecosystems are
+  # the highest-confidence auto-fix target.
+  defp eliminate_confidence(severity, bump, ecosystem) do
+    base =
+      case {severity, bump} do
+        {"critical", :patch_or_minor} -> 0.97
+        {"high", :patch_or_minor} -> 0.95
+        {"medium", :patch_or_minor} -> 0.92
+        {"low", :patch_or_minor} -> 0.88
+        {"critical", :minor} -> 0.93
+        {"high", :minor} -> 0.90
+        {"medium", :minor} -> 0.87
+        {"low", :minor} -> 0.82
+        _ -> 0.80
+      end
+
+    if String.downcase(ecosystem) in @strict_semver_ecosystems do
+      min(base + 0.01, 0.98)
+    else
+      max(base - 0.03, 0.70)
+    end
+  end
+
+  defp severity_to_score("critical"), do: 1.0
+  defp severity_to_score("high"), do: 0.8
+  defp severity_to_score("medium"), do: 0.5
+  defp severity_to_score("low"), do: 0.2
+  defp severity_to_score(_), do: 0.5
+
+  # Deterministic recipe ID: "da-" + 12-char sha256 prefix of (repo, alert_number).
+  defp recipe_id(alert_number, repo) do
+    hash =
+      :crypto.hash(:sha256, "#{repo}:da:#{alert_number}")
+      |> Base.encode16(case: :lower)
+      |> String.slice(0, 12)
+
+    "da-#{hash}"
+  end
+
   # ─── GitHub API ───────────────────────────────────────────────────────
 
   defp fetch_alerts(owner, repo) do
