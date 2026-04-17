@@ -471,7 +471,7 @@ fn find_hypatia_cli() -> Option<PathBuf> {
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("../../hypatia-cli.sh"))),
         // Well-known development paths
-        Some(PathBuf::from("/var/mnt/eclipse/repos/hypatia/hypatia-cli.sh")),
+        Some(PathBuf::from("/var/mnt/eclipse/repos/verification-ecosystem/hypatia/hypatia-cli.sh")),
         Some(dirs::home_dir()
             .unwrap_or_default()
             .join("Documents/hyperpolymath-repos/hypatia/hypatia-cli.sh")),
