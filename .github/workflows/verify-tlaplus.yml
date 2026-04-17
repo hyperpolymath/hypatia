@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+name: Verify TLA+ specs
+
+# Model-checks the Hypatia TLA+ specifications (H8 Kin-gate atomicity + any
+# future specs under verification/proofs/tlaplus/). Runs on every push /
+# pull_request that touches the specs, and weekly as a regression gate.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'verification/proofs/tlaplus/**'
+      - '.github/workflows/verify-tlaplus.yml'
+      - 'Justfile'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'verification/proofs/tlaplus/**'
+      - '.github/workflows/verify-tlaplus.yml'
+      - 'Justfile'
+  schedule:
+    - cron: '0 4 * * 1'   # Mondays 04:00 UTC — regression catch
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  tlc:
+    name: TLC model-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Eclipse Temurin 21 JRE
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache tla2tools.jar
+        id: cache-tla
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        with:
+          path: ~/.local/share/tla2tools.jar
+          key: tla2tools-v1.8.0
+
+      - name: Fetch tla2tools.jar
+        if: steps.cache-tla.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.local/share
+          curl -sSL -o ~/.local/share/tla2tools.jar \
+            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+          ls -la ~/.local/share/tla2tools.jar
+
+      - name: Model-check KinGate (H8)
+        working-directory: verification/proofs/tlaplus
+        run: |
+          java -XX:+UseParallelGC \
+            -cp "$HOME/.local/share/tla2tools.jar" tlc2.TLC \
+            -workers auto -config KinGate.cfg KinGate.tla \
+            | tee tlc.log
+          # Fail if TLC printed an error or didn't declare completion.
+          if grep -q "Error:" tlc.log; then
+            echo "::error::TLC found an invariant / property violation"
+            exit 1
+          fi
+          if ! grep -q "Model checking completed. No error has been found." tlc.log; then
+            echo "::error::TLC did not report clean completion"
+            exit 1
+          fi
+
+      - name: Upload TLC log on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tlc-log
+          path: verification/proofs/tlaplus/tlc.log
+          retention-days: 14

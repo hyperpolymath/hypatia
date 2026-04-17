@@ -60,6 +60,35 @@ compile-abi:
 compile-verify:
     cd verify && idris2 --build hypatia-verify.ipkg
 
+# Model-check TLA+ specifications (e.g. H8 Kin-gate atomicity)
+verify-tlaplus:
+    #!/usr/bin/env bash
+    # Uses host Java if available, otherwise an ephemeral eclipse-temurin:21-jre
+    # container. Honours $JAVA / $TLA2TOOLS_JAR env overrides.
+    set -euo pipefail
+    SPEC_DIR="verification/proofs/tlaplus"
+    TLA2TOOLS_JAR="${TLA2TOOLS_JAR:-$HOME/.local/share/tla2tools.jar}"
+    if [ ! -f "$TLA2TOOLS_JAR" ]; then
+        mkdir -p "$(dirname "$TLA2TOOLS_JAR")"
+        echo "Fetching tla2tools.jar -> $TLA2TOOLS_JAR"
+        curl -sSL -o "$TLA2TOOLS_JAR" \
+            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+    fi
+    if command -v java >/dev/null 2>&1; then
+        echo "== Using host Java $(java -version 2>&1 | head -1)"
+        cd "$SPEC_DIR"
+        java -XX:+UseParallelGC -cp "$TLA2TOOLS_JAR" tlc2.TLC \
+            -workers auto -config KinGate.cfg KinGate.tla
+    else
+        echo "== No host Java; using ephemeral eclipse-temurin:21-jre container"
+        podman run --rm \
+            -v "$PWD/$SPEC_DIR:/work:Z" \
+            -v "$TLA2TOOLS_JAR:/tla2tools.jar:ro,Z" \
+            -w /work docker.io/library/eclipse-temurin:21-jre \
+            java -XX:+UseParallelGC -cp /tla2tools.jar tlc2.TLC \
+                -workers auto -config KinGate.cfg KinGate.tla
+    fi
+
 # Build Zig FFI bridge
 build-ffi:
     cd ffi/zig && zig build
