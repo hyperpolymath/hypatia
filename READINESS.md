@@ -58,14 +58,14 @@
 ### `recipe-matcher` — Recipe Execution and Validation (Grade: B)
 
 **Evidence:**
-- 56 justfile recipes defined and exercised
+- 56 Justfile recipes defined and exercised
 - Matched against targets in all primary hyperpolymath languages
 - Wired into `hypatia-scan.yml` enforcement on 283+ repos
 - Validated on diverse build systems: cargo, deno, mix, gleam, zig build, julia, just
 
 **Known limitations:**
 - Recipe coverage for Idris2/Pack build system is partial
-- Custom monorepo justfiles sometimes need manual override
+- Custom monorepo Justfiles sometimes need manual override
 
 **Promotion path to A:** External users validate recipes in non-hyperpolymath contexts.
 

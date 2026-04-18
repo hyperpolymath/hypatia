@@ -781,7 +781,7 @@ scan_workflow_hygiene() {
         if [[ ! -f "$dir/.machine_readable/STATE.scm" && ! -f "$dir/justfile" ]]; then
             emit_finding "low" "workflow_hygiene" "irrelevant_rsr_antipattern" \
                 "$wf_dir/rsr-antipattern.yml" 0 \
-                "rsr-antipattern.yml present but repo lacks RSR markers (no STATE.scm or justfile)" "CWE-1059" \
+                "rsr-antipattern.yml present but repo lacks RSR markers (no STATE.scm or Justfile)" "CWE-1059" \
                 "Remove rsr-antipattern.yml — not an RSR-structured repo" "true"
         fi
     fi
