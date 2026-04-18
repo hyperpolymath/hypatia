@@ -1,0 +1,536 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+= Hypatia — CRG Audit (2026-04-18)
+Jonathan D.A. Jewell
+2026-04-18
+:toc:
+:sectnums:
+
+== Scope and Standard
+
+Evaluates the `hypatia` repository (neurosymbolic-intelligence rule engine for
+the hyperpolymath estate) against *Component Readiness Grades v2.0 (STRICT)*,
+2026-03-30 revision. Paired with the boj-server + gossamer + academic-workflow-suite
+audits written the same day.
+
+- Standard: `standards/component-readiness-grades/COMPONENT-READINESS-GRADES.md`
+- Criteria boilerplate: `rsr-template-repo/docs/governance/CRG-CRITERIA.adoc`
+- Audit template: `rsr-template-repo/docs/governance/CRG-AUDIT-TEMPLATE.adoc`
+- Self-declared grade (prior art):
+  * `.machine_readable/6a2/STATE.a2ml` has *no* `crg-grade` / `[crg]` entry at all.
+    Repo declares `completion-percentage = 78`, `maturity = "alpha"`,
+    `status = "active"` — no CRG letter claimed in STATE.a2ml as of today.
+  * `READINESS.md` (v1.0 schema, 2026-04-04) asserts *overall Grade B*, with
+    three of six components (`pattern-analyzer`, `recipe-matcher`,
+    `hypatia-scan.yml`) graded `B` and three (`triangle-router`,
+    `fleet-dispatcher`, `neural-coordinator`) graded `C`.
+- Audit date: 2026-04-18
+- Auditor: Jonathan D.A. Jewell
+
+Schema-drift note: STATE.a2ml omits any CRG key entirely. HYP-S005 (flat
+`crg-grade = …`) and the gossamer-style sectioned (`[crg] / grade = …`) both
+fail to detect a grade here. The canonical document the audit must refute is
+therefore `READINESS.md`, not STATE.a2ml. This is itself a governance defect:
+the authoritative machine-readable state does not carry a CRG field.
+
+The audit grades the repo *as-is today*, not aspirationally.
+
+== v2.0 Strictness Recap
+
+[cols="1,3,4"]
+|===
+| Grade | Release Stage | Hard Requirement (v2.0)
+
+| X | None             | Untested.
+| F | Reject           | Harmful, wasteful, or superseded.
+| E | Pre-alpha        | >=1 test, failures documented.
+| D | Alpha            | Test matrix + scope documented + *RSR compliance mandatory*.
+| C | Alpha-stable     | Dogfooded, CI green, *deep per-file + per-directory annotation*.
+| B | Beta             | 6+ *diverse* external targets, issues fed back.
+| A | Stable           | Real-world external feedback confirms value; no harm.
+|===
+
+Publication requires B+. Long alpha is discipline, not shame.
+
+== Evidence Inventory (verified 2026-04-18)
+
+=== Structural compliance (Grade D floor)
+
+[cols="2,1,3"]
+|===
+| Item | State | Source
+
+| RSR mandatory workflows (17+)
+| PRESENT (33 workflows)
+| `.github/workflows/` — includes `hypatia-scan.yml`, `codeql.yml`, `scorecard.yml`, `quality.yml`, `mirror.yml`, `rsr-antipattern.yml`, `security-policy.yml`, `wellknown-enforcement.yml`, `workflow-linter.yml`, `npm-bun-blocker.yml`, `ts-blocker.yml`, `secret-scanner.yml`, `scorecard-enforcer.yml`, `instant-sync.yml`, `guix-nix-policy.yml`, `ci.yml`, `rust-ci.yml`, `rust.yml`, `e2e.yml`, `dogfood-gate.yml`, `stress-test.yml`, `verify-tlaplus.yml`, plus others.
+
+| `.machine_readable/6a2/` canonical A2ML
+| PRESENT (STATE, META, ECOSYSTEM, AGENTIC, NEUROSYM, PLAYBOOK)
+| Layout matches CLAUDE.md invariant
+
+| `0-AI-MANIFEST.a2ml`
+| PRESENT
+| Root (`0-AI-MANIFEST.a2ml`, 5,295 B)
+
+| `README.adoc` + `EXPLAINME.adoc` + `READINESS.md`
+| PRESENT (all three)
+| Root
+
+| `docs/` subtree (architecture, design, api, diagrams, reports)
+| PRESENT
+| `docs/architecture/README.md`, `docs/design/README.md`, plus 20+ top-level `.adoc` docs.
+
+| `guix.scm` + `flake.nix`
+| PRESENT (primary + fallback; `flake.lock` also present)
+| Root
+
+| `.well-known/` (security.txt, ai.txt, humans.txt)
+| PRESENT (+ `groove/` subdir)
+| Root `.well-known/`
+
+| `LICENSE` + `LICENSE-MPL-2.0` fallback
+| PRESENT (`LICENSE` PMPL-1.0-or-later; `LICENSES/PMPL-1.0-or-later.txt` + `LICENSES/MPL-2.0.txt`; additional `license/`, `licenses/` legacy dirs also present — three parallel license-text locations)
+| Root
+
+| `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.adoc`, `MAINTAINERS.adoc`
+| PRESENT
+| Root
+
+| `Containerfile` (not `Dockerfile`)
+| PRESENT (`deploy/Containerfile` + `integration/Containerfile.test`); *zero* `Dockerfile*` at any depth
+| Container policy cleanly met
+
+| No `package.json` / npm / webpack
+| CLEAN — 0 `package.json` in-tree (Deno-only per `deno.json`)
+| Deno policy met
+
+| Contractile trident
+| PRESENT (`INTENT.contractile`, `TRUST.contractile`, `MUST.contractile`, `ADJUST.contractile`) + `contractiles/` with six-verb subtree (`dust/`, `intend/`, `k9/`, `must/`, `trust/`)
+| `.machine_readable/`
+
+| `Justfile` (capital J, no `Makefile`)
+| PRESENT (root `Justfile`, 13,210 B; additional `tasks/Justfile`); *zero* `Makefile`
+| Build-system policy met
+
+| SPDX headers on source
+| PRESENT on sampled Elixir, Idris2, Zig, Nickel, shell files (`PMPL-1.0-or-later`)
+| Spot-checked `lib/`, `src/abi/`, `ffi/zig/src/`
+
+| Remote
+| `origin = git@github.com:hyperpolymath/hypatia.git` + four mirrors (bitbucket, codeberg, gitlab, sourcehut)
+| `git remote -v`
+|===
+
+RSR compliance verdict: *met, cleanly*. Grade D floor is satisfied. Hypatia
+has the tightest RSR structural posture of any v2.0-audited repo to date — no
+Containerfile naming drift, no npm, no Makefile, no banned-language policy
+hits, contractile trident complete, full mirror fan-out configured.
+
+=== Code and proofs
+
+[cols="2,1,3"]
+|===
+| Item | Count | Notes
+
+| Idris2 ABI modules (`src/abi/*.idr`)
+| 6 files, 1,128 LOC
+| `Types.idr` 240, `REST.idr` 95, `GraphQL.idr` 93, `FFI.idr` 66, `GRPC.idr` 64, `RuleEngine.idr` 570. All declare `%default total` at file head.
+
+| Zig FFI modules (`ffi/zig/src/*.zig`)
+| 4 files, 724 LOC
+| `main.zig` 274, `hexadeca.zig` 230, `json_writer.zig` 144, `file_ops.zig` 76. Seven exported C ABI functions per `.claude/CLAUDE.md`.
+
+| Elixir rule modules (`lib/rules/*.ex`)
+| *19* modules, 6,791 LOC
+| `dependabot_alerts.ex` 738, `structural_drift.ex` 628, `code_safety.ex` 510, `dogfooding.ex` 494, `security_errors.ex` 431, `green_web.ex` 441, `rules.ex` 430 (aggregator), `workflow_audit.ex` 395, `proof_strategy_selection.ex` 384, `git_state.ex` 370, `proof_obligation.ex` 326, `honest_completion.ex` 313, `cicd_rules.ex` 343, `root_hygiene.ex` 242, `learning.ex` 230, `strategy_drift.ex` 214, `scorecard_compliance.ex` 117, `migration_rules.ex` 106, `forge_adapters.ex` 79. *Claim-vs-reality: memory + READINESS.md say "15 rule modules". Actual: 19. Drift +4.*
+
+| Axiomatic `believe_me` sites
+| 0
+| `%default total` declared across all six ABI modules. `RuleEngine.idr` documents "Zero believe_me. %default total throughout." in its header.
+
+| Non-axiomatic `believe_me`
+| 0
+| Grep `{believe_me,assert_total,Admitted,sorry,unsafeCoerce,Obj.magic}` across `src/` → 1 match, which is the literal string "Zero believe_me" in `RuleEngine.idr:18` (a claim-of-absence comment, not a use).
+
+| Logtalk legacy files
+| *0 in `lib/`* — grep finds zero hits
+| `engine/logtalk/*.lgt` removed 2026-04-11 (STATE.a2ml session log: "Deleted engine/logtalk/error_instances.lgt + loader.lgt"). The 2026-04-14 session log records the full purge: CI/CD jobs removed, Elixir promoted to primary, SWI-Prolog dropped from `stapeln.toml` and Containerfiles.
+
+| Lingering `.scm` files
+| 5 total (2 in `docs/`, 2 in `.audittraining/`, 1 at root as `guix.scm`)
+| `docs/CRYPTO-STANDARD.scm`, `docs/STANDARDIZATION-CHECKLIST.scm`, `.audittraining/ERROR-CATALOG.scm`, `.audittraining/SHA-PINS.scm`, `guix.scm` (Guile — policy-permitted). The two `docs/*.scm` and two `.audittraining/*.scm` should be migrated to `.a2ml` per the 2026-04-12 estate-wide A2ML migration closure (MEMORY.md: "`.machine_readable/` is A2ML; migration COMPLETE 2026-04-12. Remaining drift: `.bot_directives/*.scm`"). Adjacent drift here.
+|===
+
+=== Test matrix
+
+Authoritative count conflict — both "688" and "697" appear, and they refer to
+different things:
+
+- `test "…"` blocks, grepped today: *697* across 37 files under `test/`
+  (excluding `test_helper.exs`).
+- STATE.a2ml session-history (2026-04-05): "Test status: **688 tests, 124
+  pre-existing failures** (unchanged)."
+- `READINESS.md` (2026-04-04): "609 tests" — now stale by ~80 blocks.
+
+*CI is not green today.* The 2026-04-05 session explicitly records 124 failing
+tests (corrupted recipe data) that *were not fixed in that session and have
+not been recorded as fixed since*. Later sessions (2026-04-11, 2026-04-14)
+add PO001–PO006, ECHIDNA↔Hypatia coupling, and the Logtalk purge, but no
+session-history entry closes out the 124 failures. Under v2.0 C this is a
+red-flag direct failure of the "CI green" requirement.
+
+Suite breakdown (counted by file today, not STATE.a2ml):
+
+[cols="2,1,2"]
+|===
+| Suite | `test "…"` blocks | Notes
+
+| `vcl_query_test.exs`            | 91 | Largest suite — VCL parser + executor
+| `vcl_client_test.exs`           | 74 | GenServer + cache + routing
+| `vcl_file_executor_test.exs`    | 58 | FEDERATION queries against flat files
+| `code_safety_test.exs`          | 30 | Rule module
+| `confidence_annealing_test.exs` | 28 | Bayesian update paths
+| `p2p_recipe_vcl_test.exs`       | 26 | Cross-repo property-style
+| `safety_test.exs`               | 26 | RateLimiter / Quarantine / BatchRollback
+| `kin_test.exs`                  | 22 | Kin framework
+| `neural_test.exs`               | 21 | 5-network coordinator
+| `structural_drift_test.exs`     | 21 | Rule module
+| `direct_github_pr_test.exs`     | 20 | Cross-repo dispatch
+| `blackboard_test.exs`           | 20 | Multi-agent coordination
+| `zig_ffi_smoke_test.exs`        | 19 | FFI contract
+| `recipe_additional_recipes_test.exs` | 19 | Recipe coverage
+| `root_hygiene_test.exs`         | 17 | Rule module
+| `vcl_remote_cache_test.exs`     | 17 | Remote cache semantics
+| `workflow_audit_test.exs`       | 17 | Rule module
+| `dependabot_alerts_test.exs`    | 15 | Rule module
+| `git_state_test.exs`            | 15 | Rule module
+| `e2e_pipeline_test.exs`         | 15 | Pipeline stages
+| `concurrency_test.exs`          | 10 | Parallel recipe eval
+| `proof_strategy_selection_test.exs` | 10 | Rule subdir (`test/rules/`)
+| other 15 files                  | 136 | Balance
+|===
+
+CI: `.github/workflows/ci.yml` + `rust-ci.yml` + `rust.yml` + `e2e.yml`
++ `dogfood-gate.yml` + `stress-test.yml` present. Last green main-branch
+run not verified in this audit. STATE.a2ml's own session-history establishes
+non-green state as of 2026-04-05, with no subsequent "failures resolved"
+entry through 2026-04-14.
+
+=== Annotation depth
+
+Top-level documentation structure (strong *and* weak):
+
+Present:
+
+- `docs/architecture/` with README, `docs/design/` with README.
+- `docs/`: A2ML-INTEGRATION, ADA-TUI-AUDIT-SPEC, admin-guide, api-reference,
+  CICD-GUIDEBOOK (large — 64 KB), developer-guide, faq,
+  github-registry-integration, glossary, K9-INTEGRATION,
+  migration-arangodb-to-verisim, SECURITY-AUDIT, SESSION-LOG, THREAT-MODEL,
+  user-guide, vcl-usage-guide (23 `.adoc`/`.scm` docs total).
+- `docs/api/`, `docs/diagrams/`, `docs/reports/` subdirectories.
+- Root-level strategy docs: `design-decisions.adoc`, `DESIGN-NARRATIVE.md`,
+  `DOGFOODING-SESSION-2026-01-25.md`, `PALIMPSEST.adoc`, `PROOF-NEEDS.md`,
+  `ROADMAP.adoc`, `ROADMAP-v1.0.0.adoc`, `SYSTEM-INTEGRATION.md`, `TEST-NEEDS.md`,
+  `TOPOLOGY.md`, `KNOWN-ISSUES.adoc`, `CHANGELOG.adoc`, `ACTION-ITEMS.adoc`,
+  `A2ML-K9-INTEGRATION.md`.
+- Idris2 ABI: per-file header comment with design rationale on sampled
+  modules (e.g. `RuleEngine.idr` 570 LOC with structured header +
+  invariant witnesses on lines 145, 549).
+- `docs/governance/`: CREATED TODAY by this audit (was *ABSENT* before).
+
+Missing (the v2.0 C annotation-depth bar is where hypatia currently fails):
+
+[cols="1,1"]
+|===
+| README present | README absent
+| `integration/`                               | `adapters/`
+| `docs/architecture/`                         | `api/`
+| `docs/design/`                               | `batch-ops/`
+| `.audittraining/`                            | `benches/`
+| `.audittraining/prevention/`                 | `cli/`
+| `.machine_readable/agent_instructions/`      | `clients/`
+| `hooks/`                                     | `config/`
+| `tools/invariant-path/`                      | `configs/`
+|                                              | `deploy/`
+|                                              | `elixir-scanner/`
+|                                              | `ffi/`
+|                                              | `generated/`
+|                                              | `lib/`            ← biggest tell
+|                                              | `schema/`
+|                                              | `scripts/`
+|                                              | `src/`
+|                                              | `test/`
+|                                              | `tests/`
+|                                              | `tui/`
+|                                              | `verification/`
+|                                              | `verify/`
+|===
+
+*Per-source-subtree README coverage: 1 of 22 (~4.5%)*. `lib/` — which holds
+the entire Elixir core (13 top-level modules, 19 rule modules, 5 neural
+networks, VCL layer, safety layer) — has no README. Neither does `src/`,
+`ffi/`, `test/`, nor any of the tier-2 subdirs (`lib/rules/`, `lib/neural/`,
+`lib/vcl/`, `lib/safety/`, `lib/kin/`, `lib/hypatia/`, `lib/data/`).
+
+This is *below* the boj-server bar (54% cartridge README coverage),
+*below* the gossamer bar (~36% subtree coverage), and *at* the
+academic-workflow-suite floor (~10%). It is clearly below the v2.0 C
+"deep per-file and per-directory annotation" clause.
+
+=== Dogfooding / home-stable evidence
+
+STATE.a2ml has *no* `[dogfooding-status]` section. The root
+`DOGFOODING-SESSION-2026-01-25.md` exists but is a single-session write-up,
+not a running log.
+
+Indirect dogfooding is strong and real:
+
+- `hypatia-scan.yml` is deployed as a required CI workflow on ~30+ estate
+  repos (grep of `.github/workflows/hypatia-scan.yml` across
+  `/var/mnt/eclipse/repos/`): academic-workflow-suite, accessibility-everywhere,
+  anamnesis, branch-newspaper, defiant, error-lang, ffmpeg-ffi,
+  HackenbushGames.jl, hesiod-dns-map, http-capability-gateway, hyperpolymath,
+  hyperpolymath.github.io (×2), ipfs-overlay, laminar, lcb-website, live-files,
+  natsci-studio, panic-attack, panic-attacker, raze-tui, scripts,
+  twingate-helm-deploy, universal-chat-extractor, universal-project-manager,
+  v3-templater, valence-shell, zerotier-k8s-link (list non-exhaustive).
+- READINESS.md claims "302 repos scanned, 3385 weak points across ecosystem"
+  + "1635 dispatched actions (600 auto-execute, 667 review, 368 report)"
+  + "16671 outcomes recorded". These numbers are impressive but *internal*
+  to the estate.
+- The 2026-04-11 session log closes "M4 ProofStrategySelection + M5
+  ProofObligation + M6 LearningScheduler N5" and wires ECHIDNA↔Hypatia —
+  real end-to-end usage of hypatia's own dispatch path.
+- `.github/workflows/dogfood-gate.yml` exists as CI gate.
+
+But: *no dated dogfood-log entry trail* tying a specific outcome to a dated
+use of hypatia in anger. "hypatia-scan ran on repo X" is infrastructure
+deployment, not dogfood evidence in the v2.0 sense. The C requirement is
+*continuous* home-context use with no known failures, which is a moving
+claim — and the 124-failures-unresolved line makes that claim currently
+untrue for the internal `mix test` path.
+
+=== External validation (Grade B / A)
+
+STATE.a2ml has *no* `[external-targets]`, *no* `[issues-fed-back]`, *no*
+`[field-signal]`, *no* `[grade-b-status]`. Entirely absent.
+
+READINESS.md makes the B claim on the following basis (pattern-analyzer):
+
+- "Deployed via `hypatia-scan.yml` on all RSR-compliant repos (283+)"
+- Lists 10 *language diversity* targets (Elixir, Rust, Gleam, Idris2,
+  Julia, ReScript, Ada, OCaml, Haskell, Zig)
+
+Under v2.0 this is *internal* dogfood, misfiled as external evidence.
+The 10 languages are all hyperpolymath estate repos, scanned by an
+estate-owned CI workflow, with findings fed back to an estate-owned
+fleet. No external organisation runs hypatia. No non-hyperpolymath
+user has filed an issue. No third party has confirmed value or
+reported harm. Language diversity is not the same as target diversity
+under v2.0 — different languages inside one owner's estate are one
+target (hyperpolymath-itself), not ten.
+
+Same pattern as the boj-server audit's re-classification of six
+`[grade-b-status]` entries: hypatia's "B evidence" is internal-capability
+items.
+
+- Awesome-list PRs / directory listings: none documented.
+- Third-party badges: none documented.
+- External-reporter GitHub issues: none documented.
+
+== Grade x Evidence Matrix
+
+[cols="1,1,3,3"]
+|===
+| Grade | Met? | Evidence supporting | Evidence against / gaps
+
+| X
+| n/a
+| Tests exist → not X
+| —
+
+| F
+| n/a
+| Not superseded; no harm signal; hypatia is the intended estate-wide neurosymbolic CI engine
+| —
+
+| E
+| ✓
+| 697 `test "…"` blocks across 37 files; failures (124) documented in STATE.a2ml session history
+| —
+
+| D
+| *✓ strong pass*
+| 33 RSR workflows; clean Containerfile / Deno / Justfile / contractile-trident / well-known / LICENSE layout; 0 `Dockerfile`, 0 `package.json`, 0 `Makefile`; 1,128 LOC Idris2 ABI with `%default total` on every module; 0 `believe_me` / `assert_total` / `sorry` / `unsafeCoerce` / `Obj.magic` uses; Logtalk purge complete 2026-04-14 (0 `.lgt` files, 0 `logtalk` refs in `lib/`); full 5-mirror fan-out
+| Four stale `.scm` files (`docs/CRYPTO-STANDARD.scm`, `docs/STANDARDIZATION-CHECKLIST.scm`, `.audittraining/ERROR-CATALOG.scm`, `.audittraining/SHA-PINS.scm`) owe A2ML migration — adjacent to the 2026-04-12 migration closure. STATE.a2ml omits `crg-grade` entirely — machine-readable governance defect.
+
+| C
+| *✗ blocked*
+| 19 rule modules with 6,791 LOC of Elixir; structurally rich `docs/` tree (architecture, design, api, diagrams, reports); 30+ estate repos consume `hypatia-scan.yml`; ECHIDNA↔Hypatia coupling wired 2026-04-11; neural subsystem (5 networks + coordinator) under OTP supervision
+| **CI not green** — STATE.a2ml records 124 pre-existing test failures (2026-04-05), not closed in subsequent sessions. This single fact alone blocks C under the "CI green" clause. Per-subtree README coverage 1/22 (~4.5%) — `lib/`, `src/`, `ffi/`, `test/`, `cli/`, all tier-2 subdirs missing READMEs. `[dogfooding-status]` section absent from STATE.a2ml. No dated dogfood log. `READINESS.md` on v1.0 schema, stale test count (609 vs 697), stale rule-module count (15 vs 19).
+
+| B
+| *✗ (overclaim)*
+| —
+| Zero external targets. Zero issues-fed-back trail. Zero field-signal. `READINESS.md`'s B claim rests on 10 *language* targets within a single-owner estate — not 6+ diverse external targets under v2.0. `hypatia-scan.yml` deployment on ~30 estate repos is internal infrastructure, not external validation. Same category error the boj-server audit flagged.
+
+| A
+| ✗
+| —
+| No external field signal.
+|===
+
+== Verdict
+
+*Current CRG grade: **D (Alpha), with one blocker to C and four supporting gaps**.*
+
+Self-declared grade: *B* (from `READINESS.md`; STATE.a2ml declares no grade).
+Audited grade: *D*. **This is an overclaim of two grades**, consistent with
+the academic-workflow-suite finding and different in character from the
+gossamer finding (1-grade overclaim): hypatia's problem is *not* structural
+debt (structurally it is the cleanest repo audited this week) — it is the
+combination of (a) unresolved red CI, (b) per-directory annotation floor
+failure, and (c) confusing language-diversity within one estate with
+external-target diversity.
+
+Recommended action: populate `.machine_readable/6a2/STATE.a2ml` with a new
+`[crg]` section (sectioned form, matching gossamer's convention):
+
+[source]
+----
+[crg]
+grade = "D"
+grade-previous = "B (self-declared in READINESS.md, refuted by this audit)"
+grade-date = "2026-04-18"
+next-target = "C"
+notes = """
+CRG v2.0 STRICT audit 2026-04-18: 33 RSR workflows, 697 tests, 1,128 LOC
+Idris2 ABI with 0 believe_me uses, clean container+deno+justfile posture,
+Logtalk purge complete. Blocker to C: 124 pre-existing test failures
+recorded 2026-04-05 not yet closed (CI not green clause). Per-subtree
+README coverage 1/22. External-target trail absent; language diversity
+within estate is not v2.0 B evidence.
+"""
+----
+
+and retire the *B* claim in `READINESS.md` with an audit-citing note.
+
+The D grade is earned on four positive signals:
+
+1. Structural compliance is the cleanest yet audited: 33 workflows, 0 policy
+   violations (no `Dockerfile`, no `package.json`, no `Makefile`, no
+   banned-language drift), full contractile trident + six-verb
+   `.machine_readable/contractiles/` subtree.
+2. 697 `test "…"` blocks across 37 files, one of the largest suites in
+   the estate. Idris2 ABI has `%default total` on every module; grep confirms
+   zero uses of `believe_me`, `assert_total`, `sorry`, `unsafeCoerce`,
+   `Obj.magic`.
+3. Logtalk purge complete 2026-04-14 — `engine/` directory gone, 0 `.lgt`
+   files, 0 `logtalk` refs in `lib/`, SWI-Prolog dropped from `stapeln.toml`.
+   Elixir rules are now the single source of truth, as intended.
+4. Broad internal dogfood: `hypatia-scan.yml` is a consumed CI dependency
+   on ~30+ estate repos. 19 rule modules with 6,791 LOC of Elixir is a real
+   piece of software.
+
+What blocks *immediate* promotion to C:
+
+1. **124 pre-existing test failures recorded 2026-04-05 are not closed.**
+   Later sessions (2026-04-11, 2026-04-14) do *not* re-report the
+   failure count. Either re-run `mix test`, close the failures, and update
+   STATE.a2ml with "CI green, 0 failures as of YYYY-MM-DD", or downgrade
+   the claim explicitly. v2.0 C requires "CI green" — this alone is the
+   decisive C-blocker.
+2. Per-subtree README coverage 1/22. Add short orientation READMEs to
+   `lib/`, `lib/rules/`, `lib/neural/`, `lib/vcl/`, `lib/safety/`, `lib/kin/`,
+   `src/`, `src/abi/`, `ffi/`, `ffi/zig/src/`, `test/`, `cli/`, `adapters/`,
+   `clients/`, `config/`, `configs/`, `deploy/`, `scripts/`, `tui/`,
+   `verification/`, `verify/`. Purpose + what-lives-here + entry-points.
+3. Populate `[dogfooding-status]` in STATE.a2ml with concrete DONE/IN-PROGRESS
+   entries citing specific estate repos consuming `hypatia-scan.yml` and
+   the ECHIDNA↔Hypatia coupling (2026-04-11) as a home-stable signal.
+4. Refresh `READINESS.md` to v2.0 schema. Current v1.0 doc claims 15 rule
+   modules (actual: 19), 609 tests (actual: 697), and overall Grade B
+   (audited: D). A stale readiness doc is itself an annotation defect.
+5. Migrate the four stray `.scm` files to `.a2ml` (`docs/CRYPTO-STANDARD.scm`,
+   `docs/STANDARDIZATION-CHECKLIST.scm`, `.audittraining/ERROR-CATALOG.scm`,
+   `.audittraining/SHA-PINS.scm`) per the 2026-04-12 A2ML migration closure.
+   `guix.scm` is policy-permitted (Guile) — leave it.
+
+What blocks promotion to B (even after C is met):
+
+1. *Zero* external targets under v2.0 definition. Language diversity inside
+   a single owner's estate does not count. Need 6+ external users
+   (different organisations, different deployment contexts, different
+   operational postures) actually running hypatia against their own CI
+   and reporting back.
+2. *Zero* issues-fed-back with external-reporter labels, *zero* field signal.
+   Start recruiting external dogfooders; the hypatia-scan.yml workflow is
+   packaged enough for another org to install, so this is recruitable work.
+3. Resolve the category confusion in `READINESS.md` — "language targets"
+   belongs to a `[coverage-matrix]` section, not `[external-targets]`.
+   Without this split, future audits cannot grant B even if real external
+   targets exist, because the claim would be indistinguishable from the
+   current internal claim.
+
+== Notes on Non-Negotiables Respected by this Audit
+
+- The ECHIDNA↔Hypatia coupling (2026-04-11 session: `proof_obligation.ex`
+  PO001–PO006, FleetDispatcher extension, LearningScheduler N5) is taken
+  as done; not re-audited.
+- The Logtalk purge (2026-04-14) is taken as done; grep confirms 0 `.lgt`
+  files and 0 `logtalk` refs in `lib/`. The 2026-04-12 MEMORY.md note
+  ("Hypatia now consumes JSON AssailReport via Elixir rules") matches
+  what the code shows.
+- The BJ2-style credential isolation and axiomatic-`believe_me` policies are
+  moot here — hypatia has zero `believe_me` uses and hence no closure to
+  re-audit.
+- `guix.scm` is a Guile configuration file and is policy-permitted; it is
+  *not* counted among the four stray `.scm` files owing A2ML migration.
+- `READINESS.md` is a v1.0 component-by-component table; this audit does
+  not modify it, only recommends its refresh.
+
+== Related Files
+
+- `.machine_readable/6a2/STATE.a2ml` — authoritative self-declared state
+  (currently omits `crg-grade` entirely; recommend add `[crg] grade = "D"`
+  with notes citing this audit).
+- `READINESS.md` — v1.0 component table claiming overall B (2026-04-04).
+  Recommend v2.0 refresh that demotes to D and moves the "language targets"
+  list out of any B-evidence slot.
+- `docs/governance/CRG-AUDIT-2026-04-18.adoc` — this file. (The
+  `docs/governance/` subtree did not exist before this audit; it was created
+  today.)
+- `docs/governance/CRG-LIFT-PLAN-2026-04-18.adoc` — *to be written* as the
+  companion plan for the D→C lift, with the 124-failures closure as
+  blocker 1.
+- `docs/governance/CRG-CRITERIA.adoc` — *to be written* (boilerplate from
+  `rsr-template-repo/docs/governance/CRG-CRITERIA.adoc`).
+- Paired audits (format calibration): `boj-server/docs/governance/CRG-AUDIT-2026-04-18.adoc`,
+  `gossamer/docs/governance/CRG-AUDIT-2026-04-18.adoc`,
+  `document-management-toolset/academic-workflow-suite/docs/governance/CRG-AUDIT-2026-04-18.adoc`.
+
+== Detector-Rule Drift (cross-cutting)
+
+Hypatia's STATE.a2ml has *no* CRG key at all. Neither HYP-S005 (flat
+`crg-grade = …`) nor the gossamer-style sectioned (`[crg] / grade = …`)
+detector pattern matches this repo — because the field is absent, not
+drifted. The correct detector behaviour for "CRG key absent from STATE.a2ml"
+is a distinct finding from "CRG key present but schema drifts":
+
+- *Absent*: repo makes no machine-readable CRG claim — raise as
+  `HYP-S005-ABSENT` (advisory, not a contradiction).
+- *Drifted-schema*: flat vs sectioned — raise as `HYP-S005-SCHEMA`
+  (cross-cutting with gossamer finding).
+- *Contradiction*: STATE.a2ml CRG disagrees with `READINESS.md` CRG —
+  raise as `HYP-S005-CONTRADICTION` (the academic-workflow-suite + hypatia
+  failure mode).
+
+This third case is what hypatia exhibits today: STATE.a2ml is silent,
+`READINESS.md` claims B, audit finds D. Capture as follow-up against
+`developer-ecosystem/standards/hypatia-rules/`. Note: hypatia itself
+currently has no rule to detect its own CRG contradiction — a worthwhile
+dogfood target.
+
+_End of audit._
