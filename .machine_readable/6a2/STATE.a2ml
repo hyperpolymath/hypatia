@@ -15,7 +15,17 @@ phase = "implementation"
 maturity = "alpha"
 crg-grade = "D"
 crg-grade-declared-on = "2026-04-18"
-crg-grade-notes = "Declared at D per CRG v2.0 STRICT reconciliation; promotion to C gated on dogfooding/annotation evidence and clean CI signal."
+crg-grade-notes = "Declared at D per CRG v2.0 STRICT reconciliation. Dogfooding evidence now populated below (2026-04-18). Promotion to C still gated on per-subtree README coverage (1/22) + closing the 124 pre-existing test failures in the 2026-04-05 session log + clean CI signal."
+
+[dogfooding-status]
+# Populated 2026-04-18 against real on-disk integrations. Each entry must
+# resolve to a grep-hit in the cited path.
+boj-server-mcp = "2026-04-18 — hypatia-mcp cartridge (283 LOC, Deno mod.js + Idris2 ABI + Zig FFI). Path: boj-server/cartridges/hypatia-mcp/"
+gitbot-fleet-consumer = "2026-04-18 — FleetDispatcher routes to gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot). 1635 dispatched actions, 16671 outcomes recorded. Path: lib/fleet_dispatcher.ex"
+estate-rsr-scan = "2026-04-18 — hypatia-scan.yml runs in every RSR repo (15+ repos); 302 repos scanned, 3385 weak points logged. Evidence: count of hypatia-scan.yml files across estate .github/workflows/"
+verisim-data-flat-store = "2026-04-18 — git-backed flat-file canonical store consumed via VCL queries + FileExecutor. Path: lib/verisimdb_connector.ex"
+panll-data-bridge = "2026-04-18 — generates real-time JSON for PanLL dashboard panels"
+scorecard-ingestion = "2026-04-18 — 20 OpenSSF Scorecard checks ingested as local scan patterns. Path: lib/scorecard_ingestor.ex"
 
 [route-to-mvp]
 milestones = [
