@@ -13,6 +13,9 @@ name = "hypatia"
 completion-percentage = 78
 phase = "implementation"
 maturity = "alpha"
+crg-grade = "D"
+crg-grade-declared-on = "2026-04-18"
+crg-grade-notes = "Declared at D per CRG v2.0 STRICT reconciliation; promotion to C gated on dogfooding/annotation evidence and clean CI signal."
 
 [route-to-mvp]
 milestones = [
