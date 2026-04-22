@@ -14,7 +14,7 @@
 | Component             | Grade | Release Stage      | Evidence Summary                                                                 |
 |-----------------------|-------|--------------------|----------------------------------------------------------------------------------|
 | `pattern-analyzer`    | B     | Release Candidate  | 15 rule modules, 609 tests; scans 283+ repos estate-wide across all languages via hypatia-scan.yml CI workflow. |
-| `recipe-matcher`      | B     | Release Candidate  | 56 recipes validated; wired in CI on Rust, Elixir, Gleam, Julia, ReScript, Idris2, Zig, OCaml, Ada, Haskell targets. |
+| `recipe-matcher`      | B     | Release Candidate  | 56 recipes validated; wired in CI on Rust, Elixir, Gleam, Julia, Idris2, Zig, OCaml, Ada, Haskell targets. ReScript retired 2026-04 (legacy repos still detected, flagged for migration to Ephapax/Gossamer). |
 | `triangle-router`     | C     | Beta               | Routes findings through neurosymbolic pipeline; validated on hypatia itself and 10+ repos. |
 | `fleet-dispatcher`    | C     | Beta               | Dispatches gitbot-fleet directives (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot); tested on 6+ repos but dispatch logs incomplete. |
 | `neural-coordinator`  | C     | Beta               | Blackboard architecture for multi-agent coordination; dogfooded on hypatia CI for all repos but external API callers limited. |
@@ -41,7 +41,7 @@
   3. Gleam/BEAM (k9_gleam, a2ml_gleam, polyglot-formalisms-gleam) — typed BEAM target
   4. Idris2/formal-verified (ephapax, stapeln) — dependent type code
   5. Julia scientific (7-tentacles, statistease, developer-ecosystem) — REPL scripting
-  6. ReScript/Deno (idaptik, nafa-app) — web frontend code
+  6. Deno / Ephapax / Gossamer (idaptik, nafa-app, web frontends) — web code. NB: ReScript retired 2026-04; legacy ReScript repos still scanned but flagged for migration.
   7. Ada/SPARK (safety-critical components) — safety-critical language
   8. OCaml (affinescript compiler) — functional language
   9. Haskell (a2ml-haskell) — pure functional
@@ -112,7 +112,7 @@
 
 **Evidence:**
 - Required CI workflow deployed on all RSR-compliant repos (283+ confirmed)
-- Diverse target types: Rust, Elixir, Gleam, Julia, ReScript, Idris2, Zig, OCaml, Ada, Haskell, 007-lang
+- Diverse target types: Rust, Elixir, Gleam, Julia, Idris2, Zig, OCaml, Ada, Haskell, Ephapax, 007-lang (ReScript retired 2026-04; legacy repos still scanned for migration)
 - SHA-pinned actions, `permissions: read-all`, SPDX headers present
 - Enforcement: blocks merge on critical findings (configurable threshold)
 

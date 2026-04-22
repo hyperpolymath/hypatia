@@ -102,12 +102,16 @@
 
 ## What Was Built (2026-01-25)
 
-✅ **code-safety-lessons.lgt** - Rust/ReScript/CORS/auth patterns
-✅ **engine/scanner.lgt** - Actual file reading/pattern matching
+✅ **code-safety-lessons.lgt** - Rust / (legacy ReScript) / CORS / auth patterns [Logtalk engine retired 2026-04; see commit d27fe4b]
+✅ **engine/scanner.lgt** - Actual file reading/pattern matching [same retirement]
 ✅ **hypatia-cli.sh** - Command-line scanner (ripgrep-based)
 ✅ **fleet-coordinator.sh** - Bot execution & coordination
-✅ **learning_engine.lgt** - Auto-generates rules from patterns
+✅ **learning_engine.lgt** - Auto-generates rules from patterns [same retirement]
 ✅ **GitHub Actions template** - CI/CD integration
+
+> **2026-04 update:** The `.lgt` (Logtalk) components were retired;
+> rule logic now lives entirely in Elixir under `lib/rules/`. The
+> historical entries above are kept for provenance.
 
 ## How To Use
 
@@ -199,8 +203,8 @@ Elixir equivalent lives in `lib/rules/code_safety.ex`.
 - ✅ Rust `unwrap()` → panic DoS
 - ✅ Rust `unwrap_or(0)` → privilege escalation
 - ✅ Rust RwLock `unwrap()` → poison panic
-- ✅ ReScript `getExn` → crash DoS
-- ✅ ReScript `Obj.magic` → type safety bypass
+- ✅ ReScript `getExn` → crash DoS (legacy — ReScript retired 2026-04; detection kept for migration audits)
+- ✅ ReScript `Obj.magic` → type safety bypass (legacy — same)
 - ✅ CORS wildcard `*` → CSRF
 - ✅ Unverified JWT decode → auth bypass
 - ✅ Dev mode without env check → production bypass
