@@ -52,6 +52,7 @@ jobs:
             src/ui/gossamer/hypatia_gui.eph
             src/ui/gossamer/bridge.eph
             src/ui/gossamer/loader.js
+            src/ui/gossamer/panll.harness.toml
             src/ui/gossamer/README.adoc
           )
           missing=0
@@ -67,6 +68,41 @@ jobs:
             echo "::error::$missing required Gossamer source file(s) missing"
             exit 1
           fi
+
+      - name: Install jsonschema
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --quiet jsonschema
+
+      - name: Fetch panll-harness v2 schema
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/schemas
+          curl -fL --retry 3 --retry-delay 2 \
+            -o /tmp/schemas/panll-harness-v2.schema.json \
+            https://raw.githubusercontent.com/hyperpolymath/panll/main/schema/panll-harness-v2.schema.json
+          ls -la /tmp/schemas/panll-harness-v2.schema.json
+
+      - name: Validate panll.harness.toml against panll-harness/v2
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, sys, tomllib
+          from jsonschema import Draft202012Validator, validate
+
+          with open("src/ui/gossamer/panll.harness.toml", "rb") as fh:
+              data = tomllib.load(fh)
+          with open("/tmp/schemas/panll-harness-v2.schema.json") as fh:
+              schema = json.load(fh)
+
+          Draft202012Validator.check_schema(schema)
+          try:
+              validate(instance=data, schema=schema)
+          except Exception as exc:
+              print(f"::error::panll.harness.toml fails panll-harness/v2 validation: {exc}")
+              sys.exit(1)
+          print("OK  panll.harness.toml validates against panll-harness/v2")
+          PY
 
   build-ephapax:
     name: Build Ephapax toolchain (pinned)
