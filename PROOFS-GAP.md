@@ -239,18 +239,28 @@ decorative.
 
 **PR 1 — CI gate (half-day).** `verify-lean.yml` + `verify-idris.yml`.
 Promotes 9 existing proofs from discretionary to mandatory. Biggest
-ROI in the document.
+ROI in the document. **✅ Landed 2026-04-22 via `claude/quality-gates`.**
 
 **PR 2 — Fix graph_of_trust normalisation (half-day).** Then PR 3
-becomes available.
+becomes available. **✅ Landed 2026-04-22 via `claude/quality-gates`.**
 
 **PR 3 — Prove VCL parser totality (1 day).** Easy win, unblocks
-other parser-adjacent proofs.
+other parser-adjacent proofs. **✅ Landed 2026-04-22 via
+`claude/lean-proofs-parser-pagerank` —
+`verification/proofs/lean4/ParserTotality.lean`.**
 
 **PR 4 — Prove PageRank convergence (1 day).** Net-new mathematical
-assurance over the neural layer, only after PR 2.
+assurance over the neural layer, only after PR 2. **⚠ Partially
+landed 2026-04-22 via `claude/lean-proofs-parser-pagerank` —
+preconditions only (non-negativity, column-stochastic scaling
+premises) in `PageRankInvariants.lean`. Full analytical convergence
+requires Mathlib; still open.**
 
 **PR 5 — Prove ESN stability (3 days).** Same shape as PR 4.
+**⚠ Partially landed (awaiting merge) via `claude/esn-spectral-scaling`
+— `ESNSpectralScaling.lean` proves scaling preconditions
+(well-defined denominator, floor-clamping). Full analytical echo-state
+property also blocked on Mathlib.**
 
 **PR 6+ — Pick from:** query-result determinism, cache coherence,
 k-means convergence, federation consistency. Each is its own branch.
@@ -266,5 +276,8 @@ k-means convergence, federation consistency. Each is its own branch.
 
 ## One-line status
 
-We have the machinery; one half-day CI PR would triple the assurance
-we're already paying for.
+**2026-04-22 update:** the half-day CI PR landed; Lean and Idris
+proofs are now merge-blocking. 11 proof files gated in CI (2 original
+Lean + 3 new Lean + 7 Idris — awaiting one Idris stamp cycle).
+Remaining tractable work is mathlib integration for the analytical
+halves of PageRank + ESN convergence.
