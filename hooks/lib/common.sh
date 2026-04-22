@@ -180,9 +180,10 @@ is_banned_language() {
 # Usage: alt=$(get_language_alternative "typescript")
 get_language_alternative() {
     case "$1" in
-        typescript) echo "ReScript" ;;
+        typescript) echo "Ephapax (systems) or Gossamer (UI)" ;;
+        rescript)   echo "Ephapax (systems) or Gossamer (UI)" ;;
         go) echo "Rust" ;;
-        python) echo "Julia/Rust/ReScript" ;;
+        python) echo "Elixir or Rust" ;;
         java|kotlin) echo "Rust" ;;
         *) echo "allowed languages" ;;
     esac

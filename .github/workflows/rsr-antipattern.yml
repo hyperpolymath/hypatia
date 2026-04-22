@@ -2,8 +2,13 @@
 # RSR Anti-Pattern CI Check
 # SPDX-License-Identifier: PMPL-1.0-or-later
 #
-# Enforces: No TypeScript, No Go, No Python (except SaltStack), No npm
-# Allows: ReScript, Deno, WASM, Rust, OCaml, Haskell, Guile/Scheme
+# Enforces: No TypeScript, No Go, No Python (except SaltStack), No ReScript, No npm
+# Allows: Deno, Elixir, Rust, Zig, Idris2, Ephapax, Gossamer, Haskell, OCaml,
+#         WASM, Guile/Scheme
+#
+# Note: ReScript was removed from the allowed set (policy change, 2026-04).
+# For typed-wasm roles previously filled by ReScript, use Ephapax (systems)
+# or Gossamer (UI) — see hyperpolymath/ephapax and hyperpolymath/gossamer.
 
 name: RSR Anti-Pattern Check
 
@@ -27,10 +32,10 @@ jobs:
       - name: Check for TypeScript
         run: |
           # Exclude bindings/deno/ - those are Deno FFI files using Deno.dlopen, not plain TypeScript
-          # Exclude .d.ts files - those are TypeScript type declarations for ReScript FFI
+          # Exclude .d.ts files - legacy type declarations (from the retired ReScript era)
           TS_FILES=$(find . \( -name "*.ts" -o -name "*.tsx" \) | grep -v node_modules | grep -v 'bindings/deno' | grep -v '\.d\.ts$' || true)
           if [ -n "$TS_FILES" ]; then
-            echo "❌ TypeScript files detected - use ReScript instead"
+            echo "❌ TypeScript files detected - use Ephapax (systems) or Gossamer (UI) instead"
             echo "$TS_FILES"
             exit 1
           fi
@@ -66,10 +71,22 @@ jobs:
       - name: Check for tsconfig
         run: |
           if [ -f "tsconfig.json" ]; then
-            echo "❌ tsconfig.json detected - use ReScript instead"
+            echo "❌ tsconfig.json detected - use Ephapax (systems) or Gossamer (UI) instead"
             exit 1
           fi
           echo "✅ No tsconfig.json"
+
+      - name: Check for ReScript
+        run: |
+          # ReScript was sanctioned through 2026-04; now banned. Fails if any
+          # .res / .resi source or rescript.json config exists.
+          RES_FILES=$(find . \( -name "*.res" -o -name "*.resi" -o -name "rescript.json" -o -name "bsconfig.json" \) | grep -v node_modules || true)
+          if [ -n "$RES_FILES" ]; then
+            echo "❌ ReScript artifacts detected - use Ephapax (systems) or Gossamer (UI) instead"
+            echo "$RES_FILES"
+            exit 1
+          fi
+          echo "✅ No ReScript artifacts"
 
       - name: Verify Deno presence (if package.json exists)
         run: |
@@ -85,8 +102,9 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║           RSR Anti-Pattern Check Passed ✅                 ║"
           echo "║                                                            ║"
-          echo "║  Allowed: ReScript, Deno, WASM, Rust, OCaml, Haskell,     ║"
-          echo "║           Guile/Scheme, SaltStack (Python)                 ║"
+          echo "║  Allowed: Deno, Elixir, Rust, Zig, Idris2, Ephapax,       ║"
+          echo "║           Gossamer, Haskell, OCaml, WASM, Guile/Scheme,   ║"
+          echo "║           SaltStack (Python)                               ║"
           echo "║                                                            ║"
-          echo "║  Blocked: TypeScript, Go, npm, Python (non-Salt)          ║"
+          echo "║  Blocked: TypeScript, Go, ReScript, npm, Python (non-Salt)║"
           echo "╚════════════════════════════════════════════════════════════╝"

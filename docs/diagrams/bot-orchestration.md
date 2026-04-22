@@ -9,8 +9,8 @@ The cicd-hyper-a bot fleet uses dependency-based topological sorting to execute 
 
 ```mermaid
 graph TD
-    subgraph "Security Bots"
-        echidna[echidnabot<br/>Secret Detection]
+    subgraph "Verification Bots"
+        echidna[echidnabot<br/>Formal Verification]
     end
 
     subgraph "Quality Bots"

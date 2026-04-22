@@ -119,7 +119,7 @@ graph TB
 |-----|----------|---------|
 | robot-repo-automaton | Quality | Repository standards enforcement |
 | glambot | Documentation | Documentation generation |
-| echidnabot | Security | Secret detection |
+| echidnabot | Verification | Formal mathematical/statistical verification (fuzzing secondary) |
 | seambot | Quality | Code formatting |
 | compliance-bot | Compliance | License/policy compliance |
 | finishing-bot | Release | Release preparation |

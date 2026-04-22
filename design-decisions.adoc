@@ -305,8 +305,12 @@ Instead of debating SQL vs NoSQL, focus on:
 |**Non-Proprietary**
 |Oxigraph, Tantivy, Milvus all open-source. No vendor lock-in.
 
-|**ReScript Integration**
-|Registry and API in ReScript. Modalities in Rust (FFI via NIFs).
+|**Language Integration**
+|Registry and API in a sanctioned language (Ephapax/Rust/Elixir — ReScript
+ retired 2026-04). Modalities in Rust, exposed via SNIFs
+ (see `hyperpolymath/snifs`) when crossing the BEAM boundary. Hypatia's
+ own FFI is Zig-via-dlopen, not NIFs — SNIFs become relevant only if a
+ BEAM NIF is ever added (e.g. alongside a future Nx/EXLA backend).
 
 |**Zero-Trust**
 |`verisim-semantic` + `proven` for ZKP. `sactify-php` for signatures.

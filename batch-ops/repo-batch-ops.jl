@@ -178,7 +178,8 @@ function detect_languages(repo_path::String)::Vector{String}
     # Check for language indicators
     indicators = Dict(
         "rust" => ["Cargo.toml"],
-        "rescript" => ["rescript.json", "bsconfig.json"],
+        # rescript removed 2026-04 (retired from allowed languages).
+        # We still detect rescript.json as a banned-artefact check below.
         "deno" => ["deno.json", "deno.jsonc"],
         "gleam" => ["gleam.toml"],
         "ocaml" => ["dune-project"],

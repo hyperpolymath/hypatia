@@ -292,14 +292,11 @@ simulate_ci() {
         fi
     fi
 
-    # Check for rescript.json (ReScript project)
-    if [ -f "rescript.json" ]; then
-        log_info "  Running rescript build check..."
-        if command -v rescript >/dev/null 2>&1; then
-            if ! rescript build 2>/dev/null; then
-                add_warning "ReScript build failed"
-            fi
-        fi
+    # Check for rescript.json — now a violation, not a build trigger.
+    # ReScript was retired from allowed languages 2026-04; a live
+    # rescript.json means the repo still needs migration.
+    if [ -f "rescript.json" ] || [ -f "bsconfig.json" ]; then
+        add_error "ReScript project config detected — ReScript is retired. Migrate to Ephapax (systems) or Gossamer (UI)."
     fi
 
     # Check for cabal file (Haskell project)
