@@ -41,6 +41,7 @@ Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/C
 | `verification/proofs/lean4/RateLimiting.lean` | Lean 4 | ~175 | Counter never exceeds configured bound, tryAccept preserves invariant, prune preserves invariant, inductive sequence processing, rejection guarantee, concrete configs (per-bot/global/burst) | COMPLETE |
 | `verification/proofs/idris2/NeuralConsensus.idr` | Idris2 | ~170 | H9: uniform-mean aggregation of Vect n Prediction is in [0,1], bounded below by n * min(inputs), denominator > 0 for non-empty ensembles, 8-network specialization | COMPLETE |
 | `verification/proofs/tlaplus/KinGate.tla` | TLA+ | ~130 | H8: Kin gate atomicity. Acquire/Release/Expire transitions + MutualExclusionByType + MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView + GrantsAreWellBracketed + EveryRequestProcessed (liveness) | COMPLETE — TLC model-check 2026-04-17 passed on 3 bots × 2 repos × MaxRequests=4: 1,778,860 distinct states, depth 13, no errors in 51s (Eclipse Temurin 21 JRE, tla2tools 2.19) |
+| ~~`verification/proofs/agda/OutcomeLog.agda`~~ | ~~Agda~~ | ~~~220~~ | ~~H6: outcome log monotonicity (strictly increasing timestamps)~~ | RETIRED 2026-04-22 — downgraded to a runtime assertion in `lib/outcome_tracker.ex:assert_h6_monotone/2`. Echidnabot audits the JSONL for violations. See commit history. |
 
 **New total: ~1,400 LOC of proven code (all TLC-verified or Idris2/Lean4-typechecked)**
 
@@ -153,6 +154,19 @@ hypatia/
     │   ├── ConfidenceBounds.idr          # [0,1] invariant
     │   ├── SafetyTriangle.idr            # Ordering + routing correctness
     │   └── DispatchStrategy.idr          # Monotonicity
-    └── lean4/
-        └── RateLimiting.lean             # Counter bounds
+    ├── lean4/
+    │   └── RateLimiting.lean             # Counter bounds
+    └── tlaplus/
+        └── KinGate.tla                   # Mutex under interleaved bot requests
 ```
+
+## Retired proofs
+
+- **H6 — Outcome log monotonicity** (was `verification/proofs/agda/OutcomeLog.agda`,
+  retired 2026-04-22). The property — JSONL outcome log timestamps strictly
+  increasing — is trivial enough that a runtime assertion does the job. It
+  now lives in `lib/outcome_tracker.ex` (`assert_h6_monotone/2`) and
+  echidnabot audits the logs for any violation. Removing Agda also removes
+  a theorem prover from the toolchain: Hypatia now uses Idris2 (compile-time
+  types), Lean 4 (universal invariants), and TLA+ (model-checked concurrency).
+
