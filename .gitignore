@@ -102,11 +102,6 @@ Thumbs.db
 # Cargo.lock  # Keep for binaries
 
 
-# Julia
-*.jl.cov
-*.jl.mem
-/Manifest.toml
-
 
 # ReScript
 /lib/bs/

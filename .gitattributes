@@ -7,7 +7,6 @@
 *.rs    text eol=lf diff=rust
 *.ex    text eol=lf diff=elixir
 *.exs   text eol=lf diff=elixir
-*.jl    text eol=lf
 *.res   text eol=lf
 *.resi  text eol=lf
 *.ada   text eol=lf diff=ada
