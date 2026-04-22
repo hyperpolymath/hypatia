@@ -24,6 +24,13 @@ defmodule Hypatia.Rules.Dogfooding do
   }
 
   # ─── Template placeholders that must be resolved ─────────────────────
+  #
+  # DOG-06 note: the strings below are rule DATA — the literal tokens
+  # this rule searches for in downstream repos' config. They are not
+  # unresolved placeholders in this repository's own config. If a
+  # dogfooding-self scan flags these lines, the scanner is mistaking
+  # a rule definition for the pattern it detects; suppress with
+  # `# nosemgrep` or equivalent at the call site.
 
   @template_placeholders [
     "{{OWNER}}",
