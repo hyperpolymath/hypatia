@@ -93,7 +93,7 @@ RULES ENGINE (Elixir — absorbed from Logtalk 2026-03-06)
   security_errors.ex               ██████████ 100%    SHA pins, secrets, CWEs
   cicd_rules.ex                    ██████████ 100%    Commit blocking, waste detection
   code_safety.ex                   ██████████ 100%    Per-language dangerous patterns
-  migration_rules.ex               ██████████ 100%    ReScript API migration
+  migration_rules.ex               ██████████ 100%    Legacy ReScript → Ephapax/Gossamer migration (ReScript retired 2026-04)
   learning.ex                      ██████████ 100%    GenServer: confidence scoring
   forge_adapters.ex                ██████████ 100%    Forge ops with input validation
 

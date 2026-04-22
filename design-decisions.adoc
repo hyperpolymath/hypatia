@@ -12,6 +12,8 @@ This document clarifies the role of SQL/NoSQL/NewSQL in VeriSimDB's architecture
 
 VeriSimDB's core (ReScript registry + Elixir orchestration) is **agnostic to underlying storage**. The "database" is distributed across specialized stores, each optimized for its data type.
 
+NOTE: *2026-04 update.* ReScript was retired from the hyperpolymath allowed-language set. The VeriSimDB registry therefore needs migration — the natural replacement for a typed-wasm registry layer is Ephapax (per issue #177 and `.github/workflows/rsr-antipattern.yml`). The rest of this document is preserved as the original architecture record; read "ReScript registry" below as "the typed registry component, now planned as Ephapax".
+
 **Key Principle:** You don't pick one paradigm for the entire system. Instead, pick the best tool for each modality and let VeriSimDB federate them.
 
 === Where SQL/NewSQL Actually Matters

@@ -45,43 +45,39 @@ scan_pattern() {
     echo ""
 }
 
-# Test Rule 1: ReScript getExn on external data (CRITICAL)
-scan_pattern "CRITICAL" \
-    "getExn" \
-    "ReScript unsafe getExn() calls" \
-    "*.res"
+# Rule 1 (formerly ReScript getExn scan) — dropped 2026-04 when ReScript
+# was banned outright. The banned-language check below (Rule 12) now
+# catches any .res/.resi file as a CRITICAL violation; pattern-specific
+# rules for legacy ReScript are redundant.
 
-# Test Rule 2: CORS wildcard (CRITICAL)
+# Rule 2: CORS wildcard (CRITICAL) — kept, JS/Rust still relevant
 scan_pattern "CRITICAL" \
     'Access-Control-Allow-Origin.*"\*"' \
     "CORS wildcard allowing any origin" \
-    "*.{res,js,ts,rs}"
+    "*.{js,ts,rs}"
 
-# Test Rule 3: Unverified JWT decode (CRITICAL)
+# Rule 3: Unverified JWT decode (CRITICAL) — Rust-only now
 scan_pattern "CRITICAL" \
     "decodeJWT.*Basic decode.*dev/testing" \
     "Unverified JWT decode in dev mode" \
-    "*.{res,rs}"
+    "*.rs"
 
-# Test Rule 4: Rust unwrap() without checks (HIGH)
+# Rule 4: Rust unwrap() without checks (HIGH)
 scan_pattern "HIGH" \
     "\.unwrap\(\)" \
     "Rust unwrap() calls (potential panic)" \
     "*.rs"
 
-# Test Rule 5: Default to root UID (CRITICAL)
+# Rule 5: Default to root UID (CRITICAL)
 scan_pattern "CRITICAL" \
     "unwrap_or\(0\).*uid" \
     "Default to root UID (privilege escalation)" \
     "*.rs"
 
-# Test Rule 6: Obj.magic type bypass (HIGH)
-scan_pattern "HIGH" \
-    "Obj\.magic" \
-    "ReScript Obj.magic bypassing type safety" \
-    "*.res"
+# Rule 6 (formerly ReScript Obj.magic) — dropped 2026-04 same reason
+# as Rule 1.
 
-# Test Rule 7: Path traversal risk (MEDIUM)
+# Rule 7: Path traversal risk (MEDIUM)
 scan_pattern "MEDIUM" \
     "Path::new.*\.\." \
     "Potential path traversal" \
@@ -124,13 +120,17 @@ scan_banned_language() {
 }
 
 # Rule 9: Python files (CRITICAL — banned language)
-scan_banned_language "CRITICAL" "*.py" "Python" "Julia/Rust/ReScript"
+scan_banned_language "CRITICAL" "*.py" "Python" "Elixir/Rust"
 
 # Rule 10: TypeScript files (CRITICAL — banned language)
-scan_banned_language "CRITICAL" "*.ts" "TypeScript" "ReScript"
+scan_banned_language "CRITICAL" "*.ts" "TypeScript" "Ephapax (systems) / Gossamer (UI)"
 
 # Rule 11: Go files (CRITICAL — banned language)
 scan_banned_language "CRITICAL" "*.go" "Go" "Rust"
+
+# Rule 12: ReScript files (CRITICAL — banned 2026-04)
+scan_banned_language "CRITICAL" "*.res" "ReScript" "Ephapax (systems) / Gossamer (UI)"
+scan_banned_language "CRITICAL" "*.resi" "ReScript (interface)" "Ephapax (systems) / Gossamer (UI)"
 
 # ---------------------------------------------------------------------------
 # RSR Compliance: SCM File Location Enforcement
