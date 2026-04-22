@@ -145,6 +145,7 @@ jobs:
         with:
           config: >-
             p/rust
+            p/elixir
             p/security-audit
             p/secrets
           generateSarif: "1"

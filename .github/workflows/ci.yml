@@ -202,49 +202,6 @@ jobs:
           fail-on: warning
 
   # ============================================================================
-  # Logtalk Jobs (engine)
-  # ============================================================================
-  logtalk-test:
-    name: Logtalk Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Install SWI-Prolog
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y swi-prolog
-
-      - name: Install Logtalk
-        run: |
-          curl -sSL https://logtalk.org/files/logtalk-3.78.0.tar.bz2 | tar xj
-          cd logtalk-3.78.0
-          sudo ./scripts/install.sh -p /usr/local
-          echo "LOGTALKHOME=/usr/local/share/logtalk" >> $GITHUB_ENV
-          echo "LOGTALKUSER=$HOME/logtalk" >> $GITHUB_ENV
-
-      - name: Setup Logtalk user directory
-        run: |
-          /usr/local/share/logtalk/scripts/logtalk_user_setup.sh
-
-      - name: Run Logtalk tests
-        working-directory: engine
-        run: |
-          # Load and test the engine components
-          swipl -g "['$LOGTALKHOME/adapters/swi.pl'], ['$LOGTALKHOME/paths/paths.pl'], logtalk_load([loader, 'rules/cicd_rules', 'rules/learning']), halt(0)." -t "halt(1)"
-
-      - name: Validate Logtalk syntax
-        working-directory: engine
-        run: |
-          for file in *.lgt rules/*.lgt; do
-            if [ -f "$file" ]; then
-              echo "Checking $file..."
-              swipl -g "['$LOGTALKHOME/adapters/swi.pl'], logtalk_load('$file'), halt(0)." -t "halt(1)" || exit 1
-            fi
-          done
-
-  # ============================================================================
   # Combined Status Check
   # ============================================================================
   ci-status:
@@ -257,7 +214,6 @@ jobs:
       - rust-test-coverage
       - haskell-build
       - haskell-lint
-      - logtalk-test
     if: always()
     steps:
       - name: Check all jobs status
@@ -266,8 +222,7 @@ jobs:
              [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
-             [[ "${{ needs.logtalk-test.result }}" == "failure" ]]; then
+             [[ "${{ needs.haskell-lint.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi

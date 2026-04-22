@@ -125,10 +125,6 @@ __pycache__/
 /bin/
 
 
-# Chapel
-*.chpl.tmp.*
-
-
 # Secrets
 .env
 .env.*
