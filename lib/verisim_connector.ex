@@ -168,27 +168,6 @@ defmodule Hypatia.VerisimConnector do
   end
 
   # ====================================================================
-  # Logtalk Fact Generation
-  # ====================================================================
-
-  @doc "Transform a scan result into Logtalk facts for the rule engine."
-  def to_logtalk_facts(scan_data) do
-    weak_points = Map.get(scan_data.scan, "weak_points", [])
-
-    weak_points
-    |> Enum.map(fn wp ->
-      file = Map.get(wp, "location", Map.get(wp, "file", "unknown"))
-      category = Map.get(wp, "category", "unknown")
-      severity = Map.get(wp, "severity", "unknown")
-
-      """
-      weak_point('#{scan_data.repo}', '#{file}', '#{category}', '#{severity}').
-      """
-    end)
-    |> Enum.join("\n")
-  end
-
-  # ====================================================================
   # Fallback: Direct File I/O (graceful degradation)
   # ====================================================================
 

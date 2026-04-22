@@ -182,22 +182,16 @@ Observations | Action
 
 ### Auto-Generated Rule Example
 
-After seeing `useUnsafePointer()` 10 times:
+After seeing `useUnsafePointer()` 10 times, the learning pipeline in
+`lib/rules/learning.ex` auto-generates a rule module at confidence 0.50
+and promotes it via the Bayesian update loop once fixes succeed. The
+former Logtalk example here described the retired `.lgt` engine; the
+Elixir equivalent lives in `lib/rules/code_safety.ex`.
 
-```logtalk
-% Auto-generated rule (pattern observed 10 times)
-% Approved: 2026-01-25 (3 successful fixes)
-
-has_unsafe_call_issue(Path, use_unsafe_pointer_pattern(Line)) :-
-    read_code_line(Path, LineNum, Line),
-    atom_concat(_, 'useUnsafePointer', Line),
-    LineNum.
-
-classify_severity(use_unsafe_pointer_pattern(_), high).
-
-suggest_fix(use_unsafe_pointer_pattern(_),
-    'Replace useUnsafePointer with safe alternative').
-```
+> **Note:** this document still contains residual `.lgt` filenames and
+> "learned-rules.lgt"-style references from the earlier Logtalk-era
+> architecture. A full rewrite is tracked separately; the rules engine
+> is now 100% Elixir (`lib/rules/*.ex`).
 
 ## Current Rules Coverage
 

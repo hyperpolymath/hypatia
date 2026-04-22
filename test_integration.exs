@@ -18,17 +18,6 @@ Enum.each(scans, fn scan ->
   IO.puts("  #{scan.repo}: #{weak_count} weak points")
 end)
 
-# Generate Logtalk facts
-echidna_scan = Enum.find(scans, fn s -> s.repo == "echidna" end)
-if echidna_scan do
-  facts = Hypatia.VerisimdbConnector.to_logtalk_facts(echidna_scan)
-  IO.puts("\n=== Logtalk Facts Sample (echidna, first 3 facts) ===")
-  facts
-  |> String.split("\n")
-  |> Enum.take(3)
-  |> Enum.each(&IO.puts/1)
-end
-
 # Test pattern analyzer
 {:ok, analysis} = Hypatia.PatternAnalyzer.analyze_all_scans()
 IO.puts("\n=== Pattern Analysis ===")
