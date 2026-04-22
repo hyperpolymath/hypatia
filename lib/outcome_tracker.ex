@@ -272,12 +272,47 @@ defmodule Hypatia.OutcomeTracker do
     filename = "#{year}-#{month_str}.jsonl"
     path = Path.join([Path.expand(@verisimdb_data_path), "outcomes", filename])
 
+    # H6 — outcome log monotonicity. Was previously proven in
+    # verification/proofs/agda/OutcomeLog.agda; that proof was replaced
+    # by this runtime assertion + an echidnabot audit over the JSONL.
+    # A violation means NTP step, concurrent writer, or the caller
+    # supplied a stale timestamp — all investigation-worthy.
+    assert_h6_monotone(path, Map.get(record, "timestamp"))
+
     case Jason.encode(record) do
       {:ok, json} ->
         File.write(path, json <> "\n", [:append, :utf8])
 
       {:error, reason} ->
         Logger.error("Failed to write outcome log: #{inspect(reason)}")
+    end
+  end
+
+  # H6 runtime check. ISO-8601 timestamps sort lexicographically, so
+  # string comparison gives the right ordering without DateTime parsing
+  # on the hot path.
+  defp assert_h6_monotone(path, new_ts) when is_binary(new_ts) do
+    case tail_timestamp(path) do
+      {:ok, last_ts} when new_ts > last_ts -> :ok
+      {:ok, last_ts} ->
+        Logger.error(
+          "H6 violation: outcome log non-monotone at #{path} " <>
+            "(last=#{last_ts}, new=#{new_ts})"
+        )
+      :none -> :ok
+    end
+  end
+
+  defp assert_h6_monotone(_path, _), do: :ok
+
+  defp tail_timestamp(path) do
+    with true <- File.exists?(path),
+         [line] <- path |> File.stream!() |> Enum.take(-1),
+         {:ok, %{"timestamp" => ts}} when is_binary(ts) <-
+           line |> String.trim_trailing() |> Jason.decode() do
+      {:ok, ts}
+    else
+      _ -> :none
     end
   end
 
