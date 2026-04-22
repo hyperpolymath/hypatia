@@ -90,7 +90,7 @@ defmodule Hypatia.VCL.Client do
 
   @impl true
   def handle_call({:execute, ast, opts}, _from, state) do
-    result = Hypatia.VCL.FileExecutor.execute(ast, opts)
+    result = dispatch(ast, opts)
     {:reply, result, %{state | query_count: state.query_count + 1}}
   end
 
@@ -107,7 +107,7 @@ defmodule Hypatia.VCL.Client do
       _ ->
         result =
           with {:ok, ast} <- parse_vql(query_string) do
-            Hypatia.VCL.FileExecutor.execute(ast, opts)
+            dispatch(ast, opts)
           end
 
         cache = maybe_clean_cache(state.cache, now, state.last_cache_clean, state.cache_ttl)
@@ -120,6 +120,14 @@ defmodule Hypatia.VCL.Client do
         }}
     end
   end
+
+  # Route a parsed AST to the right executor. Multi-URL remote federation
+  # goes to RemoteExecutor; every other source stays on FileExecutor.
+  defp dispatch(%{source: {:federation_remote, urls, _policy}} = ast, opts) do
+    Hypatia.VCL.RemoteExecutor.execute(urls, ast, opts)
+  end
+
+  defp dispatch(ast, opts), do: Hypatia.VCL.FileExecutor.execute(ast, opts)
 
   @impl true
   def handle_call(:stats, _from, state) do
@@ -228,6 +236,15 @@ defmodule Hypatia.VCL.Client do
     {:ok, {:store, normalize_token(store_id)}, rest}
   end
 
+  # FROM FEDERATION REMOTE IN ["url1", "url2", …] [WITH DRIFT policy]
+  # Multi-store remote federation — clones every URL in parallel and
+  # merges results, tagging each row with its source URL.
+  defp parse_from(["FROM", "FEDERATION", "REMOTE", "IN", "[" | rest]) do
+    {urls, rest} = collect_urls(rest, [])
+    {drift_policy, rest} = parse_drift_policy(rest)
+    {:ok, {:federation_remote, urls, drift_policy}, rest}
+  end
+
   # FROM FEDERATION REMOTE "https://github.com/org/verisim-data"
   # Clones the remote repo via RemoteCache, then federates across all stores.
   defp parse_from(["FROM", "FEDERATION", "REMOTE", url | rest]) do
@@ -269,6 +286,30 @@ defmodule Hypatia.VCL.Client do
   end
 
   defp parse_drift_policy(rest), do: {nil, rest}
+
+  # Parser helper: collect tokens between `[` and `]` as a list of URLs.
+  # The tokenizer treats `,` as a whitespace separator, so nothing extra
+  # is needed to handle commas.
+  defp collect_urls(["]" | rest], acc), do: {Enum.reverse(acc), rest}
+
+  defp collect_urls([{:quoted, url} | rest], acc) do
+    collect_urls(rest, [url | acc])
+  end
+
+  defp collect_urls([token | rest], acc) when is_binary(token) do
+    cond do
+      token == "]" -> {Enum.reverse(acc), rest}
+      String.ends_with?(token, "]") ->
+        stripped = String.trim_trailing(token, "]")
+        acc = if stripped == "", do: acc, else: [stripped | acc]
+        {Enum.reverse(acc), rest}
+
+      true ->
+        collect_urls(rest, [token | acc])
+    end
+  end
+
+  defp collect_urls([], acc), do: {Enum.reverse(acc), []}
 
   defp parse_where(["WHERE" | rest]) do
     {condition_tokens, rest} = Enum.split_while(rest, fn token ->
