@@ -158,7 +158,7 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 | `quarantine.ex` | Auto-quarantine on 5+ failures or >30% FP rate; 3 levels (soft/hard/permanent) |
 | `batch_rollback.ex` | Rollback entire dispatch batches with confidence revert |
 
-### Metrics (as of 2026-03-07)
+### Metrics (as of 2026-04-22)
 
 - 302 repos scanned, 3385 weak points across ecosystem
 - 1635 dispatched actions (600 auto-execute, 667 review, 368 report)
@@ -180,10 +180,10 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 
 **Important:**
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
-- Implement VCL federation executor (currently local-only)
-- Historical trend tracking across scan cycles
 - 5 new RSR compliance rules cover structural compliance (banned languages, SCM locations, required files, Containerfile naming) — distinct from PA rule recipes
 - ~~Generate summaries for NULL-summary repos in verisim-data~~ (DONE 2026-03-07: 295 summaries auto-generated)
+- ~~Historical trend tracking across scan cycles~~ (DONE 2026-04-22: `lib/historical_trends.ex` + VCL.Query integration)
+- ~~VCL federation executor — multi-store~~ (DONE 2026-04-22: `lib/vcl/remote_executor.ex`; `FROM FEDERATION REMOTE IN [...]`)
 
 **Planned:**
 - GraphQL API as live HTTP endpoint
@@ -193,13 +193,12 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 
 ### Known Gaps
 
-1. **VCL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
-2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
-3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
-4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script — recipes exist but no executable script
-5. **Containerfiles:** Haskell still uses non-Chainguard base images (no Chainguard equivalents)
-6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
-7. **Neural state persistence:** State dir exists but coordinator hasn't persisted to disk yet
+1. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
+2. **Fix script coverage:** 310/600 auto-execute entries have null fix_script — recipes exist but no executable script
+3. **Containerfiles:** Haskell still uses non-Chainguard base images (no Chainguard equivalents)
+4. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
+5. **Neural state persistence:** State dir exists but coordinator hasn't persisted to disk yet
+6. **Neural training data balance:** ~99% success in the historical outcome log. Mitigated 2026-04-22 by `lib/neural/rebalancer.ex` (synthetic regressions + rule-based RBF targets, on by default); the synthetic path is Strategy A. Strategies B (adversarial perturbation) and C (real failure corpus from panic-attack history) remain unstarted.
 
 ## Code Style
 
