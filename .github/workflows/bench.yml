@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Run criterion benchmarks and gate against a committed baseline.
+#
+# See .machine_readable/benchmarks/README.md for the full convention.
+# Gate logic lives in scripts/check-bench-regression.py so the same
+# parse/compare code can be invoked locally.
+
+name: Benchmarks
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'fixer/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.machine_readable/benchmarks/**'
+      - 'scripts/update-bench-baselines.py'
+      - 'scripts/check-bench-regression.py'
+      - '.github/workflows/bench.yml'
+  pull_request:
+    paths:
+      - 'fixer/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.machine_readable/benchmarks/**'
+      - 'scripts/update-bench-baselines.py'
+      - 'scripts/check-bench-regression.py'
+      - '.github/workflows/bench.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode'
+        required: false
+        default: 'compare'
+        type: choice
+        options:
+          - compare
+          - regenerate-baseline
+
+permissions: read-all
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    name: criterion + baseline gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        with:
+          workspaces: ". -> target"
+          cache-on-failure: true
+          key: bench
+
+      - name: Run criterion benches (quick mode)
+        run: |
+          set -euo pipefail
+          # Quick mode: warm-up 1s, measurement 2s, sample 10 — cuts
+          # total runtime to ~2 min while still giving a tight enough
+          # estimate to catch >20% regressions.
+          cargo bench --bench hypatia_bench -- \
+              --warm-up-time 1 --measurement-time 2 --sample-size 10 \
+              --output-format bencher \
+              | tee bench-output.txt
+          echo "---"
+          grep '^test.*bench:' bench-output.txt || true
+
+      - name: Compare against committed baseline
+        id: compare
+        if: ${{ github.event.inputs.mode != 'regenerate-baseline' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/check-bench-regression.py \
+              bench-output.txt \
+              .machine_readable/benchmarks/baselines.json \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Regenerate baseline (manual dispatch only)
+        if: ${{ github.event.inputs.mode == 'regenerate-baseline' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/update-bench-baselines.py \
+              bench-output.txt \
+              .machine_readable/benchmarks/baselines.json
+          echo "## Regenerated baseline" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The refreshed \`baselines.json\` is attached as an" >> "$GITHUB_STEP_SUMMARY"
+          echo "artefact. Review the diff and commit manually — the" >> "$GITHUB_STEP_SUMMARY"
+          echo "workflow does not push changes on its own." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload baseline candidate (regenerate mode)
+        if: ${{ github.event.inputs.mode == 'regenerate-baseline' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: baselines-candidate
+          path: .machine_readable/benchmarks/baselines.json
+          retention-days: 30
+
+      - name: Upload raw bench output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-output
+          path: bench-output.txt
+          retention-days: 30

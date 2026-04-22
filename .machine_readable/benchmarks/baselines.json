@@ -1,0 +1,6 @@
+{
+  "_comment": "Per-benchmark baseline in ns/iter. Keys are criterion bench names; values are the median ns/iter recorded on a main-branch run. Empty until the first baseline commit — see README.md in this directory for how to regenerate. Until this file has real data, bench.yml runs in advisory mode (logs current numbers, never fails).",
+  "_schema_version": 1,
+  "_regression_threshold_pct": 50,
+  "baselines": {}
+}
