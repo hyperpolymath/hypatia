@@ -71,6 +71,18 @@ extern "gossamer" {
 
   // Close the channel. Linear — consumes ch.
   fn ipc_close(ch: IpcChannel): Unit
+
+  // ── JSON decode helpers ──────────────────────────────────────────────────
+  //
+  // The wire format is JSON: {"tag": 0, "value": <i32>} for Navigate,
+  // {"tag": 1} for PopState (matches loader.js Msg constructors at
+  // src/ui/gossamer/loader.js:76-79). When Ephapax stdlib publishes a
+  // JSON module these three externs collapse into a single
+  // `json::decode::<Msg>` call.
+
+  fn bytes_to_string(b: Bytes): String
+  fn json_parse_tag(s: String): I32
+  fn json_parse_int_field(s: String, field: String): I32
 }
 
 // ── Burble session integration (TODO) ────────────────────────────────────
@@ -107,21 +119,35 @@ extern "gossamer" {
 @tail_recursive
 fn run(win: Window, ch: IpcChannel, model: Model): Unit =
   let! (ch2, msg_bytes) = ipc_recv(ch)
-  // TODO: decode msg_bytes → Msg. Shape depends on the wire format
-  // the Phoenix/Bandit backend produces. For the AffineScript version
-  // the wire was JSON-encoded Msg records; keep that or switch to
-  // Cap'n Proto / FlatBuffers — either way this file is where the
-  // decoder lives.
   let msg: Msg = decode_msg(msg_bytes)
   let new_model = hypatia_update(msg, model)
   let new_body = hypatia_view(new_model)
   let! win2 = window_set_body(win, new_body)
   run(win2, ch2, new_model)
 
-// Placeholder — replace with real decoder once wire format is picked.
+// Maps the i32 tag at JSON field "value" to a Department variant.
+// Order matches loader.js Department = { Learning: 0, Symbolic: 1,
+// Verification: 2, Triangle: 3 }.
+fn int_to_department(n: I32): Department =
+  match n of
+    | 0 => Learning
+    | 1 => Symbolic
+    | 2 => Verification
+    | _ => Triangle
+  end
+
+// Decode a single IPC frame into a Msg. Wire format is JSON; see the
+// `extern "gossamer"` JSON helpers block above. Unknown tags fall
+// through to PopState so a forward-compatible backend that emits a
+// new variant does not crash the UI.
 fn decode_msg(bytes: Bytes): Msg =
-  // TODO: decode from JSON / Cap'n Proto / FlatBuffers
-  PopState
+  let s = bytes_to_string(bytes)
+  let tag = json_parse_tag(s)
+  match tag of
+    | 0 => Navigate(int_to_department(json_parse_int_field(s, "value")))
+    | 1 => PopState
+    | _ => PopState
+  end
 
 // ── Entry point for the Gossamer runtime ─────────────────────────────────
 
