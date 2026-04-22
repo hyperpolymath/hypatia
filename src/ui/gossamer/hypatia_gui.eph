@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Hypatia GUI — Ephapax / Gossamer TEA interface
+//
+// Ported from src/ui/tea/hypatia_gui.affine (AffineScript → Ephapax,
+// 2026-04-22 per issue #177). The TEA loop is unchanged; what differs
+// is the type discipline.
+//
+// AffineScript was affine-only and annotated parameters with @linear to
+// opt individual bindings into exactly-once use. Ephapax is dyadic
+// (ADR-002): `let` is affine, `let!` is linear, the choice is
+// per-binding at the CALL SITE, not per-parameter at the callee. So
+// what was `@linear msg: Msg, @linear model: Model` becomes implicit:
+// the caller binds with `let!` when it wants exactly-once guarantees.
+//
+// For Hypatia's TEA loop, the model and messages are naturally affine
+// (fire-and-forget on the UI thread) — the callers use plain `let` for
+// them. When Burble binds an IPC channel handle from the host, it must
+// use `let!` — see the Bridge integration stub in bridge.eph (TODO).
+//
+// References:
+//   * hyperpolymath/ephapax — language spec, v2 grammar, ADRs
+//   * hyperpolymath/gossamer — host / window / IPC layer (uses let! for
+//     window handles and IPC channels per the project receipts)
+//   * .claude.md / architecture docs on safety-triangle navigation
+
+// ── Hypatia Departments ───────────────────────────────────────────────────
+
+data Department =
+  | Learning
+  | Symbolic
+  | Verification
+  | Triangle
+
+// ── Model ─────────────────────────────────────────────────────────────────
+
+// Hypatia GUI Model. history_depth tracks the navigation stack size.
+// Held by the TEA runtime on the UI thread; no resource handles, so
+// affine discipline is enough.
+type Model = {
+  current_dept: Department,
+  history_depth: I32
+}
+
+// ── Msg ───────────────────────────────────────────────────────────────────
+
+data Msg =
+  | Navigate(Department)
+  | PopState
+
+// ── TEA Logic ─────────────────────────────────────────────────────────────
+
+// Initial state: Triangle (Core Safety) with no history.
+fn hypatia_init(): Model =
+  { current_dept: Triangle, history_depth: 0 }
+
+// TEA update. Consumes msg + model, produces a new Model.
+// Callers bind the return with `let model = hypatia_update(msg, model)`
+// (or `let!` if they want exactly-once — e.g. when driving the update
+// from the Burble effect handler, see bridge.eph).
+fn hypatia_update(msg: Msg, model: Model): Model =
+  match msg of
+    | Navigate(new_dept) =>
+        // Push current onto history stack (increment depth).
+        { current_dept: new_dept, history_depth: model.history_depth + 1 }
+    | PopState =>
+        if model.history_depth > 0 then
+          // Pop: return to Triangle baseline, decrement depth.
+          { current_dept: Triangle, history_depth: model.history_depth - 1 }
+        else
+          // Stack empty — no-op (preserve model as-is, floor depth at 0).
+          { current_dept: model.current_dept, history_depth: 0 }
+  end
+
+// View: render the current department as a display string.
+// Returns String (unrestricted; the UI may cache / hash / log it).
+fn hypatia_view(model: Model): String =
+  match model.current_dept of
+    | Learning     => "NEURAL LEARNING (Elixir Pipeline)"
+    | Symbolic     => "SYMBOLIC REASONING (Elixir Rules)"
+    | Verification => "FORMAL VERIFICATION (Idris2 / Lean4 / TLA+)"
+    | Triangle     => "SAFETY TRIANGLE (Eliminate / Substitute / Control)"
+  end
+
+// Subscriptions. Hypatia's GUI doesn't subscribe to timer / external
+// events — the symbolic pipeline is event-driven from the OTP side
+// via Burble's bridge, not polled from the UI. Return "None" as a
+// placeholder matching the old AffineScript signature.
+fn hypatia_subs(model: Model): String =
+  "None"

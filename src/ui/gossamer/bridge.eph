@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Hypatia Bridge — wires the TEA loop in hypatia_gui.eph into the
+// Gossamer host runtime (Burble-backed) and, optionally, a PanLL panel.
+//
+// STATUS: STUB. This file declares the shape of the integration without
+// calling real Gossamer / Burble APIs, because those APIs aren't in
+// scope of this branch (we don't have the ephapax / gossamer / burble
+// runtimes checked into this repo and can't verify signatures here).
+//
+// When someone with the Gossamer runtime in hand picks this up, the
+// concrete steps are:
+//
+//   1. Replace the `extern "gossamer"` placeholder signatures below
+//      with the real imports from gossamer's public module
+//      (`hyperpolymath/gossamer` — see src/core/Bridge.eph for the
+//      pattern, since that file is the receipts quoted reference).
+//
+//   2. Replace the Burble session-state TODO with real calls to
+//      burble's session API (burble is "P2P voice control plane +
+//      bot orchestration" per Hypatia's DESIGN-NARRATIVE.md:93 —
+//      that README is the authoritative shape).
+//
+//   3. Decide whether the IPC channel to the Elixir OTP backend goes
+//      directly through Gossamer's IPC primitive, or through a Burble
+//      session. If through Burble, the session handle is linear (let!);
+//      if direct Gossamer IPC, the channel handle is linear (let!) in
+//      both cases. Every handle that cannot safely double-close or
+//      leak gets let!.
+
+module hypatia/ui/bridge
+
+import hypatia/ui/gui  // exposes Model, Msg, hypatia_init, update, view, subs
+
+// ── Host imports (Gossamer) ───────────────────────────────────────────────
+//
+// These are the Gossamer host API calls we need. When the real signatures
+// are in, each `extern "gossamer"` block gets replaced by an `import` from
+// the gossamer module and the bodies move into the runtime.
+
+extern "gossamer" {
+  // Linear window handle. Obtained once, must be closed exactly once.
+  type Window
+
+  // Open a top-level window with title + initial body string (from view).
+  fn window_open(title: String, initial_body: String): Window
+
+  // Update the body of an open window. Consumes the window handle for
+  // the duration of the call; returns it reborrowed on success.
+  fn window_set_body(w: Window, body: String): Window
+
+  // Close the window. Linear — consumes w, nothing returned.
+  fn window_close(w: Window): Unit
+
+  // Linear IPC channel handle. Obtained once per session, must be
+  // closed exactly once (send a close control frame; the backend
+  // tears down its OTP GenServer on receipt).
+  type IpcChannel
+
+  // Open an IPC channel to the named host endpoint. For Hypatia the
+  // endpoint is the Phoenix/Bandit listener on :9090 (see stapeln.toml
+  // layers.elixir-toolchain for the port binding).
+  fn ipc_open(endpoint: String): IpcChannel
+
+  // Receive the next message from the channel. Consumes + reborrows.
+  // Returns (channel, msg-bytes). Caller decodes to Msg.
+  fn ipc_recv(ch: IpcChannel): (IpcChannel, Bytes)
+
+  // Send a message (e.g. outcome record from a UI action). Consumes +
+  // reborrows.
+  fn ipc_send(ch: IpcChannel, body: Bytes): IpcChannel
+
+  // Close the channel. Linear — consumes ch.
+  fn ipc_close(ch: IpcChannel): Unit
+}
+
+// ── Burble session integration (TODO) ────────────────────────────────────
+//
+// Burble provides the P2P session layer that PanLL listens on. When the
+// Hypatia panel is minted (panel-minter, per the user's earlier note),
+// Burble hands us a session handle. Shape is:
+//
+//   extern "burble" {
+//     type Session
+//     fn session_attach(panel_id: String): Session
+//     fn session_detach(s: Session): Unit
+//     fn session_publish(s: Session, topic: String, payload: Bytes): Session
+//   }
+//
+// Left unwritten here until the burble module is in the import graph.
+
+// ── Main entry: drive the TEA loop from host events ──────────────────────
+//
+// The canonical Ephapax TEA driver is a tail-recursive loop that
+// consumes and re-produces (window, channel, model) on every iteration.
+// Each iteration:
+//   1. Block on `ipc_recv` for the next Msg
+//   2. Feed it to hypatia_update(msg, model) — see hypatia_gui.eph
+//   3. Compute new view with hypatia_view(model)
+//   4. Push it to the window with window_set_body
+//   5. Recur
+//
+// `let!` on channel + window guarantees the handles are consumed once
+// per iteration and reborrowed (so a dropped iteration = a leaked handle
+// = a type error at compile time, which is the entire point of picking
+// Ephapax).
+
+@tail_recursive
+fn run(win: Window, ch: IpcChannel, model: Model): Unit =
+  let! (ch2, msg_bytes) = ipc_recv(ch)
+  // TODO: decode msg_bytes → Msg. Shape depends on the wire format
+  // the Phoenix/Bandit backend produces. For the AffineScript version
+  // the wire was JSON-encoded Msg records; keep that or switch to
+  // Cap'n Proto / FlatBuffers — either way this file is where the
+  // decoder lives.
+  let msg: Msg = decode_msg(msg_bytes)
+  let new_model = hypatia_update(msg, model)
+  let new_body = hypatia_view(new_model)
+  let! win2 = window_set_body(win, new_body)
+  run(win2, ch2, new_model)
+
+// Placeholder — replace with real decoder once wire format is picked.
+fn decode_msg(bytes: Bytes): Msg =
+  // TODO: decode from JSON / Cap'n Proto / FlatBuffers
+  PopState
+
+// ── Entry point for the Gossamer runtime ─────────────────────────────────
+
+fn main(): Unit =
+  let initial_model = hypatia_init()
+  let initial_body = hypatia_view(initial_model)
+  let! win = window_open("Hypatia", initial_body)
+  let! ch = ipc_open("http://localhost:9090/ws")
+  run(win, ch, initial_model)
