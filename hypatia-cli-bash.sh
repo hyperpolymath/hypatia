@@ -205,20 +205,16 @@ scan_code_patterns() {
         "critical" "proof_bypass" "lean_sorry" "CWE-704" \
         "Complete the proof; sorry leaves a soundness hole"
 
-    # ReScript: Obj.magic — type bypass
-    run_pattern "$dir" "*.res" '\bObj\.magic\b' \
-        "high" "type_safety_bypass" "rescript_obj_magic" "CWE-704" \
-        "Remove Obj.magic and use proper type conversions or externals"
-
-    # ReScript: getExn — crashes on None/Error
-    run_pattern "$dir" "*.res" '\bgetExn\b' \
-        "critical" "unsafe_crash" "rescript_getexn" "CWE-754" \
-        "Replace getExn with switch/match or getWithDefault"
-
-    # ReScript: JSON.parseExn — crashes on invalid JSON
-    run_pattern "$dir" "*.res" '\bJSON\.parseExn\b' \
-        "critical" "unsafe_crash" "rescript_json_parse_exn" "CWE-20" \
-        "Use try/catch or a safe JSON parser that returns Result"
+    # ReScript banned outright 2026-04 — any .res/.resi file is a
+    # violation. The pattern-specific rules (Obj.magic / getExn /
+    # JSON.parseExn) were dropped as redundant: banning the language
+    # is strictly stronger than banning three constructs within it.
+    run_pattern "$dir" "*.res" '.' \
+        "critical" "banned_language" "rescript_file_present" "CWE-1103" \
+        "Migrate to Ephapax (systems) or Gossamer (UI)"
+    run_pattern "$dir" "*.resi" '.' \
+        "critical" "banned_language" "rescript_file_present" "CWE-1103" \
+        "Migrate to Ephapax (systems) or Gossamer (UI)"
 
     # ── 2. UNSAFE CRASH / PANIC PATHS ──────────────────────────────
 
@@ -311,7 +307,8 @@ scan_code_patterns() {
         "critical" "command_injection" "shell_unquoted_var" "CWE-78" \
         "Always double-quote shell variables: exec \"\$VAR\"" "true"
 
-    # eval() / Function() in JavaScript/ReScript
+    # eval() / Function() in JavaScript (and legacy .res if any slip past
+    # the banned-language filter above).
     run_pattern "$dir" "*.{js,jsx,mjs,res}" '\beval\s*\(' \
         "critical" "code_injection" "eval_usage" "CWE-95" \
         "Replace eval() with JSON.parse, switch, or safe alternatives"
@@ -432,7 +429,7 @@ scan_code_patterns() {
 
     # ── 6. XSS / DOM SAFETY ───────────────────────────────────────
 
-    # dangerouslySetInnerHTML (React/ReScript)
+    # dangerouslySetInnerHTML (React / legacy ReScript slips)
     run_pattern "$dir" "*.{res,jsx,js,tsx}" 'dangerouslySetInnerHTML' \
         "critical" "xss" "dangerous_inner_html" "CWE-79" \
         "Sanitise HTML with DOMPurify before using dangerouslySetInnerHTML"

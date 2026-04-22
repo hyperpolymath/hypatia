@@ -77,22 +77,19 @@ scan_file() {
         echo "$filepath|$linenum|$content"
     }
 
-    # Pattern 1: ReScript getExn (CRITICAL)
-    if [[ "$file" == *.res ]]; then
-        while IFS= read -r match; do
-            IFS='|' read -r filepath linenum content <<< "$(parse_rg_line "$match")"
-            local finding
-            finding=$(make_finding \
-                "critical" \
-                "unsafe_crash" \
-                "getexn_on_external_data" \
-                "$filepath" \
-                "$linenum" \
-                "$content" \
-                "CWE-754" \
-                "Replace getExn with switch/match or getWithDefault")
-            findings+=("$finding")
-        done < <(rg -nH "getExn" "$file" 2>/dev/null || true)
+    # Pattern 1: Any .res / .resi file (CRITICAL — ReScript banned 2026-04)
+    if [[ "$file" == *.res || "$file" == *.resi ]]; then
+        local finding
+        finding=$(make_finding \
+            "critical" \
+            "banned_language" \
+            "rescript_file_present" \
+            "$file" \
+            "1" \
+            "ReScript is a banned language as of 2026-04" \
+            "CWE-1103" \
+            "Migrate to Ephapax (systems) or Gossamer (UI); see rsr-antipattern.yml")
+        findings+=("$finding")
     fi
 
     # Pattern 2: Rust unwrap (HIGH)

@@ -324,10 +324,11 @@ cicd_hyper_a:
     rust:
       - hyperpolymath/rust-clippy-strict
       - hyperpolymath/rust-fuzzing
-    rescript:
-      - hyperpolymath/rescript-deno
     gleam:
       - hyperpolymath/gleam-beam
+    # NB: ReScript rulesets retired 2026-04 alongside ReScript itself
+    # being removed from allowed languages. Use Ephapax (systems) or
+    # Gossamer (UI) for new work.
   
   # Automation settings
   automation:
