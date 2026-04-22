@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# PanLL Minter input — Hypatia
+#
+# Parameters the panel-minter uses when minting or refreshing Hypatia's
+# panel contract upstream in panll/contracts/hypatia.toml. Shape mirrors
+# existing contract files in that directory so round-tripping is
+# deterministic.
+
+panel_id = "Hypatia"
+module_name = "Hypatia"
+model_slice = "hypatia"
+msg_namespace = "hypatiaMsg"
+view_route = "PanelHypatia"
+short_name = "Hyp"
+clade_id = "hypatia"
+has_backend = true

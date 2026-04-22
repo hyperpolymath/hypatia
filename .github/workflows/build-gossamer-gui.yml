@@ -50,7 +50,10 @@ jobs:
             src/ui/gossamer/hypatia_gui.eph
             src/ui/gossamer/bridge.eph
             src/ui/gossamer/loader.js
-            src/ui/gossamer/panel.manifest.toml
+            src/ui/gossamer/panll.harness.toml
+            src/ui/gossamer/panll.minter.toml
+            src/ui/gossamer/panll.provisioner.toml
+            src/ui/gossamer/panll.configurator.cue
             src/ui/gossamer/README.adoc
           )
           missing=0
