@@ -465,4 +465,36 @@ defmodule Hypatia.VCL.Query do
       }}
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Historical trends (scan-cycle-over-time)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Per-repo weak-point trajectory over the trailing `days` days.
+
+  Each row: `%{scan_id, scanned_at, date, count, delta}`.
+  """
+  def weak_point_trends(repo, days \\ 30) do
+    to_date = Date.utc_today()
+    from_date = Date.add(to_date, -days)
+    {:ok, Hypatia.HistoricalTrends.weak_point_trend(repo, from_date, to_date)}
+  end
+
+  @doc """
+  Estate-wide frequency of a PA category over the trailing `days` days.
+
+  Each row: `%{date, count}`.
+  """
+  def category_frequency(category, days \\ 30) do
+    {:ok, Hypatia.HistoricalTrends.category_frequency(category, days)}
+  end
+
+  @doc """
+  Repos whose weak-point count has spiked more than `z_threshold` sigmas
+  above their own trailing mean. Returns the list sorted by z-score.
+  """
+  def ecosystem_anomalies(opts \\ []) do
+    {:ok, Hypatia.HistoricalTrends.detect_anomalies(opts)}
+  end
 end
