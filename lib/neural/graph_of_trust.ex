@@ -160,19 +160,43 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   defp iterate_trust(scores, _adjacency, _n, iteration) when iteration >= @max_iterations do
-    scores
+    # Fall-through when convergence wasn't reached inside the iteration cap.
+    # Normalise anyway so downstream consumers always see scores on the
+    # same scale as the converged path.
+    normalize_scores(scores)
   end
 
   defp iterate_trust(scores, adjacency, n, iteration) do
+    # Pre-compute per-source outgoing-weight sums. PageRank requires a
+    # column-stochastic transition matrix (each source's contributions
+    # to its neighbours sum to at most the source's score). Dividing by
+    # out-degree (count) only achieves this when all edges have equal
+    # weight; with mixed weights we divide by the total weight instead
+    # so the per-source contribution is conserved. See PROOFS-GAP.md
+    # for why this premise matters for PageRank convergence.
+    out_weight_sum =
+      Map.new(adjacency, fn {src, targets} ->
+        total = Enum.reduce(targets, 0.0, fn {_t, w}, acc -> acc + max(w, 0.0) end)
+        {src, total}
+      end)
+
     new_scores = Map.new(scores, fn {node_id, _old_score} ->
-      # Sum of weighted incoming trust
       incoming = Enum.reduce(adjacency, 0.0, fn {src, targets}, acc ->
         case Enum.find(targets, fn {tgt, _w} -> tgt == node_id end) do
-          {_tgt, weight} ->
+          {_tgt, weight} when is_number(weight) and weight > 0 ->
             src_score = Map.get(scores, src, 0.0)
-            out_degree = length(Map.get(adjacency, src, []))
-            acc + (src_score * weight / max(out_degree, 1))
-          nil ->
+            total = Map.get(out_weight_sum, src, 0.0)
+
+            if total > 0 do
+              acc + src_score * weight / total
+            else
+              acc
+            end
+
+          _ ->
+            # Zero or negative weights carry no trust — skip them. Negative
+            # edges would break the non-negative-matrix premise PageRank
+            # needs; they are filtered at source in `build_edges/1`.
             acc
         end
       end)
@@ -214,20 +238,34 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   defp build_edges(outcomes) do
+    # Only emit edges for successful outcomes. Negative edge weights
+    # (failure = -0.5, false_positive = -1.0 in the previous
+    # implementation) break the non-negative-matrix premise PageRank
+    # needs to converge to a unique fixed point, and let the spectral
+    # radius of the transition matrix climb above 1.
+    #
+    # Failure and false-positive signal is not lost — it is simply not
+    # expressed by signing edge weights. The follow-up for the "penalty"
+    # half of the signal is a post-processing anti-trust subtraction
+    # from the converged scores; that change is out of scope for this
+    # fix, which is purely about making the math correct. See
+    # PROOFS-GAP.md — Section "Neural / PageRank".
     Enum.flat_map(outcomes, fn outcome ->
-      repo = Map.get(outcome, "repo", "unknown")
-      bot = Map.get(outcome, "bot", "unknown")
-      recipe = Map.get(outcome, "recipe_id", Map.get(outcome, "pattern", "unknown"))
-      success = Map.get(outcome, "outcome") == "success"
+      case Map.get(outcome, "outcome") do
+        "success" ->
+          repo = Map.get(outcome, "repo", "unknown")
+          bot = Map.get(outcome, "bot", "unknown")
+          recipe = Map.get(outcome, "recipe_id", Map.get(outcome, "pattern", "unknown"))
 
-      weight = if success, do: 1.0, else: -0.5
-      fp_weight = if Map.get(outcome, "outcome") == "false_positive", do: -1.0, else: weight
+          [
+            {recipe, repo, 1.0},      # recipe fixes repo
+            {bot, recipe, 1.0},       # bot executes recipe
+            {repo, bot, 0.5}          # repo provides context to bot
+          ]
 
-      [
-        {recipe, repo, fp_weight},    # recipe fixes repo
-        {bot, recipe, fp_weight},     # bot executes recipe
-        {repo, bot, weight * 0.5}     # repo provides context to bot
-      ]
+        _ ->
+          []
+      end
     end)
   end
 
