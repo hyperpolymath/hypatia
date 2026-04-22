@@ -152,7 +152,7 @@ Elixir pipeline:
 
 * [ ] GraphQL API as live HTTP endpoint
 * [ ] SARIF output for IDE integration
-* [ ] Chapel NIFs for compute-heavy neural operations
+* [ ] Nx/EXLA backend for the neural layer (if/when reservoir sizes outgrow pure Elixir)
 * [ ] Cross-organization federation with VCL drift policies
 
 === v8.0 — Neural Maturity (PLANNED)

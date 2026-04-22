@@ -188,7 +188,7 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 **Planned:**
 - GraphQL API as live HTTP endpoint
 - SARIF output for IDE integration
-- Chapel NIFs for compute-heavy neural operations
+- Nx/EXLA backend for the neural layer if/when reservoir sizes outgrow pure Elixir
 - Cross-organization federation with VCL drift policies
 
 ### Known Gaps

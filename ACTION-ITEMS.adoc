@@ -73,5 +73,4 @@ These are the next engineering items (no credentials needed):
 * Historical trend tracking across scan cycles
 * SARIF output for IDE integration
 * VCL federation executor (multi-store)
-* Chapel NIFs for compute-heavy neural operations
 * Idris2 database connectors for VeriSimDB (PostgreSQL, SQLite, ODBC)

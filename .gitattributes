@@ -14,7 +14,6 @@
 *.adb   text eol=lf diff=ada
 *.ads   text eol=lf diff=ada
 *.hs    text eol=lf
-*.chpl  text eol=lf
 *.scm   text eol=lf
 *.a2ml  text eol=lf linguist-language=TOML
 *.ncl   text eol=lf
