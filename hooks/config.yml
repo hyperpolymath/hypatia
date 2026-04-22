@@ -102,11 +102,12 @@ hooks:
     # Language policy (RSR compliance)
     language_policy:
       enabled: true
-      # Banned languages
+      # Banned languages → recommended replacement
       banned:
-        typescript: rescript
+        typescript: ephapax  # or gossamer for UI
+        rescript: ephapax    # banned 2026-04; or gossamer for UI
         go: rust
-        python: julia
+        python: elixir       # or rust
         java: rust
         kotlin: rust
       # Exceptions (paths that bypass language policy)
@@ -240,7 +241,7 @@ hooks:
       # Run type checks before push
       check_rust: true
       check_deno: true
-      check_rescript: true
+      check_rescript: false   # ReScript retired 2026-04; leave false
       check_haskell: true
 
   # ============================================================================

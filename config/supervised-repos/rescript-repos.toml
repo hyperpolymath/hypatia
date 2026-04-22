@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Supervised repositories - ReScript ecosystem
+#
+# STATUS (2026-04-22): PAUSED. ReScript was removed from the hyperpolymath
+# allowed-language set; these repos are either awaiting migration (→ Ephapax
+# for systems / Gossamer for UI) or archival. Supervision is disabled below
+# (`enabled = false`) so that findings against these repos do not re-enter
+# the TriangleRouter / FleetDispatcher loop. Re-enable on a per-repo basis
+# once each is migrated OR delete this file outright once migration is
+# complete.
+#
+# See also:
+#   - .github/workflows/rsr-antipattern.yml (now blocks ReScript)
+#   - Issue #177 (Gossamer + Ephapax migration target for UI roles)
 
 [[repo]]
 name = "rescript-alib"
@@ -12,7 +24,7 @@ phase = "alpha"
 version = "0.1.0-alpha.2"
 
 [repo.supervision]
-enabled = true
+enabled = false        # PAUSED 2026-04-22 — ReScript retired from allowed languages
 frequency = "on-push"  # on-push, daily, weekly
 auto_fix = false       # Manual review for alpha repos
 create_issues = true
@@ -45,7 +57,7 @@ phase = "alpha"
 version = "0.1.0-alpha.1"
 
 [repo.supervision]
-enabled = true
+enabled = false        # PAUSED 2026-04-22 — ReScript retired from allowed languages
 frequency = "on-push"
 auto_fix = false
 create_issues = true

@@ -54,12 +54,22 @@ log_info "Checking $(echo "$STAGED_FILES" | wc -l | tr -d ' ') staged file(s)"
 check_language_policy() {
     log_info "Checking language policy..."
 
-    # TypeScript check (banned - use ReScript)
+    # TypeScript check (banned - use Ephapax for systems / Gossamer for UI)
     TS_FILES=$(echo "$STAGED_FILES" | grep -E '\.(ts|tsx)$' || true)
     if [ -n "$TS_FILES" ]; then
         add_error "TypeScript files not allowed per RSR policy"
-        log_error "Use ReScript instead. Found files:"
+        log_error "Use Ephapax (systems) or Gossamer (UI) instead. Found files:"
         echo "$TS_FILES" | while read -r f; do
+            log_error "  - $f"
+        done
+    fi
+
+    # ReScript check (banned 2026-04 - use Ephapax for systems / Gossamer for UI)
+    RES_FILES=$(echo "$STAGED_FILES" | grep -E '\.(res|resi)$' || true)
+    if [ -n "$RES_FILES" ]; then
+        add_error "ReScript files not allowed per RSR policy (retired 2026-04)"
+        log_error "Use Ephapax (systems) or Gossamer (UI) instead. Found files:"
+        echo "$RES_FILES" | while read -r f; do
             log_error "  - $f"
         done
     fi
@@ -74,11 +84,11 @@ check_language_policy() {
         done
     fi
 
-    # Python check (banned except SaltStack - use Julia/Rust/ReScript)
+    # Python check (banned except SaltStack - use Elixir/Rust)
     PY_FILES=$(echo "$STAGED_FILES" | grep -E '\.py$' | grep -v '^salt/' || true)
     if [ -n "$PY_FILES" ]; then
         add_error "Python files not allowed per RSR policy (except SaltStack)"
-        log_error "Use Julia, Rust, or ReScript instead. Found files:"
+        log_error "Use Elixir or Rust instead. Found files:"
         echo "$PY_FILES" | while read -r f; do
             log_error "  - $f"
         done

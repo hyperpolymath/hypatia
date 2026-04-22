@@ -383,7 +383,7 @@ function detect_languages_local(repo_path::String)::Vector{String}
 
     indicators = Dict(
         "rust" => ["Cargo.toml"],
-        "rescript" => ["rescript.json", "bsconfig.json"],
+        # rescript removed 2026-04 (retired from allowed languages).
         "deno" => ["deno.json", "deno.jsonc"],
         "gleam" => ["gleam.toml"],
         "ocaml" => ["dune-project"],

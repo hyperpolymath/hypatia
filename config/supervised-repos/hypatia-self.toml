@@ -12,7 +12,10 @@
 #   source tree. The dogfooding loop was open.
 #
 #   This entry closes the loop: Hypatia now supervises itself with
-#   the same rulesets it applies to the ReScript fleet.
+#   the same rulesets it applies to the rest of the supervised fleet.
+#   (The legacy ReScript repo supervision was paused 2026-04-22 when
+#   ReScript was retired from allowed languages — see
+#   config/supervised-repos/rescript-repos.toml for the breadcrumb.)
 
 [[repo]]
 name = "hypatia"
@@ -56,8 +59,8 @@ glambot = { enabled = true, priority = 3 }        # docs + a11y
 finishing-bot = { enabled = true, priority = 4 }  # release + licensing
 
 # Dogfooding note — auto_fix is deliberately FALSE here.
-# The ReScript repos in rescript-repos.toml also have auto_fix=false
-# for alpha phase; apply the same caution to the engine itself.
+# Apply manual-review caution to the engine itself: an auto-fix that
+# breaks Hypatia would break the whole supervision loop for the fleet.
 [common]
 check_interval_hours = 24
 notification_channels = ["github-issues", "github-checks"]
