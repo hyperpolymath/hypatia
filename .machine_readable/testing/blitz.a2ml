@@ -123,8 +123,11 @@ evidence = [
   "verification/proofs/tlaplus/KinGate.tla",
 ]
 pending-merge = [
-  "claude/quality-gates — verify-lean.yml + verify-idris.yml",
-  "claude/lean-proofs-parser-pagerank — ParserTotality + PageRankInvariants",
+  "claude/esn-spectral-scaling — ESNSpectralScaling.lean",
+]
+landed = [
+  "claude/quality-gates — verify-lean.yml + verify-idris.yml + graph_of_trust normalisation + PanLL schema validation (merged 2026-04-22)",
+  "claude/lean-proofs-parser-pagerank — ParserTotality.lean + PageRankInvariants.lean (merged 2026-04-22)",
 ]
 
 [categories.summary]
