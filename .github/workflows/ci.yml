@@ -202,6 +202,65 @@ jobs:
           fail-on: warning
 
   # ============================================================================
+  # K9iser — validates the contract manifest and emits k9 artefacts.
+  # DOG-04 from testing-and-benchmarking/TESTING-TAXONOMY.adoc § VII.
+  #
+  # Validates k9iser.toml parses cleanly and every declared source path
+  # exists. If the `k9iser` CLI is on PATH, also runs `k9iser build`
+  # and uploads the generated artefacts. Absence of the CLI is a warning,
+  # not a failure — the parse + path check is the hard gate.
+  # ============================================================================
+  k9iser-validate:
+    name: k9iser manifest + build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Parse k9iser.toml + verify declared paths exist
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tomllib, sys, pathlib
+
+          with open("k9iser.toml", "rb") as fh:
+              data = tomllib.load(fh)
+
+          missing = []
+          for src in data.get("source", []):
+              p = pathlib.Path(src["path"])
+              if not p.exists():
+                  missing.append(src["path"])
+
+          if missing:
+              for m in missing:
+                  print(f"::error::k9iser.toml declares missing source {m}")
+              sys.exit(1)
+
+          n = len(data.get("source", []))
+          c = len(data.get("constraint", []))
+          print(f"OK  k9iser.toml parses — {n} source(s), {c} constraint(s)")
+          PY
+
+      - name: Run k9iser build (if CLI available)
+        run: |
+          set -euo pipefail
+          if command -v k9iser >/dev/null 2>&1; then
+            k9iser build
+            ls -la generated/k9iser/ || true
+          else
+            echo "::warning::k9iser CLI not on PATH — skipping build step. Install from hyperpolymath/k9iser to enable full DOG-04 enforcement."
+          fi
+
+      - name: Upload k9 artefacts
+        if: hashFiles('generated/k9iser/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k9iser-artefacts
+          path: generated/k9iser/
+          retention-days: 14
+
+  # ============================================================================
   # Combined Status Check
   # ============================================================================
   ci-status:
@@ -214,6 +273,7 @@ jobs:
       - rust-test-coverage
       - haskell-build
       - haskell-lint
+      - k9iser-validate
     if: always()
     steps:
       - name: Check all jobs status
@@ -222,7 +282,8 @@ jobs:
              [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.haskell-lint.result }}" == "failure" ]]; then
+             [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.k9iser-validate.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi

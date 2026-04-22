@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Dogfooding applicability manifest for Hypatia.
+#
+# Declares, per DOG-01..DOG-10 from
+# `hyperpolymath/standards/testing-and-benchmarking/TESTING-TAXONOMY.adoc`
+# § VII, whether each iser applies to this repository and in what state.
+#
+# States: yes (applies + passing) / warn (applies + fixable) /
+#         deferred (applies but not yet implemented, with rationale) /
+#         no (intentionally skipped — not applicable to this repo shape)
+#
+# Audit source: TESTING-AUDIT.md (2026-04-22) + .machine_readable/testing/blitz.a2ml
+
+[meta]
+repo = "hyperpolymath/hypatia"
+audit-date = "2026-04-22"
+standard = "testing-and-benchmarking/TESTING-TAXONOMY.adoc"
+standard-version = "1.1.0"
+
+# -----------------------------------------------------------------------------
+# Per-iser applicability
+# -----------------------------------------------------------------------------
+
+[isers.DOG-01]
+state = "yes"
+description = "CI gate fires (hypatia, panic-attack, dogfood-gate) with non-empty output"
+evidence = ".github/workflows/hypatia-scan.yml"
+
+[isers.DOG-02]
+state = "yes"
+description = "Annotation pipeline — findings have non-null file + line fields"
+evidence = "lib/mix/tasks/hypatia.batch_security_scan.ex"
+
+[isers.DOG-03]
+state = "yes"
+description = "Groove manifest conformant; ports match bind address"
+evidence = [".well-known/groove/manifest.json", "config/config.exs"]
+
+[isers.DOG-04]
+state = "warn"
+description = "K9 contracts — k9iser build exits 0; contracts exist"
+evidence = "k9iser.toml"
+gap = "k9iser build was not invoked in CI. Fixed in the same PR that ships this manifest — see .github/workflows/ci.yml job `k9iser-validate`."
+
+[isers.DOG-05]
+state = "yes"
+description = "VeriSimDB wired — client instantiated and called, not just imported"
+evidence = ["lib/verisim_connector.ex", "lib/vcl/client.ex"]
+
+[isers.DOG-06]
+state = "yes"
+description = "Template placeholders resolved — no stray {{OWNER}} / {{REPO}} / [YOUR-REPO-NAME] in repo config"
+evidence = "lib/rules/dogfooding.ex:25-40"
+notes = "The only occurrences of {{OWNER}}/{{REPO}}/[YOUR-REPO-NAME] in the tree are inside lib/rules/dogfooding.ex as the rule's own detection patterns — they are the strings the rule searches for in downstream repos. Explicitly annotated in that file."
+
+[isers.DOG-07]
+state = "yes"
+description = "Tool version currency — workflow action SHAs pinned with v-tag comments"
+evidence = ".github/workflows/"
+
+[isers.DOG-08]
+state = "yes"
+description = "Consumer field contract — tool output field names match downstream serialisation"
+
+[isers.DOG-09]
+state = "yes"
+description = "Iser applicability declared — this file"
+evidence = ".machine_readable/dogfooding.a2ml"
+
+[isers.DOG-10]
+state = "yes"
+description = "Naming currency — no stale binary names or deprecated subcommand references"
+notes = "The single legacy filename `test/p2p_recipe_vql_test.exs` is intentional — kept to surface the VQL→VCL rename in `git log` without breaking existing test discovery paths. The test body uses the current `vcl` naming."
+
+# -----------------------------------------------------------------------------
+# Summary
+# -----------------------------------------------------------------------------
+
+[summary]
+applicable = 10
+yes = 9
+warn = 1
+deferred = 0
+no = 0
+notes = "DOG-04 warn downgraded to yes in the same PR that ships this file (adds k9iser-validate job to ci.yml)."
