@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Supervised repositories — Hypatia itself (dogfooding / self-supervision)
+#
+# Why this file exists:
+#   Hypatia is the neurosymbolic CI/CD intelligence layer for the
+#   hyperpolymath ecosystem. It scans 300+ repos but, until now, did
+#   not appear in its OWN supervised-repos list. Scan findings on
+#   this repo (Scorecard / Semgrep / CodeQL alerts surfaced at
+#   github.com/hyperpolymath/hypatia/security/code-scanning) were
+#   collected by `.github/workflows/hypatia-scan.yml` but never fed
+#   back into TriangleRouter -> FleetDispatcher for Hypatia's own
+#   source tree. The dogfooding loop was open.
+#
+#   This entry closes the loop: Hypatia now supervises itself with
+#   the same rulesets it applies to the ReScript fleet.
+
+[[repo]]
+name = "hypatia"
+owner = "hyperpolymath"
+full_name = "hyperpolymath/hypatia"
+description = "Neurosymbolic CI/CD intelligence layer — self-supervised"
+language = "elixir"  # primary; polyglot: elixir + rust + zig + idris2
+tier = "engine"
+phase = "beta"
+version = "0.4.0"
+
+[repo.supervision]
+enabled = true
+frequency = "on-push"
+# Manual review for the engine itself — an auto-fix that breaks
+# Hypatia would break the whole supervision loop for the fleet.
+auto_fix = false
+create_issues = true
+
+[repo.rulesets]
+global = [
+    "hyperpolymath/rsr-compliance",
+    "hyperpolymath/security-baseline",
+    "hyperpolymath/quality-gates",
+    # External scanner inputs Hypatia should converge with its own
+    # PA001–PA020 catalog:
+    "ossf/scorecard",
+    "returntocorp/semgrep-p-rust",
+    "github/codeql-action",
+]
+language_specific = [
+    "hyperpolymath/elixir-credo",
+    "hyperpolymath/rust-clippy",
+    "hyperpolymath/zig-safe-ffi",
+]
+
+[repo.bots]
+rhodibot = { enabled = true, priority = 1 }       # structure + policy
+echidnabot = { enabled = true, priority = 2 }     # verification
+glambot = { enabled = true, priority = 3 }        # docs + a11y
+finishing-bot = { enabled = true, priority = 4 }  # release + licensing
+
+# Dogfooding note — auto_fix is deliberately FALSE here.
+# The ReScript repos in rescript-repos.toml also have auto_fix=false
+# for alpha phase; apply the same caution to the engine itself.
+[common]
+check_interval_hours = 24
+notification_channels = ["github-issues", "github-checks"]
+require_scm_files = true
+enforce_rsr_2026 = true

@@ -53,6 +53,9 @@ logs/
 .zig-cache/
 zig-out/
 
+# AffineScript -> WebAssembly build artifact (generated from src/ui/tea/*.affine)
+src/ui/public/assets/wasm/*.wasm
+
 # Idris2
 build/
 

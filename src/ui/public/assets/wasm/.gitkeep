@@ -1,0 +1,16 @@
+# Build output directory for AffineScript -> WebAssembly artifacts.
+#
+# The GUI loads `./assets/wasm/hypatia_gui.wasm` at runtime
+# (see ../../index.html). That file is a build artifact compiled
+# from `../../../tea/hypatia_gui.affine` and is NOT committed —
+# Scorecard's `Binary-Artifacts` check treats committed .wasm as a
+# supply-chain risk because reviewers cannot audit machine code.
+#
+# Compile locally before running the UI:
+#
+#   affc build src/ui/tea/hypatia_gui.affine \
+#       --target wasm32-unknown-unknown \
+#       --out src/ui/public/assets/wasm/hypatia_gui.wasm
+#
+# CI builds it as part of the UI job; production ships the artifact
+# from a signed release, never from the repo.
