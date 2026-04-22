@@ -19,6 +19,7 @@ defmodule Hypatia.PatternAnalyzer do
   alias Hypatia.TriangleRouter
   alias Hypatia.FleetDispatcher
   alias Hypatia.DispatchManifest
+  alias Hypatia.HistoricalTrends
   alias Hypatia.Neural.Coordinator, as: NeuralCoordinator
   alias Hypatia.ScorecardIngestor
 
@@ -30,6 +31,14 @@ defmodule Hypatia.PatternAnalyzer do
   def analyze_all_scans do
     scans = VerisimConnector.fetch_all_scans()
     Logger.info("Loaded #{length(scans)} scan results")
+
+    # Step 0: Record scan snapshot to scan-history. Append-only; no failure
+    # here should block the pipeline — the rest of the run is still useful
+    # even if history write is skipped.
+    case HistoricalTrends.record_scan_snapshot(scans) do
+      {:ok, scan_id, _} -> Logger.info("Recorded scan snapshot #{scan_id}")
+      other -> Logger.warning("Scan snapshot not recorded: #{inspect(other)}")
+    end
 
     # Step 1: Sync pattern registry from scan data
     {:ok, registry} = PatternRegistry.sync_from_scans(scans)
