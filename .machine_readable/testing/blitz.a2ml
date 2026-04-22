@@ -1,0 +1,361 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Testing-taxonomy blitz report for Hypatia.
+#
+# Machine-readable counterpart to TESTING-AUDIT.md. Conforms to the
+# hyperpolymath/standards Testing Taxonomy v1.1.0.
+# Regenerate by running the audit; see TESTING-AUDIT.md § 6 for the
+# punch list that drives deltas between this file and the target grade.
+
+[meta]
+standard = "testing-and-benchmarking/TESTING-TAXONOMY.adoc"
+standard-version = "1.1.0"
+standard-date = "2026-04-04"
+audit-date = "2026-04-22"
+audit-method = "automated scouts + synthesis"
+
+[grade]
+current = "D+"
+target = "C"
+line-of-sight-to-target = "bounded — 5 Tier-1 punch-list items"
+line-of-sight-to-B = "multi-quarter — requires mutation + fuzz + compat + PBT"
+
+# -----------------------------------------------------------------------------
+# 16 test categories — primary status per TESTING-TAXONOMY.adoc § 1
+# -----------------------------------------------------------------------------
+
+[categories.UT]
+name = "Unit"
+status = "strong"
+evidence = [
+  "test/code_safety_test.exs",
+  "test/pattern_registry_test.exs",
+  "test/triangle_router_test.exs",
+  "test/confidence_annealing_test.exs",
+  "test/recipe_matcher_test.exs",
+]
+file-count = 12
+
+[categories.P2P]
+name = "Point-to-Point"
+status = "strong"
+evidence = ["test/p2p_recipe_vcl_test.exs", "test/concurrency_test.exs"]
+
+[categories.E2E]
+name = "End-to-End"
+status = "strong"
+evidence = ["test/e2e_pipeline_test.exs"]
+
+[categories.BLD]
+name = "Build"
+status = "strong"
+evidence = [".github/workflows/ci.yml"]
+
+[categories.EXE]
+name = "Execution"
+status = "strong"
+evidence = [
+  "test/zig_ffi_smoke_test.exs",
+  "test/vcl_client_test.exs",
+  "test/vcl_file_executor_test.exs",
+]
+
+[categories.REF]
+name = "Reflexive"
+status = "weak"
+evidence = ["test/safety_test.exs", "test/blackboard_test.exs"]
+gap = "no dedicated self-diagnostic suite; `just doctor` not tested"
+
+[categories.LCY]
+name = "Lifecycle"
+status = "strong"
+evidence = ["test/kin_test.exs", "test/training_pipeline_test.exs"]
+
+[categories.SMK]
+name = "Smoke"
+status = "strong"
+evidence = [
+  "test/zig_ffi_smoke_test.exs",
+  "test/root_hygiene_test.exs",
+  "test/green_web_test.exs",
+]
+
+[categories.PBT]
+name = "Property-Based"
+status = "weak"
+evidence = ["test/p2p_recipe_vcl_test.exs"]
+gap = "parameterised tables only; no StreamData; no 1000+-case coverage per property"
+
+[categories.MUT]
+name = "Mutation"
+status = "absent"
+gap = "no mutation-testing dep, no CI job, no score tracking"
+
+[categories.FUZ]
+name = "Fuzz"
+status = "absent"
+gap = "no fuzz/ directory, no cargo-fuzz targets, no fuzz workflow"
+
+[categories.CTR]
+name = "Contract"
+status = "weak"
+gap = "no .contractile runtime decorators; no assertion harness"
+
+[categories.REG]
+name = "Regression"
+status = "absent"
+gap = "no test/regressions/ subdirectory; bug-tied tests inlined in feature modules"
+
+[categories.CHS]
+name = "Chaos"
+status = "weak"
+gap = "concurrency stress only; no deliberate failure injection"
+
+[categories.CMP]
+name = "Compatibility"
+status = "weak"
+gap = "backward-only checks; no forward-compat or deprecation-warning tests"
+
+[categories.PRF]
+name = "Proof Regression"
+status = "strong"
+evidence = [
+  ".github/workflows/verify-tlaplus.yml",
+  "verification/proofs/tlaplus/KinGate.tla",
+]
+pending-merge = [
+  "claude/quality-gates — verify-lean.yml + verify-idris.yml",
+  "claude/lean-proofs-parser-pagerank — ParserTotality + PageRankInvariants",
+]
+
+[categories.summary]
+total = 16
+strong = 8
+weak = 5
+absent = 3
+
+# -----------------------------------------------------------------------------
+# DOG-01..DOG-10 dogfood-self — TESTING-TAXONOMY.adoc § VII
+# -----------------------------------------------------------------------------
+
+[dogfooding.DOG-01]
+check = "CI gate fires"
+status = "pass"
+evidence = [".github/workflows/hypatia-scan.yml"]
+
+[dogfooding.DOG-02]
+check = "Annotation pipeline"
+status = "pass"
+evidence = ["lib/mix/tasks/hypatia.batch_security_scan.ex"]
+
+[dogfooding.DOG-03]
+check = "Groove manifest"
+status = "pass"
+evidence = [".well-known/groove/manifest.json", "config/config.exs"]
+
+[dogfooding.DOG-04]
+check = "K9 contracts"
+status = "warn"
+evidence = ["k9iser.toml"]
+gap = "k9iser build not invoked in CI; no generated/k9iser/ artefacts"
+fix = "add `k9iser build` step to ci.yml"
+
+[dogfooding.DOG-05]
+check = "VeriSimDB wired"
+status = "pass"
+evidence = ["lib/verisim_connector.ex", "lib/vcl/client.ex"]
+
+[dogfooding.DOG-06]
+check = "Template placeholders"
+status = "warn"
+evidence = ["lib/rules/dogfooding.ex"]
+gap = "{{OWNER}}/{{REPO}} strings present as rule literals, not unresolved placeholders"
+fix = "optional — annotate rule data as literal test strings"
+
+[dogfooding.DOG-07]
+check = "Tool version currency"
+status = "pass"
+evidence = [".github/workflows/"]
+
+[dogfooding.DOG-08]
+check = "Consumer field contract"
+status = "pass"
+
+[dogfooding.DOG-09]
+check = "Iser applicability"
+status = "fail"
+gap = "no .machine_readable/dogfooding.a2ml"
+fix = "create the manifest with per-iser yes/no/deferred"
+
+[dogfooding.DOG-10]
+check = "Naming currency"
+status = "pass"
+notes = "single stale reference is test/p2p_recipe_vql_test.exs filename; body uses vcl"
+
+[dogfooding.summary]
+pass = 7
+warn = 2
+fail = 1
+total = 10
+
+# -----------------------------------------------------------------------------
+# Six Sigma benchmark readiness — TESTING-TAXONOMY.adoc § Benchmark Taxonomy
+# -----------------------------------------------------------------------------
+
+[benchmarks]
+verdict = "scaffolded"
+framework = "criterion"
+framework-version = "0.8"
+harness-file = "fixer/benches/hypatia_bench.rs"
+bench-count = 7
+baseline-directory = ".machine_readable/benchmarks/"
+baseline-present = false
+ci-gated = false
+six-sigma-thresholds-declared = false
+
+[benchmarks.categories.latency]
+status = "partial"
+evidence = ["fixer/benches/hypatia_bench.rs"]
+
+[benchmarks.categories.throughput]
+status = "partial"
+evidence = ["fixer/benches/hypatia_bench.rs"]
+
+[benchmarks.categories.memory]
+status = "scaffolded"
+evidence = [".github/workflows/stress-test.yml"]
+
+[benchmarks.categories.startup]
+status = "absent"
+
+[benchmarks.categories.build-time]
+status = "absent"
+
+[benchmarks.categories.energy]
+status = "absent"
+
+[benchmarks.categories.ffi-overhead]
+status = "absent"
+notes = "ffi/zig/ has functional tests only; no timing"
+
+# -----------------------------------------------------------------------------
+# 14 aspect dimensions — TESTING-TAXONOMY.adoc § 1 (aspect dimensions)
+# -----------------------------------------------------------------------------
+
+[aspects.security]
+status = "strong"
+evidence = [
+  ".github/workflows/security.yml",
+  "cargo-audit",
+  "cargo-deny",
+  "CodeQL",
+  "secret-scanner",
+  "SBOM generation",
+  "Dependabot",
+]
+
+[aspects.safety]
+status = "strong"
+evidence = ["verification/proofs/tlaplus/", "verification/proofs/idris2/", "verification/proofs/lean4/"]
+banned-patterns-clean = true
+default-total-idris = true
+
+[aspects.interoperability]
+status = "strong"
+evidence = ["adapters (GitHub/GitLab/Bitbucket/Codeberg/sr.ht)", "src/abi/ (REST/GraphQL/gRPC)", "VCL"]
+
+[aspects.functionality]
+status = "strong"
+elixir-test-files = 39
+elixir-test-loc = 8659
+
+[aspects.versability]
+status = "strong"
+evidence = ["CHANGELOG.adoc", "mix.exs"]
+
+[aspects.maintainability]
+status = "strong"
+evidence = ["TOPOLOGY.md", "DESIGN-NARRATIVE.md", "Cargo workspace"]
+
+[aspects.reproducibility]
+status = "strong"
+evidence = ["flake.nix", "guix.scm", "Cargo.lock", "mix.lock"]
+
+[aspects.portability]
+status = "strong"
+evidence = ["CI matrix (linux/macos/windows, x86_64/arm64)", "Containerfile"]
+
+[aspects.dependability]
+status = "weak"
+gap = "no chaos engineering, no fault-injection suite"
+
+[aspects.performance]
+status = "weak"
+gap = "benchmarks not baselined; no published metrics; no capacity plan"
+
+[aspects.observability]
+status = "weak"
+gap = "Logger-only; no Prometheus/OpenTelemetry exporter; no structured metrics"
+
+[aspects.usability]
+status = "absent"
+gap = "no systematic error-messaging audit; no UX review"
+
+[aspects.accessibility]
+status = "absent"
+gap = "no WCAG 2.3 audit; no ADJUST.contractile; Gossamer UI unreviewed"
+
+[aspects.privacy]
+status = "absent"
+gap = "no GDPR mapping; no PRIVACY.md"
+
+[aspects.summary]
+strong = 8
+weak = 3
+absent = 3
+total = 14
+
+# -----------------------------------------------------------------------------
+# Punch list reference — ordered sequence to target grade
+# Full detail in TESTING-AUDIT.md § 6
+# -----------------------------------------------------------------------------
+
+[punch-list.tier-1-to-C]
+items = [
+  "bench-baseline-and-CI-gate",
+  "contract-test-harness",
+  "reflexive-test-suite",
+  "dogfooding-a2ml",
+  "k9iser-ci-integration",
+]
+estimated-effort-days = 5
+
+[punch-list.tier-2-to-B]
+items = [
+  "property-based-streamdata",
+  "fuzz-targets-cargo-fuzz",
+  "mutation-score-pipeline",
+  "compatibility-suite",
+  "lifecycle-tests-all-genservers",
+]
+estimated-effort-weeks = 6
+
+[punch-list.tier-3-to-A]
+items = [
+  "chaos-resilience-suite",
+  "isolated-regression-directory",
+  "privacy-compliance",
+  "accessibility-compliance",
+]
+estimated-effort-weeks = 7
+
+# -----------------------------------------------------------------------------
+# Out of scope
+# -----------------------------------------------------------------------------
+
+[out-of-scope]
+items = [
+  "external-user-feedback (can't be manufactured)",
+  "formal WCAG/GDPR audit (needs external domain expert)",
+  "energy profiling (tooling gap for BEAM+Rust hybrid)",
+  "full PageRank convergence proof (tracked in PROOFS-GAP.md PR 4 — needs Mathlib)",
+]
