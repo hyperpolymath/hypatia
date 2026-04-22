@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# PanLL Panel Harness Manifest v2 — Hypatia
+#
+# Validates against:
+#   https://raw.githubusercontent.com/hyperpolymath/panll/main/schema/panll-harness-v2.schema.json
+#
+# Role: operational manifest. Three other artefacts accompany this one:
+#   panll.minter.toml       — contract fields the minter creates upstream
+#   panll.provisioner.toml  — resources the provisioner must stand up
+#   panll.configurator.cue  — runtime config for the configurator
+
+"$schema" = "panll-harness/v2"
+service_id = "hypatia"
+default_endpoint = "panll://hypatia"
+clade = "neurosym/ci-cd-intelligence"
+capabilities = ["network", "filesystem"]
+
+[runtime_endpoints]
+gossamer = "gossamer://hypatia"
+http = "http://localhost:9090"
+
+[health_check]
+path = "/healthz"
+interval_ms = 30000
+timeout_ms = 5000
+unhealthy_threshold = 3
+
+[data_sources.findings]
+path = "/invoke/fetch_findings"
+method = "GET"
+returns = "FindingsList"
+description = "Active findings routed through the safety triangle."
+
+[data_sources.pipeline_health]
+path = "/invoke/pipeline_health"
+method = "GET"
+returns = "PipelineHealth"
+description = "Aggregated stats from VCL Query.pipeline_health."
+
+[data_sources.dispatches]
+path = "/invoke/recent_dispatches"
+method = "GET"
+returns = "DispatchList"
+description = "Recent dispatch manifests from FleetDispatcher."
+
+[data_sources.recipes]
+path = "/invoke/fetch_recipes"
+method = "GET"
+returns = "RecipeList"
+description = "Recipe registry with confidence scores and tiers."
+
+[integrations.panic_attack]
+role = "consumer"
+protocol = "file-json"
+description = "Consumes panic-attack scan results as upstream findings."
+
+[integrations.gitbot_fleet]
+role = "dispatcher"
+protocol = "file-manifest"
+description = "Emits JSONL dispatch manifests consumed by dispatch-runner.sh."
+
+[integrations.verisim_data]
+role = "store"
+protocol = "file-vcl"
+description = "Reads canonical flat-file store via VCL Query layer."

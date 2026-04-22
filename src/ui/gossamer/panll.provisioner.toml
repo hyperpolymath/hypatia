@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# PanLL Provisioner input — Hypatia
+#
+# Describes resources the provisioner must stand up before the harness
+# is operable. Consumed by panll's provisioner panel (see
+# panll/contracts/provisioner.toml: "portfolio bundles, panel
+# configuration, isolation tier management").
+#
+# Schema status: no upstream schema published yet. These fields are
+# best-effort until schema/panll-provisioner-v1 lands; the harness is
+# the authoritative source if the two disagree.
+
+service_id = "hypatia"
+isolation_tier = "shared"  # dedicated | shared | sandbox
+
+[bundles]
+elixir_otp = true
+verisimdb_client = true
+panic_attacker_consumer = true
+gitbot_fleet_dispatcher = true
+neural_ensemble = true
+# Nx/EXLA backend pending (see CLAUDE.md "Planned").
+
+[resources.ports]
+elixir_pipeline = 9090
+forge_adapter = 8081
+
+[resources.filesystem]
+state_dir = "data/verisim/neural-states"
+outcomes = "outcomes/*.jsonl"
+shared_context = "../gitbot-fleet/shared-context/"
+
+[resources.container]
+image_ref = "ghcr.io/hyperpolymath/hypatia:latest"
+runtime = "podman"
