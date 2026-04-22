@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Build the Hypatia GUI wasm artifact from the Ephapax/Gossamer sources.
+#
+# STATUS: SCAFFOLD (2026-04-22). The `eph` compiler toolchain is not yet
+# available in any public action and we can't reliably install it in CI.
+# This workflow declares the shape of the build so that, once the
+# toolchain is installable, it becomes a one-line change to `setup-eph`
+# + `eph build ...` under the "Compile Ephapax to wasm" step below.
+#
+# Until that happens the build runs in `dry-run` mode: it validates the
+# .eph sources exist, prints their line counts, and checks the JS
+# loader + manifest. It does NOT produce a wasm artifact and it does
+# NOT fail the overall CI if wasm isn't produced — the Hypatia engine
+# doesn't depend on the GUI.
+#
+# See src/ui/gossamer/README.adoc for the full migration status.
+
+name: Build Gossamer GUI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/ui/gossamer/**'
+      - '.github/workflows/build-gossamer-gui.yml'
+  pull_request:
+    paths:
+      - 'src/ui/gossamer/**'
+      - '.github/workflows/build-gossamer-gui.yml'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  build:
+    name: Compile .eph → .wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate Ephapax sources exist
+        run: |
+          set -euo pipefail
+          required=(
+            src/ui/gossamer/hypatia_gui.eph
+            src/ui/gossamer/bridge.eph
+            src/ui/gossamer/loader.js
+            src/ui/gossamer/panel.manifest.toml
+            src/ui/gossamer/README.adoc
+          )
+          missing=0
+          for f in "${required[@]}"; do
+            if [ -f "$f" ]; then
+              echo "  ✓ $f ($(wc -l < "$f") lines)"
+            else
+              echo "  ✗ MISSING: $f"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing required Gossamer file(s) missing"
+            exit 1
+          fi
+
+      # TODO: replace the following setup/build steps when Ephapax has a
+      # public setup action. Shape will be roughly:
+      #
+      #   - name: Setup Ephapax toolchain
+      #     uses: hyperpolymath/setup-eph@<sha> # v<ver>
+      #     with:
+      #       ephapax-version: '2.x'
+      #
+      #   - name: Compile Ephapax to wasm
+      #     run: |
+      #       eph build \
+      #         --target wasm32 \
+      #         src/ui/gossamer/bridge.eph \
+      #         -o src/ui/public/assets/wasm/hypatia_gui.wasm
+      #
+      #   - name: Validate wasm module
+      #     run: wasm-validate src/ui/public/assets/wasm/hypatia_gui.wasm
+      #
+      #   - name: Upload wasm artifact
+      #     uses: actions/upload-artifact@<sha>
+      #     with:
+      #       name: hypatia-gui-wasm
+      #       path: src/ui/public/assets/wasm/hypatia_gui.wasm
+      #       retention-days: 30
+
+      - name: Dry-run build (no Ephapax toolchain yet)
+        run: |
+          set -euo pipefail
+          cat <<'EOF'
+
+          ⚠️  DRY RUN — Ephapax toolchain not installed in CI.
+
+          Source files validated. Once the Ephapax toolchain is
+          available as a GitHub Action, replace this step with the
+          real `eph build` invocation (see comment block above).
+
+          Until then, anyone who wants a built .wasm must compile
+          locally per src/ui/gossamer/README.adoc.
+          EOF

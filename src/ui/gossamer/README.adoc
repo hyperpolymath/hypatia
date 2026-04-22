@@ -1,0 +1,72 @@
+= Hypatia GUI (Gossamer + Ephapax)
+:toc:
+
+// SPDX-License-Identifier: PMPL-1.0-or-later
+
+Replacement for the earlier AffineScript GUI at `src/ui/tea/`. Per issue
+#177 and the language decision in the `claude/fix-security-issues-9zrz0`
+branch thread, the GUI is being migrated to Gossamer (UI framework) on
+top of Ephapax (dyadic-typed WASM language), with Burble providing
+session state and PanLL providing the unified dashboard panel.
+
+== Current state
+
+This branch (`claude/gossamer-ephapax-gui`) contains:
+
+* `hypatia_gui.eph` — TEA loop (Model / Msg / update / view / subs).
+  Port of the 105-line `hypatia_gui.affine`; behaviour identical.
+* `bridge.eph` — Gossamer host integration (window + IPC handles) with
+  explicit TODO stubs for Burble session and wire-format decoding.
+* `panel.manifest.toml` — PanLL manifest skeleton.
+* `../public/index.html` — updated to load the Gossamer-compiled wasm
+  from the new path (see below).
+
+== What's NOT done
+
+1. **No CI build of `.eph` → `.wasm`.** The Gossamer toolchain isn't in
+   the repo yet; when it is, add a workflow step roughly equivalent to
+   `eph build --target wasm32 src/ui/gossamer/bridge.eph -o src/ui/public/assets/wasm/hypatia_gui.wasm`.
+2. **Burble session integration is a stub** (see `bridge.eph` comments).
+3. **Wire format for Msg decode is unchosen** — JSON, Cap'n Proto, or
+   FlatBuffers; decide before shipping.
+4. **PanLL manifest schema not verified** — field names in
+   `panel.manifest.toml` are placeholders pending the real PanLL spec.
+5. **Old `src/ui/tea/hypatia_gui.affine` deleted** in this branch
+   (content preserved in git history); if the Ephapax port fails to
+   build and needs reference, `git show main:src/ui/tea/hypatia_gui.affine`
+   will retrieve it.
+
+== Local build (once Ephapax toolchain is in)
+
+[source,bash]
+----
+# Compile the TEA core + bridge into a single wasm module.
+eph build --target wasm32 \
+  src/ui/gossamer/bridge.eph \
+  -o src/ui/public/assets/wasm/hypatia_gui.wasm
+
+# Sanity-check the wasm module.
+wasm-validate src/ui/public/assets/wasm/hypatia_gui.wasm
+
+# Serve the UI locally.
+cd src/ui/public && python3 -m http.server 8000
+# open http://localhost:8000
+----
+
+== Why Ephapax over AffineScript
+
+Summary: Gossamer is already built on Ephapax, Ephapax is dyadic (affine
++ linear, not affine-only), and the Hypatia GUI has linear resources
+(IPC channel, window handle) that benefit from linear discipline.
+Full reasoning in issue #177.
+
+== References
+
+* `hyperpolymath/ephapax` — the language (see README for the receipts,
+  `docs/specs/DESIGN-DECISIONS.adoc` for the 17 ADRs)
+* `hyperpolymath/gossamer` — the host / window / IPC framework built on
+  Ephapax; `src/core/Bridge.eph` is the canonical pattern
+* `hyperpolymath/burble` — session / P2P coordination layer
+* `hyperpolymath/panll` (or whatever the exact name is) — unified
+  dashboard system
+* Issue #177 — migration tracker

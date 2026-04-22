@@ -85,7 +85,10 @@
     </div>
 
     <script type="module">
-        import { load, Msg, Department } from '../tea/hypatia_tea.js';
+        // Gossamer/Ephapax loader (replaces ../tea/hypatia_tea.js per issue #177).
+        // The wasm at assets/wasm/hypatia_gui.wasm is built from
+        // src/ui/gossamer/bridge.eph — see src/ui/gossamer/README.adoc.
+        import { load, Msg, Department } from '../gossamer/loader.js';
 
         async function main() {
             try {
