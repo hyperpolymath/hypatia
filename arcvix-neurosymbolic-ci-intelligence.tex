@@ -908,7 +908,7 @@ Several directions for future development are planned:
 
 \textbf{GraphQL live API.} The current dispatch manifest is file-based. A live GraphQL API would enable real-time monitoring dashboards and webhook-driven dispatch.
 
-\textbf{Chapel NIFs for neural computation.} For the heaviest neural operations (particularly full PageRank recomputation on the trust graph), Chapel NIFs would provide data-parallel performance on multi-core CI runners.
+\textbf{Nx/EXLA backend for scale.} The current neural layer runs in pure Elixir at reservoir sizes of 80--100, which is ample for decision-support at present volumes. If future workloads push reservoir sizes or retraining cadence beyond what pure Elixir can comfortably handle, migrating the tensor primitives to Nx with an EXLA backend is the natural next step: same BEAM runtime, same supervision tree, optional GPU acceleration, no new FFI boundary.
 
 
 % ============================================================
