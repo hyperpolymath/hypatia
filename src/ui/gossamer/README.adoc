@@ -61,25 +61,48 @@ constructor alignment). Type-check pending toolchain availability.
 | Burble session integration
 | ⏸  Deferred. See `BURBLE-DEFERRAL.md`.
 
-| CI build of `.eph` → `.wasm`
-| ⏸  Awaits an installable Ephapax toolchain. Workflow scaffold at
-  `.github/workflows/build-gossamer-gui.yml` currently runs in
-  dry-run mode.
+| Ephapax toolchain build (CI)
+| ✅ `.github/workflows/build-gossamer-gui.yml` clones
+  `hyperpolymath/ephapax` at v1.0.0 (commit `c14c3e92`) and runs
+  `cargo build --release --workspace`. Result is cached per-SHA, so
+  subsequent runs are seconds.
+
+| `.eph` → `.wasm` compilation (CI)
+| ⏸  Gated on an upstream CLI wrapper. Ephapax v1.0.0 ships
+  `ephapax-cli compile-sexpr` (stage 2) and an Idris2 parser (stage 1)
+  but no single subcommand that chains them. The workflow probes for
+  `just compile-affine`, `ephapax-cli compile-eph`, and
+  `ephapax-cli compile-affine`; when any appears upstream, the
+  compile step promotes itself automatically.
 |===
 
-== Local build (once Ephapax toolchain is in)
+== Local build
+
+Prerequisites: Rust 1.83+ with `wasm32-unknown-unknown` target, `just`,
+`git`. Clone and build Ephapax once:
 
 [source,bash]
 ----
-# Compile the TEA core + bridge into a single wasm module.
-eph build --target wasm32 \
+git clone https://github.com/hyperpolymath/ephapax /tmp/ephapax
+cd /tmp/ephapax
+git checkout v1.0.0    # or: c14c3e92a9a6bfc1074ea9d97a3ce4b5fae37501
+just doctor            # optional — reports missing tools
+cargo build --release --workspace
+----
+
+Once an upstream `.eph` → `.wasm` CLI subcommand lands, the Hypatia
+side call is:
+
+[source,bash]
+----
+# Example — exact subcommand name depends on which of compile-affine /
+# compile-eph ships first. Check `ephapax-cli --help` and `just --list`.
+/tmp/ephapax/target/release/ephapax-cli compile-eph \
   src/ui/gossamer/bridge.eph \
   -o src/ui/public/assets/wasm/hypatia_gui.wasm
 
-# Sanity-check the wasm module.
 wasm-validate src/ui/public/assets/wasm/hypatia_gui.wasm
 
-# Serve the UI locally.
 cd src/ui/public && python3 -m http.server 8000
 # open http://localhost:8000
 ----

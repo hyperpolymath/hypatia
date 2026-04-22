@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Build the Hypatia GUI wasm artifact from the Ephapax/Gossamer sources.
 #
-# STATUS: SCAFFOLD (2026-04-22). The `eph` compiler toolchain is not yet
-# available in any public action and we can't reliably install it in CI.
-# This workflow declares the shape of the build so that, once the
-# toolchain is installable, it becomes a one-line change to `setup-eph`
-# + `eph build ...` under the "Compile Ephapax to wasm" step below.
+# v2 (2026-04-22): real Ephapax toolchain build from source.
 #
-# Until that happens the build runs in `dry-run` mode: it validates the
-# .eph sources exist, prints their line counts, and checks the JS
-# loader + manifest. It does NOT produce a wasm artifact and it does
-# NOT fail the overall CI if wasm isn't produced — the Hypatia engine
-# doesn't depend on the GUI.
+# Ephapax v1.0.0 does not publish pre-built binaries and does not ship a
+# `setup-eph` GitHub Action. The toolchain is built from source here,
+# pinned to the v1.0.0 commit, and cached across runs. If a
+# `compile-affine` recipe or equivalent ephapax-cli subcommand lands in a
+# later release, the compile step below promotes from "build-only" to
+# "build + compile-our-sources".
 #
-# See src/ui/gossamer/README.adoc for the full migration status.
+# The job is advisory — compile failure does not block Hypatia CI. The
+# engine doesn't depend on the GUI.
 
 name: Build Gossamer GUI
 
@@ -31,29 +29,29 @@ on:
 
 permissions: read-all
 
+env:
+  EPHAPAX_VERSION: v1.0.0
+  EPHAPAX_SHA: c14c3e92a9a6bfc1074ea9d97a3ce4b5fae37501
+  EPHAPAX_DIR: /tmp/ephapax
+
 jobs:
-  build:
-    name: Compile .eph → .wasm
+  validate-sources:
+    name: Validate Ephapax sources exist
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: read
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Validate Ephapax sources exist
+      - name: Check required sources
         run: |
           set -euo pipefail
           required=(
             src/ui/gossamer/hypatia_gui.eph
             src/ui/gossamer/bridge.eph
             src/ui/gossamer/loader.js
-            src/ui/gossamer/panll.harness.toml
-            src/ui/gossamer/panll.minter.toml
-            src/ui/gossamer/panll.provisioner.toml
-            src/ui/gossamer/panll.configurator.cue
             src/ui/gossamer/README.adoc
           )
           missing=0
@@ -66,46 +64,136 @@ jobs:
             fi
           done
           if [ "$missing" -gt 0 ]; then
-            echo "::error::$missing required Gossamer file(s) missing"
+            echo "::error::$missing required Gossamer source file(s) missing"
             exit 1
           fi
 
-      # TODO: replace the following setup/build steps when Ephapax has a
-      # public setup action. Shape will be roughly:
-      #
-      #   - name: Setup Ephapax toolchain
-      #     uses: hyperpolymath/setup-eph@<sha> # v<ver>
-      #     with:
-      #       ephapax-version: '2.x'
-      #
-      #   - name: Compile Ephapax to wasm
-      #     run: |
-      #       eph build \
-      #         --target wasm32 \
-      #         src/ui/gossamer/bridge.eph \
-      #         -o src/ui/public/assets/wasm/hypatia_gui.wasm
-      #
-      #   - name: Validate wasm module
-      #     run: wasm-validate src/ui/public/assets/wasm/hypatia_gui.wasm
-      #
-      #   - name: Upload wasm artifact
-      #     uses: actions/upload-artifact@<sha>
-      #     with:
-      #       name: hypatia-gui-wasm
-      #       path: src/ui/public/assets/wasm/hypatia_gui.wasm
-      #       retention-days: 30
+  build-ephapax:
+    name: Build Ephapax toolchain (pinned)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate-sources
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Hypatia
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Dry-run build (no Ephapax toolchain yet)
+      - name: Setup Rust (stable) with wasm32 target
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Install just
+        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        with:
+          tool: just
+
+      - name: Cache Ephapax build
+        id: cache-ephapax
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            /tmp/ephapax
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ephapax-${{ env.EPHAPAX_SHA }}-${{ runner.os }}-v1
+
+      - name: Clone Ephapax at ${{ env.EPHAPAX_VERSION }}
+        if: steps.cache-ephapax.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          cat <<'EOF'
+          git clone https://github.com/hyperpolymath/ephapax "$EPHAPAX_DIR"
+          cd "$EPHAPAX_DIR"
+          git checkout "$EPHAPAX_SHA"
+          echo "Pinned to $(git rev-parse HEAD)"
 
-          ⚠️  DRY RUN — Ephapax toolchain not installed in CI.
+      - name: Run Ephapax doctor
+        if: steps.cache-ephapax.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cd "$EPHAPAX_DIR"
+          just doctor || true
 
-          Source files validated. Once the Ephapax toolchain is
-          available as a GitHub Action, replace this step with the
-          real `eph build` invocation (see comment block above).
+      - name: Build Ephapax
+        if: steps.cache-ephapax.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          cd "$EPHAPAX_DIR"
+          cargo build --release --workspace
 
-          Until then, anyone who wants a built .wasm must compile
-          locally per src/ui/gossamer/README.adoc.
-          EOF
+      - name: Verify ephapax-cli binary
+        run: |
+          set -euo pipefail
+          cli="$EPHAPAX_DIR/target/release/ephapax-cli"
+          if [ ! -x "$cli" ]; then
+            echo "::error::ephapax-cli not found at $cli"
+            exit 1
+          fi
+          "$cli" --version 2>/dev/null || "$cli" --help 2>/dev/null | head -20 || \
+            echo "(ephapax-cli built but has no --version/--help output)"
+
+      - name: Attempt to compile bridge.eph
+        id: compile
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p src/ui/public/assets/wasm
+          wasm_out="$GITHUB_WORKSPACE/src/ui/public/assets/wasm/hypatia_gui.wasm"
+          src_entry="$GITHUB_WORKSPACE/src/ui/gossamer/bridge.eph"
+          cli="$EPHAPAX_DIR/target/release/ephapax-cli"
+
+          cd "$EPHAPAX_DIR"
+
+          # Probe for a stage-1 .eph → .wasm path. v1.0.0 ships
+          # `ephapax-cli compile-sexpr` (stage 2), and an Idris2 parser
+          # for stage 1, but no single CLI subcommand that chains them
+          # end-to-end. When one appears — `compile-affine` in Justfile,
+          # or a new `compile-eph` subcommand on ephapax-cli — this step
+          # picks it up automatically.
+          if just --list 2>/dev/null | grep -qE '^\s*compile-affine\b'; then
+            echo "→ just compile-affine (concrete .eph path available)"
+            just compile-affine "$src_entry" affine "$wasm_out"
+          elif "$cli" --help 2>&1 | grep -qE '\bcompile-eph\b'; then
+            echo "→ ephapax-cli compile-eph"
+            "$cli" compile-eph "$src_entry" -o "$wasm_out"
+          elif "$cli" --help 2>&1 | grep -qE '\bcompile-affine\b'; then
+            echo "→ ephapax-cli compile-affine"
+            "$cli" compile-affine "$src_entry" -o "$wasm_out"
+          else
+            echo "::warning::No .eph → .wasm compile path exposed by ephapax@$EPHAPAX_VERSION."
+            echo "::warning::Stage-1 parser is currently Idris2-only; stage-2 compile-sexpr consumes .sexpr IR."
+            echo "::warning::Add a CLI wrapper (e.g. compile-eph) upstream to enable end-to-end compilation here."
+            exit 0
+          fi
+
+          if [ -f "$wasm_out" ]; then
+            echo "✓ Compiled $(basename "$wasm_out") — $(wc -c < "$wasm_out") bytes"
+          fi
+
+      - name: Upload wasm artifact
+        if: steps.compile.outcome == 'success' && hashFiles('src/ui/public/assets/wasm/hypatia_gui.wasm') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hypatia-gui-wasm
+          path: src/ui/public/assets/wasm/hypatia_gui.wasm
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Gossamer GUI Build Summary"
+            echo ""
+            echo "- **Ephapax**: \`$EPHAPAX_VERSION\` (\`${EPHAPAX_SHA:0:10}\`)"
+            if [ -f src/ui/public/assets/wasm/hypatia_gui.wasm ]; then
+              size=$(wc -c < src/ui/public/assets/wasm/hypatia_gui.wasm)
+              echo "- **wasm output**: ✅ \`hypatia_gui.wasm\` ($size bytes)"
+            else
+              echo "- **wasm output**: ⏸ skipped — stage-1 \`.eph\` parser not yet a CLI subcommand in ephapax $EPHAPAX_VERSION"
+              echo ""
+              echo "  Toolchain built successfully; compile step awaits upstream CLI wrapper."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
