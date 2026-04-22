@@ -70,17 +70,28 @@ defmodule Hypatia.Neural.TrainingPipelineTest do
     end
   end
 
-  describe "train_rbf/1" do
-    test "trains RBF on pattern data" do
+  describe "train_rbf/2" do
+    test "trains RBF on pattern data (rebalance off — original behaviour)" do
       rbf = RadialNeuralNetwork.init()
-      trained = TrainingPipeline.train_rbf(rbf)
+      trained = TrainingPipeline.train_rbf(rbf, rebalance: false)
 
-      # If we have patterns, RBF should be trained
       {vectors, _} = TrainingPipeline.build_rbf_training_data()
 
       if length(vectors) >= 5 do
         assert trained.trained == true
         assert trained.training_stats.samples == length(vectors)
+      end
+    end
+
+    test "rebalanced training uses real + synthetic samples" do
+      rbf = RadialNeuralNetwork.init()
+      trained = TrainingPipeline.train_rbf(rbf, rebalance: true, rebalance_opts: [count: 15])
+
+      {real_vectors, _} = TrainingPipeline.build_rbf_training_data()
+
+      if length(real_vectors) >= 5 do
+        assert trained.trained == true
+        assert trained.training_stats.samples == length(real_vectors) + 15
       end
     end
   end

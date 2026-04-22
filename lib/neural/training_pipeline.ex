@@ -17,7 +17,8 @@ defmodule Hypatia.Neural.TrainingPipeline do
 
   alias Hypatia.Neural.{
     EchoStateNetwork,
-    RadialNeuralNetwork
+    RadialNeuralNetwork,
+    Rebalancer
   }
 
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
@@ -100,8 +101,16 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Uses the longest available recipe confidence series (must be >= 60
   data points for the ESN reservoir to learn meaningful dynamics).
   Returns the trained ESN struct, or the original if insufficient data.
+
+  Options:
+    * `:rebalance` — inject synthetic regression events into the
+      training series to counter the ~99% success skew
+      (default `true`; set to `false` to reproduce the pre-rebalance
+      behaviour). See `Hypatia.Neural.Rebalancer.augment_esn_series/2`.
+    * `:rebalance_opts` — keyword passed through to the rebalancer
+      (e.g. `[rate: 0.05, dip_depth: 0.4, seed: 42]`).
   """
-  def train_esn(esn) do
+  def train_esn(esn, opts \\ []) do
     training_data = build_esn_training_data()
 
     if training_data == [] do
@@ -112,11 +121,25 @@ defmodule Hypatia.Neural.TrainingPipeline do
       primary = hd(training_data)
 
       if primary.count >= 60 do
+        rebalance = Keyword.get(opts, :rebalance, true)
+        rebalance_opts = Keyword.get(opts, :rebalance_opts, [])
+
+        series =
+          if rebalance do
+            Logger.info(
+              "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (synthetic regressions)"
+            )
+
+            Rebalancer.augment_esn_series(primary.series, rebalance_opts)
+          else
+            primary.series
+          end
+
         Logger.info(
           "TrainingPipeline: training ESN on #{primary.recipe_id} (#{primary.count} points)"
         )
 
-        trained_esn = EchoStateNetwork.train(esn, primary.series)
+        trained_esn = EchoStateNetwork.train(esn, series)
 
         # Log availability of additional series for future cross-validation
         other_count = length(training_data) - 1
@@ -204,9 +227,32 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Requires at least 5 patterns to train (minimum for RBF center
   placement). Returns the trained RBF struct, or the original if
   insufficient data.
+
+  Options:
+    * `:rebalance` — append synthetic 8-D feature vectors covering
+      under-represented regions of the feature space, with
+      rule-based targets matching the safety-triangle heuristic
+      (default `true`). See
+      `Hypatia.Neural.Rebalancer.rebalance_rbf/2`.
+    * `:rebalance_opts` — keyword passed through to the rebalancer
+      (e.g. `[count: 30, seed: 42]`).
   """
-  def train_rbf(rbf) do
-    {vectors, targets} = build_rbf_training_data()
+  def train_rbf(rbf, opts \\ []) do
+    {real_vectors, real_targets} = build_rbf_training_data()
+
+    {vectors, targets} =
+      if Keyword.get(opts, :rebalance, true) and real_vectors != [] do
+        Logger.info(
+          "TrainingPipeline: rebalancing RBF training set (synthetic coverage)"
+        )
+
+        Rebalancer.rebalance_rbf(
+          {real_vectors, real_targets},
+          Keyword.get(opts, :rebalance_opts, [])
+        )
+      else
+        {real_vectors, real_targets}
+      end
 
     if vectors == [] or length(vectors) < 5 do
       Logger.warning(
@@ -215,7 +261,11 @@ defmodule Hypatia.Neural.TrainingPipeline do
 
       rbf
     else
-      Logger.info("TrainingPipeline: training RBF on #{length(vectors)} patterns")
+      Logger.info(
+        "TrainingPipeline: training RBF on #{length(vectors)} vectors " <>
+          "(#{length(real_vectors)} real + #{length(vectors) - length(real_vectors)} synthetic)"
+      )
+
       RadialNeuralNetwork.train(rbf, vectors, targets)
     end
   end
@@ -226,16 +276,19 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Run full training pipeline for both ESN and RBF.
 
   Initializes fresh network instances, trains both on available data
-  from verisim-data, and returns a map with :esn and :rbf keys.
+  from verisim-data, and returns a map with `:esn` and `:rbf` keys.
+
+  Options are forwarded to `train_esn/2` and `train_rbf/2` — see those
+  functions for the `:rebalance` and `:rebalance_opts` knobs.
   """
-  def run_full_training do
+  def run_full_training(opts \\ []) do
     Logger.info("TrainingPipeline: starting full training run")
 
     esn = EchoStateNetwork.init()
     rbf = RadialNeuralNetwork.init()
 
-    trained_esn = train_esn(esn)
-    trained_rbf = train_rbf(rbf)
+    trained_esn = train_esn(esn, opts)
+    trained_rbf = train_rbf(rbf, opts)
 
     esn_status = if trained_esn.trained, do: "trained", else: "untrained"
     rbf_status = if trained_rbf.trained, do: "trained", else: "untrained"
