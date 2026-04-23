@@ -14,10 +14,12 @@ audit-date = "2026-04-22"
 audit-method = "automated scouts + synthesis"
 
 [grade]
-current = "D+"
-target = "C"
-line-of-sight-to-target = "bounded — 5 Tier-1 punch-list items"
-line-of-sight-to-B = "multi-quarter — requires mutation + fuzz + compat + PBT"
+current = "C"
+current-declared-on = "2026-04-23"
+target = "B"
+line-of-sight-to-target = "multi-quarter — requires mutation + fuzz + compat + PBT"
+tier-1-closed-on = "2026-04-23"
+tier-1-closing-pr = "claude/fix-security-issues-9zrz0 — reflexive test suite"
 
 # -----------------------------------------------------------------------------
 # 16 test categories — primary status per TESTING-TAXONOMY.adoc § 1
@@ -61,9 +63,13 @@ evidence = [
 
 [categories.REF]
 name = "Reflexive"
-status = "weak"
-evidence = ["test/safety_test.exs", "test/blackboard_test.exs"]
-gap = "no dedicated self-diagnostic suite; `just doctor` not tested"
+status = "strong"
+evidence = [
+  "test/reflexive_test.exs",
+  "test/safety_test.exs",
+  "test/blackboard_test.exs",
+]
+notes = "SelfDiagnostics health + circuit breaker, VCL/RateLimiter/Quarantine stats, Justfile doctor recipe structurally tested"
 
 [categories.LCY]
 name = "Lifecycle"
@@ -134,9 +140,9 @@ landed = [
 
 [categories.summary]
 total = 16
-strong = 8
+strong = 9
 partial = 1
-weak = 4
+weak = 3
 absent = 3
 
 # -----------------------------------------------------------------------------
@@ -329,12 +335,13 @@ total = 14
 items = [
   "bench-baseline-and-CI-gate",        # done 2026-04-22
   "contract-test-harness",             # done 2026-04-23
-  "reflexive-test-suite",              # open
+  "reflexive-test-suite",              # done 2026-04-23
   "dogfooding-a2ml",                   # done 2026-04-22
   "k9iser-ci-integration",             # done 2026-04-22
 ]
-items-open = ["reflexive-test-suite"]
-estimated-effort-days = 5
+items-open = []
+all-tier-1-complete = true
+estimated-effort-days = 0
 
 [punch-list.tier-2-to-B]
 items = [
