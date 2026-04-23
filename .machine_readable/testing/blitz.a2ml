@@ -97,8 +97,10 @@ gap = "no fuzz/ directory, no cargo-fuzz targets, no fuzz workflow"
 
 [categories.CTR]
 name = "Contract"
-status = "weak"
-gap = "no .contractile runtime decorators; no assertion harness"
+status = "partial"
+evidence = ["test/contract_test.exs", "test/support/contract_case.ex"]
+gap = "no .contractile runtime decorators; named-invariant assertion harness now present"
+notes = "covers TriangleRouter thresholds, RateLimiter burst, Quarantine auto-quarantine, VCL parse totality"
 
 [categories.REG]
 name = "Regression"
@@ -133,7 +135,8 @@ landed = [
 [categories.summary]
 total = 16
 strong = 8
-weak = 5
+partial = 1
+weak = 4
 absent = 3
 
 # -----------------------------------------------------------------------------
@@ -324,12 +327,13 @@ total = 14
 
 [punch-list.tier-1-to-C]
 items = [
-  "bench-baseline-and-CI-gate",
-  "contract-test-harness",
-  "reflexive-test-suite",
-  "dogfooding-a2ml",
-  "k9iser-ci-integration",
+  "bench-baseline-and-CI-gate",        # done 2026-04-22
+  "contract-test-harness",             # done 2026-04-23
+  "reflexive-test-suite",              # open
+  "dogfooding-a2ml",                   # done 2026-04-22
+  "k9iser-ci-integration",             # done 2026-04-22
 ]
+items-open = ["reflexive-test-suite"]
 estimated-effort-days = 5
 
 [punch-list.tier-2-to-B]
