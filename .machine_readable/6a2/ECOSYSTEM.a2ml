@@ -1,10 +1,69 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# ECOSYSTEM.a2ml — Ecosystem position
-# Converted from ECOSYSTEM.scm on 2026-03-15
+# ECOSYSTEM.a2ml — Ecosystem position and relationship map
+# Converted from ECOSYSTEM.scm on 2026-03-15; expanded 2026-04-25
 
 [metadata]
 project = "hypatia"
 ecosystem = "hyperpolymath"
+last-updated = "2026-04-25"
+media-type = "application/vnd.ecosystem+scm"
 
 [position]
 type = "component"
+category = "ci-intelligence"
+tier = "infrastructure"
+purpose = "Neurosymbolic CI/CD intelligence layer — scans repos via panic-attack, classifies findings through the Safety Triangle, dispatches fixes to gitbot-fleet, learns from outcomes via 5 neural networks."
+role = "producer-and-consumer"
+
+[position.consumers]
+boj-server = "Hypatia MCP cartridge at boj-server/cartridges/hypatia-mcp/ (283 LOC, Deno mod.js + Idris2 ABI + Zig FFI)"
+panll = "Receives real-time dashboard JSON from PanLL data bridge"
+estate-workflows = "hypatia-scan.yml runs in every RSR repo .github/workflows/"
+
+[position.producers]
+verisim-data = "Reads git-backed flat-file canonical store via VCL queries + FileExecutor"
+panic-attack = "Consumes JSON AssailReport from panic-attack estate scans"
+gitbot-fleet = "Dispatches to rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot"
+
+[related-projects]
+[[related-projects.sibling]]
+name = "verification-ecosystem/echidnabot"
+relationship = "sibling-standard"
+description = "Receives ProofObligation dispatches from Hypatia FleetDispatcher at confidence >= 0.85. Retrain loop feeds back via LearningScheduler N5."
+
+[[related-projects.sibling]]
+name = "verification-ecosystem/ephapax"
+relationship = "sibling-standard"
+description = "Linear-type verifier. Hypatia classifies ephapax-relevant findings and routes to echidnabot for formal verification."
+
+[[related-projects.sibling]]
+name = "verification-ecosystem/o"
+relationship = "sibling-standard"
+description = "Peer verification tool in the verification-ecosystem monorepo."
+
+[[related-projects.infrastructure]]
+name = "nextgen-databases/verisim"
+relationship = "data-dependency"
+description = "VeriSimDB provides the canonical flat-file store (verisim-data) that Hypatia reads via VCL queries."
+
+[[related-projects.infrastructure]]
+name = "fleet-ecosystem/git-automation-ecosystem/gitbot-fleet"
+relationship = "dispatch-target"
+description = "7 bots (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot) receive dispatches from FleetDispatcher."
+
+[[related-projects.infrastructure]]
+name = "verification-ecosystem/panic-attack"
+relationship = "scanner-source"
+description = "panic-attack assail produces JSON AssailReport consumed by Hypatia rules engine. panicbot wraps the CLI."
+
+[[related-projects.infrastructure]]
+name = "boj-server"
+relationship = "mcp-host"
+description = "All Hypatia MCP capabilities served via BoJ MCP cartridge. No standalone MCP server."
+
+[integration-points]
+groove-protocol = "All inter-service comms use Groove. HTTP port 9090 (configurable)."
+vcl-queries = "VCL Client GenServer parses + caches + executes queries against verisim-data flat files."
+dispatch-manifest = "JSONL manifests written to dispatch/pending.jsonl, consumed by dispatch-runner.sh."
+outcome-tracker = "Outcomes appended to outcomes/YYYY-MM.jsonl, drive Bayesian confidence updating."
+neural-persistence = "Neural states persisted to data/verisim/neural-states/ via lib/neural/persistence.ex."

@@ -1,23 +1,75 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# PLAYBOOK.a2ml — Operational playbook
+# PLAYBOOK.a2ml — Operational runbook
 # Runbooks, incident response, deployment procedures.
 
 [metadata]
-version = "0.1.0"
-last-updated = "2026-03-16"
+version = "0.2.0"
+last-updated = "2026-04-25"
 
 [deployment]
-# method = "gitops"
-# target = "container"
+method = "gitops"
+target = "container"
+container-tool = "Podman (not Docker)"
+containerfile = "deploy/Containerfile"
+base-image = "Chainguard Elixir base"
+http-port = 9090
+env-vars = [
+  "HYPATIA_VERISIM_URL — URL for verisim-data git-backed store",
+  "HYPATIA_FLEET_PATH — path to gitbot-fleet checkout",
+  "HYPATIA_GITHUB_PAT — GitHub PAT with repo scope for live dispatch (M7, pending)",
+  "HYPATIA_HTTP_PORT — override HTTP port (default 9090)",
+]
+start-command = "mix run --no-halt"
+pre-flight = ["mix deps.get", "mix compile", "mix test"]
 
 [incident-response]
-# 1. Check .machine_readable/STATE.a2ml for current status
-# 2. Review recent commits and CI results
-# 3. Run just validate to check compliance
+steps = [
+  "1. Check .machine_readable/6a2/STATE.a2ml for current status and known blockers",
+  "2. Review recent commits: git log --oneline -20",
+  "3. Run mix test to check for regressions (0 failures expected)",
+  "4. Check SelfDiagnostics.health_report() for circuit breaker state",
+  "5. Check SelfDiagnostics.circuit_state() — if :open, dispatch is queued to pending.jsonl",
+  "6. Review dispatch/held.jsonl and dispatch/pending.jsonl for queued items",
+  "7. Run just validate to check RSR compliance",
+  "8. Check Quarantine.list_quarantined() for bots in hard/permanent quarantine",
+  "9. If circuit is open: wait for cooldown (15 min) or send :try_half_open to SelfDiagnostics",
+  "10. If bot is quarantined: investigate cause, call Quarantine.release(bot) when resolved",
+]
 
 [release-process]
-# 1. Update version in STATE.a2ml, META.a2ml
-# 2. Run just quality (format, lint, test)
-# 3. Tag and push
+steps = [
+  "1. Update version in mix.exs",
+  "2. Update STATE.a2ml: last-updated, completion-percentage, session-history",
+  "3. Update META.a2ml if architecture decisions changed",
+  "4. Run just quality (mix format + mix test + cargo clippy + cargo test)",
+  "5. Commit all 6 a2ml files together: chore(6a2): update state post-release vX.Y.Z",
+  "6. Tag: git tag -s vX.Y.Z -m 'Release X.Y.Z'",
+  "7. Push: git push origin main --tags",
+]
+
+[maintenance-operations]
+baseline-audit = "mix test && cargo test && just validate"
+hard-pass-gate = "mix test 0 failures (233 :verisim_data excluded by design)"
+neural-retrain = "GenServer.call(Hypatia.Neural.Coordinator, :force_cycle)"
+scan-estate = "just scan (runs panic-attack assail across estate, writes to verisim-data)"
+dispatch-run = "just dispatch (runs dispatch-runner.sh against pending.jsonl)"
+crg-check = "Review STATE.a2ml [project-context] crg-grade vs crg-grade-target"
+
+[crg-promotion-criteria]
+d-to-c = [
+  "mix test 0 failures (excluding :verisim_data tag)",
+  "All test files have SPDX headers",
+  "Per-subtree README.adoc files in all key directories",
+  "Dogfooding evidence populated in STATE.a2ml",
+  "7+ Zig FFI domain functions implemented",
+]
+c-to-b = [
+  "GitHub PAT configured for live dispatch (M7 done)",
+  "Fix script coverage > 90% (M8 done)",
+  "Neural rebalancer Strategy B+C complete (M9 done)",
+  "Ada TUI wired into Elixir supervision tree (M10 done)",
+  "verisim-api deployed (G1 resolved)",
+  "Integration tests pass against live verisim-data",
+]

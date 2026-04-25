@@ -5,10 +5,60 @@
 # Configuration for Hypatia scanning and symbolic reasoning.
 
 [metadata]
-version = "0.1.0"
-last-updated = "2026-03-16"
+version = "0.2.0"
+last-updated = "2026-04-25"
 
 [hypatia-config]
 scan-enabled = true
-scan-depth = "standard"
-report-format = "logtalk"
+# "deep" = full estate scan (302 repos); use "standard" for per-repo CI runs
+scan-depth = "deep"
+# JSON AssailReport from panic-attack; Logtalk removed 2026-04-14
+report-format = "json"
+verisim-data-path = "data/verisim"
+fleet-path = "~/Documents/hyperpolymath-repos/gitbot-fleet"
+
+[neural-config]
+confidence-threshold-auto-execute = 0.95
+confidence-threshold-review = 0.85
+confidence-floor = 0.10
+confidence-cap = 0.99
+bayesian-prior-strength = 10
+networks = ["graph-of-trust", "mixture-of-experts", "liquid-state-machine", "echo-state-network", "radial-neural-network"]
+# GNN, VAE, SequenceModel added 2026-04-25 sprint (new layer)
+networks-extended = ["graph-neural-network", "variational-autoencoder", "sequence-model"]
+coordinator = "lib/neural/coordinator.ex"
+persistence = "lib/neural/persistence.ex"
+state-dir = "data/verisim/neural-states"
+rebalancer = "lib/neural/rebalancer.ex"
+rebalancer-strategy-a = "done"
+rebalancer-strategy-b = "in_progress"
+rebalancer-strategy-c = "in_progress"
+
+[symbolic-rules]
+# Project-specific rules beyond the estate-wide RSR ruleset.
+[[symbolic-rules.rule]]
+id = "HYP-001"
+name = "null-fix-script detector"
+pattern = "auto_execute entry with fix_script = null"
+severity = "medium"
+source = "lib/rules/cicd_rules.ex"
+
+[[symbolic-rules.rule]]
+id = "HYP-002"
+name = "confidence-below-floor detector"
+pattern = "recipe confidence < 0.10 after >= 10 outcomes"
+severity = "high"
+source = "lib/outcome_tracker.ex"
+
+[[symbolic-rules.rule]]
+id = "HYP-003"
+name = "circuit-breaker-open alert"
+pattern = "SelfDiagnostics.circuit_state() == :open"
+severity = "critical"
+source = "lib/self_diagnostics.ex"
+
+[proof-integration]
+proof-strategy-selection = "PS001–PS010 (lib/rules/proof_strategy_selection.ex)"
+proof-obligation = "PO001–PO006 (lib/rules/proof_obligation.ex)"
+echidnabot-route = "ProofObligation.classify confidence >= 0.85 → FleetDispatcher → echidnabot"
+prover-recommender = "lib/neural/prover_recommender.ex (RBF, 8-D feature vectors, 1108 samples)"

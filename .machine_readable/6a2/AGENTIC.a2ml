@@ -5,8 +5,8 @@
 # Defines what AI agents can and cannot do in this repository.
 
 [metadata]
-version = "0.1.0"
-last-updated = "2026-03-16"
+version = "0.2.0"
+last-updated = "2026-04-25"
 
 [agent-permissions]
 can-edit-source = true
@@ -17,12 +17,51 @@ can-create-files = true
 
 [agent-constraints]
 # What AI agents must NOT do:
-# - Never use banned language patterns (believe_me, unsafeCoerce, etc.)
-# - Never commit secrets or credentials
-# - Never use banned languages (TypeScript, Python, Go, etc.)
-# - Never place state files in repository root (must be in .machine_readable/)
-# - Never use AGPL license (use PMPL-1.0-or-later)
+forbidden = [
+  "Use banned Elixir patterns: believe_me, unsafeCoerce, Obj.magic",
+  "Use banned Idris2 patterns: believe_me, assert_total, partial without annotation",
+  "Commit secrets or credentials",
+  "Use banned languages: TypeScript, Go, Python (non-SaltStack), Node.js, npm, Bun",
+  "Place state files in repository root — .machine_readable/6a2/ ONLY",
+  "Use AGPL license (this is a PMPL-1.0-or-later repo)",
+  "Start GenServer via start_supervised! when Application supervisor already owns it — use take_supervised/1 instead",
+  "Claim '0 failures' without running mix test and observing actual output",
+  "Use Logtalk — removed 2026-04-14; all rules are pure Elixir",
+  "Emit JSON from tooling — emit A2ML (data) or Nickel (schemas)",
+]
+
+[maintenance-integrity]
+fail-closed = true
+require-evidence-per-step = true
+allow-silent-skip = false
+require-rerun-after-fix = true
+release-claim-requires-hard-pass = true
+completion-claim-requires-behavioural-tests = true
 
 [automation-hooks]
-# - Prevent runaway automation
-# - Max 10 PRs per hour per agent
+on-enter = [
+  "Read 0-AI-MANIFEST.a2ml or AI.a2ml first",
+  "Read .machine_readable/6a2/STATE.a2ml to understand current project state",
+  "Read .claude/CLAUDE.md for project-specific coding conventions",
+]
+on-exit = [
+  "Update STATE.a2ml session-history with work done",
+  "Update crg-grade if promotion criteria met (mix test 0 failures required)",
+  "Commit all 6 a2ml files together in one commit when updated",
+]
+on-commit = [
+  "Run mix test (0 failures required)",
+  "Run mix format",
+  "Run cargo clippy if Rust changed",
+  "Verify SPDX headers on new files",
+]
+
+[max-automation]
+max-prs-per-hour-per-agent = 10
+max-auto-execute-confidence-threshold = 0.95
+require-human-review-below-confidence = 0.85
+
+[sprint-patterns]
+# Patterns recorded during 2026-04-25 sprint for estate-wide reuse:
+take_supervised = "Private helper for isolated GenServer tests vs Application-supervised processes. Supervisor.terminate_child + delete_child → start_supervised! → on_exit restore. Fixes {:already_started, pid} from ExUnit start_supervised!."
+evict_expired_ttl_fix = "evict_expired boundary condition: use >= ttl not > ttl. System.monotonic_time(:second) is integer-truncated; strict > misses entries at exactly TTL age."

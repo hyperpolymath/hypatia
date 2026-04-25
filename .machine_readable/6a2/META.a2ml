@@ -1,9 +1,77 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# META.a2ml — Project meta-information
-# Converted from META.scm on 2026-03-15
+# META.a2ml — Project meta-information and architectural decisions
+# Converted from META.scm on 2026-03-15; expanded 2026-04-25
 
 [metadata]
 project = "hypatia"
 author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 license = "PMPL-1.0-or-later"
 standard = "RSR 2026"
+last-updated = "2026-04-25"
+media-type = "application/meta+scheme"
+
+[development-practices]
+versioning-scheme = "semver"
+documentation-format = "AsciiDoc"
+build-tool = "mix (Elixir) + cargo (Rust) + just (task runner)"
+test-command = "mix test"
+format-command = "mix format && cargo fmt"
+ci-command = "just quality"
+commit-strategy = "one unit = one commit; specific staged paths only"
+branch-strategy = "main only; PRs for external contributions"
+release-process = "version-bump in STATE.a2ml → just quality → tag → push"
+
+[architecture-decisions]
+# ADR-001 — 2026-04-14: Pure-Elixir rules engine (Logtalk removed)
+[[architecture-decisions.adr]]
+id = "ADR-001"
+status = "accepted"
+date = "2026-04-14"
+title = "Replace Logtalk rule engine with pure Elixir rules"
+context = "Logtalk added SWI-Prolog runtime dependency; CI instability; Hypatia's symbolic reasoning is pattern matching not first-order logic."
+decision = "Purge Logtalk entirely. Move all rules to lib/rules/*.ex as pure Elixir functions with ExUnit tests. Remove engine/ directory."
+consequences = "Single-language stack (Elixir + Rust + Idris2 + Zig). No SWI-Prolog in Containerfiles. Hypatia now consumes JSON AssailReport from panic-attack via Elixir rules."
+
+# ADR-002 — 2026-04-05: VQL renamed to VCL, verisimdb renamed to verisim
+[[architecture-decisions.adr]]
+id = "ADR-002"
+status = "accepted"
+date = "2026-04-05"
+title = "Rename VQL→VCL and verisimdb→verisim throughout"
+context = "VQL (VeriSim Query Language) conflated with SQL-style naming. VeriSim Constraint Language is more accurate."
+decision = "141 files renamed. HYPATIA_VERISIMDB_URL → HYPATIA_VERISIM_URL. VerisimdbConnector → VerisimConnector. lib/vql/ → lib/vcl/."
+consequences = "Estate-wide rename completed in one commit. API callers must update env vars."
+
+# ADR-003 — 2026-04-11: Proof learning loop via FleetDispatcher
+[[architecture-decisions.adr]]
+id = "ADR-003"
+status = "accepted"
+date = "2026-04-11"
+title = "Route ProofObligations through FleetDispatcher to echidnabot"
+context = "Proof obligations were being classified but not dispatched. Safety Triangle applies equally to formal verification dispatch."
+decision = "classify/2 in ProofObligation routes eliminate→robot-repo-automaton, substitute→echidnabot, control→sustainabot. Confidence gating applies. VeriSimDB round-trip avoided via :prover_hint_override."
+consequences = "Learning loop closed: outcomes feed LearningScheduler N5 retrain."
+
+# ADR-004 — 2026-04-22: Neural training data rebalancer
+[[architecture-decisions.adr]]
+id = "ADR-004"
+status = "accepted"
+date = "2026-04-22"
+title = "Synthetic rebalancer (Strategy A) as default; B+C deferred to M9"
+context = "Historical outcome log is ~99% success, biasing RBF/ESN training. Need representative failure distribution."
+decision = "lib/neural/rebalancer.ex adds synthetic regressions + rule-based RBF targets (Strategy A, on by default). Strategy B (adversarial perturbation) and C (real failure corpus from panic-attack history) deferred to M9."
+consequences = "Immediate improvement in training balance. B+C require additional data pipeline work."
+
+# ADR-005 — 2026-04-25: take_supervised/1 test isolation pattern
+[[architecture-decisions.adr]]
+id = "ADR-005"
+status = "accepted"
+date = "2026-04-25"
+title = "Use take_supervised/1 for isolated GenServer tests against Application-supervised processes"
+context = "start_supervised! fails with {:already_started, pid} when the Application supervisor has already claimed a globally-named GenServer."
+decision = "Private take_supervised/1 helper: Supervisor.terminate_child + delete_child → start_supervised! (clean state) → on_exit restore to Application supervisor. Used in reflexive_test.exs and contract_test.exs."
+consequences = "All 25 test isolation failures resolved. Pattern is reusable for any test needing a fresh Application-supervised GenServer."
+
+[maintenance-axes]
+priority-order = "dependability > security > interop > usability > performance > versatility > extension"
+scoping-first = true
