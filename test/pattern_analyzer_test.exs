@@ -2,6 +2,7 @@
 
 defmodule Hypatia.PatternAnalyzerTest do
   use ExUnit.Case, async: false
+  @moduletag :verisim_data
 
   alias Hypatia.PatternAnalyzer
 

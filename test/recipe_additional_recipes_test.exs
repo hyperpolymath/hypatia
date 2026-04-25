@@ -2,6 +2,7 @@
 
 defmodule Hypatia.RecipeAdditionalRecipesTest do
   use ExUnit.Case, async: true
+  @moduletag :verisim_data
 
   alias Hypatia.RecipeMatcher
 

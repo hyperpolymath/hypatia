@@ -6,6 +6,8 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 
 const std = @import("std");
+const jw = @import("json_writer");
+const file_ops = @import("file_ops");
 
 // Version information (keep in sync with project)
 const VERSION = "0.1.0";
@@ -246,6 +248,184 @@ export fn hypatia_register_callback(
 export fn hypatia_is_initialized(handle: ?*Handle) u32 {
     const h = handle orelse return 0;
     return if (h.initialized) 1 else 0;
+}
+
+//==============================================================================
+// Hypatia Domain Functions (7 documented C ABI exports)
+// Spec: .claude/CLAUDE.md §"Zig FFI (ffi/zig/src/)"
+//==============================================================================
+
+fn hypatiaDataPath() []const u8 {
+    return std.posix.getenv("HYPATIA_DATA_PATH") orelse
+        std.posix.getenv("VERISIMDB_DATA_PATH") orelse
+        "data/verisim";
+}
+
+// Append data + newline to a file (cwd-relative; creates if missing).
+fn appendLine(path: []const u8, data: []const u8) bool {
+    const file = std.fs.cwd().createFile(path, .{ .truncate = false }) catch return false;
+    defer file.close();
+    file.seekFromEnd(0) catch return false;
+    file.writeAll(data) catch return false;
+    file.writeAll("\n") catch return false;
+    return true;
+}
+
+/// Health check — queries verisim-data store directories.
+/// Returns {"ok":bool,"stores":{"scans":"ok/missing",...}} or null on OOM.
+/// Caller must free with hypatia_free_string.
+export fn hypatia_health_check() ?[*:0]const u8 {
+    const allocator = std.heap.c_allocator;
+    const base = hypatiaDataPath();
+    const stores = [_][]const u8{ "scans", "patterns", "recipes", "outcomes", "dispatch" };
+    var ok_flags: [5]bool = undefined;
+    var all_ok = true;
+
+    for (stores, 0..) |store, i| {
+        const path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ base, store }) catch return null;
+        defer allocator.free(path);
+        const accessible: bool = blk: {
+            std.fs.cwd().access(path, .{}) catch break :blk false;
+            break :blk true;
+        };
+        if (!accessible) all_ok = false;
+        ok_flags[i] = accessible;
+    }
+
+    var buf: [512]u8 = undefined;
+    var w = jw.JsonWriter.init(&buf);
+    w.beginObject();
+    w.writeKey("ok");
+    w.writeBool(all_ok);
+    w.writeKey("stores");
+    w.beginObject();
+    for (stores, 0..) |store, i| {
+        w.writeKey(store);
+        w.writeString(if (ok_flags[i]) "ok" else "missing");
+    }
+    w.endObject();
+    w.endObject();
+    return (allocator.dupeZ(u8, w.getWritten()) catch return null).ptr;
+}
+
+/// Scan repo — reads scans/{repo}.json from verisim-data.
+/// Returns file contents or {"error":"scan not found","repo":"..."} on miss.
+/// Caller must free with hypatia_free_string.
+export fn hypatia_scan_repo(repo: ?[*:0]const u8) ?[*:0]const u8 {
+    const allocator = std.heap.c_allocator;
+    const repo_str = std.mem.span(repo orelse {
+        setError("Null repo parameter");
+        return null;
+    });
+    const base = hypatiaDataPath();
+    const path = std.fmt.allocPrint(allocator, "{s}/scans/{s}.json", .{ base, repo_str }) catch return null;
+    defer allocator.free(path);
+
+    const content = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch {
+        var err_buf: [256]u8 = undefined;
+        var ew = jw.JsonWriter.init(&err_buf);
+        ew.beginObject();
+        ew.writeKey("error");
+        ew.writeString("scan not found");
+        ew.writeKey("repo");
+        ew.writeString(repo_str);
+        ew.endObject();
+        return (allocator.dupeZ(u8, ew.getWritten()) catch return null).ptr;
+    };
+    defer allocator.free(content);
+    return (allocator.dupeZ(u8, content) catch return null).ptr;
+}
+
+/// Dispatch finding — appends entry_json as a line to dispatch/pending.jsonl.
+/// Returns 0 on success, 1 on error.
+export fn hypatia_dispatch(entry_json: ?[*:0]const u8) c_int {
+    const entry = entry_json orelse {
+        setError("Null entry_json");
+        return 1;
+    };
+    const allocator = std.heap.c_allocator;
+    const base = hypatiaDataPath();
+    const path = std.fmt.allocPrint(allocator, "{s}/dispatch/pending.jsonl", .{base}) catch {
+        setError("OOM");
+        return 1;
+    };
+    defer allocator.free(path);
+    return if (appendLine(path, std.mem.span(entry))) 0 else 1;
+}
+
+/// Record outcome — appends record_json to outcomes/YYYY-MM.jsonl.
+/// Returns 0 on success, 1 on error.
+export fn hypatia_record_outcome(record_json: ?[*:0]const u8) c_int {
+    const record = record_json orelse {
+        setError("Null record_json");
+        return 1;
+    };
+    const allocator = std.heap.c_allocator;
+    const base = hypatiaDataPath();
+
+    const ts: i64 = std.time.timestamp();
+    const epoch_secs = std.time.epoch.EpochSeconds{ .secs = @intCast(ts) };
+    const epoch_day = epoch_secs.getEpochDay();
+    const year_day = epoch_day.calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+
+    const path = std.fmt.allocPrint(allocator, "{s}/outcomes/{d:0>4}-{d:0>2}.jsonl", .{
+        base,
+        year_day.year,
+        @intFromEnum(month_day.month),
+    }) catch {
+        setError("OOM");
+        return 1;
+    };
+    defer allocator.free(path);
+    return if (appendLine(path, std.mem.span(record))) 0 else 1;
+}
+
+/// Force learning cycle — writes .force-learning signal file to verisim-data root.
+/// Returns 0 on success, 1 on error.
+export fn hypatia_force_learning_cycle() c_int {
+    const allocator = std.heap.c_allocator;
+    const base = hypatiaDataPath();
+    const path = std.fmt.allocPrint(allocator, "{s}/.force-learning", .{base}) catch {
+        setError("OOM");
+        return 1;
+    };
+    defer allocator.free(path);
+    const f = std.fs.cwd().createFile(path, .{}) catch return 1;
+    f.close();
+    return 0;
+}
+
+/// Get recipe confidence — reads recipes/recipe-{id}.json, extracts "confidence" field.
+/// Returns confidence as f64, or -1.0 on missing recipe or parse error.
+export fn hypatia_get_confidence(recipe_id: ?[*:0]const u8) f64 {
+    const id_str = std.mem.span(recipe_id orelse return -1.0);
+    const allocator = std.heap.c_allocator;
+    const base = hypatiaDataPath();
+    const path = std.fmt.allocPrint(allocator, "{s}/recipes/recipe-{s}.json", .{ base, id_str }) catch return -1.0;
+    defer allocator.free(path);
+
+    const content = std.fs.cwd().readFileAlloc(allocator, path, 64 * 1024) catch return -1.0;
+    defer allocator.free(content);
+
+    const key = "\"confidence\":";
+    const idx = std.mem.indexOf(u8, content, key) orelse return -1.0;
+    const after_key = std.mem.trimLeft(u8, content[idx + key.len ..], " \t");
+
+    var end: usize = 0;
+    while (end < after_key.len) : (end += 1) {
+        const c = after_key[end];
+        if (!std.ascii.isDigit(c) and c != '.' and c != '-') break;
+    }
+    return std.fmt.parseFloat(f64, after_key[0..end]) catch -1.0;
+}
+
+/// Map confidence float to dispatch strategy integer.
+/// Returns: 0=auto_execute (>=0.95), 1=review (0.85-0.94), 2=report_only (<0.85)
+export fn hypatia_dispatch_strategy(confidence: f64) c_int {
+    if (confidence >= 0.95) return 0;
+    if (confidence >= 0.85) return 1;
+    return 2;
 }
 
 //==============================================================================

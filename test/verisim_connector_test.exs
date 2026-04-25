@@ -2,6 +2,7 @@
 
 defmodule Hypatia.VerisimConnectorTest do
   use ExUnit.Case, async: true
+  @moduletag :verisim_data
 
   # JSONL and large JSON loading via Jason.Decoder is slow on big data files.
   # Allow 120s per test instead of the default 60s.

@@ -13,6 +13,7 @@ defmodule Hypatia.VCL.QueryTest do
   """
 
   use ExUnit.Case, async: false
+  @moduletag :verisim_data
 
   # JSONL loading via the VCL Client GenServer is slow on large data files.
   # Allow 120s per test instead of the default 60s.

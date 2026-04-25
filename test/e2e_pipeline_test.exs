@@ -28,6 +28,7 @@ defmodule Hypatia.E2E.PipelineTest do
   """
 
   use ExUnit.Case, async: false
+  @moduletag :verisim_data
 
   @moduletag timeout: 60_000
 

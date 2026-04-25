@@ -13,6 +13,7 @@ defmodule Hypatia.VCL.FileExecutorTest do
   """
 
   use ExUnit.Case, async: true
+  @moduletag :verisim_data
 
   # JSONL loading via Jason.Decoder is slow on large verisim-data files.
   # Allow 120s per test instead of the default 60s.

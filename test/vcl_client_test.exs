@@ -385,6 +385,7 @@ defmodule Hypatia.VCL.ClientTest do
   # ---------------------------------------------------------------------------
 
   describe "query/1 -- store execution" do
+    @describetag :verisim_data
     test "queries scans store and returns list" do
       {:ok, results} = Client.query("SELECT DOCUMENT FROM STORE scans")
       assert is_list(results)
@@ -437,6 +438,7 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   describe "query/1 -- filtered execution" do
+    @describetag :verisim_data
     test "WHERE FIELD equality filters results" do
       {:ok, all} = Client.query("SELECT DOCUMENT FROM STORE scans")
       {:ok, filtered} = Client.query(
@@ -465,6 +467,7 @@ defmodule Hypatia.VCL.ClientTest do
   end
 
   describe "query/1 -- FEDERATION execution" do
+    @describetag :verisim_data
     test "FEDERATION cross-store query returns results" do
       {:ok, results} = Client.query(
         "SELECT DOCUMENT FROM FEDERATION /all/* LIMIT 10"

@@ -93,6 +93,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
   # ---------------------------------------------------------------------------
 
   describe "verisim-data structure (Zig FFI data path)" do
+    @describetag :verisim_data
     # The Zig FFI reads from these stores directly.
     # Note: 'index' is index.json (a file, not a directory) in this data layout.
     @required_store_dirs ~w(scans patterns recipes outcomes dispatch)
