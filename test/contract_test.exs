@@ -15,6 +15,18 @@ defmodule Hypatia.ContractTest do
   alias Hypatia.Safety.{RateLimiter, Quarantine}
   alias Hypatia.VCL.Client, as: VCLClient
 
+  # Take a GenServer away from the Application supervisor so start_supervised!/1
+  # can start a clean, isolated instance for the test. Restores the child on exit.
+  defp take_supervised(module) do
+    Supervisor.terminate_child(Hypatia.Supervisor, module)
+    Supervisor.delete_child(Hypatia.Supervisor, module)
+    start_supervised!(module)
+    on_exit(fn ->
+      if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
+      Supervisor.start_child(Hypatia.Supervisor, module)
+    end)
+  end
+
   # ---------------------------------------------------------------------------
   # TriangleRouter.dispatch_strategy/1 — pure function, no setup needed
   # ---------------------------------------------------------------------------
@@ -66,7 +78,7 @@ defmodule Hypatia.ContractTest do
 
   describe "RateLimiter — burst limit contract" do
     setup do
-      start_supervised!(RateLimiter)
+      take_supervised(RateLimiter)
       :ok
     end
 
@@ -107,7 +119,7 @@ defmodule Hypatia.ContractTest do
 
   describe "Quarantine — auto-quarantine contracts" do
     setup do
-      start_supervised!(Quarantine)
+      take_supervised(Quarantine)
       :ok
     end
 
@@ -200,7 +212,7 @@ defmodule Hypatia.ContractTest do
 
   describe "VCL.Client.parse/1 — totality contract" do
     setup do
-      start_supervised!(VCLClient)
+      take_supervised(VCLClient)
       :ok
     end
 

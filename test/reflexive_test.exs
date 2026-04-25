@@ -23,13 +23,25 @@ defmodule Hypatia.ReflexiveTest do
   alias Hypatia.VCL.Client, as: VCLClient
   alias Hypatia.Safety.{RateLimiter, Quarantine}
 
+  # Take a GenServer away from the Application supervisor so start_supervised!/1
+  # can start a clean, isolated instance for the test. Restores the child on exit.
+  defp take_supervised(module) do
+    Supervisor.terminate_child(Hypatia.Supervisor, module)
+    Supervisor.delete_child(Hypatia.Supervisor, module)
+    start_supervised!(module)
+    on_exit(fn ->
+      if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
+      Supervisor.start_child(Hypatia.Supervisor, module)
+    end)
+  end
+
   # ---------------------------------------------------------------------------
   # SelfDiagnostics — the primary reflexive surface
   # ---------------------------------------------------------------------------
 
   describe "SelfDiagnostics — health report introspection" do
     setup do
-      start_supervised!(SelfDiagnostics)
+      take_supervised(SelfDiagnostics)
       :ok
     end
 
@@ -44,7 +56,7 @@ defmodule Hypatia.ReflexiveTest do
 
   describe "SelfDiagnostics — circuit breaker contract" do
     setup do
-      start_supervised!(SelfDiagnostics)
+      take_supervised(SelfDiagnostics)
       :ok
     end
 
@@ -105,7 +117,7 @@ defmodule Hypatia.ReflexiveTest do
 
   describe "VCL.Client — stats introspection" do
     setup do
-      start_supervised!(VCLClient)
+      take_supervised(VCLClient)
       :ok
     end
 
@@ -127,7 +139,7 @@ defmodule Hypatia.ReflexiveTest do
 
   describe "RateLimiter — stats introspection" do
     setup do
-      start_supervised!(RateLimiter)
+      take_supervised(RateLimiter)
       :ok
     end
 
@@ -157,7 +169,7 @@ defmodule Hypatia.ReflexiveTest do
 
   describe "Quarantine — roster introspection" do
     setup do
-      start_supervised!(Quarantine)
+      take_supervised(Quarantine)
       :ok
     end
 

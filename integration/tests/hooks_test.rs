@@ -417,9 +417,9 @@ async fn test_spdx_validation_hook() -> Result<()> {
     )?;
     repo.stage_file("good.rs")?;
 
-    // Reset bad.rs
+    // Unstage bad.rs (never committed, so use rm --cached not reset HEAD)
     Command::new("git")
-        .args(["reset", "HEAD", "bad.rs"])
+        .args(["rm", "--cached", "bad.rs"])
         .current_dir(&repo.repo_path)
         .output()?;
 
@@ -553,19 +553,20 @@ async fn test_hook_environment_variables() -> Result<()> {
 
     let repo = HookTestRepo::new()?;
 
-    // Hook that checks environment variables
+    // Hook that checks environment variables available in pre-commit hooks
+    // Note: GIT_DIR is NOT set by git in pre-commit hooks; GIT_INDEX_FILE is.
     let env_hook = r#"#!/bin/bash
 # SPDX-License-Identifier: PMPL-1.0-or-later
 
-# Check that GIT_DIR is set
-if [ -z "$GIT_DIR" ]; then
-    echo "ERROR: GIT_DIR not set"
+# Check that GIT_INDEX_FILE is set (always set in pre-commit hooks)
+if [ -z "$GIT_INDEX_FILE" ]; then
+    echo "ERROR: GIT_INDEX_FILE not set"
     exit 1
 fi
 
-# Check working directory
-if [ ! -d ".git" ] && [ -z "$GIT_WORK_TREE" ]; then
-    echo "ERROR: Not in git repository"
+# Check working directory contains .git
+if [ ! -d ".git" ]; then
+    echo "ERROR: Not in git repository working tree"
     exit 1
 fi
 

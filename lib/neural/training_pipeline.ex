@@ -124,13 +124,38 @@ defmodule Hypatia.Neural.TrainingPipeline do
         rebalance = Keyword.get(opts, :rebalance, true)
         rebalance_opts = Keyword.get(opts, :rebalance_opts, [])
 
+        rebalance_strategy = Keyword.get(opts, :rebalance_strategy, :a)
+
         series =
           if rebalance do
-            Logger.info(
-              "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (synthetic regressions)"
-            )
+            case rebalance_strategy do
+              :b ->
+                Logger.info(
+                  "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (adversarial patterns)"
+                )
+                Rebalancer.adversarial_esn_series(primary.series, rebalance_opts)
 
-            Rebalancer.augment_esn_series(primary.series, rebalance_opts)
+              :c ->
+                Logger.info(
+                  "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (corpus dips)"
+                )
+                data_path = Keyword.get(rebalance_opts, :data_path, "data/verisim")
+                templates = Rebalancer.load_failure_templates(data_path)
+
+                if templates == [] do
+                  Logger.warning("TrainingPipeline: no failure templates found, falling back to Strategy A")
+                  Rebalancer.augment_esn_series(primary.series, rebalance_opts)
+                else
+                  Logger.info("TrainingPipeline: #{length(templates)} failure templates loaded")
+                  Rebalancer.corpus_esn_series(primary.series, templates, rebalance_opts)
+                end
+
+              _ ->
+                Logger.info(
+                  "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (synthetic regressions)"
+                )
+                Rebalancer.augment_esn_series(primary.series, rebalance_opts)
+            end
           else
             primary.series
           end

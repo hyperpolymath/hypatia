@@ -265,7 +265,7 @@ mod detection {
 
 mod webhooks {
     use super::*;
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     #[test]

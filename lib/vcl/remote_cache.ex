@@ -144,7 +144,7 @@ defmodule Hypatia.VCL.RemoteCache do
     expired =
       :ets.tab2list(@ets_table)
       |> Enum.filter(fn
-        {_hash, %{fetched_at: fetched_at}} -> now - fetched_at > ttl
+        {_hash, %{fetched_at: fetched_at}} -> now - fetched_at >= ttl
         _ -> false
       end)
 
