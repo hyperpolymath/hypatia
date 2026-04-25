@@ -12,6 +12,7 @@ defmodule Hypatia.Application do
   2. Intelligence layer -- learning scheduler, self-diagnostics
   3. Neural layer -- blackboard + 8 networks + coordinator (phased execution)
   4. Kin layer -- ecosystem coordination, watchdog, self-healing
+  5. TUI layer (optional) -- Ada terminal dashboard, enabled via :tui_enabled config
   """
 
   use Application
@@ -53,9 +54,19 @@ defmodule Hypatia.Application do
       Hypatia.Kin.Gate,           # action review checkpoint
       Hypatia.Kin.Coordinator,    # sibling heartbeat polling
       Hypatia.Kin.Watchdog        # internal OTP process monitoring
-    ]
+      # Layer 6: TUI -- optional Ada terminal dashboard (disabled by default)
+      # Enable via `config :hypatia, :tui_enabled, true` in config/runtime.exs
+    ] ++ tui_children()
 
     opts = [strategy: :one_for_one, name: Hypatia.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp tui_children do
+    if Application.get_env(:hypatia, :tui_enabled, false) do
+      [Hypatia.TUI.Port]
+    else
+      []
+    end
   end
 end
