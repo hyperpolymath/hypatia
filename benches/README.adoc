@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= benches/ — Benchmarks
+
+Rust benchmarks measuring Hypatia pipeline throughput and latency.
+
+== Running
+
+[source,bash]
+----
+cargo bench
+----
+
+Results are written to `target/criterion/`.

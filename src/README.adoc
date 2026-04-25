@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= src/ — Idris2 ABI and Verification Source
+
+Formal interface definitions and proofs for the Hypatia C ABI.
+
+== Subdirectories
+
+=== abi/
+
+Idris2 ABI definitions — the single source of truth for all API interfaces.
+Dependent types enforce interface correctness at compile time.
+
+=== Hypatia/
+
+Idris2 module namespace root for internal proofs and type-level assertions.
+
+== Build
+
+[source,bash]
+----
+# Compile ABI (requires Idris2 + Pack)
+cd src/abi && idris2 --build hypatia-abi.ipkg
+
+# Run verification proofs
+cd verify && idris2 --build hypatia-verify.ipkg
+----

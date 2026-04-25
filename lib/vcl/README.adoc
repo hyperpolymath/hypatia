@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= lib/vcl/ — VCL Query Layer
+
+VeriSim Control Language (VCL) integration for querying the verisim-data
+flat-file store. Provides a built-in parser, query cache, and cross-repo
+analytics without a running database server.
+
+== Modules
+
+[cols="2,3"]
+|===
+|Module |Purpose
+
+|`client.ex` |VCL Client GenServer: parser + query cache + execution routing
+|`file_executor.ex` |Executes VCL ASTs against verisim-data flat files (local)
+|`query.ex` |High-level query functions: fetch_scans, cross_repo_patterns, pipeline_health
+|`proof_resolver.ex` |Resolves proof references in VCL results against verisim-data
+|`remote_cache.ex` |Caches remote VCL query results with TTL eviction
+|===
+
+== Notes
+
+VCL federation is currently local-only — `FileExecutor` handles FEDERATION
+queries against local flat files, not multi-store.
+The `verisim-api` REST server is not yet deployed, so graph/vector/temporal
+modalities operate via flat files only.

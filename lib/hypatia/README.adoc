@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= lib/hypatia/ — Web Interface, CLI, and Dispatch GenServers
+
+The OTP application layer: web server, CLI handler, reviewer, gRPC service,
+and fleet dispatch controller.
+
+== Modules
+
+[cols="2,3"]
+|===
+|Module/Directory |Purpose
+
+|`cli.ex` |CLI command handler (scan, dispatch, health, confidence)
+|`reviewer.ex` |Review-tier PR creation and approval workflow
+|`dispatch/` |Fleet dispatch controller GenServer
+|`diagnostics/` |Self-diagnostics and health reporting
+|`grpc/` |gRPC service implementation
+|`web/` |Phoenix web endpoints (REST API, health check, GraphQL)
+|===

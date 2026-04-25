@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= ffi/zig/ — Zig FFI Implementation
+
+Zig implementation of the Hypatia C ABI. Produces a shared library
+loadable as an Erlang NIF or via `dlopen` from any C-compatible consumer.
+
+== Exported Functions
+
+[cols="2,3"]
+|===
+|Function |Purpose
+
+|`hypatia_health_check()` |Health status of all verisim-data store directories
+|`hypatia_scan_repo(repo)` |Read scan result for a repository from verisim-data
+|`hypatia_dispatch(entry_json)` |Append finding entry to dispatch/pending.jsonl
+|`hypatia_record_outcome(record_json)` |Append outcome record to outcomes/YYYY-MM.jsonl
+|`hypatia_force_learning_cycle()` |Write .force-learning signal to trigger immediate cycle
+|`hypatia_get_confidence(recipe_id)` |Extract confidence float from a recipe JSON file
+|`hypatia_dispatch_strategy(confidence)` |Map confidence to 0=auto_execute/1=review/2=report_only
+|===
+
+== Build
+
+[source,bash]
+----
+cd ffi/zig
+zig build              # compile shared + static libraries
+zig build test         # run all tests (main, json_writer, file_ops, integration)
+----
+
+== Source Files
+
+* `src/main.zig` — All 7 C ABI exports + lifecycle/utility functions
+* `src/json_writer.zig` — Zero-allocation JSON writer for FFI responses
+* `src/file_ops.zig` — verisim-data flat-file I/O helpers
+* `src/connectors/` — Storage connector modules
+* `test/integration_test.zig` — Integration tests against a test data fixture
+
+== Data Path
+
+Configured via `HYPATIA_DATA_PATH` or `VERISIMDB_DATA_PATH` environment variable.
+Defaults to `data/verisim` relative to the working directory.

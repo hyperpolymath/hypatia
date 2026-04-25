@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= schema/ — Nickel Schema Files
+
+Nickel configuration schemas for Hypatia data structures.
+
+== Files
+
+* `findings.ncl` — Schema for finding records emitted by the rules engine
+* `generate-findings.ncl` — Generator helpers for findings in tests and tooling
+
+These schemas are used for configuration validation and test fixture generation.
+The authoritative type definitions are in `src/abi/Types.idr`.

@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= lib/safety/ — Safety Systems
+
+Three complementary safety subsystems preventing runaway automated dispatch.
+
+== Modules
+
+[cols="2,3"]
+|===
+|Module |Purpose
+
+|`rate_limiter.ex` |Per-bot (50/min), global (200/min), burst (10/5s) dispatch limits
+|`quarantine.ex` |Auto-quarantine on 5+ failures or >30% false-positive rate; three severity levels: soft/hard/permanent
+|`batch_rollback.ex` |Rollback entire dispatch batches with confidence score revert
+|===
+
+All three operate as GenServers under the OTP supervision tree.
+Quarantine state is persisted so bots stay isolated across restarts.

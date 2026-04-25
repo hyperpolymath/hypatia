@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= lib/ — Core Elixir Pipeline
+
+The Elixir source for the Hypatia CI/CD intelligence layer.
+All GenServers, business logic, and OTP supervision tree live here.
+
+== Modules
+
+[cols="2,3"]
+|===
+|Module |Purpose
+
+|`application.ex` |OTP Application supervisor for all GenServers
+|`pattern_analyzer.ex` |Full pipeline orchestrator: scan → patterns → triangle → dispatch
+|`verisim_connector.ex` |VCL-powered data access with file I/O fallback
+|`pattern_registry.ex` |Deduplicates findings into canonical patterns (PA001–PA020)
+|`recipe_matcher.ex` |Fuzzy matching: fingerprinted IDs to clean recipe IDs
+|`triangle_router.ex` |Routes findings through Eliminate > Substitute > Control
+|`fleet_dispatcher.ex` |Confidence-gated dispatch with circuit breaker
+|`dispatch_manifest.ex` |Writes JSONL manifests as bridge to shell execution layer
+|`outcome_tracker.ex` |Records fix outcomes; Bayesian confidence updating
+|`recipe_generator.ex` |Auto-generates recipes for uncovered categories at 0.50 confidence
+|`scorecard_ingestor.ex` |Ingests 20 OpenSSF Scorecard checks as local scan patterns
+|`learning_scheduler.ex` |GenServer: polls outcomes every 5 min, drives feedback loop
+|`self_diagnostics.ex` |Health monitoring, circuit breaker, auto-recovery
+|`confidence_annealing.ex` |Simulated annealing for confidence parameter tuning
+|`cross_repo_learning.ex` |Cross-repository pattern learning and generalisation
+|===
+
+== Subdirectories
+
+* `hypatia/` — Web interface, CLI, dispatch and reviewer GenServers
+* `neural/` — 5 neural networks + coordinator GenServer
+* `vcl/` — VCL query layer (client, file executor, query helpers)
+* `safety/` — Rate limiter, quarantine, batch rollback
+* `rules/` — Elixir rules engine (20+ rule modules)
+* `data/` — Data-layer access helpers
+* `kin/` — Kin framework integration (coordinator)
+* `mix/` — Mix tasks

@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= tui/ — Ada Terminal User Interface
+
+Ada TUI for Hypatia monitoring and control.
+Provides a terminal-based dashboard for viewing pipeline status,
+pattern counts, dispatch manifests, and bot outcomes.
+
+== Status
+
+The TUI compiles but is not yet wired into the Elixir supervision tree.
+Integration is a known gap listed in `CLAUDE.md`.
+
+== Build
+
+[source,bash]
+----
+gprbuild -P hypatia_tui.gpr
+----
+
+Object files are output to `tui/obj/`.

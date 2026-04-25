@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= clients/ — Client Libraries
+
+Language-specific client libraries for consuming the Hypatia API.
+
+== rust/
+
+Rust client library providing a typed API for all Hypatia REST/gRPC endpoints.
+Used by the CLI, adapters, and integration tests.

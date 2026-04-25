@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= adapters/ — Rust Adapter Libraries
+
+Rust crates providing typed clients for external services consumed by Hypatia.
+
+== Contents
+
+* `src/` — Adapter source (GitHub API, panic-attack, verisim-data clients)
+* `tests/` — Integration tests for adapters
+
+== Build
+
+[source,bash]
+----
+cargo build -p hypatia-adapters
+cargo test -p hypatia-adapters
+----

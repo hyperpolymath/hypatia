@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= lib/rules/ — Elixir Rules Engine
+
+Pattern detection rules applied during the analysis phase.
+Each module provides a set of `check/2` or `generate_findings/2` functions
+that take scan evidence and return typed finding structs.
+
+== Rule Modules
+
+[cols="2,3"]
+|===
+|Module |Domain
+
+|`cicd_rules.ex` |CI/CD pipeline integrity checks
+|`code_safety.ex` |Memory safety, unsafe blocks, banned patterns
+|`dependabot_alerts.ex` |Dependency vulnerability detection
+|`dogfooding.ex` |Ecosystem self-application compliance
+|`forge_adapters.ex` |Cross-forge adapter validation
+|`git_state.ex` |Git hygiene: branch protection, signed commits, stale branches
+|`green_web.ex` |Green Web Foundation compliance
+|`honest_completion.ex` |Detects inflated completion claims (believe_me, sorry, stub counts)
+|`learning.ex` |Feedback loop quality and learning signal checks
+|`migration_rules.ex` |Language migration progress tracking
+|`proof_obligation.ex` |Formal verification coverage requirements
+|`proof_strategy_selection.ex` |Selects appropriate proof strategy per finding type
+|`root_hygiene.ex` |Root-level file hygiene (SPDX, licence, README)
+|`scorecard_compliance.ex` |OpenSSF Scorecard check compliance
+|`security_errors.ex` |Common security error patterns (MD5, HTTP, hardcoded secrets)
+|`strategy_drift.ex` |Dispatch strategy drift detection over time
+|`structural_drift.ex` |Repository structure drift from RSR template
+|`workflow_audit.ex` |GitHub Actions workflow security and correctness
+|===

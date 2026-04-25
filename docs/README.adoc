@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= docs/ — Documentation
+
+Project documentation for Hypatia.
+
+== Guides
+
+* link:user-guide.adoc[user-guide.adoc] — End-user guide: scanning, dispatch, outcomes
+* link:developer-guide.adoc[developer-guide.adoc] — Developer guide: extending rules, adding recipes
+* link:admin-guide.adoc[admin-guide.adoc] — Deployment and operations
+* link:CICD-GUIDEBOOK.adoc[CICD-GUIDEBOOK.adoc] — CI/CD integration patterns
+* link:vcl-usage-guide.adoc[vcl-usage-guide.adoc] — VCL query language reference
+* link:api-reference.adoc[api-reference.adoc] — REST/GraphQL/gRPC API reference
+
+== Architecture
+
+* link:architecture/[architecture/] — Architecture decision records and diagrams
+* link:design/[design/] — Design documents
+
+== Security
+
+* link:THREAT-MODEL.adoc[THREAT-MODEL.adoc] — Threat model and attack surface
+* link:SECURITY-AUDIT.adoc[SECURITY-AUDIT.adoc] — Security audit findings
+
+== Integration
+
+* link:A2ML-INTEGRATION.adoc[A2ML-INTEGRATION.adoc] — A2ML machine-readable metadata integration
+* link:K9-INTEGRATION.adoc[K9-INTEGRATION.adoc] — K9 coordination service integration

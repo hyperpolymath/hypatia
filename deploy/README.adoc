@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= deploy/ — Deployment
+
+Container and deployment configuration for Hypatia.
+
+== Files
+
+* `Containerfile` — Chainguard-based container image definition (Podman/Docker compatible)
+
+== Build
+
+[source,bash]
+----
+podman build -f deploy/Containerfile -t hypatia:latest .
+----
+
+== Notes
+
+Base image is Chainguard (minimal, hardened).
+Container naming follows RSR: `Containerfile`, not `Dockerfile`.

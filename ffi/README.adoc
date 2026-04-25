@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= ffi/ — Foreign Function Interface
+
+C-compatible FFI bridge between the Idris2 ABI and consuming runtimes.
+
+== zig/
+
+Zig implementation of the 7 documented C ABI functions declared in `src/abi/FFI.idr`.
+Produces a shared library (`libhypatia_ffi.so`) loadable as an Erlang NIF or via `dlopen`.
+
+See link:zig/README.adoc[zig/README.adoc] for build instructions and function reference.

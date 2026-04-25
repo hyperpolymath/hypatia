@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= scripts/ — Operational Scripts
+
+Shell scripts and systemd units for running the Hypatia pipeline
+and gitbot-fleet dispatch on the hyperpolymath estate.
+
+== Scripts
+
+[cols="2,3"]
+|===
+|Script |Purpose
+
+|`hypatia-sitrep.sh` |Generate a situation report from current verisim-data
+|`panll-data-bridge.sh` |Export verisim-data metrics as PanLL JSON for dashboards
+|`ramdisk-orchestrator.sh` |Orchestrate RAM disk mounts for high-throughput scanning
+|`security-check.sh` |Run security checks against the local repo
+|`invariant-path.sh` |Verify invariant paths hold after dispatch
+|`fix-pinned-dependencies.sh` |Formulaic fix for SHA-pinned dependency drift
+|`fix-token-permissions.sh` |Formulaic fix for GitHub Actions token permission gaps
+|`auto-fix-formulaic.sh` |Orchestrator for formulaic auto-fixes
+|`bot-accountability.sh` |Generate accountability report for gitbot-fleet actions
+|===
+
+== Systemd Units
+
+* `hypatia-autofix.service` — Systemd service for the auto-fix runner
+* `hypatia-autofix.timer` — Timer triggering auto-fix every 15 minutes
+
+== fix-scripts/
+
+Per-pattern fix scripts referenced by dispatch manifests.
+Each script is named after the canonical pattern ID (e.g., `fix-PA009.sh`).

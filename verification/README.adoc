@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= verification/ — Formal Proofs
+
+Idris2 proof verification for Hypatia's type-level guarantees.
+
+== Contents
+
+* `proofs/` — Idris2 proof files (`.idr`) asserting invariants from `src/abi/`
+* `PROOF-STATUS.md` — Current proof completion status
+
+== Building Proofs
+
+[source,bash]
+----
+cd src/abi && idris2 --build hypatia-verify.ipkg
+----
+
+== Status
+
+See link:PROOF-STATUS.md[PROOF-STATUS.md] for current proof completion per module.

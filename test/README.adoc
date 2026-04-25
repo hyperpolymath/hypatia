@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= test/ — ExUnit Test Suite
+
+Hypatia's ExUnit tests. Run with `mix test`.
+
+== Tagging
+
+Tests that require the `verisim-data` git-backed flat-file store are tagged
+`@moduletag :verisim_data` or `@describetag :verisim_data` and are excluded
+from local runs by default (see `test_helper.exs`).
+
+Run the full suite including verisim-data tests:
+
+[source,bash]
+----
+mix test --include verisim_data
+----
+
+== Subdirectories
+
+* `rules/` — Tests for the `lib/rules/` rule engine modules
+
+== Coverage
+
+483 tests passing locally (233 verisim_data-tagged tests excluded).
+Run in CI against the verisim-data store for full coverage.

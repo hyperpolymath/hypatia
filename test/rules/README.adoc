@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= test/rules/ — Rules Engine Tests
+
+ExUnit tests specific to the `lib/rules/` modules.
+Currently contains `proof_strategy_selection_test.exs`;
+additional rule tests live in `test/` (flat structure).

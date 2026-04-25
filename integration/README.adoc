@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= integration/ — Integration Test Suite
+
+End-to-end integration tests requiring a running Hypatia instance and
+access to verisim-data and the robot-repo-automaton fixture.
+
+== Running
+
+[source,bash]
+----
+cd integration
+./run-tests.sh
+----
+
+Or with Docker Compose:
+
+[source,bash]
+----
+docker compose -f compose.test.yaml up --abort-on-container-exit
+----
+
+== Contents
+
+* `src/` — Integration test source
+* `tests/` — Test cases
+* `fixtures/` — Test fixture data
+* `robot-repo-automaton/` — Fixture repo simulating the automaton
+
+== Note
+
+These tests are NOT run as part of `mix test`. Run separately in CI
+after the Elixir unit tests pass.

@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= fixer/ — Fix Automation Library (Rust)
+
+Rust library providing automated fix implementations for canonical patterns.
+Called by the dispatch runner after a dispatch manifest entry is approved.
+
+== Contents
+
+* `src/` — Fix library source
+* `benches/` — Benchmarks for fix application throughput
+
+== Build
+
+[source,bash]
+----
+cargo build -p hypatia-fixer
+cargo test -p hypatia-fixer
+----
+
+== Note
+
+310 of 600 auto-execute dispatch entries currently reference null fix scripts —
+recipes exist but no executable fixer implementation yet.
+See `scripts/fix-scripts/` for shell-based formulaic fixes.

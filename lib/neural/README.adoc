@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= lib/neural/ — Neural Network Subsystem
+
+Five neural networks and a coordinator GenServer providing intelligent
+confidence scoring, anomaly detection, and pattern similarity matching.
+
+All networks run as pure Elixir — no external ML framework required.
+State persists to `data/verisim/neural-states/` via the coordinator.
+
+== Networks
+
+[cols="2,2,3"]
+|===
+|Module |Type |Purpose
+
+|`graph_of_trust.ex` |PageRank |Trust-weighted routing over repos/bots/recipes
+|`mixture_of_experts.ex` |Sparse MoE |Domain-specific confidence (7 expert domains)
+|`liquid_state_machine.ex` |Reservoir |Temporal anomaly detection in event streams
+|`echo_state_network.ex` |Reservoir |Confidence trajectory forecasting + drift detection
+|`radial_neural_network.ex` |RBF |Finding similarity, novelty detection, classification
+|`coordinator.ex` |GenServer |Orchestrates all 5 networks; aggregates predictions
+|`training_pipeline.ex` |— |ESN/RBF training from verisim-data outcomes + pattern vectors
+|===
+
+== Training
+
+Training reads `outcomes/*.jsonl` for ESN (confidence time series) and
+`patterns/registry.json` for RBF (8-dimensional feature vectors).
+Trigger via the coordinator's `:force_cycle` message.

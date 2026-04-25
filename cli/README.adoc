@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= cli/ — Hypatia CLI (Rust)
+
+Rust CLI binary for operating the Hypatia pipeline from the shell.
+Wraps the core Elixir pipeline operations for scripting and CI integration.
+
+== Build
+
+[source,bash]
+----
+cargo build --release -p hypatia-cli
+----
+
+Binary output: `target/release/hypatia`
+
+== Usage
+
+[source,bash]
+----
+hypatia scan <repo>                    # Trigger a scan
+hypatia dispatch <pattern-id>          # Dispatch a finding
+hypatia confidence <recipe-id>         # Query recipe confidence
+hypatia health                         # Health check
+----
+
+== Man Pages
+
+Manual pages live in `cli/man/`.

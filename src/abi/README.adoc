@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= src/abi/ — Idris2 ABI Definitions
+
+Idris2 modules defining the Hypatia API surface with dependent type proofs.
+These are the authoritative interface definitions — all other layers derive from them.
+
+== Files
+
+[cols="2,3"]
+|===
+|File |Purpose
+
+|`Types.idr` |Core types with dependent type proofs (Severity, TriangleTier, DispatchStrategy, etc.)
+|`GraphQL.idr` |Query/Mutation/Subscription operations with proofs
+|`GRPC.idr` |gRPC service definitions (scanner, dispatch, stream, health)
+|`REST.idr` |REST endpoint definitions (18 endpoints, 6 groups)
+|`FFI.idr` |GADT constructors for all 7 C ABI functions + `ffiReturnsApiResponse` proof
+|`RuleEngine.idr` |Rule engine type definitions and proof obligations
+|`hypatia-abi.ipkg` |Idris2 package file for compilation
+|===
+
+== Key Proof
+
+`ffiReturnsApiResponse : (f : FFIFunction) -> (a : Type ** ffiReturnType f = ApiResponse a)`
+
+Proves every FFI function returns an `ApiResponse`-wrapped type.
+Eliminating this proof indicates an ABI contract violation.
