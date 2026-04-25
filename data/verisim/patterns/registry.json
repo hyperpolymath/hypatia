@@ -8,7 +8,9 @@
       "occurrences": 7,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-getexn-external-data.sh",
+      "recipe_id": "recipe-unsafe-crash"
     },
     "type_safety_bypass-obj_magic_bypass": {
       "id": "PA-type_safety_bypass-obj_magic_bypass",
@@ -18,7 +20,9 @@
       "occurrences": 2,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-obj-magic-bypass.sh",
+      "recipe_id": "recipe-unsafe-type-coercion"
     },
     "unsafe_panic-unwrap_on_lock": {
       "id": "PA-unsafe_panic-unwrap_on_lock",
@@ -28,7 +32,9 @@
       "occurrences": 3,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-unwrap-on-lock.sh",
+      "recipe_id": "recipe-unwrap-to-match"
     },
     "unsafe_panic-unwrap_on_systemtime": {
       "id": "PA-unsafe_panic-unwrap_on_systemtime",
@@ -38,7 +44,9 @@
       "occurrences": 1,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-unwrap-on-systemtime.sh",
+      "recipe_id": "recipe-unwrap-to-match"
     },
     "unsafe_panic-unwrap_without_check": {
       "id": "PA-unsafe_panic-unwrap_without_check",
@@ -48,7 +56,9 @@
       "occurrences": 10,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-unwrap-without-check.sh",
+      "recipe_id": "recipe-unwrap-to-match"
     },
     "unsafe_panic-unknown": {
       "id": "PA-unsafe_panic-unknown",
@@ -58,7 +68,9 @@
       "occurrences": 1136,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-unsafe-panic.sh",
+      "recipe_id": "recipe-panic-to-result"
     },
     "type_safety_bypass-unknown": {
       "id": "PA-type_safety_bypass-unknown",
@@ -68,7 +80,9 @@
       "occurrences": 475,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-type-safety-bypass.sh",
+      "recipe_id": "recipe-unsafe-type-coercion"
     },
     "unsafe_crash-unknown": {
       "id": "PA-unsafe_crash-unknown",
@@ -78,7 +92,9 @@
       "occurrences": 335,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-unsafe-crash.sh",
+      "recipe_id": "recipe-unsafe-crash"
     },
     "cors_misconfiguration-unknown": {
       "id": "PA-cors_misconfiguration-unknown",
@@ -88,7 +104,9 @@
       "occurrences": 3,
       "repos_affected": 0,
       "triangle_tier": "control",
-      "trend": "stable"
+      "trend": "stable",
+      "fix_script": "fix-cors-wildcard.sh",
+      "recipe_id": "recipe-fix-cors-wildcard"
     }
   }
 }

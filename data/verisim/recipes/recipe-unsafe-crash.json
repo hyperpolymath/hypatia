@@ -1,0 +1,23 @@
+{
+  "id": "recipe-unsafe-crash",
+  "name": "Report unsafe crash patterns",
+  "description": "Detect crash-inducing patterns: getexn on external data, process::abort, :erlang.halt, abort(). Report for manual review and replacement with graceful error handling.",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "PA-unsafe_crash-getexn_on_external_data",
+    "PA-unsafe_crash-unknown",
+    "PA000-getexn-on-external-data"
+  ],
+  "target_categories": ["unsafe_crash"],
+  "languages": ["rust", "ocaml", "rescript", "elixir", "c", "shell", "*"],
+  "confidence": 0.65,
+  "auto_fixable": false,
+  "fix_script": "fix-unsafe-crash.sh",
+  "action": "report",
+  "match": "process::abort/getexn/catch_exn/:erlang.halt/abort()",
+  "replacement": "Graceful error handling with Result/Option or supervised crash recovery",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}
