@@ -10,7 +10,7 @@
   "languages": ["yaml"],
   "confidence": 0.95,
   "auto_fixable": true,
-  "fix_script": "fix-unpinned-actions.sh",
+  "fix_script": "fix-pin-action-sha.sh",
   "action": "replace",
   "match": "uses: owner/repo@v1 (tag-pinned)",
   "replacement": "uses: owner/repo@<sha256> (SHA-pinned)",

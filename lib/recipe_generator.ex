@@ -27,6 +27,35 @@ defmodule Hypatia.RecipeGenerator do
 
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
+  # Maps known categories to their canonical fix script.
+  # Used when auto-generating recipes so the fix_script field is populated rather
+  # than left as "none". Entries are script basenames; dispatch_manifest resolves
+  # them to full paths via the configured fix_scripts_dir.
+  @category_fix_scripts %{
+    "unsafe_crash" => "fix-unsafe-crash.sh",
+    "unsafe_panic" => "fix-unsafe-panic.sh",
+    "PanicPath" => "fix-panic-path.sh",
+    "type_safety_bypass" => "fix-type-safety-bypass.sh",
+    "UnsafeTypeCoercion" => "fix-unsafe-type-coercion.sh",
+    "cors_misconfiguration" => "fix-cors-wildcard.sh",
+    "TokenPermissions" => "fix-workflow-permissions.sh",
+    "DependencyPinning" => "fix-pin-action-sha.sh",
+    "GoModulePinning" => "fix-pin-go-deps.sh",
+    "RustCargoPinning" => "fix-pin-rust-deps.sh",
+    "JsDependencyPinning" => "fix-pin-js-deps.sh",
+    "UnsafeCode" => "fix-unsafe-ffi.sh",
+    "UnsafeFFI" => "fix-unsafe-ffi.sh",
+    "CommandInjection" => "fix-command-injection.sh",
+    "HardcodedSecret" => "fix-hardcoded-secrets.sh",
+    "InsecureProtocol" => "fix-http-to-https.sh",
+    "AtomExhaustion" => "fix-atom-exhaustion.sh",
+    "ResourceLeak" => "fix-resource-leak.sh",
+    "UncheckedError" => "fix-unchecked-error.sh",
+    "DynamicCodeExecution" => "fix-dynamic-code-exec.sh",
+    "MissingLicense" => "fix-license-file.sh",
+    "MissingSPDX" => "fix-missing-spdx.sh"
+  }
+
   @doc """
   Scan the pattern registry for categories with no matching recipe.
   Returns a list of {category, pattern_count, sample_patterns}.
@@ -93,11 +122,11 @@ defmodule Hypatia.RecipeGenerator do
       "pa_rule" => pa_rule,
       "languages" => ["*"],
       "confidence" => 0.50,
-      "auto_fixable" => false,
+      "auto_fixable" => Map.has_key?(@category_fix_scripts, category),
       "action" => Map.get(template, "action", "report"),
       "match" => Map.get(List.first(sample_patterns) || %{}, "description", category),
       "replacement" => remediation,
-      "fix_script" => "none",
+      "fix_script" => Map.get(@category_fix_scripts, category, "none"),
       "proven_module" => nil,
       "formally_proven" => false,
       "generated" => true,
