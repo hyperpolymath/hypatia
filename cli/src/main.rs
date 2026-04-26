@@ -12,6 +12,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+mod app_state;
 mod commands;
 mod completions;
 mod config;

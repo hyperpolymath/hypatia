@@ -17,6 +17,41 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+/// Operating mode for the bot dispatcher.
+///
+/// Loaded from `[bot] mode = "..."` in the config file. Controls whether
+/// Hypatia acts as a passive verifier, advisory commenter, pull-request
+/// reviewer, or hard merge blocker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum BotMode {
+    /// Runs checks and reports results without posting any comments (default).
+    #[default]
+    Verifier,
+    /// Posts a PR comment with proof suggestions via result_formatter.
+    Advisor,
+    /// Posts a PR review comment on the offending lines.
+    Consultant,
+    /// Sets the required check-run to failure, blocking the merge.
+    Regulator,
+}
+
+/// Bot-specific configuration (read from `[bot]` table).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BotConfig {
+    /// Operating mode: verifier | advisor | consultant | regulator
+    pub mode: BotMode,
+}
+
+impl Default for BotConfig {
+    fn default() -> Self {
+        Self {
+            mode: BotMode::Verifier,
+        }
+    }
+}
+
 /// Main configuration struct
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -39,6 +74,9 @@ pub struct Config {
     /// Output settings
     pub output: OutputConfig,
 
+    /// Bot dispatcher mode and related settings
+    pub bot: BotConfig,
+
     /// Custom settings (key-value pairs)
     #[serde(flatten)]
     pub custom: HashMap<String, toml::Value>,
@@ -53,6 +91,7 @@ impl Default for Config {
             fleet: FleetConfig::default(),
             hooks: HooksConfig::default(),
             output: OutputConfig::default(),
+            bot: BotConfig::default(),
             custom: HashMap::new(),
         }
     }
