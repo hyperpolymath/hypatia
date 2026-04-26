@@ -1,14 +1,20 @@
 {
   "id": "recipe-scorecard-packaging",
   "name": "Check package publishing practices",
-  "description": "Checks whether the project publishes packages via standard registries with provenance (OpenSSF Scorecard SC-012). Partially auto-fixable — can add SLSA provenance workflow.",
-  "triangle_tier": "substitute",
-  "pattern_ids": ["SC-012-packaging"],
-  "target_categories": ["Packaging"],
-  "languages": ["any"],
+  "description": "Checks whether the project publishes packages via standard registries with provenance (OpenSSF Scorecard SC-012). Partially auto-fixable \u2014 can add SLSA provenance workflow.",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-012-packaging"
+  ],
+  "target_categories": [
+    "Packaging"
+  ],
+  "languages": [
+    "any"
+  ],
   "confidence": 0.85,
-  "auto_fixable": false,
-  "fix_script": null,
+  "auto_fixable": true,
+  "fix_script": "fix-scorecard-packaging.sh",
   "action": "report",
   "match": "Repository lacks package provenance or standard registry publishing",
   "replacement": "Add SLSA provenance workflow and publish to appropriate registry (crates.io, hex.pm, etc.)",

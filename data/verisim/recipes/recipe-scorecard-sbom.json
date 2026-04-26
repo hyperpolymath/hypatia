@@ -1,14 +1,20 @@
 {
   "id": "recipe-scorecard-sbom",
   "name": "Generate Software Bill of Materials",
-  "description": "Checks for SBOM generation in CI/CD (OpenSSF Scorecard SC-015). Partially auto-fixable — can add SBOM generation workflow.",
-  "triangle_tier": "substitute",
-  "pattern_ids": ["SC-015-sbom"],
-  "target_categories": ["SBOM"],
-  "languages": ["any"],
-  "confidence": 0.90,
-  "auto_fixable": false,
-  "fix_script": null,
+  "description": "Checks for SBOM generation in CI/CD (OpenSSF Scorecard SC-015). Partially auto-fixable \u2014 can add SBOM generation workflow.",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-015-sbom"
+  ],
+  "target_categories": [
+    "SBOM"
+  ],
+  "languages": [
+    "any"
+  ],
+  "confidence": 0.9,
+  "auto_fixable": true,
+  "fix_script": "fix-scorecard-sbom.sh",
   "action": "report",
   "match": "Repository has no SBOM generation in CI/CD pipeline",
   "replacement": "Add SBOM generation step using syft, cyclonedx, or SPDX tooling in CI workflow",

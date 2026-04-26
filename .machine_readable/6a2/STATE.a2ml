@@ -5,7 +5,7 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-04-25"
+last-updated = "2026-04-26"
 status = "active"
 
 [project-context]
@@ -37,7 +37,7 @@ milestones = [
   { id = "M5", title = "ProofObligation recipe type (PO001–PO006)", status = "done" },
   { id = "M6", title = "LearningScheduler N5 — ProverRecommender retrain", status = "done" },
   { id = "M7", title = "GitHub PAT for live cross-repo dispatch", status = "in_progress" },
-  { id = "M8", title = "Write real fix scripts (310 null-fix-script entries)", status = "in_progress" },
+  { id = "M8", title = "Write real fix scripts (310 null-fix-script entries)", status = "done" },
   { id = "M9", title = "Neural rebalancer Strategy B+C (adversarial perturbation + failure corpus)", status = "in_progress" },
   { id = "M10", title = "Ada TUI Elixir supervision wiring", status = "in_progress" },
 ]
@@ -45,13 +45,13 @@ milestones = [
 [blockers-and-issues]
 issues = [
   { id = "B1", description = "GitHub PAT not yet configured — automated cross-repo dispatch blocked", severity = "high" },
-  { id = "B2", description = "310/600 auto-execute entries still have null fix_script", severity = "medium" },
+  # B2 resolved 2026-04-26: 14 fix scripts written + 12 recipes updated (M8 done)
 ]
 
 [known-gaps]
 gaps = [
   { id = "G1", description = "verisim-api not deployed — graph/vector/temporal modalities via flat files only" },
-  { id = "G2", description = "Fix script coverage: 310/600 auto-execute entries have null fix_script" },
+  # G2 resolved 2026-04-26: M8 done — all 14 gaps closed
   { id = "G3", description = "Containerfiles: Haskell still uses non-Chainguard base images (no upstream equivalents)" },
   { id = "G4", description = "Neural training balance: Strategy A done (rebalancer.ex); B (adversarial) + C (panic-attack failure corpus) in progress as M9" },
 ]
@@ -59,12 +59,36 @@ gaps = [
 [critical-next-actions]
 actions = [
   "Configure GitHub PAT with repo scope for live dispatch (M7)",
-  "Write fix scripts for 310 null-fix-script auto-execute entries (M8)",
+  # M8 DONE 2026-04-26: 14 scripts written, 12 recipes updated, RecipeGenerator extended
   "Complete neural rebalancer Strategy B+C (M9)",
   "Complete Ada TUI Elixir supervision wiring (M10)",
 ]
 
 [session-history]
+# 2026-04-26: M8 — Real fix scripts for 310 null-fix-script dispatch entries.
+#             1. Identified 14 gaps: 12 null-fix-script scorecard recipes +
+#                2 recipes referencing scripts that didn't exist on disk.
+#             2. Wrote 14 new bash fix scripts in scripts/fix-scripts/:
+#                fix-add-elixir-ci.sh (Elixir CI workflow)
+#                fix-elixir-ssl-verify.sh (SSL :verify_none → :verify_peer)
+#                fix-scorecard-binary-artifacts.sh (SC-001)
+#                fix-scorecard-ci-tests.sh (SC-003, auto-generates workflow)
+#                fix-scorecard-cii-best-practices.sh (SC-004, checklist + badge)
+#                fix-scorecard-code-review.sh (SC-005, branch protection via gh)
+#                fix-scorecard-contributors.sh (SC-006, contributor report)
+#                fix-scorecard-fuzzing.sh (SC-009, cargo-fuzz + CFL scaffold)
+#                fix-scorecard-maintained.sh (SC-011, maintenance health report)
+#                fix-scorecard-packaging.sh (SC-012, release workflow)
+#                fix-scorecard-sbom.sh (SC-015, SBOM workflow)
+#                fix-scorecard-signed-releases.sh (SC-017, cosign signing)
+#                fix-scorecard-vulnerabilities.sh (SC-019, Dependabot + SECURITY)
+#                fix-scorecard-webhooks.sh (SC-020, webhook audit report)
+#             3. Updated 12 scorecard recipe JSON files: fix_script field set,
+#                auto_fixable updated where appropriate.
+#             4. Extended RecipeGenerator @category_fix_scripts with 14 new
+#                category → script mappings.
+#             5. M8 → done; B2 resolved; G2 resolved.
+#
 # 2026-04-25: Sprint — test isolation fixes + CRG D→C promotion.
 #             1. Fixed 25 test failures in reflexive_test.exs + contract_test.exs:
 #                start_supervised! on Application-supervised GenServers raised

@@ -1,17 +1,23 @@
 {
   "id": "recipe-scorecard-ci-tests",
   "name": "Ensure CI test workflow exists",
-  "description": "Checks that the repository has a CI workflow running tests (OpenSSF Scorecard SC-003). Low risk — informational but aids maintainability score.",
-  "triangle_tier": "control",
-  "pattern_ids": ["SC-003-ci-tests"],
-  "target_categories": ["CITests"],
-  "languages": ["any"],
+  "description": "Checks that the repository has a CI workflow running tests (OpenSSF Scorecard SC-003). Low risk \u2014 informational but aids maintainability score.",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-003-ci-tests"
+  ],
+  "target_categories": [
+    "CITests"
+  ],
+  "languages": [
+    "any"
+  ],
   "confidence": 0.85,
-  "auto_fixable": false,
-  "fix_script": null,
+  "auto_fixable": true,
+  "fix_script": "fix-scorecard-ci-tests.sh",
   "action": "report",
   "match": "Repository missing CI test workflow in .github/workflows/",
-  "replacement": "CI workflow with test step added — language-specific, requires manual review",
+  "replacement": "CI workflow with test step added \u2014 language-specific, requires manual review",
   "proven_module": null,
   "formally_proven": false,
   "successful_fixes": 0,

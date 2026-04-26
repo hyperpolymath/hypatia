@@ -2,15 +2,19 @@
   "id": "recipe-scorecard-code-review",
   "name": "Detect missing code review practices",
   "description": "Flags repositories where recent changes lack code review (OpenSSF Scorecard SC-005)",
-  "triangle_tier": "control",
+  "triangle_tier": "eliminate",
   "pattern_ids": [
     "SC-005-code-review"
   ],
-  "target_categories": ["CodeReview"],
-  "languages": ["any"],
+  "target_categories": [
+    "CodeReview"
+  ],
+  "languages": [
+    "any"
+  ],
   "confidence": 0.95,
-  "auto_fixable": false,
-  "fix_script": "none",
+  "auto_fixable": true,
+  "fix_script": "fix-scorecard-code-review.sh",
   "action": "report",
   "match": "Recent commits merged without code review",
   "replacement": "Manual enforcement of code review policy required",

@@ -1,17 +1,26 @@
 {
   "id": "recipe-scorecard-fuzzing",
   "name": "Add fuzz testing infrastructure",
-  "description": "Checks for fuzz testing (OSS-Fuzz, ClusterFuzzLite, or custom) (OpenSSF Scorecard SC-009). Partially auto-fixable — can scaffold CI workflow.",
-  "triangle_tier": "substitute",
-  "pattern_ids": ["SC-009-fuzzing"],
-  "target_categories": ["Fuzzing"],
-  "languages": ["rust", "go", "c", "cpp"],
+  "description": "Checks for fuzz testing (OSS-Fuzz, ClusterFuzzLite, or custom) (OpenSSF Scorecard SC-009). Partially auto-fixable \u2014 can scaffold CI workflow.",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "SC-009-fuzzing"
+  ],
+  "target_categories": [
+    "Fuzzing"
+  ],
+  "languages": [
+    "rust",
+    "go",
+    "c",
+    "cpp"
+  ],
   "confidence": 0.85,
-  "auto_fixable": false,
-  "fix_script": null,
+  "auto_fixable": true,
+  "fix_script": "fix-scorecard-fuzzing.sh",
   "action": "report",
   "match": "Repository has no fuzz testing configuration",
-  "replacement": "Add ClusterFuzzLite workflow or cargo-fuzz targets — language-specific setup required",
+  "replacement": "Add ClusterFuzzLite workflow or cargo-fuzz targets \u2014 language-specific setup required",
   "proven_module": null,
   "formally_proven": false,
   "successful_fixes": 0,

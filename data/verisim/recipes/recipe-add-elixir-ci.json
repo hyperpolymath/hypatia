@@ -6,9 +6,13 @@
   "pattern_ids": [
     "missing_elixir_ci"
   ],
-  "target_categories": ["MissingCI"],
-  "languages": ["elixir"],
-  "confidence": 0.90,
+  "target_categories": [
+    "MissingCI"
+  ],
+  "languages": [
+    "elixir"
+  ],
+  "confidence": 0.9,
   "auto_fixable": true,
   "fix_script": "fix-add-elixir-ci.sh",
   "action": "create_file",

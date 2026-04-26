@@ -53,7 +53,23 @@ defmodule Hypatia.RecipeGenerator do
     "UncheckedError" => "fix-unchecked-error.sh",
     "DynamicCodeExecution" => "fix-dynamic-code-exec.sh",
     "MissingLicense" => "fix-license-file.sh",
-    "MissingSPDX" => "fix-missing-spdx.sh"
+    "MissingSPDX" => "fix-missing-spdx.sh",
+    # OpenSSF Scorecard categories (SC-001 through SC-020)
+    "BinaryArtifacts" => "fix-scorecard-binary-artifacts.sh",
+    "CITests" => "fix-scorecard-ci-tests.sh",
+    "CIIBestPractices" => "fix-scorecard-cii-best-practices.sh",
+    "CodeReview" => "fix-scorecard-code-review.sh",
+    "Contributors" => "fix-scorecard-contributors.sh",
+    "Fuzzing" => "fix-scorecard-fuzzing.sh",
+    "Maintained" => "fix-scorecard-maintained.sh",
+    "Packaging" => "fix-scorecard-packaging.sh",
+    "SBOM" => "fix-scorecard-sbom.sh",
+    "SignedReleases" => "fix-scorecard-signed-releases.sh",
+    "Vulnerabilities" => "fix-scorecard-vulnerabilities.sh",
+    "Webhooks" => "fix-scorecard-webhooks.sh",
+    # Elixir-specific
+    "MissingCI" => "fix-add-elixir-ci.sh",
+    "ElixirSSLBypass" => "fix-elixir-ssl-verify.sh"
   }
 
   @doc """
@@ -64,12 +80,14 @@ defmodule Hypatia.RecipeGenerator do
     recipes = RecipeMatcher.all_recipes()
 
     # Build set of all categories covered by recipes
-    covered = recipes
-    |> Enum.flat_map(fn r -> Map.get(r, "target_categories", []) end)
-    |> MapSet.new()
+    covered =
+      recipes
+      |> Enum.flat_map(fn r -> Map.get(r, "target_categories", []) end)
+      |> MapSet.new()
 
     # Load pattern registry
     registry_path = Path.join(Path.expand(@verisimdb_data_path), "patterns/registry.json")
+
     case File.read(registry_path) do
       {:ok, content} ->
         case Jason.decode(content) do
@@ -85,9 +103,12 @@ defmodule Hypatia.RecipeGenerator do
             end)
             |> Enum.sort_by(fn {_, count, _} -> -count end)
 
-          _ -> []
+          _ ->
+            []
         end
-      _ -> []
+
+      _ ->
+        []
     end
   end
 
@@ -136,14 +157,21 @@ defmodule Hypatia.RecipeGenerator do
       "triangle_tier" => "control"
     }
 
-    recipe_path = Path.join(
-      [Path.expand(@verisimdb_data_path), "recipes", "recipe-#{slugify(category)}.json"]
-    )
+    recipe_path =
+      Path.join([
+        Path.expand(@verisimdb_data_path),
+        "recipes",
+        "recipe-#{slugify(category)}.json"
+      ])
 
     case Jason.encode(recipe, pretty: true) do
       {:ok, json} ->
         File.write!(recipe_path, json <> "\n")
-        Logger.info("Generated recipe: #{recipe["id"]} for category #{category} (#{length(sample_patterns)} patterns)")
+
+        Logger.info(
+          "Generated recipe: #{recipe["id"]} for category #{category} (#{length(sample_patterns)} patterns)"
+        )
+
         {:ok, recipe_path}
 
       {:error, reason} ->
@@ -158,24 +186,27 @@ defmodule Hypatia.RecipeGenerator do
   def generate_all do
     uncovered = find_uncovered_categories()
 
-    results = Enum.map(uncovered, fn {category, _count, samples} ->
-      recipe_id = "recipe-#{slugify(category)}"
-      existing = RecipeMatcher.get_recipe(recipe_id)
+    results =
+      Enum.map(uncovered, fn {category, _count, samples} ->
+        recipe_id = "recipe-#{slugify(category)}"
+        existing = RecipeMatcher.get_recipe(recipe_id)
 
-      if existing do
-        {:skipped, category}
-      else
-        case generate_recipe(category, samples) do
-          {:ok, _path} -> {:generated, category}
-          {:error, _} -> {:error, category}
+        if existing do
+          {:skipped, category}
+        else
+          case generate_recipe(category, samples) do
+            {:ok, _path} -> {:generated, category}
+            {:error, _} -> {:error, category}
+          end
         end
-      end
-    end)
+      end)
 
     generated = Enum.count(results, fn {status, _} -> status == :generated end)
     skipped = Enum.count(results, fn {status, _} -> status == :skipped end)
-    categories = Enum.filter(results, fn {status, _} -> status == :generated end)
-                 |> Enum.map(fn {_, cat} -> cat end)
+
+    categories =
+      Enum.filter(results, fn {status, _} -> status == :generated end)
+      |> Enum.map(fn {_, cat} -> cat end)
 
     Logger.info("Recipe generation: #{generated} new, #{skipped} skipped")
     {generated, skipped, categories}
@@ -193,9 +224,12 @@ defmodule Hypatia.RecipeGenerator do
 
   defp extract_pa_rule(patterns) do
     case List.first(patterns) do
-      nil -> "PA000"
+      nil ->
+        "PA000"
+
       pattern ->
         id = Map.get(pattern, "id", "")
+
         case Regex.run(~r/^(PA\d+)/, id) do
           [_, rule] -> rule
           _ -> "PA000"
@@ -205,30 +239,34 @@ defmodule Hypatia.RecipeGenerator do
 
   defp synthesize_description(category, patterns) do
     count = length(patterns)
-    repos = patterns
-    |> Enum.flat_map(fn p -> Map.get(p, "repos_affected_list", []) end)
-    |> Enum.uniq()
-    |> length()
+
+    repos =
+      patterns
+      |> Enum.flat_map(fn p -> Map.get(p, "repos_affected_list", []) end)
+      |> Enum.uniq()
+      |> length()
 
     "#{humanize(category)} -- #{count} patterns across #{repos} repos. " <>
-    "Auto-generated recipe for triage and tracking."
+      "Auto-generated recipe for triage and tracking."
   end
 
   defp synthesize_remediation(category, patterns) do
     # Extract common keywords from pattern descriptions
     descriptions = Enum.map(patterns, fn p -> Map.get(p, "description", "") end)
-    common_words = descriptions
-    |> Enum.flat_map(&String.split(&1, ~r/\s+/))
-    |> Enum.map(&String.downcase/1)
-    |> Enum.reject(fn w -> String.length(w) < 4 end)
-    |> Enum.frequencies()
-    |> Enum.sort_by(fn {_, c} -> -c end)
-    |> Enum.take(5)
-    |> Enum.map(fn {w, _} -> w end)
-    |> Enum.join(", ")
+
+    common_words =
+      descriptions
+      |> Enum.flat_map(&String.split(&1, ~r/\s+/))
+      |> Enum.map(&String.downcase/1)
+      |> Enum.reject(fn w -> String.length(w) < 4 end)
+      |> Enum.frequencies()
+      |> Enum.sort_by(fn {_, c} -> -c end)
+      |> Enum.take(5)
+      |> Enum.map(fn {w, _} -> w end)
+      |> Enum.join(", ")
 
     "Review #{humanize(category)} findings. Common terms: #{common_words}. " <>
-    "Create targeted fix script once remediation pattern is established."
+      "Create targeted fix script once remediation pattern is established."
   end
 
   defp find_similar_recipe(category) do
@@ -238,6 +276,7 @@ defmodule Hypatia.RecipeGenerator do
 
     Enum.find(all, %{}, fn recipe ->
       cats = Map.get(recipe, "target_categories", [])
+
       Enum.any?(cats, fn c ->
         String.jaro_distance(String.downcase(c), category_lower) > 0.6
       end)

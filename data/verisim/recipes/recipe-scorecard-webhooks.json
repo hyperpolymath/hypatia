@@ -6,11 +6,15 @@
   "pattern_ids": [
     "SC-020-webhooks"
   ],
-  "target_categories": ["Webhooks"],
-  "languages": ["any"],
+  "target_categories": [
+    "Webhooks"
+  ],
+  "languages": [
+    "any"
+  ],
   "confidence": 0.95,
-  "auto_fixable": false,
-  "fix_script": "none",
+  "auto_fixable": true,
+  "fix_script": "fix-scorecard-webhooks.sh",
   "action": "report",
   "match": "Webhooks configured without authentication or over insecure transport",
   "replacement": "Manual webhook security configuration required",

@@ -6,11 +6,15 @@
   "pattern_ids": [
     "SC-001-binary-artifacts"
   ],
-  "target_categories": ["BinaryArtifacts"],
-  "languages": ["any"],
+  "target_categories": [
+    "BinaryArtifacts"
+  ],
+  "languages": [
+    "any"
+  ],
   "confidence": 0.95,
   "auto_fixable": false,
-  "fix_script": "none",
+  "fix_script": "fix-scorecard-binary-artifacts.sh",
   "action": "report",
   "match": "Binary artifacts detected in repository tree",
   "replacement": "Manual removal of binary artifacts required",
