@@ -91,7 +91,7 @@ An Ada-based Terminal User Interface (TUI) for local repository auditing. Comple
 Validates RSR 2026 directory structure:
 * `.machine_readable/6scm/` presence
 * `tasks/Justfile` presence
-* `licenses/` directory
+* `LICENSES/` directory
 * Banned file detection
 
 ==== 2. Language Policy Enforcer
