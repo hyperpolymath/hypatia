@@ -1,31 +1,19 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Hypatia Bridge — wires the TEA loop in hypatia_gui.eph into the
-// Gossamer host runtime (Burble-backed) and, optionally, a PanLL panel.
+// Gossamer host runtime, with direct IPC to the Elixir OTP backend
+// on :9090.
 //
-// STATUS: STUB. This file declares the shape of the integration without
-// calling real Gossamer / Burble APIs, because those APIs aren't in
-// scope of this branch (we don't have the ephapax / gossamer / burble
-// runtimes checked into this repo and can't verify signatures here).
+// Wire format: JSON. See `decode_msg` below.
 //
-// When someone with the Gossamer runtime in hand picks this up, the
-// concrete steps are:
+// Burble session integration: deferred. See BURBLE-DEFERRAL.md for the
+// decision and the three triggers that promote it to a required
+// integration. Until then, all UI<->backend traffic uses the direct
+// IPC channel opened in `main` at `ipc_open("http://localhost:9090/ws")`.
 //
-//   1. Replace the `extern "gossamer"` placeholder signatures below
-//      with the real imports from gossamer's public module
-//      (`hyperpolymath/gossamer` — see src/core/Bridge.eph for the
-//      pattern, since that file is the receipts quoted reference).
-//
-//   2. Replace the Burble session-state TODO with real calls to
-//      burble's session API (burble is "P2P voice control plane +
-//      bot orchestration" per Hypatia's DESIGN-NARRATIVE.md:93 —
-//      that README is the authoritative shape).
-//
-//   3. Decide whether the IPC channel to the Elixir OTP backend goes
-//      directly through Gossamer's IPC primitive, or through a Burble
-//      session. If through Burble, the session handle is linear (let!);
-//      if direct Gossamer IPC, the channel handle is linear (let!) in
-//      both cases. Every handle that cannot safely double-close or
-//      leak gets let!.
+// The `extern "gossamer"` block below holds placeholder Gossamer host
+// API signatures. They will be replaced with imports from the real
+// gossamer module once `hyperpolymath/gossamer:src/core/Bridge.eph`
+// (the canonical pattern) is reachable from the import graph.
 
 module hypatia/ui/bridge
 
