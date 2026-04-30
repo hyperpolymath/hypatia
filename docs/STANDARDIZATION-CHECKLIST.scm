@@ -17,7 +17,7 @@
         (".machine_readable/6scm/AGENTIC.scm" "AI interaction patterns")
         (".machine_readable/6scm/NEUROSYM.scm" "Neurosymbolic config")
         ("tasks/Justfile" "Build tasks")
-        ("licenses/MPL-2.0-EN.txt" "License file")
+        ("LICENSES/MPL-2.0-EN.txt" "License file")
         ("README.adoc" "Documentation")
         ("SECURITY.md" "Security policy")
         ("LICENSE" "License"))
