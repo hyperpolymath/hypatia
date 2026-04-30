@@ -21,19 +21,55 @@ and Burble available as an optional session layer (deferred — see
   Defines the JS `Msg` constructors that pair with `decode_msg` in
   `bridge.eph`.
 
-=== PanLL lifecycle artefacts
+=== Lifecycle artefacts (minter / provisioner / configurator / harness)
 
-Four files map to PanLL's four lifecycle tools (minter, provisioner,
-configurator, harness):
+The four artefacts in this directory follow a pattern that is general
+across the ecosystem — not specific to PanLL panels:
 
-* `panll.minter.toml` — contract fields the minter writes upstream
-  at `panll/contracts/hypatia.toml`. Already exists upstream.
+* PanLL plugins and panels (Hypatia ships as a panel)
+* BoJ cartridges (`hyperpolymath/boj-server`)
+
+Source-of-truth ordering for the cross-tool link semantics:
+
+* `hyperpolymath/standards` — `groove-protocol/spec/` is the canonical
+  spec for how groove-aware systems discover, type-check, and compose
+  with each other (Burble, Gossamer, VeriSimDB are reference
+  implementations).
+* `hyperpolymath/panll` — per-PanLL guidance:
+  `schema/panll-harness-v2.schema.json`, `schemas/config.cue`,
+  and `contracts/<panel-id>.toml`.
+* `hyperpolymath/gossamer` — per-Gossamer guidance for host integration;
+  `src/core/Bridge.eph` is the canonical pattern.
+* `hyperpolymath/boj-server` — per-BoJ guidance for cartridge
+  construction.
+
+PanLL itself is a single tool that branches between a *plugin* path
+and a *panel* path. Hypatia takes the panel path. The architectural
+relationship to the Binary Star layout is by **flow** and **viewing
+perspective** (third-position, or from-L, or from-N, mediated by
+which Pane-A is viewed through), not by membership in a single pane.
+The four panes per `hyperpolymath/panll/README.adoc:99-110`:
+
+* Pane-A — Ambient (persistent context / environmental support)
+* Pane-L — Logic (role: Symbolic; strict logic, types, constraints)
+* Pane-N — Neural (streaming inference manifold, OODA traces)
+* Pane-W — World (task barycentre; results, actions, artefacts)
+
+Hypatia's `clade = "neurosym/ci-cd-intelligence"` records topical
+taxonomy but not the architectural relationship; this harness does
+not yet declare its flow/perspective. Tracked as a follow-up.
+
+The four files in this directory:
+
+* `panll.minter.toml` — local mirror. Canonical contract upstream is
+  `hyperpolymath/panll:contracts/hypatia.toml` (verified present
+  2026-04-30).
 * `panll.provisioner.toml` — resources the provisioner stands up
   (isolation tier, ports, filesystem paths, container image).
-* `panll.configurator.cue` — runtime config conforming to
+* `panll.configurator.cue` — runtime config; conforms to
   `panll/schemas/config.cue` `#Config`.
-* `panll.harness.toml` — operational manifest validated against
-  `panll/schema/panll-harness-v2.schema.json`.
+* `panll.harness.toml` — operational manifest; validates against
+  `panll/schema/panll-harness-v2.schema.json` (CI-enforced).
 
 Syntactic sanity check on `.eph` sources (2026-04-22): both files
 pass by-hand validation against the Ephapax v2 grammar (bracket
