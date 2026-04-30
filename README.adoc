@@ -16,7 +16,7 @@ image:https://img.shields.io/badge/Ada_2022-TUI-blue.svg[Ada]
 
 This project must declare **MPL-2.0-or-later** for platform/tooling compatibility.
 
-Philosophy: **Palimpsest**. The Palimpsest-MPL (PMPL) text is provided in `license/PMPL-1.0.txt`, and the canonical source is the palimpsest-license repository.
+Philosophy: **Palimpsest**. The Palimpsest-MPL (PMPL) text is provided in `LICENSES/PMPL-1.0-or-later.txt`, and the canonical source is the palimpsest-license repository.
 
 🌐 *Website:* https://hypatia.reposystem.dev[hypatia.reposystem.dev] | Part of the link:https://reposystem.dev[reposystem] ecosystem
 
