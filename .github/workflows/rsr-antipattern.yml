@@ -153,13 +153,28 @@ jobs:
 
       - name: Check for Python (non-SaltStack)
         run: |
-          PY_FILES=$(find . -name "*.py" | grep -v salt | grep -v _states | grep -v _modules | grep -v pillar | grep -v venv | grep -v __pycache__ || true)
+          # Allowlist mirrors the TypeScript rule's `scripts/` exemption — utility
+          # scripts that aren't part of the runtime are kept out of the language
+          # policy so we don't have to port `cargo bench` regression-trackers etc.
+          # to Deno just to satisfy a CI rule.
+          PY_FILES=$(find . -name "*.py" \
+            -not -path './.git/*' \
+            -not -path '*/salt/*' \
+            -not -path '*/_states/*' \
+            -not -path '*/_modules/*' \
+            -not -path '*/pillar/*' \
+            -not -path '*/venv/*' \
+            -not -path '*/__pycache__/*' \
+            -not -path '*/scripts/*' \
+            -not -path '*/bin/*' \
+            -not -path '*/tools/*' \
+            || true)
           if [ -n "$PY_FILES" ]; then
-            echo "❌ Python files detected - only allowed for SaltStack"
+            echo "❌ Python files detected outside allowlist (SaltStack / scripts / bin / tools)"
             echo "$PY_FILES"
             exit 1
           fi
-          echo "✅ No non-SaltStack Python files"
+          echo "✅ No non-SaltStack Python files outside allowlist"
 
       - name: Check for npm lockfiles
         run: |

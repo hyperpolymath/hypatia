@@ -133,6 +133,10 @@ jobs:
   haskell-build:
     name: Haskell Build & Test
     runs-on: ubuntu-latest
+    # registry/ is the Haskell sub-project; gate this job on its presence so
+    # PRs that don't touch (and don't ship) the Haskell tree don't fail here.
+    # The job re-activates the moment `registry/cicd-hyper-a.cabal` lands.
+    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -186,6 +190,7 @@ jobs:
   haskell-lint:
     name: HLint
     runs-on: ubuntu-latest
+    if: hashFiles('registry/**/*.hs') != ''
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
