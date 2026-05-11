@@ -159,16 +159,44 @@ jobs:
           cd "$EPHAPAX_DIR"
           cargo build --release --workspace
 
-      - name: Verify ephapax-cli binary
+      - name: Verify ephapax CLI binary
         run: |
           set -euo pipefail
-          cli="$EPHAPAX_DIR/target/release/ephapax-cli"
-          if [ ! -x "$cli" ]; then
-            echo "::error::ephapax-cli not found at $cli"
+          release_dir="$EPHAPAX_DIR/target/release"
+
+          # Discover whatever CLI binary `cargo build --release --workspace`
+          # produced. Upstream Ephapax v1.0.0 doesn't guarantee the
+          # `ephapax-cli` name (see hyperpolymath/ephapax#36 — the unified
+          # CLI subcommand is what would pin the binary name down). We
+          # accept the first match from a known list, then fall back to
+          # the first executable in target/release/.
+          candidates=(ephapax-cli ephapax epcc ephapax_cli)
+          cli=""
+          for name in "${candidates[@]}"; do
+            if [ -x "$release_dir/$name" ]; then
+              cli="$release_dir/$name"
+              break
+            fi
+          done
+
+          if [ -z "$cli" ]; then
+            while IFS= read -r f; do
+              cli="$f"
+              break
+            done < <(find "$release_dir" -maxdepth 1 -type f -executable 2>/dev/null | sort)
+          fi
+
+          if [ -z "$cli" ]; then
+            echo "::error::No ephapax CLI binary produced by 'cargo build --release --workspace'."
+            echo "Contents of $release_dir:"
+            ls -la "$release_dir" 2>/dev/null || true
             exit 1
           fi
+
+          echo "Discovered Ephapax CLI: $cli"
           "$cli" --version 2>/dev/null || "$cli" --help 2>/dev/null | head -20 || \
-            echo "(ephapax-cli built but has no --version/--help output)"
+            echo "(CLI built but has no --version/--help output)"
+          echo "EPHAPAX_CLI=$cli" >> "$GITHUB_ENV"
 
       - name: Attempt to compile bridge.eph
         id: compile
@@ -178,7 +206,7 @@ jobs:
           mkdir -p src/ui/public/assets/wasm
           wasm_out="$GITHUB_WORKSPACE/src/ui/public/assets/wasm/hypatia_gui.wasm"
           src_entry="$GITHUB_WORKSPACE/src/ui/gossamer/bridge.eph"
-          cli="$EPHAPAX_DIR/target/release/ephapax-cli"
+          cli="${EPHAPAX_CLI:-$EPHAPAX_DIR/target/release/ephapax-cli}"
 
           cd "$EPHAPAX_DIR"
 
