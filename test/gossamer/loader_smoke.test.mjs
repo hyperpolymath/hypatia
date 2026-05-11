@@ -18,6 +18,11 @@
 //   5. A hand-crafted minimal `.wasm` declaring the gossamer imports +
 //      hypatia_init / _update / _view / _subs exports instantiates against
 //      the loader's import object and the ABI helpers decode its memory.
+//   6. `probeAllocator` finds the canonical names listed in loader.js
+//      and returns null when none are present.
+//   7. `ipc_recv` uses the allocator to round-trip received WebSocket
+//      frames back into wasm memory as Ephapax `Bytes` values, and
+//      falls back to returning 0 when no allocator is wired up.
 //
 // Run
 // ---
@@ -33,6 +38,7 @@ import assert from 'node:assert/strict';
 import {
   readEphapaxString,
   makeGossamerHost,
+  probeAllocator,
   Msg,
   MsgTag,
   Department,
@@ -236,7 +242,112 @@ test('json_parse_int_field reads named field', () => {
   assert.equal(host.json_parse_int_field(0, 128), 42);
 });
 
-// --- 6. Msg / Department constructor parity --------------------------------
+// --- 6. Allocator probe ----------------------------------------------------
+
+test('probeAllocator finds __alloc / alloc / hypatia_alloc / gossamer_alloc', () => {
+  for (const name of ['__alloc', 'alloc', 'hypatia_alloc', 'gossamer_alloc', '__wbindgen_malloc', 'malloc']) {
+    const fn = () => 0;
+    const exports = { memory: {}, [name]: fn };
+    assert.strictEqual(probeAllocator(exports), fn, `should find ${name}`);
+  }
+});
+
+test('probeAllocator returns null when no candidate is present', () => {
+  assert.strictEqual(probeAllocator({ memory: {} }), null);
+  assert.strictEqual(probeAllocator({ memory: {}, some_other_export: () => 0 }), null);
+});
+
+test('probeAllocator ignores non-function values', () => {
+  assert.strictEqual(probeAllocator({ __alloc: 42 }), null);
+  assert.strictEqual(probeAllocator({ alloc: 'not a function' }), null);
+});
+
+test('probeAllocator prefers __alloc over alternatives when multiple match', () => {
+  const dunder = () => 1;
+  const plain = () => 2;
+  const exports = { __alloc: dunder, alloc: plain, malloc: () => 3 };
+  assert.strictEqual(probeAllocator(exports), dunder);
+});
+
+// --- 7. ipc_recv with and without an allocator ----------------------------
+
+test('ipc_recv returns 0 when no allocator is configured', () => {
+  const buf = packString('http://localhost:9090/ws');
+  const host = makeGossamerHost(fakeMemory(buf), { WebSocket: FakeWebSocket });
+  const ch = host.ipc_open(0);
+  // Inject a frame via the WS double's onmessage path.
+  const ws = FakeWebSocket.last;
+  ws.onmessage({ data: new TextEncoder().encode('hi').buffer });
+  // No allocator → recv pops the frame but cannot hand it back; returns 0.
+  assert.equal(host.ipc_recv(ch), 0);
+  // Subsequent recv with empty queue also returns 0.
+  assert.equal(host.ipc_recv(ch), 0);
+});
+
+test('ipc_recv with allocator writes Bytes (i32 len + payload) into wasm memory', () => {
+  const buf = new ArrayBuffer(1024);
+  const view = new DataView(buf);
+  const ep = new TextEncoder().encode('http://localhost:9090/ws');
+  view.setInt32(0, ep.length, true);
+  new Uint8Array(buf, 4, ep.length).set(ep);
+
+  // Bump allocator hands out monotonically-increasing pointers starting
+  // at offset 256 (well past the endpoint string).
+  let nextPtr = 256;
+  const allocator = (len) => {
+    const ptr = nextPtr;
+    nextPtr += len;
+    return ptr;
+  };
+
+  const host = makeGossamerHost(fakeMemory(buf), {
+    WebSocket: FakeWebSocket,
+    allocator,
+  });
+  const ch = host.ipc_open(0);
+  const ws = FakeWebSocket.last;
+
+  const payload = new TextEncoder().encode('hello-from-server');
+  ws.onmessage({ data: payload.buffer });
+
+  const ptr = host.ipc_recv(ch);
+  assert.ok(ptr > 0, 'returned ptr should be non-zero');
+  assert.equal(ptr, 256, 'first allocation lands at the bump base');
+  // Decode using the same convention as readEphapaxString.
+  const len = view.getInt32(ptr, true);
+  assert.equal(len, payload.length);
+  const got = new Uint8Array(buf, ptr + 4, len);
+  assert.equal(new TextDecoder().decode(got), 'hello-from-server');
+
+  // Empty queue → 0 even when allocator is present.
+  assert.equal(host.ipc_recv(ch), 0);
+});
+
+test('ipc_recv survives a broken allocator without throwing', () => {
+  const buf = packString('http://localhost:9090/ws');
+  const allocator = () => { throw new Error('boom'); };
+  const host = makeGossamerHost(fakeMemory(buf), { WebSocket: FakeWebSocket, allocator });
+  const ch = host.ipc_open(0);
+  FakeWebSocket.last.onmessage({ data: new TextEncoder().encode('x').buffer });
+  // Doesn't throw, returns 0 — the bridge's run loop interprets that
+  // as "no bytes available this iteration" rather than crashing.
+  assert.equal(host.ipc_recv(ch), 0);
+});
+
+test('ipc_recv with allocator returning bad ptr falls back to 0', () => {
+  const buf = packString('http://localhost:9090/ws');
+  // Allocator returning a negative number signals "out of memory" or
+  // similar — the host should treat it as a failed allocation.
+  const host = makeGossamerHost(fakeMemory(buf), {
+    WebSocket: FakeWebSocket,
+    allocator: () => -1,
+  });
+  const ch = host.ipc_open(0);
+  FakeWebSocket.last.onmessage({ data: new TextEncoder().encode('x').buffer });
+  assert.equal(host.ipc_recv(ch), 0);
+});
+
+// --- 8. Msg / Department constructor parity --------------------------------
 
 test('Msg.Navigate carries Department value with tag 0', () => {
   const m = Msg.Navigate(Department.Symbolic);

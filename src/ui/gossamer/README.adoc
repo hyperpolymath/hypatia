@@ -190,8 +190,21 @@ this is the single point of change.
 IPC support is multi-channel (one `WebSocket` per `ipc_open` handle,
 keyed in a `Map`), and `ipc_send` payloads issued before the socket
 reaches `OPEN` are buffered and flushed on `onopen` rather than
-silently dropped. A WS implementation can be injected via the second
-arg to `makeGossamerHost(memory, { WebSocket })` for headless tests.
+silently dropped. `ipc_recv` hands received frames back into wasm
+memory as Ephapax `Bytes` values (i32 length header + payload) using
+an allocator probed from `instance.exports` — the loader looks for
+the canonical names `__alloc`, `alloc`, `hypatia_alloc`,
+`gossamer_alloc`, `__wbindgen_malloc`, and `malloc` in that order; if
+none are present, `ipc_recv` returns `0` ("no bytes available") and
+the bridge's run loop treats that as a polling miss. A WS
+implementation and an allocator can both be injected via the second
+arg to `makeGossamerHost(memory, { WebSocket, allocator })` for
+headless tests.
+
+DataView allocations are cached per-buffer via a `WeakMap` keyed by
+`ArrayBuffer` identity; WebAssembly `memory.grow` detaches the
+previous buffer and the entry naturally drops out of the cache on
+first use against the new buffer.
 
 == Automated smoke tests
 
