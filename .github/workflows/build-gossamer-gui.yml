@@ -208,8 +208,25 @@ jobs:
             echo "✓ Compiled $(basename "$wasm_out") — $(wc -c < "$wasm_out") bytes"
           fi
 
-      - name: Upload wasm artifact
+      - name: Install wabt (for wasm-validate)
         if: steps.compile.outcome == 'success' && hashFiles('src/ui/public/assets/wasm/hypatia_gui.wasm') != ''
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends wabt
+          wasm-validate --version
+
+      - name: Validate wasm artifact
+        id: validate
+        if: steps.compile.outcome == 'success' && hashFiles('src/ui/public/assets/wasm/hypatia_gui.wasm') != ''
+        run: |
+          set -euo pipefail
+          wasm_out="$GITHUB_WORKSPACE/src/ui/public/assets/wasm/hypatia_gui.wasm"
+          wasm-validate "$wasm_out"
+          echo "✓ wasm-validate passed on $(basename "$wasm_out")"
+
+      - name: Upload wasm artifact
+        if: steps.compile.outcome == 'success' && steps.validate.outcome == 'success' && hashFiles('src/ui/public/assets/wasm/hypatia_gui.wasm') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hypatia-gui-wasm
@@ -227,9 +244,10 @@ jobs:
             if [ -f src/ui/public/assets/wasm/hypatia_gui.wasm ]; then
               size=$(wc -c < src/ui/public/assets/wasm/hypatia_gui.wasm)
               echo "- **wasm output**: ✅ \`hypatia_gui.wasm\` ($size bytes)"
+              echo "- **wasm-validate**: ✅ passed"
             else
               echo "- **wasm output**: ⏸ skipped — stage-1 \`.eph\` parser not yet a CLI subcommand in ephapax $EPHAPAX_VERSION"
               echo ""
-              echo "  Toolchain built successfully; compile step awaits upstream CLI wrapper."
+              echo "  Toolchain built successfully; compile step awaits upstream CLI wrapper (see hyperpolymath/ephapax#36)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
