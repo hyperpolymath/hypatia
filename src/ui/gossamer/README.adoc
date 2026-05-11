@@ -103,6 +103,14 @@ constructor alignment). Type-check pending toolchain availability.
 | Burble session integration
 | ⏸  Deferred. See `BURBLE-DEFERRAL.md`.
 
+| Loader smoke harness (Node)
+| ✅ `test/gossamer/loader_smoke.test.mjs` — locks the
+  `extern "gossamer"` import surface, exercises multi-channel IPC,
+  buffered-send-on-`onopen`, and instantiates a hand-built minimal
+  `.wasm` against `loader.js`. Runs in the `Build Gossamer GUI`
+  workflow on every PR touching `src/ui/gossamer/**`. No upstream
+  Ephapax dependency.
+
 | Ephapax toolchain build (CI)
 | ✅ `.github/workflows/build-gossamer-gui.yml` clones
   `hyperpolymath/ephapax` at v1.0.0 (commit `c14c3e92`) and runs
@@ -157,8 +165,11 @@ Until the end-to-end compile path lands upstream and a wasm artifact is
 produced by CI, `index.html` loading + console-error-free behaviour is a
 manual step:
 
-. Run `mix phx.server` (or the equivalent backend launcher) so the
-  Hypatia OTP listener is up on `:9090`.
+. Start the Hypatia OTP listener (Bandit + Plug.Router): `iex -S mix`
+  for an interactive shell, or `mix run --no-halt` for a headless run.
+  This serves on `:9090` by default; override via the `:hypatia,
+  :http_port` application env. (The repo isn't a Phoenix app, so
+  `mix phx.server` doesn't apply.)
 . Place a compiled `hypatia_gui.wasm` at
   `src/ui/public/assets/wasm/hypatia_gui.wasm` (download the artifact
   from the `Build Gossamer GUI` workflow once it is producing one).
@@ -171,6 +182,29 @@ namespace that mirrors the `extern "gossamer"` block in `bridge.eph`.
 The string ABI (`{ptr, len}` with leading i32 length prefix) is
 documented in `loader.js`; once Ephapax pins the wasm-level packing
 this is the single point of change.
+
+IPC support is multi-channel (one `WebSocket` per `ipc_open` handle,
+keyed in a `Map`), and `ipc_send` payloads issued before the socket
+reaches `OPEN` are buffered and flushed on `onopen` rather than
+silently dropped. A WS implementation can be injected via the second
+arg to `makeGossamerHost(memory, { WebSocket })` for headless tests.
+
+== Automated smoke tests
+
+`test/gossamer/loader_smoke.test.mjs` runs under `node --test` (no
+extra deps) and locks the loader contract that the manual browser
+smoke step exercises end-to-end. Run locally with:
+
+[source,bash]
+----
+node --test test/gossamer/loader_smoke.test.mjs
+----
+
+The harness builds a minimal valid `.wasm` from raw bytes (no Ephapax
+toolchain needed), instantiates it through `loader.js`'s gossamer
+import object, and verifies the `{ptr, i32-len}` string ABI
+round-trips through real wasm memory. CI runs it on every PR that
+touches `src/ui/gossamer/**`.
 
 == Why Ephapax over AffineScript
 
