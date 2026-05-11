@@ -146,8 +146,8 @@ impl ApiResponse {
     /// successful call to a Hypatia ABI function and have not yet
     /// been overwritten by a subsequent call.
     unsafe fn data(&self) -> &[u8] {
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         unsafe {
-            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             if self.data_ptr.is_null() || self.data_len == 0 {
                 &[]
             } else {
@@ -157,8 +157,8 @@ impl ApiResponse {
     }
 
     unsafe fn error(&self) -> &[u8] {
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         unsafe {
-            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             if self.error_ptr.is_null() || self.error_len == 0 {
                 &[]
             } else {
@@ -195,8 +195,8 @@ impl FfiTransport {
             // Safety: libloading::Library::new is unsafe because it
             // runs constructors from the loaded library. Hypatia's
             // .so has no constructors with side effects.
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             match unsafe { Library::new(path) } {
-                // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
                 Ok(lib) => return Self::bind_symbols(lib),
                 Err(e) => last_err = Some(format!("{}: {}", path.to_string_lossy(), e)),
             }
@@ -213,8 +213,8 @@ impl FfiTransport {
         // `export fn` declarations. We `Symbol::into_raw()` to
         // detach the lifetime from `lib`; the `_lib` field keeps the
         // dlopen handle alive for the lifetime of `FfiTransport`.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         unsafe {
-            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             let connector_count: Symbol<unsafe extern "C" fn() -> usize> =
                 lib.get(b"hypatia_connector_count\0").map_err(|e| {
                     HypatiaError::FfiUnavailable(format!("missing hypatia_connector_count: {}", e))
@@ -332,10 +332,8 @@ impl FfiTransport {
         let mut resp = ApiResponse::empty();
         let rc = unsafe { (self.scan_repo)(bytes.as_ptr(), bytes.len(), &mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
-            let msg = unsafe {
-                // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-                String::from_utf8_lossy(resp.error()).into_owned()
-            };
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() };
             return Err(HypatiaError::NonZero {
                 code: rc,
                 message: msg,
