@@ -122,7 +122,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install just
-        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: just
 
