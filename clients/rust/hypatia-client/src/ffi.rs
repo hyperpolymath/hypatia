@@ -332,8 +332,7 @@ impl FfiTransport {
         let mut resp = ApiResponse::empty();
         let rc = unsafe { (self.scan_repo)(bytes.as_ptr(), bytes.len(), &mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
-            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() };
+            let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             return Err(HypatiaError::NonZero {
                 code: rc,
                 message: msg,
