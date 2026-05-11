@@ -32,6 +32,25 @@
 const WINDOW_HANDLE = 1;
 const IPC_HANDLE = 2;
 
+// Reads an Ephapax string: i32 length header at `ptr`, followed by
+// `len` UTF-8 bytes from `buffer`. Throws on out-of-bounds rather than
+// reading garbage past the heap, so an ABI mismatch is visible.
+// Shared between HypatiaTEA (export-side decodes) and the gossamer
+// host import namespace (host-side decodes) so both observe the same
+// invariants.
+function readEphapaxString(buffer, ptr) {
+  if (ptr < 0 || ptr + 4 > buffer.byteLength) {
+    throw new RangeError(`readString: header ptr=${ptr} out of bounds`);
+  }
+  const view = new DataView(buffer);
+  const len = view.getInt32(ptr, true);
+  if (len < 0 || ptr + 4 + len > buffer.byteLength) {
+    throw new RangeError(`readString: len=${len} at ptr=${ptr} out of bounds`);
+  }
+  const bytes = new Uint8Array(buffer, ptr + 4, len);
+  return new TextDecoder().decode(bytes);
+}
+
 /**
  * Wraps the Hypatia Ephapax/Gossamer Wasm module.
  */
@@ -59,21 +78,8 @@ class HypatiaTEA {
     return this.readString(ptr);
   }
 
-  // Reads an Ephapax string: i32 length header at `ptr`, followed by
-  // `len` UTF-8 bytes. Throws on out-of-bounds rather than reading
-  // garbage past the heap, so an ABI mismatch is visible.
   readString(ptr) {
-    const buffer = this.memory.buffer;
-    if (ptr < 0 || ptr + 4 > buffer.byteLength) {
-      throw new RangeError(`readString: header ptr=${ptr} out of bounds`);
-    }
-    const view = new DataView(buffer);
-    const len = view.getInt32(ptr, true);
-    if (len < 0 || ptr + 4 + len > buffer.byteLength) {
-      throw new RangeError(`readString: len=${len} at ptr=${ptr} out of bounds`);
-    }
-    const bytes = new Uint8Array(buffer, ptr + 4, len);
-    return new TextDecoder().decode(bytes);
+    return readEphapaxString(this.memory.buffer, ptr);
   }
 }
 
@@ -85,16 +91,10 @@ class HypatiaTEA {
 // window_open / ipc_open / ipc_recv) is exercised only when a real host
 // invokes it; on the panel side, index.html drives the loop manually.
 function makeGossamerHost(memory) {
-  const readString = (ptr) => {
-    const view = new DataView(memory.buffer);
-    const len = view.getInt32(ptr, true);
-    const bytes = new Uint8Array(memory.buffer, ptr + 4, len);
-    return new TextDecoder().decode(bytes);
-  };
+  const readString = (ptr) => readEphapaxString(memory.buffer, ptr);
 
   let ws = null;
   const recvQueue = [];
-  const pendingRecv = [];
 
   return {
     // Window handles -----------------------------------------------------
@@ -124,24 +124,22 @@ function makeGossamerHost(memory) {
           const bytes = evt.data instanceof ArrayBuffer
             ? new Uint8Array(evt.data)
             : new TextEncoder().encode(String(evt.data));
-          if (pendingRecv.length > 0) {
-            pendingRecv.shift()(bytes);
-          } else {
-            recvQueue.push(bytes);
-          }
+          recvQueue.push(bytes);
         };
       } catch (err) {
         console.warn('ipc_open failed:', err);
       }
       return IPC_HANDLE;
     },
-    ipc_recv: (ch) => {
-      // Polling stub: real host returns (ch, bytes). Browser bridge
-      // delivers via WebSocket onmessage; the TEA loop in index.html
-      // dispatches Msg directly rather than polling, so this is unused
-      // in the panel path.
-      const _ = recvQueue.shift();
-      return ch;
+    ipc_recv: (_ch) => {
+      // Stub: real host returns a bytes pointer; returning a non-zero
+      // channel handle here would be dereferenced by wasm as bogus
+      // memory. Return 0 (no bytes available) until the bytes ABI is
+      // pinned and we can allocate into wasm memory. The TEA loop in
+      // index.html dispatches Msg directly rather than polling, so the
+      // panel path doesn't invoke this; tracked in the loader-followup
+      // issue.
+      return 0;
     },
     ipc_send: (ch, _bodyPtr) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
