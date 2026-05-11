@@ -157,10 +157,8 @@ Until the end-to-end compile path lands upstream and a wasm artifact is
 produced by CI, `index.html` loading + console-error-free behaviour is a
 manual step:
 
-. Run `iex -S mix` (or `mix run --no-halt`) so the Hypatia OTP
-  application starts and the Bandit HTTP listener
-  (`Hypatia.Web.Router`) comes up on `:9090`. The port is configurable
-  via `:hypatia, :http_port` in `config/config.exs`.
+. Run `mix phx.server` (or the equivalent backend launcher) so the
+  Hypatia OTP listener is up on `:9090`.
 . Place a compiled `hypatia_gui.wasm` at
   `src/ui/public/assets/wasm/hypatia_gui.wasm` (download the artifact
   from the `Build Gossamer GUI` workflow once it is producing one).
