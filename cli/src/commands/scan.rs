@@ -262,7 +262,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Sort findings by severity (highest first)
-    findings.sort_by(|a, b| b.severity.cmp(&a.severity));
+    findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
 
     // Build summary
     let summary = build_summary(&findings, files_scanned);

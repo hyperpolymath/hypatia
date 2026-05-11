@@ -291,17 +291,17 @@ async fn search_registry(args: &SearchArgs, registry_url: &str) -> Result<Vec<Se
             items.sort_by(|a, b| a.name.cmp(&b.name));
         }
         SortField::Downloads => {
-            items.sort_by(|a, b| b.downloads.cmp(&a.downloads));
+            items.sort_by_key(|i| std::cmp::Reverse(i.downloads));
         }
         SortField::Updated => {
-            items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            items.sort_by_key(|i| std::cmp::Reverse(i.updated_at));
         }
         SortField::Stars => {
-            items.sort_by(|a, b| b.stars.cmp(&a.stars));
+            items.sort_by_key(|i| std::cmp::Reverse(i.stars));
         }
         SortField::Relevance => {
             // For mock data, sort by downloads as proxy for relevance
-            items.sort_by(|a, b| b.downloads.cmp(&a.downloads));
+            items.sort_by_key(|i| std::cmp::Reverse(i.downloads));
         }
     }
 
