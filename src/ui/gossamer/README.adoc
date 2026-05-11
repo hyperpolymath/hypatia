@@ -118,14 +118,18 @@ constructor alignment). Type-check pending toolchain availability.
   subsequent runs are seconds.
 
 | `.eph` → `.wasm` compilation (CI)
-| ⏸  Gated on an upstream CLI wrapper (hyperpolymath/ephapax#36).
-  Ephapax v1.0.0 ships `ephapax-cli compile-sexpr` (stage 2) and an
-  Idris2 parser (stage 1) but no single subcommand that chains them.
-  The workflow probes for `just compile-affine`,
-  `ephapax-cli compile-eph`, and `ephapax-cli compile-affine`; when any
-  appears upstream, the compile step promotes itself automatically. On
-  successful compile, the workflow then runs `wasm-validate` (wabt) on
-  the produced `hypatia_gui.wasm` before uploading the artifact.
+| ⏸  Gated on the v2 grammar in `ephapax-parser` upstream
+  (hyperpolymath/ephapax#36). Ephapax v1.0.0 already ships the
+  `ephapax compile <file> -o <out>` subcommand, but its parser only
+  accepts top-level `fn` and `type` declarations. `bridge.eph` uses
+  v2 constructs (`module`, `import`, `extern "gossamer"`, `data`,
+  `match`, `let!`) that the v1.0.0 parser rejects with a syntax
+  error — the missing piece is the parser, not the CLI wrapper.
+  The workflow probes for `ephapax compile`, `ephapax compile-eph`,
+  `ephapax compile-affine`, and `just compile-affine`; whichever
+  starts accepting `bridge.eph` first wins. On successful compile,
+  the workflow runs `wasm-validate` (wabt) on the produced
+  `hypatia_gui.wasm` before uploading the artifact.
 |===
 
 == Local build

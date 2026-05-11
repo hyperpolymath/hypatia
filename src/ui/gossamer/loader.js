@@ -25,9 +25,15 @@
 // yet; the working assumption is "ptr returned from the export points
 // to a header word containing the i32 byte length, followed by len
 // bytes of UTF-8". `readString` enforces that with a bounds check so a
-// mismatch surfaces as a clear error rather than a silent garble. When
-// the ABI is pinned upstream (tracked alongside hyperpolymath/ephapax#36)
-// this routine becomes the single point of change.
+// mismatch surfaces as a clear error rather than a silent garble.
+//
+// The verification gate (issue #215) is hyperpolymath/ephapax#36, which
+// tracks the v2 grammar in `ephapax-parser`: bridge.eph uses module /
+// import / extern / data / match / let! constructs that the v1.0.0
+// parser rejects, so no real `hypatia_gui.wasm` exists to test against
+// yet. The `ephapax compile` subcommand already ships in v1.0.0; once
+// the parser learns v2, this routine becomes the single point of
+// change if the ABI differs from the assumed convention.
 
 const WINDOW_HANDLE = 1;
 // IPC channel handles are allocated per `ipc_open` starting at 2 so that
