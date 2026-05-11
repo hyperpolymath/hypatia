@@ -346,12 +346,7 @@ pub trait ForgeAdapter: Send + Sync {
     ) -> Result<Vec<WorkflowRun>>;
 
     /// Get a specific workflow run
-    async fn get_workflow_run(
-        &self,
-        owner: &str,
-        repo: &str,
-        run_id: &str,
-    ) -> Result<WorkflowRun>;
+    async fn get_workflow_run(&self, owner: &str, repo: &str, run_id: &str) -> Result<WorkflowRun>;
 
     // ============== Branch Protection ==============
 
@@ -492,8 +487,12 @@ pub trait ForgeAdapter: Send + Sync {
     ) -> Result<CheckRun>;
 
     /// List check runs for a commit
-    async fn list_check_runs(&self, owner: &str, repo: &str, ref_name: &str)
-        -> Result<Vec<CheckRun>>;
+    async fn list_check_runs(
+        &self,
+        owner: &str,
+        repo: &str,
+        ref_name: &str,
+    ) -> Result<Vec<CheckRun>>;
 
     // ============== Webhooks ==============
 
@@ -547,10 +546,7 @@ pub mod defaults {
     }
 
     /// Default webhook parsing for forges without complex signature validation
-    pub fn simple_webhook_parse(
-        event_type: &str,
-        payload: &[u8],
-    ) -> Result<WebhookPayload> {
+    pub fn simple_webhook_parse(event_type: &str, payload: &[u8]) -> Result<WebhookPayload> {
         let event = match event_type {
             "push" => WebhookEvent::Push,
             "pull_request" | "merge_request" => WebhookEvent::PullRequest,

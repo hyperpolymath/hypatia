@@ -147,16 +147,15 @@ impl FleetTestHarness {
         output
             .lines()
             .find(|line| line.contains(metric_name))
-            .and_then(|line| {
-                line.split(':')
-                    .last()
-                    .and_then(|v| v.trim().parse().ok())
-            })
+            .and_then(|line| line.split(':').last().and_then(|v| v.trim().parse().ok()))
             .unwrap_or(0)
     }
 
     /// Execute the entire fleet pipeline in order
-    async fn execute_pipeline(&mut self, pipeline: &[(&str, Vec<&str>)]) -> Result<Vec<BotExecutionResult>> {
+    async fn execute_pipeline(
+        &mut self,
+        pipeline: &[(&str, Vec<&str>)],
+    ) -> Result<Vec<BotExecutionResult>> {
         let mut results = Vec::new();
 
         for (bot_name, args) in pipeline {
@@ -254,7 +253,10 @@ async fn test_sequential_bot_execution() -> Result<()> {
     // Define the standard pipeline order
     let pipeline: Vec<(&str, Vec<&str>)> = vec![
         // Phase 1: Analysis bots
-        ("robot-repo-automaton", vec!["analyze", "--output-format", "json"]),
+        (
+            "robot-repo-automaton",
+            vec!["analyze", "--output-format", "json"],
+        ),
         ("glambot", vec!["check", "--report"]),
         // Phase 2: Fix bots
         ("finishing-bot", vec!["fix", "--dry-run"]),
@@ -419,14 +421,8 @@ async fn test_metrics_collection() -> Result<()> {
 
     // Verify metrics structure
     assert!(metrics.get("run_id").is_some());
-    assert_eq!(
-        metrics["totals"]["alerts"].as_u64().unwrap(),
-        7
-    );
-    assert_eq!(
-        metrics["totals"]["fixes"].as_u64().unwrap(),
-        5
-    );
+    assert_eq!(metrics["totals"]["alerts"].as_u64().unwrap(), 7);
+    assert_eq!(metrics["totals"]["fixes"].as_u64().unwrap(), 5);
 
     info!("Metrics collection verified");
     Ok(())
@@ -444,15 +440,34 @@ fn main() {
     println!("================================\n");
 
     // Run tests and collect results
-    let tests: Vec<(&str, fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>)> = vec![
-        ("test_empty_repo_pipeline", || Box::pin(test_empty_repo_pipeline())),
-        ("test_sequential_bot_execution", || Box::pin(test_sequential_bot_execution())),
-        ("test_shared_context_propagation", || Box::pin(test_shared_context_propagation())),
-        ("test_bot_failure_handling", || Box::pin(test_bot_failure_handling())),
-        ("test_pipeline_timeout_handling", || Box::pin(test_pipeline_timeout_handling())),
-        ("test_alert_aggregation", || Box::pin(test_alert_aggregation())),
-        ("test_fix_deduplication", || Box::pin(test_fix_deduplication())),
-        ("test_metrics_collection", || Box::pin(test_metrics_collection())),
+    let tests: Vec<(
+        &str,
+        fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>,
+    )> = vec![
+        ("test_empty_repo_pipeline", || {
+            Box::pin(test_empty_repo_pipeline())
+        }),
+        ("test_sequential_bot_execution", || {
+            Box::pin(test_sequential_bot_execution())
+        }),
+        ("test_shared_context_propagation", || {
+            Box::pin(test_shared_context_propagation())
+        }),
+        ("test_bot_failure_handling", || {
+            Box::pin(test_bot_failure_handling())
+        }),
+        ("test_pipeline_timeout_handling", || {
+            Box::pin(test_pipeline_timeout_handling())
+        }),
+        ("test_alert_aggregation", || {
+            Box::pin(test_alert_aggregation())
+        }),
+        ("test_fix_deduplication", || {
+            Box::pin(test_fix_deduplication())
+        }),
+        ("test_metrics_collection", || {
+            Box::pin(test_metrics_collection())
+        }),
     ];
 
     let mut passed = 0;

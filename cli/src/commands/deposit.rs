@@ -367,12 +367,11 @@ fn parse_ruleset(content: &str, path: &PathBuf) -> Result<Ruleset> {
     let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     match extension {
-        "json" => serde_json::from_str(content)
-            .with_context(|| "Failed to parse ruleset as JSON"),
-        "yaml" | "yml" => serde_yaml::from_str(content)
-            .with_context(|| "Failed to parse ruleset as YAML"),
-        "toml" => toml::from_str(content)
-            .with_context(|| "Failed to parse ruleset as TOML"),
+        "json" => serde_json::from_str(content).with_context(|| "Failed to parse ruleset as JSON"),
+        "yaml" | "yml" => {
+            serde_yaml::from_str(content).with_context(|| "Failed to parse ruleset as YAML")
+        }
+        "toml" => toml::from_str(content).with_context(|| "Failed to parse ruleset as TOML"),
         _ => {
             // Try each format
             if let Ok(ruleset) = serde_json::from_str(content) {
@@ -403,8 +402,16 @@ fn validate_ruleset(ruleset: &Ruleset) -> Result<ValidationResult> {
         errors.push("Ruleset name must be 100 characters or less".to_string());
     }
 
-    if !ruleset.metadata.name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-        errors.push("Ruleset name must contain only alphanumeric characters, hyphens, and underscores".to_string());
+    if !ruleset
+        .metadata
+        .name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        errors.push(
+            "Ruleset name must contain only alphanumeric characters, hyphens, and underscores"
+                .to_string(),
+        );
     }
 
     if ruleset.metadata.version.is_empty() {
@@ -500,9 +507,7 @@ async fn submit_to_registry(
     // For now, generate a mock ID
     let ruleset_id = format!(
         "{}/{}/{}",
-        ruleset.metadata.category,
-        ruleset.metadata.name,
-        ruleset.metadata.version
+        ruleset.metadata.category, ruleset.metadata.name, ruleset.metadata.version
     );
 
     debug!("Would submit to: {}/api/v1/rulesets", registry_url);
@@ -520,7 +525,11 @@ fn print_ruleset_summary(ruleset: &Ruleset, hash: &str) -> Result<()> {
     println!("  {}: {}", "Name".dimmed(), ruleset.metadata.name);
     println!("  {}: {}", "Version".dimmed(), ruleset.metadata.version);
     println!("  {}: {}", "Category".dimmed(), ruleset.metadata.category);
-    println!("  {}: {}", "Description".dimmed(), ruleset.metadata.description);
+    println!(
+        "  {}: {}",
+        "Description".dimmed(),
+        ruleset.metadata.description
+    );
     println!(
         "  {}: {}",
         "Languages".dimmed(),
@@ -542,7 +551,11 @@ fn print_ruleset_summary(ruleset: &Ruleset, hash: &str) -> Result<()> {
     println!(
         "  {}: {}",
         "Private".dimmed(),
-        if ruleset.metadata.private { "yes" } else { "no" }
+        if ruleset.metadata.private {
+            "yes"
+        } else {
+            "no"
+        }
     );
     println!("  {}: {} rules", "Rules".dimmed(), ruleset.rules.len());
     println!("  {}: {}", "Hash".dimmed(), hash);

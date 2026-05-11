@@ -95,7 +95,10 @@ impl ArangoDbContainer {
             .with_exposed_port(Self::DEFAULT_PORT.into())
             .with_env_var("ARANGO_ROOT_PASSWORD", Self::DEFAULT_PASSWORD);
 
-        let container: testcontainers::ContainerAsync<GenericImage> = image.start().await.context("Failed to start ArangoDB container")?;
+        let container: testcontainers::ContainerAsync<GenericImage> = image
+            .start()
+            .await
+            .context("Failed to start ArangoDB container")?;
 
         let port: u16 = container
             .get_host_port_ipv4(Self::DEFAULT_PORT)
@@ -204,7 +207,11 @@ impl MockArangoClient {
         Ok(self.rules.get(key).cloned())
     }
 
-    async fn execute_aql(&self, query: &str, _bind_vars: serde_json::Value) -> Result<Vec<serde_json::Value>> {
+    async fn execute_aql(
+        &self,
+        query: &str,
+        _bind_vars: serde_json::Value,
+    ) -> Result<Vec<serde_json::Value>> {
         debug!("Executing AQL: {}", query);
         // Mock AQL execution - return empty results
         Ok(vec![])
@@ -412,7 +419,9 @@ async fn test_aql_query_execution() -> Result<()> {
         RETURN { repo: repo.name, alert: alert.rule_id }
     "#;
 
-    let results = client.execute_aql(graph_query, serde_json::json!({})).await?;
+    let results = client
+        .execute_aql(graph_query, serde_json::json!({}))
+        .await?;
     assert!(results.is_empty());
 
     info!("AQL query execution test passed");
@@ -502,14 +511,23 @@ fn main() {
     println!("Running ArangoDB Integration Tests\n");
     println!("===================================\n");
 
-    let tests: Vec<(&str, fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>)> = vec![
+    let tests: Vec<(
+        &str,
+        fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>,
+    )> = vec![
         ("test_mock_connection", || Box::pin(test_mock_connection())),
         ("test_repository_crud", || Box::pin(test_repository_crud())),
         ("test_alert_storage", || Box::pin(test_alert_storage())),
         ("test_rule_management", || Box::pin(test_rule_management())),
-        ("test_aql_query_execution", || Box::pin(test_aql_query_execution())),
-        ("test_connection_timeout", || Box::pin(test_connection_timeout())),
-        ("test_bulk_insert_performance", || Box::pin(test_bulk_insert_performance())),
+        ("test_aql_query_execution", || {
+            Box::pin(test_aql_query_execution())
+        }),
+        ("test_connection_timeout", || {
+            Box::pin(test_connection_timeout())
+        }),
+        ("test_bulk_insert_performance", || {
+            Box::pin(test_bulk_insert_performance())
+        }),
     ];
 
     let mut passed = 0;

@@ -26,10 +26,9 @@ use crate::error::AdapterError;
 
 type HmacSha256 = Hmac<Sha256>;
 use crate::forge::{
-    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
-    ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
-    RunStatus, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
-    WorkflowRun, WorkflowState,
+    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
+    IssueState, PullRequest, PullRequestState, Repository, RunConclusion, RunStatus, Visibility,
+    WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun, WorkflowState,
 };
 
 type Result<T> = std::result::Result<T, AdapterError>;
@@ -87,7 +86,9 @@ impl SourcehutAdapter {
             .default_headers(headers)
             .user_agent("cicd-hyper-a/1.0")
             .build()
-            .map_err(|e| AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             client,
@@ -98,7 +99,11 @@ impl SourcehutAdapter {
 
     /// Helper to build git.sr.ht API URLs
     fn git_api_url(&self, path: &str) -> String {
-        format!("{}/api{}", self.base_url.replace("sr.ht", "git.sr.ht"), path)
+        format!(
+            "{}/api{}",
+            self.base_url.replace("sr.ht", "git.sr.ht"),
+            path
+        )
     }
 
     /// Helper to build builds.sr.ht API URLs
@@ -162,8 +167,9 @@ impl SourcehutAdapter {
 
             // Extract results from the specified key
             let page_results: Vec<T> = if let Some(arr) = body.get(results_key) {
-                serde_json::from_value(arr.clone())
-                    .map_err(|e| AdapterError::ApiError(format!("Failed to parse results: {}", e)))?
+                serde_json::from_value(arr.clone()).map_err(|e| {
+                    AdapterError::ApiError(format!("Failed to parse results: {}", e))
+                })?
             } else {
                 Vec::new()
             };
@@ -172,10 +178,7 @@ impl SourcehutAdapter {
             results.extend(page_results);
 
             // Check for next cursor
-            cursor = body
-                .get("next")
-                .and_then(|n| n.as_str())
-                .map(String::from);
+            cursor = body.get("next").and_then(|n| n.as_str()).map(String::from);
 
             page += 1;
             if is_empty || cursor.is_none() || page >= max_pages {
@@ -417,7 +420,12 @@ impl ForgeAdapter for SourcehutAdapter {
             .into_iter()
             .map(|r| {
                 let mut repo = Repository::from(r);
-                repo.url = format!("{}/~{}/{}", self.base_url.replace("sr.ht", "git.sr.ht"), owner, &repo.name);
+                repo.url = format!(
+                    "{}/~{}/{}",
+                    self.base_url.replace("sr.ht", "git.sr.ht"),
+                    owner,
+                    &repo.name
+                );
                 repo.owner = owner.to_string();
                 repo
             })
@@ -494,7 +502,8 @@ impl ForgeAdapter for SourcehutAdapter {
         // SourceHut doesn't have a file creation API like GitHub
         // Users need to push .build.yml to their repo
         Err(AdapterError::ApiError(
-            "SourceHut requires pushing build manifests via git. Use git push to deploy .build.yml".to_string(),
+            "SourceHut requires pushing build manifests via git. Use git push to deploy .build.yml"
+                .to_string(),
         ))
     }
 
@@ -565,7 +574,12 @@ tasks:
             .filter(|j| j.tags.contains(&repo.to_string()))
             .map(|j| {
                 let mut run = WorkflowRun::from(j);
-                run.url = format!("{}/~{}/job/{}", self.base_url.replace("sr.ht", "builds.sr.ht"), owner, &run.id);
+                run.url = format!(
+                    "{}/~{}/job/{}",
+                    self.base_url.replace("sr.ht", "builds.sr.ht"),
+                    owner,
+                    &run.id
+                );
                 run
             })
             .collect();
@@ -622,7 +636,8 @@ tasks:
         // SourceHut doesn't have branch protection in the traditional sense
         // Protection is managed via ACLs
         Err(AdapterError::ApiError(
-            "SourceHut uses ACL-based access control. Configure via web UI or API ACLs.".to_string(),
+            "SourceHut uses ACL-based access control. Configure via web UI or API ACLs."
+                .to_string(),
         ))
     }
 
@@ -637,7 +652,8 @@ tasks:
     ) -> Result<String> {
         // SourceHut uses email-based patch review via lists.sr.ht
         Err(AdapterError::ApiError(
-            "SourceHut uses email-based patch review. Send patches to the project mailing list.".to_string(),
+            "SourceHut uses email-based patch review. Send patches to the project mailing list."
+                .to_string(),
         ))
     }
 
@@ -741,16 +757,14 @@ tasks:
 
         let issues: Vec<Issue> = tickets
             .into_iter()
-            .filter(|t| {
-                match state {
-                    Some(IssueState::Open) => {
-                        matches!(t.status.as_str(), "reported" | "confirmed" | "in_progress")
-                    }
-                    Some(IssueState::Closed) => {
-                        matches!(t.status.as_str(), "resolved" | "closed" | "wontfix")
-                    }
-                    None => true,
+            .filter(|t| match state {
+                Some(IssueState::Open) => {
+                    matches!(t.status.as_str(), "reported" | "confirmed" | "in_progress")
                 }
+                Some(IssueState::Closed) => {
+                    matches!(t.status.as_str(), "resolved" | "closed" | "wontfix")
+                }
+                None => true,
             })
             .map(|t| {
                 let mut issue = Issue::from(t);
@@ -864,8 +878,16 @@ tasks:
     }
 
     async fn close_issue(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
-        self.update_issue(owner, repo, number, None, None, Some(IssueState::Closed), None)
-            .await?;
+        self.update_issue(
+            owner,
+            repo,
+            number,
+            None,
+            None,
+            Some(IssueState::Closed),
+            None,
+        )
+        .await?;
         Ok(())
     }
 
@@ -920,7 +942,8 @@ tasks:
     ) -> Result<Comment> {
         // SourceHut doesn't have PRs - use mailing lists
         Err(AdapterError::ApiError(
-            "SourceHut uses mailing list discussions. Reply to the patch email instead.".to_string(),
+            "SourceHut uses mailing list discussions. Reply to the patch email instead."
+                .to_string(),
         ))
     }
 
@@ -1185,8 +1208,8 @@ tasks:
                 }
                 Some(sig) => {
                     let sig_hex = sig.strip_prefix("sha256=").unwrap_or(sig);
-                    let mut mac = HmacSha256::new_from_slice(expected_secret.as_bytes())
-                        .map_err(|_| {
+                    let mut mac =
+                        HmacSha256::new_from_slice(expected_secret.as_bytes()).map_err(|_| {
                             AdapterError::AuthError("Invalid webhook secret".to_string())
                         })?;
                     mac.update(payload);

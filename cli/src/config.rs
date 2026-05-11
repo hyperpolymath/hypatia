@@ -303,15 +303,11 @@ impl Config {
         let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         match extension {
-            "toml" => {
-                toml::from_str(&content).with_context(|| "Failed to parse TOML config")
-            }
+            "toml" => toml::from_str(&content).with_context(|| "Failed to parse TOML config"),
             "yaml" | "yml" => {
                 serde_yaml::from_str(&content).with_context(|| "Failed to parse YAML config")
             }
-            "json" => {
-                serde_json::from_str(&content).with_context(|| "Failed to parse JSON config")
-            }
+            "json" => serde_json::from_str(&content).with_context(|| "Failed to parse JSON config"),
             _ => {
                 // Try TOML first, then YAML, then JSON
                 if let Ok(config) = toml::from_str(&content) {
@@ -418,8 +414,12 @@ impl Config {
             .context("Could not determine config directory")?;
 
         let config_dir = proj_dirs.config_dir();
-        std::fs::create_dir_all(config_dir)
-            .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+        std::fs::create_dir_all(config_dir).with_context(|| {
+            format!(
+                "Failed to create config directory: {}",
+                config_dir.display()
+            )
+        })?;
 
         let config_file = config_dir.join("config.toml");
 
@@ -586,7 +586,8 @@ verbose = false
             }
             _ => {
                 // Store as custom setting
-                self.custom.insert(key.to_string(), toml::Value::String(value.to_string()));
+                self.custom
+                    .insert(key.to_string(), toml::Value::String(value.to_string()));
             }
         }
 

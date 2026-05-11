@@ -638,17 +638,38 @@ fn main() {
     println!("Running Git Hooks Integration Tests\n");
     println!("====================================\n");
 
-    let tests: Vec<(&str, fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>)> = vec![
-        ("test_hook_installation", || Box::pin(test_hook_installation())),
-        ("test_precommit_hook_success", || Box::pin(test_precommit_hook_success())),
-        ("test_precommit_hook_failure", || Box::pin(test_precommit_hook_failure())),
-        ("test_hook_bypass_with_no_verify", || Box::pin(test_hook_bypass_with_no_verify())),
-        ("test_spdx_validation_hook", || Box::pin(test_spdx_validation_hook())),
-        ("test_sha_pin_validation_hook", || Box::pin(test_sha_pin_validation_hook())),
-        ("test_permissions_validation_hook", || Box::pin(test_permissions_validation_hook())),
+    let tests: Vec<(
+        &str,
+        fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>,
+    )> = vec![
+        ("test_hook_installation", || {
+            Box::pin(test_hook_installation())
+        }),
+        ("test_precommit_hook_success", || {
+            Box::pin(test_precommit_hook_success())
+        }),
+        ("test_precommit_hook_failure", || {
+            Box::pin(test_precommit_hook_failure())
+        }),
+        ("test_hook_bypass_with_no_verify", || {
+            Box::pin(test_hook_bypass_with_no_verify())
+        }),
+        ("test_spdx_validation_hook", || {
+            Box::pin(test_spdx_validation_hook())
+        }),
+        ("test_sha_pin_validation_hook", || {
+            Box::pin(test_sha_pin_validation_hook())
+        }),
+        ("test_permissions_validation_hook", || {
+            Box::pin(test_permissions_validation_hook())
+        }),
         ("test_multiple_hooks", || Box::pin(test_multiple_hooks())),
-        ("test_hook_environment_variables", || Box::pin(test_hook_environment_variables())),
-        ("test_hook_with_staged_changes_only", || Box::pin(test_hook_with_staged_changes_only())),
+        ("test_hook_environment_variables", || {
+            Box::pin(test_hook_environment_variables())
+        }),
+        ("test_hook_with_staged_changes_only", || {
+            Box::pin(test_hook_with_staged_changes_only())
+        }),
     ];
 
     let mut passed = 0;

@@ -219,7 +219,13 @@ pub fn from_severity(severity: &str, count: usize) -> i32 {
 }
 
 /// Get the highest severity exit code from a list of counts
-pub fn highest_severity(critical: usize, high: usize, medium: usize, low: usize, info: usize) -> i32 {
+pub fn highest_severity(
+    critical: usize,
+    high: usize,
+    medium: usize,
+    low: usize,
+    info: usize,
+) -> i32 {
     if critical > 0 {
         CRITICAL_FINDINGS
     } else if high > 0 {
@@ -242,7 +248,10 @@ mod tests {
     #[test]
     fn test_describe() {
         assert_eq!(describe(SUCCESS), "Success");
-        assert_eq!(describe(CRITICAL_FINDINGS), "Critical severity findings detected");
+        assert_eq!(
+            describe(CRITICAL_FINDINGS),
+            "Critical severity findings detected"
+        );
         assert_eq!(describe(999), "Unknown error");
     }
 

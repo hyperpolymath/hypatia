@@ -240,8 +240,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Scan for configuration issues
-    if categories.contains(&"configuration".to_string())
-        || categories.contains(&"all".to_string())
+    if categories.contains(&"configuration".to_string()) || categories.contains(&"all".to_string())
     {
         if let Some(pb) = &progress {
             pb.set_message("Checking configurations...");
@@ -308,7 +307,14 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Exit with error if critical findings
-    if results.summary.by_severity.get("critical").copied().unwrap_or(0) > 0 {
+    if results
+        .summary
+        .by_severity
+        .get("critical")
+        .copied()
+        .unwrap_or(0)
+        > 0
+    {
         std::process::exit(1);
     }
 
@@ -345,12 +351,8 @@ fn build_summary(findings: &[Finding], files_scanned: usize) -> ScanSummary {
     let mut auto_fixable = 0;
 
     for finding in findings {
-        *by_severity
-            .entry(finding.severity.to_string())
-            .or_insert(0) += 1;
-        *by_category
-            .entry(finding.category.to_string())
-            .or_insert(0) += 1;
+        *by_severity.entry(finding.severity.to_string()).or_insert(0) += 1;
+        *by_category.entry(finding.category.to_string()).or_insert(0) += 1;
         if finding.auto_fixable {
             auto_fixable += 1;
         }
@@ -500,9 +502,7 @@ fn scan_security_policy(repo_path: &Path, skipped_checks: &[String]) -> Result<V
 
     let security_paths = ["SECURITY.md", "security.md", ".github/SECURITY.md"];
 
-    let has_security = security_paths
-        .iter()
-        .any(|p| repo_path.join(p).exists());
+    let has_security = security_paths.iter().any(|p| repo_path.join(p).exists());
 
     if !has_security {
         findings.push(Finding {
@@ -703,7 +703,11 @@ fn scan_configurations(repo_path: &Path, skipped_checks: &[String]) -> Result<Ve
 
     // Check for CONTRIBUTING
     if !skipped_checks.contains(&"missing-contributing".to_string()) {
-        let contrib_paths = ["CONTRIBUTING.md", "CONTRIBUTING.adoc", ".github/CONTRIBUTING.md"];
+        let contrib_paths = [
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.adoc",
+            ".github/CONTRIBUTING.md",
+        ];
         let has_contrib = contrib_paths.iter().any(|p| repo_path.join(p).exists());
 
         if !has_contrib {
@@ -733,11 +737,7 @@ fn output_plain_format(results: &ScanResults, detailed: bool) -> Result<()> {
         "Scan Results for:".bold(),
         results.repository_path.display()
     );
-    println!(
-        "{} {} ms\n",
-        "Scan duration:".dimmed(),
-        results.duration_ms
-    );
+    println!("{} {} ms\n", "Scan duration:".dimmed(), results.duration_ms);
 
     if results.findings.is_empty() {
         println!("{}", "No issues found.".green().bold());

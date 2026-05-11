@@ -163,7 +163,10 @@ pub async fn happy_path_build_with_config(config: ScenarioConfig) -> ScenarioRes
     // Add initial logs
     ci.add_log(
         &build_id,
-        LogEntry::info(format!("Starting build for {}/{}", config.owner, config.repo)),
+        LogEntry::info(format!(
+            "Starting build for {}/{}",
+            config.owner, config.repo
+        )),
     )
     .await
     .unwrap();
@@ -230,8 +233,11 @@ pub async fn happy_path_build_with_config(config: ScenarioConfig) -> ScenarioRes
 /// # Returns
 /// A `ScenarioResult` with a failed build due to test failures
 pub async fn failing_test_scenario() -> ScenarioResult {
-    failing_test_scenario_with_config(ScenarioConfig::default(), vec!["test_user_auth".to_string()])
-        .await
+    failing_test_scenario_with_config(
+        ScenarioConfig::default(),
+        vec!["test_user_auth".to_string()],
+    )
+    .await
 }
 
 /// Run a failing test scenario with specific failing tests
@@ -535,9 +541,12 @@ pub async fn deployment_rollback_with_reason(failure_reason: String) -> Scenario
     ci.add_log(&build_id, LogEntry::info("Build completed successfully"))
         .await
         .unwrap();
-    ci.add_log(&build_id, LogEntry::info("Preparing deployment to staging..."))
-        .await
-        .unwrap();
+    ci.add_log(
+        &build_id,
+        LogEntry::info("Preparing deployment to staging..."),
+    )
+    .await
+    .unwrap();
     ci.add_log(&build_id, LogEntry::info("Uploading artifacts..."))
         .await
         .unwrap();
@@ -560,9 +569,12 @@ pub async fn deployment_rollback_with_reason(failure_reason: String) -> Scenario
     )
     .await
     .unwrap();
-    ci.add_log(&build_id, LogEntry::info("Rolling back to previous version..."))
-        .await
-        .unwrap();
+    ci.add_log(
+        &build_id,
+        LogEntry::info("Rolling back to previous version..."),
+    )
+    .await
+    .unwrap();
     ci.add_log(&build_id, LogEntry::info("Rollback completed successfully"))
         .await
         .unwrap();
@@ -818,12 +830,9 @@ pub async fn matrix_builds_with_config(matrix: MatrixConfig) -> ScenarioResult {
             .map(|(key, value)| format!("{}={}", key, value))
             .collect::<Vec<_>>()
             .join(", ");
-        ci.add_log(
-            &build_id,
-            LogEntry::info(format!("Running: {}", combo_str)),
-        )
-        .await
-        .unwrap();
+        ci.add_log(&build_id, LogEntry::info(format!("Running: {}", combo_str)))
+            .await
+            .unwrap();
     }
 
     ci.complete_build(&build_id, BuildConclusion::Success)
@@ -984,15 +993,15 @@ pub async fn cache_hit_miss_with_config(cache_config: CacheScenarioConfig) -> Sc
         .await
         .unwrap();
     } else {
-        ci.add_log(&build_id, LogEntry::info("Cache miss, rebuilding dependencies..."))
-            .await
-            .unwrap();
         ci.add_log(
             &build_id,
-            LogEntry::info("Dependencies built successfully"),
+            LogEntry::info("Cache miss, rebuilding dependencies..."),
         )
         .await
         .unwrap();
+        ci.add_log(&build_id, LogEntry::info("Dependencies built successfully"))
+            .await
+            .unwrap();
         ci.add_log(
             &build_id,
             LogEntry::info(format!(
@@ -1173,7 +1182,10 @@ impl ScenarioBuilder {
 
         // Add custom findings
         for finding in self.custom_findings.clone() {
-            self.ci.add_security_finding(&build_id, finding).await.unwrap();
+            self.ci
+                .add_security_finding(&build_id, finding)
+                .await
+                .unwrap();
         }
 
         // Add custom artifacts
@@ -1331,8 +1343,14 @@ mod tests {
         let matrix = MatrixConfig {
             dimensions: {
                 let mut map = HashMap::new();
-                map.insert("os".to_string(), vec!["ubuntu".to_string(), "macos".to_string()]);
-                map.insert("version".to_string(), vec!["1".to_string(), "2".to_string()]);
+                map.insert(
+                    "os".to_string(),
+                    vec!["ubuntu".to_string(), "macos".to_string()],
+                );
+                map.insert(
+                    "version".to_string(),
+                    vec!["1".to_string(), "2".to_string()],
+                );
                 map
             },
             exclude: vec![],
@@ -1349,8 +1367,14 @@ mod tests {
         let matrix = MatrixConfig {
             dimensions: {
                 let mut map = HashMap::new();
-                map.insert("os".to_string(), vec!["ubuntu".to_string(), "macos".to_string()]);
-                map.insert("version".to_string(), vec!["1".to_string(), "2".to_string()]);
+                map.insert(
+                    "os".to_string(),
+                    vec!["ubuntu".to_string(), "macos".to_string()],
+                );
+                map.insert(
+                    "version".to_string(),
+                    vec!["1".to_string(), "2".to_string()],
+                );
                 map
             },
             exclude: vec![{

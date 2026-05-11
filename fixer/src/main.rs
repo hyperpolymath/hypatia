@@ -64,7 +64,9 @@ enum Commands {
 fn main() {
     // Initialize logging
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("cicd_fixer=info".parse().unwrap()))
+        .with_env_filter(
+            EnvFilter::from_default_env().add_directive("cicd_fixer=info".parse().unwrap()),
+        )
         .init();
 
     let cli = Cli::parse();
@@ -77,7 +79,12 @@ fn main() {
         Commands::Fix { repo_path, dry_run } => {
             fix_repo(&fixer, &repo_path, dry_run);
         }
-        Commands::Batch { repos_dir, fix, dry_run, limit } => {
+        Commands::Batch {
+            repos_dir,
+            fix,
+            dry_run,
+            limit,
+        } => {
             batch_process(&fixer, &repos_dir, fix, dry_run, limit);
         }
         Commands::Pins => {
@@ -130,10 +137,7 @@ fn scan_repo(fixer: &CicdFixer, repo_path: &PathBuf, format: &str) {
 
                     println!(
                         "{} [{}] {} {}",
-                        severity_icon,
-                        fixable,
-                        issue.id,
-                        issue.file_path
+                        severity_icon, fixable, issue.id, issue.file_path
                     );
                     if let Some(line) = issue.line_number {
                         println!("   Line {}: {}", line, issue.description);
@@ -173,9 +177,14 @@ fn fix_repo(fixer: &CicdFixer, repo_path: &PathBuf, dry_run: bool) {
                 println!("    {}", result.message);
             }
 
-            println!("\nSummary: {} fixes {}, {} successful",
+            println!(
+                "\nSummary: {} fixes {}, {} successful",
                 applied,
-                if dry_run { "would be applied" } else { "applied" },
+                if dry_run {
+                    "would be applied"
+                } else {
+                    "applied"
+                },
                 success
             );
         }
@@ -223,15 +232,24 @@ fn batch_process(fixer: &CicdFixer, repos_dir: &PathBuf, fix: bool, dry_run: boo
                         Ok(fix_results) => {
                             let fixed = fix_results.iter().filter(|r| r.success).count();
                             total_fixed += fixed;
-                            println!("⚡ {} - {} issues, {} fixed", repo_name, result.issues.len(), fixed);
+                            println!(
+                                "⚡ {} - {} issues, {} fixed",
+                                repo_name,
+                                result.issues.len(),
+                                fixed
+                            );
                         }
                         Err(e) => {
                             warn!("Fix failed for {}: {}", repo_name, e);
                         }
                     }
                 } else {
-                    println!("⚠ {} - {} issues ({} auto-fixable)",
-                        repo_name, result.issues.len(), result.auto_fixable_count);
+                    println!(
+                        "⚠ {} - {} issues ({} auto-fixable)",
+                        repo_name,
+                        result.issues.len(),
+                        result.auto_fixable_count
+                    );
                 }
             }
             Err(e) => {
@@ -265,7 +283,10 @@ fn list_catalog(fixer: &CicdFixer) {
 
     println!("Auto-fixable patterns:");
     for pattern in fixer.catalog.auto_fixable() {
-        println!("  [{:?}] {} - {}", pattern.severity, pattern.id, pattern.description);
+        println!(
+            "  [{:?}] {} - {}",
+            pattern.severity, pattern.id, pattern.description
+        );
         println!("         Fix: {}", pattern.fix_pattern);
     }
 }

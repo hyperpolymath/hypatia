@@ -305,12 +305,7 @@ impl ForgeAdapter for GitLabAdapter {
             .collect())
     }
 
-    async fn get_workflow_run(
-        &self,
-        owner: &str,
-        repo: &str,
-        run_id: &str,
-    ) -> Result<WorkflowRun> {
+    async fn get_workflow_run(&self, owner: &str, repo: &str, run_id: &str) -> Result<WorkflowRun> {
         let project_path = format!("{}/{}", owner, repo);
         let url = format!(
             "{}/projects/{}/pipelines/{}",
@@ -505,10 +500,7 @@ impl ForgeAdapter for GitLabAdapter {
 
         let mut body = serde_json::Map::new();
         if let Some(msg) = commit_message {
-            body.insert(
-                "merge_commit_message".to_string(),
-                serde_json::json!(msg),
-            );
+            body.insert("merge_commit_message".to_string(), serde_json::json!(msg));
         }
         body.insert("squash".to_string(), serde_json::json!(true));
 
@@ -998,8 +990,7 @@ impl ForgeAdapter for GitLabAdapter {
             ref_name
         );
 
-        let response: Vec<GitLabCommitStatus> =
-            self.client.get(&url).send().await?.json().await?;
+        let response: Vec<GitLabCommitStatus> = self.client.get(&url).send().await?.json().await?;
 
         Ok(response
             .into_iter()

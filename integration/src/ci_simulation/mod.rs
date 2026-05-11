@@ -1107,10 +1107,8 @@ impl SimulatedCI for MockGitHubActions {
                     for job in &mut build.jobs {
                         if job.status == BuildStatus::Queued {
                             // Check if dependencies are met
-                            let deps_met = job
-                                .needs
-                                .iter()
-                                .all(|need| completed_jobs.contains(need));
+                            let deps_met =
+                                job.needs.iter().all(|need| completed_jobs.contains(need));
                             if deps_met {
                                 job.status = BuildStatus::InProgress;
                                 job.started_at = Some(Utc::now());

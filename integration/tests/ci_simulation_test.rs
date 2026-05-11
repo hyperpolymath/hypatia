@@ -8,8 +8,8 @@ use integration::ci_simulation::{
     assertions::{
         assert_all_jobs_success, assert_build_failure, assert_build_success,
         assert_category_present, assert_fix_suggested, assert_has_error_logs, assert_log_contains,
-        assert_max_severity, assert_no_error_logs, assert_no_false_positives, assert_rule_triggered,
-        assert_severity_correct, AssertionCollector,
+        assert_max_severity, assert_no_error_logs, assert_no_false_positives,
+        assert_rule_triggered, assert_severity_correct, AssertionCollector,
     },
     scenarios::{
         cache_hit_miss, cache_hit_miss_with_config, deployment_rollback,
@@ -421,7 +421,8 @@ mod scenario_tests {
             "test_session_timeout".to_string(),
         ];
 
-        let result = failing_test_scenario_with_config(ScenarioConfig::default(), failing_tests).await;
+        let result =
+            failing_test_scenario_with_config(ScenarioConfig::default(), failing_tests).await;
 
         assert!(result.is_failure());
         assert_log_contains(&result.logs, "test_user_login");
@@ -477,8 +478,7 @@ mod scenario_tests {
 
     #[tokio::test]
     async fn test_deployment_rollback_custom_reason() {
-        let result =
-            deployment_rollback_with_reason("Database migration failed".to_string()).await;
+        let result = deployment_rollback_with_reason("Database migration failed".to_string()).await;
 
         assert!(result.is_failure());
         assert_log_contains(&result.logs, "Database migration failed");
@@ -534,12 +534,13 @@ mod scenario_tests {
                 let mut map = HashMap::new();
                 map.insert(
                     "os".to_string(),
-                    vec!["ubuntu".to_string(), "macos".to_string(), "windows".to_string()],
+                    vec![
+                        "ubuntu".to_string(),
+                        "macos".to_string(),
+                        "windows".to_string(),
+                    ],
                 );
-                map.insert(
-                    "node".to_string(),
-                    vec!["18".to_string(), "20".to_string()],
-                );
+                map.insert("node".to_string(), vec!["18".to_string(), "20".to_string()]);
                 map
             },
             exclude: vec![],
@@ -987,9 +988,7 @@ mod error_handling_tests {
             .unwrap();
 
         // Try to complete again
-        let result = ci
-            .complete_build(&build_id, BuildConclusion::Failure)
-            .await;
+        let result = ci.complete_build(&build_id, BuildConclusion::Failure).await;
         assert!(matches!(
             result,
             Err(SimulationError::InvalidStateTransition { .. })
@@ -1020,7 +1019,10 @@ mod error_handling_tests {
         let mut ci = MockGitHubActions::new();
 
         let result = ci
-            .add_artifact("nonexistent", SimulatedArtifact::text("test.txt", "content"))
+            .add_artifact(
+                "nonexistent",
+                SimulatedArtifact::text("test.txt", "content"),
+            )
             .await;
         assert!(matches!(result, Err(SimulationError::BuildNotFound(_))));
     }

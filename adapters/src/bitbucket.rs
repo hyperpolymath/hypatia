@@ -6,9 +6,9 @@
 
 use crate::error::{AdapterError, Result};
 use crate::forge::{
-    Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
-    IssueState, PullRequest, PullRequestState, Repository, RunConclusion, RunStatus, Visibility,
-    WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun, WorkflowState,
+    Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue, IssueState,
+    PullRequest, PullRequestState, Repository, RunConclusion, RunStatus, Visibility, WebhookConfig,
+    WebhookEvent, WebhookPayload, Workflow, WorkflowRun, WorkflowState,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -270,12 +270,7 @@ impl ForgeAdapter for BitbucketAdapter {
             .collect())
     }
 
-    async fn get_workflow_run(
-        &self,
-        owner: &str,
-        repo: &str,
-        run_id: &str,
-    ) -> Result<WorkflowRun> {
+    async fn get_workflow_run(&self, owner: &str, repo: &str, run_id: &str) -> Result<WorkflowRun> {
         let url = format!(
             "{}/repositories/{}/{}/pipelines/{}",
             self.base_url, owner, repo, run_id
@@ -402,8 +397,7 @@ impl ForgeAdapter for BitbucketAdapter {
             )
         };
 
-        let response: BitbucketPullRequestList =
-            self.client.get(&url).send().await?.json().await?;
+        let response: BitbucketPullRequestList = self.client.get(&url).send().await?.json().await?;
 
         Ok(response
             .values
@@ -518,10 +512,7 @@ impl ForgeAdapter for BitbucketAdapter {
         body: &str,
         _labels: Vec<String>,
     ) -> Result<Issue> {
-        let url = format!(
-            "{}/repositories/{}/{}/issues",
-            self.base_url, owner, repo
-        );
+        let url = format!("{}/repositories/{}/{}/issues", self.base_url, owner, repo);
 
         let request_body = serde_json::json!({
             "title": title,
@@ -564,10 +555,7 @@ impl ForgeAdapter for BitbucketAdapter {
         repo: &str,
         state: Option<IssueState>,
     ) -> Result<Vec<Issue>> {
-        let url = format!(
-            "{}/repositories/{}/{}/issues",
-            self.base_url, owner, repo
-        );
+        let url = format!("{}/repositories/{}/{}/issues", self.base_url, owner, repo);
 
         let response: BitbucketIssueList = self.client.get(&url).send().await?.json().await?;
 
@@ -642,10 +630,7 @@ impl ForgeAdapter for BitbucketAdapter {
             request_body.insert("title".to_string(), serde_json::json!(t));
         }
         if let Some(b) = body {
-            request_body.insert(
-                "content".to_string(),
-                serde_json::json!({"raw": b}),
-            );
+            request_body.insert("content".to_string(), serde_json::json!({"raw": b}));
         }
         if let Some(s) = state {
             request_body.insert(
@@ -944,10 +929,7 @@ impl ForgeAdapter for BitbucketAdapter {
         repo: &str,
         config: WebhookConfig,
     ) -> Result<WebhookConfig> {
-        let url = format!(
-            "{}/repositories/{}/{}/hooks",
-            self.base_url, owner, repo
-        );
+        let url = format!("{}/repositories/{}/{}/hooks", self.base_url, owner, repo);
 
         let events: Vec<&str> = config
             .events
@@ -989,10 +971,7 @@ impl ForgeAdapter for BitbucketAdapter {
     }
 
     async fn list_webhooks(&self, owner: &str, repo: &str) -> Result<Vec<WebhookConfig>> {
-        let url = format!(
-            "{}/repositories/{}/{}/hooks",
-            self.base_url, owner, repo
-        );
+        let url = format!("{}/repositories/{}/{}/hooks", self.base_url, owner, repo);
 
         let response: BitbucketWebhookList = self.client.get(&url).send().await?.json().await?;
 

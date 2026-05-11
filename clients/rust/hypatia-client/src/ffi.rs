@@ -75,8 +75,8 @@ use libloading::{Library, Symbol};
 use crate::connector::{Connector, CONNECTOR_COUNT};
 use crate::error::HypatiaError;
 use crate::types::{
-    DispatchEntry, DispatchStrategy, Finding, HealthReport,
-    OutcomeRecord, ScanRequest, ScanResponse, ScanResult,
+    DispatchEntry, DispatchStrategy, Finding, HealthReport, OutcomeRecord, ScanRequest,
+    ScanResponse, ScanResult,
 };
 
 /// Mirror of the `DispatchEntry` extern struct in `main.zig`. The
@@ -145,21 +145,27 @@ impl ApiResponse {
     /// Safety: caller must ensure the pointers were populated by a
     /// successful call to a Hypatia ABI function and have not yet
     /// been overwritten by a subsequent call.
-    unsafe fn data(&self) -> &[u8] { unsafe { // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-        if self.data_ptr.is_null() || self.data_len == 0 {
-            &[]
-        } else {
-            std::slice::from_raw_parts(self.data_ptr, self.data_len)
+    unsafe fn data(&self) -> &[u8] {
+        unsafe {
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+            if self.data_ptr.is_null() || self.data_len == 0 {
+                &[]
+            } else {
+                std::slice::from_raw_parts(self.data_ptr, self.data_len)
+            }
         }
-    }}
+    }
 
-    unsafe fn error(&self) -> &[u8] { unsafe { // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-        if self.error_ptr.is_null() || self.error_len == 0 {
-            &[]
-        } else {
-            std::slice::from_raw_parts(self.error_ptr, self.error_len)
+    unsafe fn error(&self) -> &[u8] {
+        unsafe {
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+            if self.error_ptr.is_null() || self.error_len == 0 {
+                &[]
+            } else {
+                std::slice::from_raw_parts(self.error_ptr, self.error_len)
+            }
         }
-    }}
+    }
 }
 
 /// Loaded Hypatia FFI library plus the symbols the client uses.
@@ -189,7 +195,8 @@ impl FfiTransport {
             // Safety: libloading::Library::new is unsafe because it
             // runs constructors from the loaded library. Hypatia's
             // .so has no constructors with side effects.
-            match unsafe { Library::new(path) } { // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+            match unsafe { Library::new(path) } {
+                // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
                 Ok(lib) => return Self::bind_symbols(lib),
                 Err(e) => last_err = Some(format!("{}: {}", path.to_string_lossy(), e)),
             }
@@ -206,7 +213,8 @@ impl FfiTransport {
         // `export fn` declarations. We `Symbol::into_raw()` to
         // detach the lifetime from `lib`; the `_lib` field keeps the
         // dlopen handle alive for the lifetime of `FfiTransport`.
-        unsafe { // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        unsafe {
+            // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
             let connector_count: Symbol<unsafe extern "C" fn() -> usize> =
                 lib.get(b"hypatia_connector_count\0").map_err(|e| {
                     HypatiaError::FfiUnavailable(format!("missing hypatia_connector_count: {}", e))
@@ -246,11 +254,10 @@ impl FfiTransport {
                         e
                     ))
                 })?;
-            let get_confidence: Symbol<
-                unsafe extern "C" fn(*const u8, usize, *mut f64) -> c_int,
-            > = lib.get(b"hypatia_get_confidence\0").map_err(|e| {
-                HypatiaError::FfiUnavailable(format!("missing hypatia_get_confidence: {}", e))
-            })?;
+            let get_confidence: Symbol<unsafe extern "C" fn(*const u8, usize, *mut f64) -> c_int> =
+                lib.get(b"hypatia_get_confidence\0").map_err(|e| {
+                    HypatiaError::FfiUnavailable(format!("missing hypatia_get_confidence: {}", e))
+                })?;
             let dispatch_strategy: Symbol<unsafe extern "C" fn(f64) -> u8> =
                 lib.get(b"hypatia_dispatch_strategy\0").map_err(|e| {
                     HypatiaError::FfiUnavailable(format!(
@@ -325,15 +332,19 @@ impl FfiTransport {
         let mut resp = ApiResponse::empty();
         let rc = unsafe { (self.scan_repo)(bytes.as_ptr(), bytes.len(), &mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
-            let msg = unsafe { // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+            let msg = unsafe {
+                // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
                 String::from_utf8_lossy(resp.error()).into_owned()
             };
-            return Err(HypatiaError::NonZero { code: rc, message: msg });
+            return Err(HypatiaError::NonZero {
+                code: rc,
+                message: msg,
+            });
         }
         let data = unsafe { resp.data() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-        // Hypatia's `hypatia_scan_repo` returns the raw scan-store
-        // JSON document; we shape it into a `ScanResponse`. If the
-        // store schema diverges, this is the seam to update.
+                                           // Hypatia's `hypatia_scan_repo` returns the raw scan-store
+                                           // JSON document; we shape it into a `ScanResponse`. If the
+                                           // store schema diverges, this is the seam to update.
         parse_scan_payload(data)
     }
 
@@ -344,7 +355,10 @@ impl FfiTransport {
         let rc = unsafe { (self.health_check)(&mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
             let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-            return Err(HypatiaError::NonZero { code: rc, message: msg });
+            return Err(HypatiaError::NonZero {
+                code: rc,
+                message: msg,
+            });
         }
         let data = unsafe { resp.data() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         let report: HealthReport = serde_json::from_slice(data)?;
@@ -370,7 +384,10 @@ impl FfiTransport {
         let rc = unsafe { (self.dispatch)(&c_entry, &mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
             let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-            return Err(HypatiaError::NonZero { code: rc, message: msg });
+            return Err(HypatiaError::NonZero {
+                code: rc,
+                message: msg,
+            });
         }
         Ok(())
     }
@@ -394,7 +411,10 @@ impl FfiTransport {
         let rc = unsafe { (self.record_outcome)(&c_record, &mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
             let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-            return Err(HypatiaError::NonZero { code: rc, message: msg });
+            return Err(HypatiaError::NonZero {
+                code: rc,
+                message: msg,
+            });
         }
         Ok(())
     }
@@ -405,7 +425,10 @@ impl FfiTransport {
         let rc = unsafe { (self.force_learning_cycle)(&mut resp) }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
         if rc != 0 {
             let msg = unsafe { String::from_utf8_lossy(resp.error()).into_owned() }; // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
-            return Err(HypatiaError::NonZero { code: rc, message: msg });
+            return Err(HypatiaError::NonZero {
+                code: rc,
+                message: msg,
+            });
         }
         Ok(())
     }

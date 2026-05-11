@@ -238,19 +238,26 @@ async fn search_registry(args: &SearchArgs, registry_url: &str) -> Result<Vec<Se
         items.retain(|item| {
             item.name.to_lowercase().contains(&query_lower)
                 || item.description.to_lowercase().contains(&query_lower)
-                || item.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                || item
+                    .tags
+                    .iter()
+                    .any(|t| t.to_lowercase().contains(&query_lower))
         });
     }
 
     if let Some(ref effect) = args.effect {
         let effect_str = effect.to_string();
-        items.retain(|item| item.effects.contains(&effect_str) || item.effects.contains(&"both".to_string()));
+        items.retain(|item| {
+            item.effects.contains(&effect_str) || item.effects.contains(&"both".to_string())
+        });
     }
 
     if let Some(ref language) = args.language {
         let lang_lower = language.to_lowercase();
         items.retain(|item| {
-            item.languages.iter().any(|l| l.to_lowercase() == lang_lower)
+            item.languages
+                .iter()
+                .any(|l| l.to_lowercase() == lang_lower)
                 || item.languages.contains(&"all".to_string())
         });
     }
@@ -321,7 +328,11 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "security".to_string(),
             authors: vec!["cicd-hyper-a".to_string()],
             languages: vec!["all".to_string()],
-            tags: vec!["security".to_string(), "github-actions".to_string(), "supply-chain".to_string()],
+            tags: vec![
+                "security".to_string(),
+                "github-actions".to_string(),
+                "supply-chain".to_string(),
+            ],
             rules_count: 3,
             effects: vec!["both".to_string()],
             downloads: 15420,
@@ -338,7 +349,11 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "security".to_string(),
             authors: vec!["cicd-hyper-a".to_string()],
             languages: vec!["all".to_string()],
-            tags: vec!["security".to_string(), "github-actions".to_string(), "permissions".to_string()],
+            tags: vec![
+                "security".to_string(),
+                "github-actions".to_string(),
+                "permissions".to_string(),
+            ],
             rules_count: 5,
             effects: vec!["both".to_string()],
             downloads: 12340,
@@ -354,8 +369,16 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             description: "Ensure all source files have SPDX license identifiers".to_string(),
             category: "policy".to_string(),
             authors: vec!["hyperpolymath".to_string()],
-            languages: vec!["rust".to_string(), "javascript".to_string(), "typescript".to_string()],
-            tags: vec!["license".to_string(), "spdx".to_string(), "compliance".to_string()],
+            languages: vec![
+                "rust".to_string(),
+                "javascript".to_string(),
+                "typescript".to_string(),
+            ],
+            tags: vec![
+                "license".to_string(),
+                "spdx".to_string(),
+                "compliance".to_string(),
+            ],
             rules_count: 2,
             effects: vec!["both".to_string()],
             downloads: 8765,
@@ -372,7 +395,12 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "quality".to_string(),
             authors: vec!["rustacean-collective".to_string()],
             languages: vec!["rust".to_string()],
-            tags: vec!["rust".to_string(), "quality".to_string(), "linting".to_string(), "clippy".to_string()],
+            tags: vec![
+                "rust".to_string(),
+                "quality".to_string(),
+                "linting".to_string(),
+                "clippy".to_string(),
+            ],
             rules_count: 42,
             effects: vec!["check".to_string()],
             downloads: 23456,
@@ -389,7 +417,11 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "documentation".to_string(),
             authors: vec!["glambot".to_string()],
             languages: vec!["all".to_string()],
-            tags: vec!["documentation".to_string(), "readme".to_string(), "quality".to_string()],
+            tags: vec![
+                "documentation".to_string(),
+                "readme".to_string(),
+                "quality".to_string(),
+            ],
             rules_count: 8,
             effects: vec!["check".to_string(), "fix".to_string()],
             downloads: 5432,
@@ -406,7 +438,11 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "workflow".to_string(),
             authors: vec!["cicd-hyper-a".to_string()],
             languages: vec!["all".to_string()],
-            tags: vec!["codeql".to_string(), "security".to_string(), "scanning".to_string()],
+            tags: vec![
+                "codeql".to_string(),
+                "security".to_string(),
+                "scanning".to_string(),
+            ],
             rules_count: 4,
             effects: vec!["both".to_string()],
             downloads: 9876,
@@ -423,7 +459,11 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "dependencies".to_string(),
             authors: vec!["node-security".to_string()],
             languages: vec!["javascript".to_string(), "typescript".to_string()],
-            tags: vec!["npm".to_string(), "security".to_string(), "dependencies".to_string()],
+            tags: vec![
+                "npm".to_string(),
+                "security".to_string(),
+                "dependencies".to_string(),
+            ],
             rules_count: 6,
             effects: vec!["check".to_string()],
             downloads: 7654,
@@ -440,7 +480,11 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             category: "performance".to_string(),
             authors: vec!["web-perf-team".to_string()],
             languages: vec!["javascript".to_string(), "typescript".to_string()],
-            tags: vec!["performance".to_string(), "bundle".to_string(), "webpack".to_string()],
+            tags: vec![
+                "performance".to_string(),
+                "bundle".to_string(),
+                "webpack".to_string(),
+            ],
             rules_count: 3,
             effects: vec!["check".to_string()],
             downloads: 4321,
@@ -546,11 +590,7 @@ fn print_plain_format(results: &SearchResults) -> Result<()> {
             item.stars,
             item.rules_count
         );
-        println!(
-            "  {}: {}",
-            "Languages".dimmed(),
-            item.languages.join(", ")
-        );
+        println!("  {}: {}", "Languages".dimmed(), item.languages.join(", "));
         println!("  {}: {}", "Tags".dimmed(), item.tags.join(", ").dimmed());
         println!(
             "  {}",

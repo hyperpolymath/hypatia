@@ -120,7 +120,10 @@ impl WorkflowFixer {
 
     /// Pin unpinned actions to SHA
     fn fix_unpinned_action(&self, content: &str, sha_pins: &ShaPins) -> Option<String> {
-        let uses_re = Regex::new(r"uses:\s*([a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)").ok()?;
+        let uses_re = Regex::new(
+            r"uses:\s*([a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+)@(v[0-9]+[a-zA-Z0-9.-]*|main|master)",
+        )
+        .ok()?;
         let mut new_content = content.to_string();
         let mut made_change = false;
 
@@ -154,7 +157,8 @@ impl WorkflowFixer {
 
     /// Add toolchain input to dtolnay/rust-toolchain
     fn fix_missing_toolchain(&self, content: &str) -> Option<String> {
-        let toolchain_re = Regex::new(r"(?m)(uses:\s*dtolnay/rust-toolchain@[a-f0-9]+(?:\s*#[^\n]*)?)").ok()?;
+        let toolchain_re =
+            Regex::new(r"(?m)(uses:\s*dtolnay/rust-toolchain@[a-f0-9]+(?:\s*#[^\n]*)?)").ok()?;
         let mut new_content = content.to_string();
         let mut made_change = false;
 
@@ -162,8 +166,11 @@ impl WorkflowFixer {
         for (i, line) in lines.iter().enumerate() {
             if line.contains("dtolnay/rust-toolchain@") {
                 // Check if next line has with:
-                let has_with = lines.get(i + 1).map_or(false, |l| l.trim().starts_with("with:"));
-                let has_toolchain = lines.iter()
+                let has_with = lines
+                    .get(i + 1)
+                    .map_or(false, |l| l.trim().starts_with("with:"));
+                let has_toolchain = lines
+                    .iter()
                     .skip(i + 1)
                     .take(3)
                     .any(|l| l.contains("toolchain:"));
@@ -172,16 +179,18 @@ impl WorkflowFixer {
                     // Need to add with: toolchain:
                     // Find indentation of uses: line
                     let indent = line.len() - line.trim_start().len();
-                    let with_block = format!("\n{}  with:\n{}    toolchain: stable", " ".repeat(indent), " ".repeat(indent));
+                    let with_block = format!(
+                        "\n{}  with:\n{}    toolchain: stable",
+                        " ".repeat(indent),
+                        " ".repeat(indent)
+                    );
 
                     // Find position to insert
                     if let Some(cap) = toolchain_re.captures(line) {
                         let full_match = cap.get(0)?;
                         let match_end = full_match.end();
-                        let line_start = content.lines()
-                            .take(i)
-                            .map(|l| l.len() + 1)
-                            .sum::<usize>();
+                        let line_start =
+                            content.lines().take(i).map(|l| l.len() + 1).sum::<usize>();
                         let insert_pos = line_start + match_end;
 
                         new_content.insert_str(insert_pos, &with_block);
