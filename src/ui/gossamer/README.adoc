@@ -56,8 +56,14 @@ The four panes per `hyperpolymath/panll/README.adoc:99-110`:
 * Pane-W — World (task barycentre; results, actions, artefacts)
 
 Hypatia's `clade = "neurosym/ci-cd-intelligence"` records topical
-taxonomy but not the architectural relationship; this harness does
-not yet declare its flow/perspective. Tracked as a follow-up.
+taxonomy. The architectural relationship is declared in
+`panll.harness.toml`'s `[binary_star]` section: Hypatia spans L
+(rules engine, safety triangle, error catalog) and N (5 neural
+networks: Graph of Trust, Mixture of Experts, LSM, ESN, RBF), flow
+runs `L → N → W`, outputs surface in W, perspective is
+*meta-observer*. The `binary_star` schema fields are defined in
+`hyperpolymath/panll`'s `panll-harness/v2` schema (see
+https://github.com/hyperpolymath/panll/pull/26[panll#26]).
 
 The four files in this directory:
 
