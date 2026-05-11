@@ -198,6 +198,7 @@ jobs:
     name: Haskell Integration Tests
     runs-on: ubuntu-latest
     needs: [build-images]
+    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
     services:
       arangodb:
         image: arangodb:3.11
@@ -363,7 +364,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-llvm-cov
 

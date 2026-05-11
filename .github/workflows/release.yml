@@ -175,6 +175,7 @@ jobs:
     name: Build Haskell Registry
     runs-on: ubuntu-latest
     needs: [prepare]
+    if: hashFiles('registry/cicd-hyper-a.cabal') != '' || hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
