@@ -168,7 +168,7 @@ impl WorkflowFixer {
                 // Check if next line has with:
                 let has_with = lines
                     .get(i + 1)
-                    .map_or(false, |l| l.trim().starts_with("with:"));
+                    .is_some_and(|l| l.trim().starts_with("with:"));
                 let has_toolchain = lines
                     .iter()
                     .skip(i + 1)

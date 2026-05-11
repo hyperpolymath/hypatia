@@ -3,7 +3,7 @@
 //!
 //! Submits validated rulesets to the registry for distribution and reuse.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -363,7 +363,7 @@ pub async fn execute(args: DepositArgs, config: &Config, format: OutputFormat) -
 }
 
 /// Parse a ruleset from content
-fn parse_ruleset(content: &str, path: &PathBuf) -> Result<Ruleset> {
+fn parse_ruleset(content: &str, path: &Path) -> Result<Ruleset> {
     let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     match extension {
@@ -464,13 +464,13 @@ fn validate_ruleset(ruleset: &Ruleset) -> Result<ValidationResult> {
         }
 
         // Warn if fix rule has no template
-        if rule.effect == RuleEffect::Fix || rule.effect == RuleEffect::Both {
-            if rule.fix_template.is_none() {
-                warnings.push(format!(
-                    "{}: Rule has fix effect but no fix_template",
-                    rule_prefix
-                ));
-            }
+        if (rule.effect == RuleEffect::Fix || rule.effect == RuleEffect::Both)
+            && rule.fix_template.is_none()
+        {
+            warnings.push(format!(
+                "{}: Rule has fix effect but no fix_template",
+                rule_prefix
+            ));
         }
     }
 

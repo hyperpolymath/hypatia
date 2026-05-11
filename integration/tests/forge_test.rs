@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! Forge Adapters Integration Tests
 //!
 //! Tests forge adapters with mock servers:
@@ -9,12 +11,12 @@
 //! - Rate limiting behavior
 //! - Error handling
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use wiremock::matchers::{header, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

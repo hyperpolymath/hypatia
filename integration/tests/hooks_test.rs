@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! Git Hooks Integration Tests
 //!
 //! Tests git hooks execution and validation:
@@ -14,7 +16,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 mod common {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -530,11 +532,10 @@ async fn test_multiple_hooks() -> Result<()> {
     repo.install_hook_content("pre-commit", &passing_hook())?;
     repo.install_hook_content(
         "post-commit",
-        &r#"#!/bin/bash
+        r#"#!/bin/bash
 echo "Post-commit hook executed"
 exit 0
-"#
-        .to_string(),
+"#,
     )?;
 
     repo.create_file("test.txt", "content")?;

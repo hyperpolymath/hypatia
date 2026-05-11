@@ -55,6 +55,7 @@ impl Default for BotConfig {
 /// Main configuration struct
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct Config {
     /// General settings
     pub general: GeneralConfig,
@@ -80,21 +81,6 @@ pub struct Config {
     /// Custom settings (key-value pairs)
     #[serde(flatten)]
     pub custom: HashMap<String, toml::Value>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            registry_url: None,
-            scan: ScanConfig::default(),
-            fleet: FleetConfig::default(),
-            hooks: HooksConfig::default(),
-            output: OutputConfig::default(),
-            bot: BotConfig::default(),
-            custom: HashMap::new(),
-        }
-    }
 }
 
 /// General configuration
@@ -540,11 +526,7 @@ verbose = false
             ["output", "color"] => Some(self.output.color.to_string()),
             _ => {
                 // Check custom settings
-                if let Some(value) = self.custom.get(key) {
-                    Some(value.to_string())
-                } else {
-                    None
-                }
+                self.custom.get(key).map(|value| value.to_string())
             }
         }
     }
@@ -616,7 +598,6 @@ verbose = false
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
     fn test_default_config() {
@@ -665,9 +646,14 @@ min_severity = "high"
     #[test]
     fn test_config_merge() {
         let base = Config::default();
-        let mut override_config = Config::default();
-        override_config.registry_url = Some("https://override.example.com".to_string());
-        override_config.fleet.parallel = true;
+        let override_config = Config {
+            registry_url: Some("https://override.example.com".to_string()),
+            fleet: FleetConfig {
+                parallel: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
 
         let merged = base.merge(override_config);
         assert_eq!(

@@ -444,9 +444,10 @@ fn scan_github_workflows(
         }
 
         // Check for missing permissions
-        if !skipped_checks.contains(&"missing-permissions".to_string()) {
-            if !permissions_regex.is_match(&content) {
-                findings.push(Finding {
+        if !skipped_checks.contains(&"missing-permissions".to_string())
+            && !permissions_regex.is_match(&content)
+        {
+            findings.push(Finding {
                     check_id: "missing-permissions".to_string(),
                     title: "Missing Workflow Permissions".to_string(),
                     description: "Workflow does not declare explicit permissions".to_string(),
@@ -462,30 +463,26 @@ fn scan_github_workflows(
                     ),
                     rule_id: Some("SEC-WF-002".to_string()),
                 });
-            }
         }
 
         // Check for missing SPDX header
-        if !skipped_checks.contains(&"missing-spdx".to_string()) {
-            if !spdx_regex.is_match(&content) {
-                findings.push(Finding {
-                    check_id: "missing-spdx".to_string(),
-                    title: "Missing SPDX License Header".to_string(),
-                    description: "Workflow file does not have SPDX license identifier".to_string(),
-                    severity: Severity::Low,
-                    category: Category::Policy,
-                    file_path: Some(relative_path.to_path_buf()),
-                    line_number: Some(1),
-                    snippet: None,
-                    suggestion: Some(
-                        "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line"
-                            .to_string(),
-                    ),
-                    auto_fixable: true,
-                    docs_url: Some("https://spdx.dev/learn/handling-license-info/".to_string()),
-                    rule_id: Some("LIC-001".to_string()),
-                });
-            }
+        if !skipped_checks.contains(&"missing-spdx".to_string()) && !spdx_regex.is_match(&content) {
+            findings.push(Finding {
+                check_id: "missing-spdx".to_string(),
+                title: "Missing SPDX License Header".to_string(),
+                description: "Workflow file does not have SPDX license identifier".to_string(),
+                severity: Severity::Low,
+                category: Category::Policy,
+                file_path: Some(relative_path.to_path_buf()),
+                line_number: Some(1),
+                snippet: None,
+                suggestion: Some(
+                    "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line".to_string(),
+                ),
+                auto_fixable: true,
+                docs_url: Some("https://spdx.dev/learn/handling-license-info/".to_string()),
+                rule_id: Some("LIC-001".to_string()),
+            });
         }
     }
 
@@ -653,23 +650,23 @@ fn scan_configurations(repo_path: &Path, skipped_checks: &[String]) -> Result<Ve
     let mut findings = Vec::new();
 
     // Check for .gitignore
-    if !skipped_checks.contains(&"missing-gitignore".to_string()) {
-        if !repo_path.join(".gitignore").exists() {
-            findings.push(Finding {
-                check_id: "missing-gitignore".to_string(),
-                title: "Missing .gitignore".to_string(),
-                description: "Repository does not have a .gitignore file".to_string(),
-                severity: Severity::Low,
-                category: Category::Configuration,
-                file_path: None,
-                line_number: None,
-                snippet: None,
-                suggestion: Some("Add a .gitignore file appropriate for your project".to_string()),
-                auto_fixable: false,
-                docs_url: Some("https://git-scm.com/docs/gitignore".to_string()),
-                rule_id: Some("CFG-001".to_string()),
-            });
-        }
+    if !skipped_checks.contains(&"missing-gitignore".to_string())
+        && !repo_path.join(".gitignore").exists()
+    {
+        findings.push(Finding {
+            check_id: "missing-gitignore".to_string(),
+            title: "Missing .gitignore".to_string(),
+            description: "Repository does not have a .gitignore file".to_string(),
+            severity: Severity::Low,
+            category: Category::Configuration,
+            file_path: None,
+            line_number: None,
+            snippet: None,
+            suggestion: Some("Add a .gitignore file appropriate for your project".to_string()),
+            auto_fixable: false,
+            docs_url: Some("https://git-scm.com/docs/gitignore".to_string()),
+            rule_id: Some("CFG-001".to_string()),
+        });
     }
 
     // Check for README

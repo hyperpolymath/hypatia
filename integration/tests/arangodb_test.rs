@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! ArangoDB Integration Tests
 //!
 //! Tests ArangoDB connectivity, queries, and data operations:
@@ -14,7 +16,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use testcontainers::{core::WaitFor, runners::AsyncRunner, GenericImage, ImageExt};
 use tokio::time::timeout;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 mod common {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};

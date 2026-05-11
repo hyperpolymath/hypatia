@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! Fleet Integration Tests
 //!
 //! Tests all bots running in sequence, verifying:
@@ -15,7 +17,7 @@ use std::process::Command;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 mod common {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -41,7 +43,7 @@ mod common {
             .try_init();
     }
 }
-use common::{setup_test_logging, TestContext};
+use common::setup_test_logging;
 
 /// Bot execution result containing output and metrics
 #[derive(Debug, Clone)]
@@ -147,7 +149,11 @@ impl FleetTestHarness {
         output
             .lines()
             .find(|line| line.contains(metric_name))
-            .and_then(|line| line.split(':').last().and_then(|v| v.trim().parse().ok()))
+            .and_then(|line| {
+                line.split(':')
+                    .next_back()
+                    .and_then(|v| v.trim().parse().ok())
+            })
             .unwrap_or(0)
     }
 
@@ -236,7 +242,7 @@ jobs:
 
 async fn test_empty_repo_pipeline() -> Result<()> {
     setup_test_logging();
-    let harness = FleetTestHarness::new()?;
+    let _harness = FleetTestHarness::new()?;
 
     // Test that bots handle empty repos gracefully
     info!("Testing empty repository handling");
@@ -247,11 +253,11 @@ async fn test_empty_repo_pipeline() -> Result<()> {
 
 async fn test_sequential_bot_execution() -> Result<()> {
     setup_test_logging();
-    let mut harness = FleetTestHarness::new()?;
+    let harness = FleetTestHarness::new()?;
     harness.setup_test_files()?;
 
     // Define the standard pipeline order
-    let pipeline: Vec<(&str, Vec<&str>)> = vec![
+    let _pipeline: Vec<(&str, Vec<&str>)> = vec![
         // Phase 1: Analysis bots
         (
             "robot-repo-automaton",

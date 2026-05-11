@@ -476,7 +476,7 @@ impl ForgeAdapter for SourcehutAdapter {
     async fn list_workflows(&self, _owner: &str, _repo: &str) -> Result<Vec<Workflow>> {
         // SourceHut uses .build.yml manifests in the repo
         // We can list them via git tree API or check known paths
-        let common_paths = vec![".build.yml", ".builds/"];
+        let common_paths = [".build.yml", ".builds/"];
 
         let mut workflows = Vec::new();
         for (idx, workflow_path) in common_paths.iter().enumerate() {
@@ -985,6 +985,12 @@ tasks:
         // SourceHut builds can be submitted as check-like entities
         let url = self.builds_api_url("/jobs");
 
+        let git_url = format!(
+            "{}/~{}/{}",
+            self.base_url.replace("sr.ht", "git.sr.ht"),
+            owner,
+            repo
+        );
         let manifest = format!(
             r#"image: alpine/latest
 sources:
@@ -993,15 +999,7 @@ tasks:
   - {}: |
       echo "Check run: {}"
 "#,
-            format!(
-                "{}/~{}/{}",
-                self.base_url.replace("sr.ht", "git.sr.ht"),
-                owner,
-                repo
-            ),
-            head_sha,
-            name,
-            name
+            git_url, head_sha, name, name
         );
 
         let payload = SubmitBuildPayload {

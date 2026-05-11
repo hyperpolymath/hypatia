@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! Registry Integration Tests
 //!
 //! Tests Haskell registry operations:
@@ -11,7 +13,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 use tracing::{debug, info, warn};
@@ -153,7 +155,7 @@ impl MockRegistryClient {
             .filter(|rs| {
                 let matches_query = rs.name.contains(query) || rs.description.contains(query);
                 let matches_category =
-                    category.map_or(true, |cat| rs.rules.iter().any(|r| r.category == cat));
+                    category.is_none_or(|cat| rs.rules.iter().any(|r| r.category == cat));
                 matches_query && matches_category
             })
             .collect()
@@ -214,7 +216,7 @@ impl MockRegistryClient {
             .version
             .chars()
             .next()
-            .map_or(false, |c| c.is_ascii_digit())
+            .is_some_and(|c| c.is_ascii_digit())
         {
             errors.push(VerificationError {
                 location: "version".to_string(),
@@ -282,7 +284,7 @@ impl RegistryTestHarness {
     }
 
     /// Validate ruleset file
-    fn validate_ruleset_file(&self, path: &PathBuf) -> Result<bool> {
+    fn validate_ruleset_file(&self, path: &Path) -> Result<bool> {
         if !self.registry_available() {
             warn!("Registry binary not available, skipping validation");
             return Ok(true);

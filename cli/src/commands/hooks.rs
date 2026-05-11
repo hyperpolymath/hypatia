@@ -764,7 +764,7 @@ fn get_hook_statuses(repo_path: &Path) -> Result<Vec<HookStatus>> {
             std::fs::metadata(&hook_path)
                 .ok()
                 .and_then(|m| m.modified().ok())
-                .map(|t| DateTime::<Utc>::from(t))
+                .map(DateTime::<Utc>::from)
         } else {
             None
         };

@@ -9,7 +9,7 @@
 
 use cicd_fixer::{CicdFixer, IssueSeverity};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use walkdir::WalkDir;
@@ -96,7 +96,7 @@ fn main() {
     }
 }
 
-fn scan_repo(fixer: &CicdFixer, repo_path: &PathBuf, format: &str) {
+fn scan_repo(fixer: &CicdFixer, repo_path: &Path, format: &str) {
     info!("Scanning repository: {}", repo_path.display());
 
     match fixer.scan_repo(repo_path) {
@@ -155,7 +155,7 @@ fn scan_repo(fixer: &CicdFixer, repo_path: &PathBuf, format: &str) {
     }
 }
 
-fn fix_repo(fixer: &CicdFixer, repo_path: &PathBuf, dry_run: bool) {
+fn fix_repo(fixer: &CicdFixer, repo_path: &Path, dry_run: bool) {
     let mode = if dry_run { "(dry-run)" } else { "" };
     info!("Fixing repository: {} {}", repo_path.display(), mode);
 

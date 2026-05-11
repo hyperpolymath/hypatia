@@ -30,15 +30,9 @@ pub enum Transport {
 
 /// Configuration for `Client::with_config`. Defaults try FFI first,
 /// then subprocess. Override `prefer` if you want to force one path.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ClientConfig {
     pub prefer: Option<Transport>,
-}
-
-impl Default for ClientConfig {
-    fn default() -> Self {
-        ClientConfig { prefer: None }
-    }
 }
 
 /// Hypatia client. Carries an active transport (or `None` if both

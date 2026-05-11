@@ -575,12 +575,9 @@ fn print_plain_format(results: &SearchResults) -> Result<()> {
         };
 
         println!();
-        println!(
-            "{} {} {}",
-            item.name.bold(),
-            format!("v{}", item.version).dimmed(),
-            format!("[{}]", category_colored)
-        );
+        let version_str = format!("v{}", item.version).dimmed();
+        let category_str = format!("[{}]", category_colored);
+        println!("{} {} {}", item.name.bold(), version_str, category_str);
         println!("  {}", item.description);
         println!(
             "  {} {} | {} {} | {} rules",

@@ -1240,8 +1240,10 @@ impl SimulatedCI for MockGitHubActions {
     async fn stats(&self) -> SimulationStats {
         let builds = self.builds.read().await;
 
-        let mut stats = SimulationStats::default();
-        stats.total_builds = builds.len() as u64;
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
 
         for build in builds.values() {
             match build.status {
@@ -1535,8 +1537,10 @@ impl SimulatedCI for MockGitLabCI {
     async fn stats(&self) -> SimulationStats {
         let builds = self.builds.read().await;
 
-        let mut stats = SimulationStats::default();
-        stats.total_builds = builds.len() as u64;
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
 
         for build in builds.values() {
             match build.status {
@@ -1825,8 +1829,10 @@ impl SimulatedCI for MockCircleCI {
     async fn stats(&self) -> SimulationStats {
         let builds = self.builds.read().await;
 
-        let mut stats = SimulationStats::default();
-        stats.total_builds = builds.len() as u64;
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
 
         for build in builds.values() {
             match build.status {

@@ -291,6 +291,7 @@ pub struct WebhookPayload {
 /// to forge operations. Methods are designed to be async and handle
 /// forge-specific API differences internally.
 #[async_trait]
+#[allow(clippy::too_many_arguments)]
 pub trait ForgeAdapter: Send + Sync {
     // ============== Core Identity ==============
 
