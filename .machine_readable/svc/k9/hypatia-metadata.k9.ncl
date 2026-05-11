@@ -7,6 +7,8 @@ K9!
 
 {
   pedigree = {
+    name = "hypatia-metadata",
+    leash = 'Kennel,
     schema_version = "1.0.0",
     component_type = "ci-tool-metadata",
     security = {

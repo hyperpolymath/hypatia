@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
+# A2ML validator metadata
+name = "Trustfile"
+project = "hypatia"
+version = "1.0.0"
 # Trustfile (A2ML Canonical)
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
 

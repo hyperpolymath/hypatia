@@ -5,6 +5,8 @@
 # Defines what AI agents can and cannot do in this repository.
 
 [metadata]
+name = "AGENTIC"
+project = "hypatia"
 version = "0.2.0"
 last-updated = "2026-04-25"
 
