@@ -8,6 +8,9 @@ K9!
 leash = 'Hunt
 
 pedigree = {
+  name = "deploy-security-scan",
+  leash = 'Hunt,
+  signature_required = false,
   schema_version = "1.0.0",
   component_type = "security-scan-deployment",
   author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",
