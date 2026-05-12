@@ -20,10 +20,14 @@ on:
     branches: [main, master]
     paths:
       - 'src/ui/gossamer/**'
+      - 'src/ui/public/**'
+      - 'test/gossamer/**'
       - '.github/workflows/build-gossamer-gui.yml'
   pull_request:
     paths:
       - 'src/ui/gossamer/**'
+      - 'src/ui/public/**'
+      - 'test/gossamer/**'
       - '.github/workflows/build-gossamer-gui.yml'
   workflow_dispatch:
 
@@ -121,7 +125,12 @@ jobs:
           node-version: '22'
 
       - name: Run loader smoke tests
-        run: node --test test/gossamer/loader_smoke.test.mjs
+        # Shell-glob picks up every *.test.mjs in test/gossamer/, so
+        # adding a new harness (e.g. the panel-surface
+        # `browser_smoke.test.mjs` added in #220) doesn't need a second
+        # workflow edit. Node 22's `--test` does not yet support a
+        # directory argument directly.
+        run: node --test test/gossamer/*.test.mjs
 
   build-ephapax:
     name: Build Ephapax toolchain (pinned)
