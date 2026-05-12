@@ -104,6 +104,25 @@ jobs:
           print("OK  panll.harness.toml validates against panll-harness/v2")
           PY
 
+  loader-smoke:
+    name: Gossamer loader smoke harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: validate-sources
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Run loader smoke tests
+        run: node --test test/gossamer/loader_smoke.test.mjs
+
   build-ephapax:
     name: Build Ephapax toolchain (pinned)
     runs-on: ubuntu-latest
@@ -165,12 +184,13 @@ jobs:
           release_dir="$EPHAPAX_DIR/target/release"
 
           # Discover whatever CLI binary `cargo build --release --workspace`
-          # produced. Upstream Ephapax v1.0.0 doesn't guarantee the
-          # `ephapax-cli` name (see hyperpolymath/ephapax#36 — the unified
-          # CLI subcommand is what would pin the binary name down). We
-          # accept the first match from a known list, then fall back to
+          # produced. Ephapax v1.0.0's `ephapax-cli` workspace member
+          # produces a binary named `ephapax` (verified against
+          # src/ephapax-cli/Cargo.toml's `[[bin]] name = "ephapax"`).
+          # Older docs reference `ephapax-cli` directly; future packaging
+          # may rename again, so we probe a known list and fall back to
           # the first executable in target/release/.
-          candidates=(ephapax-cli ephapax epcc ephapax_cli)
+          candidates=(ephapax ephapax-cli epcc ephapax_cli)
           cli=""
           for name in "${candidates[@]}"; do
             if [ -x "$release_dir/$name" ]; then
@@ -206,29 +226,49 @@ jobs:
           mkdir -p src/ui/public/assets/wasm
           wasm_out="$GITHUB_WORKSPACE/src/ui/public/assets/wasm/hypatia_gui.wasm"
           src_entry="$GITHUB_WORKSPACE/src/ui/gossamer/bridge.eph"
-          cli="${EPHAPAX_CLI:-$EPHAPAX_DIR/target/release/ephapax-cli}"
+          cli="${EPHAPAX_CLI:-$EPHAPAX_DIR/target/release/ephapax}"
 
           cd "$EPHAPAX_DIR"
 
-          # Probe for a stage-1 .eph → .wasm path. v1.0.0 ships
-          # `ephapax-cli compile-sexpr` (stage 2), and an Idris2 parser
-          # for stage 1, but no single CLI subcommand that chains them
-          # end-to-end. When one appears — `compile-affine` in Justfile,
-          # or a new `compile-eph` subcommand on ephapax-cli — this step
-          # picks it up automatically.
+          # Probe for an .eph → .wasm compile path. Ephapax v1.0.0
+          # already ships `ephapax compile <file> -o <out>` (verified
+          # against src/ephapax-cli/src/main.rs), but its grammar only
+          # accepts top-level `fn` and `type` declarations — bridge.eph
+          # uses v2 constructs (module, import, extern, data, match,
+          # let!) that v1.0.0's parser rejects with a syntax error.
+          #
+          # The real upstream gate is therefore the v2 grammar in
+          # `ephapax-parser`, not just a CLI subcommand wrapper.
+          # `hyperpolymath/ephapax#36` tracks both. The probe order
+          # below picks up either the v1.0.0 `compile` subcommand
+          # (which will start accepting bridge.eph once the parser
+          # learns v2) or any of the future subcommand names that have
+          # been floated upstream — first one to start succeeding wins.
           if just --list 2>/dev/null | grep -qE '^\s*compile-affine\b'; then
             echo "→ just compile-affine (concrete .eph path available)"
             just compile-affine "$src_entry" affine "$wasm_out"
           elif "$cli" --help 2>&1 | grep -qE '\bcompile-eph\b'; then
-            echo "→ ephapax-cli compile-eph"
+            echo "→ ephapax compile-eph"
             "$cli" compile-eph "$src_entry" -o "$wasm_out"
           elif "$cli" --help 2>&1 | grep -qE '\bcompile-affine\b'; then
-            echo "→ ephapax-cli compile-affine"
+            echo "→ ephapax compile-affine"
             "$cli" compile-affine "$src_entry" -o "$wasm_out"
+          elif "$cli" --help 2>&1 | grep -qE '^\s*compile\b'; then
+            echo "→ ephapax compile (v1.0.0 subcommand, gated on v2 grammar)"
+            if ! "$cli" compile "$src_entry" -o "$wasm_out" 2>/tmp/ephapax-err; then
+              if grep -q 'Parse error\|expected EOI' /tmp/ephapax-err; then
+                echo "::warning::ephapax compile rejected bridge.eph — parser doesn't yet accept v2 grammar (modules/externs/data/match)."
+                echo "::warning::This is the real upstream gate. See hyperpolymath/ephapax#36."
+                cat /tmp/ephapax-err
+                exit 0
+              fi
+              cat /tmp/ephapax-err >&2
+              exit 1
+            fi
           else
-            echo "::warning::No .eph → .wasm compile path exposed by ephapax@$EPHAPAX_VERSION."
-            echo "::warning::Stage-1 parser is currently Idris2-only; stage-2 compile-sexpr consumes .sexpr IR."
-            echo "::warning::Add a CLI wrapper (e.g. compile-eph) upstream to enable end-to-end compilation here."
+            echo "::warning::No .eph → .wasm compile subcommand found on ephapax@$EPHAPAX_VERSION."
+            echo "::warning::Expected one of: ephapax compile, ephapax compile-eph, ephapax compile-affine, just compile-affine."
+            echo "::warning::See hyperpolymath/ephapax#36 for the v2 grammar + CLI tracker."
             exit 0
           fi
 

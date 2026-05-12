@@ -8,6 +8,9 @@ K9!
 leash = 'Hunt
 
 pedigree = {
+  name = "fleet-config",
+  leash = 'Hunt,
+  signature_required = false,
   schema_version = "1.0.0",
   component_type = "security-scanner-fleet-config",
   author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",

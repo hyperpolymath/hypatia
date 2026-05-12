@@ -89,7 +89,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-deny
 
@@ -155,6 +155,7 @@ jobs:
   haskell-audit:
     name: Haskell Dependency Audit
     runs-on: ubuntu-latest
+    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -207,11 +208,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Only deploy/Containerfile is currently in the tree; the adapter /
+        # engine / registry variants are part of an earlier multi-image
+        # split that hasn't landed yet. Add them back here when they exist.
         dockerfile:
           - deploy/Containerfile
-          - deploy/Containerfile.adapter
-          - deploy/Containerfile.engine
-          - deploy/Containerfile.registry
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -328,7 +329,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26 # v3.88.22
+        uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab # v3.88.22
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -486,6 +487,7 @@ jobs:
           cargo cyclonedx --format xml --output-cdx sbom-rust.cdx.xml || true
 
       - name: Setup Haskell
+        if: hashFiles('registry/cicd-hyper-a.cabal') != ''
         uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
         with:
           ghc-version: '9.6'
@@ -493,6 +495,7 @@ jobs:
           cabal-update: true
 
       - name: Generate Haskell SBOM
+        if: hashFiles('registry/cicd-hyper-a.cabal') != ''
         working-directory: registry
         run: |
           cabal build all --dry-run

@@ -76,10 +76,7 @@ impl DataLayer {
         let dragonfly = DragonflyClient::new(config.dragonfly).await?;
         let verisim = VerisimClient::new(config.verisim).await?;
 
-        Ok(Self {
-            dragonfly,
-            verisim,
-        })
+        Ok(Self { dragonfly, verisim })
     }
 
     /// Health check for all data services

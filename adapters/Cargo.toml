@@ -36,6 +36,12 @@ hex = "0.4"
 hmac = "0.13"
 sha2 = "0.11"
 
+[features]
+# Gates the `mod integration` block in tests/seam_tests.rs which exercises
+# the live forge APIs. Off by default; enable via
+# `cargo test -p hypatia-adapters --features integration`.
+integration = []
+
 # Note: The package name differs from directory name
 [lib]
 name = "adapters"

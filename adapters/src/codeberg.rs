@@ -20,10 +20,9 @@ use sha2::Sha256;
 
 use crate::error::AdapterError;
 use crate::forge::{
-    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge,
-    ForgeAdapter, Issue, IssueState, PullRequest, PullRequestState, Repository, RunConclusion,
-    RunStatus, Visibility, WebhookConfig, WebhookEvent, WebhookPayload, Workflow,
-    WorkflowRun, WorkflowState,
+    defaults, Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
+    IssueState, PullRequest, PullRequestState, Repository, RunConclusion, RunStatus, Visibility,
+    WebhookConfig, WebhookEvent, WebhookPayload, Workflow, WorkflowRun, WorkflowState,
 };
 
 type Result<T> = std::result::Result<T, AdapterError>;
@@ -81,7 +80,9 @@ impl CodebergAdapter {
             .default_headers(headers)
             .user_agent("cicd-hyper-a/1.0")
             .build()
-            .map_err(|e| AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             client,
@@ -379,12 +380,7 @@ struct GiteaFileContent {
 
 impl From<GiteaRepo> for Repository {
     fn from(repo: GiteaRepo) -> Self {
-        let owner = repo
-            .full_name
-            .split('/')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let owner = repo.full_name.split('/').next().unwrap_or("").to_string();
         let visibility = if repo.private {
             Visibility::Private
         } else {
@@ -648,11 +644,12 @@ impl ForgeAdapter for CodebergAdapter {
         content: &str,
         message: &str,
     ) -> Result<()> {
-        let workflow_path = if path.starts_with(".gitea/workflows/") || path.starts_with(".github/workflows/") {
-            path.to_string()
-        } else {
-            format!(".gitea/workflows/{}", path)
-        };
+        let workflow_path =
+            if path.starts_with(".gitea/workflows/") || path.starts_with(".github/workflows/") {
+                path.to_string()
+            } else {
+                format!(".gitea/workflows/{}", path)
+            };
 
         let url = self.api_url(&format!(
             "/repos/{}/{}/contents/{}",
@@ -788,15 +785,14 @@ impl ForgeAdapter for CodebergAdapter {
             .await
             .map_err(|e| AdapterError::ApiError(format!("Failed to parse runs: {}", e)))?;
 
-        Ok(runs.workflow_runs.into_iter().map(WorkflowRun::from).collect())
+        Ok(runs
+            .workflow_runs
+            .into_iter()
+            .map(WorkflowRun::from)
+            .collect())
     }
 
-    async fn get_workflow_run(
-        &self,
-        owner: &str,
-        repo: &str,
-        run_id: &str,
-    ) -> Result<WorkflowRun> {
+    async fn get_workflow_run(&self, owner: &str, repo: &str, run_id: &str) -> Result<WorkflowRun> {
         let url = self.api_url(&format!(
             "/repos/{}/{}/actions/runs/{}",
             owner, repo, run_id
@@ -826,16 +822,8 @@ impl ForgeAdapter for CodebergAdapter {
         Ok(WorkflowRun::from(run))
     }
 
-    async fn enable_branch_protection(
-        &self,
-        owner: &str,
-        repo: &str,
-        branch: &str,
-    ) -> Result<()> {
-        let url = self.api_url(&format!(
-            "/repos/{}/{}/branch_protections",
-            owner, repo
-        ));
+    async fn enable_branch_protection(&self, owner: &str, repo: &str, branch: &str) -> Result<()> {
+        let url = self.api_url(&format!("/repos/{}/{}/branch_protections", owner, repo));
 
         let payload = serde_json::json!({
             "branch_name": branch,
@@ -1193,8 +1181,16 @@ impl ForgeAdapter for CodebergAdapter {
     }
 
     async fn close_issue(&self, owner: &str, repo: &str, number: u64) -> Result<()> {
-        self.update_issue(owner, repo, number, None, None, Some(IssueState::Closed), None)
-            .await?;
+        self.update_issue(
+            owner,
+            repo,
+            number,
+            None,
+            None,
+            Some(IssueState::Closed),
+            None,
+        )
+        .await?;
         Ok(())
     }
 
@@ -1285,10 +1281,7 @@ impl ForgeAdapter for CodebergAdapter {
         conclusion: Option<CheckConclusion>,
     ) -> Result<CheckRun> {
         // Gitea uses commit statuses instead of check runs
-        let url = self.api_url(&format!(
-            "/repos/{}/{}/statuses/{}",
-            owner, repo, head_sha
-        ));
+        let url = self.api_url(&format!("/repos/{}/{}/statuses/{}", owner, repo, head_sha));
 
         let state = match (&status, &conclusion) {
             (CheckStatus::Completed, Some(CheckConclusion::Success)) => "success",
@@ -1521,8 +1514,8 @@ mod tests {
 
     #[test]
     fn test_custom_base_url() {
-        let adapter = CodebergAdapter::with_base_url("test-token", "https://gitea.example.com")
-            .unwrap();
+        let adapter =
+            CodebergAdapter::with_base_url("test-token", "https://gitea.example.com").unwrap();
         assert_eq!(adapter.base_url(), "https://gitea.example.com");
         assert!(matches!(adapter.forge(), Forge::Gitea));
     }
@@ -1565,9 +1558,6 @@ mod tests {
             result.payload["repository"]["full_name"].as_str(),
             Some("owner/repo")
         );
-        assert_eq!(
-            result.payload["sender"]["login"].as_str(),
-            Some("user")
-        );
+        assert_eq!(result.payload["sender"]["login"].as_str(), Some("user"));
     }
 }

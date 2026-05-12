@@ -53,7 +53,9 @@ pub fn validate_file_path(path: &Path) -> Result<PathBuf> {
 }
 
 /// Common finding severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Informational finding

@@ -5,6 +5,8 @@
 # Runbooks, incident response, deployment procedures.
 
 [metadata]
+name = "PLAYBOOK"
+project = "hypatia"
 version = "0.2.0"
 last-updated = "2026-04-25"
 

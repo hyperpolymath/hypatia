@@ -175,9 +175,13 @@ impl DispatchStrategy {
     /// `hypatia_dispatch_strategy` in main.zig — kept here so
     /// callers without an active FFI can still classify.
     pub fn from_confidence(confidence: f64) -> Self {
-        if confidence >= 0.95 { DispatchStrategy::AutoExecute }
-        else if confidence >= 0.85 { DispatchStrategy::Review }
-        else { DispatchStrategy::ReportOnly }
+        if confidence >= 0.95 {
+            DispatchStrategy::AutoExecute
+        } else if confidence >= 0.85 {
+            DispatchStrategy::Review
+        } else {
+            DispatchStrategy::ReportOnly
+        }
     }
 }
 
@@ -187,11 +191,26 @@ mod tests {
 
     #[test]
     fn dispatch_strategy_thresholds() {
-        assert_eq!(DispatchStrategy::from_confidence(0.99), DispatchStrategy::AutoExecute);
-        assert_eq!(DispatchStrategy::from_confidence(0.95), DispatchStrategy::AutoExecute);
-        assert_eq!(DispatchStrategy::from_confidence(0.90), DispatchStrategy::Review);
-        assert_eq!(DispatchStrategy::from_confidence(0.85), DispatchStrategy::Review);
-        assert_eq!(DispatchStrategy::from_confidence(0.50), DispatchStrategy::ReportOnly);
+        assert_eq!(
+            DispatchStrategy::from_confidence(0.99),
+            DispatchStrategy::AutoExecute
+        );
+        assert_eq!(
+            DispatchStrategy::from_confidence(0.95),
+            DispatchStrategy::AutoExecute
+        );
+        assert_eq!(
+            DispatchStrategy::from_confidence(0.90),
+            DispatchStrategy::Review
+        );
+        assert_eq!(
+            DispatchStrategy::from_confidence(0.85),
+            DispatchStrategy::Review
+        );
+        assert_eq!(
+            DispatchStrategy::from_confidence(0.50),
+            DispatchStrategy::ReportOnly
+        );
     }
 
     #[test]

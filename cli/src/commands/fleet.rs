@@ -199,7 +199,9 @@ pub async fn execute(args: FleetArgs, config: &Config, format: OutputFormat) -> 
     match args.command {
         FleetCommand::Run(run_args) => execute_run(run_args, config, format).await,
         FleetCommand::List => execute_list(config, format).await,
-        FleetCommand::Status { operation_id } => execute_status(&operation_id, config, format).await,
+        FleetCommand::Status { operation_id } => {
+            execute_status(&operation_id, config, format).await
+        }
         FleetCommand::Stop { operation_id } => execute_stop(&operation_id, config, format).await,
     }
 }
@@ -359,9 +361,18 @@ async fn execute_run(args: FleetRunArgs, _config: &Config, format: OutputFormat)
     // Build summary
     let summary = FleetSummary {
         total_bots: bot_results.len(),
-        successful: bot_results.iter().filter(|r| matches!(r.status, BotStatus::Success)).count(),
-        failed: bot_results.iter().filter(|r| matches!(r.status, BotStatus::Failed)).count(),
-        skipped: bot_results.iter().filter(|r| matches!(r.status, BotStatus::Skipped)).count(),
+        successful: bot_results
+            .iter()
+            .filter(|r| matches!(r.status, BotStatus::Success))
+            .count(),
+        failed: bot_results
+            .iter()
+            .filter(|r| matches!(r.status, BotStatus::Failed))
+            .count(),
+        skipped: bot_results
+            .iter()
+            .filter(|r| matches!(r.status, BotStatus::Skipped))
+            .count(),
         total_findings: bot_results.iter().map(|r| r.findings_count).sum(),
         total_fixes: bot_results.iter().map(|r| r.fixes_applied).sum(),
     };
@@ -520,7 +531,8 @@ fn get_available_bots() -> Vec<Bot> {
         Bot {
             id: "finishing-bot".to_string(),
             name: "Finishing Bot".to_string(),
-            description: "Tier 2 Finisher - completeness analysis and release readiness".to_string(),
+            description: "Tier 2 Finisher - completeness analysis and release readiness"
+                .to_string(),
             category: BotCategory::Release,
             dependencies: vec!["glambot".to_string()],
             checks: vec![
@@ -539,7 +551,8 @@ fn get_available_bots() -> Vec<Bot> {
         Bot {
             id: "echidnabot".to_string(),
             name: "Echidnabot".to_string(),
-            description: "Tier 1 Verifier - formal verification, fuzzing, proof checking".to_string(),
+            description: "Tier 1 Verifier - formal verification, fuzzing, proof checking"
+                .to_string(),
             category: BotCategory::Quality,
             dependencies: vec![],
             checks: vec![
@@ -556,7 +569,9 @@ fn get_available_bots() -> Vec<Bot> {
         Bot {
             id: "seambot".to_string(),
             name: "Seambot".to_string(),
-            description: "Architectural seam analysis - drift detection, hidden channels, forge integration".to_string(),
+            description:
+                "Architectural seam analysis - drift detection, hidden channels, forge integration"
+                    .to_string(),
             category: BotCategory::Quality,
             dependencies: vec!["robot-repo-automaton".to_string(), "echidnabot".to_string()],
             checks: vec![
@@ -705,10 +720,7 @@ fn rand_findings() -> usize {
 fn print_fleet_results(results: &FleetResults) -> Result<()> {
     println!("{}", "Fleet Execution Results".bold());
     println!("{}", "═".repeat(60));
-    println!(
-        "Operation ID: {}",
-        results.operation_id.dimmed()
-    );
+    println!("Operation ID: {}", results.operation_id.dimmed());
     println!("Repository: {}", results.repository_path.display());
     println!("Duration: {} ms", results.total_duration_ms);
     println!();
@@ -741,9 +753,15 @@ fn print_fleet_results(results: &FleetResults) -> Result<()> {
     println!();
     println!("{}", "Summary:".bold());
     println!("  Total bots: {}", results.summary.total_bots);
-    println!("  Successful: {}", results.summary.successful.to_string().green());
+    println!(
+        "  Successful: {}",
+        results.summary.successful.to_string().green()
+    );
     println!("  Failed: {}", results.summary.failed.to_string().red());
-    println!("  Skipped: {}", results.summary.skipped.to_string().yellow());
+    println!(
+        "  Skipped: {}",
+        results.summary.skipped.to_string().yellow()
+    );
     println!("  Total findings: {}", results.summary.total_findings);
     println!("  Total fixes: {}", results.summary.total_fixes);
 
