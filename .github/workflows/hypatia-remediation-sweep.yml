@@ -1,0 +1,227 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Hypatia Remediation Sweep — fleet-wide proactive scan
+#
+# hypatia-scan.yml runs per-repo on push/PR/weekly and produces findings.
+# This workflow runs centrally, walks every repo with open Dependabot
+# alerts under the owner, and dispatches a `hypatia-security-alert`
+# repository_dispatch event to gitbot-fleet for each. The existing
+# `hypatia-dispatch-intake.yml` workflow in gitbot-fleet then routes
+# the findings to the appropriate fix-* script.
+#
+# Closes the loop documented in the 2026-05-12 dependabot-automation-gap
+# audit: the remediation pipeline existed in code (fleet_dispatcher.ex
+# + fix-dependabot.sh + dispatch-runner.sh) but had no scheduled
+# fleet-wide trigger. This is that trigger.
+
+name: Hypatia Remediation Sweep
+
+on:
+  schedule:
+    # Daily at 03:17 UTC — staggered off the Sunday maintenance.yml run
+    # in .git-private-farm to avoid token-rate-limit collisions.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: 'GitHub owner/org to sweep (default: hyperpolymath)'
+        required: false
+        default: 'hyperpolymath'
+        type: string
+      dry_run:
+        description: 'Log targets without dispatching'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      severity_floor:
+        description: 'Minimum severity to dispatch (LOW|MODERATE|HIGH|CRITICAL)'
+        required: false
+        default: 'MODERATE'
+        type: choice
+        options:
+          - LOW
+          - MODERATE
+          - HIGH
+          - CRITICAL
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    name: Sweep fleet for vulnerable repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve inputs
+        id: cfg
+        run: |
+          OWNER="${{ inputs.owner || 'hyperpolymath' }}"
+          DRY="${{ inputs.dry_run || 'false' }}"
+          FLOOR="${{ inputs.severity_floor || 'MODERATE' }}"
+          echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
+          echo "dry=$DRY"     >> "$GITHUB_OUTPUT"
+          echo "floor=$FLOOR" >> "$GITHUB_OUTPUT"
+
+      - name: Query repos with open vulnerability alerts
+        id: query
+        env:
+          # FARM_TOKEN_A_INBOUND has the cross-repo `repo` + `security_events`
+          # scopes needed to read vulnerabilityAlerts.
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          OWNER: ${{ steps.cfg.outputs.owner }}
+        run: |
+          set -euo pipefail
+          CURSOR="null"
+          : > /tmp/repos.jsonl
+
+          while :; do
+            RESP=$(gh api graphql -f query="
+              query(\$c: String) {
+                user(login: \"$OWNER\") {
+                  repositories(first: 100, after: \$c, isFork: false, ownerAffiliations: OWNER) {
+                    pageInfo { hasNextPage endCursor }
+                    nodes {
+                      name
+                      isArchived
+                      vulnerabilityAlerts(first: 100, states: [OPEN]) {
+                        totalCount
+                        nodes {
+                          createdAt
+                          securityVulnerability {
+                            severity
+                            package { name ecosystem }
+                            advisory { ghsaId summary }
+                            vulnerableVersionRange
+                            firstPatchedVersion { identifier }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            " -F c="$CURSOR")
+            echo "$RESP" | jq -c '.data.user.repositories.nodes[]' >> /tmp/repos.jsonl
+            HAS=$(echo "$RESP" | jq -r '.data.user.repositories.pageInfo.hasNextPage')
+            [[ "$HAS" != "true" ]] && break
+            CURSOR=$(echo "$RESP" | jq -r '.data.user.repositories.pageInfo.endCursor')
+          done
+
+          # Filter: non-archived, has alerts, at least one alert at/above floor.
+          FLOOR='${{ steps.cfg.outputs.floor }}'
+          # Severity ordering: LOW=1, MODERATE=2, HIGH=3, CRITICAL=4
+          FLOOR_RANK=$(jq -rn --arg f "$FLOOR" '{"LOW":1,"MODERATE":2,"HIGH":3,"CRITICAL":4}[$f]')
+
+          jq -c --argjson floor "$FLOOR_RANK" '
+            select(.isArchived == false)
+            | select(.vulnerabilityAlerts.totalCount > 0)
+            | . as $r
+            | ($r.vulnerabilityAlerts.nodes
+                | map({"LOW":1,"MODERATE":2,"HIGH":3,"CRITICAL":4}[.securityVulnerability.severity] // 0)
+                | max) as $max_rank
+            | select($max_rank >= $floor)
+            | {
+                name,
+                alert_count: .vulnerabilityAlerts.totalCount,
+                top_severity: ($r.vulnerabilityAlerts.nodes
+                  | map(.securityVulnerability.severity)
+                  | unique
+                  | sort_by({"LOW":1,"MODERATE":2,"HIGH":3,"CRITICAL":4}[.] // 0)
+                  | reverse
+                  | first),
+                alerts: ($r.vulnerabilityAlerts.nodes | map({
+                  severity: .securityVulnerability.severity,
+                  package: .securityVulnerability.package.name,
+                  ecosystem: .securityVulnerability.package.ecosystem,
+                  ghsa: .securityVulnerability.advisory.ghsaId,
+                  range: .securityVulnerability.vulnerableVersionRange,
+                  patched: (.securityVulnerability.firstPatchedVersion.identifier // null)
+                }))
+              }
+          ' /tmp/repos.jsonl > /tmp/targets.jsonl
+
+          COUNT=$(wc -l < /tmp/targets.jsonl)
+          echo "target_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "## Hypatia Remediation Sweep" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Owner: \`$OWNER\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Severity floor: \`$FLOOR\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target repos: **$COUNT**" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$COUNT" -gt 0 ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Repo | Alerts | Top |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|---|---:|---|" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '"| \(.name) | \(.alert_count) | \(.top_severity) |"' /tmp/targets.jsonl \
+              | sort -t'|' -k3 -nr >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Dispatch findings to gitbot-fleet
+        if: steps.query.outputs.target_count != '0' && steps.cfg.outputs.dry != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          OWNER: ${{ steps.cfg.outputs.owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          DISPATCHED=0
+          FAILED=0
+          while IFS= read -r target; do
+            REPO=$(echo "$target" | jq -r '.name')
+            COUNT=$(echo "$target" | jq -r '.alert_count')
+            TOP=$(echo "$target" | jq -r '.top_severity')
+
+            PAYLOAD=$(jq -nc \
+              --arg source_repo "$OWNER/$REPO" \
+              --arg run_url "$RUN_URL" \
+              --argjson count "$COUNT" \
+              --arg top_severity "$TOP" \
+              --argjson alerts "$(echo "$target" | jq '.alerts')" \
+              '{
+                event_type: "hypatia-security-alert",
+                client_payload: {
+                  source_repo: $source_repo,
+                  source: "hypatia-remediation-sweep",
+                  scan_kind: "fleet_dependabot_sweep",
+                  run_url: $run_url,
+                  findings_count: $count,
+                  top_severity: $top_severity,
+                  findings: $alerts
+                }
+              }')
+
+            if gh api -X POST \
+                "/repos/hyperpolymath/gitbot-fleet/dispatches" \
+                --input - <<<"$PAYLOAD" >/dev/null 2>&1; then
+              DISPATCHED=$((DISPATCHED+1))
+              echo "  dispatched: $REPO ($COUNT alerts, top=$TOP)"
+            else
+              FAILED=$((FAILED+1))
+              echo "::warning::dispatch failed for $REPO"
+            fi
+          done < /tmp/targets.jsonl
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Dispatched: $DISPATCHED · Failed: $FAILED**" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$FAILED" -gt 0 ]]; then
+            echo "::error::$FAILED dispatch(es) failed"
+            exit 1
+          fi
+
+      - name: Dry-run summary
+        if: steps.cfg.outputs.dry == 'true'
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "_Dry-run: no dispatches sent. Set \`dry_run: false\` to emit._" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sweep artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hypatia-remediation-sweep-${{ github.run_id }}
+          path: /tmp/targets.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
