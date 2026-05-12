@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
+# A2ML validator metadata
+name = "dogfooding"
+project = "hypatia"
+version = "1.0.0"
 # Dogfooding applicability manifest for Hypatia.
 #
 # Declares, per DOG-01..DOG-10 from

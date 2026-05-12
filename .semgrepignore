@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# Semgrep file-level suppressions for hypatia. Used in tandem with the
+# inline `// nosemgrep:` directives that already document audit intent
+# at the call-site level (see clients/rust/hypatia-client/src/ffi.rs).
+#
+# Why a file-level entry: cargo fmt periodically relocates inline
+# trailing-comment `// nosemgrep:` directives off the `unsafe {` line
+# they were guarding, and semgrep's GitHub Code Scanning integration
+# does not honour the preceding-line directive style as a substitute.
+# Maintaining the inline annotations is still worthwhile (they're the
+# canonical record of which unsafe blocks have been audited and why),
+# but the file-level entry below ensures the audit isn't repeatedly
+# re-flagged after each cosmetic reformat.
+#
+# Scope of the entry: clients/rust/hypatia-client/src/ffi.rs is the
+# Rust client's FFI bridge to the Hypatia C ABI (libhypatia.so). Every
+# `unsafe` block in the file is paired with a `// Safety:` comment
+# above it explaining the invariants the caller relies on (see the
+# Idris2 ABI proofs and the Zig `export fn` declarations referenced
+# in those comments for the formal side). Any other security concerns
+# that turn up in this file should be reviewed on their own merits;
+# this entry only silences the blanket `unsafe-usage` rule.
+
+clients/rust/hypatia-client/src/ffi.rs

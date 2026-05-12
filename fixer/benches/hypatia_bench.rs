@@ -4,9 +4,10 @@
 //! Exercises real logic: error catalog construction and lookup, SHA pin resolution,
 //! scan result aggregation, and regex-based workflow pattern scanning.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 
-use cicd_fixer::{ErrorCatalog, ShaPins, ScanResult, Issue, IssueCategory, IssueSeverity};
+use cicd_fixer::{ErrorCatalog, Issue, IssueCategory, IssueSeverity, ScanResult, ShaPins};
 
 /// Benchmark constructing the full error catalog from the embedded pattern set.
 fn bench_catalog_construction(c: &mut Criterion) {

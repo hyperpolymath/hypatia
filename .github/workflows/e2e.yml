@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Setup Erlang/Elixir
-        uses: erlef/setup-beam@5a67e1a1dd86cae5e5bef84e2da5060406a66c07  # v1
+        uses: erlef/setup-beam@ee09b1e59bb240681c382eb1f0abc6a04af72764 # v1.18.2
         with:
           otp-version: '27.0'
           elixir-version: '1.17'
@@ -120,7 +120,20 @@ jobs:
 
       - name: Verify no dangerous patterns
         run: |
-          DANGEROUS=$(grep -rn 'believe_me\|assert_total\|sorry\|Admitted\|unsafeCoerce' lib/ src/ 2>/dev/null || true)
+          # Looks for proof-language escape hatches (Idris2 believe_me /
+          # assert_total, Coq Admitted, Lean/Idris sorry, Haskell
+          # unsafeCoerce) in the corresponding source files. Skip Elixir
+          # and Rust (and especially lib/rules/, where these tokens
+          # legitimately appear as detection patterns / catalogue
+          # strings, not as actual escape hatches).
+          # `grep -v '^\s*--'` strips Idris2 / Haskell line comments, which
+          # legitimately mention these tokens as documentation
+          # ("Zero believe_me." in src/abi/RuleEngine.idr is the canonical
+          # example).
+          DANGEROUS=$(find lib src \( -name '*.idr' -o -name '*.v' -o -name '*.lean' -o -name '*.hs' \) \
+            -not -path 'lib/rules/*' \
+            -exec grep -Hn 'believe_me\|assert_total\|\bsorry\b\|\bAdmitted\b\|unsafeCoerce' {} + 2>/dev/null \
+            | grep -v ':[[:space:]]*--' || true)
           if [ -n "$DANGEROUS" ]; then
             echo "FAIL: Dangerous patterns found"
             echo "$DANGEROUS"

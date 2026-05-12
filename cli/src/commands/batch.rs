@@ -201,16 +201,30 @@ pub struct BatchSummary {
 
 /// Execute the batch command
 /// Returns exit code based on results (0 for success, 50 for partial, 51 for total failure, 52 for no items)
-pub async fn execute(args: BatchArgs, config: &Config, format: OutputFormat, machine_mode: bool) -> Result<i32> {
+pub async fn execute(
+    args: BatchArgs,
+    config: &Config,
+    format: OutputFormat,
+    machine_mode: bool,
+) -> Result<i32> {
     match args.command {
-        BatchCommand::Scan(scan_args) => execute_scan(scan_args, config, format, machine_mode).await,
+        BatchCommand::Scan(scan_args) => {
+            execute_scan(scan_args, config, format, machine_mode).await
+        }
         BatchCommand::Fix(fix_args) => execute_fix(fix_args, config, format, machine_mode).await,
-        BatchCommand::Report(report_args) => execute_report(report_args, config, format, machine_mode).await,
+        BatchCommand::Report(report_args) => {
+            execute_report(report_args, config, format, machine_mode).await
+        }
     }
 }
 
 /// Execute batch scan
-async fn execute_scan(args: BatchScanArgs, config: &Config, format: OutputFormat, machine_mode: bool) -> Result<i32> {
+async fn execute_scan(
+    args: BatchScanArgs,
+    config: &Config,
+    format: OutputFormat,
+    machine_mode: bool,
+) -> Result<i32> {
     let repos = collect_repos(&args.repos, &args.from_file)?;
     let total_repos = repos.len();
     let suppress_progress = args.no_progress || machine_mode;
@@ -248,8 +262,17 @@ async fn execute_scan(args: BatchScanArgs, config: &Config, format: OutputFormat
 
             let done = completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
             if !no_progress {
-                eprintln!("[{}/{}] {} - {}", done, total, repo,
-                    if result.status == BatchStatus::Success { "done".green() } else { "failed".red() });
+                eprintln!(
+                    "[{}/{}] {} - {}",
+                    done,
+                    total,
+                    repo,
+                    if result.status == BatchStatus::Success {
+                        "done".green()
+                    } else {
+                        "failed".red()
+                    }
+                );
             }
 
             if jsonl {
@@ -460,7 +483,7 @@ fn parse_findings_count(json_str: &str) -> usize {
 }
 
 /// Locate hypatia-cli.sh in well-known paths.
-/// 
+///
 /// Security Note: current_exe() is used here for path discovery only.
 /// The path is not used for security decisions or privilege escalation.
 /// The script execution is sandboxed and validated.
@@ -471,10 +494,14 @@ fn find_hypatia_cli() -> Option<PathBuf> {
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("../../hypatia-cli.sh"))),
         // Well-known development paths
-        Some(PathBuf::from("/var/mnt/eclipse/repos/verification-ecosystem/hypatia/hypatia-cli.sh")),
-        Some(dirs::home_dir()
-            .unwrap_or_default()
-            .join("Documents/hyperpolymath-repos/hypatia/hypatia-cli.sh")),
+        Some(PathBuf::from(
+            "/var/mnt/eclipse/repos/verification-ecosystem/hypatia/hypatia-cli.sh",
+        )),
+        Some(
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join("Documents/hyperpolymath-repos/hypatia/hypatia-cli.sh"),
+        ),
         // In PATH
         std::process::Command::new("which")
             .arg("hypatia-cli.sh")
@@ -482,9 +509,7 @@ fn find_hypatia_cli() -> Option<PathBuf> {
             .ok()
             .and_then(|o| {
                 if o.status.success() {
-                    Some(PathBuf::from(
-                        String::from_utf8_lossy(&o.stdout).trim(),
-                    ))
+                    Some(PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()))
                 } else {
                     None
                 }
@@ -504,12 +529,7 @@ fn process_scan_repo_fallback(repo: &str, start: &std::time::Instant) -> BatchIt
     let mut findings = 0;
 
     // Check for required files
-    let required = [
-        "LICENSE",
-        "SECURITY.md",
-        ".editorconfig",
-        ".gitignore",
-    ];
+    let required = ["LICENSE", "SECURITY.md", ".editorconfig", ".gitignore"];
     for file in &required {
         if !path.join(file).exists() {
             // LICENSE.txt is an alternative
@@ -558,7 +578,12 @@ fn process_scan_repo_fallback(repo: &str, start: &std::time::Instant) -> BatchIt
                                 if let Some(pos) = l.find("uses:") {
                                     let rest = &l[pos..];
                                     rest.contains('@')
-                                        && !rest.chars().skip_while(|c| *c != '@').skip(1).take(40).all(|c| c.is_ascii_hexdigit())
+                                        && !rest
+                                            .chars()
+                                            .skip_while(|c| *c != '@')
+                                            .skip(1)
+                                            .take(40)
+                                            .all(|c| c.is_ascii_hexdigit())
                                 } else {
                                     false
                                 }
@@ -590,7 +615,12 @@ fn process_scan_repo_fallback(repo: &str, start: &std::time::Instant) -> BatchIt
 }
 
 /// Execute batch fix
-async fn execute_fix(args: BatchFixArgs, _config: &Config, format: OutputFormat, machine_mode: bool) -> Result<i32> {
+async fn execute_fix(
+    args: BatchFixArgs,
+    _config: &Config,
+    format: OutputFormat,
+    machine_mode: bool,
+) -> Result<i32> {
     let repos = collect_repos(&args.repos, &args.from_file)?;
     let suppress_progress = args.no_progress || machine_mode;
 
@@ -663,8 +693,10 @@ async fn execute_fix(args: BatchFixArgs, _config: &Config, format: OutputFormat,
                     // Filter to fixable findings
                     if let Ok(findings) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
                         for finding in &findings {
-                            let action = finding.get("action").and_then(|v| v.as_str()).unwrap_or("");
-                            let rule_type = finding.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                            let action =
+                                finding.get("action").and_then(|v| v.as_str()).unwrap_or("");
+                            let rule_type =
+                                finding.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
                             // Skip if fix_only filter is set and this type doesn't match
                             if let Some(ref filter) = fix_only {
@@ -677,7 +709,8 @@ async fn execute_fix(args: BatchFixArgs, _config: &Config, format: OutputFormat,
                             if action == "auto_fix" || action == "delete" || action == "create" {
                                 if !dry_run {
                                     // Apply the fix based on action type
-                                    let file = finding.get("file").and_then(|v| v.as_str()).unwrap_or("");
+                                    let file =
+                                        finding.get("file").and_then(|v| v.as_str()).unwrap_or("");
                                     let applied = apply_fix(&repo, file, action);
                                     if applied {
                                         fixes_count += 1;
@@ -853,10 +886,22 @@ fn collect_repos(args: &[String], from_file: &Option<PathBuf>) -> Result<Vec<Str
 fn build_summary(results: &[BatchItemResult], total_duration_ms: u64) -> BatchSummary {
     BatchSummary {
         total: results.len(),
-        successful: results.iter().filter(|r| r.status == BatchStatus::Success).count(),
-        warnings: results.iter().filter(|r| r.status == BatchStatus::Warning).count(),
-        failed: results.iter().filter(|r| r.status == BatchStatus::Failed).count(),
-        skipped: results.iter().filter(|r| r.status == BatchStatus::Skipped).count(),
+        successful: results
+            .iter()
+            .filter(|r| r.status == BatchStatus::Success)
+            .count(),
+        warnings: results
+            .iter()
+            .filter(|r| r.status == BatchStatus::Warning)
+            .count(),
+        failed: results
+            .iter()
+            .filter(|r| r.status == BatchStatus::Failed)
+            .count(),
+        skipped: results
+            .iter()
+            .filter(|r| r.status == BatchStatus::Skipped)
+            .count(),
         total_findings: results.iter().map(|r| r.findings_count).sum(),
         total_fixes: results.iter().map(|r| r.fixes_count).sum(),
         total_duration_ms,
@@ -869,8 +914,14 @@ fn print_summary(summary: &BatchSummary) {
     eprintln!("{}", "Batch Summary".bold());
     eprintln!("{}", "─".repeat(40));
     eprintln!("  Total repos:     {}", summary.total);
-    eprintln!("  Successful:      {}", summary.successful.to_string().green());
-    eprintln!("  With warnings:   {}", summary.warnings.to_string().yellow());
+    eprintln!(
+        "  Successful:      {}",
+        summary.successful.to_string().green()
+    );
+    eprintln!(
+        "  With warnings:   {}",
+        summary.warnings.to_string().yellow()
+    );
     eprintln!("  Failed:          {}", summary.failed.to_string().red());
     eprintln!("  Skipped:         {}", summary.skipped);
     eprintln!("  Total findings:  {}", summary.total_findings);
@@ -927,7 +978,10 @@ fn apply_fix(repo: &str, file: &str, action: &str) -> bool {
 fn generate_markdown_report(repos: &[String]) -> String {
     let mut report = String::new();
     report.push_str("# cicd-hyper-a Batch Report\n\n");
-    report.push_str(&format!("Generated: {}\n\n", Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+    report.push_str(&format!(
+        "Generated: {}\n\n",
+        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    ));
     report.push_str("## Repositories\n\n");
     report.push_str("| Repository | Status |\n");
     report.push_str("|------------|--------|\n");
@@ -940,7 +994,8 @@ fn generate_markdown_report(repos: &[String]) -> String {
 /// Generate HTML report
 fn generate_html_report(repos: &[String]) -> String {
     let mut report = String::new();
-    report.push_str("<!DOCTYPE html>\n<html><head><title>cicd-hyper-a Report</title></head><body>\n");
+    report
+        .push_str("<!DOCTYPE html>\n<html><head><title>cicd-hyper-a Report</title></head><body>\n");
     report.push_str("<h1>cicd-hyper-a Batch Report</h1>\n");
     report.push_str("<table border='1'><tr><th>Repository</th><th>Status</th></tr>\n");
     for repo in repos {
@@ -952,10 +1007,15 @@ fn generate_html_report(repos: &[String]) -> String {
 
 /// Generate JSON report
 fn generate_json_report(repos: &[String]) -> Result<String> {
-    let data: Vec<_> = repos.iter().map(|r| serde_json::json!({
-        "repo": r,
-        "status": "success"
-    })).collect();
+    let data: Vec<_> = repos
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "repo": r,
+                "status": "success"
+            })
+        })
+        .collect();
     Ok(serde_json::to_string_pretty(&data)?)
 }
 

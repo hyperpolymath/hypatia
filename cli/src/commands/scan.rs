@@ -240,8 +240,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Scan for configuration issues
-    if categories.contains(&"configuration".to_string())
-        || categories.contains(&"all".to_string())
+    if categories.contains(&"configuration".to_string()) || categories.contains(&"all".to_string())
     {
         if let Some(pb) = &progress {
             pb.set_message("Checking configurations...");
@@ -263,7 +262,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Sort findings by severity (highest first)
-    findings.sort_by(|a, b| b.severity.cmp(&a.severity));
+    findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
 
     // Build summary
     let summary = build_summary(&findings, files_scanned);
@@ -308,7 +307,14 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Exit with error if critical findings
-    if results.summary.by_severity.get("critical").copied().unwrap_or(0) > 0 {
+    if results
+        .summary
+        .by_severity
+        .get("critical")
+        .copied()
+        .unwrap_or(0)
+        > 0
+    {
         std::process::exit(1);
     }
 
@@ -345,12 +351,8 @@ fn build_summary(findings: &[Finding], files_scanned: usize) -> ScanSummary {
     let mut auto_fixable = 0;
 
     for finding in findings {
-        *by_severity
-            .entry(finding.severity.to_string())
-            .or_insert(0) += 1;
-        *by_category
-            .entry(finding.category.to_string())
-            .or_insert(0) += 1;
+        *by_severity.entry(finding.severity.to_string()).or_insert(0) += 1;
+        *by_category.entry(finding.category.to_string()).or_insert(0) += 1;
         if finding.auto_fixable {
             auto_fixable += 1;
         }
@@ -442,9 +444,10 @@ fn scan_github_workflows(
         }
 
         // Check for missing permissions
-        if !skipped_checks.contains(&"missing-permissions".to_string()) {
-            if !permissions_regex.is_match(&content) {
-                findings.push(Finding {
+        if !skipped_checks.contains(&"missing-permissions".to_string())
+            && !permissions_regex.is_match(&content)
+        {
+            findings.push(Finding {
                     check_id: "missing-permissions".to_string(),
                     title: "Missing Workflow Permissions".to_string(),
                     description: "Workflow does not declare explicit permissions".to_string(),
@@ -460,30 +463,26 @@ fn scan_github_workflows(
                     ),
                     rule_id: Some("SEC-WF-002".to_string()),
                 });
-            }
         }
 
         // Check for missing SPDX header
-        if !skipped_checks.contains(&"missing-spdx".to_string()) {
-            if !spdx_regex.is_match(&content) {
-                findings.push(Finding {
-                    check_id: "missing-spdx".to_string(),
-                    title: "Missing SPDX License Header".to_string(),
-                    description: "Workflow file does not have SPDX license identifier".to_string(),
-                    severity: Severity::Low,
-                    category: Category::Policy,
-                    file_path: Some(relative_path.to_path_buf()),
-                    line_number: Some(1),
-                    snippet: None,
-                    suggestion: Some(
-                        "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line"
-                            .to_string(),
-                    ),
-                    auto_fixable: true,
-                    docs_url: Some("https://spdx.dev/learn/handling-license-info/".to_string()),
-                    rule_id: Some("LIC-001".to_string()),
-                });
-            }
+        if !skipped_checks.contains(&"missing-spdx".to_string()) && !spdx_regex.is_match(&content) {
+            findings.push(Finding {
+                check_id: "missing-spdx".to_string(),
+                title: "Missing SPDX License Header".to_string(),
+                description: "Workflow file does not have SPDX license identifier".to_string(),
+                severity: Severity::Low,
+                category: Category::Policy,
+                file_path: Some(relative_path.to_path_buf()),
+                line_number: Some(1),
+                snippet: None,
+                suggestion: Some(
+                    "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line".to_string(),
+                ),
+                auto_fixable: true,
+                docs_url: Some("https://spdx.dev/learn/handling-license-info/".to_string()),
+                rule_id: Some("LIC-001".to_string()),
+            });
         }
     }
 
@@ -500,9 +499,7 @@ fn scan_security_policy(repo_path: &Path, skipped_checks: &[String]) -> Result<V
 
     let security_paths = ["SECURITY.md", "security.md", ".github/SECURITY.md"];
 
-    let has_security = security_paths
-        .iter()
-        .any(|p| repo_path.join(p).exists());
+    let has_security = security_paths.iter().any(|p| repo_path.join(p).exists());
 
     if !has_security {
         findings.push(Finding {
@@ -653,23 +650,23 @@ fn scan_configurations(repo_path: &Path, skipped_checks: &[String]) -> Result<Ve
     let mut findings = Vec::new();
 
     // Check for .gitignore
-    if !skipped_checks.contains(&"missing-gitignore".to_string()) {
-        if !repo_path.join(".gitignore").exists() {
-            findings.push(Finding {
-                check_id: "missing-gitignore".to_string(),
-                title: "Missing .gitignore".to_string(),
-                description: "Repository does not have a .gitignore file".to_string(),
-                severity: Severity::Low,
-                category: Category::Configuration,
-                file_path: None,
-                line_number: None,
-                snippet: None,
-                suggestion: Some("Add a .gitignore file appropriate for your project".to_string()),
-                auto_fixable: false,
-                docs_url: Some("https://git-scm.com/docs/gitignore".to_string()),
-                rule_id: Some("CFG-001".to_string()),
-            });
-        }
+    if !skipped_checks.contains(&"missing-gitignore".to_string())
+        && !repo_path.join(".gitignore").exists()
+    {
+        findings.push(Finding {
+            check_id: "missing-gitignore".to_string(),
+            title: "Missing .gitignore".to_string(),
+            description: "Repository does not have a .gitignore file".to_string(),
+            severity: Severity::Low,
+            category: Category::Configuration,
+            file_path: None,
+            line_number: None,
+            snippet: None,
+            suggestion: Some("Add a .gitignore file appropriate for your project".to_string()),
+            auto_fixable: false,
+            docs_url: Some("https://git-scm.com/docs/gitignore".to_string()),
+            rule_id: Some("CFG-001".to_string()),
+        });
     }
 
     // Check for README
@@ -703,7 +700,11 @@ fn scan_configurations(repo_path: &Path, skipped_checks: &[String]) -> Result<Ve
 
     // Check for CONTRIBUTING
     if !skipped_checks.contains(&"missing-contributing".to_string()) {
-        let contrib_paths = ["CONTRIBUTING.md", "CONTRIBUTING.adoc", ".github/CONTRIBUTING.md"];
+        let contrib_paths = [
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.adoc",
+            ".github/CONTRIBUTING.md",
+        ];
         let has_contrib = contrib_paths.iter().any(|p| repo_path.join(p).exists());
 
         if !has_contrib {
@@ -733,11 +734,7 @@ fn output_plain_format(results: &ScanResults, detailed: bool) -> Result<()> {
         "Scan Results for:".bold(),
         results.repository_path.display()
     );
-    println!(
-        "{} {} ms\n",
-        "Scan duration:".dimmed(),
-        results.duration_ms
-    );
+    println!("{} {} ms\n", "Scan duration:".dimmed(), results.duration_ms);
 
     if results.findings.is_empty() {
         println!("{}", "No issues found.".green().bold());

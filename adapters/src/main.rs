@@ -9,14 +9,16 @@ use std::env;
 /// Prevents argument injection attacks by validating format
 fn validate_args(args: &[String]) -> bool {
     // Basic validation - ensure no suspicious characters in arguments
-    for arg in args.iter().skip(1) { // Skip program name
-        if arg.contains(char::is_control) || 
-           arg.contains(';') || 
-           arg.contains('|') || 
-           arg.contains('&') ||
-           arg.contains('$') ||
-           arg.contains('`') ||
-           arg.contains('\\') {
+    for arg in args.iter().skip(1) {
+        // Skip program name
+        if arg.contains(char::is_control)
+            || arg.contains(';')
+            || arg.contains('|')
+            || arg.contains('&')
+            || arg.contains('$')
+            || arg.contains('`')
+            || arg.contains('\\')
+        {
             return false;
         }
     }

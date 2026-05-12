@@ -14,7 +14,6 @@ static UNPINNED_ACTION_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("UNPINNED_ACTION_RE regex is invalid - this is a compile-time bug")
 });
 
-
 static PERMISSIONS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?m)^permissions:")
         .expect("PERMISSIONS_RE regex is invalid - this is a compile-time bug")
@@ -35,7 +34,6 @@ static DOWNLOAD_THEN_RUN_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("DOWNLOAD_THEN_RUN_RE regex is invalid - this is a compile-time bug")
 });
 
-
 /// Issue severity levels (aligned with CVSS)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IssueSeverity {
@@ -47,6 +45,7 @@ pub enum IssueSeverity {
 }
 
 impl IssueSeverity {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "critical" => Self::Critical,
@@ -93,10 +92,26 @@ pub struct ScanResult {
 
 impl ScanResult {
     pub fn summary(&self) -> String {
-        let critical = self.issues.iter().filter(|i| i.severity == IssueSeverity::Critical).count();
-        let high = self.issues.iter().filter(|i| i.severity == IssueSeverity::High).count();
-        let medium = self.issues.iter().filter(|i| i.severity == IssueSeverity::Medium).count();
-        let low = self.issues.iter().filter(|i| i.severity == IssueSeverity::Low).count();
+        let critical = self
+            .issues
+            .iter()
+            .filter(|i| i.severity == IssueSeverity::Critical)
+            .count();
+        let high = self
+            .issues
+            .iter()
+            .filter(|i| i.severity == IssueSeverity::High)
+            .count();
+        let medium = self
+            .issues
+            .iter()
+            .filter(|i| i.severity == IssueSeverity::Medium)
+            .count();
+        let low = self
+            .issues
+            .iter()
+            .filter(|i| i.severity == IssueSeverity::Low)
+            .count();
 
         format!(
             "Scanned {} workflows: {} issues ({} critical, {} high, {} medium, {} low), {} auto-fixable",
@@ -120,7 +135,12 @@ impl Scanner {
     }
 
     /// Scan a repository for CI/CD issues
-    pub fn scan_repo(&self, repo_path: &Path, _catalog: &ErrorCatalog, sha_pins: &ShaPins) -> Result<ScanResult> {
+    pub fn scan_repo(
+        &self,
+        repo_path: &Path,
+        _catalog: &ErrorCatalog,
+        sha_pins: &ShaPins,
+    ) -> Result<ScanResult> {
         let workflows_dir = repo_path.join(".github/workflows");
         let mut issues = Vec::new();
         let mut workflows_scanned = 0;
@@ -133,7 +153,9 @@ impl Scanner {
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| {
-                e.path().extension().map_or(false, |ext| ext == "yml" || ext == "yaml")
+                e.path()
+                    .extension()
+                    .is_some_and(|ext| ext == "yml" || ext == "yaml")
             })
         {
             let path = entry.path();
@@ -148,7 +170,9 @@ impl Scanner {
                     file_path: path.display().to_string(),
                     line_number: Some(1),
                     description: "Workflow file missing SPDX license header".to_string(),
-                    fix_suggestion: "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line".to_string(),
+                    fix_suggestion:
+                        "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line"
+                            .to_string(),
                     auto_fixable: true,
                     category: IssueCategory::MissingSpdx,
                 });
@@ -174,7 +198,8 @@ impl Scanner {
                 let version = cap.get(2).map_or("", |m| m.as_str());
 
                 // Find line number and check if it's commented
-                let line_result = content.lines()
+                let line_result = content
+                    .lines()
                     .enumerate()
                     .find(|(_, line)| line.contains(action) && line.contains(version));
 
@@ -188,7 +213,8 @@ impl Scanner {
                 let line_num = line_result.map(|(i, _)| i + 1);
 
                 // Get SHA pin suggestion if available
-                let sha_suggestion = sha_pins.get_pin(action)
+                let sha_suggestion = sha_pins
+                    .get_pin(action)
                     .map(|(sha, ver)| format!("@{} # {}", sha, ver))
                     .unwrap_or_else(|| format!("@SHA # {}", version));
 
@@ -199,9 +225,15 @@ impl Scanner {
                 };
 
                 let description = if version == "main" || version == "master" {
-                    format!("GitHub Action/workflow '{}' uses mutable ref '{}' instead of SHA pin", action, version)
+                    format!(
+                        "GitHub Action/workflow '{}' uses mutable ref '{}' instead of SHA pin",
+                        action, version
+                    )
                 } else {
-                    format!("GitHub Action '{}' uses version tag '{}' instead of SHA pin", action, version)
+                    format!(
+                        "GitHub Action '{}' uses version tag '{}' instead of SHA pin",
+                        action, version
+                    )
                 };
 
                 issues.push(Issue {
@@ -223,7 +255,8 @@ impl Scanner {
                 for (i, line) in lines.iter().enumerate() {
                     if line.contains("dtolnay/rust-toolchain@") {
                         // Check next few lines for with: toolchain:
-                        let has_toolchain = lines.iter()
+                        let has_toolchain = lines
+                            .iter()
                             .skip(i + 1)
                             .take(3)
                             .any(|l| l.trim().starts_with("with:") || l.contains("toolchain:"));
@@ -234,8 +267,11 @@ impl Scanner {
                                 severity: IssueSeverity::Medium,
                                 file_path: path.display().to_string(),
                                 line_number: Some(i + 1),
-                                description: "dtolnay/rust-toolchain missing required 'toolchain' input".to_string(),
-                                fix_suggestion: "Add 'with: toolchain: stable' (or nightly/beta)".to_string(),
+                                description:
+                                    "dtolnay/rust-toolchain missing required 'toolchain' input"
+                                        .to_string(),
+                                fix_suggestion: "Add 'with: toolchain: stable' (or nightly/beta)"
+                                    .to_string(),
                                 auto_fixable: true,
                                 category: IssueCategory::MissingToolchainInput,
                             });
@@ -246,14 +282,22 @@ impl Scanner {
 
             // Check for download-and-execute shell patterns
             if let Some(mat) = DOWNLOAD_THEN_RUN_RE.find(&content) {
-                let line_number = content[..mat.start()].chars().filter(|&c| c == '\n').count() + 1;
+                let line_number = content[..mat.start()]
+                    .chars()
+                    .filter(|&c| c == '\n')
+                    .count()
+                    + 1;
                 issues.push(Issue {
                     id: "download-then-run".to_string(),
                     severity: IssueSeverity::High,
                     file_path: path.display().to_string(),
                     line_number: Some(line_number),
-                    description: "Workflow executes remote script directly via curl/wget pipe to shell".to_string(),
-                    fix_suggestion: "Download script to file, verify checksum/signature, then execute".to_string(),
+                    description:
+                        "Workflow executes remote script directly via curl/wget pipe to shell"
+                            .to_string(),
+                    fix_suggestion:
+                        "Download script to file, verify checksum/signature, then execute"
+                            .to_string(),
                     auto_fixable: false,
                     category: IssueCategory::Other,
                 });

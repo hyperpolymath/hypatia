@@ -12,7 +12,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use super::deposit::{Ruleset, RulesetMetadata, RulesetCategory, Rule, RuleEffect};
+use super::deposit::{Rule, RuleEffect, Ruleset, RulesetCategory, RulesetMetadata};
 use crate::config::Config;
 use crate::output::{OutputFormat, Outputter};
 
@@ -107,7 +107,8 @@ pub async fn execute(args: WithdrawArgs, config: &Config, format: OutputFormat) 
     );
 
     // Fetch ruleset from registry
-    let (ruleset, version) = fetch_ruleset(&args.ruleset_name, &args.version, &registry_url).await?;
+    let (ruleset, version) =
+        fetch_ruleset(&args.ruleset_name, &args.version, &registry_url).await?;
 
     // If show_only, just display and return
     if args.show_only {

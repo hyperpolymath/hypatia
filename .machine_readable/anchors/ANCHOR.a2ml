@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# A2ML validator metadata (a2ml-validate-action looks for these keys)
+name = "hypatia"
+project = "hypatia"
+version = "1.0.0"
 # ⚓ ANCHOR: hypatia
 # This is the canonical authority for the hypatia repository.
 

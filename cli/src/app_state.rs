@@ -46,9 +46,15 @@ impl RateLimitSlot {
             self.remaining.store(self.limit, Ordering::Relaxed);
             *start = now;
         }
-        let prev = self.remaining.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |r| {
-            if r > 0 { Some(r - 1) } else { None }
-        });
+        let prev = self
+            .remaining
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |r| {
+                if r > 0 {
+                    Some(r - 1)
+                } else {
+                    None
+                }
+            });
         prev.is_ok()
     }
 }
@@ -118,7 +124,10 @@ impl AppState {
 
     /// Whether the bot should post any GitHub comments.
     pub fn posts_comments(&self) -> bool {
-        matches!(self.mode_selector, BotMode::Advisor | BotMode::Consultant | BotMode::Regulator)
+        matches!(
+            self.mode_selector,
+            BotMode::Advisor | BotMode::Consultant | BotMode::Regulator
+        )
     }
 
     /// Whether the bot should block merges by failing a required check-run.

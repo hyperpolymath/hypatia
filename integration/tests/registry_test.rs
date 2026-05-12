@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! Registry Integration Tests
 //!
 //! Tests Haskell registry operations:
@@ -11,7 +13,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 use tracing::{debug, info, warn};
@@ -152,9 +154,8 @@ impl MockRegistryClient {
             .values()
             .filter(|rs| {
                 let matches_query = rs.name.contains(query) || rs.description.contains(query);
-                let matches_category = category.map_or(true, |cat| {
-                    rs.rules.iter().any(|r| r.category == cat)
-                });
+                let matches_category =
+                    category.is_none_or(|cat| rs.rules.iter().any(|r| r.category == cat));
                 matches_query && matches_category
             })
             .collect()
@@ -211,7 +212,12 @@ impl MockRegistryClient {
         }
 
         // Check version format
-        if !ruleset.version.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if !ruleset
+            .version
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit())
+        {
             errors.push(VerificationError {
                 location: "version".to_string(),
                 message: "Version must start with a digit".to_string(),
@@ -227,11 +233,7 @@ impl MockRegistryClient {
     }
 
     /// Apply fix template with bindings
-    fn apply_fix_template(
-        &self,
-        template: &str,
-        bindings: &HashMap<String, String>,
-    ) -> String {
+    fn apply_fix_template(&self, template: &str, bindings: &HashMap<String, String>) -> String {
         let mut result = template.to_string();
         for (key, value) in bindings {
             result = result.replace(&format!("{{{}}}", key), value);
@@ -282,17 +284,14 @@ impl RegistryTestHarness {
     }
 
     /// Validate ruleset file
-    fn validate_ruleset_file(&self, path: &PathBuf) -> Result<bool> {
+    fn validate_ruleset_file(&self, path: &Path) -> Result<bool> {
         if !self.registry_available() {
             warn!("Registry binary not available, skipping validation");
             return Ok(true);
         }
 
-        let (code, stdout, stderr) = self.run_registry_cmd(&[
-            "validate",
-            "--ruleset",
-            path.to_str().unwrap(),
-        ])?;
+        let (code, stdout, stderr) =
+            self.run_registry_cmd(&["validate", "--ruleset", path.to_str().unwrap()])?;
 
         debug!("Validation stdout: {}", stdout);
         if !stderr.is_empty() {
@@ -485,19 +484,17 @@ async fn test_rule_search_by_category() -> Result<()> {
         name: "Security".to_string(),
         version: "1.0.0".to_string(),
         description: "Security rules".to_string(),
-        rules: vec![
-            Rule {
-                id: "sec-1".to_string(),
-                name: "Sec Rule 1".to_string(),
-                description: "Security rule".to_string(),
-                category: RuleCategory::WorkflowSecurity,
-                severity: Severity::High,
-                pattern: None,
-                fix_template: None,
-                auto_fixable: false,
-                references: vec![],
-            },
-        ],
+        rules: vec![Rule {
+            id: "sec-1".to_string(),
+            name: "Sec Rule 1".to_string(),
+            description: "Security rule".to_string(),
+            category: RuleCategory::WorkflowSecurity,
+            severity: Severity::High,
+            pattern: None,
+            fix_template: None,
+            auto_fixable: false,
+            references: vec![],
+        }],
         metadata: RulesetMetadata {
             author: "test".to_string(),
             license: "MIT".to_string(),
@@ -512,19 +509,17 @@ async fn test_rule_search_by_category() -> Result<()> {
         name: "Quality".to_string(),
         version: "1.0.0".to_string(),
         description: "Quality rules".to_string(),
-        rules: vec![
-            Rule {
-                id: "qual-1".to_string(),
-                name: "Quality Rule 1".to_string(),
-                description: "Quality rule".to_string(),
-                category: RuleCategory::CodeQuality,
-                severity: Severity::Low,
-                pattern: None,
-                fix_template: None,
-                auto_fixable: false,
-                references: vec![],
-            },
-        ],
+        rules: vec![Rule {
+            id: "qual-1".to_string(),
+            name: "Quality Rule 1".to_string(),
+            description: "Quality rule".to_string(),
+            category: RuleCategory::CodeQuality,
+            severity: Severity::Low,
+            pattern: None,
+            fix_template: None,
+            auto_fixable: false,
+            references: vec![],
+        }],
         metadata: RulesetMetadata {
             author: "test".to_string(),
             license: "MIT".to_string(),
@@ -629,7 +624,10 @@ async fn test_fix_template_application() -> Result<()> {
     let template = "uses: {action}@{sha} # {version}";
     let mut bindings = HashMap::new();
     bindings.insert("action".to_string(), "actions/checkout".to_string());
-    bindings.insert("sha".to_string(), "b4ffde65f46336ab88eb53be808477a3936bae11".to_string());
+    bindings.insert(
+        "sha".to_string(),
+        "b4ffde65f46336ab88eb53be808477a3936bae11".to_string(),
+    );
     bindings.insert("version".to_string(), "v4".to_string());
 
     let result = client.apply_fix_template(template, &bindings);
@@ -694,14 +692,31 @@ fn main() {
     println!("Running Registry Integration Tests\n");
     println!("===================================\n");
 
-    let tests: Vec<(&str, fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>)> = vec![
-        ("test_ruleset_registration", || Box::pin(test_ruleset_registration())),
-        ("test_ruleset_verification", || Box::pin(test_ruleset_verification())),
-        ("test_duplicate_rule_detection", || Box::pin(test_duplicate_rule_detection())),
-        ("test_rule_search_by_category", || Box::pin(test_rule_search_by_category())),
-        ("test_rule_search_by_severity", || Box::pin(test_rule_search_by_severity())),
-        ("test_fix_template_application", || Box::pin(test_fix_template_application())),
-        ("test_ruleset_json_serialization", || Box::pin(test_ruleset_json_serialization())),
+    let tests: Vec<(
+        &str,
+        fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>,
+    )> = vec![
+        ("test_ruleset_registration", || {
+            Box::pin(test_ruleset_registration())
+        }),
+        ("test_ruleset_verification", || {
+            Box::pin(test_ruleset_verification())
+        }),
+        ("test_duplicate_rule_detection", || {
+            Box::pin(test_duplicate_rule_detection())
+        }),
+        ("test_rule_search_by_category", || {
+            Box::pin(test_rule_search_by_category())
+        }),
+        ("test_rule_search_by_severity", || {
+            Box::pin(test_rule_search_by_severity())
+        }),
+        ("test_fix_template_application", || {
+            Box::pin(test_fix_template_application())
+        }),
+        ("test_ruleset_json_serialization", || {
+            Box::pin(test_ruleset_json_serialization())
+        }),
     ];
 
     let mut passed = 0;

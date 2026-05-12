@@ -66,7 +66,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@8d0a9443e5efb9c69e313d234a10a028eadd018c # v2.51.11
+        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
         with:
           tool: cargo-deny
 
@@ -79,6 +79,7 @@ jobs:
   haskell-audit:
     name: Haskell Dependency Audit
     runs-on: ubuntu-latest
+    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -216,6 +217,7 @@ jobs:
   sbom-haskell:
     name: Generate Haskell SBOM
     runs-on: ubuntu-latest
+    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
     defaults:
       run:
         working-directory: registry

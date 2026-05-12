@@ -30,13 +30,9 @@ pub enum Transport {
 
 /// Configuration for `Client::with_config`. Defaults try FFI first,
 /// then subprocess. Override `prefer` if you want to force one path.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ClientConfig {
     pub prefer: Option<Transport>,
-}
-
-impl Default for ClientConfig {
-    fn default() -> Self { ClientConfig { prefer: None } }
 }
 
 /// Hypatia client. Carries an active transport (or `None` if both
@@ -83,7 +79,11 @@ impl Client {
         #[cfg(feature = "ffi")]
         {
             match FfiTransport::new().and_then(|t| t.ping().map(|_| t)) {
-                Ok(t) => return Client { transport: ActiveTransport::Ffi(t) },
+                Ok(t) => {
+                    return Client {
+                        transport: ActiveTransport::Ffi(t),
+                    }
+                }
                 Err(e) => ffi_err = Some(e.to_string()),
             }
         }
@@ -91,7 +91,11 @@ impl Client {
         #[cfg(feature = "subprocess")]
         {
             match SubprocessTransport::new() {
-                Ok(t) => return Client { transport: ActiveTransport::Subprocess(t) },
+                Ok(t) => {
+                    return Client {
+                        transport: ActiveTransport::Subprocess(t),
+                    }
+                }
                 Err(e) => sub_err = Some(e.to_string()),
             }
         }
@@ -107,7 +111,9 @@ impl Client {
     #[cfg(feature = "ffi")]
     fn try_ffi_only() -> Self {
         match FfiTransport::new().and_then(|t| t.ping().map(|_| t)) {
-            Ok(t) => Client { transport: ActiveTransport::Ffi(t) },
+            Ok(t) => Client {
+                transport: ActiveTransport::Ffi(t),
+            },
             Err(e) => Client {
                 transport: ActiveTransport::None {
                     ffi_error: Some(e.to_string()),
@@ -120,7 +126,9 @@ impl Client {
     #[cfg(feature = "subprocess")]
     fn try_subprocess_only() -> Self {
         match SubprocessTransport::new() {
-            Ok(t) => Client { transport: ActiveTransport::Subprocess(t) },
+            Ok(t) => Client {
+                transport: ActiveTransport::Subprocess(t),
+            },
             Err(e) => Client {
                 transport: ActiveTransport::None {
                     ffi_error: None,
@@ -154,10 +162,17 @@ impl Client {
     /// transport is active.
     pub fn unavailability_reason(&self) -> Option<String> {
         match &self.transport {
-            ActiveTransport::None { ffi_error, subprocess_error } => {
+            ActiveTransport::None {
+                ffi_error,
+                subprocess_error,
+            } => {
                 let mut parts: Vec<String> = Vec::new();
-                if let Some(e) = ffi_error { parts.push(format!("ffi: {}", e)); }
-                if let Some(e) = subprocess_error { parts.push(format!("subprocess: {}", e)); }
+                if let Some(e) = ffi_error {
+                    parts.push(format!("ffi: {}", e));
+                }
+                if let Some(e) = subprocess_error {
+                    parts.push(format!("subprocess: {}", e));
+                }
                 if parts.is_empty() {
                     Some("no transport compiled in".into())
                 } else {
@@ -191,7 +206,8 @@ impl Client {
             ActiveTransport::Ffi(t) => t.health_check(),
             #[cfg(feature = "subprocess")]
             ActiveTransport::Subprocess(_) => Err(HypatiaError::FfiUnavailable(
-                "health_check requires the FFI transport (subprocess fallback not yet wired)".into(),
+                "health_check requires the FFI transport (subprocess fallback not yet wired)"
+                    .into(),
             )),
             ActiveTransport::None { .. } => Err(self.unavailable_error()),
         }
@@ -267,7 +283,10 @@ impl Client {
     /// Centralised so the six new wrappers above stay tidy.
     fn unavailable_error(&self) -> HypatiaError {
         match &self.transport {
-            ActiveTransport::None { ffi_error, subprocess_error } => {
+            ActiveTransport::None {
+                ffi_error,
+                subprocess_error,
+            } => {
                 let combined = format!(
                     "ffi: {} | subprocess: {}",
                     ffi_error.clone().unwrap_or_else(|| "n/a".into()),
@@ -281,7 +300,9 @@ impl Client {
 }
 
 impl Default for Client {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -302,7 +323,10 @@ mod tests {
             assert_eq!(client.transport(), Transport::None);
             assert!(client.unavailability_reason().is_some());
             let err = client
-                .scan(&ScanRequest { repo_path: "/tmp/x".into(), rules: vec![] })
+                .scan(&ScanRequest {
+                    repo_path: "/tmp/x".into(),
+                    rules: vec![],
+                })
                 .unwrap_err();
             assert!(matches!(err, HypatiaError::FfiUnavailable(_)));
         }
@@ -317,11 +341,12 @@ mod tests {
             return;
         }
 
-        use crate::types::{
-            BotId, DispatchEntry, Outcome, OutcomeRecord, TriangleTier,
-        };
+        use crate::types::{BotId, DispatchEntry, Outcome, OutcomeRecord, TriangleTier};
 
-        assert!(matches!(client.health_check(), Err(HypatiaError::FfiUnavailable(_))));
+        assert!(matches!(
+            client.health_check(),
+            Err(HypatiaError::FfiUnavailable(_))
+        ));
 
         let entry = DispatchEntry {
             bot: BotId::Rhodibot,
@@ -331,7 +356,10 @@ mod tests {
             tier: TriangleTier::Eliminate,
             strategy: DispatchStrategy::Review,
         };
-        assert!(matches!(client.dispatch(&entry), Err(HypatiaError::FfiUnavailable(_))));
+        assert!(matches!(
+            client.dispatch(&entry),
+            Err(HypatiaError::FfiUnavailable(_))
+        ));
 
         let outcome = OutcomeRecord {
             recipe_id: "PA001".into(),
@@ -341,9 +369,18 @@ mod tests {
             timestamp: "2026-04-13T00:00:00Z".into(),
             bot: "rhodibot".into(),
         };
-        assert!(matches!(client.record_outcome(&outcome), Err(HypatiaError::FfiUnavailable(_))));
-        assert!(matches!(client.force_learning_cycle(), Err(HypatiaError::FfiUnavailable(_))));
-        assert!(matches!(client.get_confidence("PA001"), Err(HypatiaError::FfiUnavailable(_))));
+        assert!(matches!(
+            client.record_outcome(&outcome),
+            Err(HypatiaError::FfiUnavailable(_))
+        ));
+        assert!(matches!(
+            client.force_learning_cycle(),
+            Err(HypatiaError::FfiUnavailable(_))
+        ));
+        assert!(matches!(
+            client.get_confidence("PA001"),
+            Err(HypatiaError::FfiUnavailable(_))
+        ));
     }
 
     #[test]
@@ -353,7 +390,10 @@ mod tests {
         // pure-Rust DispatchStrategy::from_confidence implementation.
         let client = Client::new();
         if client.is_unavailable() {
-            assert_eq!(client.dispatch_strategy(0.99), DispatchStrategy::AutoExecute);
+            assert_eq!(
+                client.dispatch_strategy(0.99),
+                DispatchStrategy::AutoExecute
+            );
             assert_eq!(client.dispatch_strategy(0.90), DispatchStrategy::Review);
             assert_eq!(client.dispatch_strategy(0.50), DispatchStrategy::ReportOnly);
         }

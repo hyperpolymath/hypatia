@@ -290,10 +290,7 @@ mod webhooks {
             result.payload["repository"]["full_name"].as_str(),
             Some("owner/repo")
         );
-        assert_eq!(
-            result.payload["sender"]["login"].as_str(),
-            Some("testuser")
-        );
+        assert_eq!(result.payload["sender"]["login"].as_str(), Some("testuser"));
     }
 
     #[test]
@@ -307,12 +304,7 @@ mod webhooks {
         mac.update(payload);
         let signature = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
 
-        let result = adapter.parse_webhook(
-            "push",
-            Some(&signature),
-            payload,
-            Some(secret),
-        );
+        let result = adapter.parse_webhook("push", Some(&signature), payload, Some(secret));
         // Should succeed with valid signature
         assert!(result.is_ok() || result.is_err()); // Parsing might fail but signature should be valid
     }
@@ -352,10 +344,7 @@ mod webhooks {
             result.payload["project"]["path_with_namespace"].as_str(),
             Some("group/project")
         );
-        assert_eq!(
-            result.payload["user_username"].as_str(),
-            Some("testuser")
-        );
+        assert_eq!(result.payload["user_username"].as_str(), Some("testuser"));
     }
 
     #[test]

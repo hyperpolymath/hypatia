@@ -52,13 +52,13 @@ impl CachePrefix {
 
     fn default_ttl(&self) -> u64 {
         match self {
-            Self::Rule => 3600,       // 1 hour
-            Self::Ruleset => 7200,    // 2 hours
-            Self::Scan => 300,        // 5 minutes
-            Self::Fleet => 60,        // 1 minute
-            Self::Repo => 600,        // 10 minutes
-            Self::RateLimit => 60,    // 1 minute
-            Self::Job => 86400,       // 24 hours
+            Self::Rule => 3600,    // 1 hour
+            Self::Ruleset => 7200, // 2 hours
+            Self::Scan => 300,     // 5 minutes
+            Self::Fleet => 60,     // 1 minute
+            Self::Repo => 600,     // 10 minutes
+            Self::RateLimit => 60, // 1 minute
+            Self::Job => 86400,    // 24 hours
         }
     }
 }
@@ -195,7 +195,9 @@ impl DragonflyCache {
         let mut conn = self.get_conn().await?;
         let deleted: i64 = conn.del(key).await?;
         if deleted > 0 {
-            let _ = self.invalidation_tx.send(InvalidationEvent::Key(key.to_string()));
+            let _ = self
+                .invalidation_tx
+                .send(InvalidationEvent::Key(key.to_string()));
         }
         Ok(deleted > 0)
     }
@@ -342,8 +344,14 @@ impl DragonflyCache {
             .collect();
 
         let ttl = Some(CachePrefix::Rule.default_ttl());
-        self.mset(&entries.iter().map(|(k, v)| (k.clone(), v)).collect::<Vec<_>>(), ttl)
-            .await?;
+        self.mset(
+            &entries
+                .iter()
+                .map(|(k, v)| (k.clone(), v))
+                .collect::<Vec<_>>(),
+            ttl,
+        )
+        .await?;
 
         // Update indexes
         let mut conn = self.get_conn().await?;
@@ -534,9 +542,7 @@ impl DragonflyCache {
     pub async fn get_stale_bots(&self, threshold_seconds: i64) -> Result<Vec<String>> {
         let mut conn = self.get_conn().await?;
         let cutoff = chrono::Utc::now().timestamp() - threshold_seconds;
-        let bots: Vec<String> = conn
-            .zrangebyscore("fleet:active", "-inf", cutoff)
-            .await?;
+        let bots: Vec<String> = conn.zrangebyscore("fleet:active", "-inf", cutoff).await?;
         Ok(bots)
     }
 
@@ -618,9 +624,7 @@ impl DragonflyCache {
     /// Ping the cache server
     pub async fn ping(&self) -> Result<()> {
         let mut conn = self.get_conn().await?;
-        redis::cmd("PING")
-            .query_async::<String>(&mut *conn)
-            .await?;
+        redis::cmd("PING").query_async::<String>(&mut *conn).await?;
         Ok(())
     }
 

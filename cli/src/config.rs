@@ -55,6 +55,7 @@ impl Default for BotConfig {
 /// Main configuration struct
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct Config {
     /// General settings
     pub general: GeneralConfig,
@@ -80,21 +81,6 @@ pub struct Config {
     /// Custom settings (key-value pairs)
     #[serde(flatten)]
     pub custom: HashMap<String, toml::Value>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            registry_url: None,
-            scan: ScanConfig::default(),
-            fleet: FleetConfig::default(),
-            hooks: HooksConfig::default(),
-            output: OutputConfig::default(),
-            bot: BotConfig::default(),
-            custom: HashMap::new(),
-        }
-    }
 }
 
 /// General configuration
@@ -303,15 +289,11 @@ impl Config {
         let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         match extension {
-            "toml" => {
-                toml::from_str(&content).with_context(|| "Failed to parse TOML config")
-            }
+            "toml" => toml::from_str(&content).with_context(|| "Failed to parse TOML config"),
             "yaml" | "yml" => {
                 serde_yaml::from_str(&content).with_context(|| "Failed to parse YAML config")
             }
-            "json" => {
-                serde_json::from_str(&content).with_context(|| "Failed to parse JSON config")
-            }
+            "json" => serde_json::from_str(&content).with_context(|| "Failed to parse JSON config"),
             _ => {
                 // Try TOML first, then YAML, then JSON
                 if let Ok(config) = toml::from_str(&content) {
@@ -418,8 +400,12 @@ impl Config {
             .context("Could not determine config directory")?;
 
         let config_dir = proj_dirs.config_dir();
-        std::fs::create_dir_all(config_dir)
-            .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+        std::fs::create_dir_all(config_dir).with_context(|| {
+            format!(
+                "Failed to create config directory: {}",
+                config_dir.display()
+            )
+        })?;
 
         let config_file = config_dir.join("config.toml");
 
@@ -540,11 +526,7 @@ verbose = false
             ["output", "color"] => Some(self.output.color.to_string()),
             _ => {
                 // Check custom settings
-                if let Some(value) = self.custom.get(key) {
-                    Some(value.to_string())
-                } else {
-                    None
-                }
+                self.custom.get(key).map(|value| value.to_string())
             }
         }
     }
@@ -586,7 +568,8 @@ verbose = false
             }
             _ => {
                 // Store as custom setting
-                self.custom.insert(key.to_string(), toml::Value::String(value.to_string()));
+                self.custom
+                    .insert(key.to_string(), toml::Value::String(value.to_string()));
             }
         }
 
@@ -615,7 +598,6 @@ verbose = false
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
     fn test_default_config() {
@@ -664,9 +646,14 @@ min_severity = "high"
     #[test]
     fn test_config_merge() {
         let base = Config::default();
-        let mut override_config = Config::default();
-        override_config.registry_url = Some("https://override.example.com".to_string());
-        override_config.fleet.parallel = true;
+        let override_config = Config {
+            registry_url: Some("https://override.example.com".to_string()),
+            fleet: FleetConfig {
+                parallel: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
 
         let merged = base.merge(override_config);
         assert_eq!(
