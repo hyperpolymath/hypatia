@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
+# A2ML validator metadata
+name = "rules"
+project = "hypatia"
+version = "1.0.0"
 # AI Assistant Instructions for Hypatia Rule Management
 
 ## Repository Focus

@@ -235,10 +235,7 @@ pub fn check_max_severity(
         .collect();
 
     if violations.is_empty() {
-        AssertionResult::pass(format!(
-            "No findings above {:?} severity",
-            max_severity
-        ))
+        AssertionResult::pass(format!("No findings above {:?} severity", max_severity))
     } else {
         let violation_details: Vec<String> = violations
             .iter()
@@ -256,10 +253,7 @@ pub fn check_max_severity(
 }
 
 /// Assert that there are findings at a minimum severity level
-pub fn assert_min_severity_present(
-    findings: &[SecurityFinding],
-    min_severity: FindingSeverity,
-) {
+pub fn assert_min_severity_present(findings: &[SecurityFinding], min_severity: FindingSeverity) {
     check_min_severity_present(findings, min_severity).assert();
 }
 
@@ -268,7 +262,9 @@ pub fn check_min_severity_present(
     findings: &[SecurityFinding],
     min_severity: FindingSeverity,
 ) -> AssertionResult {
-    let has_severity = findings.iter().any(|finding| finding.severity >= min_severity);
+    let has_severity = findings
+        .iter()
+        .any(|finding| finding.severity >= min_severity);
 
     if has_severity {
         AssertionResult::pass(format!(
@@ -277,7 +273,10 @@ pub fn check_min_severity_present(
         ))
     } else {
         AssertionResult::fail(
-            format!("Should have findings at or above {:?} severity", min_severity),
+            format!(
+                "Should have findings at or above {:?} severity",
+                min_severity
+            ),
             "No findings at required severity level",
         )
     }
@@ -398,10 +397,7 @@ pub fn assert_critical_findings_have_fixes(findings: &[SecurityFinding]) {
 /// # Arguments
 /// * `findings` - The actual findings from the scan
 /// * `known_false_positives` - List of rule IDs known to be false positives in this context
-pub fn assert_no_false_positives(
-    findings: &[SecurityFinding],
-    known_false_positives: &[&str],
-) {
+pub fn assert_no_false_positives(findings: &[SecurityFinding], known_false_positives: &[&str]) {
     check_no_false_positives(findings, known_false_positives).assert();
 }
 
@@ -446,11 +442,7 @@ pub fn assert_true_positive(findings: &[SecurityFinding], rule_id: &str) {
 }
 
 /// Assert the false positive rate is below a threshold
-pub fn assert_false_positive_rate(
-    total_findings: usize,
-    false_positives: usize,
-    max_rate: f64,
-) {
+pub fn assert_false_positive_rate(total_findings: usize, false_positives: usize, max_rate: f64) {
     if total_findings == 0 {
         return; // Can't calculate rate with no findings
     }
@@ -507,11 +499,7 @@ pub fn assert_build_cancelled(build: &SimulatedBuild) {
 }
 
 /// Assert build duration is within expected range
-pub fn assert_build_duration_range(
-    build: &SimulatedBuild,
-    min_seconds: i64,
-    max_seconds: i64,
-) {
+pub fn assert_build_duration_range(build: &SimulatedBuild, min_seconds: i64, max_seconds: i64) {
     let duration = build.duration().expect("Build should have duration");
     let seconds = duration.num_seconds();
 
@@ -530,11 +518,7 @@ pub fn assert_build_duration_range(
 /// Assert that all jobs completed successfully
 pub fn assert_all_jobs_success(jobs: &[SimulatedJob]) {
     for job in jobs {
-        if !job
-            .conclusion
-            .map(|c| c.is_success())
-            .unwrap_or(false)
-        {
+        if !job.conclusion.map(|c| c.is_success()).unwrap_or(false) {
             panic!(
                 "Job '{}' should have succeeded, got: {:?}",
                 job.name, job.conclusion
@@ -577,10 +561,7 @@ pub fn assert_jobs_parallel(jobs: &[SimulatedJob], tolerance_seconds: i64) {
         return; // Can't check parallelism with fewer than 2 jobs
     }
 
-    let start_times: Vec<_> = jobs
-        .iter()
-        .filter_map(|j| j.started_at)
-        .collect();
+    let start_times: Vec<_> = jobs.iter().filter_map(|j| j.started_at).collect();
 
     if start_times.len() < 2 {
         panic!("Not enough jobs with start times to verify parallelism");
@@ -792,8 +773,16 @@ mod tests {
     #[test]
     fn test_assert_rule_triggered() {
         let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::High, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-002", FindingSeverity::Medium, FindingCategory::CodeQuality),
+            create_test_finding(
+                "SEC-001",
+                FindingSeverity::High,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-002",
+                FindingSeverity::Medium,
+                FindingCategory::CodeQuality,
+            ),
         ];
 
         assert_rule_triggered(&findings, "SEC-001");
@@ -860,8 +849,16 @@ mod tests {
     #[test]
     fn test_assert_no_false_positives() {
         let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::High, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-002", FindingSeverity::Medium, FindingCategory::CodeQuality),
+            create_test_finding(
+                "SEC-001",
+                FindingSeverity::High,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-002",
+                FindingSeverity::Medium,
+                FindingCategory::CodeQuality,
+            ),
         ];
 
         let known_fps = vec!["FP-001", "FP-002"];
@@ -884,8 +881,16 @@ mod tests {
     #[test]
     fn test_assert_max_severity() {
         let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::Medium, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-002", FindingSeverity::Low, FindingCategory::CodeQuality),
+            create_test_finding(
+                "SEC-001",
+                FindingSeverity::Medium,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-002",
+                FindingSeverity::Low,
+                FindingCategory::CodeQuality,
+            ),
         ];
 
         assert_max_severity(&findings, FindingSeverity::Medium);
@@ -950,8 +955,16 @@ mod tests {
     #[test]
     fn test_category_assertions() {
         let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::High, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-002", FindingSeverity::Medium, FindingCategory::CodeQuality),
+            create_test_finding(
+                "SEC-001",
+                FindingSeverity::High,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-002",
+                FindingSeverity::Medium,
+                FindingCategory::CodeQuality,
+            ),
         ];
 
         assert_category_present(&findings, FindingCategory::CodeSecurity);
@@ -961,9 +974,11 @@ mod tests {
 
     #[test]
     fn test_auto_fixable_assertions() {
-        let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::Low, FindingCategory::CodeQuality),
-        ];
+        let findings = vec![create_test_finding(
+            "SEC-001",
+            FindingSeverity::Low,
+            FindingCategory::CodeQuality,
+        )];
 
         assert_auto_fixable(&findings, "SEC-001");
     }
@@ -971,9 +986,21 @@ mod tests {
     #[test]
     fn test_severity_distribution() {
         let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::High, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-002", FindingSeverity::High, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-003", FindingSeverity::Medium, FindingCategory::CodeQuality),
+            create_test_finding(
+                "SEC-001",
+                FindingSeverity::High,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-002",
+                FindingSeverity::High,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-003",
+                FindingSeverity::Medium,
+                FindingCategory::CodeQuality,
+            ),
         ];
 
         assert_severity_distribution(
@@ -989,8 +1016,16 @@ mod tests {
     #[test]
     fn test_exact_rules_triggered() {
         let findings = vec![
-            create_test_finding("SEC-001", FindingSeverity::High, FindingCategory::CodeSecurity),
-            create_test_finding("SEC-002", FindingSeverity::Medium, FindingCategory::CodeQuality),
+            create_test_finding(
+                "SEC-001",
+                FindingSeverity::High,
+                FindingCategory::CodeSecurity,
+            ),
+            create_test_finding(
+                "SEC-002",
+                FindingSeverity::Medium,
+                FindingCategory::CodeQuality,
+            ),
         ];
 
         assert_exact_rules_triggered(&findings, &["SEC-001", "SEC-002"]);

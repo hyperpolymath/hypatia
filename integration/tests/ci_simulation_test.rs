@@ -1,28 +1,14 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
 //! CI Simulation Integration Tests
 //!
 //! This test suite validates the CI simulation framework functionality
 //! and demonstrates how to use it for testing the CI/CD intelligence platform.
 
 use integration::ci_simulation::{
-    assertions::{
-        assert_all_jobs_success, assert_build_failure, assert_build_success,
-        assert_category_present, assert_fix_suggested, assert_has_error_logs, assert_log_contains,
-        assert_max_severity, assert_no_error_logs, assert_no_false_positives, assert_rule_triggered,
-        assert_severity_correct, AssertionCollector,
-    },
-    scenarios::{
-        cache_hit_miss, cache_hit_miss_with_config, deployment_rollback,
-        deployment_rollback_with_reason, failing_test_scenario, failing_test_scenario_with_config,
-        happy_path_build, happy_path_build_with_config, matrix_builds, matrix_builds_with_config,
-        parallel_jobs, parallel_jobs_with_count, security_scan_findings,
-        security_scan_findings_with_severity, CacheScenarioConfig, ScenarioBuilder, ScenarioConfig,
-    },
-    BuildConclusion, BuildConfig, BuildStatus, CIProvider, FindingCategory, FindingSeverity,
-    LogEntry, MatrixConfig, MockCircleCI, MockGitHubActions, MockGitLabCI, SecurityFinding,
-    SimulatedArtifact, SimulatedCI, SimulatedJob, SimulationStats,
+    scenarios::happy_path_build, BuildConclusion, BuildConfig, FindingCategory, FindingSeverity,
+    MockGitHubActions, SecurityFinding, SimulatedCI,
 };
-use std::collections::HashMap;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use uuid::Uuid;
 
@@ -42,7 +28,6 @@ fn setup_test_logging() {
 // ============================================================================
 
 mod basic_simulation {
-    use super::*;
 
     #[tokio::test]
     async fn test_github_actions_basic_flow() {
@@ -187,7 +172,6 @@ mod basic_simulation {
 // ============================================================================
 
 mod artifact_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_add_text_artifact() {
@@ -255,7 +239,6 @@ mod artifact_tests {
 // ============================================================================
 
 mod security_finding_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_add_security_finding() {
@@ -338,7 +321,6 @@ mod security_finding_tests {
 // ============================================================================
 
 mod logging_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_add_logs() {
@@ -371,7 +353,6 @@ mod logging_tests {
 // ============================================================================
 
 mod scenario_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_happy_path_build_scenario() {
@@ -421,7 +402,8 @@ mod scenario_tests {
             "test_session_timeout".to_string(),
         ];
 
-        let result = failing_test_scenario_with_config(ScenarioConfig::default(), failing_tests).await;
+        let result =
+            failing_test_scenario_with_config(ScenarioConfig::default(), failing_tests).await;
 
         assert!(result.is_failure());
         assert_log_contains(&result.logs, "test_user_login");
@@ -477,8 +459,7 @@ mod scenario_tests {
 
     #[tokio::test]
     async fn test_deployment_rollback_custom_reason() {
-        let result =
-            deployment_rollback_with_reason("Database migration failed".to_string()).await;
+        let result = deployment_rollback_with_reason("Database migration failed".to_string()).await;
 
         assert!(result.is_failure());
         assert_log_contains(&result.logs, "Database migration failed");
@@ -534,12 +515,13 @@ mod scenario_tests {
                 let mut map = HashMap::new();
                 map.insert(
                     "os".to_string(),
-                    vec!["ubuntu".to_string(), "macos".to_string(), "windows".to_string()],
+                    vec![
+                        "ubuntu".to_string(),
+                        "macos".to_string(),
+                        "windows".to_string(),
+                    ],
                 );
-                map.insert(
-                    "node".to_string(),
-                    vec!["18".to_string(), "20".to_string()],
-                );
+                map.insert("node".to_string(), vec!["18".to_string(), "20".to_string()]);
                 map
             },
             exclude: vec![],
@@ -596,7 +578,6 @@ mod scenario_tests {
 // ============================================================================
 
 mod scenario_builder_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_custom_scenario_with_builder() {
@@ -657,9 +638,6 @@ mod scenario_builder_tests {
 
 mod assertion_tests {
     use super::*;
-    use integration::ci_simulation::assertions::{
-        check_fix_suggested, check_rule_triggered, check_severity_correct,
-    };
 
     fn create_sample_findings() -> Vec<SecurityFinding> {
         vec![
@@ -839,7 +817,6 @@ mod assertion_tests {
 // ============================================================================
 
 mod job_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_get_jobs() {
@@ -898,7 +875,6 @@ mod job_tests {
 // ============================================================================
 
 mod stats_tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_simulation_stats() {
@@ -964,8 +940,6 @@ mod stats_tests {
 // ============================================================================
 
 mod error_handling_tests {
-    use super::*;
-    use integration::ci_simulation::SimulationError;
 
     #[tokio::test]
     async fn test_get_nonexistent_build() {
@@ -987,9 +961,7 @@ mod error_handling_tests {
             .unwrap();
 
         // Try to complete again
-        let result = ci
-            .complete_build(&build_id, BuildConclusion::Failure)
-            .await;
+        let result = ci.complete_build(&build_id, BuildConclusion::Failure).await;
         assert!(matches!(
             result,
             Err(SimulationError::InvalidStateTransition { .. })
@@ -1020,7 +992,10 @@ mod error_handling_tests {
         let mut ci = MockGitHubActions::new();
 
         let result = ci
-            .add_artifact("nonexistent", SimulatedArtifact::text("test.txt", "content"))
+            .add_artifact(
+                "nonexistent",
+                SimulatedArtifact::text("test.txt", "content"),
+            )
             .await;
         assert!(matches!(result, Err(SimulationError::BuildNotFound(_))));
     }
@@ -1031,7 +1006,6 @@ mod error_handling_tests {
 // ============================================================================
 
 mod intelligence_platform_tests {
-    use super::*;
 
     /// Test that simulates how the intelligence platform would detect
     /// and respond to security findings from CI

@@ -9,7 +9,6 @@
 
 #![allow(dead_code)]
 
-
 use anyhow::Result;
 use colored::Colorize;
 use serde::Serialize;
@@ -72,11 +71,7 @@ impl Outputter {
 
     /// Create an outputter from config
     pub fn from_config(config: &Config) -> Self {
-        let format = config
-            .output
-            .format
-            .parse()
-            .unwrap_or(OutputFormat::Plain);
+        let format = config.output.format.parse().unwrap_or(OutputFormat::Plain);
         Self { format }
     }
 
@@ -135,7 +130,10 @@ impl Outputter {
     pub fn success(&self, message: &str) -> Result<()> {
         match self.format {
             OutputFormat::Json => {
-                println!(r#"{{"status": "success", "message": "{}"}}"#, escape_json(message));
+                println!(
+                    r#"{{"status": "success", "message": "{}"}}"#,
+                    escape_json(message)
+                );
             }
             OutputFormat::Yaml => {
                 println!("status: success\nmessage: \"{}\"", message);
@@ -151,7 +149,10 @@ impl Outputter {
     pub fn warn(&self, message: &str) -> Result<()> {
         match self.format {
             OutputFormat::Json => {
-                println!(r#"{{"status": "warning", "message": "{}"}}"#, escape_json(message));
+                println!(
+                    r#"{{"status": "warning", "message": "{}"}}"#,
+                    escape_json(message)
+                );
             }
             OutputFormat::Yaml => {
                 println!("status: warning\nmessage: \"{}\"", message);
@@ -167,7 +168,10 @@ impl Outputter {
     pub fn error(&self, message: &str) -> Result<()> {
         match self.format {
             OutputFormat::Json => {
-                eprintln!(r#"{{"status": "error", "message": "{}"}}"#, escape_json(message));
+                eprintln!(
+                    r#"{{"status": "error", "message": "{}"}}"#,
+                    escape_json(message)
+                );
             }
             OutputFormat::Yaml => {
                 eprintln!("status: error\nmessage: \"{}\"", message);
@@ -183,7 +187,10 @@ impl Outputter {
     pub fn info(&self, message: &str) -> Result<()> {
         match self.format {
             OutputFormat::Json => {
-                println!(r#"{{"status": "info", "message": "{}"}}"#, escape_json(message));
+                println!(
+                    r#"{{"status": "info", "message": "{}"}}"#,
+                    escape_json(message)
+                );
             }
             OutputFormat::Yaml => {
                 println!("status: info\nmessage: \"{}\"", message);
@@ -407,10 +414,16 @@ mod tests {
 
     #[test]
     fn test_output_format_parsing() {
-        assert_eq!("plain".parse::<OutputFormat>().unwrap(), OutputFormat::Plain);
+        assert_eq!(
+            "plain".parse::<OutputFormat>().unwrap(),
+            OutputFormat::Plain
+        );
         assert_eq!("json".parse::<OutputFormat>().unwrap(), OutputFormat::Json);
         assert_eq!("yaml".parse::<OutputFormat>().unwrap(), OutputFormat::Yaml);
-        assert_eq!("table".parse::<OutputFormat>().unwrap(), OutputFormat::Table);
+        assert_eq!(
+            "table".parse::<OutputFormat>().unwrap(),
+            OutputFormat::Table
+        );
     }
 
     #[test]

@@ -323,9 +323,7 @@ async fn execute_install(
                 println!("  {} {}", "✓".green(), hook);
             }
             println!();
-            println!(
-                "Hooks are now active and will run on git operations."
-            );
+            println!("Hooks are now active and will run on git operations.");
         }
     }
 
@@ -671,8 +669,9 @@ async fn execute_update(
 fn get_hooks_dir(repo_path: &Path) -> Result<PathBuf> {
     let hooks_dir = repo_path.join(".git/hooks");
     if !hooks_dir.exists() {
-        std::fs::create_dir_all(&hooks_dir)
-            .with_context(|| format!("Failed to create hooks directory: {}", hooks_dir.display()))?;
+        std::fs::create_dir_all(&hooks_dir).with_context(|| {
+            format!("Failed to create hooks directory: {}", hooks_dir.display())
+        })?;
     }
     Ok(hooks_dir)
 }
@@ -680,11 +679,7 @@ fn get_hooks_dir(repo_path: &Path) -> Result<PathBuf> {
 /// Parse a comma-separated list of hook types
 fn parse_hook_list(list: &str) -> Result<Vec<HookType>> {
     list.split(',')
-        .map(|s| {
-            s.trim()
-                .parse::<HookType>()
-                .map_err(|e| anyhow::anyhow!(e))
-        })
+        .map(|s| s.trim().parse::<HookType>().map_err(|e| anyhow::anyhow!(e)))
         .collect()
 }
 
@@ -769,7 +764,7 @@ fn get_hook_statuses(repo_path: &Path) -> Result<Vec<HookStatus>> {
             std::fs::metadata(&hook_path)
                 .ok()
                 .and_then(|m| m.modified().ok())
-                .map(|t| DateTime::<Utc>::from(t))
+                .map(DateTime::<Utc>::from)
         } else {
             None
         };
@@ -799,7 +794,9 @@ fn extract_hook_version(path: &Path) -> Result<Option<String>> {
     let content = std::fs::read_to_string(path)?;
     for line in content.lines() {
         if line.starts_with("# Version:") {
-            return Ok(Some(line.trim_start_matches("# Version:").trim().to_string()));
+            return Ok(Some(
+                line.trim_start_matches("# Version:").trim().to_string(),
+            ));
         }
     }
     Ok(None)
@@ -808,7 +805,8 @@ fn extract_hook_version(path: &Path) -> Result<Option<String>> {
 /// Generate hook script content
 fn generate_hook_script(hook_type: HookType) -> String {
     let checks = match hook_type {
-        HookType::PreCommit => r#"
+        HookType::PreCommit => {
+            r#"
 # Check for SPDX headers in modified files
 for file in $(git diff --cached --name-only --diff-filter=ACMR); do
     if [[ "$file" =~ \.(rs|js|ts|py|go|sh)$ ]]; then
@@ -838,8 +836,10 @@ if git diff --cached --name-only | xargs grep -l "<<<<<<< HEAD" 2>/dev/null; the
     echo "Merge conflict markers found!"
     exit 1
 fi
-"#,
-        HookType::PrePush => r#"
+"#
+        }
+        HookType::PrePush => {
+            r#"
 # Validate GitHub workflow files
 if [ -d ".github/workflows" ]; then
     for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
@@ -864,8 +864,10 @@ if [ -d ".github/workflows" ]; then
         exit 1
     fi
 fi
-"#,
-        HookType::CommitMsg => r#"
+"#
+        }
+        HookType::CommitMsg => {
+            r#"
 # Validate conventional commit format
 commit_msg_file=$1
 commit_msg=$(cat "$commit_msg_file")
@@ -886,7 +888,8 @@ if ! echo "$commit_msg" | head -1 | grep -qE "$pattern"; then
     echo "  docs: update README"
     exit 1
 fi
-"#,
+"#
+        }
         _ => "",
     };
 

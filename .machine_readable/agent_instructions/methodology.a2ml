@@ -8,6 +8,8 @@
 # Reference: ADR-002 in standards/agentic-a2ml/docs/
 
 [metadata]
+name = "methodology"
+project = "hypatia"
 version = "1.0.0"
 last-updated = "2026-03-24"
 spec = "https://github.com/hyperpolymath/standards/blob/main/agentic-a2ml/docs/ADR-002-methodology-layer.adoc"

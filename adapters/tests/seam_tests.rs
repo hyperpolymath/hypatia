@@ -45,7 +45,7 @@ fn test_alert_model_severity_seam() {
         let alert = Alert {
             id: "1".to_string(),
             rule_id: "test-rule".to_string(),
-            severity: severity.clone(),
+            severity,
             category: AlertCategory::CodeSecurity,
             description: "Test alert".to_string(),
             file: Some("/src/main.rs".to_string()),

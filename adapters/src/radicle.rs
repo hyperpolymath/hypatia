@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AdapterError;
 use crate::forge::{
-    Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue,
-    IssueState, PullRequest, PullRequestState, Repository, Visibility, WebhookConfig, WebhookEvent,
+    Alert, CheckConclusion, CheckRun, CheckStatus, Comment, Forge, ForgeAdapter, Issue, IssueState,
+    PullRequest, PullRequestState, Repository, Visibility, WebhookConfig, WebhookEvent,
     WebhookPayload, Workflow, WorkflowRun,
 };
 
@@ -74,7 +74,9 @@ impl RadicleAdapter {
             .default_headers(headers)
             .user_agent("cicd-hyper-a/1.0")
             .build()
-            .map_err(|e| AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e))
+            })?;
 
         Ok(Self { client, node_url })
     }
@@ -354,7 +356,7 @@ impl From<RadPatch> for PullRequest {
                 .unwrap_or_default(),
             base_branch: patch.target,
             url: String::new(), // Will be set by caller
-            mergeable: None, // Radicle doesn't provide this directly
+            mergeable: None,    // Radicle doesn't provide this directly
             created_at,
             updated_at,
         }
@@ -448,7 +450,11 @@ impl ForgeAdapter for RadicleAdapter {
         // Filter by owner DID
         let repos: Vec<Repository> = projects
             .into_iter()
-            .filter(|p| p.delegates.iter().any(|d| d.id == owner || d.alias.as_deref() == Some(owner)))
+            .filter(|p| {
+                p.delegates
+                    .iter()
+                    .any(|d| d.id == owner || d.alias.as_deref() == Some(owner))
+            })
             .map(Repository::from)
             .collect();
 
@@ -503,7 +509,8 @@ impl ForgeAdapter for RadicleAdapter {
         _message: &str,
     ) -> Result<()> {
         Err(AdapterError::ApiError(
-            "Radicle doesn't have built-in CI. Use external CI systems with Radicle webhooks.".to_string(),
+            "Radicle doesn't have built-in CI. Use external CI systems with Radicle webhooks."
+                .to_string(),
         ))
     }
 
@@ -515,7 +522,8 @@ impl ForgeAdapter for RadicleAdapter {
         _ref_name: &str,
     ) -> Result<()> {
         Err(AdapterError::ApiError(
-            "Radicle doesn't have built-in CI. Use external CI systems with Radicle webhooks.".to_string(),
+            "Radicle doesn't have built-in CI. Use external CI systems with Radicle webhooks."
+                .to_string(),
         ))
     }
 
@@ -639,13 +647,13 @@ impl ForgeAdapter for RadicleAdapter {
 
         let prs: Vec<PullRequest> = patches
             .into_iter()
-            .filter(|p| {
-                match state {
-                    Some(PullRequestState::Open) => p.state.status == "open" || p.state.status == "draft",
-                    Some(PullRequestState::Closed) => p.state.status == "archived",
-                    Some(PullRequestState::Merged) => p.state.status == "merged",
-                    None => true,
+            .filter(|p| match state {
+                Some(PullRequestState::Open) => {
+                    p.state.status == "open" || p.state.status == "draft"
                 }
+                Some(PullRequestState::Closed) => p.state.status == "archived",
+                Some(PullRequestState::Merged) => p.state.status == "merged",
+                None => true,
             })
             .map(|p| {
                 let mut pr = PullRequest::from(p);
@@ -680,7 +688,8 @@ impl ForgeAdapter for RadicleAdapter {
 
     async fn close_pr(&self, _owner: &str, _repo: &str, _number: u64) -> Result<()> {
         Err(AdapterError::ApiError(
-            "Radicle patches use string IDs. Archive patches via the API with the patch ID.".to_string(),
+            "Radicle patches use string IDs. Archive patches via the API with the patch ID."
+                .to_string(),
         ))
     }
 
@@ -769,12 +778,10 @@ impl ForgeAdapter for RadicleAdapter {
 
         let result: Vec<Issue> = issues
             .into_iter()
-            .filter(|i| {
-                match state {
-                    Some(IssueState::Open) => i.state.status == "open",
-                    Some(IssueState::Closed) => i.state.status != "open",
-                    None => true,
-                }
+            .filter(|i| match state {
+                Some(IssueState::Open) => i.state.status == "open",
+                Some(IssueState::Closed) => i.state.status != "open",
+                None => true,
             })
             .map(|i| {
                 let mut issue = Issue::from(i);
@@ -804,13 +811,15 @@ impl ForgeAdapter for RadicleAdapter {
         _labels: Option<Vec<String>>,
     ) -> Result<Issue> {
         Err(AdapterError::ApiError(
-            "Radicle issues use string IDs. Update issues via the API with the issue ID.".to_string(),
+            "Radicle issues use string IDs. Update issues via the API with the issue ID."
+                .to_string(),
         ))
     }
 
     async fn close_issue(&self, _owner: &str, _repo: &str, _number: u64) -> Result<()> {
         Err(AdapterError::ApiError(
-            "Radicle issues use string IDs. Close issues via the API with the issue ID.".to_string(),
+            "Radicle issues use string IDs. Close issues via the API with the issue ID."
+                .to_string(),
         ))
     }
 
@@ -822,7 +831,8 @@ impl ForgeAdapter for RadicleAdapter {
         _body: &str,
     ) -> Result<Comment> {
         Err(AdapterError::ApiError(
-            "Radicle issues use string IDs. Add comments via the API with the issue ID.".to_string(),
+            "Radicle issues use string IDs. Add comments via the API with the issue ID."
+                .to_string(),
         ))
     }
 
@@ -834,7 +844,8 @@ impl ForgeAdapter for RadicleAdapter {
         _body: &str,
     ) -> Result<Comment> {
         Err(AdapterError::ApiError(
-            "Radicle patches use string IDs. Add comments via the API with the patch ID.".to_string(),
+            "Radicle patches use string IDs. Add comments via the API with the patch ID."
+                .to_string(),
         ))
     }
 
@@ -845,7 +856,8 @@ impl ForgeAdapter for RadicleAdapter {
         _issue_number: u64,
     ) -> Result<Vec<Comment>> {
         Err(AdapterError::ApiError(
-            "Radicle issues use string IDs. List comments via the API with the issue ID.".to_string(),
+            "Radicle issues use string IDs. List comments via the API with the issue ID."
+                .to_string(),
         ))
     }
 
@@ -856,7 +868,8 @@ impl ForgeAdapter for RadicleAdapter {
         _pr_number: u64,
     ) -> Result<Vec<Comment>> {
         Err(AdapterError::ApiError(
-            "Radicle patches use string IDs. List comments via the API with the patch ID.".to_string(),
+            "Radicle patches use string IDs. List comments via the API with the patch ID."
+                .to_string(),
         ))
     }
 
@@ -1194,10 +1207,7 @@ mod tests {
             result.payload["project"]["id"].as_str(),
             Some("rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5")
         );
-        assert_eq!(
-            result.payload["author"]["alias"].as_str(),
-            Some("alice")
-        );
+        assert_eq!(result.payload["author"]["alias"].as_str(), Some("alice"));
     }
 
     #[test]

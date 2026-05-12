@@ -2,6 +2,8 @@
 # Dustfile — Cleanup and Hygiene Contract
 
 [dustfile]
+name = "Dustfile"
+project = "hypatia"
 version = "1.0.0"
 format = "a2ml"
 
