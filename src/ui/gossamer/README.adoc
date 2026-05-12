@@ -163,29 +163,72 @@ cd src/ui/public && python3 -m http.server 8000
 # open http://localhost:8000
 ----
 
-== Manual browser smoke test
+== Browser smoke test (automated)
 
-Until the end-to-end compile path lands upstream and a wasm artifact is
-produced by CI, `index.html` loading + console-error-free behaviour is a
-manual step:
+Closes #216. The manual procedure has been replaced by an automated
+Node smoke that exercises the same surface the manual step did — the
+loader instantiates a wasm module against its `gossamer` host, the
+panel renders the initial `hypatia_view(init)` text, each of the four
+department buttons updates `#app`, and "Step Back (History)" pops the
+navigation stack.
 
-. Start the Hypatia OTP listener (Bandit + Plug.Router): `iex -S mix`
-  for an interactive shell, or `mix run --no-halt` for a headless run.
-  This serves on `:9090` by default; override via the `:hypatia,
-  :http_port` application env. (The repo isn't a Phoenix app, so
-  `mix phx.server` doesn't apply.)
-. Place a compiled `hypatia_gui.wasm` at
-  `src/ui/public/assets/wasm/hypatia_gui.wasm` (download the artifact
-  from the `Build Gossamer GUI` workflow once it is producing one).
+[source,bash]
+----
+node --test test/gossamer/browser_smoke.test.mjs
+----
+
+The harness builds a stand-in `.wasm` byte-by-byte
+(`test/gossamer/fixture_wasm.mjs`) so it runs without the upstream
+Ephapax CLI (hyperpolymath/ephapax#36) and without a real browser. The
+fixture honours:
+
+* The `{i32 length header, UTF-8 bytes}` string ABI documented in
+  `loader.js`.
+* The in-process Msg ABI pinned at the top of `loader.js`
+  (`tag` in low byte, `value` in next byte). `encodeMsg` performs the
+  pack at the JS ↔ wasm boundary; the fixture's `hypatia_update`
+  decodes the same layout.
+* A five-deep history stack so `PopState` is observable across all four
+  departments.
+
+A companion change to `.github/workflows/build-gossamer-gui.yml`
+adds a `loader-smoke` job that runs the harness on every PR touching
+`src/ui/gossamer/**`, `src/ui/public/**`, or `test/gossamer/**`, so any
+drift between `loader.js`, `index.html`, and the fixture breaks CI
+immediately.
+
+=== Verifying against a real Ephapax artifact (optional runbook)
+
+Once `Build Gossamer GUI` publishes a real `hypatia-gui-wasm` artifact
+(gated on the upstream CLI subcommand from hyperpolymath/ephapax#36),
+the same `loader.js` code path can be verified end-to-end in a browser:
+
+. Start the Hypatia OTP backend so the IPC listener is up on `:9090`:
++
+[source,bash]
+----
+mix deps.get
+iex -S mix                      # interactive, with IEx
+# or: mix run --no-halt         # headless
+----
++
+The HTTP port is configurable via the `:hypatia, :http_port`
+application env (default `9090`; see `config/config.exs` and
+`lib/application.ex`).
+. Download the `hypatia-gui-wasm` artifact from the workflow run and
+  drop `hypatia_gui.wasm` at
+  `src/ui/public/assets/wasm/hypatia_gui.wasm`.
 . From `src/ui/public/`, run `python3 -m http.server 8000`.
-. Open `http://localhost:8000` and confirm: panel renders, no console
-  errors, clicking each department button updates `#app`'s text.
+. Open `http://localhost:8000`. Confirm the panel renders the initial
+  `hypatia_view(init)` text without console errors, that each
+  department button updates `#app`, and that "Step Back (History)"
+  pops state.
 
-The loader (`loader.js`) supplies a browser-side `gossamer` host import
-namespace that mirrors the `extern "gossamer"` block in `bridge.eph`.
-The string ABI (`{ptr, len}` with leading i32 length prefix) is
-documented in `loader.js`; once Ephapax pins the wasm-level packing
-this is the single point of change.
+The loader supplies a browser-side `gossamer` host import namespace
+that mirrors the `extern "gossamer"` block in `bridge.eph`. The
+string ABI (`{ptr, len}` with leading i32 length prefix) is documented
+in `loader.js`; once Ephapax pins the wasm-level packing this is the
+single point of change.
 
 IPC support is multi-channel (one `WebSocket` per `ipc_open` handle,
 keyed in a `Map`), and `ipc_send` payloads issued before the socket
