@@ -25,15 +25,24 @@
 // yet; the working assumption is "ptr returned from the export points
 // to a header word containing the i32 byte length, followed by len
 // bytes of UTF-8". `readString` enforces that with a bounds check so a
-// mismatch surfaces as a clear error rather than a silent garble.
+// mismatch surfaces as a clear error rather than a silent garble. When
+// the ABI is pinned upstream (tracked alongside hyperpolymath/ephapax#36)
+// this routine becomes the single point of change.
 //
-// The verification gate (issue #215) is hyperpolymath/ephapax#36, which
-// tracks the v2 grammar in `ephapax-parser`: bridge.eph uses module /
-// import / extern / data / match / let! constructs that the v1.0.0
-// parser rejects, so no real `hypatia_gui.wasm` exists to test against
-// yet. The `ephapax compile` subcommand already ships in v1.0.0; once
-// the parser learns v2, this routine becomes the single point of
-// change if the ABI differs from the assumed convention.
+// In-process Msg ABI
+// ------------------
+// `bridge.eph` defines an IPC Msg decoder that consumes JSON from a
+// WebSocket. The panel path in `../public/index.html` skips IPC: clicks
+// dispatch a JS Msg object straight into `tea.update(msg, model)`. The
+// wasm import boundary coerces non-numeric JS values to i32 via
+// ToInt32, which would silently fold every Msg to 0. `encodeMsg`
+// instead packs the JS object into a defined i32 layout:
+//
+//   bits 0..7   tag   (0 = Navigate, 1 = PopState)
+//   bits 8..15  value (Department for Navigate; unused for PopState)
+//
+// Keep this in lock-step with `hypatia_update` in `hypatia_gui.eph`
+// (and the fixture in `test/gossamer/fixture_wasm.mjs`).
 
 const WINDOW_HANDLE = 1;
 // IPC channel handles are allocated per `ipc_open` starting at 2 so that
@@ -128,6 +137,20 @@ function writeEphapaxBytes(buffer, allocator, bytes) {
   return ptr;
 }
 
+export const MSG_TAG_NAVIGATE = 0;
+export const MSG_TAG_POP_STATE = 1;
+
+export function encodeMsg(msg) {
+  switch (msg.tag) {
+    case MSG_TAG_NAVIGATE:
+      return ((msg.value & 0xff) << 8) | MSG_TAG_NAVIGATE;
+    case MSG_TAG_POP_STATE:
+      return MSG_TAG_POP_STATE;
+    default:
+      throw new RangeError(`encodeMsg: unknown msg.tag=${msg.tag}`);
+  }
+}
+
 /**
  * Wraps the Hypatia Ephapax/Gossamer Wasm module.
  */
@@ -142,7 +165,7 @@ class HypatiaTEA {
   }
 
   update(msg, model) {
-    return this.exports.hypatia_update(msg, model);
+    return this.exports.hypatia_update(encodeMsg(msg), model);
   }
 
   view(model) {
