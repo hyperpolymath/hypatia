@@ -20,10 +20,14 @@ on:
     branches: [main, master]
     paths:
       - 'src/ui/gossamer/**'
+      - 'src/ui/public/**'
+      - 'test/gossamer/**'
       - '.github/workflows/build-gossamer-gui.yml'
   pull_request:
     paths:
       - 'src/ui/gossamer/**'
+      - 'src/ui/public/**'
+      - 'test/gossamer/**'
       - '.github/workflows/build-gossamer-gui.yml'
   workflow_dispatch:
 
@@ -103,6 +107,23 @@ jobs:
               sys.exit(1)
           print("OK  panll.harness.toml validates against panll-harness/v2")
           PY
+
+  loader-smoke:
+    name: Loader browser-equivalent smoke (closes #216)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: validate-sources
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Show Node version (ubuntu-latest ships Node 20+ by default)
+        run: node --version
+
+      - name: Run loader smoke (node --test)
+        run: node --test test/gossamer/browser_smoke.test.mjs
 
   build-ephapax:
     name: Build Ephapax toolchain (pinned)
