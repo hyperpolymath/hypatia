@@ -130,18 +130,9 @@ fn register_project(repo_url: &str) -> Result<()> {
         let created: CreateResponse = response
             .json()
             .context("Failed to parse registration response")?;
-        println!(
-            "Registered successfully — project ID: {}",
-            created.id
-        );
-        println!(
-            "Badge URL: {}/en/projects/{}/badge",
-            API_BASE, created.id
-        );
-        println!(
-            "Edit URL: {}/en/projects/{}/edit",
-            API_BASE, created.id
-        );
+        println!("Registered successfully — project ID: {}", created.id);
+        println!("Badge URL: {}/en/projects/{}/badge", API_BASE, created.id);
+        println!("Edit URL: {}/en/projects/{}/edit", API_BASE, created.id);
     } else {
         let status = response.status();
         let body = response.text().unwrap_or_default();
@@ -168,24 +159,21 @@ fn check_status(project_id: u64) -> Result<()> {
             .json()
             .context("Failed to parse project response")?;
 
-        println!("Name:       {}", project.name.as_deref().unwrap_or("(unnamed)"));
-        println!("Repo:       {}", project.repo_url.as_deref().unwrap_or("(none)"));
+        println!(
+            "Name:       {}",
+            project.name.as_deref().unwrap_or("(unnamed)")
+        );
+        println!(
+            "Repo:       {}",
+            project.repo_url.as_deref().unwrap_or("(none)")
+        );
         println!(
             "Level:      {}",
             project.badge_level.as_deref().unwrap_or("in_progress")
         );
-        println!(
-            "Progress:   {}%",
-            project.badge_percentage_0.unwrap_or(0)
-        );
-        println!(
-            "Tiered:     {}%",
-            project.tiered_percentage.unwrap_or(0)
-        );
-        println!(
-            "Badge:      {}/en/projects/{}/badge",
-            API_BASE, project_id
-        );
+        println!("Progress:   {}%", project.badge_percentage_0.unwrap_or(0));
+        println!("Tiered:     {}%", project.tiered_percentage.unwrap_or(0));
+        println!("Badge:      {}/en/projects/{}/badge", API_BASE, project_id);
     } else if response.status().as_u16() == 404 {
         println!("Project {} not found on bestpractices.dev", project_id);
     } else {
@@ -226,21 +214,25 @@ fn batch_register(file_path: &str) -> Result<()> {
         println!();
     }
 
-    println!("Batch complete: {} succeeded, {} failed", successes, failures);
+    println!(
+        "Batch complete: {} succeeded, {} failed",
+        successes, failures
+    );
 
     Ok(())
 }
 
 /// List repos from the hyperpolymath GitHub org, optionally filtering for readiness
 fn list_repos(ready_only: bool) -> Result<()> {
-    let token = std::env::var("GITHUB_TOKEN")
-        .context("GITHUB_TOKEN env var required for listing repos")?;
+    let token =
+        std::env::var("GITHUB_TOKEN").context("GITHUB_TOKEN env var required for listing repos")?;
 
     let client = reqwest::blocking::Client::builder()
         .user_agent("cii-registrar/0.1.0")
         .build()?;
 
-    let url = "https://api.github.com/orgs/hyperpolymath/repos?per_page=100&sort=updated&type=public";
+    let url =
+        "https://api.github.com/orgs/hyperpolymath/repos?per_page=100&sort=updated&type=public";
 
     let response = client
         .get(url)
@@ -259,10 +251,7 @@ fn list_repos(ready_only: bool) -> Result<()> {
         .json()
         .context("Failed to parse GitHub repos response")?;
 
-    println!(
-        "Found {} public repos for hyperpolymath",
-        repos.len()
-    );
+    println!("Found {} public repos for hyperpolymath", repos.len());
     println!();
 
     for repo in &repos {

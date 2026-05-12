@@ -10,6 +10,11 @@ permissions: read-all
 jobs:
   pr-fuzzing:
     runs-on: ubuntu-latest
+    # Gated on the presence of fuzz targets — without `fuzz/` (cargo-fuzz)
+    # or a ClusterFuzzLite OSS-Fuzz-style harness, the build_fuzzers step
+    # has nothing to compile and fails. Job re-activates the moment the
+    # fuzz tree lands.
+    if: hashFiles('fuzz/Cargo.toml') != '' || hashFiles('.clusterfuzzlite/build.sh') != ''
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
         with:

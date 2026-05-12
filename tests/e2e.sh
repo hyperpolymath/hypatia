@@ -153,7 +153,7 @@ fi
 # ═══════════════════════════════════════════════════════════════════════
 bold "Section 3: Rule module validation"
 
-RULE_DIR="$PROJECT_DIR/lib/hypatia/rules"
+RULE_DIR="$PROJECT_DIR/lib/rules"
 if [ -d "$RULE_DIR" ]; then
     RULE_COUNT=$(find "$RULE_DIR" -name "*.ex" | wc -l)
     if [ "$RULE_COUNT" -gt 0 ]; then

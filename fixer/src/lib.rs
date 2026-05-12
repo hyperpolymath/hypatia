@@ -18,7 +18,7 @@ use thiserror::Error;
 
 pub use catalog::ErrorCatalog;
 pub use fixer::WorkflowFixer;
-pub use scanner::{Issue, IssueCategory, IssueSeverity, Scanner, ScanResult};
+pub use scanner::{Issue, IssueCategory, IssueSeverity, ScanResult, Scanner};
 pub use sha_pins::ShaPins;
 
 #[derive(Error, Debug)]
@@ -59,7 +59,8 @@ impl CicdFixer {
 
     /// Scan a repository for CI/CD issues
     pub fn scan_repo(&self, repo_path: &Path) -> Result<ScanResult> {
-        self.scanner.scan_repo(repo_path, &self.catalog, &self.sha_pins)
+        self.scanner
+            .scan_repo(repo_path, &self.catalog, &self.sha_pins)
     }
 
     /// Fix all auto-fixable issues in a repository
@@ -69,7 +70,9 @@ impl CicdFixer {
 
         for issue in scan_result.issues {
             if issue.auto_fixable {
-                let result = self.fixer.fix_issue(repo_path, &issue, &self.sha_pins, dry_run)?;
+                let result = self
+                    .fixer
+                    .fix_issue(repo_path, &issue, &self.sha_pins, dry_run)?;
                 results.push(result);
             }
         }

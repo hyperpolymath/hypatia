@@ -5,7 +5,7 @@
 # ============================================================
 # Stage 1: Build Environment
 # ============================================================
-FROM docker.io/library/rust:1.85-slim-bookworm AS builder
+FROM docker.io/library/rust:1.94-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,16 +23,18 @@ COPY Cargo.toml Cargo.lock ./
 # Copy all workspace member Cargo.toml files
 COPY cli/Cargo.toml ./cli/
 COPY adapters/Cargo.toml ./adapters/
+COPY clients/rust/hypatia-client/Cargo.toml ./clients/rust/hypatia-client/
 COPY data/Cargo.toml ./data/
 COPY fixer/Cargo.toml ./fixer/
 COPY integration/Cargo.toml ./integration/
 COPY tools/cii-registrar/Cargo.toml ./tools/cii-registrar/
 
 # Create dummy source files for dependency compilation
-RUN mkdir -p cli/src adapters/src data/src fixer/src integration/src tools/cii-registrar/src && \
+RUN mkdir -p cli/src adapters/src clients/rust/hypatia-client/src data/src fixer/src integration/src tools/cii-registrar/src && \
     echo "fn main() {}" > cli/src/main.rs && \
     echo "pub fn dummy() {}" > adapters/src/lib.rs && \
     echo "fn main() {}" > adapters/src/main.rs && \
+    echo "pub fn dummy() {}" > clients/rust/hypatia-client/src/lib.rs && \
     echo "pub fn dummy() {}" > data/src/lib.rs && \
     echo "pub fn dummy() {}" > fixer/src/lib.rs && \
     echo "pub fn dummy() {}" > integration/src/lib.rs && \
@@ -40,11 +42,12 @@ RUN mkdir -p cli/src adapters/src data/src fixer/src integration/src tools/cii-r
 
 # Build dependencies only (this layer will be cached)
 RUN cargo build --release --package hypatia-cli || true
-RUN rm -rf cli/src adapters/src data/src fixer/src integration/src
+RUN rm -rf cli/src adapters/src clients/rust/hypatia-client/src data/src fixer/src integration/src
 
 # Copy actual source code
 COPY cli/src ./cli/src
 COPY adapters/src ./adapters/src
+COPY clients/rust/hypatia-client/src ./clients/rust/hypatia-client/src
 COPY data/src ./data/src
 COPY fixer/src ./fixer/src
 COPY integration/src ./integration/src

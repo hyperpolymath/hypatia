@@ -287,10 +287,7 @@ impl ForgeAdapter for GitHubAdapter {
                 "{}/repos/{}/{}/actions/workflows/{}/runs",
                 self.base_url, owner, repo, wf_id
             ),
-            None => format!(
-                "{}/repos/{}/{}/actions/runs",
-                self.base_url, owner, repo
-            ),
+            None => format!("{}/repos/{}/{}/actions/runs", self.base_url, owner, repo),
         };
 
         let response: GitHubWorkflowRuns = self.client.get(&url).send().await?.json().await?;
@@ -330,12 +327,7 @@ impl ForgeAdapter for GitHubAdapter {
             .collect())
     }
 
-    async fn get_workflow_run(
-        &self,
-        owner: &str,
-        repo: &str,
-        run_id: &str,
-    ) -> Result<WorkflowRun> {
+    async fn get_workflow_run(&self, owner: &str, repo: &str, run_id: &str) -> Result<WorkflowRun> {
         let url = format!(
             "{}/repos/{}/{}/actions/runs/{}",
             self.base_url, owner, repo, run_id
@@ -451,7 +443,8 @@ impl ForgeAdapter for GitHubAdapter {
             self.base_url, owner, repo, state_str
         );
 
-        let response: Vec<GitHubPullRequestFull> = self.client.get(&url).send().await?.json().await?;
+        let response: Vec<GitHubPullRequestFull> =
+            self.client.get(&url).send().await?.json().await?;
 
         Ok(response
             .into_iter()
@@ -1150,10 +1143,8 @@ impl ForgeAdapter for GitHubAdapter {
         if let (Some(sig), Some(sec)) = (signature, secret) {
             let expected = sig.strip_prefix("sha256=").unwrap_or(sig);
 
-            let mut mac =
-                HmacSha256::new_from_slice(sec.as_bytes()).map_err(|_| {
-                    AdapterError::AuthError("Invalid webhook secret".to_string())
-                })?;
+            let mut mac = HmacSha256::new_from_slice(sec.as_bytes())
+                .map_err(|_| AdapterError::AuthError("Invalid webhook secret".to_string()))?;
             mac.update(payload);
             let computed = hex::encode(mac.finalize().into_bytes());
 
@@ -1370,10 +1361,7 @@ mod tests {
             GitHubAdapter::with_base_url("test-token", "https://github.enterprise.com/api/v3");
         assert!(adapter.is_ok());
         let adapter = adapter.unwrap();
-        assert_eq!(
-            adapter.base_url(),
-            "https://github.enterprise.com/api/v3"
-        );
+        assert_eq!(adapter.base_url(), "https://github.enterprise.com/api/v3");
     }
 
     #[test]

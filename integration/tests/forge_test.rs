@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 //! Forge Adapters Integration Tests
 //!
 //! Tests forge adapters with mock servers:
@@ -9,12 +11,12 @@
 //! - Rate limiting behavior
 //! - Error handling
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use wiremock::matchers::{header, method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -180,9 +182,10 @@ impl MockForgeServer {
         // List repositories endpoint
         Mock::given(method("GET"))
             .and(path_regex(r"^/users/[^/]+/repos$"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                self.repositories.read().await.values().collect::<Vec<_>>(),
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(self.repositories.read().await.values().collect::<Vec<_>>()),
+            )
             .mount(&self.server)
             .await;
 
@@ -261,14 +264,16 @@ impl MockForgeServer {
         // List projects endpoint
         Mock::given(method("GET"))
             .and(path("/api/v4/projects"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{
-                "id": 1,
-                "name": "test-project",
-                "path_with_namespace": "user/test-project",
-                "web_url": "https://gitlab.com/user/test-project",
-                "default_branch": "main",
-                "visibility": "public"
-            }])))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+                    "id": 1,
+                    "name": "test-project",
+                    "path_with_namespace": "user/test-project",
+                    "web_url": "https://gitlab.com/user/test-project",
+                    "default_branch": "main",
+                    "visibility": "public"
+                }])),
+            )
             .mount(&self.server)
             .await;
 
@@ -289,13 +294,15 @@ impl MockForgeServer {
         // Pipelines endpoint
         Mock::given(method("GET"))
             .and(path_regex(r"^/api/v4/projects/[^/]+/pipelines$"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{
-                "id": 1,
-                "status": "success",
-                "ref": "main",
-                "sha": "abc123",
-                "web_url": "https://gitlab.com/user/test-project/-/pipelines/1"
-            }])))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+                    "id": 1,
+                    "status": "success",
+                    "ref": "main",
+                    "sha": "abc123",
+                    "web_url": "https://gitlab.com/user/test-project/-/pipelines/1"
+                }])),
+            )
             .mount(&self.server)
             .await;
 
@@ -404,11 +411,10 @@ impl MockForgeClient {
     async fn get_repository(&self, owner: &str, repo: &str) -> Result<RepositoryResponse> {
         let url = match self.forge_type {
             ForgeType::GitHub => format!("{}/repos/{}/{}", self.base_url, owner, repo),
-            ForgeType::GitLab => format!(
-                "{}/api/v4/projects/{}%2F{}",
-                self.base_url, owner, repo
-            ),
-            ForgeType::Bitbucket => format!("{}/2.0/repositories/{}/{}", self.base_url, owner, repo),
+            ForgeType::GitLab => format!("{}/api/v4/projects/{}%2F{}", self.base_url, owner, repo),
+            ForgeType::Bitbucket => {
+                format!("{}/2.0/repositories/{}/{}", self.base_url, owner, repo)
+            }
         };
 
         let mut request = self.client.get(&url);
@@ -445,7 +451,9 @@ impl MockForgeClient {
         let body: serde_json::Value = response.json().await?;
 
         let workflows: Vec<WorkflowResponse> = serde_json::from_value(
-            body.get("workflows").cloned().unwrap_or(serde_json::json!([])),
+            body.get("workflows")
+                .cloned()
+                .unwrap_or(serde_json::json!([])),
         )?;
 
         Ok(workflows)
@@ -460,9 +468,7 @@ impl MockForgeClient {
         let response = self.client.get(&url).send().await?;
         let body: serde_json::Value = response.json().await?;
 
-        let remaining = body["resources"]["core"]["remaining"]
-            .as_u64()
-            .unwrap_or(0);
+        let remaining = body["resources"]["core"]["remaining"].as_u64().unwrap_or(0);
 
         Ok(remaining)
     }
@@ -570,8 +576,8 @@ async fn test_authentication_header() -> Result<()> {
         .mount(&mock_server)
         .await;
 
-    let client = MockForgeClient::new(&mock_server.uri(), ForgeType::GitHub)
-        .with_token("test-token");
+    let client =
+        MockForgeClient::new(&mock_server.uri(), ForgeType::GitHub).with_token("test-token");
 
     let repo = client.get_repository("owner", "repo").await?;
     assert_eq!(repo.name, "repo");
@@ -715,7 +721,10 @@ async fn test_pagination_handling() -> Result<()> {
                     {"number": 1, "title": "Issue 1"},
                     {"number": 2, "title": "Issue 2"}
                 ]))
-                .append_header("Link", r#"<http://api.github.com/repos/owner/repo/issues?page=2>; rel="next""#),
+                .append_header(
+                    "Link",
+                    r#"<http://api.github.com/repos/owner/repo/issues?page=2>; rel="next""#,
+                ),
         )
         .mount(&mock_server)
         .await;
@@ -724,12 +733,9 @@ async fn test_pagination_handling() -> Result<()> {
     Mock::given(method("GET"))
         .and(path("/repos/owner/repo/issues"))
         .and(wiremock::matchers::query_param("page", "2"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!([
-                    {"number": 3, "title": "Issue 3"}
-                ])),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"number": 3, "title": "Issue 3"}
+        ])))
         .mount(&mock_server)
         .await;
 
@@ -737,7 +743,10 @@ async fn test_pagination_handling() -> Result<()> {
 
     // Fetch first page
     let response = client
-        .get(format!("{}/repos/owner/repo/issues?page=1", mock_server.uri()))
+        .get(format!(
+            "{}/repos/owner/repo/issues?page=1",
+            mock_server.uri()
+        ))
         .send()
         .await?;
 
@@ -750,7 +759,10 @@ async fn test_pagination_handling() -> Result<()> {
 
     // Fetch second page
     let response = client
-        .get(format!("{}/repos/owner/repo/issues?page=2", mock_server.uri()))
+        .get(format!(
+            "{}/repos/owner/repo/issues?page=2",
+            mock_server.uri()
+        ))
         .send()
         .await?;
 
@@ -818,16 +830,35 @@ fn main() {
     println!("Running Forge Adapters Integration Tests\n");
     println!("=========================================\n");
 
-    let tests: Vec<(&str, fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>)> = vec![
-        ("test_github_mock_server", || Box::pin(test_github_mock_server())),
-        ("test_gitlab_mock_server", || Box::pin(test_gitlab_mock_server())),
-        ("test_bitbucket_mock_server", || Box::pin(test_bitbucket_mock_server())),
-        ("test_authentication_header", || Box::pin(test_authentication_header())),
-        ("test_rate_limiting_response", || Box::pin(test_rate_limiting_response())),
-        ("test_webhook_payload_handling", || Box::pin(test_webhook_payload_handling())),
+    let tests: Vec<(
+        &str,
+        fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>,
+    )> = vec![
+        ("test_github_mock_server", || {
+            Box::pin(test_github_mock_server())
+        }),
+        ("test_gitlab_mock_server", || {
+            Box::pin(test_gitlab_mock_server())
+        }),
+        ("test_bitbucket_mock_server", || {
+            Box::pin(test_bitbucket_mock_server())
+        }),
+        ("test_authentication_header", || {
+            Box::pin(test_authentication_header())
+        }),
+        ("test_rate_limiting_response", || {
+            Box::pin(test_rate_limiting_response())
+        }),
+        ("test_webhook_payload_handling", || {
+            Box::pin(test_webhook_payload_handling())
+        }),
         ("test_error_handling", || Box::pin(test_error_handling())),
-        ("test_pagination_handling", || Box::pin(test_pagination_handling())),
-        ("test_concurrent_requests", || Box::pin(test_concurrent_requests())),
+        ("test_pagination_handling", || {
+            Box::pin(test_pagination_handling())
+        }),
+        ("test_concurrent_requests", || {
+            Box::pin(test_concurrent_requests())
+        }),
     ];
 
     let mut passed = 0;

@@ -3,6 +3,8 @@
 # See: https://github.com/hyperpolymath/gv-clade-index
 
 [identity]
+name = "hypatia"
+project = "hypatia"
 uuid = "32793824-07a1-5c4d-8518-19e0981c4f57"
 primary-forge = "github"
 primary-owner = "hyperpolymath"

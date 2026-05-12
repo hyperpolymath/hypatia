@@ -1107,10 +1107,8 @@ impl SimulatedCI for MockGitHubActions {
                     for job in &mut build.jobs {
                         if job.status == BuildStatus::Queued {
                             // Check if dependencies are met
-                            let deps_met = job
-                                .needs
-                                .iter()
-                                .all(|need| completed_jobs.contains(need));
+                            let deps_met =
+                                job.needs.iter().all(|need| completed_jobs.contains(need));
                             if deps_met {
                                 job.status = BuildStatus::InProgress;
                                 job.started_at = Some(Utc::now());
@@ -1242,8 +1240,10 @@ impl SimulatedCI for MockGitHubActions {
     async fn stats(&self) -> SimulationStats {
         let builds = self.builds.read().await;
 
-        let mut stats = SimulationStats::default();
-        stats.total_builds = builds.len() as u64;
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
 
         for build in builds.values() {
             match build.status {
@@ -1537,8 +1537,10 @@ impl SimulatedCI for MockGitLabCI {
     async fn stats(&self) -> SimulationStats {
         let builds = self.builds.read().await;
 
-        let mut stats = SimulationStats::default();
-        stats.total_builds = builds.len() as u64;
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
 
         for build in builds.values() {
             match build.status {
@@ -1827,8 +1829,10 @@ impl SimulatedCI for MockCircleCI {
     async fn stats(&self) -> SimulationStats {
         let builds = self.builds.read().await;
 
-        let mut stats = SimulationStats::default();
-        stats.total_builds = builds.len() as u64;
+        let mut stats = SimulationStats {
+            total_builds: builds.len() as u64,
+            ..Default::default()
+        };
 
         for build in builds.values() {
             match build.status {

@@ -1,5 +1,9 @@
 // Bustfile.a2ml — meta-repo bust contractile (breakage / rollback)
 // SPDX-License-Identifier: PMPL-1.0-or-later
+// A2ML validator metadata
+name = "Bustfile"
+project = "hypatia"
+version = "1.0.0"
 
 Bust {
     name: "hypatia"
