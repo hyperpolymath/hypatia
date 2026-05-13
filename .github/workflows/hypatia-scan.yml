@@ -47,11 +47,19 @@ jobs:
 
       - name: Run Hypatia scan
         id: scan
+        env:
+          # Suppress the "Warning: Dependabot alerts unavailable: GITHUB_TOKEN
+          # not set" line so the run is silent-warning-free. The token is
+          # read-only by default and only used to query Dependabot alerts.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Scanning repository: ${{ github.repository }}"
 
-          # Run scanner
-          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . > hypatia-findings.json
+          # Run scanner with --exit-zero so a findings-found exit-1 does
+          # NOT short-circuit the rest of this step under `set -e`. The
+          # downstream "Check for critical or high-severity issues" step
+          # is the explicit gate. See hyperpolymath/hypatia#213.
+          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json
 
           # Count findings
           FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
@@ -73,7 +81,7 @@ jobs:
           echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload findings artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hypatia-findings
           path: hypatia-findings.json
