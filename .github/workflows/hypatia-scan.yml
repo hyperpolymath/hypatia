@@ -30,9 +30,15 @@ jobs:
           elixir-version: '1.19.4'
           otp-version: '28.3'
 
-      - name: Clone Hypatia
+      - name: Clone Hypatia (or use checkout when scanning hypatia itself)
         run: |
-          if [ ! -d "$HOME/hypatia" ]; then
+          # When scanning hypatia from inside hypatia, point $HOME/hypatia
+          # at the PR/branch checkout instead of cloning main — otherwise
+          # CLI changes can never pass their own gate (the scanner binary
+          # would always come from main and ignore new flags).
+          if [ "${{ github.repository }}" = "hyperpolymath/hypatia" ]; then
+            ln -sfn "${GITHUB_WORKSPACE}" "$HOME/hypatia"
+          elif [ ! -d "$HOME/hypatia" ]; then
             git clone https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia"
           fi
 
