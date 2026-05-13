@@ -66,8 +66,18 @@ defmodule Hypatia.CLI do
 
   @doc """
   Main entry point invoked by the escript runtime.
+
   Parses argv, dispatches to the appropriate command, and halts with
-  an appropriate exit code (0 = success, 1 = findings found, 2 = error).
+  an appropriate exit code:
+
+    * `0` -- success (no findings at/above the severity threshold), or
+      `--exit-zero` / `HYPATIA_EXIT_ZERO` was set and the scan ran cleanly.
+    * `1` -- findings exist at/above the threshold (default behaviour).
+    * `2` -- error (bad arguments, scan failed, etc.).
+
+  Findings are always written to stdout in the requested format. A
+  one-line `[hypatia] scan complete: ...` summary is always written to
+  stderr so CI logs are never silent on exit.
   """
   def main(argv) do
     {opts, args, _invalid} =
@@ -78,7 +88,8 @@ defmodule Hypatia.CLI do
           severity: :string,
           path: :string,
           help: :boolean,
-          version: :boolean
+          version: :boolean,
+          exit_zero: :boolean
         ],
         aliases: [
           r: :rules,
@@ -93,12 +104,14 @@ defmodule Hypatia.CLI do
     # Environment variable overrides
     format = opts[:format] || System.get_env("HYPATIA_FORMAT") || "json"
     severity = opts[:severity] || System.get_env("HYPATIA_SEVERITY") || "medium"
+    exit_zero = opts[:exit_zero] || env_flag?("HYPATIA_EXIT_ZERO")
 
     config = %{
       format: format,
       severity: severity,
       rules: parse_rules(opts[:rules]),
-      path: opts[:path]
+      path: opts[:path],
+      exit_zero: exit_zero
     }
 
     case args do
@@ -154,9 +167,12 @@ defmodule Hypatia.CLI do
       end)
 
     output(filtered, config.format)
+    emit_finding_summary(filtered, config)
 
-    if length(filtered) > 0 do
-      System.halt(1)
+    cond do
+      length(filtered) == 0 -> :ok
+      config.exit_zero -> :ok
+      true -> System.halt(1)
     end
   end
 
@@ -183,9 +199,60 @@ defmodule Hypatia.CLI do
 
     # Report always uses text format with extra detail
     output_report(filtered, abs_path)
+    emit_finding_summary(filtered, config)
 
-    if length(filtered) > 0 do
-      System.halt(1)
+    cond do
+      length(filtered) == 0 -> :ok
+      config.exit_zero -> :ok
+      true -> System.halt(1)
+    end
+  end
+
+  # ─── Diagnostic summary ──────────────────────────────────────────────
+  #
+  # Always emit a single-line summary on stderr after a scan/report so CI
+  # logs never report a silent exit-1. Findings themselves go to stdout
+  # in the requested format; this line is a separate operator-facing
+  # signal that includes severity counts and the exit code about to be
+  # returned. See hypatia#213.
+
+  defp emit_finding_summary(filtered, config) do
+    counts =
+      Enum.reduce(filtered, %{}, fn f, acc ->
+        sev = Map.get(f, :severity, "medium") |> to_string()
+        Map.update(acc, sev, 1, &(&1 + 1))
+      end)
+
+    total = length(filtered)
+
+    breakdown =
+      ["critical", "high", "medium", "low", "info"]
+      |> Enum.map(fn sev -> "#{sev}=#{Map.get(counts, sev, 0)}" end)
+      |> Enum.join(", ")
+
+    exit_code =
+      cond do
+        total == 0 -> 0
+        config.exit_zero -> 0
+        true -> 1
+      end
+
+    IO.puts(
+      :stderr,
+      "[hypatia] scan complete: #{total} findings >= #{config.severity} " <>
+        "(#{breakdown}); exit #{exit_code}" <>
+        if(config.exit_zero and total > 0, do: " (--exit-zero suppressed exit 1)", else: "")
+    )
+  end
+
+  defp env_flag?(name) do
+    case System.get_env(name) do
+      nil -> false
+      "" -> false
+      "0" -> false
+      "false" -> false
+      "FALSE" -> false
+      _ -> true
     end
   end
 
@@ -847,15 +914,27 @@ defmodule Hypatia.CLI do
         --format, -f <fmt>      Output format: json (default), text, github
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
+        --exit-zero             Always exit 0 after a successful scan, even when
+                                findings exist. Use in CI when a downstream step
+                                gates on severity counts. (See HYPATIA_EXIT_ZERO.)
+
+    EXIT CODES:
+        0   No findings at or above the configured severity threshold,
+            OR --exit-zero / HYPATIA_EXIT_ZERO was set and the scan ran cleanly.
+        1   Findings exist at/above the threshold (default behaviour).
+        2   Error (bad arguments, scan failed, etc.).
 
     ENVIRONMENT:
         HYPATIA_FORMAT          Override --format
         HYPATIA_SEVERITY        Override --severity
+        HYPATIA_EXIT_ZERO       If set to a truthy value (1, true, anything
+                                non-empty/non-zero), behaves as --exit-zero.
 
     EXAMPLES:
         hypatia scan .
         hypatia scan ~/repos/my-project --format text
         hypatia scan . --rules root_hygiene,code_safety --severity high
+        hypatia scan . --exit-zero        # CI: emit findings, never fail step
         hypatia report . > report.txt
         HYPATIA_FORMAT=json hypatia scan .
     """)
