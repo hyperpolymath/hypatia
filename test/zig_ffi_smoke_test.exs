@@ -29,8 +29,8 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
   alias Hypatia.TriangleRouter
 
-  @zig_ffi_dir "/var/mnt/eclipse/repos/verification-ecosystem/hypatia/ffi/zig"
-  @zig_src_dir "#{@zig_ffi_dir}/src"
+  @zig_ffi_dir Path.expand("../ffi/zig", __DIR__)
+  @zig_src_dir Path.join(@zig_ffi_dir, "src")
   @data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   # ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
   # ---------------------------------------------------------------------------
 
   describe "Idris2 ABI source integrity" do
-    @abi_dir "/var/mnt/eclipse/repos/verification-ecosystem/hypatia/src/abi"
+    @abi_dir Path.expand("../src/abi", __DIR__)
 
     test "src/abi directory exists" do
       assert File.exists?(@abi_dir),
