@@ -139,7 +139,9 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # --- Trust Computation (PageRank-style) ---
 
-  defp compute_trust(%__MODULE__{nodes: nodes} = graph) when map_size(nodes) == 0, do: graph
+  defp compute_trust(%__MODULE__{nodes: nodes} = graph) when map_size(nodes) == 0 do
+    %{graph | last_computed: DateTime.utc_now()}
+  end
 
   defp compute_trust(%__MODULE__{nodes: nodes, edges: edges} = graph) do
     n = map_size(nodes)
