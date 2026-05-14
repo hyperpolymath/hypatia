@@ -4,7 +4,6 @@
 # CODEOWNERS — hypatia
 
 # Default owner for all files
-* @hyperpolymath
 
 # Core Rust workspace
 /cli/ @hyperpolymath
