@@ -163,4 +163,114 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert report.standard_coverage == round(2 / 17 * 100)
     end
   end
+
+  describe "check_codeql_language_matrix_mismatch/2" do
+    @codeql_js_ts """
+    name: CodeQL Security Analysis
+    on: [push, pull_request]
+    jobs:
+      analyze:
+        runs-on: ubuntu-latest
+        strategy:
+          matrix:
+            include:
+              - language: javascript-typescript
+                build-mode: none
+        steps:
+          - uses: github/codeql-action/init@SHA
+            with:
+              languages: ${{ matrix.language }}
+    """
+
+    @codeql_actions """
+    name: CodeQL Security Analysis
+    on: [push, pull_request]
+    jobs:
+      analyze:
+        runs-on: ubuntu-latest
+        strategy:
+          matrix:
+            include:
+              - language: actions
+                build-mode: none
+    """
+
+    test "flags javascript-typescript matrix on a repo with no JS/TS source" do
+      contents = %{".github/workflows/codeql.yml" => @codeql_js_ts}
+      findings =
+        WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
+          has_codeql_supported_language: false
+        )
+
+      assert length(findings) == 1
+      f = hd(findings)
+      assert f.type == :codeql_language_matrix_mismatch
+      assert f.severity == :high
+      assert f.action == :switch_codeql_matrix_to_actions
+      assert String.contains?(f.detail, "javascript-typescript")
+    end
+
+    test "does NOT flag when matrix is `actions` (workflow-only scan)" do
+      contents = %{".github/workflows/codeql.yml" => @codeql_actions}
+      findings =
+        WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
+          has_codeql_supported_language: false
+        )
+
+      assert findings == []
+    end
+
+    test "does NOT flag when repo has CodeQL-supported source files (caller's repo-detection said true)" do
+      # Even if codeql.yml lists javascript-typescript, if the repo actually
+      # has JS/TS files the analyze job will scan them — no mismatch.
+      contents = %{".github/workflows/codeql.yml" => @codeql_js_ts}
+      findings =
+        WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
+          has_codeql_supported_language: true
+        )
+
+      assert findings == []
+    end
+
+    test "ignores non-codeql workflow files even on a no-source-langs repo" do
+      contents = %{
+        ".github/workflows/ci.yml" => "language: javascript-typescript",
+        ".github/workflows/hypatia-scan.yml" => "language: javascript-typescript"
+      }
+
+      findings =
+        WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
+          has_codeql_supported_language: false
+        )
+
+      assert findings == []
+    end
+
+    test "flags each scanning-language listed in the matrix" do
+      multi = """
+      jobs:
+        analyze:
+          strategy:
+            matrix:
+              include:
+                - language: python
+                - language: go
+                - language: actions
+      """
+
+      contents = %{".github/workflows/codeql.yml" => multi}
+      findings =
+        WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
+          has_codeql_supported_language: false
+        )
+
+      types = Enum.map(findings, & &1.type) |> Enum.uniq()
+      assert types == [:codeql_language_matrix_mismatch]
+      assert length(findings) == 2
+      detail_text = findings |> Enum.map(& &1.detail) |> Enum.join("\n")
+      assert String.contains?(detail_text, "python")
+      assert String.contains?(detail_text, "go")
+      refute String.contains?(detail_text, "actions ")
+    end
+  end
 end
