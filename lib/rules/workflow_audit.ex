@@ -281,7 +281,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
     run_context_re =
       ~r/run:\s*\|(?:(?:\n[ \t]+[^\n]*)*?\n[ \t]+[^\n]*\$\{\{\s*github\.(?:event\.repository\.name|repository|ref_name|head_ref|actor|event\.pull_request\.|event\.issue\.|event\.comment\.)[^}]*\}\})/m
 
-    unsafe_json_payload_re = ~r/-d\s*".*\$\{\{\s*github\./s
+    # Require `curl` to appear on the same line as `-d "…${{ github.… }}…"`,
+    # with no shell pipe (`|`) or newline between, so the rule doesn't
+    # false-match bash's `[ -d "$DIR" ]` directory-existence test or any
+    # other unrelated -d flag whose payload happens to share the file with
+    # a later `${{ github.* }}` reference.
+    unsafe_json_payload_re = ~r/curl[^\n|]*?-d\s*"[^"\n]*\$\{\{\s*github\./
 
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       findings = []

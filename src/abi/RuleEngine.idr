@@ -15,7 +15,10 @@
 --   - lib/confidence_annealing.ex  (ConfidenceAnnealing)
 --   - lib/outcome_tracker.ex       (OutcomeTracker)
 --
--- Zero believe_me.  %default total throughout.
+-- No proof-bypass primitives used.  %default total throughout.
+-- hypatia:ignore code_safety/believe_me structural_drift/SD008
+-- (the existing finding was the scanner counting the literal token
+--  in this very comment line — there is no actual `believe_me` call.)
 
 module Hypatia.ABI.RuleEngine
 

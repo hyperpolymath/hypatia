@@ -122,24 +122,17 @@ jobs:
             --attribute toclevels=3 \
             README.adoc || echo "PDF generation skipped or failed"
 
+      # Install Rust via SHA-pinned action; no remote-script-exec install
+      # path. Closes the workflow_audit/download_then_run finding.
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        with:
+          toolchain: stable
+          components: rust-docs
+
       - name: Generate Rust API documentation
         run: |
-          # Install Rust using official action (more secure than curl | sh)
-          # Note: In a real workflow, we would use rust-toolchain file or setup action
-          # For documentation purposes, we'll use a safer approach
-          if ! command -v cargo &> /dev/null; then
-            echo "Rust not found, installing..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-install.sh
-            chmod +x rustup-install.sh
-            ./rustup-install.sh -y --profile minimal --default-toolchain stable
-            source $HOME/.cargo/env
-            rm rustup-install.sh
-          fi
-
-          # Generate rustdoc
           cargo doc --workspace --no-deps --document-private-items
-
-          # Copy to site
           cp -r target/doc/* _site/api/
 
       - name: Generate Haskell API documentation
