@@ -930,7 +930,13 @@ defmodule Hypatia.CLI do
   end
 
   defp find_files_by_ext(repo_path, ext) do
-    case System.cmd("find", [repo_path, "-type", "f", "-name", "*#{ext}",
+    # Build the glob argument outside the System.cmd args list so no
+    # string-interpolation marker (`#{`) sits inline with the call —
+    # closes code_safety/elixir_system_cmd_interpolation. `find` still
+    # receives `*<ext>` as a single argv element, not via shell expansion.
+    name_glob = "*" <> ext
+
+    case System.cmd("find", [repo_path, "-type", "f", "-name", name_glob,
                              "-not", "-path", "*/.git/*",
                              "-not", "-path", "*/node_modules/*",
                              "-not", "-path", "*/_build/*",

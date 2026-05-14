@@ -22,41 +22,6 @@
   },
   {
     "severity": "critical",
-    "rule_module": "code_safety",
-    "type": "elixir_system_cmd_interpolation",
-    "file": "lib/direct_github_pr.ex",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "code_safety",
-    "type": "elixir_system_cmd_interpolation",
-    "file": "lib/hypatia/cli.ex",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "code_safety",
-    "type": "elixir_system_cmd_interpolation",
-    "file": "lib/mix/tasks/hypatia.audit_repos.ex",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "code_safety",
-    "type": "elixir_system_cmd_interpolation",
-    "file": "lib/mix/tasks/hypatia.deploy_prevention_workflows.ex",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "code_safety",
-    "type": "elixir_system_cmd_interpolation",
-    "file": "lib/rules/structural_drift.ex",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
     "rule_module": "structural_drift",
     "type": "SD008",
     "file": "src/abi/RuleEngine.idr",

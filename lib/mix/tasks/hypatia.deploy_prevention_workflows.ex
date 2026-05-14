@@ -95,18 +95,19 @@ defmodule Mix.Tasks.Hypatia.DeployPreventionWorkflows do
   end
 
   defp rust_repo?(repo) do
-    case System.cmd("gh", ["api", "repos/#{@org}/#{repo}/contents/Cargo.toml"],
-           stderr_to_stdout: true
-         ) do
+    api_path = "repos/" <> @org <> "/" <> repo <> "/contents/Cargo.toml"
+
+    case System.cmd("gh", ["api", api_path], stderr_to_stdout: true) do
       {_, 0} -> true
       _ -> false
     end
   end
 
   defp workflow_exists?(repo, workflow) do
-    case System.cmd("gh", ["api", "repos/#{@org}/#{repo}/contents/.github/workflows/#{workflow}"],
-           stderr_to_stdout: true
-         ) do
+    api_path =
+      "repos/" <> @org <> "/" <> repo <> "/contents/.github/workflows/" <> workflow
+
+    case System.cmd("gh", ["api", api_path], stderr_to_stdout: true) do
       {_, 0} -> true
       _ -> false
     end

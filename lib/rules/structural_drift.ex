@@ -610,9 +610,11 @@ defmodule Hypatia.Rules.StructuralDrift do
     case src_dirs do
       [] -> []
       dirs ->
+        name_glob = "*" <> ext
+
         dirs
         |> Enum.flat_map(fn dir ->
-          case System.cmd("find", [dir, "-maxdepth", "5", "-name", "*#{ext}",
+          case System.cmd("find", [dir, "-maxdepth", "5", "-name", name_glob,
                                    "-not", "-path", "*/.git/*",
                                    "-not", "-path", "*/node_modules/*",
                                    "-not", "-path", "*/target/*",

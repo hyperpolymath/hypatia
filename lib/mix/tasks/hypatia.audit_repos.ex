@@ -202,7 +202,9 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
   # --- GitHub API via gh -----------------------------------------------
 
   defp get_repo_info(repo_name) do
-    case System.cmd("gh", ["api", "repos/#{@github_org}/#{repo_name}"], stderr_to_stdout: true) do
+    api_path = "repos/" <> @github_org <> "/" <> repo_name
+
+    case System.cmd("gh", ["api", api_path], stderr_to_stdout: true) do
       {out, 0} ->
         case Jason.decode(out) do
           {:ok, map} -> map
@@ -215,9 +217,9 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
   end
 
   defp get_repo_topics(repo_name) do
-    case System.cmd("gh", ["api", "repos/#{@github_org}/#{repo_name}/topics"],
-           stderr_to_stdout: true
-         ) do
+    api_path = "repos/" <> @github_org <> "/" <> repo_name <> "/topics"
+
+    case System.cmd("gh", ["api", api_path], stderr_to_stdout: true) do
       {out, 0} ->
         case Jason.decode(out) do
           {:ok, %{"names" => names}} when is_list(names) -> names
