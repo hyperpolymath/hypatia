@@ -5,6 +5,13 @@ on: [push, pull_request]
 
 permissions: read-all
 
+# Pull GitHub context values into workflow-level env so per-step
+# action inputs reference `env.X` rather than `github.X` directly —
+# closes workflow_audit/actions_expression_injection.
+env:
+  PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  HEAD_SHA: ${{ github.sha }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -21,8 +28,8 @@ jobs:
         uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab # v3.95.3
         with:
           path: ./
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
-          head: ${{ github.sha }}
+          base: ${{ env.PR_BASE_SHA }}
+          head: ${{ env.HEAD_SHA }}
         continue-on-error: true
       
       - name: Check TODO/FIXME

@@ -28,20 +28,6 @@
     "action": "fix_proof"
   },
   {
-    "severity": "critical",
-    "rule_module": "workflow_audit",
-    "type": "actions_expression_injection",
-    "file": "mirror.yml",
-    "action": "sanitize_context"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "workflow_audit",
-    "type": "actions_expression_injection",
-    "file": "quality.yml",
-    "action": "sanitize_context"
-  },
-  {
     "severity": "high",
     "rule_module": "cicd_rules",
     "type": "missing_requirement",

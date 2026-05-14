@@ -9,6 +9,16 @@ on:
 
 permissions: read-all
 
+# Hoist GitHub context refs to workflow env so the per-step run blocks
+# read `$REPO_NAME` / `$GITEA_HOST` instead of interpolating
+# `${{ github.event.repository.name }}` inline — closes
+# workflow_audit/actions_expression_injection. `github.event.repository.name`
+# is GitHub-controlled metadata anyway, but the scanner rule fires on
+# the *shape* so we move it out cleanly.
+env:
+  REPO_NAME: ${{ github.event.repository.name }}
+  GITEA_HOST: ${{ vars.GITEA_HOST }}
+
 jobs:
   mirror-gitlab:
     runs-on: ubuntu-latest
@@ -25,7 +35,7 @@ jobs:
       - name: Mirror to GitLab
         run: |
           ssh-keyscan -t ed25519 gitlab.com >> ~/.ssh/known_hosts
-          git remote add gitlab git@gitlab.com:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add gitlab "git@gitlab.com:hyperpolymath/${REPO_NAME}.git" || true
           git push --force gitlab main
 
   mirror-bitbucket:
@@ -43,7 +53,7 @@ jobs:
       - name: Mirror to Bitbucket
         run: |
           ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts
-          git remote add bitbucket git@bitbucket.org:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add bitbucket "git@bitbucket.org:hyperpolymath/${REPO_NAME}.git" || true
           git push --force bitbucket main
 
   mirror-codeberg:
@@ -61,7 +71,7 @@ jobs:
       - name: Mirror to Codeberg
         run: |
           ssh-keyscan -t ed25519 codeberg.org >> ~/.ssh/known_hosts
-          git remote add codeberg git@codeberg.org:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add codeberg "git@codeberg.org:hyperpolymath/${REPO_NAME}.git" || true
           git push --force codeberg main
 
   mirror-sourcehut:
@@ -79,7 +89,7 @@ jobs:
       - name: Mirror to SourceHut
         run: |
           ssh-keyscan -t ed25519 git.sr.ht >> ~/.ssh/known_hosts
-          git remote add sourcehut git@git.sr.ht:~hyperpolymath/${{ github.event.repository.name }} || true
+          git remote add sourcehut "git@git.sr.ht:~hyperpolymath/${REPO_NAME}" || true
           git push --force sourcehut main
 
   mirror-disroot:
@@ -97,7 +107,7 @@ jobs:
       - name: Mirror to Disroot
         run: |
           ssh-keyscan -t ed25519 git.disroot.org >> ~/.ssh/known_hosts
-          git remote add disroot git@git.disroot.org:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add disroot "git@git.disroot.org:hyperpolymath/${REPO_NAME}.git" || true
           git push --force disroot main
 
   mirror-gitea:
@@ -114,8 +124,8 @@ jobs:
 
       - name: Mirror to Gitea
         run: |
-          ssh-keyscan -t ed25519 ${{ vars.GITEA_HOST }} >> ~/.ssh/known_hosts
-          git remote add gitea git@${{ vars.GITEA_HOST }}:hyperpolymath/${{ github.event.repository.name }}.git || true
+          ssh-keyscan -t ed25519 "$GITEA_HOST" >> ~/.ssh/known_hosts
+          git remote add gitea "git@${GITEA_HOST}:hyperpolymath/${REPO_NAME}.git" || true
           git push --force gitea main
 
   mirror-radicle:
