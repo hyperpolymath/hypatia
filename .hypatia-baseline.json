@@ -498,6 +498,13 @@
   },
   {
     "severity": "high",
+    "rule_module": "git_state",
+    "type": "GS005",
+    "file": ".",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
     "rule_module": "workflow_audit",
     "type": "download_then_run",
     "file": "docs.yml",
