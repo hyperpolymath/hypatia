@@ -15,7 +15,7 @@
 --   - lib/confidence_annealing.ex  (ConfidenceAnnealing)
 --   - lib/outcome_tracker.ex       (OutcomeTracker)
 --
--- Zero believe_me.  %default total throughout.
+-- Zero proof-bypass primitives.  %default total throughout.
 
 module Hypatia.ABI.RuleEngine
 

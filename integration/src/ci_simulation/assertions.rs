@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+// hypatia: allow code_safety/panic_macro -- panic! IS the assertion mechanism in this file
 //! Custom Assertions for CI Simulation Testing
 //!
 //! This module provides specialized assertion functions and macros for testing
-//! the CI/CD intelligence platform against simulated CI environments.
+//! the CI/CD intelligence platform against simulated CI environments. Every
+//! function here that takes a `should_*` shape uses `panic!` as the failure
+//! mechanism — the same way `assert!`, `assert_eq!`, and `unreachable!` do.
+//! This is the idiomatic Rust assertion-utility pattern.
 //!
 //! # Assertion Categories
 //!

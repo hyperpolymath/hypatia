@@ -218,3 +218,63 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 - Bot quarantine on repeated failures
 - Batch rollback capability for auto_execute tier
 - Novelty gating: unknown findings forced to report_only
+
+## Scanner Hygiene (preventing FPs at source)
+
+Hypatia self-scans, so anything below is also how *Hypatia* avoids
+re-introducing false positives into its own scan results. See the
+post-mortem on PR #237 for the canonical examples.
+
+### When you add a fixture / training corpus / remediation script
+
+Default exemptions in `lib/hypatia/scanner_suppression.ex` cover:
+`.audittraining/`, `test/`, `tests/`, `integration/fixtures/`,
+`scripts/fix-scripts/`, the rule definition files themselves. **If your
+new file belongs to one of those categories but lives elsewhere, add it
+to that list** rather than baselining the resulting findings.
+
+### When you write a workflow
+
+* Push GitHub context into env first, then jq with `--arg` — never
+  string-interpolate `${{ github.* }}` directly into a `run:` shell line.
+* `${{ secrets.X }}` and `${{ vars.X }}` are *references*, not leaks; the
+  scanner already exempts them, but use them rather than inline literals.
+* Prefer args-list form for action `run:` blocks over shell strings.
+
+### When you call out to a process from Elixir
+
+* `System.cmd("bin", ["arg1", "arg2"])` — **safe**, no shell. Interpolating
+  into the args list is fine.
+* `System.shell("…#{x}")` — **always shell injection**. Don't.
+* `:os.cmd('…#{x}')` — **always shell injection**. Don't.
+* `Port.open({:spawn, "string"}, …)` — shell form. Use `:spawn_executable`
+  + `args:` instead.
+
+### When you write Rust in this repo
+
+* `.unwrap()` is acceptable in `cli/`, `main.rs`, `build.rs`, `bin/*.rs`,
+  `tools/`, `fixer/` — scanner downgrades those automatically.
+* `.unwrap()` in library code (`adapters/`, `data/`, `integration/src/`)
+  is real and should be migrated to `?` or `.unwrap_or_else(…exit…)`.
+* For test fixture credentials, prefix the literal with `test-`,
+  `dummy-`, `fake-`, `example-`, or `placeholder-` so the secret scanner
+  recognises it.
+
+### When you need to suppress a real finding
+
+Three mechanisms, in order of preference:
+
+1. **Fix the code.** Most "unsuppressable" findings are actually
+   fixable in 5 minutes.
+2. **Inline directive** at the call site, with a reason:
+   ```
+   let pw = "x"  // hypatia: allow security_errors/secret_detected -- doctest
+   ```
+   Recognised in `#`, `//`, `--`, `;` comment styles. A file-level
+   directive in the first 20 lines covers every match in the file.
+3. **`.hypatia-ignore`** for file-scoped or directory-scoped exemptions
+   that have a documented org-policy rationale.
+
+`.hypatia-baseline.json` should be a **last resort**. Baseline entries
+are accepted findings — every new agent reads them as historical risk.
+Prefer fix > inline directive > .hypatia-ignore > baseline.

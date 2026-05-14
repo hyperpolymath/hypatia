@@ -351,7 +351,10 @@ defmodule Hypatia.CLI do
             |> Enum.reject(&is_nil/1)
             |> Map.new()
 
-          %{findings: findings} = Hypatia.Rules.WorkflowAudit.audit(yml_files, wf_contents)
+          %{findings: findings} =
+            Hypatia.Rules.WorkflowAudit.audit(yml_files, wf_contents,
+              has_codeql_supported_language: has_codeql_supported_language?(repo_path)
+            )
 
           normalized =
             Enum.map(findings, fn f ->
@@ -393,7 +396,14 @@ defmodule Hypatia.CLI do
           has_deps: File.exists?(Path.join(repo_path, "mix.lock")) or
                       File.exists?(Path.join(repo_path, "Cargo.lock")) or
                       File.exists?(Path.join(repo_path, "deno.lock")),
-          files: root_files
+          files: root_files,
+          # `repo_path` is consulted by the must-have-file check to verify
+          # *nested* paths (`.github/dependabot.yml`, `.github/workflows/*`)
+          # exist on disk. Without it, the rule could only see root files
+          # and so reported every nested requirement as missing — that was
+          # the source of three baselined FPs (dependabot.yml, scorecard.yml,
+          # the literal string "permissions: read-all") in hypatia#237.
+          repo_path: repo_path
         }
 
         missing = Hypatia.Rules.CicdRules.check_repo_requirements(repo_info)
@@ -410,7 +420,10 @@ defmodule Hypatia.CLI do
             }
           end)
 
-        # Check for banned file extensions in the repo
+        # Check for banned file extensions in the repo. Findings are filtered
+        # through ScannerSuppression so a scoped exemption in `.hypatia-ignore`
+        # (or a documented org-policy exemption) can suppress specific files
+        # without re-baselining every scan.
         all_files = list_all_files(repo_path)
         banned = Hypatia.Rules.CodeSafety.banned_file_extensions()
 
@@ -421,7 +434,13 @@ defmodule Hypatia.CLI do
             matches =
               Enum.filter(all_files, fn f ->
                 String.ends_with?(f, ext) and not String.contains?(f, "node_modules") and
-                  not String.contains?(f, ".git/")
+                  not String.contains?(f, ".git/") and
+                  not Hypatia.ScannerSuppression.suppressed?(
+                    f,
+                    "cicd_rules",
+                    "banned_language_file",
+                    repo_path: repo_path
+                  )
               end)
 
             Enum.map(matches, fn file ->
@@ -675,11 +694,35 @@ defmodule Hypatia.CLI do
           case File.read(file) do
             {:ok, content} ->
               findings = Hypatia.Rules.CodeSafety.scan_content(content, language)
-
-              Enum.map(findings, fn f ->
+              # Two-stage suppression:
+              #
+              #   1. Path-based — files under `lib/rules/`, `scripts/fix-scripts/`,
+              #      `test/`, `.audittraining/`, etc. are training corpora /
+              #      remediation scripts for the very rules being checked.
+              #      Content-pattern rules firing in them is self-recursion.
+              #
+              #   2. File-level allow directive — first 20 lines may declare
+              #      `# hypatia: allow code_safety/<rule>` for intentional usage
+              #      (e.g. an Idris2 proof file that legitimately needs
+              #      `believe_me`). One declaration covers every match.
+              findings
+              |> Enum.reject(fn f ->
+                Hypatia.ScannerSuppression.suppressed?(
+                  file,
+                  "code_safety",
+                  to_string(f.rule),
+                  repo_path: repo_path
+                ) or
+                  Hypatia.ScannerSuppression.file_allowed?(
+                    content,
+                    "code_safety",
+                    to_string(f.rule)
+                  )
+              end)
+              |> Enum.map(fn f ->
                 %{
                   rule_module: "code_safety",
-                  severity: to_string(f.severity),
+                  severity: cli_context_severity(file, f.rule, f.severity),
                   type: to_string(f.rule),
                   file: file,
                   reason: "#{f.description} (#{f.occurrences} occurrences, #{f.cwe})",
@@ -698,30 +741,122 @@ defmodule Hypatia.CLI do
     secret_findings =
       repo_path
       |> list_all_files()
-      |> Enum.flat_map(&scan_file_for_secrets/1)
+      |> Enum.flat_map(&scan_file_for_secrets(&1, repo_path))
 
     language_findings ++ secret_findings
   end
 
-  defp scan_file_for_secrets(file) do
-    with {:ok, %File.Stat{type: :regular, size: size}} when size <= @max_secret_scan_bytes <- File.stat(file),
+  # Downgrade `unwrap*` / `panic_macro` / `expect_in_hot_path` etc. when
+  # they fire inside CLI entry-point code or test code, where idiomatic
+  # Rust uses `.unwrap()` to convert "bad CLI input or test fixture
+  # failure" into a non-zero exit with a panic. The dangerous-by-default
+  # rule still fires for library code; CLI and test contexts are
+  # downgraded to `:low`.
+  #
+  # In-scope contexts: `cli/`, any `main.rs`, any `bin/<name>.rs`, any
+  # `build.rs`, the `tools/` directory (RSR convention for one-shot
+  # binaries), `fixer/`, and `tests/` directories (integration tests
+  # often unwrap to surface assertion failures). Library code under
+  # `adapters/src/`, `data/src/`, etc. is unaffected.
+  defp cli_context_severity(file, rule, original_severity) do
+    if cli_context_rule?(rule) and cli_context_file?(file) do
+      to_string(:low)
+    else
+      to_string(original_severity)
+    end
+  end
+
+  defp cli_context_rule?(rule) when rule in [
+         :unwrap_without_check,
+         :unwrap_dangerous_default,
+         :expect_in_hot_path,
+         :panic_macro,
+         :todo_macro,
+         :unimplemented_macro
+       ],
+       do: true
+
+  defp cli_context_rule?(_), do: false
+
+  defp cli_context_file?(file) do
+    basename = Path.basename(file)
+
+    basename in ["main.rs", "build.rs"] or
+      String.contains?(file, "/cli/") or
+      String.contains?(file, "/bin/") or
+      String.contains?(file, "/tools/") or
+      String.contains?(file, "/fixer/") or
+      String.contains?(file, "/tests/") or
+      # `/integration/` covers both `integration/tests/*` and the
+      # `integration/src/{lib,ci_simulation/*}.rs` test-utility tree.
+      String.contains?(file, "/integration/") or
+      String.ends_with?(file, "_test.rs") or
+      String.ends_with?(file, "/scenarios.rs") or
+      String.ends_with?(file, "/assertions.rs")
+  end
+
+  # Path exemptions, GHA-secret-reference awareness, and inline allow
+  # directives all funnel through Hypatia.ScannerSuppression. This is
+  # deliberately a small predicate set — provenance-aware suppression that
+  # would otherwise be re-discovered every run (training corpora, fixture
+  # files, the rule definitions themselves, `${{ secrets.X }}` references
+  # which point at the secret store, not leaks). Anything beyond that
+  # belongs in .hypatia-baseline.json so it stays visible during review.
+  defp scan_file_for_secrets(file, repo_path) do
+    rule_module = "security_errors"
+    rule_type = "secret_detected"
+
+    with false <-
+           Hypatia.ScannerSuppression.suppressed?(file, rule_module, rule_type,
+             repo_path: repo_path
+           ),
+         {:ok, %File.Stat{type: :regular, size: size}} when size <= @max_secret_scan_bytes <-
+           File.stat(file),
          {:ok, content} <- File.read(file),
-         true <- not String.contains?(content, <<0>>) do
-      Hypatia.Rules.SecurityErrors.detect_secrets(content)
-      |> Enum.uniq()
-      |> Enum.map(fn label ->
-        %{
-          rule_module: "security_errors",
-          severity: "critical",
-          type: "secret_detected",
-          file: file,
-          reason: "Secret found: #{label}",
-          action: "revoke_rotate_and_purge"
-        }
-      end)
+         true <- not String.contains?(content, <<0>>),
+         false <-
+           Hypatia.ScannerSuppression.file_allowed?(content, rule_module, rule_type) do
+      detect_secrets_with_context(content, file, rule_module, rule_type)
     else
       _ -> []
     end
+  end
+
+  defp detect_secrets_with_context(content, file, rule_module, rule_type) do
+    # Per-line scan so each finding can carry line number and consult
+    # inline-allow directives + GHA-secret-reference exemption. Reduces
+    # the line set to a uniq `(line_number, label)` so a single line that
+    # matches multiple regex patterns still produces one finding.
+    lines = String.split(content, "\n")
+
+    lines
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {line, idx} ->
+      prev = if idx > 0, do: Enum.at(lines, idx - 1), else: nil
+
+      cond do
+        Hypatia.ScannerSuppression.context_safe_line?(rule_type, line) ->
+          []
+
+        Hypatia.ScannerSuppression.inline_allowed?(line, prev, rule_module, rule_type) ->
+          []
+
+        true ->
+          Hypatia.Rules.SecurityErrors.detect_secrets(line)
+          |> Enum.uniq()
+          |> Enum.map(fn label ->
+            %{
+              rule_module: rule_module,
+              severity: "critical",
+              type: rule_type,
+              file: file,
+              line: idx + 1,
+              reason: "Secret found: #{label}",
+              action: "revoke_rotate_and_purge"
+            }
+          end)
+      end
+    end)
   end
 
   # ─── Output formatting ───────────────────────────────────────────────
@@ -822,6 +957,23 @@ defmodule Hypatia.CLI do
       [] -> @all_rule_modules
       rules -> rules
     end
+  end
+
+  # CodeQL supports JavaScript/TypeScript, Python, Go, Java/Kotlin, Ruby,
+  # C#, C/C++, Swift. A repo whose source is purely Rust + Elixir + Idris
+  # (etc.) has nothing for CodeQL to scan, so the standard "every repo gets
+  # a codeql.yml" requirement is dropped to avoid a perpetual unclearable
+  # finding. See hypatia#237 triage.
+  @codeql_extensions ~w(.js .jsx .ts .tsx .mjs .py .go .java .kt .rb .cs
+                        .cpp .cc .cxx .c .h .hpp .swift)
+
+  defp has_codeql_supported_language?(repo_path) do
+    Enum.any?(@codeql_extensions, fn ext ->
+      case find_files_by_ext(repo_path, ext) do
+        [_ | _] -> true
+        _ -> false
+      end
+    end)
   end
 
   defp list_root_files(repo_path) do

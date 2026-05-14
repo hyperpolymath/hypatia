@@ -16,7 +16,11 @@ defmodule Hypatia.Rules.CicdRules do
     %{file: "SECURITY.md", condition: :public_repo},
     %{file: ".github/dependabot.yml", condition: :has_dependencies},
     %{file: ".github/workflows/scorecard.yml", condition: :public_repo},
-    %{file: "permissions: read-all", condition: :all_workflows}
+    # `permissions: read-all` is a content requirement (every workflow file
+    # must declare top-level `permissions:`), not a filename. It is checked
+    # by Hypatia.Rules.WorkflowAudit.check_permissions/1, NOT by file-path
+    # existence — the entry below is treated specially in `has_file?/2`.
+    %{file: "permissions: read-all", condition: :all_workflows, kind: :content}
   ]
 
   def repo_must_have_rules, do: @repo_must_have
@@ -24,7 +28,7 @@ defmodule Hypatia.Rules.CicdRules do
   def check_repo_requirements(repo_info) do
     Enum.flat_map(@repo_must_have, fn rule ->
       if requirement_applies?(rule.condition, repo_info) and
-           not has_file?(repo_info, rule.file) do
+           not has_file?(repo_info, rule) do
         [%{missing: rule.file, condition: rule.condition}]
       else
         []
@@ -36,7 +40,22 @@ defmodule Hypatia.Rules.CicdRules do
   defp requirement_applies?(:has_dependencies, info), do: Map.get(info, :has_deps, true)
   defp requirement_applies?(:all_workflows, _info), do: true
 
-  defp has_file?(info, file), do: file in Map.get(info, :files, [])
+  # Content-only rules are handled by other rule modules (workflow_audit etc.)
+  # and should never report missing-file findings here.
+  defp has_file?(_info, %{kind: :content}), do: true
+
+  defp has_file?(info, %{file: file}) do
+    repo_path = Map.get(info, :repo_path)
+
+    cond do
+      # Repo-rooted check: nested paths like `.github/dependabot.yml` can
+      # only be confirmed via on-disk inspection. The root_files list is
+      # not enough — without this the rule was a false-positive factory.
+      is_binary(repo_path) and File.exists?(Path.join(repo_path, file)) -> true
+      file in Map.get(info, :files, []) -> true
+      true -> false
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Commit Blocking Patterns
