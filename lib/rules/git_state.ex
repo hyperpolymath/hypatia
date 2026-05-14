@@ -216,18 +216,36 @@ defmodule Hypatia.Rules.GitState do
   Action: create branch or checkout existing branch.
   """
   def gs005_detached_head(repo_path) do
-    case System.cmd("git", ["symbolic-ref", "HEAD"],
-                    cd: repo_path, stderr_to_stdout: true) do
-      {_, 0} -> []  # Not detached
-      _ ->
-        [%{
-          rule: "GS005",
-          file: ".",
-          severity: :high,
-          reason: "HEAD is detached -- commits will be lost. Create a branch or checkout an existing one.",
-          action: :create_branch
-        }]
+    # Detached HEAD in a CI runner is the expected state — actions/checkout
+    # fetches the PR merge ref and leaves HEAD pointing at it directly,
+    # not at a branch. Surfacing a "commits will be lost" warning there
+    # is pure noise; the runner is ephemeral and no human is committing
+    # into the workspace. Suppress when CI env vars are set.
+    if ci_environment?() do
+      []
+    else
+      case System.cmd("git", ["symbolic-ref", "HEAD"],
+                      cd: repo_path, stderr_to_stdout: true) do
+        {_, 0} -> []  # Not detached
+        _ ->
+          [%{
+            rule: "GS005",
+            file: ".",
+            severity: :high,
+            reason: "HEAD is detached -- commits will be lost. Create a branch or checkout an existing one.",
+            action: :create_branch
+          }]
+      end
     end
+  end
+
+  defp ci_environment? do
+    # GitHub Actions sets both CI=true and GITHUB_ACTIONS=true.
+    # GitLab/CircleCI/Drone/Travis all set CI=true. Keep the predicate
+    # generic so the rule self-suppresses on any major CI host.
+    System.get_env("CI") in ["true", "1"] or
+      System.get_env("GITHUB_ACTIONS") == "true" or
+      System.get_env("GITLAB_CI") == "true"
   end
 
   # ─── GS006: Not on main/master ─────────────────────────────────────────

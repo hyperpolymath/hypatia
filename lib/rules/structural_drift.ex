@@ -303,10 +303,15 @@ defmodule Hypatia.Rules.StructuralDrift do
         find_files_with_extension(repo_path, ext)
         |> Enum.flat_map(fn file_path ->
           content = File.read!(file_path)
+          # Strip inline-directive lines for SD008 (mirrors the
+          # code_safety scanner's line filter) so a comment that names
+          # the unsound primitive in order to declare it accepted
+          # doesn't itself trigger the rule.
+          filtered = strip_inline_ignored_lines(content, "SD008")
 
-          if Regex.match?(pattern, content) do
+          if Regex.match?(pattern, filtered) do
             # Count occurrences for severity escalation
-            count = length(Regex.scan(pattern, content))
+            count = length(Regex.scan(pattern, filtered))
 
             [%{
               rule: "SD008",
@@ -324,6 +329,19 @@ defmodule Hypatia.Rules.StructuralDrift do
         end)
       end)
     end)
+  end
+
+  defp strip_inline_ignored_lines(content, rule_id) do
+    # Permissive form: the directive lists `hypatia:ignore` followed by
+    # one or more rule names, anywhere later on the same line. A line
+    # is ignored for `rule_id` if its directive lists that rule (as a
+    # whole word) somewhere after the marker.
+    directive_re = ~r/hypatia:ignore\b.*\b#{Regex.escape(rule_id)}\b/
+
+    content
+    |> String.split(~r/\r?\n/)
+    |> Enum.reject(&Regex.match?(directive_re, &1))
+    |> Enum.join("\n")
   end
 
   # ─── SD009: Missing SPDX headers ──────────────────────────────────────

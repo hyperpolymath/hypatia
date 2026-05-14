@@ -311,8 +311,13 @@ defmodule Hypatia.Rules.CodeSafety do
   # ---------------------------------------------------------------------------
 
   @nickel_patterns [
+    # Match `= "http://…"` but NOT loopback addresses (localhost,
+    # 127.0.0.1, [::1]) — those legitimately speak plaintext because
+    # there's no network path to MITM. Negative-lookahead handles all
+    # three forms in one alternation.
     %{id: :ncl_http_url, severity: :high,
-      pattern: ~r/=\s*"http:\/\//, cwe: "CWE-319",
+      pattern: ~r/=\s*"http:\/\/(?!localhost|127\.0\.0\.1|\[::1\])/,
+      cwe: "CWE-319",
       description: "HTTP URL in Nickel config -- must use HTTPS"},
     %{id: :ncl_weak_hash, severity: :high,
       pattern: ~r/(md5:|sha1:)[a-fA-F0-9]+/, cwe: "CWE-328",
@@ -365,12 +370,55 @@ defmodule Hypatia.Rules.CodeSafety do
 
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
-      case Regex.scan(rule.pattern, scannable) do
+      # Strip lines carrying an inline `hypatia:ignore` directive for
+      # *this* rule before counting matches. The directive can name the
+      # rule bare (`hypatia:ignore from_raw`) or namespaced
+      # (`hypatia:ignore code_safety/from_raw`); either form silences a
+      # single line. Lines below 2 chars after stripping the marker are
+      # also dropped (catches `// hypatia:ignore` on a line of its own
+      # the convention reads as "next line is exempt").
+      rule_id_str = Atom.to_string(rule.id)
+
+      filtered =
+        scannable
+        |> String.split(~r/\r?\n/)
+        |> filter_lines_for_rule(rule_id_str)
+        |> Enum.join("\n")
+
+      case Regex.scan(rule.pattern, filtered) do
         [] -> []
         matches -> [%{rule: rule.id, severity: rule.severity, cwe: rule.cwe,
                        description: rule.description, occurrences: length(matches)}]
       end
     end)
+  end
+
+  defp filter_lines_for_rule(lines, rule_id) do
+    # A line is "ignored for this rule" if it contains an
+    # `hypatia:ignore` marker followed (anywhere later on the same
+    # line) by the rule name as a whole word. This is permissive on
+    # purpose: a single directive can list multiple rules
+    # (`hypatia:ignore code_safety/believe_me structural_drift/SD008`)
+    # and each call to this function honours just the rule_id it was
+    # passed.
+    on_line = ~r/hypatia:ignore\b.*\b#{Regex.escape(rule_id)}\b/
+
+    # Two-pass: drop lines that contain the directive directly, *and*
+    # drop the line immediately after a comment-only directive line
+    # (so `// hypatia:ignore rule\nstatement` works the way the
+    # convention reads).
+    above = ~r/^\s*(?:\/\/|#|--)\s*hypatia:ignore\b.*\b#{Regex.escape(rule_id)}\b/
+
+    lines
+    |> Enum.with_index()
+    |> Enum.reject(fn {line, idx} ->
+      Regex.match?(on_line, line) or
+        (idx > 0 and
+           lines
+           |> Enum.at(idx - 1, "")
+           |> String.match?(above))
+    end)
+    |> Enum.map(fn {line, _} -> line end)
   end
 
   # Strip test sections from non-test source files so panic-shape rules

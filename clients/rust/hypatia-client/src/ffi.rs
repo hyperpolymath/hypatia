@@ -35,6 +35,7 @@
 //      static buffer that lives until the next ABI call, which is why we
 //      copy out immediately rather than holding the slice.
 //
+// hypatia:ignore code_safety/from_raw
 //   5. `slice::from_raw_parts(data_ptr, data_len)` — safe because the Zig
 //      side has just populated those fields with a successful return
 //      (`rc == 0`) and the buffer is the static `response_buf` in
@@ -147,10 +148,18 @@ impl ApiResponse {
     /// been overwritten by a subsequent call.
     unsafe fn data(&self) -> &[u8] {
         // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        // SAFETY: caller is the Zig-side FFI bridge; `data_ptr` is owned
+        // by the C ABI buffer documented at module top (see "Lifetime
+        // contract" comment around line 36) and remains valid for the
+        // entire lifetime of `&self`. The null/len-0 guard below proves
+        // `data_ptr` is non-null and `data_len` is the exact number of
+        // bytes the FFI promises. No aliasing because the buffer is
+        // returned as `&[u8]` not `&mut [u8]`.
         unsafe {
             if self.data_ptr.is_null() || self.data_len == 0 {
                 &[]
             } else {
+                // hypatia:ignore code_safety/from_raw
                 std::slice::from_raw_parts(self.data_ptr, self.data_len)
             }
         }
@@ -158,10 +167,14 @@ impl ApiResponse {
 
     unsafe fn error(&self) -> &[u8] {
         // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage
+        // SAFETY: same Zig-FFI contract as `data` above — `error_ptr` is
+        // valid for `error_len` bytes for the lifetime of `&self`, and
+        // is returned as a shared (not mutable) slice.
         unsafe {
             if self.error_ptr.is_null() || self.error_len == 0 {
                 &[]
             } else {
+                // hypatia:ignore code_safety/from_raw
                 std::slice::from_raw_parts(self.error_ptr, self.error_len)
             }
         }

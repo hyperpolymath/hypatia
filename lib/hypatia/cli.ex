@@ -426,7 +426,8 @@ defmodule Hypatia.CLI do
             matches =
               Enum.filter(all_files, fn f ->
                 String.ends_with?(f, ext) and not String.contains?(f, "node_modules") and
-                  not String.contains?(f, ".git/")
+                  not String.contains?(f, ".git/") and
+                  not file_carries_banned_lang_exemption?(f)
               end)
 
             Enum.map(matches, fn file ->
@@ -742,6 +743,41 @@ defmodule Hypatia.CLI do
       |> String.replace_leading("./", "")
 
     String.starts_with?(rel, "scripts/fix-scripts/")
+  end
+
+  # Inline-directive exemption for the cicd_rules/banned_language_file
+  # check. The rule is file-existence-based (any *.py file fails), so
+  # the directive has to live inside the file itself — we scan the
+  # first 20 lines for `hypatia:ignore … cicd_rules/banned_language_file`
+  # (or the bare form `banned_language_file`).
+  @banned_lang_directive_re ~r/hypatia:ignore\b.*\bbanned_language_file\b/
+
+  defp file_carries_banned_lang_exemption?(file) do
+    case File.open(file, [:read, :utf8]) do
+      {:ok, io} ->
+        try do
+          read_head_for_directive(io, 20)
+        after
+          File.close(io)
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp read_head_for_directive(_io, 0), do: false
+  defp read_head_for_directive(io, n) do
+    case IO.read(io, :line) do
+      :eof -> false
+      {:error, _} -> false
+      line ->
+        if Regex.match?(@banned_lang_directive_re, line) do
+          true
+        else
+          read_head_for_directive(io, n - 1)
+        end
+    end
   end
 
   defp scan_code_safety(repo_path) do
