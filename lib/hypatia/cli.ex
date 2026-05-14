@@ -663,6 +663,42 @@ defmodule Hypatia.CLI do
     "typescript" => [".ts", ".tsx"]
   }
 
+  # Panic-shape rules whose findings are conventional / acceptable in
+  # test code (panicking on bad input is the documented test failure
+  # mode). Suppressed when the matching file is identifiably a test.
+  @panic_shape_rules_test_exempt MapSet.new(~w(
+    unwrap_without_check
+    unwrap_dangerous_default
+    expect_in_hot_path
+    panic_macro
+    todo_macro
+    unimplemented_macro
+  )a |> Enum.map(&Atom.to_string/1))
+
+  defp test_file_path?(file, repo_path) do
+    rel =
+      file
+      |> Path.relative_to(repo_path)
+      |> String.replace_leading("./", "")
+
+    String.starts_with?(rel, "test/") or
+      String.starts_with?(rel, "tests/") or
+      # `integration/` here is the dedicated integration-test crate, not
+      # a generic integration layer — same panic-on-bad-setup conventions
+      # as `tests/`.
+      String.starts_with?(rel, "integration/src/") or
+      String.starts_with?(rel, "integration/tests/") or
+      String.contains?(rel, "/tests/") or
+      String.contains?(rel, "/test/") or
+      String.ends_with?(rel, "_test.rs") or
+      String.ends_with?(rel, "_tests.rs") or
+      String.ends_with?(rel, "_test.exs") or
+      # cli/build.rs is a Cargo build script (compile-time only) — it
+      # panicking just aborts the build, same as a failed compile, and
+      # never runs at scan/runtime. Same semantics as test code.
+      String.ends_with?(rel, "build.rs")
+  end
+
   defp scan_code_safety(repo_path) do
     language_findings =
       Enum.flat_map(@language_extensions, fn {language, exts} ->
@@ -675,8 +711,13 @@ defmodule Hypatia.CLI do
           case File.read(file) do
             {:ok, content} ->
               findings = Hypatia.Rules.CodeSafety.scan_content(content, language)
+              is_test = test_file_path?(file, repo_path)
 
-              Enum.map(findings, fn f ->
+              findings
+              |> Enum.reject(fn f ->
+                is_test and MapSet.member?(@panic_shape_rules_test_exempt, to_string(f.rule))
+              end)
+              |> Enum.map(fn f ->
                 %{
                   rule_module: "code_safety",
                   severity: to_string(f.severity),
@@ -698,9 +739,45 @@ defmodule Hypatia.CLI do
     secret_findings =
       repo_path
       |> list_all_files()
+      |> Enum.reject(&secret_scan_path_exempt?(&1, repo_path))
       |> Enum.flat_map(&scan_file_for_secrets/1)
 
     language_findings ++ secret_findings
+  end
+
+  # Path-prefix exemptions for the secret_detected rule. These directories
+  # contain example secrets / credential patterns *by design* — they exist
+  # to teach the scanner or remove the very patterns they reference — and
+  # are documented in `.hypatia-exemptions.md`. Test fixtures land in the
+  # same bucket: a literal assertion value in a test file is not a leak.
+  @secret_scan_exempt_prefixes [
+    ".audittraining/",
+    "scripts/fix-scripts/",
+    "test/",
+    "tests/",
+    "integration/",
+    # The scanner's own rule modules definitionally contain the
+    # patterns they detect — keep them out of the self-scan.
+    "lib/rules/",
+    # Same for the human-readable exemptions doc, which has to
+    # spell out the example secrets it grants exceptions for.
+    ".hypatia-exemptions.md"
+  ]
+  @secret_scan_exempt_infixes [
+    "/tests/",
+    "/test/",
+    "/.audittraining/",
+    "/fixtures/"
+  ]
+
+  defp secret_scan_path_exempt?(file, repo_path) do
+    rel =
+      file
+      |> Path.relative_to(repo_path)
+      |> String.replace_leading("./", "")
+
+    Enum.any?(@secret_scan_exempt_prefixes, &String.starts_with?(rel, &1)) or
+      Enum.any?(@secret_scan_exempt_infixes, &String.contains?(rel, &1))
   end
 
   defp scan_file_for_secrets(file) do

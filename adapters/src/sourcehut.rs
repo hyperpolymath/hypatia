@@ -321,7 +321,7 @@ impl From<SrhtTicket> for Issue {
 
         Issue {
             id: ticket.id.to_string(),
-            number: ticket.ref_id.parse().unwrap_or(0),
+            number: ticket.ref_id.parse().unwrap_or_default(),
             title: ticket.subject,
             body: ticket.body,
             state,

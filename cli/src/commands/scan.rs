@@ -189,7 +189,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.green} {msg}")
-                .unwrap(),
+                .expect("static progress-bar template should be valid"),
         );
         pb.set_message("Scanning repository...");
         Some(pb)
@@ -312,7 +312,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
         .by_severity
         .get("critical")
         .copied()
-        .unwrap_or(0)
+        .unwrap_or_default()
         > 0
     {
         std::process::exit(1);

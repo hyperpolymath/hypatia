@@ -171,8 +171,8 @@ fn check_status(project_id: u64) -> Result<()> {
             "Level:      {}",
             project.badge_level.as_deref().unwrap_or("in_progress")
         );
-        println!("Progress:   {}%", project.badge_percentage_0.unwrap_or(0));
-        println!("Tiered:     {}%", project.tiered_percentage.unwrap_or(0));
+        println!("Progress:   {}%", project.badge_percentage_0.unwrap_or_default());
+        println!("Tiered:     {}%", project.tiered_percentage.unwrap_or_default());
         println!("Badge:      {}/en/projects/{}/badge", API_BASE, project_id);
     } else if response.status().as_u16() == 404 {
         println!("Project {} not found on bestpractices.dev", project_id);

@@ -523,7 +523,7 @@ fn parse_scan_payload(bytes: &[u8]) -> Result<ScanResponse, HypatiaError> {
     Ok(ScanResponse {
         result,
         findings: shape.findings,
-        score: shape.score.unwrap_or(0),
+        score: shape.score.unwrap_or_default(),
     })
 }
 

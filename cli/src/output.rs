@@ -247,7 +247,7 @@ impl Progress {
             pb.set_style(
                 indicatif::ProgressStyle::default_spinner()
                     .template("{spinner:.green} {msg}")
-                    .unwrap(),
+                    .expect("static progress-bar template should be valid"),
             );
             pb.set_message(message.to_string());
             Some(pb)
@@ -265,7 +265,7 @@ impl Progress {
             pb.set_style(
                 indicatif::ProgressStyle::default_bar()
                     .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-                    .unwrap()
+                    .expect("static progress-bar template should be valid")
                     .progress_chars("#>-"),
             );
             pb.set_message(message.to_string());

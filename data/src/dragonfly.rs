@@ -262,7 +262,7 @@ impl DragonflyClient {
         let rate_key = format!("rl:{}", key);
 
         let current: Option<i64> = conn.get(&rate_key).await.ok();
-        let count = current.unwrap_or(0);
+        let count = current.unwrap_or_default();
 
         if count >= limit {
             warn!("Rate limit exceeded for {}: {}/{}", key, count, limit);

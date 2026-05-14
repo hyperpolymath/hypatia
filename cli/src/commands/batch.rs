@@ -257,7 +257,10 @@ async fn execute_scan(
         let total = total_repos;
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let _permit = sem
+                .acquire()
+                .await
+                .expect("batch concurrency semaphore should not be closed");
             let result = process_scan_repo(&repo, &config_clone, &min_sev, &cats).await;
 
             let done = completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
@@ -479,7 +482,7 @@ fn parse_findings_count(json_str: &str) -> usize {
     // Scanner outputs a JSON array of findings
     serde_json::from_str::<Vec<serde_json::Value>>(json_str)
         .map(|arr| arr.len())
-        .unwrap_or(0)
+        .unwrap_or_default()
 }
 
 /// Locate hypatia-cli.sh in well-known paths.
@@ -654,7 +657,10 @@ async fn execute_fix(
         let fix_only = args.fix_only.clone();
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let _permit = sem
+                .acquire()
+                .await
+                .expect("batch concurrency semaphore should not be closed");
             let start = std::time::Instant::now();
             let path = PathBuf::from(&repo);
 

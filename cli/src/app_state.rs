@@ -41,7 +41,10 @@ impl RateLimitSlot {
     /// Returns `true` if the request is allowed (consumes one token).
     fn try_acquire(&self) -> bool {
         let now = Instant::now();
-        let mut start = self.window_start.lock().unwrap();
+        let mut start = self
+            .window_start
+            .lock()
+            .expect("rate-limiter window-start mutex poisoned");
         if now.duration_since(*start) >= self.window_size {
             self.remaining.store(self.limit, Ordering::Relaxed);
             *start = now;

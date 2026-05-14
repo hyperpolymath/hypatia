@@ -1524,7 +1524,7 @@ mod tests {
     fn test_webhook_signature_verification() {
         let adapter = CodebergAdapter::new("test-token").unwrap();
         let payload = b"test payload";
-        let secret = "test-secret";
+        let secret = "test-secret"; // hypatia:ignore security_errors/secret_detected (test fixture)
 
         // Calculate expected signature
         let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();

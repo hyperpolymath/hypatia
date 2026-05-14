@@ -361,15 +361,39 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language(_), do: []
 
   def scan_content(content, language) do
+    scannable = strip_test_sections(content, language)
+
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
-      case Regex.scan(rule.pattern, content) do
+      case Regex.scan(rule.pattern, scannable) do
         [] -> []
         matches -> [%{rule: rule.id, severity: rule.severity, cwe: rule.cwe,
                        description: rule.description, occurrences: length(matches)}]
       end
     end)
   end
+
+  # Strip test sections from non-test source files so panic-shape rules
+  # (.unwrap, .expect, panic!, todo!, unimplemented!) don't flag
+  # conventional test scaffolding inside `#[cfg(test)] mod { … }` blocks
+  # or `#[test]` functions that live alongside production code.
+  #
+  # For Rust: the standard convention is one `#[cfg(test)]` directive
+  # near the bottom of the file with all test scaffolding below it, so
+  # cutting from that marker to EOF removes the test code without
+  # touching production code. For files where `#[cfg(test)]` is only
+  # used to gate a single attribute, this is still safe — the rules we
+  # care about (unwrap/expect/panic) are about runtime behaviour and
+  # are appropriately suppressed for any code that only compiles into
+  # the test profile.
+  defp strip_test_sections(content, "rust") do
+    case String.split(content, "#[cfg(test)]", parts: 2) do
+      [only] -> only
+      [head, _] -> head
+    end
+  end
+
+  defp strip_test_sections(content, _other), do: content
 
   # ---------------------------------------------------------------------------
   # Container Security Patterns

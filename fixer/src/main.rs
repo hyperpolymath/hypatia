@@ -65,7 +65,11 @@ fn main() {
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::from_default_env().add_directive("cicd_fixer=info".parse().unwrap()),
+            EnvFilter::from_default_env().add_directive(
+                "cicd_fixer=info"
+                    .parse()
+                    .expect("static log directive should parse"),
+            ),
         )
         .init();
 
@@ -118,7 +122,11 @@ fn scan_repo(fixer: &CicdFixer, repo_path: &Path, format: &str) {
                         "auto_fixable": i.auto_fixable,
                     })).collect::<Vec<_>>()
                 });
-                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json)
+                        .expect("locally-constructed JSON value should serialise")
+                );
             } else {
                 // Human-readable output
                 println!("\n{}", result.summary());
@@ -219,7 +227,10 @@ fn batch_process(fixer: &CicdFixer, repos_dir: &PathBuf, fix: bool, dry_run: boo
         }
 
         processed += 1;
-        let repo_name = repo_path.file_name().unwrap().to_string_lossy();
+        let repo_name = repo_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| repo_path.display().to_string());
 
         match fixer.scan_repo(repo_path) {
             Ok(result) => {

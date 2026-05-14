@@ -263,7 +263,7 @@ async fn execute_run(args: FleetRunArgs, _config: &Config, format: OutputFormat)
     overall_pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} bots ({msg})")
-            .unwrap()
+            .expect("static progress-bar template should be valid")
             .progress_chars("#>-"),
     );
     overall_pb.set_message("starting...");
@@ -278,7 +278,7 @@ async fn execute_run(args: FleetRunArgs, _config: &Config, format: OutputFormat)
         bot_pb.set_style(
             ProgressStyle::default_spinner()
                 .template("  {spinner:.blue} {msg}")
-                .unwrap(),
+                .expect("static progress-bar template should be valid"),
         );
         bot_pb.set_message(format!("{}: starting...", bot.name));
 

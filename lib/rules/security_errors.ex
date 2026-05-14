@@ -371,9 +371,50 @@ defmodule Hypatia.Rules.SecurityErrors do
     {~r/AIza[0-9A-Za-z\-_]{35}/, "Google API Key"}
   ]
 
+  # Filter out lines that match a per-line ignore predicate before
+  # running the secret-pattern regexes. Today we drop:
+  #   * any line whose value-side is a GitHub Actions secret reference
+  #     (`${{ secrets.FOO }}`) — that's the supported way to consume a
+  #     secret, not a leak.
+  #   * any line carrying an inline `hypatia:ignore` directive — same
+  #     convention used elsewhere.
+  defp filter_lines_for_secret_scan(content) do
+    content
+    |> String.split(~r/\r?\n/)
+    |> Enum.reject(&line_excluded_from_secret_scan?/1)
+    |> Enum.join("\n")
+  end
+
+  defp line_excluded_from_secret_scan?(line) do
+    cond do
+      # GitHub Actions secret reference — the supported way to consume a
+      # secret, not a leak.
+      String.contains?(line, "${{ secrets.") -> true
+      String.contains?(line, "${{secrets.") -> true
+
+      # Inline directive.
+      Regex.match?(~r/hypatia:ignore.*security_errors\/secret_detected/, line) -> true
+      Regex.match?(~r/hypatia:ignore.*secret_detected/, line) -> true
+
+      # Shell-variable expansion on the value side — `FOO="${BAR}"`,
+      # `FOO="$BAR"`, `--password="$VAR"`. Not a hardcoded secret.
+      Regex.match?(~r/[=:]\s*["'][\s]*\$\{?[A-Za-z_]/, line) -> true
+
+      # Elixir / Rust / Python regex literals defining the secret patterns
+      # themselves — the rule definition shouldn't trigger itself.
+      Regex.match?(~r/~r\/.*\(\?i\)/, line) -> true
+      Regex.match?(~r/Regex::new\(.*\(\?i\)/, line) -> true
+      Regex.match?(~r/re\.compile\(.*\(\?i\)/, line) -> true
+
+      true -> false
+    end
+  end
+
   def detect_secrets(content) do
+    sanitised = filter_lines_for_secret_scan(content)
+
     Enum.flat_map(@secret_patterns, fn {regex, label} ->
-      if Regex.match?(regex, content), do: [label], else: []
+      if Regex.match?(regex, sanitised), do: [label], else: []
     end)
   end
 
