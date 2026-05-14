@@ -196,9 +196,25 @@ defmodule Hypatia.Rules.CodeSafety do
   # ---------------------------------------------------------------------------
 
   @elixir_patterns [
-    %{id: :elixir_system_cmd_interpolation, severity: :critical,
-      pattern: ~r/System\.cmd\(.*#\{/, cwe: "CWE-78",
-      description: "System.cmd with string interpolation -- command injection risk"},
+    # System.cmd/3 in Elixir does NOT spawn a shell — it goes straight to
+    # execvp(3), so interpolation inside the *args list* (positions 2+) is
+    # safe regardless of input. Only the executable name itself can be
+    # abused (substitute a different binary), so this rule only fires when
+    # the first argument to System.cmd contains string interpolation.
+    # Args-list interpolation like `System.cmd("gh", ["api", "repos/#{x}"])`
+    # is the idiomatic safe form and does not match. See hypatia#237 triage.
+    %{id: :elixir_system_cmd_dynamic_binary, severity: :high,
+      pattern: ~r/System\.cmd\(\s*"[^"]*#\{/, cwe: "CWE-78",
+      description: "System.cmd with interpolated executable name -- binary substitution risk"},
+    # System.shell/1 *does* go through `sh -c`. Always a shell-injection
+    # vector when given user input; flag any interpolation in the argument.
+    %{id: :elixir_system_shell, severity: :critical,
+      pattern: ~r/System\.shell\([^)]*#\{/, cwe: "CWE-78",
+      description: "System.shell with interpolation -- shell injection risk"},
+    # :os.cmd/1 goes through a shell. Same risk class as System.shell.
+    %{id: :elixir_os_cmd, severity: :critical,
+      pattern: ~r/:os\.cmd\([^)]*#\{/, cwe: "CWE-78",
+      description: ":os.cmd with interpolation -- shell injection risk"},
     %{id: :elixir_code_eval, severity: :critical,
       pattern: ~r/Code\.eval_string|Code\.eval_quoted|Code\.eval_file/, cwe: "CWE-94",
       description: "Code.eval_* -- arbitrary code execution risk"},
