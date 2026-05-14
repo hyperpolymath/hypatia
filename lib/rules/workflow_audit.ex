@@ -79,11 +79,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     run_context_issues = check_github_context_in_run(workflow_contents)
     download_then_run_issues = check_download_then_run(workflow_contents)
     nperm_typos = check_npermissions_typo(workflow_contents)
+    codeql_lang_mismatch = check_codeql_language_matrix_mismatch(workflow_contents, opts)
 
     %{
       findings:
         missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
-          caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos,
+          caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
+          codeql_lang_mismatch,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -94,6 +96,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       run_context_issues: length(run_context_issues),
       download_then_run_issues: length(download_then_run_issues),
       npermissions_typo_count: length(nperm_typos),
+      codeql_lang_mismatch_count: length(codeql_lang_mismatch),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -389,6 +392,60 @@ defmodule Hypatia.Rules.WorkflowAudit do
         []
       end
     end)
+  end
+
+  @doc """
+  Detect codeql.yml whose language matrix lists a CodeQL source-scanning
+  language (`javascript-typescript`, `python`, `go`, etc.) when the repo
+  has no source files in any such language.
+
+  Caught 12 repos across the fleet at the time of writing — each one had
+  `language: javascript-typescript` on a Julia / Rust / Coq / Idris repo,
+  so the CodeQL `analyze` job exited "configuration error: no source
+  files" on every Dependabot PR and blocked the merge.
+
+  The `actions` language is always safe (scans workflow files which every
+  repo has). Only the source-scanning languages need the repo-side
+  guarantee.
+
+  `opts[:has_codeql_supported_language]` — same boolean threaded through
+  from `Hypatia.CLI.has_codeql_supported_language?/1`. When `false` and
+  codeql.yml lists a scanning language, this rule fires.
+  """
+  def check_codeql_language_matrix_mismatch(workflow_contents, opts \\ []) do
+    if Keyword.get(opts, :has_codeql_supported_language, true) do
+      []
+    else
+      # Languages CodeQL scans by reading source files in the repo (as
+      # opposed to `actions`, which scans workflow YAML).
+      scanning_langs = ~w(javascript-typescript javascript typescript python go java ruby csharp c-cpp swift kotlin)
+
+      Enum.flat_map(workflow_contents, fn {filename, content} ->
+        if codeql_workflow?(filename) do
+          Enum.flat_map(scanning_langs, fn lang ->
+            if Regex.match?(~r/language:\s*#{Regex.escape(lang)}(?:\s|$)/m, content) do
+              [%{
+                type: :codeql_language_matrix_mismatch,
+                file: filename,
+                detail:
+                  "codeql.yml lists `language: #{lang}` but the repo has no source files in any CodeQL-scannable language. The analyze job will exit 'no source files' on every run. Switch the matrix to `actions` (which scans workflow files — every repo has those).",
+                severity: :high,
+                action: :switch_codeql_matrix_to_actions
+              }]
+            else
+              []
+            end
+          end)
+        else
+          []
+        end
+      end)
+    end
+  end
+
+  defp codeql_workflow?(filename) do
+    base = Path.basename(filename)
+    base in ["codeql.yml", "codeql.yaml", "codeql-analysis.yml", "codeql-analysis.yaml"]
   end
 
   # ─── Helpers ───────────────────────────────────────────────────────────
