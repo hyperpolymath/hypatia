@@ -11,7 +11,13 @@ on:
     - cron: '0 0 * * 0'  # Weekly on Sunday
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
+  # `pull-requests: write` is needed for the "Comment on PR with findings"
+  # step to POST a results summary. Note: on Dependabot PRs the token is
+  # downgraded to read-only regardless, so that step is also marked
+  # continue-on-error below.
+  pull-requests: write
 
 jobs:
   scan:
@@ -221,7 +227,13 @@ jobs:
           cat hypatia-report.md >> $GITHUB_STEP_SUMMARY
 
       - name: Comment on PR with findings
+        # Dependabot PRs always run with a read-only token regardless of the
+        # workflow's declared permissions, so the createComment call below
+        # would 403 on every dep-bump PR. The PR comment is informational
+        # (the check result is already visible in the PR UI); we don't want
+        # its absence to block merge.
         if: github.event_name == 'pull_request' && steps.scan.outputs.findings_count > 0
+        continue-on-error: true
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
