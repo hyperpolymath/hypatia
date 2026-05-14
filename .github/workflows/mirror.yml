@@ -9,6 +9,12 @@ on:
 
 permissions: read-all
 
+# All `run:` scripts in this workflow lift GitHub contexts into `env:` rather
+# than interpolating `${{ ... }}` directly into shell text. The contexts here
+# (`github.event.repository.name`, `vars.GITEA_HOST`, `secrets.RADICLE_KEY`)
+# are bounded or trusted, but the `env:` pattern is the upstream-recommended
+# shape and silences the workflow_audit/actions_expression_injection rule.
+
 jobs:
   mirror-gitlab:
     runs-on: ubuntu-latest
@@ -23,9 +29,11 @@ jobs:
           ssh-private-key: ${{ secrets.GITLAB_SSH_KEY }}
 
       - name: Mirror to GitLab
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           ssh-keyscan -t ed25519 gitlab.com >> ~/.ssh/known_hosts
-          git remote add gitlab git@gitlab.com:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add gitlab "git@gitlab.com:hyperpolymath/${REPO_NAME}.git" || true
           git push --force gitlab main
 
   mirror-bitbucket:
@@ -41,9 +49,11 @@ jobs:
           ssh-private-key: ${{ secrets.BITBUCKET_SSH_KEY }}
 
       - name: Mirror to Bitbucket
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts
-          git remote add bitbucket git@bitbucket.org:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add bitbucket "git@bitbucket.org:hyperpolymath/${REPO_NAME}.git" || true
           git push --force bitbucket main
 
   mirror-codeberg:
@@ -59,9 +69,11 @@ jobs:
           ssh-private-key: ${{ secrets.CODEBERG_SSH_KEY }}
 
       - name: Mirror to Codeberg
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           ssh-keyscan -t ed25519 codeberg.org >> ~/.ssh/known_hosts
-          git remote add codeberg git@codeberg.org:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add codeberg "git@codeberg.org:hyperpolymath/${REPO_NAME}.git" || true
           git push --force codeberg main
 
   mirror-sourcehut:
@@ -77,9 +89,11 @@ jobs:
           ssh-private-key: ${{ secrets.SOURCEHUT_SSH_KEY }}
 
       - name: Mirror to SourceHut
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           ssh-keyscan -t ed25519 git.sr.ht >> ~/.ssh/known_hosts
-          git remote add sourcehut git@git.sr.ht:~hyperpolymath/${{ github.event.repository.name }} || true
+          git remote add sourcehut "git@git.sr.ht:~hyperpolymath/${REPO_NAME}" || true
           git push --force sourcehut main
 
   mirror-disroot:
@@ -95,9 +109,11 @@ jobs:
           ssh-private-key: ${{ secrets.DISROOT_SSH_KEY }}
 
       - name: Mirror to Disroot
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           ssh-keyscan -t ed25519 git.disroot.org >> ~/.ssh/known_hosts
-          git remote add disroot git@git.disroot.org:hyperpolymath/${{ github.event.repository.name }}.git || true
+          git remote add disroot "git@git.disroot.org:hyperpolymath/${REPO_NAME}.git" || true
           git push --force disroot main
 
   mirror-gitea:
@@ -113,9 +129,12 @@ jobs:
           ssh-private-key: ${{ secrets.GITEA_SSH_KEY }}
 
       - name: Mirror to Gitea
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          GITEA_HOST: ${{ vars.GITEA_HOST }}
         run: |
-          ssh-keyscan -t ed25519 ${{ vars.GITEA_HOST }} >> ~/.ssh/known_hosts
-          git remote add gitea git@${{ vars.GITEA_HOST }}:hyperpolymath/${{ github.event.repository.name }}.git || true
+          ssh-keyscan -t ed25519 "$GITEA_HOST" >> ~/.ssh/known_hosts
+          git remote add gitea "git@${GITEA_HOST}:hyperpolymath/${REPO_NAME}.git" || true
           git push --force gitea main
 
   mirror-radicle:
@@ -138,7 +157,11 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Mirror to Radicle
+        # The key material is written via `printenv` rather than `echo "${{ ... }}"`
+        # to avoid the secret ever appearing in the shell command line / GHA log.
+        env:
+          RADICLE_KEY: ${{ secrets.RADICLE_KEY }}
         run: |
-          echo "${{ secrets.RADICLE_KEY }}" > ~/.radicle/keys/radicle
+          printenv RADICLE_KEY > ~/.radicle/keys/radicle
           chmod 600 ~/.radicle/keys/radicle
           rad sync --announce || echo "Radicle sync attempted"
