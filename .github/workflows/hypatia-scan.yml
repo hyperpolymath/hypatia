@@ -150,17 +150,24 @@ jobs:
           # on (severity, rule_module, type, file) tuple with absolute
           # build paths normalised to repo-relative.
           if [ -f .hypatia-baseline.json ]; then
-            # Normalise + project just the comparable keys from the current scan.
+            # Normalise + project the FINDING IDENTITY tuple from the current
+            # scan. Identity is (severity, rule_module, type, file) — `action`
+            # is remediation guidance that can legitimately drift between
+            # scanner versions (e.g. "flag" -> "create_branch") and is NOT
+            # part of what makes two findings the same.
             jq '[ .[] | select(.severity == "critical" or .severity == "high")
                        | {severity, rule_module, type,
                           file: (.file | sub("^/home/runner/work/[^/]+/[^/]+/"; "")
-                                       | sub("^/github/workspace/"; "")),
-                          action} ]' hypatia-findings.json > findings-current.json
+                                       | sub("^/github/workspace/"; "")) } ]' \
+               hypatia-findings.json > findings-current.json
 
             # Subtract baseline. A current finding is "new" iff there's no
-            # element in baseline equal to it (by-value).
+            # baseline element with the same identity tuple. Baseline entries
+            # may include extra fields (e.g. `action`); strip them before the
+            # comparison so legacy baselines keep working.
             jq --slurpfile base .hypatia-baseline.json \
-               '. as $cur | $cur | map(. as $f | select(($base[0] | any(. == $f)) | not))' \
+               '($base[0] | map({severity, rule_module, type, file})) as $bk
+                | map(. as $f | select(($bk | any(. == $f)) | not))' \
                findings-current.json > findings-new.json
             new_count=$(jq 'length' findings-new.json)
 
@@ -169,7 +176,7 @@ jobs:
               jq -r '.[] | "  [\(.severity)] \(.rule_module)/\(.type) — \(.file)"' findings-new.json
               echo
               echo "If these are intentional, regenerate .hypatia-baseline.json:"
-              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file, action}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
+              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
               exit 1
             fi
             echo "All critical/high findings present in baseline — gate passes."
