@@ -152,12 +152,5 @@
     "type": "unwrap_without_check",
     "file": "integration/src/lib.rs",
     "action": "flag"
-  },
-  {
-    "severity": "high",
-    "rule_module": "workflow_audit",
-    "type": "missing_workflow",
-    "file": "codeql.yml",
-    "action": "create"
   }
 ]
