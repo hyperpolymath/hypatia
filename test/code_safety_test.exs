@@ -129,6 +129,33 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert Enum.any?(findings, &(&1.rule == :ncl_hardcoded_secret))
     end
 
+    test "flags System.shell with interpolation as command injection" do
+      code = ~s|System.shell("rm -rf \#{user_path}")|
+      findings = CodeSafety.scan_content(code, "elixir")
+      assert Enum.any?(findings, &(&1.rule == :elixir_system_shell_interpolation))
+    end
+
+    test "flags System.cmd with interpolated program name" do
+      # Dynamic arg-1 can execute an arbitrary binary
+      code = ~s|System.cmd("git\#{ext}", ["status"])|
+      findings = CodeSafety.scan_content(code, "elixir")
+      assert Enum.any?(findings, &(&1.rule == :elixir_system_cmd_dynamic_program))
+    end
+
+    test "does NOT flag System.cmd with interpolation only in argv list" do
+      # argv elements are passed without shell tokenisation — no injection.
+      # This is the dominant safe pattern across the hypatia codebase and was
+      # being false-flagged by the old `System\.cmd\(.*#\{` regex.
+      code = """
+      System.cmd("git", ["ls-files", "\#{repo_path}"], cd: repo_path)
+      System.cmd("gh", ["api", "repos/\#{org}/\#{name}"])
+      System.cmd("find", [path, "-maxdepth", "3", "-name", "*.\#{ext}"])
+      """
+      findings = CodeSafety.scan_content(code, "elixir")
+      refute Enum.any?(findings, &(&1.rule == :elixir_system_shell_interpolation))
+      refute Enum.any?(findings, &(&1.rule == :elixir_system_cmd_dynamic_program))
+    end
+
     test "returns empty for clean code" do
       code = """
       fn main() {

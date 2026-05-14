@@ -196,9 +196,22 @@ defmodule Hypatia.Rules.CodeSafety do
   # ---------------------------------------------------------------------------
 
   @elixir_patterns [
-    %{id: :elixir_system_cmd_interpolation, severity: :critical,
-      pattern: ~r/System\.cmd\(.*#\{/, cwe: "CWE-78",
-      description: "System.cmd with string interpolation -- command injection risk"},
+    # System.shell/2 invokes the platform shell (/bin/sh -c); ANY interpolation
+    # in its arguments is a command-injection risk if attacker-influenced.
+    %{id: :elixir_system_shell_interpolation, severity: :critical,
+      pattern: ~r/System\.shell\(.*#\{/, cwe: "CWE-78",
+      description: "System.shell with string interpolation -- shell command injection"},
+    # System.cmd/3 is execve-style: arg 1 is the program, arg 2 is an argv
+    # list passed without shell tokenisation. Interpolation INTO an argv
+    # element is safe (the OS never re-parses). The injection risk is when
+    # the *program name itself* (arg 1) is built from interpolation, which
+    # lets an attacker run an arbitrary binary. So we flag only that shape:
+    # `System.cmd("prefix#{...}", ...)` — not interpolation deeper in the
+    # call. This prevents the swarm of false positives the previous regex
+    # (`System\.cmd\(.*#\{`) produced on every benign `gh`/`git` shell-out.
+    %{id: :elixir_system_cmd_dynamic_program, severity: :critical,
+      pattern: ~r/System\.cmd\(\s*"[^"]*#\{/, cwe: "CWE-78",
+      description: "System.cmd with interpolated program name -- can execute arbitrary binary"},
     %{id: :elixir_code_eval, severity: :critical,
       pattern: ~r/Code\.eval_string|Code\.eval_quoted|Code\.eval_file/, cwe: "CWE-94",
       description: "Code.eval_* -- arbitrary code execution risk"},
