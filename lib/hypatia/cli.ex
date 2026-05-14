@@ -675,6 +675,28 @@ defmodule Hypatia.CLI do
     unimplemented_macro
   )a |> Enum.map(&Atom.to_string/1))
 
+  # Rules whose patterns are *defined* in (or whose remediation guidance
+  # is *spelled out* in) the scanner's own rule modules — necessarily
+  # triggering the rule against the rule module itself. Suppressed when
+  # the matching file lives under `lib/rules/`.
+  @rule_self_match_exempt MapSet.new(~w(
+    elixir_send_unsanitised
+    elixir_atom_from_user
+    elixir_code_eval
+    elixir_port_open_shell
+    elixir_wildcard_plug_cors
+    elixir_no_ssl_verify
+  )a |> Enum.map(&Atom.to_string/1))
+
+  # Rules whose findings are unavoidable in remediation scripts under
+  # `scripts/fix-scripts/` — those scripts have to recognise the very
+  # patterns they remove. Suppressed for paths matching that prefix.
+  @fix_script_rules_exempt MapSet.new(~w(
+    shell_download_then_run
+    unsafe_curl_payload
+    download_then_run
+  )a |> Enum.map(&Atom.to_string/1))
+
   defp test_file_path?(file, repo_path) do
     rel =
       file
@@ -699,6 +721,24 @@ defmodule Hypatia.CLI do
       String.ends_with?(rel, "build.rs")
   end
 
+  defp rule_module_path?(file, repo_path) do
+    rel =
+      file
+      |> Path.relative_to(repo_path)
+      |> String.replace_leading("./", "")
+
+    String.starts_with?(rel, "lib/rules/")
+  end
+
+  defp fix_script_path?(file, repo_path) do
+    rel =
+      file
+      |> Path.relative_to(repo_path)
+      |> String.replace_leading("./", "")
+
+    String.starts_with?(rel, "scripts/fix-scripts/")
+  end
+
   defp scan_code_safety(repo_path) do
     language_findings =
       Enum.flat_map(@language_extensions, fn {language, exts} ->
@@ -712,10 +752,16 @@ defmodule Hypatia.CLI do
             {:ok, content} ->
               findings = Hypatia.Rules.CodeSafety.scan_content(content, language)
               is_test = test_file_path?(file, repo_path)
+              is_rule_module = rule_module_path?(file, repo_path)
+              is_fix_script = fix_script_path?(file, repo_path)
 
               findings
               |> Enum.reject(fn f ->
-                is_test and MapSet.member?(@panic_shape_rules_test_exempt, to_string(f.rule))
+                rule = to_string(f.rule)
+
+                (is_test and MapSet.member?(@panic_shape_rules_test_exempt, rule)) or
+                  (is_rule_module and MapSet.member?(@rule_self_match_exempt, rule)) or
+                  (is_fix_script and MapSet.member?(@fix_script_rules_exempt, rule))
               end)
               |> Enum.map(fn f ->
                 %{

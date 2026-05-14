@@ -51,13 +51,6 @@
   {
     "severity": "high",
     "rule_module": "code_safety",
-    "type": "elixir_send_unsanitised",
-    "file": "lib/rules/security_errors.ex",
-    "action": "flag"
-  },
-  {
-    "severity": "high",
-    "rule_module": "code_safety",
     "type": "from_raw",
     "file": "clients/rust/hypatia-client/src/ffi.rs",
     "action": "flag"
@@ -67,13 +60,6 @@
     "rule_module": "code_safety",
     "type": "ncl_http_url",
     "file": "fleet-config.k9.ncl",
-    "action": "flag"
-  },
-  {
-    "severity": "high",
-    "rule_module": "code_safety",
-    "type": "shell_download_then_run",
-    "file": "scripts/fix-scripts/fix-heredoc-install.sh",
     "action": "flag"
   },
   {
