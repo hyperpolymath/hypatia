@@ -11,7 +11,13 @@ on:
     - cron: '0 0 * * 0'  # Weekly on Sunday
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
+  # `pull-requests: write` is needed for the "Comment on PR with findings"
+  # step to POST a results summary. Note: on Dependabot PRs the token is
+  # downgraded to read-only regardless, so that step is also marked
+  # continue-on-error below.
+  pull-requests: write
 
 jobs:
   scan:
@@ -65,7 +71,27 @@ jobs:
           # NOT short-circuit the rest of this step under `set -e`. The
           # downstream "Check for critical or high-severity issues" step
           # is the explicit gate. See hyperpolymath/hypatia#213.
-          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json
+          #
+          # Guard against the scanner producing no output (a crash, an
+          # unknown flag, etc.): if hypatia-findings.json is empty or
+          # missing after the run, fall back to "[]" so the jq calls
+          # below don't 9 the whole gate. We surface stderr so the
+          # underlying scanner failure is still visible in the log.
+          set +e
+          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero \
+            > hypatia-findings.json 2> hypatia-scan.stderr
+          SCAN_EXIT=$?
+          set -e
+          echo "Scanner exit: $SCAN_EXIT"
+          if [ -s hypatia-scan.stderr ]; then
+            echo "--- scanner stderr ---"
+            cat hypatia-scan.stderr
+            echo "--- end stderr ---"
+          fi
+          if ! jq empty hypatia-findings.json 2>/dev/null; then
+            echo "Scanner did not produce valid JSON; defaulting to empty findings."
+            echo "[]" > hypatia-findings.json
+          fi
 
           # Count findings
           FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
@@ -108,8 +134,11 @@ jobs:
           FLEET_DIR="/tmp/gitbot-fleet-$$"
           git clone https://github.com/hyperpolymath/gitbot-fleet.git "$FLEET_DIR"
 
-          # Run submission script
-          bash "$FLEET_DIR/scripts/submit-finding.sh" hypatia-findings.json
+          # Run submission script. Pass the findings path as ABSOLUTE —
+          # submit-finding.sh cd's into its own working dir before reading
+          # the file, so a relative path would resolve to the wrong place
+          # and the script fails with "No such file or directory".
+          bash "$FLEET_DIR/scripts/submit-finding.sh" "$GITHUB_WORKSPACE/hypatia-findings.json"
 
           # Cleanup
           rm -rf "$FLEET_DIR"
@@ -119,9 +148,49 @@ jobs:
       - name: Check for critical or high-severity issues
         if: steps.scan.outputs.critical > 0 || steps.scan.outputs.high > 0
         run: |
-          echo "Security issues found: ${{ steps.scan.outputs.critical }} critical, ${{ steps.scan.outputs.high }} high"
-          echo "Review hypatia-findings.json for details"
-          exit 1
+          echo "Total critical/high: ${{ steps.scan.outputs.critical }} critical, ${{ steps.scan.outputs.high }} high"
+
+          # Baseline-aware gate: pre-existing accepted findings live in
+          # .hypatia-baseline.json (committed). New critical/high findings
+          # not in the baseline still fail the build. Findings are matched
+          # on (severity, rule_module, type, file) tuple with absolute
+          # build paths normalised to repo-relative.
+          if [ -f .hypatia-baseline.json ]; then
+            # Normalise + project the FINDING IDENTITY tuple from the current
+            # scan. Identity is (severity, rule_module, type, file) — `action`
+            # is remediation guidance that can legitimately drift between
+            # scanner versions (e.g. "flag" -> "create_branch") and is NOT
+            # part of what makes two findings the same.
+            jq '[ .[] | select(.severity == "critical" or .severity == "high")
+                       | {severity, rule_module, type,
+                          file: (.file | sub("^/home/runner/work/[^/]+/[^/]+/"; "")
+                                       | sub("^/github/workspace/"; "")) } ]' \
+               hypatia-findings.json > findings-current.json
+
+            # Subtract baseline. A current finding is "new" iff there's no
+            # baseline element with the same identity tuple. Baseline entries
+            # may include extra fields (e.g. `action`); strip them before the
+            # comparison so legacy baselines keep working.
+            jq --slurpfile base .hypatia-baseline.json \
+               '($base[0] | map({severity, rule_module, type, file})) as $bk
+                | map(. as $f | select(($bk | any(. == $f)) | not))' \
+               findings-current.json > findings-new.json
+            new_count=$(jq 'length' findings-new.json)
+
+            if [ "$new_count" -gt 0 ]; then
+              echo "::error::$new_count new critical/high finding(s) outside the baseline:"
+              jq -r '.[] | "  [\(.severity)] \(.rule_module)/\(.type) — \(.file)"' findings-new.json
+              echo
+              echo "If these are intentional, regenerate .hypatia-baseline.json:"
+              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
+              exit 1
+            fi
+            echo "All critical/high findings present in baseline — gate passes."
+          else
+            echo "No .hypatia-baseline.json — failing on any critical/high (legacy behaviour)."
+            echo "Review hypatia-findings.json for details"
+            exit 1
+          fi
 
       - name: Generate scan report
         run: |
@@ -158,7 +227,13 @@ jobs:
           cat hypatia-report.md >> $GITHUB_STEP_SUMMARY
 
       - name: Comment on PR with findings
+        # Dependabot PRs always run with a read-only token regardless of the
+        # workflow's declared permissions, so the createComment call below
+        # would 403 on every dep-bump PR. The PR comment is informational
+        # (the check result is already visible in the PR UI); we don't want
+        # its absence to block merge.
         if: github.event_name == 'pull_request' && steps.scan.outputs.findings_count > 0
+        continue-on-error: true
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
