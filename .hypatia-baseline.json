@@ -29,27 +29,6 @@
   },
   {
     "severity": "high",
-    "rule_module": "cicd_rules",
-    "type": "missing_requirement",
-    "file": ".github/dependabot.yml",
-    "action": "create"
-  },
-  {
-    "severity": "high",
-    "rule_module": "cicd_rules",
-    "type": "missing_requirement",
-    "file": ".github/workflows/scorecard.yml",
-    "action": "create"
-  },
-  {
-    "severity": "high",
-    "rule_module": "cicd_rules",
-    "type": "missing_requirement",
-    "file": "permissions: read-all",
-    "action": "create"
-  },
-  {
-    "severity": "high",
     "rule_module": "code_safety",
     "type": "from_raw",
     "file": "clients/rust/hypatia-client/src/ffi.rs",

@@ -393,7 +393,12 @@ defmodule Hypatia.CLI do
           has_deps: File.exists?(Path.join(repo_path, "mix.lock")) or
                       File.exists?(Path.join(repo_path, "Cargo.lock")) or
                       File.exists?(Path.join(repo_path, "deno.lock")),
-          files: root_files
+          files: root_files,
+          # Pass the repo path so check_repo_requirements can run the
+          # actual filesystem / workflow-content checks rather than the
+          # legacy "is it in the root-files basename list" heuristic
+          # (which never saw `.github/dependabot.yml` etc.).
+          repo_path: repo_path
         }
 
         missing = Hypatia.Rules.CicdRules.check_repo_requirements(repo_info)

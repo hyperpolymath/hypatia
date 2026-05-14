@@ -12,11 +12,15 @@ defmodule Hypatia.Rules.CicdRules do
   # Repository Must-Have Rules
   # ---------------------------------------------------------------------------
 
+  # `kind: :file` entries are required filesystem paths.
+  # `kind: :workflow_top_level` entries are required top-level YAML keys
+  # that must appear in every `.github/workflows/*.yml`.
   @repo_must_have [
-    %{file: "SECURITY.md", condition: :public_repo},
-    %{file: ".github/dependabot.yml", condition: :has_dependencies},
-    %{file: ".github/workflows/scorecard.yml", condition: :public_repo},
-    %{file: "permissions: read-all", condition: :all_workflows}
+    %{file: "SECURITY.md", condition: :public_repo, kind: :file},
+    %{file: ".github/dependabot.yml", condition: :has_dependencies, kind: :file},
+    %{file: ".github/workflows/scorecard.yml", condition: :public_repo, kind: :file},
+    %{file: "permissions: read-all", condition: :all_workflows, kind: :workflow_top_level,
+      yaml_key: "permissions"}
   ]
 
   def repo_must_have_rules, do: @repo_must_have
@@ -24,7 +28,7 @@ defmodule Hypatia.Rules.CicdRules do
   def check_repo_requirements(repo_info) do
     Enum.flat_map(@repo_must_have, fn rule ->
       if requirement_applies?(rule.condition, repo_info) and
-           not has_file?(repo_info, rule.file) do
+           not requirement_satisfied?(rule, repo_info) do
         [%{missing: rule.file, condition: rule.condition}]
       else
         []
@@ -36,7 +40,59 @@ defmodule Hypatia.Rules.CicdRules do
   defp requirement_applies?(:has_dependencies, info), do: Map.get(info, :has_deps, true)
   defp requirement_applies?(:all_workflows, _info), do: true
 
-  defp has_file?(info, file), do: file in Map.get(info, :files, [])
+  # `kind: :file` — check actual disk presence relative to `:repo_path`
+  # if supplied; otherwise fall back to the legacy root-file list (which
+  # only catches top-level basenames). Nested paths like
+  # `.github/dependabot.yml` are impossible for the legacy check to see
+  # because that list only contains the repo root.
+  defp requirement_satisfied?(%{kind: :file, file: file}, info) do
+    case Map.get(info, :repo_path) do
+      nil ->
+        # No repo_path supplied — only the legacy basename list. Accept a
+        # match on either the full nested path or its basename so the
+        # check isn't strictly worse than before for older callers.
+        files = Map.get(info, :files, [])
+        file in files or Path.basename(file) in files
+
+      repo_path ->
+        File.exists?(Path.join(repo_path, file))
+    end
+  end
+
+  # `kind: :workflow_top_level` — every `.github/workflows/*.yml` file
+  # in the repo has to mention the named YAML key at the start of a
+  # line. This is a content predicate, not a file predicate, so we walk
+  # the workflows dir and bail out on the first one that doesn't match.
+  defp requirement_satisfied?(%{kind: :workflow_top_level, yaml_key: key}, info) do
+    case Map.get(info, :repo_path) do
+      nil ->
+        # Can't validate without a repo path; treat as satisfied so
+        # legacy callers don't see spurious "missing permissions"
+        # findings.
+        true
+
+      repo_path ->
+        workflows_dir = Path.join([repo_path, ".github", "workflows"])
+
+        case File.ls(workflows_dir) do
+          {:ok, entries} ->
+            workflow_files =
+              entries
+              |> Enum.filter(&String.ends_with?(&1, [".yml", ".yaml"]))
+              |> Enum.map(&Path.join(workflows_dir, &1))
+
+            Enum.all?(workflow_files, fn path ->
+              case File.read(path) do
+                {:ok, content} -> Regex.match?(~r/^#{Regex.escape(key)}:/m, content)
+                _ -> true
+              end
+            end)
+
+          _ ->
+            true
+        end
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Commit Blocking Patterns
