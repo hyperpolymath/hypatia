@@ -787,7 +787,12 @@ defmodule Hypatia.CLI do
       String.contains?(file, "/tools/") or
       String.contains?(file, "/fixer/") or
       String.contains?(file, "/tests/") or
-      String.ends_with?(file, "_test.rs")
+      # `/integration/` covers both `integration/tests/*` and the
+      # `integration/src/{lib,ci_simulation/*}.rs` test-utility tree.
+      String.contains?(file, "/integration/") or
+      String.ends_with?(file, "_test.rs") or
+      String.ends_with?(file, "/scenarios.rs") or
+      String.ends_with?(file, "/assertions.rs")
   end
 
   # Path exemptions, GHA-secret-reference awareness, and inline allow

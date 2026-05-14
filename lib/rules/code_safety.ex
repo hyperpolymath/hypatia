@@ -327,8 +327,12 @@ defmodule Hypatia.Rules.CodeSafety do
   # ---------------------------------------------------------------------------
 
   @nickel_patterns [
+    # Excludes localhost / 127.0.0.1 / 0.0.0.0 — these are dev-time
+    # references where TLS termination is conventionally absent and not a
+    # security risk. Matches the same allowlist as the JS http URL rule.
     %{id: :ncl_http_url, severity: :high,
-      pattern: ~r/=\s*"http:\/\//, cwe: "CWE-319",
+      pattern: ~r{=\s*"http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)},
+      cwe: "CWE-319",
       description: "HTTP URL in Nickel config -- must use HTTPS"},
     %{id: :ncl_weak_hash, severity: :high,
       pattern: ~r/(md5:|sha1:)[a-fA-F0-9]+/, cwe: "CWE-328",
@@ -377,14 +381,51 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language(_), do: []
 
   def scan_content(content, language) do
+    scannable = strip_inline_test_blocks(content, language)
+
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
-      case Regex.scan(rule.pattern, content) do
+      case Regex.scan(rule.pattern, scannable) do
         [] -> []
         matches -> [%{rule: rule.id, severity: rule.severity, cwe: rule.cwe,
                        description: rule.description, occurrences: length(matches)}]
       end
     end)
+  end
+
+  # For Rust:
+  #
+  #   1. Strip the trailing `#[cfg(test)] mod tests { ... }` block — it
+  #      lives at EOF by convention and contains `.unwrap()` / `panic!` /
+  #      fixture credentials that would be unsafe in production but are
+  #      normal in test code.
+  #
+  #   2. Strip doc-comment lines (`///` outer, `//!` inner). Documentation
+  #      routinely includes code-example snippets that legitimately call
+  #      `.unwrap()` / `panic!` / etc. — flagging the *example* is a
+  #      false positive of the same character as flagging a remediation
+  #      script for the pattern it remediates.
+  #
+  # Inline `#[cfg(test)] fn …` items in the middle of a file aren't
+  # stripped (rare), and the per-rule severity downgrade in
+  # `Hypatia.CLI.cli_context_severity/3` still applies in those cases.
+  defp strip_inline_test_blocks(content, "rust") do
+    content
+    |> strip_after_cfg_test()
+    |> strip_doc_comments()
+  end
+
+  defp strip_inline_test_blocks(content, _other), do: content
+
+  defp strip_after_cfg_test(content) do
+    case :binary.match(content, "#[cfg(test)]") do
+      :nomatch -> content
+      {pos, _len} -> binary_part(content, 0, pos)
+    end
+  end
+
+  defp strip_doc_comments(content) do
+    Regex.replace(~r{^[ \t]*//[/!][^\n]*$}m, content, "")
   end
 
   # ---------------------------------------------------------------------------

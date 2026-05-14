@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// hypatia: allow code_safety/from_raw -- FFI bridge to libhypatia_ffi.so; see SAFETY section below
 //
 // # Safety
 //
@@ -523,7 +524,7 @@ fn parse_scan_payload(bytes: &[u8]) -> Result<ScanResponse, HypatiaError> {
     Ok(ScanResponse {
         result,
         findings: shape.findings,
-        score: shape.score.unwrap_or(0),
+        score: shape.score.unwrap_or_default(),
     })
 }
 
