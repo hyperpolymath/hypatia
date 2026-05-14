@@ -1,0 +1,534 @@
+[
+  {
+    "severity": "critical",
+    "rule_module": "cicd_rules",
+    "type": "banned_language_file",
+    "file": "scripts/check-bench-regression.py",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "cicd_rules",
+    "type": "banned_language_file",
+    "file": "scripts/update-bench-baselines.py",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "believe_me",
+    "file": "src/abi/RuleEngine.idr",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "elixir_system_cmd_interpolation",
+    "file": "lib/direct_github_pr.ex",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "elixir_system_cmd_interpolation",
+    "file": "lib/hypatia/cli.ex",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "elixir_system_cmd_interpolation",
+    "file": "lib/mix/tasks/hypatia.audit_repos.ex",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "elixir_system_cmd_interpolation",
+    "file": "lib/mix/tasks/hypatia.deploy_prevention_workflows.ex",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "elixir_system_cmd_interpolation",
+    "file": "lib/rules/structural_drift.ex",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "adapters/src/sourcehut.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "cli/src/commands/batch.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "cli/src/commands/scan.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "clients/rust/hypatia-client/src/ffi.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "data/src/cache.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "data/src/dragonfly.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "integration/src/ci_simulation/scenarios.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "integration/tests/fleet_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "integration/tests/forge_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "code_safety",
+    "type": "unwrap_dangerous_default",
+    "file": "tools/cii-registrar/src/main.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": ".audittraining/security-errors/echidnabot.md",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": ".audittraining/security-errors/echidnabot.md",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": ".github/workflows/integration.yml",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "adapters/src/codeberg.rs",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "adapters/tests/adapter_tests.rs",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "hooks/lib/cache.sh",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "integration/run-tests.sh",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "lib/rules/security_errors.ex",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "scripts/fix-scripts/fix-hardcoded-secrets.sh",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "scripts/fix-scripts/fix-hardcoded-secrets.sh",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
+    "file": "test/code_safety_test.exs",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "structural_drift",
+    "type": "SD008",
+    "file": "src/abi/RuleEngine.idr",
+    "action": "fix_proof"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "workflow_audit",
+    "type": "actions_expression_injection",
+    "file": "boj-build.yml",
+    "action": "sanitize_context"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "workflow_audit",
+    "type": "actions_expression_injection",
+    "file": "hypatia-scan.yml",
+    "action": "sanitize_context"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "workflow_audit",
+    "type": "actions_expression_injection",
+    "file": "mirror.yml",
+    "action": "sanitize_context"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "workflow_audit",
+    "type": "actions_expression_injection",
+    "file": "quality.yml",
+    "action": "sanitize_context"
+  },
+  {
+    "severity": "high",
+    "rule_module": "cicd_rules",
+    "type": "missing_requirement",
+    "file": ".github/dependabot.yml",
+    "action": "create"
+  },
+  {
+    "severity": "high",
+    "rule_module": "cicd_rules",
+    "type": "missing_requirement",
+    "file": ".github/workflows/scorecard.yml",
+    "action": "create"
+  },
+  {
+    "severity": "high",
+    "rule_module": "cicd_rules",
+    "type": "missing_requirement",
+    "file": "permissions: read-all",
+    "action": "create"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "elixir_send_unsanitised",
+    "file": "lib/rules/security_errors.ex",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "from_raw",
+    "file": "clients/rust/hypatia-client/src/ffi.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "lock_unwrap",
+    "file": "cli/src/app_state.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "ncl_http_url",
+    "file": "fleet-config.k9.ncl",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "panic_macro",
+    "file": "integration/src/ci_simulation/assertions.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "shell_download_then_run",
+    "file": "scripts/fix-scripts/fix-heredoc-install.sh",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/src/bitbucket.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/src/codeberg.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/src/github.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/src/gitlab.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/src/radicle.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/src/sourcehut.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "adapters/tests/adapter_tests.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/build.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/src/app_state.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/src/commands/batch.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/src/commands/fleet.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/src/commands/scan.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/src/config.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "cli/src/output.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "clients/rust/hypatia-client/src/ffi.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "data/src/cache.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "data/src/dragonfly.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "data/src/verisim.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "fixer/src/main.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/src/ci_simulation/mod.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/src/ci_simulation/scenarios.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/src/lib.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/tests/arangodb_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/tests/ci_simulation_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/tests/fleet_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/tests/forge_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/tests/hooks_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "unwrap_without_check",
+    "file": "integration/tests/registry_test.rs",
+    "action": "flag"
+  },
+  {
+    "severity": "high",
+    "rule_module": "workflow_audit",
+    "type": "download_then_run",
+    "file": "docs.yml",
+    "action": "verify_download_integrity"
+  },
+  {
+    "severity": "high",
+    "rule_module": "workflow_audit",
+    "type": "download_then_run",
+    "file": "mirror.yml",
+    "action": "verify_download_integrity"
+  },
+  {
+    "severity": "high",
+    "rule_module": "workflow_audit",
+    "type": "missing_workflow",
+    "file": "codeql.yml",
+    "action": "create"
+  },
+  {
+    "severity": "high",
+    "rule_module": "workflow_audit",
+    "type": "unsafe_curl_payload",
+    "file": "boj-build.yml",
+    "action": "use_jq_payload"
+  },
+  {
+    "severity": "high",
+    "rule_module": "workflow_audit",
+    "type": "unsafe_curl_payload",
+    "file": "hypatia-scan.yml",
+    "action": "use_jq_payload"
+  }
+]

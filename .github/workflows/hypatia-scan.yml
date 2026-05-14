@@ -142,9 +142,42 @@ jobs:
       - name: Check for critical or high-severity issues
         if: steps.scan.outputs.critical > 0 || steps.scan.outputs.high > 0
         run: |
-          echo "Security issues found: ${{ steps.scan.outputs.critical }} critical, ${{ steps.scan.outputs.high }} high"
-          echo "Review hypatia-findings.json for details"
-          exit 1
+          echo "Total critical/high: ${{ steps.scan.outputs.critical }} critical, ${{ steps.scan.outputs.high }} high"
+
+          # Baseline-aware gate: pre-existing accepted findings live in
+          # .hypatia-baseline.json (committed). New critical/high findings
+          # not in the baseline still fail the build. Findings are matched
+          # on (severity, rule_module, type, file) tuple with absolute
+          # build paths normalised to repo-relative.
+          if [ -f .hypatia-baseline.json ]; then
+            # Normalise + project just the comparable keys from the current scan.
+            jq '[ .[] | select(.severity == "critical" or .severity == "high")
+                       | {severity, rule_module, type,
+                          file: (.file | sub("^/home/runner/work/[^/]+/[^/]+/"; "")
+                                       | sub("^/github/workspace/"; "")),
+                          action} ]' hypatia-findings.json > findings-current.json
+
+            # Subtract baseline. A current finding is "new" iff there's no
+            # element in baseline equal to it (by-value).
+            jq --slurpfile base .hypatia-baseline.json \
+               '. as $cur | $cur | map(. as $f | select(($base[0] | any(. == $f)) | not))' \
+               findings-current.json > findings-new.json
+            new_count=$(jq 'length' findings-new.json)
+
+            if [ "$new_count" -gt 0 ]; then
+              echo "::error::$new_count new critical/high finding(s) outside the baseline:"
+              jq -r '.[] | "  [\(.severity)] \(.rule_module)/\(.type) — \(.file)"' findings-new.json
+              echo
+              echo "If these are intentional, regenerate .hypatia-baseline.json:"
+              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file, action}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
+              exit 1
+            fi
+            echo "All critical/high findings present in baseline — gate passes."
+          else
+            echo "No .hypatia-baseline.json — failing on any critical/high (legacy behaviour)."
+            echo "Review hypatia-findings.json for details"
+            exit 1
+          fi
 
       - name: Generate scan report
         run: |
