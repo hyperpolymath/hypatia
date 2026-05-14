@@ -63,6 +63,7 @@ build/
 ai-cli-crash-capture/
 
 # Built binaries
+/hypatia
 hypatia-v2
 elixir-scanner/hypatia
 

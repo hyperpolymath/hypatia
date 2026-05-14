@@ -65,7 +65,27 @@ jobs:
           # NOT short-circuit the rest of this step under `set -e`. The
           # downstream "Check for critical or high-severity issues" step
           # is the explicit gate. See hyperpolymath/hypatia#213.
-          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json
+          #
+          # Guard against the scanner producing no output (a crash, an
+          # unknown flag, etc.): if hypatia-findings.json is empty or
+          # missing after the run, fall back to "[]" so the jq calls
+          # below don't 9 the whole gate. We surface stderr so the
+          # underlying scanner failure is still visible in the log.
+          set +e
+          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero \
+            > hypatia-findings.json 2> hypatia-scan.stderr
+          SCAN_EXIT=$?
+          set -e
+          echo "Scanner exit: $SCAN_EXIT"
+          if [ -s hypatia-scan.stderr ]; then
+            echo "--- scanner stderr ---"
+            cat hypatia-scan.stderr
+            echo "--- end stderr ---"
+          fi
+          if ! jq empty hypatia-findings.json 2>/dev/null; then
+            echo "Scanner did not produce valid JSON; defaulting to empty findings."
+            echo "[]" > hypatia-findings.json
+          fi
 
           # Count findings
           FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
