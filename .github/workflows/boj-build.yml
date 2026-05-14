@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+permissions: read-all
 jobs:
   trigger-boj:
     runs-on: ubuntu-latest
@@ -11,8 +12,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Trigger BoJ Server (Casket/ssg-mcp)
+        env:
+          # Pull GitHub context into env so the curl payload can be built
+          # with `jq --arg` instead of inline interpolation — closes the
+          # workflow_audit/unsafe_curl_payload finding and accidentally
+          # also fixes a pre-existing JSON-escaping bug in the old payload
+          # (a stray `}` outside the closing brace).
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          # Send a secure trigger to boj-server to build this repository
-          curl -X POST "http://boj-server.local:7700/cartridges/ssg-mcp/invoke"             -H "Content-Type: application/json"             -d "{\"repo\": \"${{ github.repository }}\", \"branch\": \"${{ github.ref_name }}\", \"engine\": \"casket\\"}"}
+          PAYLOAD=$(jq -nc \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg engine "casket" \
+            '{repo: $repo, branch: $branch, engine: $engine}')
+          curl -X POST "http://boj-server.local:7700/cartridges/ssg-mcp/invoke" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
         continue-on-error: true
-permissions: read-all

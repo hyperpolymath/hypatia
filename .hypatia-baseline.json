@@ -150,6 +150,13 @@
     "severity": "critical",
     "rule_module": "security_errors",
     "type": "secret_detected",
+    "file": ".hypatia-exemptions.md",
+    "action": "revoke_rotate_and_purge"
+  },
+  {
+    "severity": "critical",
+    "rule_module": "security_errors",
+    "type": "secret_detected",
     "file": "adapters/src/codeberg.rs",
     "action": "revoke_rotate_and_purge"
   },
@@ -208,20 +215,6 @@
     "type": "SD008",
     "file": "src/abi/RuleEngine.idr",
     "action": "fix_proof"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "workflow_audit",
-    "type": "actions_expression_injection",
-    "file": "boj-build.yml",
-    "action": "sanitize_context"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "workflow_audit",
-    "type": "actions_expression_injection",
-    "file": "hypatia-scan.yml",
-    "action": "sanitize_context"
   },
   {
     "severity": "critical",
@@ -509,27 +502,6 @@
     "type": "download_then_run",
     "file": "docs.yml",
     "action": "verify_download_integrity"
-  },
-  {
-    "severity": "high",
-    "rule_module": "workflow_audit",
-    "type": "download_then_run",
-    "file": "mirror.yml",
-    "action": "verify_download_integrity"
-  },
-  {
-    "severity": "high",
-    "rule_module": "workflow_audit",
-    "type": "missing_workflow",
-    "file": "codeql.yml",
-    "action": "create"
-  },
-  {
-    "severity": "high",
-    "rule_module": "workflow_audit",
-    "type": "unsafe_curl_payload",
-    "file": "boj-build.yml",
-    "action": "use_jq_payload"
   },
   {
     "severity": "high",
