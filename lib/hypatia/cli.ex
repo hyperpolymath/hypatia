@@ -694,18 +694,30 @@ defmodule Hypatia.CLI do
           case File.read(file) do
             {:ok, content} ->
               findings = Hypatia.Rules.CodeSafety.scan_content(content, language)
-              # File-level allow directive — first 20 lines may declare
-              # `# hypatia: allow code_safety/<rule>` for intentional usage
-              # (e.g. an Idris2 proof file that legitimately uses
-              # `believe_me`). One declaration covers every match in the
-              # file, replacing per-match annotations.
+              # Two-stage suppression:
+              #
+              #   1. Path-based — files under `lib/rules/`, `scripts/fix-scripts/`,
+              #      `test/`, `.audittraining/`, etc. are training corpora /
+              #      remediation scripts for the very rules being checked.
+              #      Content-pattern rules firing in them is self-recursion.
+              #
+              #   2. File-level allow directive — first 20 lines may declare
+              #      `# hypatia: allow code_safety/<rule>` for intentional usage
+              #      (e.g. an Idris2 proof file that legitimately needs
+              #      `believe_me`). One declaration covers every match.
               findings
               |> Enum.reject(fn f ->
-                Hypatia.ScannerSuppression.file_allowed?(
-                  content,
+                Hypatia.ScannerSuppression.suppressed?(
+                  file,
                   "code_safety",
-                  to_string(f.rule)
-                )
+                  to_string(f.rule),
+                  repo_path: repo_path
+                ) or
+                  Hypatia.ScannerSuppression.file_allowed?(
+                    content,
+                    "code_safety",
+                    to_string(f.rule)
+                  )
               end)
               |> Enum.map(fn f ->
                 %{

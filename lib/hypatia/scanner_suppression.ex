@@ -39,25 +39,30 @@ defmodule Hypatia.ScannerSuppression do
   #
   # `:any` as inner key applies to every rule type in that module.
 
+  # Path fragments that are *by definition* a rule's training corpus:
+  # rule-definition modules (the regex set lives here — flagging it is
+  # self-recursion), remediation scripts (they document the bad pattern
+  # they fix), training corpora, and test fixtures. Any content-pattern
+  # rule (`secret_detected`, `shell_download_then_run`, `elixir_*`, etc.)
+  # firing in these paths is provenance noise, not signal.
+  @training_corpus_paths [
+    ".audittraining/",
+    "lib/rules/",
+    "scripts/fix-scripts/",
+    "test/",
+    "tests/",
+    "integration/fixtures/",
+    "integration/run-tests.sh"
+  ]
+
   @default_exemptions %{
+    # `:any` key under a module: applies to every rule type in that module.
     "security_errors" => %{
-      "secret_detected" => [
-        # Training corpora — by name, these document example bad patterns.
-        ".audittraining/",
-        # Hypatia's own scanner rule definitions — the canonical home of
-        # the secret-detection regex set. Flagging it is auto-recursion.
-        "lib/rules/security_errors.ex",
-        "lib/rules/code_safety.ex",
-        "lib/rules/cicd_rules.ex",
-        # Remediation scripts that *describe* the patterns they replace.
-        "scripts/fix-scripts/",
-        # Test fixtures — assertions necessarily contain bad example values.
-        "test/", "tests/",
-        "integration/fixtures/", "integration/run-tests.sh",
-        # GitHub Actions integration workflow — it intentionally references
-        # `${{ secrets.X }}` (not a leak; a reference to the secret store).
-        ".github/workflows/integration.yml"
-      ]
+      :any => @training_corpus_paths ++
+                [".github/workflows/integration.yml"]
+    },
+    "code_safety" => %{
+      :any => @training_corpus_paths
     }
   }
 
