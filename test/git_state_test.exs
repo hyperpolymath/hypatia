@@ -92,22 +92,34 @@ defmodule Hypatia.Rules.GitStateTest do
 
   # ─── GS005: Detached HEAD ──────────────────────────────────────────
 
-  describe "gs005_detached_head/1" do
+  describe "gs005_detached_head/2" do
+    # Use the explicit-CI-flag arity so detection is deterministic
+    # regardless of the ambient CI env (these tests run under CI=true).
     test "returns empty when on a branch", %{repo: repo} do
-      findings = GitState.gs005_detached_head(repo)
+      findings = GitState.gs005_detached_head(repo, false)
       assert findings == []
     end
 
-    test "detects detached HEAD", %{repo: repo} do
+    test "detects detached HEAD when not in CI", %{repo: repo} do
       # Detach by checking out a specific commit
       {sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: repo)
       System.cmd("git", ["checkout", String.trim(sha)], cd: repo, stderr_to_stdout: true)
 
-      findings = GitState.gs005_detached_head(repo)
+      findings = GitState.gs005_detached_head(repo, false)
       assert length(findings) == 1
       assert hd(findings).rule == "GS005"
       assert hd(findings).severity == :high
       assert String.contains?(hd(findings).reason, "detached")
+    end
+
+    test "is exempt under CI even with a detached HEAD", %{repo: repo} do
+      # CI (e.g. GitHub Actions PR builds) checks out a detached HEAD by
+      # design; flagging it would hard-fail the security gate on every
+      # PR regardless of content. Exemption must hold.
+      {sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: repo)
+      System.cmd("git", ["checkout", String.trim(sha)], cd: repo, stderr_to_stdout: true)
+
+      assert GitState.gs005_detached_head(repo, true) == []
     end
   end
 
