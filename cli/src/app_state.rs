@@ -41,7 +41,14 @@ impl RateLimitSlot {
     /// Returns `true` if the request is allowed (consumes one token).
     fn try_acquire(&self) -> bool {
         let now = Instant::now();
-        let mut start = self.window_start.lock().unwrap();
+        // Poison recovery: the lock only protects an `Instant` (Copy), so a
+        // poisoned mutex doesn't mean corrupted state — the inner value is
+        // still a valid timestamp. Take it and carry on rather than
+        // cascading the panic and taking the whole rate limiter offline.
+        let mut start = self
+            .window_start
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if now.duration_since(*start) >= self.window_size {
             self.remaining.store(self.limit, Ordering::Relaxed);
             *start = now;

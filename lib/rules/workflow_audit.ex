@@ -68,8 +68,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   Audit workflow directory. Takes a list of workflow filenames and
   optionally their contents (as a map of filename => content).
   """
-  def audit(workflow_files, workflow_contents \\ %{}) do
-    missing = check_missing_workflows(workflow_files)
+  def audit(workflow_files, workflow_contents \\ %{}, opts \\ []) do
+    missing = check_missing_workflows(workflow_files, opts)
     unpinned = check_unpinned_actions(workflow_contents)
     wrong_pins = check_wrong_pins(workflow_contents)
     permission_issues = check_permissions(workflow_contents)
@@ -79,11 +79,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     run_context_issues = check_github_context_in_run(workflow_contents)
     download_then_run_issues = check_download_then_run(workflow_contents)
     nperm_typos = check_npermissions_typo(workflow_contents)
+    codeql_lang_mismatch = check_codeql_language_matrix_mismatch(workflow_contents, opts)
 
     %{
       findings:
         missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
-          caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos,
+          caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
+          codeql_lang_mismatch,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -94,6 +96,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       run_context_issues: length(run_context_issues),
       download_then_run_issues: length(download_then_run_issues),
       npermissions_typo_count: length(nperm_typos),
+      codeql_lang_mismatch_count: length(codeql_lang_mismatch),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -101,9 +104,23 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @doc """
   Check which standard workflows are missing.
+
+  `opts[:has_codeql_supported_language]` (boolean): when false, `codeql.yml`
+  is dropped from the required set — CodeQL has nothing to scan in a repo
+  with no JavaScript / Python / Go / Java / Ruby / C# / C++ / Swift files,
+  so demanding the workflow would produce a perpetual missing-file finding
+  that no one can usefully close. Hypatia's Rust + Elixir + Idris mix
+  triggered this exact FP in the #237 self-scan.
   """
-  def check_missing_workflows(workflow_files) do
-    Enum.flat_map(@standard_workflows, fn wf ->
+  def check_missing_workflows(workflow_files, opts \\ []) do
+    requireds =
+      if Keyword.get(opts, :has_codeql_supported_language, true) do
+        @standard_workflows
+      else
+        @standard_workflows -- ["codeql.yml"]
+      end
+
+    Enum.flat_map(requireds, fn wf ->
       if wf in workflow_files do
         []
       else
@@ -137,7 +154,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   @doc """
-  Check for SHA pins that don't match known-good values.
+  Check for SHA pins that don't match the local known-good table.
+
+  Severity is `:info`, not `:medium`: a SHA that's not in the local table is
+  *unverified*, not *wrong*. The known-good table can't keep pace with the
+  full dependency graph, so when this rule fires at medium it generates
+  more noise than signal (see hypatia#237 triage — 148 of 225 findings).
+  Only escalate manually when the current SHA is on a known-vulnerable list.
   """
   def check_wrong_pins(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
@@ -153,7 +176,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           {_ref, known_sha} when known_sha != sha ->
             [%{type: :wrong_sha_pin, file: filename, action_ref: action,
                current_sha: sha, expected_sha: known_sha,
-               severity: :medium, fix: :update_pin}]
+               severity: :info, fix: :update_pin}]
           _ -> []
         end
       end)
@@ -275,15 +298,39 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @doc """
   Detect direct GitHub context interpolation inside run blocks.
-  These patterns are repeatedly implicated in workflow command/script injection alerts.
+
+  Only fires for **actor-controllable** context expressions — the values a
+  forked-PR contributor or issue/comment author can choose:
+
+    * `github.head_ref` / `github.event.pull_request.head.ref`
+    * `github.event.pull_request.title|body`
+    * `github.event.issue.title|body`
+    * `github.event.comment.body` / `github.event.review.body`
+    * `github.event.workflow_run.head_branch` / `display_title`
+    * `github.event.commits[*].message|author.name|author.email`
+
+  Admin-controlled context (`github.repository`, `github.sha`, `github.ref_name`
+  on a push event from a privileged author, `vars.*`, etc.) is not an
+  injection vector — it can only be set by repo owners and is constrained by
+  GitHub. Interpolating those is style guidance, not a security finding, so
+  it doesn't fire here.
+
+  Note: `github.actor` is *only* attacker-controllable when the workflow runs
+  on `pull_request_target` from a fork. Pre-2026-05 audit was conservative
+  (always flagged); we narrow to the actor-controlled set to restore signal.
   """
   def check_github_context_in_run(workflow_contents) do
+    # Actor-controllable expressions. Anchored loosely so we catch the
+    # expression wherever it appears in a run block — the previous full
+    # `run: |` block-shape match missed inline `run:` single-liners.
     run_context_re =
-      ~r/run:\s*\|(?:(?:\n[ \t]+[^\n]*)*?\n[ \t]+[^\n]*\$\{\{\s*github\.(?:event\.repository\.name|repository|ref_name|head_ref|actor|event\.pull_request\.|event\.issue\.|event\.comment\.)[^}]*\}\})/m
+      ~r/run:[\s\S]*?\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)[^}]*\}\}/m
 
-    unsafe_json_payload_re = ~r/-d\s*".*\$\{\{\s*github\./s
+    unsafe_json_payload_re =
+      ~r/-d\s*".*\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)/s
 
     Enum.flat_map(workflow_contents, fn {filename, content} ->
+      content = strip_comments(content)
       findings = []
 
       findings =
@@ -320,12 +367,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @doc """
   Detect download-and-execute shell patterns in workflow run blocks.
+
+  Comment-aware: YAML comment lines (`^# ...`) and shell comments inside
+  run blocks are stripped before matching, so a workflow that says
+  `# safer than curl | sh` doesn't get flagged for the pattern in its own
+  description (see hypatia#237 triage — docs.yml and mirror.yml both
+  baselined this FP).
   """
   def check_download_then_run(workflow_contents) do
     download_then_run_re = ~r/\b(?:curl|wget)\b[^\n|;]*\|\s*(?:sh|bash)\b/
 
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      if Regex.match?(download_then_run_re, content) do
+      stripped = strip_comments(content)
+      if Regex.match?(download_then_run_re, stripped) do
         [%{
           type: :download_then_run,
           file: filename,
@@ -340,7 +394,72 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  @doc """
+  Detect codeql.yml whose language matrix lists a CodeQL source-scanning
+  language (`javascript-typescript`, `python`, `go`, etc.) when the repo
+  has no source files in any such language.
+
+  Caught 12 repos across the fleet at the time of writing — each one had
+  `language: javascript-typescript` on a Julia / Rust / Coq / Idris repo,
+  so the CodeQL `analyze` job exited "configuration error: no source
+  files" on every Dependabot PR and blocked the merge.
+
+  The `actions` language is always safe (scans workflow files which every
+  repo has). Only the source-scanning languages need the repo-side
+  guarantee.
+
+  `opts[:has_codeql_supported_language]` — same boolean threaded through
+  from `Hypatia.CLI.has_codeql_supported_language?/1`. When `false` and
+  codeql.yml lists a scanning language, this rule fires.
+  """
+  def check_codeql_language_matrix_mismatch(workflow_contents, opts \\ []) do
+    if Keyword.get(opts, :has_codeql_supported_language, true) do
+      []
+    else
+      # Languages CodeQL scans by reading source files in the repo (as
+      # opposed to `actions`, which scans workflow YAML).
+      scanning_langs = ~w(javascript-typescript javascript typescript python go java ruby csharp c-cpp swift kotlin)
+
+      Enum.flat_map(workflow_contents, fn {filename, content} ->
+        if codeql_workflow?(filename) do
+          Enum.flat_map(scanning_langs, fn lang ->
+            if Regex.match?(~r/language:\s*#{Regex.escape(lang)}(?:\s|$)/m, content) do
+              [%{
+                type: :codeql_language_matrix_mismatch,
+                file: filename,
+                detail:
+                  "codeql.yml lists `language: #{lang}` but the repo has no source files in any CodeQL-scannable language. The analyze job will exit 'no source files' on every run. Switch the matrix to `actions` (which scans workflow files — every repo has those).",
+                severity: :high,
+                action: :switch_codeql_matrix_to_actions
+              }]
+            else
+              []
+            end
+          end)
+        else
+          []
+        end
+      end)
+    end
+  end
+
+  defp codeql_workflow?(filename) do
+    base = Path.basename(filename)
+    base in ["codeql.yml", "codeql.yaml", "codeql-analysis.yml", "codeql-analysis.yaml"]
+  end
+
   # ─── Helpers ───────────────────────────────────────────────────────────
+
+  # Strip YAML / shell line comments from a workflow body before pattern
+  # matching. Used by the security-pattern checks (download-then-run,
+  # actions-expression-injection, unsafe-curl-payload) so a workflow that
+  # *describes* the bad pattern in a comment ("safer than curl | sh") is
+  # not itself flagged for it. Leaves shebangs and inline trailing-comments
+  # untouched — only full-line comments are removed, which is the most
+  # common false-positive case.
+  defp strip_comments(content) do
+    Regex.replace(~r/^[ \t]*#[^\n]*$/m, content, "")
+  end
 
   defp coverage_percentage(workflow_files) do
     present = Enum.count(@standard_workflows, &(&1 in workflow_files))

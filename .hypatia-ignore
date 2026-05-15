@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# .hypatia-ignore — scoped, documented exemptions for the Hypatia scanner.
+#
+# Format (one entry per line):
+#
+#     <rule_module>/<rule_type>:<path-fragment>
+#     <rule_module>/*:<path-fragment>          (any type in module)
+#     <path-fragment>                           (any rule, any module)
+#
+# Lines starting with `#` are comments. A path-fragment is a substring match
+# against the repo-relative file path — narrow your fragments to avoid
+# accidentally hiding adjacent findings.
+#
+# Built-in default exemptions are in lib/hypatia/scanner_suppression.ex; do
+# not duplicate them here. This file is for *repo-specific* exemptions that
+# carry a stated reason in the comment above each entry.
+#
+# Inline-allow alternative: for one or two sites, prefer an inline directive
+# at the call site:
+#
+#     # hypatia: allow security_errors/secret_detected -- test fixture
+#
+# This file is for exemptions that span a whole file or directory.
+
+# ─── Python bench helpers ───────────────────────────────────────────────
+#
+# Scoped exemption — RSR org policy bans Python except SaltStack. These two
+# scripts are bench-data helpers used only by .github/workflows/bench.yml;
+# they parse criterion output and update baseline JSON. Rust/Julia port is
+# tracked but not blocking. Until the port lands, suppress the
+# banned_language_file finding on these two specific paths so the gate
+# treats them as a known, documented carve-out rather than baseline noise.
+cicd_rules/banned_language_file:scripts/check-bench-regression.py
+cicd_rules/banned_language_file:scripts/update-bench-baselines.py

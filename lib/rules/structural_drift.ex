@@ -277,16 +277,21 @@ defmodule Hypatia.Rules.StructuralDrift do
   end
 
   # ─── SD008: Unsound formal verification patterns ───────────────────────
+  #
+  # Historically SD008 carried per-language patterns that were *also* picked
+  # up by `Hypatia.Rules.CodeSafety.patterns_for_language/1` — every Idris,
+  # Lean, Coq, Haskell, OCaml, Ada/SPARK pattern below was a duplicate of a
+  # code_safety entry, so a single intentional `believe_me` would emit one
+  # `code_safety/believe_me` finding AND one `structural_drift/SD008` finding
+  # for the same line, inflating the count and forcing both into baselines.
+  #
+  # SD008 now defers to code_safety for any pattern code_safety already
+  # covers. The list below holds only cross-language structural drift
+  # patterns *not* otherwise reachable via the per-language pattern sets.
+  # If you're adding a new per-language proof-bypass pattern, add it to
+  # `lib/rules/code_safety.ex` instead.
 
-  @unsound_patterns [
-    {~r/believe_me/, [".idr"], :critical, "Idris2 believe_me -- bypasses type checker"},
-    {~r/assert_total/, [".idr"], :critical, "Idris2 assert_total -- hides non-termination"},
-    {~r/\bsorry\b/, [".idr", ".lean"], :critical, "Incomplete proof (sorry) -- admits unproven goal"},
-    {~r/\bAdmitted\b/, [".v"], :critical, "Coq Admitted -- incomplete proof"},
-    {~r/unsafeCoerce/, [".hs"], :critical, "Haskell unsafeCoerce -- bypasses type system"},
-    {~r/Obj\.magic/, [".ml"], :critical, "OCaml Obj.magic -- bypasses type system"},
-    {~r/pragma\s+Suppress/, [".ads", ".adb"], :high, "Ada pragma Suppress -- disables runtime checks"}
-  ]
+  @unsound_patterns []
 
   @doc """
   SD008: Detect unsound formal verification patterns across all proof languages.

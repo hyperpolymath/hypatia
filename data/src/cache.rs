@@ -577,7 +577,7 @@ impl DragonflyCache {
         let total_keys: i64 = redis::cmd("DBSIZE")
             .query_async(&mut *conn)
             .await
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let rule_keys: Vec<String> = conn
             .keys(format!("{}:*", CachePrefix::Rule.as_str()))
@@ -602,12 +602,12 @@ impl DragonflyCache {
             .query_async(&mut *conn)
             .await
             .unwrap_or_default();
-        let memory_used = info
+        let memory_used: i64 = info
             .lines()
             .find(|l| l.starts_with("used_memory:"))
             .and_then(|l| l.split(':').nth(1))
             .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         Ok(CacheStats {
             total_keys,
