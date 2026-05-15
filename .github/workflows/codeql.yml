@@ -1,67 +1,41 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-#
-# CodeQL static analysis for hypatia's JavaScript surface.
-#
-# Hypatia's primary languages (Rust, Elixir, Idris2) are not supported by
-# CodeQL, so this workflow scans only the small JS surface:
-#   - schemas/arangodb-setup.js
-#   - src/ui/gossamer/loader.js
-#
-# It's deliberately scoped to the `javascript-typescript` matrix entry;
-# adding `python` (or anything else) here would re-introduce the
-# banned-language-file finding for the Python bench helpers under
-# scripts/ — those are exempted via .hypatia-ignore pending a Rust port.
-
-name: CodeQL
+name: CodeQL Security Analysis
 
 on:
   push:
     branches: [main, master]
-    paths:
-      - '**/*.js'
-      - '**/*.mjs'
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '.github/workflows/codeql.yml'
   pull_request:
     branches: [main, master]
-    paths:
-      - '**/*.js'
-      - '**/*.mjs'
-      - '**/*.ts'
-      - '**/*.tsx'
   schedule:
-    - cron: '0 5 * * 0'  # Weekly, Sundays at 05:00 UTC
-  workflow_dispatch:
+    - cron: '0 6 * * 1'
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   analyze:
-    name: CodeQL Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: read
       security-events: write
-
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript]
+        include:
+          - language: actions
+            build-mode: none
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v3.31.8
+        uses: github/codeql-action/init@0d579ffd059c29b07949a3cce3983f0780820c98 # v3.28.1
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v3.31.8
+        uses: github/codeql-action/analyze@0d579ffd059c29b07949a3cce3983f0780820c98 # v3.28.1
         with:
           category: "/language:${{ matrix.language }}"

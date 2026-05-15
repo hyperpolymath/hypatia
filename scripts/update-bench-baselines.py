@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: PMPL-1.0-or-later
+# hypatia:ignore cicd_rules/banned_language_file
+# Intentional exception to the org's no-Python policy: this script
+# parses criterion's bencher-format output and rewrites the JSON
+# baseline file. The criterion ecosystem (and most Rust bench tooling)
+# emits Python-friendly text; rewriting in shell or Rust is possible
+# but not yet a priority. Tracked in the .hypatia-exemptions.md table.
 """
 update-bench-baselines.py — regenerate
 .machine_readable/benchmarks/baselines.json from a criterion bencher-

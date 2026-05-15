@@ -37,12 +37,14 @@ jobs:
           otp-version: '28.3'
 
       - name: Clone Hypatia (or use checkout when scanning hypatia itself)
+        env:
+          REPO: ${{ github.repository }}
         run: |
           # When scanning hypatia from inside hypatia, point $HOME/hypatia
           # at the PR/branch checkout instead of cloning main — otherwise
           # CLI changes can never pass their own gate (the scanner binary
           # would always come from main and ignore new flags).
-          if [ "${{ github.repository }}" = "hyperpolymath/hypatia" ]; then
+          if [ "$REPO" = "hyperpolymath/hypatia" ]; then
             ln -sfn "${GITHUB_WORKSPACE}" "$HOME/hypatia"
           elif [ ! -d "$HOME/hypatia" ]; then
             git clone https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia"
@@ -64,8 +66,9 @@ jobs:
           # not set" line so the run is silent-warning-free. The token is
           # read-only by default and only used to query Dependabot alerts.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
-          echo "Scanning repository: ${{ github.repository }}"
+          echo "Scanning repository: $REPO"
 
           # Run scanner with --exit-zero so a findings-found exit-1 does
           # NOT short-circuit the rest of this step under `set -e`. The
@@ -122,13 +125,18 @@ jobs:
       - name: Submit findings to gitbot-fleet (Phase 2)
         if: steps.scan.outputs.findings_count > 0
         env:
+          # All GitHub context values surface as env vars so the run
+          # block never interpolates `${{ … }}` inline (closes the
+          # workflow_audit/unsafe_curl_payload + actions_expression_injection
+          # findings).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FLEET_PUSH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
           FLEET_DISPATCH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
+          FINDINGS_COUNT: ${{ steps.scan.outputs.findings_count }}
         run: |
-          echo "📤 Submitting ${{ steps.scan.outputs.findings_count }} findings to gitbot-fleet..."
+          echo "📤 Submitting $FINDINGS_COUNT findings to gitbot-fleet..."
 
           # Clone gitbot-fleet to temp directory
           FLEET_DIR="/tmp/gitbot-fleet-$$"
@@ -147,8 +155,11 @@ jobs:
 
       - name: Check for critical or high-severity issues
         if: steps.scan.outputs.critical > 0 || steps.scan.outputs.high > 0
+        env:
+          CRITICAL_COUNT: ${{ steps.scan.outputs.critical }}
+          HIGH_COUNT: ${{ steps.scan.outputs.high }}
         run: |
-          echo "Total critical/high: ${{ steps.scan.outputs.critical }} critical, ${{ steps.scan.outputs.high }} high"
+          echo "Total critical/high: $CRITICAL_COUNT critical, $HIGH_COUNT high"
 
           # Baseline-aware gate: pre-existing accepted findings live in
           # .hypatia-baseline.json (committed). New critical/high findings
@@ -156,24 +167,17 @@ jobs:
           # on (severity, rule_module, type, file) tuple with absolute
           # build paths normalised to repo-relative.
           if [ -f .hypatia-baseline.json ]; then
-            # Normalise + project the FINDING IDENTITY tuple from the current
-            # scan. Identity is (severity, rule_module, type, file) — `action`
-            # is remediation guidance that can legitimately drift between
-            # scanner versions (e.g. "flag" -> "create_branch") and is NOT
-            # part of what makes two findings the same.
+            # Normalise + project just the comparable keys from the current scan.
             jq '[ .[] | select(.severity == "critical" or .severity == "high")
                        | {severity, rule_module, type,
                           file: (.file | sub("^/home/runner/work/[^/]+/[^/]+/"; "")
-                                       | sub("^/github/workspace/"; "")) } ]' \
-               hypatia-findings.json > findings-current.json
+                                       | sub("^/github/workspace/"; "")),
+                          action} ]' hypatia-findings.json > findings-current.json
 
             # Subtract baseline. A current finding is "new" iff there's no
-            # baseline element with the same identity tuple. Baseline entries
-            # may include extra fields (e.g. `action`); strip them before the
-            # comparison so legacy baselines keep working.
+            # element in baseline equal to it (by-value).
             jq --slurpfile base .hypatia-baseline.json \
-               '($base[0] | map({severity, rule_module, type, file})) as $bk
-                | map(. as $f | select(($bk | any(. == $f)) | not))' \
+               '. as $cur | $cur | map(. as $f | select(($base[0] | any(. == $f)) | not))' \
                findings-current.json > findings-new.json
             new_count=$(jq 'length' findings-new.json)
 
@@ -182,7 +186,7 @@ jobs:
               jq -r '.[] | "  [\(.severity)] \(.rule_module)/\(.type) — \(.file)"' findings-new.json
               echo
               echo "If these are intentional, regenerate .hypatia-baseline.json:"
-              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
+              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file, action}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
               exit 1
             fi
             echo "All critical/high findings present in baseline — gate passes."
@@ -193,22 +197,29 @@ jobs:
           fi
 
       - name: Generate scan report
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          CRITICAL_COUNT: ${{ steps.scan.outputs.critical }}
+          HIGH_COUNT: ${{ steps.scan.outputs.high }}
+          MEDIUM_COUNT: ${{ steps.scan.outputs.medium }}
+          TOTAL_COUNT: ${{ steps.scan.outputs.findings_count }}
         run: |
           cat << EOF > hypatia-report.md
           # Hypatia Security Scan Report
 
-          **Repository:** ${{ github.repository }}
+          **Repository:** $REPO
           **Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          **Commit:** ${{ github.sha }}
+          **Commit:** $SHA
 
           ## Summary
 
           | Severity | Count |
           |----------|-------|
-          | Critical | ${{ steps.scan.outputs.critical }} |
-          | High     | ${{ steps.scan.outputs.high }} |
-          | Medium   | ${{ steps.scan.outputs.medium }} |
-          | **Total**| ${{ steps.scan.outputs.findings_count }} |
+          | Critical | $CRITICAL_COUNT |
+          | High     | $HIGH_COUNT |
+          | Medium   | $MEDIUM_COUNT |
+          | **Total**| $TOTAL_COUNT |
 
           ## Next Steps
 

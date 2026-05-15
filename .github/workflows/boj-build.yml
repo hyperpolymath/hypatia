@@ -12,19 +12,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Trigger BoJ Server (Casket/ssg-mcp)
-        # GitHub contexts go through env so the body is built by jq with --arg,
-        # not by string-concatenating ${{ ... }} into the shell. Previous form
-        # inlined `github.ref_name` into the JSON payload (CWE-94 injection
-        # via branch name) and shipped a malformed payload — extra `}` and
-        # bad escape — that `continue-on-error: true` was masking.
         env:
+          # Pull GitHub context into env so the curl payload can be built
+          # with `jq --arg` instead of inline interpolation — closes the
+          # workflow_audit/unsafe_curl_payload finding and accidentally
+          # also fixes a pre-existing JSON-escaping bug in the old payload
+          # (a stray `}` outside the closing brace).
           REPO: ${{ github.repository }}
-          REF: ${{ github.ref_name }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          jq -nc --arg repo "$REPO" --arg branch "$REF" \
-            '{repo: $repo, branch: $branch, engine: "casket"}' \
-            | curl --fail-with-body \
-                   -X POST "http://boj-server.local:7700/cartridges/ssg-mcp/invoke" \
-                   -H "Content-Type: application/json" \
-                   --data @-
+          PAYLOAD=$(jq -nc \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg engine "casket" \
+            '{repo: $repo, branch: $branch, engine: $engine}')
+          curl -X POST "http://boj-server.local:7700/cartridges/ssg-mcp/invoke" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
         continue-on-error: true

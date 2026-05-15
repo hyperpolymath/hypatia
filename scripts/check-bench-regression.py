@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: PMPL-1.0-or-later
+# hypatia:ignore cicd_rules/banned_language_file
+# Intentional exception to the org's no-Python policy: this script
+# parses criterion's bencher-format output and compares against the
+# committed baseline. Pairs with update-bench-baselines.py.
+# Tracked in the .hypatia-exemptions.md table.
 """
 check-bench-regression.py — compare a criterion bencher run against
 .machine_readable/benchmarks/baselines.json and fail if any benchmark
