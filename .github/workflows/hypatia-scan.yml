@@ -206,11 +206,15 @@ jobs:
           # build paths normalised to repo-relative.
           if [ -f .hypatia-baseline.json ]; then
             # Normalise + project just the comparable keys from the current scan.
+            # Identity is the 4-tuple (severity, rule_module, type, file) per
+            # the contract above. `action` is advisory metadata that varies
+            # by run/strategy and MUST NOT be part of finding identity —
+            # including it made every baseline entry fail to match (the
+            # baseline-aware gate was silently inert estate-wide).
             jq '[ .[] | select(.severity == "critical" or .severity == "high")
                        | {severity, rule_module, type,
                           file: (.file | sub("^/home/runner/work/[^/]+/[^/]+/"; "")
-                                       | sub("^/github/workspace/"; "")),
-                          action} ]' hypatia-findings.json > findings-current.json
+                                       | sub("^/github/workspace/"; "")) } ]' hypatia-findings.json > findings-current.json
 
             # Subtract baseline. A current finding is "new" iff there's no
             # element in baseline equal to it (by-value).
@@ -224,7 +228,7 @@ jobs:
               jq -r '.[] | "  [\(.severity)] \(.rule_module)/\(.type) — \(.file)"' findings-new.json
               echo
               echo "If these are intentional, regenerate .hypatia-baseline.json:"
-              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file, action}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
+              echo "  jq '[.[] | select(.severity == \"critical\" or .severity == \"high\") | {severity, rule_module, type, file}] | sort_by(.severity, .rule_module, .type, .file)' hypatia-findings.json > .hypatia-baseline.json"
               exit 1
             fi
             echo "All critical/high findings present in baseline — gate passes."
