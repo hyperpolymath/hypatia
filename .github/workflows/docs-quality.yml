@@ -30,7 +30,7 @@ jobs:
 
       - name: Install AsciiDoctor
         run: |
-          gem install asciidoctor --version ${{ env.ASCIIDOCTOR_VERSION }}
+          gem install asciidoctor
           gem install asciidoctor-diagram
           gem install asciidoctor-rouge
           gem install asciidoctor-pdf
