@@ -36,49 +36,59 @@ defmodule Hypatia.Rules.GitState do
 
         findings =
           if staged > 0 do
-            [%{
-              rule: "GS001",
-              file: ".",
-              severity: :medium,
-              reason: "#{staged} staged but uncommitted change(s) -- commit needed",
-              action: :commit,
-              detail: %{staged: staged}
-            } | findings]
+            [
+              %{
+                rule: "GS001",
+                file: ".",
+                severity: :medium,
+                reason: "#{staged} staged but uncommitted change(s) -- commit needed",
+                action: :commit,
+                detail: %{staged: staged}
+              }
+              | findings
+            ]
           else
             findings
           end
 
         findings =
           if unstaged > 0 do
-            [%{
-              rule: "GS001",
-              file: ".",
-              severity: :medium,
-              reason: "#{unstaged} unstaged modification(s) -- stage and commit needed",
-              action: :commit,
-              detail: %{unstaged: unstaged}
-            } | findings]
+            [
+              %{
+                rule: "GS001",
+                file: ".",
+                severity: :medium,
+                reason: "#{unstaged} unstaged modification(s) -- stage and commit needed",
+                action: :commit,
+                detail: %{unstaged: unstaged}
+              }
+              | findings
+            ]
           else
             findings
           end
 
         findings =
           if untracked > 0 do
-            [%{
-              rule: "GS001",
-              file: ".",
-              severity: :low,
-              reason: "#{untracked} untracked file(s) -- review and add or .gitignore",
-              action: :review,
-              detail: %{untracked: untracked}
-            } | findings]
+            [
+              %{
+                rule: "GS001",
+                file: ".",
+                severity: :low,
+                reason: "#{untracked} untracked file(s) -- review and add or .gitignore",
+                action: :review,
+                detail: %{untracked: untracked}
+              }
+              | findings
+            ]
           else
             findings
           end
 
         findings
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -98,19 +108,23 @@ defmodule Hypatia.Rules.GitState do
     else
       # Check for upstream tracking
       case System.cmd("git", ["rev-list", "--count", "@{u}..HEAD"],
-                      cd: repo_path, stderr_to_stdout: true) do
+             cd: repo_path,
+             stderr_to_stdout: true
+           ) do
         {count_str, 0} ->
           count = count_str |> String.trim() |> String.to_integer()
 
           if count > 0 do
-            [%{
-              rule: "GS002",
-              file: ".",
-              severity: :high,
-              reason: "#{count} unpushed commit(s) on #{branch} -- push to remote",
-              action: :push,
-              detail: %{branch: branch, unpushed: count}
-            }]
+            [
+              %{
+                rule: "GS002",
+                file: ".",
+                severity: :high,
+                reason: "#{count} unpushed commit(s) on #{branch} -- push to remote",
+                action: :push,
+                detail: %{branch: branch, unpushed: count}
+              }
+            ]
           else
             []
           end
@@ -118,19 +132,22 @@ defmodule Hypatia.Rules.GitState do
         # No upstream tracking branch
         {output, _} when output != "" ->
           if String.contains?(output, "no upstream") do
-            [%{
-              rule: "GS002",
-              file: ".",
-              severity: :high,
-              reason: "Branch #{branch} has no upstream tracking -- push with -u",
-              action: :push_set_upstream,
-              detail: %{branch: branch}
-            }]
+            [
+              %{
+                rule: "GS002",
+                file: ".",
+                severity: :high,
+                reason: "Branch #{branch} has no upstream tracking -- push with -u",
+                action: :push_set_upstream,
+                detail: %{branch: branch}
+              }
+            ]
           else
             []
           end
 
-        _ -> []
+        _ ->
+          []
       end
     end
   end
@@ -144,7 +161,9 @@ defmodule Hypatia.Rules.GitState do
   """
   def gs003_branch_divergence(repo_path) do
     case System.cmd("git", ["rev-list", "--left-right", "--count", "HEAD...@{u}"],
-                    cd: repo_path, stderr_to_stdout: true) do
+           cd: repo_path,
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         parts = output |> String.trim() |> String.split(~r/\s+/)
 
@@ -156,22 +175,27 @@ defmodule Hypatia.Rules.GitState do
             if ahead > 0 and behind > 0 do
               branch = get_current_branch(repo_path)
 
-              [%{
-                rule: "GS003",
-                file: ".",
-                severity: :high,
-                reason: "Branch #{branch} diverged: #{ahead} ahead, #{behind} behind upstream -- rebase or merge needed",
-                action: :rebase_or_merge,
-                detail: %{branch: branch, ahead: ahead, behind: behind}
-              }]
+              [
+                %{
+                  rule: "GS003",
+                  file: ".",
+                  severity: :high,
+                  reason:
+                    "Branch #{branch} diverged: #{ahead} ahead, #{behind} behind upstream -- rebase or merge needed",
+                  action: :rebase_or_merge,
+                  detail: %{branch: branch, ahead: ahead, behind: behind}
+                }
+              ]
             else
               []
             end
 
-          _ -> []
+          _ ->
+            []
         end
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -184,7 +208,9 @@ defmodule Hypatia.Rules.GitState do
   """
   def gs004_stale_remote_refs(repo_path) do
     case System.cmd("git", ["remote", "prune", "origin", "--dry-run"],
-                    cd: repo_path, stderr_to_stdout: true) do
+           cd: repo_path,
+           stderr_to_stdout: true
+         ) do
       {output, 0} when output != "" ->
         stale_refs =
           output
@@ -192,19 +218,23 @@ defmodule Hypatia.Rules.GitState do
           |> Enum.filter(&String.contains?(&1, "[would prune]"))
 
         if stale_refs != [] do
-          [%{
-            rule: "GS004",
-            file: ".",
-            severity: :low,
-            reason: "#{length(stale_refs)} stale remote tracking ref(s) -- run git remote prune origin",
-            action: :prune_remote,
-            detail: %{stale_count: length(stale_refs)}
-          }]
+          [
+            %{
+              rule: "GS004",
+              file: ".",
+              severity: :low,
+              reason:
+                "#{length(stale_refs)} stale remote tracking ref(s) -- run git remote prune origin",
+              action: :prune_remote,
+              detail: %{stale_count: length(stale_refs)}
+            }
+          ]
         else
           []
         end
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -214,20 +244,61 @@ defmodule Hypatia.Rules.GitState do
   GS005: Detect detached HEAD state.
   Severity: high (commits will be lost without branch).
   Action: create branch or checkout existing branch.
+
+  CI exemption: GitHub Actions (and CI generally) checks out a *detached
+  HEAD* by design — `refs/pull/N/merge` for PR events, or a pinned SHA.
+  The runner is ephemeral and makes no working-tree commits, so the
+  rule's data-loss rationale does not apply. Without this guard GS005
+  fires `high` on `.` for *every PR in every consuming repo regardless
+  of content*, hard-failing the security gate. Detached HEAD is only a
+  real risk on a developer's persistent working copy.
   """
-  def gs005_detached_head(repo_path) do
-    case System.cmd("git", ["symbolic-ref", "HEAD"],
-                    cd: repo_path, stderr_to_stdout: true) do
-      {_, 0} -> []  # Not detached
+  def gs005_detached_head(repo_path),
+    do: gs005_detached_head(repo_path, ci_environment?())
+
+  @doc """
+  GS005 with an explicit CI flag — a testable seam so the detection
+  logic can be exercised deterministically without mutating process
+  environment in `async: true` tests. When `ci?` is true the check is
+  skipped (see the CI-exemption rationale above).
+  """
+  def gs005_detached_head(_repo_path, true), do: []
+
+  def gs005_detached_head(repo_path, false) do
+    case System.cmd("git", ["symbolic-ref", "HEAD"], cd: repo_path, stderr_to_stdout: true) do
+      # Not detached
+      {_, 0} ->
+        []
+
       _ ->
-        [%{
-          rule: "GS005",
-          file: ".",
-          severity: :high,
-          reason: "HEAD is detached -- commits will be lost. Create a branch or checkout an existing one.",
-          action: :create_branch
-        }]
+        [
+          %{
+            rule: "GS005",
+            file: ".",
+            severity: :high,
+            reason:
+              "HEAD is detached -- commits will be lost. Create a branch or checkout an existing one.",
+            action: :create_branch
+          }
+        ]
     end
+  end
+
+  # True when running inside a CI runner, where a detached HEAD is the
+  # expected, harmless checkout state. Honours the de-facto `CI` env var
+  # and the GitHub Actions / GitLab / generic CI markers.
+  defp ci_environment? do
+    Enum.any?(
+      ["CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILD_ID", "RUNNER_OS"],
+      fn var ->
+        case System.get_env(var) do
+          nil -> false
+          "" -> false
+          "false" -> false
+          _ -> true
+        end
+      end
+    )
   end
 
   # ─── GS006: Not on main/master ─────────────────────────────────────────
@@ -241,14 +312,16 @@ defmodule Hypatia.Rules.GitState do
     branch = get_current_branch(repo_path)
 
     if branch != nil and branch not in ["main", "master"] do
-      [%{
-        rule: "GS006",
-        file: ".",
-        severity: :low,
-        reason: "On branch '#{branch}' instead of main/master -- review if merge is needed",
-        action: :review,
-        detail: %{branch: branch}
-      }]
+      [
+        %{
+          rule: "GS006",
+          file: ".",
+          severity: :low,
+          reason: "On branch '#{branch}' instead of main/master -- review if merge is needed",
+          action: :review,
+          detail: %{branch: branch}
+        }
+      ]
     else
       []
     end
@@ -272,25 +345,29 @@ defmodule Hypatia.Rules.GitState do
           |> Enum.map(&String.trim/1)
           |> Enum.reject(fn branch ->
             branch == "origin/main" or
-            branch == "origin/master" or
-            branch == "origin/HEAD" or
-            String.contains?(branch, "->")
+              branch == "origin/master" or
+              branch == "origin/HEAD" or
+              String.contains?(branch, "->")
           end)
 
         if branches != [] do
-          [%{
-            rule: "GS007",
-            file: ".",
-            severity: :medium,
-            reason: "Repository has #{length(branches)} non-main remote branch(es). Policy: single main branch only.",
-            action: :delete_remote_branches,
-            detail: %{stale_branches: branches, count: length(branches)}
-          }]
+          [
+            %{
+              rule: "GS007",
+              file: ".",
+              severity: :medium,
+              reason:
+                "Repository has #{length(branches)} non-main remote branch(es). Policy: single main branch only.",
+              action: :delete_remote_branches,
+              detail: %{stale_branches: branches, count: length(branches)}
+            }
+          ]
         else
           []
         end
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -307,12 +384,12 @@ defmodule Hypatia.Rules.GitState do
     else
       findings =
         gs001_uncommitted_changes(repo_path) ++
-        gs002_unpushed_commits(repo_path) ++
-        gs003_branch_divergence(repo_path) ++
-        gs004_stale_remote_refs(repo_path) ++
-        gs005_detached_head(repo_path) ++
-        gs006_not_on_default_branch(repo_path) ++
-        gs007_stale_remote_branches(repo_path)
+          gs002_unpushed_commits(repo_path) ++
+          gs003_branch_divergence(repo_path) ++
+          gs004_stale_remote_refs(repo_path) ++
+          gs005_detached_head(repo_path) ++
+          gs006_not_on_default_branch(repo_path) ++
+          gs007_stale_remote_branches(repo_path)
 
       %{
         findings: findings,
@@ -327,12 +404,15 @@ defmodule Hypatia.Rules.GitState do
 
   defp get_current_branch(repo_path) do
     case System.cmd("git", ["rev-parse", "--abbrev-ref", "HEAD"],
-                    cd: repo_path, stderr_to_stdout: true) do
+           cd: repo_path,
+           stderr_to_stdout: true
+         ) do
       {branch, 0} ->
         trimmed = String.trim(branch)
         if trimmed == "HEAD", do: nil, else: trimmed
 
-      _ -> nil
+      _ ->
+        nil
     end
   end
 
@@ -345,26 +425,33 @@ defmodule Hypatia.Rules.GitState do
 
   defp dispatch_recommendations(findings) do
     Enum.map(findings, fn finding ->
-      bot = case finding.action do
-        :push -> :sustainabot
-        :push_set_upstream -> :sustainabot
-        :commit -> :sustainabot
-        :rebase_or_merge -> :seambot
-        :prune_remote -> :rhodibot
-        :create_branch -> :seambot
-        _ -> :sustainabot
-      end
+      bot =
+        case finding.action do
+          :push -> :sustainabot
+          :push_set_upstream -> :sustainabot
+          :commit -> :sustainabot
+          :rebase_or_merge -> :seambot
+          :prune_remote -> :rhodibot
+          :create_branch -> :seambot
+          _ -> :sustainabot
+        end
 
-      confidence = case finding.severity do
-        :critical -> 0.98
-        :high -> 0.90
-        :medium -> 0.85
-        :low -> 0.70
-        _ -> 0.50
-      end
+      confidence =
+        case finding.severity do
+          :critical -> 0.98
+          :high -> 0.90
+          :medium -> 0.85
+          :low -> 0.70
+          _ -> 0.50
+        end
 
-      %{bot: bot, confidence: confidence, rule: finding.rule,
-        action: finding.action, reason: finding.reason}
+      %{
+        bot: bot,
+        confidence: confidence,
+        rule: finding.rule,
+        action: finding.action,
+        reason: finding.reason
+      }
     end)
   end
 end

@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+= Sweep: hypatia-scan.yml Phase-2 re-sync (Layer-1 of hypatia#252)
+:toc: left
+
+== Why
+
+The estate-wide *"Hypatia Neurosymbolic Analysis"* check failed identically
+regardless of content. Two root causes, fixed at source in
+`hyperpolymath/hypatia#252`:
+
+* *Layer 1* — the "Submit findings to gitbot-fleet (Phase 2)" step in
+  `.github/workflows/hypatia-scan.yml` hard-failed (exit 127) for any commit
+  with >=1 finding, because `gitbot-fleet/scripts/submit-finding.sh` no longer
+  exists on gitbot-fleet's default branch.
+* *Layer 2* — scanner rule GS005 flagged CI's by-design detached HEAD as
+  `high`, tripping the real gate.
+
+*Layer 2 needs no propagation* — it ships in the scanner binary, which every
+consuming repo clones from hypatia `main` at scan time.
+
+*Layer 1 does* — ~85 consuming repos carry their own copy of the workflow.
+This sweep replaces only the Phase-2 step with the canonical fixed block.
+
+== Files
+
+[cols="1,3"]
+|===
+| `phase2-canonical.fragment.yml` | Canonical fixed Phase-2 step block (source of truth). Refresh from hypatia `main` after #252 merges: `sed -n '125,193p' .github/workflows/hypatia-scan.yml`.
+| `patch_phase2.sh`               | Idempotent, surgical block replacer (pure shell — the estate bans Python). Exit 0 patched / 2 already-patched / 3 not-applicable / 1 error.
+| `resync-hypatia-scan-phase2.sh` | Driver: enumerate consumers, clone, patch, validate YAML, (dry-run) diff or (apply) branch+commit+push+PR.
+|===
+
+== Run
+
+[source,sh]
+----
+# DRY RUN over every consumer (clone, patch, diff, discard — no writes):
+./resync-hypatia-scan-phase2.sh
+
+# DRY RUN over a chosen subset:
+./resync-hypatia-scan-phase2.sh --repos boj-server,volumod
+
+# APPLY — branch fix/hypatia-scan-phase2-resync, commit, push, open PRs:
+./resync-hypatia-scan-phase2.sh --apply
+----
+
+== Guarantees
+
+* *Surgical*: only the Phase-2 step is replaced; every other step (including
+  each repo's own critical/high gate) is preserved verbatim.
+* *Idempotent*: a repo whose Phase-2 block already has `continue-on-error:
+  true` is skipped.
+* *Verified*: patching the pre-#252 canonical workflow yields a file
+  byte-identical to the post-#252 canonical workflow.
+* *Safe*: post-patch YAML is parsed before any commit; invalid → repo
+  untouched, reported as error.
+
+== Exclusions (estate policy — review before `--apply`)
+
+`hypatia` (already fixed via #252) and ReScript-ecosystem / ReScript-language
+repos and rescript adapters are excluded from bulk sweeps. Default
+`EXCLUDE` list in the driver: `hypatia`, `stapeln`, `rescript-dom-mounter`,
+`idaptik-rescript13-staging`, `poly-observability-mcp`. Extend as needed.
+
+== PR conventions
+
+Squash-merge target. PRs use `Refs hyperpolymath/hypatia#252` (not `Closes`).
+Push is `git push origin HEAD:<branch>` (no `-u` on token-bearing URLs).
+Commits carry the `Co-Authored-By` trailer; merges are left to the maintainer.
