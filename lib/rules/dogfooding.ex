@@ -211,11 +211,11 @@ defmodule Hypatia.Rules.Dogfooding do
             [
               %{
                 rule: "HYP-DOG-005",
-                severity: "medium",
+                severity: "low",
                 file: filepath,
                 line: line,
                 description:
-                  "Uses 'docker' CLI -- policy requires 'podman'. Replace docker commands with podman equivalents."
+                  "Uses 'docker' CLI -- 'podman' is highly preferred (Docker permitted). Prefer podman equivalents where practical."
               }
             ]
 
@@ -230,11 +230,11 @@ defmodule Hypatia.Rules.Dogfooding do
         [
           %{
             rule: "HYP-DOG-005",
-            severity: "medium",
+            severity: "low",
             file: Path.join(repo_path, "Dockerfile"),
             line: nil,
             description:
-              "File named 'Dockerfile' -- policy requires 'Containerfile'. Rename the file."
+              "File named 'Dockerfile' -- 'Containerfile' is highly preferred (Docker permitted). Rename unless a specific tool requires the Dockerfile name."
           }
         ]
       else

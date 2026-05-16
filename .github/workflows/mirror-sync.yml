@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# SPDX-FileCopyrightText: 2025 Jonathan D.A. Jewell
-name: Mirror to Git Forges
+# Consolidated workflow (behaviour-preserving merge).
+# Merged from: boj-build.yml, instant-sync.yml, mirror.yml
+name: Mirror & Sync
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+    - main
+    - master
+  workflow_dispatch: null
+  release:
+    types:
+    - published
 
 permissions: read-all
 
@@ -142,3 +148,48 @@ jobs:
           echo "${{ secrets.RADICLE_KEY }}" > ~/.radicle/keys/radicle
           chmod 600 ~/.radicle/keys/radicle
           rad sync --announce || echo "Radicle sync attempted"
+
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Propagation
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v3
+        with:
+          token: ${{ secrets.FARM_DISPATCH_TOKEN }}
+          repository: hyperpolymath/.git-private-farm
+          event-type: propagate
+          client-payload: |-
+            {
+              "repo": "${{ github.event.repository.name }}",
+              "ref": "${{ github.ref }}",
+              "sha": "${{ github.sha }}",
+              "forges": ""
+            }
+
+      - name: Confirm
+        run: echo "::notice::Propagation triggered for ${{ github.event.repository.name }}"
+
+  trigger-boj:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Trigger BoJ Server (Casket/ssg-mcp)
+        env:
+          # Pull GitHub context into env so the curl payload can be built
+          # with `jq --arg` instead of inline interpolation — closes the
+          # workflow_audit/unsafe_curl_payload finding and accidentally
+          # also fixes a pre-existing JSON-escaping bug in the old payload
+          # (a stray `}` outside the closing brace).
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          PAYLOAD=$(jq -nc \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg engine "casket" \
+            '{repo: $repo, branch: $branch, engine: $engine}')
+          curl -X POST "http://boj-server.local:7700/cartridges/ssg-mcp/invoke" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+        continue-on-error: true
