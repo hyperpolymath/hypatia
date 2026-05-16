@@ -119,21 +119,11 @@ jobs:
           cargo doc --workspace --no-deps --document-private-items
           cp -r target/doc/* _site/api/
 
-      - name: Generate Haskell API documentation
-        working-directory: registry
-        run: |
-          # Install GHC and Cabal
-          sudo apt-get update
-          sudo apt-get install -y ghc cabal-install
-
-          cabal update
-          cabal haddock --haddock-html --haddock-hyperlink-source || true
-
-          # Copy Haddock output if it exists
-          if [ -d "dist-newstyle/build/*/ghc-*/cicd-hyper-a-*/doc/html/cicd-hyper-a" ]; then
-            mkdir -p ../_site/api/haskell
-            cp -r dist-newstyle/build/*/ghc-*/cicd-hyper-a-*/doc/html/cicd-hyper-a/* ../_site/api/haskell/
-          fi
+      # NOTE: a "Generate Haskell API documentation" step (working-directory:
+      # registry, ghc/cabal/haddock for cicd-hyper-a) was removed here — pure
+      # template drift from a Haskell repo. hypatia is Elixir/Rust with no
+      # `registry/` dir, so the step exited "No such file or directory" on
+      # every run. Resolve-at-source + cut-the-irrelevant. Refs #260.
 
       - name: Create navigation index
         run: |
