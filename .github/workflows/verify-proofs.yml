@@ -1,0 +1,235 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Consolidated workflow (behaviour-preserving merge).
+# Merged from: verify-idris.yml, verify-lean.yml, verify-tlaplus.yml
+name: Verify Proofs (Idris / Lean / TLA+)
+
+on:
+  push:
+    paths:
+    - .github/workflows/verify-idris.yml
+    - .github/workflows/verify-lean.yml
+    - .github/workflows/verify-tlaplus.yml
+    - Justfile
+    - pack.toml
+    - verification/proofs/idris2/**
+    - verification/proofs/lean4/**
+    - verification/proofs/tlaplus/**
+    branches:
+    - main
+    - master
+  pull_request:
+    paths:
+    - .github/workflows/verify-idris.yml
+    - .github/workflows/verify-lean.yml
+    - .github/workflows/verify-tlaplus.yml
+    - Justfile
+    - pack.toml
+    - verification/proofs/idris2/**
+    - verification/proofs/lean4/**
+    - verification/proofs/tlaplus/**
+    branches:
+    - main
+    - master
+  schedule:
+  - cron: 0 5 * * 1
+  - cron: 30 4 * * 1
+  - cron: 0 4 * * 1
+  workflow_dispatch: null
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  type-check:
+    name: idris2 --check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    env:
+      IDRIS2_VERSION: v0.7.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Chez Scheme
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y chezscheme
+
+      - name: Cache Idris 2 install
+        id: cache-idris
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            /usr/local/bin/idris2
+            /usr/local/lib/idris2
+            ~/.idris2
+          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}
+
+      - name: Build Idris 2 from source
+        if: steps.cache-idris.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "${IDRIS2_VERSION}" \
+            https://github.com/idris-lang/Idris2 /tmp/idris2
+          cd /tmp/idris2
+          make bootstrap SCHEME=chezscheme
+          sudo make install PREFIX=/usr/local
+          idris2 --version
+
+      - name: Verify Idris is on PATH
+        run: idris2 --version
+
+      - name: Type-check every .idr proof file
+        working-directory: verification/proofs/idris2
+        run: |
+          set -euo pipefail
+          failed=0
+          for f in *.idr; do
+            echo "── $f ─────────────────────────────────────────────"
+            if idris2 --check "$f"; then
+              echo "✓ $f"
+            else
+              echo "✗ $f"
+              failed=$((failed + 1))
+            fi
+          done
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::$failed Idris proof file(s) failed to type-check"
+            exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Idris 2 proof verification"
+            echo ""
+            echo "- Toolchain: Idris 2 \`${IDRIS2_VERSION}\` (from source, Chez Scheme backend)"
+            echo "- Proof files checked:"
+            for f in verification/proofs/idris2/*.idr; do
+              echo "  - \`$(basename "$f")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lake-build:
+    name: lake build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    env:
+      ELAN_VERSION: v4.0.0
+      LEAN_TOOLCHAIN: leanprover/lean4:stable
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Cache Lean toolchain and build
+        id: cache-lean
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.elan
+            verification/proofs/lean4/.lake
+          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-${{ hashFiles('verification/proofs/lean4/lakefile.lean', 'verification/proofs/lean4/*.lean') }}
+          restore-keys: |
+            lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-
+
+      - name: Install elan + Lean 4
+        if: steps.cache-lean.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -fL -o /tmp/elan-init.sh "https://raw.githubusercontent.com/leanprover/elan/${ELAN_VERSION}/elan-init.sh"
+          sh /tmp/elan-init.sh -y --default-toolchain "${LEAN_TOOLCHAIN}" --no-modify-path
+
+      - name: Put elan on PATH
+        run: echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: lake build
+        working-directory: verification/proofs/lean4
+        run: |
+          set -euo pipefail
+          lean --version
+          lake --version
+          lake build
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Lean proof verification"
+            echo ""
+            echo "- Toolchain: \`${LEAN_TOOLCHAIN}\` via elan \`${ELAN_VERSION}\`"
+            echo "- Proof files:"
+            for f in verification/proofs/lean4/*.lean; do
+              [ "$(basename "$f")" = "lakefile.lean" ] && continue
+              echo "  - \`$(basename "$f")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  tlc:
+    name: TLC model-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Eclipse Temurin 21 JRE
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache tla2tools.jar
+        id: cache-tla
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/tla2tools.jar
+          key: tla2tools-v1.8.0
+
+      - name: Fetch tla2tools.jar
+        if: steps.cache-tla.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.local/share
+          curl -sSL -o ~/.local/share/tla2tools.jar \
+            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+          ls -la ~/.local/share/tla2tools.jar
+
+      - name: Model-check KinGate (H8)
+        working-directory: verification/proofs/tlaplus
+        run: |
+          java -XX:+UseParallelGC \
+            -cp "$HOME/.local/share/tla2tools.jar" tlc2.TLC \
+            -workers auto -config KinGate.cfg KinGate.tla \
+            | tee tlc.log
+          # Fail if TLC printed an error or didn't declare completion.
+          if grep -q "Error:" tlc.log; then
+            echo "::error::TLC found an invariant / property violation"
+            exit 1
+          fi
+          if ! grep -q "Model checking completed. No error has been found." tlc.log; then
+            echo "::error::TLC did not report clean completion"
+            exit 1
+          fi
+
+      - name: Upload TLC log on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tlc-log
+          path: verification/proofs/tlaplus/tlc.log
+          retention-days: 14

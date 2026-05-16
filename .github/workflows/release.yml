@@ -1,38 +1,15 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# Release workflow for Hypatia
-# Website: https://hypatia.reposystem.dev
-# Builds binaries, Docker images, and publishes releases
-
-name: Release
+# Consolidated workflow (behaviour-preserving merge).
+# Merged from: container.yml, release.yml
+name: Release & Container
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-*'
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run (do not publish)'
-        type: boolean
-        default: false
-      version:
-        description: 'Version to release (e.g., 0.1.0)'
-        type: string
-        required: false
+  push: null
+  workflow_dispatch: null
 
-permissions:
-  contents: read
-
-env:
-  CARGO_TERM_COLOR: always
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+permissions: read-all
 
 jobs:
-  # ============================================================================
-  # Prepare Release
-  # ============================================================================
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
@@ -65,6 +42,7 @@ jobs:
   # ============================================================================
   # Build Rust Binaries
   # ============================================================================
+
   build-rust:
     name: Build Rust - ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -171,6 +149,7 @@ jobs:
   # ============================================================================
   # Build Haskell Binary
   # ============================================================================
+
   build-haskell:
     name: Build Haskell Registry
     runs-on: ubuntu-latest
@@ -225,6 +204,7 @@ jobs:
   # ============================================================================
   # Build Docker Images
   # ============================================================================
+
   build-docker:
     name: Build Container Images
     runs-on: ubuntu-latest
@@ -296,6 +276,7 @@ jobs:
   # ============================================================================
   # Create GitHub Release
   # ============================================================================
+
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -375,6 +356,7 @@ jobs:
   # ============================================================================
   # Publish Haskell Package
   # ============================================================================
+
   publish-hackage:
     name: Publish to Hackage
     runs-on: ubuntu-latest
@@ -405,3 +387,64 @@ jobs:
           HACKAGE_TOKEN: ${{ secrets.HACKAGE_TOKEN }}
           HACKAGE_USERNAME: ${{ secrets.HACKAGE_USERNAME }}
           HACKAGE_PASSWORD: ${{ secrets.HACKAGE_TOKEN }}
+
+  build-and-push:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - name: cli
+            dockerfile: deploy/Containerfile
+          - name: adapter
+            dockerfile: deploy/Containerfile.adapter
+          - name: engine
+            dockerfile: deploy/Containerfile.engine
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+
+  # NOTE: Haskell registry container removed — source directory deleted in f2fe2df
+  # The hypatia-registry package on ghcr.io is now archived
