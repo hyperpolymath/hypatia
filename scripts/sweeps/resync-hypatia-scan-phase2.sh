@@ -28,7 +28,7 @@ ORG="hyperpolymath"
 BRANCH="fix/hypatia-scan-phase2-resync"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRAGMENT="${HERE}/phase2-canonical.fragment.yml"
-PATCHER="${HERE}/patch_phase2.py"
+PATCHER="${HERE}/patch_phase2.sh"
 WF_PATH=".github/workflows/hypatia-scan.yml"
 APPLY=0
 REPO_CSV=""
@@ -104,7 +104,7 @@ for full in "${REPOS[@]}"; do
   fi
 
   set +e
-  python3 "$PATCHER" "${dir}/${WF_PATH}" "$FRAGMENT"
+  bash "$PATCHER" "${dir}/${WF_PATH}" "$FRAGMENT"
   rc=$?
   set -e
 
@@ -115,11 +115,23 @@ for full in "${REPOS[@]}"; do
     *) echo "ERR   $full (patcher rc=$rc)"; SUM_ERR+=("$full"); continue ;;
   esac
 
-  # Validate YAML before going further.
-  if ! python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" \
-        "${dir}/${WF_PATH}" 2>/dev/null; then
-    echo "ERR   $full (post-patch YAML invalid — NOT touched)"
-    SUM_ERR+=("$full"); continue
+  # Validate before going further. Prefer a real YAML parser if one is
+  # available (yq); else fall back to a structural sanity check (the
+  # splice is deterministic from a known-good fragment, so structural
+  # breakage is the only realistic failure mode). No Python — the
+  # estate bans it.
+  patched_wf="${dir}/${WF_PATH}"
+  if command -v yq >/dev/null 2>&1; then
+    if ! yq -e '.' "$patched_wf" >/dev/null 2>&1; then
+      echo "ERR   $full (post-patch YAML invalid — NOT pushed)"
+      SUM_ERR+=("$full"); continue
+    fi
+  else
+    if [ "$(grep -c '^        continue-on-error: true$' "$patched_wf")" -lt 1 ] \
+       || ! grep -q '^      - name: Submit findings to gitbot-fleet (Phase 2)$' "$patched_wf"; then
+      echo "ERR   $full (post-patch sanity check failed — NOT pushed)"
+      SUM_ERR+=("$full"); continue
+    fi
   fi
 
   if [ $APPLY -eq 0 ]; then

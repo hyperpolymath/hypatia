@@ -28,7 +28,7 @@ This sweep replaces only the Phase-2 step with the canonical fixed block.
 [cols="1,3"]
 |===
 | `phase2-canonical.fragment.yml` | Canonical fixed Phase-2 step block (source of truth). Refresh from hypatia `main` after #252 merges: `sed -n '125,193p' .github/workflows/hypatia-scan.yml`.
-| `patch_phase2.py`               | Idempotent, surgical block replacer. Exit 0 patched / 2 already-patched / 3 not-applicable / 1 error.
+| `patch_phase2.sh`               | Idempotent, surgical block replacer (pure shell — the estate bans Python). Exit 0 patched / 2 already-patched / 3 not-applicable / 1 error.
 | `resync-hypatia-scan-phase2.sh` | Driver: enumerate consumers, clone, patch, validate YAML, (dry-run) diff or (apply) branch+commit+push+PR.
 |===
 
