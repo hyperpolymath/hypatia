@@ -81,11 +81,15 @@ defmodule Hypatia.Rules.RootHygiene do
       action: :move},
     %{pattern: "LANGUAGES.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
       action: :move},
-    %{pattern: "Dockerfile", reason: "Use Containerfile (Podman, not Docker)", severity: :high,
+    # Docker is permitted estate-wide; Podman/Containerfile is HIGHLY PREFERRED
+    # but not mandatory. These are low-severity advisories (do not fail the
+    # critical/high gate), nudging Containerfile naming unless a specific tool
+    # genuinely needs the Docker-* name.
+    %{pattern: "Dockerfile", reason: "Containerfile preferred over Dockerfile (Podman highly preferred; Docker permitted) -- rename unless a tool requires the Dockerfile name", severity: :low,
       action: :rename},
-    %{pattern: "docker-compose.yml", reason: "Use podman-compose or compose.yml", severity: :high,
+    %{pattern: "docker-compose.yml", reason: "compose.yml / podman-compose highly preferred (Docker permitted)", severity: :low,
       action: :rename},
-    %{pattern: "docker-compose.yaml", reason: "Use podman-compose or compose.yml", severity: :high,
+    %{pattern: "docker-compose.yaml", reason: "compose.yml / podman-compose highly preferred (Docker permitted)", severity: :low,
       action: :rename},
     %{pattern: "Makefile", reason: "Use Justfile", severity: :medium,
       action: :replace},
