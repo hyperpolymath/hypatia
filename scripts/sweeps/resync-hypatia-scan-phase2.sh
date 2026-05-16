@@ -143,7 +143,7 @@ for full in "${REPOS[@]}"; do
   git -C "$dir" checkout -q -b "$BRANCH"
   git -C "$dir" add "$WF_PATH"
   git -C "$dir" -c commit.gpgsign=false -c user.name="Jonathan D.A. Jewell" \
-      -c user.email="jonathan.jewell@gmail.com" commit -q -F - <<'MSG'
+      -c user.email="6759885+hyperpolymath@users.noreply.github.com" commit -q -F - <<'MSG'
 fix(ci): Phase-2 fleet submission must not fail the security gate
 
 Layer-1 propagation of hyperpolymath/hypatia#252. This repo's own copy
