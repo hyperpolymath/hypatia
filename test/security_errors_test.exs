@@ -62,4 +62,36 @@ defmodule Hypatia.Rules.SecurityErrorsTest do
       assert 5 = SecurityErrors.severity_value(:unknown)
     end
   end
+
+  describe "SHA-pin exemptions (hypatia#262)" do
+    test "slsa-github-generator is pin-exempt in tag form" do
+      assert SecurityErrors.pin_exempt?("slsa-framework/slsa-github-generator@v2.1.0")
+    end
+
+    test "slsa generator reusable-workflow path form is also exempt" do
+      ref =
+        "slsa-framework/slsa-github-generator/.github/workflows/" <>
+          "generator_generic_slsa3.yml@v2.1.0"
+
+      assert SecurityErrors.pin_exempt?(ref)
+      assert SecurityErrors.pin_exemption_reason(ref) =~ "provenance"
+    end
+
+    test "pin_action returns :exempt (never a SHA fix) for exempt actions" do
+      assert {:exempt, reason} =
+               SecurityErrors.pin_action("slsa-framework/slsa-github-generator@v2.1.0")
+
+      assert reason =~ "semver tag"
+    end
+
+    test "non-exempt actions still pin normally" do
+      assert {:ok, pinned} = SecurityErrors.pin_action("actions/checkout@v4")
+      assert pinned =~ "actions/checkout@"
+    end
+
+    test "the harmful slsa SHA mapping was removed from @sha_pins" do
+      refute Map.has_key?(SecurityErrors.sha_pins(),
+               "slsa-framework/slsa-github-generator@v2.1.0")
+    end
+  end
 end

@@ -355,27 +355,89 @@ defmodule Hypatia.ScorecardIngestor do
   defp check_sast(repo_path, repo_name) do
     workflows_dir = Path.join([repo_path, ".github", "workflows"])
 
-    has_sast =
+    files =
       case File.ls(workflows_dir) do
-        {:ok, files} ->
-          Enum.any?(files, fn f ->
-            path = Path.join(workflows_dir, f)
-            case File.read(path) do
-              {:ok, content} ->
-                String.contains?(content, "codeql") or
-                  String.contains?(content, "CodeQL") or
-                  String.contains?(content, "sonarcloud") or
-                  String.contains?(content, "semgrep")
-              _ -> false
-            end
-          end)
-
-        _ -> false
+        {:ok, fs} -> fs
+        _ -> []
       end
 
-    unless has_sast do
-      make_pattern("SC-014", "SAST", repo_name,
-        "No SAST tool (CodeQL/SonarCloud/Semgrep) detected in #{repo_name}")
+    contents =
+      files
+      |> Enum.map(fn f -> File.read(Path.join(workflows_dir, f)) end)
+      |> Enum.flat_map(fn
+        {:ok, c} -> [c]
+        _ -> []
+      end)
+
+    has_non_codeql_sast =
+      Enum.any?(contents, fn c ->
+        String.contains?(c, "sonarcloud") or String.contains?(c, "semgrep") or
+          String.contains?(c, "snyk")
+      end)
+
+    codeql_content =
+      Enum.find(contents, fn c ->
+        String.contains?(c, "codeql") or String.contains?(c, "CodeQL")
+      end)
+
+    cond do
+      # No SAST tool of any kind — the original SC-014 missing finding.
+      is_nil(codeql_content) and not has_non_codeql_sast ->
+        make_pattern("SC-014", "SAST", repo_name,
+          "No SAST tool (CodeQL/SonarCloud/Semgrep) detected in #{repo_name}")
+
+      # Effective-vs-nominal: CodeQL workflow PRESENT but pointed at a
+      # language the repo does not contain (and not `actions`). It runs
+      # but records zero results, so Scorecard reports "0 commits checked"
+      # even though a SAST workflow exists. Presence != efficacy.
+      # Refs hyperpolymath/hypatia#261 (generalises modshells #72).
+      not is_nil(codeql_content) and not has_non_codeql_sast and
+          not codeql_effective?(codeql_content, repo_path) ->
+        make_pattern("SC-014", "SAST", repo_name,
+          "Nominal-only SAST in #{repo_name}: codeql.yml language matrix " <>
+            "contains no language present in the repo and lacks `actions`, " <>
+            "so CodeQL records zero results on every commit. " <>
+            "Remediation: set the CodeQL matrix to `language: actions`.")
+
+      true ->
+        nil
+    end
+  end
+
+  # A CodeQL workflow is *effective* if its language matrix includes
+  # `actions` (always scannable — workflow YAML exists in every repo) or
+  # at least one CodeQL-source language the repo actually contains.
+  defp codeql_effective?(codeql_content, repo_path) do
+    matrix = codeql_matrix_languages(codeql_content)
+
+    "actions" in matrix or
+      Enum.any?(matrix, fn lang -> lang in repo_codeql_languages(repo_path) end)
+  end
+
+  defp codeql_matrix_languages(content) do
+    Regex.scan(~r/language:\s*([a-z0-9-]+)/i, content)
+    |> Enum.map(fn [_, l] -> String.downcase(l) end)
+    |> Enum.uniq()
+  end
+
+  defp repo_codeql_languages(repo_path) do
+    case System.cmd("find", [repo_path, "-type", "f",
+                             "-not", "-path", "*/.git/*",
+                             "-not", "-path", "*/node_modules/*",
+                             "-not", "-path", "*/_build/*",
+                             "-not", "-path", "*/deps/*",
+                             "-not", "-path", "*/target/*"],
+                    stderr_to_stdout: true) do
+      {out, 0} ->
+        out
+        |> String.split("\n", trim: true)
+        |> Enum.map(&Path.extname/1)
+        |> Enum.map(&Hypatia.Rules.SecurityErrors.codeql_language_for_ext/1)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+
+      _ ->
+        []
     end
   end
 
