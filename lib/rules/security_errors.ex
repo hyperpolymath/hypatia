@@ -287,20 +287,65 @@ defmodule Hypatia.Rules.SecurityErrors do
     "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
     "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
-    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
-    "slsa-framework/slsa-github-generator@v2.1.0" => "f7dd8c54c2067bafc12ca7a55595d5ee9b75204a"
+    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169"
   }
 
   def sha_pins, do: @sha_pins
+
+  # ---------------------------------------------------------------------------
+  # SHA-pin exemptions (self-verifying-ref reusable workflows)
+  # ---------------------------------------------------------------------------
+  #
+  # Some reusable workflows MUST be referenced by a semantic-version tag and
+  # MUST NOT be SHA-pinned: they inspect their own `github.ref` at runtime to
+  # mint verifiable provenance, and a 40-hex SHA ref makes that provenance
+  # invalid (or refuses to run). OSSF Scorecard's Pinned-Dependencies check
+  # flags these, but the "fix" (SHA-pin) is actively harmful. Hypatia must
+  # emit an *accept-with-rationale*, never a pin fix; the reconciler uses the
+  # rationale to dismiss the Scorecard alert. Keyed by action-name prefix so
+  # every version and the `/.github/workflows/...` path form is covered.
+  # Refs hyperpolymath/hypatia#262.
+  @pin_exempt %{
+    "slsa-framework/slsa-github-generator" =>
+      "SLSA generator self-verifies its own github.ref to mint verifiable " <>
+        "provenance; it MUST stay on a semver tag (@vX.Y.Z). SHA-pinning it " <>
+        "breaks SLSA provenance. Documented Scorecard limitation."
+  }
+
+  def pin_exempt, do: @pin_exempt
+
+  @doc """
+  True when `action_ref` is a reusable workflow / action that must NOT be
+  SHA-pinned (it self-verifies its ref). Matched by action-name prefix so
+  tag, SHA and `/.github/workflows/...` path forms are all covered.
+  """
+  def pin_exempt?(action_ref) do
+    name = action_name(action_ref)
+    Enum.any?(Map.keys(@pin_exempt), &String.starts_with?(name, &1))
+  end
+
+  @doc "Rationale for a pin exemption, or nil if not exempt."
+  def pin_exemption_reason(action_ref) do
+    name = action_name(action_ref)
+    Enum.find_value(@pin_exempt, fn {prefix, reason} ->
+      if String.starts_with?(name, prefix), do: reason
+    end)
+  end
 
   def correct_sha(action_ref) do
     Map.get(@sha_pins, action_ref)
   end
 
   def pin_action(action_ref) do
-    case correct_sha(action_ref) do
-      nil -> {:error, :unknown_action}
-      sha -> {:ok, "#{action_name(action_ref)}@#{sha} # #{action_version(action_ref)}"}
+    cond do
+      pin_exempt?(action_ref) ->
+        {:exempt, pin_exemption_reason(action_ref)}
+
+      true ->
+        case correct_sha(action_ref) do
+          nil -> {:error, :unknown_action}
+          sha -> {:ok, "#{action_name(action_ref)}@#{sha} # #{action_version(action_ref)}"}
+        end
     end
   end
 

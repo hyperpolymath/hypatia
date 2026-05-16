@@ -46,7 +46,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
     "Swatinem/rust-cache@v2" => "779680da715d629ac1d338a641029a2f4372abb5",
     "codecov/codecov-action@v5" => "671740ac38dd9b0130fbe1cec585b89eea48d3de",
     "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
-    "slsa-framework/slsa-github-generator@v2.1.0" => "f7dd8c54c2067bafc12ca7a55595d5ee9b75204a",
+    # NOTE: slsa-framework/slsa-github-generator deliberately removed — it is
+    # pin-exempt (self-verifies github.ref). See SecurityErrors.@pin_exempt
+    # and hyperpolymath/hypatia#262. SHA-pinning it breaks SLSA provenance.
     "webfactory/ssh-agent@v0.9.0" => "dc588b651fe13675774614f8e6a936a468676387",
     "actions/configure-pages@v5" => "983d7736d9b0ae728b81ab479565c72886d7745b",
     "actions/jekyll-build-pages@v1" => "44a6e6beabd48582f863aeeb6cb2151cc1716697",
@@ -139,16 +141,33 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Match uses: owner/repo@vN.N.N or @main/@master (tag/branch, not SHA)
       Regex.scan(~r/uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+)@((?:v[\d][\w.-]*|main|master))\s*$/m, content)
       |> Enum.map(fn [_full, action, ref] ->
-        severity = if ref in ["main", "master"], do: :high, else: :medium
+        action_ref = "#{action}@#{ref}"
 
-        %{
-          type: :unpinned_action,
-          file: filename,
-          action_ref: "#{action}@#{ref}",
-          severity: severity,
-          action: :pin_sha,
-          known_sha: Map.get(@known_good_shas, "#{action}@#{ref}")
-        }
+        if Hypatia.Rules.SecurityErrors.pin_exempt?(action_ref) do
+          # Self-verifying-ref reusable workflow: SHA-pinning is HARMFUL.
+          # Emit an accept-with-rationale finding (never :pin_sha) so the
+          # reconciler dismisses the Scorecard alert instead of "fixing" it.
+          # Refs hyperpolymath/hypatia#262.
+          %{
+            type: :pin_exempt_accepted,
+            file: filename,
+            action_ref: action_ref,
+            severity: :info,
+            action: :accept_with_rationale,
+            rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(action_ref)
+          }
+        else
+          severity = if ref in ["main", "master"], do: :high, else: :medium
+
+          %{
+            type: :unpinned_action,
+            file: filename,
+            action_ref: action_ref,
+            severity: severity,
+            action: :pin_sha,
+            known_sha: Map.get(@known_good_shas, action_ref)
+          }
+        end
       end)
     end)
   end

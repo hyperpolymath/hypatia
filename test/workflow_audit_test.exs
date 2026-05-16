@@ -273,4 +273,29 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       refute String.contains?(detail_text, "actions ")
     end
   end
+
+  describe "check_unpinned_actions/1 — SLSA pin-exemption (hypatia#262)" do
+    test "SLSA generator emits accept-with-rationale, never :pin_sha" do
+      wf = """
+      jobs:
+        provenance:
+          uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+      """
+
+      [f] = WorkflowAudit.check_unpinned_actions(%{"x.yml" => wf})
+
+      assert f.type == :pin_exempt_accepted
+      assert f.action == :accept_with_rationale
+      assert f.severity == :info
+      assert f.rationale =~ "provenance"
+      refute Map.get(f, :action) == :pin_sha
+    end
+
+    test "ordinary unpinned action still flagged for :pin_sha" do
+      wf = "jobs:\n  b:\n    steps:\n      - uses: actions/checkout@v4\n"
+      [f] = WorkflowAudit.check_unpinned_actions(%{"x.yml" => wf})
+      assert f.type == :unpinned_action
+      assert f.action == :pin_sha
+    end
+  end
 end
