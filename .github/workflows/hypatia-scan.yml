@@ -205,11 +205,12 @@ jobs:
           # on (severity, rule_module, type, file) tuple with absolute
           # build paths normalised to repo-relative.
           if [ -f .hypatia-baseline.json ]; then
-            # Normalise + project just the comparable keys. Identity is the
-            # 4-tuple (severity, rule_module, type, file) per the contract above.
-            # `action` is advisory metadata that varies by run/strategy and MUST
-            # NOT be part of finding identity — including it made every baseline
-            # entry fail to match (the gate was silently inert estate-wide).
+            # Normalise + project just the comparable keys from the current scan.
+            # Identity is the 4-tuple (severity, rule_module, type, file) per
+            # the contract above. `action` is advisory metadata that varies
+            # by run/strategy and MUST NOT be part of finding identity —
+            # including it made every baseline entry fail to match (the
+            # baseline-aware gate was silently inert estate-wide).
             jq '[ .[] | select(.severity == "critical" or .severity == "high")
                        | {severity, rule_module, type,
                           file: (.file | sub("^/home/runner/work/[^/]+/[^/]+/"; "")
