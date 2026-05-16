@@ -352,9 +352,9 @@ defmodule Hypatia.Rules.CodeSafety do
     %{id: :ncl_hardcoded_secret, severity: :critical,
       pattern: ~r/password\s*=\s*"[^"]+"|api_key\s*=\s*"[^"]+"|secret\s*=\s*"[^"]+"/, cwe: "CWE-798",
       description: "Hardcoded credential in Nickel config -- use SecretRef"},
-    %{id: :ncl_docker_not_podman, severity: :medium,
+    %{id: :ncl_docker_not_podman, severity: :low,
       pattern: ~r/docker\s|docker\.io|dockerfile/i, cwe: "CWE-1104",
-      description: "Docker reference in Nickel config -- RSR requires Podman/Containerfile"}
+      description: "Docker reference in Nickel config -- Podman/Containerfile highly preferred (Docker permitted)"}
   ]
 
   def patterns_for_language("rust"), do: @rust_patterns
@@ -512,7 +512,7 @@ defmodule Hypatia.Rules.CodeSafety do
     end)
   end
 
-  @doc "Check for Dockerfile instead of Containerfile"
+  @doc "Advise Containerfile over Dockerfile naming (highly preferred; Docker permitted)"
   def check_dockerfile_naming(file_list) do
     file_list
     |> Enum.filter(fn f ->
@@ -520,8 +520,8 @@ defmodule Hypatia.Rules.CodeSafety do
       basename == "Dockerfile" or String.starts_with?(basename, "Dockerfile.")
     end)
     |> Enum.map(fn f ->
-      %{rule: :dockerfile_not_containerfile, severity: :high,
-        description: "Dockerfile detected -- must be named Containerfile",
+      %{rule: :dockerfile_not_containerfile, severity: :low,
+        description: "Dockerfile detected -- Containerfile highly preferred (Docker permitted; rename unless a specific tool requires the Dockerfile name)",
         file: f}
     end)
   end
