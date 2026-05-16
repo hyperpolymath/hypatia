@@ -461,7 +461,7 @@ defmodule Hypatia.Rules.CodeSafety do
 
   @banned_file_extensions [
     %{id: :python_file, severity: :critical, glob: "*.py",
-      language: "Python", replacement: "Julia/Rust/ReScript",
+      language: "Python", replacement: "Julia/Rust/AffineScript",
       description: "Python file detected -- banned language"},
     %{id: :typescript_file, severity: :critical, glob: "*.ts",
       language: "TypeScript", replacement: "ReScript",

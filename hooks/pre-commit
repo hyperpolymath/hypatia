@@ -30,7 +30,7 @@ ERRORS=0
 TS_FILES=$(echo "$STAGED_FILES" | grep -E '\.(ts|tsx)$' || true)
 if [ -n "$TS_FILES" ]; then
     echo -e "${RED}ERROR: TypeScript files not allowed per RSR policy${NC}"
-    echo "Use ReScript instead. Files found:"
+    echo "Use AffineScript instead. Files found:"
     echo "$TS_FILES"
     ERRORS=$((ERRORS + 1))
 fi
