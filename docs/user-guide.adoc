@@ -634,7 +634,7 @@ blockTypeScript :: Rule 'Preventive
 blockTypeScript = PreventiveRule
   "block-typescript"
   (Or (LanguageUsed TypeScript) (FileExtension "*" ".ts"))
-  (RejectCommit "TypeScript not allowed. Use ReScript instead.")
+  (RejectCommit "TypeScript not allowed. Use AffineScript instead.")
 ----
 
 .JSON Format Example

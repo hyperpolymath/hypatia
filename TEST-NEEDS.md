@@ -12,9 +12,9 @@
 | gossamer | Gleam/Rust/Idris2 | Full `hypatia scan` — security, policy, workflow audit | 70 findings (12 CRITICAL, 7 HIGH, 47 MEDIUM) |
 | protocol-squisher | Rust (29 crates) | Full `hypatia scan` — code safety, banned languages | 209 findings (18 CRITICAL, 16 HIGH, 175 MEDIUM) |
 | burble | Elixir/ReScript/Idris2 | Full `hypatia scan` — believe_me detection, deprecated APIs | 59 findings (2 CRITICAL, 5 HIGH, 48 MEDIUM) |
-| stapeln | Idris2/Zig/Rust/ReScript | Full `hypatia scan` — container system, multi-language | 492 findings (34 CRITICAL, 209 HIGH, 249 MEDIUM) |
+| stapeln | Idris2/Zig/Rust/AffineScript | Full `hypatia scan` — container system, multi-language | 492 findings (34 CRITICAL, 209 HIGH, 249 MEDIUM) |
 | boj-server | ReScript/Deno/Idris2 | Full `hypatia scan` — MCP server, workflow audit | 73 findings (11 CRITICAL, 7 HIGH, 51 MEDIUM) |
-| standards | Mixed (Rust/ReScript/Nickel/TS) | Full `hypatia scan` — monorepo, multi-standard | 163 findings (30 CRITICAL, 46 HIGH, 87 MEDIUM) |
+| standards | Mixed (Rust/AffineScript/Nickel/TS) | Full `hypatia scan` — monorepo, multi-standard | 163 findings (30 CRITICAL, 46 HIGH, 87 MEDIUM) |
 
 ### Target Details
 

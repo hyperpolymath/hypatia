@@ -267,7 +267,7 @@ The pre-commit hook enforces the Rhodium Standard Repositories language policy:
 |Rust
 
 |Python
-|Julia/Rust/ReScript
+|Julia/Rust/AffineScript
 
 |Java/Kotlin
 |Rust

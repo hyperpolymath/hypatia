@@ -355,7 +355,7 @@
           },
           "action": {
             "type": "reject-commit",
-            "message": "TypeScript not allowed per RSR policy. Use ReScript instead."
+            "message": "TypeScript not allowed per RSR policy. Use AffineScript instead."
           },
           "autoFixable": false
         }
