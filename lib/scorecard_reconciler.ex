@@ -48,8 +48,14 @@ defmodule Hypatia.ScorecardReconciler do
   #   :dismiss_accept  — code change *possible* but the canonical remediation
   #                      is HARMFUL / it is correct-by-design. Dismiss
   #                      "won't fix" with rationale. (SLSA pin-exempt)
-  #   :fix             — safe, deterministic remediation exists. Emit a
-  #                      fix-request (PR; auto-merge if CI-green + low-risk).
+  #   :fix             — safe, deterministic *code* remediation exists. Emit
+  #                      a fix-request (PR; auto-merge if CI-green + low-risk).
+  #   :fix_settings    — safe, deterministic *repository-configuration*
+  #                      remediation exists via the GitHub settings API
+  #                      (enable branch protection, require reviews). NOT a
+  #                      code change and NOT non-actionable — a third, narrow
+  #                      action class so config findings are auto-remediated
+  #                      under full-auto policy instead of escalated. (#265)
   #   :open_escalate   — unknown / not safely automatable. Leave OPEN and
   #                      ensure a tracking issue (never silently drop —
   #                      "didn't look" is an escaped-defect KPI breach).
@@ -57,6 +63,12 @@ defmodule Hypatia.ScorecardReconciler do
   # Scorecard rules that are pure activity/information signals: Scorecard
   # itself states no remediation is needed.
   @info_rules ~w(MaintainedID ContributorsID CITestsID CIIBestPracticesID)
+
+  # Scorecard rules that are repo-CONFIGURATION-actionable: not code, not
+  # non-actionable — deterministically remediable via the GitHub settings
+  # API (#265). Surfaced by the natsci-studio live calibration where these
+  # were being :open_escalate'd despite a safe automatic fix existing.
+  @settings_rules ~w(BranchProtectionID CodeReviewID)
 
   @doc """
   Pure classification of a single code-scanning alert map (as returned by
@@ -91,6 +103,14 @@ defmodule Hypatia.ScorecardReconciler do
          "Pin the third-party dependency to a full-length commit SHA " <>
            "(not pin-exempt)."}
 
+      rule in @settings_rules ->
+        {:fix_settings, nil,
+         "Repository-configuration finding `#{rule}` — deterministically " <>
+           "remediable via the GitHub settings API (enable branch " <>
+           "protection / require pull-request reviews on the default " <>
+           "branch). Not a code change and not non-actionable; auto-applied " <>
+           "under full-auto policy, escalated under conservative. (#265)"}
+
       true ->
         {:open_escalate, nil,
          "No safe automated lifecycle action known for rule `#{rule}` — " <>
@@ -118,6 +138,10 @@ defmodule Hypatia.ScorecardReconciler do
   """
   def reconcile(owner, repo, opts \\ []) do
     dry = Keyword.get(opts, :dry_run, false)
+    # :full_auto (default) auto-applies :fix_settings via the settings API;
+    # :conservative escalates settings findings for human review instead of
+    # mutating repo configuration automatically. (#265)
+    policy = Keyword.get(opts, :policy, :full_auto)
 
     case fetch_open_alerts(owner, repo) do
       {:error, reason} ->
@@ -135,11 +159,24 @@ defmodule Hypatia.ScorecardReconciler do
 
             acted =
               cond do
-                dry -> :skipped_dry_run
+                dry ->
+                  :skipped_dry_run
+
                 action in [:dismiss_info, :dismiss_accept] ->
                   do_dismiss(owner, repo, number, reason_code, rationale)
-                action == :fix -> :fix_requested
-                true -> :escalated
+
+                action == :fix ->
+                  :fix_requested
+
+                action == :fix_settings and policy == :full_auto ->
+                  do_fix_settings(owner, repo, alert)
+
+                action == :fix_settings ->
+                  # :conservative — never silently drop; escalate.
+                  :escalated_conservative
+
+                true ->
+                  :escalated
               end
 
             reg_acc =
@@ -163,9 +200,10 @@ defmodule Hypatia.ScorecardReconciler do
           looked: true,
           found: length(alerts),
           classified: length(results),
-          dismissed:
-            Enum.count(results, &(&1.acted in [:dismissed, :already_dismissed])),
+          dismissed: Enum.count(results, &(&1.acted in [:dismissed, :already_dismissed])),
           fix_requested: Enum.count(results, &(&1.action == :fix)),
+          settings_remediated: Enum.count(results, &(&1.acted == :settings_remediated)),
+          settings_actionable: Enum.count(results, &(&1.action == :fix_settings)),
           escalated: Enum.count(results, &(&1.action == :open_escalate)),
           results: results
         }
@@ -185,8 +223,12 @@ defmodule Hypatia.ScorecardReconciler do
         for alert <- alerts,
             entry = Registry.get(reg, fingerprint(owner, repo, alert)),
             entry["action"] in ["dismiss_info", "dismiss_accept"] do
-          %{alert: alert["number"], fp: fingerprint(owner, repo, alert),
-            recurrence_defect: true, prior: entry}
+          %{
+            alert: alert["number"],
+            fp: fingerprint(owner, repo, alert),
+            recurrence_defect: true,
+            prior: entry
+          }
         end
 
       {:ok, %{repo: "#{owner}/#{repo}", recurrence_defects: regressions}}
@@ -205,13 +247,21 @@ defmodule Hypatia.ScorecardReconciler do
         "#{@github_api_base}/repos/#{owner}/#{repo}/code-scanning/alerts" <>
           "?state=open&per_page=#{@max_alerts}"
 
-      case System.cmd("curl", [
-             "-s", "-f",
-             "-H", "Accept: application/vnd.github+json",
-             "-H", "Authorization: Bearer #{token}",
-             "-H", "X-GitHub-Api-Version: 2022-11-28",
-             url
-           ], stderr_to_stdout: true) do
+      case System.cmd(
+             "curl",
+             [
+               "-s",
+               "-f",
+               "-H",
+               "Accept: application/vnd.github+json",
+               "-H",
+               "Authorization: Bearer #{token}",
+               "-H",
+               "X-GitHub-Api-Version: 2022-11-28",
+               url
+             ],
+             stderr_to_stdout: true
+           ) do
         {body, 0} ->
           case Jason.decode(body) do
             {:ok, a} when is_list(a) -> {:ok, a}
@@ -240,17 +290,119 @@ defmodule Hypatia.ScorecardReconciler do
     url =
       "#{@github_api_base}/repos/#{owner}/#{repo}/code-scanning/alerts/#{number}"
 
-    case System.cmd("curl", [
-           "-s", "-f", "-X", "PATCH",
-           "-H", "Accept: application/vnd.github+json",
-           "-H", "Authorization: Bearer #{token}",
-           "-H", "X-GitHub-Api-Version: 2022-11-28",
-           "-d", payload, url
-         ], stderr_to_stdout: true) do
-      {_, 0} -> :dismissed
+    case System.cmd(
+           "curl",
+           [
+             "-s",
+             "-f",
+             "-X",
+             "PATCH",
+             "-H",
+             "Accept: application/vnd.github+json",
+             "-H",
+             "Authorization: Bearer #{token}",
+             "-H",
+             "X-GitHub-Api-Version: 2022-11-28",
+             "-d",
+             payload,
+             url
+           ],
+           stderr_to_stdout: true
+         ) do
+      {_, 0} ->
+        :dismissed
+
       {err, _} ->
         Logger.warning("reconciler dismiss ##{number} failed: #{String.slice(err, 0, 160)}")
         :dismiss_failed
+    end
+  end
+
+  # #265: deterministic, safe, API-driven repository-configuration
+  # remediation for BranchProtectionID / CodeReviewID. Enables default-branch
+  # protection requiring at least one approving pull-request review (this one
+  # change satisfies both checks). Idempotent — the protection PUT is
+  # declarative, so re-running converges to the same state.
+  defp do_fix_settings(owner, repo, _alert) do
+    token = System.get_env("GITHUB_TOKEN")
+
+    with branch when is_binary(branch) <- default_branch(owner, repo, token) do
+      payload =
+        Jason.encode!(%{
+          "required_status_checks" => nil,
+          "enforce_admins" => false,
+          "required_pull_request_reviews" => %{
+            "required_approving_review_count" => 1,
+            "dismiss_stale_reviews" => true
+          },
+          "restrictions" => nil,
+          "allow_force_pushes" => false,
+          "allow_deletions" => false
+        })
+
+      url =
+        "#{@github_api_base}/repos/#{owner}/#{repo}/branches/#{branch}/protection"
+
+      case System.cmd(
+             "curl",
+             [
+               "-s",
+               "-f",
+               "-X",
+               "PUT",
+               "-H",
+               "Accept: application/vnd.github+json",
+               "-H",
+               "Authorization: Bearer #{token}",
+               "-H",
+               "X-GitHub-Api-Version: 2022-11-28",
+               "-d",
+               payload,
+               url
+             ],
+             stderr_to_stdout: true
+           ) do
+        {_, 0} ->
+          :settings_remediated
+
+        {err, _} ->
+          Logger.warning(
+            "reconciler fix_settings #{owner}/#{repo} failed: #{String.slice(err, 0, 160)}"
+          )
+
+          :settings_failed
+      end
+    else
+      _ -> :settings_failed
+    end
+  end
+
+  defp default_branch(owner, repo, token) do
+    url = "#{@github_api_base}/repos/#{owner}/#{repo}"
+
+    case System.cmd(
+           "curl",
+           [
+             "-s",
+             "-f",
+             "-H",
+             "Accept: application/vnd.github+json",
+             "-H",
+             "Authorization: Bearer #{token}",
+             "-H",
+             "X-GitHub-Api-Version: 2022-11-28",
+             url
+           ],
+           stderr_to_stdout: true
+         ) do
+      {body, 0} ->
+        case Jason.decode(body) do
+          {:ok, %{"default_branch" => b}} when is_binary(b) -> b
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 
@@ -268,13 +420,21 @@ defmodule Hypatia.ScorecardReconciler do
          url =
            "#{@github_api_base}/repos/#{owner}/#{repo}/contents/#{path}",
          {body, 0} <-
-           System.cmd("curl", [
-             "-s", "-f",
-             "-H", "Accept: application/vnd.github.raw+json",
-             "-H", "Authorization: Bearer #{token}",
-             "-H", "X-GitHub-Api-Version: 2022-11-28",
-             url
-           ], stderr_to_stdout: true),
+           System.cmd(
+             "curl",
+             [
+               "-s",
+               "-f",
+               "-H",
+               "Accept: application/vnd.github.raw+json",
+               "-H",
+               "Authorization: Bearer #{token}",
+               "-H",
+               "X-GitHub-Api-Version: 2022-11-28",
+               url
+             ],
+             stderr_to_stdout: true
+           ),
          lines = String.split(body, "\n"),
          target when is_binary(target) <- Enum.at(lines, line - 1),
          [_, ref] <- Regex.run(~r/uses:\s*(\S+)/, target) do
