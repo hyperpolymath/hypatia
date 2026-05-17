@@ -32,7 +32,14 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
 
         result =
           if opts[:verify] do
-            ScorecardReconciler.verify(owner, repo)
+            # verify/2 returns {:ok, summary} | {:error, reason}; reconcile/3
+            # returns a bare map. Normalise verify to a bare map so the
+            # Jason.encode! below never receives a tuple (it cannot encode
+            # one — `mix hypatia.reconcile --verify` used to crash here).
+            case ScorecardReconciler.verify(owner, repo) do
+              {:ok, summary} -> summary
+              {:error, reason} -> %{repo: "#{owner}/#{repo}", verified: false, error: reason}
+            end
           else
             ScorecardReconciler.reconcile(owner, repo, dry_run: !!opts[:dry_run])
           end
