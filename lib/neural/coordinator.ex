@@ -87,21 +87,72 @@ defmodule Hypatia.Neural.Coordinator do
 
   @impl true
   def init(_opts) do
+    persisted = safe_load_persisted()
+    rbf = hydrate_rbf(RadialNeuralNetwork.init(), persisted)
+
     state = %__MODULE__{
       trust_graph: GraphOfTrust.build(),
       moe: MixtureOfExperts.init(),
       lsm: LiquidStateMachine.init(),
       esn: EchoStateNetwork.init(),
-      rbf: RadialNeuralNetwork.init()
+      rbf: rbf
     }
 
     Logger.info(
       "Neural Coordinator initialised: blackboard architecture, " <>
-        "#{@network_count} networks, #{@phase_count} phases"
+        "#{@network_count} networks, #{@phase_count} phases" <>
+        rbf_restore_note(rbf)
     )
 
     {:ok, state}
   end
+
+  # Best-effort load of persisted neural state. Never raises: a missing or
+  # malformed store must not crash the supervisor -- networks fall back to
+  # init-defaults and are retrained by the first LearningScheduler cycle.
+  defp safe_load_persisted do
+    Hypatia.Neural.Persistence.load_all()
+  rescue
+    e ->
+      Logger.warning(
+        "Neural Coordinator: persisted-state load failed (#{inspect(e)}); using defaults"
+      )
+
+      %{}
+  end
+
+  # RBF is the only network restored at init: it is genuinely learned,
+  # plainly serialisable (Persistence.save_rbf/1 is a 1:1 of the struct),
+  # and otherwise unusable until a full training cycle runs. trust is
+  # rebuilt from source every cycle; MoE/ESN/LSM are continuously /
+  # per-cycle trained (ESN/LSM persistence is summary-only by design).
+  defp hydrate_rbf(default_rbf, %{rbf: {:ok, data}}) when is_map(data) do
+    centers = Map.get(data, "centers", [])
+    weights = Map.get(data, "output_weights", [])
+
+    if data["trained"] == true and is_list(centers) and centers != [] and
+         is_list(weights) and weights != [] do
+      %{
+        default_rbf
+        | centers: centers,
+          widths: Map.get(data, "widths", []),
+          output_weights: weights,
+          num_inputs: Map.get(data, "num_inputs", default_rbf.num_inputs),
+          num_centers: Map.get(data, "num_centers", default_rbf.num_centers),
+          trained: true,
+          training_stats: Map.get(data, "training_stats", %{})
+      }
+    else
+      default_rbf
+    end
+  rescue
+    _ -> default_rbf
+  end
+
+  defp hydrate_rbf(default_rbf, _), do: default_rbf
+
+  defp rbf_restore_note(%{trained: true}), do: " (RBF restored from persisted state)"
+  defp rbf_restore_note(_), do: " (RBF cold; trains on first learning cycle)"
 
   # ── Public API ──────────────────────────────────────────
 

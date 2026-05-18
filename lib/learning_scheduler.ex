@@ -117,6 +117,13 @@ defmodule Hypatia.LearningScheduler do
     # echidnabot immediately influence the next prover hint recommendation.
     proof_model_updated = retrain_prover_recommender()
 
+    # N6: Trigger the Neural Coordinator's learning cycle so the organs
+    # (ESN/RBF) actually train on the outcomes just ingested. Without this
+    # the Coordinator's networks run on init-defaults forever and
+    # pattern_analyzer defensively ignores their (untrained) output -- the
+    # root cause of the token-cost/scattergun symptom (issue #274).
+    neural_cycled = trigger_neural_cycle()
+
     now = DateTime.utc_now()
     total = outcomes_count + fleet_outcomes_count
 
@@ -138,6 +145,13 @@ defmodule Hypatia.LearningScheduler do
 
     if proof_model_updated do
       Logger.info("LearningScheduler: prover recommender retrained from VeriSimDB proof_attempts")
+    end
+
+    if neural_cycled do
+      Logger.info(
+        "LearningScheduler: neural learning cycle triggered " <>
+          "(ESN/RBF train on #{total} new + accumulated outcomes)"
+      )
     end
 
     %{
@@ -195,6 +209,29 @@ defmodule Hypatia.LearningScheduler do
         Logger.warning("LearningScheduler: prover_recommender retrain error: #{inspect(e)}")
         false
     end
+  end
+
+  # --- N6: Neural Coordinator learning-cycle trigger -------------------
+
+  # Casts :force_cycle to the Neural Coordinator so it trains ESN on the
+  # accumulated confidence trajectories and RBF on the pattern registry,
+  # then persists all neural states. Cast is fire-and-forget (training
+  # runs inside the Coordinator process); we only confirm the process is
+  # alive. Non-fatal: the scheduler must keep running even if the neural
+  # layer is down.
+  defp trigger_neural_cycle do
+    case Process.whereis(Hypatia.Neural.Coordinator) do
+      nil ->
+        false
+
+      _pid ->
+        Hypatia.Neural.Coordinator.force_cycle()
+        true
+    end
+  rescue
+    e ->
+      Logger.warning("LearningScheduler: neural cycle trigger failed: #{inspect(e)}")
+      false
   end
 
   # --- N4: Strategy-shift detection + re-queueing ----------------------
