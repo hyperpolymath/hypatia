@@ -5,9 +5,16 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
 
   ## Usage
 
-      mix hypatia.reconcile owner/repo            # reconcile + write registry
-      mix hypatia.reconcile owner/repo --dry-run  # classify only, no mutation
-      mix hypatia.reconcile owner/repo --verify   # recurrence-defect check
+      mix hypatia.reconcile owner/repo                # reconcile + write registry
+      mix hypatia.reconcile owner/repo --dry-run      # classify only, no mutation
+      mix hypatia.reconcile owner/repo --verify       # recurrence-defect check
+      mix hypatia.reconcile owner/repo --conservative # escalate :fix_settings
+                                                      # instead of auto-applying
+
+  Policy (#265): default `:full_auto` auto-applies repo-configuration
+  remediations (`:fix_settings` — branch protection / required reviews) via
+  the GitHub settings API. `--conservative` escalates those for human review
+  instead.
 
   Requires `GITHUB_TOKEN` (security_events scope). Non-actionable and
   design-correct-exception findings are dismissed-with-rationale on GitHub
@@ -23,7 +30,9 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
   @impl true
   def run(argv) do
     {opts, rest, _} =
-      OptionParser.parse(argv, switches: [dry_run: :boolean, verify: :boolean])
+      OptionParser.parse(argv,
+        switches: [dry_run: :boolean, verify: :boolean, conservative: :boolean]
+      )
 
     case rest do
       [slug] ->
@@ -34,7 +43,10 @@ defmodule Mix.Tasks.Hypatia.Reconcile do
           if opts[:verify] do
             ScorecardReconciler.verify(owner, repo)
           else
-            ScorecardReconciler.reconcile(owner, repo, dry_run: !!opts[:dry_run])
+            ScorecardReconciler.reconcile(owner, repo,
+              dry_run: !!opts[:dry_run],
+              policy: if(opts[:conservative], do: :conservative, else: :full_auto)
+            )
           end
 
         IO.puts(Jason.encode!(result, pretty: true))

@@ -57,6 +57,23 @@ defmodule Hypatia.ScorecardReconcilerTest do
     test "unknown rule -> open_escalate (never silently dropped)" do
       assert {:open_escalate, nil, _} = R.classify(alert("SomeBrandNewRuleID"))
     end
+
+    test "BranchProtection -> fix_settings (#265, not escalate, not code fix)" do
+      {action, code, why} = R.classify(alert("BranchProtectionID"))
+      assert action == :fix_settings
+      assert code == nil
+      assert why =~ "settings API"
+    end
+
+    test "CodeReview -> fix_settings (#265)" do
+      assert {:fix_settings, nil, _} = R.classify(alert("CodeReviewID"))
+    end
+
+    test "fix_settings is distinct from :fix and :open_escalate" do
+      assert {:fix_settings, _, _} = R.classify(alert("BranchProtectionID"))
+      assert {:fix, _, _} = R.classify(alert("SASTID"))
+      assert {:open_escalate, _, _} = R.classify(alert("SomeBrandNewRuleID"))
+    end
   end
 
   describe "fingerprint/3 — stable across line drift" do
