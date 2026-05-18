@@ -647,7 +647,8 @@ jobs:
         if: ${{ github.event.inputs.mode != 'regenerate-baseline' }}
         run: |
           set -euo pipefail
-          python3 scripts/check-bench-regression.py \
+          cargo build --release --manifest-path scripts/bench-tools/Cargo.toml
+          ./scripts/bench-tools/target/release/check-bench-regression \
               bench-output.txt \
               .machine_readable/benchmarks/baselines.json \
               | tee -a "$GITHUB_STEP_SUMMARY"
@@ -656,7 +657,8 @@ jobs:
         if: ${{ github.event.inputs.mode == 'regenerate-baseline' }}
         run: |
           set -euo pipefail
-          python3 scripts/update-bench-baselines.py \
+          cargo build --release --manifest-path scripts/bench-tools/Cargo.toml
+          ./scripts/bench-tools/target/release/update-bench-baselines \
               bench-output.txt \
               .machine_readable/benchmarks/baselines.json
           echo "## Regenerated baseline" >> "$GITHUB_STEP_SUMMARY"

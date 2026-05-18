@@ -1,20 +1,6 @@
 [
   {
     "severity": "critical",
-    "rule_module": "cicd_rules",
-    "type": "banned_language_file",
-    "file": "scripts/check-bench-regression.py",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
-    "rule_module": "cicd_rules",
-    "type": "banned_language_file",
-    "file": "scripts/update-bench-baselines.py",
-    "action": "flag"
-  },
-  {
-    "severity": "critical",
     "rule_module": "code_safety",
     "type": "believe_me",
     "file": "src/abi/RuleEngine.idr",

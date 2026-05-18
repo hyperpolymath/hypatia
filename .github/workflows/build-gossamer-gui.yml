@@ -73,10 +73,11 @@ jobs:
             exit 1
           fi
 
-      - name: Install jsonschema
+      - name: Build ci-tools (panll-harness validator)
         run: |
           set -euo pipefail
-          python3 -m pip install --user --quiet jsonschema
+          cargo build --release --manifest-path scripts/ci-tools/Cargo.toml \
+              --bin validate-panll-harness
 
       - name: Fetch panll-harness v2 schema
         run: |
@@ -90,23 +91,9 @@ jobs:
       - name: Validate panll.harness.toml against panll-harness/v2
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, sys, tomllib
-          from jsonschema import Draft202012Validator, validate
-
-          with open("src/ui/gossamer/panll.harness.toml", "rb") as fh:
-              data = tomllib.load(fh)
-          with open("/tmp/schemas/panll-harness-v2.schema.json") as fh:
-              schema = json.load(fh)
-
-          Draft202012Validator.check_schema(schema)
-          try:
-              validate(instance=data, schema=schema)
-          except Exception as exc:
-              print(f"::error::panll.harness.toml fails panll-harness/v2 validation: {exc}")
-              sys.exit(1)
-          print("OK  panll.harness.toml validates against panll-harness/v2")
-          PY
+          ./scripts/ci-tools/target/release/validate-panll-harness \
+              src/ui/gossamer/panll.harness.toml \
+              /tmp/schemas/panll-harness-v2.schema.json
 
   loader-smoke:
     name: Gossamer loader smoke harness

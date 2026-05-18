@@ -84,7 +84,8 @@ cargo bench --bench hypatia_bench -- \
   | tee /tmp/bench.txt
 
 # Parse the output and update baselines.json:
-python3 scripts/update-bench-baselines.py /tmp/bench.txt \
+cargo build --release --manifest-path scripts/bench-tools/Cargo.toml
+./scripts/bench-tools/target/release/update-bench-baselines /tmp/bench.txt \
   .machine_readable/benchmarks/baselines.json
 ```
 

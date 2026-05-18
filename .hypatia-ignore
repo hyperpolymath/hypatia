@@ -23,13 +23,8 @@
 #
 # This file is for exemptions that span a whole file or directory.
 
-# ─── Python bench helpers ───────────────────────────────────────────────
+# ─── Python bench helpers — REVOKED ─────────────────────────────────────
 #
-# Scoped exemption — RSR org policy bans Python except SaltStack. These two
-# scripts are bench-data helpers used only by .github/workflows/bench.yml;
-# they parse criterion output and update baseline JSON. Rust/Julia port is
-# tracked but not blocking. Until the port lands, suppress the
-# banned_language_file finding on these two specific paths so the gate
-# treats them as a known, documented carve-out rather than baseline noise.
-cicd_rules/banned_language_file:scripts/check-bench-regression.py
-cicd_rules/banned_language_file:scripts/update-bench-baselines.py
+# The two scripts/*.py bench helpers were removed and re-implemented in
+# Rust (scripts/bench-tools/). The org Python ban is now total with no
+# exceptions, so this carve-out is deleted rather than carried.
