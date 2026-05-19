@@ -98,7 +98,7 @@ baseline, add a CI job that fails if p95 regresses > 50%.
 | **Functionality** | strong | 39 Elixir + 38 Rust test files, ~8,659 Elixir LOC, full pipeline E2E |
 | **Versability** | strong | SemVer in `CHANGELOG.adoc` + `mix.exs`, detailed per-version changelogs |
 | **Maintainability** | strong | Modular Rust workspace, TOPOLOGY.md, DESIGN-NARRATIVE.md, clean module boundaries |
-| **Reproducibility** | strong | `flake.nix` + `guix.scm`, `Cargo.lock` + `mix.lock` committed |
+| **Reproducibility** | strong | `guix.scm` (canonical per standards#101 — `flake.nix` retired), `Cargo.lock` + `mix.lock` committed |
 | **Portability** | strong | Cross-platform CI matrix (Linux x86_64 / ARM64, macOS x86_64 / ARM64, Windows), Containerfile, podman |
 | **Dependability** | weak | OTP supervision + concurrency tests but no chaos engineering, no fault-injection |
 | **Performance** | weak | No published metrics, no latency / throughput benchmarks gated, no capacity planning |
