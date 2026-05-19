@@ -225,27 +225,9 @@ jobs:
       - name: Parse k9iser.toml + verify declared paths exist
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import tomllib, sys, pathlib
-
-          with open("k9iser.toml", "rb") as fh:
-              data = tomllib.load(fh)
-
-          missing = []
-          for src in data.get("source", []):
-              p = pathlib.Path(src["path"])
-              if not p.exists():
-                  missing.append(src["path"])
-
-          if missing:
-              for m in missing:
-                  print(f"::error::k9iser.toml declares missing source {m}")
-              sys.exit(1)
-
-          n = len(data.get("source", []))
-          c = len(data.get("constraint", []))
-          print(f"OK  k9iser.toml parses — {n} source(s), {c} constraint(s)")
-          PY
+          cargo build --release --manifest-path scripts/ci-tools/Cargo.toml \
+              --bin check-k9iser-paths
+          ./scripts/ci-tools/target/release/check-k9iser-paths k9iser.toml
 
       - name: Run k9iser build (if CLI available)
         run: |

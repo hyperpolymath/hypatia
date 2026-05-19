@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# CI helper tooling — faithful Rust replacements for the inline `python3`
+# steps formerly embedded in .github/workflows/{build-gossamer-gui,ci}.yml
+# (org policy bans Python outside SaltStack; no exceptions). Deliberately
+# NOT a workspace member so it never perturbs the main build / proof gates.
+[workspace]
+
+[package]
+name = "ci-tools"
+version = "0.1.0"
+edition = "2021"
+license = "PMPL-1.0-or-later"
+publish = false
+
+[[bin]]
+name = "validate-panll-harness"
+path = "src/bin/validate-panll-harness.rs"
+
+[[bin]]
+name = "check-k9iser-paths"
+path = "src/bin/check-k9iser-paths.rs"
+
+[dependencies]
+toml = "0.8"
+serde_json = "1"
+jsonschema = "0.40"
+
+[profile.release]
+opt-level = 1

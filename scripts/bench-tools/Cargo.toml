@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+#
+# Standalone bench-data tooling — deliberately NOT a workspace member so it
+# never perturbs the main build / proof gates, and zero-dependency so CI
+# needs no crates.io fetch. Replaces the former scripts/*.py (org policy
+# bans Python outside SaltStack; see standards Explicit-Escape Principle).
+# Empty table: keep this crate out of the repo's main Cargo workspace so it
+# never perturbs the main build / proof gates.
+[workspace]
+
+[package]
+name = "bench-tools"
+version = "0.1.0"
+edition = "2021"
+license = "PMPL-1.0-or-later"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "check-bench-regression"
+path = "src/bin/check-bench-regression.rs"
+
+[[bin]]
+name = "update-bench-baselines"
+path = "src/bin/update-bench-baselines.rs"
+
+[profile.release]
+opt-level = 1
