@@ -15,7 +15,7 @@ We welcome contributions in many forms:
 ## Getting Started
 
 1. **Read the AI Manifest:** Start with `0-AI-MANIFEST.a2ml` (if present) to understand the repository structure.
-2. **Environment:** Use `nix develop` or `direnv allow` to set up your tools.
+2. **Environment:** Use `guix shell -D -f guix.scm` (or `direnv allow`) to set up your tools. Guix is the canonical packager per [standards#101](https://github.com/hyperpolymath/standards/issues/101); the prior `nix develop` fallback was retired.
 3. **Task Runner:** Use `just` to see available commands (`just --list`).
 
 ## Development Workflow
