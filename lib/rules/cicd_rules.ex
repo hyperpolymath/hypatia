@@ -65,8 +65,10 @@ defmodule Hypatia.Rules.CicdRules do
     %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned -- use ReScript"},
     %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
-    %{id: :python_detected, glob: "*.py", reason: "Python banned -- use Julia/Rust",
-      exception: "SaltStack"},
+    # Python ban is total — no exceptions (the former SaltStack carve-out
+    # was removed by org policy 2026-05-18). ScannerSuppression also
+    # hard-refuses to suppress cicd_rules/banned_language_file.
+    %{id: :python_detected, glob: "*.py", reason: "Python banned -- use Julia/Rust"},
     %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
     %{id: :unpinned_action,
       pattern: ~r/uses:\s+[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+@(v[0-9][a-zA-Z0-9.-]*|main|master)/,

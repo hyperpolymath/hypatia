@@ -68,6 +68,51 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+  describe "suppressed?/4 — banned_language_file is total, no exceptions" do
+    test "never suppressed even on a universal-exclude path" do
+      refute ScannerSuppression.suppressed?(
+               "node_modules/tool/helper.py",
+               "cicd_rules",
+               "banned_language_file"
+             )
+    end
+
+    test "never suppressed even for a training-corpus path" do
+      refute ScannerSuppression.suppressed?(
+               ".audittraining/security-errors/sample.py",
+               "cicd_rules",
+               "banned_language_file"
+             )
+    end
+
+    test "never suppressed even with a matching .hypatia-ignore entry" do
+      tmp = Path.join(System.tmp_dir!(), "hyp-ban-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(tmp, "scripts"))
+
+      File.write!(
+        Path.join(tmp, ".hypatia-ignore"),
+        "cicd_rules/banned_language_file:scripts/legacy.py\n"
+      )
+
+      refute ScannerSuppression.suppressed?(
+               "scripts/legacy.py",
+               "cicd_rules",
+               "banned_language_file",
+               repo_path: tmp
+             )
+
+      File.rm_rf!(tmp)
+    end
+
+    test "an unrelated rule on the same path is still suppressible" do
+      assert ScannerSuppression.suppressed?(
+               "node_modules/foo/index.js",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+  end
+
   describe "context_safe_line?/2 — line-level exemptions for secret_detected" do
     test "GitHub Actions secrets reference is not a leak" do
       assert ScannerSuppression.context_safe_line?(

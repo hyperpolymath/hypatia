@@ -78,8 +78,21 @@ defmodule Hypatia.ScannerSuppression do
 
   `file` is matched as a normalised relative path. Absolute paths are
   normalised by stripping the leading repo_path when supplied.
+
+  ## Unsuppressible findings
+
+  The banned-language ban (`cicd_rules/banned_language_file`) is **total
+  with no exceptions** as of org policy 2026-05-18 — including the former
+  SaltStack carve-out. No `.hypatia-ignore` entry, built-in default
+  exemption, universal exclude, or training-corpus path may suppress it;
+  this clause short-circuits every suppression vector for that rule so the
+  gate cannot be silenced repo-side.
   """
-  def suppressed?(file, rule_module, rule_type, opts \\ []) do
+  def suppressed?(file, rule_module, rule_type, opts \\ [])
+
+  def suppressed?(_file, "cicd_rules", "banned_language_file", _opts), do: false
+
+  def suppressed?(file, rule_module, rule_type, opts) do
     repo_path = Keyword.get(opts, :repo_path, nil)
     rel = relative(file, repo_path)
 
