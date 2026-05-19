@@ -44,12 +44,39 @@ build_escript() {
     )
 }
 
+# A stale escript is a SOUNDNESS hazard, not a convenience issue: an
+# escript built before a rule/pattern was added silently emits zero
+# findings for that whole pattern family (observed: an escript predating
+# the Elixir/Erlang/Coq/Lean/Agda/Zig pattern sets passed a textbook
+# `System.shell("…#{x}")` injection with "0 findings"). So rebuild when
+# the binary is missing *or* older than any tracked rule/CLI source.
+# Set HYPATIA_NO_STALE_REBUILD=1 to opt out (e.g. air-gapped deploys
+# that ship a known-current binary and have no toolchain).
+escript_is_stale() {
+    [[ -x "${ESCRIPT}" ]] || return 0
+    [[ "${HYPATIA_NO_STALE_REBUILD:-0}" == "1" ]] && return 1
+    local newer
+    newer=$(find "${HYPATIA_DIR}/lib" "${HYPATIA_DIR}/mix.exs" \
+                 -name '*.ex' -o -name '*.exs' 2>/dev/null \
+            | while IFS= read -r f; do
+                  [[ "$f" -nt "${ESCRIPT}" ]] && { echo stale; break; }
+              done)
+    [[ -n "$newer" ]]
+}
+
 # ─── Locate or build the escript ────────────────────────────────────────
 
 if [[ ! -x "${ESCRIPT}" ]]; then
     # Try to build if mix is available
     if command -v mix &>/dev/null; then
         build_escript
+    fi
+elif escript_is_stale; then
+    if command -v mix &>/dev/null; then
+        echo "[hypatia] escript is older than rule sources — rebuilding to avoid silent false negatives." >&2
+        build_escript
+    else
+        echo "[hypatia] WARNING: escript is older than rule sources and mix is unavailable; scan results may omit newer pattern families." >&2
     fi
 fi
 
