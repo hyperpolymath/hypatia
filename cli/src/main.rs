@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! cicd-hyper-a CLI - Command-line interface for the neurosymbolic CI/CD platform
+//! hypatia CLI - Command-line interface for the neurosymbolic CI/CD platform
 //!
 //! This CLI provides commands for:
 //! - Scanning repositories for CI/CD issues
@@ -23,7 +23,7 @@ use commands::{batch, deposit, fleet, hooks, scan, search, withdraw};
 use config::Config;
 use output::OutputFormat;
 
-/// cicd-hyper-a CLI - Neurosymbolic CI/CD Intelligence Platform
+/// hypatia CLI - Neurosymbolic CI/CD Intelligence Platform
 ///
 /// Combines neural learning with symbolic reasoning to provide
 /// intelligent CI/CD automation and issue detection.

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Dragonfly Cache Strategy
+# hypatia Dragonfly Cache Strategy
 
 # Dragonfly is a Redis-compatible in-memory store optimized for:
 # - High throughput (25x faster than Redis)

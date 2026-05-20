@@ -80,7 +80,7 @@ jobs:
   haskell-audit:
     name: Haskell Dependency Audit
     runs-on: ubuntu-latest
-    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
+    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -221,7 +221,7 @@ jobs:
   sbom-haskell:
     name: Generate Haskell SBOM
     runs-on: ubuntu-latest
-    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
+    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -252,7 +252,7 @@ jobs:
             "metadata": {
               "component": {
                 "type": "application",
-                "name": "cicd-hyper-a",
+                "name": "hypatia",
                 "version": "0.1.0.0"
               }
             },
@@ -290,12 +290,12 @@ jobs:
 
       - name: Build test image
         run: |
-          docker build -t cicd-hyper-a:scan -f deploy/Containerfile .
+          docker build -t hypatia:scan -f deploy/Containerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.28.0
         with:
-          image-ref: 'cicd-hyper-a:scan'
+          image-ref: 'hypatia:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -422,7 +422,7 @@ jobs:
           if [ ! -f deny.toml ]; then
             cat > deny.toml << 'EOF'
           # SPDX-License-Identifier: PMPL-1.0-or-later
-          # cargo-deny configuration for cicd-hyper-a
+          # cargo-deny configuration for hypatia
 
           [advisories]
           db-path = "~/.cargo/advisory-db"
@@ -480,7 +480,7 @@ jobs:
   audit_haskell-audit:
     name: Haskell Dependency Audit
     runs-on: ubuntu-latest
-    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
+    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -502,7 +502,7 @@ jobs:
             ~/.cabal/packages
             ~/.cabal/store
             registry/dist-newstyle
-          key: ${{ runner.os }}-cabal-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+          key: ${{ runner.os }}-cabal-${{ hashFiles('registry/hypatia.cabal') }}
 
       - name: Generate dependency freeze
         run: |
@@ -547,9 +547,9 @@ jobs:
         id: image
         run: |
           dockerfile="${{ matrix.dockerfile }}"
-          name=$(basename "$dockerfile" | sed 's/Containerfile/cicd-hyper-a/' | sed 's/^\.//' | sed 's/^-//')
-          if [ "$name" = "cicd-hyper-a" ]; then
-            name="cicd-hyper-a-main"
+          name=$(basename "$dockerfile" | sed 's/Containerfile/hypatia/' | sed 's/^\.//' | sed 's/^-//')
+          if [ "$name" = "hypatia" ]; then
+            name="hypatia-main"
           fi
           echo "name=$name" >> $GITHUB_OUTPUT
 
@@ -599,9 +599,9 @@ jobs:
           if [ ! -f .gitleaks.toml ]; then
             cat > .gitleaks.toml << 'EOF'
           # SPDX-License-Identifier: PMPL-1.0-or-later
-          # Gitleaks configuration for cicd-hyper-a
+          # Gitleaks configuration for hypatia
 
-          title = "cicd-hyper-a gitleaks configuration"
+          title = "hypatia gitleaks configuration"
 
           [allowlist]
           description = "Allowlisted files and patterns"
@@ -817,7 +817,7 @@ jobs:
           cargo cyclonedx --format xml --output-cdx sbom-rust.cdx.xml || true
 
       - name: Setup Haskell
-        if: hashFiles('registry/cicd-hyper-a.cabal') != ''
+        if: hashFiles('registry/hypatia.cabal') != ''
         uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
         with:
           ghc-version: '9.6'
@@ -825,7 +825,7 @@ jobs:
           cabal-update: true
 
       - name: Generate Haskell SBOM
-        if: hashFiles('registry/cicd-hyper-a.cabal') != ''
+        if: hashFiles('registry/hypatia.cabal') != ''
         working-directory: registry
         run: |
           cabal build all --dry-run
@@ -841,9 +841,9 @@ jobs:
               "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
               "component": {
                 "type": "application",
-                "name": "cicd-hyper-a-registry",
+                "name": "hypatia-registry",
                 "version": "0.1.0.0",
-                "purl": "pkg:hackage/cicd-hyper-a@0.1.0.0"
+                "purl": "pkg:hackage/hypatia@0.1.0.0"
               }
             },
             "components": []

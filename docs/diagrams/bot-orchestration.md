@@ -3,7 +3,7 @@
 
 ## Overview
 
-The cicd-hyper-a bot fleet uses dependency-based topological sorting to execute bots in the correct order.
+The hypatia bot fleet uses dependency-based topological sorting to execute bots in the correct order.
 
 ## Bot Dependency Graph
 

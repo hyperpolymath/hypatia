@@ -1,8 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Git Hooks Installer
+# hypatia Git Hooks Installer
 #
-# Installs cicd-hyper-a git hooks into a repository.
+# Installs hypatia git hooks into a repository.
 #
 # Usage:
 #   ./installer.sh [options] [target-repo]
@@ -100,7 +100,7 @@ die() {
 
 usage() {
     cat << EOF
-${BOLD}cicd-hyper-a Git Hooks Installer v${VERSION}${NC}
+${BOLD}hypatia Git Hooks Installer v${VERSION}${NC}
 
 ${BOLD}Usage:${NC}
     $(basename "$0") [options] [target-repo]
@@ -125,7 +125,7 @@ ${BOLD}Examples:${NC}
     $(basename "$0") --uninstall                  # Remove hooks
 
 ${BOLD}Environment Variables:${NC}
-    CICD_HYPER_A_API    API endpoint for cicd-hyper-a
+    CICD_HYPER_A_API    API endpoint for hypatia
     CICD_HYPER_A_TOKEN  API authentication token
     CICD_CACHE_HOST     Redis/Dragonfly host
     CICD_CACHE_PORT     Redis/Dragonfly port
@@ -258,7 +258,7 @@ install_hook() {
             log_debug "Force mode - overwriting existing hook"
         else
             # Check if it's our hook
-            if grep -q "cicd-hyper-a" "$target" 2>/dev/null; then
+            if grep -q "hypatia" "$target" 2>/dev/null; then
                 if [ "$UPDATE" = true ]; then
                     backup_hook "$target"
                 else
@@ -342,7 +342,7 @@ install_config() {
 install_all() {
     local repo="$1"
 
-    log_info "Installing cicd-hyper-a hooks to: $repo"
+    log_info "Installing hypatia hooks to: $repo"
 
     # Install lib directory first
     install_lib "$repo"
@@ -378,8 +378,8 @@ uninstall_hook() {
     fi
 
     # Only remove our hooks
-    if ! grep -q "cicd-hyper-a" "$target" 2>/dev/null; then
-        log_warn "Not a cicd-hyper-a hook, skipping: $hook_name"
+    if ! grep -q "hypatia" "$target" 2>/dev/null; then
+        log_warn "Not a hypatia hook, skipping: $hook_name"
         return 0
     fi
 
@@ -395,7 +395,7 @@ uninstall_hook() {
 uninstall_all() {
     local repo="$1"
 
-    log_info "Uninstalling cicd-hyper-a hooks from: $repo"
+    log_info "Uninstalling hypatia hooks from: $repo"
 
     # Uninstall each hook
     for hook in pre-commit pre-push post-receive commit-msg prepare-commit-msg; do

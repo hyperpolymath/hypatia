@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= Threat Model for cicd-hyper-a
+= Threat Model for hypatia
 :toc: macro
 :toclevels: 3
 :icons: font
@@ -10,9 +10,9 @@ toc::[]
 
 == Executive Summary
 
-This document describes the threat model for *cicd-hyper-a*, a neurosymbolic CI/CD intelligence platform. The system combines neural learning, symbolic reasoning, and formal verification to manage CI/CD rulesets across multiple code forges.
+This document describes the threat model for *hypatia*, a neurosymbolic CI/CD intelligence platform. The system combines neural learning, symbolic reasoning, and formal verification to manage CI/CD rulesets across multiple code forges.
 
-Due to its position in the software supply chain and its access to repository credentials, cicd-hyper-a is a high-value target for attackers seeking to:
+Due to its position in the software supply chain and its access to repository credentials, hypatia is a high-value target for attackers seeking to:
 
 * Inject malicious code into downstream repositories
 * Steal credentials for code forges
@@ -670,7 +670,7 @@ a|
 
 [cols="1,3"]
 |===
-| Boundary | Between cicd-hyper-a and external forges
+| Boundary | Between hypatia and external forges
 
 | *Controls*
 a|
@@ -736,5 +736,5 @@ a|
 * https://owasp.org/www-community/Threat_Modeling[OWASP Threat Modeling]
 * https://docs.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats[Microsoft STRIDE Model]
 * https://www.cisa.gov/sites/default/files/publications/ESF_SECURING_THE_SOFTWARE_SUPPLY_CHAIN_DEVELOPERS.PDF[CISA Securing the Software Supply Chain]
-* link:SECURITY-AUDIT.adoc[cicd-hyper-a Security Audit Checklist]
+* link:SECURITY-AUDIT.adoc[hypatia Security Audit Checklist]
 * link:../SECURITY.md[Security Policy]

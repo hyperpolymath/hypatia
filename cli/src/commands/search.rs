@@ -166,7 +166,7 @@ pub async fn execute(args: SearchArgs, config: &Config, format: OutputFormat) ->
         .registry
         .clone()
         .or_else(|| config.registry_url.clone())
-        .unwrap_or_else(|| "https://registry.cicd-hyper-a.dev".to_string());
+        .unwrap_or_else(|| "https://registry.hypatia.dev".to_string());
 
     info!("Searching registry: {}", registry_url);
 
@@ -326,7 +326,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             version: "1.2.0".to_string(),
             description: "Pin all GitHub Actions to SHA for supply chain security".to_string(),
             category: "security".to_string(),
-            authors: vec!["cicd-hyper-a".to_string()],
+            authors: vec!["hypatia".to_string()],
             languages: vec!["all".to_string()],
             tags: vec![
                 "security".to_string(),
@@ -347,7 +347,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             version: "2.0.1".to_string(),
             description: "Enforce minimal workflow permissions for GitHub Actions".to_string(),
             category: "security".to_string(),
-            authors: vec!["cicd-hyper-a".to_string()],
+            authors: vec!["hypatia".to_string()],
             languages: vec!["all".to_string()],
             tags: vec![
                 "security".to_string(),
@@ -436,7 +436,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             version: "2.0.0".to_string(),
             description: "Optimal CodeQL configuration for language detection".to_string(),
             category: "workflow".to_string(),
-            authors: vec!["cicd-hyper-a".to_string()],
+            authors: vec!["hypatia".to_string()],
             languages: vec!["all".to_string()],
             tags: vec![
                 "codeql".to_string(),

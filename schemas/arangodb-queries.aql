@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-// cicd-hyper-a ArangoDB Query Templates
+// hypatia ArangoDB Query Templates
 //
-// These AQL queries provide common operations for the cicd-hyper-a graph model.
+// These AQL queries provide common operations for the hypatia graph model.
 // Variables prefixed with @ are bind parameters.
 
 // =============================================================================

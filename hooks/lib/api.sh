@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Git Hooks - API Client Functions
-# HTTP client for cicd-hyper-a API integration
+# hypatia Git Hooks - API Client Functions
+# HTTP client for hypatia API integration
 #
 # This file is designed to be sourced by hook scripts:
 #   . "$(dirname "$0")/lib/api.sh"
@@ -17,7 +17,7 @@ CICD_API_TIMEOUT="${CICD_API_TIMEOUT:-10}"
 CICD_API_RETRIES="${CICD_API_RETRIES:-3}"
 
 # User agent for requests
-CICD_USER_AGENT="cicd-hyper-a-hooks/1.0"
+CICD_USER_AGENT="hypatia-hooks/1.0"
 
 # ==============================================================================
 # HTTP CLIENT DETECTION
@@ -180,7 +180,7 @@ api_request_with_retry() {
 # CICD-HYPER-A API ENDPOINTS
 # ==============================================================================
 
-# Report hook execution to cicd-hyper-a
+# Report hook execution to hypatia
 # Usage: report_hook_execution "pre-commit" "success" "..."
 report_hook_execution() {
     _hook_name="$1"

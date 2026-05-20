@@ -695,7 +695,7 @@ fn is_managed_hook(path: &Path) -> Result<bool> {
     }
 
     let content = std::fs::read_to_string(path)?;
-    Ok(content.contains("# Managed by cicd-hyper-a"))
+    Ok(content.contains("# Managed by hypatia"))
 }
 
 /// Get hook definitions
@@ -896,11 +896,11 @@ fi
     format!(
         r#"#!/bin/bash
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# Managed by cicd-hyper-a
+# Managed by hypatia
 # Version: 1.0.0
 # Hook: {hook_type}
 #
-# This hook is managed by the cicd-hyper-a CLI.
+# This hook is managed by the hypatia CLI.
 # To update: hyper hooks update
 # To remove: hyper hooks remove {hook_type}
 

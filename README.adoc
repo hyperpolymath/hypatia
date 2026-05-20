@@ -161,8 +161,8 @@ services:
 
 [source,bash]
 ----
-helm repo add cicd-hyper-a https://hyperpolymath.github.io/cicd-hyper-a
-helm install cicd-hyper-a hypatia/hypatia
+helm repo add hypatia https://hyperpolymath.github.io/hypatia
+helm install hypatia hypatia/hypatia
 ----
 
 == Haskell Verification Registry
@@ -285,21 +285,21 @@ preventiveSafe rule repo = apply rule repo
 [source,bash]
 ----
 # Deposit a new ruleset
-cicd-hyper-a deposit ./my-ruleset.hs \
+hypatia deposit ./my-ruleset.hs \
   --name "rust-security-hardening" \
   --description "Security rules for Rust projects" \
   --sign --verify
 
 # Withdraw for local use
-cicd-hyper-a withdraw rust-security-hardening \
+hypatia withdraw rust-security-hardening \
   --version "1.2.0" \
   --output ./rules/
 
 # Search for rulesets
-cicd-hyper-a search --effect preventive --language rust
+hypatia search --effect preventive --language rust
 
 # Audit a ruleset
-cicd-hyper-a audit rust-security-hardening --full
+hypatia audit rust-security-hardening --full
 ----
 
 == Integration with robot-repo-automaton
@@ -311,7 +311,7 @@ The platform integrates with link:https://github.com/hyperpolymath/robot-repo-au
 # robot-repo-automaton/config.yml
 cicd_hyper_a:
   enabled: true
-  registry_url: https://registry.cicd-hyper-a.hyperpolymath.dev
+  registry_url: https://registry.hypatia.hyperpolymath.dev
   
   # Rulesets to apply to all repos
   global_rulesets:
@@ -342,10 +342,10 @@ cicd_hyper_a:
 [source,bash]
 ----
 #!/bin/bash
-# .git/hooks/pre-commit (injected by cicd-hyper-a)
+# .git/hooks/pre-commit (injected by hypatia)
 
 # Load rulesets from registry (cached in Dragonfly)
-cicd-hyper-a hooks pre-commit \
+hypatia hooks pre-commit \
   --rulesets hyperpolymath/rsr-compliance \
   --cache-ttl 3600
 
@@ -361,7 +361,7 @@ cicd-hyper-a hooks pre-commit \
 #!/bin/bash
 # .git/hooks/pre-push
 
-cicd-hyper-a hooks pre-push \
+hypatia hooks pre-push \
   --rulesets hyperpolymath/security-baseline \
   --verify-signatures
 
@@ -449,7 +449,7 @@ registry:
 
 [source]
 ----
-cicd-hyper-a/
+hypatia/
 ├── registry/                    # Haskell verification registry
 │   ├── src/
 │   │   ├── CicdHyperA/
@@ -460,7 +460,7 @@ cicd-hyper-a/
 │   │   │   └── API.hs          # REST/GraphQL API
 │   │   └── Main.hs
 │   ├── test/
-│   └── cicd-hyper-a.cabal
+│   └── hypatia.cabal
 │
 ├── engine/                      # Logtalk rule engine
 │   ├── rules/

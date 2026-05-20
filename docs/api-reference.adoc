@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a API Reference
+= hypatia API Reference
 :toc: left
 :toclevels: 3
 :icons: font
@@ -10,7 +10,7 @@
 
 == Overview
 
-The cicd-hyper-a Registry API provides programmatic access to ruleset management, verification, and distribution.
+The hypatia Registry API provides programmatic access to ruleset management, verification, and distribution.
 
 === Base URL
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Pre-Commit Hook Template
+# hypatia Pre-Commit Hook Template
 # Runs preventive rules before commits are created
 #
 # This hook checks:

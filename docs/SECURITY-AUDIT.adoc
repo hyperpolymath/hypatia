@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= Security Audit Checklist for cicd-hyper-a
+= Security Audit Checklist for hypatia
 :toc: macro
 :toclevels: 3
 :icons: font
@@ -10,7 +10,7 @@ toc::[]
 
 == Overview
 
-This document provides a comprehensive security audit checklist for the cicd-hyper-a neurosymbolic CI/CD intelligence platform. It covers all layers of the system: Rust adapters, Haskell verification registry, Logtalk rule engine, data stores (ArangoDB, Dragonfly), container deployments, and API surfaces.
+This document provides a comprehensive security audit checklist for the hypatia neurosymbolic CI/CD intelligence platform. It covers all layers of the system: Rust adapters, Haskell verification registry, Logtalk rule engine, data stores (ArangoDB, Dragonfly), container deployments, and API surfaces.
 
 === Audit Scope
 
@@ -124,7 +124,7 @@ This document provides a comprehensive security audit checklist for the cicd-hyp
 
 === Cryptographic Standards
 
-Reference: `CRYPTO-STANDARD.scm` in the cicd-hyper-a repo (`docs/CRYPTO-STANDARD.scm`)
+Reference: `CRYPTO-STANDARD.scm` in the hypatia repo (`docs/CRYPTO-STANDARD.scm`)
 
 [%interactive]
 * [ ] *CRYPTO-001*: TLS 1.3 is enforced for all network connections
@@ -369,7 +369,7 @@ Reference: `CRYPTO-STANDARD.scm` in the cicd-hyper-a repo (`docs/CRYPTO-STANDARD
 
 === CII Best Practices
 
-Reference: `CII-ENFORCEMENT.adoc` in the cicd-hyper-a repo
+Reference: `CII-ENFORCEMENT.adoc` in the hypatia repo
 
 [%interactive]
 * [ ] *CII-001*: Passing badge requirements are met

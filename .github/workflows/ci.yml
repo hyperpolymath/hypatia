@@ -135,8 +135,8 @@ jobs:
     runs-on: ubuntu-latest
     # registry/ is the Haskell sub-project; gate this job on its presence so
     # PRs that don't touch (and don't ship) the Haskell tree don't fail here.
-    # The job re-activates the moment `registry/cicd-hyper-a.cabal` lands.
-    if: hashFiles('registry/cicd-hyper-a.cabal') != ''
+    # The job re-activates the moment `registry/hypatia.cabal` lands.
+    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -164,7 +164,7 @@ jobs:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ env.key }}-plan-${{ hashFiles('registry/cicd-hyper-a.cabal') }}
+          key: ${{ env.key }}-plan-${{ hashFiles('registry/hypatia.cabal') }}
           restore-keys: ${{ env.key }}-
 
       - name: Install dependencies

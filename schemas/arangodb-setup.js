@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-// cicd-hyper-a ArangoDB Setup Script
+// hypatia ArangoDB Setup Script
 //
 // Run with: arangosh --javascript.execute arangodb-setup.js
 // Or import in Foxx service
@@ -389,7 +389,7 @@ function seedData() {
 
 function main() {
   console.log('='.repeat(60));
-  console.log('cicd-hyper-a ArangoDB Setup');
+  console.log('hypatia ArangoDB Setup');
   console.log('='.repeat(60));
 
   setupDatabase();

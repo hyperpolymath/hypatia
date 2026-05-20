@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Git Hooks Configuration
+# hypatia Git Hooks Configuration
 #
-# This file controls the behavior of cicd-hyper-a git hooks.
+# This file controls the behavior of hypatia git hooks.
 # Copy to .git/hooks/config.yml or set CICD_CONFIG_FILE environment variable.
 #
-# Documentation: https://github.com/hyperpolymath/cicd-hyper-a/docs/hooks.adoc
+# Documentation: https://github.com/hyperpolymath/hypatia/docs/hooks.adoc
 
 # ==============================================================================
 # GLOBAL SETTINGS
@@ -27,8 +27,8 @@ colors: auto
 # ==============================================================================
 
 api:
-  # cicd-hyper-a API endpoint
-  # Production: https://api.cicd-hyper-a.example.com  # TODO: Replace with your domain
+  # hypatia API endpoint
+  # Production: https://api.hypatia.example.com  # TODO: Replace with your domain
   url: "http://localhost:8080"
 
   # API timeout in seconds
@@ -58,7 +58,7 @@ cache:
   # Cache TTL in seconds (1 hour default)
   ttl: 3600
 
-  # File cache directory (default: ~/.cache/cicd-hyper-a)
+  # File cache directory (default: ~/.cache/hypatia)
   file_dir: ""
 
 # ==============================================================================
@@ -270,7 +270,7 @@ hooks:
     logging:
       enabled: true
       # Log directory
-      dir: "/var/log/cicd-hyper-a"
+      dir: "/var/log/hypatia"
 
   # ============================================================================
   # HOOK: COMMIT-MSG

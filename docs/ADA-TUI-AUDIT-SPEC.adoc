@@ -141,7 +141,7 @@ GitHub Actions workflow validation:
 ║ RECENT ACTIVITY                                                    ║
 ║ ├─ glambot         ✓ Compliant (100%)  [just now]                  ║
 ║ ├─ finishing-bot   ✓ Compliant (100%)  [just now]                  ║
-║ ├─ cicd-hyper-a    ! Warning (87%)     [structure missing]         ║
+║ ├─ hypatia    ! Warning (87%)     [structure missing]         ║
 ║ └─ git-dispatcher  ! Warning (45%)     [needs 6scm files]          ║
 ╚════════════════════════════════════════════════════════════════════╝
 ----
@@ -176,7 +176,7 @@ GitHub Actions workflow validation:
 
 == Integration Points
 
-=== cicd-hyper-a Integration
+=== hypatia Integration
 * Export audit results to Logtalk rule engine
 * Feed error patterns to neurosymbolic learning
 * Trigger hook wave propagation on fixes
@@ -214,7 +214,7 @@ rsr-audit --quick --fail-on-required
 * SHA-pin verification
 
 === Phase 4: Integration
-* cicd-hyper-a event export
+* hypatia event export
 * rhodibot result import
 * Git hook generation
 * Report export (JSON, Markdown, AsciiDoc)

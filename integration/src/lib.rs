@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Integration test utilities and shared code for cicd-hyper-a
+//! Integration test utilities and shared code for hypatia
 //!
 //! This module provides common utilities used across integration tests:
 //! - Test logging setup

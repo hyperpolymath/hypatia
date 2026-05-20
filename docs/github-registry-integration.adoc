@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= GitHub Registry Integration for cicd-hyper-a
+= GitHub Registry Integration for hypatia
 :toc: left
 :toclevels: 3
 :icons: font
@@ -12,7 +12,7 @@
 
 == Executive Summary
 
-This document evaluates GitHub's built-in registry systems as alternatives to a self-hosted registry for storing and distributing cicd-hyper-a rulesets. The analysis covers four options: GitHub Packages, GitHub Container Registry (ghcr.io), GitHub Releases, and GitHub Actions Artifacts.
+This document evaluates GitHub's built-in registry systems as alternatives to a self-hosted registry for storing and distributing hypatia rulesets. The analysis covers four options: GitHub Packages, GitHub Container Registry (ghcr.io), GitHub Releases, and GitHub Actions Artifacts.
 
 === Recommendation
 
@@ -33,7 +33,7 @@ This provides the best balance of:
 
 === How It Works
 
-GitHub Packages provides package hosting for multiple ecosystems. For cicd-hyper-a rulesets, we could package them as:
+GitHub Packages provides package hosting for multiple ecosystems. For hypatia rulesets, we could package them as:
 
 * *npm packages*: JSON/YAML rulesets as npm modules
 * *Cargo crates*: Rust-based ruleset loaders (not the rulesets themselves)
@@ -50,8 +50,8 @@ Rulesets would be published as scoped npm packages:
   "description": "GitHub Actions SHA pinning rules",
   "main": "ruleset.yaml",
   "files": ["ruleset.yaml", "rules/*.yaml"],
-  "keywords": ["cicd-hyper-a", "ruleset", "security"],
-  "repository": "https://github.com/hyperpolymath/cicd-hyper-a",
+  "keywords": ["hypatia", "ruleset", "security"],
+  "repository": "https://github.com/hyperpolymath/hypatia",
   "license": "PMPL-1.0-or-later"
 }
 ----
@@ -105,7 +105,7 @@ echo "@hyperpolymath:registry=https://npm.pkg.github.com" >> ~/.npmrc
 
 # Cargo authentication (in .cargo/config.toml)
 [registries.github]
-index = "sparse+https://github.com/hyperpolymath/cicd-hyper-a-registry/index/"
+index = "sparse+https://github.com/hyperpolymath/hypatia-registry/index/"
 token = "Bearer ${GITHUB_TOKEN}"
 ----
 
@@ -207,7 +207,7 @@ GitHub Container Registry (ghcr.io) supports OCI artifacts, allowing storage of 
 
 [source]
 ----
-ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0
+ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins:1.0.0
                   │                         │        │              │
                   └─ org name               │        │              └─ version tag
                                             │        └─ ruleset name
@@ -222,24 +222,24 @@ ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0
   "schemaVersion": 2,
   "mediaType": "application/vnd.oci.image.manifest.v1+json",
   "config": {
-    "mediaType": "application/vnd.cicd-hyper-a.ruleset.config.v1+json",
+    "mediaType": "application/vnd.hypatia.ruleset.config.v1+json",
     "size": 233,
     "digest": "sha256:abc..."
   },
   "layers": [
     {
-      "mediaType": "application/vnd.cicd-hyper-a.ruleset.content.v1+yaml",
+      "mediaType": "application/vnd.hypatia.ruleset.content.v1+yaml",
       "size": 4521,
       "digest": "sha256:def...",
       "annotations": {
         "org.opencontainers.image.title": "workflow-pins.yaml",
-        "dev.cicd-hyper-a.category": "security",
-        "dev.cicd-hyper-a.version": "1.0.0"
+        "dev.hypatia.category": "security",
+        "dev.hypatia.version": "1.0.0"
       }
     }
   ],
   "annotations": {
-    "org.opencontainers.image.source": "https://github.com/hyperpolymath/cicd-hyper-a",
+    "org.opencontainers.image.source": "https://github.com/hyperpolymath/hypatia",
     "org.opencontainers.image.description": "GitHub Actions SHA pinning rules",
     "org.opencontainers.image.licenses": "PMPL-1.0-or-later"
   }
@@ -298,14 +298,14 @@ echo $GITHUB_TOKEN | oras login ghcr.io -u USERNAME --password-stdin
 brew install oras  # or: go install oras.land/oras/cmd/oras@latest
 
 # Push ruleset as OCI artifact
-oras push ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 \
-  --artifact-type application/vnd.cicd-hyper-a.ruleset.v1 \
-  --annotation "org.opencontainers.image.source=https://github.com/hyperpolymath/cicd-hyper-a" \
-  --annotation "dev.cicd-hyper-a.category=security" \
-  workflow-pins.yaml:application/vnd.cicd-hyper-a.ruleset.content.v1+yaml
+oras push ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins:1.0.0 \
+  --artifact-type application/vnd.hypatia.ruleset.v1 \
+  --annotation "org.opencontainers.image.source=https://github.com/hyperpolymath/hypatia" \
+  --annotation "dev.hypatia.category=security" \
+  workflow-pins.yaml:application/vnd.hypatia.ruleset.content.v1+yaml
 
 # Tag as latest
-oras tag ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 latest
+oras tag ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins:1.0.0 latest
 ----
 
 ==== Pulling with ORAS (Withdraw)
@@ -313,14 +313,14 @@ oras tag ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.
 [source,bash]
 ----
 # Pull ruleset
-oras pull ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 \
+oras pull ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins:1.0.0 \
   --output ./rulesets/
 
 # Pull by digest (immutable)
-oras pull ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins@sha256:abc123...
+oras pull ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins@sha256:abc123...
 
 # List tags
-oras repo tags ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins
+oras repo tags ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins
 ----
 
 ==== GitHub Container Registry API
@@ -333,11 +333,11 @@ curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
 
 # Get package versions
 curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/orgs/hyperpolymath/packages/container/cicd-hyper-a-rulesets%2Fsecurity%2Fworkflow-pins/versions"
+  "https://api.github.com/orgs/hyperpolymath/packages/container/hypatia-rulesets%2Fsecurity%2Fworkflow-pins/versions"
 
 # Delete a version (admin only)
 curl -X DELETE -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/orgs/hyperpolymath/packages/container/cicd-hyper-a-rulesets%2Fsecurity%2Fworkflow-pins/versions/12345"
+  "https://api.github.com/orgs/hyperpolymath/packages/container/hypatia-rulesets%2Fsecurity%2Fworkflow-pins/versions/12345"
 ----
 
 === CLI Integration
@@ -368,7 +368,7 @@ impl GhcrRegistry {
 
         Ok(Self {
             client,
-            namespace: "ghcr.io/hyperpolymath/cicd-hyper-a-rulesets".to_string(),
+            namespace: "ghcr.io/hyperpolymath/hypatia-rulesets".to_string(),
         })
     }
 
@@ -384,15 +384,15 @@ impl GhcrRegistry {
 
         // Create OCI manifest
         let config = OciConfig {
-            media_type: "application/vnd.cicd-hyper-a.ruleset.config.v1+json",
+            media_type: "application/vnd.hypatia.ruleset.config.v1+json",
             config: serde_json::to_vec(&ruleset.metadata)?,
         };
 
         let layer = OciLayer {
-            media_type: "application/vnd.cicd-hyper-a.ruleset.content.v1+yaml",
+            media_type: "application/vnd.hypatia.ruleset.content.v1+yaml",
             data: content.to_vec(),
             annotations: HashMap::from([
-                ("dev.cicd-hyper-a.category".into(), ruleset.metadata.category.to_string()),
+                ("dev.hypatia.category".into(), ruleset.metadata.category.to_string()),
             ]),
         };
 
@@ -401,7 +401,7 @@ impl GhcrRegistry {
             .layer(layer)
             .annotations(HashMap::from([
                 ("org.opencontainers.image.source".into(),
-                 "https://github.com/hyperpolymath/cicd-hyper-a".into()),
+                 "https://github.com/hyperpolymath/hypatia".into()),
             ]))
             .build()?;
 
@@ -474,7 +474,7 @@ GitHub Releases attach binary assets to git tags, providing a simple way to dist
 
 [source]
 ----
-https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/tag/v1.0.0
+https://github.com/hyperpolymath/hypatia-rulesets/releases/tag/v1.0.0
 ├── security-workflow-pins-1.0.0.yaml
 ├── security-codeql-matrix-1.0.0.yaml
 ├── policy-spdx-headers-1.0.0.yaml
@@ -514,10 +514,10 @@ https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/tag/v1.0.0
 # For private repos only
 curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "Accept: application/octet-stream" \
-  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a-rulesets/releases/assets/12345"
+  "https://api.github.com/repos/hyperpolymath/hypatia-rulesets/releases/assets/12345"
 
 # Public repos: Direct download, no auth needed
-curl -LO "https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/download/v1.0.0/workflow-pins.yaml"
+curl -LO "https://github.com/hyperpolymath/hypatia-rulesets/releases/download/v1.0.0/workflow-pins.yaml"
 ----
 
 === API Usage Examples
@@ -528,7 +528,7 @@ curl -LO "https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/downlo
 ----
 # Create release via gh CLI
 gh release create v1.0.0 \
-  --repo hyperpolymath/cicd-hyper-a-rulesets \
+  --repo hyperpolymath/hypatia-rulesets \
   --title "Rulesets v1.0.0" \
   --notes "Security and policy rulesets" \
   ./rulesets/*.yaml
@@ -537,7 +537,7 @@ gh release create v1.0.0 \
 curl -X POST \
   -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a-rulesets/releases" \
+  "https://api.github.com/repos/hyperpolymath/hypatia-rulesets/releases" \
   -d '{
     "tag_name": "v1.0.0",
     "name": "Rulesets v1.0.0",
@@ -551,7 +551,7 @@ curl -X POST \
   -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "Content-Type: application/x-yaml" \
   --data-binary @workflow-pins.yaml \
-  "https://uploads.github.com/repos/hyperpolymath/cicd-hyper-a-rulesets/releases/12345/assets?name=workflow-pins.yaml"
+  "https://uploads.github.com/repos/hyperpolymath/hypatia-rulesets/releases/12345/assets?name=workflow-pins.yaml"
 ----
 
 ==== Downloading Assets (Withdraw)
@@ -559,16 +559,16 @@ curl -X POST \
 [source,bash]
 ----
 # Direct download (public)
-curl -LO "https://github.com/hyperpolymath/cicd-hyper-a-rulesets/releases/download/v1.0.0/workflow-pins.yaml"
+curl -LO "https://github.com/hyperpolymath/hypatia-rulesets/releases/download/v1.0.0/workflow-pins.yaml"
 
 # Via gh CLI
 gh release download v1.0.0 \
-  --repo hyperpolymath/cicd-hyper-a-rulesets \
+  --repo hyperpolymath/hypatia-rulesets \
   --pattern "*.yaml" \
   --dir ./rulesets/
 
 # List releases
-gh release list --repo hyperpolymath/cicd-hyper-a-rulesets
+gh release list --repo hyperpolymath/hypatia-rulesets
 ----
 
 === CLI Integration
@@ -749,13 +749,13 @@ jobs:
 ----
 # List artifacts
 curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a/actions/artifacts"
+  "https://api.github.com/repos/hyperpolymath/hypatia/actions/artifacts"
 
 # Download artifact (returns zip)
 curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
   -H "Accept: application/vnd.github+json" \
   -L -o artifact.zip \
-  "https://api.github.com/repos/hyperpolymath/cicd-hyper-a/actions/artifacts/12345/zip"
+  "https://api.github.com/repos/hyperpolymath/hypatia/actions/artifacts/12345/zip"
 ----
 
 === When to Use
@@ -864,7 +864,7 @@ curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
 | GPG
 | No
 
-| *cicd-hyper-a Fit*
+| *hypatia Fit*
 | Medium
 | *Best*
 | Good
@@ -878,13 +878,13 @@ curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
 [source]
 ----
 ┌─────────────────────────────────────────────────────────────────────┐
-│                cicd-hyper-a Registry Architecture                    │
+│                hypatia Registry Architecture                    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │                 PRIMARY: ghcr.io (OCI)                       │    │
 │  │                                                               │    │
-│  │  ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/                │    │
+│  │  ghcr.io/hyperpolymath/hypatia-rulesets/                │    │
 │  │  ├── security/workflow-pins:1.0.0                            │    │
 │  │  ├── security/codeql-matrix:1.0.0                            │    │
 │  │  ├── policy/spdx-headers:1.0.0                               │    │
@@ -902,8 +902,8 @@ curl -H "Authorization: Bearer ${GITHUB_TOKEN}" \
 │  │              SECONDARY: GitHub Releases                       │    │
 │  │                                                               │    │
 │  │  Bundled downloads for offline/air-gapped environments:      │    │
-│  │  - cicd-hyper-a-rulesets-v1.0.0-all.tar.gz                   │    │
-│  │  - cicd-hyper-a-rulesets-v1.0.0-security.tar.gz              │    │
+│  │  - hypatia-rulesets-v1.0.0-all.tar.gz                   │    │
+│  │  - hypatia-rulesets-v1.0.0-security.tar.gz              │    │
 │  │  - SHA256SUMS + SHA256SUMS.sig                               │    │
 │  │                                                               │    │
 │  └─────────────────────────────────────────────────────────────┘    │
@@ -998,7 +998,7 @@ pub fn create_registry(config: &Config) -> Result<Box<dyn Registry>> {
             let token = std::env::var("GITHUB_TOKEN").ok();
             Ok(Box::new(GitHubReleasesRegistry::new(
                 "hyperpolymath",
-                "cicd-hyper-a-rulesets",
+                "hypatia-rulesets",
                 token.as_deref(),
             )?))
         }
@@ -1007,7 +1007,7 @@ pub fn create_registry(config: &Config) -> Result<Box<dyn Registry>> {
         }
         RegistryBackend::SelfHosted => {
             let url = config.registry_url.clone()
-                .unwrap_or_else(|| "https://registry.cicd-hyper-a.dev".into());
+                .unwrap_or_else(|| "https://registry.hypatia.dev".into());
             Ok(Box::new(SelfHostedRegistry::new(&url)?))
         }
     }
@@ -1030,13 +1030,13 @@ use super::{Registry, RegistryBackend, DepositResult, WithdrawResult};
 use crate::commands::deposit::{Ruleset, RulesetMetadata};
 
 const GHCR_HOST: &str = "ghcr.io";
-const NAMESPACE: &str = "hyperpolymath/cicd-hyper-a-rulesets";
+const NAMESPACE: &str = "hyperpolymath/hypatia-rulesets";
 
-/// Custom media types for cicd-hyper-a rulesets
+/// Custom media types for hypatia rulesets
 mod media_types {
-    pub const CONFIG: &str = "application/vnd.cicd-hyper-a.ruleset.config.v1+json";
-    pub const CONTENT_YAML: &str = "application/vnd.cicd-hyper-a.ruleset.content.v1+yaml";
-    pub const CONTENT_JSON: &str = "application/vnd.cicd-hyper-a.ruleset.content.v1+json";
+    pub const CONFIG: &str = "application/vnd.hypatia.ruleset.config.v1+json";
+    pub const CONTENT_YAML: &str = "application/vnd.hypatia.ruleset.content.v1+yaml";
+    pub const CONTENT_JSON: &str = "application/vnd.hypatia.ruleset.content.v1+json";
 }
 
 /// ghcr.io registry client
@@ -1049,7 +1049,7 @@ pub struct GhcrRegistry {
 impl GhcrRegistry {
     pub fn new(token: &str) -> Result<Self> {
         let client = Client::builder()
-            .user_agent("cicd-hyper-a-cli/0.1.0")
+            .user_agent("hypatia-cli/0.1.0")
             .build()?;
 
         Ok(Self {
@@ -1101,14 +1101,14 @@ impl GhcrRegistry {
             }],
             annotations: Some(HashMap::from([
                 ("org.opencontainers.image.source".into(),
-                 "https://github.com/hyperpolymath/cicd-hyper-a".into()),
+                 "https://github.com/hyperpolymath/hypatia".into()),
                 ("org.opencontainers.image.description".into(),
                  metadata.description.clone()),
                 ("org.opencontainers.image.licenses".into(),
                  metadata.license.clone()),
-                ("dev.cicd-hyper-a.category".into(),
+                ("dev.hypatia.category".into(),
                  metadata.category.to_string()),
-                ("dev.cicd-hyper-a.version".into(),
+                ("dev.hypatia.version".into(),
                  metadata.version.clone()),
             ])),
         }
@@ -1308,7 +1308,7 @@ impl GitHubReleasesRegistry {
     pub fn new(owner: &str, repo: &str, token: Option<&str>) -> Result<Self> {
         Ok(Self {
             client: Client::builder()
-                .user_agent("cicd-hyper-a-cli/0.1.0")
+                .user_agent("hypatia-cli/0.1.0")
                 .build()?,
             owner: owner.to_string(),
             repo: repo.to_string(),
@@ -1487,11 +1487,11 @@ jobs:
             category=$(yq '.metadata.category' "$file")
             version=$(yq '.metadata.version' "$file")
 
-            oras push "ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/${category}/${name}:${version}" \
-              --artifact-type application/vnd.cicd-hyper-a.ruleset.v1 \
-              "$file:application/vnd.cicd-hyper-a.ruleset.content.v1+yaml"
+            oras push "ghcr.io/hyperpolymath/hypatia-rulesets/${category}/${name}:${version}" \
+              --artifact-type application/vnd.hypatia.ruleset.v1 \
+              "$file:application/vnd.hypatia.ruleset.content.v1+yaml"
 
-            oras tag "ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/${category}/${name}:${version}" latest
+            oras tag "ghcr.io/hyperpolymath/hypatia-rulesets/${category}/${name}:${version}" latest
           done
 
       - name: Create GitHub Release
@@ -1507,13 +1507,13 @@ jobs:
 
 [source,toml]
 ----
-# ~/.config/cicd-hyper-a/config.toml
+# ~/.config/hypatia/config.toml
 
 # Use GitHub Container Registry
 registry_backend = "ghcr"
 
 # Optional: Override namespace
-# registry_namespace = "hyperpolymath/cicd-hyper-a-rulesets"
+# registry_namespace = "hyperpolymath/hypatia-rulesets"
 ----
 
 [source,bash]
@@ -1532,11 +1532,11 @@ hyper withdraw security/workflow-pins:1.0.0
 
 [source,toml]
 ----
-# ~/.config/cicd-hyper-a/config.toml
+# ~/.config/hypatia/config.toml
 
 registry_backend = "releases"
 github_owner = "hyperpolymath"
-github_repo = "cicd-hyper-a-rulesets"
+github_repo = "hypatia-rulesets"
 ----
 
 [source,bash]
@@ -1576,8 +1576,8 @@ export HYPER_REGISTRY_NAMESPACE="myorg/my-rulesets"
 
 set -euo pipefail
 
-OLD_REGISTRY="https://registry.cicd-hyper-a.dev"
-NEW_NAMESPACE="ghcr.io/hyperpolymath/cicd-hyper-a-rulesets"
+OLD_REGISTRY="https://registry.hypatia.dev"
+NEW_NAMESPACE="ghcr.io/hyperpolymath/hypatia-rulesets"
 
 # Export all rulesets from old registry
 hyper search --registry "$OLD_REGISTRY" --output json | jq -r '.[].id' | while read id; do
@@ -1602,11 +1602,11 @@ echo "Migration complete!"
 [source,bash]
 ----
 # Sign artifacts during deposit
-cosign sign ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0
+cosign sign ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins:1.0.0
 
 # Verify during withdraw
-cosign verify ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins:1.0.0 \
-  --certificate-identity https://github.com/hyperpolymath/cicd-hyper-a/.github/workflows/release-rulesets.yml@refs/tags/rulesets-v1.0.0 \
+cosign verify ghcr.io/hyperpolymath/hypatia-rulesets/security/workflow-pins:1.0.0 \
+  --certificate-identity https://github.com/hyperpolymath/hypatia/.github/workflows/release-rulesets.yml@refs/tags/rulesets-v1.0.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ----
 
@@ -1617,7 +1617,7 @@ cosign verify ghcr.io/hyperpolymath/cicd-hyper-a-rulesets/security/workflow-pins
 # Add to release workflow
 - uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
   with:
-    image: ghcr.io/hyperpolymath/cicd-hyper-a-rulesets
+    image: ghcr.io/hyperpolymath/hypatia-rulesets
     digest: ${{ steps.build.outputs.digest }}
 ----
 

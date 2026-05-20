@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Integration with robot-repo-automaton
+# hypatia Integration with robot-repo-automaton
 # Configuration for automated repository management
 
 integration:
-  name: cicd-hyper-a
+  name: hypatia
   version: 0.1.0
   enabled: true
 
-# Connection to cicd-hyper-a engine
+# Connection to hypatia engine
 engine:
   # Logtalk rule engine
   logtalk:
@@ -19,7 +19,7 @@ engine:
 
   # Haskell verification registry
   registry:
-    cabal_file: registry/cicd-hyper-a.cabal
+    cabal_file: registry/hypatia.cabal
     executable: registry
     data_dir: registry/data
 

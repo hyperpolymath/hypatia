@@ -20,7 +20,7 @@
       "help": "Pin the action to a specific commit SHA instead of using a version tag."
     },
     "tool": {
-      "name": "cicd-hyper-a",
+      "name": "hypatia",
       "version": "0.1.0"
     },
     "most_recent_instance": {
@@ -63,7 +63,7 @@
       "help": "Add 'permissions: read-all' to the workflow file."
     },
     "tool": {
-      "name": "cicd-hyper-a",
+      "name": "hypatia",
       "version": "0.1.0"
     },
     "most_recent_instance": {

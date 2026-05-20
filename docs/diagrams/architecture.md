@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
-# cicd-hyper-a System Architecture
+# hypatia System Architecture
 
 ## Overview
 
-The cicd-hyper-a platform is a neurosymbolic CI/CD intelligence system that combines neural learning with symbolic reasoning.
+The hypatia platform is a neurosymbolic CI/CD intelligence system that combines neural learning with symbolic reasoning.
 
 ## High-Level Architecture
 

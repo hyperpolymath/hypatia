@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Output formatting for the cicd-hyper-a CLI.
+//! Output formatting for the hypatia CLI.
 //!
 //! Supports multiple output formats:
 //! - Plain text (default, human-readable)

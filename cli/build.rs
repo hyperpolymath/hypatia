@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Build script for cicd-hyper-a CLI.
+//! Build script for hypatia CLI.
 //!
 //! Captures build-time information like git commit hash and build date.
 //! Optionally generates shell completions and man pages during release builds.

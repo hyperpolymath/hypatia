@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Exit codes for the cicd-hyper-a CLI.
+//! Exit codes for the hypatia CLI.
 //!
 //! Standardized exit codes for headless/workflow automation.
 //! These codes allow scripts and CI systems to detect specific failure modes.

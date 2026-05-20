@@ -1,10 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Post-Receive Hook Template
+# hypatia Post-Receive Hook Template
 # Server-side hook for triggering curative actions after push
 #
 # This hook:
-#   - Notifies cicd-hyper-a engine of pushes
+#   - Notifies hypatia engine of pushes
 #   - Triggers appropriate curative rules
 #   - Logs push events for analytics
 #   - Sends webhooks to external services
@@ -29,7 +29,7 @@ fi
 [ -f "$HOOK_DIR/lib/api.sh" ] && . "$HOOK_DIR/lib/api.sh"
 
 # Post-receive should not block, so just print header
-color_print "bold" "cicd-hyper-a post-receive"
+color_print "bold" "hypatia post-receive"
 
 # ==============================================================================
 # CONFIGURATION
@@ -140,7 +140,7 @@ EOF
 )
 
         api_post "/hooks/post-receive" "$payload" >/dev/null 2>&1 || \
-            log_warn "Failed to notify cicd-hyper-a engine"
+            log_warn "Failed to notify hypatia engine"
     fi
 
     # ==================================================================
@@ -186,7 +186,7 @@ trigger_workflow_analysis() {
             unpinned=$(git show "$commit:$wf" 2>/dev/null | grep -E 'uses:\s+[^@]+@(v[0-9]+|main|master|latest)\s*$' || true)
             if [ -n "$unpinned" ]; then
                 log_warn "Found unpinned actions in $wf"
-                log_info "Run 'cicd-hyper-a fix unpinned-actions --file $wf' to auto-pin"
+                log_info "Run 'hypatia fix unpinned-actions --file $wf' to auto-pin"
             fi
         fi
     done
@@ -251,7 +251,7 @@ log_push_event() {
     local refname="$3"
 
     # Log to file if directory exists
-    LOG_DIR="${CICD_LOG_DIR:-/var/log/cicd-hyper-a}"
+    LOG_DIR="${CICD_LOG_DIR:-/var/log/hypatia}"
     if [ -d "$LOG_DIR" ]; then
         echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) push $refname $oldrev $newrev" >> "$LOG_DIR/post-receive.log"
     fi

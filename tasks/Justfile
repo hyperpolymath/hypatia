@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a build automation
+# hypatia build automation
 
 # Default recipe: show help
 default:

@@ -56,7 +56,7 @@ deploy_workflow() {
     content=$(base64 < "$src")
     local message="Add $workflow prevention workflow
 
-🤖 Generated with cicd-hyper-a
+🤖 Generated with hypatia
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 

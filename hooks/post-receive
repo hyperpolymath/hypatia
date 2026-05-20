@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Post-Receive Hook
+# hypatia Post-Receive Hook
 # Triggers curative actions after push
 
 set -e
@@ -9,7 +9,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${YELLOW}cicd-hyper-a post-receive hook${NC}"
+echo -e "${YELLOW}hypatia post-receive hook${NC}"
 
 # Configuration
 CICD_HYPER_A_API="${CICD_HYPER_A_API:-http://localhost:8080}"
@@ -85,7 +85,7 @@ EOF
         curl -s -X POST "$CICD_HYPER_A_API/hooks/post-receive" \
             -H "Authorization: Bearer $CICD_HYPER_A_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$payload" || echo "Warning: Failed to notify cicd-hyper-a engine"
+            -d "$payload" || echo "Warning: Failed to notify hypatia engine"
     fi
 
     # ============================================================
@@ -99,7 +99,7 @@ EOF
                 unpinned=$(git show "$newrev:$wf" | grep -E 'uses:\s+[^@]+@(v[0-9]+|main|master)\s*$' || true)
                 if [ -n "$unpinned" ]; then
                     echo -e "${YELLOW}Note: Found unpinned actions in $wf${NC}"
-                    echo "Run 'cicd-hyper-a fix unpinned-actions' to auto-pin"
+                    echo "Run 'hypatia fix unpinned-actions' to auto-pin"
                 fi
             fi
         done

@@ -255,7 +255,7 @@ struct RegistryTestHarness {
 impl RegistryTestHarness {
     fn new() -> Result<Self> {
         let temp_dir = TempDir::new()?;
-        let registry_binary = PathBuf::from("registry/dist-newstyle/build/x86_64-linux/ghc-9.4.8/cicd-hyper-a-0.1.0.0/x/registry/build/registry/registry");
+        let registry_binary = PathBuf::from("registry/dist-newstyle/build/x86_64-linux/ghc-9.4.8/hypatia-0.1.0.0/x/registry/build/registry/registry");
 
         Ok(Self {
             temp_dir,

@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
-# cicd-hyper-a Data Flow
+# hypatia Data Flow
 
 ## Overview
 
-This document describes the data flow between components in the cicd-hyper-a platform.
+This document describes the data flow between components in the hypatia platform.
 
 ## Scan Data Flow
 

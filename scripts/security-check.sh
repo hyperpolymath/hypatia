@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: PMPL-1.0-or-later
 #
-# security-check.sh - Local security scanning script for cicd-hyper-a
+# security-check.sh - Local security scanning script for hypatia
 #
 # This script runs comprehensive security checks locally before committing
 # or pushing code. It mirrors the CI security-audit workflow.
@@ -107,7 +107,7 @@ check_command() {
 
 show_help() {
     cat << 'EOF'
-security-check.sh - Local security scanning for cicd-hyper-a
+security-check.sh - Local security scanning for hypatia
 
 USAGE:
     ./scripts/security-check.sh [OPTIONS]
@@ -442,9 +442,9 @@ check_container_trivy() {
             continue
         fi
 
-        local image_name="cicd-hyper-a-$(basename "$containerfile" | sed 's/Containerfile//' | sed 's/^\./scan-/' | sed 's/^-//')"
-        if [ "$image_name" = "cicd-hyper-a-scan-" ]; then
-            image_name="cicd-hyper-a-main:scan"
+        local image_name="hypatia-$(basename "$containerfile" | sed 's/Containerfile//' | sed 's/^\./scan-/' | sed 's/^-//')"
+        if [ "$image_name" = "hypatia-scan-" ]; then
+            image_name="hypatia-main:scan"
         else
             image_name="${image_name}:scan"
         fi
@@ -609,7 +609,7 @@ generate_sbom() {
     "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "component": {
       "type": "application",
-      "name": "cicd-hyper-a-registry",
+      "name": "hypatia-registry",
       "version": "0.1.0.0"
     }
   },
@@ -634,7 +634,7 @@ EOF
 main() {
     parse_args "$@"
 
-    print_header "cicd-hyper-a Security Check"
+    print_header "hypatia Security Check"
     echo "Timestamp: $(date)"
     echo "Reports will be saved to: $REPORT_DIR"
 

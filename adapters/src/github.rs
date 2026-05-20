@@ -46,7 +46,7 @@ impl GitHubAdapter {
             HeaderValue::from_str(&format!("Bearer {}", token))
                 .map_err(|_| AdapterError::ConfigError("Invalid token".into()))?,
         );
-        headers.insert(USER_AGENT, HeaderValue::from_static("cicd-hyper-a/0.1.0"));
+        headers.insert(USER_AGENT, HeaderValue::from_static("hypatia/0.1.0"));
         headers.insert(
             "X-GitHub-Api-Version",
             HeaderValue::from_static("2022-11-28"),

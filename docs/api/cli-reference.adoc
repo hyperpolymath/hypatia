@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a CLI Reference
+= hypatia CLI Reference
 :toc: left
 :toclevels: 3
 :icons: font
@@ -7,13 +7,13 @@
 
 == Overview
 
-The `hyper` CLI is the command-line interface for the cicd-hyper-a neurosymbolic CI/CD platform. It combines neural learning with symbolic reasoning to provide intelligent CI/CD automation and issue detection.
+The `hyper` CLI is the command-line interface for the hypatia neurosymbolic CI/CD platform. It combines neural learning with symbolic reasoning to provide intelligent CI/CD automation and issue detection.
 
 === Installation
 
 [source,bash]
 ----
-cargo install cicd-hyper-a-cli
+cargo install hypatia-cli
 ----
 
 === Global Options
@@ -798,7 +798,7 @@ hyper config get <KEY>
 
 |`registry.url`
 |Registry server URL
-|https://registry.cicd-hyper-a.io
+|https://registry.hypatia.io
 
 |`registry.token`
 |Authentication token
@@ -886,10 +886,10 @@ The configuration file uses TOML format and is located at `~/.config/hyper/confi
 
 [source,toml]
 ----
-# cicd-hyper-a configuration
+# hypatia configuration
 
 [registry]
-url = "https://registry.cicd-hyper-a.io"
+url = "https://registry.hypatia.io"
 # token = "your-token-here"
 
 [scan]

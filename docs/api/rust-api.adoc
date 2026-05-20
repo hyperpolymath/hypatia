@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a Rust API Reference
+= hypatia Rust API Reference
 :toc: left
 :toclevels: 3
 :icons: font
@@ -7,7 +7,7 @@
 
 == Overview
 
-The cicd-hyper-a platform is implemented as a Rust workspace with multiple crates. This document provides an overview of the public APIs exposed by each crate.
+The hypatia platform is implemented as a Rust workspace with multiple crates. This document provides an overview of the public APIs exposed by each crate.
 
 NOTE: Full rustdoc documentation can be generated with `cargo doc --workspace --no-deps`.
 
@@ -17,24 +17,24 @@ NOTE: Full rustdoc documentation can be generated with `cargo doc --workspace --
 |===
 |Crate |Version |Description
 
-|`cicd-hyper-a-cli`
+|`hypatia-cli`
 |0.1.0
 |Command-line interface application
 
-|`cicd-hyper-a-adapters`
+|`hypatia-adapters`
 |0.1.0
 |Forge adapters for GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Radicle
 
-|`cicd-hyper-a-data`
+|`hypatia-data`
 |0.1.0
 |Data access layer with DragonflyDB support
 
-|`cicd-hyper-a-fixer`
+|`hypatia-fixer`
 |0.1.0
 |Auto-fix implementations for detected issues
 |===
 
-== cicd-hyper-a-cli
+== hypatia-cli
 
 The CLI crate provides the `hyper` command-line tool.
 
@@ -234,7 +234,7 @@ pub fn validate_git_repository(path: &Path) -> Result<Repository>;
 pub fn validate_file_path(path: &Path) -> Result<PathBuf>;
 ----
 
-== cicd-hyper-a-adapters
+== hypatia-adapters
 
 The adapters crate provides forge-agnostic interfaces for interacting with various Git hosting platforms.
 
@@ -397,7 +397,7 @@ pub fn create_adapter(
 ) -> Result<Box<dyn ForgeAdapter>, AdapterError>;
 ----
 
-== cicd-hyper-a-data
+== hypatia-data
 
 The data crate provides data access and caching functionality.
 
@@ -443,7 +443,7 @@ impl DragonflyClient {
 }
 ----
 
-== cicd-hyper-a-fixer
+== hypatia-fixer
 
 The fixer crate provides auto-fix implementations.
 

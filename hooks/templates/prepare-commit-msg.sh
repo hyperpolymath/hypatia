@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Prepare Commit Message Hook Template
+# hypatia Prepare Commit Message Hook Template
 # Auto-adds metadata to commit messages
 #
 # This hook adds:

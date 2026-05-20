@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a: Route to v1.0.0
+= hypatia: Route to v1.0.0
 :toc: macro
 :toclevels: 3
 :icons: font
@@ -93,7 +93,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 | 3 days
 
 | Basic CLI
-| `cicd-hyper-a scan <repo>` command
+| `hypatia scan <repo>` command
 | 2 days
 
 | Documentation
@@ -102,7 +102,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 |===
 
 **Deliverables**:
-- Working `cicd-hyper-a scan` command
+- Working `hypatia scan` command
 - Findings persisted in ArangoDB
 - All 8 bots execute in dependency order
 
@@ -163,7 +163,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 |===
 
 **Deliverables**:
-- `cicd-hyper-a deposit/withdraw` commands
+- `hypatia deposit/withdraw` commands
 - Signed rulesets with verification
 - Sub-millisecond rule lookups via Dragonfly
 
@@ -215,7 +215,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 | 2 days
 
 | Hook injection
-| `cicd-hyper-a install-hooks` command
+| `hypatia install-hooks` command
 | 1 day
 
 | Hook configuration
@@ -426,7 +426,7 @@ This document outlines the complete path from the current alpha state (*90% comp
                               └─────────────────┬───────────────────┘
                                                 │
 ┌───────────────────────────────────────────────┼───────────────────────────────────────────────┐
-│                                    cicd-hyper-a Core                                           │
+│                                    hypatia Core                                           │
 │                                                                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
 │  │                          VERIFICATION LAYER (Haskell)                                    │ │
@@ -587,7 +587,7 @@ This document outlines the complete path from the current alpha state (*90% comp
 1. Deploy ArangoDB with graph model
 2. Run initial bot fleet integration test
 3. Connect Logtalk engine to ArangoDB
-4. Create `cicd-hyper-a scan` CLI
+4. Create `hypatia scan` CLI
 
 === This Month
 

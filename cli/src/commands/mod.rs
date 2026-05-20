@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Command implementations for the cicd-hyper-a CLI.
+//! Command implementations for the hypatia CLI.
 //!
 //! Each submodule implements a specific CLI command with its own
 //! arguments, validation, and execution logic.

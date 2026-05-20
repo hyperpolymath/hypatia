@@ -296,7 +296,7 @@ Instead of debating SQL vs NoSQL, focus on:
 
 - **Rootless containers:** All modality stores run in `svalinn/vordr` or `nerdctl`
 - **WASM compatibility:** Tantivy/Oxigraph compile to WASM (edge deployments)
-- **Security automation:** Use `cicd-hyper-a` to automate updates across nodes
+- **Security automation:** Use `hypatia` to automate updates across nodes
 
 == 10. Decision Alignment with Goals
 
