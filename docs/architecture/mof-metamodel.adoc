@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Hypatia -- OMG MOF (M2) Metamodel
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+[NOTE]
+====
+*Canonical, as-built model.* This is an OMG MOF *M2 metamodel* of Hypatia's core
+domain. It reflects the *as-built* system (flat files, no ArangoDB/snif/NIF).
+Target-state boundary elements are tagged *TARGET (pending ruling #273)* and are
+*not* implemented. Legacy Mermaid diagrams under `docs/diagrams/*.md` are
+superseded -- see `README.adoc`.
+====
+
+== 1. MOF Layering
+
+[cols="1,1,3",options="header"]
+|===
+| Layer | Name | Content here
+
+| M3 | MOF (meta-metamodel) | OMG MOF (`Class`, `Property`, `Association`, `Generalization`) -- assumed, not redefined.
+| M2 | Hypatia metamodel | The metaclasses below (Finding, Scan, Recipe, ...).
+| M1 | Model | A concrete configuration: a particular scan, its findings, the recipe registry.
+| M0 | Instances | Runtime data: a row in `data/verisim/scans/<repo>.json`, a line in `pending.jsonl`.
+|===
+
+== 2. M2 Metaclasses
+
+[cols="1,3a,2",options="header"]
+|===
+| Metaclass | Properties | As-built grounding
+
+| `Scan`
+| `repo : String`, `scannedAt : DateTime`, `tool : String`, `rawPayload : Json`
+| `data/verisim/scans/*.json`, `lib/vcl/file_executor.ex:99`
+
+| `Finding`
+| `id : String`, `severity : Enum{low,medium,high,critical}`, `category : String`,
+  `location : String`, `evidence : Json`
+| Extracted from `Scan.rawPayload`; consumed by `lib/pattern_analyzer.ex:31`
+
+| `Pattern`
+| `id : String`, `signature : String`, `description : String`, `domain : String`
+| `data/verisim/patterns/registry.json`, `lib/vcl/file_executor.ex:100,134`
+
+| `Recipe`
+| `id : String`, `action : Enum{eliminate,substitute,control,proof_obligation,dependabot_fix}`,
+  `confidence : Float`, `appliesToPattern : ref Pattern`
+| `data/verisim/recipes/recipe-*.json`, `lib/vcl/file_executor.ex:101`;
+  action verbs `lib/fleet_dispatcher.ex:35,96,117,142,218`
+
+| `RoutedAction`
+| `kind : Enum{eliminate,substitute,control,proof_obligation,dependabot_fix}`,
+  `recipe : ref Recipe`, `pattern : ref Pattern`, `neuralAdjusted : Boolean`
+| `lib/pattern_analyzer.ex:178,258-308`
+
+| `Outcome`
+| `findingId : String`, `result : Enum{success,failure,partial}`,
+  `recordedAt : DateTime`
+| `data/verisim/outcomes/*.jsonl`; `lib/fleet_dispatcher.ex:691,707`
+
+| `OctadEntity` (verisim entity)
+| `store : Enum{scans,patterns,recipes,outcomes,dispatch,index}`,
+  `physicalForm : Enum{jsonDir,singleJson,jsonlDir}`, `path : String`
+| The flat-file store abstraction; `lib/vcl/file_executor.ex:35,99-104`
+
+| `NeuralOrgan`
+| `name : Enum{RBF,PageRank,GNN,MoE,ESN,LSM,VAE,Sequence}`, `phase : Int{1..6}`,
+  `role : String`
+| `lib/neural/coordinator.ex:13-47`
+
+| `DispatchManifest`
+| `path : String`, `entries : Seq<RoutedAction>`, `writtenAt : DateTime`,
+  `archivePath : String`
+| `lib/dispatch_manifest.ex:29-58`
+
+| `Bot`
+| `name : String`, `endpoint : String`, `fleet : String`
+| gitbot-fleet targets; `lib/fleet_dispatcher.ex:5,707`
+|===
+
+== 3. Meta-Associations
+
+[cols="1,1,1,3",options="header"]
+|===
+| Source | Multiplicity | Target | Semantics
+
+| `Scan` | 1 -> 0..* | `Finding` | A scan yields zero or more findings.
+| `Finding` | 0..* -> 0..1 | `Pattern` | A finding may match a known pattern (classification).
+| `Pattern` | 1 -> 0..* | `Recipe` | A pattern has candidate remediation recipes.
+| `Recipe` + `Pattern` | 1 + 1 -> 1 | `RoutedAction` | Classification produces a routed action.
+| `RoutedAction` | 0..* -> 1 | `DispatchManifest` | Routed actions are batched into a manifest (`pending.jsonl`).
+| `DispatchManifest` | 1 -> 1..* | `Bot` | Manifest entries are dispatched to fleet bots.
+| `Bot` | 1 -> 0..* | `Outcome` | Bot remediation produces outcomes.
+| `Outcome` | 0..* -> 1 | `NeuralOrgan`(via Coordinator) | Outcomes feed `Coordinator.record_outcome` (`lib/fleet_dispatcher.ex:691`).
+| `NeuralOrgan` | 8 -(blackboard)- 1 | `RoutedAction` | Organs (6 phases) advise/adjust routing (`lib/pattern_analyzer.ex:258-308`).
+| `OctadEntity` | 1 -> 1 | {Scan,Pattern,Recipe,Outcome,DispatchManifest} | Each domain class is persisted as one OctadEntity store kind (flat file).
+|===
+
+== 4. Constraints (OCL-style, informal)
+
+* `inv as_built_store`: every `OctadEntity.physicalForm` is one of
+  `{jsonDir, singleJson, jsonlDir}` -- *no database-backed form exists*
+  (`lib/vcl/file_executor.ex:99-104`).
+* `inv neural_advisory`: a `RoutedAction.kind` is never *solely* determined by a
+  `NeuralOrgan`; symbolic `Recipe` is the primary determinant; neural sets
+  `neuralAdjusted` (`lib/pattern_analyzer.ex:258-308`, `lib/kin/gate.ex:402-413`).
+* `inv findings_write_bypasses_vcl`: `DispatchManifest` and the fix journal are
+  written as raw JSONL, *not* via the VCL query path
+  (`lib/dispatch_manifest.ex:33,57-58`, `lib/fleet_dispatcher.ex:707`).
+* `inv proof_resolver_unbound`: no metaclass references the (vestigial)
+  `proof_resolver` HTTP seam; it has zero callers.
+
+== 5. TARGET delta (pending ruling #273)
+
+[NOTE]
+====
+Under epic #273, `OctadEntity` would gain a `physicalForm = verisimdbInstance`
+literal, and a new boundary metaclass `SnifGateway` (`transport : Zig->wasm`)
+would mediate `OctadEntity` access. *This is not part of the M2 metamodel above*
+-- it is shown here only as the proposed extension, *pending ruling*. Do not
+instantiate at M1/M0.
+====
