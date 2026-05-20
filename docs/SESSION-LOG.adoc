@@ -109,7 +109,7 @@ Each bot now has:
 
 * `git-dispatcher` is the central coordination hub with satellites:
 ** `gitbot-fleet` - contains all bots (rhodibot, glambot, finishing-bot, echidnabot, oikos, seambot)
-** `cicd-hyper-a` - CI/CD automation
+** `hypatia` - CI/CD automation
 ** `gitvisor` - repository monitoring
 ** `git-reposystem` - repository infrastructure
 
@@ -128,7 +128,7 @@ Each bot now has:
 * `finishing-bot/.machine_readable/6scm/ECOSYSTEM.scm` - gitbot-fleet as parent
 
 **Ada TUI Audit Tool Specification created:**
-* `cicd-hyper-a/docs/ADA-TUI-AUDIT-SPEC.adoc`
+* `hypatia/docs/ADA-TUI-AUDIT-SPEC.adoc`
 * Complements rhodibot (GitHub-focused) with local, offline auditing
 * TUI interface for human operators
 * SPARK subset for security-critical paths
@@ -143,7 +143,7 @@ Each bot now has:
 
 === Immediate (This Session)
 
-* [x] Link cicd-hyper-a as git-dispatcher satellite
+* [x] Link hypatia as git-dispatcher satellite
 * [x] Check RSR repos for existing audit tooling (found rhodibot rsr.rs)
 * [x] Create Ada TUI auditing tool specification
 * [x] Establish bot fleet hierarchy under git-dispatcher
@@ -189,7 +189,7 @@ When a repo is a satellite of another:
 === For Central/Parent Repos
 
 1. Document in `ECOSYSTEM.scm`:
-   - `(satellites (list "cicd-hyper-a" "other-satellite"))`
+   - `(satellites (list "hypatia" "other-satellite"))`
    - Track which satellites exist
 
 2. When satellite is updated:

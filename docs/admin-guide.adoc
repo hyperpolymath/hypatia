@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a Administrator Guide
+= hypatia Administrator Guide
 :toc: left
 :toclevels: 3
 :icons: font
@@ -10,11 +10,11 @@
 
 == Overview
 
-This guide covers deployment, operation, and maintenance of cicd-hyper-a infrastructure for system administrators and DevOps engineers.
+This guide covers deployment, operation, and maintenance of hypatia infrastructure for system administrators and DevOps engineers.
 
 === Architecture Summary
 
-cicd-hyper-a consists of several interconnected components:
+hypatia consists of several interconnected components:
 
 [source]
 ----
@@ -63,8 +63,8 @@ Suitable for development, testing, and small deployments.
 [source,bash]
 ----
 # Clone the repository
-git clone https://github.com/hyperpolymath/cicd-hyper-a.git
-cd cicd-hyper-a/deploy
+git clone https://github.com/hyperpolymath/hypatia.git
+cd hypatia/deploy
 
 # Configure environment
 cp .env.example .env
@@ -158,18 +158,18 @@ helm repo add hyperpolymath https://charts.hyperpolymath.dev
 helm repo update
 
 # Create namespace
-kubectl create namespace cicd-hyper-a
+kubectl create namespace hypatia
 
 # Create secrets
-kubectl create secret generic cicd-hyper-a-secrets \
-  --namespace cicd-hyper-a \
+kubectl create secret generic hypatia-secrets \
+  --namespace hypatia \
   --from-literal=arango-password=secure-password \
   --from-literal=github-token=ghp_token \
   --from-literal=gitlab-token=glpat-token
 
 # Install the chart
-helm install cicd-hyper-a hyperpolymath/cicd-hyper-a \
-  --namespace cicd-hyper-a \
+helm install hypatia hyperpolymath/hypatia \
+  --namespace hypatia \
   --values values-production.yaml
 ----
 
@@ -228,14 +228,14 @@ ingress:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/rate-limit: "100"
   hosts:
-    - host: registry.cicd-hyper-a.example.com
+    - host: registry.hypatia.example.com
       paths:
         - path: /
           service: registry
   tls:
-    - secretName: cicd-hyper-a-tls
+    - secretName: hypatia-tls
       hosts:
-        - registry.cicd-hyper-a.example.com
+        - registry.hypatia.example.com
 
 # Pod disruption budgets
 podDisruptionBudget:
@@ -256,22 +256,22 @@ autoscaling:
 
 [source,bash]
 ----
-kubectl get all -n cicd-hyper-a
+kubectl get all -n hypatia
 ----
 
 Expected output:
 ----
 NAME                                    READY   STATUS    RESTARTS   AGE
-pod/cicd-hyper-a-adapter-xxx            1/1     Running   0          1h
-pod/cicd-hyper-a-engine-xxx             1/1     Running   0          1h
-pod/cicd-hyper-a-registry-xxx           1/1     Running   0          1h
+pod/hypatia-adapter-xxx            1/1     Running   0          1h
+pod/hypatia-engine-xxx             1/1     Running   0          1h
+pod/hypatia-registry-xxx           1/1     Running   0          1h
 pod/arangodb-coordinator-xxx            1/1     Running   0          1h
 pod/dragonfly-xxx                       1/1     Running   0          1h
 
 NAME                              TYPE        CLUSTER-IP       PORT(S)
-service/cicd-hyper-a-registry     ClusterIP   10.96.xxx.xxx    8080/TCP
-service/cicd-hyper-a-engine       ClusterIP   10.96.xxx.xxx    8081/TCP
-service/cicd-hyper-a-adapter      ClusterIP   10.96.xxx.xxx    8082/TCP
+service/hypatia-registry     ClusterIP   10.96.xxx.xxx    8080/TCP
+service/hypatia-engine       ClusterIP   10.96.xxx.xxx    8081/TCP
+service/hypatia-adapter      ClusterIP   10.96.xxx.xxx    8082/TCP
 service/arangodb                  ClusterIP   10.96.xxx.xxx    8529/TCP
 service/dragonfly                 ClusterIP   10.96.xxx.xxx    6379/TCP
 ----
@@ -330,7 +330,7 @@ apt-get install -y swi-prolog
 [source,bash]
 ----
 # Build registry
-cd cicd-hyper-a/registry
+cd hypatia/registry
 cabal build
 
 # Build adapter
@@ -347,14 +347,14 @@ cargo build --release
 [source,bash]
 ----
 # Copy binaries
-cp registry/dist-newstyle/build/.../cicd-hyper-a /usr/local/bin/
-cp adapters/target/release/cicd-hyper-a-adapter /usr/local/bin/
+cp registry/dist-newstyle/build/.../hypatia /usr/local/bin/
+cp adapters/target/release/hypatia-adapter /usr/local/bin/
 cp cli/target/release/hyper /usr/local/bin/
 
 # Create systemd services
 cp deploy/systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable cicd-hyper-a-registry cicd-hyper-a-engine cicd-hyper-a-adapter
+systemctl enable hypatia-registry hypatia-engine hypatia-adapter
 ----
 
 == Scaling
@@ -368,7 +368,7 @@ The registry is stateless and scales horizontally:
 [source,bash]
 ----
 # Kubernetes
-kubectl scale deployment cicd-hyper-a-registry --replicas=5
+kubectl scale deployment hypatia-registry --replicas=5
 
 # Docker Compose
 docker compose up -d --scale registry=5
@@ -393,11 +393,11 @@ annotations:
 [source,bash]
 ----
 # Add coordinator
-helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+helm upgrade hypatia hyperpolymath/hypatia \
   --set arangodb.coordinators=5
 
 # Add DB server
-helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+helm upgrade hypatia hyperpolymath/hypatia \
   --set arangodb.dbservers=5
 ----
 
@@ -406,7 +406,7 @@ helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
 [source,bash]
 ----
 # Scale Dragonfly replicas
-helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+helm upgrade hypatia hyperpolymath/hypatia \
   --set dragonfly.replicas=5
 ----
 
@@ -481,7 +481,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: arangodb-backup
-  namespace: cicd-hyper-a
+  namespace: hypatia
 spec:
   schedule: "0 2 * * *"  # Daily at 2 AM
   jobTemplate:
@@ -650,7 +650,7 @@ Import pre-built dashboards from `/deploy/grafana/dashboards/`:
 [source,yaml]
 ----
 groups:
-- name: cicd-hyper-a
+- name: hypatia
   rules:
   - alert: RegistryHighLatency
     expr: histogram_quantile(0.99, registry_request_duration_seconds_bucket) > 1
@@ -694,16 +694,16 @@ Configure centralized logging with Loki or ELK:
 ----
 [INPUT]
     Name              tail
-    Path              /var/log/containers/*cicd-hyper-a*.log
+    Path              /var/log/containers/*hypatia*.log
     Parser            docker
-    Tag               cicd-hyper-a.*
+    Tag               hypatia.*
 
 [OUTPUT]
     Name              loki
-    Match             cicd-hyper-a.*
+    Match             hypatia.*
     Host              loki.monitoring.svc.cluster.local
     Port              3100
-    Labels            job=cicd-hyper-a
+    Labels            job=hypatia
 ----
 
 == Security Hardening
@@ -717,8 +717,8 @@ Configure centralized logging with Loki or ELK:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: cicd-hyper-a-network-policy
-  namespace: cicd-hyper-a
+  name: hypatia-network-policy
+  namespace: hypatia
 spec:
   podSelector: {}
   policyTypes:
@@ -753,7 +753,7 @@ All internal communication should use TLS:
 # Mutual TLS for internal services
 tls:
   enabled: true
-  secretName: cicd-hyper-a-internal-tls
+  secretName: hypatia-internal-tls
   clientAuth: required
 ----
 
@@ -769,7 +769,7 @@ auth:
   methods:
     - type: bearer
       issuer: https://auth.example.com
-      audience: cicd-hyper-a
+      audience: hypatia
     - type: api-key
       header: X-API-Key
 ----
@@ -783,11 +783,11 @@ Create dedicated service accounts:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cicd-hyper-a
-  namespace: cicd-hyper-a
+  name: hypatia
+  namespace: hypatia
   annotations:
     # Workload identity (GKE)
-    iam.gke.io/gcp-service-account: cicd-hyper-a@project.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: hypatia@project.iam.gserviceaccount.com
 ----
 
 === Secrets Management
@@ -801,19 +801,19 @@ Use sealed secrets or external secrets operator:
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: cicd-hyper-a-secrets
-  namespace: cicd-hyper-a
+  name: hypatia-secrets
+  namespace: hypatia
 spec:
   refreshInterval: 1h
   secretStoreRef:
     name: vault
     kind: ClusterSecretStore
   target:
-    name: cicd-hyper-a-secrets
+    name: hypatia-secrets
   data:
   - secretKey: github-token
     remoteRef:
-      key: cicd-hyper-a/github
+      key: hypatia/github
       property: token
 ----
 
@@ -825,9 +825,9 @@ vault:
   enabled: true
   address: https://vault.example.com
   authPath: kubernetes
-  role: cicd-hyper-a
+  role: hypatia
   secrets:
-    - path: secret/data/cicd-hyper-a/github
+    - path: secret/data/hypatia/github
       key: token
       env: GITHUB_TOKEN
 ----
@@ -866,7 +866,7 @@ audit:
   maxAge: 30
   maxBackups: 10
   maxSize: 100
-  path: /var/log/cicd-hyper-a/audit.log
+  path: /var/log/hypatia/audit.log
 ----
 
 ==== RBAC
@@ -902,9 +902,9 @@ rbac:
 ----
 # Update Helm chart
 helm repo update
-helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
+helm upgrade hypatia hyperpolymath/hypatia \
   --version 1.2.0 \
-  --namespace cicd-hyper-a
+  --namespace hypatia
 ----
 
 ==== Database Migrations
@@ -912,8 +912,8 @@ helm upgrade cicd-hyper-a hyperpolymath/cicd-hyper-a \
 [source,bash]
 ----
 # Run migrations
-kubectl exec -it deployment/cicd-hyper-a-registry -- \
-  cicd-hyper-a migrate --up
+kubectl exec -it deployment/hypatia-registry -- \
+  hypatia migrate --up
 ----
 
 === Health Checks
@@ -969,7 +969,7 @@ Check container logs:
 
 [source,bash]
 ----
-kubectl logs -f deployment/cicd-hyper-a-registry --tail=100
+kubectl logs -f deployment/hypatia-registry --tail=100
 ----
 
 Common issues:
@@ -999,14 +999,14 @@ curl -u root:password http://localhost:8529/_api/query/slow
 +
 [source,bash]
 ----
-kubectl top pods -n cicd-hyper-a
+kubectl top pods -n hypatia
 ----
 
 . Review heap usage:
 +
 [source,bash]
 ----
-kubectl exec -it deployment/cicd-hyper-a-engine -- \
+kubectl exec -it deployment/hypatia-engine -- \
   swipl -g "statistics(heap, H), format('Heap: ~w~n', [H]), halt"
 ----
 

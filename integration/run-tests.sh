@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: PMPL-1.0-or-later
 #
-# Integration Test Runner for cicd-hyper-a
+# Integration Test Runner for hypatia
 #
 # This script:
 # 1. Starts test containers (ArangoDB, Dragonfly, mock servers)
@@ -343,7 +343,7 @@ cleanup() {
 main() {
     echo ""
     echo "============================================"
-    echo "  cicd-hyper-a Integration Test Runner"
+    echo "  hypatia Integration Test Runner"
     echo "============================================"
     echo ""
 

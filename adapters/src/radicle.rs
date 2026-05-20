@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Radicle adapter for cicd-hyper-a
+//! Radicle adapter for hypatia
 //!
 //! Provides integration with Radicle, a sovereign code forge built on Git.
 //! Radicle is a peer-to-peer network for code collaboration that uses:
@@ -72,7 +72,7 @@ impl RadicleAdapter {
 
         let client = Client::builder()
             .default_headers(headers)
-            .user_agent("cicd-hyper-a/1.0")
+            .user_agent("hypatia/1.0")
             .build()
             .map_err(|e| {
                 AdapterError::ConfigError(format!("Failed to build HTTP client: {}", e))

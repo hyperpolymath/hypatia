@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! cicd-hyper-a forge adapter CLI
+//! hypatia forge adapter CLI
 
 use adapters::github::GitHubAdapter;
 use adapters::ForgeAdapter;
@@ -112,7 +112,7 @@ fn get_github_adapter() -> Result<GitHubAdapter, Box<dyn std::error::Error>> {
 }
 
 fn print_usage() {
-    println!("cicd-hyper-a Forge Adapter");
+    println!("hypatia Forge Adapter");
     println!();
     println!("Usage: forge-adapter <command> [args...]");
     println!();

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# Test environment for cicd-hyper-a integration tests
+# Test environment for hypatia integration tests
 #
 # Usage:
 #   podman-compose -f compose.test.yaml up -d
@@ -14,7 +14,7 @@ services:
   # ============================================================================
   arangodb:
     image: arangodb:3.11
-    container_name: cicd-hyper-a-test-arangodb
+    container_name: hypatia-test-arangodb
     environment:
       ARANGO_ROOT_PASSWORD: testpassword
       ARANGO_NO_AUTH: 0
@@ -38,7 +38,7 @@ services:
   # ============================================================================
   dragonfly:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
-    container_name: cicd-hyper-a-test-dragonfly
+    container_name: hypatia-test-dragonfly
     ulimits:
       memlock: -1
     ports:
@@ -60,7 +60,7 @@ services:
   # ============================================================================
   mock-github:
     image: mockserver/mockserver:5.15.0
-    container_name: cicd-hyper-a-test-github
+    container_name: hypatia-test-github
     environment:
       MOCKSERVER_INITIALIZATION_JSON_PATH: /config/github-expectations.json
       MOCKSERVER_LOG_LEVEL: WARN
@@ -82,7 +82,7 @@ services:
   # ============================================================================
   mock-gitlab:
     image: mockserver/mockserver:5.15.0
-    container_name: cicd-hyper-a-test-gitlab
+    container_name: hypatia-test-gitlab
     environment:
       MOCKSERVER_INITIALIZATION_JSON_PATH: /config/gitlab-expectations.json
       MOCKSERVER_LOG_LEVEL: WARN
@@ -104,7 +104,7 @@ services:
   # ============================================================================
   mock-bitbucket:
     image: mockserver/mockserver:5.15.0
-    container_name: cicd-hyper-a-test-bitbucket
+    container_name: hypatia-test-bitbucket
     environment:
       MOCKSERVER_INITIALIZATION_JSON_PATH: /config/bitbucket-expectations.json
       MOCKSERVER_LOG_LEVEL: WARN
@@ -126,7 +126,7 @@ services:
   # ============================================================================
   webhook-receiver:
     image: tarampampam/webhook-tester:1.2
-    container_name: cicd-hyper-a-test-webhook
+    container_name: hypatia-test-webhook
     ports:
       - "8088:8088"
     environment:
@@ -148,7 +148,7 @@ services:
     build:
       context: .
       dockerfile: Containerfile.test
-    container_name: cicd-hyper-a-test-runner
+    container_name: hypatia-test-runner
     depends_on:
       arangodb:
         condition: service_healthy
@@ -177,16 +177,16 @@ services:
 networks:
   cicd-test-net:
     driver: bridge
-    name: cicd-hyper-a-test-network
+    name: hypatia-test-network
 
 volumes:
   arangodb-test-data:
-    name: cicd-hyper-a-test-arangodb-data
+    name: hypatia-test-arangodb-data
   arangodb-test-apps:
-    name: cicd-hyper-a-test-arangodb-apps
+    name: hypatia-test-arangodb-apps
   dragonfly-test-data:
-    name: cicd-hyper-a-test-dragonfly-data
+    name: hypatia-test-dragonfly-data
   cargo-cache:
-    name: cicd-hyper-a-test-cargo-cache
+    name: hypatia-test-cargo-cache
   target-cache:
-    name: cicd-hyper-a-test-target-cache
+    name: hypatia-test-target-cache

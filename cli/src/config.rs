@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Configuration handling for the cicd-hyper-a CLI.
+//! Configuration handling for the hypatia CLI.
 //!
 //! Supports loading configuration from:
-//! - Default locations (~/.config/cicd-hyper-a/config.toml)
+//! - Default locations (~/.config/hypatia/config.toml)
 //! - Environment variables (HYPER_*)
 //! - Command-line arguments (--config)
 //! - Project-local files (.hyper.toml, .hyper.yaml)
@@ -247,7 +247,7 @@ impl Config {
         let mut config = Config::default();
 
         // Try to load from XDG config directory
-        if let Some(proj_dirs) = ProjectDirs::from("dev", "hyperpolymath", "cicd-hyper-a") {
+        if let Some(proj_dirs) = ProjectDirs::from("dev", "hyperpolymath", "hypatia") {
             let config_file = proj_dirs.config_dir().join("config.toml");
             if config_file.exists() {
                 config = Config::from_file(&config_file)?;
@@ -396,7 +396,7 @@ impl Config {
 
     /// Initialize default configuration file
     pub fn init_default() -> Result<PathBuf> {
-        let proj_dirs = ProjectDirs::from("dev", "hyperpolymath", "cicd-hyper-a")
+        let proj_dirs = ProjectDirs::from("dev", "hyperpolymath", "hypatia")
             .context("Could not determine config directory")?;
 
         let config_dir = proj_dirs.config_dir();
@@ -410,11 +410,11 @@ impl Config {
         let config_file = config_dir.join("config.toml");
 
         let default_content = r#"# SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a CLI Configuration
-# https://github.com/hyperpolymath/cicd-hyper-a
+# hypatia CLI Configuration
+# https://github.com/hyperpolymath/hypatia
 
 # Registry URL for ruleset operations
-# registry_url = "https://registry.cicd-hyper-a.dev"
+# registry_url = "https://registry.hypatia.dev"
 
 [general]
 # Log level: trace, debug, info, warn, error
@@ -423,8 +423,8 @@ log_level = "warn"
 # Enable telemetry (anonymous usage statistics)
 telemetry = false
 
-# Cache directory (default: ~/.cache/cicd-hyper-a)
-# cache_dir = "~/.cache/cicd-hyper-a"
+# Cache directory (default: ~/.cache/hypatia)
+# cache_dir = "~/.cache/hypatia"
 
 [scan]
 # Minimum severity to report: info, low, medium, high, critical
@@ -496,7 +496,7 @@ verbose = false
 
     /// Save configuration to default location
     pub fn save(&self) -> Result<()> {
-        let proj_dirs = ProjectDirs::from("dev", "hyperpolymath", "cicd-hyper-a")
+        let proj_dirs = ProjectDirs::from("dev", "hyperpolymath", "hypatia")
             .context("Could not determine config directory")?;
 
         let config_dir = proj_dirs.config_dir();
@@ -580,8 +580,8 @@ verbose = false
     pub fn cache_dir(&self) -> PathBuf {
         self.general.cache_dir.clone().unwrap_or_else(|| {
             dirs::cache_dir()
-                .map(|d| d.join("cicd-hyper-a"))
-                .unwrap_or_else(|| PathBuf::from(".cache/cicd-hyper-a"))
+                .map(|d| d.join("hypatia"))
+                .unwrap_or_else(|| PathBuf::from(".cache/hypatia"))
         })
     }
 
@@ -589,8 +589,8 @@ verbose = false
     pub fn data_dir(&self) -> PathBuf {
         self.general.data_dir.clone().unwrap_or_else(|| {
             dirs::data_dir()
-                .map(|d| d.join("cicd-hyper-a"))
-                .unwrap_or_else(|| PathBuf::from(".local/share/cicd-hyper-a"))
+                .map(|d| d.join("hypatia"))
+                .unwrap_or_else(|| PathBuf::from(".local/share/hypatia"))
         })
     }
 }

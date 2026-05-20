@@ -945,7 +945,7 @@ impl ForgeAdapter for BitbucketAdapter {
             .collect();
 
         let body = serde_json::json!({
-            "description": "cicd-hyper-a webhook",
+            "description": "hypatia webhook",
             "url": config.url,
             "active": config.active,
             "events": events

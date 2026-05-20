@@ -1,5 +1,5 @@
 ;; SPDX-License-Identifier: PMPL-1.0-or-later
-;; Security Error Catalog for cicd-hyper-a Training Data
+;; Security Error Catalog for hypatia Training Data
 ;; Format: Guile Scheme (per RSR)
 ;; Generated: 2025-12-29
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a HTTP API Reference
+= hypatia HTTP API Reference
 :toc: left
 :toclevels: 3
 :icons: font
@@ -7,12 +7,12 @@
 
 == Overview
 
-The cicd-hyper-a platform exposes a REST API for programmatic access to the ruleset registry, verification services, and fleet operations. This document supplements the existing `api-reference.adoc` with additional endpoint details.
+The hypatia platform exposes a REST API for programmatic access to the ruleset registry, verification services, and fleet operations. This document supplements the existing `api-reference.adoc` with additional endpoint details.
 
 == Base URL
 
 Production::
-  `https://api.cicd-hyper-a.io/v1`
+  `https://api.hypatia.io/v1`
 
 Local Development::
   `http://localhost:8080/v1`
@@ -611,7 +611,7 @@ Response:
 [source,json]
 ----
 {
-  "service": "cicd-hyper-a",
+  "service": "hypatia",
   "version": "0.1.0",
   "git_commit": "abc123def",
   "build_date": "2026-01-15",
@@ -772,21 +772,21 @@ X-Hyper-Signature: sha256=abc123...
 ----
 # List rulesets
 curl -H "Authorization: Bearer $TOKEN" \
-     https://api.cicd-hyper-a.io/v1/rulesets
+     https://api.hypatia.io/v1/rulesets
 
 # Deposit ruleset
 curl -X POST \
      -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json" \
      -d @ruleset.json \
-     https://api.cicd-hyper-a.io/v1/rulesets
+     https://api.hypatia.io/v1/rulesets
 
 # Start fleet run
 curl -X POST \
      -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"repository":"https://github.com/org/repo","bots":["glambot"]}' \
-     https://api.cicd-hyper-a.io/v1/fleet/runs
+     https://api.hypatia.io/v1/fleet/runs
 ----
 
 === Rust (reqwest)
@@ -799,7 +799,7 @@ use serde_json::json;
 async fn list_rulesets(token: &str) -> Result<Vec<Ruleset>, Error> {
     let client = Client::new();
     let response = client
-        .get("https://api.cicd-hyper-a.io/v1/rulesets")
+        .get("https://api.hypatia.io/v1/rulesets")
         .bearer_auth(token)
         .send()
         .await?;
@@ -810,7 +810,7 @@ async fn list_rulesets(token: &str) -> Result<Vec<Ruleset>, Error> {
 async fn start_fleet_run(token: &str, repo: &str) -> Result<FleetRun, Error> {
     let client = Client::new();
     let response = client
-        .post("https://api.cicd-hyper-a.io/v1/fleet/runs")
+        .post("https://api.hypatia.io/v1/fleet/runs")
         .bearer_auth(token)
         .json(&json!({
             "repository": repo,

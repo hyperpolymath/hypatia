@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! cicd-hyper-a-fixer: Programmatic CI/CD workflow fixer
+//! hypatia-fixer: Programmatic CI/CD workflow fixer
 //!
 //! This crate provides:
 //! - Workflow scanning for common CI/CD issues

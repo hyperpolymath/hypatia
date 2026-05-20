@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a Git Hooks System
+= hypatia Git Hooks System
 :toc:
 :toc-placement: preamble
 :sectnums:
@@ -44,7 +44,7 @@ hooks/
 ├── lib/                  # Shared shell functions
 │   ├── common.sh         # Core utilities
 │   ├── cache.sh          # Dragonfly/Redis caching
-│   └── api.sh            # cicd-hyper-a API client
+│   └── api.sh            # hypatia API client
 ├── pre-commit            # Legacy hook (deprecated)
 ├── pre-push              # Legacy hook (deprecated)
 ├── post-receive          # Legacy hook (deprecated)
@@ -87,7 +87,7 @@ Server-side hook for triggering curative actions.
 
 **Actions:**
 
-* Notifies cicd-hyper-a engine of pushes
+* Notifies hypatia engine of pushes
 * Triggers workflow analysis on workflow changes
 * Triggers dependency scan on dependency changes
 * Sends webhooks to external services
@@ -149,7 +149,7 @@ See the full config.yml for all options.
 |Variable |Description |Default
 
 |`CICD_HYPER_A_API`
-|cicd-hyper-a API endpoint
+|hypatia API endpoint
 |`http://localhost:8080`
 
 |`CICD_HYPER_A_TOKEN`
@@ -198,7 +198,7 @@ Dragonfly/Redis cache integration:
 
 === api.sh
 
-cicd-hyper-a API client:
+hypatia API client:
 
 * HTTP request functions
 * Hook execution reporting

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Shared application state for the cicd-hyper-a CLI.
+//! Shared application state for the hypatia CLI.
 //!
 //! `AppState` is the single owner of runtime-mutable configuration that must
 //! be shared across command handlers without cloning the entire `Config`.

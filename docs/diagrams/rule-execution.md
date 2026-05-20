@@ -3,7 +3,7 @@
 
 ## Overview
 
-The cicd-hyper-a rule engine uses a neurosymbolic approach, combining static declarative rules with dynamically learned patterns.
+The hypatia rule engine uses a neurosymbolic approach, combining static declarative rules with dynamically learned patterns.
 
 ## Rule Evaluation Pipeline
 

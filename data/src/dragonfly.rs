@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Dragonfly (Redis-compatible) client for cicd-hyper-a caching
+//! Dragonfly (Redis-compatible) client for hypatia caching
 
 use crate::error::{DataError, Result};
 use crate::models::*;

@@ -245,11 +245,11 @@ async fn test_repository_crud() -> Result<()> {
 
     // Create
     let repo = RepositoryDocument {
-        _key: "hyperpolymath_cicd-hyper-a".to_string(),
-        name: "cicd-hyper-a".to_string(),
+        _key: "hyperpolymath_hypatia".to_string(),
+        name: "hypatia".to_string(),
         owner: "hyperpolymath".to_string(),
         forge: "github".to_string(),
-        url: "https://github.com/hyperpolymath/cicd-hyper-a".to_string(),
+        url: "https://github.com/hyperpolymath/hypatia".to_string(),
         default_branch: "main".to_string(),
         languages: vec!["Rust".to_string(), "Haskell".to_string()],
         created_at: chrono::Utc::now().to_rfc3339(),
@@ -257,13 +257,13 @@ async fn test_repository_crud() -> Result<()> {
     };
 
     let key = client.insert_repository(repo.clone()).await?;
-    assert_eq!(key, "hyperpolymath_cicd-hyper-a");
+    assert_eq!(key, "hyperpolymath_hypatia");
 
     // Read
     let retrieved = client.get_repository(&key).await?;
     assert!(retrieved.is_some());
     let retrieved = retrieved.unwrap();
-    assert_eq!(retrieved.name, "cicd-hyper-a");
+    assert_eq!(retrieved.name, "hypatia");
     assert_eq!(retrieved.owner, "hyperpolymath");
 
     // List

@@ -8,7 +8,7 @@
 :source-highlighter: rouge
 
 [abstract]
-This guidebook provides comprehensive documentation for the cicd-hyper-a platform and its integration with gitbot-fleet. It covers the philosophy, architecture, tooling, error patterns, and operational procedures for maintaining CI/CD compliance across the hyperpolymath repository ecosystem.
+This guidebook provides comprehensive documentation for the hypatia platform and its integration with gitbot-fleet. It covers the philosophy, architecture, tooling, error patterns, and operational procedures for maintaining CI/CD compliance across the hyperpolymath repository ecosystem.
 
 toc::[]
 
@@ -16,7 +16,7 @@ toc::[]
 
 === What This System Does
 
-The cicd-hyper-a platform is a neurosymbolic CI/CD intelligence system that:
+The hypatia platform is a neurosymbolic CI/CD intelligence system that:
 
 1. **Learns** patterns from CI/CD failures across repositories
 2. **Distills** them into simple, fast-acting declarative rules
@@ -41,7 +41,7 @@ The system learns complex patterns through analysis, then distills them into sim
 |===
 | Component | Purpose | Status
 
-| `cicd-hyper-a`
+| `hypatia`
 | Central intelligence platform with error catalog and SHA pins
 | Active
 
@@ -176,7 +176,7 @@ jobs:
 
 [source]
 ----
-cicd-hyper-a/
+hypatia/
 ├── .audittraining/
 │   ├── ERROR-CATALOG.scm      # Error patterns in Guile Scheme
 │   ├── SHA-PINS.scm           # Verified SHA pins
@@ -566,8 +566,8 @@ gh api repos/actions/checkout/git/refs/tags/v6.0.1 --jq '.object.sha'
 [source,bash]
 ----
 # Build from source
-cd $REPOS_DIR/cicd-hyper-a
-cargo build --release --package cicd-hyper-a-fixer
+cd $REPOS_DIR/hypatia
+cargo build --release --package hypatia-fixer
 
 # Binary location
 ./target/release/cicd-fixer
@@ -734,7 +734,7 @@ fn main() {
 
 === Bot Capabilities
 
-The gitbot-fleet bots can leverage cicd-hyper-a for automated fixes:
+The gitbot-fleet bots can leverage hypatia for automated fixes:
 
 [cols="1,2,2"]
 |===
@@ -831,7 +831,7 @@ The gitbot-fleet reads patterns from `.machine_readable/6scm/CICD-PATTERNS.scm`:
 [source,bash]
 ----
 # Quick scan of all repos
-cd $REPOS_DIR/cicd-hyper-a
+cd $REPOS_DIR/hypatia
 ./target/release/cicd-fixer batch $REPOS_DIR --limit 100
 
 # Review repos with issues
@@ -885,7 +885,7 @@ gh api repos/actions/checkout/git/refs/tags/v6.0.2 --jq '.object.sha'
 # 2. Update SHA-PINS.scm
 # 3. Update fixer/src/sha_pins.rs
 # 4. Rebuild
-cargo build --release --package cicd-hyper-a-fixer
+cargo build --release --package hypatia-fixer
 
 # 5. Batch update
 ./target/release/cicd-fixer batch $REPOS_DIR --fix
@@ -1072,7 +1072,7 @@ RUST_LOG=cicd_fixer::scanner=trace cicd-fixer scan /path/to/repo
 | New action versions, security advisories
 
 | *DevOps Engineer*
-| cicd-hyper-a maintenance, bot configuration
+| hypatia maintenance, bot configuration
 | Tool updates, new pattern additions
 
 | *Developer*
@@ -1153,15 +1153,15 @@ Update workflow template   │ DevOps Eng       │ seambot
 [source,bash]
 ----
 # Step 1: Clone the repository
-git clone https://github.com/hyperpolymath/cicd-hyper-a.git
-cd cicd-hyper-a
+git clone https://github.com/hyperpolymath/hypatia.git
+cd hypatia
 
 # Step 2: Install Rust (if not installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 
 # Step 3: Build the fixer
-cargo build --release --package cicd-hyper-a-fixer
+cargo build --release --package hypatia-fixer
 
 # Step 4: Verify installation
 ./target/release/cicd-fixer --version
@@ -1233,7 +1233,7 @@ git commit -m "fix: apply CI/CD security fixes
 - Add explicit permissions declarations
 - Add SPDX license headers
 
-Applied by cicd-fixer from cicd-hyper-a."
+Applied by cicd-fixer from hypatia."
 
 # Step 7: Push changes
 git push
@@ -1335,21 +1335,21 @@ gh api repos/owner/action/git/refs/tags/v2.0.0 --jq '.object.sha'
 gh release view v2.0.0 --repo owner/action
 
 # Step 4: Update SHA-PINS.scm
-vim $REPOS_DIR/cicd-hyper-a/.audittraining/SHA-PINS.scm
+vim $REPOS_DIR/hypatia/.audittraining/SHA-PINS.scm
 # Add:
 #     (owner/action
 #      "abc123def456..."
 #      "v2.0.0")
 
 # Step 5: Update sha_pins.rs
-vim $REPOS_DIR/cicd-hyper-a/fixer/src/sha_pins.rs
+vim $REPOS_DIR/hypatia/fixer/src/sha_pins.rs
 # Add:
 #         pins.insert("owner/action".to_string(),
 #             ("abc123def456...".to_string(), "v2.0.0".to_string()));
 
 # Step 6: Rebuild
-cd $REPOS_DIR/cicd-hyper-a
-cargo build --release --package cicd-hyper-a-fixer
+cd $REPOS_DIR/hypatia
+cargo build --release --package hypatia-fixer
 
 # Step 7: Verify
 ./target/release/cicd-fixer pins | grep "owner/action"
@@ -1370,7 +1370,7 @@ git push
 # Is it auto-fixable?
 
 # Step 2: Update ERROR-CATALOG.scm
-vim $REPOS_DIR/cicd-hyper-a/.audittraining/ERROR-CATALOG.scm
+vim $REPOS_DIR/hypatia/.audittraining/ERROR-CATALOG.scm
 # Add:
 #     (new-error-id
 #      error-category severity #t-or-f
@@ -1378,19 +1378,19 @@ vim $REPOS_DIR/cicd-hyper-a/.audittraining/ERROR-CATALOG.scm
 #      "How to fix it")
 
 # Step 3: Update catalog.rs
-vim $REPOS_DIR/cicd-hyper-a/fixer/src/catalog.rs
+vim $REPOS_DIR/hypatia/fixer/src/catalog.rs
 # Add Rust equivalent
 
 # Step 4: Update scanner.rs (if auto-detectable)
-vim $REPOS_DIR/cicd-hyper-a/fixer/src/scanner.rs
+vim $REPOS_DIR/hypatia/fixer/src/scanner.rs
 # Add detection logic
 
 # Step 5: Update fixer.rs (if auto-fixable)
-vim $REPOS_DIR/cicd-hyper-a/fixer/src/fixer.rs
+vim $REPOS_DIR/hypatia/fixer/src/fixer.rs
 # Add fix logic
 
 # Step 6: Rebuild and test
-cargo build --release --package cicd-hyper-a-fixer
+cargo build --release --package hypatia-fixer
 ./target/release/cicd-fixer catalog  # Verify new pattern appears
 ./target/release/cicd-fixer scan /path/to/test/repo  # Test detection
 
@@ -1439,8 +1439,8 @@ gh api repos/vulnerable/action/git/refs/tags/v-fixed --jq '.object.sha'
 # Edit and add the new secure SHA
 
 # Step 4 - Rebuild cicd-fixer
-cd $REPOS_DIR/cicd-hyper-a
-cargo build --release --package cicd-hyper-a-fixer
+cd $REPOS_DIR/hypatia
+cargo build --release --package hypatia-fixer
 
 # Step 5 - Batch fix all affected repos
 ./target/release/cicd-fixer batch $REPOS_DIR --fix
@@ -1631,14 +1631,14 @@ Examples:              Examples:              Examples:
 === General Questions
 
 [qanda]
-What is cicd-hyper-a?::
-cicd-hyper-a is a neurosymbolic CI/CD intelligence platform that learns from CI/CD failures, distills patterns into rules, and applies fixes programmatically across repositories.
+What is hypatia?::
+hypatia is a neurosymbolic CI/CD intelligence platform that learns from CI/CD failures, distills patterns into rules, and applies fixes programmatically across repositories.
 
 What is cicd-fixer?::
 cicd-fixer is a Rust CLI tool that scans repositories for CI/CD issues, applies automatic fixes, and can process multiple repositories in batch mode.
 
 Why not just use Dependabot?::
-Dependabot handles dependency updates but doesn't address workflow security (SHA pinning, permissions), SPDX headers, or cross-repo template propagation. cicd-hyper-a complements Dependabot.
+Dependabot handles dependency updates but doesn't address workflow security (SHA pinning, permissions), SPDX headers, or cross-repo template propagation. hypatia complements Dependabot.
 
 Do I need to run cicd-fixer on every commit?::
 No. Run it periodically (daily/weekly) or when you notice CI failures. The gitbot-fleet bots can automate this.
@@ -1686,7 +1686,7 @@ Can bots fix critical issues automatically?::
 For auto-fixable issues (SHA pinning, permissions, SPDX), yes. For manual issues (hardcoded secrets, code changes), bots create issues for human review.
 
 What if cicd-fixer introduces a bug?::
-Report it at https://github.com/hyperpolymath/cicd-hyper-a/issues. In the meantime, revert the affected workflows and fix manually.
+Report it at https://github.com/hyperpolymath/hypatia/issues. In the meantime, revert the affected workflows and fix manually.
 
 == User's Guide: Getting Started
 
@@ -1918,7 +1918,7 @@ Neurosymbolic:: Combining neural learning with symbolic reasoning
 
 == Appendix C: Related Documents
 
-* link:../README.adoc[cicd-hyper-a README]
+* link:../README.adoc[hypatia README]
 * link:../CII-ENFORCEMENT.adoc[CII Best Practices Enforcement]
 * link:../PALIMPSEST.adoc[Palimpsest Philosophy]
 * link:../../gitbot-fleet/.machine_readable/6scm/CICD-PATTERNS.scm[CICD-PATTERNS.scm]
@@ -1929,4 +1929,4 @@ Neurosymbolic:: Combining neural learning with symbolic reasoning
 
 _Generated: 2026-01-05_
 
-_This guidebook is maintained as part of cicd-hyper-a and should be updated when patterns, SHA pins, or procedures change._
+_This guidebook is maintained as part of hypatia and should be updated when patterns, SHA pins, or procedures change._

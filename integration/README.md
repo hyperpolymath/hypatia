@@ -1,6 +1,6 @@
 # Integration Tests
 
-This directory contains integration tests for the cicd-hyper-a platform.
+This directory contains integration tests for the hypatia platform.
 
 ## Overview
 
@@ -241,7 +241,7 @@ async fn test_with_container() -> Result<()> {
 
 ```bash
 # Check container logs
-docker logs cicd-hyper-a-test-arangodb
+docker logs hypatia-test-arangodb
 
 # Restart containers
 docker-compose -f docker-compose.test.yml restart

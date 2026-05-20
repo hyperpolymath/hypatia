@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Pre-Push Hook Template
+# hypatia Pre-Push Hook Template
 # Validates commits before pushing to remote
 #
 # This hook checks:

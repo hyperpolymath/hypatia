@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! Multi-forge adapters for cicd-hyper-a
+//! Multi-forge adapters for hypatia
 //!
 //! Provides forge adapters for various code hosting platforms:
 //!

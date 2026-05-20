@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a User Guide
+= hypatia User Guide
 :toc: left
 :toclevels: 3
 :icons: font
@@ -10,7 +10,7 @@
 
 == Introduction
 
-*cicd-hyper-a* is a neurosymbolic CI/CD intelligence platform that combines neural learning with symbolic reasoning to provide automated repository management, security enforcement, and policy compliance.
+*hypatia* is a neurosymbolic CI/CD intelligence platform that combines neural learning with symbolic reasoning to provide automated repository management, security enforcement, and policy compliance.
 
 This guide covers installation, configuration, and day-to-day usage of the `hyper` CLI tool.
 
@@ -35,7 +35,7 @@ For a complete glossary, see <<glossary.adoc#,Glossary>>.
 
 === Prerequisites
 
-Before installing cicd-hyper-a, ensure you have:
+Before installing hypatia, ensure you have:
 
 * *Rust toolchain* (1.75 or later) - For building the CLI
 * *Git* (2.40 or later) - For repository operations
@@ -49,7 +49,7 @@ The fastest way to get started is with pre-built binaries.
 .Linux (x86_64)
 [source,bash]
 ----
-curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-linux-x86_64 -o hyper
+curl -fsSL https://releases.hyperpolymath.dev/hypatia/latest/hyper-linux-x86_64 -o hyper
 chmod +x hyper
 sudo mv hyper /usr/local/bin/
 ----
@@ -57,7 +57,7 @@ sudo mv hyper /usr/local/bin/
 .macOS (Apple Silicon)
 [source,bash]
 ----
-curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-darwin-arm64 -o hyper
+curl -fsSL https://releases.hyperpolymath.dev/hypatia/latest/hyper-darwin-arm64 -o hyper
 chmod +x hyper
 sudo mv hyper /usr/local/bin/
 ----
@@ -65,7 +65,7 @@ sudo mv hyper /usr/local/bin/
 .macOS (Intel)
 [source,bash]
 ----
-curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-darwin-x86_64 -o hyper
+curl -fsSL https://releases.hyperpolymath.dev/hypatia/latest/hyper-darwin-x86_64 -o hyper
 chmod +x hyper
 sudo mv hyper /usr/local/bin/
 ----
@@ -76,8 +76,8 @@ Clone and build the project:
 
 [source,bash]
 ----
-git clone https://github.com/hyperpolymath/cicd-hyper-a.git
-cd cicd-hyper-a/cli
+git clone https://github.com/hyperpolymath/hypatia.git
+cd hypatia/cli
 cargo build --release
 sudo cp target/release/hyper /usr/local/bin/
 ----
@@ -110,7 +110,7 @@ Initialize your configuration:
 hyper config init
 ----
 
-This creates `~/.config/cicd-hyper-a/config.toml` with default settings.
+This creates `~/.config/hypatia/config.toml` with default settings.
 
 === Authenticate with GitHub
 
@@ -202,7 +202,7 @@ All commands support these global options:
 
 | `-c, --config`
 | Configuration file path
-| `~/.config/cicd-hyper-a/config.toml`
+| `~/.config/hypatia/config.toml`
 
 | `--no-color`
 | Disable colored output
@@ -494,13 +494,13 @@ hyper config get registry.url
 
 === Configuration File
 
-The configuration file is located at `~/.config/cicd-hyper-a/config.toml`.
+The configuration file is located at `~/.config/hypatia/config.toml`.
 
 [source,toml]
 ----
 # Registry settings
 [registry]
-url = "https://registry.cicd-hyper-a.hyperpolymath.dev"
+url = "https://registry.hypatia.hyperpolymath.dev"
 cache_ttl = 3600
 
 # GitHub settings
@@ -549,7 +549,7 @@ Configuration can be overridden with environment variables:
 
 === Per-Repository Configuration
 
-Create `.cicd-hyper-a.toml` in your repository root to override settings:
+Create `.hypatia.toml` in your repository root to override settings:
 
 [source,toml]
 ----
@@ -577,7 +577,7 @@ A ruleset is a collection of rules that share a common purpose. Rulesets are ide
 
 === Built-in Rulesets
 
-cicd-hyper-a includes several pre-built rulesets:
+hypatia includes several pre-built rulesets:
 
 [cols="2,3,1"]
 |===
@@ -702,7 +702,7 @@ gh auth refresh
 +
 [source,bash]
 ----
-curl -I https://registry.cicd-hyper-a.hyperpolymath.dev/health
+curl -I https://registry.hypatia.hyperpolymath.dev/health
 ----
 
 2. Verify registry URL in configuration:
@@ -761,7 +761,7 @@ hyper scan . --no-cache
 If you encounter issues not covered here:
 
 1. Check the FAQ: <<faq.adoc#,Frequently Asked Questions>>
-2. Search existing issues: https://github.com/hyperpolymath/cicd-hyper-a/issues
+2. Search existing issues: https://github.com/hyperpolymath/hypatia/issues
 3. Join the community chat: https://matrix.to/#/#hyperpolymath:matrix.org
 4. File a new issue with debug output:
 +

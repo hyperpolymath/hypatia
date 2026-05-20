@@ -161,7 +161,7 @@ Show PipelineState where
 export
 exampleWorkflow : Pipeline Succeeded
 exampleWorkflow =
-  let p0 = newPipeline "pipe-001" "CI Build" "hyperpolymath/cicd-hyper-a" "main" "abc123"
+  let p0 = newPipeline "pipe-001" "CI Build" "hyperpolymath/hypatia" "main" "abc123"
       p1 = queue p0
       p2 = start p1 1705600000
       p3 = succeed p2 1705600300

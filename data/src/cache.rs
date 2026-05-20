@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-//! High-level cache abstraction for cicd-hyper-a
+//! High-level cache abstraction for hypatia
 //!
 //! Provides a unified caching interface wrapping DragonflyClient with:
 //! - Connection pooling via deadpool-redis

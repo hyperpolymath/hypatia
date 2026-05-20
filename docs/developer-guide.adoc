@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a Developer Guide
+= hypatia Developer Guide
 :toc: left
 :toclevels: 3
 :icons: font
@@ -10,7 +10,7 @@
 
 == Introduction
 
-This guide covers development of cicd-hyper-a components, including writing rules in Logtalk, creating rulesets in Haskell, developing forge adapters, and contributing to the project.
+This guide covers development of hypatia components, including writing rules in Logtalk, creating rulesets in Haskell, developing forge adapters, and contributing to the project.
 
 === Development Environment Setup
 
@@ -54,8 +54,8 @@ This guide covers development of cicd-hyper-a components, including writing rule
 [source,bash]
 ----
 # Clone repository
-git clone https://github.com/hyperpolymath/cicd-hyper-a.git
-cd cicd-hyper-a
+git clone https://github.com/hyperpolymath/hypatia.git
+cd hypatia
 
 # Install Rust dependencies
 cd cli && cargo build
@@ -83,7 +83,7 @@ cabal test
 [source]
 ----
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         cicd-hyper-a Platform                            │
+│                         hypatia Platform                            │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
@@ -343,7 +343,7 @@ File = 'README.md'.
 
 === Type-Safe Rule DSL
 
-cicd-hyper-a uses GADTs for type-safe rule definitions:
+hypatia uses GADTs for type-safe rule definitions:
 
 [source,haskell]
 ----
@@ -895,7 +895,7 @@ make dev-up
 make test
 
 # Run specific test suite
-cargo test -p cicd-hyper-a-cli
+cargo test -p hypatia-cli
 cabal test registry
 logtalk_tester -d engine/
 

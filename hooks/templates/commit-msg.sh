@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Commit Message Hook Template
+# hypatia Commit Message Hook Template
 # Validates commit message format
 #
 # This hook validates:

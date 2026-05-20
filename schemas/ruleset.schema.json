@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://hyperpolymath.dev/schemas/cicd-hyper-a/ruleset",
-  "title": "cicd-hyper-a Ruleset Schema",
+  "$id": "https://hyperpolymath.dev/schemas/hypatia/ruleset",
+  "title": "hypatia Ruleset Schema",
   "description": "JSON Schema for validated CI/CD rulesets",
   "type": "object",
   "required": ["name", "version", "effect", "rules"],

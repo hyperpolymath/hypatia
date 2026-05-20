@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Git Hooks - Cache Functions
+# hypatia Git Hooks - Cache Functions
 # Dragonfly/Redis cache integration for ruleset caching
 #
 # This file is designed to be sourced by hook scripts:
@@ -23,10 +23,10 @@ CICD_CACHE_PASSWORD="${CICD_CACHE_PASSWORD:-}"
 CICD_CACHE_TTL="${CICD_CACHE_TTL:-3600}"  # 1 hour default TTL
 
 # Cache key prefix
-CICD_CACHE_PREFIX="cicd-hyper-a:hooks"
+CICD_CACHE_PREFIX="hypatia:hooks"
 
 # Fallback to local file cache if Redis unavailable
-CICD_FILE_CACHE_DIR="${CICD_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/cicd-hyper-a}/rulesets"
+CICD_FILE_CACHE_DIR="${CICD_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/hypatia}/rulesets"
 
 # ==============================================================================
 # REDIS/DRAGONFLY CLIENT
@@ -187,7 +187,7 @@ get_cached_ruleset() {
     echo "$_ruleset"
 }
 
-# Fetch ruleset from cicd-hyper-a registry
+# Fetch ruleset from hypatia registry
 # Usage: ruleset=$(fetch_ruleset_from_registry "security/secrets" "1.0.0")
 fetch_ruleset_from_registry() {
     _ruleset_name="$1"
@@ -206,7 +206,7 @@ fetch_ruleset_from_registry() {
     fi
 
     # Fallback to local registry file
-    _local_file="${CICD_REGISTRY_PATH:-/var/lib/cicd-hyper-a/registry}/rulesets/$_ruleset_name/$_version.json"
+    _local_file="${CICD_REGISTRY_PATH:-/var/lib/hypatia/registry}/rulesets/$_ruleset_name/$_version.json"
     if [ -f "$_local_file" ]; then
         cat "$_local_file"
         return 0

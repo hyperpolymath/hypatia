@@ -99,7 +99,7 @@ pub async fn execute(args: WithdrawArgs, config: &Config, format: OutputFormat) 
         .registry
         .clone()
         .or_else(|| config.registry_url.clone())
-        .unwrap_or_else(|| "https://registry.cicd-hyper-a.dev".to_string());
+        .unwrap_or_else(|| "https://registry.hypatia.dev".to_string());
 
     info!(
         "Withdrawing ruleset '{}' from {}",
@@ -315,11 +315,11 @@ fn generate_mock_ruleset(category: &str, name: &str, version: &str) -> Ruleset {
             version: version.to_string(),
             description: format!("{} ruleset for {} category", name, category),
             category: category_enum,
-            authors: vec!["cicd-hyper-a".to_string()],
+            authors: vec!["hypatia".to_string()],
             languages: vec!["all".to_string()],
             tags: vec![category.to_string(), name.to_string()],
             license: "PMPL-1.0-or-later".to_string(),
-            repository: Some("https://github.com/hyperpolymath/cicd-hyper-a".to_string()),
+            repository: Some("https://github.com/hyperpolymath/hypatia".to_string()),
             private: false,
         },
         rules,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a Glossary
+= hypatia Glossary
 :toc: left
 :toclevels: 2
 :icons: font
@@ -8,7 +8,7 @@
 
 == Introduction
 
-This glossary defines terms and concepts used throughout the cicd-hyper-a documentation. Terms are organized alphabetically within categories.
+This glossary defines terms and concepts used throughout the hypatia documentation. Terms are organized alphabetically within categories.
 
 == Core Concepts
 
@@ -18,7 +18,7 @@ The operation performed when a rule's condition matches. Actions can inject file
 
 [[adapter]]
 Adapter::
-A component that translates between cicd-hyper-a's internal operations and a specific forge's API. Each supported forge (GitHub, GitLab, etc.) has its own adapter. See <<developer-guide.adoc#forge-adapter-development,Forge Adapter Development>>.
+A component that translates between hypatia's internal operations and a specific forge's API. Each supported forge (GitHub, GitLab, etc.) has its own adapter. See <<developer-guide.adoc#forge-adapter-development,Forge Adapter Development>>.
 
 [[audit-log]]
 Audit Log::
@@ -78,7 +78,7 @@ A numeric value (0-100) representing a repository's overall compliance with poli
 
 [[hook]]
 Hook::
-A Git hook script installed in a repository that invokes cicd-hyper-a rules at specific points in the Git workflow (pre-commit, pre-push, post-receive).
+A Git hook script installed in a repository that invokes hypatia rules at specific points in the Git workflow (pre-commit, pre-push, post-receive).
 
 [[inference]]
 Inference::
@@ -86,11 +86,11 @@ The logical reasoning process by which the Logtalk engine derives conclusions fr
 
 [[learning]]
 Learning::
-The process by which cicd-hyper-a improves rules based on feedback from fix outcomes. Successful fixes increase confidence; failed fixes trigger rule refinement.
+The process by which hypatia improves rules based on feedback from fix outcomes. Successful fixes increase confidence; failed fixes trigger rule refinement.
 
 [[neurosymbolic]]
 Neurosymbolic::
-A hybrid approach combining neural networks (for pattern recognition and learning) with symbolic logic (for fast, deterministic rule execution). The foundational philosophy of cicd-hyper-a.
+A hybrid approach combining neural networks (for pattern recognition and learning) with symbolic logic (for fast, deterministic rule execution). The foundational philosophy of hypatia.
 
 [[pattern]]
 Pattern::
@@ -148,15 +148,15 @@ A Redis-compatible in-memory data store used for caching compiled rules. Provide
 
 [[helm]]
 Helm::
-A package manager for Kubernetes used to deploy cicd-hyper-a in production environments.
+A package manager for Kubernetes used to deploy hypatia in production environments.
 
 [[kubernetes]]
 Kubernetes (K8s)::
-A container orchestration platform used for production deployment of cicd-hyper-a services.
+A container orchestration platform used for production deployment of hypatia services.
 
 [[prometheus]]
 Prometheus::
-A metrics and monitoring system used to track cicd-hyper-a performance, throughput, and health.
+A metrics and monitoring system used to track hypatia performance, throughput, and health.
 
 [[radicle]]
 Radicle::
@@ -166,19 +166,19 @@ A peer-to-peer code collaboration network used for decentralized ruleset distrib
 
 [[branch-protection]]
 Branch Protection::
-A forge feature that restricts who can push to a branch and what conditions must be met (reviews, status checks). Often enforced by cicd-hyper-a rules.
+A forge feature that restricts who can push to a branch and what conditions must be met (reviews, status checks). Often enforced by hypatia rules.
 
 [[code-review]]
 Code Review::
-The practice of having changes reviewed by another developer before merging. A common requirement in cicd-hyper-a security rules.
+The practice of having changes reviewed by another developer before merging. A common requirement in hypatia security rules.
 
 [[codeql]]
 CodeQL::
-A semantic code analysis engine used by GitHub for security scanning. cicd-hyper-a can configure and validate CodeQL workflows.
+A semantic code analysis engine used by GitHub for security scanning. hypatia can configure and validate CodeQL workflows.
 
 [[openssf-scorecard]]
 OpenSSF Scorecard::
-A tool that assesses open source project security practices. Many cicd-hyper-a rules align with Scorecard checks.
+A tool that assesses open source project security practices. Many hypatia rules align with Scorecard checks.
 
 [[pinned-dependencies]]
 Pinned Dependencies::
@@ -194,11 +194,11 @@ The practice of referencing GitHub Actions by commit SHA rather than version tag
 
 [[spdx]]
 SPDX::
-Software Package Data Exchange, a standard for license identification. cicd-hyper-a rules enforce SPDX license headers.
+Software Package Data Exchange, a standard for license identification. hypatia rules enforce SPDX license headers.
 
 [[supply-chain]]
 Supply Chain (Security)::
-The security of all components, dependencies, and processes involved in building and distributing software. cicd-hyper-a addresses supply chain security through dependency pinning and verification.
+The security of all components, dependencies, and processes involved in building and distributing software. hypatia addresses supply chain security through dependency pinning and verification.
 
 == Language Terms
 
@@ -238,7 +238,7 @@ A typed language that compiles to JavaScript. Preferred over TypeScript in the h
 
 [[palimpsest]]
 Palimpsest::
-The philosophical license under which cicd-hyper-a is distributed, emphasizing layered, evolving contributions.
+The philosophical license under which hypatia is distributed, emphasizing layered, evolving contributions.
 
 [[rsr]]
 RSR (Rhodium Standard Repositories)::

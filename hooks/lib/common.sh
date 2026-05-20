@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: PMPL-1.0-or-later
-# cicd-hyper-a Git Hooks - Common Functions
+# hypatia Git Hooks - Common Functions
 # Shared utilities for all hook templates
 #
 # This file is designed to be sourced by hook scripts:
@@ -20,7 +20,7 @@ fi
 
 # Default configuration paths
 CICD_CONFIG_FILE="${CICD_CONFIG_FILE:-${GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null)}/hooks/config.yml}"
-CICD_CACHE_DIR="${CICD_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/cicd-hyper-a}"
+CICD_CACHE_DIR="${CICD_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/hypatia}"
 CICD_API_URL="${CICD_HYPER_A_API:-http://localhost:8080}"
 CICD_API_TOKEN="${CICD_HYPER_A_TOKEN:-}"
 
@@ -67,7 +67,7 @@ log_debug() { [ "${CICD_DEBUG:-0}" = "1" ] && color_print "magenta" "[DEBUG] $*"
 print_header() {
     _title="$1"
     color_print "bold" "===================================="
-    color_print "bold" "cicd-hyper-a: $_title"
+    color_print "bold" "hypatia: $_title"
     color_print "bold" "===================================="
 }
 

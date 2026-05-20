@@ -493,7 +493,7 @@ fn compute_hash(content: &str) -> String {
 fn get_registry_url(arg: &Option<String>, config: &Config) -> String {
     arg.clone()
         .or_else(|| config.registry_url.clone())
-        .unwrap_or_else(|| "https://registry.cicd-hyper-a.dev".to_string())
+        .unwrap_or_else(|| "https://registry.hypatia.dev".to_string())
 }
 
 /// Submit ruleset to registry

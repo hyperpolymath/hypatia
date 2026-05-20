@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= cicd-hyper-a FAQ
+= hypatia FAQ
 :toc: left
 :toclevels: 2
 :icons: font
@@ -8,13 +8,13 @@
 
 == Introduction
 
-Frequently asked questions about cicd-hyper-a, organized by topic.
+Frequently asked questions about hypatia, organized by topic.
 
 == General Questions
 
-=== What is cicd-hyper-a?
+=== What is hypatia?
 
-cicd-hyper-a is a neurosymbolic CI/CD intelligence platform that combines:
+hypatia is a neurosymbolic CI/CD intelligence platform that combines:
 
 * *Neural learning* for pattern recognition across thousands of repositories
 * *Symbolic reasoning* (Logtalk/Prolog) for fast, deterministic rule execution
@@ -30,15 +30,15 @@ Neurosymbolic AI combines two approaches:
 . *Neural networks* excel at pattern recognition, learning from large datasets, and handling ambiguity
 . *Symbolic logic* excels at deterministic reasoning, explainability, and formal guarantees
 
-cicd-hyper-a uses neural learning to identify patterns in CI/CD failures across thousands of repositories, then converts these patterns into symbolic rules that execute in microseconds without ML inference overhead.
+hypatia uses neural learning to identify patterns in CI/CD failures across thousands of repositories, then converts these patterns into symbolic rules that execute in microseconds without ML inference overhead.
 
-=== How is cicd-hyper-a different from GitHub Actions / GitLab CI?
+=== How is hypatia different from GitHub Actions / GitLab CI?
 
-cicd-hyper-a is not a CI/CD execution platform -- it's an intelligence layer that works *with* your existing CI/CD:
+hypatia is not a CI/CD execution platform -- it's an intelligence layer that works *with* your existing CI/CD:
 
 [cols="2,3,3"]
 |===
-| Aspect | CI/CD Platforms | cicd-hyper-a
+| Aspect | CI/CD Platforms | hypatia
 
 | Purpose
 | Execute build/test/deploy pipelines
@@ -57,7 +57,7 @@ cicd-hyper-a is not a CI/CD execution platform -- it's an intelligence layer tha
 | Automated with confidence scoring
 |===
 
-=== What forges does cicd-hyper-a support?
+=== What forges does hypatia support?
 
 Currently supported:
 
@@ -68,14 +68,14 @@ Currently supported:
 * Sourcehut (community)
 * Radicle (P2P federation)
 
-=== Is cicd-hyper-a open source?
+=== Is hypatia open source?
 
-Yes. cicd-hyper-a is dual-licensed under:
+Yes. hypatia is dual-licensed under:
 
 * *PMPL-1.0-or-later* (legal)
 * *Palimpsest Licence* (philosophical)
 
-The source code is available at https://github.com/hyperpolymath/cicd-hyper-a
+The source code is available at https://github.com/hyperpolymath/hypatia
 
 == Installation & Setup
 
@@ -100,7 +100,7 @@ The fastest method is downloading a pre-built binary:
 
 [source,bash]
 ----
-curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-linux-x86_64 -o hyper
+curl -fsSL https://releases.hyperpolymath.dev/hypatia/latest/hyper-linux-x86_64 -o hyper
 chmod +x hyper
 sudo mv hyper /usr/local/bin/
 ----
@@ -109,7 +109,7 @@ See <<user-guide.adoc#installation,Installation Guide>> for all methods.
 
 === Do I need to self-host?
 
-No. You can use the public registry at `registry.cicd-hyper-a.hyperpolymath.dev` without deploying any infrastructure.
+No. You can use the public registry at `registry.hypatia.hyperpolymath.dev` without deploying any infrastructure.
 
 Self-hosting is recommended for:
 
@@ -176,7 +176,7 @@ See <<developer-guide.adoc#writing-rules,Writing Rules>> for detailed instructio
 
 === Can I disable specific rules?
 
-Yes. Create `.cicd-hyper-a.toml` in your repository:
+Yes. Create `.hypatia.toml` in your repository:
 
 [source,toml]
 ----
@@ -262,7 +262,7 @@ This shows exactly what would be modified without making changes.
 
 == Security
 
-=== Is cicd-hyper-a safe to run on my repositories?
+=== Is hypatia safe to run on my repositories?
 
 Yes, with appropriate precautions:
 
@@ -315,9 +315,9 @@ With cached rules in Dragonfly:
 
 The neural → symbolic distillation ensures rules execute without ML inference overhead.
 
-=== Can cicd-hyper-a handle large organizations?
+=== Can hypatia handle large organizations?
 
-Yes. cicd-hyper-a is designed for scale:
+Yes. hypatia is designed for scale:
 
 * Horizontal scaling of all services
 * Distributed caching with Dragonfly
@@ -417,16 +417,16 @@ hyper scan . -vvv  # Trace
 
 == Integration
 
-=== Can I use cicd-hyper-a in CI/CD pipelines?
+=== Can I use hypatia in CI/CD pipelines?
 
 Yes. Add to your workflow:
 
 .GitHub Actions Example
 [source,yaml]
 ----
-- name: Scan with cicd-hyper-a
+- name: Scan with hypatia
   run: |
-    curl -fsSL https://releases.hyperpolymath.dev/cicd-hyper-a/latest/hyper-linux-x86_64 -o hyper
+    curl -fsSL https://releases.hyperpolymath.dev/hypatia/latest/hyper-linux-x86_64 -o hyper
     chmod +x hyper
     ./hyper scan . --severity high --output json > scan-results.json
 
@@ -438,7 +438,7 @@ Yes. Add to your workflow:
     fi
 ----
 
-=== Does cicd-hyper-a work with monorepos?
+=== Does hypatia work with monorepos?
 
 Yes. Scan specific directories:
 
@@ -448,9 +448,9 @@ hyper scan ./packages/frontend --rulesets rescript-strict
 hyper scan ./services/api --rulesets rust-strict
 ----
 
-Or scan the entire monorepo with per-directory rules in `.cicd-hyper-a.toml`.
+Or scan the entire monorepo with per-directory rules in `.hypatia.toml`.
 
-=== Can I use cicd-hyper-a with pre-commit hooks?
+=== Can I use hypatia with pre-commit hooks?
 
 Yes. Install hooks in your repository:
 
@@ -498,7 +498,7 @@ We respond within 48 hours.
 === How do I get support?
 
 * *Community chat*: https://matrix.to/#/#hyperpolymath:matrix.org
-* *GitHub issues*: https://github.com/hyperpolymath/cicd-hyper-a/issues
+* *GitHub issues*: https://github.com/hyperpolymath/hypatia/issues
 * *Email*: support@hyperpolymath.dev
 
 === Is there commercial support?

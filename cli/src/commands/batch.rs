@@ -977,7 +977,7 @@ fn apply_fix(repo: &str, file: &str, action: &str) -> bool {
 /// Generate Markdown report
 fn generate_markdown_report(repos: &[String]) -> String {
     let mut report = String::new();
-    report.push_str("# cicd-hyper-a Batch Report\n\n");
+    report.push_str("# hypatia Batch Report\n\n");
     report.push_str(&format!(
         "Generated: {}\n\n",
         Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
@@ -995,8 +995,8 @@ fn generate_markdown_report(repos: &[String]) -> String {
 fn generate_html_report(repos: &[String]) -> String {
     let mut report = String::new();
     report
-        .push_str("<!DOCTYPE html>\n<html><head><title>cicd-hyper-a Report</title></head><body>\n");
-    report.push_str("<h1>cicd-hyper-a Batch Report</h1>\n");
+        .push_str("<!DOCTYPE html>\n<html><head><title>hypatia Report</title></head><body>\n");
+    report.push_str("<h1>hypatia Batch Report</h1>\n");
     report.push_str("<table border='1'><tr><th>Repository</th><th>Status</th></tr>\n");
     for repo in repos {
         report.push_str(&format!("<tr><td>{}</td><td>✓</td></tr>\n", repo));

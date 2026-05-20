@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://hyperpolymath.dev/schemas/cicd-hyper-a/graph-model/v2",
-  "title": "cicd-hyper-a ArangoDB Graph Model",
+  "$id": "https://hyperpolymath.dev/schemas/hypatia/graph-model/v2",
+  "title": "hypatia ArangoDB Graph Model",
   "description": "Comprehensive graph model for neurosymbolic CI/CD platform with gitbot-fleet integration",
   "version": "2.0.0",
   "definitions": {
