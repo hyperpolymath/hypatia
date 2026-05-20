@@ -1,0 +1,212 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Hypatia -- TOGAF-Style Architecture Overview
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+[NOTE]
+====
+*Canonical, as-built model.* This document describes Hypatia *as it is built today*
+(verified by code audit, 2026-05-18). Target-state elements that depend on the
+boundary architecture ruling are explicitly tagged *TARGET (pending ruling #273)*
+and MUST NOT be read as implemented. Stale Mermaid diagrams under
+`docs/diagrams/*.md` are *legacy/superseded* -- see `README.adoc`.
+====
+
+== 1. Architecture Vision
+
+Hypatia is a neurosymbolic CI/CD intelligence platform: an Elixir/OTP application
+that ingests security/quality findings from GitHub Actions scans, classifies them
+against a symbolic recipe/pattern knowledge base, enhances routing decisions with
+an 8-organ neural subsystem, dispatches remediation actions to the gitbot-fleet,
+and learns from outcomes.
+
+The architecture vision balances two states:
+
+* *Baseline (as-built):* a single-node BEAM application reading and writing
+  *local flat files* (`data/verisim/*.json|*.jsonl`), invoking external CLIs via
+  `System.cmd`/`Port`, with an in-process VCL query layer. No external database.
+* *Target (pending ruling #273):* the verisim data boundary is replaced by a
+  private `verisimdb` instance accessed through a Zig->wasm SNIF. This is *under
+  architectural ruling* (epic #273) and is modelled here only as a delta.
+
+== 2. Architecture Principles
+
+[cols="1,3a",options="header"]
+|===
+| Principle | Statement & Rationale
+
+| P1 -- BEAM-resident logic
+| All reasoning (symbolic + neural) runs inside the BEAM. No NIF, no embedded
+  database. Rationale: supervision-tree fault tolerance; observed in
+  `lib/application.ex:26-59`.
+
+| P2 -- Flat-file substrate (as-built)
+| The verisim data store is local flat files (`data/verisim`), parsed by an
+  in-process Elixir VCL parser. Rationale: zero external runtime dependency;
+  `lib/vcl/file_executor.ex:35`, `lib/vcl/client.ex:7-11`.
+
+| P3 -- External effects via OS processes only
+| Side effects beyond the BEAM go through `System.cmd`/`Port` to external CLIs
+  (`gh`, `git`, `scorecard`, `panic-attack`, `curl`, `systemctl`). No in-process
+  network DB driver.
+
+| P4 -- Symbolic-first, neural-advisory
+| Recipe/pattern matching produces routed actions; the neural coordinator
+  *advises* (re-weights / demotes) but does not replace symbolic routing.
+  `lib/pattern_analyzer.ex:258-308`, `lib/kin/gate.ex:402-413`.
+
+| P5 -- Learn from outcomes
+| Every dispatched action records an outcome that feeds the neural coordinator
+  and a fix-outcomes journal. `lib/fleet_dispatcher.ex:691,707`.
+
+| P6 -- Boundary changes are ruled, not assumed
+| Any move off the flat-file substrate (e.g. private verisimdb + SNIF) is
+  governed by epic #273 and represented only as TARGET delta until ruled.
+|===
+
+== 3. Business Architecture
+
+[cols="1,3",options="header"]
+|===
+| Capability | Description
+
+| Finding intake | Receive security/quality findings produced by GitHub Actions scans across the hyperpolymath estate.
+| Triage & classification | Match findings to known patterns and remediation recipes; assign a routing decision (eliminate / substitute / control / proof-obligation / dependabot-fix).
+| Neural enhancement | Re-rank / demote routing using novelty, trust, domain, temporal and interpretation signals.
+| Remediation dispatch | Route actions to gitbot-fleet bots and record a dispatch manifest.
+| Self-governance | Rate-limit, quarantine, gate, arbitrate, and watchdog the ecosystem (Safety + Kin layers).
+| Continuous learning | Capture fix outcomes and adjust models over scheduled learning cycles.
+|===
+
+Primary actors: GitHub Actions (finding source), gitbot-fleet bots (remediation
+executors), the operator (single-node host), and the verisim data corpus.
+
+== 4. Data Architecture (as-built)
+
+[cols="1,2,2",options="header"]
+|===
+| Logical store | Physical form (as-built) | Code reference
+
+| Scans      | `data/verisim/scans/*.json` (JSON dir)               | `lib/vcl/file_executor.ex:99`
+| Patterns   | `data/verisim/patterns/registry.json` (single JSON)  | `lib/vcl/file_executor.ex:100,134`
+| Recipes    | `data/verisim/recipes/recipe-*.json` (JSON dir)      | `lib/vcl/file_executor.ex:101`
+| Outcomes   | `data/verisim/outcomes/*.jsonl` (JSONL dir)          | `lib/vcl/file_executor.ex:102`
+| Dispatch   | `data/verisim/dispatch/pending.jsonl` (+ archive)    | `lib/dispatch_manifest.ex:33,57-58`
+| Index      | `data/verisim/index.json`                            | `lib/vcl/file_executor.ex:104`
+| Fix journal| gitbot-fleet `shared-context/learning/fix-outcomes.jsonl` | `lib/fleet_dispatcher.ex:707`
+| Remote cache | Optional git-clone TTL cache of a remote corpus    | `lib/vcl/remote_cache.ex`
+|===
+
+[IMPORTANT]
+====
+There is *no ArangoDB, no Dragonfly, no snif, no NIF* in the running BEAM
+application. `lib/vcl/proof_resolver.ex` (HTTP -> verisim REST) has *zero callers*
+and is *vestigial* -- it is not part of the as-built data path.
+====
+
+Access path (as-built): `lib/verisim_connector.ex` (with file-I/O fallback,
+`:7-12`) -> `lib/vcl/query.ex` -> `lib/vcl/client.ex` (GenServer, built-in parser,
+`:4-11`) -> `lib/vcl/file_executor.ex` (flat files).
+
+== 5. Application Architecture
+
+The supervision tree (`lib/application.ex:26-59`, `:one_for_one`) groups
+components into layers:
+
+[cols="1,2,3",options="header"]
+|===
+| Layer | Components | Role
+
+| 0 HTTP   | `Bandit` (`Hypatia.Web.Router`, :9090) | Public groove / health endpoints
+| 0 Query  | `VCL.Client` | Structured query over flat files
+| 0.5 Dispatch | `Dispatch.Pipeline` (GenStage) | Controlled parallel processing
+| 0.7 Diagnostics | `Diagnostics.Monitor` | Health monitoring / auto-recovery
+| 1 Safety | `Safety.RateLimiter`, `Safety.Quarantine` | Rate limiting, bot quarantine
+| 3 Intelligence | `Rules.Learning`, `LearningScheduler`, `SelfDiagnostics` | Feedback loop, scheduled learning cycles
+| 4 Neural | `Neural.Blackboard`, `Neural.{GraphNeuralNetwork,VariationalAutoencoder,SequenceModel}`, `Neural.Coordinator` | 8-organ blackboard, 6 phases
+| 5 Kin    | `Kin.{Contingency,Arbiter,Gate,Coordinator,Watchdog}` | Ecosystem coordination, gating, self-healing
+| 6 TUI    | `TUI.Port` (optional, `:tui_enabled`) | Ada terminal dashboard
+|===
+
+Neural subsystem: 8 organs -- RBF (novelty), PageRank/GraphOfTrust (trust),
+GNN (interaction graph), MoE (domain confidence), ESN (forecast), LSM (anomaly),
+VAE (interpretation clustering), Sequence (choreography). Coordinated via a shared
+ETS blackboard over 6 phases (`lib/neural/coordinator.ex:13-47`). Output consumed
+by `lib/pattern_analyzer.ex:258-308` and `lib/kin/gate.ex:402-413`. The
+LearningScheduler->`force_cycle` training wiring + RBF restore-at-init landed in
+PR #275 (`lib/learning_scheduler.ex:125`, `lib/neural/coordinator.ex:90`).
+
+GH-Actions findings path (as-built): scan -> `lib/dispatch_manifest.ex:29-58`
++ `lib/fleet_dispatcher.ex` write flat JSONL to
+`data/verisim/dispatch/pending.jsonl` + gitbot-fleet `fix-outcomes.jsonl`
+(+ optional HTTP to bots) + `Hypatia.Neural.Coordinator.record_outcome`
+(`lib/fleet_dispatcher.ex:691`). This path does *not* go through VCL/verisim.
+
+== 6. Technology Architecture
+
+* Runtime: Elixir/OTP on the BEAM, single node.
+* HTTP server: Bandit, port 9090.
+* Concurrency: GenServer, GenStage (`Dispatch.Pipeline`), ETS (Neural.Blackboard).
+* Persistence: local filesystem flat files; optional git-clone TTL cache.
+* External tools (out-of-process): `gh`, `git`, `scorecard`, `panic-attack`,
+  `curl`, `systemctl` via `System.cmd`/`Port`.
+* No database engine, no NIF, no message broker.
+
+.TARGET (pending ruling #273)
+[NOTE]
+====
+The technology layer target replaces the flat-file substrate with a *private
+`verisimdb` instance* accessed through a *Zig->wasm SNIF* boundary. Decision is
+open in epic #273. Until ruled, this is *not* part of the technology baseline.
+====
+
+== 7. As-Built vs Target Delta
+
+[cols="1,2,2",options="header"]
+|===
+| Concern | As-built (today) | TARGET (pending ruling #273)
+
+| Verisim store | Local flat files `data/verisim/*` | Private `verisimdb` instance
+| Store access | In-process Elixir VCL parser + FileExecutor | Zig->wasm SNIF boundary
+| Network DB driver | None | (TBD by ruling)
+| `proof_resolver.ex` | Vestigial, zero callers | Possibly the seam for verisim REST (TBD)
+| Deployment | Single node, no DB tier | Single node + verisimdb tier behind SNIF
+|===
+
+== 8. Architecture Decision Log (ADR-style)
+
+[cols="1,1,3a",options="header"]
+|===
+| ADR | Status | Decision
+
+| ADR-001 | Accepted (as-built)
+| *Flat-file verisim substrate.* The store is local flat files parsed by an
+  in-process Elixir VCL parser; no external DB. Verified `lib/vcl/file_executor.ex:35`,
+  `lib/vcl/client.ex:7-11`.
+
+| ADR-002 | Accepted (as-built)
+| *No Deno/Node bridge.* The VCL parser is a built-in Elixir parser derived from
+  VeriSim's VQLBridge -- no external process. `lib/vcl/client.ex:8-11`.
+
+| ADR-003 | Accepted (as-built)
+| *Findings-write path bypasses VCL.* Dispatch manifests and fix-outcomes are
+  written directly as flat JSONL, not through the VCL/verisim query path.
+  `lib/dispatch_manifest.ex:29-58`, `lib/fleet_dispatcher.ex:691,707`.
+
+| ADR-004 | Accepted (as-built)
+| *Neural is advisory.* The neural coordinator re-weights/demotes symbolic
+  routing; it does not own the routing decision. `lib/pattern_analyzer.ex:258-308`,
+  `lib/kin/gate.ex:402-413`.
+
+| ADR-005 | Deprecated
+| *`proof_resolver.ex` (HTTP -> verisim REST) is vestigial* -- zero callers.
+  Retained for reference; not on any live path.
+
+| ADR-006 | *Open -- epic #273*
+| *Boundary architecture: private verisimdb behind a Zig->wasm SNIF.* Under
+  architectural ruling. See `docs/architecture/boundary-design-options.adoc`.
+  Modelled here only as TARGET delta; NOT implemented.
+|===
