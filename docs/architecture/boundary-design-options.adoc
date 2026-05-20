@@ -1,0 +1,366 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Hypatia ↔ Store Boundary: Architecture Options (Decision-Ready)
+:author: Cross-repo code audit
+:revdate: 2026-05-18
+:toc: left
+:toclevels: 3
+:sectnums:
+
+[NOTE]
+====
+Status: *OPEN -- epic #273 gap (2)*. This document presents three coherent
+resolutions of the verisimdb-via-SNIF target. Until ruled, the as-built
+(flat-file) substrate is the only canonical baseline -- see
+`togaf-overview.adoc` and `mof-metamodel.adoc`.
+====
+
+== Purpose
+
+The user wants hypatia's store to be a *private verisimdb instance*, reached via
+a *Zig→WebAssembly SNIF*, with VCL conforming to *vcl-ut*. This document presents
+three coherent, evidence-cited resolutions so the user can *rule on the boundary*,
+after which build work item #7 can start immediately.
+
+This is a design document only. No code was changed; no PR/branch was created.
+
+== The hard finding (why the naive chain is impossible)
+
+The intuitive target chain `VCL → SNIF → verisimdb` *cannot be built as stated*,
+because of three independently verified facts:
+
+[cols="1,4"]
+|===
+| Fact | Evidence
+
+| SNIFs are `wasm32-freestanding` with *zero imports*
+| A SNIF guest cannot perform *any* I/O — no filesystem, no network, no clock.
+  It can only compute over bytes the host passes in and return bytes out. WASI
+  (which would grant I/O) is explicitly listed as *unspecified future work*:
+  `snifs/docs/whitepapers/academic/snif.tex` — "`WASI target. Our WASM modules
+  use wasm32-freestanding... A WASI-based SNIF could support NIFs that require
+  filesystem or network access`" (≈ lines 639–644), noting "`slightly more
+  complex import binding in wasmex`".
+
+| verisimdb has *no octad/VCL-native embeddable surface* a freestanding guest could use
+| verisimdb exposes: HTTP `:8080`, gRPC `:50051`, GraphQL, a Rustler NIF
+  (`verisim-nif`), and a raw-KV `StorageBackend` trait
+  (`verisimdb/rust-core/verisim-storage/src/backend.rs:23` — `get/put/delete`
+  over `&[u8]`, *not* octad/VCL). The NIF is a *placeholder*: `get_octad/1`
+  returns `{"status":"nif_placeholder", ...}` and never touches the store
+  (`verisimdb/rust-core/verisim-nif/src/lib.rs:86–100`). All transport paths
+  are Rust/host-side; *none is reachable from a freestanding wasm guest*.
+
+| The conformant VCL parser is *not* available in Elixir or Zig
+| vcl-ut's conformant parser/typechecker is *ReScript*
+  (`vcl-ut/src/bridges/VclTotalParser.res`, 1426 LOC) over an *Idris2 core*
+  (`vcl-ut/src/core/Grammar.idr`, 405 LOC; `Checker.idr`, `Levels.idr`,
+  `Epistemic.idr`). vcl-ut's own Zig FFI is a non-parsing stub. There is *no*
+  conformant Elixir or Zig VCL parser anywhere in the estate.
+|===
+
+*Consequence:* a freestanding SNIF physically cannot reach verisimdb. Any viable
+architecture must either (a) keep the DB hop host-side, (b) upgrade the SNIF to
+WASI, or (c) drop the SNIF from the data path. These are Options A, B, C.
+
+== Current state in hypatia (baseline for #7)
+
+* `hypatia/lib/verisim_connector.ex` — already exists; today reads JSON data
+  fixtures (`fetch_all_scans/0`, `fetch_pattern_registry/0`, …). *Not* wired to
+  a live verisimdb. This is the integration point to re-target.
+* `hypatia/lib/vcl/` — `client.ex`, `query.ex`, `remote_executor.ex`,
+  `proof_resolver.ex`, `file_executor.ex`, `remote_cache.ex`. A VCL client
+  surface exists; the parse/typecheck stage and the store binding are what #7
+  must define.
+* verisimdb Elixir transport selection already designed: `VERISIM_TRANSPORT ∈
+  {http, nif, auto}` (`verisim-nif/src/lib.rs:1–30` moduledoc) — the `nif` path
+  is the placeholder.
+
+[NOTE]
+====
+*Shared prerequisite for Options A and C:* `verisim-nif` must move past the
+placeholder. Quantified below; it is *verisimdb-side* work, not hypatia-side.
+====
+
+== Shared prerequisite: wiring `verisim-nif` (Options A & C)
+
+The NIF crate is ~216 LOC of well-shaped stubs
+(`verisim-nif/src/lib.rs`): `rustler::init!` at line 204; eight nifs
+(`create_octad/get_octad/delete_octad/search_text/search_vector/list_octads/get_drift_score/trigger_normalise`),
+each returning a static `nif_placeholder`-style JSON value (e.g.
+`get_octad`, lines 86–100). `#![forbid(unsafe_code)]` is set.
+
+Wiring needed (verisimdb-side):
+
+. Embed/hold a verisimdb store handle in the NIF process. The octad-level API
+  lives above raw KV: `verisim-octad`, `verisim-storage` (`TypedStore` in
+  `verisim-storage/src/typed.rs:86/103/117` — `get/put/delete<T>` by string
+  key), `verisim-document`, `verisim-vector`. A shared async runtime
+  (Tokio) bridged into Rustler dirty schedulers is required (the nifs already
+  declare `schedule = "DirtyCpu"`).
+. Replace each stub body with a real call into the octad/typed store and
+  serialise the actual result instead of the placeholder map.
+. Decide instance lifecycle: a *co-located private verisimdb* (in-process
+  embedded store, or a child process the NIF dials on localhost) — must be
+  *private to hypatia*, not the shared cluster.
+
+Effort tier for this prerequisite: *M* (the crates exist and are typed; the
+work is runtime bridging + 8 method bodies + private-instance lifecycle, not
+new subsystems). Estimate ~1–2 weeks verisimdb-side. This is the gating item
+for A and C and the user should treat it as such.
+
+== Option A — Split responsibilities *(RECOMMENDED)*
+
+Let the SNIF do *only* the pure, safety-critical part it is designed for —
+VCL parse + type-safety/consonance checking — and keep all verisimdb I/O
+host-side in Elixir via a real Rustler NIF to a *private* verisimdb.
+
+=== Target chain + interface types
+
+[source]
+----
+VCL.Client (Elixir)
+  │  VCL source text : binary
+  ▼
+SNIF  [wasm32-freestanding, zero imports]
+  │  IN : bytes (VCL source)        ── host passes in, no I/O in guest
+  │  OUT: bytes (typed plan | typed error)
+  │  semantics: parse + typecheck + consonance/epistemic check ONLY
+  ▼
+{:ok, typed_plan} | {:error, typed_diagnostics}   (Elixir term)
+  │  typed_plan : validated octad query/mutation IR (serde/erlang-term)
+  ▼
+Elixir orchestration (verisim_connector.ex re-targeted)
+  ▼
+Rustler NIF (verisim-nif, REAL)  ── host-side, can do I/O
+  ▼
+PRIVATE co-located verisimdb instance
+----
+
+There is *no* impossible wasm→db hop: the SNIF only ever sees bytes in / bytes
+out, which is exactly the freestanding contract.
+
+=== What must be BUILT in hypatia
+
+* Re-target `verisim_connector.ex` from JSON fixtures to the real NIF
+  (`VERISIM_TRANSPORT=nif`, private instance). *S–M.*
+* A boundary module that: feeds VCL text to the SNIF, decodes the typed-plan /
+  typed-error result, and translates the typed plan into NIF calls. *M.*
+* SNIF packaging: compile the VCL parser+checker to `wasm32-freestanding` and
+  load via wasmex. *See parser strategy — this is the crux.*
+
+=== What must be built/unblocked in verisimdb
+
+* The shared prerequisite: real `verisim-nif` + private instance lifecycle
+  (*M*, above). Nothing beyond it for Option A.
+
+=== Parser strategy (the crux for A)
+
+The conformant checker is ReScript+Idris2. To make it a freestanding SNIF:
+
+. *Preferred:* compile the *Idris2 core* (`Grammar.idr`/`Checker.idr`/
+  `Levels.idr`) toward a wasm-able backend, wrapping it in the Zig SNIF
+  scaffold so the *formally specified* checker is what runs in the sandbox.
+  Highest assurance, highest novelty/effort.
+. *Pragmatic interim:* run the ReScript `VclTotalParser.res` compiled to JS
+  inside the SNIF is *not possible* (no JS engine in freestanding wasm). So the
+  interim is instead: *port the Grammar/Checker to Zig* from the Idris2 spec
+  (it is the authority, ReScript is a bridge), targeting
+  `wasm32-freestanding` directly. Medium-large, but it is the natural SNIF
+  language and yields a single source of truth for the sandboxed checker.
+. *Not acceptable long-term:* re-implement the parser in Elixir — that throws
+  away the safe-boundary property and is Option C, not A.
+
+=== Single biggest risk
+
+Porting the conformant VCL grammar+checker from the Idris2 spec into a
+`wasm32-freestanding` Zig SNIF *without semantic drift from vcl-ut*. Mitigation:
+differential test the SNIF against the ReScript reference parser on a VCL
+corpus; treat the Idris2 core as the conformance oracle.
+
+=== Effort tier
+
+*L* overall (multi-week): prerequisite *M* (verisimdb) + connector re-target
+*S–M* + SNIF parser port *M–L*. The parser port dominates and is sequenceable
+after the prerequisite.
+
+== Option B — WASI SNIF
+
+Re-target the SNIF to *WASI* so the guest itself can perform I/O and dial
+verisimdb (socket or host-provided handle).
+
+=== Target chain + interface types
+
+[source]
+----
+VCL.Client (Elixir)
+  ▼
+SNIF [wasm32-wasi]  ── guest CAN do I/O
+  │  parse + typecheck, THEN itself calls verisimdb
+  │  via WASI socket / host import → verisim HTTP :8080 or gRPC :50051
+  ▼
+PRIVATE verisimdb instance (reached from inside the guest)
+----
+
+=== What must be BUILT in hypatia
+
+* WASI runtime wiring in wasmex (snifs calls this "`more complex import binding
+  in wasmex`", and explicitly *unspecified*: `snif.tex` ≈ 639–644). *L.*
+* SNIF parser+checker (same parser-strategy crux as A) plus an in-guest
+  verisimdb client over WASI sockets. *L.*
+
+=== What must be built/unblocked in verisimdb
+
+* A network surface reachable from the guest: real `verisim-nif` is *not*
+  usable from inside wasm, so this needs verisim HTTP/gRPC made real for the
+  *private* instance (HTTP `:8080` exists but the octad path / private-instance
+  story still needs validation). Comparable to or *larger* than the A/C
+  prerequisite.
+
+=== Parser strategy
+
+Same crux as A (Idris2 spec → wasm), *plus* an embedded DB client compiled into
+the guest. Strictly a superset of A's parser work.
+
+=== Single biggest risk
+
+The WASI import-binding path is *explicitly unspecified future work in snifs*
+and weakens the sandbox story (the guest gains network/filesystem reach,
+eroding the very property that motivates a SNIF). Highest novelty, highest
+unknowns, weakest safety argument.
+
+=== Effort tier
+
+*L+* (multi-week to multi-month): everything in A *plus* unspecified WASI
+binding work *plus* a guest-side DB client. Not recommended as a first move.
+
+== Option C — No SNIF on the data path
+
+Keep VCL parsing *in-process Elixir* (status quo posture), and wire only a
+host-side Rustler NIF to a *private* verisimdb. The SNIF mechanism remains
+available for other native compute elsewhere, just not for VCL parsing.
+
+=== Target chain + interface types
+
+[source]
+----
+VCL.Client (Elixir)
+  │  parse + typecheck IN ELIXIR (no conformant parser today)
+  ▼
+verisim_connector.ex
+  ▼
+Rustler NIF (verisim-nif, REAL)
+  ▼
+PRIVATE co-located verisimdb instance
+----
+
+=== What must be BUILT in hypatia
+
+* Re-target `verisim_connector.ex` to the real NIF + private instance. *S–M.*
+* A VCL parser/checker *in Elixir* — but there is *no conformant Elixir
+  parser*; building one from the Idris2 spec is itself a *medium-large* effort
+  and would be a *second*, unverified implementation that can drift from
+  vcl-ut. *M–L.*
+
+=== What must be built/unblocked in verisimdb
+
+* The shared prerequisite only: real `verisim-nif` + private instance (*M*).
+
+=== Parser strategy
+
+Port grammar+checker to Elixir from the Idris2 spec. Fastest to a running data
+path, but creates a non-conformant parallel parser unless continuously
+differential-tested against vcl-ut.
+
+=== Single biggest risk
+
+*Abandons the safe-boundary property for VCL parsing* — the explicit user goal
+of a sandboxed checker is lost on the data path, and a second VCL parser
+becomes a drift source against vcl-ut.
+
+=== Effort tier
+
+*M* (multi-week): prerequisite *M* + connector *S–M* + Elixir parser *M–L*,
+but lower risk-of-the-unknown than A/B. It is the *fastest to first working
+store*, at the cost of the boundary property.
+
+== Comparison
+
+[cols="1,2,2,2",options="header"]
+|===
+| | A — Split (REC) | B — WASI SNIF | C — No SNIF on data path
+
+| SNIF used for VCL safety | Yes (pure check) | Yes (+ I/O) | No
+| Impossible wasm→db hop avoided | Yes (host-side DB) | N/A (WASI grants I/O) | Yes (no SNIF)
+| verisim-nif prerequisite | Required (M) | HTTP/gRPC real instead (≥M) | Required (M)
+| Parser work | Idris2-spec → Zig SNIF (M–L) | A's parser + guest DB client (L) | Idris2-spec → Elixir (M–L), non-conformant
+| Safe-boundary property kept | *Yes* | Weakened (guest gets I/O) | *Lost* for VCL
+| Biggest risk | Parser port w/o drift | Unspecified WASI binding; weak sandbox | Loses the boundary; parser drift
+| Effort tier | L | L+ | M
+| Time-to-first-store | Medium | Slowest | Fastest
+|===
+
+== Recommendation
+
+*Adopt Option A.* It is the only option that (1) keeps the freestanding-SNIF
+contract intact (bytes in / typed-plan out — no impossible I/O in the guest),
+(2) preserves the user's explicit safe-boundary goal for VCL parsing, (3)
+matches what SNIFs and vcl-ut *are* (pure checkers), and (4) leaves verisimdb
+behind a normal host-side Rustler NIF where I/O is legal. Option B layers an
+explicitly unspecified WASI path and weakens the sandbox; Option C is faster
+but discards the very property motivating the design.
+
+== The decision the user must make
+
+[IMPORTANT]
+====
+Rule on one boundary question:
+
+*Does the VCL parse+typecheck stage run inside the SNIF sandbox (A), inside the
+SNIF with WASI I/O so it can also reach the DB (B), or in-process in Elixir
+with no SNIF on the data path (C)?*
+
+Recommended answer: *A*.
+
+A secondary ruling, only if A or B: confirm the parser strategy — port the
+*Idris2 core* (the conformance authority) to a `wasm32-freestanding` Zig SNIF,
+differential-tested against the ReScript reference. (Recommended.)
+====
+
+== What #7 (the build) looks like under each choice
+
+*If A (recommended):*
+
+. verisimdb: wire `verisim-nif` past placeholder + stand up a private
+  co-located instance (prerequisite, *M*).
+. hypatia: port the Idris2 VCL core to a `wasm32-freestanding` Zig SNIF;
+  differential-test vs `VclTotalParser.res`.
+. hypatia: boundary module — VCL text → SNIF → `{:ok, typed_plan}` decode →
+  NIF calls; re-target `verisim_connector.ex` to the real NIF.
+. Integration test the full chain against the private instance.
+
+*If B:* steps 1–4 of A, plus replace the host-side NIF hop with WASI
+import-binding in wasmex and an in-guest verisimdb client; first resolve the
+unspecified WASI binding spike before committing.
+
+*If C:* (1) wire `verisim-nif` + private instance (*M*); (2) port the Idris2
+VCL core to *Elixir*, differential-tested vs vcl-ut; (3) re-target
+`verisim_connector.ex` to the real NIF. No SNIF on the data path.
+
+== Evidence index
+
+* `snifs/docs/whitepapers/academic/snif.tex` ≈ 639–644 — WASI is unspecified
+  future work; modules are `wasm32-freestanding`.
+* `verisimdb/rust-core/verisim-nif/src/lib.rs:1–30` — transport selection
+  moduledoc; `:86–100` — `get_octad` placeholder; `:204` — `rustler::init!`;
+  216 LOC total, 8 stub nifs.
+* `verisimdb/rust-core/verisim-storage/src/backend.rs:23` — `StorageBackend`
+  trait, raw `&[u8]` KV; `.../typed.rs:86/103/117` — typed `get/put/delete`.
+* `verisimdb/rust-core/` — `verisim-octad`, `verisim-document`,
+  `verisim-vector`, etc. (octad-level surfaces above raw KV).
+* `vcl-ut/src/bridges/VclTotalParser.res` (1426 LOC) — ReScript conformant
+  parser; `vcl-ut/src/core/Grammar.idr` (405 LOC), `Checker.idr`, `Levels.idr`,
+  `Epistemic.idr` — Idris2 conformance core. No Elixir/Zig conformant parser.
+* `hypatia/lib/verisim_connector.ex` — current connector reads JSON fixtures;
+  `hypatia/lib/vcl/` — existing VCL client surface (`client.ex`, `query.ex`,
+  `remote_executor.ex`, …).

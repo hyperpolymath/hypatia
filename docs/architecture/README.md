@@ -8,7 +8,11 @@ Architecture documentation for the hypatia neurosymbolic CI/CD intelligence plat
 
 | Document | Purpose |
 |----------|---------|
-| [NEURAL-ARCHITECTURE.md](NEURAL-ARCHITECTURE.md) | Neural subsystem: hub-and-spoke topology, 5 networks, pipeline integration, training, cross-repo wiring |
+| [togaf-overview.adoc](togaf-overview.adoc) | TOGAF-style as-built architecture overview (verified by code audit, 2026-05-18). Canonical. |
+| [mof-metamodel.adoc](mof-metamodel.adoc) | OMG MOF M2 metamodel of the core domain (Scan, Finding, Pattern, Recipe, RoutedAction, Outcome, OctadEntity, NeuralOrgan, …). Canonical. |
+| [NEURAL-ARCHITECTURE.md](NEURAL-ARCHITECTURE.md) | Neural subsystem detail: 8-organ blackboard, 6 phases, training, persistence. |
+
+> Legacy Mermaid diagrams under `docs/diagrams/*.md` are **superseded** by the two `.adoc` documents above.
 
 ## See Also
 
