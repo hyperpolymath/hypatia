@@ -5,7 +5,7 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-04-26"
+last-updated = "2026-05-21"
 status = "active"
 
 [project-context]
@@ -65,6 +65,40 @@ actions = [
 ]
 
 [session-history]
+# 2026-05-21: Epic #273 — Hypatia architecture reconciliation & neurosymbolic activation.
+#             Four-gap landing (one session, owner-merge gated):
+#             Gap (1) UNFED neural organs — already on `main` via PR #275 (merged
+#                     2026-05-18). lib/learning_scheduler.ex:125 → force_cycle();
+#                     lib/neural/coordinator.ex:90 → load_all() + RBF hydrate.
+#                     Closure-recommendation comment posted on #274 (no self-close).
+#             Gap (2) snif/private-verisimdb boundary — DECISION-READY, awaiting owner
+#                     ruling. Sub-issue #294 (A / B / C). PR #295 commits the memo
+#                     as docs/architecture/boundary-design-options.adoc with explicit
+#                     OPEN status NOTE. The naive VCL → SNIF → verisimdb chain is
+#                     physically impossible (SNIFs are wasm32-freestanding zero-imports;
+#                     verisim-nif is placeholder; no conformant Elixir/Zig VCL parser).
+#                     Recommendation: Option A (split — SNIF for parse+check only,
+#                     host-side Rustler NIF to private verisimdb).
+#             Gap (3) cicd-hyper-a name purge — sub-issue #292 + PR #293. Mechanical
+#                     1-to-1 rename across 87 files / 477 lines. Cargo packages already
+#                     canonicalised to hypatia-*; only doc-comments, banners, README
+#                     examples, helm/registry refs, security.yml hashFiles guards,
+#                     scripts, hooks, machine-readable refs. 0 occurrences remaining
+#                     outside .git/. `cargo metadata --no-deps` invariant (same 7
+#                     packages / versions). `cargo check -p hypatia-cli --offline` clean.
+#             Gap (4) no UML/MOF/TOGAF — PR #291. Adds docs/architecture/togaf-overview.adoc
+#                     (TOGAF baseline, P1-P6, ADR-001..ADR-006) + mof-metamodel.adoc
+#                     (OMG MOF M2: 10 metaclasses, meta-associations, OCL-style
+#                     invariants, TARGET delta). Every claim grounded in lib/...:N.
+#                     proof_resolver.ex confirmed vestigial (zero callers).
+#                     Mermaid diagrams under docs/diagrams/ marked superseded.
+#             Cross-PR: PR #291 touches docs/architecture/README.md to add the new
+#                     rows; PR #295 deliberately does NOT touch README to avoid textual
+#                     conflict. Whichever merges second adds a single line for
+#                     boundary-design-options.adoc.
+#             PRs opened: #291, #293, #295. Issues opened: #292, #294. Comments
+#             posted on #273 (status table) + #274 (closure rec). Nothing merged.
+#
 # 2026-04-26: M8 — Real fix scripts for 310 null-fix-script dispatch entries.
 #             1. Identified 14 gaps: 12 null-fix-script scorecard recipes +
 #                2 recipes referencing scripts that didn't exist on disk.
