@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 
 defmodule Hypatia.Rules.WorkflowAuditTest do
   use ExUnit.Case, async: true
@@ -68,7 +68,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     end
 
     test "accepts read-all" do
-      content = "permissions: read-all\n# SPDX-License-Identifier: PMPL-1.0-or-later\njobs:"
+      content = "permissions: read-all\n# SPDX-License-Identifier: MPL-2.0\njobs:"
       findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
       refute Enum.any?(findings, & &1.type == :broad_permissions)
       refute Enum.any?(findings, & &1.type == :missing_permissions)

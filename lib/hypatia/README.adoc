@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = lib/hypatia/ — Web Interface, CLI, and Dispatch GenServers
 
 The OTP application layer: web server, CLI handler, reviewer, gRPC service,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Build script for hypatia CLI.
 //!
 //! Captures build-time information like git commit hash and build date.

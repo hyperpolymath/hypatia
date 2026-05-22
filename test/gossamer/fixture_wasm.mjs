@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Hand-built fixture .wasm module that satisfies the Hypatia GUI loader ABI.
 //
 // Purpose: lets `test/gossamer/browser_smoke.test.mjs` close issue #216

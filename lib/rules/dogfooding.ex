@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Hypatia.Rules.Dogfooding do
@@ -20,7 +20,7 @@ defmodule Hypatia.Rules.Dogfooding do
   @stale_names %{
     "panic-attacker" => {"panic-attack", "renamed 2026-02-08"},
     "xray" => {"assail", "subcommand renamed 2026-02-08"},
-    "AGPL-3.0" => {"PMPL-1.0-or-later", "license changed -- except idaptik and airborne-submarine-squadron"}
+    "AGPL-3.0" => {"MPL-2.0", "license changed -- except idaptik and airborne-submarine-squadron"}
   }
 
   # ─── Template placeholders that must be resolved ─────────────────────

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // PanLL Configurator input — Hypatia runtime config.
 //
 // Conforms to the #Config schema in hyperpolymath/panll

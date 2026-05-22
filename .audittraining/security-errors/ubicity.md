@@ -29,7 +29,7 @@ Workflow lacks explicit `permissions:` declaration, inheriting default (often wr
 #### Fix
 Add at workflow level:
 ```yaml
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 name: RSR Antipattern Check
 
 permissions: read-all

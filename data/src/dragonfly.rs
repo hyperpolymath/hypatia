@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Dragonfly (Redis-compatible) client for hypatia caching
 
 use crate::error::{DataError, Result};

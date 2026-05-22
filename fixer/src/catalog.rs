@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Error catalog for CI/CD issues
 //! Generated from .audittraining/ERROR-CATALOG.scm
 
@@ -128,7 +128,7 @@ impl ErrorCatalog {
                 severity: Severity::Low,
                 auto_fixable: true,
                 description: "Workflow file missing SPDX license header".to_string(),
-                fix_pattern: "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line"
+                fix_pattern: "Add '# SPDX-License-Identifier: MPL-2.0' as first line"
                     .to_string(),
             },
         );

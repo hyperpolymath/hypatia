@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unwrap-on-systemtime.sh — Report .unwrap() on SystemTime duration_since results
 # Recipe: recipe-unwrap-to-match (confidence: 0.75, auto_fixable: false)
 #

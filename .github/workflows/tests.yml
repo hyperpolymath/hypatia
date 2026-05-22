@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: bench.yml, e2e.yml, integration.yml, stress-test.yml
 name: Tests (E2E / Integration / Stress / Bench)
@@ -62,6 +62,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
+        with:
+          toolchain: stable
 
       - name: Rust cache
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5  # v2
@@ -78,7 +80,7 @@ jobs:
           echo '  build:' >> /tmp/test-repo/.github/workflows/ci.yml
           echo '    runs-on: ubuntu-latest' >> /tmp/test-repo/.github/workflows/ci.yml
           echo '    steps:' >> /tmp/test-repo/.github/workflows/ci.yml
-          echo '      - uses: actions/checkout@v4' >> /tmp/test-repo/.github/workflows/ci.yml
+          echo '      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2' >> /tmp/test-repo/.github/workflows/ci.yml
           ./target/release/hyper scan /tmp/test-repo 2>&1 || true
           echo "PASS: Rust CLI scan completed"
 
@@ -569,6 +571,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        with:
+          toolchain: stable
 
       - name: Install stress testing tools
         run: |

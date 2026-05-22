@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Hypatia.DirectGitHubPRTest do
@@ -269,13 +269,13 @@ defmodule Hypatia.DirectGitHubPRTest do
     test "fix-pinned-dependencies.sh has SPDX header" do
       script = Path.expand("../scripts/fix-pinned-dependencies.sh", __DIR__)
       content = File.read!(script)
-      assert String.contains?(content, "SPDX-License-Identifier: PMPL-1.0-or-later")
+      assert String.contains?(content, "SPDX-License-Identifier: MPL-2.0")
     end
 
     test "fix-token-permissions.sh has SPDX header" do
       script = Path.expand("../scripts/fix-token-permissions.sh", __DIR__)
       content = File.read!(script)
-      assert String.contains?(content, "SPDX-License-Identifier: PMPL-1.0-or-later")
+      assert String.contains?(content, "SPDX-License-Identifier: MPL-2.0")
     end
   end
 

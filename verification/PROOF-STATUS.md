@@ -1,6 +1,6 @@
 # Proof Status — Hypatia
 
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) -->
 
 Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/CD platform.

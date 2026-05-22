@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 = Hypatia — CRG Audit (2026-04-18)
@@ -90,7 +90,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 | Root `.well-known/`
 
 | `LICENSE` + `LICENSE-MPL-2.0` fallback
-| PRESENT (`LICENSE` PMPL-1.0-or-later; `LICENSES/PMPL-1.0-or-later.txt` + `LICENSES/MPL-2.0.txt`; additional `license/`, `licenses/` legacy dirs also present — three parallel license-text locations)
+| PRESENT (`LICENSE` MPL-2.0; `LICENSES/MPL-2.0.txt` + `LICENSES/MPL-2.0.txt`; additional `license/`, `licenses/` legacy dirs also present — three parallel license-text locations)
 | Root
 
 | `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.adoc`, `MAINTAINERS.adoc`
@@ -114,7 +114,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 | Build-system policy met
 
 | SPDX headers on source
-| PRESENT on sampled Elixir, Idris2, Zig, Nickel, shell files (`PMPL-1.0-or-later`)
+| PRESENT on sampled Elixir, Idris2, Zig, Nickel, shell files (`MPL-2.0`)
 | Spot-checked `lib/`, `src/abi/`, `ffi/zig/src/`
 
 | Remote

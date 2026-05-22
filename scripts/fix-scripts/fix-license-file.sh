@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
-# fix-license-file.sh — Add LICENSE file with PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
+# fix-license-file.sh — Add LICENSE file with MPL-2.0
 # Recipe: recipe-add-license-file (confidence: 0.95, auto_fixable: true)
 #
 # Usage: fix-license-file.sh <repo-path>
@@ -21,13 +21,13 @@ done
 TEMPLATE_LICENSE="${HOME}/Documents/hyperpolymath-repos/rsr-template-repo/LICENSE"
 if [[ -f "$TEMPLATE_LICENSE" ]]; then
   cp "$TEMPLATE_LICENSE" "${REPO}/LICENSE"
-  echo "[fix-license-file] Copied PMPL-1.0-or-later LICENSE from template"
+  echo "[fix-license-file] Copied MPL-2.0 LICENSE from template"
 else
   # Create a minimal placeholder
   cat > "${REPO}/LICENSE" <<'EOF'
-Palimpsest License (PMPL-1.0-or-later)
+Palimpsest License (MPL-2.0)
 
-SPDX-License-Identifier: PMPL-1.0-or-later
+SPDX-License-Identifier: MPL-2.0
 
 Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
@@ -36,5 +36,5 @@ This software is licensed under the Palimpsest License, Version 1.0 or later.
 For the full license text, see:
 https://github.com/hyperpolymath/palimpsest-license
 EOF
-  echo "[fix-license-file] Created placeholder LICENSE (PMPL-1.0-or-later)"
+  echo "[fix-license-file] Created placeholder LICENSE (MPL-2.0)"
 fi

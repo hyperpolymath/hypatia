@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = hypatia FAQ
 :toc: left
 :toclevels: 2
@@ -72,7 +72,7 @@ Currently supported:
 
 Yes. hypatia is dual-licensed under:
 
-* *PMPL-1.0-or-later* (legal)
+* *MPL-2.0* (legal)
 * *Palimpsest Licence* (philosophical)
 
 The source code is available at https://github.com/hyperpolymath/hypatia

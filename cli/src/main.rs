@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! hypatia CLI - Command-line interface for the neurosymbolic CI/CD platform
 //!
 //! This CLI provides commands for:

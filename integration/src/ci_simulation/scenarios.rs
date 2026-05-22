@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Pre-built CI Simulation Scenarios
 //!
 //! This module provides ready-to-use test scenarios for common CI situations.

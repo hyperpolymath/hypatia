@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 = Project Governance
 :toc:
@@ -153,4 +153,4 @@ final authority.
 
 '''
 
-Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath). Licensed under PMPL-1.0-or-later.
+Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath). Licensed under MPL-2.0.

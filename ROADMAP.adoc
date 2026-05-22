@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = Hypatia Roadmap
 :toc:
 :toclevels: 3
@@ -181,7 +181,7 @@ Elixir pipeline:
 
 == License & Governance
 
-**License:** PMPL-1.0-or-later (Palimpsest License)
+**License:** MPL-2.0 (Palimpsest License)
 
 **Author:** Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 

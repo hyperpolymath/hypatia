@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-secret-to-env.sh — Report hardcoded secrets that should be env vars
 # Recipe: recipe-secret-to-env (confidence: 0.55, auto_fixable: false)
 #

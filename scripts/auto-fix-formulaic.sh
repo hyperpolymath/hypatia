@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # auto-fix-formulaic.sh — Direct auto-fix for predictable, formulaic issues
 #
 # This bypasses the full Hypatia pipeline and directly fixes issues that
@@ -177,7 +177,7 @@ fix_agpl_references() {
     if echo "$f" | grep -qE 'mock|fixture.*github'; then
       continue
     fi
-    warn "AGPL-3.0 reference in: $f (should be PMPL-1.0-or-later)"
+    warn "AGPL-3.0 reference in: $f (should be MPL-2.0)"
   done
 }
 

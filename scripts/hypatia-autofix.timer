@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Runs hypatia auto-fix weekly (Sunday 02:00)
 [Unit]
 Description=Weekly Hypatia auto-fix scan

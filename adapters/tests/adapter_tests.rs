@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Integration tests for forge adapters
 //!
 //! These tests verify the behavior of all forge adapters.

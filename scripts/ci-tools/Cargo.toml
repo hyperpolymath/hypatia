@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # CI helper tooling — faithful Rust replacements for the inline `python3`
 # steps formerly embedded in .github/workflows/{build-gossamer-gui,ci}.yml
@@ -10,7 +10,7 @@
 name = "ci-tools"
 version = "0.1.0"
 edition = "2021"
-license = "PMPL-1.0-or-later"
+license = "MPL-2.0"
 publish = false
 
 [[bin]]

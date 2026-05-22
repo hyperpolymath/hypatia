@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = integration/ — Integration Test Suite
 
 End-to-end integration tests requiring a running Hypatia instance and

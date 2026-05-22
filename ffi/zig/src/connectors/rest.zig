@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Connector 3/16 — REST. Stub fidelity; see `hexadeca.zig` for the substrate.
 
 const std = @import("std");

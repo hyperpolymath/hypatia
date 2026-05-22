@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Hypatia CLI v2.0 - Generalised code safety scanner
 # Scans all project languages with extensible pattern rules
 
@@ -596,7 +596,7 @@ scan_repo_structure() {
             if ! head -1 "$wf" | grep -q '^# SPDX-License-Identifier:'; then
                 emit_finding "medium" "repo_structure" "missing_spdx_header" \
                     "$wf" 1 "Workflow missing SPDX header" "CWE-1059" \
-                    "Add '# SPDX-License-Identifier: PMPL-1.0-or-later' as first line" "true"
+                    "Add '# SPDX-License-Identifier: MPL-2.0' as first line" "true"
             fi
         done
 
@@ -629,18 +629,18 @@ scan_repo_structure() {
     if [[ ! -d "$dir/LICENSES" ]]; then
         emit_finding "medium" "license_hygiene" "missing_licenses_dir" \
             "$dir" 0 "No LICENSES/ directory (REUSE standard)" "CWE-1059" \
-            "Add LICENSES/ with MPL-2.0.txt and PMPL-1.0-or-later.txt" "true"
+            "Add LICENSES/ with MPL-2.0.txt and MPL-2.0.txt" "true"
     else
-        [[ ! -f "$dir/LICENSES/PMPL-1.0-or-later.txt" ]] && \
+        [[ ! -f "$dir/LICENSES/MPL-2.0.txt" ]] && \
             emit_finding "medium" "license_hygiene" "missing_pmpl_text" \
-                "$dir/LICENSES" 0 "LICENSES/ missing PMPL-1.0-or-later.txt" "CWE-1059" \
-                "Add LICENSES/PMPL-1.0-or-later.txt" "true"
+                "$dir/LICENSES" 0 "LICENSES/ missing MPL-2.0.txt" "CWE-1059" \
+                "Add LICENSES/MPL-2.0.txt" "true"
     fi
 
     if [[ ! -f "$dir/NOTICE" ]]; then
         emit_finding "low" "license_hygiene" "missing_notice" \
             "$dir" 0 "No NOTICE file explaining dual-license setup" "CWE-1059" \
-            "Add NOTICE explaining MPL-2.0 + PMPL-1.0-or-later relationship" "true"
+            "Add NOTICE explaining MPL-2.0 + MPL-2.0 relationship" "true"
     fi
 
     # Dependabot config

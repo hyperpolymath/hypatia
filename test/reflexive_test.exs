@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 defmodule Hypatia.ReflexiveTest do
   @moduledoc """
   Reflexive tests: verify Hypatia can introspect and report its own state.

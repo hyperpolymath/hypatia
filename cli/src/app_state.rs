@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Shared application state for the hypatia CLI.
 //!
 //! `AppState` is the single owner of runtime-mutable configuration that must

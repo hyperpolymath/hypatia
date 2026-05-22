@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: boj-build.yml, instant-sync.yml, mirror.yml
 name: Mirror & Sync

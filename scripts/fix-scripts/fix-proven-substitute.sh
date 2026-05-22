@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-proven-substitute.sh — Report code that could use proven/ module equivalents
 # Recipe: recipe-fix-proven-substitute (confidence: 0.85, auto_fixable: false)
 #

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // hypatia: allow code_safety/panic_macro -- panic! IS the assertion mechanism in this file
 //! Custom Assertions for CI Simulation Testing
 //!

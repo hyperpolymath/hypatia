@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! VeriSimDB client for hypatia.
 //!
 //! **Status:** Minimal stub retained only for `DataLayer::health_check`.

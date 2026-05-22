@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //
 // Shared helpers for the bench-data tools. Zero external dependencies: a
 // minimal JSON model (object key-order preserved, numbers kept as their

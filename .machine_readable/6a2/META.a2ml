@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # META.a2ml — Project meta-information and architectural decisions
 # Converted from META.scm on 2026-03-15; expanded 2026-04-25
 
 [metadata]
 project = "hypatia"
 author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
-license = "PMPL-1.0-or-later"
+license = "MPL-2.0"
 standard = "RSR 2026"
 last-updated = "2026-04-25"
 media-type = "application/meta+scheme"

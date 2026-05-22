@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unsafe-crash.sh — Report generic unsafe crash patterns (unsafe_crash-unknown)
 # Recipe: recipe-unsafe-crash (confidence: 0.65, auto_fixable: false)
 #

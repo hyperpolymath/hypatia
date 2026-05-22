@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Hypatia Remediation Sweep — fleet-wide proactive scan
 #
 # hypatia-scan.yml runs per-repo on push/PR/weekly and produces findings.

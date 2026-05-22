@@ -14,7 +14,7 @@
   "exclude_repos": ["game-server-admin", "idaptik", "airborne-submarine-squadron"],
   "action": "create_file",
   "match": "Missing LICENSE file",
-  "replacement": "PMPL-1.0-or-later LICENSE file",
+  "replacement": "MPL-2.0 LICENSE file",
   "proven_module": null,
   "formally_proven": false,
   "successful_fixes": 0,

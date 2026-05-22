@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = test/rules/ — Rules Engine Tests
 
 ExUnit tests specific to the `lib/rules/` modules.

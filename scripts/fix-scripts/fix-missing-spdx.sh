@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-missing-spdx.sh — Add or fix SPDX license headers
 # Recipe: recipe-fix-spdx-license (confidence: 0.99, auto_fixable: true)
 #
-# Replaces AGPL-3.0 references with PMPL-1.0-or-later.
+# Replaces AGPL-3.0 references with MPL-2.0.
 # Adds SPDX header to files missing one.
 #
 # Usage: fix-missing-spdx.sh <repo-path> [--file <specific-file>]
@@ -16,26 +16,26 @@ FIXES=0
 
 # File extension to comment style mapping
 declare -A COMMENT_STYLE=(
-  [rs]="// SPDX-License-Identifier: PMPL-1.0-or-later"
-  [ex]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [exs]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [idr]="-- SPDX-License-Identifier: PMPL-1.0-or-later"
-  [zig]="// SPDX-License-Identifier: PMPL-1.0-or-later"
-  [sh]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [res]="// SPDX-License-Identifier: PMPL-1.0-or-later"
-  [resi]="// SPDX-License-Identifier: PMPL-1.0-or-later"
-  [gleam]="// SPDX-License-Identifier: PMPL-1.0-or-later"
-  [yml]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [yaml]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [toml]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [lean]="-- SPDX-License-Identifier: PMPL-1.0-or-later"
-  [v]="// SPDX-License-Identifier: PMPL-1.0-or-later"
-  [hs]="-- SPDX-License-Identifier: PMPL-1.0-or-later"
-  [ml]="(* SPDX-License-Identifier: PMPL-1.0-or-later *)"
-  [ads]="-- SPDX-License-Identifier: PMPL-1.0-or-later"
-  [adb]="-- SPDX-License-Identifier: PMPL-1.0-or-later"
-  [jl]="# SPDX-License-Identifier: PMPL-1.0-or-later"
-  [ncl]="# SPDX-License-Identifier: PMPL-1.0-or-later"
+  [rs]="// SPDX-License-Identifier: MPL-2.0"
+  [ex]="# SPDX-License-Identifier: MPL-2.0"
+  [exs]="# SPDX-License-Identifier: MPL-2.0"
+  [idr]="-- SPDX-License-Identifier: MPL-2.0"
+  [zig]="// SPDX-License-Identifier: MPL-2.0"
+  [sh]="# SPDX-License-Identifier: MPL-2.0"
+  [res]="// SPDX-License-Identifier: MPL-2.0"
+  [resi]="// SPDX-License-Identifier: MPL-2.0"
+  [gleam]="// SPDX-License-Identifier: MPL-2.0"
+  [yml]="# SPDX-License-Identifier: MPL-2.0"
+  [yaml]="# SPDX-License-Identifier: MPL-2.0"
+  [toml]="# SPDX-License-Identifier: MPL-2.0"
+  [lean]="-- SPDX-License-Identifier: MPL-2.0"
+  [v]="// SPDX-License-Identifier: MPL-2.0"
+  [hs]="-- SPDX-License-Identifier: MPL-2.0"
+  [ml]="(* SPDX-License-Identifier: MPL-2.0 *)"
+  [ads]="-- SPDX-License-Identifier: MPL-2.0"
+  [adb]="-- SPDX-License-Identifier: MPL-2.0"
+  [jl]="# SPDX-License-Identifier: MPL-2.0"
+  [ncl]="# SPDX-License-Identifier: MPL-2.0"
 )
 
 fix_file() {
@@ -50,14 +50,14 @@ fix_file() {
   [[ "$file" == */deps/* ]] && return 0
   [[ "$file" == */.lake/* ]] && return 0
 
-  # Fix 1: Replace AGPL-3.0 with PMPL-1.0-or-later
+  # Fix 1: Replace AGPL-3.0 with MPL-2.0
   if grep -q "AGPL-3.0" "$file" 2>/dev/null; then
     # Don't fix files in repos that legitimately use AGPL-3.0-or-later
     if [[ "$file" != */idaptik/* ]] \
     && [[ "$file" != */game-server-admin/* ]] \
     && [[ "$file" != */airborne-submarine-squadron/* ]]; then
-      sed -i 's/AGPL-3.0-or-later/PMPL-1.0-or-later/g; s/AGPL-3.0/PMPL-1.0-or-later/g' "$file"
-      echo "[fix-missing-spdx] Replaced AGPL-3.0 → PMPL-1.0-or-later in ${file}"
+      sed -i 's/AGPL-3.0-or-later/MPL-2.0/g; s/AGPL-3.0/MPL-2.0/g' "$file"
+      echo "[fix-missing-spdx] Replaced AGPL-3.0 → MPL-2.0 in ${file}"
       FIXES=$((FIXES + 1))
     fi
   fi

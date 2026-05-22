@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Connector 12/16 — VeriSimDB REST. Stub fidelity; see `hexadeca.zig`.
 //
 // Distinct from the generic REST connector (3/16) because VeriSimDB

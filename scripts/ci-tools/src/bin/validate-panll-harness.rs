@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //
 // validate-panll-harness — load a panll harness manifest (TOML), validate it
 // against the panll-harness/v2 JSON-Schema (Draft 2020-12), fail CI if it

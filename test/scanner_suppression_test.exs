@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Hypatia.ScannerSuppressionTest do
@@ -223,7 +223,7 @@ defmodule Hypatia.ScannerSuppressionTest do
   describe "file_allowed?/3 — file-level directive suppression" do
     test "matches directive in file header" do
       content = """
-      -- SPDX-License-Identifier: PMPL-1.0-or-later
+      -- SPDX-License-Identifier: MPL-2.0
       -- hypatia: allow code_safety/believe_me -- intentional proof bypass
       --
       module Foo

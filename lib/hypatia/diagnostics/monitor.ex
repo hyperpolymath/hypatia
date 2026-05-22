@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 defmodule Hypatia.Diagnostics.Monitor do
   @moduledoc """
   System-wide diagnostics monitor that proactively detects failures

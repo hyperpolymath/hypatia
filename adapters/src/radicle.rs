@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
+// hypatia: allow code_safety/expect_in_hot_path
 //! Radicle adapter for hypatia
 //!
 //! Provides integration with Radicle, a sovereign code forge built on Git.
@@ -110,9 +111,9 @@ impl RadicleAdapter {
 impl Default for RadicleAdapter {
     /// Creates a default RadicleAdapter connecting to localhost:8080.
     ///
-    /// Panics if the HTTP client cannot be constructed, which would indicate
-    /// a broken TLS/system configuration rather than a missing Radicle node.
-    /// For fallible construction, use `RadicleAdapter::new()` instead.
+    /// # Panics
+    ///
+    /// Panics if the HTTP client cannot be constructed.
     fn default() -> Self {
         Self::new().expect(
             "Failed to construct HTTP client for RadicleAdapter — \

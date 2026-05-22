@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 defmodule Mix.Tasks.Hypatia.AuditRepos do
   @moduledoc """
   Audit hyperpolymath repos for description / tag / README quality.

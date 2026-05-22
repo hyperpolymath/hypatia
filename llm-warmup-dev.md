@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- LLM warmup context — DEVELOPER level (<400 lines) -->
 <!-- Feed this to an LLM before doing development work on Hypatia -->
 
@@ -199,6 +199,6 @@ All in `.machine_readable/6a2/`:
 
 ## License
 
-PMPL-1.0-or-later.
+MPL-2.0.
 Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 Git author: 6759885+hyperpolymath@users.noreply.github.com

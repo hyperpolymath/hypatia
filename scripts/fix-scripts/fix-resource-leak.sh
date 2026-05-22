@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-resource-leak.sh — Report potential resource leaks
 # Recipe: recipe-fix-resource-leak (confidence: 0.70, auto_fixable: false)
 #

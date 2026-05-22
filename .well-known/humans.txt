@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # humanstxt.org
@@ -10,6 +10,6 @@ Location: United Kingdom
 
 /* SITE */
 Software: Hypatia — Neurosymbolic CI/CD Intelligence Platform
-Standards: PMPL-1.0-or-later, RSR (Rhodium Standard Repository)
+Standards: MPL-2.0, RSR (Rhodium Standard Repository)
 Components: hypatia-engine (Elixir OTP), hypatia-cli (Rust), hypatia-adapter (Rust), elixir-rules, idris2-abi, zig-ffi
 Languages: Elixir, Rust, Idris2, Zig, Haskell, Bash

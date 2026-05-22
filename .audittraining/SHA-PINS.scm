@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: PMPL-1.0-or-later
+;; SPDX-License-Identifier: MPL-2.0
 ;; SHA Pins Reference for GitHub Actions
 ;; Format: Guile Scheme (per RSR)
 ;; Last Updated: 2026-01-05

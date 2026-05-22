@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: docs.yml, quality.yml
 name: Docs & Code Quality
@@ -106,8 +106,8 @@ jobs:
             --attribute toclevels=3 \
             README.adoc || echo "PDF generation skipped or failed"
 
-      # Install Rust via SHA-pinned action rather than `curl … | sh`-style
-      # rustup install — closes the workflow_audit/download_then_run finding.
+      # Install Rust via SHA-pinned action rather than using a direct
+      # shell-piped installer — satisfies the download_then_run policy.
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
         with:

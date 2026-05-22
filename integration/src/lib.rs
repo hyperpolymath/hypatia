@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Integration test utilities and shared code for hypatia
 //!
 //! This module provides common utilities used across integration tests:

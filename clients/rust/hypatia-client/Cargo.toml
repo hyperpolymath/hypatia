@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 [package]
 name = "hypatia-client"
 description = "Rust client for the Hypatia hexadeca-connector surface (FFI primary, subprocess fallback)"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-obj-magic-bypass.sh — Report Obj.magic type-system bypass in OCaml/ReScript
 # Recipe: recipe-unsafe-type-coercion (confidence: 0.75, auto_fixable: false)
 #

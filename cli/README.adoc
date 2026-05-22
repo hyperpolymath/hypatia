@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = cli/ — Hypatia CLI (Rust)
 
 Rust CLI binary for operating the Hypatia pipeline from the shell.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-sorry-lean.sh — Report sorry/Admitted proofs in Lean4/Coq code
 # Recipe: recipe-fix-sorry-lean (confidence: 0.80, auto_fixable: false)
 #

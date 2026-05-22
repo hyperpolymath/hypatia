@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unbounded-loop.sh — Report unbounded loops
 # Recipe: recipe-unbounded-loop (confidence: 0.55, auto_fixable: false)
 #

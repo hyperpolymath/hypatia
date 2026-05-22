@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //
 // update-bench-baselines — regenerate
 // .machine_readable/benchmarks/baselines.json from a criterion bencher-

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Search command implementation.
 //!
 //! Search for rulesets in the registry by various criteria.
@@ -339,7 +339,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             stars: 234,
             updated_at: Utc::now() - chrono::Duration::days(2),
             private: false,
-            license: "PMPL-1.0-or-later".to_string(),
+            license: "MPL-2.0".to_string(),
         },
         SearchResultItem {
             id: "security/workflow-permissions/2.0.1".to_string(),
@@ -360,7 +360,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             stars: 189,
             updated_at: Utc::now() - chrono::Duration::days(5),
             private: false,
-            license: "PMPL-1.0-or-later".to_string(),
+            license: "MPL-2.0".to_string(),
         },
         SearchResultItem {
             id: "policy/spdx-headers/1.0.0".to_string(),
@@ -428,7 +428,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             stars: 87,
             updated_at: Utc::now() - chrono::Duration::days(7),
             private: false,
-            license: "PMPL-1.0-or-later".to_string(),
+            license: "MPL-2.0".to_string(),
         },
         SearchResultItem {
             id: "workflow/codeql-config/2.0.0".to_string(),
@@ -449,7 +449,7 @@ fn generate_mock_results() -> Vec<SearchResultItem> {
             stars: 145,
             updated_at: Utc::now() - chrono::Duration::days(3),
             private: false,
-            license: "PMPL-1.0-or-later".to_string(),
+            license: "MPL-2.0".to_string(),
         },
         SearchResultItem {
             id: "dependencies/npm-audit/1.1.0".to_string(),

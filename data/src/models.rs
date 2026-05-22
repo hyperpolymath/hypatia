@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Data models shared between ArangoDB and Dragonfly
 
 use serde::{Deserialize, Serialize};

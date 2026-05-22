@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = ffi/ — Foreign Function Interface
 
 C-compatible FFI bridge between the Idris2 ABI and consuming runtimes.

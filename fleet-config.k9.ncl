@@ -1,5 +1,5 @@
 K9!
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Hypatia Fleet Configuration
 #
 # K9 Contractile defining hypatia's fleet-wide scanning configuration,

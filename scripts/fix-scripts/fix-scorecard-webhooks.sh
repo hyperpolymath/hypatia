@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-scorecard-webhooks.sh — Report webhook security posture (SC-024)
 # Recipe: recipe-scorecard-webhooks (auto_fixable: false)
 #

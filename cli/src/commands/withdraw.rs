@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Withdraw command implementation.
 //!
 //! Pulls rulesets from the registry for local use or inspection.
@@ -283,7 +283,7 @@ fn generate_mock_ruleset(category: &str, name: &str, version: &str) -> Ruleset {
                 severity: "low".to_string(),
                 effect: RuleEffect::Both,
                 pattern: Some(r"SPDX-License-Identifier:".to_string()),
-                fix_template: Some("// SPDX-License-Identifier: PMPL-1.0-or-later".to_string()),
+                fix_template: Some("// SPDX-License-Identifier: MPL-2.0".to_string()),
                 conditions: None,
             },
             Rule {
@@ -318,7 +318,7 @@ fn generate_mock_ruleset(category: &str, name: &str, version: &str) -> Ruleset {
             authors: vec!["hypatia".to_string()],
             languages: vec!["all".to_string()],
             tags: vec![category.to_string(), name.to_string()],
-            license: "PMPL-1.0-or-later".to_string(),
+            license: "MPL-2.0".to_string(),
             repository: Some("https://github.com/hyperpolymath/hypatia".to_string()),
             private: false,
         },

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //
 // check-bench-regression — compare a criterion bencher run against
 // .machine_readable/benchmarks/baselines.json and fail if any benchmark

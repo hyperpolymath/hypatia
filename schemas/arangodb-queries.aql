@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // hypatia ArangoDB Query Templates
 //
 // These AQL queries provide common operations for the hypatia graph model.

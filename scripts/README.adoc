@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = scripts/ — Operational Scripts
 
 Shell scripts and systemd units for running the Hypatia pipeline

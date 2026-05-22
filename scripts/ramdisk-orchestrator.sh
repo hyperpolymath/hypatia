@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Hypatia RAM Disk Orchestrator
 #
 # Creates a tmpfs workspace, clones repos, runs the full hypatia scanner,

@@ -172,7 +172,7 @@ cargo test --features slow-tests
 Each test file follows this pattern:
 
 ```rust
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 
 use anyhow::Result;
 use tracing::info;
@@ -297,4 +297,4 @@ jobs:
 
 ## License
 
-PMPL-1.0-or-later
+MPL-2.0

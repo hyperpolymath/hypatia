@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unwrap-to-match.sh — Report .unwrap() calls for conversion to match/Result
 # Recipe: recipe-unwrap-to-match + recipe-panic-to-result (confidence: 0.75)
 #

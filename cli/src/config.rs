@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Configuration handling for the hypatia CLI.
 //!
 //! Supports loading configuration from:
@@ -409,7 +409,7 @@ impl Config {
 
         let config_file = config_dir.join("config.toml");
 
-        let default_content = r#"# SPDX-License-Identifier: PMPL-1.0-or-later
+        let default_content = r#"# SPDX-License-Identifier: MPL-2.0
 # hypatia CLI Configuration
 # https://github.com/hyperpolymath/hypatia
 

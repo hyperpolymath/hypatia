@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # hypatia Git Hooks - Cache Functions
 # Dragonfly/Redis cache integration for ruleset caching
 #

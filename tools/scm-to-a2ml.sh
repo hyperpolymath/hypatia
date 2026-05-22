@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # scm-to-a2ml.sh — Convert SCM checkpoint files to A2ML format
 #
 # Scans a repo's .machine_readable/ directory for checkpoint .scm files
@@ -92,7 +92,7 @@ convert_scm_to_a2ml() {
 
     # Write A2ML header
     {
-        echo "# SPDX-License-Identifier: PMPL-1.0-or-later"
+        echo "# SPDX-License-Identifier: MPL-2.0"
         echo "# ${basename_noext}.a2ml — ${file_desc}"
         echo "# Converted from ${basename_noext}.scm by scm-to-a2ml.sh on ${TODAY}"
         echo ""

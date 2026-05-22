@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Hypatia Bridge — wires the TEA loop in hypatia_gui.eph into the
 // Gossamer host runtime, with direct IPC to the Elixir OTP backend
 // on :9090.

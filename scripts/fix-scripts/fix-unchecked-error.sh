@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unchecked-error.sh — Report unchecked error handling
 # Recipe: recipe-unchecked-error (confidence: 0.60, auto_fixable: false)
 #

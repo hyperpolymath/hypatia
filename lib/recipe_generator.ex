@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Hypatia.RecipeGenerator do
@@ -134,7 +134,7 @@ defmodule Hypatia.RecipeGenerator do
     template = find_similar_recipe(category)
 
     recipe = %{
-      "license" => "PMPL-1.0-or-later",
+      "license" => "MPL-2.0",
       "id" => "recipe-#{slugify(category)}",
       "name" => "Auto-generated: #{humanize(category)}",
       "description" => description,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 import Config
 
 # verisim-data: the canonical git-backed flat-file store (300 scans, 23 recipes)

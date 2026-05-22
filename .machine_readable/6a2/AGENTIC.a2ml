@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
 # AGENTIC.a2ml — AI agent constraints and capabilities
@@ -25,7 +25,7 @@ forbidden = [
   "Commit secrets or credentials",
   "Use banned languages: TypeScript, Go, Python (non-SaltStack), Node.js, npm, Bun",
   "Place state files in repository root — .machine_readable/6a2/ ONLY",
-  "Use AGPL license (this is a PMPL-1.0-or-later repo)",
+  "Use AGPL license (this is a MPL-2.0 repo)",
   "Start GenServer via start_supervised! when Application supervisor already owns it — use take_supervised/1 instead",
   "Claim '0 failures' without running mix test and observing actual output",
   "Use Logtalk — removed 2026-04-14; all rules are pure Elixir",

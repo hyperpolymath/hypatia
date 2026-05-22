@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 
 defmodule Hypatia.Rules do
   @moduledoc """
@@ -60,7 +60,7 @@ defmodule Hypatia.Rules do
           case CicdRules.validate_license(String.trim(spdx_id), repo_name) do
             {:error, :wrong_license, bad} ->
               [%{rule: "wrong_license", severity: :high,
-                 description: "Wrong license #{bad} -- should be PMPL-1.0-or-later"} | findings]
+                 description: "Wrong license #{bad} -- should be MPL-2.0"} | findings]
             _ -> findings
           end
         _ -> findings

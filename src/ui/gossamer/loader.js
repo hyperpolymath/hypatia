@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Hypatia GUI JS loader — bridges the browser to the Gossamer/Ephapax
 // WASM module. Replaces src/ui/tea/hypatia_tea.js (the AffineScript
 // loader) per issue #177.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 defmodule Hypatia.ScannerSuppression do
@@ -69,7 +69,14 @@ defmodule Hypatia.ScannerSuppression do
   # Default exemption directory globs that suppress *every* content-pattern
   # rule (not logic rules) — used for vendored / generated / .git dirs.
   @universal_excludes [
-    ".git/", "node_modules/", "_build/", "deps/", "target/", "dist/"
+    ".git/",
+    "node_modules/",
+    "_build/",
+    "deps/",
+    "target/",
+    "dist/",
+    ".hypatia-exemptions.md",
+    ".hypatia-baseline.json"
   ]
 
   @doc """

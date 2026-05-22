@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unsafe-ffi.sh — Report raw FFI calls without safety wrappers
 # Recipe: recipe-unsafe-ffi-wrapper (confidence: 0.70, auto_fixable: false)
 #

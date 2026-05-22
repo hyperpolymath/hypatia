@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Deposit command implementation.
 //!
 //! Submits validated rulesets to the registry for distribution and reuse.

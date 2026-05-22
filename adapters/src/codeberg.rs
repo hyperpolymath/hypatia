@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
+// hypatia: allow code_safety/expect_in_hot_path
 //! Codeberg/Gitea adapter for hypatia
 //!
 //! Provides integration with Codeberg (and self-hosted Gitea instances) for:

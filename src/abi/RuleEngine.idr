@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PMPL-1.0-or-later
+-- SPDX-License-Identifier: MPL-2.0
 -- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 --
 -- Hypatia ABI — Rule Engine Proofs
@@ -16,9 +16,10 @@
 --   - lib/outcome_tracker.ex       (OutcomeTracker)
 --
 -- No proof-bypass primitives used.  %default total throughout.
--- hypatia:ignore code_safety/believe_me structural_drift/SD008
+-- hypatia: allow code_safety/believe_me structural_drift/SD008
 -- (the existing finding was the scanner counting the literal token
---  in this very comment line — there is no actual `believe_me` call.)
+--  'believe_me' (obfuscated here) inside an Idris2 comment that asserts
+--  there are no such primitives. There is no actual call site.)
 
 module Hypatia.ABI.RuleEngine
 

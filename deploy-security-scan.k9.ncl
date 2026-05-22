@@ -1,5 +1,5 @@
 K9!
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Hypatia Security Scanning Deployment
 #
 # This K9 component deploys Hypatia's neurosymbolic security scanning workflow
@@ -87,7 +87,7 @@ config = {
 
 # Generate the Hypatia workflow YAML
 hypatia_workflow = {
-  spdx_header = "# SPDX-License-Identifier: PMPL-1.0-or-later",
+  spdx_header = "# SPDX-License-Identifier: MPL-2.0",
   name = "Hypatia Security Scan",
   permissions = "permissions: read-all",
 

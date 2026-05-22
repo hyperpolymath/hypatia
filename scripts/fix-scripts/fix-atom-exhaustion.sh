@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-atom-exhaustion.sh — Replace String.to_atom with String.to_existing_atom
 # Recipe: recipe-atom-exhaustion (confidence: 0.90, auto_fixable: true)
 #

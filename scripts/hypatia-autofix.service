@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Install: cp hypatia-autofix.{service,timer} ~/.config/systemd/user/
 #          systemctl --user enable --now hypatia-autofix.timer
 [Unit]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-eval-to-safe.sh — Report eval/exec usage
 # Recipe: recipe-eval-to-safe-exec (confidence: 0.60, auto_fixable: false)
 #

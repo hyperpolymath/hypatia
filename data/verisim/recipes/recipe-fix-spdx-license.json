@@ -2,7 +2,7 @@
   "id": "recipe-fix-spdx-license",
   "triangle_tier": "eliminate",
   "pattern_ids": ["PA-license-wrong_spdx"],
-  "description": "Replace AGPL-3.0 SPDX headers with PMPL-1.0-or-later",
+  "description": "Replace AGPL-3.0 SPDX headers with MPL-2.0",
   "confidence": 0.99,
   "languages": ["*"],
   "auto_fixable": true,

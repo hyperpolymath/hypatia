@@ -1,4 +1,4 @@
-; SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-License-Identifier: MPL-2.0
 ; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath)
 ;
 ; 0-AI-MANIFEST.a2ml — Universal AI entry point for Hypatia
@@ -12,7 +12,7 @@
     (full-name "Hypatia — Neurosymbolic CI/CD Intelligence")
     (version "0.7.x")
     (repo "https://github.com/hyperpolymath/hypatia")
-    (license "PMPL-1.0-or-later")
+    (license "MPL-2.0")
     (author "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"))
 
   (purpose
@@ -91,7 +91,7 @@
     (rule "SCM files ONLY in .machine_readable/ — never in root")
     (rule "Safety triangle: Eliminate > Substitute > Control — order matters")
     (rule "Confidence gates: >=0.95 auto-execute, 0.85-0.94 review, <0.85 report")
-    (rule "PMPL-1.0-or-later on all source files")
+    (rule "MPL-2.0 on all source files")
     (rule "Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"))
 
   ;; ===================================================================

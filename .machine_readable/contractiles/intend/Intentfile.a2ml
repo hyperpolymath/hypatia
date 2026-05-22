@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # A2ML validator metadata
 name = "Intentfile"
 project = "hypatia"
@@ -12,7 +12,7 @@ Declared intent and purpose for Hypatia.
 
 ## Purpose
 
-Hypatia — // SPDX-License-Identifier: MPL-2.0-or-later
+Hypatia — // SPDX-License-Identifier: MPL-2.0
 
 ## Anti-Purpose
 

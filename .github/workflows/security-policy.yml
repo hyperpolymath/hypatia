@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: security-audit.yml, security.yml
 name: Security
@@ -421,7 +421,7 @@ jobs:
         run: |
           if [ ! -f deny.toml ]; then
             cat > deny.toml << 'EOF'
-          # SPDX-License-Identifier: PMPL-1.0-or-later
+          # SPDX-License-Identifier: MPL-2.0
           # cargo-deny configuration for hypatia
 
           [advisories]
@@ -598,7 +598,7 @@ jobs:
         run: |
           if [ ! -f .gitleaks.toml ]; then
             cat > .gitleaks.toml << 'EOF'
-          # SPDX-License-Identifier: PMPL-1.0-or-later
+          # SPDX-License-Identifier: MPL-2.0
           # Gitleaks configuration for hypatia
 
           title = "hypatia gitleaks configuration"

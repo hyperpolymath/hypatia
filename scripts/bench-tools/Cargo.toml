@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 #
 # Standalone bench-data tooling — deliberately NOT a workspace member so it
 # never perturbs the main build / proof gates, and zero-dependency so CI
@@ -12,7 +12,7 @@
 name = "bench-tools"
 version = "0.1.0"
 edition = "2021"
-license = "PMPL-1.0-or-later"
+license = "MPL-2.0"
 publish = false
 
 [lib]

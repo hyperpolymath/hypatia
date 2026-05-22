@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-shell-quoting.sh — Quote unquoted shell variable expansions
 # Recipe: recipe-shell-quote-vars (confidence: 0.99, auto_fixable: true)
 #

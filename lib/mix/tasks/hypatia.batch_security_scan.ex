@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
   @moduledoc """
   Scan the hyperpolymath org for code-scanning alerts and generate
@@ -238,7 +238,7 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
 
     header = """
-    %% SPDX-License-Identifier: PMPL-1.0-or-later
+    %% SPDX-License-Identifier: MPL-2.0
     %% Auto-generated security rules from #{length(all_alerts)} alerts across hyperpolymath org
     %% Generated: #{now}
 

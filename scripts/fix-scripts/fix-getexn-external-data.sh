@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-getexn-external-data.sh — Report getexn/catch_exn on external data without validation
 # Recipe: recipe-unsafe-crash (confidence: 0.70, auto_fixable: false)
 #

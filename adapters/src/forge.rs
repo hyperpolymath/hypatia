@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Common forge traits and types
 //!
 //! This module defines the unified interface for all forge adapters,

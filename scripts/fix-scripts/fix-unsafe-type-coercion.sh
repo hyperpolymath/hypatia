@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unsafe-type-coercion.sh — Report unsafe type coercion patterns
 # Recipe: recipe-unsafe-type-coercion (confidence: 0.80, auto_fixable: false)
 #

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-scorecard-vulnerabilities.sh — Enable vulnerability disclosure workflow (SC-023)
 # Recipe: recipe-scorecard-vulnerabilities (confidence: 0.92, auto_fixable: true)
 #

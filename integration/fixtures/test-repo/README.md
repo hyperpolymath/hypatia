@@ -11,4 +11,4 @@ This repository contains intentional issues for testing:
 
 ## License
 
-PMPL-1.0-or-later
+MPL-2.0

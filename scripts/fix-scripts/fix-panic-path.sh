@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-panic-path.sh — Comprehensive PanicPath reporter (all PA005 sub-patterns)
 # Recipe: recipe-panic-to-result + recipe-unwrap-to-match (confidence: 0.75)
 #

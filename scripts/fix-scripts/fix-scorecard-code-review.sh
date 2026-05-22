@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-scorecard-code-review.sh — Enable branch protection for code review (SC-010)
 # Recipe: recipe-scorecard-code-review (confidence: 0.88, auto_fixable: true)
 #

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Connector 16/16 — Apache Arrow Flight. Stub fidelity.
 // Part of the Umoja substrate (big-data columnar transport).
 

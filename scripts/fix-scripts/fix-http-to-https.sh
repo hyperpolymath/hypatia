@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-http-to-https.sh — Replace http:// URLs with https://
 # Recipe: recipe-fix-http-to-https (confidence: 0.95, auto_fixable: true)
 #

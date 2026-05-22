@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-scorecard-fuzzing.sh — Add fuzzing setup (SC-014)
 # Recipe: recipe-scorecard-fuzzing (confidence: 0.80, auto_fixable: true)
 #
@@ -23,7 +23,7 @@ if [[ -f "${REPO}/Cargo.toml" ]]; then
   mkdir -p "${FUZZ_DIR}/fuzz_targets"
 
   cat > "${FUZZ_DIR}/Cargo.toml" <<'TOML'
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 [package]
 name = "fuzz"
 version = "0.0.0"
@@ -45,7 +45,7 @@ bench = false
 TOML
 
   cat > "${FUZZ_DIR}/fuzz_targets/fuzz_target_1.rs" <<'RUST'
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Fuzz target template — replace with meaningful parsing entry point
 #![no_main]
 use libfuzzer_sys::fuzz_target;
@@ -58,7 +58,7 @@ RUST
 
   mkdir -p "${REPO}/.github/workflows"
   cat > "${REPO}/.github/workflows/fuzz.yml" <<'YAML'
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Nightly fuzz run — 5 minutes per target
 name: Fuzz
 
@@ -86,7 +86,7 @@ else
   echo "[fix-scorecard-fuzzing] Non-Rust repo — creating fuzz workflow stub"
   mkdir -p "${REPO}/.github/workflows"
   cat > "${REPO}/.github/workflows/fuzz.yml" <<'YAML'
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # TODO: configure fuzzing for this project's language
 name: Fuzz
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-hardcoded-secrets.sh — Detect hardcoded secrets in source code
 # Recipe: recipe-fix-hardcoded-secrets (confidence: 0.90, auto_fixable: false)
 #

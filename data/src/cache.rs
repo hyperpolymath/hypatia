@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! High-level cache abstraction for hypatia
 //!
 //! Provides a unified caching interface wrapping DragonflyClient with:

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # hypatia Git Hooks Configuration
 #
 # This file controls the behavior of hypatia git hooks.
@@ -131,7 +131,7 @@ hooks:
     spdx:
       enabled: true
       # Default license for new files
-      default_license: "PMPL-1.0-or-later"
+      default_license: "MPL-2.0"
       # Warn only (don't fail)
       warn_only: true
 

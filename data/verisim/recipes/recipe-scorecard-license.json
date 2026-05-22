@@ -13,7 +13,7 @@
   "fix_script": "fix-license-file.sh",
   "action": "insert",
   "match": "Repository missing LICENSE file or license not detected",
-  "replacement": "LICENSE file added with PMPL-1.0-or-later text",
+  "replacement": "LICENSE file added with MPL-2.0 text",
   "proven_module": null,
   "formally_proven": false,
   "successful_fixes": 0,

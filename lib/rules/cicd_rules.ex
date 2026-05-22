@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 
 defmodule Hypatia.Rules.CicdRules do
   @moduledoc """
@@ -79,7 +79,7 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "Files must have SPDX headers"},
     # --- Rules derived from 2026-03-16 session dogfooding ---
     %{id: :agpl_license, pattern: ~r/SPDX-License-Identifier:\s*AGPL-3\.0/,
-      reason: "AGPL-3.0 replaced by PMPL-1.0-or-later",
+      reason: "AGPL-3.0 replaced by MPL-2.0",
       exception_repos: ["game-server-admin", "idaptik", "airborne-submarine-squadron"]},
     %{id: :innerhtml_usage, pattern: ~r/\.innerHTML\s*=|document\.write\(/,
       reason: "innerHTML/document.write banned -- use rescript-dom-mounter SafeDOM",
@@ -281,8 +281,8 @@ defmodule Hypatia.Rules.CicdRules do
   # License Validation
   # ---------------------------------------------------------------------------
 
-  @required_spdx "PMPL-1.0-or-later"
-  @wrong_licenses ["MIT", "Apache-2.0", "PMPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
+  @required_spdx "MPL-2.0"
+  @wrong_licenses ["MIT", "Apache-2.0", "MPL-2.0", "AGPL-3.0", "GPL-3.0"]
 
   # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
   @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]

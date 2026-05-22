@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Connector 14/16 — Source Code Index Protocol. Stub fidelity.
 // Part of the Umoja substrate.
 

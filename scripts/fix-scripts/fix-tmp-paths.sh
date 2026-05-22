@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-tmp-paths.sh — Replace hardcoded /tmp paths with secure alternatives
 # Recipe: recipe-fix-tmp-paths (confidence: 0.85, auto_fixable: true)
 #

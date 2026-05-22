@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-deno-permissions.sh — Report Deno -A (all permissions) usage
 # Recipe: recipe-deno-least-privilege (confidence: 0.75, auto_fixable: false)
 #

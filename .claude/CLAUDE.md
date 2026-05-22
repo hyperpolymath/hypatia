@@ -205,7 +205,7 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 - Elixir: `mix format`, SPDX headers on all files
 - Rust: `rustfmt`, `clippy`
 - Shell: `ShellCheck`, POSIX-compatible
-- SPDX-License-Identifier: PMPL-1.0-or-later
+- SPDX-License-Identifier: MPL-2.0
 
 ## Security Requirements
 

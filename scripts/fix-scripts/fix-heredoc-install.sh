@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-heredoc-install.sh — Report curl|bash install patterns
 # Recipe: recipe-fix-heredoc-install (confidence: 0.90, auto_fixable: false)
 #

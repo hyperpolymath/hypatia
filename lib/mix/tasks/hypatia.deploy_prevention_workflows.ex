@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 defmodule Mix.Tasks.Hypatia.DeployPreventionWorkflows do
   @moduledoc """
   Deploy prevention workflows to hyperpolymath repos with open alerts.

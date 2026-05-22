@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-pin-go-deps.sh — Ensure Go module dependencies are pinned via go.sum
 # Recipe: recipe-pin-dependencies (confidence: 0.85, auto_fixable: true)
 #

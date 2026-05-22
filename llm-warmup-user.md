@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- LLM warmup context — USER level (<200 lines) -->
 <!-- Feed this to an LLM before asking questions about Hypatia -->
 
@@ -105,7 +105,7 @@ Prerequisites: Elixir (>= 1.14), Erlang/OTP (>= 25), Rust (nightly), just.
 
 ## License
 
-PMPL-1.0-or-later. Author: Jonathan D.A. Jewell.
+MPL-2.0. Author: Jonathan D.A. Jewell.
 
 ## Ecosystem position
 

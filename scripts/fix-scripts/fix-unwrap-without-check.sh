@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # fix-unwrap-without-check.sh — Report .unwrap() calls without a prior .is_ok()/.is_some() guard
 # Recipe: recipe-unwrap-to-match (confidence: 0.75, auto_fixable: false)
 #

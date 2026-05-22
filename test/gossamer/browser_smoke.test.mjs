@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Automated browser-equivalent smoke for the Hypatia GUI loader.
 //
 // Closes the manual procedure documented in issue #216 by exercising
