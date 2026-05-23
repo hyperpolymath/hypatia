@@ -1,0 +1,104 @@
+{
+  "_comment": "Soundness manifest — each entry asserts that the named rule MUST fire on its fixture. Catches regressions of the kind PR #278 documented (stale escript silently dropping entire pattern families). Add an entry whenever you add a new rule; remove only if you delete the rule.",
+  "entries": [
+    {
+      "rule_module": "code_safety",
+      "rule_id": "believe_me",
+      "language": "idris2",
+      "fixture": "test/soundness/fixtures/code_safety/believe_me.idr",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "sorry",
+      "language": "lean",
+      "fixture": "test/soundness/fixtures/code_safety/sorry.lean",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "admitted",
+      "language": "coq",
+      "fixture": "test/soundness/fixtures/code_safety/admitted.v",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "unsafe_coerce",
+      "language": "haskell",
+      "fixture": "test/soundness/fixtures/code_safety/unsafe_coerce.hs",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "obj_magic_ocaml",
+      "language": "ocaml",
+      "fixture": "test/soundness/fixtures/code_safety/obj_magic_ocaml.ml",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "getexn_on_external",
+      "language": "rescript",
+      "fixture": "test/soundness/fixtures/code_safety/getexn_on_external.res",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "unwrap_without_check",
+      "language": "rust",
+      "fixture": "test/soundness/fixtures/code_safety/unwrap_without_check.rs",
+      "expected_severity": "high"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "transmute",
+      "language": "rust",
+      "fixture": "test/soundness/fixtures/code_safety/transmute.rs",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "elixir_system_shell",
+      "language": "elixir",
+      "fixture": "test/soundness/fixtures/code_safety/elixir_system_shell.ex",
+      "expected_severity": "critical",
+      "note": "THE rule PR #278 caught the stale escript silently dropping. Removing this entry needs a soundness PR explanation."
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "elixir_os_cmd",
+      "language": "elixir",
+      "fixture": "test/soundness/fixtures/code_safety/elixir_os_cmd.ex",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "elixir_code_eval",
+      "language": "elixir",
+      "fixture": "test/soundness/fixtures/code_safety/elixir_code_eval.ex",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "shell_download_then_run",
+      "language": "shell",
+      "fixture": "test/soundness/fixtures/code_safety/shell_download_then_run.sh",
+      "expected_severity": "high"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "agda_postulate",
+      "language": "agda",
+      "fixture": "test/soundness/fixtures/code_safety/agda_postulate.agda",
+      "expected_severity": "critical"
+    },
+    {
+      "rule_module": "code_safety",
+      "rule_id": "zig_ptr_cast",
+      "language": "zig",
+      "fixture": "test/soundness/fixtures/code_safety/zig_ptr_cast.zig",
+      "expected_severity": "high"
+    }
+  ]
+}

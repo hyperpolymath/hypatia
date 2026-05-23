@@ -1,0 +1,87 @@
+= Soundness Gate
+
+== Purpose
+
+PR #278 documented a class of bug where the deployed `hypatia` escript
+was silently dropping entire pattern families because the binary was
+stale relative to the rule sources. "No findings" looks the same whether
+the code is clean OR the rule is broken — that's the soundness gap.
+
+The soundness gate fixes that with the simplest possible mechanism: for
+every rule the scanner is supposed to detect, we keep a known-bad sample
+on disk. The test asserts every sample is flagged by its rule. If a rule
+silently breaks (regex drift, file pruning, module rename), the build
+fails before that change merges.
+
+== Layout
+
+  test/soundness/
+  ├── manifest.json                  -- rule -> fixture -> expected severity
+  ├── fixtures/
+  │   ├── code_safety/               -- one file per code_safety rule_id
+  │   │   ├── believe_me.idr
+  │   │   ├── elixir_system_shell.ex
+  │   │   ├── ...
+  │   ├── cicd_rules/                -- one file per cicd_rules rule_id
+  │   └── security_errors/           -- one file per security_errors rule_id
+  └── README.adoc                    -- this file
+
+The test runner is `test/soundness_test.exs`, tagged `:soundness`.
+
+== Adding a fixture for a new rule
+
+1. Write a minimal known-bad sample under
+   `test/soundness/fixtures/<rule_module>/<rule_id>.<ext>`. Keep it as
+   small as possible — ideally just the bad pattern with enough context
+   to look real, plus an SPDX header and a "DO NOT FIX" comment so future
+   contributors don't try to "clean it up".
+
+2. Add an entry to `test/soundness/manifest.json`:
++
+[source,json]
+----
+{
+  "rule_module": "code_safety",
+  "rule_id": "your_new_rule",
+  "language": "rust",
+  "fixture": "test/soundness/fixtures/code_safety/your_new_rule.rs",
+  "expected_severity": "high"
+}
+----
+
+3. Run `mix test test/soundness_test.exs` and confirm the new entry
+   passes (rule fires at expected severity).
+
+4. Commit fixture + manifest entry + the rule change in one PR.
+
+== Removing a fixture
+
+Only acceptable when the rule itself is being removed or merged into
+another rule. The commit message MUST justify the removal — the default
+assumption is the entry stays. A bare manifest entry deletion in a PR
+that doesn't also remove the rule should fail review.
+
+== Running
+
+  mix test --only soundness            # just the soundness suite
+  mix test                             # full suite includes soundness
+  mix test --exclude soundness         # everything else (for dev cycles)
+
+== Why the manifest is JSON, not Elixir
+
+So a non-Elixir reviewer (or a non-Elixir scanner / a JSON Schema
+validator running in CI) can verify it without a BEAM runtime. The
+schema is intentionally flat and self-documenting.
+
+== Out of scope (today)
+
+* End-to-end escript-build soundness — building the escript, then
+  running the built binary against the fixture corpus. That's the
+  exact PR #278 reproduction. Worth adding next, but requires a CI
+  job that can build escripts (the in-process test already catches
+  rule-definition regressions, just not packaging regressions).
+
+* Fixtures for non-`code_safety` rule families. The current manifest
+  covers the families PR #278 specifically called out as having been
+  silently dropped. Workflow_audit, cicd_rules, structural_drift,
+  scorecard, dependabot_alerts etc. fixtures are next-iteration work.

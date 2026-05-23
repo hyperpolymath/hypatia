@@ -38,12 +38,16 @@ defmodule Hypatia.OutcomeTracker do
   - repo: repository name
   - file: file that was fixed
   - outcome: :success | :failure | :false_positive
+  - metadata: optional map of extra fields to merge into the record
+              (e.g. %{"verification" => "verified"} from `record_and_verify`).
+              Pre-existing keys (recipe_id, repo, file, outcome,
+              timestamp, bot) are not overwritten by metadata.
   """
-  def record_outcome(recipe_id, repo, file, outcome) do
+  def record_outcome(recipe_id, repo, file, outcome, metadata \\ %{}) do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     outcome_str = Atom.to_string(outcome)
 
-    record = %{
+    base = %{
       "pattern_id" => nil,
       "recipe_id" => recipe_id,
       "repo" => repo,
@@ -52,6 +56,10 @@ defmodule Hypatia.OutcomeTracker do
       "timestamp" => now,
       "bot" => "hypatia"
     }
+
+    # Metadata is merged UNDER the base so the canonical fields can't be
+    # silently overwritten by a caller passing the wrong recipe_id etc.
+    record = Map.merge(metadata, base)
 
     # Write to verisim-data outcomes (append-only JSONL per month)
     write_outcome_log(record)
@@ -114,8 +122,6 @@ defmodule Hypatia.OutcomeTracker do
   :false_positive to correct the confidence.
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
-    {:ok, record} = record_outcome(recipe_id, repo, file, outcome)
-
     if Keyword.get(opts, :verify, false) and outcome == :success do
       repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
       repo_path = Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
@@ -124,17 +130,49 @@ defmodule Hypatia.OutcomeTracker do
 
       case verify_fix(repo_path, pattern_id, category) do
         :verified ->
+          # Record success WITH the verification stamp so recipe_health
+          # can distinguish verified-clean fixes from un-verified ones.
+          {:ok, record} =
+            record_outcome(recipe_id, repo, file, outcome, %{"verification" => "verified"})
+
           {:ok, record, :verified}
 
         :still_present ->
-          Logger.warning("Fix claimed success but pattern still present -- recording false_positive")
-          record_outcome(recipe_id, repo, file, :false_positive)
+          Logger.warning(
+            "Fix claimed success but pattern still present -- recording false_positive"
+          )
+
+          # Both records are tagged so the trail is explicit: the claimed
+          # success was actually a false positive, surfaced by re-scan.
+          {:ok, _} =
+            record_outcome(recipe_id, repo, file, outcome, %{"verification" => "still_present"})
+
+          {:ok, record} =
+            record_outcome(recipe_id, repo, file, :false_positive, %{
+              "verification" => "still_present",
+              "caused_by" => "post_fix_rescan"
+            })
+
           {:ok, record, :false_positive}
 
         :scan_failed ->
+          # The fix may or may not have worked; we just couldn't verify.
+          # Recording the outcome with the scan_failed marker preserves
+          # the distinction from "verified clean" without penalising the
+          # recipe in confidence updates.
+          {:ok, record} =
+            record_outcome(recipe_id, repo, file, outcome, %{"verification" => "scan_failed"})
+
           {:ok, record, :scan_unavailable}
       end
     else
+      # Unverified outcome (or non-success): record as before, with the
+      # explicit "unverified" marker so verification_rate aggregates can
+      # tell the difference between "verification wasn't attempted" and
+      # "verification was attempted and failed".
+      {:ok, record} =
+        record_outcome(recipe_id, repo, file, outcome, %{"verification" => "unverified"})
+
       {:ok, record, :not_verified}
     end
   end
@@ -264,7 +302,196 @@ defmodule Hypatia.OutcomeTracker do
     end
   end
 
+  # ─── Closed-loop verification metric ───────────────────────────────────
+
+  @doc """
+  Per-recipe verification rate.
+
+  Returns `{:ok, %{verified, still_present, scan_failed, unverified, total,
+  rate}}` where `rate` is the fraction of *verifiable* successes that were
+  actually verified clean by post-fix re-scan. `scan_failed` and
+  `unverified` records are excluded from the denominator so a recipe is
+  not penalised for being run in environments without panic-attack.
+
+  A recipe's verification rate is meaningful only after a handful of
+  attempts -- returns `{:ok, :insufficient_data}` below the threshold.
+  """
+  def verification_rate(recipe_id, min_attempts \\ 5) do
+    outcomes = load_outcomes_for_recipe(recipe_id)
+    successes = Enum.filter(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
+
+    counts =
+      Enum.reduce(
+        successes,
+        %{verified: 0, still_present: 0, scan_failed: 0, unverified: 0},
+        fn o, acc ->
+          case Map.get(o, "verification") do
+            "verified" -> Map.update!(acc, :verified, &(&1 + 1))
+            "still_present" -> Map.update!(acc, :still_present, &(&1 + 1))
+            "scan_failed" -> Map.update!(acc, :scan_failed, &(&1 + 1))
+            _ -> Map.update!(acc, :unverified, &(&1 + 1))
+          end
+        end
+      )
+
+    verifiable = counts.verified + counts.still_present
+
+    cond do
+      length(successes) == 0 ->
+        {:ok, :no_outcomes}
+
+      verifiable < min_attempts ->
+        {:ok,
+         Map.merge(counts, %{
+           total: length(successes),
+           rate: :insufficient_data,
+           verifiable: verifiable
+         })}
+
+      true ->
+        rate = counts.verified / verifiable
+
+        {:ok,
+         Map.merge(counts, %{
+           total: length(successes),
+           rate: rate,
+           verifiable: verifiable
+         })}
+    end
+  end
+
+  @doc """
+  Aggregate health stats across every recipe with recorded outcomes.
+
+  Returns a list of maps sorted ascending by verification rate, so
+  recipes that look most broken surface first. Recipes with insufficient
+  verification data still appear -- they're flagged distinctly so they
+  can be prioritised for verification-enabled runs.
+
+  Schema:
+    %{
+      recipe_id: String.t(),
+      dispatches: non_neg_integer(),
+      successes: non_neg_integer(),
+      failures: non_neg_integer(),
+      false_positives: non_neg_integer(),
+      success_rate: float() | :no_data,
+      verification: %{
+        verified: non_neg_integer(),
+        still_present: non_neg_integer(),
+        scan_failed: non_neg_integer(),
+        unverified: non_neg_integer(),
+        verifiable: non_neg_integer(),
+        rate: float() | :insufficient_data | :no_data
+      },
+      status: :healthy | :unverified | :insufficient_data | :degraded | :quarantine_candidate
+    }
+  """
+  def recipe_health(opts \\ []) do
+    min_attempts = Keyword.get(opts, :min_attempts, 5)
+    degraded_threshold = Keyword.get(opts, :degraded_threshold, 0.70)
+    quarantine_threshold = Keyword.get(opts, :quarantine_threshold, 0.30)
+
+    recipe_ids = all_recipe_ids_with_outcomes()
+
+    recipe_ids
+    |> Enum.map(fn recipe_id ->
+      outcomes = load_outcomes_for_recipe(recipe_id)
+
+      successes = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
+      failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
+      false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
+
+      dispatches = length(outcomes)
+      attempts = successes + failures + false_positives
+
+      success_rate =
+        if attempts > 0, do: successes / attempts, else: :no_data
+
+      {:ok, verification} = verification_rate(recipe_id, min_attempts)
+
+      verification_map =
+        case verification do
+          :no_outcomes ->
+            %{
+              verified: 0,
+              still_present: 0,
+              scan_failed: 0,
+              unverified: 0,
+              verifiable: 0,
+              rate: :no_data
+            }
+
+          map when is_map(map) ->
+            map
+        end
+
+      status =
+        cond do
+          verification_map.rate == :no_data -> :no_data
+          verification_map.rate == :insufficient_data -> :insufficient_data
+          is_float(verification_map.rate) and verification_map.rate < quarantine_threshold ->
+            :quarantine_candidate
+          is_float(verification_map.rate) and verification_map.rate < degraded_threshold ->
+            :degraded
+          is_float(verification_map.rate) ->
+            :healthy
+          true ->
+            :unverified
+        end
+
+      %{
+        recipe_id: recipe_id,
+        dispatches: dispatches,
+        successes: successes,
+        failures: failures,
+        false_positives: false_positives,
+        success_rate: success_rate,
+        verification: verification_map,
+        status: status
+      }
+    end)
+    |> Enum.sort_by(fn r ->
+      # Sort by rate ascending so quarantine_candidate / degraded float to
+      # the top. :no_data and :insufficient_data sort after numerics so
+      # they don't bury actionable rows.
+      case r.verification.rate do
+        :no_data -> {2, 0}
+        :insufficient_data -> {1, 0}
+        rate when is_float(rate) -> {0, rate}
+      end
+    end)
+  end
+
   # --- Private ---
+
+  defp all_recipe_ids_with_outcomes do
+    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+
+    case File.ls(outcomes_dir) do
+      {:ok, files} ->
+        files
+        |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+        |> Enum.flat_map(fn f ->
+          path = Path.join(outcomes_dir, f)
+
+          path
+          |> File.stream!()
+          |> Stream.map(fn line ->
+            case Jason.decode(String.trim(line)) do
+              {:ok, %{"recipe_id" => id}} when is_binary(id) -> id
+              _ -> nil
+            end
+          end)
+          |> Stream.reject(&is_nil/1)
+          |> Enum.to_list()
+        end)
+        |> Enum.uniq()
+
+      {:error, _} ->
+        []
+    end
+  end
 
   defp write_outcome_log(record) do
     {{year, month, _}, _} = :calendar.universal_time()

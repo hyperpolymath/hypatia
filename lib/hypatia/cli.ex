@@ -23,6 +23,7 @@ defmodule Hypatia.CLI do
                         Available: root_hygiene,honest_completion,workflow_audit,
                                    cicd_rules,code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
+                                   secret_scanning_alerts,code_scanning_alerts,
                                    structural_drift
       --format <fmt>    Output format: json (default), text, github
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
@@ -47,6 +48,8 @@ defmodule Hypatia.CLI do
     :green_web,
     :git_state,
     :dependabot_alerts,
+    :secret_scanning_alerts,
+    :code_scanning_alerts,
     :structural_drift
   ]
 
@@ -636,6 +639,60 @@ defmodule Hypatia.CLI do
         results
       end
 
+    # Secret Scanning Alerts
+    results =
+      if :secret_scanning_alerts in rules do
+        case Hypatia.Rules.SecretScanningAlerts.scan_from_path(repo_path) do
+          {:ok, %{findings: findings}} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "secret_scanning_alerts",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, ""),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          {:error, reason} ->
+            IO.puts(:stderr, "Warning: Secret-scanning alerts unavailable: #{reason}")
+            results
+        end
+      else
+        results
+      end
+
+    # Code Scanning Alerts
+    results =
+      if :code_scanning_alerts in rules do
+        case Hypatia.Rules.CodeScanningAlerts.scan_from_path(repo_path) do
+          {:ok, %{findings: findings}} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "code_scanning_alerts",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, ""),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          {:error, reason} ->
+            IO.puts(:stderr, "Warning: Code-scanning alerts unavailable: #{reason}")
+            results
+        end
+      else
+        results
+      end
+
     # Structural Drift
     results =
       if :structural_drift in rules do
@@ -1042,6 +1099,8 @@ defmodule Hypatia.CLI do
   defp format_module_name("green_web"), do: "Green Web Foundation"
   defp format_module_name("git_state"), do: "Git State Sync"
   defp format_module_name("dependabot_alerts"), do: "Dependabot Alerts"
+  defp format_module_name("secret_scanning_alerts"), do: "Secret Scanning Alerts"
+  defp format_module_name("code_scanning_alerts"), do: "Code Scanning Alerts"
   defp format_module_name(other), do: other
 
   defp print_usage do
@@ -1062,7 +1121,8 @@ defmodule Hypatia.CLI do
                                 Available: root_hygiene,honest_completion,
                                 workflow_audit,cicd_rules,code_safety,
                                 migration_rules,scorecard,green_web,
-                                git_state,dependabot_alerts
+                                git_state,dependabot_alerts,
+                                secret_scanning_alerts,code_scanning_alerts
         --format, -f <fmt>      Output format: json (default), text, github
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)

@@ -21,9 +21,11 @@ permissions:
   contents: read
   # security-events: write serves two purposes (write implies read):
   #   1. read — lets the built-in GITHUB_TOKEN query this repo's own
-  #      Dependabot alerts via the Hypatia DependabotAlerts rule
-  #      (DA001-DA004). Without read, `scan_from_path` gets HTTP 403
-  #      and the rule silently returns no findings.
+  #      Dependabot alerts (DependabotAlerts rule, DA001-DA004),
+  #      secret-scanning alerts (SecretScanningAlerts, SSA001-SSA004),
+  #      and code-scanning alerts (CodeScanningAlerts, CSA001-CSA004).
+  #      Without read, `scan_from_path` gets HTTP 403 and the rule
+  #      silently returns no findings.
   #      See 007-lang/audits/audit-dependabot-automation-gap-2026-04-17.md.
   #   2. write — lets the "Upload SARIF to code scanning" step publish
   #      Hypatia findings to the Security → Code scanning page so they
