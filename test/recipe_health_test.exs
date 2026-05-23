@@ -114,6 +114,61 @@ defmodule Hypatia.RecipeHealthTest do
       assert ours.status == :quarantine_candidate
     end
 
+    test "quarantined?/2 returns true when verification rate is below threshold", %{
+      recipe_id: recipe_id
+    } do
+      # 1 verified + 9 still_present = 10 verifiable, rate = 0.10
+      OutcomeTracker.record_outcome(recipe_id, "r", "v1", :success, %{
+        "verification" => "verified"
+      })
+
+      for i <- 1..9 do
+        OutcomeTracker.record_outcome(recipe_id, "r", "sp#{i}", :success, %{
+          "verification" => "still_present"
+        })
+      end
+
+      assert OutcomeTracker.quarantined?(recipe_id, threshold: 0.30, min_attempts: 5) == true
+    end
+
+    test "quarantined?/2 returns false on insufficient data (avoids chicken-and-egg)", %{
+      recipe_id: recipe_id
+    } do
+      # Only 2 verifiable outcomes -- below min_attempts. The gate
+      # should let the recipe through so it can earn more verification
+      # data, not gate it on too few samples.
+      OutcomeTracker.record_outcome(recipe_id, "r", "v1", :success, %{
+        "verification" => "still_present"
+      })
+
+      OutcomeTracker.record_outcome(recipe_id, "r", "v2", :success, %{
+        "verification" => "still_present"
+      })
+
+      assert OutcomeTracker.quarantined?(recipe_id, threshold: 0.30, min_attempts: 5) == false
+    end
+
+    test "quarantined?/2 honours HYPATIA_RECIPE_QUARANTINE_DISABLE env override", %{
+      recipe_id: recipe_id
+    } do
+      # Set up data that WOULD quarantine, then disable via env.
+      OutcomeTracker.record_outcome(recipe_id, "r", "v1", :success, %{
+        "verification" => "verified"
+      })
+
+      for i <- 1..9 do
+        OutcomeTracker.record_outcome(recipe_id, "r", "sp#{i}", :success, %{
+          "verification" => "still_present"
+        })
+      end
+
+      System.put_env("HYPATIA_RECIPE_QUARANTINE_DISABLE", "true")
+
+      on_exit(fn -> System.delete_env("HYPATIA_RECIPE_QUARANTINE_DISABLE") end)
+
+      assert OutcomeTracker.quarantined?(recipe_id, threshold: 0.30, min_attempts: 5) == false
+    end
+
     test "tags degraded between quarantine and healthy", %{recipe_id: recipe_id} do
       # 3 verified + 7 still_present = 10 verifiable, rate = 0.3
       # → just at the quarantine threshold (0.30), so degraded (< 0.70).

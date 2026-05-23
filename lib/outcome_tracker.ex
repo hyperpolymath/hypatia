@@ -535,6 +535,66 @@ defmodule Hypatia.OutcomeTracker do
     end)
   end
 
+  @doc """
+  Cheap predicate: is this recipe currently auto-quarantined on the
+  basis of its verification rate?
+
+  A recipe is quarantined when its verification rate (verified /
+  (verified + still_present)) drops below `:threshold` AND the
+  verifiable-outcomes denominator has crossed `:min_attempts`.
+  Recipes with no verification data are NOT quarantined — the gate
+  errs on the side of letting them dispatch so the runner can
+  produce verification data in the first place.
+
+  An operator override is available via `HYPATIA_RECIPE_QUARANTINE_DISABLE=true`
+  for emergencies; the override is logged when consulted so audit
+  history captures why an "unhealthy" recipe was still dispatched.
+
+  Options:
+    :threshold     -- rate below which to quarantine (default 0.30)
+    :min_attempts  -- minimum verifiable count before the gate engages
+                      (default 5)
+  """
+  def quarantined?(recipe_id, opts \\ []) do
+    cond do
+      System.get_env("HYPATIA_RECIPE_QUARANTINE_DISABLE") == "true" ->
+        Logger.warning(
+          "Recipe quarantine gate DISABLED via env override -- recipe " <>
+            "#{recipe_id} dispatched without verification-rate check."
+        )
+
+        false
+
+      true ->
+        threshold = Keyword.get(opts, :threshold, 0.30)
+        min_attempts = Keyword.get(opts, :min_attempts, 5)
+
+        case verification_rate(recipe_id, min_attempts) do
+          {:ok, %{rate: rate}} when is_float(rate) ->
+            quarantined = rate < threshold
+
+            if quarantined do
+              Logger.warning(
+                "Recipe #{recipe_id} AUTO-QUARANTINED: " <>
+                  "verification rate #{:erlang.float_to_binary(rate, decimals: 2)} " <>
+                  "< threshold #{threshold}. Will be downgraded from " <>
+                  ":auto_execute to :review until human reviews recipe."
+              )
+            end
+
+            quarantined
+
+          _ ->
+            # :no_outcomes / :insufficient_data — let the dispatch through.
+            # The whole point of letting it through is to accumulate
+            # verification data; gating here would create a chicken-and-
+            # egg problem where new recipes can never earn enough data
+            # to leave quarantine.
+            false
+        end
+    end
+  end
+
   # --- Private ---
 
   defp all_recipe_ids_with_outcomes do
