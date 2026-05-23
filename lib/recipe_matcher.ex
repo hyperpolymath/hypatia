@@ -32,8 +32,7 @@ defmodule Hypatia.RecipeMatcher do
   def best_recipe(pattern_id, language) do
     find_recipes(pattern_id)
     |> Enum.find(fn recipe ->
-      langs = Map.get(recipe, "languages", [])
-      "*" in langs or language in langs
+      langs_match?(Map.get(recipe, "languages", []), language)
     end)
   end
 
@@ -140,12 +139,12 @@ defmodule Hypatia.RecipeMatcher do
   # Match recipe by target_categories field -- most reliable match
   defp category_match_recipe(pattern, language) do
     category = Map.get(pattern, "category", "")
+    effective_language = effective_language_for(pattern, language)
 
     all_recipes()
     |> Enum.filter(fn recipe ->
       cats = Map.get(recipe, "target_categories", [])
-      langs = Map.get(recipe, "languages", [])
-      lang_ok = "*" in langs or language in langs
+      lang_ok = langs_match?(Map.get(recipe, "languages", []), effective_language)
       lang_ok and category in cats
     end)
     |> Enum.sort_by(fn r -> Map.get(r, "confidence", 0) end, :desc)
@@ -155,6 +154,7 @@ defmodule Hypatia.RecipeMatcher do
   defp fuzzy_match_recipe(pattern, language) do
     pa_rule = Map.get(pattern, "pa_rule", "")
     description = Map.get(pattern, "description", "") |> String.downcase()
+    effective_language = effective_language_for(pattern, language)
 
     # Skip if no PA rule to match against
     if pa_rule == "" do
@@ -162,8 +162,7 @@ defmodule Hypatia.RecipeMatcher do
     else
       all_recipes()
       |> Enum.filter(fn recipe ->
-        langs = Map.get(recipe, "languages", [])
-        lang_ok = "*" in langs or language in langs
+        lang_ok = langs_match?(Map.get(recipe, "languages", []), effective_language)
 
         recipe_pattern_ids = Map.get(recipe, "pattern_ids", [])
 
@@ -194,6 +193,37 @@ defmodule Hypatia.RecipeMatcher do
       |> Enum.sort_by(fn r -> Map.get(r, "confidence", 0) end, :desc)
       |> List.first()
     end
+  end
+
+  # Both "*" and "any" are language-agnostic sentinels. Historical recipes
+  # use one or the other; treating them as synonyms keeps both groups
+  # routable (without this, ~12 recipes declared "any" matched no patterns).
+  defp langs_match?(langs, language) do
+    "*" in langs or "any" in langs or language in langs
+  end
+
+  # Scorecard / workflow-file findings are about .github/workflows/*.yml,
+  # not the repo's primary language. Without this remap, recipes declared
+  # `languages: ["yaml"]` (pin-deps, token-permissions, etc.) never match
+  # because no repo has yaml as its primary language, and every scorecard
+  # finding falls through to :control "no safe fix available".
+  defp effective_language_for(pattern, language) do
+    cond do
+      Map.get(pattern, "source") == "scorecard" -> "yaml"
+      workflow_file_category?(Map.get(pattern, "category", "")) -> "yaml"
+      true -> language
+    end
+  end
+
+  defp workflow_file_category?(category) do
+    category in [
+      "DependencyPinning",
+      "PinnedDependencies",
+      "TokenPermissions",
+      "DangerousWorkflow",
+      "DependencyUpdateTool",
+      "BranchProtection"
+    ]
   end
 
   defp load_recipe(path) do

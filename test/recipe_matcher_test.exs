@@ -93,4 +93,52 @@ defmodule Hypatia.RecipeMatcherTest do
       assert RecipeMatcher.substitution_for_category("FakeCategory") == nil
     end
   end
+
+  describe "best_recipe_for_pattern/2 — language matching" do
+    test "'any' sentinel matches any repo language" do
+      # recipe-scorecard-license declares languages: ["any"]
+      pattern = %{
+        "id" => "SC-010-some-repo",
+        "category" => "License",
+        "pa_rule" => "SC010",
+        "source" => "scorecard"
+      }
+
+      recipe = RecipeMatcher.best_recipe_for_pattern(pattern, "rust")
+      assert recipe != nil
+      assert recipe["id"] in ["recipe-scorecard-license", "recipe-add-license-file"]
+      assert recipe["fix_script"] not in [nil, ""]
+    end
+
+    test "scorecard DependencyPinning pattern resolves yaml recipe regardless of repo language" do
+      # Reproduces the production gap: SC013 findings across 230+ repos
+      # routed to :control "no safe fix available" because recipe-pin-deps
+      # declares languages: ["yaml"] and no repo has yaml as primary lang.
+      pattern = %{
+        "id" => "SC-013-007-lang",
+        "category" => "DependencyPinning",
+        "pa_rule" => "SC013",
+        "source" => "scorecard",
+        "description" => "1 workflow(s) with tag-pinned actions"
+      }
+
+      recipe = RecipeMatcher.best_recipe_for_pattern(pattern, "elixir")
+      assert recipe != nil, "scorecard pattern must route to a recipe, not :control"
+      assert recipe["fix_script"] not in [nil, ""]
+      assert recipe["triangle_tier"] in ["eliminate", "substitute"]
+    end
+
+    test "scorecard TokenPermissions pattern resolves yaml recipe" do
+      pattern = %{
+        "id" => "SC-018-some-repo",
+        "category" => "TokenPermissions",
+        "pa_rule" => "SC018",
+        "source" => "scorecard"
+      }
+
+      recipe = RecipeMatcher.best_recipe_for_pattern(pattern, "go")
+      assert recipe != nil
+      assert recipe["fix_script"] == "fix-workflow-permissions.sh"
+    end
+  end
 end
