@@ -115,11 +115,83 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   @doc """
+  Canonical entry point for the dispatch-runner / external automaton
+  *after* a fix has been applied to a repo.
+
+  This is the default-verify variant: unlike `record_outcome/5` (which is
+  intentionally unverified, used by replay and rollback paths), this
+  always attempts a post-fix re-scan via panic-attack when `outcome` is
+  `:success`. It auto-derives the `category` and `pattern_id` from the
+  recipe registry, so callers don't have to thread them through.
+
+  Failure to derive `category` (recipe not found / no `target_categories`)
+  falls back to `record_outcome/5` with `"verification" = "scan_skipped"`
+  so the outcome is still recorded and the verification gap is auditable.
+
+  Returns `{:ok, record, verification}` where verification is one of
+  `:verified | :false_positive | :scan_unavailable | :not_verified`.
+  """
+  def record_outcome_for_fix(recipe_id, repo, file, outcome, opts \\ []) do
+    derived =
+      case derive_verify_opts(recipe_id, repo, opts) do
+        {:ok, derived_opts} -> Keyword.merge(derived_opts, opts)
+        {:error, _reason} -> Keyword.put(opts, :verify, false)
+      end
+
+    record_and_verify(recipe_id, repo, file, outcome, Keyword.put(derived, :verify, true))
+  end
+
+  defp derive_verify_opts(recipe_id, repo, opts) do
+    cond do
+      Keyword.has_key?(opts, :category) and Keyword.has_key?(opts, :repo_path) ->
+        {:ok, opts}
+
+      true ->
+        recipe_path = find_recipe_file(recipe_id)
+
+        case recipe_path && File.read(recipe_path) do
+          {:ok, content} ->
+            case Jason.decode(content) do
+              {:ok, recipe} ->
+                cats = Map.get(recipe, "target_categories", [])
+
+                category =
+                  Keyword.get(opts, :category, List.first(cats) || "")
+
+                repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
+
+                repo_path =
+                  Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
+
+                {:ok,
+                 [
+                   category: category,
+                   pattern_id: Keyword.get(opts, :pattern_id, recipe_id),
+                   repo_path: repo_path
+                 ]}
+
+              _ ->
+                {:error, :recipe_unparseable}
+            end
+
+          _ ->
+            {:error, :recipe_not_found}
+        end
+    end
+  end
+
+  @doc """
   Record an outcome and optionally verify the fix by re-scanning.
 
-  If verify: true is passed, runs panic-attacker against the repo after
-  recording the outcome. If the pattern is still present, records a
-  :false_positive to correct the confidence.
+  Low-level: prefer `record_outcome_for_fix/5` from external runners
+  (it auto-derives `category` from the recipe registry). This entry
+  point is for in-tree call sites that already have those fields in
+  hand.
+
+  If `verify: true` is passed, runs `panic-attacker` against the repo
+  after recording the outcome. The verification verdict is persisted
+  on every branch (verified / still_present / scan_failed / unverified)
+  so `recipe_health/1` can compute meaningful aggregates.
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
     if Keyword.get(opts, :verify, false) and outcome == :success do
