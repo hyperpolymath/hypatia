@@ -147,9 +147,43 @@ defmodule Hypatia.Watcher do
 
       record_counts(event, now)
       state = record_recent(state, event, measurements, metadata, now)
+      broadcast(event, measurements, metadata, now)
 
       {:noreply, state}
     end
+  end
+
+  @doc """
+  Subscribe the calling process to all telemetry events from the
+  watcher. Each event arrives as
+  `{:hypatia_event, event, measurements, metadata, timestamp_ms}`.
+  Subscription is automatically dropped when the caller dies.
+
+  Optional `:events` filters delivery to a list of event names
+  (lists like `[:hypatia, :scan, :complete]`).
+  """
+  def subscribe(opts \\ []) do
+    filter = Keyword.get(opts, :events, :all)
+    Registry.register(Hypatia.Watcher.PubSub, :events, filter)
+    :ok
+  end
+
+  defp broadcast(event, measurements, metadata, ts) do
+    # Registry dispatch runs in the caller's process; we're already
+    # inside the watcher GenServer so any handler exception MUST be
+    # caught — otherwise one misbehaving subscriber takes down the
+    # whole watcher.
+    Registry.dispatch(Hypatia.Watcher.PubSub, :events, fn entries ->
+      Enum.each(entries, fn {pid, filter} ->
+        if filter == :all or event in filter do
+          send(pid, {:hypatia_event, event, measurements, metadata, ts})
+        end
+      end)
+    end)
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
   end
 
   @impl true

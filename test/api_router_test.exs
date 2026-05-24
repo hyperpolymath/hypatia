@@ -124,6 +124,31 @@ defmodule Hypatia.Web.ApiRouterTest do
     end
   end
 
+  describe "GET /recipes/:id" do
+    test "returns 404 for an unknown recipe id" do
+      conn = build_conn(:get, "/recipes/does-not-exist-recipe-id", {127, 0, 0, 1})
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+
+      assert conn.status == 404
+      body = Jason.decode!(conn.resp_body)
+      assert body["error"] == "recipe_not_found"
+    end
+  end
+
+  describe "GET /quarantine" do
+    test "returns the recipe + bot quarantine roster" do
+      conn = build_conn(:get, "/quarantine", {127, 0, 0, 1})
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+
+      assert conn.status == 200
+      body = Jason.decode!(conn.resp_body)
+      assert Map.has_key?(body, "recipes")
+      assert Map.has_key?(body, "bots")
+      assert is_list(body["recipes"]["rows"])
+      assert is_map(body["bots"]["entries"])
+    end
+  end
+
   defp build_conn(method, path, remote_ip) do
     conn(method, path)
     |> Map.put(:remote_ip, remote_ip)

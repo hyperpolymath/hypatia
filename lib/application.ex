@@ -36,6 +36,10 @@ defmodule Hypatia.Application do
       # telemetry events, maintains rolling windows in ETS, backs the
       # /api/status endpoint and `mix hypatia.watch` TUI).
       Hypatia.Watcher,
+      # Pub/sub for SSE clients watching /api/events live. Each HTTP
+      # request handler registers itself here; Watcher dispatches each
+      # event into the registry. OTP-built Registry — no new dep.
+      {Registry, keys: :duplicate, name: Hypatia.Watcher.PubSub},
       # Layer 1: Safety -- rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,
