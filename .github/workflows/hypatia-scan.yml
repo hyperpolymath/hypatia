@@ -59,14 +59,25 @@ jobs:
           otp-version: '27'
 
       - name: Clone Hypatia
+        # Issue #141: $HOME can collapse to empty in some runner contexts
+        # (container images that don't set the env explicitly, certain
+        # composite actions, etc.) — when that happens, `$HOME/hypatia`
+        # becomes `/hypatia` and the clone fails with a permission error
+        # at a path the runner can't write to. RUNNER_TEMP is always set
+        # by the Actions runtime and points at a writable scratch dir, so
+        # we pin the clone there. Set HYPATIA_HOME once and refer to it
+        # from every subsequent step so the path can't drift mid-job.
+        env:
+          HYPATIA_HOME: ${{ runner.temp }}/hypatia
         run: |
-          if [ ! -d "$HOME/hypatia" ]; then
-            git clone https://github.com/hyperpolymath/hypatia.git "$HOME/hypatia"
+          echo "HYPATIA_HOME=$HYPATIA_HOME" >> "$GITHUB_ENV"
+          if [ ! -d "$HYPATIA_HOME" ]; then
+            git clone https://github.com/hyperpolymath/hypatia.git "$HYPATIA_HOME"
           fi
 
       - name: Build Hypatia scanner (if needed)
         run: |
-          cd "$HOME/hypatia"
+          cd "$HYPATIA_HOME"
           if [ ! -f hypatia ]; then
             echo "Building hypatia scanner..."
             mix deps.get
@@ -89,8 +100,8 @@ jobs:
           #   hypatia-findings.json  — native JSON for the artifact + PR comment + Phase 2 submission
           #   hypatia.sarif          — native SARIF 2.1.0 (Hypatia.SARIF module since PR #309)
           #                            replaces the inline Node.js converter that used to live here.
-          HYPATIA_FORMAT=json  "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json || true
-          HYPATIA_FORMAT=sarif "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia.sarif         || true
+          HYPATIA_FORMAT=json  "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json || true
+          HYPATIA_FORMAT=sarif "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia.sarif         || true
 
           # Validate SARIF (empty SARIF is intentional — clears stale alerts).
           # Falls back to a minimal empty document if the scanner couldn't emit
