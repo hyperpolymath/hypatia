@@ -73,6 +73,13 @@ defmodule Hypatia.OutcomeTracker do
     # Update recipe confidence (now annealing-aware)
     update_recipe_confidence(recipe_id)
 
+    Hypatia.Telemetry.outcome_recorded(
+      recipe_id: recipe_id,
+      repo: repo,
+      outcome: outcome_str,
+      verification: Map.get(metadata, "verification", "unverified")
+    )
+
     Logger.info("Outcome recorded: #{recipe_id} in #{repo}/#{file} -> #{outcome_str}")
     {:ok, record}
   end
@@ -85,6 +92,18 @@ defmodule Hypatia.OutcomeTracker do
   or :scan_failed.
   """
   def verify_fix(repo_path, pattern_id, category) do
+    result = do_verify_fix(repo_path, pattern_id, category)
+
+    Hypatia.Telemetry.verification_result(
+      recipe_id: pattern_id,
+      repo: Path.basename(repo_path),
+      verdict: result
+    )
+
+    result
+  end
+
+  defp do_verify_fix(repo_path, pattern_id, category) do
     case System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
            stderr_to_stdout: true) do
       {output, 0} ->
@@ -115,11 +134,83 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   @doc """
+  Canonical entry point for the dispatch-runner / external automaton
+  *after* a fix has been applied to a repo.
+
+  This is the default-verify variant: unlike `record_outcome/5` (which is
+  intentionally unverified, used by replay and rollback paths), this
+  always attempts a post-fix re-scan via panic-attack when `outcome` is
+  `:success`. It auto-derives the `category` and `pattern_id` from the
+  recipe registry, so callers don't have to thread them through.
+
+  Failure to derive `category` (recipe not found / no `target_categories`)
+  falls back to `record_outcome/5` with `"verification" = "scan_skipped"`
+  so the outcome is still recorded and the verification gap is auditable.
+
+  Returns `{:ok, record, verification}` where verification is one of
+  `:verified | :false_positive | :scan_unavailable | :not_verified`.
+  """
+  def record_outcome_for_fix(recipe_id, repo, file, outcome, opts \\ []) do
+    derived =
+      case derive_verify_opts(recipe_id, repo, opts) do
+        {:ok, derived_opts} -> Keyword.merge(derived_opts, opts)
+        {:error, _reason} -> Keyword.put(opts, :verify, false)
+      end
+
+    record_and_verify(recipe_id, repo, file, outcome, Keyword.put(derived, :verify, true))
+  end
+
+  defp derive_verify_opts(recipe_id, repo, opts) do
+    cond do
+      Keyword.has_key?(opts, :category) and Keyword.has_key?(opts, :repo_path) ->
+        {:ok, opts}
+
+      true ->
+        recipe_path = find_recipe_file(recipe_id)
+
+        case recipe_path && File.read(recipe_path) do
+          {:ok, content} ->
+            case Jason.decode(content) do
+              {:ok, recipe} ->
+                cats = Map.get(recipe, "target_categories", [])
+
+                category =
+                  Keyword.get(opts, :category, List.first(cats) || "")
+
+                repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
+
+                repo_path =
+                  Keyword.get(opts, :repo_path, Path.join(repos_dir, repo))
+
+                {:ok,
+                 [
+                   category: category,
+                   pattern_id: Keyword.get(opts, :pattern_id, recipe_id),
+                   repo_path: repo_path
+                 ]}
+
+              _ ->
+                {:error, :recipe_unparseable}
+            end
+
+          _ ->
+            {:error, :recipe_not_found}
+        end
+    end
+  end
+
+  @doc """
   Record an outcome and optionally verify the fix by re-scanning.
 
-  If verify: true is passed, runs panic-attacker against the repo after
-  recording the outcome. If the pattern is still present, records a
-  :false_positive to correct the confidence.
+  Low-level: prefer `record_outcome_for_fix/5` from external runners
+  (it auto-derives `category` from the recipe registry). This entry
+  point is for in-tree call sites that already have those fields in
+  hand.
+
+  If `verify: true` is passed, runs `panic-attacker` against the repo
+  after recording the outcome. The verification verdict is persisted
+  on every branch (verified / still_present / scan_failed / unverified)
+  so `recipe_health/1` can compute meaningful aggregates.
   """
   def record_and_verify(recipe_id, repo, file, outcome, opts \\ []) do
     if Keyword.get(opts, :verify, false) and outcome == :success do
@@ -461,6 +552,75 @@ defmodule Hypatia.OutcomeTracker do
         rate when is_float(rate) -> {0, rate}
       end
     end)
+  end
+
+  @doc """
+  Cheap predicate: is this recipe currently auto-quarantined on the
+  basis of its verification rate?
+
+  A recipe is quarantined when its verification rate (verified /
+  (verified + still_present)) drops below `:threshold` AND the
+  verifiable-outcomes denominator has crossed `:min_attempts`.
+  Recipes with no verification data are NOT quarantined — the gate
+  errs on the side of letting them dispatch so the runner can
+  produce verification data in the first place.
+
+  An operator override is available via `HYPATIA_RECIPE_QUARANTINE_DISABLE=true`
+  for emergencies; the override is logged when consulted so audit
+  history captures why an "unhealthy" recipe was still dispatched.
+
+  Options:
+    :threshold     -- rate below which to quarantine (default 0.30)
+    :min_attempts  -- minimum verifiable count before the gate engages
+                      (default 5)
+  """
+  def quarantined?(recipe_id, opts \\ []) do
+    cond do
+      System.get_env("HYPATIA_RECIPE_QUARANTINE_DISABLE") == "true" ->
+        Logger.warning(
+          "Recipe quarantine gate DISABLED via env override -- recipe " <>
+            "#{recipe_id} dispatched without verification-rate check."
+        )
+
+        false
+
+      true ->
+        threshold = Keyword.get(opts, :threshold, 0.30)
+        min_attempts = Keyword.get(opts, :min_attempts, 5)
+
+        case verification_rate(recipe_id, min_attempts) do
+          {:ok, %{rate: rate}} when is_float(rate) ->
+            quarantined = rate < threshold
+
+            if quarantined do
+              Hypatia.Telemetry.quarantine_triggered(
+                kind: :recipe,
+                id: recipe_id,
+                reason: "verification_rate_below_threshold",
+                level: :auto,
+                rate: rate,
+                threshold: threshold
+              )
+
+              Logger.warning(
+                "Recipe #{recipe_id} AUTO-QUARANTINED: " <>
+                  "verification rate #{:erlang.float_to_binary(rate, decimals: 2)} " <>
+                  "< threshold #{threshold}. Will be downgraded from " <>
+                  ":auto_execute to :review until human reviews recipe."
+              )
+            end
+
+            quarantined
+
+          _ ->
+            # :no_outcomes / :insufficient_data — let the dispatch through.
+            # The whole point of letting it through is to accumulate
+            # verification data; gating here would create a chicken-and-
+            # egg problem where new recipes can never earn enough data
+            # to leave quarantine.
+            false
+        end
+    end
   end
 
   # --- Private ---

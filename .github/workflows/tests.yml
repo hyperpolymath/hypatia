@@ -51,6 +51,15 @@ jobs:
       - name: Run E2E test suite
         run: bash tests/e2e.sh
 
+      - name: Escript packaging soundness
+        # PR #278 documented that the rule definitions can be correct
+        # but the *packaged escript* can silently drop entire rule
+        # families. The in-process `mix test` catches rule-definition
+        # regressions; this step catches packaging regressions by
+        # building the escript fresh and running it against every
+        # known-bad sample in test/soundness/manifest.json.
+        run: bash test/soundness/run-escript-soundness.sh
+
   e2e-rust:
     name: E2E — Rust CLI Scan
     runs-on: ubuntu-latest

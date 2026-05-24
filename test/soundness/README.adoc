@@ -75,13 +75,98 @@ schema is intentionally flat and self-documenting.
 
 == Out of scope (today)
 
-* End-to-end escript-build soundness — building the escript, then
-  running the built binary against the fixture corpus. That's the
-  exact PR #278 reproduction. Worth adding next, but requires a CI
-  job that can build escripts (the in-process test already catches
-  rule-definition regressions, just not packaging regressions).
+* End-to-end escript-build soundness has now landed
+  (`run-escript-soundness.sh`, wired into the e2e-elixir job). It
+  builds the escript fresh and runs it against the fixtures tree on
+  every CI run. The PR #278 reproduction is closed.
 
-* Fixtures for non-`code_safety` rule families. The current manifest
-  covers the families PR #278 specifically called out as having been
-  silently dropped. Workflow_audit, cicd_rules, structural_drift,
-  scorecard, dependabot_alerts etc. fixtures are next-iteration work.
+* Fixtures for non-`code_safety` rule families are NOT a simple
+  generalisation. Each rule family has an architectural model that
+  makes the "one fixture file per rule" pattern not directly portable.
+  Documented below so future iteration starts from the right premise.
+
+=== Why other rule families don't drop in cleanly
+
+[cols="1,3,3", options="header"]
+|===
+| Module | Detection model | Soundness model needed
+
+| `code_safety`
+| `scan_content(content, language)` per file
+| ✅ One fixture file per rule — current design works
+
+| `cicd_rules` (`banned_language_file`)
+| Walk repo, match banned globs (`*.py`, `*.go`, ...)
+| Architecturally blocked: the rule is **unsuppressable** by design
+  (PR #280 "total ban, no exceptions"). A .py fixture in-tree produces
+  a real critical finding in every scan, polluting the baseline.
+  Needs either (a) a policy carve-out for `test/soundness/fixtures/`
+  in the unsuppressable clause, or (b) a separate scratch-repo
+  scan-root model.
+
+| `workflow_audit`
+| `audit(yml_files, contents)` against
+  `<repo>/.github/workflows/*.yml` at the scan root only
+| Needs per-fixture scan-root: each fixture is its own directory tree
+  with `.github/workflows/bad.yml`. The current "scan the whole
+  fixtures tree once" runner can't see them — workflow_audit doesn't
+  recurse into subdirs looking for `.github/workflows/`. Either
+  refactor the runner to scan per-fixture-directory, or relax the
+  workflow_audit walker.
+
+| `structural_drift`
+| Repo-level structural checks against well-known paths (LICENSE,
+  README.md, SECURITY.md, .github/...)
+| Same shape as `workflow_audit` — needs per-fixture scan-root.
+
+| `security_errors`
+| Most are content patterns dispatched through `code_safety` — already
+  covered when the underlying `code_safety` pattern is fixtured.
+  The `:secret_detected` family is the exception: it uses a separate
+  scanner (`scan_file_for_secrets`).
+| Either piggyback on `code_safety` fixtures (already done for shared
+  patterns) or add per-fixture-directory entries for `:secret_detected`.
+
+| `git_state`, `root_hygiene`, `honest_completion`
+| Transient/repo-level — depend on git state, file presence at the
+  repo root, absence of STATE.a2ml etc.
+| Per-fixture scan-root, harder to make hermetic (git state is the
+  signal).
+
+| `dependabot_alerts`,
+  `secret_scanning_alerts`,
+  `code_scanning_alerts`
+| GitHub API queries
+| Soundness gate doesn't apply — these don't have a "known-bad sample
+  on disk" model. Mock the GitHub API in `test/*_alerts_test.exs`
+  (already done) and gate token-absent + parse paths there.
+|===
+
+=== Suggested Phase 2 design (when someone gets to it)
+
+Extend the manifest with a `scan_root` field. When present, the
+soundness runner scans that path INSTEAD of the whole fixtures tree
+and asserts the rule fires on it. Example:
+
+[source,json]
+----
+{
+  "rule_module": "workflow_audit",
+  "rule_id": "missing_permissions",
+  "scan_root": "test/soundness/fixtures/workflow_audit/missing_permissions",
+  "expected_severity": "high"
+}
+----
+
+Fixture layout becomes:
+
+  test/soundness/fixtures/workflow_audit/missing_permissions/
+    .github/workflows/bad.yml         (no permissions: block)
+
+The runner iterates manifest entries with `scan_root`, runs the
+escript on each, and accumulates findings. Same exit-code contract,
+just per-fixture invocation instead of one tree-scan.
+
+Once that's in place, all the rule families above become tractable.
+Today's scope: ship the `code_safety` soundness gate (operational)
+and document the gap.

@@ -271,16 +271,49 @@ defmodule Hypatia.FleetDispatcher do
   # --- Eliminate dispatch helpers (called after Gate approval) ---
 
   defp do_eliminate_dispatch(:auto_execute, recipe, pattern, confidence) do
-    dispatch_to_robot_repo_automaton(%{
-      type: :auto_fix_request,
-      repo: get_pattern_repo(pattern),
-      file: Map.get(pattern, "file", ""),
-      issue: Map.get(pattern, "description", ""),
-      fix_type: "eliminate",
-      confidence: confidence,
-      recipe_id: Map.get(recipe, "id"),
-      suggestion: Map.get(recipe, "description", "")
-    })
+    recipe_id = Map.get(recipe, "id")
+
+    if recipe_id && Hypatia.OutcomeTracker.quarantined?(recipe_id) do
+      # Verification-rate gate: this recipe's post-fix re-scans have been
+      # failing too often to trust for auto_execute. Downgrade to :review
+      # so rhodibot opens a PR for human inspection. This is the
+      # closed-loop safety net: a recipe drifting toward false fixes
+      # can no longer ship to repos automatically.
+      Hypatia.Telemetry.quarantine_triggered(
+        kind: :recipe,
+        id: recipe_id,
+        reason: "verification_rate",
+        level: :auto_downgrade
+      )
+
+      Hypatia.Telemetry.dispatch_decision(confidence,
+        strategy: :review,
+        tier: :eliminate,
+        recipe_id: recipe_id,
+        repo: get_pattern_repo(pattern),
+        quarantine_downgraded: true
+      )
+
+      do_eliminate_dispatch(:review, recipe, pattern, confidence)
+    else
+      Hypatia.Telemetry.dispatch_decision(confidence,
+        strategy: :auto_execute,
+        tier: :eliminate,
+        recipe_id: recipe_id,
+        repo: get_pattern_repo(pattern)
+      )
+
+      dispatch_to_robot_repo_automaton(%{
+        type: :auto_fix_request,
+        repo: get_pattern_repo(pattern),
+        file: Map.get(pattern, "file", ""),
+        issue: Map.get(pattern, "description", ""),
+        fix_type: "eliminate",
+        confidence: confidence,
+        recipe_id: recipe_id,
+        suggestion: Map.get(recipe, "description", "")
+      })
+    end
   end
 
   defp do_eliminate_dispatch(:review, recipe, pattern, _confidence) do
