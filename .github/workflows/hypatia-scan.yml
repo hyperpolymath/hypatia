@@ -84,8 +84,27 @@ jobs:
         run: |
           echo "Scanning repository: ${{ github.repository }}"
 
-          # Run scanner (exits non-zero when findings exist — suppress to continue)
-          HYPATIA_FORMAT=json "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json || true
+          # Run scanner (exits non-zero when findings exist — suppress to continue).
+          # Emits BOTH:
+          #   hypatia-findings.json  — native JSON for the artifact + PR comment + Phase 2 submission
+          #   hypatia.sarif          — native SARIF 2.1.0 (Hypatia.SARIF module since PR #309)
+          #                            replaces the inline Node.js converter that used to live here.
+          HYPATIA_FORMAT=json  "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json || true
+          HYPATIA_FORMAT=sarif "$HOME/hypatia/hypatia-cli.sh" scan . --exit-zero > hypatia.sarif         || true
+
+          # Validate SARIF (empty SARIF is intentional — clears stale alerts).
+          # Falls back to a minimal empty document if the scanner couldn't emit
+          # SARIF for any reason (stale escript without the SARIF module, etc.).
+          if ! jq -e 'has("version") and .version == "2.1.0"' hypatia.sarif >/dev/null 2>&1; then
+            echo "::warning::scanner did not produce a valid SARIF; emitting empty fallback"
+            cat > hypatia.sarif <<'JSON'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [{"tool":{"driver":{"name":"Hypatia","informationUri":"https://github.com/hyperpolymath/hypatia","rules":[]}},"results":[]}]
+          }
+          JSON
+          fi
 
           # Count findings
           FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
@@ -112,122 +131,6 @@ jobs:
           name: hypatia-findings
           path: hypatia-findings.json
           retention-days: 90
-
-      - name: Convert Hypatia findings to SARIF
-        # Always runs (no findings_count guard): an EMPTY SARIF run is
-        # valid and intentional — uploading it clears stale Hypatia
-        # alerts from the code-scanning page when a repo goes clean.
-        # The converter is dependency-free Node (Node ships on
-        # ubuntu-latest; no npm install — estate npm ban respected) and
-        # is hardened against the heterogeneous Hypatia JSON schema:
-        # most findings are {rule_module,severity,type,file,reason,
-        # action}; only some carry an integer `line`; `file` may be
-        # empty or absolute. See lib/hypatia/cli.ex (collect_findings).
-        run: |
-          cat > "$RUNNER_TEMP/hypatia-sarif.cjs" <<'CJS'
-          const fs = require('fs');
-          const path = require('path');
-          const crypto = require('crypto');
-
-          const ws = process.env.GITHUB_WORKSPACE || process.cwd();
-
-          let findings = [];
-          try {
-            const parsed = JSON.parse(fs.readFileSync('hypatia-findings.json', 'utf8'));
-            if (Array.isArray(parsed)) findings = parsed;
-          } catch (_) {
-            // Scanner unavailable / empty / malformed -> empty SARIF.
-            // Intentionally clears stale alerts rather than erroring.
-            findings = [];
-          }
-
-          // Mirrors Hypatia's own "github" annotation mapping
-          // (lib/hypatia/cli.ex output/2): critical|high -> error,
-          // medium -> warning, everything else -> note.
-          const levelFor = (sev) => {
-            switch (String(sev || '').toLowerCase()) {
-              case 'critical':
-              case 'high': return 'error';
-              case 'medium': return 'warning';
-              default: return 'note';
-            }
-          };
-
-          // SARIF artifactLocation.uri must be a repo-relative POSIX
-          // path. Hypatia may emit absolute paths (scanned under
-          // $GITHUB_WORKSPACE) or "" / "." for repo-level findings.
-          const relUri = (file) => {
-            if (!file) return '.';
-            let f = String(file);
-            if (path.isAbsolute(f)) {
-              const rel = path.relative(ws, f);
-              f = (rel && !rel.startsWith('..')) ? rel : path.basename(f);
-            }
-            f = f.replace(/\\/g, '/').replace(/^\.\//, '');
-            return f || '.';
-          };
-
-          const rules = new Map();
-          const results = findings.map((f) => {
-            const mod = String(f.rule_module || 'hypatia');
-            const type = String(f.type || 'finding');
-            const ruleId = `hypatia/${mod}/${type}`;
-            const level = levelFor(f.severity);
-            if (!rules.has(ruleId)) {
-              rules.set(ruleId, {
-                id: ruleId,
-                name: `${mod}.${type}`,
-                shortDescription: { text: `Hypatia ${mod}: ${type}` },
-                defaultConfiguration: { level }
-              });
-            }
-            const uri = relUri(f.file);
-            const msg = String(f.reason || f.type || 'Hypatia finding');
-            const startLine =
-              Number.isInteger(f.line) && f.line > 0 ? f.line : 1;
-            // Stable cross-run fingerprint for dedupe (no line, so a
-            // moved finding in the same file/rule stays one alert).
-            const fp = crypto
-              .createHash('sha256')
-              .update([ruleId, uri, type, msg].join('|'))
-              .digest('hex');
-            return {
-              ruleId,
-              level,
-              message: { text: msg },
-              locations: [
-                {
-                  physicalLocation: {
-                    artifactLocation: { uri },
-                    region: { startLine }
-                  }
-                }
-              ],
-              partialFingerprints: { 'hypatiaFindingHash/v1': fp }
-            };
-          });
-
-          const sarif = {
-            $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
-            version: '2.1.0',
-            runs: [
-              {
-                tool: {
-                  driver: {
-                    name: 'Hypatia',
-                    informationUri: 'https://github.com/hyperpolymath/hypatia',
-                    rules: Array.from(rules.values())
-                  }
-                },
-                results
-              }
-            ]
-          };
-
-          fs.writeFileSync('hypatia.sarif', JSON.stringify(sarif, null, 2));
-          console.log(`hypatia.sarif written: ${results.length} result(s).`);
-          CJS
-          node "$RUNNER_TEMP/hypatia-sarif.cjs"
 
       - name: Upload SARIF to GitHub code scanning
         # Fork PRs get a read-only GITHUB_TOKEN, so security-events:write

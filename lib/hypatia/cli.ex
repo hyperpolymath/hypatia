@@ -25,7 +25,7 @@ defmodule Hypatia.CLI do
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
                                    structural_drift
-      --format <fmt>    Output format: json (default), text, github
+      --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
 
@@ -935,6 +935,13 @@ defmodule Hypatia.CLI do
     IO.puts(Jason.encode!(findings, pretty: true))
   end
 
+  defp output(findings, "sarif") do
+    # SARIF 2.1.0 — see lib/hypatia/sarif.ex. Output goes to stdout
+    # so workflows can redirect to a .sarif file and upload-sarif
+    # picks it up directly (no Node.js converter needed).
+    IO.puts(Hypatia.SARIF.render(findings))
+  end
+
   defp output(findings, "github") do
     # GitHub Actions annotation format
     Enum.each(findings, fn f ->
@@ -1136,7 +1143,7 @@ defmodule Hypatia.CLI do
                                 migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts
-        --format, -f <fmt>      Output format: json (default), text, github
+        --format, -f <fmt>      Output format: json (default), text, github, sarif, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
         --exit-zero             Always exit 0 after a successful scan, even when
