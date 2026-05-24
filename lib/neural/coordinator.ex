@@ -369,13 +369,32 @@ defmodule Hypatia.Neural.Coordinator do
 
   @impl true
   def handle_cast(:force_cycle, state) do
-    Logger.info("Neural Coordinator: forcing learning cycle ##{state.cycle_count + 1}")
+    cycle = state.cycle_count + 1
+    Logger.info("Neural Coordinator: forcing learning cycle ##{cycle}")
 
     # Rebuild trust graph from latest data
     updated_graph = GraphOfTrust.build()
 
+    # M9 — Strategy selection for ESN rebalancing. Three operational
+    # modes, configurable via :hypatia, :neural_rebalance_strategy:
+    #   :a       — uniform random dips (Strategy A, the historical default)
+    #   :b       — structured adversarial patterns (Strategy B)
+    #   :c       — corpus-grounded dips from real failure history (Strategy C)
+    #   :rotate  — cycles A → B → C → A across consecutive cycles, so the
+    #              ESN sees a diverse training distribution rather than
+    #              one fixed augmentation style.
+    rebalance_strategy = resolve_rebalance_strategy(cycle)
+
+    Logger.debug(
+      "Neural Coordinator: cycle #{cycle} ESN rebalance strategy = #{rebalance_strategy}"
+    )
+
     # Train ESN on accumulated confidence trajectories
-    trained_esn = Hypatia.Neural.TrainingPipeline.train_esn(state.esn)
+    trained_esn =
+      Hypatia.Neural.TrainingPipeline.train_esn(
+        state.esn,
+        rebalance_strategy: rebalance_strategy
+      )
 
     # Train RBF on pattern registry data
     trained_rbf = Hypatia.Neural.TrainingPipeline.train_rbf(state.rbf)
@@ -694,4 +713,23 @@ defmodule Hypatia.Neural.Coordinator do
         nil
     end
   end
+
+  # ── M9: Rebalance strategy selection ─────────────────────────────────
+
+  defp resolve_rebalance_strategy(cycle) do
+    case Application.get_env(:hypatia, :neural_rebalance_strategy, :a) do
+      :a -> :a
+      :b -> :b
+      :c -> :c
+      :rotate -> Enum.at([:a, :b, :c], rem(cycle - 1, 3))
+      other when is_binary(other) -> resolve_rebalance_strategy_str(other, cycle)
+      _ -> :a
+    end
+  end
+
+  defp resolve_rebalance_strategy_str("a", _cycle), do: :a
+  defp resolve_rebalance_strategy_str("b", _cycle), do: :b
+  defp resolve_rebalance_strategy_str("c", _cycle), do: :c
+  defp resolve_rebalance_strategy_str("rotate", cycle), do: Enum.at([:a, :b, :c], rem(cycle - 1, 3))
+  defp resolve_rebalance_strategy_str(_other, _cycle), do: :a
 end
