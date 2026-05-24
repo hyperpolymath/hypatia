@@ -136,16 +136,16 @@ Elixir pipeline:
 
 ==== Critical
 
-* [ ] Create PAT with repo scope for automated cross-repo dispatch
-* [ ] Write real fix scripts for 310 null-fix-script dispatch entries
-* [ ] Push committed fixes to remotes across repos
+* [x] Create PAT with repo scope for automated cross-repo dispatch _(2026-05-24: HYPATIA_DISPATCH_PAT provisioned, verified end-to-end — 19 hypatia-security-alert dispatches landed in gitbot-fleet from the first manual sweep)_
+* [x] Resolve "310 null-fix-script dispatch entries" _(PR #309 commit `d2bbf75`: root cause was a recipe-matcher language-gate bug, not missing scripts — all 22 scorecard recipe fix scripts already existed on disk but were unreachable. Matcher fixed; scripts now route as auto_execute / review per recipe tier.)_
+* [ ] Push committed fixes to remotes across repos _(PAT now allows it; remaining is wiring the dispatch-runner to call `mix hypatia.record_outcome` — see PR #309 commit `5e895b5`)_
 * [ ] Fix `hypatia-scan.yml` template so `${{ env.HOME }}` does not collapse to empty in GitHub Actions (Issue #141: https://github.com/hyperpolymath/hypatia/issues/141)
 
 ==== Important
 
 * [ ] Deploy verisim-api server (enables native graph/vector/temporal modalities)
-* [ ] VCL federation executor (currently local-only)
-* [ ] Historical trend tracking across scan cycles
+* [x] VCL federation executor _(2026-04-22: `lib/vcl/remote_executor.ex`; `FROM FEDERATION REMOTE IN [...]`)_
+* [x] Historical trend tracking across scan cycles _(2026-04-22: `lib/historical_trends.ex` + VCL.Query integration; 2026-05-24 PR #309 adds 5-minute snapshot persistence to `data/verisim/metrics/`)_
 * [ ] Wire Ada TUI into Elixir supervision tree
 
 ==== Planned
@@ -154,6 +154,51 @@ Elixir pipeline:
 * [ ] SARIF output for IDE integration
 * [ ] Nx/EXLA backend for the neural layer (if/when reservoir sizes outgrow pure Elixir)
 * [ ] Cross-organization federation with VCL drift policies
+
+=== v7.5 — Watcher / Supervision Interface (COMPLETE, 2026-05-24, PR #309)
+
+Three-phase live monitoring and analysis layer for the supervision tree.
+
+==== Phase 1 — Instrumentation + minimal watcher
+
+* [x] `:telemetry` event registry (`Hypatia.Telemetry`): 9 event names covering every observable decision (scan, dispatch, outcome, verification, quarantine, rate_limit, neural cycle, soundness violation, anomaly)
+* [x] `Hypatia.Watcher` GenServer: subscribes to all events, maintains 5min / 1hr / 1day rolling-window counters in ETS, polls supervised GenServer queue depths, back-pressure with bounded mailbox + drop counter
+* [x] `/api/status`, `/api/counts/:window`, `/api/recipes`, `/api/recipes/:id`, `/api/quarantine` (loopback-only via `Hypatia.Web.ApiRouter`)
+* [x] `mix hypatia.watch` — terminal dashboard, ANSI-based, no external dep, local or remote (`--url`) mode
+
+==== Phase 2 — Live streaming + web + Prometheus
+
+* [x] `/api/events` Server-Sent Events stream with optional filter (`?events=hypatia.scan.complete,...`), heartbeat every 15s
+* [x] Single-page HTML dashboard at `/` — vanilla JS + CSS, no framework, polls `/api/status` + `/api/recipes` + EventSource on `/api/events`
+* [x] `/metrics` Prometheus text-format exposition (gauges per event/window, queue depths, dropped events counter, recipe verification rate, quarantine candidate gauges)
+
+==== Phase 3 — Alerts + persistence + anomaly
+
+* [x] `Hypatia.Watcher.Alerts`: threshold rules (quarantine, soundness, queue depth > 100, dropped events, anomaly) → pluggable sinks (Log always, Webhook via `HYPATIA_ALERT_WEBHOOK_URL`, File via `HYPATIA_ALERT_LOG_FILE`)
+* [x] `Hypatia.Watcher.Persistence`: 5-minute snapshots → `data/verisim/metrics/YYYY-MM-DD.jsonl` for VCL trend queries
+* [x] `Hypatia.Watcher.AnomalyDetector`: rolling 200-outcome baseline, 30-outcome recent window, fires `hypatia.anomaly.detected` when divergence > 2σ; escalates severity if ESN drift state concurs
+
+==== Phase 4 — Deferred to v7.6
+
+* [ ] Bearer-token auth on `/api/*` (currently loopback-only)
+* [ ] Persistent Watcher state across restart (currently ETS dies with process)
+* [ ] Cross-host federation of alerts
+* [ ] ESN tight integration (currently soft — corroborating evidence only)
+* [ ] SARIF output for IDE integration
+
+=== v7.6 — Closed-loop Quality (COMPLETE, 2026-05-24, PR #309)
+
+Soundness gates plus closed-loop verification metric.
+
+* [x] In-process soundness manifest (`test/soundness/manifest.json` + `test/soundness_test.exs`): 14 known-bad fixtures across Idris2, Coq, Lean, Haskell, OCaml, ReScript, Rust, Elixir, shell, Agda, Zig — every rule MUST flag its sample on every CI run
+* [x] End-to-end escript-build soundness (`test/soundness/run-escript-soundness.sh` wired into `e2e-elixir` CI job): builds escript fresh, runs against fixtures tree, catches packaging regressions (the exact PR #278 bug class)
+* [x] Latent extension-walker bug caught and fixed by the gate on its first run (`@language_extensions` in `lib/hypatia/cli.ex:726` was missing `.agda`, `.zig`, `.thy`, `.fst`, `.adb` — rules existed but never received input)
+* [x] Closed-loop verification metric: `OutcomeTracker.verification_rate/2`, `recipe_health/1`, `mix hypatia.recipe_health` task
+* [x] `OutcomeTracker.record_outcome_for_fix/5` + `mix hypatia.record_outcome` CLI — canonical entry for the dispatch-runner with default-on re-scan verification (exit code 2 on `still_present`)
+* [x] Auto-quarantine: `OutcomeTracker.quarantined?/2` predicate; `FleetDispatcher` downgrades `:auto_execute` → `:review` when recipe verification rate < 0.30 with ≥ 5 verifiable outcomes
+* [x] GitHub alert API consumers: `lib/rules/secret_scanning_alerts.ex` (SSA001-SSA004), `lib/rules/code_scanning_alerts.ex` (CSA001-CSA004)
+* [x] Recipe-matcher language-gate fix: `"any"` sentinel treated as `"*"`; workflow-file categories override repo language to `"yaml"` so the 20 scorecard recipes become reachable
+* [x] `.hypatia-baseline.json` regenerated against current tree: 71 stale → 35 fresh, 0 critical/0 high (the suppressed-by-inline-directive surface absorbed all the historical noise)
 
 === v8.0 — Neural Maturity (PLANNED)
 
@@ -171,13 +216,14 @@ Elixir pipeline:
 
 == Known Gaps
 
-1. **VCL federation local-only:** FileExecutor handles FEDERATION queries against local files, not multi-store
+1. **VCL federation local-only:** ~~Multi-store~~ Done 2026-04-22 (`lib/vcl/remote_executor.ex`); cross-organisation drift policies still TODO under v7.0 Planned.
 2. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal via flat files only
-3. **One-sided training data:** 99%+ outcomes are "success" — needs failure data for balanced learning
-4. **Fix script coverage:** 310/600 auto-execute entries have null fix_script
+3. **One-sided training data:** ~~99%+ "success"~~ Strategy A (synthetic regressions + rule-based RBF targets) on by default since 2026-04-22 (`lib/neural/rebalancer.ex`). Strategies B (adversarial perturbation) and C (real failure corpus from panic-attack history) remain unstarted.
+4. **Fix script coverage:** ~~310/600 auto-execute entries with null fix_script~~ Resolved 2026-05-24 (PR #309 commit `d2bbf75`) — root cause was a matcher language-gate bug, not missing scripts. All 22 scorecard recipe fix scripts already existed on disk; they were unreachable because of an unrecognised `"any"` language sentinel and unreachable `"yaml"` recipes.
 5. **Containerfiles:** Haskell still uses non-Chainguard base images (Logtalk removed)
 6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
-7. **Neural state persistence:** State dir exists but coordinator has not persisted to disk yet
+7. **Neural state persistence:** Coordinator has not persisted to disk yet. Watcher Phase 1 ETS state is similarly ephemeral by design; 5-min snapshot persistence to `data/verisim/metrics/` (PR #309 commit `a1eb6b2`) covers historical trends without solving live-state continuity.
+8. **`/api/*` loopback-only:** Watcher's operational endpoints currently reject non-localhost callers. Bearer-token auth tracked as Phase 4 deferred work under v7.5.
 
 == License & Governance
 
@@ -189,5 +235,4 @@ Elixir pipeline:
 
 ---
 
-_Last Updated: 2026-03-29_
-Last Updated: 2026-03-29_
+_Last Updated: 2026-05-24 (PR #309 — watcher/supervision interface + closed-loop quality)_
