@@ -45,6 +45,10 @@ defmodule Hypatia.Application do
       # sinks (Log always, Webhook if HYPATIA_ALERT_WEBHOOK_URL,
       # File if HYPATIA_ALERT_LOG_FILE).
       Hypatia.Watcher.Alerts,
+      # Layer 0.95: Persistence -- 5-minute trend snapshots to
+      # data/verisim/metrics/YYYY-MM-DD.jsonl. ETS is ephemeral by
+      # design; this is the historical trail.
+      Hypatia.Watcher.Persistence,
       # Layer 1: Safety -- rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,
