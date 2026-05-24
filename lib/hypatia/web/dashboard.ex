@@ -237,6 +237,7 @@ defmodule Hypatia.Web.Dashboard do
           "hypatia.rate_limit.exceeded",
           "hypatia.neural.cycle",
           "hypatia.soundness.violation",
+          "hypatia.anomaly.detected",
         ];
 
         known.forEach((name) => {

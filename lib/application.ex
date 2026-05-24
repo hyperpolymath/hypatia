@@ -49,6 +49,12 @@ defmodule Hypatia.Application do
       # data/verisim/metrics/YYYY-MM-DD.jsonl. ETS is ephemeral by
       # design; this is the historical trail.
       Hypatia.Watcher.Persistence,
+      # Layer 0.97: Anomaly detector -- rolling success-rate baseline
+      # over the outcome stream; fires hypatia.anomaly.detected when
+      # the recent window diverges from baseline by > 2σ. The Alerts
+      # module above picks it up as a high/critical alert depending
+      # on whether the ESN drift state concurs.
+      Hypatia.Watcher.AnomalyDetector,
       # Layer 1: Safety -- rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,

@@ -84,7 +84,8 @@ defmodule Hypatia.Watcher.Alerts do
     Hypatia.Watcher.subscribe(
       events: [
         [:hypatia, :quarantine, :triggered],
-        [:hypatia, :soundness, :violation]
+        [:hypatia, :soundness, :violation],
+        [:hypatia, :anomaly, :detected]
       ]
     )
 
@@ -132,6 +133,36 @@ defmodule Hypatia.Watcher.Alerts do
 
     # No dedup for soundness — every regression must be visible.
     {:noreply, emit(state, alert)}
+  end
+
+  def handle_info({:hypatia_event, [:hypatia, :anomaly, :detected], measurements, metadata, ts},
+        state) do
+    kind = metadata[:kind] || metadata["kind"]
+    key = "anomaly:#{kind}"
+    recent = measurements[:recent_rate] || measurements["recent_rate"]
+    baseline = measurements[:baseline_rate] || measurements["baseline_rate"]
+    sigma = measurements[:sigma_distance] || measurements["sigma_distance"]
+    concurs = metadata[:esn_drift_concurs] || metadata["esn_drift_concurs"]
+
+    severity = if concurs, do: :critical, else: :high
+
+    summary =
+      "Statistical anomaly: recent rate " <>
+        format_rate(recent) <>
+        " vs baseline " <>
+        format_rate(baseline) <>
+        " (" <> format_sigma(sigma) <> "σ)" <>
+        if(concurs, do: " — ESN drift concurs", else: "")
+
+    alert = %{
+      rule: :anomaly_detected,
+      severity: severity,
+      summary: summary,
+      metadata: Map.merge(metadata, %{measurements: measurements}),
+      at: ts || System.system_time(:millisecond)
+    }
+
+    {:noreply, maybe_emit(state, key, alert)}
   end
 
   # Ignore other event kinds we may receive (e.g. via :all subscriptions
@@ -264,4 +295,12 @@ defmodule Hypatia.Watcher.Alerts do
 
     base
   end
+
+  defp format_rate(nil), do: "?"
+  defp format_rate(r) when is_float(r), do: :erlang.float_to_binary(r, decimals: 2)
+  defp format_rate(r), do: inspect(r)
+
+  defp format_sigma(nil), do: "?"
+  defp format_sigma(s) when is_float(s), do: :erlang.float_to_binary(s, decimals: 1)
+  defp format_sigma(s), do: inspect(s)
 end

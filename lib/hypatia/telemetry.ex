@@ -57,6 +57,7 @@ defmodule Hypatia.Telemetry do
   @rate_limit_exceeded [:hypatia, :rate_limit, :exceeded]
   @neural_cycle [:hypatia, :neural, :cycle]
   @soundness_violation [:hypatia, :soundness, :violation]
+  @anomaly_detected [:hypatia, :anomaly, :detected]
 
   @all_events [
     @scan_complete,
@@ -66,7 +67,8 @@ defmodule Hypatia.Telemetry do
     @quarantine_triggered,
     @rate_limit_exceeded,
     @neural_cycle,
-    @soundness_violation
+    @soundness_violation,
+    @anomaly_detected
   ]
 
   @doc "Every event the watcher should subscribe to."
@@ -108,6 +110,18 @@ defmodule Hypatia.Telemetry do
 
   def soundness_violation(metadata) do
     safe_execute(@soundness_violation, %{count: 1}, Map.new(metadata))
+  end
+
+  @doc """
+  Emitted by `Hypatia.Watcher.AnomalyDetector` when the recent
+  outcome stream diverges from its baseline. `measurements:` carries
+  numeric context (rates, sigma); `metadata:` carries categorical
+  context (kind, esn corroboration).
+  """
+  def anomaly_detected(opts) do
+    measurements = Keyword.fetch!(opts, :measurements)
+    metadata = Keyword.fetch!(opts, :metadata) |> Map.new()
+    safe_execute(@anomaly_detected, Map.new(measurements), metadata)
   end
 
   # `:telemetry` is a transitive dep of phoenix/bandit, but if Hypatia
