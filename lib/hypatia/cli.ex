@@ -157,7 +157,14 @@ defmodule Hypatia.CLI do
       System.halt(2)
     end
 
+    started = System.monotonic_time(:millisecond)
     findings = collect_findings(abs_path, config.rules)
+    duration_ms = System.monotonic_time(:millisecond) - started
+
+    Hypatia.Telemetry.scan_complete(duration_ms, length(findings),
+      path: abs_path,
+      severity_floor: config.severity
+    )
 
     # Filter by severity threshold
     filtered =

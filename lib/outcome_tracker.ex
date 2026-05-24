@@ -73,6 +73,13 @@ defmodule Hypatia.OutcomeTracker do
     # Update recipe confidence (now annealing-aware)
     update_recipe_confidence(recipe_id)
 
+    Hypatia.Telemetry.outcome_recorded(
+      recipe_id: recipe_id,
+      repo: repo,
+      outcome: outcome_str,
+      verification: Map.get(metadata, "verification", "unverified")
+    )
+
     Logger.info("Outcome recorded: #{recipe_id} in #{repo}/#{file} -> #{outcome_str}")
     {:ok, record}
   end
@@ -85,6 +92,18 @@ defmodule Hypatia.OutcomeTracker do
   or :scan_failed.
   """
   def verify_fix(repo_path, pattern_id, category) do
+    result = do_verify_fix(repo_path, pattern_id, category)
+
+    Hypatia.Telemetry.verification_result(
+      recipe_id: pattern_id,
+      repo: Path.basename(repo_path),
+      verdict: result
+    )
+
+    result
+  end
+
+  defp do_verify_fix(repo_path, pattern_id, category) do
     case System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
            stderr_to_stdout: true) do
       {output, 0} ->
@@ -574,6 +593,15 @@ defmodule Hypatia.OutcomeTracker do
             quarantined = rate < threshold
 
             if quarantined do
+              Hypatia.Telemetry.quarantine_triggered(
+                kind: :recipe,
+                id: recipe_id,
+                reason: "verification_rate_below_threshold",
+                level: :auto,
+                rate: rate,
+                threshold: threshold
+              )
+
               Logger.warning(
                 "Recipe #{recipe_id} AUTO-QUARANTINED: " <>
                   "verification rate #{:erlang.float_to_binary(rate, decimals: 2)} " <>

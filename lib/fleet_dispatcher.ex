@@ -279,8 +279,30 @@ defmodule Hypatia.FleetDispatcher do
       # so rhodibot opens a PR for human inspection. This is the
       # closed-loop safety net: a recipe drifting toward false fixes
       # can no longer ship to repos automatically.
+      Hypatia.Telemetry.quarantine_triggered(
+        kind: :recipe,
+        id: recipe_id,
+        reason: "verification_rate",
+        level: :auto_downgrade
+      )
+
+      Hypatia.Telemetry.dispatch_decision(confidence,
+        strategy: :review,
+        tier: :eliminate,
+        recipe_id: recipe_id,
+        repo: get_pattern_repo(pattern),
+        quarantine_downgraded: true
+      )
+
       do_eliminate_dispatch(:review, recipe, pattern, confidence)
     else
+      Hypatia.Telemetry.dispatch_decision(confidence,
+        strategy: :auto_execute,
+        tier: :eliminate,
+        recipe_id: recipe_id,
+        repo: get_pattern_repo(pattern)
+      )
+
       dispatch_to_robot_repo_automaton(%{
         type: :auto_fix_request,
         repo: get_pattern_repo(pattern),
