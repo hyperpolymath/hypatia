@@ -107,6 +107,41 @@ defmodule Hypatia.WatcherTest do
     end
   end
 
+  describe "persistence across restart" do
+    test "restart restores ETS counters + recent-event tail" do
+      # Use a per-test tmp dir for isolation.
+      tmp = Path.join(System.tmp_dir!(), "watcher-restart-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp)
+      Application.put_env(:hypatia, :watcher_persist_path, tmp)
+
+      on_exit(fn ->
+        Application.delete_env(:hypatia, :watcher_persist_path)
+        File.rm_rf!(tmp)
+      end)
+
+      # Bring down any existing watcher so we can boot fresh into the tmp.
+      if pid = Process.whereis(Watcher) do
+        if Process.alive?(pid), do: GenServer.stop(pid)
+      end
+
+      {:ok, pid1} = Watcher.start_link([])
+      T.scan_complete(99, 3, path: "/tmp/x", severity_floor: "low")
+      Process.sleep(50)
+
+      # Stop triggers a flush via terminate/2.
+      GenServer.stop(pid1)
+
+      state_file = Path.join(tmp, "watcher.state.json")
+      assert File.exists?(state_file), "terminate must persist watcher state"
+
+      # New process: should rehydrate.
+      {:ok, _pid2} = Watcher.start_link([])
+
+      counts_m5 = Watcher.counts(:m5)
+      assert Map.get(counts_m5, [:hypatia, :scan, :complete]) == 1
+    end
+  end
+
   describe "subscribe/1 (SSE fan-out)" do
     setup do
       case Process.whereis(Hypatia.Watcher.PubSub) do

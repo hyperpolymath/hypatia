@@ -54,6 +54,11 @@ defmodule Hypatia.Watcher do
 
   @prune_interval_ms 30_000
   @queue_poll_interval_ms 5_000
+  # Persistence flushes every minute. ETS counters are still
+  # ephemeral live state; this is a "warm restart" facility.
+  @persist_interval_ms 60_000
+  @persist_filename "watcher.state.json"
+  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @handler_id "hypatia-watcher"
   # Drop telemetry events if our mailbox is over this. Keeps the
   # watcher from becoming a tarpit during sweep storms.
@@ -127,13 +132,15 @@ defmodule Hypatia.Watcher do
 
     Process.send_after(self(), :prune, @prune_interval_ms)
     Process.send_after(self(), :poll_queues, @queue_poll_interval_ms)
+    Process.send_after(self(), :persist, @persist_interval_ms)
 
-    state = %{
-      recent: %{},
-      queue_depths: %{},
-      dropped_events: 0,
-      started_at: DateTime.utc_now()
-    }
+    state =
+      load_persisted_state(%{
+        recent: %{},
+        queue_depths: %{},
+        dropped_events: 0,
+        started_at: DateTime.utc_now()
+      })
 
     {:ok, state, :hibernate}
   end
@@ -227,11 +234,195 @@ defmodule Hypatia.Watcher do
     {:noreply, %{state | queue_depths: depths}}
   end
 
+  def handle_info(:persist, state) do
+    persist_state(state)
+    Process.send_after(self(), :persist, @persist_interval_ms)
+    {:noreply, state}
+  end
+
   @impl true
-  def terminate(_reason, _state) do
+  def terminate(_reason, state) do
+    # Best-effort persist on shutdown so the next start picks up
+    # ETS counts + dropped_events + recent tail. Skipped silently
+    # on failure — terminate must not raise.
+    persist_state(state)
     :telemetry.detach(@handler_id)
     :ok
   end
+
+  # ─── Persistence ───────────────────────────────────────────────────────
+  #
+  # ETS dies with this process, so a restart loses the rolling window
+  # counters and the recent-event tail. We periodically (and on
+  # terminate) write a JSON snapshot to disk; init reads it back and
+  # rehydrates the ETS tables + state map. The dashboard / API now
+  # show continuous data across restarts instead of resetting.
+  #
+  # This is "warm-restart" semantics, not full HA — concurrent writers
+  # or crashes mid-flush can lose at most one persist_interval's
+  # worth of bucket increments. Adequate for operational visibility;
+  # not the canonical event log (that's outcomes.jsonl).
+
+  defp persist_path do
+    # Runtime override wins so tests / dev runs can target a tmp dir
+    # without recompiling. Falls back to the compile-time verisim
+    # path in production.
+    base =
+      Application.get_env(:hypatia, :watcher_persist_path) ||
+        Path.join(Path.expand(@verisimdb_data_path), "watcher")
+
+    Path.join(base, @persist_filename)
+  end
+
+  defp persist_state(state) do
+    payload = %{
+      "schema_version" => 1,
+      "saved_at_ms" => System.system_time(:millisecond),
+      "started_at" => DateTime.to_iso8601(state.started_at),
+      "dropped_events" => state.dropped_events,
+      "recent" => serialize_recent(state.recent),
+      "tables" =>
+        Map.new(@tables, fn {name, _bucket, _max} ->
+          {Atom.to_string(name), :ets.tab2list(name) |> Enum.map(&serialize_row/1)}
+        end)
+    }
+
+    path = persist_path()
+    File.mkdir_p!(Path.dirname(path))
+
+    case File.write(path, Jason.encode!(payload), [:write, :utf8]) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Watcher persist failed at #{path}: #{inspect(reason)}")
+    end
+  rescue
+    e -> Logger.warning("Watcher persist crashed: #{Exception.message(e)}")
+  catch
+    _, _ -> :ok
+  end
+
+  defp load_persisted_state(default) do
+    path = persist_path()
+
+    with {:ok, body} <- File.read(path),
+         {:ok, payload} <- Jason.decode(body),
+         %{"schema_version" => 1} <- payload do
+      restore_tables(payload["tables"] || %{})
+
+      %{
+        recent: deserialize_recent(payload["recent"] || %{}),
+        queue_depths: %{},
+        dropped_events: payload["dropped_events"] || 0,
+        started_at:
+          case payload["started_at"] do
+            iso when is_binary(iso) ->
+              case DateTime.from_iso8601(iso) do
+                {:ok, dt, _} -> dt
+                _ -> default.started_at
+              end
+
+            _ ->
+              default.started_at
+          end
+      }
+    else
+      _ -> default
+    end
+  rescue
+    _ -> default
+  catch
+    _, _ -> default
+  end
+
+  defp restore_tables(tables_payload) do
+    Enum.each(@tables, fn {name, _bucket_ms, _max_buckets} ->
+      rows = Map.get(tables_payload, Atom.to_string(name), [])
+
+      Enum.each(rows, fn row ->
+        case deserialize_row(row) do
+          {key, count} -> :ets.insert(name, {key, count})
+          _ -> :ok
+        end
+      end)
+    end)
+  end
+
+  defp serialize_row({{event, bucket}, count}) when is_list(event) and is_integer(bucket) do
+    %{"event" => Enum.map(event, &Atom.to_string/1), "bucket" => bucket, "count" => count}
+  end
+
+  defp deserialize_row(%{"event" => event_strs, "bucket" => bucket, "count" => count}) do
+    event = Enum.map(event_strs, &safe_to_existing_atom/1)
+
+    if Enum.all?(event, &is_atom/1) and bucket != nil and count != nil do
+      {{event, bucket}, count}
+    else
+      :error
+    end
+  end
+
+  defp deserialize_row(_), do: :error
+
+  defp safe_to_existing_atom(s) when is_binary(s) do
+    String.to_existing_atom(s)
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp safe_to_existing_atom(_), do: nil
+
+  defp serialize_recent(recent) when is_map(recent) do
+    Map.new(recent, fn {event, entries} ->
+      {Enum.join(event, "."),
+       Enum.map(entries, fn entry ->
+         %{
+           "event" => Enum.join(entry.event, "."),
+           "measurements" => json_safe(entry.measurements),
+           "metadata" => json_safe(entry.metadata),
+           "at" => entry.at
+         }
+       end)}
+    end)
+  end
+
+  defp deserialize_recent(payload) when is_map(payload) do
+    Map.new(payload, fn {event_str, entries} ->
+      event_list = event_str |> String.split(".") |> Enum.map(&safe_to_existing_atom/1)
+
+      key =
+        if Enum.all?(event_list, &is_atom/1), do: event_list, else: event_str
+
+      {key,
+       Enum.map(entries, fn e ->
+         entry_event =
+           (Map.get(e, "event") || event_str)
+           |> String.split(".")
+           |> Enum.map(&safe_to_existing_atom/1)
+           |> case do
+             list -> if Enum.all?(list, &is_atom/1), do: list, else: event_list
+           end
+
+         %{
+           event: entry_event,
+           measurements: e["measurements"] || %{},
+           metadata: e["metadata"] || %{},
+           at: e["at"] || 0
+         }
+       end)}
+    end)
+  end
+
+  defp deserialize_recent(_), do: %{}
+
+  # Coerce values to JSON-safe shapes. The Watcher receives metadata
+  # straight from telemetry callers; pids / refs / funs can sneak in.
+  defp json_safe(v) when is_binary(v) or is_number(v) or is_boolean(v) or is_nil(v), do: v
+  defp json_safe(v) when is_atom(v), do: Atom.to_string(v)
+  defp json_safe(v) when is_list(v), do: Enum.map(v, &json_safe/1)
+  defp json_safe(v) when is_map(v), do: Map.new(v, fn {k, val} -> {to_string(k), json_safe(val)} end)
+  defp json_safe(v), do: inspect(v)
 
   # ─── Internals ─────────────────────────────────────────────────────────
 
