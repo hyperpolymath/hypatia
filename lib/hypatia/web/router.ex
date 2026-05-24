@@ -88,6 +88,18 @@ defmodule Hypatia.Web.Router do
   # reachable for container orchestrators.
   forward "/api", to: Hypatia.Web.ApiRouter
 
+  @doc """
+  POST /graphql -- GraphQL-shaped query endpoint (M14).
+
+  Minimal hand-rolled implementation; no introspection, no schema
+  federation, no Absinthe dep. See lib/hypatia/web/graphql.ex for
+  the supported field set and limitations. Loopback-only by sharing
+  the bearer-auth gate when HYPATIA_API_BEARER_TOKEN is configured.
+  """
+  post "/graphql" do
+    Hypatia.Web.GraphQL.call(conn, [])
+  end
+
   match _ do
     conn
     |> put_resp_content_type("application/json")
