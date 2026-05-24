@@ -40,6 +40,11 @@ defmodule Hypatia.Application do
       # request handler registers itself here; Watcher dispatches each
       # event into the registry. OTP-built Registry — no new dep.
       {Registry, keys: :duplicate, name: Hypatia.Watcher.PubSub},
+      # Layer 0.9: Alerts -- threshold evaluator that subscribes to
+      # the Watcher's telemetry stream and dispatches to enabled
+      # sinks (Log always, Webhook if HYPATIA_ALERT_WEBHOOK_URL,
+      # File if HYPATIA_ALERT_LOG_FILE).
+      Hypatia.Watcher.Alerts,
       # Layer 1: Safety -- rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,

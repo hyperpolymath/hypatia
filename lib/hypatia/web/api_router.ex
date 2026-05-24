@@ -102,6 +102,21 @@ defmodule Hypatia.Web.ApiRouter do
   end
 
   @doc """
+  GET /api/alerts -- Recent threshold-rule alerts emitted by
+  Hypatia.Watcher.Alerts (ring buffer, newest first). Powers the
+  dashboard alert ribbon and supports manual triage.
+  """
+  get "/alerts" do
+    rows =
+      case Process.whereis(Hypatia.Watcher.Alerts) do
+        nil -> []
+        _ -> Hypatia.Watcher.Alerts.recent()
+      end
+
+    json(conn, 200, %{count: length(rows), rows: rows})
+  end
+
+  @doc """
   GET /api/events -- Server-Sent Events stream of telemetry as it
   fires. Each event arrives as
 
