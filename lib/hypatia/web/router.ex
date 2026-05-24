@@ -54,6 +54,16 @@ defmodule Hypatia.Web.Router do
     |> send_resp(200, Jason.encode!(health))
   end
 
+  @doc """
+  GET /metrics -- Prometheus text-format exposition. Publicly
+  reachable (NOT loopback-only) because scrapers routinely run on a
+  different host; there's no operational data in the metric body
+  that isn't already implied by the dashboard's existence.
+  """
+  get "/metrics" do
+    Hypatia.Web.Metrics.call(conn, [])
+  end
+
   # /api/* is gated to loopback in Hypatia.Web.ApiRouter — keeps
   # operational data off the public surface while leaving /health
   # reachable for container orchestrators.
