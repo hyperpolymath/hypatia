@@ -36,6 +36,25 @@ defmodule Hypatia.Application do
       # telemetry events, maintains rolling windows in ETS, backs the
       # /api/status endpoint and `mix hypatia.watch` TUI).
       Hypatia.Watcher,
+      # Pub/sub for SSE clients watching /api/events live. Each HTTP
+      # request handler registers itself here; Watcher dispatches each
+      # event into the registry. OTP-built Registry — no new dep.
+      {Registry, keys: :duplicate, name: Hypatia.Watcher.PubSub},
+      # Layer 0.9: Alerts -- threshold evaluator that subscribes to
+      # the Watcher's telemetry stream and dispatches to enabled
+      # sinks (Log always, Webhook if HYPATIA_ALERT_WEBHOOK_URL,
+      # File if HYPATIA_ALERT_LOG_FILE).
+      Hypatia.Watcher.Alerts,
+      # Layer 0.95: Persistence -- 5-minute trend snapshots to
+      # data/verisim/metrics/YYYY-MM-DD.jsonl. ETS is ephemeral by
+      # design; this is the historical trail.
+      Hypatia.Watcher.Persistence,
+      # Layer 0.97: Anomaly detector -- rolling success-rate baseline
+      # over the outcome stream; fires hypatia.anomaly.detected when
+      # the recent window diverges from baseline by > 2σ. The Alerts
+      # module above picks it up as a high/critical alert depending
+      # on whether the ESN drift state concurs.
+      Hypatia.Watcher.AnomalyDetector,
       # Layer 1: Safety -- rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,

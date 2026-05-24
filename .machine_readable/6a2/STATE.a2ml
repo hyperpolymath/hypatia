@@ -5,18 +5,18 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-05-21"
+last-updated = "2026-05-24"
 status = "active"
 
 [project-context]
 name = "hypatia"
-completion-percentage = 87
+completion-percentage = 91
 phase = "implementation"
 maturity = "alpha"
 crg-grade = "C"
 crg-grade-declared-on = "2026-04-25"
 crg-grade-target = "B"
-crg-grade-notes = "Promoted D→C 2026-04-25: mix test 0/528 failures (233 verisim_data excluded by design); take_supervised/1 pattern fixed 25 test isolation failures in reflexive/contract suites; evict_expired >= ttl fix; 24 per-subtree README.adoc files; 7 Zig FFI domain functions. B blockers: live GitHub PAT dispatch, fix-script coverage, neural B+C rebalancer strategies, Ada TUI supervision wiring."
+crg-grade-notes = "Promoted D→C 2026-04-25: mix test 0/528 failures (233 verisim_data excluded by design); take_supervised/1 pattern fixed 25 test isolation failures in reflexive/contract suites; evict_expired >= ttl fix; 24 per-subtree README.adoc files; 7 Zig FFI domain functions. Closed 2026-05-24 (PR #309): live GitHub PAT dispatch operational, fix-script coverage gap resolved (root cause was matcher bug not missing scripts), watcher/supervision interface delivered end-to-end (telemetry → ETS aggregator → JSON/SSE/Prometheus/HTML/TUI → alerts/persistence/anomaly). B blockers remaining: neural B+C rebalancer strategies, Ada TUI supervision wiring."
 
 [dogfooding-status]
 # Populated 2026-04-18 against real on-disk integrations. Each entry must
@@ -36,16 +36,24 @@ milestones = [
   { id = "M4", title = "ProofStrategySelection (PS001–PS010)", status = "done" },
   { id = "M5", title = "ProofObligation recipe type (PO001–PO006)", status = "done" },
   { id = "M6", title = "LearningScheduler N5 — ProverRecommender retrain", status = "done" },
-  { id = "M7", title = "GitHub PAT for live cross-repo dispatch", status = "in_progress" },
+  { id = "M7", title = "GitHub PAT for live cross-repo dispatch", status = "done" },
   { id = "M8", title = "Write real fix scripts (310 null-fix-script entries)", status = "done" },
   { id = "M9", title = "Neural rebalancer Strategy B+C (adversarial perturbation + failure corpus)", status = "in_progress" },
   { id = "M10", title = "Ada TUI Elixir supervision wiring", status = "in_progress" },
+  { id = "M11", title = "Watcher / supervision interface (telemetry → aggregator → API/SSE/Prometheus/TUI → alerts/persistence/anomaly)", status = "done" },
+  { id = "M12", title = "Closed-loop quality (soundness gates, verification metric, auto-quarantine)", status = "done" },
+  { id = "M13", title = "SARIF output for IDE integration", status = "planned" },
+  { id = "M14", title = "GraphQL API as live HTTP endpoint", status = "planned" },
+  { id = "M15", title = "Bearer-token auth + state persistence + federation for /api/*", status = "planned" },
 ]
 
 [blockers-and-issues]
 issues = [
-  { id = "B1", description = "GitHub PAT not yet configured — automated cross-repo dispatch blocked", severity = "high" },
-  # B2 resolved 2026-04-26: 14 fix scripts written + 12 recipes updated (M8 done)
+  # B1 resolved 2026-05-24: HYPATIA_DISPATCH_PAT provisioned, verified end-to-end
+  #     (19 hypatia-security-alert dispatches landed in gitbot-fleet on first sweep).
+  # B2 resolved 2026-04-26: 14 fix scripts written + 12 recipes updated (M8 done).
+  # B3 resolved 2026-05-24: matcher language-gate bug fixed (PR #309 commit d2bbf75) —
+  #     was the underlying cause of the "310 null fix_script" symptom; scripts existed.
 ]
 
 [known-gaps]
@@ -58,13 +66,58 @@ gaps = [
 
 [critical-next-actions]
 actions = [
-  "Configure GitHub PAT with repo scope for live dispatch (M7)",
-  # M8 DONE 2026-04-26: 14 scripts written, 12 recipes updated, RecipeGenerator extended
+  # M7 DONE 2026-05-24: HYPATIA_DISPATCH_PAT provisioned + verified.
+  # M8 DONE 2026-04-26: 14 scripts written, 12 recipes updated, RecipeGenerator extended.
+  # M11 DONE 2026-05-24 (PR #309): watcher/supervision interface, 3-phase delivery.
+  # M12 DONE 2026-05-24 (PR #309): soundness gates + closed-loop verification.
   "Complete neural rebalancer Strategy B+C (M9)",
   "Complete Ada TUI Elixir supervision wiring (M10)",
+  "SARIF output for IDE integration (M13)",
+  "GraphQL API as live HTTP endpoint (M14)",
+  "Bearer auth + state persistence + cross-host federation for /api/* (M15)",
 ]
 
 [session-history]
+# 2026-05-24: PR #309 — watcher/supervision interface + closed-loop quality. 19 commits.
+#             Bug fixes (4): recipe-matcher language-gate (`d2bbf75` — unblocked ~310
+#             scorecard dispatches; the "310 null fix_script" symptom's real cause was
+#             a matcher bug treating `"any"` sentinel as unmatched and `"yaml"` recipes
+#             as unreachable, not missing scripts), baseline regen (`7cc2667` — 71 stale
+#             → 35 fresh, 0 critical/0 high), secret + code scanning alert consumers
+#             (`e929621`), `@language_extensions` walker missing `.agda`/`.zig`/`.thy`/
+#             `.fst`/`.adb` (`6d40240` — caught by the new escript packaging soundness
+#             test on its first run; same PR #278 class).
+#             Soundness gates (3): in-process manifest test with 14 fixtures (`74173ee`),
+#             end-to-end escript-build test wired into e2e-elixir CI (`6d40240`), honest
+#             doc on why other rule families don't drop into the manifest pattern
+#             (`3569d47`).
+#             Closed-loop quality (3): verification_rate + recipe_health + `mix
+#             hypatia.recipe_health` (`12f2890`), `record_outcome_for_fix` + `mix
+#             hypatia.record_outcome` CLI wrapper for the bash dispatch-runner with
+#             non-zero exit on still_present (`5e895b5`), auto-quarantine in
+#             FleetDispatcher when verification rate < 0.30 over ≥5 verifiable outcomes
+#             (`97b299f`).
+#             Watcher Phase 1 (4): `Hypatia.Telemetry` event registry + emit helpers
+#             (`d0ddd2f`), `Hypatia.Watcher` GenServer + ETS rolling-window aggregator
+#             (`3b4379e`), `/api/status` + `/api/counts/:window` + `/api/recipes`
+#             loopback-only via `Hypatia.Web.ApiRouter` (`30ced35`), `mix hypatia.watch`
+#             terminal dashboard (`708a19b`).
+#             Watcher Phase 2 (3): SSE stream at `/api/events` + `/api/recipes/:id` +
+#             `/api/quarantine` drill-downs (`5b15430`), static HTML dashboard at `/`
+#             with vanilla JS + EventSource (`a0075db`), Prometheus `/metrics`
+#             exposition (`adc2863`).
+#             Watcher Phase 3 (3): threshold rules + pluggable sinks (Log/Webhook/File)
+#             + `/api/alerts` (`3750086`), 5-min snapshot persistence to
+#             data/verisim/metrics/YYYY-MM-DD.jsonl (`a1eb6b2`), statistical anomaly
+#             detector with 2σ baseline divergence + ESN drift corroboration
+#             (`fc4f5d0`).
+#             Plus housekeeping (this commit): ROADMAP + STATE updates marking M7/M8/M11/
+#             M12 done; v7.5 (watcher) + v7.6 (closed-loop quality) sections added; M13/
+#             M14/M15 added for the remaining roadmap items.
+#             PAT verification: 19 hypatia-security-alert events landed in gitbot-fleet
+#             from the first manual sweep, all completing 17-26s, confirming the closed
+#             loop is operational end-to-end for the first time in the session.
+#
 # 2026-05-21: Epic #273 — Hypatia architecture reconciliation & neurosymbolic activation.
 #             Four-gap landing (one session, owner-merge gated):
 #             Gap (1) UNFED neural organs — already on `main` via PR #275 (merged

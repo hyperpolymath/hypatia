@@ -138,6 +138,9 @@ htmlcov/
 /tmp/
 *.tmp
 *.bak
+
+# Watcher runtime state (warm-restart persistence — operational, not source)
+data/verisim/watcher/watcher.state.json
 # asdf version manager
 .tool-versions
 verification/proofs/agda/*.agdai

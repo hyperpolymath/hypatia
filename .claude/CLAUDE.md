@@ -171,25 +171,30 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 - 3 safety systems: rate limiter, quarantine, batch rollback
 - VCL integrated: built-in parser, file executor, query cache, cross-repo analytics
 
-### Remaining Work (M7: Production Operations)
+### Remaining Work (M7+: Production Operations)
 
 **Critical:**
-- Create PAT with repo scope for automated cross-repo dispatch
-- Write real fix scripts for the 310 null-fix-script dispatch entries
-- Push committed fixes to remotes across repos
+- ~~Create PAT with repo scope for automated cross-repo dispatch~~ (DONE 2026-05-24: `HYPATIA_DISPATCH_PAT` provisioned + verified — 19 `hypatia-security-alert` events landed in gitbot-fleet from first manual sweep, all completing 17-26s)
+- ~~Resolve "310 null-fix-script dispatch entries"~~ (DONE 2026-05-24, PR #309 commit `d2bbf75`: root cause was matcher language-gate, not missing scripts — all 22 scorecard fix scripts already existed on disk)
+- Push committed fixes to remotes across repos (PAT now allows it; dispatch-runner side needs to call `mix hypatia.record_outcome` to populate the verification metric — `mix` task delivered in PR #309 commit `5e895b5`)
 
 **Important:**
 - Deploy verisim-api server (enables native graph/vector/temporal modalities)
 - 5 new RSR compliance rules cover structural compliance (banned languages, SCM locations, required files, Containerfile naming) — distinct from PA rule recipes
 - ~~Generate summaries for NULL-summary repos in verisim-data~~ (DONE 2026-03-07: 295 summaries auto-generated)
-- ~~Historical trend tracking across scan cycles~~ (DONE 2026-04-22: `lib/historical_trends.ex` + VCL.Query integration)
+- ~~Historical trend tracking across scan cycles~~ (DONE 2026-04-22: `lib/historical_trends.ex` + VCL.Query integration; PR #309 adds 5-min snapshot persistence to `data/verisim/metrics/`)
 - ~~VCL federation executor — multi-store~~ (DONE 2026-04-22: `lib/vcl/remote_executor.ex`; `FROM FEDERATION REMOTE IN [...]`)
+- ~~Live watcher / supervision interface~~ (DONE 2026-05-24, PR #309: 10 commits across 3 phases — telemetry → Watcher GenServer → HTTP API + SSE + HTML dashboard + Prometheus + alerts + 5-min persistence + statistical anomaly detection)
+- ~~Closed-loop quality~~ (DONE 2026-05-24, PR #309: soundness gates (in-process + escript-packaging) + closed-loop verification metric + auto-quarantine in FleetDispatcher)
 
-**Planned:**
-- GraphQL API as live HTTP endpoint
-- SARIF output for IDE integration
+**Planned (M13-M15):**
+- M13: SARIF output for IDE integration
+- M14: GraphQL API as live HTTP endpoint
+- M15: Bearer-token auth on `/api/*` + persistent Watcher state across restart + cross-host alert federation + ESN tight integration
 - Nx/EXLA backend for the neural layer if/when reservoir sizes outgrow pure Elixir
 - Cross-organization federation with VCL drift policies
+- Neural rebalancer Strategy B (adversarial perturbation) + C (real failure corpus from panic-attack history) (M9 in progress)
+- Ada TUI Elixir supervision wiring (M10 in progress)
 
 ### Known Gaps
 

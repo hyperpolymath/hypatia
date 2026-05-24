@@ -106,4 +106,92 @@ defmodule Hypatia.WatcherTest do
       assert is_map(depths)
     end
   end
+
+  describe "persistence across restart" do
+    test "restart restores ETS counters + recent-event tail" do
+      # Use a per-test tmp dir for isolation.
+      tmp = Path.join(System.tmp_dir!(), "watcher-restart-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp)
+      Application.put_env(:hypatia, :watcher_persist_path, tmp)
+
+      on_exit(fn ->
+        Application.delete_env(:hypatia, :watcher_persist_path)
+        File.rm_rf!(tmp)
+      end)
+
+      # Bring down any existing watcher so we can boot fresh into the tmp.
+      if pid = Process.whereis(Watcher) do
+        if Process.alive?(pid), do: GenServer.stop(pid)
+      end
+
+      {:ok, pid1} = Watcher.start_link([])
+      T.scan_complete(99, 3, path: "/tmp/x", severity_floor: "low")
+      Process.sleep(50)
+
+      # Stop triggers a flush via terminate/2.
+      GenServer.stop(pid1)
+
+      state_file = Path.join(tmp, "watcher.state.json")
+      assert File.exists?(state_file), "terminate must persist watcher state"
+
+      # New process: should rehydrate.
+      {:ok, _pid2} = Watcher.start_link([])
+
+      counts_m5 = Watcher.counts(:m5)
+      assert Map.get(counts_m5, [:hypatia, :scan, :complete]) == 1
+    end
+  end
+
+  describe "subscribe/1 (SSE fan-out)" do
+    setup do
+      case Process.whereis(Hypatia.Watcher.PubSub) do
+        nil ->
+          {:ok, pid} = Registry.start_link(keys: :duplicate, name: Hypatia.Watcher.PubSub)
+          on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+
+        _ ->
+          :ok
+      end
+
+      :ok
+    end
+
+    test "all-events subscriber receives every kind" do
+      Watcher.subscribe()
+
+      T.scan_complete(11, 2, path: "/tmp/x", severity_floor: "low")
+      assert_receive {:hypatia_event, [:hypatia, :scan, :complete], _measurements, _md, _ts}, 200
+
+      T.outcome_recorded(recipe_id: "r", repo: "x", outcome: "success", verification: "verified")
+      assert_receive {:hypatia_event, [:hypatia, :outcome, :recorded], _, _, _}, 200
+    end
+
+    test "filtered subscriber only sees its events" do
+      Watcher.subscribe(events: [[:hypatia, :verification, :result]])
+
+      T.scan_complete(11, 2, path: "/tmp/x", severity_floor: "low")
+      refute_receive {:hypatia_event, [:hypatia, :scan, :complete], _, _, _}, 100
+
+      T.verification_result(recipe_id: "r", repo: "x", verdict: :verified)
+      assert_receive {:hypatia_event, [:hypatia, :verification, :result], _, _, _}, 200
+    end
+
+    test "dead subscriber gets auto-cleaned by Registry" do
+      task =
+        Task.async(fn ->
+          Watcher.subscribe()
+          # Exit immediately after subscribing; Registry should drop us.
+          :done
+        end)
+
+      Task.await(task)
+
+      # Emit something; the now-dead PID's mailbox going nowhere
+      # must not crash the watcher.
+      T.scan_complete(1, 1, path: "/tmp/y", severity_floor: "low")
+      Process.sleep(50)
+
+      assert Process.alive?(Process.whereis(Watcher))
+    end
+  end
 end
