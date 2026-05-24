@@ -29,6 +29,17 @@ defmodule Hypatia.Web.Router do
   plug :dispatch
 
   @doc """
+  GET / -- Single-page live operational dashboard. HTML + vanilla JS,
+  polls /api/status and EventSource-streams /api/events. The dashboard
+  itself is publicly reachable; the data endpoints it calls are
+  loopback-only (gated in ApiRouter), so a non-local browser would
+  render the chrome but get 403 from the XHR/SSE calls.
+  """
+  get "/" do
+    Hypatia.Web.Dashboard.call(conn, [])
+  end
+
+  @doc """
   GET /health -- Basic health check for the HTTP endpoint.
   """
   get "/health" do
