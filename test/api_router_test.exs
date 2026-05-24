@@ -22,6 +22,76 @@ defmodule Hypatia.Web.ApiRouterTest do
     :ok
   end
 
+  describe "bearer auth gate" do
+    test "no token configured → no auth required (legacy behaviour)" do
+      System.delete_env("HYPATIA_API_BEARER_TOKEN")
+      conn = build_conn(:get, "/status", {127, 0, 0, 1})
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+      assert conn.status == 200
+    end
+
+    test "token configured + valid Bearer header → 200" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+      on_exit(fn -> System.delete_env("HYPATIA_API_BEARER_TOKEN") end)
+
+      conn =
+        build_conn(:get, "/status", {127, 0, 0, 1})
+        |> Plug.Conn.put_req_header("authorization", "Bearer test-secret-abc123")
+
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+      assert conn.status == 200
+    end
+
+    test "token configured + wrong Bearer header → 401" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+      on_exit(fn -> System.delete_env("HYPATIA_API_BEARER_TOKEN") end)
+
+      conn =
+        build_conn(:get, "/status", {127, 0, 0, 1})
+        |> Plug.Conn.put_req_header("authorization", "Bearer wrong-token")
+
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+      assert conn.status == 401
+      body = Jason.decode!(conn.resp_body)
+      assert body["error"] == "invalid_token"
+    end
+
+    test "token configured + missing header → 401 missing_token" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+      on_exit(fn -> System.delete_env("HYPATIA_API_BEARER_TOKEN") end)
+
+      conn = build_conn(:get, "/status", {127, 0, 0, 1})
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+      assert conn.status == 401
+      body = Jason.decode!(conn.resp_body)
+      assert body["error"] == "missing_token"
+    end
+
+    test "valid token from non-loopback IP → 200 (bearer beats loopback)" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+      on_exit(fn -> System.delete_env("HYPATIA_API_BEARER_TOKEN") end)
+
+      conn =
+        build_conn(:get, "/status", {10, 1, 2, 3})
+        |> Plug.Conn.put_req_header("authorization", "Bearer test-secret-abc123")
+
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+      assert conn.status == 200
+    end
+
+    test "lowercase 'bearer' prefix is accepted" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+      on_exit(fn -> System.delete_env("HYPATIA_API_BEARER_TOKEN") end)
+
+      conn =
+        build_conn(:get, "/status", {127, 0, 0, 1})
+        |> Plug.Conn.put_req_header("authorization", "bearer test-secret-abc123")
+
+      conn = ApiRouter.call(conn, ApiRouter.init([]))
+      assert conn.status == 200
+    end
+  end
+
   describe "loopback gate" do
     test "127.0.0.1 caller is allowed through" do
       conn = build_conn(:get, "/status", {127, 0, 0, 1})

@@ -18,8 +18,10 @@ defmodule Hypatia.Web.ApiRouter do
   use Plug.Router
 
   require Logger
+  import Bitwise, only: [|||: 2, bxor: 2]
 
   plug :match
+  plug :auth_gate
   plug :loopback_only
   plug :dispatch
 
@@ -239,7 +241,88 @@ defmodule Hypatia.Web.ApiRouter do
 
   # ─── Plug ──────────────────────────────────────────────────────────────
 
+  # ─── Auth gate ─────────────────────────────────────────────────────────
+  #
+  # If HYPATIA_API_BEARER_TOKEN is set, any /api/* request must carry a
+  # matching Authorization: Bearer <token> header. The token + loopback
+  # checks compose: with neither, /api is loopback-only. With both, /api
+  # is openable to non-local callers provided they present the token.
+  #
+  # Token comparison uses Plug.Crypto.secure_compare/2 so timing attacks
+  # can't enumerate the secret.
+  defp auth_gate(conn, _opts) do
+    case System.get_env("HYPATIA_API_BEARER_TOKEN") do
+      nil ->
+        conn
+
+      "" ->
+        conn
+
+      expected ->
+        case get_bearer(conn) do
+          {:ok, presented} ->
+            if secure_compare(expected, presented) do
+              # If the token is valid, the caller is implicitly allowed
+              # past the loopback gate too — explicit authentication is
+              # at least as strong as IP-based filtering.
+              Plug.Conn.put_private(conn, :hypatia_auth_passed, true)
+            else
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(
+                401,
+                Jason.encode!(%{error: "invalid_token", hint: "Authorization: Bearer <token>"})
+              )
+              |> halt()
+            end
+
+          :error ->
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(
+              401,
+              Jason.encode!(%{
+                error: "missing_token",
+                hint:
+                  "Hypatia API requires Authorization: Bearer <token> when " <>
+                    "HYPATIA_API_BEARER_TOKEN is set on the server."
+              })
+            )
+            |> halt()
+        end
+    end
+  end
+
+  defp get_bearer(conn) do
+    case Plug.Conn.get_req_header(conn, "authorization") do
+      ["Bearer " <> token] -> {:ok, token}
+      ["bearer " <> token] -> {:ok, token}
+      _ -> :error
+    end
+  end
+
+  # Constant-time string comparison. Plug.Crypto provides this in the
+  # production dep set; fall back to a hand-rolled equivalent for
+  # environments where Plug.Crypto isn't loaded (e.g. escript builds).
+  defp secure_compare(a, b) when is_binary(a) and is_binary(b) do
+    if Code.ensure_loaded?(Plug.Crypto) and function_exported?(Plug.Crypto, :secure_compare, 2) do
+      Plug.Crypto.secure_compare(a, b)
+    else
+      byte_size(a) == byte_size(b) and
+        a |> :binary.bin_to_list() |> Enum.zip(:binary.bin_to_list(b)) |> Enum.reduce(0, fn {x, y}, acc -> acc ||| Bitwise.bxor(x, y) end) == 0
+    end
+  end
+
   defp loopback_only(conn, _opts) do
+    if conn.private[:hypatia_auth_passed] do
+      # Caller authenticated via bearer; loopback check is unnecessary.
+      conn
+    else
+      legacy_loopback_only(conn, [])
+    end
+  end
+
+  defp legacy_loopback_only(conn, _opts) do
     cond do
       System.get_env("HYPATIA_API_ALLOW_NONLOCAL") == "true" ->
         Logger.warning(
