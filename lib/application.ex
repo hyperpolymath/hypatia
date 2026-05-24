@@ -32,6 +32,10 @@ defmodule Hypatia.Application do
       Hypatia.Dispatch.Pipeline,
       # Layer 0.7: Diagnostics -- system health monitoring and auto-recovery
       Hypatia.Diagnostics.Monitor,
+      # Layer 0.8: Watcher -- live monitoring aggregator (subscribes to
+      # telemetry events, maintains rolling windows in ETS, backs the
+      # /api/status endpoint and `mix hypatia.watch` TUI).
+      Hypatia.Watcher,
       # Layer 1: Safety -- rate limiting and bot quarantine
       Hypatia.Safety.RateLimiter,
       Hypatia.Safety.Quarantine,
