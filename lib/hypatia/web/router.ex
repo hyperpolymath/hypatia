@@ -7,6 +7,15 @@ defmodule Hypatia.Web.Router do
 
   Serves well-known service discovery manifests and health checks.
   Listens on port 9090 via Bandit, supervised by the OTP application.
+
+  Public:
+    GET /health              liveness probe (no auth, no IP filter)
+    GET /.well-known/groove  service discovery (via GroovePlug)
+
+  Loopback-only (operational):
+    GET /api/status          live Watcher snapshot
+    GET /api/counts/:window  event counts in window
+    GET /api/recipes         recipe-health roll-up
   """
 
   use Plug.Router
@@ -34,7 +43,14 @@ defmodule Hypatia.Web.Router do
     |> send_resp(200, Jason.encode!(health))
   end
 
+  # /api/* is gated to loopback in Hypatia.Web.ApiRouter — keeps
+  # operational data off the public surface while leaving /health
+  # reachable for container orchestrators.
+  forward "/api", to: Hypatia.Web.ApiRouter
+
   match _ do
-    send_resp(conn, 404, Jason.encode!(%{error: "not_found"}))
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(404, Jason.encode!(%{error: "not_found"}))
   end
 end
