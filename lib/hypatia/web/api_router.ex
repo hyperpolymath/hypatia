@@ -119,6 +119,60 @@ defmodule Hypatia.Web.ApiRouter do
   end
 
   @doc """
+  POST /api/alerts/ingest -- Federation ingress. Peer hypatia
+  instances POST their alerts here via the Peer sink.
+
+  Auth: the auth_gate plug enforces a valid bearer token, so this
+  endpoint is only reachable when HYPATIA_API_BEARER_TOKEN is set
+  and the request carries it. Federation without shared auth is
+  refused at the gate, not here.
+
+  Loop prevention: the ingested alert is tagged with
+  `metadata.federated_from = <peer hostname or "unknown">` so the
+  Peer sink can skip it on broadcast and the dashboard can
+  attribute it.
+  """
+  post "/alerts/ingest" do
+    {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+    case Jason.decode(body) do
+      {:ok, payload} when is_map(payload) ->
+        peer_id =
+          case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
+            [host | _] -> host
+            _ -> conn.remote_ip |> :inet.ntoa() |> to_string()
+          end
+
+        alert =
+          %{
+            rule: parse_atom(payload["rule"]),
+            severity: parse_atom(payload["severity"]),
+            summary: payload["summary"] || "(no summary)",
+            metadata: payload["metadata"] || %{},
+            at: payload["at"] || System.system_time(:millisecond)
+          }
+
+        case Process.whereis(Hypatia.Watcher.Alerts) do
+          nil -> json(conn, 503, %{error: "alerts_unavailable"})
+          _ -> Hypatia.Watcher.Alerts.ingest_federated(alert, peer_id)
+        end
+
+        json(conn, 202, %{ok: true, peer: peer_id})
+
+      _ ->
+        json(conn, 400, %{error: "invalid_json"})
+    end
+  end
+
+  defp parse_atom(value) when is_atom(value), do: value
+  defp parse_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> :unknown
+  end
+  defp parse_atom(_), do: :unknown
+
+  @doc """
   GET /api/events -- Server-Sent Events stream of telemetry as it
   fires. Each event arrives as
 

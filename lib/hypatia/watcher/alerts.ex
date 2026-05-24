@@ -75,6 +75,17 @@ defmodule Hypatia.Watcher.Alerts do
     :exit, _ -> []
   end
 
+  @doc """
+  Inject a federated alert from a peer into the local ring buffer
+  WITHOUT going through the sinks (loop prevention — we mustn't
+  re-federate). Tagged metadata.federated_from = peer_id so the
+  dashboard can attribute the alert and the Peer sink can skip it
+  on next broadcast.
+  """
+  def ingest_federated(alert, peer_id) do
+    GenServer.cast(__MODULE__, {:ingest_federated, alert, peer_id})
+  end
+
   # ─── GenServer ─────────────────────────────────────────────────────────
 
   @impl true
@@ -187,6 +198,21 @@ defmodule Hypatia.Watcher.Alerts do
     state = run_threshold_rules(state)
     Process.send_after(self(), :tick, @tick_interval_ms)
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:ingest_federated, alert, peer_id}, state) do
+    # Federated alerts go straight into the ring buffer with the
+    # peer attribution — they do NOT fan out through sinks (which
+    # would re-federate them and ping-pong). The Log sink is
+    # bypassed too, intentional: the originating peer already
+    # logged it.
+    tagged_metadata =
+      Map.merge(alert.metadata || %{}, %{federated_from: peer_id})
+
+    tagged = %{alert | metadata: tagged_metadata}
+
+    {:noreply, %{state | recent: [tagged | state.recent] |> Enum.take(100)}}
   end
 
   @impl true
@@ -303,6 +329,11 @@ defmodule Hypatia.Watcher.Alerts do
     base =
       if System.get_env("HYPATIA_ALERT_LOG_FILE") not in [nil, ""],
         do: [Hypatia.Watcher.Alerts.Sinks.File | base],
+        else: base
+
+    base =
+      if System.get_env("HYPATIA_FEDERATION_PEERS") not in [nil, ""],
+        do: [Hypatia.Watcher.Alerts.Sinks.Peer | base],
         else: base
 
     base
