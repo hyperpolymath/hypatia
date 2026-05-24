@@ -10,7 +10,7 @@ status = "active"
 
 [project-context]
 name = "hypatia"
-completion-percentage = 91
+completion-percentage = 95
 phase = "implementation"
 maturity = "alpha"
 crg-grade = "C"
@@ -38,13 +38,16 @@ milestones = [
   { id = "M6", title = "LearningScheduler N5 — ProverRecommender retrain", status = "done" },
   { id = "M7", title = "GitHub PAT for live cross-repo dispatch", status = "done" },
   { id = "M8", title = "Write real fix scripts (310 null-fix-script entries)", status = "done" },
-  { id = "M9", title = "Neural rebalancer Strategy B+C (adversarial perturbation + failure corpus)", status = "in_progress" },
-  { id = "M10", title = "Ada TUI Elixir supervision wiring", status = "in_progress" },
+  { id = "M9", title = "Neural rebalancer Strategy B+C operationalised via :neural_rebalance_strategy config (:a | :b | :c | :rotate)", status = "done" },
+  { id = "M10", title = "Ada TUI Elixir supervision wiring (Port wired + /metrics/snapshot endpoint added)", status = "done" },
   { id = "M11", title = "Watcher / supervision interface (telemetry → aggregator → API/SSE/Prometheus/TUI → alerts/persistence/anomaly)", status = "done" },
   { id = "M12", title = "Closed-loop quality (soundness gates, verification metric, auto-quarantine)", status = "done" },
-  { id = "M13", title = "SARIF output for IDE integration", status = "planned" },
-  { id = "M14", title = "GraphQL API as live HTTP endpoint", status = "planned" },
-  { id = "M15", title = "Bearer-token auth + state persistence + federation for /api/*", status = "planned" },
+  { id = "M13", title = "SARIF output for IDE integration", status = "done" },
+  { id = "M14", title = "GraphQL API as live HTTP endpoint", status = "done" },
+  { id = "M15", title = "Bearer-token auth + persistent state across restart + cross-host federation + ESN tight integration", status = "done" },
+  { id = "M16", title = "Neural state persistence: MoE + trust_graph hydration on init (LSM/ESN summary-only by design)", status = "done" },
+  { id = "M17", title = "GNN + VAE + Seq models for 007 trace integration", status = "planned" },
+  { id = "M18", title = "Cross-organization federation with VCL drift policies", status = "planned" },
 ]
 
 [blockers-and-issues]
