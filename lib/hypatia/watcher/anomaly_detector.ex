@@ -141,6 +141,12 @@ defmodule Hypatia.Watcher.AnomalyDetector do
   # ─── Evaluation ────────────────────────────────────────────────────────
 
   defp evaluate(state) do
+    state
+    |> evaluate_statistical()
+    |> evaluate_esn_drift()
+  end
+
+  defp evaluate_statistical(state) do
     outcomes = state.outcomes
 
     cond do
@@ -155,6 +161,72 @@ defmodule Hypatia.Watcher.AnomalyDetector do
         do_evaluate(state, outcomes)
     end
   end
+
+  # M15c — ESN tight integration. The statistical path uses ESN drift
+  # as a corroborating signal that bumps severity. This second path
+  # lets ESN drift be an INDEPENDENT alert source: if the ESN is
+  # trained and reporting sustained directional change, we surface
+  # that even if the rolling-baseline gate hasn't tripped — the
+  # neural layer may catch a trend earlier than a 2σ statistical
+  # threshold can.
+  defp evaluate_esn_drift(state) do
+    case Process.whereis(Hypatia.Neural.Coordinator) do
+      nil ->
+        state
+
+      _ ->
+        try do
+          report = Hypatia.Neural.Coordinator.health_report()
+          drift = get_in(report, [:esn, :drift])
+          trained? = get_in(report, [:esn, :trained])
+          accuracy = get_in(report, [:esn, :accuracy])
+
+          cond do
+            not trained? ->
+              state
+
+            drift in [:rising_drift, :falling_drift] ->
+              key = :"esn_drift_#{drift}"
+              now = System.system_time(:millisecond)
+              last = Map.get(state.last_alert_at, key, 0)
+
+              if now - last >= @dedup_window_ms do
+                Hypatia.Telemetry.anomaly_detected(
+                  measurements: %{
+                    recent_rate: nil,
+                    baseline_rate: nil,
+                    sigma_distance: 0.0
+                  },
+                  metadata: %{
+                    kind: key,
+                    esn_drift_concurs: true,
+                    esn_state: drift,
+                    esn_accuracy: jsonable_accuracy(accuracy)
+                  }
+                )
+
+                %{state | last_alert_at: Map.put(state.last_alert_at, key, now)}
+              else
+                state
+              end
+
+            true ->
+              state
+          end
+        rescue
+          _ -> state
+        catch
+          _, _ -> state
+        end
+    end
+  end
+
+  # The accuracy report from EchoStateNetwork is a map of floats
+  # (or :insufficient_data); make sure the metadata stays JSON-safe
+  # for the alerts pipeline.
+  defp jsonable_accuracy(:insufficient_data), do: "insufficient_data"
+  defp jsonable_accuracy(%{} = m), do: m
+  defp jsonable_accuracy(other), do: inspect(other)
 
   defp do_evaluate(state, outcomes) do
     {recent, baseline} = Enum.split(outcomes, @recent_size)

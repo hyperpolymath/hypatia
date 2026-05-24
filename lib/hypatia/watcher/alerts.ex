@@ -139,20 +139,32 @@ defmodule Hypatia.Watcher.Alerts do
         state) do
     kind = metadata[:kind] || metadata["kind"]
     key = "anomaly:#{kind}"
-    recent = measurements[:recent_rate] || measurements["recent_rate"]
-    baseline = measurements[:baseline_rate] || measurements["baseline_rate"]
-    sigma = measurements[:sigma_distance] || measurements["sigma_distance"]
     concurs = metadata[:esn_drift_concurs] || metadata["esn_drift_concurs"]
 
-    severity = if concurs, do: :critical, else: :high
+    {summary, severity} =
+      case kind do
+        # M15c — ESN drift can fire INDEPENDENTLY of statistical
+        # detection now. Different summary wording so triage can
+        # tell the two sources apart.
+        :esn_drift_rising_drift ->
+          {"Neural anomaly: ESN reports rising drift in success-rate forecast", :high}
 
-    summary =
-      "Statistical anomaly: recent rate " <>
-        format_rate(recent) <>
-        " vs baseline " <>
-        format_rate(baseline) <>
-        " (" <> format_sigma(sigma) <> "σ)" <>
-        if(concurs, do: " — ESN drift concurs", else: "")
+        :esn_drift_falling_drift ->
+          {"Neural anomaly: ESN reports falling drift in success-rate forecast", :high}
+
+        _ ->
+          recent = measurements[:recent_rate] || measurements["recent_rate"]
+          baseline = measurements[:baseline_rate] || measurements["baseline_rate"]
+          sigma = measurements[:sigma_distance] || measurements["sigma_distance"]
+          sev = if concurs, do: :critical, else: :high
+
+          {"Statistical anomaly: recent rate " <>
+             format_rate(recent) <>
+             " vs baseline " <>
+             format_rate(baseline) <>
+             " (" <> format_sigma(sigma) <> "σ)" <>
+             if(concurs, do: " — ESN drift concurs", else: ""), sev}
+      end
 
     alert = %{
       rule: :anomaly_detected,
