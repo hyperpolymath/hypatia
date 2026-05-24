@@ -64,6 +64,25 @@ defmodule Hypatia.Web.Router do
     Hypatia.Web.Metrics.call(conn, [])
   end
 
+  @doc """
+  GET /metrics/snapshot -- Compact JSON snapshot of estate-level
+  counters: repos scanned, weak points, dispatched actions, outcomes,
+  recipes, average confidence. Consumed by the optional Ada TUI
+  (`lib/tui/port.ex`) on its 10s tick, and useful as a single-call
+  status read for external dashboards.
+
+  Reads from the verisim-data flat-file store via VerisimConnector;
+  any failure returns a degraded snapshot with status="degraded"
+  rather than 500, so the TUI keeps rendering.
+  """
+  get "/metrics/snapshot" do
+    snapshot = Hypatia.Web.MetricsSnapshot.build()
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(snapshot))
+  end
+
   # /api/* is gated to loopback in Hypatia.Web.ApiRouter — keeps
   # operational data off the public surface while leaving /health
   # reachable for container orchestrators.
