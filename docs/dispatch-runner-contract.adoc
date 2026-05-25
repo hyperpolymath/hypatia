@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: MPL-2.0
+= Dispatch-runner contract for outcome reporting back to Hypatia
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-05-24
+
+== Why this exists
+
+Hypatia's closed-loop verification metric (PR #309, commit
+`12f2890`) and auto-quarantine gate (commit `97b299f`) depend on
+the dispatch-runner reporting back what actually happened after
+each fix is applied. Without that data, every recipe shows up as
+`:insufficient_data` and the auto-quarantine never engages.
+
+The dispatch-runner lives in `gitbot-fleet`, not here. This memo
+documents the contract that side must implement.
+
+== The contract
+
+After a fix script runs against a target repository, the runner
+MUST invoke:
+
+  mix hypatia.record_outcome \
+      --recipe   <recipe-id>          # from the dispatch manifest
+      --repo     <owner/repo>         # full GitHub coordinates
+      --file     <path/inside/repo>   # what was fixed
+      --outcome  success|failure|false_positive
+
+The mix task lives in this repo at `lib/mix/tasks/hypatia.record_outcome.ex`.
+It auto-derives `category` from the recipe registry and
+auto-invokes panic-attack for re-scan verification.
+
+=== Exit codes
+
+  0   outcome recorded; verification verified-clean OR scan_unavailable
+      → runner SHOULD continue to the next dispatch entry.
+
+  2   outcome recorded BUT re-scan still finds the weak point
+      → runner SHOULD treat this batch as failed and consider rollback
+      via `mix hypatia.rollback_batch <batch_id>` (see safety/batch_rollback.ex).
+
+  1   bad arguments OR unrecoverable error
+      → runner SHOULD log loud and skip this entry without retry.
+
+The non-zero-on-still_present exit is the contract that lets bash
+notice a false-fix without parsing JSON.
+
+== Operational example
+
+In `gitbot-fleet/dispatch-runner.sh`, the per-entry loop:
+
+[source,bash]
+----
+# After git commit / push of the fix
+RECIPE_ID=$(jq -r '.recipe_id' "$ENTRY")
+REPO=$(jq -r '.repo' "$ENTRY")
+FILE=$(jq -r '.file' "$ENTRY")
+
+# Run the actual fix script (existing logic)
+bash "$FIX_SCRIPT" "$REPO_PATH" "$FILE"
+FIX_EXIT=$?
+
+# Report outcome back to Hypatia
+case "$FIX_EXIT" in
+  0)  OUTCOME=success    ;;
+  *)  OUTCOME=failure    ;;
+esac
+
+# Path to Hypatia install; pinned to RUNNER_TEMP via the
+# scan workflow's $HYPATIA_HOME convention. The runner can
+# clone Hypatia separately or share the clone with the scan job.
+( cd "$HYPATIA_HOME" && \
+  mix hypatia.record_outcome \
+      --recipe   "$RECIPE_ID" \
+      --repo     "$REPO" \
+      --file     "$FILE" \
+      --outcome  "$OUTCOME" )
+RECORD_EXIT=$?
+
+case "$RECORD_EXIT" in
+  0)  ;;  # Verified clean or scan unavailable — move on.
+  2)  echo "::warning::Recipe $RECIPE_ID still flags $REPO/$FILE after fix; \
+           consider mix hypatia.rollback_batch $BATCH_ID"
+      ;;
+  *)  echo "::error::record_outcome failed for $REPO/$FILE: exit $RECORD_EXIT"
+      ;;
+esac
+----
+
+== What's already on Hypatia's side
+
+  * `mix hypatia.record_outcome` — the mix task itself (commit `5e895b5`)
+  * `OutcomeTracker.record_outcome_for_fix/5` — the underlying function
+    that record_outcome wraps
+  * `OutcomeTracker.recipe_health/0` — reads outcomes log + verification
+    stamps; backs `/api/recipes` and the dashboard
+  * Auto-quarantine in `FleetDispatcher.do_eliminate_dispatch/4` —
+    refuses :auto_execute when recipe verification rate drops below
+    threshold, downgrades to :review instead
+
+Once gitbot-fleet's dispatch-runner adopts this contract, recipes
+will migrate from `:insufficient_data` to `:healthy` / `:degraded` /
+`:quarantine_candidate` based on real evidence, and the closed-loop
+gate becomes operational.
+
+== Optional: avoid the per-call mix overhead
+
+`mix hypatia.record_outcome` boots Mix on every invocation (~1.5s
+cold-start). For high-volume dispatch (>100 outcomes per minute),
+two alternatives:
+
+  1. *Batch*: collect outcomes into a JSONL file, then run one
+     `mix hypatia.record_outcomes_batch < outcomes.jsonl` at the end.
+     (Task not yet written; trivial extension.)
+
+  2. *HTTP*: hit `POST /api/outcomes/record` (also not yet written;
+     ~30 LOC against the existing ApiRouter pattern).
+
+For the current dispatch volume (~20/day from the daily sweep) the
+per-call overhead is negligible. Revisit when volume crosses ~1k/day.
+
+== When to update this memo
+
+  * When the record_outcome flag set changes (add/remove --pattern-id,
+    --category, etc.)
+  * When new exit codes are added
+  * When the runner's invocation pattern needs to evolve (e.g. parallel
+    dispatch, partial-batch retry semantics)

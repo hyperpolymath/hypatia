@@ -1,0 +1,129 @@
+// SPDX-License-Identifier: MPL-2.0
+= Nx / EXLA neural backend — migration plan
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-05-24
+
+== Status
+
+Tracked under v7.0 Planned as conditional: "Nx/EXLA backend for the
+neural layer (if/when reservoir sizes outgrow pure Elixir)". No
+current pressure — reservoirs are sized for ~1k–10k nodes which
+pure-Elixir matrix math handles in single-digit ms per step.
+
+This memo records the migration plan so the work is bounded when
+the trigger fires.
+
+== Trigger
+
+Migrate when ONE of the following:
+
+  1. ESN reservoir cycle exceeds 50ms in production (visible via
+     the `hypatia.neural.cycle` telemetry duration).
+  2. RBF center count crosses ~5000 (currently bounded at 100;
+     would require explicit policy change to raise).
+  3. LSM reservoir size goes above 2000 nodes (currently 100).
+  4. A new network requires conv / attention layers (impractical
+     in pure Elixir).
+
+None of these are imminent. The 2026-05-24 telemetry shows ESN
+cycles at ~3ms on a 100-node reservoir.
+
+== What changes
+
+  * `mix.exs` — add `{:nx, "~> 0.9"}` and `{:exla, "~> 0.9"}` deps.
+    The latter pulls in XLA which is a ~70MB native binary; CI build
+    times jump ~2 minutes.
+
+  * `lib/neural/echo_state_network.ex` — replace `List`-based
+    matrix ops with `Nx.tensor/*`. The reservoir step becomes one
+    `Nx.dot` call instead of nested Enum.maps.
+
+  * `lib/neural/liquid_state_machine.ex` — same shape change.
+
+  * `lib/neural/radial_neural_network.ex` — RBF activation is
+    natively expressible as `Nx.exp(Nx.negate(Nx.divide(...)))`.
+
+  * `lib/neural/persistence.ex` — Nx tensors serialise via
+    `Nx.to_binary/1`; add the encode/decode pair to save_esn /
+    save_rbf / save_lsm.
+
+== What stays
+
+  * The Coordinator's blackboard architecture — Nx is a numeric
+    library, not a process model. Phase ordering, GenServer
+    boundaries, and the existing public APIs don't change.
+
+  * Trust graph + MoE — these are graph/dispatch logic, not
+    matrix-dominant. No Nx benefit.
+
+  * GNN / VAE / Sequence model — these would benefit eventually
+    (especially VAE's encoder/decoder) but are currently
+    placeholder structs; migrate when actually trained.
+
+== Compatibility considerations
+
+  * EXLA backend pins to specific XLA versions; check CI runner
+    has compatible libstdc++ (Chainguard wolfi-base does).
+
+  * Nx tensor serialisation is endian-sensitive. Persisted state
+    written on x86_64 may not load on arm64 without a flag flip.
+    Document this in `Persistence.save_*` once we have multi-arch
+    deployments.
+
+  * Property-based tests in `test/neural_*` use plain floats; the
+    Nx versions will need ~1e-6 tolerance assertions instead of
+    exact equality. ~30 tests affected; mechanical change.
+
+== Rollback path
+
+Nx-based network modules can be guarded by an app config:
+
+[source,elixir]
+----
+defmodule Hypatia.Neural.EchoStateNetwork do
+  @backend Application.compile_env(:hypatia, :neural_backend, :elixir)
+
+  def step(esn, x) do
+    case @backend do
+      :nx -> step_nx(esn, x)
+      _   -> step_elixir(esn, x)
+    end
+  end
+
+  ...
+end
+----
+
+Compile-time switch (not runtime) because Nx wants the backend
+known at module load. Switching to :elixir reverts to the current
+implementation; switching to :nx uses the EXLA path. Both
+implementations stay in the codebase during the migration period.
+
+== Migration phasing
+
+  *Phase 1 (~1 week)* — Add deps, write the :nx clauses for ESN,
+  keep :elixir as default. Tests run with both backends; benchmark
+  comparison committed to confirm no regression.
+
+  *Phase 2 (~1 week)* — Same for RBF and LSM. Compile-time switch
+  to :nx in production.
+
+  *Phase 3 (~2 weeks)* — Remove the :elixir clauses once the :nx
+  path has been in production for 30 days without regression.
+
+== Acceptance criteria for closing the ROADMAP item
+
+Mark "Nx/EXLA backend" done when:
+
+  * Three networks (ESN, RBF, LSM) have Nx implementations
+  * `:hypatia, :neural_backend, :nx` is the default in
+    config/runtime.exs
+  * Persisted state round-trips through Nx serialisation
+  * No production incident attributable to the backend swap for 30 days
+
+== When to update this memo
+
+  * If the trigger conditions (reservoir size thresholds) change
+  * When Nx ships a major version that changes the public API
+  * If we switch from EXLA to a different backend (e.g. Torchx,
+    Candle)

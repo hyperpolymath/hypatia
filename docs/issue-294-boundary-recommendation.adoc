@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: MPL-2.0
+= Issue #294: VCL / SNIF / verisimdb boundary — recommendation memo
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-05-24
+
+== Status
+
+Issue #294 has been awaiting a ruling since 2026-05-20. The
+decision-ready memo is at `docs/architecture/boundary-design-options.adoc`
+— this memo extends it with a concrete recommendation grounded in
+what the implementation work has revealed since.
+
+== The choice
+
+Three boundary architectures, restated briefly:
+
+  *Option A — Split.* SNIF performs VCL parse + typecheck only;
+  the VCL→DB hop runs host-side via a NIF. The SNIF stays
+  freestanding wasm32 with no I/O imports.
+
+  *Option B — WASI.* SNIF takes on the DB hop too via WASI
+  filesystem / sockets. SNIF gains I/O. verisim-nif unneeded.
+
+  *Option C — No SNIF on the data path.* VCL parse+check is
+  in-process Elixir or Rust; no wasm boundary at all.
+
+== Recommendation: Option A
+
+Three reasons.
+
+=== 1. The SNIF moat is worth keeping, but only for what SNIFs are good at
+
+SNIFs (`wasm32-freestanding`, zero imports) are *designed* to be
+purely computational: take input, return output, can't reach
+network / disk / clock. That's exactly the threat profile of a
+VCL parser running against potentially-malicious query text:
+the worst it can do is OOM or infinite-loop, both fixable with
+the standard sandbox resource limits.
+
+Option B *gives up that property*. Once the SNIF has WASI sockets,
+"SNIF" becomes "wasm runtime with capabilities" — at which point
+we've reinvented Docker for one query parser. Significantly more
+attack surface and no commensurate gain over Option A.
+
+=== 2. The verisim-nif work is unavoidable
+
+All three options need a real `verisim-nif` (not the current
+placeholder). Option A and B need it host-side; Option C needs
+the Elixir parser to talk to verisimdb directly via the same
+NIF. Cost is the same; only the consumer changes.
+
+=== 3. The parser port is bounded
+
+The Idris2 reference parser exists in `vcl-ut`. Porting it to
+`wasm32-freestanding` Zig is mechanical (parser combinators,
+no I/O), and differential testing against the ReScript reference
+gives us a regression net at every commit. Estimated 2–3
+person-weeks for the port + the test rig. Option C's "port to
+Elixir" is the same scale (a parser is a parser) but loses the
+SNIF moat.
+
+== What landing this ruling unblocks
+
+A: verisim-nif host-side build → SNIF parser port → boundary module
+→ `verisim_connector.ex` retarget to go through the parser-checked
+NIF path. Roughly 2 milestones (M19, M20 — to be added to ROADMAP
+upon ruling).
+
+B: A's work + WASI binding spike in `wasmex` + in-guest verisimdb
+client. Roughly 3 milestones.
+
+C: verisim-nif host-side build → in-process Elixir parser port
+→ direct NIF calls. Roughly 1.5 milestones.
+
+Schedule-only argument favours C. Architectural-property argument
+favours A. **A is the right call** because we've spent two years
+building toward a SNIF-bounded query path and giving it up to
+shave a few weeks is a poor trade.
+
+== If you pick A — what happens next
+
+After the ruling commits:
+
+  1. Open M19 — verisim-nif real implementation in verisimdb
+     repository.
+  2. Open M20 — Idris2 → Zig SNIF parser port in this repository,
+     with a `verify/` differential-test rig against the ReScript
+     reference (vcl-ut).
+  3. Update `lib/verisim_connector.ex` to route through the new
+     boundary once both above land.
+
+Estimated total: ~6 person-weeks across both repos for a working
+end-to-end pipeline; another 4 for hardening (timeout enforcement,
+proper error mapping, observability).
+
+== If you pick B
+
+Reopen this memo with the WASI capability list (which subset are
+we permitting?) and the deny-list for what we DON'T grant (no
+network, no clock, etc.). Without that scoping the security
+properties of B are unbounded.
+
+== If you pick C
+
+Update the SNIF whitepaper to remove the VCL parsing example and
+amend the "snifs as boundary modules" section to acknowledge that
+data-path queries are out of scope for SNIFs in the production
+architecture. Pure Elixir parser port begins immediately; first
+useful milestone in ~3 weeks.
+
+== Where to record the ruling
+
+Reply to https://github.com/hyperpolymath/hypatia/issues/294 with
+one of:
+
+  * "Decision: A — split. M19 + M20 to be opened."
+  * "Decision: B — WASI. Memo extension required (see above)."
+  * "Decision: C — no SNIF on data path. SNIF whitepaper to be
+    amended."
+
+Whichever ruling, this memo and `docs/architecture/boundary-design-options.adoc`
+become the historical record of the decision.

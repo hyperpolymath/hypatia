@@ -1,0 +1,165 @@
+// SPDX-License-Identifier: MPL-2.0
+= verisim-api deployment runbook
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-05-24
+:toc:
+
+== Why this exists
+
+Hypatia currently consumes verisim-data as flat-file JSONL through
+`Hypatia.VCL.FileExecutor`. The roadmap (v9.0) tracks "verisim-api
+deployment" as the blocker for native graph / vector / temporal
+modalities — once a verisim-api server is running, VCL queries can
+hit `FROM verisim-api ...` for proper indexed traversal instead of
+scanning JSONL on every read.
+
+This memo documents the deployment work that's NOT in this repo
+(verisim-api is a separate Rust crate) but IS what Hypatia needs
+to be aware of when the deployment lands.
+
+== Current state on Hypatia's side
+
+  * `lib/verisim_connector.ex` — flat-file reader; will keep working
+    as a fallback after the API ships
+  * `lib/vcl/file_executor.ex` — local executor; will be the second
+    choice once a `VCL.ApiExecutor` lands
+  * `lib/vcl/remote_executor.ex` — multi-store federation (cross-org
+    is M18 via `lib/vcl/cross_org.ex`)
+  * `lib/vcl/client.ex` — routes queries by AST source type;
+    currently dispatches to FileExecutor for everything except
+    `{:federation_remote, ...}` (RemoteExecutor's domain)
+
+When verisim-api is deployed, Hypatia needs:
+
+  1. A new `Hypatia.VCL.ApiExecutor` that translates AST → HTTP
+     request → JSON response.
+  2. Routing in `Hypatia.VCL.Client` to dispatch
+     `{:source, :verisim_api}` AST nodes to the new executor.
+  3. Configurable endpoint (`:hypatia, :verisim_api_url`) with
+     fallback to FileExecutor when the API is unreachable.
+
+This is ~200 LOC of glue. Not done now because the API isn't
+deployed yet; documented here so it's ready when the deployment
+lands.
+
+== Deployment prerequisites (verisim-api side)
+
+The verisim-api crate lives in a separate repository (verisim-data
+or similar; check the hyperpolymath org). Before Hypatia integrates:
+
+=== Compute
+
+  * 1 small VM or container per region (verisim-api is a single
+    Rust binary; idle memory ~80 MB, working set during a sweep
+    ~500 MB)
+  * Co-locate with verisim-data's flat-file mount OR mount the
+    git-backed store over NFS / SSHFS for read-only access. The
+    API server doesn't write to the store; it serves queries
+    against it.
+
+=== Network
+
+  * Bind to a private network endpoint accessible from every
+    Hypatia instance that consumes it. Public exposure is not
+    required; the existing /api/* bearer-auth + loopback pattern
+    in Hypatia covers the Hypatia-facing surface.
+  * Standard ports: 7474 (Cypher / GraphDB legacy mapping), 8080
+    (REST), 50051 (gRPC). Pick one and document.
+
+=== Authentication
+
+  * Shared bearer token, same model as Hypatia's
+    HYPATIA_API_BEARER_TOKEN.
+  * Set `HYPATIA_VERISIM_API_TOKEN` in Hypatia's release env;
+    the new ApiExecutor reads it on every call.
+
+=== TLS
+
+  * Required if the API listener isn't on the same host as
+    Hypatia. Wolfi-base supports rustls / native TLS by default.
+
+== Step-by-step deploy
+
+1. *Build the verisim-api binary*:
++
+   In the verisim-data repo:
++
+   `cargo build --release -p verisim-api`
++
+   Resulting binary at `target/release/verisim-api`.
+
+2. *Containerise* (recommended for production):
++
+   Use `cgr.dev/chainguard/static` as the runtime (see
+   `docs/containerfiles-chainguard-gap.adoc` for the estate's
+   base-image policy). Single-stage build with the binary
+   COPY'd in.
+
+3. *Mount or clone the verisim-data store* into the container:
++
+   `/data/verisim` should be the store root; the API server reads
+   recursively. Treat it as read-only — Hypatia's outcomes / etc.
+   still go through the existing write path.
+
+4. *Wire env*:
++
+   `VERISIM_API_BIND=0.0.0.0:8080`
++
+   `VERISIM_API_TOKEN=...` (shared with Hypatia)
++
+   `VERISIM_DATA_PATH=/data/verisim`
+
+5. *Start the service* under whatever supervisor the deployment uses
+   (systemd, k8s, nomad, etc.). Health check: `GET /health`
+   returns `{"status":"ok"}`.
+
+6. *On Hypatia's side*: set in `config/runtime.exs`:
++
+   `config :hypatia, :verisim_api_url, "http://verisim-api.internal:8080"`
++
+   `config :hypatia, :verisim_api_token_env, "HYPATIA_VERISIM_API_TOKEN"`
++
+   Restart Hypatia. The new ApiExecutor (when implemented) will
+   route to the API; absent the URL config it stays on FileExecutor.
+
+== Migration / rollback
+
+Phase 1: ApiExecutor deployed, configured for ONE specific query
+shape (e.g. `pipeline_health`), all other queries continue through
+FileExecutor.
+
+Phase 2: As confidence grows, more query shapes migrate. Each
+migration is a one-line change in `Hypatia.VCL.Client.dispatch/2`.
+
+Rollback at any phase: unset `:hypatia, :verisim_api_url` →
+ApiExecutor returns `:not_configured` → Client falls back to
+FileExecutor.
+
+This means the deployment doesn't have to be all-or-nothing; we can
+prove out the API on the cheapest query first, then expand.
+
+== What happens to the file store
+
+Nothing immediate. The flat-file store remains the canonical
+write surface for outcomes, dispatches, neural states, metrics
+snapshots. The API server reads it; Hypatia keeps writing to it
+directly. Eventually (multi-year roadmap) the API may take over
+writes too, but that's separate from deployment.
+
+== Acceptance criteria for closing the ROADMAP item
+
+Mark "Deploy verisim-api server" done when:
+
+  * The API binary is running in production (one instance minimum)
+  * Hypatia has `Hypatia.VCL.ApiExecutor` implemented
+  * At least ONE production query has been migrated from FileExecutor
+    to ApiExecutor for at least 7 days without regression
+  * Rollback path verified by unsetting `:verisim_api_url` and
+    confirming queries continue through FileExecutor
+
+== When to update this memo
+
+  * When the verisim-api crate adds new endpoints
+  * When the auth model changes
+  * When new query shapes are migrated (track them in an audit
+    history section at the bottom of this file)
