@@ -1,28 +1,132 @@
 // SPDX-License-Identifier: MPL-2.0
-= docs/ — Documentation
+= Hypatia documentation
+:toc:
+:toclevels: 2
 
-Project documentation for Hypatia.
+Welcome. This index lists every authoritative document for Hypatia.
+For up-to-the-minute status see the link:../ROADMAP.adoc[ROADMAP]; for
+the human entry point use the link:../README.adoc[README].
+
+Layout follows the conventions in `rsr-template-repo` so contributors
+moving between hyperpolymath repos see a familiar tree.
+
+== Quickstart
+
+Pick one based on who you are. Each is a 1-page on-ramp.
+
+* link:quickstart/user.adoc[`user.adoc`] — install + run a scan.
+* link:quickstart/developer.adoc[`developer.adoc`] — clone + extend a rule.
+* link:quickstart/maintainer.adoc[`maintainer.adoc`] — deploy + monitor.
+* link:quickstart/llm-warmup-user.md[`llm-warmup-user.md`] — short context dump for chat-LLM users.
+* link:quickstart/llm-warmup-dev.md[`llm-warmup-dev.md`] — context dump for coding-agent users.
 
 == Guides
 
-* link:user-guide.adoc[user-guide.adoc] — End-user guide: scanning, dispatch, outcomes
-* link:developer-guide.adoc[developer-guide.adoc] — Developer guide: extending rules, adding recipes
-* link:admin-guide.adoc[admin-guide.adoc] — Deployment and operations
-* link:CICD-GUIDEBOOK.adoc[CICD-GUIDEBOOK.adoc] — CI/CD integration patterns
-* link:vcl-usage-guide.adoc[vcl-usage-guide.adoc] — VCL query language reference
-* link:api-reference.adoc[api-reference.adoc] — REST/GraphQL/gRPC API reference
+* link:guides/user-guide.adoc[`user-guide.adoc`] — end-to-end usage walkthrough.
+* link:guides/developer-guide.adoc[`developer-guide.adoc`] — adding rules, recipes, neural networks.
+* link:guides/admin-guide.adoc[`admin-guide.adoc`] — deployment + operations.
+* link:guides/cicd-guidebook.adoc[`cicd-guidebook.adoc`] — CI/CD integration patterns.
+* link:guides/vcl-usage-guide.adoc[`vcl-usage-guide.adoc`] — VCL query language reference.
+* link:guides/api-reference.adoc[`api-reference.adoc`] — REST / GraphQL / gRPC API reference.
+* link:guides/faq.adoc[`faq.adoc`] — frequently asked questions.
+* link:guides/glossary.adoc[`glossary.adoc`] — terminology.
 
 == Architecture
 
-* link:architecture/[architecture/] — Architecture decision records and diagrams
-* link:design/[design/] — Design documents
+* link:architecture/README.md[`README.md`] — architecture overview.
+* link:architecture/NEURAL-ARCHITECTURE.md[`NEURAL-ARCHITECTURE.md`] — 8 neural networks, 6-phase blackboard.
+* link:architecture/togaf-overview.adoc[`togaf-overview.adoc`] — TOGAF baseline, ADR-001..006.
+* link:architecture/mof-metamodel.adoc[`mof-metamodel.adoc`] — OMG MOF M2 metamodel.
+* link:architecture/boundary-design-options.adoc[`boundary-design-options.adoc`] — VCL / SNIF / verisimdb boundary (issue #294 decision memo).
+* link:architecture/topology.md[`topology.md`] — ecosystem topology.
+* link:architecture/system-integration.md[`system-integration.md`] — how Hypatia integrates with the wider estate.
 
-== Security
+== Design
 
-* link:THREAT-MODEL.adoc[THREAT-MODEL.adoc] — Threat model and attack surface
-* link:SECURITY-AUDIT.adoc[SECURITY-AUDIT.adoc] — Security audit findings
+* link:design/README.md[`README.md`] — design index.
+* link:design/DESIGN-NARRATIVE.md[`DESIGN-NARRATIVE.md`] — narrative design rationale.
+* link:design/design-decisions.adoc[`design-decisions.adoc`] — atomic decision log.
+
+== Operations — runbooks + design memos
+
+Each operations doc has a "When to update this memo" footer and explicit
+acceptance criteria for closing the underlying roadmap item.
+
+* link:operations/dispatch-runner-contract.adoc[`dispatch-runner-contract.adoc`] — exit-code contract gitbot-fleet must implement.
+* link:operations/verisim-api-deployment.adoc[`verisim-api-deployment.adoc`] — runbook for when the verisim-api Rust crate ships.
+* link:operations/migration-arangodb-to-verisim.adoc[`migration-arangodb-to-verisim.adoc`] — historical migration record.
+* link:operations/issue-294-boundary-recommendation.adoc[`issue-294-boundary-recommendation.adoc`] — A / B / C ruling memo.
+* link:operations/prover-wars-integration.adoc[`prover-wars-integration.adoc`] — v8.0 epic scope.
+* link:operations/nx-exla-neural-backend.adoc[`nx-exla-neural-backend.adoc`] — conditional migration plan.
+* link:operations/containerfiles-chainguard-gap.adoc[`containerfiles-chainguard-gap.adoc`] — estate Chainguard base-image audit.
 
 == Integration
 
-* link:A2ML-INTEGRATION.adoc[A2ML-INTEGRATION.adoc] — A2ML machine-readable metadata integration
-* link:K9-INTEGRATION.adoc[K9-INTEGRATION.adoc] — K9 coordination service integration
+* link:integration/a2ml.adoc[`a2ml.adoc`] — A2ML machine-readable metadata integration.
+* link:integration/k9.adoc[`k9.adoc`] — K9 coordination service integration.
+* link:integration/a2ml-k9.md[`a2ml-k9.md`] — combined integration notes.
+* link:integration/github-registry.adoc[`github-registry.adoc`] — GitHub registry integration.
+
+== Security
+
+* link:THREAT-MODEL.adoc[`THREAT-MODEL.adoc`] — threat model + attack surface.
+* link:SECURITY-AUDIT.adoc[`SECURITY-AUDIT.adoc`] — security audit findings.
+* link:governance/CRG-AUDIT-2026-04-18.adoc[`governance/CRG-AUDIT-2026-04-18.adoc`] — CRG audit.
+
+== Testing + proofs
+
+* link:testing/needs.md[`testing/needs.md`] — coverage targets.
+* link:testing/audit.md[`testing/audit.md`] — test-suite audit.
+* link:proofs/needs.md[`proofs/needs.md`] — Idris2 proof obligations.
+* link:proofs/gap-analysis.md[`proofs/gap-analysis.md`] — proof-coverage gap analysis.
+
+== Readiness + reports
+
+* link:readiness.md[`readiness.md`] — CRG declaration + component grades.
+* link:reports/audit/[`reports/audit/`] — dated audit reports.
+* link:SESSION-LOG.adoc[`SESSION-LOG.adoc`] — long-running session record.
+
+== Reference
+
+* link:EXPLAINME.adoc[`EXPLAINME.adoc`] — annotated tour of the codebase.
+* link:ADA-TUI-AUDIT-SPEC.adoc[`ADA-TUI-AUDIT-SPEC.adoc`] — Ada TUI spec.
+* link:STANDARDIZATION-CHECKLIST.scm[`STANDARDIZATION-CHECKLIST.scm`] — machine-checkable standardisation policy.
+* link:CRYPTO-STANDARD.scm[`CRYPTO-STANDARD.scm`] — machine-checkable crypto policy.
+
+== History
+
+* link:history/ROADMAP-v1.0.0.adoc[`history/ROADMAP-v1.0.0.adoc`] — route-to-v1.0.0 plan (superseded by the current ROADMAP).
+* link:history/ACTION-ITEMS.adoc[`history/ACTION-ITEMS.adoc`] — early action-item ledger (now tracked in GitHub issues).
+* link:history/KNOWN-ISSUES.adoc[`history/KNOWN-ISSUES.adoc`] — early known-issues list (now in ROADMAP "Known Gaps").
+
+== Diagrams
+
+* link:diagrams/architecture.md[`architecture.md`]
+* link:diagrams/bot-orchestration.md[`bot-orchestration.md`]
+* link:diagrams/data-flow.md[`data-flow.md`]
+* link:diagrams/rule-execution.md[`rule-execution.md`]
+
+== Wiki page sources
+
+The public wiki at https://github.com/hyperpolymath/hypatia/wiki is
+mirrored from `docs/wiki-pages/`. Wikis are a separate git repo we
+can't push to from CI; copy edits across via the wiki UI (or
+`git clone hypatia.wiki.git`) when these files change.
+
+* link:wiki-pages/README.md[`wiki-pages/README.md`] — sync instructions + page mapping
+* link:wiki-pages/Home.md[`Home.md`]
+* link:wiki-pages/Architecture.md[`Architecture.md`]
+* link:wiki-pages/Getting-Started.md[`Getting-Started.md`]
+* link:wiki-pages/Guides.md[`Guides.md`]
+* link:wiki-pages/FAQ.md[`FAQ.md`]
+* link:wiki-pages/Troubleshooting.md[`Troubleshooting.md`]
+
+== How this index is maintained
+
+Authoritative index. Whenever a new document is added (or relocated),
+update this file at the same time. The pattern PR is: (1) the doc
+change, (2) one-line addition here, (3) update of any references in
+the root link:../README.adoc[README] if the new doc warrants top-level
+visibility.
+
+For a navigation taxonomy reference, see `rsr-template-repo/docs/README.adoc`.
