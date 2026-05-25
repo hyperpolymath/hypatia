@@ -138,12 +138,12 @@ Elixir pipeline:
 
 * [x] Create PAT with repo scope for automated cross-repo dispatch _(2026-05-24: HYPATIA_DISPATCH_PAT provisioned, verified end-to-end — 19 hypatia-security-alert dispatches landed in gitbot-fleet from the first manual sweep)_
 * [x] Resolve "310 null-fix-script dispatch entries" _(PR #309 commit `d2bbf75`: root cause was a recipe-matcher language-gate bug, not missing scripts — all 22 scorecard recipe fix scripts already existed on disk but were unreachable. Matcher fixed; scripts now route as auto_execute / review per recipe tier.)_
-* [ ] Push committed fixes to remotes across repos _(PAT now allows it; remaining is wiring the dispatch-runner to call `mix hypatia.record_outcome` — see PR #309 commit `5e895b5`. Wiring lives in gitbot-fleet, not this repo.)_
+* [ ] Push committed fixes to remotes across repos _(Hypatia side ready: `mix hypatia.record_outcome` from commit `5e895b5` exposes the canonical entry point. Contract documented at `docs/dispatch-runner-contract.adoc` for the gitbot-fleet implementation; wiring lives in that repo.)_
 * [x] Fix `hypatia-scan.yml` template so `${{ env.HOME }}` does not collapse to empty in GitHub Actions (Issue #141) _(2026-05-24 commit `a77b41a`: pinned to `${{ runner.temp }}/hypatia` via `HYPATIA_HOME` in `$GITHUB_ENV`)_
 
 ==== Important
 
-* [ ] Deploy verisim-api server (enables native graph/vector/temporal modalities)
+* [ ] Deploy verisim-api server (enables native graph/vector/temporal modalities) _(runbook at `docs/verisim-api-deployment.adoc` covering compute/network/auth/TLS, step-by-step deploy, the Hypatia-side ApiExecutor glue that lands when the API ships, phased migration with one-line rollback)_
 * [x] VCL federation executor _(2026-04-22: `lib/vcl/remote_executor.ex`; `FROM FEDERATION REMOTE IN [...]`)_
 * [x] Historical trend tracking across scan cycles _(2026-04-22: `lib/historical_trends.ex` + VCL.Query integration; 2026-05-24 PR #309 adds 5-minute snapshot persistence to `data/verisim/metrics/`)_
 * [x] Ada TUI Elixir supervision wiring _(2026-05-24 commit `e3686be`: the Port was wired conditional on `:tui_enabled`, but pointed at a phantom `/metrics/snapshot` endpoint. Endpoint added via `Hypatia.Web.MetricsSnapshot` so the TUI receives live data when enabled.)_
@@ -152,8 +152,8 @@ Elixir pipeline:
 
 * [x] GraphQL API as live HTTP endpoint _(2026-05-24 commit `c344af9` — M14: minimal hand-rolled GraphQL handler at POST /graphql; supports status / health / recipes / recipe / alerts / quarantine. Upgrade path to Absinthe is keep-the-URL-replace-the-handler.)_
 * [x] SARIF output for IDE integration _(2026-05-24 commit `01fce4d` — M13: native `--format sarif` in `Hypatia.SARIF`; replaces the inline JS converter that lived in `hypatia-scan.yml`.)_
-* [ ] Nx/EXLA backend for the neural layer (if/when reservoir sizes outgrow pure Elixir — currently no pressure)
-* [ ] Cross-organization federation with VCL drift policies (heavy; needs separate design pass)
+* [ ] Nx/EXLA backend for the neural layer (if/when reservoir sizes outgrow pure Elixir — currently no pressure) _(migration plan at `docs/nx-exla-neural-backend.adoc`)_
+* [x] Cross-organization federation with VCL drift policies (M18) _(2026-05-24 commit `e1f1134`: `lib/vcl/cross_org.ex` with per-peer policies (severity allowlist, age cap, dismissal override, drift threshold); two new telemetry events; per-peer bearer token via env)_
 
 === v7.5 — Watcher / Supervision Interface (COMPLETE, 2026-05-24, PR #309)
 
@@ -204,8 +204,8 @@ Soundness gates plus closed-loop verification metric.
 
 * [x] Balanced training data: Strategy A on by default, B + C operationally selectable _(2026-05-24 commit `fdb929d`: `:hypatia, :neural_rebalance_strategy = :a | :b | :c | :rotate` in app config; `:rotate` cycles A→B→C across `force_cycle` calls)_
 * [x] Neural state persistence to disk: save (Persistence.save_all) was wired since PR #275; load was partial (RBF only). 2026-05-24 commit `2d5cb2e` adds MoE + trust_graph hydration on init. LSM + ESN remain summary-only by design (reservoirs not plainly serialisable).
-* [ ] GNN + VAE + Seq models for 007 trace integration (per blackboard architecture plan)
-* [ ] Prover Wars integration (dodeca-API, VeriSimDB, ABI, VCL-UT)
+* [x] GNN + VAE + Seq models for 007 trace integration (M17) _(2026-05-24 commit `cc50422`: GNN/VAE/Seq already wired into Coordinator phases 2/5/6 since pre-PR-309; this commit adds state/restore persistence so the three networks survive BEAM restart alongside the other five)_
+* [ ] Prover Wars integration (dodeca-API, VeriSimDB, ABI, VCL-UT) _(design proposal at `docs/prover-wars-integration.adoc` — three-stage pipeline, ~4 weeks for one engineer)_
 
 === v9.0 — Ecosystem Scale (PLANNED)
 
@@ -222,8 +222,10 @@ Soundness gates plus closed-loop verification metric.
 4. **Fix script coverage:** ~~310/600 auto-execute entries with null fix_script~~ Resolved 2026-05-24 (PR #309 commit `d2bbf75`) — root cause was a matcher language-gate bug, not missing scripts. All 22 scorecard recipe fix scripts already existed on disk; they were unreachable because of an unrecognised `"any"` language sentinel and unreachable `"yaml"` recipes.
 5. **Containerfiles:** Haskell still uses non-Chainguard base images (Logtalk removed)
 6. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
-7. **Neural state persistence:** Coordinator has not persisted to disk yet. Watcher Phase 1 ETS state is similarly ephemeral by design; 5-min snapshot persistence to `data/verisim/metrics/` (PR #309 commit `a1eb6b2`) covers historical trends without solving live-state continuity.
-8. **`/api/*` loopback-only:** Watcher's operational endpoints currently reject non-localhost callers. Bearer-token auth tracked as Phase 4 deferred work under v7.5.
+7. **Neural state persistence:** ~~Coordinator has not persisted to disk yet~~ All eight networks now warm-restart-capable. RBF + MoE + trust_graph hydrated since commits `f5257ef` + `2d5cb2e`; GNN + VAE + Sequence since commit `cc50422` (M17). LSM + ESN remain summary-only by reservoir-state design — no plain serialisation pathway for those.
+8. **`/api/*` loopback-only:** ~~Bearer-token auth tracked as Phase 4 deferred~~ Done 2026-05-24 commit `5fab9d4` (M15a): HYPATIA_API_BEARER_TOKEN env enables remote callers; loopback-only otherwise.
+9. **Containerfiles Chainguard gap:** Hypatia's own Containerfiles use Chainguard for runtime; the Haskell sibling repos can't until Chainguard ships a Haskell base image or we build a custom Wolfi-Haskell. Cross-repo work; memo at `docs/containerfiles-chainguard-gap.adoc`.
+10. **Issue #294 — VCL/SNIF/verisimdb boundary ruling:** Decision-ready since 2026-05-20. Recommendation memo at `docs/issue-294-boundary-recommendation.adoc` argues for Option A (split — SNIF for parse + check, host-side NIF for DB hop). Awaiting human ruling.
 
 == License & Governance
 

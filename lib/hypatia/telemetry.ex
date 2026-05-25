@@ -58,6 +58,8 @@ defmodule Hypatia.Telemetry do
   @neural_cycle [:hypatia, :neural, :cycle]
   @soundness_violation [:hypatia, :soundness, :violation]
   @anomaly_detected [:hypatia, :anomaly, :detected]
+  @cross_org_import [:hypatia, :cross_org, :import]
+  @cross_org_drift [:hypatia, :cross_org, :drift]
 
   @all_events [
     @scan_complete,
@@ -68,7 +70,9 @@ defmodule Hypatia.Telemetry do
     @rate_limit_exceeded,
     @neural_cycle,
     @soundness_violation,
-    @anomaly_detected
+    @anomaly_detected,
+    @cross_org_import,
+    @cross_org_drift
   ]
 
   @doc "Every event the watcher should subscribe to."
@@ -122,6 +126,35 @@ defmodule Hypatia.Telemetry do
     measurements = Keyword.fetch!(opts, :measurements)
     metadata = Keyword.fetch!(opts, :metadata) |> Map.new()
     safe_execute(@anomaly_detected, Map.new(measurements), metadata)
+  end
+
+  @doc """
+  Emitted by `Hypatia.VCL.CrossOrg.pull_findings/1` for every peer
+  pull. Carries import counts in measurements; peer identity and
+  drop reasons in metadata.
+  """
+  def cross_org_import(metadata) do
+    {accepted, metadata} = Keyword.pop(metadata, :accepted, 0)
+    {dropped, metadata} = Keyword.pop(metadata, :dropped, 0)
+
+    safe_execute(@cross_org_import, %{accepted: accepted, dropped: dropped}, Map.new(metadata))
+  end
+
+  @doc """
+  Emitted by `Hypatia.VCL.CrossOrg` when a peer's recipe confidence
+  diverges from the local value by more than the configured
+  drift_threshold. The Alerts module routes this to operators.
+  """
+  def cross_org_drift(metadata) do
+    {peer_conf, metadata} = Keyword.pop(metadata, :peer_confidence, 0.0)
+    {local_conf, metadata} = Keyword.pop(metadata, :local_confidence, 0.0)
+    {delta, metadata} = Keyword.pop(metadata, :delta, 0.0)
+
+    safe_execute(
+      @cross_org_drift,
+      %{peer_confidence: peer_conf, local_confidence: local_conf, delta: delta},
+      Map.new(metadata)
+    )
   end
 
   # `:telemetry` is a transitive dep of phoenix/bandit, but if Hypatia

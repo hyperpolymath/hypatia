@@ -85,6 +85,19 @@ schema is intentionally flat and self-documenting.
   makes the "one fixture file per rule" pattern not directly portable.
   Documented below so future iteration starts from the right premise.
 
+* Fixtures in BANNED LANGUAGES are blocked by the org-policy
+  governance check, even when they live in `test/soundness/fixtures/`.
+  The fixture file's mere existence trips the unsuppressable
+  `cicd_rules/banned_language_file` rule (PR #280 made it total).
+  Specifically: `getexn_on_external.res` was removed in PR #314 after
+  the AffineScript migration moved ReScript to banned status. The
+  rule it covered (`code_safety/getexn_on_external`) still has unit
+  coverage via inline-string test in `test/code_safety_test.exs`
+  (line 118), so removing the fixture didn't lose detection — just
+  the end-to-end packaging assertion for that specific rule. Same
+  architectural mismatch as the Python fixture problem; do NOT add
+  new banned-language fixtures.
+
 === Why other rule families don't drop in cleanly
 
 [cols="1,3,3", options="header"]

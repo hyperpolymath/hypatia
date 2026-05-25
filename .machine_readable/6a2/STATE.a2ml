@@ -10,7 +10,7 @@ status = "active"
 
 [project-context]
 name = "hypatia"
-completion-percentage = 95
+completion-percentage = 97
 phase = "implementation"
 maturity = "alpha"
 crg-grade = "C"
@@ -46,8 +46,11 @@ milestones = [
   { id = "M14", title = "GraphQL API as live HTTP endpoint", status = "done" },
   { id = "M15", title = "Bearer-token auth + persistent state across restart + cross-host federation + ESN tight integration", status = "done" },
   { id = "M16", title = "Neural state persistence: MoE + trust_graph hydration on init (LSM/ESN summary-only by design)", status = "done" },
-  { id = "M17", title = "GNN + VAE + Seq models for 007 trace integration", status = "planned" },
-  { id = "M18", title = "Cross-organization federation with VCL drift policies", status = "planned" },
+  { id = "M17", title = "GNN + VAE + Seq state/restore persistence (already wired into Coordinator phases pre-PR-309)", status = "done" },
+  { id = "M18", title = "Cross-organization federation with VCL drift policies (lib/vcl/cross_org.ex + telemetry events)", status = "done" },
+  { id = "M19", title = "Prover Wars integration (dodeca-API / VeriSimDB / ABI / VCL-UT)", status = "planned" },
+  { id = "M20", title = "verisim-api deployment + Hypatia.VCL.ApiExecutor", status = "planned" },
+  { id = "M21", title = "Nx/EXLA neural backend (conditional on reservoir size growth)", status = "planned" },
 ]
 
 [blockers-and-issues]

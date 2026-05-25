@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 // HYPATIA FFI Implementation
 //
 // This module implements the C-compatible FFI declared in src/abi/Foreign.idr

@@ -96,12 +96,23 @@ jobs:
           echo "Scanning repository: ${{ github.repository }}"
 
           # Run scanner (exits non-zero when findings exist — suppress to continue).
-          # Emits BOTH:
-          #   hypatia-findings.json  — native JSON for the artifact + PR comment + Phase 2 submission
-          #   hypatia.sarif          — native SARIF 2.1.0 (Hypatia.SARIF module since PR #309)
-          #                            replaces the inline Node.js converter that used to live here.
-          HYPATIA_FORMAT=json  "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json || true
-          HYPATIA_FORMAT=sarif "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia.sarif         || true
+          # Two outputs at different severity thresholds:
+          #
+          #   hypatia-findings.json (severity=low)
+          #     Full advisory surface — the artifact + SARIF page show
+          #     everything including the noise floor. SARIF goes to
+          #     Code Scanning where alerts are individually triageable.
+          #
+          #   hypatia-dispatch.json  (severity=medium)
+          #     Only medium+ findings are forwarded to gitbot-fleet's
+          #     Phase 2 learning channel. Low-severity findings are
+          #     ADVISORY ONLY by design and should not generate
+          #     cross-repo dispatches / sustainabot issues — that's
+          #     where the "hundreds of hypatia-linked issues" noise
+          #     was coming from. See PR #314 triage.
+          HYPATIA_FORMAT=json  HYPATIA_SEVERITY=low    "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia-findings.json  || true
+          HYPATIA_FORMAT=json  HYPATIA_SEVERITY=medium "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia-dispatch.json  || true
+          HYPATIA_FORMAT=sarif HYPATIA_SEVERITY=low    "$HYPATIA_HOME/hypatia-cli.sh" scan . --exit-zero > hypatia.sarif          || true
 
           # Validate SARIF (empty SARIF is intentional — clears stale alerts).
           # Falls back to a minimal empty document if the scanner couldn't emit
@@ -224,7 +235,12 @@ jobs:
           # the script cd's into its own working dir before reading the
           # file, so a relative path would resolve to the wrong place.
           # A submission-script failure is logged but non-fatal.
-          if bash "$SUBMIT_SCRIPT" "$GITHUB_WORKSPACE/hypatia-findings.json"; then
+          # Submit the medium+ filtered payload, NOT the full hypatia-findings.json.
+          # Low-severity findings are advisory-only by design (see severity
+          # threshold split above) and submitting them generated estate-wide
+          # sustainabot issue spam — the original cause of "hundreds of
+          # hypatia-linked issues" triaged in PR #314.
+          if bash "$SUBMIT_SCRIPT" "$GITHUB_WORKSPACE/hypatia-dispatch.json"; then
             echo "✅ Finding submission complete"
           else
             echo "::warning::gitbot-fleet submission script exited non-zero — Phase 2 learning submission skipped (non-fatal)."

@@ -1,0 +1,117 @@
+// SPDX-License-Identifier: MPL-2.0
+= Containerfiles: Chainguard base-image gap
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-05-24
+
+== Scope
+
+This memo records the *cross-repository* state of base-image hardening
+across the hyperpolymath estate, what's blocking full Chainguard
+adoption, and the actionable path forward. Tracked in ROADMAP.adoc
+under "Known Gaps".
+
+== In this repository (hypatia)
+
+[cols="3,2,2,3", options="header"]
+|===
+| Containerfile | Builder base | Runtime base | Status
+
+| `deploy/Containerfile`
+| `docker.io/library/rust:1.94-slim-bookworm`
+| `cgr.dev/chainguard/wolfi-base:latest`
+| ✅ Chainguard runtime; Rust builder is the only published toolchain
+   with everything Hypatia's escript needs
+
+| `integration/Containerfile.test`
+| `docker.io/library/rust:1.94-slim-bookworm`
+| (same — single-stage)
+| ✅ Pinned to versioned tag (2026-05-24); cargo-tarpaulin requires
+   the full rustc toolchain which Chainguard does not publish
+|===
+
+Both are pinned to specific tags; neither uses `:latest` (which is
+reproducibility poison). The runtime image is Chainguard wolfi-base.
+The builder images are the official Rust images because:
+
+  * Chainguard publishes `cgr.dev/chainguard/rust` but only with the
+    minimal runtime, not the full toolchain (cargo, rustc, binutils,
+    cargo-tarpaulin) Hypatia's build needs.
+  * Switching the builder to Chainguard-rust-toolchain would require
+    a custom Wolfi-based image build with our exact toolchain pinned,
+    which is its own maintenance burden.
+
+This is acceptable: the *runtime* surface is what counts for the
+deployed binary's attack surface, and that's Chainguard. The builder
+runs in CI / dev sandboxes only.
+
+== Cross-repo Haskell gap (this is the ROADMAP item)
+
+Several hyperpolymath sibling repos contain Haskell projects:
+
+  * `cicada-rs/integration` (Haskell smoke tests)
+  * `haskell-*` ecosystem repos (per the org's `haskell-*` naming
+    convention)
+  * `boj-server` (Haskell cartridges, e.g. earlier `hypatia-mcp` work)
+
+Their Containerfiles use `docker.io/library/haskell:9.x-slim` or
+similar. Chainguard does NOT publish a Haskell base image as of this
+writing; only Rust, Go, Node, Python, Ruby, JDK, .NET, and a few
+language-agnostic bases (wolfi-base, static, glibc-dynamic) are on
+their catalog.
+
+=== Why this is upstream advocacy, not a code fix
+
+Three options, each with constraints:
+
+  1. *Wait for Chainguard to ship a Haskell image.*
+     They've signalled interest publicly but no ETA. We can subscribe
+     to their roadmap and migrate when they ship. Zero work for us
+     until then.
+
+  2. *Build our own Wolfi-based Haskell image.*
+     We'd take cgr.dev/chainguard/wolfi-base and `apk add` GHC + Cabal
+     + Stack. Wolfi has GHC packages. This works but commits us to
+     maintaining the image (security patches, GHC version bumps).
+     Estimated cost: 1 person-day initial + half a day per quarter.
+
+  3. *Switch Haskell projects to a different runtime.*
+     We've already retired Logtalk and several other languages. If
+     the Haskell footprint is small enough, a port-or-retire decision
+     might be cleaner than building a custom image. Out of scope for
+     a Containerfile audit — that's an architectural call.
+
+=== Recommendation
+
+Pursue (1) — subscribe to Chainguard's Haskell roadmap and migrate
+when shipped. In the meantime:
+
+  * Pin every Haskell Containerfile across the estate to a SPECIFIC
+    GHC version tag (no `haskell:latest`).
+  * Add Trivy or grype scanning of the Haskell builder images in CI
+    so we notice CVE drift even on non-Chainguard bases.
+  * When a Haskell repo's image is the runtime (not just build),
+    add a `runtime:` stage on `cgr.dev/chainguard/static` so only
+    the compiled binary lives in the deployed layer.
+
+The hardening work for (1) is in the sibling Haskell repos, not
+here. This memo exists in hypatia so the ROADMAP entry can point
+at it.
+
+== Acceptance criteria for closing the ROADMAP item
+
+Mark "Containerfiles: Haskell still uses non-Chainguard base images"
+done when one of:
+
+  * Chainguard publishes a Haskell base image AND the haskell-*
+    repos have migrated to it.
+  * The custom Wolfi-Haskell image has been published to ghcr.io and
+    every estate Haskell repo's Containerfile references it.
+  * All Haskell projects in the estate have been retired or ported.
+
+== Audit history
+
+  * 2026-05-24 — initial memo. integration/Containerfile.test pinned
+    to rust:1.94-slim-bookworm (matching deploy/Containerfile's
+    builder). Backslash line-continuations restored on the apt-get
+    install (previous version had them stripped, breaking the
+    install). cargo install gained `--locked` for reproducibility.

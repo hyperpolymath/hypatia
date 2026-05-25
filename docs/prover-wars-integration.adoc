@@ -1,0 +1,174 @@
+// SPDX-License-Identifier: MPL-2.0
+= Prover Wars integration — design proposal
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-05-24
+
+== Scope
+
+"Prover Wars integration (dodeca-API, VeriSimDB, ABI, VCL-UT)" is
+listed under v8.0 Neural Maturity in ROADMAP.adoc as a separate
+epic. This memo scopes the work so an implementation pass can be
+budgeted.
+
+Status: not started. This memo is a design proposal, not a
+finalised plan.
+
+== What Prover Wars is (one paragraph)
+
+Prover Wars is the hyperpolymath research thread on automated
+adversarial theorem prover comparison: given a goal, multiple
+provers (Lean, Coq, Idris2, Agda, Isabelle, HOL4, F*) compete to
+discharge it. The winner's tactic + the runtime statistics feed
+Hypatia's `Hypatia.Neural.ProverRecommender` (M5 — already
+operational). What's missing is the data ingestion side: pulling
+the head-to-head statistics from each prover's results corpus.
+
+== Components and their roles
+
+  * *dodeca-API* — the central catalogue of prover challenges,
+    their canonical statements, and winner attribution. Lives in
+    its own repo (dodecahedron-something; check the org). REST
+    API exposes `/challenges`, `/results/:challenge_id`,
+    `/winners?since=...`.
+
+  * *VeriSimDB* — already integrated for Hypatia's data layer.
+    Prover Wars results land in VeriSimDB under
+    `data/prover-wars/{challenge,result,winner}/*.jsonl` (proposed
+    layout — needs confirmation with the VeriSimDB owner).
+
+  * *ABI* — Idris2 ABI definitions in `src/abi/` already export
+    `ProofObligation` types. Prover Wars integration adds
+    `ProofChallenge` + `ProofResult` to the ABI so cross-language
+    consumers see consistent shapes.
+
+  * *VCL-UT* — the conformant VCL parser (ReScript + Idris2). Used
+    by dodeca-API for differential comparison. Hypatia doesn't
+    need direct access — it consumes the results through
+    dodeca-API.
+
+== Proposed architecture
+
+Three-stage pipeline:
+
+[source]
+----
+dodeca-API           VeriSimDB                    Hypatia
+   │                     │                           │
+   ├─ /winners → ──────→ │                           │
+   │                     │ (canonical store)         │
+   │                     │ ←─────── periodic poll ───┤
+   │                     │                           │  ProverRecommender
+   │                     │                           │  learns from
+   │                     │                           │  head-to-head
+   │                     │                           │
+   │ ←──── ProofObligation dispatched ──────────────┤
+   │                                                 │
+   ├─ runs N provers in parallel                     │
+   │                                                 │
+   ├─ writes ProofResult → VeriSimDB ────────────────┤
+   │                                                 │
+   │                                            ProverRecommender
+   │                                            updates next time
+----
+
+=== New module on Hypatia's side
+
+`Hypatia.ProverWars` — single module, single GenServer.
+
+  * `subscribe_dodeca/0` — periodic poll of dodeca-API for new
+    winners (default every 5 min). Writes to verisim-data and
+    updates the prover trust scores in the `GraphOfTrust`.
+
+  * `dispatch_obligation/1` — when Hypatia's pipeline produces a
+    `ProofObligation`, route to dodeca-API. The existing
+    `Hypatia.ProofObligation` module already builds the shape;
+    this adds the cross-system wire.
+
+  * `result_handler/1` — consumes ProofResult writebacks, updates
+    the prover_recommender weights.
+
+Estimated 400–600 LOC including tests.
+
+=== ABI additions
+
+In `src/abi/Types.idr`:
+
+[source,idris]
+----
+record ProofChallenge where
+  constructor MkProofChallenge
+  id : String
+  statement : String
+  context : String
+  difficulty : Nat
+  introduced : String  -- ISO-8601
+
+record ProofResult where
+  constructor MkProofResult
+  challenge_id : String
+  prover : String       -- "lean" | "coq" | "idris2" | ...
+  tactic : String
+  duration_ms : Nat
+  succeeded : Bool
+  timestamp : String
+----
+
+Add equivalent gRPC + REST endpoint definitions in `src/abi/GRPC.idr`
+and `src/abi/REST.idr`.
+
+=== Telemetry
+
+Two new events (extend `lib/hypatia/telemetry.ex`):
+
+  * `[:hypatia, :prover_wars, :winner_observed]`
+    metadata: `prover`, `challenge_id`, `duration_ms`
+
+  * `[:hypatia, :prover_wars, :obligation_dispatched]`
+    metadata: `challenge_id`, `provers_invited`, `local_obligation_id`
+
+These flow through the existing Watcher + Alerts pipeline. The
+ProverRecommender doesn't need new telemetry — it already learns
+from outcomes.
+
+== Pre-requisites
+
+  * dodeca-API operational and reachable from the Hypatia VPC
+  * VeriSimDB schema agreement on `data/prover-wars/...` layout
+    (currently a proposal — needs dodeca-API owner sign-off)
+  * Bearer-token auth between Hypatia and dodeca-API (same model
+    as cross-org federation in `lib/vcl/cross_org.ex`)
+
+== Phasing
+
+  *Phase 1 (~1 week)* — Read-only. `Hypatia.ProverWars.subscribe_dodeca/0`
+  polls and writes to VeriSimDB. ProverRecommender learns passively.
+  No outbound dispatch yet.
+
+  *Phase 2 (~2 weeks)* — Bidirectional. Hypatia dispatches
+  ProofObligations to dodeca-API; consumes the result events.
+  Telemetry surfaces winners on the dashboard.
+
+  *Phase 3 (~1 week)* — Adversarial training feedback. When a
+  prover loses N times in a row, downweight it in the
+  recommender. When a tactic wins consistently, surface as a
+  recommended pattern.
+
+Total: ~4 weeks for one engineer.
+
+== Acceptance criteria for closing the ROADMAP item
+
+Mark "Prover Wars integration" done when:
+
+  * `Hypatia.ProverWars` GenServer is running in supervision tree
+  * VeriSimDB has at least 30 days of polled winner data
+  * ProverRecommender's trust weights have been updated at least
+    once from real Prover Wars outcomes (visible in
+    `data/verisim/neural-states/trust.json`)
+  * The dashboard shows the two new telemetry kinds in the live
+    stream
+
+== When to update this memo
+
+  * When dodeca-API's API surface changes
+  * When the VeriSimDB schema for prover-wars/ is finalised
+  * On every phase landing — append an audit-history line

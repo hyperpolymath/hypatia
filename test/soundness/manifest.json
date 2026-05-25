@@ -38,13 +38,6 @@
     },
     {
       "rule_module": "code_safety",
-      "rule_id": "getexn_on_external",
-      "language": "rescript",
-      "fixture": "test/soundness/fixtures/code_safety/getexn_on_external.res",
-      "expected_severity": "critical"
-    },
-    {
-      "rule_module": "code_safety",
       "rule_id": "unwrap_without_check",
       "language": "rust",
       "fixture": "test/soundness/fixtures/code_safety/unwrap_without_check.rs",

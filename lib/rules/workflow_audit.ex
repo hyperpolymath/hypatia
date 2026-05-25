@@ -12,23 +12,30 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # ─── Standard RSR workflows (17 total) ─────────────────────────────────
 
+  # These are workflows EVERY ecosystem repo is expected to carry, either as
+  # a standalone YAML file or via the consolidated `governance.yml` shared
+  # bundle. Eight workflows that USED to be in this list have been retired
+  # by the consolidation (per `.github/workflows/governance.yml`'s docstring):
+  #
+  #   quality.yml, guix-nix-policy.yml, npm-bun-blocker.yml, ts-blocker.yml,
+  #   security-policy.yml, rsr-antipattern.yml, wellknown-enforcement.yml,
+  #   workflow-linter.yml
+  #
+  # All eight are now covered by `governance.yml` ->
+  # hyperpolymath/standards/.github/workflows/governance-reusable.yml.
+  # Flagging them as "missing" produces ~10 false-positive findings per
+  # consuming repo (~2,900 across the estate); removed from the list.
+  #
+  # Three more removed: instant-sync.yml (per-repo opt-in for mirror sync,
+  # not universal), jekyll.yml + jekyll-gh-pages.yml (only repos using
+  # GitHub Pages need these), scorecard-enforcer.yml (consolidated into
+  # scorecard.yml).
   @standard_workflows [
     "hypatia-scan.yml",
     "codeql.yml",
     "scorecard.yml",
-    "quality.yml",
     "mirror.yml",
-    "instant-sync.yml",
-    "guix-nix-policy.yml",
-    "rsr-antipattern.yml",
-    "security-policy.yml",
-    "wellknown-enforcement.yml",
-    "workflow-linter.yml",
-    "npm-bun-blocker.yml",
-    "ts-blocker.yml",
-    "jekyll-gh-pages.yml",
-    "jekyll.yml",
-    "scorecard-enforcer.yml",
+    "governance.yml",
     "secret-scanner.yml"
   ]
 

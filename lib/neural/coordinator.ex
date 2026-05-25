@@ -92,6 +92,17 @@ defmodule Hypatia.Neural.Coordinator do
     moe = hydrate_moe(MixtureOfExperts.init(), persisted)
     trust_graph = hydrate_trust_graph(GraphOfTrust.build(), persisted)
 
+    # M17 — restore GNN / VAE / Seq via their GenServer restore APIs.
+    # These networks are siblings under the same supervisor; they're
+    # already started by the time the Coordinator init runs (the
+    # Application supervision order in lib/application.ex puts them
+    # before this module). Restore is best-effort and asynchronous
+    # in spirit — a missing PID or restore failure leaves the network
+    # at its fresh-init defaults rather than crashing the supervisor.
+    restore_named_network(GraphNeuralNetwork, get_in(persisted, [:gnn]))
+    restore_named_network(VariationalAutoencoder, get_in(persisted, [:vae]))
+    restore_named_network(SequenceModel, get_in(persisted, [:sequence]))
+
     state = %__MODULE__{
       trust_graph: trust_graph,
       moe: moe,
@@ -103,7 +114,8 @@ defmodule Hypatia.Neural.Coordinator do
     notes = [
       rbf_restore_note(rbf),
       moe_restore_note(moe, persisted),
-      trust_restore_note(persisted)
+      trust_restore_note(persisted),
+      new_networks_restore_note(persisted)
     ]
 
     Logger.info(
@@ -113,6 +125,38 @@ defmodule Hypatia.Neural.Coordinator do
     )
 
     {:ok, state}
+  end
+
+  defp restore_named_network(module, {:ok, data}) when is_map(data) do
+    if Process.whereis(module) do
+      try do
+        module.restore(data)
+      rescue
+        _ -> :ok
+      catch
+        _, _ -> :ok
+      end
+    end
+
+    :ok
+  end
+
+  defp restore_named_network(_module, _other), do: :ok
+
+  defp new_networks_restore_note(persisted) do
+    restored =
+      [:gnn, :vae, :sequence]
+      |> Enum.filter(fn k ->
+        case Map.get(persisted, k) do
+          {:ok, data} when is_map(data) -> Map.get(data, "trained") == true
+          _ -> false
+        end
+      end)
+
+    case restored do
+      [] -> ""
+      list -> " (#{Enum.join(list, "/")} restored)"
+    end
   end
 
   # Best-effort load of persisted neural state. Never raises: a missing or

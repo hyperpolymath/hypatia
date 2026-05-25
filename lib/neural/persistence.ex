@@ -34,6 +34,15 @@ defmodule Hypatia.Neural.Persistence do
     save_esn_summary(coordinator_state.esn)
     save_rbf(coordinator_state.rbf)
 
+    # M17 — new networks (GNN / VAE / Seq) are supervised GenServers,
+    # not fields on the coordinator's struct. Pull their state via the
+    # documented `state/0` accessor and persist alongside the original
+    # five. Best-effort: missing process / dead network skips silently
+    # so persistence can't kill the coordinator on shutdown.
+    save_named_network("gnn", Hypatia.Neural.GraphNeuralNetwork)
+    save_named_network("vae", Hypatia.Neural.VariationalAutoencoder)
+    save_named_network("sequence", Hypatia.Neural.SequenceModel)
+
     Logger.info("Neural states persisted (cycle #{coordinator_state.cycle_count})")
   end
 
@@ -44,7 +53,10 @@ defmodule Hypatia.Neural.Persistence do
       moe: load_state("moe"),
       lsm: load_state("lsm"),
       esn: load_state("esn"),
-      rbf: load_state("rbf")
+      rbf: load_state("rbf"),
+      gnn: load_state("gnn"),
+      vae: load_state("vae"),
+      sequence: load_state("sequence")
     }
   end
 
@@ -124,6 +136,25 @@ defmodule Hypatia.Neural.Persistence do
     }
 
     save_state("rbf", data)
+  end
+
+  # --- M17 helper: save a GenServer-backed network by name ---
+
+  defp save_named_network(filename, module) do
+    case Process.whereis(module) do
+      nil ->
+        :ok
+
+      _ ->
+        try do
+          snap = module.state()
+          save_state(filename, snap)
+        rescue
+          e -> Logger.warning("Persistence: #{module}.state/0 failed: #{Exception.message(e)}")
+        catch
+          _, _ -> :ok
+        end
+    end
   end
 
   # --- Generic Save/Load ---

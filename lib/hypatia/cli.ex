@@ -485,7 +485,21 @@ defmodule Hypatia.CLI do
         rescript_files = find_files_by_ext(repo_path, ".res")
 
         migration_findings =
-          Enum.flat_map(rescript_files, fn file ->
+          rescript_files
+          # Filter out files that suppression covers (e.g. soundness
+          # fixtures under test/soundness/fixtures/ deliberately use
+          # deprecated APIs so the scanner has something to flag).
+          # Previously this path bypassed ScannerSuppression entirely,
+          # producing a false-positive HIGH on every fixture.
+          |> Enum.reject(fn file ->
+            Hypatia.ScannerSuppression.suppressed?(
+              file,
+              "migration_rules",
+              "deprecated_api",
+              repo_path: repo_path
+            )
+          end)
+          |> Enum.flat_map(fn file ->
             case File.read(file) do
               {:ok, content} ->
                 deprecated = Hypatia.Rules.MigrationRules.scan_deprecated_usage(content)
