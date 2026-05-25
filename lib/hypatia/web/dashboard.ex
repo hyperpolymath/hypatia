@@ -127,6 +127,11 @@ defmodule Hypatia.Web.Dashboard do
     </div>
 
     <div class="card" style="margin-top:1rem">
+      <h2>Recent alerts</h2>
+      <div id="alerts" class="stream"><div class="empty">no alerts yet</div></div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
       <h2>Live telemetry stream</h2>
       <div id="stream" class="stream"><div class="empty">connecting…</div></div>
     </div>
@@ -215,6 +220,36 @@ defmodule Hypatia.Web.Dashboard do
         } catch (e) { /* keep last */ }
       }
 
+      async function pollAlerts() {
+        try {
+          const res = await fetch("/api/alerts", { cache: "no-store" });
+          if (!res.ok) throw new Error(res.status);
+          const body = await res.json();
+          renderAlerts(body.rows || []);
+        } catch (e) { /* keep last */ }
+      }
+
+      function renderAlerts(rows) {
+        const el = $("alerts");
+        if (!rows.length) {
+          el.innerHTML = '<div class="empty">no alerts yet</div>';
+          return;
+        }
+        el.innerHTML = rows.slice(0, 20).map((a) => {
+          const sev = String(a.severity || "").toLowerCase();
+          const pillClass = sev === "critical" || sev === "high"
+            ? "bad" : sev === "medium" ? "warn" : "dim";
+          const fed = a.metadata && a.metadata.federated_from
+            ? ` <span class="pill dim">peer ${a.metadata.federated_from}</span>` : "";
+          return `<div class="ev">
+            <span class="ts">${fmt.time(a.at || Date.now())}</span>
+            <span class="pill ${pillClass}">${a.severity || "?"}</span>
+            <span class="name">${a.rule || "?"}</span>
+            ${a.summary || ""}${fed}
+          </div>`;
+        }).join("");
+      }
+
       function connectStream() {
         const es = new EventSource("/api/events");
         const stream = $("stream");
@@ -272,9 +307,11 @@ defmodule Hypatia.Web.Dashboard do
       // Boot
       pollStatus();
       pollRecipes();
+      pollAlerts();
       connectStream();
       setInterval(pollStatus, 2000);
       setInterval(pollRecipes, 5000);
+      setInterval(pollAlerts, 5000);
     </script>
   </body>
   </html>

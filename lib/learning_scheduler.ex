@@ -124,6 +124,12 @@ defmodule Hypatia.LearningScheduler do
     # root cause of the token-cost/scattergun symptom (issue #274).
     neural_cycled = trigger_neural_cycle()
 
+    # M18 — pull findings from configured cross-org peers and import them
+    # under each peer's policy gates. No-op when :cross_org_policies is
+    # unset (the default). Best-effort: a failing peer never breaks the
+    # local learning cycle.
+    cross_org_imports = poll_cross_org_peers()
+
     now = DateTime.utc_now()
     total = outcomes_count + fleet_outcomes_count
 
@@ -145,6 +151,13 @@ defmodule Hypatia.LearningScheduler do
 
     if proof_model_updated do
       Logger.info("LearningScheduler: prover recommender retrained from VeriSimDB proof_attempts")
+    end
+
+    if cross_org_imports > 0 do
+      Logger.info(
+        "LearningScheduler: cross_org imported #{cross_org_imports} accepted finding(s) " <>
+          "from #{length(Hypatia.VCL.CrossOrg.peers())} peer(s)"
+      )
     end
 
     if neural_cycled do
@@ -232,6 +245,48 @@ defmodule Hypatia.LearningScheduler do
     e ->
       Logger.warning("LearningScheduler: neural cycle trigger failed: #{inspect(e)}")
       false
+  end
+
+  # --- M18: Cross-org peer polling -------------------------------------
+  #
+  # For every peer configured under :hypatia, :cross_org_policies, pull
+  # recent findings through their /graphql endpoint and apply the peer
+  # policy gates (severity allowlist, age cap, dismissal override, drift
+  # threshold). Returns the total accepted-finding count for logging.
+  #
+  # All failure modes are isolated: an unreachable peer / bad response /
+  # parse error never breaks the local learning cycle. The CrossOrg
+  # module itself returns {:error, reason} for any of these; we just
+  # tally and continue.
+  defp poll_cross_org_peers do
+    case Hypatia.VCL.CrossOrg.peers() do
+      [] ->
+        0
+
+      peers ->
+        Enum.reduce(peers, 0, fn policy, acc ->
+          peer_id = Map.get(policy, :peer_id)
+
+          case Hypatia.VCL.CrossOrg.pull_findings(peer_id: peer_id, limit: 100) do
+            {:ok, accepted, stats} ->
+              Logger.info(
+                "LearningScheduler: cross_org peer #{peer_id} accepted=#{stats.accepted} " <>
+                  "dropped_severity=#{stats.dropped_severity} dropped_age=#{stats.dropped_age} " <>
+                  "dropped_dismissed=#{stats.dropped_dismissed} drift_alerts=#{stats.drift_alerts}"
+              )
+
+              acc + length(accepted)
+
+            {:error, reason} ->
+              Logger.warning("LearningScheduler: cross_org peer #{peer_id} skipped: #{reason}")
+              acc
+          end
+        end)
+    end
+  rescue
+    e ->
+      Logger.warning("LearningScheduler: cross_org poll crashed: #{inspect(e)}")
+      0
   end
 
   # --- N4: Strategy-shift detection + re-queueing ----------------------
