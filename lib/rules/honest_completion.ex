@@ -62,9 +62,43 @@ defmodule Hypatia.Rules.HonestCompletion do
       stub_count: count_stubs(repo_path),
       has_ci: File.dir?(Path.join(repo_path, ".github/workflows")),
       has_tests_dir: File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
-      has_state_file: File.exists?(Path.join(repo_path, ".machine_readable/STATE.a2ml")) or
-                      File.exists?(Path.join(repo_path, ".machine_readable/STATE.scm")) # DEPRECATED: .scm fallback -- will be removed once all repos migrate to .a2ml
+      # State file location convention varies across the estate:
+      # most repos use .machine_readable/STATE.a2ml directly; some
+      # (including hypatia) namespace it under a profile dir like
+      # .machine_readable/6a2/STATE.a2ml. Check both — flagging
+      # the namespaced layout as "missing" produced a false positive
+      # on every repo that uses it.
+      has_state_file: state_file_exists?(repo_path)
     }
+  end
+
+  defp state_file_exists?(repo_path) do
+    mr = Path.join(repo_path, ".machine_readable")
+
+    direct =
+      File.exists?(Path.join(mr, "STATE.a2ml")) or
+        File.exists?(Path.join(mr, "STATE.scm"))
+
+    if direct do
+      true
+    else
+      # Look for STATE.{a2ml,scm} in any direct subdirectory of
+      # .machine_readable/. Bounded search (one level deep) so a
+      # malicious repo can't tarpit us via deep nesting.
+      case File.ls(mr) do
+        {:ok, entries} ->
+          Enum.any?(entries, fn entry ->
+            sub = Path.join(mr, entry)
+
+            File.dir?(sub) and
+              (File.exists?(Path.join(sub, "STATE.a2ml")) or
+                 File.exists?(Path.join(sub, "STATE.scm")))
+          end)
+
+        _ ->
+          false
+      end
+    end
   end
 
   # ─── Audit functions ───────────────────────────────────────────────────

@@ -63,6 +63,14 @@ defmodule Hypatia.ScannerSuppression do
     },
     "code_safety" => %{
       :any => @training_corpus_paths
+    },
+    # migration_rules detects deprecated APIs. The soundness fixtures
+    # under test/soundness/fixtures/ DELIBERATELY use deprecated patterns
+    # so the scanner has something to flag — flagging them via
+    # migration_rules is self-recursion, same class as the existing
+    # code_safety / security_errors exemptions for the training corpus.
+    "migration_rules" => %{
+      :any => @training_corpus_paths
     }
   }
 
