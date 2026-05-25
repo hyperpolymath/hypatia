@@ -1,17 +1,27 @@
 # SPDX-License-Identifier: MPL-2.0
-FROM rust:latest
+#
+# Test container for the Rust integration suite. The runtime image in
+# deploy/Containerfile is Chainguard wolfi-base; this builder uses the
+# official rust image because cargo-tarpaulin (coverage) needs a full
+# rustc toolchain that Chainguard doesn't publish.
+#
+# Pinned to a versioned tag (not :latest) so test runs are reproducible
+# and a Docker Hub registry hiccup can't pull a newer rust mid-flight.
+FROM docker.io/library/rust:1.94-slim-bookworm
 
 WORKDIR /workspace
 
-# Install dependencies
-RUN apt-get update && apt-get install -y 
-    curl 
-    wget 
-    iputils-ping 
-    && rm -rf /var/lib/apt/lists/*
+# Backslash continuations restored — previous version had them stripped,
+# which broke the apt-get install into separate (failing) RUN commands.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    iputils-ping \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install tarpaulin for coverage
-RUN cargo install cargo-tarpaulin
+# Install tarpaulin for coverage. --locked uses the project's Cargo.lock
+# so a transient registry blip can't drag in an unintended dep set.
+RUN cargo install cargo-tarpaulin --locked
 
 # Default command
 CMD ["cargo", "test", "--manifest-path", "integration/Cargo.toml"]
