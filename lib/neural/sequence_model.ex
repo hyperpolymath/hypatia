@@ -55,6 +55,26 @@ defmodule Hypatia.Neural.SequenceModel do
     GenServer.cast(__MODULE__, {:observe, decision})
   end
 
+  @doc """
+  Snapshot the network's serialisable state for persistence
+  (M17 — neural restart continuity). Returns a plain map; pass
+  to `restore/1` on a fresh process to rehydrate.
+  """
+  def state do
+    GenServer.call(__MODULE__, :get_state)
+  end
+
+  @doc """
+  Restore network state from a previously snapshotted map. Fields
+  not present in the map keep their fresh-init defaults. Silently
+  ignored if no data is provided.
+  """
+  def restore(map) when is_map(map) do
+    GenServer.call(__MODULE__, {:restore, map})
+  end
+
+  def restore(_), do: :ok
+
   @impl true
   def handle_call({:predict, _finding}, _from, state) do
     # Read full blackboard context
@@ -76,6 +96,30 @@ defmodule Hypatia.Neural.SequenceModel do
     Hypatia.Neural.Blackboard.write(:sequence, :prediction, result)
 
     {:reply, result, state}
+  end
+
+  def handle_call(:get_state, _from, state) do
+    snap = %{
+      "hidden_dim" => state.hidden_dim,
+      "max_sequence" => state.max_sequence,
+      "sequence_buffer" => state.sequence_buffer,
+      "weights" => state.weights,
+      "trained" => state.weights != nil
+    }
+
+    {:reply, snap, state}
+  end
+
+  def handle_call({:restore, map}, _from, state) do
+    restored = %{
+      state
+      | hidden_dim: Map.get(map, "hidden_dim", state.hidden_dim),
+        max_sequence: Map.get(map, "max_sequence", state.max_sequence),
+        sequence_buffer: Map.get(map, "sequence_buffer", state.sequence_buffer),
+        weights: Map.get(map, "weights", state.weights)
+    }
+
+    {:reply, :ok, restored}
   end
 
   @impl true

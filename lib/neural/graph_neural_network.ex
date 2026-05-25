@@ -50,6 +50,13 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
     GenServer.call(__MODULE__, {:analyse, finding})
   end
 
+  @doc "Snapshot serialisable state for M17 persistence."
+  def state, do: GenServer.call(__MODULE__, :get_state)
+
+  @doc "Restore state from a previously snapshotted map."
+  def restore(map) when is_map(map), do: GenServer.call(__MODULE__, {:restore, map})
+  def restore(_), do: :ok
+
   @impl true
   def handle_call({:analyse, finding}, _from, state) do
     # Read novelty from blackboard (Phase 1 output)
@@ -72,6 +79,53 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
 
     {:reply, result, state}
   end
+
+  def handle_call(:get_state, _from, state) do
+    snap = %{
+      "node_embeddings" => stringify_keys(state.node_embeddings),
+      "edge_weights" => Enum.map(state.edge_weights, fn {{from, to}, w} ->
+        %{"from" => to_string(from), "to" => to_string(to), "weight" => w}
+      end),
+      "clusters" => stringify_keys(state.clusters),
+      "layer_count" => state.layer_count,
+      "embedding_dim" => state.embedding_dim,
+      "trained" => map_size(state.node_embeddings) > 0
+    }
+
+    {:reply, snap, state}
+  end
+
+  def handle_call({:restore, map}, _from, state) do
+    edges =
+      (Map.get(map, "edge_weights", []) || [])
+      |> Enum.reduce(%{}, fn
+        %{"from" => f, "to" => t, "weight" => w}, acc when is_number(w) ->
+          Map.put(acc, {f, t}, w)
+
+        _, acc ->
+          acc
+      end)
+
+    node_embeddings = Map.get(map, "node_embeddings", state.node_embeddings) || state.node_embeddings
+    clusters = Map.get(map, "clusters", state.clusters) || state.clusters
+
+    restored = %{
+      state
+      | node_embeddings: node_embeddings,
+        edge_weights: edges,
+        clusters: clusters,
+        layer_count: Map.get(map, "layer_count", state.layer_count),
+        embedding_dim: Map.get(map, "embedding_dim", state.embedding_dim)
+    }
+
+    {:reply, :ok, restored}
+  end
+
+  defp stringify_keys(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp stringify_keys(other), do: other
 
   defp compute_centrality(agent_id, state) do
     edges = state.edge_weights

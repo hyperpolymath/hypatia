@@ -51,6 +51,13 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
     GenServer.call(__MODULE__, {:cluster, finding})
   end
 
+  @doc "Snapshot serialisable state for M17 persistence."
+  def state, do: GenServer.call(__MODULE__, :get_state)
+
+  @doc "Restore state from a previously snapshotted map."
+  def restore(map) when is_map(map), do: GenServer.call(__MODULE__, {:restore, map})
+  def restore(_), do: :ok
+
   @impl true
   def handle_call({:cluster, _finding}, _from, state) do
     # Read full blackboard context
@@ -74,5 +81,39 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
     Hypatia.Neural.Blackboard.write(:vae, :latent, latent)
 
     {:reply, result, state}
+  end
+
+  def handle_call(:get_state, _from, state) do
+    snap = %{
+      "encoder_weights" => state.encoder_weights,
+      "decoder_weights" => state.decoder_weights,
+      "latent_dim" => state.latent_dim,
+      "clusters" => state.clusters,
+      "cluster_labels" => Map.new(state.cluster_labels, fn {k, v} -> {to_string(k), v} end),
+      "trained" => state.encoder_weights != nil
+    }
+
+    {:reply, snap, state}
+  end
+
+  def handle_call({:restore, map}, _from, state) do
+    restored = %{
+      state
+      | encoder_weights: Map.get(map, "encoder_weights", state.encoder_weights),
+        decoder_weights: Map.get(map, "decoder_weights", state.decoder_weights),
+        latent_dim: Map.get(map, "latent_dim", state.latent_dim),
+        clusters: Map.get(map, "clusters", state.clusters),
+        cluster_labels:
+          map
+          |> Map.get("cluster_labels", %{})
+          |> Map.new(fn {k, v} ->
+            {case Integer.parse(to_string(k)) do
+               {n, ""} -> n
+               _ -> k
+             end, v}
+          end)
+    }
+
+    {:reply, :ok, restored}
   end
 end
