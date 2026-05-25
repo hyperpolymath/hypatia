@@ -37,6 +37,31 @@ defmodule Hypatia.Rules.LangPolicyRefreshTest do
       refute py[:applies_to], "Python ban must not be scoped via applies_to"
       refute py[:exception_repos], "Python ban must not have exception_repos"
     end
+
+    test "Jekyll workflow files are banned (use casket-ssg instead)" do
+      patterns = CicdRules.blocked_patterns()
+
+      for id <- [:jekyll_workflow_detected, :jekyll_gh_pages_workflow_detected] do
+        entry = Enum.find(patterns, &(&1.id == id))
+        assert entry, "expected #{id} entry"
+        assert entry.reason =~ "casket-ssg"
+      end
+    end
+
+    test "_config.yml (Jekyll site config) is banned" do
+      patterns = CicdRules.blocked_patterns()
+      entry = Enum.find(patterns, &(&1.id == :jekyll_config_detected))
+      assert entry
+      assert entry.glob == "_config.yml"
+      assert entry.reason =~ "casket-ssg"
+    end
+
+    test "Gemfile is banned (Ruby/Jekyll surface)" do
+      patterns = CicdRules.blocked_patterns()
+      entry = Enum.find(patterns, &(&1.id == :gemfile_detected))
+      assert entry
+      assert entry.glob == "Gemfile"
+    end
   end
 
   describe "validate_license/2 — MPL-1.0 → MPL-2.0 rewrite policy" do
