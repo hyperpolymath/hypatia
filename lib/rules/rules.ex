@@ -24,6 +24,7 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.CodeSafety
   alias Hypatia.Rules.MigrationRules
   alias Hypatia.Rules.BaselineHealth
+  alias Hypatia.Rules.BuildSystemRules
 
   @doc """
   Run a comprehensive scan on a file's content given its path and language.
@@ -34,6 +35,10 @@ defmodule Hypatia.Rules do
 
     # Code safety patterns
     findings = findings ++ CodeSafety.scan_content(content, language)
+
+    # Build-system config anti-patterns (dune, package.json) — added from
+    # affinescript#361 (the PR that found 3 of these on one main branch).
+    findings = findings ++ BuildSystemRules.scan(content, file_path)
 
     # Secret detection
     secrets = SecurityErrors.detect_secrets(content)
