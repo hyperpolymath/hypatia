@@ -62,7 +62,15 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @blocked_patterns [
-    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned -- use ReScript"},
+    # Lang-policy refresh 2026-05-25: TypeScript / ReScript / migrated-JS
+    # all replaced by AffineScript (the estate's go-forward language).
+    # Existing approved carve-outs (e.g. `.d.ts` declaration files, Deno
+    # test-runner .ts in `affinescript-deno-test/`, JS shims in
+    # `affinescript-cli/`) are honoured via ScannerSuppression — these
+    # entries gate NEW occurrences only.
+    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned -- use AffineScript"},
+    %{id: :rescript_detected, glob: "*.res", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
+    %{id: :rescript_interface_detected, glob: "*.resi", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
@@ -282,7 +290,12 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @required_spdx "MPL-2.0"
-  @wrong_licenses ["MIT", "Apache-2.0", "MPL-2.0", "AGPL-3.0", "GPL-3.0"]
+  # `MPL-2.0` is intentionally absent here — it's the required identifier
+  # (the first/second clauses of validate_license/2 short-circuit before
+  # this list is consulted). MPL-1.0 / MPL-1.0-or-later are the only
+  # legacy MPL identifiers seen in estate history; both must rewrite to
+  # MPL-2.0 (org policy refresh 2026-05-25, applies to docs AND code).
+  @wrong_licenses ["MIT", "Apache-2.0", "MPL-1.0", "MPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
 
   # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
   @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
