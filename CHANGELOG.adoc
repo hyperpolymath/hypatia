@@ -12,6 +12,46 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== Repository tidy: doc taxonomy aligned with rsr-template-repo (2026-05-25)
+
+Root-level documentation reorganised into `docs/` subtrees so the
+tree matches the conventions in `rsr-template-repo`. No content lost
+— moves are tracked via `git mv` so blame history is preserved.
+
+* Quickstarts moved to `docs/quickstart/`: user / developer / maintainer
+  on-ramps, plus the two LLM warmups.
+* Guides moved to `docs/guides/`: user, developer, admin, CI/CD, VCL,
+  FAQ, glossary, API reference.
+* Operational memos moved to `docs/operations/`: dispatch-runner
+  contract, verisim-api runbook, issue #294 ruling, Prover Wars,
+  Nx/EXLA migration plan, Chainguard gap.
+* Architecture extensions to `docs/architecture/`: system-integration
+  + topology (previously at root).
+* Design materials to `docs/design/`: DESIGN-NARRATIVE +
+  design-decisions.
+* Proofs to `docs/proofs/`: needs + gap-analysis.
+* Testing to `docs/testing/`: needs + audit.
+* Integration to `docs/integration/`: A2ML / K9 / GitHub registry +
+  the combined a2ml-k9 notes.
+* CRG declaration to `docs/readiness.md`.
+* History bucket `docs/history/`: ROADMAP-v1.0.0, ACTION-ITEMS,
+  KNOWN-ISSUES — superseded but kept for the audit trail.
+* `EXPLAINME.adoc` moved to `docs/`.
+
+Deletions:
+
+* `CONTRIBUTING.adoc` — 20-line stub duplicate of the canonical
+  66-line `CONTRIBUTING.md`.
+* `DOGFOODING-SESSION-2026-01-25.md` — 4-month-old session log;
+  retained in git history.
+
+Root README ArangoDB badge and "Graph Intelligence" line corrected
+to reflect verisim-data (ArangoDB was ditched per #273 audit; this
+was tech-debt in the README).
+
+`docs/README.adoc` rebuilt as the authoritative index with explicit
+links to every doc under the new taxonomy.
+
 ==== VQL → VCL + verisimdb → verisim Rename (2026-04-05)
 
 Matches the ecosystem-wide rename landed in Verisim on the same day.

@@ -9,7 +9,7 @@ image:https://raw.githubusercontent.com/hyperpolymath/palimpsest-license/main/as
 :website: https://hypatia.reposystem.dev
 
 image:https://img.shields.io/badge/Elixir-Rules-purple.svg[Elixir]
-image:https://img.shields.io/badge/ArangoDB-Graph-green.svg[ArangoDB]
+image:https://img.shields.io/badge/verisim--data-Flat--file-green.svg[verisim-data]
 image:https://img.shields.io/badge/Ada_2022-TUI-blue.svg[Ada]
 
 == License & Philosophy
@@ -28,7 +28,7 @@ toc::[]
 
 * *Neural Learning*: Pattern recognition from CI/CD failures across ecosystems
 * *Symbolic Reasoning*: High-performance Elixir rules for fast, deterministic actions
-* *Graph Intelligence*: ArangoDB for relationship modeling
+* *Graph Intelligence*: verisim-data git-backed flat-file store (ArangoDB ditched per #273 architecture audit) for relationship modelling; queried via the in-process VCL parser + FileExecutor.
 * *Distributed Cache*: Dragonfly for sub-millisecond rule lookups
 * *P2P Federation*: Radicle for decentralized ruleset distribution
 
@@ -559,4 +559,4 @@ hypatia (policy/knowledge services used by OPSM)
 
 == Architecture
 
-See link:TOPOLOGY.md[TOPOLOGY.md] for a visual architecture map and completion dashboard.
+See link:docs/architecture/topology.md[docs/architecture/topology.md] for a visual architecture map and completion dashboard.
