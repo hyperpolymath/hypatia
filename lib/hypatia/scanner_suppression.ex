@@ -102,6 +102,32 @@ defmodule Hypatia.ScannerSuppression do
   exemption, universal exclude, or training-corpus path may suppress it;
   this clause short-circuits every suppression vector for that rule so the
   gate cannot be silenced repo-side.
+
+  ### Known policy tension: migration-tool test fixtures (affinescript#361)
+
+  Repos that ship a "migrate `.X` → `.Y`" tool (e.g.
+  `affinescript/tools/res-to-affine/` for `.res` → `.affine`) need a real
+  `.X` corpus checked into `test/fixtures/` to exercise the migration
+  pipeline. The estate banned-language scanner correctly flags those
+  files, and this module's no-exception clause refuses to suppress them.
+
+  affinescript#361 surfaced the friction. Notably the SHARED governance
+  bundle (`hyperpolymath/standards`) DOES honour an inline
+  `hypatia:ignore cicd_rules/banned_language_file` pragma read from the
+  first 8 lines of the file, but THIS scanner refuses regardless. The
+  two scanners are intentionally divergent: the governance bundle
+  enforces a coarse repo-level gate (PR-blocking on .res / .go / .py),
+  while Hypatia's own scanner is the finer downstream consumer where the
+  "no exceptions" policy was hardened in 2026-05.
+
+  Acceptable resolutions when this friction recurs, in order of
+  preference: (a) encode fixtures as base64 / string literals in test
+  code rather than raw `.X` files, (b) move fixtures to a sibling repo
+  outside language-policy scope, or (c) revisit the no-exception policy
+  with explicit org-level approval. Do NOT add a per-repo
+  `.hypatia-ignore` carve-out — that would silently re-introduce the
+  "policy by exception" drift the 2026-05 hardening was meant to
+  eliminate.
   """
   def suppressed?(file, rule_module, rule_type, opts \\ [])
 
