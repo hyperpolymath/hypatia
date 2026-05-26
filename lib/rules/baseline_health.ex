@@ -5,7 +5,7 @@ defmodule Hypatia.Rules.BaselineHealth do
   @moduledoc """
   Detects degraded `main`-branch baseline conditions that allow silent rot.
 
-  Three failure modes, each surfaced as a finding:
+  Seven failure modes, each surfaced as a finding:
 
   - **BH001** — `main` branch protection has no `required_status_checks`
     block (or has it but with an empty `contexts` list). With this gap a
@@ -26,16 +26,48 @@ defmodule Hypatia.Rules.BaselineHealth do
     rather than auto-fix, because by the time it's >24h old it's not a
     flake.
 
-  Dispatches to:
-  - sustainabot: BH001/BH003 advisory (owner-level action — branch
-    protection / escalation)
-  - rhodibot: BH002 follow-up PR to discharge the TODO
+  - **BH004** — A workflow `uses:` line references an action by full SHA
+    that does not exist on the upstream repository. Every workflow run
+    using the pin fails immediately on action resolution. Discovered
+    2026-05-26 in `hyperpolymath/rsr-template-repo` and 9 other estate
+    repos — a single dead SHA pin (`actions/upload-artifact@65c79d7f…`)
+    was propagated by template scaffolding and broke main on each.
 
-  Rule IDs: BH001-BH003
+  - **BH005** — A required status check in branch protection corresponds
+    to a workflow that only runs on `push` events (mirror jobs,
+    `trigger-boj`, dispatch fan-outs, etc.), so it never reports on PRs.
+    Every PR ends up permanently `BLOCKED` waiting for a check that
+    can't appear. Discovered 2026-05-26 by an org-wide sweep that locked
+    330 repos against their push-context checks; ~290 of them then
+    needed correction to remove push-only contexts.
+
+  - **BH006** — A required status check in branch protection corresponds
+    to a workflow that no longer exists in `.github/workflows/`. The
+    workflow was renamed or deleted, but the protection list wasn't
+    updated. PRs block on a check that will never run. Discovered
+    2026-05-26 in `hyperpolymath/rsr-template-repo` whose required list
+    still referenced `analysis`, `dispatch`, `mirror-codeberg`, etc.
+    after those workflows had been retired or renamed.
+
+  - **BH007** — A merged commit's `author.email` does not match any UID
+    on the GPG/SSH signing key that GitHub has registered for the
+    committing user. The commit is signed (locally valid), but GitHub
+    returns `verified: false, reason: bad_email`. Branch protection
+    rules that require signed commits then block all subsequent PRs.
+    Discovered 2026-05-26 after a session of estate-wide commits ran
+    into `bad_email` on every output because the noreply UID was on the
+    local GPG key but absent from the GitHub-registered public key.
+
+  Dispatches to:
+  - sustainabot: BH001/BH003/BH005/BH006/BH007 advisory (owner-level —
+    branch protection / escalation / key management)
+  - rhodibot: BH002/BH004 follow-up PR (mechanical fix is well-defined)
+
+  Rule IDs: BH001-BH007
 
   ## Why this module exists
 
-  Authored 2026-05-25 after a foundational fix to
+  Originally authored 2026-05-25 after a foundational fix to
   `hyperpolymath/reasonably-good-token-vault` (PR #89) where:
 
   1. PR #82 bumped `ureq` 2.12.1 → 3.3.0 and left a TODO instead of
@@ -44,7 +76,13 @@ defmodule Hypatia.Rules.BaselineHealth do
   3. Branch protection had no `required_status_checks`, so PR #82
      merged despite red CI. (BH001 detects this.)
 
-  Each of those is a propagation hazard — every repo in the estate
+  Extended 2026-05-26 with BH004-BH007 after a follow-on session
+  surfaced four more propagation hazards across the estate (dead-SHA
+  pins, push-only required checks, stale required-check names,
+  GPG-UID-on-key mismatches). Same pattern: each was a single line of
+  config that broke CI silently across many repos.
+
+  Each finding is a propagation hazard — every repo in the estate
   might have the same gap. Hypatia surfaces them per-repo so the safety
   triangle can route the right action to the right bot.
   """
@@ -61,6 +99,22 @@ defmodule Hypatia.Rules.BaselineHealth do
   # than false negatives for this rule because the dispatch is "open a
   # PR", not "advise".
   @migration_pattern ~r/\b(TODO|FIXME|XXX)\b.*(migrat|rename|API|breaking|major)/i
+
+  # Workflow YAML scanner for BH004 (dead SHA pin). Captures
+  # `uses: <owner>/<repo>@<40-hex-sha>` (with or without a trailing
+  # comment) for every action reference. Composite-action callouts
+  # (`uses: ./...`) and docker-image refs (`docker://...`) are skipped.
+  @uses_sha_pattern ~r/^\s*-?\s*uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)@([a-fA-F0-9]{40})\b/m
+
+  # BH005/BH006 — distinguish workflows that ran on the latest PR vs
+  # only on the main-branch push. A required check whose name appears
+  # in `push_checks` but not in `pr_checks` is push-only (BH005). A
+  # required check whose name appears in neither is stale (BH006).
+
+  # BH007 — commit verification API reasons that indicate a UID gap on
+  # the signing key (as opposed to a properly unsigned commit). `valid`
+  # is the positive case; everything else is investigated.
+  @bad_signing_reasons ~w[bad_email no_user unknown_signature_type bad_cert unsigned]
 
   # ─── BH001: Branch protection missing required_status_checks ──────────
 
@@ -227,12 +281,275 @@ defmodule Hypatia.Rules.BaselineHealth do
     end
   end
 
+  # ─── BH004: Dead action SHA pin in workflow YAML ──────────────────────
+
+  @doc """
+  BH004: For each `uses: <owner>/<repo>@<sha>` reference in workflow YAML,
+  verify the SHA resolves to a real commit on the upstream action repo.
+
+  Discovery 2026-05-26: a single dead pin
+  (`actions/upload-artifact@65c79d7f54e76e4e3c7a8f34db0f4ac8b515c478`)
+  was propagated by template scaffolding into ~62 workflow files across
+  10 repos. Every workflow run using the pin fails at action-resolution
+  time, before any step executes:
+
+      Unable to resolve action `actions/upload-artifact@65c79d…`,
+      unable to find version `65c79d…`
+
+  Severity: `:critical` — the workflow is dead, not slow. Action:
+  `:open_followup_pr` to bump to the current SHA (rhodibot territory).
+
+  Requires `GITHUB_TOKEN` to confirm the SHA does not exist upstream.
+  Returns `[]` cleanly without one.
+  """
+  def bh004_dead_action_sha_pin(repo_path) do
+    workflow_files = find_workflow_files(repo_path)
+
+    workflow_files
+    |> Enum.flat_map(fn path ->
+      content = File.read!(path)
+      rel = Path.relative_to(path, repo_path)
+
+      Regex.scan(@uses_sha_pattern, content, return: :index)
+      |> Enum.flat_map(fn [{full_start, _}, {repo_start, repo_len}, {sha_start, sha_len}] ->
+        action_repo = String.slice(content, repo_start, repo_len)
+        sha = String.slice(content, sha_start, sha_len) |> String.downcase()
+        line_no = line_number_for_offset(content, full_start)
+        check_action_sha_alive(action_repo, sha, rel, line_no)
+      end)
+    end)
+  end
+
+  defp check_action_sha_alive(action_repo, sha, file, line_no) do
+    case curl_github("repos/#{action_repo}/commits/#{sha}") do
+      {:ok, %{"message" => "No commit found for SHA: " <> _}} ->
+        [
+          %{
+            rule: "BH004",
+            file: file,
+            severity: :critical,
+            reason:
+              "workflow #{file}:#{line_no} pins #{action_repo}@#{String.slice(sha, 0, 8)}… " <>
+                "which does not exist on the upstream action repository",
+            action: :open_followup_pr,
+            detail: %{
+              line: line_no,
+              action_repo: action_repo,
+              dead_sha: sha,
+              fix:
+                "Bump to the current tag head: " <>
+                  "`gh api repos/#{action_repo}/git/refs/tags/v<MAJOR> --jq .object.sha`"
+            }
+          }
+        ]
+
+      {:ok, %{"sha" => _real_sha}} ->
+        # SHA resolves cleanly — no finding.
+        []
+
+      {:error, :no_token} ->
+        # We can't verify without a token. Don't emit — false positives
+        # are worse than false negatives for this rule (would be
+        # disruptive to flag every pin as dead).
+        []
+
+      _other ->
+        []
+    end
+  end
+
+  # ─── BH005: Push-only required check ──────────────────────────────────
+
+  @doc """
+  BH005: A required status check corresponds to a workflow that triggers
+  only on `push` events (no `pull_request` trigger), so it never reports
+  on PRs. Every PR ends up permanently `BLOCKED` waiting for a check
+  that cannot appear.
+
+  Discovery 2026-05-26: an org-wide branch-protection sweep against
+  330 hyperpolymath repos applied "lock currently-green checks on
+  default branch" policy. It correctly captured 14 contexts on ephapax
+  but 6 (`Dependabot`, `analysis`, `check-critical`, `dispatch`,
+  `mirror-gitlab`, `trigger-boj`) were push-context-only workflows. The
+  next PR opened immediately stuck in `BLOCKED / MERGEABLE`. Pattern
+  replicated across all 330 protected repos.
+
+  Logic: load branch protection's required `contexts`; load the latest
+  PR-context check set (recent merged PRs); flag any required context
+  that has no PR-side representative.
+
+  Severity: `:high` — workflow itself is fine; the protection list is
+  miscalibrated. Action: `:report` (sustainabot — owner is the only
+  one who can edit protection).
+
+  Requires `GITHUB_TOKEN`.
+  """
+  def bh005_push_only_required_check(owner, repo) do
+    with {:ok, %{"required_status_checks" => %{"contexts" => contexts}}}
+         when is_list(contexts) and contexts != [] <-
+           fetch_branch_protection(owner, repo, "main"),
+         {:ok, pr_checks} <- fetch_recent_pr_check_names(owner, repo) do
+      contexts
+      |> Enum.reject(&(&1 in pr_checks))
+      |> Enum.map(fn name ->
+        %{
+          rule: "BH005",
+          file: "#{owner}/#{repo}",
+          severity: :high,
+          reason:
+            "required check `#{name}` did not run on any recent PR " <>
+              "(likely push-only) — every PR will be permanently BLOCKED on it",
+          action: :report,
+          detail: %{
+            context: name,
+            branch: "main",
+            fix:
+              "Either remove `#{name}` from required_status_checks, or " <>
+                "add a `pull_request:` trigger to its workflow file."
+          }
+        }
+      end)
+    else
+      _ -> []
+    end
+  end
+
+  # ─── BH006: Required-check name no longer corresponds to a workflow ──
+
+  @doc """
+  BH006: A required status check name does not correspond to any
+  workflow currently in `.github/workflows/` (and did not appear on
+  any recent main-branch push). The workflow was renamed or deleted
+  but the protection list wasn't updated.
+
+  Discovery 2026-05-26: `hyperpolymath/rsr-template-repo`'s required
+  list still referenced `.github/dependabot.yml` (which is a path, not
+  a check name), `analysis`, `antipattern-check`, `check`, `docs`,
+  `lint`, `mirror-codeberg`, `mirror-gitlab`, `mirror-sourcehut`,
+  `validate` — all stale or never-reporting names.
+
+  Distinction from BH005: BH005 catches "ran on push, not on PR";
+  BH006 catches "didn't run anywhere recently."
+
+  Severity: `:high`. Action: `:report` (manual prune of protection
+  list).
+
+  Requires `GITHUB_TOKEN`.
+  """
+  def bh006_required_check_drift(owner, repo) do
+    with {:ok, %{"required_status_checks" => %{"contexts" => contexts}}}
+         when is_list(contexts) and contexts != [] <-
+           fetch_branch_protection(owner, repo, "main"),
+         {:ok, push_checks} <- fetch_recent_push_check_names(owner, repo),
+         {:ok, pr_checks} <- fetch_recent_pr_check_names(owner, repo) do
+      observed = MapSet.union(MapSet.new(push_checks), MapSet.new(pr_checks))
+
+      contexts
+      |> Enum.reject(&MapSet.member?(observed, &1))
+      |> Enum.map(fn name ->
+        %{
+          rule: "BH006",
+          file: "#{owner}/#{repo}",
+          severity: :high,
+          reason:
+            "required check `#{name}` has not been emitted on any recent " <>
+              "main-branch push OR pull-request — it appears stale or never existed",
+          action: :report,
+          detail: %{
+            context: name,
+            branch: "main",
+            fix:
+              "Verify the workflow still exists. If renamed, update " <>
+                "required_status_checks. If retired, remove from the list."
+          }
+        }
+      end)
+    else
+      _ -> []
+    end
+  end
+
+  # ─── BH007: GPG/SSH key UID gap (signature bad_email) ────────────────
+
+  @doc """
+  BH007: A commit on the default branch (or open PR) is signed but
+  GitHub returns `verified: false, reason: bad_email` (or similar
+  UID-mismatch reasons). The signature itself is valid locally; the
+  author email simply doesn't appear as a UID on the public key
+  registered for that user on GitHub.
+
+  Discovery 2026-05-26: an entire estate-wide session of commits was
+  authored as the GitHub noreply email (`<id>+<user>@users.noreply.github.com`)
+  to satisfy email-privacy push restrictions. The local GPG key
+  contained both the noreply UID and the public UID, but the GitHub-
+  registered public key only had the public UID exported. Every commit
+  showed `verified: false / bad_email`. Branch protection requiring
+  signed commits then blocked all PRs.
+
+  Severity: `:high` — silently breaks branch protection that requires
+  verified signatures. Action: `:report` (key management is owner-side).
+
+  Logic: scan recent merge commits on main + open-PR head SHAs for
+  `verification.reason ∈ #{inspect(@bad_signing_reasons)}`. Emit one
+  finding per unique (author, reason) pair, not per commit, to avoid
+  drowning the owner.
+
+  Requires `GITHUB_TOKEN`.
+  """
+  def bh007_signing_key_uid_gap(owner, repo) do
+    case fetch_recent_commit_verifications(owner, repo) do
+      {:ok, commits} ->
+        commits
+        |> Enum.filter(fn c ->
+          reason = get_in(c, ["commit", "verification", "reason"])
+          verified = get_in(c, ["commit", "verification", "verified"])
+          # Only emit for *signed but bad_email* — `unsigned` is a
+          # different defect handled by a separate rule.
+          reason in ["bad_email", "no_user", "unknown_signature_type"] and verified == false
+        end)
+        |> Enum.group_by(fn c ->
+          {
+            get_in(c, ["commit", "author", "email"]) || "(unknown)",
+            get_in(c, ["commit", "verification", "reason"]) || "(unknown)"
+          }
+        end)
+        |> Enum.map(fn {{email, reason}, group} ->
+          shas = group |> Enum.map(&String.slice(&1["sha"], 0, 7)) |> Enum.uniq()
+
+          %{
+            rule: "BH007",
+            file: "#{owner}/#{repo}",
+            severity: :high,
+            reason:
+              "#{length(group)} commit(s) by #{email} signed but rejected " <>
+                "with `#{reason}` — author email is not a UID on the GPG/SSH " <>
+                "key registered for this user on GitHub",
+            action: :report,
+            detail: %{
+              author_email: email,
+              github_reason: reason,
+              affected_shas: Enum.take(shas, 5),
+              fix:
+                "Add the author email as a UID to the key " <>
+                  "(`gpg --quick-add-uid <fpr> '<name> <email>'`), re-export " <>
+                  "(`gpg --armor --export <fpr>`), and re-upload to " <>
+                  "https://github.com/settings/keys — or switch to SSH signing " <>
+                  "and register the SSH public key as a Signing Key on GitHub."
+            }
+          }
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
   # ─── scan/2 facade ────────────────────────────────────────────────────
 
   @doc """
   Run all baseline-health checks. `owner` and `repo` may be `nil` if you
-  only want the local (BH002) check; the API-backed checks will return
-  empty in that case.
+  only want the local (BH002, BH004 partially) checks; the API-backed
+  checks will return empty in that case.
   """
   def scan(repo_path, opts \\ []) do
     {owner, repo} =
@@ -244,12 +561,18 @@ defmodule Hypatia.Rules.BaselineHealth do
     api_findings =
       if owner && repo do
         bh001_missing_required_status_checks(owner, repo) ++
-          bh003_persistent_red_baseline(owner, repo, opts)
+          bh003_persistent_red_baseline(owner, repo, opts) ++
+          bh005_push_only_required_check(owner, repo) ++
+          bh006_required_check_drift(owner, repo) ++
+          bh007_signing_key_uid_gap(owner, repo)
       else
         []
       end
 
-    findings = bh002_migration_todo_in_manifest(repo_path) ++ api_findings
+    findings =
+      bh002_migration_todo_in_manifest(repo_path) ++
+        bh004_dead_action_sha_pin(repo_path) ++
+        api_findings
 
     %{
       findings: findings,
@@ -284,6 +607,70 @@ defmodule Hypatia.Rules.BaselineHealth do
       {:ok, %{"workflow_runs" => runs}} when is_list(runs) -> {:ok, runs}
       {:ok, %{"message" => msg}} -> {:error, "GitHub API: #{msg}"}
       {:ok, _} -> {:error, "unexpected GitHub response shape"}
+      other -> other
+    end
+  end
+
+  # BH005/BH006 helper — names of successful check-runs from the most
+  # recent merged PRs (up to 3). Union across the three so a single
+  # dependabot-only PR doesn't skew toward dependabot-only checks.
+  defp fetch_recent_pr_check_names(owner, repo) do
+    case curl_github("repos/#{owner}/#{repo}/pulls?state=closed&per_page=10") do
+      {:ok, prs} when is_list(prs) ->
+        recent_heads =
+          prs
+          |> Enum.filter(&(&1["merged_at"] != nil))
+          |> Enum.take(3)
+          |> Enum.map(& &1["head"]["sha"])
+
+        names =
+          recent_heads
+          |> Enum.flat_map(fn sha ->
+            case curl_github(
+                   "repos/#{owner}/#{repo}/commits/#{sha}/check-runs?per_page=100"
+                 ) do
+              {:ok, %{"check_runs" => runs}} when is_list(runs) ->
+                runs
+                |> Enum.filter(&(&1["conclusion"] == "success"))
+                |> Enum.map(& &1["name"])
+
+              _ ->
+                []
+            end
+          end)
+          |> Enum.uniq()
+
+        {:ok, names}
+
+      _ ->
+        {:error, :no_recent_prs}
+    end
+  end
+
+  # BH006 helper — names of successful check-runs from the latest
+  # push on the default branch.
+  defp fetch_recent_push_check_names(owner, repo) do
+    case curl_github("repos/#{owner}/#{repo}/commits/main/check-runs?per_page=100") do
+      {:ok, %{"check_runs" => runs}} when is_list(runs) ->
+        names =
+          runs
+          |> Enum.filter(&(&1["conclusion"] == "success"))
+          |> Enum.map(& &1["name"])
+          |> Enum.uniq()
+
+        {:ok, names}
+
+      _ ->
+        {:error, :no_main_runs}
+    end
+  end
+
+  # BH007 helper — latest ~30 commits on main with their verification
+  # block. GitHub returns this in `/repos/.../commits` already.
+  defp fetch_recent_commit_verifications(owner, repo) do
+    case curl_github("repos/#{owner}/#{repo}/commits?per_page=30") do
+      {:ok, commits} when is_list(commits) -> {:ok, commits}
+      {:ok, %{"message" => msg}} -> {:error, "GitHub API: #{msg}"}
       other -> other
     end
   end
@@ -356,6 +743,38 @@ defmodule Hypatia.Rules.BaselineHealth do
     end
   end
 
+  # BH004 helper — locate every active GitHub Actions workflow file.
+  # Active = lives under `.github/workflows/` at the REPO ROOT (not
+  # nested under subdirectories; GitHub Actions only consumes the
+  # root location). Nested `.github/workflows/` in monorepo subtrees
+  # are template scaffolds — they may still ship the broken pin but
+  # they don't run CI, so BH004 leaves them to a separate rule.
+  defp find_workflow_files(repo_path) do
+    root = Path.join([repo_path, ".github", "workflows"])
+
+    cond do
+      not File.dir?(root) ->
+        []
+
+      true ->
+        root
+        |> File.ls!()
+        |> Enum.filter(&(String.ends_with?(&1, ".yml") or String.ends_with?(&1, ".yaml")))
+        |> Enum.map(&Path.join(root, &1))
+        |> Enum.filter(&File.regular?/1)
+    end
+  end
+
+  # BH004 helper — given a byte offset into a file's content, return
+  # the 1-based line number.
+  defp line_number_for_offset(content, offset) when offset >= 0 do
+    content
+    |> binary_part(0, min(offset, byte_size(content)))
+    |> String.graphemes()
+    |> Enum.count(&(&1 == "\n"))
+    |> Kernel.+(1)
+  end
+
   defp extract_owner_repo(repo_path) do
     case System.cmd("git", ["remote", "get-url", "origin"],
            cd: repo_path,
@@ -417,12 +836,20 @@ defmodule Hypatia.Rules.BaselineHealth do
           _ -> :sustainabot
         end
 
+      # BH004 is mechanically fixable (one-line sed replace + PR), so
+      # confidence is high; BH005-007 need owner judgement (which
+      # contexts to keep, key-management) so we route to sustainabot
+      # at calibrated confidence.
       confidence =
-        case finding.severity do
-          :critical -> 0.95
-          :high -> 0.88
-          :medium -> 0.80
-          :low -> 0.65
+        case {finding.rule, finding.severity} do
+          {"BH004", _} -> 0.93
+          {"BH005", _} -> 0.85
+          {"BH006", _} -> 0.85
+          {"BH007", _} -> 0.80
+          {_, :critical} -> 0.95
+          {_, :high} -> 0.88
+          {_, :medium} -> 0.80
+          {_, :low} -> 0.65
           _ -> 0.50
         end
 
