@@ -686,29 +686,50 @@ defmodule Hypatia.Rules.SupplyChain do
     end
   end
 
-  # Simple Levenshtein distance — adequate for the typosquat scope.
+  # Iterative O(n*m) Levenshtein. The naïve recursive form was
+  # exponential — fine on short test inputs, but ~3^32 on real
+  # action-slug pairs which led to scan-time hangs.
   defp levenshtein(a, b) do
     a_list = String.graphemes(a)
     b_list = String.graphemes(b)
-    levenshtein_rows(a_list, b_list)
+    n = length(a_list)
+    m = length(b_list)
+
+    cond do
+      n == 0 -> m
+      m == 0 -> n
+      abs(n - m) > 2 -> 3  # short-circuit: caller only cares about <= 2
+      true -> dp_levenshtein(a_list, b_list, m)
+    end
   end
 
-  defp levenshtein_rows([], b), do: length(b)
-  defp levenshtein_rows(a, []), do: length(a)
+  defp dp_levenshtein(a_list, b_list, m) do
+    init_row = Enum.to_list(0..m)
 
-  defp levenshtein_rows([ah | at], [bh | bt] = b) do
-    cond do
-      ah == bh ->
-        levenshtein_rows(at, bt)
+    Enum.with_index(a_list, 1)
+    |> Enum.reduce(init_row, fn {ah, i}, prev_row ->
+      [first | _] = prev_row
 
-      true ->
-        1 +
-          Enum.min([
-            levenshtein_rows(at, b),
-            levenshtein_rows([ah | at], bt),
-            levenshtein_rows(at, bt)
-          ])
-    end
+      {row, _} =
+        Enum.reduce(Enum.with_index(b_list, 1), {[i], prev_row}, fn {bh, _j},
+                                                                    {acc, [pl, pr | rest]} ->
+          cost = if ah == bh, do: 0, else: 1
+          [cur | _] = acc
+
+          val =
+            Enum.min([
+              cur + 1,
+              pr + 1,
+              pl + cost
+            ])
+
+          {[val | acc], [pr | rest]}
+        end)
+
+      _ = first
+      Enum.reverse(row)
+    end)
+    |> List.last()
   end
 
   defp fetch_repo_archived(slug) do
