@@ -172,8 +172,8 @@ defmodule Hypatia.Rules.CicdRules do
       description: "ts-blocker.yml in repo with no TypeScript or JavaScript"},
     %{id: :irrelevant_npm_blocker, severity: :low, auto_fixable: true,
       description: "npm-bun-blocker.yml in repo with no JS package ecosystem"},
-    %{id: :irrelevant_jekyll, severity: :low, auto_fixable: true,
-      description: "Jekyll workflow in repo with no _config.yml or Gemfile"},
+    %{id: :irrelevant_jekyll, severity: :medium, auto_fixable: true,
+      description: "Jekyll workflow in repo with no _config.yml or Gemfile (estate policy bans Jekyll; replacement is casket-ssg)"},
     %{id: :irrelevant_guix_nix, severity: :low, auto_fixable: true,
       description: "guix-nix-policy.yml in repo with no Guix or Nix configuration"},
     %{id: :irrelevant_wellknown, severity: :low, auto_fixable: true,
@@ -186,6 +186,20 @@ defmodule Hypatia.Rules.CicdRules do
       description: "instant-sync.yml redundant with mirror.yml"},
     %{id: :redundant_security_policy_wf, severity: :info, auto_fixable: true,
       description: "security-policy.yml checking for SECURITY.md that already exists"},
+
+    # Standalone workflows subsumed by governance-reusable.yml (per the
+    # hyperpolymath/standards governance-reusable.yml header). When
+    # `governance.yml` is present in a repo, every name in
+    # @subsumed_standalones below is redundant — its logic runs via the
+    # reusable and the standalone copy drifts independently.
+    %{id: :redundant_subsumed_standalone, severity: :medium, auto_fixable: true,
+      description: "Standalone workflow whose logic is already exercised by governance.yml (calls governance-reusable.yml)"},
+
+    # rust-ci.yml exists but the repo has no Cargo.toml at root and no .rs
+    # files anywhere — guaranteed install/build failure. Cousin of
+    # :missing_rust_ci, which catches the inverse (Cargo.toml without CI).
+    %{id: :irrelevant_rust_ci, severity: :high, auto_fixable: true,
+      description: "rust-ci.yml in repo with no Cargo.toml at root and no .rs files (guaranteed install failure)"},
 
     # Missing language-appropriate CI
     %{id: :missing_julia_ci, severity: :high, auto_fixable: true,
@@ -270,6 +284,49 @@ defmodule Hypatia.Rules.CicdRules do
           acc
         end
       end)
+
+    # Subsumed standalones: when `governance.yml` is present in the repo,
+    # each of these standalone workflow files is redundant — its logic
+    # already runs via the standards governance-reusable.yml. Authoritative
+    # list per the reusable's own header comment in hyperpolymath/standards.
+    subsumed_standalones = [
+      "workflow-linter.yml",
+      "language-policy.yml",
+      "quality.yml",
+      "security-policy.yml",
+      "guix-nix-policy.yml",
+      "npm-bun-blocker.yml",
+      "ts-blocker.yml",
+      "rsr-antipattern.yml",
+      "wellknown-enforcement.yml"
+    ]
+
+    results =
+      if "governance.yml" in workflows do
+        Enum.reduce(subsumed_standalones, results, fn wf, acc ->
+          if wf in workflows do
+            [%{pattern: :redundant_subsumed_standalone, workflow: wf, auto_fixable: true} | acc]
+          else
+            acc
+          end
+        end)
+      else
+        results
+      end
+
+    # rust-ci.yml without any Rust code in the repo. Mirrors
+    # :missing_rust_ci (which detects the inverse) but uses the same
+    # file-presence and *.rs walk heuristics that BaselineHealth uses.
+    has_rs_anywhere =
+      Map.get(repo_info, :rs_file_count, 0) > 0 or
+        Enum.any?(files, &String.ends_with?(&1, ".rs"))
+
+    results =
+      if "rust-ci.yml" in workflows and "Cargo.toml" not in files and not has_rs_anywhere do
+        [%{pattern: :irrelevant_rust_ci, workflow: "rust-ci.yml", auto_fixable: true} | results]
+      else
+        results
+      end
 
     # Missing language-appropriate CI
     has_ci = Enum.any?(workflows, fn w -> w in ["ci.yml", "CI.yml", "test.yml"] end)
