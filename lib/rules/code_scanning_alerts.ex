@@ -318,6 +318,31 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
     end
   end
 
+  # ─── Self-referential filter ───────────────────────────────────────────
+
+  @doc """
+  Returns true when the alert is one Hypatia previously uploaded for this
+  module (CSA001-CSA004). These rules are lenses over GitHub's code-scanning
+  alerts; their findings are themselves uploaded back to GitHub as SARIF and
+  become new alerts under `tool: Hypatia`, rule id
+  `hypatia/code_scanning_alerts/CSA00X`.
+
+  Without this filter, each scan generates new CSA alerts about the previous
+  scan's CSA alerts — boj-server accumulated 30+ self-referential alerts on
+  `cartridges/*/ffi/cartridge_shim.zig` this way (alert numbers 357-386).
+  The message field showed the self-echo: the `description` slot was filled
+  with the previous round's rendered `build_alert_reason/5` output, so each
+  round nests one level deeper.
+
+  Public so the regression test in `test/code_scanning_alerts_test.exs` can
+  exercise it without hitting the GitHub API.
+  """
+  def self_referential_alert?(alert) do
+    tool = get_in(alert, ["tool", "name"])
+    rule_id = get_in(alert, ["rule", "id"]) || ""
+    tool == "Hypatia" and String.starts_with?(rule_id, "hypatia/code_scanning_alerts/")
+  end
+
   # ─── GitHub API ────────────────────────────────────────────────────────
 
   defp fetch_alerts(owner, repo) do
@@ -343,9 +368,14 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
            ], stderr_to_stdout: true) do
         {body, 0} ->
           case Jason.decode(body) do
-            {:ok, alerts} when is_list(alerts) -> {:ok, alerts}
-            {:ok, %{"message" => msg}} -> {:error, "GitHub API: #{msg}"}
-            {:error, _} -> {:error, "Invalid JSON response from GitHub API"}
+            {:ok, alerts} when is_list(alerts) ->
+              {:ok, Enum.reject(alerts, &self_referential_alert?/1)}
+
+            {:ok, %{"message" => msg}} ->
+              {:error, "GitHub API: #{msg}"}
+
+            {:error, _} ->
+              {:error, "Invalid JSON response from GitHub API"}
           end
 
         {error, _} ->
