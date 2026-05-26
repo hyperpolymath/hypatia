@@ -23,6 +23,7 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.CicdRules
   alias Hypatia.Rules.CodeSafety
   alias Hypatia.Rules.MigrationRules
+  alias Hypatia.Rules.BaselineHealth
 
   @doc """
   Run a comprehensive scan on a file's content given its path and language.
@@ -392,6 +393,13 @@ defmodule Hypatia.Rules do
   Detect CI/CD waste patterns.
   """
   defdelegate detect_waste(repo_info), to: CicdRules
+
+  @doc """
+  Run baseline-health checks (BH001-BH003): missing required_status_checks
+  on main, deferred-migration TODOs in dep manifests, persistent >24h red
+  baseline on main. Returns the same shape as `GitState.scan/1`.
+  """
+  defdelegate scan_baseline_health(repo_path, opts \\ []), to: BaselineHealth, as: :scan
 
   # ---------------------------------------------------------------------------
   # Private Helpers
