@@ -5,12 +5,12 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-05-24"
+last-updated = "2026-05-25"
 status = "active"
 
 [project-context]
 name = "hypatia"
-completion-percentage = 97
+completion-percentage = 98
 phase = "implementation"
 maturity = "alpha"
 crg-grade = "C"
@@ -84,6 +84,34 @@ actions = [
 ]
 
 [session-history]
+# 2026-05-25: PRs #314 + #315 + #319 — post-#313 batch + repo health tidy.
+#             PR #314 (15 commits, merged): M17 GNN/VAE/Sequence state/restore
+#             persistence; M18 cross-org VCL federation with policy gates; M9
+#             longitudinal effectiveness mix task; container hardening +
+#             Chainguard gap memo; five operations memos; CrossOrg wired into
+#             LearningScheduler; dashboard alerts ribbon; PR-#314 noise reduction
+#             (workflow_audit @standard_workflows trimmed, migration_rules
+#             suppression, honest_completion namespaced-state check, Phase 2
+#             medium+ severity filter); mix hypatia.triage_issues task for
+#             bulk-closing PR-invalidated estate issues.
+#             PR #315 (2 commits, merged): root-level doc reorg into docs/
+#             subtrees aligned to rsr-template-repo; 30 root files → 9
+#             standard project chrome only; new docs/{quickstart,guides,
+#             operations,proofs,testing,integration,history,wiki-pages}/
+#             subdirs; CONTRIBUTING.adoc + DOGFOODING-SESSION-2026-01-25.md
+#             deleted; README badges + Graph Intelligence line corrected
+#             (ArangoDB → verisim-data); wiki page sources (Home, Architecture,
+#             Getting-Started, Guides, FAQ, Troubleshooting) committed to
+#             docs/wiki-pages/ for manual copy to the live wiki.
+#             PR #319 (1 commit, open): second-pass docs/ bucketing —
+#             security/, standards/, specs/ subdirs created; docs/ root now
+#             4 files + 16 subdirs.
+#             Issues triaged: #274 (Neural organs UNFED) closed as completed
+#             with full resolution chain documented; #294 (boundary ruling)
+#             commented with Option A recommendation memo location; #273
+#             (architecture epic) status update.
+#             completion-percentage 97 → 98.
+#
 # 2026-05-24: PR #309 — watcher/supervision interface + closed-loop quality. 19 commits.
 #             Bug fixes (4): recipe-matcher language-gate (`d2bbf75` — unblocked ~310
 #             scorecard dispatches; the "310 null fix_script" symptom's real cause was

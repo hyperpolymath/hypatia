@@ -69,9 +69,26 @@ acceptance criteria for closing the underlying roadmap item.
 
 == Security
 
-* link:THREAT-MODEL.adoc[`THREAT-MODEL.adoc`] — threat model + attack surface.
-* link:SECURITY-AUDIT.adoc[`SECURITY-AUDIT.adoc`] — security audit findings.
+* link:security/threat-model.adoc[`security/threat-model.adoc`] — threat model + attack surface.
+* link:security/security-audit.adoc[`security/security-audit.adoc`] — security audit findings.
 * link:governance/CRG-AUDIT-2026-04-18.adoc[`governance/CRG-AUDIT-2026-04-18.adoc`] — CRG audit.
+
+== Standards (machine-readable policies)
+
+* link:standards/crypto-standard.scm[`standards/crypto-standard.scm`] — machine-checkable crypto policy.
+* link:standards/standardization-checklist.scm[`standards/standardization-checklist.scm`] — machine-checkable standardisation policy.
+
+== Specs
+
+* link:specs/ada-tui-audit-spec.adoc[`specs/ada-tui-audit-spec.adoc`] — Ada TUI audit specification.
+
+== API references
+
+Detailed per-surface references. For the high-level overview see link:guides/api-reference.adoc[`guides/api-reference.adoc`].
+
+* link:api/cli-reference.adoc[`api/cli-reference.adoc`] — CLI command reference.
+* link:api/http-api.adoc[`api/http-api.adoc`] — HTTP/REST + SSE + GraphQL surface.
+* link:api/rust-api.adoc[`api/rust-api.adoc`] — Rust crate reference (cli, fixer, data, adapters, integration).
 
 == Testing + proofs
 
@@ -89,9 +106,6 @@ acceptance criteria for closing the underlying roadmap item.
 == Reference
 
 * link:EXPLAINME.adoc[`EXPLAINME.adoc`] — annotated tour of the codebase.
-* link:ADA-TUI-AUDIT-SPEC.adoc[`ADA-TUI-AUDIT-SPEC.adoc`] — Ada TUI spec.
-* link:STANDARDIZATION-CHECKLIST.scm[`STANDARDIZATION-CHECKLIST.scm`] — machine-checkable standardisation policy.
-* link:CRYPTO-STANDARD.scm[`CRYPTO-STANDARD.scm`] — machine-checkable crypto policy.
 
 == History
 

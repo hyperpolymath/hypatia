@@ -12,6 +12,23 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== docs/ second-pass bucketing (2026-05-25, post-#315)
+
+Five flat files at `docs/` root moved into proper subdirs. PR #315
+bucketed root-level docs into `docs/` subtrees; this follow-up does
+the same one level down so `docs/` itself only carries the index
+(`README.adoc`), the annotated tour (`EXPLAINME.adoc`), the session
+log, and the CRG declaration (`readiness.md`).
+
+* `docs/security/` — `threat-model.adoc`, `security-audit.adoc`.
+* `docs/standards/` — `crypto-standard.scm`,
+  `standardization-checklist.scm` (machine-readable policy files).
+* `docs/specs/` — `ada-tui-audit-spec.adoc`.
+
+`docs/README.adoc` gains explicit sections for each new subdir plus
+the previously-undocumented `docs/api/` per-surface references
+(`cli-reference.adoc`, `http-api.adoc`, `rust-api.adoc`).
+
 ==== Repository tidy: doc taxonomy aligned with rsr-template-repo (2026-05-25)
 
 Root-level documentation reorganised into `docs/` subtrees so the
