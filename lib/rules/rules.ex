@@ -101,6 +101,18 @@ defmodule Hypatia.Rules do
         findings
       end
 
+    # AffineScript hand-port patterns for `.affine` files not already covered
+    # by language patterns. Mirrors the JS/TS extension fallback above so
+    # callers that pass `language=nil` or an upstream-default language still
+    # get the hand-port-pitfall scan on every `.affine` file (gitbot-fleet#148).
+    findings =
+      if language not in ["affine", "affinescript"] and
+           String.ends_with?(file_path, ".affine") do
+        findings ++ CodeSafety.scan_content(content, "affine")
+      else
+        findings
+      end
+
     # Container code patterns for Containerfiles and shell scripts
     findings =
       if String.ends_with?(file_path, "Containerfile") or
