@@ -89,12 +89,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
     download_then_run_issues = check_download_then_run(workflow_contents)
     nperm_typos = check_npermissions_typo(workflow_contents)
     codeql_lang_mismatch = check_codeql_language_matrix_mismatch(workflow_contents, opts)
+    workflow_sha_foreign_ref = check_workflow_sha_as_foreign_ref(workflow_contents)
+    reusable_caller_context_self_checkout = check_reusable_caller_context_self_checkout(workflow_contents)
 
     %{
       findings:
         missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
           caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
-          codeql_lang_mismatch,
+          codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
+          reusable_caller_context_self_checkout,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -502,6 +505,233 @@ defmodule Hypatia.Rules.WorkflowAudit do
       "secret-scanner.yml" -> :high
       "security-policy.yml" -> :medium
       _ -> :low
+    end
+  end
+
+  @doc """
+  Detect `actions/checkout` steps that use `${{ github.workflow_sha }}`
+  as `ref:` for a `repository:` that is NOT the caller's own repository.
+
+  Root cause caught: in any workflow (especially reusable), the
+  `github.workflow_sha` context resolves to the *caller's* commit SHA,
+  not the SHA of the workflow YAML itself. Passing it as `ref:` to
+  `actions/checkout` of a foreign repository — e.g. checking out
+  `hyperpolymath/standards` at the caller's SHA — fails with
+  `git fetch ... exit code 128` ("No commit found for SHA"), and after
+  three retries the step (and the whole job) fails.
+
+  This was the root cause of the estate-wide stuck-PR cascade on
+  2026-05-26 (governance / Language / package anti-pattern policy
+  failing on every PR after `governance-reusable.yml` was updated to
+  fetch its own scripts dir via the foreign-checkout pattern with
+  `ref: ${{ github.workflow_sha }}`). See `hyperpolymath/standards`
+  PR fixing `governance-reusable.yml:155`.
+
+  Sensitivity / specificity:
+
+  * Specific — only fires when `repository:` is a literal owner/name
+    OR `${{ inputs.* }}` (i.e. NOT `${{ github.repository }}`). The
+    common safe pattern `repository: ${{ github.repository }}` +
+    `ref: ${{ github.workflow_sha }}` is fine (or at least
+    consistent — both refer to the caller).
+  * Sensitive — catches the pattern regardless of which job/step it
+    lives in. Operates on the parsed `with:` block keys so it does
+    not depend on key ordering.
+  """
+  def check_workflow_sha_as_foreign_ref(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      content
+      |> strip_comments()
+      |> extract_checkout_blocks()
+      |> Enum.flat_map(fn block ->
+        repo_value = block_value(block, ~r/^\s*repository:\s*([^\n]+?)\s*$/m)
+        ref_value = block_value(block, ~r/^\s*ref:\s*([^\n]+?)\s*$/m)
+
+        cond do
+          is_nil(repo_value) or is_nil(ref_value) ->
+            []
+
+          true ->
+            uses_workflow_sha? =
+              Regex.match?(~r/\$\{\{\s*github\.workflow_sha\s*\}\}/, ref_value)
+
+            caller_repo? =
+              Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
+
+            if uses_workflow_sha? and not caller_repo? do
+              [%{
+                type: :workflow_sha_as_foreign_ref,
+                file: filename,
+                detail:
+                  "actions/checkout uses `ref: ${{ github.workflow_sha }}` " <>
+                    "for `repository: #{repo_value}` (not the caller's own " <>
+                    "repo). `github.workflow_sha` resolves to the caller's " <>
+                    "commit SHA, which does not exist in `#{repo_value}` — " <>
+                    "the fetch fails with exit code 128. Pin `ref:` to a " <>
+                    "branch (e.g. `main`), tag, or explicit SHA in the " <>
+                    "target repo, or expose it as an input on the reusable.",
+                severity: :critical,
+                action: :pin_external_checkout_ref
+              }]
+            else
+              []
+            end
+        end
+      end)
+    end)
+  end
+
+  @doc """
+  Detect reusable workflows (`on: workflow_call`) that check out their
+  *own* repository at a caller-derived ref (`github.ref`,
+  `github.head_ref`, `github.sha`).
+
+  In a reusable-workflow context, all `github.*` ref variables resolve
+  to the *caller*'s values, not the reusable repo's. A reusable that
+  does:
+
+      uses: actions/checkout@…
+      with:
+        repository: hyperpolymath/standards   # this repo
+        ref: ${{ github.ref }}                # caller's branch ref
+
+  …will try to fetch the caller's branch from the reusable's repo,
+  which almost always fails (the caller's branch name doesn't exist
+  here). The two safe shapes are:
+
+    1. `ref:` omitted (defaults to the reusable's default branch), or
+    2. `ref:` pinned to a specific branch/tag/SHA of the reusable's
+       repo, or
+    3. an explicit `inputs.*_ref` threaded through from the caller.
+
+  This is the structural cousin of the `workflow_sha` bug — same
+  failure mode (`exit code 128 — No commit found`), different context
+  variable.
+  """
+  def check_reusable_caller_context_self_checkout(workflow_contents) do
+    caller_ref_re =
+      ~r/\$\{\{\s*github\.(?:ref|head_ref|sha|workflow_sha)\s*\}\}/
+
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+      reusable? = Regex.match?(~r/^\s*workflow_call:/m, stripped)
+
+      if reusable? do
+        stripped
+        |> extract_checkout_blocks()
+        |> Enum.flat_map(fn block ->
+          repo_value = block_value(block, ~r/^\s*repository:\s*([^\n]+?)\s*$/m)
+          ref_value = block_value(block, ~r/^\s*ref:\s*([^\n]+?)\s*$/m)
+
+          cond do
+            is_nil(repo_value) or is_nil(ref_value) ->
+              []
+
+            true ->
+              caller_repo_var? =
+                Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
+
+              foreign_literal_self? =
+                not caller_repo_var? and
+                  String.contains?(repo_value, "/") and
+                  not String.starts_with?(repo_value, "${{")
+
+              caller_derived_ref? = Regex.match?(caller_ref_re, ref_value)
+
+              if foreign_literal_self? and caller_derived_ref? do
+                [%{
+                  type: :reusable_caller_context_self_checkout,
+                  file: filename,
+                  detail:
+                    "Reusable workflow (`on: workflow_call`) checks out a " <>
+                      "literal foreign repo `#{repo_value}` at " <>
+                      "`ref: #{ref_value}` — a caller-context variable. In a " <>
+                      "reusable workflow, `github.ref` / `head_ref` / `sha` / " <>
+                      "`workflow_sha` resolve to the *caller's* values, which " <>
+                      "do not exist in `#{repo_value}`, so the fetch fails " <>
+                      "with exit code 128. Pin `ref:` to a literal branch/tag/SHA " <>
+                      "in `#{repo_value}`, omit it (defaults to the default " <>
+                      "branch), or thread an explicit input through from the caller.",
+                  severity: :critical,
+                  action: :pin_reusable_self_checkout_ref
+                }]
+              else
+                []
+              end
+          end
+        end)
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── Helpers for the two checkout-shape rules above ────────────────────
+  #
+  # `extract_checkout_blocks/1` splits the file into YAML steps (each
+  # starting at a `- key:` line), then returns only the steps whose body
+  # contains `uses: actions/checkout@…`. This handles both shapes a
+  # checkout step can take:
+  #
+  #     - uses: actions/checkout@SHA          # uses-first
+  #       with: { … }
+  #
+  #     - name: Check out X                   # name-first
+  #       uses: actions/checkout@SHA
+  #       with: { … }
+  #
+  # Unlike a single multi-line regex, it does not get tripped by interior
+  # `with:` / `repository:` / `ref:` / `path:` sub-keys.
+  defp extract_checkout_blocks(content) do
+    content
+    |> String.split("\n")
+    |> Enum.reduce({[], nil}, fn line, {steps, current} ->
+      cond do
+        # A step starts at any line of shape `  - key:` (the `-` is the
+        # list-item marker; whatever follows is the first key of the
+        # step). We anchor on the `-` column so we know when the step
+        # ends.
+        matches = Regex.run(~r/^(\s*)-\s+/, line) ->
+          indent = matches |> Enum.at(1) |> String.length()
+          {flush_step(steps, current), {indent, [line]}}
+
+        is_tuple(current) ->
+          {step_indent, lines_acc} = current
+
+          if String.trim(line) == "" or leading_indent(line) > step_indent do
+            {steps, {step_indent, [line | lines_acc]}}
+          else
+            # Less- or equal-indented line that isn't a new `- key:`
+            # closes the current step (and we don't start a new one).
+            {flush_step(steps, current), nil}
+          end
+
+        true ->
+          {steps, current}
+      end
+    end)
+    |> then(fn {steps, current} -> flush_step(steps, current) end)
+    |> Enum.reverse()
+    |> Enum.filter(&Regex.match?(~r/uses:\s*actions\/checkout@/, &1))
+  end
+
+  defp flush_step(steps, nil), do: steps
+
+  defp flush_step(steps, {_indent, lines_acc}) do
+    [lines_acc |> Enum.reverse() |> Enum.join("\n") | steps]
+  end
+
+  defp leading_indent(line) do
+    case Regex.run(~r/^(\s*)/, line) do
+      [_, ws] -> String.length(ws)
+      _ -> 0
+    end
+  end
+
+  defp block_value(block, regex) do
+    case Regex.run(regex, block) do
+      [_, value] -> String.trim(value)
+      _ -> nil
     end
   end
 
