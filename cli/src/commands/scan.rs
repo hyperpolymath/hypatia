@@ -189,7 +189,7 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.green} {msg}")
-                .unwrap(),
+                .expect("ProgressStyle invariant: static template is well-formed"),
         );
         pb.set_message("Scanning repository...");
         Some(pb)
@@ -307,14 +307,10 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     }
 
     // Exit with error if critical findings
-    if results
-        .summary
-        .by_severity
-        .get("critical")
-        .copied()
-        .unwrap_or(0)
-        > 0
-    {
+    // No critical-severity bucket in the summary map means zero criticals; 0
+    // is the semantically correct default here (absent key == none observed).
+    let critical_count = results.summary.by_severity.get("critical").copied().unwrap_or(0);
+    if critical_count > 0 {
         std::process::exit(1);
     }
 

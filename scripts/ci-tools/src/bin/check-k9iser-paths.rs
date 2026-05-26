@@ -36,11 +36,14 @@ fn main() {
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
+    // Missing or non-array "constraint" means zero constraints declared —
+    // that's a legitimate audit reading (zero is the absent state), not a
+    // silent error swallow. Counter to the rule's "dangerous default" framing,
+    // 0 is the only sensible default here.
     let constraints = doc
         .get("constraint")
         .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
+        .map_or(0, |a| a.len());
 
     let mut missing: Vec<String> = Vec::new();
     for src in &sources {

@@ -171,8 +171,20 @@ fn check_status(project_id: u64) -> Result<()> {
             "Level:      {}",
             project.badge_level.as_deref().unwrap_or("in_progress")
         );
-        println!("Progress:   {}%", project.badge_percentage_0.unwrap_or(0));
-        println!("Tiered:     {}%", project.tiered_percentage.unwrap_or(0));
+        // Percentages absent from the upstream API response render as "n/a"
+        // rather than "0%" — 0 is a meaningful value that would mislead.
+        println!(
+            "Progress:   {}",
+            project
+                .badge_percentage_0
+                .map_or_else(|| "n/a".to_string(), |p| format!("{p}%"))
+        );
+        println!(
+            "Tiered:     {}",
+            project
+                .tiered_percentage
+                .map_or_else(|| "n/a".to_string(), |p| format!("{p}%"))
+        );
         println!("Badge:      {}/en/projects/{}/badge", API_BASE, project_id);
     } else if response.status().as_u16() == 404 {
         println!("Project {} not found on bestpractices.dev", project_id);
