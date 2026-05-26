@@ -25,6 +25,10 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.MigrationRules
   alias Hypatia.Rules.BaselineHealth
   alias Hypatia.Rules.BuildSystemRules
+  alias Hypatia.Rules.WorkflowHardening
+  alias Hypatia.Rules.SupplyChain
+  alias Hypatia.Rules.BranchProtection
+  # alias Hypatia.Rules.ResearchExtensions  # wired in follow-up after PR #325 merges
 
   @doc """
   Run a comprehensive scan on a file's content given its path and language.
@@ -400,11 +404,87 @@ defmodule Hypatia.Rules do
   defdelegate detect_waste(repo_info), to: CicdRules
 
   @doc """
-  Run baseline-health checks (BH001-BH003): missing required_status_checks
+  Run baseline-health checks (BH001-BH007): missing required_status_checks
   on main, deferred-migration TODOs in dep manifests, persistent >24h red
-  baseline on main. Returns the same shape as `GitState.scan/1`.
+  baseline on main, dead action SHA pins, push-only required checks,
+  required-check drift, signing-key UID gaps. Returns `%{findings, total,
+  by_severity, dispatch}`.
   """
   defdelegate scan_baseline_health(repo_path, opts \\ []), to: BaselineHealth, as: :scan
+
+  @doc """
+  Run workflow-content hardening checks (WH001-WH012): template injection,
+  excessive permissions, dangerous triggers, unpinned actions, hardcoded
+  credentials, missing timeouts/concurrency, secrets leakage, deprecated
+  workflow commands, curl-pipe-shell, $GITHUB_ENV taint. Pure local file
+  scan — no GitHub API.
+  """
+  defdelegate scan_workflow_hardening(repo_path, opts \\ []), to: WorkflowHardening, as: :scan
+
+  @doc """
+  Run supply-chain integrity checks (SC001-SC011): CODEOWNERS coverage,
+  Dependabot config, archived actions, typosquats, pull_request_target,
+  release SBOM/signing, self-hosted runners, OIDC vs static secrets,
+  SECURITY.md, webhook secrets. Uses GitHub API when `:owner_repo` is
+  supplied; degrades cleanly without a token.
+  """
+  defdelegate scan_supply_chain(repo_path, opts \\ []), to: SupplyChain, as: :scan
+
+  @doc """
+  Run branch-protection hygiene checks (BP001-BP007) against the default
+  branch: required signatures, linear history, required reviews, stale-
+  review dismissal, CODEOWNERS, admin enforcement, force-push/delete
+  block. All API-backed; returns `[]` cleanly without a token.
+  """
+  defdelegate scan_branch_protection(owner, repo), to: BranchProtection, as: :scan
+
+  # ResearchExtensions (RE001-RE010) delegate added in follow-up once
+  # PR #325 lands on main. The facade for the other four families is
+  # below.
+
+  @doc """
+  Run every estate-policy rule available against a repository in one
+  pass and merge the findings. Optional `:owner_repo` keyword unlocks
+  the API-backed rules in `BaselineHealth`, `SupplyChain`, and
+  `BranchProtection`.
+
+  Returns `%{findings: [...], total: N, by_severity: %{...}, dispatch: [...]}`
+  with all five new rule families plus the existing `BaselineHealth`
+  surface combined.
+  """
+  def scan_all_estate_policies(repo_path, opts \\ []) do
+    {owner, repo} =
+      case Keyword.get(opts, :owner_repo) do
+        {o, r} when is_binary(o) and is_binary(r) -> {o, r}
+        _ -> {nil, nil}
+      end
+
+    parts = [
+      BaselineHealth.scan(repo_path, opts),
+      WorkflowHardening.scan(repo_path, opts),
+      SupplyChain.scan(repo_path, opts)
+    ]
+
+    parts =
+      if owner && repo do
+        [BranchProtection.scan(owner, repo) | parts]
+      else
+        parts
+      end
+
+    findings = Enum.flat_map(parts, & &1.findings)
+
+    %{
+      findings: findings,
+      total: length(findings),
+      by_severity:
+        findings
+        |> Enum.group_by(& &1.severity)
+        |> Enum.map(fn {sev, items} -> {sev, length(items)} end)
+        |> Map.new(),
+      dispatch: Enum.flat_map(parts, & &1.dispatch)
+    }
+  end
 
   # ---------------------------------------------------------------------------
   # Private Helpers
