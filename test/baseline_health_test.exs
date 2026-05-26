@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Tests for baseline-health detection rules (BH001-BH003).
+# Tests for baseline-health detection rules (BH001-BH007).
 # API-backed rules are tested via their no-token path (returns `[]`
-# cleanly); the local manifest scan is exercised against an ephemeral
-# repo in /tmp.
+# cleanly); the local manifest and workflow scans are exercised against
+# an ephemeral repo in /tmp.
 
 defmodule Hypatia.Rules.BaselineHealthTest do
   use ExUnit.Case, async: true
@@ -169,6 +169,125 @@ defmodule Hypatia.Rules.BaselineHealthTest do
                "hyperpolymath",
                "x",
                threshold_hours: 1
+             ) == []
+    end
+  end
+
+  # ─── BH004: dead action SHA pin ─────────────────────────────────────
+
+  describe "bh004_dead_action_sha_pin/1" do
+    test "returns [] when no workflow files exist", %{repo: repo} do
+      # No .github/workflows/ directory at all.
+      assert BaselineHealth.bh004_dead_action_sha_pin(repo) == []
+    end
+
+    test "returns [] when no token is set even if SHAs are present", %{repo: repo} do
+      old_token = System.get_env("GITHUB_TOKEN")
+      old_pat = System.get_env("HYPATIA_DISPATCH_PAT")
+      System.delete_env("GITHUB_TOKEN")
+      System.delete_env("HYPATIA_DISPATCH_PAT")
+
+      on_exit(fn ->
+        if old_token, do: System.put_env("GITHUB_TOKEN", old_token)
+        if old_pat, do: System.put_env("HYPATIA_DISPATCH_PAT", old_pat)
+      end)
+
+      wf_dir = Path.join([repo, ".github", "workflows"])
+      File.mkdir_p!(wf_dir)
+
+      File.write!(Path.join(wf_dir, "test.yml"), """
+      name: Test
+      on: [push]
+      jobs:
+        x:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@ea165f8d65b6e75b540449e92b4886f43607fa02
+            - uses: actions/upload-artifact@65c79d7f54e76e4e3c7a8f34db0f4ac8b515c478
+      """)
+
+      # No token = we can't verify, so we silently skip rather than
+      # emit false positives. The function should not raise.
+      assert BaselineHealth.bh004_dead_action_sha_pin(repo) == []
+    end
+
+    test "ignores nested .github/workflows in monorepo subdirectories", %{repo: repo} do
+      nested_wf_dir = Path.join([repo, "cartridge-a", ".github", "workflows"])
+      File.mkdir_p!(nested_wf_dir)
+
+      # Even with the broken SHA, a nested scaffold is not active CI.
+      File.write!(Path.join(nested_wf_dir, "scaffold.yml"), """
+      name: Scaffold
+      on: [push]
+      jobs:
+        x:
+          steps:
+            - uses: actions/upload-artifact@65c79d7f54e76e4e3c7a8f34db0f4ac8b515c478
+      """)
+
+      assert BaselineHealth.bh004_dead_action_sha_pin(repo) == []
+    end
+  end
+
+  # ─── BH005: push-only required check ────────────────────────────────
+
+  describe "bh005_push_only_required_check/2" do
+    test "returns [] when GITHUB_TOKEN is not set" do
+      old_token = System.get_env("GITHUB_TOKEN")
+      old_pat = System.get_env("HYPATIA_DISPATCH_PAT")
+      System.delete_env("GITHUB_TOKEN")
+      System.delete_env("HYPATIA_DISPATCH_PAT")
+
+      on_exit(fn ->
+        if old_token, do: System.put_env("GITHUB_TOKEN", old_token)
+        if old_pat, do: System.put_env("HYPATIA_DISPATCH_PAT", old_pat)
+      end)
+
+      assert BaselineHealth.bh005_push_only_required_check(
+               "hyperpolymath",
+               "test-nonexistent"
+             ) == []
+    end
+  end
+
+  # ─── BH006: required-check drift ────────────────────────────────────
+
+  describe "bh006_required_check_drift/2" do
+    test "returns [] when GITHUB_TOKEN is not set" do
+      old_token = System.get_env("GITHUB_TOKEN")
+      old_pat = System.get_env("HYPATIA_DISPATCH_PAT")
+      System.delete_env("GITHUB_TOKEN")
+      System.delete_env("HYPATIA_DISPATCH_PAT")
+
+      on_exit(fn ->
+        if old_token, do: System.put_env("GITHUB_TOKEN", old_token)
+        if old_pat, do: System.put_env("HYPATIA_DISPATCH_PAT", old_pat)
+      end)
+
+      assert BaselineHealth.bh006_required_check_drift(
+               "hyperpolymath",
+               "test-nonexistent"
+             ) == []
+    end
+  end
+
+  # ─── BH007: signing-key UID gap ─────────────────────────────────────
+
+  describe "bh007_signing_key_uid_gap/2" do
+    test "returns [] when GITHUB_TOKEN is not set" do
+      old_token = System.get_env("GITHUB_TOKEN")
+      old_pat = System.get_env("HYPATIA_DISPATCH_PAT")
+      System.delete_env("GITHUB_TOKEN")
+      System.delete_env("HYPATIA_DISPATCH_PAT")
+
+      on_exit(fn ->
+        if old_token, do: System.put_env("GITHUB_TOKEN", old_token)
+        if old_pat, do: System.put_env("HYPATIA_DISPATCH_PAT", old_pat)
+      end)
+
+      assert BaselineHealth.bh007_signing_key_uid_gap(
+               "hyperpolymath",
+               "test-nonexistent"
              ) == []
     end
   end
