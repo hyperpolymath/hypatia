@@ -68,6 +68,32 @@ defmodule Hypatia.Rules.CodeSafety do
       description: "JSON decode without validation"}
   ]
 
+  # AffineScript hand-port pitfalls — patterns that hand-ports from
+  # ReScript/OCaml routinely leak into `.affine` files but that the
+  # AffineScript grammar rejects. Both surfaced during the sustainabot
+  # ReScript->AffineScript migration (gitbot-fleet#148, 2026-05-26).
+  # Cross-references: affinescript repo CLAUDE.md "Hypatia and gitbot-fleet
+  # standing rules" + the agent-memory entries
+  # `feedback_affinescript_handle_keyword_gotcha.md` /
+  # `feedback_affinescript_no_ocaml_float_ops.md`.
+  @affine_hand_port_patterns [
+    %{id: :handle_as_fn_name, severity: :high,
+      pattern: ~r/(?:^|\n)\s*(?:pub\s+)?(?:total\s+)?fn\s+handle\s*[\(\<]/, cwe: "CWE-1109",
+      description: "Function named `handle` collides with AffineScript HANDLE keyword token (used by `handle body { handlers }` effect-handler expression form). Rename to `dispatch`, `handle_request`, `handle_event`, etc."},
+    %{id: :ocaml_style_float_div, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*\/\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float division `/.` is not accepted by AffineScript — use unified `/` for both Int and Float"},
+    %{id: :ocaml_style_float_mul, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*\*\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float multiplication `*.` is not accepted by AffineScript — use unified `*` for both Int and Float"},
+    %{id: :ocaml_style_float_add, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*\+\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float addition `+.` is not accepted by AffineScript — use unified `+` for both Int and Float"},
+    %{id: :ocaml_style_float_sub, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*-\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float subtraction `-.` is not accepted by AffineScript — use unified `-` for both Int and Float"}
+  ]
+
   @idris2_banned [
     %{id: :believe_me, severity: :critical,
       pattern: ~r/believe_me/, cwe: "CWE-704",
@@ -359,6 +385,8 @@ defmodule Hypatia.Rules.CodeSafety do
 
   def patterns_for_language("rust"), do: @rust_patterns
   def patterns_for_language("rescript"), do: @rescript_patterns
+  def patterns_for_language("affine"), do: @affine_hand_port_patterns
+  def patterns_for_language("affinescript"), do: @affine_hand_port_patterns
   def patterns_for_language("idris2"), do: @idris2_banned
   def patterns_for_language("haskell"), do: @haskell_banned
   def patterns_for_language("ocaml"), do: @ocaml_banned
