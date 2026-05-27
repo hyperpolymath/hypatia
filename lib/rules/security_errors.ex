@@ -309,7 +309,24 @@ defmodule Hypatia.Rules.SecurityErrors do
     "slsa-framework/slsa-github-generator" =>
       "SLSA generator self-verifies its own github.ref to mint verifiable " <>
         "provenance; it MUST stay on a semver tag (@vX.Y.Z). SHA-pinning it " <>
-        "breaks SLSA provenance. Documented Scorecard limitation."
+        "breaks SLSA provenance. Documented Scorecard limitation.",
+    # Own-org reusable workflows are intentionally referenced at @main so
+    # wrapper consumers across the estate pick up reusable updates without
+    # a fan-out SHA-bump PR per repo (the canonical wrapper pattern —
+    # see project_admin_merge_wrappers_2026_05_26 and the
+    # `chore(ci): replace …yml with reusable wrapper` PR class).
+    # SHA-pinning these would defeat the wrapper pattern's whole purpose
+    # and force the fan-out the wrappers were created to eliminate.
+    # The trust boundary is "we control the org" — same as a vendored
+    # dependency you have commit rights on. Observed flagging 2026-05-27
+    # across affinescript#357 / panll#54 / claude-integrations#43 /
+    # idaptik#98 / tma-mark2#41 / maa-framework#78 (6/6 PRs flagged).
+    "hyperpolymath/standards/.github/workflows/" =>
+      "Own-org reusable workflow referenced at @main is the canonical " <>
+        "wrapper pattern (project_admin_merge_wrappers_2026_05_26). " <>
+        "SHA-pinning each wrapper would force a fan-out SHA-bump PR " <>
+        "per consumer repo per reusable change — defeating the wrapper's " <>
+        "whole purpose. Trust boundary: own-org commit rights."
   }
 
   def pin_exempt, do: @pin_exempt
