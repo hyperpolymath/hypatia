@@ -131,7 +131,33 @@ defmodule Hypatia.ScannerSuppression do
   """
   def suppressed?(file, rule_module, rule_type, opts \\ [])
 
-  def suppressed?(_file, "cicd_rules", "banned_language_file", _opts), do: false
+  # banned_language_file dispatch:
+  # Python / Go / Makefile / Ruby (Gemfile) — TOTAL ban, no exceptions
+  # (org policy 2026-05-18 hardening). The former SaltStack carve-out is
+  # explicitly rejected here so no `.hypatia-ignore` or path heuristic
+  # can re-introduce drift.
+  # TypeScript / ReScript / JavaScript — bannned-by-default but with
+  # narrow, documented carve-outs honoured (see `@banned_lang_ts_carveouts`).
+  # The carve-outs mirror the comment in
+  # `Hypatia.Rules.CicdRules.@blocked_patterns`: `.d.ts` declaration
+  # files for interop, Deno test-runner under `affinescript-deno-test/`,
+  # and JS shims under `affinescript-cli/`. The cicd_rules comment
+  # claimed these were "honoured via ScannerSuppression" but the
+  # previous hard-`false` clause broke the carve-out, generating
+  # ~15 critical false-positives per affected PR scan (observed
+  # 2026-05-27 on affinescript#357, panll#54, claude-integrations#43).
+  def suppressed?(file, "cicd_rules", "banned_language_file", opts) do
+    cond do
+      String.ends_with?(file, ".py") -> false
+      String.ends_with?(file, ".go") -> false
+      String.ends_with?(file, "/Makefile") or String.ends_with?(file, "Makefile") -> false
+      String.ends_with?(file, "/Gemfile") or String.ends_with?(file, "Gemfile") -> false
+      true ->
+        repo_path = Keyword.get(opts, :repo_path, nil)
+        rel = relative(file, repo_path)
+        ts_carveout_match?(rel)
+    end
+  end
 
   def suppressed?(file, rule_module, rule_type, opts) do
     repo_path = Keyword.get(opts, :repo_path, nil)
@@ -140,6 +166,24 @@ defmodule Hypatia.ScannerSuppression do
     universal_excluded?(rel) or
       match_exemptions?(rel, @default_exemptions, rule_module, rule_type) or
       match_exemptions?(rel, user_exemptions(repo_path), rule_module, rule_type)
+  end
+
+  # Documented TypeScript / JavaScript / ReScript carve-outs — kept
+  # narrow on purpose. The `.d.ts` allowance covers TS declaration
+  # files which are interop-only (no runtime code). The
+  # `affinescript-deno-test/` path is the Deno test harness for the
+  # AffineScript CLI itself — replacing it with AffineScript would be
+  # circular (the CLI under test compiles AffineScript). The
+  # `affinescript-cli/` path covers thin JS shims that bridge to the
+  # compiled WASM runtime.
+  @banned_lang_ts_carveouts [
+    ~r{(^|/)affinescript-deno-test/},
+    ~r{(^|/)affinescript-cli/.*\.js$},
+    ~r{\.d\.ts$}
+  ]
+
+  defp ts_carveout_match?(rel) do
+    Enum.any?(@banned_lang_ts_carveouts, &Regex.match?(&1, rel))
   end
 
   @doc """

@@ -326,6 +326,7 @@ defmodule Hypatia.Rules.CicdRules do
 
   def validate_license(spdx_id, repo_name) do
     cond do
+      double_suffix?(spdx_id) -> {:error, :spdx_double_suffix, spdx_id}
       spdx_id == @required_spdx -> :ok
       spdx_id == "MPL-2.0" -> :ok_fallback
       spdx_id in ["AGPL-3.0", "AGPL-3.0-or-later"] and repo_name in @agpl_exception_repos ->
@@ -334,6 +335,24 @@ defmodule Hypatia.Rules.CicdRules do
       true -> {:warning, :unknown_license, spdx_id}
     end
   end
+
+  # Detect SPDX identifiers with a duplicated `-or-later` (or `+`) suffix —
+  # the rhodibot regex-regression class observed 2026-05-27 in
+  # the-nash-equilibrium#41. The deployed bot's auto-fix applies
+  # `s/AGPL-3.0/AGPL-3.0-or-later/` without a word-boundary anchor, so
+  # files that already carry `-or-later` end up with the suffix duplicated.
+  # A canonical SPDX identifier never repeats its `-or-later` clause and
+  # the `+` short-form is mutually exclusive with `-or-later` (so
+  # `…-or-later+` and `…+-or-later` are also malformed). Returns true for
+  # malformed strings; validate_license/2 maps that to
+  # `{:error, :spdx_double_suffix, …}` (ERR-LIC-001 in the catalog).
+  defp double_suffix?(spdx_id) when is_binary(spdx_id) do
+    String.contains?(spdx_id, "-or-later-or-later") or
+      String.contains?(spdx_id, "-or-later+") or
+      Regex.match?(~r/\+-or-later\b/, spdx_id)
+  end
+
+  defp double_suffix?(_), do: false
 
   # ---------------------------------------------------------------------------
   # Error Catalog IDs
@@ -349,6 +368,9 @@ defmodule Hypatia.Rules.CicdRules do
     "ERR-WF-003" => %{type: :missing_spdx, severity: :medium,
       detection: [:grep_pattern],
       prevention: [:pre_commit_hook, :template]},
+    "ERR-LIC-001" => %{type: :spdx_double_suffix, severity: :high,
+      detection: [:grep_pattern, :validate_license],
+      prevention: [:pre_commit_hook, :rhodibot_regex_word_boundary]},
     "ERR-WF-004" => %{type: :codeql_mismatch, severity: :medium,
       detection: [:workflow_run_failure, :manual_review],
       prevention: [:language_detection_hook, :ci_check]},
