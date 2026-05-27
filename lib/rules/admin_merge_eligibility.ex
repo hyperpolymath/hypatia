@@ -163,4 +163,160 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   end
 
   def dependabot_stalled?(_, _), do: :ok
+
+  # ─── Estate-wide backlog scan (DBA002) ────────────────────────────────
+
+  @doc """
+  Inventory open PRs across an estate and partition them by
+  `AdminMergeEligibility.classify/1`. Returns
+  `{:ok, %{eligible: [...], requires_review: [...], stalled_dependabot: [...]}}`.
+
+  Intended consumers:
+
+    * Periodic scan: when `length(eligible) > 50` the scanner emits an
+      estate finding (`:backlog_exceeds_threshold`) that surfaces in
+      hypatia's web dashboard + dispatches the
+      `recipe-budget-resume-sweep` (which calls the
+      `.git-private-farm/dispatch-templates/budget-resume-sweep.yml`
+      workflow).
+
+    * Manual inspection: the same partition runs as a one-off via
+      `mix hypatia.pr_backlog` (script at
+      `scripts/pr_backlog_report.sh` reads JSONL from
+      `gh search prs --author=@me --state=open --owner=<owner>` and
+      pipes through this function).
+
+  The `prs` argument is a list of maps shaped like the
+  `gh search prs ... --json url,title,isDraft,mergeable,mergeStateStatus,createdAt,author,reviewRequests`
+  output (snake_case keys are accepted as well via the standard
+  Map.get-with-default fallthrough).
+  """
+  @spec scan_estate_backlog(list(map())) :: {:ok, map()}
+  def scan_estate_backlog(prs) when is_list(prs) do
+    {eligible, others} =
+      Enum.split_with(prs, fn pr ->
+        case eligible?(pr) do
+          {:eligible, _id} -> true
+          _ -> false
+        end
+      end)
+
+    stalled_dependabot =
+      Enum.filter(others, fn pr ->
+        dependabot_stalled?(pr) == :stalled
+      end)
+
+    requires_review = others -- stalled_dependabot
+
+    {:ok,
+     %{
+       eligible: eligible,
+       requires_review: requires_review,
+       stalled_dependabot: stalled_dependabot,
+       counts: %{
+         eligible: length(eligible),
+         requires_review: length(requires_review),
+         stalled_dependabot: length(stalled_dependabot),
+         total: length(prs)
+       }
+     }}
+  end
+
+  @doc """
+  Detect an "obsolete supersedes" PR (ERR-PR-001): a PR whose only
+  substantive change is to set a workflow `uses:` SHA, but main now
+  carries a NEWER SHA at the same location. The PR's edit would
+  REGRESS main. Close-as-superseded rather than rebase.
+
+  Observed 2026-05-27: 6 such PRs across the estate
+  (`somethings-fishy#26`, `nextgen-languages#55`, `stapeln#74`,
+  `hypatia#349`, `typed-wasm#75`, plus the explicitly-confirmed
+  `maa-framework#78` doc supersedes). All closed cleanly with a
+  one-line "main already has newer X" comment.
+
+  Inputs (all expected to be already-fetched via `gh` upstream):
+    * `pr` — map with `:url`, `:title`, `:files` (list of `{path, patch}`)
+    * `main_lookup` — fn that given a `path` returns the current main
+      file contents (string) or nil if not present.
+
+  Returns `{:obsolete, reason}` when the PR's edited line is older
+  than main's current value at the same location; `:not_obsolete`
+  otherwise. Caller is expected to gh-pr-close with the canonical
+  comment template.
+  """
+  @spec obsolete_supersedes?(map(), (String.t() -> String.t() | nil)) ::
+          {:obsolete, String.t()} | :not_obsolete
+  def obsolete_supersedes?(%{files: files} = pr, main_lookup)
+      when is_function(main_lookup, 1) do
+    # Look at workflow YAML edits that change a `uses: ...@<sha>` line.
+    Enum.find_value(files, :not_obsolete, fn file ->
+      path = Map.get(file, :path, "")
+      patch = Map.get(file, :patch, "")
+
+      pr_targets = Regex.scan(~r/^\+\s+uses:\s+([^@\s]+)@([0-9a-f]{40})/m, patch)
+
+      if pr_targets == [] do
+        nil
+      else
+        case main_lookup.(path) do
+          nil ->
+            nil
+
+          main_content ->
+            main_targets =
+              Regex.scan(~r/uses:\s+([^@\s]+)@([0-9a-f]{40})/, main_content)
+
+            stale? =
+              Enum.any?(pr_targets, fn [_, action, pr_sha] ->
+                main_sha =
+                  Enum.find_value(main_targets, fn [_, m_action, m_sha] ->
+                    if m_action == action, do: m_sha
+                  end)
+
+                main_sha != nil and main_sha != pr_sha
+              end)
+
+            if stale? do
+              {:obsolete, "main already carries a newer SHA for `uses:` line in #{path}"}
+            else
+              nil
+            end
+        end
+      end
+    end)
+  end
+
+  def obsolete_supersedes?(_, _), do: :not_obsolete
+
+  @doc """
+  Backlog-threshold finding. Returns `{:finding, ...}` when the
+  eligible-PR queue exceeds `threshold` (default 50 — the 2026-05-26
+  pilot's CI-blocked-but-mergeable count when GitHub Actions billing
+  first cliff-hit). Returns `:below_threshold` otherwise.
+
+  Wired into the periodic learning-loop sweep via `Hypatia.Rules` so a
+  growing backlog becomes a first-class finding before it becomes a
+  weekend-burner sweep.
+  """
+  @spec backlog_finding(map(), pos_integer()) ::
+          {:finding, map()} | :below_threshold
+  def backlog_finding(%{counts: %{eligible: count}}, threshold \\ 50) do
+    if count >= threshold do
+      {:finding,
+       %{
+         rule: "admin_merge_backlog_exceeds_threshold",
+         rule_id: "DBA002",
+         recipe_id: "recipe-budget-resume-sweep",
+         severity: :medium,
+         count: count,
+         threshold: threshold,
+         description:
+           "Admin-merge-eligible PR queue is #{count} (threshold #{threshold}). " <>
+             "Run `.git-private-farm/dispatch-templates/budget-resume-sweep.yml` to clear " <>
+             "wrapper/docs/changelog/rescript-migration PRs in bulk before they backlog further."
+       }}
+    else
+      :below_threshold
+    end
+  end
 end

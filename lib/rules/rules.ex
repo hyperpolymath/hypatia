@@ -28,6 +28,7 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.WorkflowHardening
   alias Hypatia.Rules.SupplyChain
   alias Hypatia.Rules.BranchProtection
+  alias Hypatia.Rules.AdminMergeEligibility
   # alias Hypatia.Rules.ResearchExtensions  # wired in follow-up after PR #325 merges
 
   @doc """
@@ -71,6 +72,15 @@ defmodule Hypatia.Rules do
             {:error, :wrong_license, bad} ->
               [%{rule: "wrong_license", severity: :high,
                  description: "Wrong license #{bad} -- should be MPL-2.0"} | findings]
+            {:error, :spdx_double_suffix, bad} ->
+              # ERR-LIC-001 — rhodibot regex-regression class
+              # (`AGPL-3.0-or-later-or-later` etc.). Fix-script:
+              # `gitbot-fleet/scripts/fix-spdx-double-suffix.sh`.
+              [%{rule: "spdx_double_suffix",
+                 rule_id: "ERR-LIC-001",
+                 recipe_id: "recipe-fix-spdx-double-suffix",
+                 severity: :high,
+                 description: "Malformed SPDX identifier `#{bad}` -- duplicate `-or-later` or `+` suffix. Regression from rhodibot auto-fix without word-boundary anchor."} | findings]
             _ -> findings
           end
         _ -> findings
