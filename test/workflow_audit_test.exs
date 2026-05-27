@@ -298,4 +298,171 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert f.action == :pin_sha
     end
   end
+
+  describe "check_workflow_sha_as_foreign_ref/1" do
+    test "flags actions/checkout of a foreign repo at github.workflow_sha" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+                ref: ${{ github.workflow_sha }}
+                path: .standards-checkout
+      """
+
+      findings = WorkflowAudit.check_workflow_sha_as_foreign_ref(%{"governance-reusable.yml" => wf})
+      assert length(findings) == 1
+      [f] = findings
+      assert f.type == :workflow_sha_as_foreign_ref
+      assert f.severity == :critical
+      assert f.action == :pin_external_checkout_ref
+      assert String.contains?(f.detail, "hyperpolymath/standards")
+    end
+
+    test "ignores checkout of the caller's own repo at github.workflow_sha" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: ${{ github.repository }}
+                ref: ${{ github.workflow_sha }}
+      """
+
+      assert [] = WorkflowAudit.check_workflow_sha_as_foreign_ref(%{"ci.yml" => wf})
+    end
+
+    test "ignores checkout of a foreign repo with a pinned literal ref" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+                ref: main
+      """
+
+      assert [] = WorkflowAudit.check_workflow_sha_as_foreign_ref(%{"ci.yml" => wf})
+    end
+
+    test "ignores checkout without an explicit ref" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+      """
+
+      assert [] = WorkflowAudit.check_workflow_sha_as_foreign_ref(%{"ci.yml" => wf})
+    end
+  end
+
+  describe "check_reusable_caller_context_self_checkout/1" do
+    test "flags reusable workflow self-checkout at caller-context github.ref" do
+      wf = """
+      on:
+        workflow_call:
+          inputs:
+            runs-on:
+              type: string
+              default: ubuntu-latest
+
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+                ref: ${{ github.ref }}
+      """
+
+      [f] =
+        WorkflowAudit.check_reusable_caller_context_self_checkout(%{
+          "governance-reusable.yml" => wf
+        })
+
+      assert f.type == :reusable_caller_context_self_checkout
+      assert f.severity == :critical
+    end
+
+    test "flags reusable self-checkout with workflow_sha too" do
+      wf = """
+      on:
+        workflow_call:
+
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+                ref: ${{ github.workflow_sha }}
+      """
+
+      [f] =
+        WorkflowAudit.check_reusable_caller_context_self_checkout(%{
+          "governance-reusable.yml" => wf
+        })
+
+      assert f.type == :reusable_caller_context_self_checkout
+    end
+
+    test "does not fire on non-reusable workflows" do
+      wf = """
+      on:
+        push:
+          branches: [main]
+
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+                ref: ${{ github.ref }}
+      """
+
+      assert [] = WorkflowAudit.check_reusable_caller_context_self_checkout(%{"ci.yml" => wf})
+    end
+
+    test "does not fire on caller-context ref for caller's own repo" do
+      wf = """
+      on:
+        workflow_call:
+
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: ${{ github.repository }}
+                ref: ${{ github.ref }}
+      """
+
+      assert [] = WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
+    end
+
+    test "does not fire when ref is a literal pin" do
+      wf = """
+      on:
+        workflow_call:
+
+      jobs:
+        check:
+          steps:
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+              with:
+                repository: hyperpolymath/standards
+                ref: main
+      """
+
+      assert [] = WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
+    end
+  end
 end
