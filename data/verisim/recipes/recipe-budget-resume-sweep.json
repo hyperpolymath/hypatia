@@ -1,0 +1,38 @@
+{
+  "id": "recipe-budget-resume-sweep",
+  "name": "Estate-wide budget-resume admin-merge sweep",
+  "description": "When the GitHub Actions budget exhausts and the BLOCKED-but-MERGEABLE PR queue exceeds the threshold (default 50), trigger the .git-private-farm/dispatch-templates/budget-resume-sweep.yml workflow which admin-merges PRs matching AM001-AM009 title shapes (Hypatia.Rules.AdminMergeEligibility).",
+  "triangle_tier": "control",
+  "pattern_ids": [
+    "DBA002"
+  ],
+  "target_categories": ["EstateOperations"],
+  "languages": ["*"],
+  "confidence": 0.98,
+  "auto_fixable": false,
+  "fix_script": null,
+  "exclude_repos": [],
+  "action": "workflow_dispatch",
+  "match": "AdminMergeEligibility.scan_estate_backlog: eligible count >= threshold",
+  "replacement": "Dispatch budget-resume-sweep workflow (dry-run=false, limit=200) in .git-private-farm",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0,
+  "discovery": {
+    "first_observed": "2026-05-27",
+    "first_observed_in": "hyperpolymath estate (1254-PR backlog)",
+    "root_cause": "Estate fan-out workflows (mirror/secret-scanner/codeql/scorecard/hypatia-scan/language-CI) across 354 repos burn through monthly GH Actions minutes faster than the sweeps that file their wrapper-replacement PRs. Required-CI checks never complete → auto-merge never fires → backlog accumulates.",
+    "session_memory": "session_2026_05_27_estate_sweep_1254_prs",
+    "encoded_artifacts": [
+      "hypatia/lib/rules/admin_merge_eligibility.ex AM001-AM009",
+      ".git-private-farm/dispatch-templates/budget-resume-sweep.yml"
+    ]
+  },
+  "trigger": {
+    "kind": "scheduled_inventory",
+    "schedule": "every 6h",
+    "command": "gh search prs --author=@me --state=open --owner=hyperpolymath --limit 1000 --json url,title,isDraft,mergeable,mergeStateStatus,createdAt,author,reviewRequests",
+    "consumer": "AdminMergeEligibility.scan_estate_backlog/1 |> AdminMergeEligibility.backlog_finding/1"
+  }
+}

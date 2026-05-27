@@ -91,13 +91,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
     codeql_lang_mismatch = check_codeql_language_matrix_mismatch(workflow_contents, opts)
     workflow_sha_foreign_ref = check_workflow_sha_as_foreign_ref(workflow_contents)
     reusable_caller_context_self_checkout = check_reusable_caller_context_self_checkout(workflow_contents)
+    missing_timeouts = check_missing_timeout_minutes(workflow_contents)
 
     %{
       findings:
         missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
           caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
           codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
-          reusable_caller_context_self_checkout,
+          reusable_caller_context_self_checkout ++ missing_timeouts,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -109,10 +110,84 @@ defmodule Hypatia.Rules.WorkflowAudit do
       download_then_run_issues: length(download_then_run_issues),
       npermissions_typo_count: length(nperm_typos),
       codeql_lang_mismatch_count: length(codeql_lang_mismatch),
+      missing_timeout_count: length(missing_timeouts),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
   end
+
+  @doc """
+  Check workflow jobs that lack `timeout-minutes:`. The GitHub Actions
+  default is 6 hours, which lets a stuck job (commonly a `codeload`
+  fetch hang — see standards#208) burn through monthly budget. Every
+  job should declare an explicit timeout proportionate to its expected
+  runtime; governance / lint jobs typically settle in 1-10 minutes.
+
+  Detection is regex-based: scan for top-level `jobs:` keys, then
+  verify the next ~20 lines after each job header carry a
+  `timeout-minutes:` line before another top-level key (`runs-on`,
+  `permissions`, `if`, `needs`, `outputs`, `name`, `steps`,
+  `concurrency`, `services`, `environment`, `strategy`,
+  `continue-on-error`, `defaults`, `container`). Emits one finding
+  per job that lacks one.
+
+  Recipe: `recipe-add-workflow-timeout-minutes` (gitbot-fleet script
+  `fix-workflow-timeout-minutes.sh` — auto-fixable; default 10m for
+  unrecognised jobs).
+  """
+  def check_missing_timeout_minutes(workflow_contents) when is_map(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      # Naïve YAML scan: any `^  <key>:$` under top-level `jobs:`
+      # without a subsequent `^    timeout-minutes:` line before the
+      # next sibling block.
+      lines = String.split(content, "\n")
+      in_jobs = false
+      jobs_with_timeout = MapSet.new()
+      jobs_seen = MapSet.new()
+      current_job = nil
+
+      {jobs_seen, jobs_with_timeout} =
+        Enum.reduce(lines, {jobs_seen, jobs_with_timeout, false, nil}, fn line, {seen, with_to, in_j, curj} ->
+          cond do
+            String.match?(line, ~r/^jobs:\s*$/) ->
+              {seen, with_to, true, nil}
+
+            in_j and String.match?(line, ~r/^  [A-Za-z0-9_-]+:\s*$/) ->
+              [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
+              {MapSet.put(seen, name), with_to, in_j, name}
+
+            in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
+              {seen, MapSet.put(with_to, curj), in_j, curj}
+
+            String.match?(line, ~r/^[A-Za-z]/) ->
+              {seen, with_to, false, curj}
+
+            true ->
+              {seen, with_to, in_j, curj}
+          end
+        end)
+        |> then(fn {s, w, _, _} -> {s, w} end)
+
+      missing = MapSet.difference(jobs_seen, jobs_with_timeout)
+
+      Enum.map(missing, fn job_name ->
+        %{
+          rule: "missing_timeout_minutes",
+          rule_id: "ERR-WF-013",
+          recipe_id: "recipe-add-workflow-timeout-minutes",
+          severity: :medium,
+          file: filename,
+          job: job_name,
+          description:
+            "Job `#{job_name}` in #{filename} has no `timeout-minutes:` declaration. " <>
+              "Default is 6 hours — a stuck codeload fetch or runner hang can burn budget. " <>
+              "Add `timeout-minutes: 10` (or proportional)."
+        }
+      end)
+    end)
+  end
+
+  def check_missing_timeout_minutes(_), do: []
 
   @doc """
   Check which standard workflows are missing.

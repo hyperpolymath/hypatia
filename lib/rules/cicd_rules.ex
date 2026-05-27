@@ -406,7 +406,16 @@ defmodule Hypatia.Rules.CicdRules do
       prevention: [:template]},
     "ERR-WF-012" => %{type: :missing_workflow_caching, severity: :low,
       detection: [:workflow_audit, :content_scan],
-      prevention: [:template]}
+      prevention: [:template]},
+    "ERR-WF-013" => %{type: :missing_timeout_minutes, severity: :medium,
+      detection: [:workflow_audit, :content_scan],
+      prevention: [:template, :pre_commit_hook]},
+    "ERR-GIT-001" => %{type: :crlf_blob_without_gitattributes, severity: :medium,
+      detection: [:git_state, :content_scan],
+      prevention: [:gitattributes_template]},
+    "ERR-PR-001" => %{type: :obsolete_pr_target_sha_stale, severity: :info,
+      detection: [:gh_api_check, :pr_inventory],
+      prevention: [:branch_protection]}
   }
 
   def error_catalog, do: @error_catalog

@@ -1,0 +1,28 @@
+{
+  "id": "recipe-fix-gitattributes-eol",
+  "name": "Add .gitattributes normalising EOL to LF + renormalise CRLF blobs",
+  "description": "Repos that carry CRLF-encoded files without a `.gitattributes` directive normalising EOL to LF produce 'phantom diffs' on every checkout — git's autocrlf+core.eol heuristics rewrite CRLF↔LF round-trip, blocking rebases (observed on claude-integrations#43 2026-05-27). Fix: write a sensible `.gitattributes` AND `git add --renormalize .` to refresh the index.",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "ERR-GIT-001"
+  ],
+  "target_categories": ["GitHygiene"],
+  "languages": ["*"],
+  "confidence": 0.92,
+  "auto_fixable": true,
+  "fix_script": "fix-gitattributes-eol.sh",
+  "exclude_repos": [],
+  "action": "create_or_amend_file",
+  "match": "Repo with tracked CRLF blobs but no `eol=lf` directive in `.gitattributes`",
+  "replacement": "Write `.gitattributes` with `* text=auto eol=lf`, exempt `*.bat` (`text eol=crlf`), exempt declared binaries, then renormalise",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0,
+  "discovery": {
+    "first_observed": "2026-05-27",
+    "first_observed_in": "hyperpolymath/claude-integrations#43",
+    "root_cause": "Repo had `.gitattributes` declaring `* text=auto eol=lf` but the BLOBS themselves were already CRLF in git's object store; without `git add --renormalize` the working-tree CRLF→LF round-trip kept regenerating uncommittable diffs.",
+    "session_memory": "session_2026_05_27_estate_sweep_1254_prs"
+  }
+}
