@@ -28,13 +28,32 @@ defmodule Hypatia.SARIF do
   @schema_uri "https://json.schemastore.org/sarif-2.1.0.json"
   @version "2.1.0"
 
+  # Rule modules whose findings are lenses over GitHub's own alert
+  # surfaces. Uploading them as SARIF turns each finding into a new
+  # code-scanning alert that the next scan re-observes (self-echo) --
+  # the boj-server post-mortem in `code_scanning_alerts.ex` describes
+  # alerts 357-386 accumulated this way, and the 2026-05-27 estate
+  # audit found 7,724 such alerts across 310 repos. The fetch-time
+  # filter in `code_scanning_alerts.ex` stops the loop going forward
+  # for any single scanner instance, but does not help when the SARIF
+  # is uploaded by one runner and re-observed by the next. Filtering
+  # at SARIF render time closes the loop for good.
+  #
+  # Findings still flow through the Elixir pipeline (PatternAnalyzer,
+  # TriangleRouter, FleetDispatcher) -- only the public GitHub surface
+  # is suppressed.
+  @meta_rule_modules ~w(code_scanning_alerts)
+
   @doc """
   Build a complete SARIF document from a finding list. Pass `repo_root`
   if findings carry absolute paths so they can be relativised; defaults
   to the CWD which is appropriate when called from a scan rooted there.
   """
   def from_findings(findings, repo_root \\ File.cwd!()) do
-    {results, rules} = build_results_and_rules(findings, repo_root)
+    {results, rules} =
+      findings
+      |> Enum.reject(&meta_rule_finding?/1)
+      |> build_results_and_rules(repo_root)
 
     %{
       "$schema" => @schema_uri,
@@ -65,6 +84,11 @@ defmodule Hypatia.SARIF do
   end
 
   # ─── Internals ─────────────────────────────────────────────────────────
+
+  defp meta_rule_finding?(finding) do
+    mod = Map.get(finding, :rule_module) || Map.get(finding, "rule_module")
+    stringify(mod) in @meta_rule_modules
+  end
 
   defp build_results_and_rules(findings, repo_root) do
     Enum.reduce(findings, {[], %{}}, fn finding, {results, rules} ->

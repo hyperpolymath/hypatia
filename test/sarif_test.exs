@@ -141,6 +141,68 @@ defmodule Hypatia.SARIFTest do
     end
   end
 
+  describe "meta-rule suppression" do
+    test "code_scanning_alerts findings are excluded from SARIF output" do
+      findings = [
+        %{
+          severity: "high",
+          rule_module: "code_scanning_alerts",
+          type: "CSA001",
+          file: ".github/workflows/governance.yml",
+          reason: "Code scanning (Hypatia): hypatia/workflow_audit/missing_workflow ..."
+        },
+        %{
+          severity: "high",
+          rule_module: "workflow_audit",
+          type: "missing_workflow",
+          file: ".github/workflows/scorecard.yml",
+          reason: "scorecard workflow missing"
+        }
+      ]
+
+      [run] = SARIF.from_findings(findings, "/tmp") |> Map.fetch!("runs")
+      results = run["results"]
+      rules = run["tool"]["driver"]["rules"]
+
+      assert length(results) == 1
+      assert hd(results)["ruleId"] == "hypatia/workflow_audit/missing_workflow"
+
+      refute Enum.any?(rules, fn r ->
+               String.starts_with?(r["id"], "hypatia/code_scanning_alerts/")
+             end)
+    end
+
+    test "string-keyed rule_module is also recognised as meta" do
+      findings = [
+        %{
+          "severity" => "medium",
+          "rule_module" => "code_scanning_alerts",
+          "type" => "CSA003",
+          "file" => "x.yml",
+          "reason" => "stale"
+        }
+      ]
+
+      [run] = SARIF.from_findings(findings, "/tmp") |> Map.fetch!("runs")
+      assert run["results"] == []
+    end
+
+    test "atom rule_module is also recognised as meta" do
+      findings = [
+        %{
+          severity: "medium",
+          rule_module: :code_scanning_alerts,
+          type: "CSA002",
+          file: "repo",
+          reason: "summary"
+        }
+      ]
+
+      [run] = SARIF.from_findings(findings, "/tmp") |> Map.fetch!("runs")
+      assert run["results"] == []
+    end
+  end
+
   describe "fingerprints" do
     test "same {ruleId, uri, type, reason} produces same fingerprint" do
       f = %{severity: "high", rule_module: "x", type: "y", file: "a.ex", reason: "r"}
