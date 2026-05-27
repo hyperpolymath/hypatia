@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# .trusted-base-ignore — path-fragment exemptions for check-trusted-base.sh.
+#
+# Format (matches .hypatia-ignore):
+#   - Lines starting with `#` are comments.
+#   - Each non-comment, non-blank line is a path-fragment substring that
+#     exempts every escape-hatch marker whose file path contains the fragment.
+#
+# Prefer this over inline TRUSTED: comments only for whole-path/whole-directory
+# exemptions with a documented org-policy rationale. Per-site TRUSTED:/AXIOM:
+# comments remain the right tool for one-off documented escapes.
+#
+# See: standards/docs/TRUSTED-BASE-REDUCTION-POLICY.adoc (standards#223 added
+# this exemption mechanism).
+
+# ─── Scanner test fixtures ──────────────────────────────────────────────
+# Files under test/soundness/fixtures/code_safety/ exist *to be detected*
+# by Hypatia's own scanner — they are deliberate inputs to verify the
+# detector fires. Not real soundness debt.
+test/soundness/fixtures/
+
+# ─── Local agent worktree shadows ───────────────────────────────────────
+# `.claude/worktrees/` holds locally-checked-out copies of feature
+# branches; their contents shadow the canonical tree and cause
+# double-counting in self-scans. Not part of the committed source.
+.claude/worktrees/
