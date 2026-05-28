@@ -67,7 +67,7 @@ defmodule Hypatia.Rules.CicdRules do
     # TS ban (org policy 2026-04-30 for NEW files; existing TS grandfathered
     # while in-flight migration to AffineScript proceeds — see project
     # tracker `project_estate_ts_to_affinescript_2026_05_28.md`).
-    # Path-prefix allowlist covers seven classes of legitimate `.ts` presence:
+    # Path-prefix allowlist covers nine classes of legitimate `.ts` presence:
     #
     # (1) Declaration files (`.d.ts`) — FFI/library type definitions are
     #     headers, not implementation; they're the boundary, not the code.
@@ -93,10 +93,21 @@ defmodule Hypatia.Rules.CicdRules do
     #
     # (6) Upstream forks not estate-authored — `rescript/` (ReScript
     #     compiler), `servers/` (third-party MCP servers),
-    #     `repos-monorepo/` (mass aggregator).
+    #     `repos-monorepo/` (mass aggregator), `linguist/` (GitHub's
+    #     language classifier — TS in `samples/` is ML training data).
     #
     # (7) Archived repos — GitHub-archived repos cannot accept PRs;
     #     their TS is dormant. `hyperpolymath-archive/**`.
+    #
+    # (8) Vendored package-manager deps — `**/deps/` covers Elixir Mix
+    #     vendored deps (canonical example: `tma-mark2/deps/phoenix_live_view/`
+    #     ships Phoenix LiveView's authored TS). We don't own this code.
+    #
+    # (9) Editor-host extensions — `**/vscode/**` covers VSCode extension
+    #     entry points (`extension.ts` lives under `editors/vscode/`,
+    #     `extensions/vscode/`, or `clients/vscode/`). Blocked on the
+    #     AffineScript VSCode-extension API binding (top-50 roadmap);
+    #     carve-out unblocks the policy gate until bindings ship.
     %{id: :typescript_detected, glob: "*.ts",
       reason: "TypeScript banned in NEW code -- use AffineScript (org policy 2026-04-30; existing TS grandfathered while in-flight migration proceeds, see project_estate_ts_to_affinescript_2026_05_28)",
       # check_pattern uses String.contains?/2 so these entries match as
@@ -120,12 +131,28 @@ defmodule Hypatia.Rules.CicdRules do
         # (5) Bootstrap shims
         "affinescript-deno-test/",
         "affinescript-cli/",
-        # (6) Upstream forks
+        # (6) Upstream forks — not estate-authored; TS exists as vendored
+        # upstream code or sample fixtures (linguist ships `.ts` files in
+        # `samples/` as classification training data for its ML model).
         "rescript/",
         "servers/",
         "repos-monorepo/",
+        "linguist/",
         # (7) Archived repos
-        "hyperpolymath-archive/"
+        "hyperpolymath-archive/",
+        # (8) Vendored package-manager deps — `deps/` is the canonical Elixir
+        # Mix vendored-dep directory (also used by other tools that vendor
+        # via that name). Exemplar: `tma-mark2/deps/phoenix_live_view/`
+        # ships Phoenix LiveView's authored TS.
+        "/deps/",
+        # (9) Editor-host extensions — VSCode extension entry points target
+        # the `vscode` extension-host API which AffineScript does not yet
+        # bind. These are blocked on the AS-bindings top-50 roadmap; the
+        # carve-out unblocks the gate until host-API bindings ship.
+        # Exemplars: `*/editors/vscode/`, `*/extensions/vscode/`,
+        # `*/clients/vscode/`. The bare `/vscode/` substring suffices since
+        # `String.contains?/2` matches any path containing it.
+        "/vscode/"
       ]},
     %{id: :rescript_detected, glob: "*.res", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :rescript_interface_detected, glob: "*.resi", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
