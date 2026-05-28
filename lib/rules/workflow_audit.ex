@@ -204,26 +204,35 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @doc """
   Check for GitHub Actions that use tag references instead of SHA pins.
+
+  Delegates the regex detection to `WorkflowHardening.wh004_scan_content/2`
+  (canonical per audit 2026-05-28 Part 3.1) and post-processes the
+  canonical findings to add this module's extras: `pin_exempt?` carve-
+  outs (hypatia#262 self-verifying-ref reusables) and `known_sha`
+  hints from the `@known_good_shas` table.
   """
   def check_unpinned_actions(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      # Match uses: owner/repo@vN.N.N or @main/@master (tag/branch, not SHA)
-      Regex.scan(~r/uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+)@((?:v[\d][\w.-]*|main|master))\s*$/m, content)
-      |> Enum.map(fn [_full, action, ref] ->
-        action_ref = "#{action}@#{ref}"
+      Hypatia.Rules.WorkflowHardening.wh004_scan_content(filename, content)
+      |> Enum.map(fn finding ->
+        slug = finding.detail.uses
+        # Reconstruct action_ref + ref from the canonical "slug"
+        # (e.g. "owner/repo@vN.N.N") emitted by WH004.
+        [action_ref, ref] =
+          case String.split(slug, "@", parts: 2) do
+            [_a, r] -> [slug, r]
+            [_a]    -> [slug, ""]
+          end
+        _ = action_ref
 
-        if Hypatia.Rules.SecurityErrors.pin_exempt?(action_ref) do
-          # Self-verifying-ref reusable workflow: SHA-pinning is HARMFUL.
-          # Emit an accept-with-rationale finding (never :pin_sha) so the
-          # reconciler dismisses the Scorecard alert instead of "fixing" it.
-          # Refs hyperpolymath/hypatia#262.
+        if Hypatia.Rules.SecurityErrors.pin_exempt?(slug) do
           %{
             type: :pin_exempt_accepted,
             file: filename,
-            action_ref: action_ref,
+            action_ref: slug,
             severity: :info,
             action: :accept_with_rationale,
-            rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(action_ref)
+            rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
           }
         else
           severity = if ref in ["main", "master"], do: :high, else: :medium
@@ -231,7 +240,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           %{
             type: :unpinned_action,
             file: filename,
-            action_ref: action_ref,
+            action_ref: slug,
             severity: severity,
             action: :pin_sha,
             known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
