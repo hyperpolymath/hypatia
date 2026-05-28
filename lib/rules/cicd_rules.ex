@@ -130,6 +130,17 @@ defmodule Hypatia.Rules.CicdRules do
     %{id: :rescript_detected, glob: "*.res", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :rescript_interface_detected, glob: "*.resi", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
+    # Added 2026-05-28 (audit gap §5.8): npx / npm-run in CI run-blocks
+    # bypasses the lockfile-based npm detection. `npx <pkg>` downloads
+    # the package fresh each run; `npm run <script>` re-enters the npm
+    # toolchain even on repos that don't ship a package-lock.json.
+    # Both are npm-ban evasion. Match either at line start or after a
+    # shell separator, with a trailing space-or-end to avoid prefix
+    # collisions (`npxyz`, `npmrc`).
+    %{id: :npx_in_workflow,
+      pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
+      reason: "npx / `npm run` banned in CI -- use `deno task` or `deno run` instead (npm fully banned 2026-05-25)",
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]},
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
     # was removed by org policy 2026-05-18). ScannerSuppression also
@@ -217,6 +228,27 @@ defmodule Hypatia.Rules.CicdRules do
         # Archived repos
         "polystack/"
       ]},
+    # Added 2026-05-28 (audit gap §5.2): catches V-lang invocation in CI
+    # workflow run-blocks even when no `.v` / `v.mod` file is tracked.
+    # Matches `v build` / `v test` / `v run` as a whole command at line
+    # start or after a shell separator (`&&`/`||`/`;`/`|`/newline). The
+    # word-boundary anchor and the `[[:space:]]` lookahead prevent false
+    # positives on `vbuild`, `vector`, `verify`, etc.
+    %{id: :v_build_in_ci,
+      pattern: ~r/(?:^|[\s;&|])v[[:space:]]+(build|test|run|install)\b/m,
+      reason: "V-lang banned (org policy 2026-04-10) -- migrate `v <cmd>` to `zig <cmd>` (see v-ecosystem carve-outs in :vlang_detected for exemption paths)",
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
+      path_allow_prefixes: [
+        "developer-ecosystem/v-ecosystem/",
+        "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
+        "hyperpolymath-archive/asdf-vlang-plugin/",
+        "hyperpolymath-archive/v-deno/",
+        "/v-cartridge",
+        "/v-adapter",
+        "/v-bindings",
+        "/v-client",
+        "polystack/"
+      ]},
     %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
     # Jekyll banned 2026-05-25 — estate uses `hyperpolymath/casket-ssg`
     # (Haskell SSG) for GitHub Pages. The pre-existing :irrelevant_jekyll
@@ -265,6 +297,17 @@ defmodule Hypatia.Rules.CicdRules do
       exception: "rsr-template-repo"},
     %{id: :deno_all_perms, pattern: ~r/deno\s+run\s+-A\b/,
       reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"},
+    # Added 2026-05-28 (audit gap §5.3): HTTP URLs in docs/prose files.
+    # `js_http_url_in_code`, `ncl_http_url`, `erlang_insecure_httpc`
+    # cover code contexts; this rule covers Markdown/AsciiDoc/RST where
+    # human readers click links. Excludes localhost-class hosts and the
+    # `http://www.w3.org/...` XML-namespace pattern (which is identifier-
+    # only, not a navigable URL). Severity :medium (advisory; flagrant
+    # uses become RFC-9116 / RSR violations).
+    %{id: :http_in_docs,
+      pattern: ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
+      reason: "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
+      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]},
     %{id: :mu_plugin_no_guard, pattern: ~r/define\(\s*['"]WP_DEBUG['"]/,
       reason: "WordPress mu-plugins must guard constants with defined() check",
       applies_to: ["*/mu-plugins/*.php"]}
