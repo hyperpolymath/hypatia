@@ -174,7 +174,7 @@ defmodule Hypatia.Rules.SecurityErrors do
   # ---------------------------------------------------------------------------
 
   @fix_suggestions %{
-    "TokenPermissionsID" => "Add \"permissions: read-all\" at workflow level",
+    "TokenPermissionsID" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "PinnedDependenciesID" => "Replace @vN with @SHA # vN format",
     "SecurityPolicyID" => "Create SECURITY.md with vulnerability reporting instructions",
     "BranchProtectionID" => "Enable branch protection via Settings > Branches",
@@ -206,9 +206,9 @@ defmodule Hypatia.Rules.SecurityErrors do
     "rust-toolchain-sha-missing-input" => "Add \"with: toolchain: stable\" to dtolnay step",
     "workflow-linter-self-detection" => "Add grep -v filters for grep/echo/comments",
     "unpinned_action" => "Replace @vN with @SHA # vN format",
-    "missing_permissions" => "Add \"permissions: read-all\" at workflow level",
+    "missing_permissions" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "missing_spdx" => "Add SPDX-License-Identifier header to file",
-    "missing-workflow-permissions" => "Add \"permissions: read-all\" at workflow level",
+    "missing-workflow-permissions" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "missing-spdx-header" => "Add SPDX-License-Identifier header to file",
     "stub-crypto-function" => "Replace stub with real cryptographic implementation or add compile_error! guard",
     "stub-hash-return" => "Replace format!(\"stub:...\") with real hash computation",
@@ -458,13 +458,19 @@ defmodule Hypatia.Rules.SecurityErrors do
   # RSR Language Policy
   # ---------------------------------------------------------------------------
 
+  # Policy refresh 2026-05-28: rescript REMOVED (banned 2026-04-30 per
+  # estate policy refresh — migration target is AffineScript directly,
+  # not through ReScript). affinescript ADDED. typescript replacement
+  # corrected from "rescript" → "affinescript".
   @allowed_languages MapSet.new([
-    "rescript", "rust", "gleam", "julia", "logtalk", "haskell",
+    "affinescript", "affine",
+    "rust", "gleam", "julia", "logtalk", "haskell",
     "bash", "nickel", "guile", "ocaml", "ada", "elixir", "zig", "idris2"
   ])
 
   @banned_languages %{
-    "typescript" => "rescript",
+    "typescript" => "affinescript",
+    "rescript" => "affinescript",
     "nodejs" => "deno",
     "golang" => "rust",
     "python" => "julia",
