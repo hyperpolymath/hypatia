@@ -39,37 +39,21 @@ defmodule Hypatia.Rules.WorkflowAudit do
     "secret-scanner.yml"
   ]
 
-  # ─── Known-good SHA pins (2026-02-04 baseline) ────────────────────────
-
-  @known_good_shas %{
-    "actions/checkout@v4" => "34e114876b0b11c390a56381ad16ebd13914f8d5",
-    "actions/checkout@v5" => "93cb6efe18208431cddfb8368fd83d5badbf9bfd",
-    "github/codeql-action@v3" => "6624720a57d4c312633c7b953db2f2da5bcb4c3a",
-    "github/codeql-action@v4" => "d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e",
-    "denoland/setup-deno@v2" => "909cc5acb0fdd60627fb858598759246509fa755",
-    "ossf/scorecard-action@v2.4.0" => "62b2cac7ed8198b15735ed49ab1e5cf35480ba46",
-    "trufflesecurity/trufflehog@main" => "7ee2e0fdffec27d19ccbb8fb3dcf8a83b9d7f9e8",
-    "dtolnay/rust-toolchain@stable" => "4be9e76fd7c4901c61fb841f559994984270fce7",
-    "Swatinem/rust-cache@v2" => "779680da715d629ac1d338a641029a2f4372abb5",
-    "codecov/codecov-action@v5" => "671740ac38dd9b0130fbe1cec585b89eea48d3de",
-    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
-    # NOTE: slsa-framework/slsa-github-generator deliberately removed — it is
-    # pin-exempt (self-verifies github.ref). See SecurityErrors.@pin_exempt
-    # and hyperpolymath/hypatia#262. SHA-pinning it breaks SLSA provenance.
-    "webfactory/ssh-agent@v0.9.0" => "dc588b651fe13675774614f8e6a936a468676387",
-    "actions/configure-pages@v5" => "983d7736d9b0ae728b81ab479565c72886d7745b",
-    "actions/jekyll-build-pages@v1" => "44a6e6beabd48582f863aeeb6cb2151cc1716697",
-    "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
-    "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
-    "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
-    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
-    "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
-    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" =>
-      "21fc3f00a088c954912936f4a68970621b82c2e6"
-  }
+  # ─── Known-good SHA pins ──────────────────────────────────────────────
+  #
+  # Consolidated 2026-05-28 (audit Part 3.7): this module previously
+  # carried its own @known_good_shas with overlapping but DIFFERENT
+  # entries from SecurityErrors.@sha_pins. The two maps had drifted to
+  # different memberships, and every update had to touch both. Now
+  # delegates to SecurityErrors.sha_pins/0 (the canonical source).
+  # NOTE: slsa-framework/slsa-github-generator is deliberately omitted —
+  # it is pin-exempt (self-verifies github.ref). See
+  # SecurityErrors.@pin_exempt and hyperpolymath/hypatia#262. SHA-pinning
+  # it breaks SLSA provenance.
 
   def standard_workflows, do: @standard_workflows
-  def known_good_shas, do: @known_good_shas
+
+  def known_good_shas, do: Hypatia.Rules.SecurityErrors.sha_pins()
 
   # ─── Audit functions ───────────────────────────────────────────────────
 
@@ -259,7 +243,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
             action_ref: slug,
             severity: severity,
             action: :pin_sha,
-            known_sha: Map.get(@known_good_shas, slug)
+            known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
           }
         end
       end)
@@ -281,7 +265,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       Regex.scan(~r/uses:\s*([^\s#]+)@([0-9a-f]{40})/m, content)
       |> Enum.flat_map(fn [_full, action, sha] ->
         # Check if we have a known-good SHA for any version of this action
-        matching = Enum.find(@known_good_shas, fn {ref, _} ->
+        matching = Enum.find(Hypatia.Rules.SecurityErrors.sha_pins(), fn {ref, _} ->
           String.starts_with?(ref, action <> "@")
         end)
 

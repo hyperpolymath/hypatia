@@ -369,9 +369,10 @@ defmodule Hypatia.Rules.CodeSafety do
     %{id: :ncl_banned_language_ref, severity: :high,
       pattern: ~r/language\s*=\s*"(typescript|go|python|java|kotlin|swift|dart)"/, cwe: "CWE-1104",
       description: "Banned language referenced in Nickel build target"},
-    %{id: :ncl_missing_spdx, severity: :medium,
-      pattern: ~r/\A(?!.*SPDX-License-Identifier).{0,500}\z/s, cwe: "CWE-1104",
-      description: "Nickel file missing SPDX-License-Identifier header"},
+    # REMOVED 2026-05-28: :ncl_missing_spdx — exact duplicate of
+    # security_errors/missing_spdx which already covers any file type.
+    # Nickel files have no scope distinction worth a separate rule. See
+    # Hypatia audit 2026-05-28, Part 3.3.
     %{id: :ncl_k9_missing_pedigree, severity: :high,
       pattern: ~r/\AK9!(?!.*pedigree\s*=).+\z/s, cwe: "CWE-1104",
       description: "K9 contractile missing pedigree section"},

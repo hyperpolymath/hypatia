@@ -103,7 +103,7 @@ defmodule Hypatia.Rules.RootHygiene do
       action: :delete},
     %{pattern: ".npmrc", reason: "npm banned -- use Deno", severity: :medium,
       action: :delete},
-    %{pattern: "tsconfig.json", reason: "TypeScript banned -- use ReScript", severity: :high,
+    %{pattern: "tsconfig.json", reason: "TypeScript banned -- use AffineScript", severity: :high,
       action: :flag},
     %{pattern: "go.mod", reason: "Go banned -- use Rust", severity: :high,
       action: :flag},

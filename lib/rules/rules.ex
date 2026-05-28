@@ -334,14 +334,11 @@ defmodule Hypatia.Rules do
             findings
           end
 
-        # ex_doc -- older versions have XSS in generated docs
-        findings =
-          if Regex.match?(~r/"ex_doc":\s*\{[^}]*"version":\s*"0\.(2[0-9]\.|30\.[0-5])"/, content) do
-            [%{rule: "hex-ex-doc-xss", severity: :low,
-               description: "ex_doc < 0.31.0 may generate docs with XSS -- update to >= 0.31.0"} | findings]
-          else
-            findings
-          end
+        # REMOVED 2026-05-28: hex-ex-doc-xss — targeted ex_doc < 0.31.0,
+        # which was released 2023-12. Any actively-maintained Elixir
+        # repo in the estate has long since updated; very-low-signal
+        # rule that produces noise without value. See Hypatia audit
+        # 2026-05-28, Part 4.8.
 
         # nimble_parsec -- stack overflow on deeply nested input
         findings =
