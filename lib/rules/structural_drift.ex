@@ -475,6 +475,13 @@ defmodule Hypatia.Rules.StructuralDrift do
     end)
   end
 
+  # ─── SD012: TOMBSTONE ────────────────────────────────────────────────
+  # SD012 was never implemented; gap left between SD011 and SD013
+  # during a prior renumbering. Documented as a tombstone (rather than
+  # deleted from the sequence) per Hypatia audit 2026-05-28, Part 4.5:
+  # reusing the SD012 slot for a fresh rule could collide with an
+  # operator's mental model from logs. New rules should take SD014+.
+
   # ─── SD013: Path-specific gitignore patterns ───────────────────────────
 
   @path_specific_artifacts [

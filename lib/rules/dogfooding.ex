@@ -96,6 +96,13 @@ defmodule Hypatia.Rules.Dogfooding do
     end
   end
 
+  # ─── HYP-DOG-002: TOMBSTONE ──────────────────────────────────────────
+  # HYP-DOG-002 was never implemented; gap left between DOG-001 and
+  # DOG-003 during a prior renumbering. Documented as a tombstone (not
+  # filled) per Hypatia audit 2026-05-28, Part 4.4: reusing this slot
+  # for a fresh rule could collide with an operator's mental model
+  # from logs. New rules should take HYP-DOG-011+.
+
   # ─── HYP-DOG-003: Renamed tool references ────────────────────────────
 
   defp check_stale_names(findings, repo_path) do

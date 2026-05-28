@@ -264,10 +264,11 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "Unfilled RSR template placeholder",
       exception: "rsr-template-repo"},
     %{id: :deno_all_perms, pattern: ~r/deno\s+run\s+-A\b/,
-      reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"},
-    %{id: :mu_plugin_no_guard, pattern: ~r/define\(\s*['"]WP_DEBUG['"]/,
-      reason: "WordPress mu-plugins must guard constants with defined() check",
-      applies_to: ["*/mu-plugins/*.php"]}
+      reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"}
+    # REMOVED 2026-05-28: :mu_plugin_no_guard targeted WordPress mu-plugins
+    # (PHP). PHP is fully banned estate-wide; no estate repo can have a
+    # mu-plugins/*.php path. The rule could never fire. See Hypatia audit
+    # 2026-05-28, Part 4.7.
   ]
 
   def blocked_patterns, do: @blocked_patterns
