@@ -89,6 +89,75 @@ defmodule Hypatia.Rules.StructuralDriftTest do
     end
   end
 
+  describe "sd005_orphan_gitlinks/1" do
+    test "returns empty when no gitlinks exist", %{repo: repo} do
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["config", "user.email", "test@test.com"], cd: repo)
+      System.cmd("git", ["config", "user.name", "Test"], cd: repo)
+      File.write!(Path.join(repo, "README.md"), "# test")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init"], cd: repo)
+
+      findings = StructuralDrift.sd005_orphan_gitlinks(repo)
+      assert findings == []
+    end
+
+    test "emits summary finding when orphan count exceeds threshold", %{repo: repo} do
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["config", "user.email", "test@test.com"], cd: repo)
+      System.cmd("git", ["config", "user.name", "Test"], cd: repo)
+      File.write!(Path.join(repo, "README.md"), "# test")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init"], cd: repo)
+
+      # Inject 6 orphan gitlinks directly via git update-index (no .gitmodules)
+      fake_sha = "deadbeefdeadbeefdeadbeefdeadbeef00000001"
+      for i <- 1..6 do
+        path = "vendor/dep_#{i}"
+        File.mkdir_p!(Path.join(repo, path))
+        System.cmd("git", ["update-index", "--add", "--cacheinfo",
+                           "160000,#{fake_sha},#{path}"],
+                   cd: repo)
+      end
+
+      findings = StructuralDrift.sd005_orphan_gitlinks(repo)
+      summary = Enum.find(findings, & &1[:count] == 6)
+      assert summary != nil, "Expected a summary finding with count=6"
+      assert summary.severity == :high
+      assert summary.rule == "SD005"
+      assert String.contains?(summary.reason, "actions/checkout")
+      assert String.contains?(summary.reason, "startup_failure")
+      # Also should have 6 per-link critical findings
+      per_link = Enum.filter(findings, & &1.file != ".git (index)")
+      assert length(per_link) == 6
+      assert Enum.all?(per_link, &(&1.severity == :critical))
+    end
+
+    test "does not emit summary when orphan count is at or below threshold", %{repo: repo} do
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["config", "user.email", "test@test.com"], cd: repo)
+      System.cmd("git", ["config", "user.name", "Test"], cd: repo)
+      File.write!(Path.join(repo, "README.md"), "# test")
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init"], cd: repo)
+
+      # Inject exactly 5 orphan gitlinks (at threshold — no summary)
+      fake_sha = "deadbeefdeadbeefdeadbeefdeadbeef00000002"
+      for i <- 1..5 do
+        path = "vendor/sub_#{i}"
+        File.mkdir_p!(Path.join(repo, path))
+        System.cmd("git", ["update-index", "--add", "--cacheinfo",
+                           "160000,#{fake_sha},#{path}"],
+                   cd: repo)
+      end
+
+      findings = StructuralDrift.sd005_orphan_gitlinks(repo)
+      summary = Enum.find(findings, & &1[:count] != nil)
+      assert summary == nil, "Expected no summary finding for count <= threshold"
+      assert length(findings) == 5
+    end
+  end
+
   describe "sd010_tracked_node_modules/1" do
     test "returns empty when no node_modules directory exists", %{repo: repo} do
       # Initialise a git repo so the git commands work
