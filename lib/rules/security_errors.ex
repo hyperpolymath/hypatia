@@ -270,11 +270,23 @@ defmodule Hypatia.Rules.SecurityErrors do
   # GitHub Action SHA Pins (canonical)
   # ---------------------------------------------------------------------------
 
+  # CANONICAL SHA-PIN DATABASE for the estate.
+  #
+  # Audit 2026-05-28 Part 3.7 flagged the previous two-database setup
+  # (this @sha_pins plus workflow_audit/@known_good_shas) as a
+  # maintenance hazard: each update had to touch both maps in lockstep,
+  # and they had drifted to different memberships (workflow_audit
+  # carried codeql-action@v4, denoland/setup-deno@v2, the three
+  # hyperpolymath/* entries; this map carried ocaml/setup-ocaml,
+  # softprops/action-gh-release). Consolidated into the union here.
+  # workflow_audit/known_good_shas now delegates to this map.
   @sha_pins %{
     "actions/checkout@v4" => "34e114876b0b11c390a56381ad16ebd13914f8d5",
     "actions/checkout@v5" => "93cb6efe18208431cddfb8368fd83d5badbf9bfd",
     "github/codeql-action@v3" => "6624720a57d4c312633c7b953db2f2da5bcb4c3a",
+    "github/codeql-action@v4" => "d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e",
     "ossf/scorecard-action@v2.4.0" => "62b2cac7ed8198b15735ed49ab1e5cf35480ba46",
+    "denoland/setup-deno@v2" => "909cc5acb0fdd60627fb858598759246509fa755",
     "dtolnay/rust-toolchain@stable" => "4be9e76fd7c4901c61fb841f559994984270fce7",
     "Swatinem/rust-cache@v2" => "779680da715d629ac1d338a641029a2f4372abb5",
     "codecov/codecov-action@v5" => "671740ac38dd9b0130fbe1cec585b89eea48d3de",
@@ -287,7 +299,10 @@ defmodule Hypatia.Rules.SecurityErrors do
     "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
     "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
-    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169"
+    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
+    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
+    "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
+    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" => "21fc3f00a088c954912936f4a68970621b82c2e6"
   }
 
   def sha_pins, do: @sha_pins
