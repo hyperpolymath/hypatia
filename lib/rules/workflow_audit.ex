@@ -39,37 +39,21 @@ defmodule Hypatia.Rules.WorkflowAudit do
     "secret-scanner.yml"
   ]
 
-  # ─── Known-good SHA pins (2026-02-04 baseline) ────────────────────────
-
-  @known_good_shas %{
-    "actions/checkout@v4" => "34e114876b0b11c390a56381ad16ebd13914f8d5",
-    "actions/checkout@v5" => "93cb6efe18208431cddfb8368fd83d5badbf9bfd",
-    "github/codeql-action@v3" => "6624720a57d4c312633c7b953db2f2da5bcb4c3a",
-    "github/codeql-action@v4" => "d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e",
-    "denoland/setup-deno@v2" => "909cc5acb0fdd60627fb858598759246509fa755",
-    "ossf/scorecard-action@v2.4.0" => "62b2cac7ed8198b15735ed49ab1e5cf35480ba46",
-    "trufflesecurity/trufflehog@main" => "7ee2e0fdffec27d19ccbb8fb3dcf8a83b9d7f9e8",
-    "dtolnay/rust-toolchain@stable" => "4be9e76fd7c4901c61fb841f559994984270fce7",
-    "Swatinem/rust-cache@v2" => "779680da715d629ac1d338a641029a2f4372abb5",
-    "codecov/codecov-action@v5" => "671740ac38dd9b0130fbe1cec585b89eea48d3de",
-    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
-    # NOTE: slsa-framework/slsa-github-generator deliberately removed — it is
-    # pin-exempt (self-verifies github.ref). See SecurityErrors.@pin_exempt
-    # and hyperpolymath/hypatia#262. SHA-pinning it breaks SLSA provenance.
-    "webfactory/ssh-agent@v0.9.0" => "dc588b651fe13675774614f8e6a936a468676387",
-    "actions/configure-pages@v5" => "983d7736d9b0ae728b81ab479565c72886d7745b",
-    "actions/jekyll-build-pages@v1" => "44a6e6beabd48582f863aeeb6cb2151cc1716697",
-    "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
-    "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
-    "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
-    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
-    "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
-    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" =>
-      "21fc3f00a088c954912936f4a68970621b82c2e6"
-  }
+  # ─── Known-good SHA pins ──────────────────────────────────────────────
+  #
+  # Consolidated 2026-05-28 (audit Part 3.7): this module previously
+  # carried its own @known_good_shas with overlapping but DIFFERENT
+  # entries from SecurityErrors.@sha_pins. The two maps had drifted to
+  # different memberships, and every update had to touch both. Now
+  # delegates to SecurityErrors.sha_pins/0 (the canonical source).
+  # NOTE: slsa-framework/slsa-github-generator is deliberately omitted —
+  # it is pin-exempt (self-verifies github.ref). See
+  # SecurityErrors.@pin_exempt and hyperpolymath/hypatia#262. SHA-pinning
+  # it breaks SLSA provenance.
 
   def standard_workflows, do: @standard_workflows
-  def known_good_shas, do: @known_good_shas
+
+  def known_good_shas, do: Hypatia.Rules.SecurityErrors.sha_pins()
 
   # ─── Audit functions ───────────────────────────────────────────────────
 
@@ -89,12 +73,16 @@ defmodule Hypatia.Rules.WorkflowAudit do
     download_then_run_issues = check_download_then_run(workflow_contents)
     nperm_typos = check_npermissions_typo(workflow_contents)
     codeql_lang_mismatch = check_codeql_language_matrix_mismatch(workflow_contents, opts)
+    workflow_sha_foreign_ref = check_workflow_sha_as_foreign_ref(workflow_contents)
+    reusable_caller_context_self_checkout = check_reusable_caller_context_self_checkout(workflow_contents)
+    missing_timeouts = check_missing_timeout_minutes(workflow_contents)
 
     %{
       findings:
         missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
           caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
-          codeql_lang_mismatch,
+          codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
+          reusable_caller_context_self_checkout ++ missing_timeouts,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -106,10 +94,84 @@ defmodule Hypatia.Rules.WorkflowAudit do
       download_then_run_issues: length(download_then_run_issues),
       npermissions_typo_count: length(nperm_typos),
       codeql_lang_mismatch_count: length(codeql_lang_mismatch),
+      missing_timeout_count: length(missing_timeouts),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
   end
+
+  @doc """
+  Check workflow jobs that lack `timeout-minutes:`. The GitHub Actions
+  default is 6 hours, which lets a stuck job (commonly a `codeload`
+  fetch hang — see standards#208) burn through monthly budget. Every
+  job should declare an explicit timeout proportionate to its expected
+  runtime; governance / lint jobs typically settle in 1-10 minutes.
+
+  Detection is regex-based: scan for top-level `jobs:` keys, then
+  verify the next ~20 lines after each job header carry a
+  `timeout-minutes:` line before another top-level key (`runs-on`,
+  `permissions`, `if`, `needs`, `outputs`, `name`, `steps`,
+  `concurrency`, `services`, `environment`, `strategy`,
+  `continue-on-error`, `defaults`, `container`). Emits one finding
+  per job that lacks one.
+
+  Recipe: `recipe-add-workflow-timeout-minutes` (gitbot-fleet script
+  `fix-workflow-timeout-minutes.sh` — auto-fixable; default 10m for
+  unrecognised jobs).
+  """
+  def check_missing_timeout_minutes(workflow_contents) when is_map(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      # Naïve YAML scan: any `^  <key>:$` under top-level `jobs:`
+      # without a subsequent `^    timeout-minutes:` line before the
+      # next sibling block.
+      lines = String.split(content, "\n")
+      in_jobs = false
+      jobs_with_timeout = MapSet.new()
+      jobs_seen = MapSet.new()
+      current_job = nil
+
+      {jobs_seen, jobs_with_timeout} =
+        Enum.reduce(lines, {jobs_seen, jobs_with_timeout, false, nil}, fn line, {seen, with_to, in_j, curj} ->
+          cond do
+            String.match?(line, ~r/^jobs:\s*$/) ->
+              {seen, with_to, true, nil}
+
+            in_j and String.match?(line, ~r/^  [A-Za-z0-9_-]+:\s*$/) ->
+              [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
+              {MapSet.put(seen, name), with_to, in_j, name}
+
+            in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
+              {seen, MapSet.put(with_to, curj), in_j, curj}
+
+            String.match?(line, ~r/^[A-Za-z]/) ->
+              {seen, with_to, false, curj}
+
+            true ->
+              {seen, with_to, in_j, curj}
+          end
+        end)
+        |> then(fn {s, w, _, _} -> {s, w} end)
+
+      missing = MapSet.difference(jobs_seen, jobs_with_timeout)
+
+      Enum.map(missing, fn job_name ->
+        %{
+          rule: "missing_timeout_minutes",
+          rule_id: "ERR-WF-013",
+          recipe_id: "recipe-add-workflow-timeout-minutes",
+          severity: :medium,
+          file: filename,
+          job: job_name,
+          description:
+            "Job `#{job_name}` in #{filename} has no `timeout-minutes:` declaration. " <>
+              "Default is 6 hours — a stuck codeload fetch or runner hang can burn budget. " <>
+              "Add `timeout-minutes: 10` (or proportional)."
+        }
+      end)
+    end)
+  end
+
+  def check_missing_timeout_minutes(_), do: []
 
   @doc """
   Check which standard workflows are missing.
@@ -142,26 +204,35 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @doc """
   Check for GitHub Actions that use tag references instead of SHA pins.
+
+  Delegates the regex detection to `WorkflowHardening.wh004_scan_content/2`
+  (canonical per audit 2026-05-28 Part 3.1) and post-processes the
+  canonical findings to add this module's extras: `pin_exempt?` carve-
+  outs (hypatia#262 self-verifying-ref reusables) and `known_sha`
+  hints from the `@known_good_shas` table.
   """
   def check_unpinned_actions(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      # Match uses: owner/repo@vN.N.N or @main/@master (tag/branch, not SHA)
-      Regex.scan(~r/uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+)@((?:v[\d][\w.-]*|main|master))\s*$/m, content)
-      |> Enum.map(fn [_full, action, ref] ->
-        action_ref = "#{action}@#{ref}"
+      Hypatia.Rules.WorkflowHardening.wh004_scan_content(filename, content)
+      |> Enum.map(fn finding ->
+        slug = finding.detail.uses
+        # Reconstruct action_ref + ref from the canonical "slug"
+        # (e.g. "owner/repo@vN.N.N") emitted by WH004.
+        [action_ref, ref] =
+          case String.split(slug, "@", parts: 2) do
+            [_a, r] -> [slug, r]
+            [_a]    -> [slug, ""]
+          end
+        _ = action_ref
 
-        if Hypatia.Rules.SecurityErrors.pin_exempt?(action_ref) do
-          # Self-verifying-ref reusable workflow: SHA-pinning is HARMFUL.
-          # Emit an accept-with-rationale finding (never :pin_sha) so the
-          # reconciler dismisses the Scorecard alert instead of "fixing" it.
-          # Refs hyperpolymath/hypatia#262.
+        if Hypatia.Rules.SecurityErrors.pin_exempt?(slug) do
           %{
             type: :pin_exempt_accepted,
             file: filename,
-            action_ref: action_ref,
+            action_ref: slug,
             severity: :info,
             action: :accept_with_rationale,
-            rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(action_ref)
+            rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
           }
         else
           severity = if ref in ["main", "master"], do: :high, else: :medium
@@ -169,10 +240,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
           %{
             type: :unpinned_action,
             file: filename,
-            action_ref: action_ref,
+            action_ref: slug,
             severity: severity,
             action: :pin_sha,
-            known_sha: Map.get(@known_good_shas, action_ref)
+            known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
           }
         end
       end)
@@ -194,7 +265,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       Regex.scan(~r/uses:\s*([^\s#]+)@([0-9a-f]{40})/m, content)
       |> Enum.flat_map(fn [_full, action, sha] ->
         # Check if we have a known-good SHA for any version of this action
-        matching = Enum.find(@known_good_shas, fn {ref, _} ->
+        matching = Enum.find(Hypatia.Rules.SecurityErrors.sha_pins(), fn {ref, _} ->
           String.starts_with?(ref, action <> "@")
         end)
 
@@ -502,6 +573,233 @@ defmodule Hypatia.Rules.WorkflowAudit do
       "secret-scanner.yml" -> :high
       "security-policy.yml" -> :medium
       _ -> :low
+    end
+  end
+
+  @doc """
+  Detect `actions/checkout` steps that use `${{ github.workflow_sha }}`
+  as `ref:` for a `repository:` that is NOT the caller's own repository.
+
+  Root cause caught: in any workflow (especially reusable), the
+  `github.workflow_sha` context resolves to the *caller's* commit SHA,
+  not the SHA of the workflow YAML itself. Passing it as `ref:` to
+  `actions/checkout` of a foreign repository — e.g. checking out
+  `hyperpolymath/standards` at the caller's SHA — fails with
+  `git fetch ... exit code 128` ("No commit found for SHA"), and after
+  three retries the step (and the whole job) fails.
+
+  This was the root cause of the estate-wide stuck-PR cascade on
+  2026-05-26 (governance / Language / package anti-pattern policy
+  failing on every PR after `governance-reusable.yml` was updated to
+  fetch its own scripts dir via the foreign-checkout pattern with
+  `ref: ${{ github.workflow_sha }}`). See `hyperpolymath/standards`
+  PR fixing `governance-reusable.yml:155`.
+
+  Sensitivity / specificity:
+
+  * Specific — only fires when `repository:` is a literal owner/name
+    OR `${{ inputs.* }}` (i.e. NOT `${{ github.repository }}`). The
+    common safe pattern `repository: ${{ github.repository }}` +
+    `ref: ${{ github.workflow_sha }}` is fine (or at least
+    consistent — both refer to the caller).
+  * Sensitive — catches the pattern regardless of which job/step it
+    lives in. Operates on the parsed `with:` block keys so it does
+    not depend on key ordering.
+  """
+  def check_workflow_sha_as_foreign_ref(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      content
+      |> strip_comments()
+      |> extract_checkout_blocks()
+      |> Enum.flat_map(fn block ->
+        repo_value = block_value(block, ~r/^\s*repository:\s*([^\n]+?)\s*$/m)
+        ref_value = block_value(block, ~r/^\s*ref:\s*([^\n]+?)\s*$/m)
+
+        cond do
+          is_nil(repo_value) or is_nil(ref_value) ->
+            []
+
+          true ->
+            uses_workflow_sha? =
+              Regex.match?(~r/\$\{\{\s*github\.workflow_sha\s*\}\}/, ref_value)
+
+            caller_repo? =
+              Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
+
+            if uses_workflow_sha? and not caller_repo? do
+              [%{
+                type: :workflow_sha_as_foreign_ref,
+                file: filename,
+                detail:
+                  "actions/checkout uses `ref: ${{ github.workflow_sha }}` " <>
+                    "for `repository: #{repo_value}` (not the caller's own " <>
+                    "repo). `github.workflow_sha` resolves to the caller's " <>
+                    "commit SHA, which does not exist in `#{repo_value}` — " <>
+                    "the fetch fails with exit code 128. Pin `ref:` to a " <>
+                    "branch (e.g. `main`), tag, or explicit SHA in the " <>
+                    "target repo, or expose it as an input on the reusable.",
+                severity: :critical,
+                action: :pin_external_checkout_ref
+              }]
+            else
+              []
+            end
+        end
+      end)
+    end)
+  end
+
+  @doc """
+  Detect reusable workflows (`on: workflow_call`) that check out their
+  *own* repository at a caller-derived ref (`github.ref`,
+  `github.head_ref`, `github.sha`).
+
+  In a reusable-workflow context, all `github.*` ref variables resolve
+  to the *caller*'s values, not the reusable repo's. A reusable that
+  does:
+
+      uses: actions/checkout@…
+      with:
+        repository: hyperpolymath/standards   # this repo
+        ref: ${{ github.ref }}                # caller's branch ref
+
+  …will try to fetch the caller's branch from the reusable's repo,
+  which almost always fails (the caller's branch name doesn't exist
+  here). The two safe shapes are:
+
+    1. `ref:` omitted (defaults to the reusable's default branch), or
+    2. `ref:` pinned to a specific branch/tag/SHA of the reusable's
+       repo, or
+    3. an explicit `inputs.*_ref` threaded through from the caller.
+
+  This is the structural cousin of the `workflow_sha` bug — same
+  failure mode (`exit code 128 — No commit found`), different context
+  variable.
+  """
+  def check_reusable_caller_context_self_checkout(workflow_contents) do
+    caller_ref_re =
+      ~r/\$\{\{\s*github\.(?:ref|head_ref|sha|workflow_sha)\s*\}\}/
+
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+      reusable? = Regex.match?(~r/^\s*workflow_call:/m, stripped)
+
+      if reusable? do
+        stripped
+        |> extract_checkout_blocks()
+        |> Enum.flat_map(fn block ->
+          repo_value = block_value(block, ~r/^\s*repository:\s*([^\n]+?)\s*$/m)
+          ref_value = block_value(block, ~r/^\s*ref:\s*([^\n]+?)\s*$/m)
+
+          cond do
+            is_nil(repo_value) or is_nil(ref_value) ->
+              []
+
+            true ->
+              caller_repo_var? =
+                Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
+
+              foreign_literal_self? =
+                not caller_repo_var? and
+                  String.contains?(repo_value, "/") and
+                  not String.starts_with?(repo_value, "${{")
+
+              caller_derived_ref? = Regex.match?(caller_ref_re, ref_value)
+
+              if foreign_literal_self? and caller_derived_ref? do
+                [%{
+                  type: :reusable_caller_context_self_checkout,
+                  file: filename,
+                  detail:
+                    "Reusable workflow (`on: workflow_call`) checks out a " <>
+                      "literal foreign repo `#{repo_value}` at " <>
+                      "`ref: #{ref_value}` — a caller-context variable. In a " <>
+                      "reusable workflow, `github.ref` / `head_ref` / `sha` / " <>
+                      "`workflow_sha` resolve to the *caller's* values, which " <>
+                      "do not exist in `#{repo_value}`, so the fetch fails " <>
+                      "with exit code 128. Pin `ref:` to a literal branch/tag/SHA " <>
+                      "in `#{repo_value}`, omit it (defaults to the default " <>
+                      "branch), or thread an explicit input through from the caller.",
+                  severity: :critical,
+                  action: :pin_reusable_self_checkout_ref
+                }]
+              else
+                []
+              end
+          end
+        end)
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── Helpers for the two checkout-shape rules above ────────────────────
+  #
+  # `extract_checkout_blocks/1` splits the file into YAML steps (each
+  # starting at a `- key:` line), then returns only the steps whose body
+  # contains `uses: actions/checkout@…`. This handles both shapes a
+  # checkout step can take:
+  #
+  #     - uses: actions/checkout@SHA          # uses-first
+  #       with: { … }
+  #
+  #     - name: Check out X                   # name-first
+  #       uses: actions/checkout@SHA
+  #       with: { … }
+  #
+  # Unlike a single multi-line regex, it does not get tripped by interior
+  # `with:` / `repository:` / `ref:` / `path:` sub-keys.
+  defp extract_checkout_blocks(content) do
+    content
+    |> String.split("\n")
+    |> Enum.reduce({[], nil}, fn line, {steps, current} ->
+      cond do
+        # A step starts at any line of shape `  - key:` (the `-` is the
+        # list-item marker; whatever follows is the first key of the
+        # step). We anchor on the `-` column so we know when the step
+        # ends.
+        matches = Regex.run(~r/^(\s*)-\s+/, line) ->
+          indent = matches |> Enum.at(1) |> String.length()
+          {flush_step(steps, current), {indent, [line]}}
+
+        is_tuple(current) ->
+          {step_indent, lines_acc} = current
+
+          if String.trim(line) == "" or leading_indent(line) > step_indent do
+            {steps, {step_indent, [line | lines_acc]}}
+          else
+            # Less- or equal-indented line that isn't a new `- key:`
+            # closes the current step (and we don't start a new one).
+            {flush_step(steps, current), nil}
+          end
+
+        true ->
+          {steps, current}
+      end
+    end)
+    |> then(fn {steps, current} -> flush_step(steps, current) end)
+    |> Enum.reverse()
+    |> Enum.filter(&Regex.match?(~r/uses:\s*actions\/checkout@/, &1))
+  end
+
+  defp flush_step(steps, nil), do: steps
+
+  defp flush_step(steps, {_indent, lines_acc}) do
+    [lines_acc |> Enum.reverse() |> Enum.join("\n") | steps]
+  end
+
+  defp leading_indent(line) do
+    case Regex.run(~r/^(\s*)/, line) do
+      [_, ws] -> String.length(ws)
+      _ -> 0
+    end
+  end
+
+  defp block_value(block, regex) do
+    case Regex.run(regex, block) do
+      [_, value] -> String.trim(value)
+      _ -> nil
     end
   end
 

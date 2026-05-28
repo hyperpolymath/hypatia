@@ -1,0 +1,28 @@
+{
+  "id": "recipe-close-obsolete-pr",
+  "name": "Close obsolete PR (target SHA stale)",
+  "description": "When a PR's only substantive change is to set a workflow `uses:` SHA, and main now carries a NEWER SHA at the same location, the PR's edit would REGRESS main. Close-as-superseded with the canonical comment template — do NOT rebase (the rebase would revert main's progress).",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "ERR-PR-001"
+  ],
+  "target_categories": ["PRTriage"],
+  "languages": ["*"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-close-obsolete-pr.sh",
+  "exclude_repos": [],
+  "action": "gh_pr_close",
+  "match": "PR diff adds `uses: ...@<old-sha>` but main has `uses: ...@<newer-sha>` at the same path+key",
+  "replacement": "gh pr close <url> --comment <canonical-template>",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 6,
+  "failed_fixes": 0,
+  "discovery": {
+    "first_observed": "2026-05-27",
+    "first_observed_in": "6 estate PRs in single session (somethings-fishy#26, nextgen-languages#55, stapeln#74, hypatia#349, typed-wasm#75, +1)",
+    "root_cause": "Two reusable-pin-bump PRs land out of order. The first updates main to SHA-B; the second PR (filed earlier against SHA-A) still proposes SHA-A→SHA-A_renamed_to_B which is regressive vs main's current SHA-B+.",
+    "session_memory": "session_2026_05_27_estate_sweep_1254_prs"
+  }
+}

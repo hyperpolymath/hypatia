@@ -62,17 +62,245 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @blocked_patterns [
-    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned -- use ReScript"},
+    # Lang-policy refresh 2026-05-25: TypeScript / ReScript / migrated-JS
+    # all replaced by AffineScript (the estate's go-forward language).
+    # TS ban (org policy 2026-04-30 for NEW files; existing TS grandfathered
+    # while in-flight migration to AffineScript proceeds — see project
+    # tracker `project_estate_ts_to_affinescript_2026_05_28.md`).
+    # Path-prefix allowlist covers nine classes of legitimate `.ts` presence:
+    #
+    # (1) Declaration files (`.d.ts`) — FFI/library type definitions are
+    #     headers, not implementation; they're the boundary, not the code.
+    #
+    # (2) Interop targets — directories where we author non-TS code that
+    #     EXPOSES our work to TS/Deno consumers (parallel to V-lang
+    #     v-cartridge/v-adapter/v-bindings/v-client carve-out).
+    #     Pattern: `*/bindings/deno/`, `*/bindings/typescript/`,
+    #     `*/bindings/ts/`. Exemplar: `proven/bindings/deno/` (72 files
+    #     exposing Idris2 ABI to Deno consumers).
+    #
+    # (3) PERMANENT exemption — `avow-protocol/telegram-bot/avow-telegram-bot/`:
+    #     Telegraf / node-telegram-bot-api are the canonical TS-native
+    #     Bot API libraries; no AffineScript binding planned.
+    #
+    # (4) Tooling configs — `vite.config.ts`, `vitest.config.ts`,
+    #     `tsup.config.ts`, `*.config.ts` are build orchestration,
+    #     not application code.
+    #
+    # (5) Bootstrap shims — `affinescript-deno-test/` (Deno test runner)
+    #     and `affinescript-cli/` (CLI bootstrap) carry TS/JS shims that
+    #     bootstrap the AffineScript toolchain itself.
+    #
+    # (6) Upstream forks not estate-authored — `rescript/` (ReScript
+    #     compiler), `servers/` (third-party MCP servers),
+    #     `repos-monorepo/` (mass aggregator), `linguist/` (GitHub's
+    #     language classifier — TS in `samples/` is ML training data).
+    #
+    # (7) Archived repos — GitHub-archived repos cannot accept PRs;
+    #     their TS is dormant. `hyperpolymath-archive/**`.
+    #
+    # (8) Vendored package-manager deps — `**/deps/` covers Elixir Mix
+    #     vendored deps (canonical example: `tma-mark2/deps/phoenix_live_view/`
+    #     ships Phoenix LiveView's authored TS). We don't own this code.
+    #
+    # (9) Editor-host extensions — `**/vscode/**` covers VSCode extension
+    #     entry points (`extension.ts` lives under `editors/vscode/`,
+    #     `extensions/vscode/`, or `clients/vscode/`). Blocked on the
+    #     AffineScript VSCode-extension API binding (top-50 roadmap);
+    #     carve-out unblocks the policy gate until bindings ship.
+    %{id: :typescript_detected, glob: "*.ts",
+      reason: "TypeScript banned in NEW code -- use AffineScript (org policy 2026-04-30; existing TS grandfathered while in-flight migration proceeds, see project_estate_ts_to_affinescript_2026_05_28)",
+      # check_pattern uses String.contains?/2 so these entries match as
+      # substrings anywhere in the file path — both directory prefixes
+      # (e.g., "/bindings/deno/") and suffix patterns (e.g., ".d.ts",
+      # "vite.config.ts") work uniformly.
+      path_allow_prefixes: [
+        # (1) Declaration files — FFI/library type definitions
+        ".d.ts",
+        # (2) Interop targets — TS/Deno consumer-facing bindings
+        "/bindings/deno/",
+        "/bindings/typescript/",
+        "/bindings/ts/",
+        # (3) PERMANENT exemption — Telegraf
+        "avow-protocol/telegram-bot/avow-telegram-bot/",
+        # (4) Tooling configs (matched as suffix substrings)
+        "vite.config.ts",
+        "vitest.config.ts",
+        "tsup.config.ts",
+        "tsconfig.json",
+        # (5) Bootstrap shims
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        # (6) Upstream forks — not estate-authored; TS exists as vendored
+        # upstream code or sample fixtures (linguist ships `.ts` files in
+        # `samples/` as classification training data for its ML model).
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        "linguist/",
+        # (7) Archived repos
+        "hyperpolymath-archive/",
+        # (8) Vendored package-manager deps — `deps/` is the canonical Elixir
+        # Mix vendored-dep directory (also used by other tools that vendor
+        # via that name). Exemplar: `tma-mark2/deps/phoenix_live_view/`
+        # ships Phoenix LiveView's authored TS.
+        "/deps/",
+        # (9) Editor-host extensions — VSCode extension entry points target
+        # the `vscode` extension-host API which AffineScript does not yet
+        # bind. These are blocked on the AS-bindings top-50 roadmap; the
+        # carve-out unblocks the gate until host-API bindings ship.
+        # Exemplars: `*/editors/vscode/`, `*/extensions/vscode/`,
+        # `*/clients/vscode/`. The bare `/vscode/` substring suffices since
+        # `String.contains?/2` matches any path containing it.
+        "/vscode/"
+      ]},
+    %{id: :rescript_detected, glob: "*.res", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
+    %{id: :rescript_interface_detected, glob: "*.resi", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
+    # Added 2026-05-28 (audit gap §5.8): npx / npm-run in CI run-blocks
+    # bypasses the lockfile-based npm detection. `npx <pkg>` downloads
+    # the package fresh each run; `npm run <script>` re-enters the npm
+    # toolchain even on repos that don't ship a package-lock.json.
+    # Both are npm-ban evasion. Match either at line start or after a
+    # shell separator, with a trailing space-or-end to avoid prefix
+    # collisions (`npxyz`, `npmrc`).
+    %{id: :npx_in_workflow,
+      pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
+      reason: "npx / `npm run` banned in CI -- use `deno task` or `deno run` instead (npm fully banned 2026-05-25)",
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]},
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
     # was removed by org policy 2026-05-18). ScannerSuppression also
     # hard-refuses to suppress cicd_rules/banned_language_file.
     %{id: :python_detected, glob: "*.py", reason: "Python banned -- use Julia/Rust"},
+    # V-lang ban (org policy 2026-05-28). Estate default for APIs/FFIs/
+    # gateways/client SDKs is Zig; Idris2 owns ABIs. Path-prefix
+    # allowlist covers four classes of legitimate `.v` presence:
+    #
+    # (1) R&D carve-out — the V-language ecosystem itself:
+    #   - developer-ecosystem/v-ecosystem/**
+    #
+    # (2) Toolchain installers — how V gets onto developer machines:
+    #   - asdf-augmenters/asdf-plugin-collection/plugins/vlang/**
+    #   - hyperpolymath-archive/asdf-vlang-plugin/**
+    #   - hyperpolymath-archive/v-deno/** (archived V-lang Deno FFI bridge)
+    #
+    # (3) Interop targets — directories where we author non-V code that
+    #     EXPOSES our work to V consumers (we don't write V; we may
+    #     ship a sample `.v` showing V usage). Pattern: `*v-cartridge*`,
+    #     `*v-adapter*`, `*v-bindings*`, `*v-client*`. The repo's README
+    #     in such a directory must declare "We target V from non-V code"
+    #     for the carve-out to apply. See feedback-vlang-interop-carveout
+    #     in operator memory for the full rule.
+    #   - */v-cartridge*/, */v-adapter*/, */v-bindings*/, */v-client*/
+    #
+    # (4) Archived repos — GitHub-archived repos can't accept PRs so
+    #     their V content is dormant. Add the repo's path-prefix on
+    #     discovery; `polystack/` is the only one known 2026-05-28.
+    #   - polystack/
+    #
+    # (5) Coq + Verilog disambiguation — `.v` is also Coq's and
+    #     Verilog's source extension; the following paths house proof
+    #     scripts / hardware test fixtures and must be preserved:
+    #   - /formal/**, /theories/**, /proofs/coq/**,
+    #     /proofs/canonical-proof-suite/**, /proofs/verification/coq/**,
+    #     /academic/formal-verification/**, /docs/proofs/**,
+    #     /fixtures/code_safety/** — Coq
+    #   - /HOL/examples/PSL/** — Verilog test files
+    #   - /linguist/samples/** — github-linguist language-detection samples
+    #   - /echidna/examples/**, /echidna/tests/live_goals/** — Coq proof
+    #     examples co-located with echidna's prover tooling
+    %{id: :vlang_detected, glob: "*.v",
+      reason: "V-lang banned -- use Zig for APIs/FFIs/gateways/SDKs, Idris2 for ABIs (org policy 2026-05-28)",
+      path_allow_prefixes: [
+        # (1) R&D carve-out
+        "developer-ecosystem/v-ecosystem/",
+        # (2) Toolchain installers + archived V tooling
+        "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
+        "hyperpolymath-archive/asdf-vlang-plugin/",
+        "hyperpolymath-archive/v-deno/",
+        # (3) Interop targets (we expose our work to V consumers)
+        "/v-cartridge",
+        "/v-adapter",
+        "/v-bindings",
+        "/v-client",
+        # (4) Archived repos
+        "polystack/",
+        # (5) Coq + Verilog
+        "/formal/",
+        "/theories/",
+        "/proofs/coq",
+        "/proofs/canonical-proof-suite/",
+        "/proofs/verification/coq/",
+        "/academic/formal-verification/",
+        "/docs/proofs/",
+        "/fixtures/code_safety/",
+        "/linguist/samples/",
+        "/HOL/examples/PSL/",
+        "/echidna/examples/",
+        "/echidna/tests/live_goals/"
+      ]},
+    %{id: :vmod_detected, glob: "v.mod",
+      reason: "V-lang `v.mod` manifest banned -- use Zig `build.zig.zon` (org policy 2026-05-28)",
+      path_allow_prefixes: [
+        "developer-ecosystem/v-ecosystem/",
+        "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
+        "hyperpolymath-archive/asdf-vlang-plugin/",
+        "hyperpolymath-archive/v-deno/",
+        # Interop target may carry a v.mod alongside its `.v` consumer-facing example
+        "/v-cartridge",
+        "/v-adapter",
+        "/v-bindings",
+        "/v-client",
+        # Archived repos
+        "polystack/"
+      ]},
+    # Added 2026-05-28 (audit gap §5.2): catches V-lang invocation in CI
+    # workflow run-blocks even when no `.v` / `v.mod` file is tracked.
+    # Matches `v build` / `v test` / `v run` as a whole command at line
+    # start or after a shell separator (`&&`/`||`/`;`/`|`/newline). The
+    # word-boundary anchor and the `[[:space:]]` lookahead prevent false
+    # positives on `vbuild`, `vector`, `verify`, etc.
+    %{id: :v_build_in_ci,
+      pattern: ~r/(?:^|[\s;&|])v[[:space:]]+(build|test|run|install)\b/m,
+      reason: "V-lang banned (org policy 2026-04-10) -- migrate `v <cmd>` to `zig <cmd>` (see v-ecosystem carve-outs in :vlang_detected for exemption paths)",
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
+      path_allow_prefixes: [
+        "developer-ecosystem/v-ecosystem/",
+        "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
+        "hyperpolymath-archive/asdf-vlang-plugin/",
+        "hyperpolymath-archive/v-deno/",
+        "/v-cartridge",
+        "/v-adapter",
+        "/v-bindings",
+        "/v-client",
+        "polystack/"
+      ]},
     %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
+    # Jekyll banned 2026-05-25 — estate uses `hyperpolymath/casket-ssg`
+    # (Haskell SSG) for GitHub Pages. The pre-existing :irrelevant_jekyll
+    # waste pattern below catches Jekyll workflows in non-Jekyll repos;
+    # these new entries flag the Jekyll-specific filenames everywhere
+    # they appear, so the GHA workflow is caught EVEN IF a repo also
+    # carries a stale _config.yml / Gemfile pair that previously made
+    # the waste pattern's "irrelevant" check return false.
+    %{id: :jekyll_workflow_detected, glob: "jekyll.yml",
+      reason: "Jekyll banned -- migrate GitHub Pages to casket-ssg (hyperpolymath/casket-ssg). See affinescript/.github/workflows/casket-pages.yml for the canonical pattern."},
+    %{id: :jekyll_gh_pages_workflow_detected, glob: "jekyll-gh-pages.yml",
+      reason: "Jekyll banned -- migrate GitHub Pages to casket-ssg (hyperpolymath/casket-ssg). See affinescript/.github/workflows/casket-pages.yml for the canonical pattern."},
+    %{id: :jekyll_config_detected, glob: "_config.yml",
+      reason: "Jekyll banned -- _config.yml is Jekyll's site config. Migrate to casket-ssg (hyperpolymath/casket-ssg)."},
+    %{id: :gemfile_detected, glob: "Gemfile",
+      reason: "Gemfile banned (no Ruby/Jekyll in estate) -- if this is for Jekyll, migrate to casket-ssg (hyperpolymath/casket-ssg). If for non-Jekyll Ruby, file an exemption request: Ruby itself is not in the allowed-language table."},
+    # CANONICAL DETECTION: this entry mirrors WH004 in workflow_hardening.ex
+    # for the fast-path commit-gate. WH004 is the authoritative scanner
+    # (per audit 2026-05-28 Part 3.1) — its regex + exempt-slug logic
+    # is the source of truth. workflow_audit/check_unpinned_actions
+    # delegates to WH004. Any rule-logic change should land in WH004
+    # first; this entry follows.
     %{id: :unpinned_action,
       pattern: ~r/uses:\s+[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+@(v[0-9][a-zA-Z0-9.-]*|main|master)/,
-      reason: "GitHub Actions and reusable workflows must be SHA-pinned"},
+      reason: "GitHub Actions and reusable workflows must be SHA-pinned (canonical detection: WH004 in workflow_hardening.ex)"},
     %{id: :missing_permissions, pattern: ~r/^permissions:/m, negative: true,
       reason: "Workflows must declare permissions"},
     %{id: :missing_spdx, pattern: ~r/^# SPDX-License-Identifier:/m, negative: true,
@@ -102,6 +330,17 @@ defmodule Hypatia.Rules.CicdRules do
       exception: "rsr-template-repo"},
     %{id: :deno_all_perms, pattern: ~r/deno\s+run\s+-A\b/,
       reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"},
+    # Added 2026-05-28 (audit gap §5.3): HTTP URLs in docs/prose files.
+    # `js_http_url_in_code`, `ncl_http_url`, `erlang_insecure_httpc`
+    # cover code contexts; this rule covers Markdown/AsciiDoc/RST where
+    # human readers click links. Excludes localhost-class hosts and the
+    # `http://www.w3.org/...` XML-namespace pattern (which is identifier-
+    # only, not a navigable URL). Severity :medium (advisory; flagrant
+    # uses become RFC-9116 / RSR violations).
+    %{id: :http_in_docs,
+      pattern: ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
+      reason: "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
+      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]},
     %{id: :mu_plugin_no_guard, pattern: ~r/define\(\s*['"]WP_DEBUG['"]/,
       reason: "WordPress mu-plugins must guard constants with defined() check",
       applies_to: ["*/mu-plugins/*.php"]}
@@ -116,11 +355,159 @@ defmodule Hypatia.Rules.CicdRules do
     end)
   end
 
-  defp check_pattern(%{glob: glob} = _pattern, files) do
-    Enum.filter(files, fn f -> String.ends_with?(f, String.replace(glob, "*", "")) end)
+  defp check_pattern(%{glob: glob} = pattern, files) do
+    suffix = String.replace(glob, "*", "")
+    allow_prefixes = Map.get(pattern, :path_allow_prefixes, [])
+
+    files
+    |> Enum.filter(fn f -> String.ends_with?(f, suffix) end)
+    |> Enum.reject(fn f -> Enum.any?(allow_prefixes, &String.contains?(f, &1)) end)
   end
 
   defp check_pattern(%{pattern: _regex}, _files), do: []
+
+  @doc """
+  Content scanner — activates the regex+applies_to rules in @blocked_patterns
+  that were previously dormant.
+
+  Walks `repo_path`, opens any file matching one of a rule's `applies_to`
+  globs, and emits a finding for each regex match. Honors:
+
+    * `path_allow_prefixes` — substring match against the relative file
+      path (mirrors the glob-pattern behaviour).
+    * `exception` — single-substring exemption against the relative
+      path (covers the existing `Containerfile` / `rsr-template-repo`
+      style entries).
+    * `exception_repos` — list of repo names; if any matches the basename
+      of `repo_path`, the rule is skipped for this scan.
+    * `negative: true` — fires when the regex does NOT match (used by
+      `:missing_permissions` and `:missing_spdx` which test for the
+      ABSENCE of an expected line).
+    * Inline pragma — a line starting with `# hypatia:ignore <rule_id>`
+      or `<!-- hypatia:ignore <rule_id> -->` (for markdown/HTML)
+      suppresses findings for that rule on the SAME line and the
+      following line. Matches the convention used by other Hypatia
+      scanners (scanner_suppression.ex).
+
+  Activates these previously-dormant rules: :innerhtml_usage,
+  :eval_in_shell, :download_then_run_shell, :hardcoded_tmp,
+  :template_placeholder, :deno_all_perms, :v_build_in_ci (#383),
+  :npx_in_workflow (#383), :http_in_docs (#383).
+
+  Returns a list of findings:
+    [%{rule: :rule_id, reason: "...", file: "rel/path", line: N, match: "..."}]
+  """
+  def scan_content_patterns(repo_path) do
+    repo_name = Path.basename(repo_path)
+
+    @blocked_patterns
+    |> Enum.filter(fn p -> Map.has_key?(p, :pattern) and Map.has_key?(p, :applies_to) end)
+    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name) end)
+  end
+
+  defp scan_one_content_rule(rule, repo_path, repo_name) do
+    exception_repos = Map.get(rule, :exception_repos, [])
+
+    if repo_name in exception_repos do
+      []
+    else
+      rule
+      |> matching_files(repo_path)
+      |> Enum.flat_map(fn rel -> scan_one_file(rule, repo_path, rel) end)
+    end
+  end
+
+  defp matching_files(rule, repo_path) do
+    globs = Map.get(rule, :applies_to, [])
+    allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
+    exception = Map.get(rule, :exception)
+
+    Path.wildcard("#{repo_path}/**/*", match_dot: false)
+    |> Enum.reject(&File.dir?/1)
+    |> Enum.map(&Path.relative_to(&1, repo_path))
+    |> Enum.filter(fn rel ->
+      not String.starts_with?(rel, ".git/") and
+        Enum.any?(globs, fn g -> glob_matches?(g, rel) end)
+    end)
+    |> Enum.reject(fn rel ->
+      Enum.any?(allow_prefixes, &String.contains?(rel, &1)) or
+        (is_binary(exception) and String.contains?(rel, exception))
+    end)
+  end
+
+  defp scan_one_file(rule, repo_path, rel) do
+    abs = Path.join(repo_path, rel)
+
+    case File.read(abs) do
+      {:ok, content} ->
+        negative? = Map.get(rule, :negative, false)
+        matched? = Regex.match?(rule.pattern, content)
+
+        cond do
+          # Negative rules: fire when pattern is ABSENT
+          negative? and not matched? ->
+            [%{rule: rule.id, reason: rule.reason, file: rel, line: 1, match: "(absent)"}]
+
+          negative? ->
+            []
+
+          matched? ->
+            line_findings(rule, rel, content)
+
+          true ->
+            []
+        end
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp line_findings(rule, rel, content) do
+    lines = String.split(content, "\n")
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.flat_map(fn {line, n} ->
+      cond do
+        not Regex.match?(rule.pattern, line) -> []
+        ignored?(rule.id, lines, n) -> []
+        true -> [%{rule: rule.id, reason: rule.reason, file: rel, line: n, match: String.trim(line)}]
+      end
+    end)
+  end
+
+  # Inline pragma: this line OR the previous line carries
+  # `hypatia:ignore <rule_id>` (in any comment syntax we recognise).
+  defp ignored?(rule_id, lines, n) do
+    here = Enum.at(lines, n - 1, "")
+    prev = Enum.at(lines, n - 2, "")
+    needle = "hypatia:ignore #{rule_id}"
+    String.contains?(here, needle) or String.contains?(prev, needle)
+  end
+
+  defp glob_matches?(glob, path) do
+    # Support: "*.ext" (suffix), "**/path/**", literal "Justfile" / "Mustfile",
+    # "*/segment/*" (substring).
+    cond do
+      String.starts_with?(glob, "*.") ->
+        String.ends_with?(path, String.replace_leading(glob, "*", ""))
+
+      not String.contains?(glob, "*") ->
+        String.ends_with?(path, glob) or path == glob
+
+      true ->
+        # Convert glob to regex: ** → .*, * → [^/]*
+        re =
+          glob
+          |> Regex.escape()
+          |> String.replace("\\*\\*", ".*")
+          |> String.replace("\\*", "[^/]*")
+          |> then(&Regex.compile!("^#{&1}$"))
+
+        Regex.match?(re, path)
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # CI/CD Waste Detection
@@ -149,8 +536,8 @@ defmodule Hypatia.Rules.CicdRules do
       description: "ts-blocker.yml in repo with no TypeScript or JavaScript"},
     %{id: :irrelevant_npm_blocker, severity: :low, auto_fixable: true,
       description: "npm-bun-blocker.yml in repo with no JS package ecosystem"},
-    %{id: :irrelevant_jekyll, severity: :low, auto_fixable: true,
-      description: "Jekyll workflow in repo with no _config.yml or Gemfile"},
+    %{id: :irrelevant_jekyll, severity: :medium, auto_fixable: true,
+      description: "Jekyll workflow in repo with no _config.yml or Gemfile (estate policy bans Jekyll; replacement is casket-ssg)"},
     %{id: :irrelevant_guix_nix, severity: :low, auto_fixable: true,
       description: "guix-nix-policy.yml in repo with no Guix or Nix configuration"},
     %{id: :irrelevant_wellknown, severity: :low, auto_fixable: true,
@@ -163,6 +550,20 @@ defmodule Hypatia.Rules.CicdRules do
       description: "instant-sync.yml redundant with mirror.yml"},
     %{id: :redundant_security_policy_wf, severity: :info, auto_fixable: true,
       description: "security-policy.yml checking for SECURITY.md that already exists"},
+
+    # Standalone workflows subsumed by governance-reusable.yml (per the
+    # hyperpolymath/standards governance-reusable.yml header). When
+    # `governance.yml` is present in a repo, every name in
+    # @subsumed_standalones below is redundant — its logic runs via the
+    # reusable and the standalone copy drifts independently.
+    %{id: :redundant_subsumed_standalone, severity: :medium, auto_fixable: true,
+      description: "Standalone workflow whose logic is already exercised by governance.yml (calls governance-reusable.yml)"},
+
+    # rust-ci.yml exists but the repo has no Cargo.toml at root and no .rs
+    # files anywhere — guaranteed install/build failure. Cousin of
+    # :missing_rust_ci, which catches the inverse (Cargo.toml without CI).
+    %{id: :irrelevant_rust_ci, severity: :high, auto_fixable: true,
+      description: "rust-ci.yml in repo with no Cargo.toml at root and no .rs files (guaranteed install failure)"},
 
     # Missing language-appropriate CI
     %{id: :missing_julia_ci, severity: :high, auto_fixable: true,
@@ -248,6 +649,49 @@ defmodule Hypatia.Rules.CicdRules do
         end
       end)
 
+    # Subsumed standalones: when `governance.yml` is present in the repo,
+    # each of these standalone workflow files is redundant — its logic
+    # already runs via the standards governance-reusable.yml. Authoritative
+    # list per the reusable's own header comment in hyperpolymath/standards.
+    subsumed_standalones = [
+      "workflow-linter.yml",
+      "language-policy.yml",
+      "quality.yml",
+      "security-policy.yml",
+      "guix-nix-policy.yml",
+      "npm-bun-blocker.yml",
+      "ts-blocker.yml",
+      "rsr-antipattern.yml",
+      "wellknown-enforcement.yml"
+    ]
+
+    results =
+      if "governance.yml" in workflows do
+        Enum.reduce(subsumed_standalones, results, fn wf, acc ->
+          if wf in workflows do
+            [%{pattern: :redundant_subsumed_standalone, workflow: wf, auto_fixable: true} | acc]
+          else
+            acc
+          end
+        end)
+      else
+        results
+      end
+
+    # rust-ci.yml without any Rust code in the repo. Mirrors
+    # :missing_rust_ci (which detects the inverse) but uses the same
+    # file-presence and *.rs walk heuristics that BaselineHealth uses.
+    has_rs_anywhere =
+      Map.get(repo_info, :rs_file_count, 0) > 0 or
+        Enum.any?(files, &String.ends_with?(&1, ".rs"))
+
+    results =
+      if "rust-ci.yml" in workflows and "Cargo.toml" not in files and not has_rs_anywhere do
+        [%{pattern: :irrelevant_rust_ci, workflow: "rust-ci.yml", auto_fixable: true} | results]
+      else
+        results
+      end
+
     # Missing language-appropriate CI
     has_ci = Enum.any?(workflows, fn w -> w in ["ci.yml", "CI.yml", "test.yml"] end)
 
@@ -282,7 +726,16 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @required_spdx "MPL-2.0"
-  @wrong_licenses ["MIT", "Apache-2.0", "MPL-2.0", "AGPL-3.0", "GPL-3.0"]
+  # `MPL-2.0` is intentionally absent here — it's the required identifier
+  # (the first/second clauses of validate_license/2 short-circuit before
+  # this list is consulted). MPL-1.0 / MPL-1.0-or-later are the only
+  # legacy MPL identifiers seen in estate history; both must rewrite to
+  # MPL-2.0 (org policy refresh 2026-05-25, applies to docs AND code).
+  #
+  # PMPL-1.0 / PMPL-1.0-or-later (Palimpsest MPL) added 2026-05-28 after a
+  # standards sweep found 25 reusable workflow files still carrying the
+  # legacy PMPL header (standards#249). Same migration target: MPL-2.0.
+  @wrong_licenses ["MIT", "Apache-2.0", "MPL-1.0", "MPL-1.0-or-later", "PMPL-1.0", "PMPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
 
   # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
   @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
@@ -298,6 +751,7 @@ defmodule Hypatia.Rules.CicdRules do
 
   def validate_license(spdx_id, repo_name) do
     cond do
+      double_suffix?(spdx_id) -> {:error, :spdx_double_suffix, spdx_id}
       spdx_id == @required_spdx -> :ok
       spdx_id == "MPL-2.0" -> :ok_fallback
       spdx_id in ["AGPL-3.0", "AGPL-3.0-or-later"] and repo_name in @agpl_exception_repos ->
@@ -306,6 +760,24 @@ defmodule Hypatia.Rules.CicdRules do
       true -> {:warning, :unknown_license, spdx_id}
     end
   end
+
+  # Detect SPDX identifiers with a duplicated `-or-later` (or `+`) suffix —
+  # the rhodibot regex-regression class observed 2026-05-27 in
+  # the-nash-equilibrium#41. The deployed bot's auto-fix applies
+  # `s/AGPL-3.0/AGPL-3.0-or-later/` without a word-boundary anchor, so
+  # files that already carry `-or-later` end up with the suffix duplicated.
+  # A canonical SPDX identifier never repeats its `-or-later` clause and
+  # the `+` short-form is mutually exclusive with `-or-later` (so
+  # `…-or-later+` and `…+-or-later` are also malformed). Returns true for
+  # malformed strings; validate_license/2 maps that to
+  # `{:error, :spdx_double_suffix, …}` (ERR-LIC-001 in the catalog).
+  defp double_suffix?(spdx_id) when is_binary(spdx_id) do
+    String.contains?(spdx_id, "-or-later-or-later") or
+      String.contains?(spdx_id, "-or-later+") or
+      Regex.match?(~r/\+-or-later\b/, spdx_id)
+  end
+
+  defp double_suffix?(_), do: false
 
   # ---------------------------------------------------------------------------
   # Error Catalog IDs
@@ -321,6 +793,9 @@ defmodule Hypatia.Rules.CicdRules do
     "ERR-WF-003" => %{type: :missing_spdx, severity: :medium,
       detection: [:grep_pattern],
       prevention: [:pre_commit_hook, :template]},
+    "ERR-LIC-001" => %{type: :spdx_double_suffix, severity: :high,
+      detection: [:grep_pattern, :validate_license],
+      prevention: [:pre_commit_hook, :rhodibot_regex_word_boundary]},
     "ERR-WF-004" => %{type: :codeql_mismatch, severity: :medium,
       detection: [:workflow_run_failure, :manual_review],
       prevention: [:language_detection_hook, :ci_check]},
@@ -356,7 +831,16 @@ defmodule Hypatia.Rules.CicdRules do
       prevention: [:template]},
     "ERR-WF-012" => %{type: :missing_workflow_caching, severity: :low,
       detection: [:workflow_audit, :content_scan],
-      prevention: [:template]}
+      prevention: [:template]},
+    "ERR-WF-013" => %{type: :missing_timeout_minutes, severity: :medium,
+      detection: [:workflow_audit, :content_scan],
+      prevention: [:template, :pre_commit_hook]},
+    "ERR-GIT-001" => %{type: :crlf_blob_without_gitattributes, severity: :medium,
+      detection: [:git_state, :content_scan],
+      prevention: [:gitattributes_template]},
+    "ERR-PR-001" => %{type: :obsolete_pr_target_sha_stale, severity: :info,
+      detection: [:gh_api_check, :pr_inventory],
+      prevention: [:branch_protection]}
   }
 
   def error_catalog, do: @error_catalog

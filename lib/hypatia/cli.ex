@@ -12,10 +12,13 @@ defmodule Hypatia.CLI do
 
   ## Commands
 
-      hypatia scan <path>       Scan a repository for security and policy issues
-      hypatia report <path>     Generate a detailed report with remediation advice
-      hypatia version           Print version and exit
-      hypatia help              Print usage and exit
+      hypatia scan <path>                      Scan a repository for security and policy issues
+      hypatia report <path>                    Generate a detailed report with remediation advice
+      hypatia pr-eligibility --owner X         Query AM010 admin-merge eligibility for a PR
+                             --repo Y
+                             --pr N
+      hypatia version                          Print version and exit
+      hypatia help                             Print usage and exit
 
   ## Options
 
@@ -92,7 +95,11 @@ defmodule Hypatia.CLI do
           path: :string,
           help: :boolean,
           version: :boolean,
-          exit_zero: :boolean
+          exit_zero: :boolean,
+          # pr-eligibility flags
+          owner: :string,
+          repo: :string,
+          pr: :integer
         ],
         aliases: [
           r: :rules,
@@ -125,6 +132,9 @@ defmodule Hypatia.CLI do
       ["report" | rest] ->
         path = config.path || List.first(rest) || "."
         run_report(path, config)
+
+      ["pr-eligibility" | _] ->
+        run_pr_eligibility(opts[:owner], opts[:repo], opts[:pr])
 
       ["version"] ->
         IO.puts("hypatia #{@version}")
@@ -216,6 +226,21 @@ defmodule Hypatia.CLI do
       config.exit_zero -> :ok
       true -> System.halt(1)
     end
+  end
+
+  # ─── PR eligibility command (AM010 / BP008) ──────────────────────────
+
+  @doc false
+  def run_pr_eligibility(owner, repo, pr_number)
+      when is_binary(owner) and is_binary(repo) and is_integer(pr_number) do
+    result = Mix.Tasks.Hypatia.PrEligibility.check_eligibility(owner, repo, pr_number)
+    IO.puts(Jason.encode!(result, pretty: false))
+  end
+
+  def run_pr_eligibility(_, _, _) do
+    IO.puts(:stderr, "Error: pr-eligibility requires --owner, --repo, and --pr.")
+    IO.puts(:stderr, "Usage: hypatia pr-eligibility --owner OWNER --repo REPO --pr NUMBER")
+    System.halt(2)
   end
 
   # ─── Diagnostic summary ──────────────────────────────────────────────
@@ -1145,10 +1170,18 @@ defmodule Hypatia.CLI do
         hypatia <command> [options]
 
     COMMANDS:
-        scan <path>         Scan directory for security and policy issues
-        report <path>       Generate detailed report with remediation advice
-        version             Show version
-        help                Show this help
+        scan <path>                      Scan directory for security and policy issues
+        report <path>                    Generate detailed report with remediation advice
+        pr-eligibility                   Query AM010 admin-merge eligibility for a PR
+          --owner OWNER                  GitHub owner (org or user)
+          --repo REPO                    Repository name
+          --pr NUMBER                    PR number
+        version                          Show version
+        help                             Show this help
+
+    pr-eligibility OUTPUT (JSON on stdout):
+        {"eligible":true|false,"reason":"AM010"|null,
+         "phantom_contexts":[...],"required_contexts":[...]}
 
     OPTIONS:
         --rules, -r <list>      Comma-separated rule modules (default: all)

@@ -1,0 +1,29 @@
+{
+  "id": "recipe-add-workflow-timeout-minutes",
+  "name": "Add timeout-minutes to workflow jobs",
+  "description": "Add explicit `timeout-minutes: <N>` to every workflow job that lacks one. Default is the GH Actions 6-hour ceiling, which lets a stuck job (commonly a codeload-fetch hang per standards#208) burn budget out of proportion to its expected runtime.",
+  "triangle_tier": "substitute",
+  "pattern_ids": [
+    "ERR-WF-013"
+  ],
+  "target_categories": ["WorkflowHardening", "CostControl"],
+  "languages": ["*"],
+  "confidence": 0.90,
+  "auto_fixable": true,
+  "fix_script": "fix-workflow-timeout-minutes.sh",
+  "exclude_repos": [],
+  "action": "edit_yaml",
+  "match": "Job header in .github/workflows/*.yml without subsequent timeout-minutes line",
+  "replacement": "Insert `timeout-minutes: 10` (or proportional override via `job_timeout_overrides`) directly after `runs-on:`",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0,
+  "discovery": {
+    "first_observed": "2026-05-26",
+    "first_observed_in": "standards#208 (44-PR codeload outage)",
+    "root_cause": "GH Actions default timeout is 6 hours. A transient codeload outage during action-tarball fetch can hang the runner for the full default, burning estate budget proportional to (number_of_concurrent_stuck_jobs * 6h).",
+    "session_memory": "session_2026_05_27_estate_sweep_1254_prs",
+    "first_root_fix": "standards#224 (PR 2026-05-27, governance-reusable.yml gained timeout-minutes: 10 on all 8 jobs)"
+  }
+}

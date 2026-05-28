@@ -6,14 +6,14 @@ name: Tests (E2E / Integration / Stress / Bench)
 on:
   push:
     branches:
-    - develop
     - main
-    - master
   pull_request: null
   workflow_dispatch: null
   schedule:
+  # Daily 03:00 UTC — covers Mondays too. The Monday-only `0 3 * * 1`
+  # cron from the pre-consolidation tests was a subset of the daily one
+  # and was dropped to stop running this workflow twice on Mondays.
   - cron: 0 3 * * *
-  - cron: 0 3 * * 1
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -480,7 +480,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@6c1f7cf125e42770ff087ea443901b487cc5471a # v2.79.5
+        uses: taiki-e/install-action@13608cbb45b01feb47ef444ab1a42dc41ad56f1a # v2.79.11
         with:
           tool: cargo-llvm-cov
 

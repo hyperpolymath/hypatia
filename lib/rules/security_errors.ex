@@ -174,7 +174,7 @@ defmodule Hypatia.Rules.SecurityErrors do
   # ---------------------------------------------------------------------------
 
   @fix_suggestions %{
-    "TokenPermissionsID" => "Add \"permissions: read-all\" at workflow level",
+    "TokenPermissionsID" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "PinnedDependenciesID" => "Replace @vN with @SHA # vN format",
     "SecurityPolicyID" => "Create SECURITY.md with vulnerability reporting instructions",
     "BranchProtectionID" => "Enable branch protection via Settings > Branches",
@@ -206,9 +206,9 @@ defmodule Hypatia.Rules.SecurityErrors do
     "rust-toolchain-sha-missing-input" => "Add \"with: toolchain: stable\" to dtolnay step",
     "workflow-linter-self-detection" => "Add grep -v filters for grep/echo/comments",
     "unpinned_action" => "Replace @vN with @SHA # vN format",
-    "missing_permissions" => "Add \"permissions: read-all\" at workflow level",
+    "missing_permissions" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "missing_spdx" => "Add SPDX-License-Identifier header to file",
-    "missing-workflow-permissions" => "Add \"permissions: read-all\" at workflow level",
+    "missing-workflow-permissions" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "missing-spdx-header" => "Add SPDX-License-Identifier header to file",
     "stub-crypto-function" => "Replace stub with real cryptographic implementation or add compile_error! guard",
     "stub-hash-return" => "Replace format!(\"stub:...\") with real hash computation",
@@ -270,11 +270,23 @@ defmodule Hypatia.Rules.SecurityErrors do
   # GitHub Action SHA Pins (canonical)
   # ---------------------------------------------------------------------------
 
+  # CANONICAL SHA-PIN DATABASE for the estate.
+  #
+  # Audit 2026-05-28 Part 3.7 flagged the previous two-database setup
+  # (this @sha_pins plus workflow_audit/@known_good_shas) as a
+  # maintenance hazard: each update had to touch both maps in lockstep,
+  # and they had drifted to different memberships (workflow_audit
+  # carried codeql-action@v4, denoland/setup-deno@v2, the three
+  # hyperpolymath/* entries; this map carried ocaml/setup-ocaml,
+  # softprops/action-gh-release). Consolidated into the union here.
+  # workflow_audit/known_good_shas now delegates to this map.
   @sha_pins %{
     "actions/checkout@v4" => "34e114876b0b11c390a56381ad16ebd13914f8d5",
     "actions/checkout@v5" => "93cb6efe18208431cddfb8368fd83d5badbf9bfd",
     "github/codeql-action@v3" => "6624720a57d4c312633c7b953db2f2da5bcb4c3a",
+    "github/codeql-action@v4" => "d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e",
     "ossf/scorecard-action@v2.4.0" => "62b2cac7ed8198b15735ed49ab1e5cf35480ba46",
+    "denoland/setup-deno@v2" => "909cc5acb0fdd60627fb858598759246509fa755",
     "dtolnay/rust-toolchain@stable" => "4be9e76fd7c4901c61fb841f559994984270fce7",
     "Swatinem/rust-cache@v2" => "779680da715d629ac1d338a641029a2f4372abb5",
     "codecov/codecov-action@v5" => "671740ac38dd9b0130fbe1cec585b89eea48d3de",
@@ -287,7 +299,10 @@ defmodule Hypatia.Rules.SecurityErrors do
     "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
     "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
-    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169"
+    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
+    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
+    "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
+    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" => "21fc3f00a088c954912936f4a68970621b82c2e6"
   }
 
   def sha_pins, do: @sha_pins
@@ -309,7 +324,24 @@ defmodule Hypatia.Rules.SecurityErrors do
     "slsa-framework/slsa-github-generator" =>
       "SLSA generator self-verifies its own github.ref to mint verifiable " <>
         "provenance; it MUST stay on a semver tag (@vX.Y.Z). SHA-pinning it " <>
-        "breaks SLSA provenance. Documented Scorecard limitation."
+        "breaks SLSA provenance. Documented Scorecard limitation.",
+    # Own-org reusable workflows are intentionally referenced at @main so
+    # wrapper consumers across the estate pick up reusable updates without
+    # a fan-out SHA-bump PR per repo (the canonical wrapper pattern —
+    # see project_admin_merge_wrappers_2026_05_26 and the
+    # `chore(ci): replace …yml with reusable wrapper` PR class).
+    # SHA-pinning these would defeat the wrapper pattern's whole purpose
+    # and force the fan-out the wrappers were created to eliminate.
+    # The trust boundary is "we control the org" — same as a vendored
+    # dependency you have commit rights on. Observed flagging 2026-05-27
+    # across affinescript#357 / panll#54 / claude-integrations#43 /
+    # idaptik#98 / tma-mark2#41 / maa-framework#78 (6/6 PRs flagged).
+    "hyperpolymath/standards/.github/workflows/" =>
+      "Own-org reusable workflow referenced at @main is the canonical " <>
+        "wrapper pattern (project_admin_merge_wrappers_2026_05_26). " <>
+        "SHA-pinning each wrapper would force a fan-out SHA-bump PR " <>
+        "per consumer repo per reusable change — defeating the wrapper's " <>
+        "whole purpose. Trust boundary: own-org commit rights."
   }
 
   def pin_exempt, do: @pin_exempt
@@ -426,13 +458,19 @@ defmodule Hypatia.Rules.SecurityErrors do
   # RSR Language Policy
   # ---------------------------------------------------------------------------
 
+  # Policy refresh 2026-05-28: rescript REMOVED (banned 2026-04-30 per
+  # estate policy refresh — migration target is AffineScript directly,
+  # not through ReScript). affinescript ADDED. typescript replacement
+  # corrected from "rescript" → "affinescript".
   @allowed_languages MapSet.new([
-    "rescript", "rust", "gleam", "julia", "logtalk", "haskell",
+    "affinescript", "affine",
+    "rust", "gleam", "julia", "logtalk", "haskell",
     "bash", "nickel", "guile", "ocaml", "ada", "elixir", "zig", "idris2"
   ])
 
   @banned_languages %{
-    "typescript" => "rescript",
+    "typescript" => "affinescript",
+    "rescript" => "affinescript",
     "nodejs" => "deno",
     "golang" => "rust",
     "python" => "julia",

@@ -31,10 +31,10 @@ across the ecosystem — not specific to PanLL panels:
 
 Source-of-truth ordering for the cross-tool link semantics:
 
-* `hyperpolymath/standards` — `groove-protocol/spec/` is the canonical
-  spec for how groove-aware systems discover, type-check, and compose
-  with each other (Burble, Gossamer, VeriSimDB are reference
-  implementations).
+* `hyperpolymath/groove-protocol` — `spec/` is the canonical spec for
+  how groove-aware systems discover, type-check, and compose with each
+  other (Burble, Gossamer, VeriSimDB are reference implementations).
+  Extracted from `hyperpolymath/standards` 2026-05-28.
 * `hyperpolymath/panll` — per-PanLL guidance:
   `schema/panll-harness-v2.schema.json`, `schemas/config.cue`,
   and `contracts/<panel-id>.toml`.

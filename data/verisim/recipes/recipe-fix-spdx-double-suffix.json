@@ -1,0 +1,28 @@
+{
+  "id": "recipe-fix-spdx-double-suffix",
+  "name": "Fix SPDX double-suffix",
+  "description": "Repair SPDX-License-Identifier strings with a duplicated `-or-later` (or `+`) suffix (rhodibot regex-regression class ERR-LIC-001).",
+  "triangle_tier": "eliminate",
+  "pattern_ids": [
+    "ERR-LIC-001"
+  ],
+  "target_categories": ["LicenseCompliance"],
+  "languages": ["*"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-spdx-double-suffix.sh",
+  "exclude_repos": [],
+  "action": "rewrite_in_place",
+  "match": "SPDX-License-Identifier line containing -or-later-or-later, -or-later+, or +-or-later",
+  "replacement": "Collapse the duplicate suffix back to a canonical `-or-later`",
+  "proven_module": null,
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0,
+  "discovery": {
+    "first_observed": "2026-05-27",
+    "first_observed_in": "hyperpolymath/the-nash-equilibrium#41",
+    "root_cause": "Deployed rhodibot replace rule applies `s/AGPL-3.0/AGPL-3.0-or-later/` without a word-boundary anchor; files already carrying `-or-later` get the suffix duplicated.",
+    "session_memory": "session_2026_05_27_estate_sweep_1254_prs"
+  }
+}

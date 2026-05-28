@@ -53,7 +53,8 @@ fn main() {
     println!("cargo:rustc-env=TARGET={}", target);
 
     // Set man page directory path for installation
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+        .expect("cargo invariant: CARGO_MANIFEST_DIR is always set in build scripts");
     let man_dir = Path::new(&manifest_dir).join("man");
     if man_dir.exists() {
         println!("cargo:rustc-env=MAN_DIR={}", man_dir.display());
@@ -61,7 +62,8 @@ fn main() {
 
     // Copy man pages to OUT_DIR for packaging (release builds)
     if env::var("PROFILE").map(|p| p == "release").unwrap_or(false) {
-        let out_dir = env::var("OUT_DIR").unwrap();
+        let out_dir = env::var("OUT_DIR")
+            .expect("cargo invariant: OUT_DIR is always set in build scripts");
         let target_man_dir = Path::new(&out_dir).join("man");
 
         if man_dir.exists() {

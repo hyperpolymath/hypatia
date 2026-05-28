@@ -25,6 +25,11 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.MigrationRules
   alias Hypatia.Rules.BaselineHealth
   alias Hypatia.Rules.BuildSystemRules
+  alias Hypatia.Rules.WorkflowHardening
+  alias Hypatia.Rules.SupplyChain
+  alias Hypatia.Rules.BranchProtection
+  alias Hypatia.Rules.AdminMergeEligibility
+  # alias Hypatia.Rules.ResearchExtensions  # wired in follow-up after PR #325 merges
 
   @doc """
   Run a comprehensive scan on a file's content given its path and language.
@@ -67,6 +72,15 @@ defmodule Hypatia.Rules do
             {:error, :wrong_license, bad} ->
               [%{rule: "wrong_license", severity: :high,
                  description: "Wrong license #{bad} -- should be MPL-2.0"} | findings]
+            {:error, :spdx_double_suffix, bad} ->
+              # ERR-LIC-001 — rhodibot regex-regression class
+              # (`AGPL-3.0-or-later-or-later` etc.). Fix-script:
+              # `gitbot-fleet/scripts/fix-spdx-double-suffix.sh`.
+              [%{rule: "spdx_double_suffix",
+                 rule_id: "ERR-LIC-001",
+                 recipe_id: "recipe-fix-spdx-double-suffix",
+                 severity: :high,
+                 description: "Malformed SPDX identifier `#{bad}` -- duplicate `-or-later` or `+` suffix. Regression from rhodibot auto-fix without word-boundary anchor."} | findings]
             _ -> findings
           end
         _ -> findings
@@ -93,6 +107,18 @@ defmodule Hypatia.Rules do
             String.ends_with?(file_path, ".ts") or
             String.ends_with?(file_path, ".mjs")) do
         findings ++ CodeSafety.scan_web_security(content)
+      else
+        findings
+      end
+
+    # AffineScript hand-port patterns for `.affine` files not already covered
+    # by language patterns. Mirrors the JS/TS extension fallback above so
+    # callers that pass `language=nil` or an upstream-default language still
+    # get the hand-port-pitfall scan on every `.affine` file (gitbot-fleet#148).
+    findings =
+      if language not in ["affine", "affinescript"] and
+           String.ends_with?(file_path, ".affine") do
+        findings ++ CodeSafety.scan_content(content, "affine")
       else
         findings
       end
@@ -308,14 +334,11 @@ defmodule Hypatia.Rules do
             findings
           end
 
-        # ex_doc -- older versions have XSS in generated docs
-        findings =
-          if Regex.match?(~r/"ex_doc":\s*\{[^}]*"version":\s*"0\.(2[0-9]\.|30\.[0-5])"/, content) do
-            [%{rule: "hex-ex-doc-xss", severity: :low,
-               description: "ex_doc < 0.31.0 may generate docs with XSS -- update to >= 0.31.0"} | findings]
-          else
-            findings
-          end
+        # REMOVED 2026-05-28: hex-ex-doc-xss — targeted ex_doc < 0.31.0,
+        # which was released 2023-12. Any actively-maintained Elixir
+        # repo in the estate has long since updated; very-low-signal
+        # rule that produces noise without value. See Hypatia audit
+        # 2026-05-28, Part 4.8.
 
         # nimble_parsec -- stack overflow on deeply nested input
         findings =
@@ -400,11 +423,87 @@ defmodule Hypatia.Rules do
   defdelegate detect_waste(repo_info), to: CicdRules
 
   @doc """
-  Run baseline-health checks (BH001-BH003): missing required_status_checks
+  Run baseline-health checks (BH001-BH007): missing required_status_checks
   on main, deferred-migration TODOs in dep manifests, persistent >24h red
-  baseline on main. Returns the same shape as `GitState.scan/1`.
+  baseline on main, dead action SHA pins, push-only required checks,
+  required-check drift, signing-key UID gaps. Returns `%{findings, total,
+  by_severity, dispatch}`.
   """
   defdelegate scan_baseline_health(repo_path, opts \\ []), to: BaselineHealth, as: :scan
+
+  @doc """
+  Run workflow-content hardening checks (WH001-WH012): template injection,
+  excessive permissions, dangerous triggers, unpinned actions, hardcoded
+  credentials, missing timeouts/concurrency, secrets leakage, deprecated
+  workflow commands, curl-pipe-shell, $GITHUB_ENV taint. Pure local file
+  scan — no GitHub API.
+  """
+  defdelegate scan_workflow_hardening(repo_path, opts \\ []), to: WorkflowHardening, as: :scan
+
+  @doc """
+  Run supply-chain integrity checks (SC001-SC011): CODEOWNERS coverage,
+  Dependabot config, archived actions, typosquats, pull_request_target,
+  release SBOM/signing, self-hosted runners, OIDC vs static secrets,
+  SECURITY.md, webhook secrets. Uses GitHub API when `:owner_repo` is
+  supplied; degrades cleanly without a token.
+  """
+  defdelegate scan_supply_chain(repo_path, opts \\ []), to: SupplyChain, as: :scan
+
+  @doc """
+  Run branch-protection hygiene checks (BP001-BP007) against the default
+  branch: required signatures, linear history, required reviews, stale-
+  review dismissal, CODEOWNERS, admin enforcement, force-push/delete
+  block. All API-backed; returns `[]` cleanly without a token.
+  """
+  defdelegate scan_branch_protection(owner, repo), to: BranchProtection, as: :scan
+
+  # ResearchExtensions (RE001-RE010) delegate added in follow-up once
+  # PR #325 lands on main. The facade for the other four families is
+  # below.
+
+  @doc """
+  Run every estate-policy rule available against a repository in one
+  pass and merge the findings. Optional `:owner_repo` keyword unlocks
+  the API-backed rules in `BaselineHealth`, `SupplyChain`, and
+  `BranchProtection`.
+
+  Returns `%{findings: [...], total: N, by_severity: %{...}, dispatch: [...]}`
+  with all five new rule families plus the existing `BaselineHealth`
+  surface combined.
+  """
+  def scan_all_estate_policies(repo_path, opts \\ []) do
+    {owner, repo} =
+      case Keyword.get(opts, :owner_repo) do
+        {o, r} when is_binary(o) and is_binary(r) -> {o, r}
+        _ -> {nil, nil}
+      end
+
+    parts = [
+      BaselineHealth.scan(repo_path, opts),
+      WorkflowHardening.scan(repo_path, opts),
+      SupplyChain.scan(repo_path, opts)
+    ]
+
+    parts =
+      if owner && repo do
+        [BranchProtection.scan(owner, repo) | parts]
+      else
+        parts
+      end
+
+    findings = Enum.flat_map(parts, & &1.findings)
+
+    %{
+      findings: findings,
+      total: length(findings),
+      by_severity:
+        findings
+        |> Enum.group_by(& &1.severity)
+        |> Enum.map(fn {sev, items} -> {sev, length(items)} end)
+        |> Map.new(),
+      dispatch: Enum.flat_map(parts, & &1.dispatch)
+    }
+  end
 
   # ---------------------------------------------------------------------------
   # Private Helpers

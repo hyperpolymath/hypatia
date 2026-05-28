@@ -28,3 +28,49 @@
 # The two scripts/*.py bench helpers were removed and re-implemented in
 # Rust (scripts/bench-tools/). The org Python ban is now total with no
 # exceptions, so this carve-out is deleted rather than carried.
+
+# ─── 2026-05-26 self-dogfood triage ─────────────────────────────────────
+#
+# Hypatia scans itself in CI. A subset of findings are not real defects —
+# either test fixtures that deliberately contain the pattern under test,
+# or non-ReScript files where the ReScript-specific CSA001 rule is a
+# straight false positive. Each entry below carries a one-line reason.
+
+# CSA001 is a ReScript code-scanning alert. Test fixture is *supposed* to
+# trigger it — verifies the rule catches `getExn` on external functions.
+code_safety/CSA001:test/soundness/fixtures/code_safety/getexn_on_external.res
+
+# False positive: Rust file matched by ReScript-only CSA001 rule.
+code_safety/CSA001:clients/rust/hypatia-client/src/ffi.rs
+
+# False positive: CSA001 fires on .gitignore patterns. Not ReScript code.
+code_safety/CSA001:.gitignore
+structural_drift/SD013:.gitignore
+
+# CSA002 is a meta-finding ("94 open code-scanning alerts") flagged at the
+# repo level. Alert backlog triage is tracked separately, not via this
+# scanner — exempt the meta-finding to avoid recursive self-flagging.
+code_scanning_alerts/CSA002:hyperpolymath/hypatia
+
+# Test simulation infrastructure: ci_simulation/scenarios.rs and
+# assertions.rs are deliberately-panicking test scenarios — `.unwrap()` /
+# `.expect()` failures here surface broken fixtures, not runtime DoS.
+# 94 unwrap + 8 expect sites in scenarios.rs are by design; treating them
+# as production safety violations confuses the signal.
+code_safety/unwrap_without_check:integration/src/ci_simulation/scenarios.rs
+code_safety/expect_in_hot_path:integration/src/ci_simulation/scenarios.rs
+code_safety/expect_in_hot_path:integration/src/ci_simulation/assertions.rs
+
+# fixer/src/scanner.rs uses `.expect("...is a compile-time bug")` on
+# regex constants. These regexes parse at module load with infallible
+# inputs; the expect is the standard Rust idiom for "this can't fail
+# unless the source compiled wrong" and the message already states the
+# invariant. The rule sees only the lexical `.expect(` pattern.
+code_safety/expect_in_hot_path:fixer/src/scanner.rs
+
+# The Nickel k9 metadata config REFERENCES "Dockerfile" in its
+# banned_files list — i.e. the config is declaring that Dockerfiles are
+# NOT permitted. The ncl_docker_not_podman rule is matching the lexical
+# "docker" string and flagging the policy itself; this is recursive
+# self-flagging.
+code_safety/ncl_docker_not_podman:.machine_readable/svc/k9/hypatia-metadata.k9.ncl

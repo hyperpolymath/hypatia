@@ -65,4 +65,74 @@ defmodule Hypatia.Rules.CodeScanningAlertsTest do
       File.rm_rf!(tmp)
     end
   end
+
+  describe "self_referential_alert?/1" do
+    # Regression for the boj-server #149 self-amplifying loop where each
+    # Hypatia scan generated new CSA001 alerts about the previous scan's
+    # CSA001 alerts (30+ alerts on cartridges/*/ffi/cartridge_shim.zig
+    # before the fix).
+
+    test "rejects Hypatia's own CSA001 echo" do
+      alert = %{
+        "tool" => %{"name" => "Hypatia"},
+        "rule" => %{"id" => "hypatia/code_scanning_alerts/CSA001"}
+      }
+
+      assert CodeScanningAlerts.self_referential_alert?(alert)
+    end
+
+    test "rejects CSA002 / CSA003 / CSA004 echoes too" do
+      for rule_id <- ~w(
+            hypatia/code_scanning_alerts/CSA002
+            hypatia/code_scanning_alerts/CSA003
+            hypatia/code_scanning_alerts/CSA004
+          ) do
+        alert = %{
+          "tool" => %{"name" => "Hypatia"},
+          "rule" => %{"id" => rule_id}
+        }
+
+        assert CodeScanningAlerts.self_referential_alert?(alert),
+               "expected #{rule_id} to be flagged self-referential"
+      end
+    end
+
+    test "keeps CodeQL alerts" do
+      alert = %{
+        "tool" => %{"name" => "CodeQL"},
+        "rule" => %{"id" => "rs/unsafe-cast"}
+      }
+
+      refute CodeScanningAlerts.self_referential_alert?(alert)
+    end
+
+    test "keeps third-party SARIF alerts" do
+      alert = %{
+        "tool" => %{"name" => "Snyk"},
+        "rule" => %{"id" => "SNYK-RS-12345"}
+      }
+
+      refute CodeScanningAlerts.self_referential_alert?(alert)
+    end
+
+    test "keeps Hypatia alerts from other rule modules" do
+      # Hypatia has many rule modules (code_safety, supply_chain,
+      # workflow_hardening, etc.); only the code_scanning_alerts module is
+      # a lens over GitHub's API and recursive. Other modules find real
+      # things in the code and SHOULD continue to surface even when their
+      # findings get re-uploaded as SARIF.
+      alert = %{
+        "tool" => %{"name" => "Hypatia"},
+        "rule" => %{"id" => "hypatia/code_safety/CSA001"}
+      }
+
+      refute CodeScanningAlerts.self_referential_alert?(alert)
+    end
+
+    test "handles missing tool / rule keys gracefully" do
+      refute CodeScanningAlerts.self_referential_alert?(%{})
+      refute CodeScanningAlerts.self_referential_alert?(%{"tool" => %{"name" => "Hypatia"}})
+      refute CodeScanningAlerts.self_referential_alert?(%{"rule" => %{"id" => "x"}})
+    end
+  end
 end

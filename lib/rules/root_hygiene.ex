@@ -103,7 +103,7 @@ defmodule Hypatia.Rules.RootHygiene do
       action: :delete},
     %{pattern: ".npmrc", reason: "npm banned -- use Deno", severity: :medium,
       action: :delete},
-    %{pattern: "tsconfig.json", reason: "TypeScript banned -- use ReScript", severity: :high,
+    %{pattern: "tsconfig.json", reason: "TypeScript banned -- use AffineScript", severity: :high,
       action: :flag},
     %{pattern: "go.mod", reason: "Go banned -- use Rust", severity: :high,
       action: :flag},
@@ -216,6 +216,61 @@ defmodule Hypatia.Rules.RootHygiene do
       end
     end)
   end
+
+  @doc """
+  Scan for CRLF-encoded blobs in a repo that lacks a `.gitattributes`
+  declaring `eol=lf` (or `text=auto eol=lf`). Root cause of the
+  "phantom diff" class observed on claude-integrations#43 2026-05-27:
+  files round-trip through CRLF normalisation on every checkout,
+  producing uncommittable diffs that block rebase.
+
+  Inputs:
+    * `repo_path` — absolute path to the repo root.
+    * `tracked_files_with_eol` — list of `{path, :crlf | :lf | :mixed}`
+      tuples (caller computes via `file -i` on each tracked file).
+
+  Returns one finding per CRLF file when the repo's `.gitattributes`
+  doesn't normalize EOL to LF. Pairs with
+  `recipe-fix-gitattributes-eol` (ERR-GIT-001).
+  """
+  def scan_crlf_phantom_diff(repo_path, tracked_files_with_eol)
+      when is_binary(repo_path) and is_list(tracked_files_with_eol) do
+    gitattributes_path = Path.join(repo_path, ".gitattributes")
+
+    normalises_lf? =
+      case File.read(gitattributes_path) do
+        {:ok, content} ->
+          String.contains?(content, "eol=lf") or
+            String.contains?(content, "text=auto") or
+            String.contains?(content, "text eol=lf")
+
+        _ ->
+          false
+      end
+
+    if normalises_lf? do
+      []
+    else
+      tracked_files_with_eol
+      |> Enum.filter(fn {_path, eol} -> eol in [:crlf, :mixed] end)
+      |> Enum.map(fn {path, _eol} ->
+        %{
+          rule: "crlf_blob_without_gitattributes",
+          rule_id: "ERR-GIT-001",
+          recipe_id: "recipe-fix-gitattributes-eol",
+          severity: :medium,
+          file: path,
+          description:
+            "File `#{path}` is committed with CRLF line endings but the repo has no " <>
+              "`.gitattributes` normalising EOL to LF. Phantom diffs on every checkout " <>
+              "(rebases fail with persistent uncommittable changes). Fix: write " <>
+              "`.gitattributes` with `* text=auto eol=lf` and renormalise blobs."
+        }
+      end)
+    end
+  end
+
+  def scan_crlf_phantom_diff(_, _), do: []
 
   @doc """
   Generate fleet dispatch recommendations from findings.

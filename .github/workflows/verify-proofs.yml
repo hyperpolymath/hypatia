@@ -16,7 +16,6 @@ on:
     - verification/proofs/tlaplus/**
     branches:
     - main
-    - master
   pull_request:
     paths:
     - .github/workflows/verify-idris.yml
@@ -29,10 +28,11 @@ on:
     - verification/proofs/tlaplus/**
     branches:
     - main
-    - master
   schedule:
-  - cron: 0 5 * * 1
-  - cron: 30 4 * * 1
+  # Weekly Monday 04:00 UTC — single trigger. The three crons (04:00,
+  # 04:30, 05:00) were inherited from the pre-consolidation
+  # verify-{idris,lean,tlaplus}.yml workflows and fired the now-merged
+  # workflow three times every Monday. Collapsed to one.
   - cron: 0 4 * * 1
   workflow_dispatch: null
 

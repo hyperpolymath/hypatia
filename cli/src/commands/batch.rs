@@ -257,7 +257,8 @@ async fn execute_scan(
         let total = total_repos;
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let _permit = sem.acquire().await
+                .expect("invariant: semaphore is held by this scope, not closed");
             let result = process_scan_repo(&repo, &config_clone, &min_sev, &cats).await;
 
             let done = completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
@@ -475,11 +476,18 @@ async fn process_scan_repo(
 }
 
 /// Parse the number of findings from scanner JSON output.
+///
+/// Returns 0 on parse failure with a stderr log; the caller treats "no
+/// parseable findings" as "no findings" which is the right behaviour
+/// when the scanner emits malformed JSON or an empty buffer.
 fn parse_findings_count(json_str: &str) -> usize {
-    // Scanner outputs a JSON array of findings
-    serde_json::from_str::<Vec<serde_json::Value>>(json_str)
-        .map(|arr| arr.len())
-        .unwrap_or(0)
+    match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+        Ok(arr) => arr.len(),
+        Err(e) => {
+            eprintln!("warn: scanner output not parseable as JSON array ({e}); counting as 0 findings");
+            0
+        }
+    }
 }
 
 /// Locate hypatia-cli.sh in well-known paths.
@@ -654,7 +662,8 @@ async fn execute_fix(
         let fix_only = args.fix_only.clone();
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let _permit = sem.acquire().await
+                .expect("invariant: semaphore is held by this scope, not closed");
             let start = std::time::Instant::now();
             let path = PathBuf::from(&repo);
 

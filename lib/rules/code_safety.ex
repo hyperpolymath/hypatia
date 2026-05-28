@@ -68,6 +68,32 @@ defmodule Hypatia.Rules.CodeSafety do
       description: "JSON decode without validation"}
   ]
 
+  # AffineScript hand-port pitfalls — patterns that hand-ports from
+  # ReScript/OCaml routinely leak into `.affine` files but that the
+  # AffineScript grammar rejects. Both surfaced during the sustainabot
+  # ReScript->AffineScript migration (gitbot-fleet#148, 2026-05-26).
+  # Cross-references: affinescript repo CLAUDE.md "Hypatia and gitbot-fleet
+  # standing rules" + the agent-memory entries
+  # `feedback_affinescript_handle_keyword_gotcha.md` /
+  # `feedback_affinescript_no_ocaml_float_ops.md`.
+  @affine_hand_port_patterns [
+    %{id: :handle_as_fn_name, severity: :high,
+      pattern: ~r/(?:^|\n)\s*(?:pub\s+)?(?:total\s+)?fn\s+handle\s*[\(\<]/, cwe: "CWE-1109",
+      description: "Function named `handle` collides with AffineScript HANDLE keyword token (used by `handle body { handlers }` effect-handler expression form). Rename to `dispatch`, `handle_request`, `handle_event`, etc."},
+    %{id: :ocaml_style_float_div, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*\/\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float division `/.` is not accepted by AffineScript — use unified `/` for both Int and Float"},
+    %{id: :ocaml_style_float_mul, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*\*\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float multiplication `*.` is not accepted by AffineScript — use unified `*` for both Int and Float"},
+    %{id: :ocaml_style_float_add, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*\+\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float addition `+.` is not accepted by AffineScript — use unified `+` for both Int and Float"},
+    %{id: :ocaml_style_float_sub, severity: :high,
+      pattern: ~r/[a-zA-Z0-9_)\]]\s*-\.\s/, cwe: "CWE-704",
+      description: "OCaml-style float subtraction `-.` is not accepted by AffineScript — use unified `-` for both Int and Float"}
+  ]
+
   @idris2_banned [
     %{id: :believe_me, severity: :critical,
       pattern: ~r/believe_me/, cwe: "CWE-704",
@@ -343,9 +369,10 @@ defmodule Hypatia.Rules.CodeSafety do
     %{id: :ncl_banned_language_ref, severity: :high,
       pattern: ~r/language\s*=\s*"(typescript|go|python|java|kotlin|swift|dart)"/, cwe: "CWE-1104",
       description: "Banned language referenced in Nickel build target"},
-    %{id: :ncl_missing_spdx, severity: :medium,
-      pattern: ~r/\A(?!.*SPDX-License-Identifier).{0,500}\z/s, cwe: "CWE-1104",
-      description: "Nickel file missing SPDX-License-Identifier header"},
+    # REMOVED 2026-05-28: :ncl_missing_spdx — exact duplicate of
+    # security_errors/missing_spdx which already covers any file type.
+    # Nickel files have no scope distinction worth a separate rule. See
+    # Hypatia audit 2026-05-28, Part 3.3.
     %{id: :ncl_k9_missing_pedigree, severity: :high,
       pattern: ~r/\AK9!(?!.*pedigree\s*=).+\z/s, cwe: "CWE-1104",
       description: "K9 contractile missing pedigree section"},
@@ -359,6 +386,8 @@ defmodule Hypatia.Rules.CodeSafety do
 
   def patterns_for_language("rust"), do: @rust_patterns
   def patterns_for_language("rescript"), do: @rescript_patterns
+  def patterns_for_language("affine"), do: @affine_hand_port_patterns
+  def patterns_for_language("affinescript"), do: @affine_hand_port_patterns
   def patterns_for_language("idris2"), do: @idris2_banned
   def patterns_for_language("haskell"), do: @haskell_banned
   def patterns_for_language("ocaml"), do: @ocaml_banned
