@@ -6,15 +6,18 @@ defmodule Hypatia.Rules.BranchProtection do
   Branch-protection hygiene rules drawn from the CIS GitHub Benchmark,
   OSSF Scorecard, and NIST SP 800-218 (SSDF) PO/PS/PW practices.
 
-  Rule IDs BP001-BP007.
+  Rule IDs BP001-BP008.
 
   These rules concern the **review and integrity controls** on the
   default branch — distinct from `BaselineHealth` (drift conditions),
   `WorkflowHardening` (workflow content) and `SupplyChain` (provenance).
 
-  All rules read from a single GitHub API endpoint:
+  Most rules read from a single GitHub API endpoint:
 
       gh api repos/{owner}/{repo}/branches/main/protection
+
+  BP008 additionally queries `/check-runs` against recent main-branch
+  commits to detect required contexts that never emit a check.
 
   ## Provenance map
 
@@ -27,6 +30,7 @@ defmodule Hypatia.Rules.BranchProtection do
   | BP005 | CIS GH 1.6.x + NIST PO.3.2 | `require_code_owner_reviews: true` but CODEOWNERS missing/empty |
   | BP006 | CIS GH | `enforce_admins: false` |
   | BP007 | scorecard `Branch-Protection` tier 1 | default branch allows force-push or deletion |
+  | BP008 | this estate (2026-05-28) | required status-check context never emits a check (phantom context blocks auto-merge) |
 
   ## Dispatch
 
@@ -383,6 +387,81 @@ defmodule Hypatia.Rules.BranchProtection do
     end
   end
 
+  # ─── BP008: required context never emits a check (phantom) ──────────
+
+  @doc """
+  BP008: `main` branch protection lists a required status-check context
+  that has produced **zero** check_runs across the last N commits on
+  main. The context is *phantom*: auto-merge will wait forever for it to
+  pass, and admin-merge is the only path until it's removed (or the
+  workflow that would emit it is wired up).
+
+  Severity: `:high` — every PR is silently blocked from auto-merge.
+  Confidence: 0.85.
+
+  The empirical trigger was the 2026-05-28 estate sweep: every
+  `hyperpolymath/affinescript` PR sat in `mergeStateStatus: BLOCKED`
+  with all visible checks green, because `spark-theatre-gate / SPARK
+  Theatre Gate` was a required context that no workflow emits. 14 PRs
+  needed admin-merge to land.
+
+  Heuristic: walk the last `recent_commits` (default 5) on main, union
+  every check_run name observed, and flag any required context that
+  doesn't appear in that union. Five commits is enough signal because
+  a real CI context emits one check per commit; a context that's been
+  silent across five commits is either retired (worth removing) or
+  never wired up (worth filing).
+
+  Returns one finding per phantom context. Returns `[]` cleanly when
+  `GITHUB_TOKEN` / `HYPATIA_DISPATCH_PAT` is not set, when no contexts
+  are required, or when the recent-commits lookup fails.
+
+  ## Options
+
+    * `:recent_commits` — number of main-branch commits to sample
+      (default: 5). Lower bound 1, upper bound 20.
+  """
+  def bp008_phantom_required_context(owner, repo, opts \\ []) do
+    n =
+      opts
+      |> Keyword.get(:recent_commits, 5)
+      |> max(1)
+      |> min(20)
+
+    with {:ok, protection} <- fetch_branch_protection(owner, repo, "main"),
+         contexts when contexts != [] <- required_contexts(protection),
+         {:ok, seen} <- fetch_recent_check_names(owner, repo, n) do
+      phantoms = Enum.reject(contexts, &MapSet.member?(seen, &1))
+
+      Enum.map(phantoms, fn ctx ->
+        %{
+          rule: "BP008",
+          file: "#{owner}/#{repo}",
+          severity: :high,
+          reason:
+            "required status check `#{ctx}` has emitted zero check_runs " <>
+              "across the last #{n} commits on main — auto-merge will " <>
+              "stall on every PR until this context is removed or its " <>
+              "workflow is wired up",
+          action: :report,
+          detail: %{
+            branch: "main",
+            phantom_context: ctx,
+            sampled_commits: n,
+            fix:
+              "Either remove `#{ctx}` from required contexts " <>
+                "(`gh api -X PATCH repos/#{owner}/#{repo}/branches/main/" <>
+                "protection/required_status_checks -F 'contexts[]=...'` " <>
+                "without it), or land a workflow whose job's name is " <>
+                "exactly `#{ctx}`"
+          }
+        }
+      end)
+    else
+      _ -> []
+    end
+  end
+
   # ─── scan/2 facade ──────────────────────────────────────────────────
 
   @doc """
@@ -408,7 +487,8 @@ defmodule Hypatia.Rules.BranchProtection do
           bp004_dismiss_stale_reviews_off(owner, repo) ++
           bp005_codeowners_required_but_missing(owner, repo) ++
           bp006_enforce_admins_off(owner, repo) ++
-          bp007_force_push_or_delete_allowed(owner, repo)
+          bp007_force_push_or_delete_allowed(owner, repo) ++
+          bp008_phantom_required_context(owner, repo)
       else
         []
       end
@@ -493,6 +573,30 @@ defmodule Hypatia.Rules.BranchProtection do
   defp maybe_add(list, true, item), do: list ++ [item]
   defp maybe_add(list, _, _item), do: list
 
+  # ─── Required-context extraction (BP008 helper) ─────────────────────
+  #
+  # `required_status_checks.contexts` is the legacy form; the newer
+  # `checks` array carries the same names alongside per-app pin info
+  # (`app_id`). Accept either; flatten to a string list. Returns `[]`
+  # when no required-checks block is present (BP008 then no-ops).
+
+  defp required_contexts(%{"required_status_checks" => %{"contexts" => ctxs}})
+       when is_list(ctxs) do
+    Enum.filter(ctxs, &is_binary/1)
+  end
+
+  defp required_contexts(%{"required_status_checks" => %{"checks" => checks}})
+       when is_list(checks) do
+    checks
+    |> Enum.map(fn
+      %{"context" => ctx} when is_binary(ctx) -> ctx
+      _ -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp required_contexts(_), do: []
+
   # ─── CODEOWNERS presence ────────────────────────────────────────────
 
   # BP005 helper. GitHub looks for CODEOWNERS in three locations: root,
@@ -524,6 +628,41 @@ defmodule Hypatia.Rules.BranchProtection do
   end
 
   # ─── GitHub API ─────────────────────────────────────────────────────
+
+  # ─── Recent main-commit check-run sampling (BP008 helper) ───────────
+  #
+  # Walks the last `n` commits on main (default-branch HEAD), collects
+  # every `check_runs[].name` observed, and returns the union as a
+  # `MapSet`. A required context absent from this set after `n` commits
+  # is a phantom. Returns `{:error, :no_token}` cleanly when no token.
+
+  defp fetch_recent_check_names(owner, repo, n) do
+    with {:ok, commits} <- curl_github("repos/#{owner}/#{repo}/commits?per_page=#{n}") do
+      shas =
+        commits
+        |> Enum.map(fn
+          %{"sha" => sha} when is_binary(sha) -> sha
+          _ -> nil
+        end)
+        |> Enum.reject(&is_nil/1)
+
+      names =
+        Enum.reduce(shas, MapSet.new(), fn sha, acc ->
+          case curl_github("repos/#{owner}/#{repo}/commits/#{sha}/check-runs?per_page=100") do
+            {:ok, %{"check_runs" => runs}} when is_list(runs) ->
+              Enum.reduce(runs, acc, fn
+                %{"name" => name}, set when is_binary(name) -> MapSet.put(set, name)
+                _, set -> set
+              end)
+
+            _ ->
+              acc
+          end
+        end)
+
+      {:ok, names}
+    end
+  end
 
   defp fetch_branch_protection(owner, repo, branch) do
     case curl_github("repos/#{owner}/#{repo}/branches/#{branch}/protection") do

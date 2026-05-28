@@ -12,7 +12,12 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   replace a heavy workflow with a thin wrapper, seed a doc, or apply a
   template-level chore, so blocking on CI provides no signal.
 
-  Rule IDs AM001-AM009.
+  Rule IDs AM001-AM010.
+
+  AM010 is the only state-based recognizer in this module: a PR whose
+  only failing/missing required check is a phantom (per
+  `Hypatia.Rules.BranchProtection` BP008) is admin-eligible regardless
+  of title shape. Caller supplies the phantom-context set.
 
   Intended consumers:
 
@@ -124,9 +129,112 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
       "AM006" => "language-CI (rust/elixir) reusable-wrapper replacement",
       "AM007" => "CHANGELOG.md seed in Keep-a-Changelog format",
       "AM008" => "docs-template / README / tech-debt-audit doc",
-      "AM009" => "linguist gitattributes / license-header migration"
+      "AM009" => "linguist gitattributes / license-header migration",
+      "AM010" => "phantom required check is the only blocker (paired with BP008)"
     }
   end
+
+  # ─── AM010: phantom-context-only blocker ──────────────────────────────
+
+  @doc """
+  AM010: a PR is admin-eligible if every required status-check context
+  passes EXCEPT one or more contexts that are known phantoms (per
+  `Hypatia.Rules.BranchProtection` BP008). Auto-merge cannot satisfy a
+  context that never emits a check; admin-merge is the only path.
+
+  This is a STATE check, not a title check — orthogonal to AM001-AM009.
+  Call this BEFORE `classify/1` when you have the data, and fall
+  through to title classification otherwise.
+
+  ## Inputs
+
+  `pr_state` is a map with these keys:
+
+    * `:required_contexts` — list of context names from
+      `required_status_checks.contexts` (or `.checks[*].context`).
+    * `:phantom_contexts` — list of context names known to be phantom
+      (BP008 findings, materialised as a set).
+    * `:rollup` — list of `%{"name" => name, "conclusion" => conc}`
+      maps, shaped like
+      `gh pr view <n> --json statusCheckRollup`. Conclusions matching
+      `["SUCCESS", "NEUTRAL", "SKIPPED"]` count as passing.
+
+  Returns `{:eligible, "AM010"}` when:
+
+    1. `phantom_contexts` (minus any context currently in-progress on
+       THIS PR) is non-empty, AND
+    2. every required context is either passing OR in the in-progress-
+       subtracted `phantom_contexts`.
+
+  Returns `:not_phantom_only` otherwise.
+
+  Empty `required_contexts` returns `:not_phantom_only` — if nothing
+  is required, auto-merge already works; AM010 doesn't apply.
+
+  ## ALARP type-1 safety: in-progress subtraction
+
+  BP008 derives the phantom set from the LAST N MAIN COMMITS. A
+  path-filtered workflow that happens to touch the path on THIS PR
+  (but didn't on the recent main commits) would be classified as
+  phantom even though it IS firing here. Admin-merging would bypass
+  an actively-running check.
+
+  Defence: before deciding eligibility, subtract from the phantom set
+  any context whose rollup entry is queued / pending / in_progress on
+  this PR. A truly phantom context has NO rollup entry; a sometimes-
+  firing context has a non-terminal entry. The subtraction collapses
+  the latter back into the "wait for it" path.
+  """
+  @spec am010_phantom_only_blocker?(map()) ::
+          {:eligible, String.t()} | :not_phantom_only
+  def am010_phantom_only_blocker?(pr_state) when is_map(pr_state) do
+    required = Map.get(pr_state, :required_contexts, [])
+    phantoms = MapSet.new(Map.get(pr_state, :phantom_contexts, []))
+    rollup = Map.get(pr_state, :rollup, [])
+
+    passing =
+      rollup
+      |> Enum.filter(fn entry ->
+        Map.get(entry, "conclusion") in ["SUCCESS", "NEUTRAL", "SKIPPED"]
+      end)
+      |> Enum.map(&Map.get(&1, "name"))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    # ALARP Type 1 mitigation. A context flagged phantom by BP008 (sample-
+    # based, main-branch) is only safe to treat as phantom on THIS PR when
+    # it has NO rollup entry here. Any rollup entry — passing, failing,
+    # pending, in-progress — means the context IS firing on this PR; the
+    # BP008 main-branch sample was a false-negative for this commit. In
+    # all such cases admin-merging would bypass an actual check (pass-by-
+    # luck, fail-by-vote, or skip-an-in-progress run). Restrict the
+    # phantom set to contexts truly absent from this PR's rollup.
+    rollup_names =
+      rollup
+      |> Enum.map(&Map.get(&1, "name"))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    phantoms_on_this_pr = MapSet.difference(phantoms, rollup_names)
+
+    cond do
+      MapSet.size(phantoms_on_this_pr) == 0 ->
+        :not_phantom_only
+
+      required == [] ->
+        :not_phantom_only
+
+      Enum.all?(required, fn ctx ->
+        MapSet.member?(passing, ctx) or MapSet.member?(phantoms_on_this_pr, ctx)
+      end) ->
+        {:eligible, "AM010"}
+
+      true ->
+        :not_phantom_only
+    end
+  end
+
+  def am010_phantom_only_blocker?(_), do: :not_phantom_only
 
   # ─── Stall detection (DBA001) ─────────────────────────────────────────
 
