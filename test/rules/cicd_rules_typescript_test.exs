@@ -79,16 +79,18 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil
     end
 
-    test "exempts upstream-fork repos (rescript/servers/repos-monorepo)" do
+    test "exempts upstream-fork repos (rescript/servers/repos-monorepo/linguist)" do
       files = [
         "rescript/jscomp/test/test.ts",
         "servers/src/everything/index.ts",
-        "repos-monorepo/some/path/file.ts"
+        "repos-monorepo/some/path/file.ts",
+        "linguist/samples/TypeScript/classes.ts",
+        "linguist/samples/TypeScript/proto.ts"
       ]
 
       results = CicdRules.check_commit_blocks(files)
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
-             "upstream forks are not estate-authored — vendored as-is"
+             "upstream forks are not estate-authored — linguist ships TS as ML training samples"
     end
 
     test "exempts hyperpolymath-archive/** (archived repos)" do
@@ -99,6 +101,32 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
 
       results = CicdRules.check_commit_blocks(files)
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil
+    end
+
+    test "exempts **/deps/ vendored package-manager dirs (Mix etc.)" do
+      files = [
+        "tma-mark2/deps/phoenix_live_view/assets/js/phoenix_live_view/view_hook.ts",
+        "tma-mark2/deps/phoenix_live_view/assets/js/phoenix_live_view/index.ts",
+        "some-elixir-app/deps/some_dep/assets/foo.ts"
+      ]
+
+      results = CicdRules.check_commit_blocks(files)
+      assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
+             "Mix-style vendored deps under /deps/ are not estate-authored"
+    end
+
+    test "exempts **/vscode/** editor-host extensions (blocked on AS-bindings)" do
+      files = [
+        "universal-language-server-plugin/clients/vscode/extension.ts",
+        "reposystem/tools/rsr-certified/extensions/vscode/src/extension.ts",
+        "proof-burrower/affinescript/editors/vscode/src/extension.ts",
+        "phronesis/editors/vscode/src/extension.ts",
+        "bofj-kitt/affinescript/editors/vscode/src/extension.ts"
+      ]
+
+      results = CicdRules.check_commit_blocks(files)
+      assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
+             "VSCode extension entry points wait on AS VSCode-extension API binding"
     end
 
     test "flags new TS even with carve-out-like names but outside carve-out paths" do
