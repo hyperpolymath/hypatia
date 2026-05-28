@@ -233,9 +233,15 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "Jekyll banned -- _config.yml is Jekyll's site config. Migrate to casket-ssg (hyperpolymath/casket-ssg)."},
     %{id: :gemfile_detected, glob: "Gemfile",
       reason: "Gemfile banned (no Ruby/Jekyll in estate) -- if this is for Jekyll, migrate to casket-ssg (hyperpolymath/casket-ssg). If for non-Jekyll Ruby, file an exemption request: Ruby itself is not in the allowed-language table."},
+    # CANONICAL DETECTION: this entry mirrors WH004 in workflow_hardening.ex
+    # for the fast-path commit-gate. WH004 is the authoritative scanner
+    # (per audit 2026-05-28 Part 3.1) — its regex + exempt-slug logic
+    # is the source of truth. workflow_audit/check_unpinned_actions
+    # delegates to WH004. Any rule-logic change should land in WH004
+    # first; this entry follows.
     %{id: :unpinned_action,
       pattern: ~r/uses:\s+[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+@(v[0-9][a-zA-Z0-9.-]*|main|master)/,
-      reason: "GitHub Actions and reusable workflows must be SHA-pinned"},
+      reason: "GitHub Actions and reusable workflows must be SHA-pinned (canonical detection: WH004 in workflow_hardening.ex)"},
     %{id: :missing_permissions, pattern: ~r/^permissions:/m, negative: true,
       reason: "Workflows must declare permissions"},
     %{id: :missing_spdx, pattern: ~r/^# SPDX-License-Identifier:/m, negative: true,
@@ -289,6 +295,149 @@ defmodule Hypatia.Rules.CicdRules do
   end
 
   defp check_pattern(%{pattern: _regex}, _files), do: []
+
+  @doc """
+  Content scanner — activates the regex+applies_to rules in @blocked_patterns
+  that were previously dormant.
+
+  Walks `repo_path`, opens any file matching one of a rule's `applies_to`
+  globs, and emits a finding for each regex match. Honors:
+
+    * `path_allow_prefixes` — substring match against the relative file
+      path (mirrors the glob-pattern behaviour).
+    * `exception` — single-substring exemption against the relative
+      path (covers the existing `Containerfile` / `rsr-template-repo`
+      style entries).
+    * `exception_repos` — list of repo names; if any matches the basename
+      of `repo_path`, the rule is skipped for this scan.
+    * `negative: true` — fires when the regex does NOT match (used by
+      `:missing_permissions` and `:missing_spdx` which test for the
+      ABSENCE of an expected line).
+    * Inline pragma — a line starting with `# hypatia:ignore <rule_id>`
+      or `<!-- hypatia:ignore <rule_id> -->` (for markdown/HTML)
+      suppresses findings for that rule on the SAME line and the
+      following line. Matches the convention used by other Hypatia
+      scanners (scanner_suppression.ex).
+
+  Activates these previously-dormant rules: :innerhtml_usage,
+  :eval_in_shell, :download_then_run_shell, :hardcoded_tmp,
+  :template_placeholder, :deno_all_perms, :v_build_in_ci (#383),
+  :npx_in_workflow (#383), :http_in_docs (#383).
+
+  Returns a list of findings:
+    [%{rule: :rule_id, reason: "...", file: "rel/path", line: N, match: "..."}]
+  """
+  def scan_content_patterns(repo_path) do
+    repo_name = Path.basename(repo_path)
+
+    @blocked_patterns
+    |> Enum.filter(fn p -> Map.has_key?(p, :pattern) and Map.has_key?(p, :applies_to) end)
+    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name) end)
+  end
+
+  defp scan_one_content_rule(rule, repo_path, repo_name) do
+    exception_repos = Map.get(rule, :exception_repos, [])
+
+    if repo_name in exception_repos do
+      []
+    else
+      rule
+      |> matching_files(repo_path)
+      |> Enum.flat_map(fn rel -> scan_one_file(rule, repo_path, rel) end)
+    end
+  end
+
+  defp matching_files(rule, repo_path) do
+    globs = Map.get(rule, :applies_to, [])
+    allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
+    exception = Map.get(rule, :exception)
+
+    Path.wildcard("#{repo_path}/**/*", match_dot: false)
+    |> Enum.reject(&File.dir?/1)
+    |> Enum.map(&Path.relative_to(&1, repo_path))
+    |> Enum.filter(fn rel ->
+      not String.starts_with?(rel, ".git/") and
+        Enum.any?(globs, fn g -> glob_matches?(g, rel) end)
+    end)
+    |> Enum.reject(fn rel ->
+      Enum.any?(allow_prefixes, &String.contains?(rel, &1)) or
+        (is_binary(exception) and String.contains?(rel, exception))
+    end)
+  end
+
+  defp scan_one_file(rule, repo_path, rel) do
+    abs = Path.join(repo_path, rel)
+
+    case File.read(abs) do
+      {:ok, content} ->
+        negative? = Map.get(rule, :negative, false)
+        matched? = Regex.match?(rule.pattern, content)
+
+        cond do
+          # Negative rules: fire when pattern is ABSENT
+          negative? and not matched? ->
+            [%{rule: rule.id, reason: rule.reason, file: rel, line: 1, match: "(absent)"}]
+
+          negative? ->
+            []
+
+          matched? ->
+            line_findings(rule, rel, content)
+
+          true ->
+            []
+        end
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp line_findings(rule, rel, content) do
+    lines = String.split(content, "\n")
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.flat_map(fn {line, n} ->
+      cond do
+        not Regex.match?(rule.pattern, line) -> []
+        ignored?(rule.id, lines, n) -> []
+        true -> [%{rule: rule.id, reason: rule.reason, file: rel, line: n, match: String.trim(line)}]
+      end
+    end)
+  end
+
+  # Inline pragma: this line OR the previous line carries
+  # `hypatia:ignore <rule_id>` (in any comment syntax we recognise).
+  defp ignored?(rule_id, lines, n) do
+    here = Enum.at(lines, n - 1, "")
+    prev = Enum.at(lines, n - 2, "")
+    needle = "hypatia:ignore #{rule_id}"
+    String.contains?(here, needle) or String.contains?(prev, needle)
+  end
+
+  defp glob_matches?(glob, path) do
+    # Support: "*.ext" (suffix), "**/path/**", literal "Justfile" / "Mustfile",
+    # "*/segment/*" (substring).
+    cond do
+      String.starts_with?(glob, "*.") ->
+        String.ends_with?(path, String.replace_leading(glob, "*", ""))
+
+      not String.contains?(glob, "*") ->
+        String.ends_with?(path, glob) or path == glob
+
+      true ->
+        # Convert glob to regex: ** → .*, * → [^/]*
+        re =
+          glob
+          |> Regex.escape()
+          |> String.replace("\\*\\*", ".*")
+          |> String.replace("\\*", "[^/]*")
+          |> then(&Regex.compile!("^#{&1}$"))
+
+        Regex.match?(re, path)
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # CI/CD Waste Detection
