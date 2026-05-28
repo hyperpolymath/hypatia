@@ -104,5 +104,43 @@ defmodule Hypatia.Rules.CicdRules.VlangTest do
       results = CicdRules.check_commit_blocks(files)
       assert Enum.find(results, &(&1.rule == :vmod_detected)) == nil
     end
+
+    test "exempts v.mod under hyperpolymath-archive/v-deno (archived FFI bridge)" do
+      files = ["hyperpolymath-archive/v-deno/v.mod"]
+      results = CicdRules.check_commit_blocks(files)
+      assert Enum.find(results, &(&1.rule == :vmod_detected)) == nil
+    end
+
+    test "exempts v.mod under archived polystack repo" do
+      files = ["polystack/poly-core/adapter/v/v.mod"]
+      results = CicdRules.check_commit_blocks(files)
+      assert Enum.find(results, &(&1.rule == :vmod_detected)) == nil
+    end
+  end
+
+  describe "interop carve-outs" do
+    test "exempts v-cartridge / v-adapter / v-bindings / v-client interop dirs" do
+      files = [
+        "proven-servers/connectors/v-adapter/examples/usage.v",
+        "boj-server-cartridges/v-cartridge/sample.v",
+        "verisimdb/connectors/v-bindings/example.v",
+        "echidna/clients/v-client/demo.v"
+      ]
+
+      results = CicdRules.check_commit_blocks(files)
+      assert Enum.find(results, &(&1.rule == :vlang_detected)) == nil,
+             "interop-target dirs (where we expose work to V consumers) are exempt"
+    end
+
+    test "exempts archived V-lang content (polystack + hyperpolymath-archive/v-deno)" do
+      files = [
+        "polystack/poly-core/adapter/v/src/main.v",
+        "polystack/poly-db/adapter/v/src/main.v",
+        "hyperpolymath-archive/v-deno/src/main.v"
+      ]
+
+      results = CicdRules.check_commit_blocks(files)
+      assert Enum.find(results, &(&1.rule == :vlang_detected)) == nil
+    end
   end
 end
