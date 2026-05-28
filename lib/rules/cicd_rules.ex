@@ -64,11 +64,69 @@ defmodule Hypatia.Rules.CicdRules do
   @blocked_patterns [
     # Lang-policy refresh 2026-05-25: TypeScript / ReScript / migrated-JS
     # all replaced by AffineScript (the estate's go-forward language).
-    # Existing approved carve-outs (e.g. `.d.ts` declaration files, Deno
-    # test-runner .ts in `affinescript-deno-test/`, JS shims in
-    # `affinescript-cli/`) are honoured via ScannerSuppression — these
-    # entries gate NEW occurrences only.
-    %{id: :typescript_detected, glob: "*.ts", reason: "TypeScript banned -- use AffineScript"},
+    # TS ban (org policy 2026-04-30 for NEW files; existing TS grandfathered
+    # while in-flight migration to AffineScript proceeds — see project
+    # tracker `project_estate_ts_to_affinescript_2026_05_28.md`).
+    # Path-prefix allowlist covers seven classes of legitimate `.ts` presence:
+    #
+    # (1) Declaration files (`.d.ts`) — FFI/library type definitions are
+    #     headers, not implementation; they're the boundary, not the code.
+    #
+    # (2) Interop targets — directories where we author non-TS code that
+    #     EXPOSES our work to TS/Deno consumers (parallel to V-lang
+    #     v-cartridge/v-adapter/v-bindings/v-client carve-out).
+    #     Pattern: `*/bindings/deno/`, `*/bindings/typescript/`,
+    #     `*/bindings/ts/`. Exemplar: `proven/bindings/deno/` (72 files
+    #     exposing Idris2 ABI to Deno consumers).
+    #
+    # (3) PERMANENT exemption — `avow-protocol/telegram-bot/avow-telegram-bot/`:
+    #     Telegraf / node-telegram-bot-api are the canonical TS-native
+    #     Bot API libraries; no AffineScript binding planned.
+    #
+    # (4) Tooling configs — `vite.config.ts`, `vitest.config.ts`,
+    #     `tsup.config.ts`, `*.config.ts` are build orchestration,
+    #     not application code.
+    #
+    # (5) Bootstrap shims — `affinescript-deno-test/` (Deno test runner)
+    #     and `affinescript-cli/` (CLI bootstrap) carry TS/JS shims that
+    #     bootstrap the AffineScript toolchain itself.
+    #
+    # (6) Upstream forks not estate-authored — `rescript/` (ReScript
+    #     compiler), `servers/` (third-party MCP servers),
+    #     `repos-monorepo/` (mass aggregator).
+    #
+    # (7) Archived repos — GitHub-archived repos cannot accept PRs;
+    #     their TS is dormant. `hyperpolymath-archive/**`.
+    %{id: :typescript_detected, glob: "*.ts",
+      reason: "TypeScript banned in NEW code -- use AffineScript (org policy 2026-04-30; existing TS grandfathered while in-flight migration proceeds, see project_estate_ts_to_affinescript_2026_05_28)",
+      # check_pattern uses String.contains?/2 so these entries match as
+      # substrings anywhere in the file path — both directory prefixes
+      # (e.g., "/bindings/deno/") and suffix patterns (e.g., ".d.ts",
+      # "vite.config.ts") work uniformly.
+      path_allow_prefixes: [
+        # (1) Declaration files — FFI/library type definitions
+        ".d.ts",
+        # (2) Interop targets — TS/Deno consumer-facing bindings
+        "/bindings/deno/",
+        "/bindings/typescript/",
+        "/bindings/ts/",
+        # (3) PERMANENT exemption — Telegraf
+        "avow-protocol/telegram-bot/avow-telegram-bot/",
+        # (4) Tooling configs (matched as suffix substrings)
+        "vite.config.ts",
+        "vitest.config.ts",
+        "tsup.config.ts",
+        "tsconfig.json",
+        # (5) Bootstrap shims
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        # (6) Upstream forks
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        # (7) Archived repos
+        "hyperpolymath-archive/"
+      ]},
     %{id: :rescript_detected, glob: "*.res", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :rescript_interface_detected, glob: "*.resi", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
     %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
