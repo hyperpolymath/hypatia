@@ -264,7 +264,7 @@ run_tests() {
     export ARANGODB_URL="http://localhost:8529"
     export ARANGODB_DATABASE="cicd_hyper_a_test"
     export ARANGODB_USERNAME="root"
-    # See note above re: `testpassword` being the documented fixture, not a real secret.
+    # scanner-allow: shell-secrets -- test fixture, not a real credential
     export ARANGODB_PASSWORD="testpassword"
     export DRAGONFLY_URL="redis://localhost:6379"
     export RUST_LOG="${RUST_LOG:-info}"
