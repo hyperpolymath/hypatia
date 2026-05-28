@@ -79,24 +79,58 @@ defmodule Hypatia.Rules.CicdRules do
     %{id: :python_detected, glob: "*.py", reason: "Python banned -- use Julia/Rust"},
     # V-lang ban (org policy 2026-05-28). Estate default for APIs/FFIs/
     # gateways/client SDKs is Zig; Idris2 owns ABIs. Path-prefix
-    # allowlist covers:
-    #   - developer-ecosystem/v-ecosystem/** (V R&D carve-out)
-    #   - asdf-augmenters/asdf-plugin-collection/plugins/vlang/** (V toolchain installer)
-    #   - hyperpolymath-archive/asdf-vlang-plugin/** (archived V toolchain plugin)
-    #   - formal/**, theories/**, proofs/coq/**, proofs/canonical-proof-suite/**,
-    #     proofs/verification/coq/**, academic/formal-verification/**,
-    #     docs/proofs/**, fixtures/code_safety/** — Coq `.v` proofs share
-    #     the `.v` extension; never delete or rewrite these.
-    #   - linguist/samples/** — github-linguist language-detection samples
-    #   - HOL/examples/PSL/** — Verilog test files (HOL theorem prover repo)
-    #   - echidna/examples/**, echidna/tests/live_goals/** — Coq proof
-    #     examples co-located with echidna's V toolchain.
+    # allowlist covers four classes of legitimate `.v` presence:
+    #
+    # (1) R&D carve-out — the V-language ecosystem itself:
+    #   - developer-ecosystem/v-ecosystem/**
+    #
+    # (2) Toolchain installers — how V gets onto developer machines:
+    #   - asdf-augmenters/asdf-plugin-collection/plugins/vlang/**
+    #   - hyperpolymath-archive/asdf-vlang-plugin/**
+    #   - hyperpolymath-archive/v-deno/** (archived V-lang Deno FFI bridge)
+    #
+    # (3) Interop targets — directories where we author non-V code that
+    #     EXPOSES our work to V consumers (we don't write V; we may
+    #     ship a sample `.v` showing V usage). Pattern: `*v-cartridge*`,
+    #     `*v-adapter*`, `*v-bindings*`, `*v-client*`. The repo's README
+    #     in such a directory must declare "We target V from non-V code"
+    #     for the carve-out to apply. See feedback-vlang-interop-carveout
+    #     in operator memory for the full rule.
+    #   - */v-cartridge*/, */v-adapter*/, */v-bindings*/, */v-client*/
+    #
+    # (4) Archived repos — GitHub-archived repos can't accept PRs so
+    #     their V content is dormant. Add the repo's path-prefix on
+    #     discovery; `polystack/` is the only one known 2026-05-28.
+    #   - polystack/
+    #
+    # (5) Coq + Verilog disambiguation — `.v` is also Coq's and
+    #     Verilog's source extension; the following paths house proof
+    #     scripts / hardware test fixtures and must be preserved:
+    #   - /formal/**, /theories/**, /proofs/coq/**,
+    #     /proofs/canonical-proof-suite/**, /proofs/verification/coq/**,
+    #     /academic/formal-verification/**, /docs/proofs/**,
+    #     /fixtures/code_safety/** — Coq
+    #   - /HOL/examples/PSL/** — Verilog test files
+    #   - /linguist/samples/** — github-linguist language-detection samples
+    #   - /echidna/examples/**, /echidna/tests/live_goals/** — Coq proof
+    #     examples co-located with echidna's prover tooling
     %{id: :vlang_detected, glob: "*.v",
       reason: "V-lang banned -- use Zig for APIs/FFIs/gateways/SDKs, Idris2 for ABIs (org policy 2026-05-28)",
       path_allow_prefixes: [
+        # (1) R&D carve-out
         "developer-ecosystem/v-ecosystem/",
+        # (2) Toolchain installers + archived V tooling
         "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
         "hyperpolymath-archive/asdf-vlang-plugin/",
+        "hyperpolymath-archive/v-deno/",
+        # (3) Interop targets (we expose our work to V consumers)
+        "/v-cartridge",
+        "/v-adapter",
+        "/v-bindings",
+        "/v-client",
+        # (4) Archived repos
+        "polystack/",
+        # (5) Coq + Verilog
         "/formal/",
         "/theories/",
         "/proofs/coq",
@@ -115,7 +149,15 @@ defmodule Hypatia.Rules.CicdRules do
       path_allow_prefixes: [
         "developer-ecosystem/v-ecosystem/",
         "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
-        "hyperpolymath-archive/asdf-vlang-plugin/"
+        "hyperpolymath-archive/asdf-vlang-plugin/",
+        "hyperpolymath-archive/v-deno/",
+        # Interop target may carry a v.mod alongside its `.v` consumer-facing example
+        "/v-cartridge",
+        "/v-adapter",
+        "/v-bindings",
+        "/v-client",
+        # Archived repos
+        "polystack/"
       ]},
     %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
     # Jekyll banned 2026-05-25 — estate uses `hyperpolymath/casket-ssg`
