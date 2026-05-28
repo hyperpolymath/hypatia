@@ -77,6 +77,46 @@ defmodule Hypatia.Rules.CicdRules do
     # was removed by org policy 2026-05-18). ScannerSuppression also
     # hard-refuses to suppress cicd_rules/banned_language_file.
     %{id: :python_detected, glob: "*.py", reason: "Python banned -- use Julia/Rust"},
+    # V-lang ban (org policy 2026-05-28). Estate default for APIs/FFIs/
+    # gateways/client SDKs is Zig; Idris2 owns ABIs. Path-prefix
+    # allowlist covers:
+    #   - developer-ecosystem/v-ecosystem/** (V R&D carve-out)
+    #   - asdf-augmenters/asdf-plugin-collection/plugins/vlang/** (V toolchain installer)
+    #   - hyperpolymath-archive/asdf-vlang-plugin/** (archived V toolchain plugin)
+    #   - formal/**, theories/**, proofs/coq/**, proofs/canonical-proof-suite/**,
+    #     proofs/verification/coq/**, academic/formal-verification/**,
+    #     docs/proofs/**, fixtures/code_safety/** — Coq `.v` proofs share
+    #     the `.v` extension; never delete or rewrite these.
+    #   - linguist/samples/** — github-linguist language-detection samples
+    #   - HOL/examples/PSL/** — Verilog test files (HOL theorem prover repo)
+    #   - echidna/examples/**, echidna/tests/live_goals/** — Coq proof
+    #     examples co-located with echidna's V toolchain.
+    %{id: :vlang_detected, glob: "*.v",
+      reason: "V-lang banned -- use Zig for APIs/FFIs/gateways/SDKs, Idris2 for ABIs (org policy 2026-05-28)",
+      path_allow_prefixes: [
+        "developer-ecosystem/v-ecosystem/",
+        "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
+        "hyperpolymath-archive/asdf-vlang-plugin/",
+        "/formal/",
+        "/theories/",
+        "/proofs/coq",
+        "/proofs/canonical-proof-suite/",
+        "/proofs/verification/coq/",
+        "/academic/formal-verification/",
+        "/docs/proofs/",
+        "/fixtures/code_safety/",
+        "/linguist/samples/",
+        "/HOL/examples/PSL/",
+        "/echidna/examples/",
+        "/echidna/tests/live_goals/"
+      ]},
+    %{id: :vmod_detected, glob: "v.mod",
+      reason: "V-lang `v.mod` manifest banned -- use Zig `build.zig.zon` (org policy 2026-05-28)",
+      path_allow_prefixes: [
+        "developer-ecosystem/v-ecosystem/",
+        "asdf-augmenters/asdf-plugin-collection/plugins/vlang/",
+        "hyperpolymath-archive/asdf-vlang-plugin/"
+      ]},
     %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
     # Jekyll banned 2026-05-25 — estate uses `hyperpolymath/casket-ssg`
     # (Haskell SSG) for GitHub Pages. The pre-existing :irrelevant_jekyll
@@ -139,8 +179,13 @@ defmodule Hypatia.Rules.CicdRules do
     end)
   end
 
-  defp check_pattern(%{glob: glob} = _pattern, files) do
-    Enum.filter(files, fn f -> String.ends_with?(f, String.replace(glob, "*", "")) end)
+  defp check_pattern(%{glob: glob} = pattern, files) do
+    suffix = String.replace(glob, "*", "")
+    allow_prefixes = Map.get(pattern, :path_allow_prefixes, [])
+
+    files
+    |> Enum.filter(fn f -> String.ends_with?(f, suffix) end)
+    |> Enum.reject(fn f -> Enum.any?(allow_prefixes, &String.contains?(f, &1)) end)
   end
 
   defp check_pattern(%{pattern: _regex}, _files), do: []
