@@ -161,13 +161,29 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
 
   Returns `{:eligible, "AM010"}` when:
 
-    1. `phantom_contexts` is non-empty, AND
-    2. every required context is either passing OR in `phantom_contexts`.
+    1. `phantom_contexts` (minus any context currently in-progress on
+       THIS PR) is non-empty, AND
+    2. every required context is either passing OR in the in-progress-
+       subtracted `phantom_contexts`.
 
   Returns `:not_phantom_only` otherwise.
 
   Empty `required_contexts` returns `:not_phantom_only` — if nothing
   is required, auto-merge already works; AM010 doesn't apply.
+
+  ## ALARP type-1 safety: in-progress subtraction
+
+  BP008 derives the phantom set from the LAST N MAIN COMMITS. A
+  path-filtered workflow that happens to touch the path on THIS PR
+  (but didn't on the recent main commits) would be classified as
+  phantom even though it IS firing here. Admin-merging would bypass
+  an actively-running check.
+
+  Defence: before deciding eligibility, subtract from the phantom set
+  any context whose rollup entry is queued / pending / in_progress on
+  this PR. A truly phantom context has NO rollup entry; a sometimes-
+  firing context has a non-terminal entry. The subtraction collapses
+  the latter back into the "wait for it" path.
   """
   @spec am010_phantom_only_blocker?(map()) ::
           {:eligible, String.t()} | :not_phantom_only
@@ -185,15 +201,31 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
       |> Enum.reject(&is_nil/1)
       |> MapSet.new()
 
+    # ALARP Type 1 mitigation. A context flagged phantom by BP008 (sample-
+    # based, main-branch) is only safe to treat as phantom on THIS PR when
+    # it has NO rollup entry here. Any rollup entry — passing, failing,
+    # pending, in-progress — means the context IS firing on this PR; the
+    # BP008 main-branch sample was a false-negative for this commit. In
+    # all such cases admin-merging would bypass an actual check (pass-by-
+    # luck, fail-by-vote, or skip-an-in-progress run). Restrict the
+    # phantom set to contexts truly absent from this PR's rollup.
+    rollup_names =
+      rollup
+      |> Enum.map(&Map.get(&1, "name"))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    phantoms_on_this_pr = MapSet.difference(phantoms, rollup_names)
+
     cond do
-      MapSet.size(phantoms) == 0 ->
+      MapSet.size(phantoms_on_this_pr) == 0 ->
         :not_phantom_only
 
       required == [] ->
         :not_phantom_only
 
       Enum.all?(required, fn ctx ->
-        MapSet.member?(passing, ctx) or MapSet.member?(phantoms, ctx)
+        MapSet.member?(passing, ctx) or MapSet.member?(phantoms_on_this_pr, ctx)
       end) ->
         {:eligible, "AM010"}
 
