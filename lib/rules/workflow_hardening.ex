@@ -285,54 +285,80 @@ defmodule Hypatia.Rules.WorkflowHardening do
   release can substitute the implementation.
   """
   def wh004_unpinned_uses(repo_path) do
-    # Skip local-action / docker refs. `actions/...` and `github/...`
-    # are GitHub-owned and exempt by convention (configurable later).
+    # Path-walking wrapper: enumerate workflow files and delegate per-file
+    # scanning to `wh004_scan_content/2` so the same detection logic is
+    # callable both from a repo-path walker (this function) and from a
+    # pre-loaded `{filename, content}` mapper (workflow_audit). See audit
+    # 2026-05-28 Part 3.1 — WH004 is now the canonical unpinned-action
+    # source; workflow_audit/check_unpinned_actions delegates here.
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
+      wh004_scan_content(rel, content)
+    end)
+  end
 
-      Regex.scan(~r/^\s*-?\s*uses:\s*(\S+)/m, content, return: :index)
-      |> Enum.flat_map(fn [{full_start, _}, {slug_start, slug_len}] ->
-        slug = String.slice(content, slug_start, slug_len)
+  @doc """
+  WH004 core scanner: detect unpinned `uses:` references in a single
+  workflow file's content. Returns the canonical WH004 finding shape
+  with severity `:warn` (no special-casing of main/master here; callers
+  that want main-vs-tag severity bumps can post-process).
 
-        cond do
-          String.starts_with?(slug, "./") or String.starts_with?(slug, "docker://") ->
-            []
+  Exempts: local-action refs (`./...`), docker images (`docker://...`),
+  already-SHA-pinned refs (40 hex chars after `@`).
 
-          # Already SHA-pinned (40 hex chars after @)
-          Regex.match?(~r/@[a-fA-F0-9]{40}\b/, slug) ->
-            []
+  This is the canonical unpinned-action detection per audit 2026-05-28
+  Part 3.1. Direct consumers:
 
-          # Has an @ but it's a tag or branch
-          String.contains?(slug, "@") ->
-            line_no = line_number_for_offset(content, full_start)
+    * `wh004_unpinned_uses/1` — repo-path walker (this module)
+    * `Hypatia.Rules.WorkflowAudit.check_unpinned_actions/1` — pre-
+      loaded-content path; post-processes findings to add
+      `pin_exempt?` carve-outs and `@known_good_shas` lookups.
 
-            [
-              %{
-                rule: "WH004",
-                file: rel,
-                severity: :warn,
-                reason:
-                  "workflow #{rel}:#{line_no} pins `#{slug}` to a tag/branch — " <>
-                    "mutable ref allows upstream takeover",
-                action: :report,
-                detail: %{
-                  line: line_no,
-                  uses: slug,
-                  fix:
-                    "Replace tag/branch ref with a 40-char commit SHA: " <>
-                      "`gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`. " <>
-                      "Append `# <tag>` as a comment for readability."
-                }
+  Both should be the only sites doing unpinned-action regex matching.
+  """
+  def wh004_scan_content(filename, content) do
+    Regex.scan(~r/^\s*-?\s*uses:\s*(\S+)/m, content, return: :index)
+    |> Enum.flat_map(fn [{full_start, _}, {slug_start, slug_len}] ->
+      slug = String.slice(content, slug_start, slug_len)
+
+      cond do
+        String.starts_with?(slug, "./") or String.starts_with?(slug, "docker://") ->
+          []
+
+        # Already SHA-pinned (40 hex chars after @)
+        Regex.match?(~r/@[a-fA-F0-9]{40}\b/, slug) ->
+          []
+
+        # Has an @ but it's a tag or branch
+        String.contains?(slug, "@") ->
+          line_no = line_number_for_offset(content, full_start)
+
+          [
+            %{
+              rule: "WH004",
+              file: filename,
+              severity: :warn,
+              reason:
+                "workflow #{filename}:#{line_no} pins `#{slug}` to a tag/branch — " <>
+                  "mutable ref allows upstream takeover",
+              action: :report,
+              detail: %{
+                line: line_no,
+                uses: slug,
+                fix:
+                  "Replace tag/branch ref with a 40-char commit SHA: " <>
+                    "`gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`. " <>
+                    "Append `# <tag>` as a comment for readability."
               }
-            ]
+            }
+          ]
 
-          true ->
-            []
-        end
-      end)
+        true ->
+          []
+      end
     end)
   end
 
