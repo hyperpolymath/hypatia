@@ -79,6 +79,16 @@ defmodule Hypatia.Rules.LangPolicyRefreshTest do
                CicdRules.validate_license("MPL-1.0-or-later")
     end
 
+    test "PMPL-1.0 is flagged as wrong_license (added 2026-05-28)" do
+      assert {:error, :wrong_license, "PMPL-1.0"} =
+               CicdRules.validate_license("PMPL-1.0")
+    end
+
+    test "PMPL-1.0-or-later is flagged as wrong_license (added 2026-05-28)" do
+      assert {:error, :wrong_license, "PMPL-1.0-or-later"} =
+               CicdRules.validate_license("PMPL-1.0-or-later")
+    end
+
     test "MIT is still flagged" do
       assert {:error, :wrong_license, "MIT"} =
                CicdRules.validate_license("MIT")
