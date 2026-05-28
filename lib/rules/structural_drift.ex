@@ -151,6 +151,13 @@ defmodule Hypatia.Rules.StructuralDrift do
 
   # ─── SD005: Orphan gitlinks without .gitmodules ────────────────────────
 
+  # When orphan gitlink count exceeds this threshold, actions/checkout
+  # post-job cleanup (git submodule foreach) will startup_failure on
+  # every gitlink it cannot resolve. Surfaced by the developer-ecosystem
+  # fix (hyperpolymath/developer-ecosystem@baab1534): 69 mode-160000 stale
+  # gitlinks caused scorecard workflow startup_failure on every push.
+  @orphan_gitlink_checkout_failure_threshold 5
+
   @doc """
   SD005: Detect gitlinks (mode 160000) without corresponding .gitmodules entry.
   This is how stray repos-inside-repos (like svalinn in ats2-tui) happen.
@@ -158,6 +165,10 @@ defmodule Hypatia.Rules.StructuralDrift do
   Severity: critical (data corruption risk).
   Action: investigate -- move nested repo to canonical location, remove gitlink.
   Triggers: intensive scan + alert user.
+
+  When the orphan count exceeds #{@orphan_gitlink_checkout_failure_threshold},
+  emits one additional summary finding at severity :high with a reason that
+  explicitly names the actions/checkout startup_failure risk.
   """
   def sd005_orphan_gitlinks(repo_path) do
     gitmodules_path = Path.join(repo_path, ".gitmodules")
@@ -183,21 +194,50 @@ defmodule Hypatia.Rules.StructuralDrift do
           gitmodules_content =
             if has_gitmodules, do: File.read!(gitmodules_path), else: ""
 
-          Enum.flat_map(gitlinks, fn path ->
-            if String.contains?(gitmodules_content, "path = #{path}") do
-              []  # Legitimate submodule
-            else
+          per_link_findings =
+            Enum.flat_map(gitlinks, fn path ->
+              if String.contains?(gitmodules_content, "path = #{path}") do
+                []  # Legitimate submodule
+              else
+                [%{
+                  rule: "SD005",
+                  file: path,
+                  severity: :critical,
+                  reason: "Orphan gitlink -- submodule ref without .gitmodules entry. Likely a stray clone caught by bot git-add-all.",
+                  action: :investigate,
+                  trigger_intensive: true,
+                  alert_user: true
+                }]
+              end
+            end)
+
+          orphan_count = length(per_link_findings)
+
+          # When count > threshold, emit an additional summary finding that
+          # explicitly calls out the actions/checkout startup_failure risk.
+          # This is the count-level signal that per-link :critical findings
+          # don't surface on their own (developer-ecosystem@baab1534 had 69
+          # stale gitlinks and scorecard's startup_failure was only diagnosed
+          # after manual inspection of the submodule foreach error).
+          summary_finding =
+            if orphan_count > @orphan_gitlink_checkout_failure_threshold do
               [%{
                 rule: "SD005",
-                file: path,
-                severity: :critical,
-                reason: "Orphan gitlink -- submodule ref without .gitmodules entry. Likely a stray clone caught by bot git-add-all.",
+                file: ".git (index)",
+                severity: :high,
+                reason: "#{orphan_count} orphan gitlinks detected -- actions/checkout post-job cleanup " <>
+                        "(git submodule foreach) will startup_failure with this many stale refs. " <>
+                        "Remove all orphan gitlinks before next push.",
                 action: :investigate,
                 trigger_intensive: true,
-                alert_user: true
+                alert_user: true,
+                count: orphan_count
               }]
+            else
+              []
             end
-          end)
+
+          per_link_findings ++ summary_finding
         end
 
       _ -> []
