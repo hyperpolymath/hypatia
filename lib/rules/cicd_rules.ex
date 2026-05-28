@@ -512,7 +512,11 @@ defmodule Hypatia.Rules.CicdRules do
   # this list is consulted). MPL-1.0 / MPL-1.0-or-later are the only
   # legacy MPL identifiers seen in estate history; both must rewrite to
   # MPL-2.0 (org policy refresh 2026-05-25, applies to docs AND code).
-  @wrong_licenses ["MIT", "Apache-2.0", "MPL-1.0", "MPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
+  #
+  # PMPL-1.0 / PMPL-1.0-or-later (Palimpsest MPL) added 2026-05-28 after a
+  # standards sweep found 25 reusable workflow files still carrying the
+  # legacy PMPL header (standards#249). Same migration target: MPL-2.0.
+  @wrong_licenses ["MIT", "Apache-2.0", "MPL-1.0", "MPL-1.0-or-later", "PMPL-1.0", "PMPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
 
   # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
   @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
