@@ -12,6 +12,23 @@ https://semver.org/[Semantic Versioning].
 
 === Added
 
+==== `CicdRules` rule `duplicate_cron_schedule` (2026-05-30, #362)
+
+Flags workflows whose `on.schedule` carries redundant `cron:` triggers: two
+or more entries on the same day-of-week field (e.g. three Monday crons
+inherited from a workflow consolidation), or a daily `* * *` entry that
+strictly covers a day-specific entry at the same `HH:MM`. Root-fixed
+estate-wide in `hypatia#331` (`tests.yml`, `verify-proofs.yml`); distinct
+intentional triggers (different times, or different `if:` gates on the same
+day) are advisory only and never auto-removed.
+
+Surfaced through the facade as
+`Hypatia.Rules.scan_duplicate_cron_schedules/1`; the pure predicate
+`CicdRules.check_duplicate_cron_schedules/2` is covered by
+`test/rules/cicd_rules_duplicate_cron_test.exs` for both sensitivity
+(same-day-of-week + daily-subset oracles) and specificity (different-time
+non-subset, single cron, commented-out lines).
+
 ==== `CicdRules` rule `scorecard_wrapper_missing_job_permissions` (2026-05-30, #390)
 
 New forward-detection rule for a silent-CI-failure class: a
