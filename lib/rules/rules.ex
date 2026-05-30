@@ -423,12 +423,6 @@ defmodule Hypatia.Rules do
   defdelegate detect_waste(repo_info), to: CicdRules
 
   @doc """
-  Scan for scorecard wrappers that call the standards reusable but omit the
-  required `security-events: write` job permission (#390).
-  """
-  defdelegate scan_scorecard_wrapper_permissions(repo_path, opts \\ []), to: CicdRules
-
-  @doc """
   Scan workflows for redundant `cron:` schedules firing on the same
   day-of-week (#362).
   """
