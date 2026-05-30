@@ -441,7 +441,53 @@ defmodule Hypatia.Rules.CodeSafety do
   defp strip_inline_test_blocks(content, "rust") do
     content
     |> strip_after_cfg_test()
-    |> strip_doc_comments()
+    |> strip_rust_doc_comments()
+  end
+
+  # Idris2: strip `|||` doc-comments, `--` line comments, and `{- ... -}`
+  # block comments. Without this, docstrings like
+  # `||| Zero `believe_me` / `idris_crash`.` trigger the believe_me /
+  # assert_total / postulate regexes — false positives in every `proven`
+  # Safe*/Proofs.idr docstring.
+  defp strip_inline_test_blocks(content, "idris2") do
+    content
+    |> strip_idris2_doc_and_line_comments()
+    |> strip_haskell_style_block_comments()
+  end
+
+  # Coq, Isabelle, HOL4, F*: ML-style `(* ... *)` block comments. Strips
+  # docstring-style mentions of `Admitted`, `admit`, `Axiom`, `oops`,
+  # `mk_thm`, `assume` that survive in proof-script comments (e.g.
+  # `(* no Admitted here *)` legitimately documenting absence of admit).
+  defp strip_inline_test_blocks(content, lang)
+       when lang in ["coq", "isabelle", "hol4", "fstar"] do
+    strip_ml_style_block_comments(content)
+  end
+
+  # Lean: `--` line comments + `/- ... -/` block comments.
+  defp strip_inline_test_blocks(content, "lean") do
+    content
+    |> strip_dashdash_line_comments()
+    |> strip_lean_block_comments()
+  end
+
+  # Agda: `--` line comments + `{- ... -}` block comments.
+  defp strip_inline_test_blocks(content, "agda") do
+    content
+    |> strip_dashdash_line_comments()
+    |> strip_haskell_style_block_comments()
+  end
+
+  # Haskell: `--` line comments + `{- ... -}` block comments.
+  defp strip_inline_test_blocks(content, "haskell") do
+    content
+    |> strip_dashdash_line_comments()
+    |> strip_haskell_style_block_comments()
+  end
+
+  # OCaml: ML-style `(* ... *)` block comments.
+  defp strip_inline_test_blocks(content, "ocaml") do
+    strip_ml_style_block_comments(content)
   end
 
   defp strip_inline_test_blocks(content, _other), do: content
@@ -453,8 +499,37 @@ defmodule Hypatia.Rules.CodeSafety do
     end
   end
 
-  defp strip_doc_comments(content) do
+  defp strip_rust_doc_comments(content) do
     Regex.replace(~r{^[ \t]*//[/!][^\n]*$}m, content, "")
+  end
+
+  # Idris2 `|||` doc-comments (one or more on consecutive lines) AND
+  # `--` line comments. The `|||` form is the docstring marker; `||` is
+  # the boolean OR operator and is NOT touched (regex requires 3+ pipes).
+  defp strip_idris2_doc_and_line_comments(content) do
+    content
+    |> then(&Regex.replace(~r{^[ \t]*\|\|\|[^\n]*$}m, &1, ""))
+    |> then(&Regex.replace(~r{^[ \t]*--[^\n]*$}m, &1, ""))
+  end
+
+  defp strip_dashdash_line_comments(content) do
+    Regex.replace(~r{^[ \t]*--[^\n]*$}m, content, "")
+  end
+
+  # ML-style `(* ... *)` block comments. Greedy `.*?` with `s` flag for
+  # multi-line. Non-nested — Coq nesting is rare in audit-relevant text.
+  defp strip_ml_style_block_comments(content) do
+    Regex.replace(~r{\(\*.*?\*\)}s, content, "")
+  end
+
+  # Haskell / Agda / Idris2 `{- ... -}` block comments.
+  defp strip_haskell_style_block_comments(content) do
+    Regex.replace(~r{\{-.*?-\}}s, content, "")
+  end
+
+  # Lean `/- ... -/` block comments.
+  defp strip_lean_block_comments(content) do
+    Regex.replace(~r{/-.*?-/}s, content, "")
   end
 
   # ---------------------------------------------------------------------------
