@@ -393,10 +393,23 @@ defmodule Hypatia.CLI do
 
           normalized =
             Enum.map(findings, fn f ->
+              # Findings produced by the newer detection helpers
+              # (missing_timeout_minutes, WF013-WF016, flawed_regex) carry
+              # a `:rule` key instead of the legacy `:type` key. Without
+              # the fallthrough, those normalise to SARIF rule_id
+              # `workflow_audit/unknown` — losing the actual rule label
+              # and breaking the GitHub code-scanning UX (every finding
+              # collapses into one nameless bucket). Fall through
+              # `:type` -> `:rule` -> `:unknown`.
+              type =
+                Map.get(f, :type) ||
+                  Map.get(f, :rule) ||
+                  :unknown
+
               %{
                 rule_module: "workflow_audit",
                 severity: to_string(Map.get(f, :severity, :medium)),
-                type: to_string(Map.get(f, :type, :unknown)),
+                type: to_string(type),
                 file: Map.get(f, :file, Map.get(f, :files, "") |> listify()),
                 reason: Map.get(f, :detail, describe_workflow_finding(f)),
                 action: to_string(Map.get(f, :action, Map.get(f, :fix, :flag)))
