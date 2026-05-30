@@ -83,6 +83,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     scorecard_wrapper_missing_perms = check_scorecard_wrapper_missing_job_permissions(workflow_contents)
     workflow_linter_self_ref = check_workflow_linter_self_reference(workflow_contents)
     codeql_missing_actions = check_codeql_missing_actions_language(workflow_contents)
+    concurrency_missing = check_concurrency_missing_readonly(workflow_contents)
 
     %{
       findings:
@@ -92,7 +93,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           reusable_caller_context_self_checkout ++ missing_timeouts ++
           scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins ++
           ungated_secret_action ++ scorecard_wrapper_missing_perms ++
-          workflow_linter_self_ref ++ codeql_missing_actions,
+          workflow_linter_self_ref ++ codeql_missing_actions ++ concurrency_missing,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -112,6 +113,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       scorecard_wrapper_missing_perms_count: length(scorecard_wrapper_missing_perms),
       workflow_linter_self_ref_count: length(workflow_linter_self_ref),
       codeql_missing_actions_count: length(codeql_missing_actions),
+      concurrency_missing_count: length(concurrency_missing),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -1417,5 +1419,61 @@ defmodule Hypatia.Rules.WorkflowAudit do
         end
       end)
     end
+  end
+
+  # ─── WF021: Read-only check workflow missing `concurrency:` ───────────
+  #
+  # A workflow that runs on `pull_request`/`push` and is read-only (a
+  # `permissions:` block with no `: write` scope) wastes runner minutes on
+  # rapid-push PRs when it lacks a top-level `concurrency:` block with
+  # `cancel-in-progress`. The read-only condition is the safety gate:
+  # cancelling an in-flight run is only safe when the workflow neither
+  # publishes nor mutates. Publishers/mutators (release, npm/jsr publish,
+  # Pages deploy, repo mirror/sync, `git push`) are skipped.
+  #
+  # See hyperpolymath/hypatia#365 (cohort hypatia#333, pattern 6).
+
+  @wf021_skip ~r/npm publish|jsr publish|gh-release|softprops|publish_results|peaceiris|deploy-pages|pages-build|mirror|GITLAB_SSH|BITBUCKET_SSH|git push|release:/i
+
+  @doc """
+  WF021: Detect a read-only check workflow (runs on pull_request/push, has a
+  `permissions:` block with no `: write` scope) that lacks a top-level
+  `concurrency:` block.
+
+  Sensitivity / specificity:
+    * Specific — the read-only gate (no `: write` anywhere) plus a
+      publisher/mutator skip-list keep release/publish/Pages/mirror
+      workflows out, where `cancel-in-progress` would be unsafe.
+    * Sensitive — fires on any PR/push read-only workflow missing a
+      top-level `concurrency:` key.
+  """
+  def check_concurrency_missing_readonly(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      triggers? = Regex.match?(~r/pull_request|^\s+push:/m, content)
+      no_concurrency? = not Regex.match?(~r/^concurrency:/m, content)
+
+      read_only? =
+        Regex.match?(~r/^permissions:/m, content) and not String.contains?(content, ": write")
+
+      if triggers? and no_concurrency? and read_only? and not Regex.match?(@wf021_skip, content) do
+        [
+          %{
+            rule: "WF021",
+            type: :concurrency_missing_readonly,
+            file: filename,
+            severity: :low,
+            reason:
+              "read-only check workflow runs on pull_request/push but has no top-level " <>
+                "`concurrency:` block; rapid-push PRs queue redundant runs. Add " <>
+                "`concurrency: {group: \"${{ github.workflow }}-${{ github.ref }}\", " <>
+                "cancel-in-progress: true}`. Skipped for publishers/mutators where " <>
+                "cancelling is unsafe.",
+            fix_recipe: :add_workflow_concurrency
+          }
+        ]
+      else
+        []
+      end
+    end)
   end
 end
