@@ -931,6 +931,116 @@ defmodule Hypatia.Rules.CicdRules do
   end
 
   # ---------------------------------------------------------------------------
+  # Duplicate cron schedules (#362)
+  # ---------------------------------------------------------------------------
+  #
+  # A workflow whose `on.schedule` lists multiple `cron:` entries that fire on
+  # the same day-of-week is usually a consolidation artefact (merged-in source
+  # workflows each carrying their own trigger): wasted runner minutes and log
+  # noise. Two shapes are flagged:
+  #
+  #   1. >= 2 entries sharing the same day-of-week field (e.g. three `* * 1`
+  #      Monday crons inherited from pre-consolidation workflows).
+  #   2. A daily entry (`* * *`) and a day-specific entry at the same HH:MM —
+  #      the specific entry is a strict subset of the daily one.
+  #
+  # Root-fixed estate-wide in hypatia#331 (tests.yml, verify-proofs.yml).
+  # Distinct intentional triggers (different HH:MM, or different `if:` gates on
+  # the same day) are advisory under shape (1) and never auto-removed.
+
+  @doc """
+  Scan `repo_path`'s workflow files for redundant `cron:` schedules (#362).
+
+  Reads each `.github/workflows/*.{yml,yaml}` (root or nested monorepo copy)
+  and returns the findings from `check_duplicate_cron_schedules/2` for each.
+
+  Returns `[%{rule:, severity:, file:, reason:, fix:, crons:}]`.
+  """
+  def scan_duplicate_cron_schedules(repo_path) do
+    Path.wildcard("#{repo_path}/**/*", match_dot: true)
+    |> Enum.reject(&File.dir?/1)
+    |> Enum.map(&Path.relative_to(&1, repo_path))
+    |> Enum.filter(&workflow_file?/1)
+    |> Enum.flat_map(fn rel ->
+      case File.read(Path.join(repo_path, rel)) do
+        {:ok, content} -> check_duplicate_cron_schedules(rel, content)
+        {:error, _} -> []
+      end
+    end)
+  end
+
+  @doc """
+  Pure predicate behind `scan_duplicate_cron_schedules/1`: parse the `cron:`
+  list entries in workflow `content` and return findings for `path`. Lines
+  that are not 5-field cron expressions (and commented-out `# - cron:` lines)
+  are ignored.
+  """
+  def check_duplicate_cron_schedules(path, content) do
+    crons = parse_cron_entries(content)
+
+    same_dow =
+      crons
+      |> Enum.group_by(& &1.dow)
+      |> Enum.filter(fn {_dow, list} -> length(list) >= 2 end)
+      |> Enum.map(fn {dow, list} ->
+        raws = Enum.map(list, & &1.raw)
+
+        %{
+          rule: :duplicate_cron_schedule,
+          severity: :medium,
+          file: path,
+          reason:
+            "#{length(list)} cron entries fire on the same day-of-week (#{dow_label(dow)}): #{Enum.join(raws, ", ")} — likely a consolidation artefact.",
+          fix:
+            "Collapse to a single cron unless the triggers serve distinct purposes (e.g. different `if:` gates); otherwise drop the redundant entries.",
+          crons: raws
+        }
+      end)
+
+    daily = Enum.filter(crons, &(&1.dow == "*"))
+    specific = Enum.reject(crons, &(&1.dow == "*"))
+
+    subsets =
+      for d <- daily, s <- specific, d.min == s.min and d.hour == s.hour do
+        %{
+          rule: :duplicate_cron_schedule,
+          severity: :medium,
+          file: path,
+          reason:
+            "cron `#{s.raw}` is a strict subset of the daily cron `#{d.raw}` (same HH:MM); the daily trigger already covers that day.",
+          fix:
+            "Drop the day-specific entry `#{s.raw}` — the daily `#{d.raw}` already runs at that time.",
+          crons: [d.raw, s.raw]
+        }
+      end
+
+    same_dow ++ subsets
+  end
+
+  defp workflow_file?(rel) do
+    String.contains?(rel, ".github/workflows/") and
+      (String.ends_with?(rel, ".yml") or String.ends_with?(rel, ".yaml"))
+  end
+
+  defp parse_cron_entries(content) do
+    ~r/^\s*-\s*cron:\s*["']?([\d*,\/\- ]+?)["']?\s*(?:#[^\n]*)?$/m
+    |> Regex.scan(content)
+    |> Enum.map(fn [_, expr] -> String.trim(expr) end)
+    |> Enum.map(&parse_one_cron/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp parse_one_cron(expr) do
+    case String.split(expr, " ", trim: true) do
+      [min, hour, _dom, _mon, dow] -> %{raw: expr, min: min, hour: hour, dow: dow}
+      _ -> nil
+    end
+  end
+
+  defp dow_label("*"), do: "every day"
+  defp dow_label(dow), do: "day-of-week #{dow}"
+
+  # ---------------------------------------------------------------------------
   # CI/CD Waste Detection
   # ---------------------------------------------------------------------------
 

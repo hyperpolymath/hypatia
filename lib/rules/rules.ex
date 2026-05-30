@@ -429,6 +429,12 @@ defmodule Hypatia.Rules do
   defdelegate scan_scorecard_wrapper_permissions(repo_path, opts \\ []), to: CicdRules
 
   @doc """
+  Scan workflows for redundant `cron:` schedules firing on the same
+  day-of-week (#362).
+  """
+  defdelegate scan_duplicate_cron_schedules(repo_path), to: CicdRules
+
+  @doc """
   Run baseline-health checks (BH001-BH007): missing required_status_checks
   on main, deferred-migration TODOs in dep manifests, persistent >24h red
   baseline on main, dead action SHA pins, push-only required checks,
