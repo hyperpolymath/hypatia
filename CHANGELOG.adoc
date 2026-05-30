@@ -29,25 +29,6 @@ Surfaced through the facade as
 (same-day-of-week + daily-subset oracles) and specificity (different-time
 non-subset, single cron, commented-out lines).
 
-==== `CicdRules` rule `scorecard_wrapper_missing_job_permissions` (2026-05-30, #390)
-
-New forward-detection rule for a silent-CI-failure class: a
-`.github/workflows/scorecard.yml` that *calls* the standards
-`scorecard-reusable.yml` but omits `security-events: write` on the calling
-job. Called-workflow permissions are capped by the caller, so
-`ossf/scorecard-action` cannot upload its SARIF and every scheduled
-Scorecard run fails with `startup_failure` — no logs. Estate baseline
-2026-05-30: 37 affected wrappers (35 unique + 2 inert nested-monorepo
-copies). Prior art: `julia-professional-registry#19`, `absolute-zero#68`.
-
-Surfaced through the facade as
-`Hypatia.Rules.scan_scorecard_wrapper_permissions/2`; the pure predicate
-`CicdRules.check_scorecard_wrapper_permissions/2` and an
-`opts[:path_allow_prefixes]` carve-out (for bespoke inline scorecard
-workflows) are covered by `test/rules/cicd_rules_scorecard_wrapper_test.exs`
-for both sensitivity (positive + nested copy) and specificity (perm present,
-no-reusable, carve-out).
-
 ==== `WorkflowAudit` rules WF014–WF017 (2026-05-30, PRs #393 + #396)
 
 Four new forward-detection rules surfacing patterns root-fixed in
