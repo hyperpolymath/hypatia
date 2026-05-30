@@ -568,6 +568,70 @@ defmodule Hypatia.Rules.StructuralDrift do
     end
   end
 
+  # ─── SD014: SafeDOMExample dialect mismatch (.res lingers without .affine) ───
+
+  @doc """
+  SD014: Detect `examples/SafeDOMExample.res` lingering in repos that
+  haven't picked up the canonical AffineScript version
+  `examples/SafeDOMExample.affine` (lives in burble/main since the
+  2026-05 ReScript→AffineScript migration).
+
+  Three states:
+    * `.res` only → `:fail` (dialect_mismatch) — repo carries the legacy
+      ReScript variant with no AffineScript replacement.
+    * Both `.res` and `.affine` → `:warn` (both_dialects) — delete the
+      `.res` copy; the `.affine` is canonical.
+    * `.affine` only or neither → no finding.
+
+  Origin: dominant per-PR failure class on the otpiser#11 + 48-PR
+  sweep was `governance / Language / package anti-pattern policy`
+  firing on `examples/SafeDOMExample.res`. Template repos kept
+  regenerating it; this rule catches the long tail. See
+  hyperpolymath/hypatia#336.
+  """
+  def sd014_safedom_example_dialect(repo_path) do
+    res_path = Path.join(repo_path, "examples/SafeDOMExample.res")
+    affine_path = Path.join(repo_path, "examples/SafeDOMExample.affine")
+    has_res = File.exists?(res_path)
+    has_affine = File.exists?(affine_path)
+
+    cond do
+      has_res and not has_affine ->
+        [%{
+          rule: "SD014",
+          type: :safedom_example_dialect_mismatch,
+          file: "examples/SafeDOMExample.res",
+          severity: :high,
+          reason:
+            "examples/SafeDOMExample.res lingers without the canonical " <>
+              "AffineScript replacement examples/SafeDOMExample.affine. " <>
+              "ReScript is banned in new code as of 2026-04-30 " <>
+              "(estate policy); the canonical .affine version lives in " <>
+              "burble/main. The governance/language-policy check fires " <>
+              "on every push until the .res is replaced.",
+          action: :replace_safedom_with_affine,
+          trigger_intensive: false
+        }]
+
+      has_res and has_affine ->
+        [%{
+          rule: "SD014",
+          type: :safedom_example_both_dialects,
+          file: "examples/SafeDOMExample.res",
+          severity: :medium,
+          reason:
+            "Both examples/SafeDOMExample.res and " <>
+              "examples/SafeDOMExample.affine are present. The .affine " <>
+              "is canonical; delete the .res copy.",
+          action: :delete_legacy_safedom_res,
+          trigger_intensive: false
+        }]
+
+      true ->
+        []
+    end
+  end
+
   # ─── Comprehensive scan (triggered by any finding) ─────────────────────
 
   @doc """
@@ -588,7 +652,8 @@ defmodule Hypatia.Rules.StructuralDrift do
       sd009_missing_spdx(repo_path) ++
       sd010_tracked_node_modules(repo_path) ++
       sd011_missing_gitignore(repo_path) ++
-      sd013_path_specific_gitignore(repo_path)
+      sd013_path_specific_gitignore(repo_path) ++
+      sd014_safedom_example_dialect(repo_path)
 
     needs_intensive = Enum.any?(findings, & &1[:trigger_intensive])
     needs_alert = Enum.any?(findings, & &1[:alert_user])

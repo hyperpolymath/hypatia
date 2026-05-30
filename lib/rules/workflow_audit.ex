@@ -80,6 +80,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
     nonroot_container_eacces = check_nonroot_container_checkout_eacces(workflow_contents)
     orphan_reusable_pins = check_orphan_standards_reusable_pin(workflow_contents)
     ungated_secret_action = check_ungated_secret_action(workflow_contents)
+    scorecard_wrapper_missing_perms = check_scorecard_wrapper_missing_job_permissions(workflow_contents)
+    workflow_linter_self_ref = check_workflow_linter_self_reference(workflow_contents)
+    codeql_missing_actions = check_codeql_missing_actions_language(workflow_contents)
 
     %{
       findings:
@@ -88,7 +91,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
           reusable_caller_context_self_checkout ++ missing_timeouts ++
           scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins ++
-          ungated_secret_action,
+          ungated_secret_action ++ scorecard_wrapper_missing_perms ++
+          workflow_linter_self_ref ++ codeql_missing_actions,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -105,6 +109,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
       nonroot_container_eacces_count: length(nonroot_container_eacces),
       orphan_reusable_pin_count: length(orphan_reusable_pins),
       ungated_secret_action_count: length(ungated_secret_action),
+      scorecard_wrapper_missing_perms_count: length(scorecard_wrapper_missing_perms),
+      workflow_linter_self_ref_count: length(workflow_linter_self_ref),
+      codeql_missing_actions_count: length(codeql_missing_actions),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -1223,4 +1230,192 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   def check_flawed_regex(_), do: []
+
+  # ─── WF018: Scorecard wrapper missing job-level permissions ───────────
+  #
+  # Caller-of-`scorecard-reusable.yml` workflow without job-level
+  # `security-events: write`. Reusable called-workflow permissions are
+  # CAPPED by the caller's grant: even though the reusable re-asserts
+  # the grant on its own analysis job, the cap silently zeros it out.
+  # ossf/scorecard-action then cannot upload SARIF and the run fails
+  # with `startup_failure` — no logs, no findings, the silent-CI-
+  # failure class hypatia is best positioned to catch.
+  #
+  # Estate baseline 2026-05-30: 81 of 88 wrappers across the estate
+  # were in this state (see standards#303 / #282). Canonical fix shape
+  # in standards/.github/workflows/scorecard-reusable.yml docstring.
+  # See hyperpolymath/hypatia#390 + memory
+  # feedback_scorecard_wrapper_caller_permissions.md.
+
+  @doc """
+  WF018: Detect a `scorecard.yml` wrapper that delegates to
+  `hyperpolymath/standards`'s `scorecard-reusable.yml` but lacks
+  `security-events: write`.
+
+  Sensitivity / specificity:
+    * Specific — only fires when the file references
+      `scorecard-reusable.yml`. A standalone scorecard workflow is not
+      flagged.
+    * Sensitive — looks for the literal `security-events: write` token
+      anywhere in the file (workflow-level is enough since called-
+      workflow permissions inherit from there, but the fix recipe
+      recommends job-level for clarity).
+  """
+  def check_scorecard_wrapper_missing_job_permissions(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      base = Path.basename(filename)
+      cond do
+        base not in ["scorecard.yml", "scorecard.yaml"] ->
+          []
+
+        not String.contains?(content, "scorecard-reusable.yml") ->
+          []
+
+        Regex.match?(~r/security-events:\s*write/, content) ->
+          []
+
+        true ->
+          [%{
+            rule: "WF018",
+            type: :scorecard_wrapper_missing_job_permissions,
+            file: filename,
+            severity: :high,
+            reason:
+              "scorecard.yml delegates to hyperpolymath/standards " <>
+                "`scorecard-reusable.yml` but the file does not declare " <>
+                "`security-events: write`. Reusable called-workflow " <>
+                "permissions are CAPPED by the caller's grants; the " <>
+                "reusable's own job-level grant cannot exceed what the " <>
+                "caller provides. Result: ossf/scorecard-action cannot " <>
+                "upload SARIF and the run fails with `startup_failure` " <>
+                "(no logs, no findings). Add `permissions: " <>
+                "{security-events: write, id-token: write}` at the job " <>
+                "level (preferred) or workflow level.",
+            fix_recipe: :add_job_level_scorecard_perms
+          }]
+      end
+    end)
+  end
+
+  # ─── WF019: workflow-linter.yml self-referential `uses:` grep ─────────
+  #
+  # Repos carrying the legacy in-tree `workflow-linter.yml` (rather than
+  # the consolidated `governance.yml` → standards reusable) often
+  # contain a shell step that `grep`s for `uses:` across all workflow
+  # files. The linter's own comments + grep command line contain
+  # literal `uses:` tokens, so the linter flags itself. Fix is to
+  # exempt `workflow-linter.yml` (and the sibling
+  # `scorecard-enforcer.yml`) from the grep, or to migrate to the
+  # consolidated governance reusable.
+  #
+  # Observed 4 repos in this state on the 2026-05-30 sweep
+  # (ipv6-only#9 / #10, file-soup#44, fireflag#30). See
+  # hyperpolymath/hypatia#337.
+
+  @doc """
+  WF019: Detect `workflow-linter.yml` that greps for `uses:` across all
+  workflow files without exempting itself or the canonical
+  `scorecard-enforcer.yml`.
+
+  Sensitivity / specificity:
+    * Specific — fires only when all three markers are present: file
+      basename is `workflow-linter.yml`, file contains a
+      `grep ... "uses:"` invocation, file does NOT contain a string
+      naming `workflow-linter.yml` or `scorecard-enforcer.yml`
+      (which would suggest a `grep -v` exemption is in place).
+    * Sensitive — works regardless of whether the grep is in a `run:`
+      block or a heredoc.
+  """
+  def check_workflow_linter_self_reference(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      base = Path.basename(filename)
+      cond do
+        base not in ["workflow-linter.yml", "workflow-linter.yaml"] ->
+          []
+
+        not Regex.match?(~r/grep[^\n]*["']uses:["']/, content) ->
+          []
+
+        Regex.match?(~r/workflow-linter\.ya?ml|scorecard-enforcer\.ya?ml/, content) ->
+          []
+
+        true ->
+          [%{
+            rule: "WF019",
+            type: :workflow_linter_self_reference,
+            file: filename,
+            severity: :medium,
+            reason:
+              "workflow-linter.yml greps for `uses:` across all workflow " <>
+                "files but does not exempt itself or the sibling " <>
+                "`scorecard-enforcer.yml`. Its own comments + grep " <>
+                "command line contain literal `uses:` tokens, so the " <>
+                "linter flags itself on every run. Either add " <>
+                "`grep -v workflow-linter.yml | grep -v scorecard-enforcer.yml` " <>
+                "to the pipeline, or migrate to the consolidated " <>
+                "`governance.yml` -> standards reusable.",
+            fix_recipe: :exempt_linter_from_self_grep
+          }]
+      end
+    end)
+  end
+
+  # ─── WF020: CodeQL workflow missing `language: actions` matrix entry ──
+  #
+  # Companion to check_codeql_language_matrix_mismatch (which catches
+  # the OPPOSITE: a codeql.yml that lists a *source-scanning* language
+  # on a repo with no matching source). WF020 catches the positive
+  # case: almost every repo has .github/workflows/*.yml, so almost
+  # every repo SHOULD declare `language: actions` in its CodeQL matrix.
+  #
+  # See hyperpolymath/hypatia#338.
+
+  @doc """
+  WF020: Detect a `codeql.yml` that does not list `language: actions`
+  in its matrix, when the repo has workflow files.
+
+  Companion to (not replacement for) `check_codeql_language_matrix_mismatch`.
+  This rule says "you SHOULD also scan workflow YAML"; the other says
+  "you should NOT pretend to scan a source language you don't have".
+
+  Sensitivity / specificity:
+    * Specific — only fires when codeql.yml exists AND lacks
+      `language: actions` AND the workflow_contents map contains at
+      least one non-codeql workflow.
+    * Sensitive — handles both YAML list-style and inline-string-style
+      `language: actions`.
+  """
+  def check_codeql_missing_actions_language(workflow_contents) do
+    has_other_workflows? =
+      Enum.any?(workflow_contents, fn {f, _} ->
+        base = Path.basename(f)
+        String.ends_with?(base, ".yml") and not codeql_workflow?(f)
+      end)
+
+    if not has_other_workflows? do
+      []
+    else
+      Enum.flat_map(workflow_contents, fn {filename, content} ->
+        if codeql_workflow?(filename) and
+             not Regex.match?(~r/language:\s*actions(?:\s|$)/m, content) do
+          [%{
+            rule: "WF020",
+            type: :codeql_missing_actions_language,
+            file: filename,
+            severity: :medium,
+            reason:
+              "codeql.yml does not list `language: actions` in its " <>
+                "matrix, but the repo has workflow files. CodeQL's " <>
+                "`actions` language scans workflow YAML for injection " <>
+                "and other CI/CD-specific weaknesses — every repo with " <>
+                "workflows benefits. Add an entry to `matrix.include` " <>
+                "with `language: actions` + `build-mode: none`.",
+            fix_recipe: :add_codeql_actions_language
+          }]
+        else
+          []
+        end
+      end)
+    end
+  end
 end
