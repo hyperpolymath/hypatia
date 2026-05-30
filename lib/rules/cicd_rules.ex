@@ -549,6 +549,35 @@ defmodule Hypatia.Rules.CicdRules do
       reason:
         "GitHub Actions and reusable workflows must be SHA-pinned (canonical detection: WH004 in workflow_hardening.ex)"
     },
+    # COMPLEMENT to :unpinned_action — catches the OPPOSITE failure mode where
+    # the pin is a SHA-shaped string but the SHA doesn't actually exist on the
+    # upstream action repo (gh api repos/<org>/<action>/commits/<sha> -> 422).
+    #
+    # Discovered 2026-05-30 estate audit: ~67 fake SHA pairs across ~50 repos
+    # (11% fabrication rate across 372 unique pins). All confirmed via
+    # `gh api commits/<sha> -> 422`. Pattern: partial-prefix corruption — the
+    # first 8-20 hex chars match a real release's SHA, the suffix is
+    # fabricated, slipping past visual review. Almost certainly a single AI
+    # hallucination event that got copy-pasted across the estate.
+    #
+    # Static-list approach: enumerates the 25 known fake SHAs from the
+    # 2026-05-30 audit. Inert until uncommented, but blocks regression if
+    # any of them propagates into NEW files. For proactive detection of
+    # FUTURE fakes, see the design note in
+    # `project_estate_fake_action_sha_punch_list_2026_05_30.md` — a `mix
+    # hypatia.verify_action_shas` task is the right shape for that
+    # (requires network access; can't be a static regex rule).
+    #
+    # Substitution map for replacement SHAs lives in the punch-list memory
+    # entry above; each fake has a documented version-faithful real SHA.
+    %{
+      id: :known_fake_action_sha,
+      pattern:
+        ~r/@(7ab2955eb728f5440978d7b4f723a50dea1f3608|5a67e1a1dd86cae5e5bef84e2da5060406a66c07|5fae568d37c3b73e0e4ca63d4e2c4e324a2b3497|dd344bc1cec854a9b55c2b857c28b688010e4fce|ea165f8d65b6db9a8b71b5c2d1a090c0daf9c8bb|65c79d7f54e76e4e3c7a8f34db0f4ac8b515c478|49933ea5288caeca8642195f2b846b8bbe245a93|1d0ff469b7ec7b3cb9d8673fde0c81c483a26c6c|8a8ef8526528d8a4ff3e2c90be08e25ef8efbd9b|37835157ba6190a612501a35f7959b8eb3009581|80e8293c5aaa80faf9b3e8fde13b80c04073d7ab|8a83df83c66e0b5c7ee6b3cd5636dd2d2c0c7c56|7ee2e0fdffec27d19ccbb8fb3dcf8a83b9d7f9e8|b2f9ef845756500b97acbdaf5c1dd4e9c1d15734|6624720a57d4c312633c7b953db2f2da5bcb4c3a|ea9e4e37992a54ee68a9571571f9a567d8f90f78|a4784f2dad6682d68cce8299ef20b1ca931bbdfb|ad397744b0d591a723ab90405b7247fac0e6b8db|e2bb9c9574c8527c28e4a102d0f2cb9e8efe9c0d|909cc5acb0135c37a79510dd77767e217930de55|9db7efd2d8d10d73081f64624f472263a3d12f20|61df2da039798545a278151ba52240239f604b71|5304e04ea2b1555a004402327ce0988b1f48fa1d|53eca37a5015e5c7075c3d9b4b08705001f35835|b5a3d9d107a26590ff7e9e6eddc6f0acff786aff)\b/,
+      reason:
+        "Known-fabricated action SHA pin — `gh api commits/<sha>` returns 422. Replace with the version-faithful real SHA per the substitution map in `project_estate_fake_action_sha_punch_list_2026_05_30.md`. These were caught in the 2026-05-30 estate audit (~67 fakes / 11% fabrication rate); the partial-prefix corruption pattern slips past visual review.",
+      applies_to: ["*.yml", "*.yaml"]
+    },
     %{
       id: :missing_permissions,
       pattern: ~r/^permissions:/m,
