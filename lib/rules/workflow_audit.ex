@@ -76,13 +76,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
     workflow_sha_foreign_ref = check_workflow_sha_as_foreign_ref(workflow_contents)
     reusable_caller_context_self_checkout = check_reusable_caller_context_self_checkout(workflow_contents)
     missing_timeouts = check_missing_timeout_minutes(workflow_contents)
+    scorecard_publish_run = check_scorecard_publish_run_violation(workflow_contents)
+    nonroot_container_eacces = check_nonroot_container_checkout_eacces(workflow_contents)
+    orphan_reusable_pins = check_orphan_standards_reusable_pin(workflow_contents)
 
     %{
       findings:
         missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
           caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
           codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
-          reusable_caller_context_self_checkout ++ missing_timeouts,
+          reusable_caller_context_self_checkout ++ missing_timeouts ++
+          scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -95,6 +99,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
       npermissions_typo_count: length(nperm_typos),
       codeql_lang_mismatch_count: length(codeql_lang_mismatch),
       missing_timeout_count: length(missing_timeouts),
+      scorecard_publish_run_count: length(scorecard_publish_run),
+      nonroot_container_eacces_count: length(nonroot_container_eacces),
+      orphan_reusable_pin_count: length(orphan_reusable_pins),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -543,6 +550,254 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp codeql_workflow?(filename) do
     base = Path.basename(filename)
     base in ["codeql.yml", "codeql.yaml", "codeql-analysis.yml", "codeql-analysis.yaml"]
+  end
+
+  # ─── WF014: OSSF Scorecard publish-with-run job-shape violation ───────
+
+  @doc """
+  WF014: Detect a workflow job that runs `ossf/scorecard-action` with
+  `publish_results: true` AND contains a `run:` step in the same job.
+
+  The OSSF publish endpoint enforces a hard contract on the job that
+  publishes:
+
+      webapp: scorecard job must only have steps with uses
+
+  Any `run:` step in the same job (typically a "Check minimum score"
+  threshold gate, or an SBOM dump) causes the publish step to fail and
+  the whole workflow run to be marked failed. Caught 49 estate repos on
+  the 2026-05-30 audit.
+
+  Fix recipe: split the threshold check into a downstream job that
+  `needs: scorecard` and consumes the SARIF via `actions/upload-artifact`
+  → `actions/download-artifact`. The publishing job stays `uses:`-only.
+
+  Sensitivity / specificity:
+    * Specific — only fires when ALL THREE markers are present in the
+      same file: `uses: ossf/scorecard-action…`, `publish_results: true`,
+      and at least one `run:` step. A job that omits `publish_results`
+      or omits the `run:` step does not trigger the OSSF endpoint
+      contract, so no finding.
+    * Sensitive — file-level detection catches the canonical single-job
+      `scorecard-enforcer.yml` shape and any clone of it; the multi-job
+      variant (already-split) does not have `run:` in the same workflow
+      file alongside `publish_results: true` *unless* the threshold gate
+      is co-located, which is exactly the bug we want to flag.
+  """
+  def check_scorecard_publish_run_violation(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      uses_scorecard? =
+        Regex.match?(~r/uses:\s*ossf\/scorecard-action@/, stripped)
+
+      publish_true? =
+        Regex.match?(~r/publish_results:\s*true/, stripped)
+
+      # Filter out `run:` keys that appear inside top-level `defaults:` /
+      # `with:` / commented blocks. Step-level `run:` is the only flavour
+      # the OSSF endpoint cares about — anchored at `^\s+-\s+run:` or
+      # `^\s+run:\s*\|` inside a `steps:` list.
+      has_step_run? =
+        Regex.match?(~r/^\s+- name:[^\n]*\n\s+run:/m, stripped) or
+          Regex.match?(~r/^\s+- run:\s*[|>\n]/m, stripped) or
+          Regex.match?(~r/^\s+run:\s*[|>]/m, stripped)
+
+      if uses_scorecard? and publish_true? and has_step_run? do
+        [%{
+          rule: "WF014",
+          type: :scorecard_publish_with_run_step,
+          file: filename,
+          severity: :high,
+          reason:
+            "Job runs `ossf/scorecard-action` with `publish_results: true` AND " <>
+              "contains a `run:` step. The OSSF publish endpoint enforces " <>
+              "\"scorecard job must only have steps with uses\" — the run-step " <>
+              "presence will fail the publish step and the whole workflow. " <>
+              "Move any `run:` step (e.g. threshold gate) into a `needs: scorecard` " <>
+              "downstream job that consumes the SARIF via upload/download-artifact.",
+          action: :split_scorecard_publish_job
+        }]
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── WF015: Non-root container image with actions/checkout EACCES ─────
+
+  # Container images that default to a non-root user. `actions/checkout`'s
+  # post-step writes save_state files to `/__w/_temp/_runner_file_commands`
+  # — a runner-host path mounted into the container. Non-root containers
+  # cannot write there and the checkout post-step fails with EACCES,
+  # killing the job before any user step runs.
+  #
+  # The fix is `container.options: --user root` on the job, OR a
+  # post-checkout chown step. The first is simpler and is the canonical
+  # recipe; the in-container `root` user is still mapped to the runner
+  # host's unprivileged runner user by the Actions sandbox.
+  @nonroot_container_images [
+    "coqorg/coq",
+    "leanprover/lean4",
+    "leanprover/elan",
+    "makarius/isabelle",
+    "haskell:",
+    "haskell/cabal:",
+    "rocker/r-",
+    "jekyll/jekyll"
+  ]
+
+  @doc """
+  WF015: Detect a workflow job whose `container.image:` is on the known
+  non-root-user image list, WITHOUT `container.options: --user root` (or
+  equivalent `--user 0`) and WITHOUT a post-checkout chown of `/__w/_temp`.
+
+  Root cause: `actions/checkout` writes save_state files to
+  `/__w/_temp/_runner_file_commands/save_state_<uuid>` as part of its
+  post-step. Non-root container users (UID ≠ 0) cannot open that path
+  for write, and Node.js throws EACCES before any user step runs.
+
+  Caught ephapax `coq-build.yml` on the 2026-05-30 audit — the merge-
+  oracle workflow itself couldn't run, defeating the formal/ hard-gate
+  guarantee in `[[feedback_proof_pr_build_oracle_is_only_truth]]`.
+
+  Sensitivity / specificity:
+    * Specific — only fires for images on the well-known non-root-user
+      list (coqorg/coq, leanprover/*, makarius/isabelle, etc.). Generic
+      `ubuntu:22.04`, `alpine:latest`, `node:18`, `python:3.10`,
+      `debian:bookworm` etc. all default to root and do not need the
+      override, so they do NOT fire.
+    * Sensitive — fires regardless of where the `--user root` would
+      appear (anywhere in the same file's `container:` block).
+  """
+  def check_nonroot_container_checkout_eacces(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      uses_checkout? = Regex.match?(~r/uses:\s*actions\/checkout@/, stripped)
+      has_user_root? =
+        Regex.match?(~r/options:\s*[^\n]*--user\s+(?:root|0)\b/, stripped)
+
+      if uses_checkout? and not has_user_root? do
+        Enum.flat_map(@nonroot_container_images, fn img ->
+          if Regex.match?(~r/image:\s*#{Regex.escape(img)}/, stripped) do
+            [%{
+              rule: "WF015",
+              type: :nonroot_container_checkout_eacces,
+              file: filename,
+              severity: :critical,
+              container_image: img,
+              reason:
+                "Job uses container `#{img}*` (non-root default user) + " <>
+                  "`actions/checkout` without `--user root`. The checkout " <>
+                  "post-step writes to `/__w/_temp/_runner_file_commands` " <>
+                  "as the runner host user; the container's non-root user " <>
+                  "lacks write permission and the job dies with EACCES " <>
+                  "before any user step runs. Add `container.options: " <>
+                  "--user root` (or a post-checkout chown step).",
+              action: :add_container_user_root
+            }]
+          else
+            []
+          end
+        end)
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── WF016: Orphan reusable-workflow SHA pin ──────────────────────────
+
+  # SHAs of `hyperpolymath/standards/.github/workflows/*-reusable.yml`
+  # commits that have been REMOVED from main (force-pushed branch tip,
+  # garbage-collected via repo rewrite, etc.). GitHub's read-only API
+  # still resolves the blob content, so a caller pinning to one of these
+  # SHAs appears to validate at code-review time — but the `workflow_call`
+  # resolution at run-time refuses commits not reachable from any branch
+  # HEAD and emits "workflow file issue" with zero jobs created.
+  #
+  # Audit reference:
+  #   hyperpolymath/standards/docs/audits/audit-hypatia-pin-orphan-2026-05-27.adoc
+  #
+  # Append to this list when a fresh orphan is discovered. The detector
+  # is data-driven so the rule does not need a code change to absorb a
+  # newly-rotated reusable.
+  @orphan_reusable_shas %{
+    "hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml" => [
+      # 97df762... orphan — superseded by 915139d73560e65a8240b8fc7768698658502c89
+      "97df7621",
+      "97df76210d966e0e1a89d5e5e9bcf66e16cea5e8"
+    ],
+    "hyperpolymath/standards/.github/workflows/rust-ci-reusable.yml" => [
+      # 4fdf4314... orphan — superseded by cc5a372af1 (merge commit SHA)
+      "4fdf4314",
+      "4fdf43147f2ad6d96f9c849c2f81e3a5fad9a8c0"
+    ]
+  }
+
+  @doc """
+  WF016: Detect callers pinning to a known-orphan reusable-workflow SHA.
+
+  Orphan SHA = a commit that was once the tip of `standards/main` but
+  has since been removed from main (force-push, branch rewrite, GC).
+  The `gh api repos/.../contents/...?ref=SHA` call still succeeds (read-
+  only blob lookup is cache-friendly), so code-review tooling does not
+  catch this. Run-time `workflow_call` resolution, on the other hand,
+  requires the SHA to be reachable from a branch HEAD and refuses
+  orphans — emitting "workflow file issue" and creating zero jobs.
+
+  Audit recipe:
+  `recipe-rewrite-orphan-reusable-pin` (gitbot-fleet script
+  `rewrite-orphan-reusable-pin.sh` — auto-fixable; replaces the orphan
+  SHA with the canonical merge-commit SHA published by the standards
+  audit). Caught 178 estate repos on the 2026-05-30 sweep (95 hypatia-
+  scan + 83 rust-ci).
+
+  Sensitivity / specificity:
+    * Specific — only fires on `uses: <owner>/<repo>/.github/workflows/
+      <name>-reusable.yml@<orphan_sha>` where the owner/repo/name + SHA
+      pair are in the maintained `@orphan_reusable_shas` map. Currency-
+      checking is by static membership, not by API call, so the rule
+      is safe under rate-limit pressure (callable across the estate
+      without a quota hit). Both prefix (8-char) and full (40-char)
+      SHAs match.
+    * Sensitive — runs against the `uses:` line as it appears in YAML,
+      so caller wrappers, fan-out templates, and one-off pins all match.
+  """
+  def check_orphan_standards_reusable_pin(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      Enum.flat_map(@orphan_reusable_shas, fn {reusable_path, orphan_shas} ->
+        # Match: `uses: owner/repo/.github/workflows/x-reusable.yml@SHA`
+        ref_re = ~r/uses:\s*#{Regex.escape(reusable_path)}@([0-9a-f]{8,40})/
+
+        Regex.scan(ref_re, stripped)
+        |> Enum.flat_map(fn [_full, sha] ->
+          if Enum.any?(orphan_shas, fn orphan -> String.starts_with?(sha, orphan) end) do
+            [%{
+              rule: "WF016",
+              type: :orphan_reusable_sha_pin,
+              file: filename,
+              reusable: reusable_path,
+              current_sha: sha,
+              severity: :critical,
+              reason:
+                "`#{reusable_path}` is pinned at `@#{sha}` which is no longer " <>
+                  "reachable from any branch in the standards repo. Code-review " <>
+                  "tooling resolves the blob (cached) but `workflow_call` at " <>
+                  "run-time refuses orphan SHAs, emitting \"workflow file issue\" " <>
+                  "with zero jobs created. Re-pin to the canonical merge-commit " <>
+                  "SHA from the standards audit.",
+              action: :rewrite_orphan_reusable_pin
+            }]
+          else
+            []
+          end
+        end)
+      end)
+    end)
   end
 
   # ─── Helpers ───────────────────────────────────────────────────────────
