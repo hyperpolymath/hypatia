@@ -23,6 +23,11 @@ defmodule Hypatia.LearningScheduler do
 
   # 5 minutes
   @poll_interval_ms 5 * 60 * 1_000
+  # Action-SHA verification runs once per 24h — gh-api-heavy, doesn't need
+  # per-cycle frequency. Cached so first run after 24h is fast for unchanged
+  # pins.
+  @action_sha_verify_interval_seconds 24 * 60 * 60
+  @action_sha_cache_path "data/verified-action-shas.json"
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @fleet_path Application.compile_env(
                 :hypatia,
@@ -130,6 +135,15 @@ defmodule Hypatia.LearningScheduler do
     # local learning cycle.
     cross_org_imports = poll_cross_org_peers()
 
+    # Daily action-SHA verification. Companion to the static
+    # `:known_fake_action_sha` rule — that rule blocks the 25 known fakes
+    # from the 2026-05-30 audit, this catches future fabrications via
+    # `gh api commits/<sha>`. Cache at `data/verified-action-shas.json`
+    # makes subsequent runs fast (only verifies new pins). Spawned as a
+    # subprocess so the mix task's `exit({:shutdown, N})` can't crash this
+    # GenServer. Async — does not block the learning cycle.
+    maybe_verify_action_shas()
+
     now = DateTime.utc_now()
     total = outcomes_count + fleet_outcomes_count
 
@@ -178,6 +192,68 @@ defmodule Hypatia.LearningScheduler do
         proof_model_retrain_count:
           Map.get(state, :proof_model_retrain_count, 0) + if(proof_model_updated, do: 1, else: 0)
     }
+  end
+
+  # --- Action-SHA verification (companion to :known_fake_action_sha rule) ----
+
+  # Runs `mix hypatia.verify_action_shas` at most once per 24 hours. The mix
+  # task itself maintains a SHA→{real|fake} cache so re-runs only call
+  # `gh api` for new pins.
+  #
+  # Spawned as a subprocess so the mix task's `exit({:shutdown, 2})` on
+  # fakes-found cannot crash this GenServer. Fully async (Task.start,
+  # no return value) — the learning cycle never waits on it.
+  defp maybe_verify_action_shas do
+    if action_sha_verify_stale?() do
+      Task.start(fn -> run_action_sha_verification() end)
+    end
+  end
+
+  defp action_sha_verify_stale? do
+    case File.stat(@action_sha_cache_path) do
+      {:ok, %{mtime: mtime}} ->
+        # mtime is an erlang :calendar.datetime tuple in UTC
+        cache_secs = :calendar.datetime_to_gregorian_seconds(mtime)
+        now_secs = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
+        now_secs - cache_secs > @action_sha_verify_interval_seconds
+
+      {:error, _} ->
+        # No cache yet → run on first cycle
+        true
+    end
+  rescue
+    e ->
+      Logger.warning("LearningScheduler: action_sha cache stat failed: #{inspect(e)}")
+      false
+  end
+
+  defp run_action_sha_verification do
+    Logger.info("LearningScheduler: running daily action-SHA verification...")
+
+    try do
+      case System.cmd("mix", ["hypatia.verify_action_shas", "--quiet"],
+             stderr_to_stdout: true
+           ) do
+        {_output, 0} ->
+          Logger.info("LearningScheduler: action_sha verify clean (zero fakes)")
+
+        {output, 2} ->
+          # Exit 2 = fakes-found. Surface the count and a clipped sample.
+          Logger.warning(
+            "LearningScheduler: action_sha verify FOUND FAKES — " <>
+              String.slice(output, 0, 500)
+          )
+
+        {output, code} ->
+          Logger.warning(
+            "LearningScheduler: action_sha verify exit=#{code} — " <>
+              String.slice(output, 0, 200)
+          )
+      end
+    rescue
+      e ->
+        Logger.warning("LearningScheduler: action_sha verify crashed: #{inspect(e)}")
+    end
   end
 
   # --- N5: ProverRecommender retraining from VeriSimDB proof_attempts --------
