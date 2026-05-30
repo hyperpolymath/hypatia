@@ -10,6 +10,52 @@ https://semver.org/[Semantic Versioning].
 
 == [Unreleased]
 
+=== Added
+
+==== `WorkflowAudit` rules WF014–WF017 (2026-05-30, PRs #393 + #396)
+
+Four new forward-detection rules surfacing patterns root-fixed in
+companion `hyperpolymath/standards` PRs. All four smoke-tested for
+both sensitivity (positive case fires) and specificity (inverse case
+silent); see the per-rule `@doc` blocks in `lib/rules/workflow_audit.ex`
+for the test matrix.
+
+* **WF014** `scorecard_publish_with_run_step` (#393) — fires when a
+  job uses `ossf/scorecard-action` with `publish_results: true` AND
+  contains a `run:` step in the same job. The OSSF publish endpoint
+  enforces "scorecard job must only have steps with uses"; any
+  co-located `run:` step fails the publish + the whole workflow run.
+  Caught 49 estate repos on the 2026-05-30 audit; template fix in
+  `standards#304`.
+* **WF015** `nonroot_container_checkout_eacces` (#393) — fires when
+  `container.image:` is on the curated non-root-user list
+  (`coqorg/coq`, `leanprover/lean4`, `makarius/isabelle`, `haskell:`,
+  `rocker/r-`, `jekyll/jekyll`) AND uses `actions/checkout` AND
+  lacks `container.options: --user root`. Caught ephapax `coq-build.yml`
+  where the checkout post-step failed with EACCES writing
+  `/__w/_temp/_runner_file_commands/` as the non-root container user.
+  Does NOT fire on generic `ubuntu:22.04` / `node:18` / `alpine:latest`
+  (root by default).
+* **WF016** `orphan_reusable_sha_pin` (#393) — data-driven rule;
+  detects callers pinning to known-orphan SHAs of
+  `hyperpolymath/standards/.github/workflows/<name>-reusable.yml`.
+  Initial orphan list: `hypatia-scan-reusable.yml@97df7621*` +
+  `rust-ci-reusable.yml@4fdf4314*`. Caught 178 estate repos; fan-out
+  recipe in `audit-hypatia-pin-orphan-2026-05-27.adoc`.
+* **WF017** `secret_action_without_presence_gate` (#396) — fires
+  when a workflow step uses one of the curated
+  `@secret_consuming_actions` (`webfactory/ssh-agent`,
+  `peter-evans/repository-dispatch`,
+  `peter-evans/create-pull-request`,
+  `actions-ecosystem/action-create-comment`) with `${{ secrets.X }}`
+  as its primary input AND lacks an `if: secrets.X != ''` gate.
+  Caught Mirror radicle (26 repos) + Instant Sync (39 repos) on the
+  2026-05-30 audit; source-level fix in `standards#305`.
+
+The `audit/3` entry point in `lib/rules/workflow_audit.ex` was
+extended to thread the four new check functions into its return
+`findings` list and the count summary fields.
+
 === Changed
 
 ==== docs/ second-pass bucketing (2026-05-25, post-#315)
