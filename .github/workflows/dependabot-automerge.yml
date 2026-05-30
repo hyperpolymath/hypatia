@@ -45,6 +45,10 @@ permissions:
                   # elevate to write only on the job that performs auto-merge.
   # NB: keep narrow — do NOT add secrets: read or id-token: write here.
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   automerge:
     # Only run for PRs actually authored by Dependabot.
