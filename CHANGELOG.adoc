@@ -12,6 +12,18 @@ https://semver.org/[Semantic Versioning].
 
 === Added
 
+==== `WorkflowAudit` rule `WF021` concurrency-missing-readonly (2026-05-30, #365)
+
+Flags a read-only check workflow (runs on `pull_request`/`push`, with a
+`permissions:` block carrying no `: write` scope) that lacks a top-level
+`concurrency:` block — rapid-push PRs then queue redundant runs. The
+read-only gate plus a publisher/mutator skip-list (release, npm/jsr publish,
+Pages deploy, repo mirror/sync, `git push`) keep out workflows where
+`cancel-in-progress` would be unsafe. Threaded into `audit/3`; covered in
+`test/workflow_audit_test.exs` for sensitivity (PR check missing concurrency)
+and specificity (concurrency present, publisher, write-scoped). Verified to
+produce zero findings on hypatia's own workflows. Cohort hypatia#333, pattern 6.
+
 ==== `CicdRules` rule `duplicate_cron_schedule` (2026-05-30, #362)
 
 Flags workflows whose `on.schedule` carries redundant `cron:` triggers: two

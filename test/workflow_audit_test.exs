@@ -465,4 +465,68 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert [] = WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
     end
   end
+
+  describe "check_concurrency_missing_readonly/1 (WF021)" do
+    test "flags a read-only PR/push check workflow with no concurrency" do
+      wf = """
+      name: CI
+      on:
+        pull_request:
+      permissions: read-all
+      jobs:
+        test:
+          runs-on: ubuntu-latest
+          steps:
+            - run: echo hi
+      """
+
+      [f] = WorkflowAudit.check_concurrency_missing_readonly(%{"ci.yml" => wf})
+      assert f.rule == "WF021"
+      assert f.severity == :low
+      assert f.file == "ci.yml"
+    end
+
+    test "silent when a top-level concurrency block is present" do
+      wf = """
+      name: CI
+      on:
+        pull_request:
+      permissions: read-all
+      concurrency:
+        group: g-${{ github.ref }}
+        cancel-in-progress: true
+      jobs: {}
+      """
+
+      assert [] = WorkflowAudit.check_concurrency_missing_readonly(%{"ci.yml" => wf})
+    end
+
+    test "silent for a publisher workflow (cancelling a release is unsafe)" do
+      wf = """
+      name: Release
+      on:
+        push:
+      permissions: read-all
+      jobs:
+        publish:
+          steps:
+            - run: npm publish
+      """
+
+      assert [] = WorkflowAudit.check_concurrency_missing_readonly(%{"release.yml" => wf})
+    end
+
+    test "silent when the workflow has a write permission scope" do
+      wf = """
+      name: Label
+      on:
+        pull_request:
+      permissions:
+        pull-requests: write
+      jobs: {}
+      """
+
+      assert [] = WorkflowAudit.check_concurrency_missing_readonly(%{"labeler.yml" => wf})
+    end
+  end
 end
