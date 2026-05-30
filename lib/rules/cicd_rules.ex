@@ -108,8 +108,11 @@ defmodule Hypatia.Rules.CicdRules do
     #     `extensions/vscode/`, or `clients/vscode/`). Blocked on the
     #     AffineScript VSCode-extension API binding (top-50 roadmap);
     #     carve-out unblocks the policy gate until bindings ship.
-    %{id: :typescript_detected, glob: "*.ts",
-      reason: "TypeScript banned in NEW code -- use AffineScript (org policy 2026-04-30; existing TS grandfathered while in-flight migration proceeds, see project_estate_ts_to_affinescript_2026_05_28)",
+    %{
+      id: :typescript_detected,
+      glob: "*.ts",
+      reason:
+        "TypeScript banned in NEW code -- use AffineScript (org policy 2026-04-30; existing TS grandfathered while in-flight migration proceeds, see project_estate_ts_to_affinescript_2026_05_28)",
       # check_pattern uses String.contains?/2 so these entries match as
       # substrings anywhere in the file path — both directory prefixes
       # (e.g., "/bindings/deno/") and suffix patterns (e.g., ".d.ts",
@@ -153,10 +156,223 @@ defmodule Hypatia.Rules.CicdRules do
         # `*/clients/vscode/`. The bare `/vscode/` substring suffices since
         # `String.contains?/2` matches any path containing it.
         "/vscode/"
-      ]},
-    %{id: :rescript_detected, glob: "*.res", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
-    %{id: :rescript_interface_detected, glob: "*.resi", reason: "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant)"},
-    %{id: :nodejs_detected, glob: "package-lock.json", reason: "Node.js banned -- use Deno"},
+      ]
+    },
+    # ReScript ban (org policy 2026-05-25). In-flight estate migration
+    # tracked under hyperpolymath/standards#252 + STEPS #260-#280.
+    # Path-prefix allowlist covers eight classes of legitimate `.res` /
+    # `.resi` presence (mirrors TS 9-class canon adapted for ReScript):
+    #
+    # (1) Tooling configs — `bsconfig.json`, `*.config.res` are build
+    #     orchestration, not application code.
+    # (2) Upstream forks not estate-authored — `rescript/` (compiler),
+    #     `servers/`, `repos-monorepo/`, `linguist/` (samples are ML
+    #     training data).
+    # (3) Archived repos — `hyperpolymath-archive/**` cannot accept PRs.
+    # (4) Vendored package-manager deps — `**/deps/**`, `**/node_modules/**`.
+    # (5) Editor-host extensions — `**/vscode/**` blocked on the
+    #     AffineScript VSCode-extension API binding (top-50 roadmap).
+    # (6) Compiled output — `**/lib/js/**`, `**/lib/es6/**`, `**/lib/bs/**`
+    #     are bsc compilation targets, not source.
+    # (7) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
+    #     parallel to TS class 5.
+    # (8) Telegraf carve-out — `avow-protocol/telegram-bot/avow-telegram-bot/`
+    #     parallel to TS class 3 if a `.res` file appears for the bot.
+    %{
+      id: :rescript_detected,
+      glob: "*.res",
+      reason:
+        "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant; in-flight migration tracked under standards#252)",
+      path_allow_prefixes: [
+        # (1) Tooling configs
+        "bsconfig.json",
+        ".config.res",
+        # (2) Upstream forks
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        "linguist/",
+        # (3) Archived
+        "hyperpolymath-archive/",
+        # (4) Vendored deps
+        "/deps/",
+        "/node_modules/",
+        # (5) Editor-host extensions
+        "/vscode/",
+        # (6) Compiled output
+        "/lib/js/",
+        "/lib/es6/",
+        "/lib/bs/",
+        # (7) Bootstrap shims
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        # (8) Telegraf carve-out
+        "avow-protocol/telegram-bot/avow-telegram-bot/"
+      ]
+    },
+    %{
+      id: :rescript_interface_detected,
+      glob: "*.resi",
+      reason:
+        "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant; in-flight migration tracked under standards#252)",
+      path_allow_prefixes: [
+        # Same eight classes as :rescript_detected
+        "bsconfig.json",
+        ".config.res",
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        "linguist/",
+        "hyperpolymath-archive/",
+        "/deps/",
+        "/node_modules/",
+        "/vscode/",
+        "/lib/js/",
+        "/lib/es6/",
+        "/lib/bs/",
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        "avow-protocol/telegram-bot/avow-telegram-bot/"
+      ]
+    },
+    # Node.js / npm ban (org policy 2026-05-25). Matches `package-lock.json`
+    # as the canonical npm-toolchain signal. In-flight estate migration to
+    # Deno tracked under hyperpolymath/standards#253 + STEPS #261-#275.
+    # Path-prefix allowlist covers six classes of legitimate lockfile
+    # presence:
+    #
+    # (1) VSCode extension host-required — `**/vscode/**`; VSCode
+    #     extension toolchain runs under Node, so its lockfile is
+    #     contractually required by the host (parallel to TS class 9).
+    # (2) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
+    #     parallel to TS class 5.
+    # (3) Upstream forks not estate-authored — `rescript/`, `servers/`,
+    #     `repos-monorepo/`, `linguist/`.
+    # (4) Archived repos — `hyperpolymath-archive/**`.
+    # (5) Vendored package-manager deps — `**/deps/**`, `**/node_modules/**`.
+    # (6) Example/test fixtures — `**/example/**`, `**/examples/**`,
+    #     `**/test-fixtures/**`, `**/fixtures/**` may legitimately ship
+    #     a lockfile demonstrating an npm consumer.
+    %{
+      id: :nodejs_detected,
+      glob: "package-lock.json",
+      reason:
+        "Node.js banned -- use Deno (org policy 2026-05-25; in-flight migration tracked under standards#253)",
+      path_allow_prefixes: [
+        # (1) VSCode extension host-required
+        "/vscode/",
+        # (2) Bootstrap shims
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        # (3) Upstream forks
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        "linguist/",
+        # (4) Archived
+        "hyperpolymath-archive/",
+        # (5) Vendored deps
+        "/deps/",
+        "/node_modules/",
+        # (6) Example / test fixtures
+        "/example/",
+        "/examples/",
+        "/test-fixtures/",
+        "/fixtures/"
+      ]
+    },
+    # Unnecessarily-JavaScript ban (org policy 2026-05-25). Per policy,
+    # JavaScript is *allowed* where AffineScript cannot reach, so this rule
+    # targets the gap between current AS bindings and current JS usage —
+    # i.e., JS that COULD be AS today but isn't. In-flight estate migration
+    # tracked under hyperpolymath/standards#254 + STEPS #263-#277.
+    #
+    # SHIP MODE: HARD-BLOCK at rule level; per-PR exemption via inline
+    # `// hypatia: allow cicd_rules/javascript_detected -- <reason>`
+    # pragmas. The WARNING-first option (umbrella#254 STEP 1 design
+    # question) was decided in favour of HARD-BLOCK + extensive carve-outs;
+    # see #263 for rationale.
+    #
+    # Path-prefix allowlist covers eight classes of legitimate `.js` / `.jsx`:
+    #
+    # (1) Host-required by ecosystem — MCP servers, plugin entry points
+    #     where JS is the host contract. Exemplars: `mcp-bridge/`,
+    #     `**/plugins/**`.
+    # (2) Tooling configs — `*.config.js`, `*.config.cjs`, `*.config.mjs`
+    #     are build orchestration.
+    # (3) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
+    #     parallel to TS class 5.
+    # (4) Upstream forks — `rescript/`, `servers/`, `repos-monorepo/`,
+    #     `linguist/` (samples are ML training data).
+    # (5) Archived repos — `hyperpolymath-archive/**`.
+    # (6) Vendored package-manager deps — `**/deps/**`, `**/node_modules/**`.
+    # (7) Compiled output — `**/out/**`, `**/lib/js/**`, `**/.deno/**`
+    #     are AS / RS compile targets.
+    # (8) Host extension entry — `**/vscode/**`, `**/extensions/vscode/**`
+    #     parallel to TS class 9 (blocked on AS VSCode-extension API).
+    %{
+      id: :javascript_detected,
+      glob: "*.js",
+      reason:
+        "Unnecessarily-JavaScript banned in NEW code -- use AffineScript where bindings exist; existing JS grandfathered while in-flight migration proceeds (org policy 2026-05-25; tracked under standards#254). To suppress for an MCP/plugin-host case, use inline pragma.",
+      path_allow_prefixes: [
+        # (1) Host-required by ecosystem
+        "mcp-bridge/",
+        "/plugins/",
+        # (2) Tooling configs
+        ".config.js",
+        ".config.cjs",
+        ".config.mjs",
+        # (3) Bootstrap shims
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        # (4) Upstream forks
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        "linguist/",
+        # (5) Archived
+        "hyperpolymath-archive/",
+        # (6) Vendored deps
+        "/deps/",
+        "/node_modules/",
+        # (7) Compiled output
+        "/out/",
+        "/lib/js/",
+        "/.deno/",
+        # (8) Host extension entry
+        "/vscode/",
+        "/extensions/vscode/"
+      ]
+    },
+    %{
+      id: :javascript_jsx_detected,
+      glob: "*.jsx",
+      reason:
+        "Unnecessarily-JavaScript (JSX) banned in NEW code -- use AffineScript where bindings exist (org policy 2026-05-25; tracked under standards#254).",
+      path_allow_prefixes: [
+        # Same eight classes as :javascript_detected
+        "mcp-bridge/",
+        "/plugins/",
+        ".config.js",
+        ".config.cjs",
+        ".config.mjs",
+        "affinescript-deno-test/",
+        "affinescript-cli/",
+        "rescript/",
+        "servers/",
+        "repos-monorepo/",
+        "linguist/",
+        "hyperpolymath-archive/",
+        "/deps/",
+        "/node_modules/",
+        "/out/",
+        "/lib/js/",
+        "/.deno/",
+        "/vscode/",
+        "/extensions/vscode/"
+      ]
+    },
     # Added 2026-05-28 (audit gap §5.8): npx / npm-run in CI run-blocks
     # bypasses the lockfile-based npm detection. `npx <pkg>` downloads
     # the package fresh each run; `npm run <script>` re-enters the npm
@@ -164,10 +380,13 @@ defmodule Hypatia.Rules.CicdRules do
     # Both are npm-ban evasion. Match either at line start or after a
     # shell separator, with a trailing space-or-end to avoid prefix
     # collisions (`npxyz`, `npmrc`).
-    %{id: :npx_in_workflow,
+    %{
+      id: :npx_in_workflow,
       pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
-      reason: "npx / `npm run` banned in CI -- use `deno task` or `deno run` instead (npm fully banned 2026-05-25)",
-      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]},
+      reason:
+        "npx / `npm run` banned in CI -- use `deno task` or `deno run` instead (npm fully banned 2026-05-25)",
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]
+    },
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
     # was removed by org policy 2026-05-18). ScannerSuppression also
@@ -210,8 +429,11 @@ defmodule Hypatia.Rules.CicdRules do
     #   - /linguist/samples/** — github-linguist language-detection samples
     #   - /echidna/examples/**, /echidna/tests/live_goals/** — Coq proof
     #     examples co-located with echidna's prover tooling
-    %{id: :vlang_detected, glob: "*.v",
-      reason: "V-lang banned -- use Zig for APIs/FFIs/gateways/SDKs, Idris2 for ABIs (org policy 2026-05-28)",
+    %{
+      id: :vlang_detected,
+      glob: "*.v",
+      reason:
+        "V-lang banned -- use Zig for APIs/FFIs/gateways/SDKs, Idris2 for ABIs (org policy 2026-05-28)",
       path_allow_prefixes: [
         # (1) R&D carve-out
         "developer-ecosystem/v-ecosystem/",
@@ -239,8 +461,11 @@ defmodule Hypatia.Rules.CicdRules do
         "/HOL/examples/PSL/",
         "/echidna/examples/",
         "/echidna/tests/live_goals/"
-      ]},
-    %{id: :vmod_detected, glob: "v.mod",
+      ]
+    },
+    %{
+      id: :vmod_detected,
+      glob: "v.mod",
       reason: "V-lang `v.mod` manifest banned -- use Zig `build.zig.zon` (org policy 2026-05-28)",
       path_allow_prefixes: [
         "developer-ecosystem/v-ecosystem/",
@@ -254,16 +479,19 @@ defmodule Hypatia.Rules.CicdRules do
         "/v-client",
         # Archived repos
         "polystack/"
-      ]},
+      ]
+    },
     # Added 2026-05-28 (audit gap §5.2): catches V-lang invocation in CI
     # workflow run-blocks even when no `.v` / `v.mod` file is tracked.
     # Matches `v build` / `v test` / `v run` as a whole command at line
     # start or after a shell separator (`&&`/`||`/`;`/`|`/newline). The
     # word-boundary anchor and the `[[:space:]]` lookahead prevent false
     # positives on `vbuild`, `vector`, `verify`, etc.
-    %{id: :v_build_in_ci,
+    %{
+      id: :v_build_in_ci,
       pattern: ~r/(?:^|[\s;&|])v[[:space:]]+(build|test|run|install)\b/m,
-      reason: "V-lang banned (org policy 2026-04-10) -- migrate `v <cmd>` to `zig <cmd>` (see v-ecosystem carve-outs in :vlang_detected for exemption paths)",
+      reason:
+        "V-lang banned (org policy 2026-04-10) -- migrate `v <cmd>` to `zig <cmd>` (see v-ecosystem carve-outs in :vlang_detected for exemption paths)",
       applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
       path_allow_prefixes: [
         "developer-ecosystem/v-ecosystem/",
@@ -275,7 +503,8 @@ defmodule Hypatia.Rules.CicdRules do
         "/v-bindings",
         "/v-client",
         "polystack/"
-      ]},
+      ]
+    },
     %{id: :makefile_detected, glob: "Makefile", reason: "Makefiles banned -- use justfile"},
     # Jekyll banned 2026-05-25 — estate uses `hyperpolymath/casket-ssg`
     # (Haskell SSG) for GitHub Pages. The pre-existing :irrelevant_jekyll
@@ -284,52 +513,104 @@ defmodule Hypatia.Rules.CicdRules do
     # they appear, so the GHA workflow is caught EVEN IF a repo also
     # carries a stale _config.yml / Gemfile pair that previously made
     # the waste pattern's "irrelevant" check return false.
-    %{id: :jekyll_workflow_detected, glob: "jekyll.yml",
-      reason: "Jekyll banned -- migrate GitHub Pages to casket-ssg (hyperpolymath/casket-ssg). See affinescript/.github/workflows/casket-pages.yml for the canonical pattern."},
-    %{id: :jekyll_gh_pages_workflow_detected, glob: "jekyll-gh-pages.yml",
-      reason: "Jekyll banned -- migrate GitHub Pages to casket-ssg (hyperpolymath/casket-ssg). See affinescript/.github/workflows/casket-pages.yml for the canonical pattern."},
-    %{id: :jekyll_config_detected, glob: "_config.yml",
-      reason: "Jekyll banned -- _config.yml is Jekyll's site config. Migrate to casket-ssg (hyperpolymath/casket-ssg)."},
-    %{id: :gemfile_detected, glob: "Gemfile",
-      reason: "Gemfile banned (no Ruby/Jekyll in estate) -- if this is for Jekyll, migrate to casket-ssg (hyperpolymath/casket-ssg). If for non-Jekyll Ruby, file an exemption request: Ruby itself is not in the allowed-language table."},
+    %{
+      id: :jekyll_workflow_detected,
+      glob: "jekyll.yml",
+      reason:
+        "Jekyll banned -- migrate GitHub Pages to casket-ssg (hyperpolymath/casket-ssg). See affinescript/.github/workflows/casket-pages.yml for the canonical pattern."
+    },
+    %{
+      id: :jekyll_gh_pages_workflow_detected,
+      glob: "jekyll-gh-pages.yml",
+      reason:
+        "Jekyll banned -- migrate GitHub Pages to casket-ssg (hyperpolymath/casket-ssg). See affinescript/.github/workflows/casket-pages.yml for the canonical pattern."
+    },
+    %{
+      id: :jekyll_config_detected,
+      glob: "_config.yml",
+      reason:
+        "Jekyll banned -- _config.yml is Jekyll's site config. Migrate to casket-ssg (hyperpolymath/casket-ssg)."
+    },
+    %{
+      id: :gemfile_detected,
+      glob: "Gemfile",
+      reason:
+        "Gemfile banned (no Ruby/Jekyll in estate) -- if this is for Jekyll, migrate to casket-ssg (hyperpolymath/casket-ssg). If for non-Jekyll Ruby, file an exemption request: Ruby itself is not in the allowed-language table."
+    },
     # CANONICAL DETECTION: this entry mirrors WH004 in workflow_hardening.ex
     # for the fast-path commit-gate. WH004 is the authoritative scanner
     # (per audit 2026-05-28 Part 3.1) — its regex + exempt-slug logic
     # is the source of truth. workflow_audit/check_unpinned_actions
     # delegates to WH004. Any rule-logic change should land in WH004
     # first; this entry follows.
-    %{id: :unpinned_action,
+    %{
+      id: :unpinned_action,
       pattern: ~r/uses:\s+[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.\/-]+@(v[0-9][a-zA-Z0-9.-]*|main|master)/,
-      reason: "GitHub Actions and reusable workflows must be SHA-pinned (canonical detection: WH004 in workflow_hardening.ex)"},
-    %{id: :missing_permissions, pattern: ~r/^permissions:/m, negative: true,
-      reason: "Workflows must declare permissions"},
-    %{id: :missing_spdx, pattern: ~r/^# SPDX-License-Identifier:/m, negative: true,
-      reason: "Files must have SPDX headers"},
+      reason:
+        "GitHub Actions and reusable workflows must be SHA-pinned (canonical detection: WH004 in workflow_hardening.ex)"
+    },
+    %{
+      id: :missing_permissions,
+      pattern: ~r/^permissions:/m,
+      negative: true,
+      reason: "Workflows must declare permissions"
+    },
+    %{
+      id: :missing_spdx,
+      pattern: ~r/^# SPDX-License-Identifier:/m,
+      negative: true,
+      reason: "Files must have SPDX headers"
+    },
     # --- Rules derived from 2026-03-16 session dogfooding ---
-    %{id: :agpl_license, pattern: ~r/SPDX-License-Identifier:\s*AGPL-3\.0/,
+    %{
+      id: :agpl_license,
+      pattern: ~r/SPDX-License-Identifier:\s*AGPL-3\.0/,
       reason: "AGPL-3.0 replaced by MPL-2.0",
-      exception_repos: ["game-server-admin", "idaptik", "airborne-submarine-squadron"]},
-    %{id: :innerhtml_usage, pattern: ~r/\.innerHTML\s*=|document\.write\(/,
+      exception_repos: ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
+    },
+    %{
+      id: :innerhtml_usage,
+      pattern: ~r/\.innerHTML\s*=|document\.write\(/,
       reason: "innerHTML/document.write banned -- use rescript-dom-mounter SafeDOM",
-      applies_to: ["*.js", "*.res"]},
-    %{id: :eval_in_shell, pattern: ~r/\beval\b/,
+      applies_to: ["*.js", "*.res"]
+    },
+    %{
+      id: :eval_in_shell,
+      pattern: ~r/\beval\b/,
       reason: "eval banned in shell scripts -- use direct expansion or arrays",
-      applies_to: ["*.sh"]},
-    %{id: :download_then_run_shell, pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
+      applies_to: ["*.sh"]
+    },
+    %{
+      id: :download_then_run_shell,
+      pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
       reason: "download-then-run banned -- verify checksum/signature before execution",
-      applies_to: ["*.sh", "*.yml", "*.yaml"]},
-    %{id: :js_insecure_random_security_context,
+      applies_to: ["*.sh", "*.yml", "*.yaml"]
+    },
+    %{
+      id: :js_insecure_random_security_context,
       pattern: ~r/(?i)\b(session|token|nonce|secret|auth|csrf)\w*\b\s*[:=][^\n]*Math\.random\(/,
-      reason: "Math.random in security-sensitive context -- use crypto.randomUUID/getRandomValues",
-      applies_to: ["*.js", "*.ts"]},
-    %{id: :hardcoded_tmp, pattern: ~r/["'\/]tmp\//,
+      reason:
+        "Math.random in security-sensitive context -- use crypto.randomUUID/getRandomValues",
+      applies_to: ["*.js", "*.ts"]
+    },
+    %{
+      id: :hardcoded_tmp,
+      pattern: ~r/["'\/]tmp\//,
       reason: "Hardcoded /tmp/ paths -- use mktemp",
-      applies_to: ["*.sh"], exception: "Containerfile"},
-    %{id: :template_placeholder, pattern: ~r/\{\{(REPO|OWNER|FORGE|AUTHOR)\}\}/,
+      applies_to: ["*.sh"],
+      exception: "Containerfile"
+    },
+    %{
+      id: :template_placeholder,
+      pattern: ~r/\{\{(REPO|OWNER|FORGE|AUTHOR)\}\}/,
       reason: "Unfilled RSR template placeholder",
-      exception: "rsr-template-repo"},
-    %{id: :deno_all_perms, pattern: ~r/deno\s+run\s+-A\b/,
-      reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"},
+      exception: "rsr-template-repo"
+    },
+    %{
+      id: :deno_all_perms,
+      pattern: ~r/deno\s+run\s+-A\b/,
+      reason: "Deno -A (all permissions) banned -- use specific --allow-* flags"
+    },
     # Added 2026-05-28 (audit gap §5.3): HTTP URLs in docs/prose files.
     # `js_http_url_in_code`, `ncl_http_url`, `erlang_insecure_httpc`
     # cover code contexts; this rule covers Markdown/AsciiDoc/RST where
@@ -337,13 +618,20 @@ defmodule Hypatia.Rules.CicdRules do
     # `http://www.w3.org/...` XML-namespace pattern (which is identifier-
     # only, not a navigable URL). Severity :medium (advisory; flagrant
     # uses become RFC-9116 / RSR violations).
-    %{id: :http_in_docs,
-      pattern: ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
-      reason: "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
-      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]},
-    %{id: :mu_plugin_no_guard, pattern: ~r/define\(\s*['"]WP_DEBUG['"]/,
+    %{
+      id: :http_in_docs,
+      pattern:
+        ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
+      reason:
+        "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
+      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]
+    },
+    %{
+      id: :mu_plugin_no_guard,
+      pattern: ~r/define\(\s*['"]WP_DEBUG['"]/,
       reason: "WordPress mu-plugins must guard constants with defined() check",
-      applies_to: ["*/mu-plugins/*.php"]}
+      applies_to: ["*/mu-plugins/*.php"]
+    }
   ]
 
   def blocked_patterns, do: @blocked_patterns
@@ -351,7 +639,10 @@ defmodule Hypatia.Rules.CicdRules do
   def check_commit_blocks(files_changed) do
     Enum.flat_map(@blocked_patterns, fn pattern ->
       matches = check_pattern(pattern, files_changed)
-      if matches != [], do: [%{rule: pattern.id, reason: pattern.reason, files: matches}], else: []
+
+      if matches != [],
+        do: [%{rule: pattern.id, reason: pattern.reason, files: matches}],
+        else: []
     end)
   end
 
@@ -470,9 +761,14 @@ defmodule Hypatia.Rules.CicdRules do
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {line, n} ->
       cond do
-        not Regex.match?(rule.pattern, line) -> []
-        ignored?(rule.id, lines, n) -> []
-        true -> [%{rule: rule.id, reason: rule.reason, file: rel, line: n, match: String.trim(line)}]
+        not Regex.match?(rule.pattern, line) ->
+          []
+
+        ignored?(rule.id, lines, n) ->
+          []
+
+        true ->
+          [%{rule: rule.id, reason: rule.reason, file: rel, line: n, match: String.trim(line)}]
       end
     end)
   end
@@ -514,72 +810,176 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @waste_patterns [
-    %{id: :duplicate_workflow, severity: :medium, auto_fixable: true,
-      description: "Multiple workflows doing same thing"},
-    %{id: :unused_publish_workflows, severity: :low, auto_fixable: true,
-      description: "5+ platform-specific publish workflows"},
-    %{id: :mirror_missing_secrets, severity: :medium, auto_fixable: true,
-      description: "mirror.yml exists but no GITLAB_SSH_KEY/BITBUCKET_SSH_KEY"},
-    %{id: :npm_in_workflow, severity: :high, auto_fixable: true,
-      description: "npm install/pnpm despite npm-bun-blocker.yml"},
-    %{id: :spec_repo_full_ci, severity: :medium, auto_fixable: true,
-      description: "Spec-only repo with 10+ workflows"},
-    %{id: :semgrep_language_mismatch, severity: :medium, auto_fixable: true,
-      description: "semgrep.yml in repos without Python/Go/JS"},
-    %{id: :excessive_workflow_count, severity: :low, auto_fixable: false,
-      description: "More than 15 workflows -- consolidate"},
-    %{id: :missing_directory_workflow, severity: :low, auto_fixable: true,
-      description: "zig-ffi.yml workflow but no zig/ directory"},
+    %{
+      id: :duplicate_workflow,
+      severity: :medium,
+      auto_fixable: true,
+      description: "Multiple workflows doing same thing"
+    },
+    %{
+      id: :unused_publish_workflows,
+      severity: :low,
+      auto_fixable: true,
+      description: "5+ platform-specific publish workflows"
+    },
+    %{
+      id: :mirror_missing_secrets,
+      severity: :medium,
+      auto_fixable: true,
+      description: "mirror.yml exists but no GITLAB_SSH_KEY/BITBUCKET_SSH_KEY"
+    },
+    %{
+      id: :npm_in_workflow,
+      severity: :high,
+      auto_fixable: true,
+      description: "npm install/pnpm despite npm-bun-blocker.yml"
+    },
+    %{
+      id: :spec_repo_full_ci,
+      severity: :medium,
+      auto_fixable: true,
+      description: "Spec-only repo with 10+ workflows"
+    },
+    %{
+      id: :semgrep_language_mismatch,
+      severity: :medium,
+      auto_fixable: true,
+      description: "semgrep.yml in repos without Python/Go/JS"
+    },
+    %{
+      id: :excessive_workflow_count,
+      severity: :low,
+      auto_fixable: false,
+      description: "More than 15 workflows -- consolidate"
+    },
+    %{
+      id: :missing_directory_workflow,
+      severity: :low,
+      auto_fixable: true,
+      description: "zig-ffi.yml workflow but no zig/ directory"
+    },
 
     # Workflow hygiene: irrelevant template workflows
-    %{id: :irrelevant_ts_blocker, severity: :low, auto_fixable: true,
-      description: "ts-blocker.yml in repo with no TypeScript or JavaScript"},
-    %{id: :irrelevant_npm_blocker, severity: :low, auto_fixable: true,
-      description: "npm-bun-blocker.yml in repo with no JS package ecosystem"},
-    %{id: :irrelevant_jekyll, severity: :medium, auto_fixable: true,
-      description: "Jekyll workflow in repo with no _config.yml or Gemfile (estate policy bans Jekyll; replacement is casket-ssg)"},
-    %{id: :irrelevant_guix_nix, severity: :low, auto_fixable: true,
-      description: "guix-nix-policy.yml in repo with no Guix or Nix configuration"},
-    %{id: :irrelevant_wellknown, severity: :low, auto_fixable: true,
-      description: "wellknown-enforcement.yml in repo with no .well-known/ directory"},
-    %{id: :irrelevant_rsr_antipattern, severity: :low, auto_fixable: true,
-      description: "rsr-antipattern.yml in repo without RSR markers"},
-    %{id: :redundant_scorecard_enforcer, severity: :low, auto_fixable: true,
-      description: "scorecard-enforcer.yml redundant with scorecard.yml"},
-    %{id: :redundant_instant_sync, severity: :low, auto_fixable: true,
-      description: "instant-sync.yml redundant with mirror.yml"},
-    %{id: :redundant_security_policy_wf, severity: :info, auto_fixable: true,
-      description: "security-policy.yml checking for SECURITY.md that already exists"},
+    %{
+      id: :irrelevant_ts_blocker,
+      severity: :low,
+      auto_fixable: true,
+      description: "ts-blocker.yml in repo with no TypeScript or JavaScript"
+    },
+    %{
+      id: :irrelevant_npm_blocker,
+      severity: :low,
+      auto_fixable: true,
+      description: "npm-bun-blocker.yml in repo with no JS package ecosystem"
+    },
+    %{
+      id: :irrelevant_jekyll,
+      severity: :medium,
+      auto_fixable: true,
+      description:
+        "Jekyll workflow in repo with no _config.yml or Gemfile (estate policy bans Jekyll; replacement is casket-ssg)"
+    },
+    %{
+      id: :irrelevant_guix_nix,
+      severity: :low,
+      auto_fixable: true,
+      description: "guix-nix-policy.yml in repo with no Guix or Nix configuration"
+    },
+    %{
+      id: :irrelevant_wellknown,
+      severity: :low,
+      auto_fixable: true,
+      description: "wellknown-enforcement.yml in repo with no .well-known/ directory"
+    },
+    %{
+      id: :irrelevant_rsr_antipattern,
+      severity: :low,
+      auto_fixable: true,
+      description: "rsr-antipattern.yml in repo without RSR markers"
+    },
+    %{
+      id: :redundant_scorecard_enforcer,
+      severity: :low,
+      auto_fixable: true,
+      description: "scorecard-enforcer.yml redundant with scorecard.yml"
+    },
+    %{
+      id: :redundant_instant_sync,
+      severity: :low,
+      auto_fixable: true,
+      description: "instant-sync.yml redundant with mirror.yml"
+    },
+    %{
+      id: :redundant_security_policy_wf,
+      severity: :info,
+      auto_fixable: true,
+      description: "security-policy.yml checking for SECURITY.md that already exists"
+    },
 
     # Standalone workflows subsumed by governance-reusable.yml (per the
     # hyperpolymath/standards governance-reusable.yml header). When
     # `governance.yml` is present in a repo, every name in
     # @subsumed_standalones below is redundant — its logic runs via the
     # reusable and the standalone copy drifts independently.
-    %{id: :redundant_subsumed_standalone, severity: :medium, auto_fixable: true,
-      description: "Standalone workflow whose logic is already exercised by governance.yml (calls governance-reusable.yml)"},
+    %{
+      id: :redundant_subsumed_standalone,
+      severity: :medium,
+      auto_fixable: true,
+      description:
+        "Standalone workflow whose logic is already exercised by governance.yml (calls governance-reusable.yml)"
+    },
 
     # rust-ci.yml exists but the repo has no Cargo.toml at root and no .rs
     # files anywhere — guaranteed install/build failure. Cousin of
     # :missing_rust_ci, which catches the inverse (Cargo.toml without CI).
-    %{id: :irrelevant_rust_ci, severity: :high, auto_fixable: true,
-      description: "rust-ci.yml in repo with no Cargo.toml at root and no .rs files (guaranteed install failure)"},
+    %{
+      id: :irrelevant_rust_ci,
+      severity: :high,
+      auto_fixable: true,
+      description:
+        "rust-ci.yml in repo with no Cargo.toml at root and no .rs files (guaranteed install failure)"
+    },
 
     # Missing language-appropriate CI
-    %{id: :missing_julia_ci, severity: :high, auto_fixable: true,
-      description: "Julia package without CI running Pkg.test()"},
-    %{id: :missing_rust_ci, severity: :high, auto_fixable: true,
-      description: "Rust crate without CI running cargo test"},
-    %{id: :missing_elixir_ci, severity: :medium, auto_fixable: true,
-      description: "Elixir project without CI running mix test"},
-    %{id: :missing_zig_ci, severity: :medium, auto_fixable: true,
-      description: "Zig project without CI running zig build test"},
+    %{
+      id: :missing_julia_ci,
+      severity: :high,
+      auto_fixable: true,
+      description: "Julia package without CI running Pkg.test()"
+    },
+    %{
+      id: :missing_rust_ci,
+      severity: :high,
+      auto_fixable: true,
+      description: "Rust crate without CI running cargo test"
+    },
+    %{
+      id: :missing_elixir_ci,
+      severity: :medium,
+      auto_fixable: true,
+      description: "Elixir project without CI running mix test"
+    },
+    %{
+      id: :missing_zig_ci,
+      severity: :medium,
+      auto_fixable: true,
+      description: "Zig project without CI running zig build test"
+    },
 
     # --- Rules derived from 2026-03-18 session: Maximize Value ---
-    %{id: :missing_github_actions_dependabot, severity: :medium, auto_fixable: true,
-      description: "Dependabot missing github-actions ecosystem"},
-    %{id: :missing_workflow_caching, severity: :low, auto_fixable: true,
-      description: "Setup action missing built-in caching (setup-node, setup-python, setup-zig, etc.)"}
+    %{
+      id: :missing_github_actions_dependabot,
+      severity: :medium,
+      auto_fixable: true,
+      description: "Dependabot missing github-actions ecosystem"
+    },
+    %{
+      id: :missing_workflow_caching,
+      severity: :low,
+      auto_fixable: true,
+      description:
+        "Setup action missing built-in caching (setup-node, setup-python, setup-zig, etc.)"
+    }
   ]
 
   def waste_patterns, do: @waste_patterns
@@ -623,21 +1023,19 @@ defmodule Hypatia.Rules.CicdRules do
 
     irrelevant_checks = [
       {:irrelevant_ts_blocker, "ts-blocker.yml",
-        fn -> "typescript" not in languages and "javascript" not in languages end},
+       fn -> "typescript" not in languages and "javascript" not in languages end},
       {:irrelevant_npm_blocker, "npm-bun-blocker.yml",
-        fn -> "package.json" not in files and "package-lock.json" not in files end},
+       fn -> "package.json" not in files and "package-lock.json" not in files end},
       {:irrelevant_jekyll, "jekyll.yml",
-        fn -> "_config.yml" not in files and "Gemfile" not in files end},
+       fn -> "_config.yml" not in files and "Gemfile" not in files end},
       {:irrelevant_jekyll, "jekyll-gh-pages.yml",
-        fn -> "_config.yml" not in files and "Gemfile" not in files end},
+       fn -> "_config.yml" not in files and "Gemfile" not in files end},
       {:irrelevant_guix_nix, "guix-nix-policy.yml",
-        fn -> "flake.nix" not in files and "manifest.scm" not in files end},
-      {:irrelevant_wellknown, "wellknown-enforcement.yml",
-        fn -> ".well-known" not in dirs end},
+       fn -> "flake.nix" not in files and "manifest.scm" not in files end},
+      {:irrelevant_wellknown, "wellknown-enforcement.yml", fn -> ".well-known" not in dirs end},
       {:redundant_scorecard_enforcer, "scorecard-enforcer.yml",
-        fn -> "scorecard.yml" in workflows end},
-      {:redundant_instant_sync, "instant-sync.yml",
-        fn -> "mirror.yml" in workflows end}
+       fn -> "scorecard.yml" in workflows end},
+      {:redundant_instant_sync, "instant-sync.yml", fn -> "mirror.yml" in workflows end}
     ]
 
     results =
@@ -703,7 +1101,8 @@ defmodule Hypatia.Rules.CicdRules do
       end
 
     results =
-      if "Cargo.toml" in files and not has_ci and "rust.yml" not in workflows and "build.yml" not in workflows do
+      if "Cargo.toml" in files and not has_ci and "rust.yml" not in workflows and
+           "build.yml" not in workflows do
         [%{pattern: :missing_rust_ci, auto_fixable: true} | results]
       else
         results
@@ -735,7 +1134,16 @@ defmodule Hypatia.Rules.CicdRules do
   # PMPL-1.0 / PMPL-1.0-or-later (Palimpsest MPL) added 2026-05-28 after a
   # standards sweep found 25 reusable workflow files still carrying the
   # legacy PMPL header (standards#249). Same migration target: MPL-2.0.
-  @wrong_licenses ["MIT", "Apache-2.0", "MPL-1.0", "MPL-1.0-or-later", "PMPL-1.0", "PMPL-1.0-or-later", "AGPL-3.0", "GPL-3.0"]
+  @wrong_licenses [
+    "MIT",
+    "Apache-2.0",
+    "MPL-1.0",
+    "MPL-1.0-or-later",
+    "PMPL-1.0",
+    "PMPL-1.0-or-later",
+    "AGPL-3.0",
+    "GPL-3.0"
+  ]
 
   # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
   @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
@@ -751,13 +1159,23 @@ defmodule Hypatia.Rules.CicdRules do
 
   def validate_license(spdx_id, repo_name) do
     cond do
-      double_suffix?(spdx_id) -> {:error, :spdx_double_suffix, spdx_id}
-      spdx_id == @required_spdx -> :ok
-      spdx_id == "MPL-2.0" -> :ok_fallback
+      double_suffix?(spdx_id) ->
+        {:error, :spdx_double_suffix, spdx_id}
+
+      spdx_id == @required_spdx ->
+        :ok
+
+      spdx_id == "MPL-2.0" ->
+        :ok_fallback
+
       spdx_id in ["AGPL-3.0", "AGPL-3.0-or-later"] and repo_name in @agpl_exception_repos ->
         :ok_agpl_exception
-      spdx_id in @wrong_licenses -> {:error, :wrong_license, spdx_id}
-      true -> {:warning, :unknown_license, spdx_id}
+
+      spdx_id in @wrong_licenses ->
+        {:error, :wrong_license, spdx_id}
+
+      true ->
+        {:warning, :unknown_license, spdx_id}
     end
   end
 
@@ -784,63 +1202,120 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
 
   @error_catalog %{
-    "ERR-WF-001" => %{type: :unpinned_action, severity: :high,
+    "ERR-WF-001" => %{
+      type: :unpinned_action,
+      severity: :high,
       detection: [:workflow_linter, :grep_pattern],
-      prevention: [:pre_commit_hook, :ci_check, :code_review]},
-    "ERR-WF-002" => %{type: :missing_permissions, severity: :high,
+      prevention: [:pre_commit_hook, :ci_check, :code_review]
+    },
+    "ERR-WF-002" => %{
+      type: :missing_permissions,
+      severity: :high,
       detection: [:workflow_linter, :grep_pattern],
-      prevention: [:pre_commit_hook, :ci_check, :template]},
-    "ERR-WF-003" => %{type: :missing_spdx, severity: :medium,
+      prevention: [:pre_commit_hook, :ci_check, :template]
+    },
+    "ERR-WF-003" => %{
+      type: :missing_spdx,
+      severity: :medium,
       detection: [:grep_pattern],
-      prevention: [:pre_commit_hook, :template]},
-    "ERR-LIC-001" => %{type: :spdx_double_suffix, severity: :high,
+      prevention: [:pre_commit_hook, :template]
+    },
+    "ERR-LIC-001" => %{
+      type: :spdx_double_suffix,
+      severity: :high,
       detection: [:grep_pattern, :validate_license],
-      prevention: [:pre_commit_hook, :rhodibot_regex_word_boundary]},
-    "ERR-WF-004" => %{type: :codeql_mismatch, severity: :medium,
+      prevention: [:pre_commit_hook, :rhodibot_regex_word_boundary]
+    },
+    "ERR-WF-004" => %{
+      type: :codeql_mismatch,
+      severity: :medium,
       detection: [:workflow_run_failure, :manual_review],
-      prevention: [:language_detection_hook, :ci_check]},
-    "ERR-WF-005" => %{type: :duplicate_workflow, severity: :low,
+      prevention: [:language_detection_hook, :ci_check]
+    },
+    "ERR-WF-005" => %{
+      type: :duplicate_workflow,
+      severity: :low,
       detection: [:manual_review, :file_comparison],
-      prevention: [:template_standardization]},
-    "ERR-WF-006" => %{type: :undefined_secret, severity: :high,
+      prevention: [:template_standardization]
+    },
+    "ERR-WF-006" => %{
+      type: :undefined_secret,
+      severity: :high,
       detection: [:workflow_run_failure],
-      prevention: [:secret_validation_hook, :conditional_guards]},
-    "ERR-WF-007" => %{type: :empty_workflow, severity: :low,
+      prevention: [:secret_validation_hook, :conditional_guards]
+    },
+    "ERR-WF-007" => %{
+      type: :empty_workflow,
+      severity: :low,
       detection: [:file_size_check],
-      prevention: [:template_cleanup]},
-    "ERR-WF-008" => %{type: :irrelevant_workflow, severity: :low,
+      prevention: [:template_cleanup]
+    },
+    "ERR-WF-008" => %{
+      type: :irrelevant_workflow,
+      severity: :low,
       detection: [:workflow_hygiene_scan, :language_detection],
-      prevention: [:template_customization, :hypatia_scan]},
-    "ERR-WF-009" => %{type: :redundant_workflow, severity: :low,
+      prevention: [:template_customization, :hypatia_scan]
+    },
+    "ERR-WF-009" => %{
+      type: :redundant_workflow,
+      severity: :low,
       detection: [:workflow_hygiene_scan],
-      prevention: [:template_customization]},
-    "ERR-WF-010" => %{type: :missing_language_ci, severity: :high,
+      prevention: [:template_customization]
+    },
+    "ERR-WF-010" => %{
+      type: :missing_language_ci,
+      severity: :high,
       detection: [:workflow_hygiene_scan, :language_detection],
-      prevention: [:template_ci_generation, :hypatia_scan]},
-    "ERR-DEP-001" => %{type: :vulnerable_dependency, severity: :critical,
+      prevention: [:template_ci_generation, :hypatia_scan]
+    },
+    "ERR-DEP-001" => %{
+      type: :vulnerable_dependency,
+      severity: :critical,
       detection: [:dependabot, :trivy_scan],
-      prevention: [:dependabot_auto_update, :renovate, :lockfile]},
-    "ERR-SEC-001" => %{type: :missing_branch_protection, severity: :high,
+      prevention: [:dependabot_auto_update, :renovate, :lockfile]
+    },
+    "ERR-SEC-001" => %{
+      type: :missing_branch_protection,
+      severity: :high,
       detection: [:scorecard, :gh_api_check],
-      prevention: [:ruleset, :branch_protection_api]},
-    "ERR-SEC-002" => %{type: :missing_security_md, severity: :medium,
+      prevention: [:ruleset, :branch_protection_api]
+    },
+    "ERR-SEC-002" => %{
+      type: :missing_security_md,
+      severity: :medium,
       detection: [:file_existence_check],
-      prevention: [:template]},
-    "ERR-WF-011" => %{type: :missing_github_actions_dependabot, severity: :medium,
+      prevention: [:template]
+    },
+    "ERR-WF-011" => %{
+      type: :missing_github_actions_dependabot,
+      severity: :medium,
       detection: [:file_existence_check, :content_scan],
-      prevention: [:template]},
-    "ERR-WF-012" => %{type: :missing_workflow_caching, severity: :low,
+      prevention: [:template]
+    },
+    "ERR-WF-012" => %{
+      type: :missing_workflow_caching,
+      severity: :low,
       detection: [:workflow_audit, :content_scan],
-      prevention: [:template]},
-    "ERR-WF-013" => %{type: :missing_timeout_minutes, severity: :medium,
+      prevention: [:template]
+    },
+    "ERR-WF-013" => %{
+      type: :missing_timeout_minutes,
+      severity: :medium,
       detection: [:workflow_audit, :content_scan],
-      prevention: [:template, :pre_commit_hook]},
-    "ERR-GIT-001" => %{type: :crlf_blob_without_gitattributes, severity: :medium,
+      prevention: [:template, :pre_commit_hook]
+    },
+    "ERR-GIT-001" => %{
+      type: :crlf_blob_without_gitattributes,
+      severity: :medium,
       detection: [:git_state, :content_scan],
-      prevention: [:gitattributes_template]},
-    "ERR-PR-001" => %{type: :obsolete_pr_target_sha_stale, severity: :info,
+      prevention: [:gitattributes_template]
+    },
+    "ERR-PR-001" => %{
+      type: :obsolete_pr_target_sha_stale,
+      severity: :info,
       detection: [:gh_api_check, :pr_inventory],
-      prevention: [:branch_protection]}
+      prevention: [:branch_protection]
+    }
   }
 
   def error_catalog, do: @error_catalog
