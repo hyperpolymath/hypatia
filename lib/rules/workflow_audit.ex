@@ -79,6 +79,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     scorecard_publish_run = check_scorecard_publish_run_violation(workflow_contents)
     nonroot_container_eacces = check_nonroot_container_checkout_eacces(workflow_contents)
     orphan_reusable_pins = check_orphan_standards_reusable_pin(workflow_contents)
+    ungated_secret_action = check_ungated_secret_action(workflow_contents)
 
     %{
       findings:
@@ -86,7 +87,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
           codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
           reusable_caller_context_self_checkout ++ missing_timeouts ++
-          scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins,
+          scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins ++
+          ungated_secret_action,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -102,6 +104,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       scorecard_publish_run_count: length(scorecard_publish_run),
       nonroot_container_eacces_count: length(nonroot_container_eacces),
       orphan_reusable_pin_count: length(orphan_reusable_pins),
+      ungated_secret_action_count: length(ungated_secret_action),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -798,6 +801,136 @@ defmodule Hypatia.Rules.WorkflowAudit do
         end)
       end)
     end)
+  end
+
+  # ─── WF017: Secret-consuming action without secret-presence gate ──────
+
+  # Actions whose primary input is a secret and that fail outright when
+  # the secret is empty. Each entry: `{action_prefix, param_name}` —
+  # the `param_name` is the `with:` key the action reads from.
+  #
+  # When the param value interpolates `${{ secrets.X }}` and the step has
+  # no `if: secrets.X != ''` gate (or equivalent env-based gate), the
+  # workflow fails every run on repos where the secret hasn't been
+  # propagated. The Mirror radicle (26 repos) + Instant Sync (39 repos)
+  # bugs caught by the 2026-05-30 audit were both this pattern.
+  @secret_consuming_actions [
+    {"webfactory/ssh-agent", "ssh-private-key"},
+    {"peter-evans/repository-dispatch", "token"},
+    {"peter-evans/create-pull-request", "token"},
+    {"actions-ecosystem/action-create-comment", "github_token"}
+  ]
+
+  @doc """
+  WF017: Detect a workflow step that uses a known secret-consuming
+  action with `${{ secrets.X }}` as its primary input, but lacks
+  an `if: secrets.X != ''` gate.
+
+  Caught Mirror radicle (\`webfactory/ssh-agent\` per-forge × 7 jobs) and
+  Instant Sync (\`peter-evans/repository-dispatch\`) on the 2026-05-30
+  audit — combined 65 estate repos failing on every push because the
+  required secret was missing on those repos. Fix recipe is in
+  hyperpolymath/standards#305 (source-level gate in the reusable).
+
+  Sensitivity / specificity:
+    * Specific — only fires for the curated `@secret_consuming_actions`
+      list. Generic `uses: actions/checkout` with no secret param does
+      not fire. Actions that gracefully no-op on empty secret (rare —
+      most error out) are not in the list. The list is data-driven so
+      a new entry does not require a code change.
+    * Sensitive — fires regardless of where the `if:` would appear
+      (anywhere in the step block), and works for both single-line
+      `if: secrets.X != ''` and YAML-block `if: \${{ secrets.X != '' }}`.
+      Both quote styles (\` ` `\`` and \` ' `\`) match.
+  """
+  def check_ungated_secret_action(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      stripped
+      |> extract_steps_using_known_actions()
+      |> Enum.flat_map(fn step_block ->
+        Enum.flat_map(@secret_consuming_actions, fn {action_prefix, param} ->
+          if Regex.match?(~r/uses:\s*#{Regex.escape(action_prefix)}@/, step_block) do
+            # Pull the secret name out of the `with: <param>: ${{ secrets.X }}` line.
+            case Regex.run(
+                   ~r/#{Regex.escape(param)}:\s*\$\{\{\s*secrets\.([A-Z_][A-Z0-9_]*)\s*\}\}/,
+                   step_block
+                 ) do
+              [_full, secret_name] ->
+                # Step is "gated" if there is an `if:` line in the step block
+                # that references the secret being empty/non-empty. The `if:`
+                # can be the step's leading key (`  - if: ...`) or a regular
+                # interior key (`    if: ...` after a `- uses:` head). Both
+                # quote-styles + both block / `${{ … }}` expression forms
+                # count.
+                gate_re =
+                  ~r/(?:^|\n)\s*(?:-\s+)?if:[^\n]*secrets\.#{Regex.escape(secret_name)}[^\n]*!=\s*['"]['"]?/
+
+                if Regex.match?(gate_re, step_block) do
+                  []
+                else
+                  [%{
+                    rule: "WF017",
+                    type: :secret_action_without_presence_gate,
+                    file: filename,
+                    action: action_prefix,
+                    secret: secret_name,
+                    severity: :high,
+                    reason:
+                      "Step uses `#{action_prefix}` with `#{param}: " <>
+                        "\${{ secrets.#{secret_name} }}` but has no " <>
+                        "`if: secrets.#{secret_name} != ''` gate. On repos " <>
+                        "where the secret hasn't been propagated the action " <>
+                        "fails on every push, red-maining the repo. Add the " <>
+                        "step-level gate (or env+if pattern) so the missing-" <>
+                        "secret path is a clean skip instead of a red.",
+                    fix_recipe: :add_secret_presence_gate
+                  }]
+                end
+
+              _ ->
+                []
+            end
+          else
+            []
+          end
+        end)
+      end)
+    end)
+  end
+
+  # Like `extract_checkout_blocks/1` but yields step blocks that use any
+  # of the known secret-consuming actions. Re-uses the same column-aware
+  # step-boundary detection; just changes the final filter predicate.
+  defp extract_steps_using_known_actions(content) do
+    prefixes = Enum.map(@secret_consuming_actions, fn {p, _} -> Regex.escape(p) end) |> Enum.join("|")
+    filter_re = ~r/uses:\s*(?:#{prefixes})@/
+
+    content
+    |> String.split("\n")
+    |> Enum.reduce({[], nil}, fn line, {steps, current} ->
+      cond do
+        matches = Regex.run(~r/^(\s*)-\s+/, line) ->
+          indent = matches |> Enum.at(1) |> String.length()
+          {flush_step(steps, current), {indent, [line]}}
+
+        is_tuple(current) ->
+          {step_indent, lines_acc} = current
+
+          if String.trim(line) == "" or leading_indent(line) > step_indent do
+            {steps, {step_indent, [line | lines_acc]}}
+          else
+            {flush_step(steps, current), nil}
+          end
+
+        true ->
+          {steps, current}
+      end
+    end)
+    |> then(fn {steps, current} -> flush_step(steps, current) end)
+    |> Enum.reverse()
+    |> Enum.filter(&Regex.match?(filter_re, &1))
   end
 
   # ─── Helpers ───────────────────────────────────────────────────────────
