@@ -83,6 +83,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     scorecard_wrapper_missing_perms = check_scorecard_wrapper_missing_job_permissions(workflow_contents)
     workflow_linter_self_ref = check_workflow_linter_self_reference(workflow_contents)
     codeql_missing_actions = check_codeql_missing_actions_language(workflow_contents)
+    inline_python_unanchored = check_inline_python_unanchored_regex(workflow_contents)
 
     %{
       findings:
@@ -92,7 +93,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           reusable_caller_context_self_checkout ++ missing_timeouts ++
           scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins ++
           ungated_secret_action ++ scorecard_wrapper_missing_perms ++
-          workflow_linter_self_ref ++ codeql_missing_actions,
+          workflow_linter_self_ref ++ codeql_missing_actions ++
+          inline_python_unanchored,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -112,6 +114,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       scorecard_wrapper_missing_perms_count: length(scorecard_wrapper_missing_perms),
       workflow_linter_self_ref_count: length(workflow_linter_self_ref),
       codeql_missing_actions_count: length(codeql_missing_actions),
+      inline_python_unanchored_count: length(inline_python_unanchored),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -1415,6 +1418,406 @@ defmodule Hypatia.Rules.WorkflowAudit do
         else
           []
         end
+      end)
+    end
+  end
+
+  # ─── WF021: Unanchored heading regex in inline-python workflow scripts ───
+  #
+  # When a workflow `run: |` block embeds `python3 << 'PYEOF' ... PYEOF`
+  # and that Python uses `re.search(r'<heading-shape>', line)` /
+  # `re.match(...)` to detect markdown headings, the regex MUST be
+  # anchored to `^#{1,4}\s+` (or `^#`) — otherwise prose mentions of the
+  # heading text in body content match too and the parser walks the
+  # wrong table.
+  #
+  # Caught by 2026-05-30 estate sweep: `governance-reusable.yml:179`
+  # used `re.search(r'TypeScript [Ee]xemptions', line)` unanchored;
+  # affinescript carried a `### TypeScript / JavaScript Exemptions
+  # (Approved)` heading variant that the regex didn't match, so the
+  # parser fell through to a prose mention inside a DIFFERENT section
+  # and parsed the wrong table. Every PR in affinescript failed the
+  # `governance / Language / package anti-pattern policy` check for
+  # weeks. Fixed in standards#183 by anchoring to
+  # `^#{1,4}\\s+.*TypeScript.*[Ee]xemption`.
+  #
+  # See hyperpolymath/hypatia#360.
+
+  # Heuristic: "looks like a markdown heading literal" — short token
+  # sequence with at least one capitalised word and no anchor metachar.
+  @heading_shape ~r/\bre\.(search|match)\(\s*r['"]([^'"]+)['"]/
+
+  @doc """
+  WF021: Detect a `re.search(r'<pattern>')` / `re.match(...)` call
+  inside a `python3 << 'PYEOF'` heredoc within a workflow `run:` block,
+  whose pattern looks like a markdown-heading literal but is NOT
+  anchored to `^#`.
+
+  Sensitivity / specificity:
+    * Specific — fires only when the heredoc tag is the canonical
+      `PYEOF` (matches the standards/* convention; widen the tag list
+      below if estate adopts another).
+    * Sensitive — captures the inner pattern and tests for
+      `^#`-anchoring presence (any of `^#`, `(?m)^#`, `\\A#`).
+  """
+  def check_inline_python_unanchored_regex(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      # Carve out PYEOF heredoc bodies inside `run: |` blocks.
+      Regex.scan(~r/<<\s*['"]?PYEOF['"]?\n(.*?)\nPYEOF/sm, content, capture: :all_but_first)
+      |> Enum.flat_map(fn [heredoc] ->
+        Regex.scan(@heading_shape, heredoc, capture: :all_but_first)
+        |> Enum.flat_map(fn [_kind, pattern] ->
+          looks_like_heading? =
+            Regex.match?(~r/^[A-Z][a-zA-Z]+\s+[\[A-Z]/, pattern) or
+              Regex.match?(~r/[Ee]xemption|[Ee]xception|[Aa]llow(list|ed)|[Bb]anned/, pattern)
+          anchored? =
+            Regex.match?(~r/(?:\(\?m\))?\^#/, pattern) or
+              Regex.match?(~r/\\A#/, pattern)
+
+          if looks_like_heading? and not anchored? do
+            [%{
+              rule: "WF021",
+              type: :inline_python_unanchored_heading_regex,
+              file: filename,
+              severity: :high,
+              pattern: pattern,
+              reason:
+                "Inline-python in workflow uses `re.search/match(r'#{pattern}')` " <>
+                  "that looks like a markdown heading shape but is NOT anchored to " <>
+                  "`^\#` (or `^\#{1,4}\\s+`). Without the anchor, prose mentions " <>
+                  "of the heading text inside body content also match, and the " <>
+                  "parser walks the wrong table. Caught the estate-wide " <>
+                  "`governance / Language / package anti-pattern policy` red on " <>
+                  "affinescript (standards\#183).",
+              fix_recipe: :anchor_inline_python_heading_regex
+            }]
+          else
+            []
+          end
+        end)
+      end)
+    end)
+  end
+
+  # ─── WF022: Required-check requires/imports a package only in optionalDependencies ───
+  #
+  # When a workflow job listed in branch protection's required_status_checks
+  # contains a `require("X")` (or import equivalent) call and X is in the
+  # sibling package.json's `optionalDependencies` but NOT in `dependencies`
+  # or `devDependencies`, the required check is structurally contradictory:
+  # the dep is "optional to install" but "required to pass".
+  #
+  # Worked example: affinescript editors/vscode/out/extension.cjs
+  # runtime-requires `@hyperpolymath/affine-vscode` while
+  # affinescript/editors/vscode/package.json lists it under
+  # optionalDependencies only. The vscode-smoke job WAS NOT required
+  # (correctly), but the same pattern in a required check is silent
+  # breakage. affinescript#380 fixed by embedding the adapter source at
+  # codegen time.
+  #
+  # See hyperpolymath/hypatia#361.
+
+  @doc """
+  WF022: Detect a workflow job whose `run:` step `require("X")`s a
+  package that appears in a sibling package.json's `optionalDependencies`
+  but not in `dependencies` or `devDependencies`.
+
+  Inputs:
+    * `workflow_contents` — usual map of filename => content.
+    * `package_json_map` — map of relative path (e.g. `"editors/vscode/package.json"`)
+      to parsed JSON map. Pass `%{}` to skip (rule returns `[]`).
+
+  Sensitivity / specificity:
+    * Specific — fires only when the require'd name appears in
+      `optionalDependencies` AND not in `dependencies` / `devDependencies`
+      of at least one sibling `package.json`.
+    * Sensitive — picks up `require("X")`, `require('X')`, and
+      `from "X"` / `from 'X'` ES-module imports.
+  """
+  def check_required_check_uses_optional_dep(workflow_contents, package_json_map \\ %{}) do
+    if map_size(package_json_map) == 0 do
+      []
+    else
+      # Build a single index: package name -> [paths where it's optional-only]
+      optional_only =
+        Enum.reduce(package_json_map, %{}, fn {path, parsed}, acc ->
+          opt = Map.get(parsed, "optionalDependencies", %{}) |> Map.keys() |> MapSet.new()
+          dep = Map.get(parsed, "dependencies", %{}) |> Map.keys() |> MapSet.new()
+          dev = Map.get(parsed, "devDependencies", %{}) |> Map.keys() |> MapSet.new()
+          truly_optional = MapSet.difference(opt, MapSet.union(dep, dev))
+
+          Enum.reduce(truly_optional, acc, fn name, a ->
+            Map.update(a, name, [path], &[path | &1])
+          end)
+        end)
+
+      if map_size(optional_only) == 0 do
+        []
+      else
+        Enum.flat_map(workflow_contents, fn {filename, content} ->
+          Regex.scan(~r/(?:require|from)\s*[\(\s]\s*["']([^"']+)["']/, content, capture: :all_but_first)
+          |> Enum.flat_map(fn [name] ->
+            case Map.get(optional_only, name) do
+              nil -> []
+              paths ->
+                [%{
+                  rule: "WF022",
+                  type: :required_check_uses_optional_dep,
+                  file: filename,
+                  severity: :high,
+                  package: name,
+                  package_json_paths: paths,
+                  reason:
+                    "Workflow `#{filename}` references package `#{name}` (via " <>
+                      "require/import) which is listed in `optionalDependencies` " <>
+                      "of #{Enum.join(paths, ", ")} but NOT in `dependencies` or " <>
+                      "`devDependencies`. If this workflow is a required status " <>
+                      "check, the contradiction (optional-to-install + required-" <>
+                      "to-pass) means the check silently fails when the optional " <>
+                      "package is absent. Either move the dep out of " <>
+                      "`optionalDependencies` so installs are reliable, or remove " <>
+                      "the runtime require (embed source, inline the adapter, " <>
+                      "etc.). See affinescript#380 for an example fix.",
+                  fix_recipe: :resolve_required_optional_contradiction
+                }]
+            end
+          end)
+        end)
+        |> Enum.uniq_by(fn f -> {f.file, f.package} end)
+      end
+    end
+  end
+
+  # ─── WF023: Workflow trigger references a non-existent branch ──────────
+  #
+  # For each workflow, collect `on.push.branches`, `on.pull_request.branches`,
+  # etc., and compare against the repo's actual branch set. Flag any
+  # branch name that doesn't resolve as a ref AND isn't a glob AND isn't
+  # the common default-symmetry pair (`main`/`master`).
+  #
+  # Examples: affinescript/.github/workflows/{semgrep,spark-theatre-gate}.yml
+  # had `branches: [main, master]` while the repo uses `main` exclusively
+  # — affinescript#379 dropped `master`. Same on hypatia#331 for
+  # `develop`/`master`.
+  #
+  # See hyperpolymath/hypatia#363.
+
+  @doc """
+  WF023: Detect workflow trigger branch lists that reference non-existent
+  refs.
+
+  Inputs:
+    * `workflow_contents` — usual map.
+    * `existing_branches` — MapSet of branch names that DO exist in the
+      repo. Pass an empty MapSet to skip (rule returns `[]`).
+
+  Sensitivity / specificity:
+    * Specific — never flags glob patterns (`**`, `release/*`,
+      `feature/*`) or the symmetry-pair `main`/`master` when the
+      counterpart exists.
+    * Sensitive — handles inline-list form `branches: [main, master]`
+      and YAML-list form (`- main` / `- master`).
+  """
+  def check_nonexistent_branch_in_trigger(workflow_contents, existing_branches \\ MapSet.new()) do
+    if MapSet.size(existing_branches) == 0 do
+      []
+    else
+      Enum.flat_map(workflow_contents, fn {filename, content} ->
+        # Pull `branches:` lists in both inline-array and block-list forms.
+        inline =
+          Regex.scan(~r/branches:\s*\[([^\]]+)\]/, content, capture: :all_but_first)
+          |> Enum.flat_map(fn [list_body] ->
+            list_body
+            |> String.split(",")
+            |> Enum.map(&String.trim/1)
+            |> Enum.map(&String.trim(&1, "\""))
+            |> Enum.map(&String.trim(&1, "'"))
+          end)
+
+        block =
+          Regex.scan(~r/branches:\s*\n((?:\s+-\s+[^\n]+\n)+)/, content, capture: :all_but_first)
+          |> Enum.flat_map(fn [list_body] ->
+            Regex.scan(~r/-\s+["']?([^"'\s]+)["']?/, list_body, capture: :all_but_first)
+            |> Enum.map(fn [n] -> n end)
+          end)
+
+        candidates = Enum.uniq(inline ++ block)
+
+        Enum.flat_map(candidates, fn name ->
+          cond do
+            name == "" -> []
+            String.contains?(name, "*") -> []
+            String.contains?(name, "?") -> []
+            MapSet.member?(existing_branches, name) -> []
+            # Symmetry-pair tolerance: keep main/master when counterpart exists.
+            name in ["main", "master"] and
+                Enum.any?(["main", "master"], &MapSet.member?(existing_branches, &1)) ->
+              []
+
+            true ->
+              [%{
+                rule: "WF023",
+                type: :nonexistent_branch_in_trigger,
+                file: filename,
+                severity: :low,
+                branch: name,
+                reason:
+                  "Workflow `#{filename}` triggers on branch `#{name}` which " <>
+                    "does not exist in this repo. Drop the entry to remove the " <>
+                    "dead config (avoids ambiguity for maintainers reading the " <>
+                    "trigger list).",
+                fix_recipe: :drop_dead_branch_trigger
+              }]
+          end
+        end)
+      end)
+    end
+  end
+
+  # ─── WF024: Stale `continue-on-error: true` mask tied to closed issue ──
+  #
+  # When a job carries `continue-on-error: true` with a leading comment
+  # like `# until #N lands` / `# remove when #N` / etc., and #N is now
+  # closed/merged, the mask is stale: the workflow drifts further from
+  # green main-line because the gate is severed but the reason no
+  # longer applies.
+  #
+  # See hyperpolymath/hypatia#364.
+
+  # Phrases (case-insensitive) that bind a continue-on-error to an
+  # issue's status. Each pattern captures the referenced issue number.
+  @stale_mask_phrases [
+    ~r/until\s+#(\d+)\s+(?:lands?|closes?|merges?|ships?|resolves?)/i,
+    ~r/remove\s+when\s+#(\d+)\s+/i,
+    ~r/pending\s+#(\d+)\b/i,
+    ~r/awaits?\s+#(\d+)\b/i,
+    ~r/gated\s+on\s+#(\d+)\b/i,
+    ~r/blocked\s+by\s+#(\d+)\b/i
+  ]
+
+  @doc """
+  WF024: Detect `continue-on-error: true` jobs whose leading comment
+  binds removal to a specific `#N` issue / PR.
+
+  Inputs:
+    * `workflow_contents` — usual map.
+    * `closed_issue_numbers` — MapSet of `#N` integers known to be
+      closed or merged. Findings ONLY fire when the referenced #N is
+      in this set; pass `MapSet.new()` to emit `:candidate_only`
+      findings (caller filters externally).
+
+  Sensitivity / specificity:
+    * Specific — only fires when the referenced #N is closed/merged.
+    * Sensitive — captures the issue number from any of the canonical
+      gate-comment phrasings (`until #N` / `remove when #N` /
+      `pending #N` / `awaits #N` / `gated on #N` / `blocked by #N`).
+  """
+  def check_stale_continue_on_error_mask(workflow_contents, closed_issue_numbers \\ MapSet.new()) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      # Carve out windows of [~10 lines of comments] followed by
+      # `continue-on-error: true`.
+      Regex.scan(
+        ~r/((?:^[ \t]*#[^\n]*\n){1,10})[ \t]*continue-on-error:\s*true/m,
+        content,
+        capture: :all_but_first
+      )
+      |> Enum.flat_map(fn [comments] ->
+        Enum.flat_map(@stale_mask_phrases, fn re ->
+          Regex.scan(re, comments, capture: :all_but_first)
+          |> Enum.map(fn [n_str] -> String.to_integer(n_str) end)
+        end)
+        |> Enum.uniq()
+      end)
+      |> Enum.map(fn n ->
+        is_known_closed = MapSet.member?(closed_issue_numbers, n)
+        %{
+          rule: "WF024",
+          type: :stale_continue_on_error_mask,
+          file: filename,
+          severity: if(is_known_closed, do: :medium, else: :info),
+          referenced_issue: n,
+          verdict: if(is_known_closed, do: :stale_confirmed, else: :candidate_only),
+          reason:
+            if is_known_closed do
+              "Job has `continue-on-error: true` gated on #{n}, which is now " <>
+                "closed/merged. The gating reason no longer applies — drop the " <>
+                "mask and let the job report accurately."
+            else
+              "Job has `continue-on-error: true` gated on #{n} (caller should " <>
+                "verify #{n}'s open/closed status; if closed/merged, drop the " <>
+                "mask)."
+            end,
+          fix_recipe: :drop_stale_continue_on_error
+        }
+      end)
+    end)
+  end
+
+  # ─── WF025: Stale `#N` issue references in workflow / source comments ───
+  #
+  # Scan workflow + source comments for `#N` references with phrasing
+  # patterns that bind documentation freshness to issue state (`until #N`,
+  # `pending #N`, `gated on #N`, etc.). If the referenced #N is now
+  # closed/merged, the comment is documentation rot.
+  #
+  # Companion to WF024 (WF024 is the specific case where the comment
+  # gates a `continue-on-error: true`; WF025 is the general case across
+  # all source comments).
+  #
+  # See hyperpolymath/hypatia#366.
+
+  @doc """
+  WF025: Detect comments that reference issue/PR numbers via the
+  canonical gate-phrasing patterns, where the referenced #N is now
+  closed/merged.
+
+  Inputs:
+    * `comment_contents` — map of filename => content. Caller passes
+      ANY file (workflow YAML, source code, docs) whose comment lines
+      should be scanned. Comment style is auto-detected by the scanner
+      (`#`, `//`, `--`, `;`).
+    * `closed_issue_numbers` — MapSet of closed/merged #N integers.
+
+  Sensitivity / specificity:
+    * Specific — only fires when #N is in the closed set AND the
+      reference is inside a comment AND the phrasing is one of the
+      gate-phrasing patterns.
+    * Sensitive — captures any of `until #N` / `pending #N` /
+      `gated on #N` / `awaits #N` / `blocked by #N` / `remove when #N`.
+  """
+  def check_stale_issue_ref_in_comments(comment_contents, closed_issue_numbers \\ MapSet.new()) do
+    if MapSet.size(closed_issue_numbers) == 0 do
+      []
+    else
+      Enum.flat_map(comment_contents, fn {filename, content} ->
+        # Match each line that LOOKS like a comment (any of the four
+        # comment-styles) and contains one of the gate phrases.
+        Regex.scan(~r/^[ \t]*(?:#|\/\/|--|;)[^\n]*$/m, content)
+        |> List.flatten()
+        |> Enum.flat_map(fn line ->
+          Enum.flat_map(@stale_mask_phrases, fn re ->
+            Regex.scan(re, line, capture: :all_but_first)
+            |> Enum.map(fn [n_str] -> {line, String.to_integer(n_str)} end)
+          end)
+        end)
+        |> Enum.filter(fn {_line, n} -> MapSet.member?(closed_issue_numbers, n) end)
+        |> Enum.uniq_by(fn {line, n} -> {line, n} end)
+        |> Enum.map(fn {line, n} ->
+          %{
+            rule: "WF025",
+            type: :stale_issue_ref_in_comment,
+            file: filename,
+            severity: :low,
+            referenced_issue: n,
+            comment: String.trim(line),
+            reason:
+              "Comment in `#{filename}` references #{n} via a gate-phrasing " <>
+                "pattern (`until #N` / `pending #N` / etc.), but #{n} is now " <>
+                "closed/merged. Update or delete the comment so the next reader " <>
+                "doesn't waste time looking it up.",
+            fix_recipe: :update_stale_issue_ref_comment
+          }
+        end)
       end)
     end
   end
