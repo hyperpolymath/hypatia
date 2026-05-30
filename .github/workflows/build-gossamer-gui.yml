@@ -38,6 +38,10 @@ env:
   EPHAPAX_SHA: c14c3e92a9a6bfc1074ea9d97a3ce4b5fae37501
   EPHAPAX_DIR: /tmp/ephapax
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-sources:
     name: Validate Ephapax sources exist
