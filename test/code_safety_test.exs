@@ -164,6 +164,116 @@ defmodule Hypatia.Rules.CodeSafetyTest do
     end
   end
 
+  describe "doc-comment stripping (FP suppression)" do
+    test "Idris2 ||| docstring mention of believe_me is NOT a finding" do
+      code = """
+      ||| Zero `believe_me` / `idris_crash`.
+      myProof : Refl
+      myProof = Refl
+      """
+
+      findings = CodeSafety.scan_content(code, "idris2")
+      refute Enum.any?(findings, &(&1.rule == :believe_me))
+    end
+
+    test "Idris2 ||| docstring mention of assert_total is NOT a finding" do
+      code = """
+      ||| Zero assert_total in this module.
+      total myFunc : Int
+      myFunc = 42
+      """
+
+      findings = CodeSafety.scan_content(code, "idris2")
+      refute Enum.any?(findings, &(&1.rule == :assert_total))
+    end
+
+    test "Idris2 -- line comment mention of believe_me is NOT a finding" do
+      code = """
+      -- believe_me banned by estate policy
+      myProof : Refl
+      myProof = Refl
+      """
+
+      findings = CodeSafety.scan_content(code, "idris2")
+      refute Enum.any?(findings, &(&1.rule == :believe_me))
+    end
+
+    test "Idris2 still detects believe_me in REAL code (not comment)" do
+      code = "myProof = believe_me ()"
+      findings = CodeSafety.scan_content(code, "idris2")
+      assert Enum.any?(findings, &(&1.rule == :believe_me))
+    end
+
+    test "Coq (* ... *) comment mention of Admitted is NOT a finding" do
+      code = """
+      (* This module contains no Admitted proofs. *)
+      Theorem t : 1 = 1. Proof. reflexivity. Qed.
+      """
+
+      findings = CodeSafety.scan_content(code, "coq")
+      refute Enum.any?(findings, &(&1.rule == :admitted))
+    end
+
+    test "Coq still detects Admitted in REAL code" do
+      code = "Theorem t : True. Proof. intros. Admitted."
+      findings = CodeSafety.scan_content(code, "coq")
+      assert Enum.any?(findings, &(&1.rule == :admitted))
+    end
+
+    test "Lean -- comment mention of sorry is NOT a finding" do
+      code = """
+      -- avoid sorry by all means
+      theorem t : True := trivial
+      """
+
+      findings = CodeSafety.scan_content(code, "lean")
+      refute Enum.any?(findings, &(&1.rule == :sorry))
+    end
+
+    test "Lean still detects sorry in real code" do
+      code = """
+      theorem t : True := by
+        sorry
+      """
+
+      findings = CodeSafety.scan_content(code, "lean")
+      assert Enum.any?(findings, &(&1.rule == :sorry))
+    end
+
+    test "Agda -- line comment mention of postulate is NOT a finding" do
+      code = """
+      -- postulate forbidden in this development
+      module M where
+      """
+
+      findings = CodeSafety.scan_content(code, "agda")
+      refute Enum.any?(findings, &(&1.rule == :agda_postulate))
+    end
+
+    test "Agda still detects postulate in real code" do
+      code = """
+      postulate
+        magic : Bool
+      """
+
+      findings = CodeSafety.scan_content(code, "agda")
+      assert Enum.any?(findings, &(&1.rule == :agda_postulate))
+    end
+
+    test "Idris2 `||` boolean OR is NOT a docstring (regex requires 3+ pipes)" do
+      code = """
+      andThen : Bool -> Bool -> Bool
+      andThen a b = a || b  -- boolean OR, must not trigger believe_me strip
+      myProof = believe_me ()
+      """
+
+      findings = CodeSafety.scan_content(code, "idris2")
+      # believe_me on the third line should still fire (it's real code,
+      # the `--` comment on line 2 ends BEFORE the believe_me line).
+      assert Enum.any?(findings, &(&1.rule == :believe_me))
+    end
+  end
+
   describe "scan_container_code/1" do
     test "detects wildcard CORS" do
       code = ~s(Access-Control-Allow-Origin: *)
