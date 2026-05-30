@@ -238,18 +238,30 @@ defmodule Hypatia.Rules.CicdRules do
     # Node.js / npm ban (org policy 2026-05-25). Matches `package-lock.json`
     # as the canonical npm-toolchain signal. In-flight estate migration to
     # Deno tracked under hyperpolymath/standards#253 + STEPS #261-#275.
-    # Path-prefix allowlist covers six classes of legitimate lockfile
+    # Path-prefix allowlist covers eight classes of legitimate lockfile
     # presence:
     #
-    # (1) VSCode extension host-required — `**/vscode/**`; VSCode
-    #     extension toolchain runs under Node, so its lockfile is
-    #     contractually required by the host (parallel to TS class 9).
+    # (1a) VSCode extension host-required — `**/vscode/**` (segment match);
+    #      VSCode extension toolchain runs under Node, so its lockfile is
+    #      contractually required by the host (parallel to TS class 9).
+    # (1b) VSCode-* extension repos / subdirs — `vscode-` substring covers
+    #      `vscode-extension/`, `editors/vscode-007/`, repo-root manifests
+    #      for `vscode-a2ml`, `vscode-k9` etc. Same host-required rationale
+    #      as (1a); separate prefix because the path segment varies.
+    # (1c) tree-sitter grammar npm-publish targets — `tree-sitter-` substring
+    #      covers `tree-sitter-a2ml/`, `tree-sitter-k9/`,
+    #      `editors/tree-sitter-ephapax/` etc. Class C consumer artifact:
+    #      tree-sitter grammars ship via npm with `node-gyp` native binding
+    #      because consumers (Atom/Neovim/VSCode) link the native addon.
     # (2) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
     #     parallel to TS class 5.
     # (3) Upstream forks not estate-authored — `rescript/`, `servers/`,
     #     `repos-monorepo/`, `linguist/`.
     # (4) Archived repos — `hyperpolymath-archive/**`.
-    # (5) Vendored package-manager deps — `**/deps/**`, `**/node_modules/**`.
+    # (5) Vendored package-manager deps — `**/deps/**`, `**/node_modules/**`,
+    #     `**/.lake/**` (Lean4 vendored), `**/office-addin/**` (Office.js
+    #     host-required), `**/bindings/{javascript,typescript}/**`
+    #     (consumer-facing estate exports).
     # (6) Example/test fixtures — `**/example/**`, `**/examples/**`,
     #     `**/test-fixtures/**`, `**/fixtures/**` may legitimately ship
     #     a lockfile demonstrating an npm consumer.
@@ -259,8 +271,20 @@ defmodule Hypatia.Rules.CicdRules do
       reason:
         "Node.js banned -- use Deno (org policy 2026-05-25; in-flight migration tracked under standards#253)",
       path_allow_prefixes: [
-        # (1) VSCode extension host-required
+        # (1a) VSCode extension host-required (/vscode/ as path segment)
         "/vscode/",
+        # (1b) VSCode-* extension repos / subdirs (vscode-extension/, vscode-007/,
+        #      vscode-a2ml, vscode-k9, etc. — host-required toolchain runs under
+        #      Node; lockfile is contractually required by the VSCode extension
+        #      host). Substring match covers paths like editors/vscode-007/ +
+        #      repo-root manifests for vscode-* extension repos.
+        "vscode-",
+        # (1c) tree-sitter grammar npm-publish targets — these ship via npm
+        #      with `node-gyp` native binding because every tree-sitter
+        #      consumer (Atom, Neovim's nvim-treesitter, VSCode TextMate, etc.)
+        #      links against the native addon. Class C: npm-publishable
+        #      consumer artifact, NOT estate-internal npm toolchain use.
+        "tree-sitter-",
         # (2) Bootstrap shims
         "affinescript-deno-test/",
         "affinescript-cli/",
@@ -274,6 +298,19 @@ defmodule Hypatia.Rules.CicdRules do
         # (5) Vendored deps
         "/deps/",
         "/node_modules/",
+        # (5a) Vendored Lake (Lean4) packages — `.lake/packages/**` mirrors the
+        #      `/deps/` carve-out class for Lean4's package manager
+        "/.lake/",
+        # (5b) Office add-in host-required toolchain (Office.js extensions
+        #      ship via npm because the Office host loads `.js` from a
+        #      Node-packaged manifest). Parallel to VSCode extension carve-out.
+        "/office-addin/",
+        # (5c) Estate "bindings/{javascript,typescript,deno}/" subdirs are
+        #      consumer-facing exports of estate-internal proven libraries
+        #      to npm-consuming downstreams (parallel to /bindings/deno/
+        #      under :typescript_detected). NOT estate-internal npm use.
+        "/bindings/javascript/",
+        "/bindings/typescript/",
         # (6) Example / test fixtures
         "/example/",
         "/examples/",
