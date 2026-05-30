@@ -40,7 +40,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -81,7 +81,7 @@ jobs:
           toolchain: stable
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -112,7 +112,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2.7.8
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -196,12 +196,12 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup HLint
-        uses: haskell-actions/hlint-setup@17f0f4093d35cfdbf02aab186d51d0bb8b92ddfa # v2.7.0
+        uses: haskell-actions/hlint-setup@fe9cd1cd1af94a23900c06738e73f6ddb092966a # v2.4.10
         with:
           version: '3.8'
 
       - name: Run HLint
-        uses: haskell-actions/hlint-run@75c62c3bed4ab3e4c85c64ed8f287478c5f86ce2 # v2.4.9
+        uses: haskell-actions/hlint-run@0b0024319753ba0c8b2fa21b7018ed252aed8181 # v2.4.9
         with:
           path: registry/
           fail-on: warning
