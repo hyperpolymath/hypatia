@@ -835,6 +835,102 @@ defmodule Hypatia.Rules.CicdRules do
   end
 
   # ---------------------------------------------------------------------------
+  # Scorecard Wrapper Permissions (#390)
+  # ---------------------------------------------------------------------------
+  #
+  # A `.github/workflows/scorecard.yml` that *calls* the standards
+  # `scorecard-reusable.yml` MUST grant `security-events: write` (and
+  # `id-token: write`) on the calling job. Called-workflow permissions are
+  # CAPPED by the caller, so a wrapper that omits the grant leaves
+  # `ossf/scorecard-action` unable to upload its SARIF — every scheduled
+  # Scorecard run then fails with `startup_failure` and *no logs*. That
+  # silent-CI-failure shape is exactly what Hypatia exists to catch.
+  #
+  # Estate baseline 2026-05-30: 37 affected wrappers (35 unique + 2 inert
+  # nested-monorepo copies). Prior art: julia-professional-registry#19,
+  # absolute-zero#68 (memory: feedback_scorecard_wrapper_caller_permissions).
+
+  @scorecard_wrapper_path ".github/workflows/scorecard.yml"
+  @scorecard_reusable_marker "scorecard-reusable.yml"
+  @scorecard_required_perm ~r/security-events:\s*write/
+  @scorecard_missing_perm_reason "scorecard.yml calls the standards scorecard-reusable.yml but does not grant `security-events: write` on the calling job; called-workflow permissions are capped by the caller, so ossf/scorecard-action cannot upload its SARIF and the scheduled Scorecard run fails with `startup_failure` (silent CI failure, no logs)."
+  @scorecard_missing_perm_fix "Grant the calling job `security-events: write` (and `id-token: write`); the reusable re-asserts them, but the caller caps them:\n    permissions:\n      security-events: write\n      id-token: write"
+
+  @doc """
+  Scan `repo_path` for scorecard wrappers that call the standards reusable
+  but omit the required `security-events: write` job permission (#390).
+
+  A finding is emitted for each `.github/workflows/scorecard.yml` (repo-root
+  *or* nested monorepo copy) that, in the same file:
+
+    * references `scorecard-reusable.yml` (i.e. uses the reusable), AND
+    * does NOT grant `security-events: write`.
+
+  Inline scorecard workflows that do not call the reusable are ignored by
+  construction (the first condition fails). `opts[:path_allow_prefixes]` is a
+  list of substrings; any wrapper whose relative path contains one is skipped
+  — an explicit carve-out for bespoke scorecard workflows that manage their
+  own permissions shape.
+
+  Returns `[%{rule:, severity:, file:, reason:, fix:}]`.
+  """
+  def scan_scorecard_wrapper_permissions(repo_path, opts \\ []) do
+    allow_prefixes = Keyword.get(opts, :path_allow_prefixes, [])
+
+    Path.wildcard("#{repo_path}/**/*", match_dot: true)
+    |> Enum.reject(&File.dir?/1)
+    |> Enum.map(&Path.relative_to(&1, repo_path))
+    |> Enum.filter(fn rel ->
+      not String.starts_with?(rel, ".git/") and scorecard_wrapper_path?(rel)
+    end)
+    |> Enum.reject(fn rel -> Enum.any?(allow_prefixes, &String.contains?(rel, &1)) end)
+    |> Enum.flat_map(fn rel ->
+      case File.read(Path.join(repo_path, rel)) do
+        {:ok, content} ->
+          case check_scorecard_wrapper_permissions(rel, content) do
+            {:fail, finding} -> [finding]
+            :ok -> []
+          end
+
+        {:error, _} ->
+          []
+      end
+    end)
+  end
+
+  @doc """
+  Pure predicate behind `scan_scorecard_wrapper_permissions/2`.
+
+  Given a scorecard wrapper's relative `path` and its `content`, returns
+  `{:fail, finding}` when the file calls the standards reusable but does not
+  grant `security-events: write`, or `:ok` otherwise.
+  """
+  def check_scorecard_wrapper_permissions(path, content) do
+    uses_reusable? = String.contains?(content, @scorecard_reusable_marker)
+    grants_perm? = Regex.match?(@scorecard_required_perm, content)
+
+    if uses_reusable? and not grants_perm? do
+      finding = %{
+        rule: :scorecard_wrapper_missing_job_permissions,
+        severity: :high,
+        file: path,
+        reason: @scorecard_missing_perm_reason,
+        fix: @scorecard_missing_perm_fix
+      }
+
+      {:fail, finding}
+    else
+      :ok
+    end
+  end
+
+  # True when `rel` is a scorecard wrapper workflow — the repo-root copy or
+  # any nested monorepo copy (`pkg/.github/workflows/scorecard.yml`).
+  defp scorecard_wrapper_path?(rel) do
+    rel == @scorecard_wrapper_path or String.ends_with?(rel, "/" <> @scorecard_wrapper_path)
+  end
+
+  # ---------------------------------------------------------------------------
   # CI/CD Waste Detection
   # ---------------------------------------------------------------------------
 

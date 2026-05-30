@@ -20,6 +20,7 @@ this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- feat(rules): CicdRules `scorecard_wrapper_missing_job_permissions` — flag scorecard.yml wrappers that call the standards reusable but omit `security-events: write` on the calling job (#390)
 - feat(rules): AffineScript hand-port pitfalls — HANDLE-as-fn-name + OCaml float ops (#332)
 - feat(rules): wire 4 new rule modules through the facade (#326)
 - feat(rules): ResearchExtensions (RE001-RE010) — 10 rules from Snyk/StepSecurity/Endor/academic literature (#325)

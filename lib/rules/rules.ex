@@ -423,6 +423,12 @@ defmodule Hypatia.Rules do
   defdelegate detect_waste(repo_info), to: CicdRules
 
   @doc """
+  Scan for scorecard wrappers that call the standards reusable but omit the
+  required `security-events: write` job permission (#390).
+  """
+  defdelegate scan_scorecard_wrapper_permissions(repo_path, opts \\ []), to: CicdRules
+
+  @doc """
   Run baseline-health checks (BH001-BH007): missing required_status_checks
   on main, deferred-migration TODOs in dep manifests, persistent >24h red
   baseline on main, dead action SHA pins, push-only required checks,
