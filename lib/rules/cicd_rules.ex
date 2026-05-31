@@ -305,12 +305,19 @@ defmodule Hypatia.Rules.CicdRules do
         #      ship via npm because the Office host loads `.js` from a
         #      Node-packaged manifest). Parallel to VSCode extension carve-out.
         "/office-addin/",
-        # (5c) Estate "bindings/{javascript,typescript,deno}/" subdirs are
-        #      consumer-facing exports of estate-internal proven libraries
-        #      to npm-consuming downstreams (parallel to /bindings/deno/
-        #      under :typescript_detected). NOT estate-internal npm use.
+        # (5c) Estate "bindings/{javascript,typescript,rescript,deno}/"
+        #      subdirs are consumer-facing exports of estate-internal proven
+        #      libraries to npm-consuming downstreams (parallel to
+        #      /bindings/deno/ under :typescript_detected). NOT
+        #      estate-internal npm use. The rescript variant is
+        #      host-required for the rescript-to-js compile chain (same
+        #      pattern as JS/TS consumer exports, just produced from .res
+        #      sources). Surfaced during standards#275 STEP 7 closeout
+        #      estate-wide scan (proven-servers/bindings/rescript/ was the
+        #      single uncarved hit).
         "/bindings/javascript/",
         "/bindings/typescript/",
+        "/bindings/rescript/",
         # (6) Example / test fixtures
         "/example/",
         "/examples/",
