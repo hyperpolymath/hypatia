@@ -188,6 +188,19 @@ defmodule Hypatia.Rules.CicdRules.RescriptNpmJsTest do
       assert Enum.find(results, &(&1.rule == :nodejs_detected)) == nil,
              "example/fixture lockfiles demonstrate npm consumer — not own toolchain"
     end
+
+    test "exempts */bindings/{javascript,typescript,rescript}/ consumer exports" do
+      files = [
+        "proven-servers/bindings/javascript/package-lock.json",
+        "proven-servers/bindings/typescript/package-lock.json",
+        "proven-servers/bindings/rescript/package-lock.json"
+      ]
+
+      results = CicdRules.check_commit_blocks(files)
+
+      assert Enum.find(results, &(&1.rule == :nodejs_detected)) == nil,
+             "consumer-facing language bindings under /bindings/{js,ts,res}/ ship to npm-consuming downstreams (parallel to /bindings/deno/ under :typescript_detected); the rescript variant is host-required for the rescript-to-js compile chain"
+    end
   end
 
   # ---------------------------------------------------------- Unnecessarily-JS
