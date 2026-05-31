@@ -84,6 +84,15 @@ actions = [
 ]
 
 [session-history]
+# 2026-05-31: Cohort #333 + Group-B CI/CD detection rules. Merged
+#             duplicate_cron_schedule (#362), WF021 concurrency_missing_readonly
+#             (#365), WF022 unanchored_heading_regex (#360). Reverted a duplicate
+#             #390 scorecard rule (already shipped as WF018 in #403). Added Group-B
+#             detectors SD021 workflow_branch_refs (#363), WF023
+#             stale_continue_on_error (#364), HonestCompletion stale_issue_refs
+#             (#366) — pure functions taking an injected signal (branch list /
+#             closed-issue set); the live-signal scan-flow wiring is the remaining
+#             follow-up noted on each issue. #339 was already covered by BP008.
 # 2026-05-25: PRs #314 + #315 + #319 — post-#313 batch + repo health tidy.
 #             PR #314 (15 commits, merged): M17 GNN/VAE/Sequence state/restore
 #             persistence; M18 cross-org VCL federation with policy gates; M9

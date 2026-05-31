@@ -742,4 +742,65 @@ defmodule Hypatia.Rules.StructuralDrift do
         end)
     end
   end
+
+  # ─── SD021: Workflow trigger references a non-existent branch (#363) ───
+  #
+  # `on.push.branches` / `on.pull_request.branches` entries that don't
+  # resolve to a real branch are dead config (consolidation drift). Globs
+  # and the default branch are exempt. The actual-branch list is injected by
+  # the caller (git index / GitHub API). Cohort hypatia#333, pattern 4.
+  @doc """
+  SD021: flag workflow trigger branch refs that aren't real branches.
+
+  `actual_branches` is the repo's live branch list (injected). Glob patterns
+  and `opts[:default_branch]` (default `"main"`) are exempt. Returns one
+  finding per (file, dead-branch).
+  """
+  def check_workflow_branch_refs(workflow_contents, actual_branches, opts \\ []) do
+    default = Keyword.get(opts, :default_branch, "main")
+
+    Enum.flat_map(workflow_contents, fn {file, content} ->
+      content
+      |> trigger_branches()
+      |> Enum.filter(fn b ->
+        b != default and not String.contains?(b, "*") and b not in actual_branches
+      end)
+      |> Enum.uniq()
+      |> Enum.map(fn b ->
+        %{
+          rule: "SD021",
+          file: file,
+          severity: :low,
+          reason:
+            "workflow trigger references branch `#{b}`, which is not a real branch in this repo (dead config / consolidation drift)",
+          action: :update_reference,
+          branch: b
+        }
+      end)
+    end)
+  end
+
+  defp trigger_branches(content) do
+    inline =
+      ~r/branches(?:-ignore)?:\s*\[([^\]]+)\]/
+      |> Regex.scan(content)
+      |> Enum.flat_map(fn [_, inner] -> String.split(inner, ",") end)
+      |> Enum.map(&(&1 |> String.trim() |> String.trim("\"") |> String.trim("'")))
+
+    block = content |> String.split("\n") |> branch_block_items(false, [])
+    Enum.reject(inline ++ block, &(&1 == ""))
+  end
+
+  defp branch_block_items([], _in?, acc), do: Enum.reverse(acc)
+
+  defp branch_block_items([line | rest], in?, acc) do
+    item = Regex.run(~r/^\s*-\s*['"]?([A-Za-z0-9._\/*-]+)['"]?\s*$/, line)
+
+    cond do
+      Regex.match?(~r/^\s*branches(?:-ignore)?:\s*$/, line) -> branch_block_items(rest, true, acc)
+      in? and Regex.match?(~r/^\s*#/, line) -> branch_block_items(rest, true, acc)
+      in? and item != nil -> branch_block_items(rest, true, [Enum.at(item, 1) | acc])
+      true -> branch_block_items(rest, false, acc)
+    end
+  end
 end

@@ -12,6 +12,25 @@ https://semver.org/[Semantic Versioning].
 
 === Added
 
+==== Group-B detectors — SD021 / WF023 / stale-issue-refs (2026-05-31, #363/#364/#366)
+
+Three #333-cohort detectors, each a pure function taking its external signal
+(injected by the caller) so they unit-test without live API access:
+
+* **SD021** `StructuralDrift.check_workflow_branch_refs/3` (#363) — workflow
+  trigger branches (`on.push`/`pull_request.branches`, inline or block form)
+  that aren't in the repo's live branch list; globs and the default branch
+  are exempt.
+* **WF023** `WorkflowAudit.check_stale_continue_on_error/2` (#364) — a
+  `continue-on-error: true` job whose "until/remove when #N" comment names an
+  issue in the injected closed-issue set.
+* `HonestCompletion.check_stale_issue_refs/2` (#366) — source/workflow
+  comments referencing a closed/merged issue via stale-marker phrasing.
+
+Covered by `test/rules/group_b_detectors_test.exs` (sensitivity + specificity
+each). The live-signal wiring (fetching the branch list / issue states in the
+scan flow) is the remaining follow-up noted on each issue.
+
 ==== `WorkflowAudit` rule `WF022` unanchored-heading-regex (2026-05-30, #360)
 
 Flags a markdown-heading-detection regex used *unanchored* inside inline

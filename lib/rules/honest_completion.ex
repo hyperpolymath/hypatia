@@ -344,4 +344,33 @@ defmodule Hypatia.Rules.HonestCompletion do
     patterns = ["todo!", "unimplemented!", "raise \"not implemented\"", "raise \"TODO\""]
     Enum.sum(Enum.map(patterns, fn p -> count_pattern(repo_path, p) end))
   end
+
+  # ─── Stale issue references in comments (#366) ─────────────────────────
+  # Comments like "blocked by #N" / "until #N" that name a now-closed issue
+  # are documentation rot. `closed_issues` is injected. Cohort #333 pattern 7.
+  @doc """
+  Flag comments in `file_contents` (path => content) that reference an issue
+  in `closed_issues` via stale-marker phrasing.
+  """
+  def check_stale_issue_refs(file_contents, closed_issues) do
+    closed = MapSet.new(closed_issues)
+
+    Enum.flat_map(file_contents, fn {file, content} ->
+      ~r/(?:until|pending|gated on|awaits|blocked by|remove when)\s+#(\d+)/i
+      |> Regex.scan(content)
+      |> Enum.map(fn [_, n] -> String.to_integer(n) end)
+      |> Enum.filter(&MapSet.member?(closed, &1))
+      |> Enum.uniq()
+      |> Enum.map(fn n ->
+        %{
+          type: :stale_issue_reference,
+          file: file,
+          detail: "comment references ##{n}, which is closed/merged — update or delete it",
+          severity: :low,
+          deduction: 5,
+          issue: n
+        }
+      end)
+    end)
+  end
 end

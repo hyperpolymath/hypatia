@@ -20,6 +20,9 @@ this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- feat(rules): StructuralDrift SD021 `workflow_branch_refs` — flag workflow trigger branches that aren't real repo branches (#363)
+- feat(rules): WorkflowAudit WF023 `stale_continue_on_error` — flag continue-on-error masks gated on a now-closed issue (#364)
+- feat(rules): HonestCompletion `stale_issue_refs` — flag comments referencing closed/merged issues (#366)
 - feat(rules): WorkflowAudit WF022 `unanchored_heading_regex` — flag inline-python heading-detection regexes not anchored to `^#` (#360)
 - feat(rules): WorkflowAudit WF021 `concurrency_missing_readonly` — flag read-only PR/push check workflows lacking a `concurrency:` block (#365)
 - feat(rules): CicdRules `duplicate_cron_schedule` — flag workflows with redundant cron entries on the same day-of-week / daily-subset (#362)

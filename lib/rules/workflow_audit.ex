@@ -1537,4 +1537,42 @@ defmodule Hypatia.Rules.WorkflowAudit do
     heading_like? = Regex.match?(~r/[A-Z][a-z]+\s+(?:[A-Z][a-z]+|\[[A-Za-z])/, pat)
     heading_like? and not String.starts_with?(pat, "^#")
   end
+
+  # ─── WF023: Stale continue-on-error mask tied to a closed issue (#364) ─
+  #
+  # A job carrying `continue-on-error: true` with a nearby comment like
+  # "remove when #N" / "until #N" is a deliberate temporary mask. Once #N
+  # closes, the mask is stale and erodes gate quality. `closed_issues` (a
+  # list of closed issue numbers) is injected by the caller. Standalone (not
+  # wired into audit/3 — it needs the issue-state signal). Cohort #333 p5.
+  @doc """
+  WF023: flag `continue-on-error: true` workflows whose "until/remove when
+  #N" comment names an issue in `closed_issues`.
+  """
+  def check_stale_continue_on_error(workflow_contents, closed_issues) do
+    closed = MapSet.new(closed_issues)
+
+    Enum.flat_map(workflow_contents, fn {file, content} ->
+      if Regex.match?(~r/continue-on-error:\s*true/, content) do
+        ~r/(?:until|remove when|gated on|pending|once)\s+#(\d+)/i
+        |> Regex.scan(content)
+        |> Enum.map(fn [_, n] -> String.to_integer(n) end)
+        |> Enum.filter(&MapSet.member?(closed, &1))
+        |> Enum.uniq()
+        |> Enum.map(fn n ->
+          %{
+            rule: "WF023",
+            type: :stale_continue_on_error,
+            file: file,
+            severity: :medium,
+            reason:
+              "`continue-on-error: true` is gated on ##{n}, which is closed; drop the mask and let the job report accurately",
+            issue: n
+          }
+        end)
+      else
+        []
+      end
+    end)
+  end
 end
