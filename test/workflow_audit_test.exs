@@ -529,4 +529,57 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert [] = WorkflowAudit.check_concurrency_missing_readonly(%{"labeler.yml" => wf})
     end
   end
+
+  describe "check_unanchored_heading_regex/1 (WF022)" do
+    test "flags an unanchored heading regex inside inline python" do
+      wf = """
+      jobs:
+        gate:
+          steps:
+            - run: |
+                python3 << 'PYEOF'
+                if re.search(r'TypeScript [Ee]xemptions', line):
+                    pass
+                PYEOF
+      """
+
+      [f] = WorkflowAudit.check_unanchored_heading_regex(%{"gov.yml" => wf})
+      assert f.rule == "WF022"
+      assert f.severity == :high
+    end
+
+    test "silent when the heading regex is anchored to ^#" do
+      wf = """
+      jobs:
+        gate:
+          steps:
+            - run: |
+                python3 << 'PYEOF'
+                if re.search(r'^# TypeScript Exemptions', line):
+                    pass
+                PYEOF
+      """
+
+      assert [] = WorkflowAudit.check_unanchored_heading_regex(%{"gov.yml" => wf})
+    end
+
+    test "silent for a non-heading regex (single capitalised word)" do
+      wf = """
+      jobs:
+        gate:
+          steps:
+            - run: |
+                python3 << 'PYEOF'
+                m = re.search(r'Error: (.+)', line)
+                PYEOF
+      """
+
+      assert [] = WorkflowAudit.check_unanchored_heading_regex(%{"gov.yml" => wf})
+    end
+
+    test "silent when the workflow has no inline python" do
+      wf = "jobs:\n  build:\n    steps:\n      - run: echo hi\n"
+      assert [] = WorkflowAudit.check_unanchored_heading_regex(%{"ci.yml" => wf})
+    end
+  end
 end

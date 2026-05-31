@@ -84,6 +84,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     workflow_linter_self_ref = check_workflow_linter_self_reference(workflow_contents)
     codeql_missing_actions = check_codeql_missing_actions_language(workflow_contents)
     concurrency_missing = check_concurrency_missing_readonly(workflow_contents)
+    heading_regex_issues = check_unanchored_heading_regex(workflow_contents)
 
     %{
       findings:
@@ -93,7 +94,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           reusable_caller_context_self_checkout ++ missing_timeouts ++
           scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins ++
           ungated_secret_action ++ scorecard_wrapper_missing_perms ++
-          workflow_linter_self_ref ++ codeql_missing_actions ++ concurrency_missing,
+          workflow_linter_self_ref ++ codeql_missing_actions ++ concurrency_missing ++
+          heading_regex_issues,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -114,6 +116,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       workflow_linter_self_ref_count: length(workflow_linter_self_ref),
       codeql_missing_actions_count: length(codeql_missing_actions),
       concurrency_missing_count: length(concurrency_missing),
+      heading_regex_issues_count: length(heading_regex_issues),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -1475,5 +1478,63 @@ defmodule Hypatia.Rules.WorkflowAudit do
         []
       end
     end)
+  end
+
+  # ─── WF022: Unanchored heading regex in inline-python workflow scripts ─
+  #
+  # An inline-python `run:` step that detects a markdown section heading with
+  # `re.search(r'TitleCase Phrase', line)` — without anchoring to `^#` /
+  # `^#{1,4}\s+` — also matches *prose* mentions of the same phrase, so the
+  # parser silently walks the wrong table. This was the multi-week silent
+  # gate failure on affinescript's governance check (standards#183 anchored
+  # the regex). HIGH severity: estate-wide and invisible in logs.
+  #
+  # See hyperpolymath/hypatia#360 (cohort hypatia#333, pattern 1).
+
+  @wf022_re_call ~r/re\.(?:search|match)\(\s*r(['"])(.*?)\1/
+  @wf022_reason "inline-python heading-detection regex is not anchored to `^#` / `^\#{1,4}\\s+`; it also matches prose mentions of the heading phrase, so the parser can silently walk the wrong section. Anchor the regex to the heading shape (e.g. `^\#{1,4}\\s+.*Phrase`) and name the intended heading in a comment."
+
+  @doc """
+  WF022: Detect a heading-detection regex used unanchored inside inline
+  Python in a workflow `run:` block.
+
+  Heuristic: in a file that uses `python3`, find `re.search`/`re.match` whose
+  literal pattern has a markdown-heading shape (a Title-Case word followed by
+  another Title-Case word or a `[Xx]`-style char class) and does NOT start
+  with `^#`.
+
+  Sensitivity / specificity:
+    * Specific — gated on `python3` presence, the heading-phrase shape, and
+      absence of `^#` anchoring; single-word matches (e.g. `Error: (.+)`) and
+      already-anchored patterns are ignored.
+    * Sensitive — fires on any such unanchored heading regex in the file.
+  """
+  def check_unanchored_heading_regex(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if String.contains?(content, "python3") do
+        @wf022_re_call
+        |> Regex.scan(content)
+        |> Enum.map(fn [_, _q, pat] -> pat end)
+        |> Enum.filter(&wf022_heading_unanchored?/1)
+        |> Enum.map(fn pat ->
+          %{
+            rule: "WF022",
+            type: :unanchored_heading_regex,
+            file: filename,
+            severity: :high,
+            pattern: pat,
+            reason: @wf022_reason,
+            fix_recipe: :anchor_heading_regex
+          }
+        end)
+      else
+        []
+      end
+    end)
+  end
+
+  defp wf022_heading_unanchored?(pat) do
+    heading_like? = Regex.match?(~r/[A-Z][a-z]+\s+(?:[A-Z][a-z]+|\[[A-Za-z])/, pat)
+    heading_like? and not String.starts_with?(pat, "^#")
   end
 end

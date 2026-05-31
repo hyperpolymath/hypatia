@@ -12,6 +12,20 @@ https://semver.org/[Semantic Versioning].
 
 === Added
 
+==== `WorkflowAudit` rule `WF022` unanchored-heading-regex (2026-05-30, #360)
+
+Flags a markdown-heading-detection regex used *unanchored* inside inline
+Python in a workflow `run:` block — e.g. `re.search(r'TypeScript [Ee]xemptions', line)`
+with no `^#` anchor. Such a regex also matches prose mentions of the phrase,
+so the parser silently walks the wrong section. This was the multi-week
+silent failure of affinescript's governance gate (`standards#183` anchored
+it). HIGH severity (estate-wide, invisible in logs). Heuristic: gated on
+`python3` presence, a Title-Case heading shape, and absence of `^#`
+anchoring; single-word matches (`Error: (.+)`) and anchored patterns are
+ignored. Threaded into `audit/3`; covered in `test/workflow_audit_test.exs`
+(positive + anchored / non-heading / no-python negatives). Zero findings on
+hypatia's own workflows. Cohort hypatia#333, pattern 1.
+
 ==== `WorkflowAudit` rule `WF021` concurrency-missing-readonly (2026-05-30, #365)
 
 Flags a read-only check workflow (runs on `pull_request`/`push`, with a

@@ -20,6 +20,7 @@ this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- feat(rules): WorkflowAudit WF022 `unanchored_heading_regex` — flag inline-python heading-detection regexes not anchored to `^#` (#360)
 - feat(rules): WorkflowAudit WF021 `concurrency_missing_readonly` — flag read-only PR/push check workflows lacking a `concurrency:` block (#365)
 - feat(rules): CicdRules `duplicate_cron_schedule` — flag workflows with redundant cron entries on the same day-of-week / daily-subset (#362)
 - feat(rules): AffineScript hand-port pitfalls — HANDLE-as-fn-name + OCaml float ops (#332)
