@@ -1331,12 +1331,46 @@ defmodule Hypatia.Rules.CicdRules do
   # Repos that legitimately use AGPL-3.0-or-later (co-developed with family, etc.)
   @agpl_exception_repos ["game-server-admin", "idaptik", "airborne-submarine-squadron"]
 
+  # Repos that legitimately use PMPL-1.0-or-later (Palimpsest MPL).
+  # paint-type (JoshuaJewell/son's repo) uses PMPL-1.0-or-later for source/doc
+  # SPDX headers with MPL-2.0 only as the LICENSE-file fallback (explicit dual
+  # pattern, paint-type#4 owner carve-out 2026-06-01). Estate-licence-debt
+  # audits flagging this as a mismatch are FALSE POSITIVES.
+  @pmpl_exception_repos ["paint-type"]
+
+  # Per-repo path globs to skip strict SPDX-vs-LICENSE checking on.
+  # echidna intentionally keeps doc files at MPL-2.0 even though the LICENSE
+  # file is AGPL (owner reverted PR #149 docs reconciliation 2026-05-30 —
+  # this is owner-managed and must NOT be auto-reconciled by sweep rules).
+  @license_exception_paths %{
+    "echidna" => [
+      "docs/**",
+      "EXPLAINME.adoc",
+      "CLAUDE.md",
+      "CONTRIBUTING.adoc",
+      "FAQ.md"
+    ]
+  }
+
   def required_spdx, do: @required_spdx
   def agpl_exception_repos, do: @agpl_exception_repos
+  def pmpl_exception_repos, do: @pmpl_exception_repos
+  def license_exception_paths, do: @license_exception_paths
+
+  @doc """
+  Return the list of path globs that are exempt from strict SPDX-vs-LICENSE
+  checking for the given repo. Returns `[]` if the repo has no carve-out.
+  """
+  def license_exception_paths_for(repo_name) when is_binary(repo_name) do
+    Map.get(@license_exception_paths, repo_name, [])
+  end
+
+  def license_exception_paths_for(_), do: []
 
   @doc """
   Validate a license SPDX identifier, optionally scoped to a repo name.
   AGPL-3.0-or-later is permitted for repos in @agpl_exception_repos.
+  PMPL-1.0 / PMPL-1.0-or-later is permitted for repos in @pmpl_exception_repos.
   """
   def validate_license(spdx_id, repo_name \\ nil)
 
@@ -1354,12 +1388,44 @@ defmodule Hypatia.Rules.CicdRules do
       spdx_id in ["AGPL-3.0", "AGPL-3.0-or-later"] and repo_name in @agpl_exception_repos ->
         :ok_agpl_exception
 
+      spdx_id in ["PMPL-1.0", "PMPL-1.0-or-later"] and repo_name in @pmpl_exception_repos ->
+        :ok_pmpl_exception
+
       spdx_id in @wrong_licenses ->
         {:error, :wrong_license, spdx_id}
 
       true ->
         {:warning, :unknown_license, spdx_id}
     end
+  end
+
+  @doc """
+  Validate a license SPDX identifier for a specific file path within a repo.
+  If the file path matches a glob in @license_exception_paths for the repo,
+  returns `:ok_path_exception` regardless of the SPDX identifier — used by
+  doc-vs-source carve-outs (e.g. echidna's MPL-2.0 docs under AGPL LICENSE).
+  """
+  def validate_license(spdx_id, repo_name, file_path)
+      when is_binary(repo_name) and is_binary(file_path) do
+    globs = license_exception_paths_for(repo_name)
+
+    if Enum.any?(globs, &path_matches_glob?(file_path, &1)) do
+      :ok_path_exception
+    else
+      validate_license(spdx_id, repo_name)
+    end
+  end
+
+  # Minimal glob match: `**` (any depth), `*` (no slash), literal otherwise.
+  defp path_matches_glob?(path, glob) do
+    regex_src =
+      glob
+      |> String.replace(".", "\\.")
+      |> String.replace("**", "::DOUBLESTAR::")
+      |> String.replace("*", "[^/]*")
+      |> String.replace("::DOUBLESTAR::", ".*")
+
+    Regex.match?(~r/\A#{regex_src}\z/, path)
   end
 
   # Detect SPDX identifiers with a duplicated `-or-later` (or `+`) suffix —

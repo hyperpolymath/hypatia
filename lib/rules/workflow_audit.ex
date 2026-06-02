@@ -1575,4 +1575,86 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end
     end)
   end
+
+  # ─── WF024: Chapel ≥2.8.0 ABI / runs-on mismatch ──────────────────────
+
+  # Chapel debian packages (`chapel-*.deb` from chapel-lang/chapel releases,
+  # also fetched via `CHAPEL_DEB_URL`) link against `libclang-cpp.so.14`.
+  # That SONAME ships on ubuntu-22.04 (LLVM 14, the default toolchain).
+  # ubuntu-24.04 / ubuntu-latest (currently noble) carries `libclang-cpp.so.18`
+  # and the chpl binary aborts at start-up with the classic
+  #   "error while loading shared libraries: libclang-cpp.so.14: cannot open"
+  # message. Caught proven#141 (Chapel pilot CI fix) + panic-attack#99
+  # (Chapel Wave 2 — 6 cold-cache CI iterations debugging this exact ABI
+  # mismatch + 3 more Chapel-2.8.0 sharp edges). The fix is `runs-on:
+  # ubuntu-22.04` for any job invoking a pre-built Chapel deb.
+  @chapel_marker_patterns [
+    ~r/CHAPEL_DEB_URL\b/,
+    ~r/chapel-[0-9]+\.[0-9]+(?:\.[0-9]+)?[-_a-zA-Z0-9]*\.deb\b/
+  ]
+
+  @doc """
+  WF024: Detect a workflow job that downloads/installs a Chapel ≥2.8.0
+  debian package but runs on `ubuntu-latest` or `ubuntu-24.04`, where the
+  binary's `libclang-cpp.so.14` SONAME dependency is unsatisfiable.
+
+  Heuristic: workflow content contains `CHAPEL_DEB_URL` OR a `chapel-*.deb`
+  filename, AND `runs-on:` resolves to anything other than `ubuntu-22.04`.
+
+  Recipe (from panic-attack#99): pin `runs-on: ubuntu-22.04`. Bumping
+  Chapel itself to a 24.04-built artifact would also work but isn't
+  upstream-available as of 2026-06-02.
+  """
+  def check_chapel_abi_runs_on_mismatch(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      chapel? =
+        Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped))
+
+      if chapel? do
+        runs_on_vals =
+          ~r/runs-on:\s*([^\n#]+)/
+          |> Regex.scan(stripped, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&String.trim(&1, "\""))
+          |> Enum.map(&String.trim(&1, "'"))
+
+        bad =
+          Enum.filter(runs_on_vals, fn v ->
+            v in ["ubuntu-latest", "ubuntu-24.04"] or
+              String.starts_with?(v, "ubuntu-24") or
+              String.starts_with?(v, "ubuntu-25")
+          end)
+
+        case bad do
+          [] ->
+            []
+
+          _ ->
+            [
+              %{
+                rule: "WF024",
+                type: :chapel_abi_runs_on_mismatch,
+                file: filename,
+                severity: :high,
+                runs_on: bad,
+                reason:
+                  "Workflow installs a Chapel ≥2.8.0 .deb (CHAPEL_DEB_URL or " <>
+                    "chapel-*.deb), but `runs-on:` is `#{Enum.join(bad, ", ")}`. " <>
+                    "The chpl binary links against libclang-cpp.so.14 (LLVM 14, " <>
+                    "ubuntu-22.04 only) — newer Ubuntu images carry .so.18 and " <>
+                    "chpl aborts with `cannot open shared object file` before " <>
+                    "any user step runs. Pin `runs-on: ubuntu-22.04`. See " <>
+                    "panic-attack#99 / proven#141.",
+                action: :pin_runs_on_ubuntu_2204
+              }
+            ]
+        end
+      else
+        []
+      end
+    end)
+  end
 end
