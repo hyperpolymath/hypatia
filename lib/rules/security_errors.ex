@@ -300,7 +300,8 @@ defmodule Hypatia.Rules.SecurityErrors do
     "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
     "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
-    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
+    # Bumped 2026-06-01 → 6bff6ec (s-expression form support, panic-attack#94)
+    "hyperpolymath/a2ml-validate-action@main" => "6bff6ec134fc977e86d25166a5c522ddea5c1e78",
     "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
     "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" => "21fc3f00a088c954912936f4a68970621b82c2e6"
   }
