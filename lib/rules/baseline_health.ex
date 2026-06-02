@@ -544,6 +544,79 @@ defmodule Hypatia.Rules.BaselineHealth do
     end
   end
 
+  # ─── BH008: Inherited main-branch debt ────────────────────────────────
+  #
+  # Pattern hit repeatedly during the 2026-06-02 sweeps: a single broken
+  # check on `main` cascades to EVERY open PR in the same repo. Each PR
+  # shows the same failing check, none of the PR diffs are causal, and
+  # the right answer is one root-fix PR on `main` rather than N retries.
+  #
+  # Detection: across the open PRs in `{owner, repo}`, find any check
+  # name that fails on `:threshold` (default 3) or more PRs. Emit one
+  # `:warn` finding per inherited check name with the affected PR list
+  # and a recommended action to file a root-fix PR on main.
+  #
+  # Crucially NOT auto-fixable: the root cause may be a workflow change,
+  # a dep bump, a baseline regression — each needs owner direction.
+  # See feedback in MEMORY.md: "C. NEW rule: inherited-main-branch-debt".
+
+  @default_inherited_debt_threshold 3
+
+  @doc """
+  BH008: Find check names that fail across ≥ `threshold` open PRs in
+  `{owner, repo}`. The shared failure is almost certainly inherited from
+  a degraded `main` baseline rather than caused by any single PR's diff.
+
+  Inputs (caller supplies; this rule is data-driven so the gh API
+  fan-out lives in the caller):
+
+      pr_check_data :: [
+        %{number: integer,
+          failed_checks: [String.t()]}
+      ]
+
+  Returns a list of findings, one per check name meeting the threshold.
+
+  Opts:
+    * `:threshold` — minimum PR count to flag (default 3)
+  """
+  def bh008_inherited_main_debt(owner, repo, pr_check_data, opts \\ [])
+      when is_list(pr_check_data) do
+    threshold = Keyword.get(opts, :threshold, @default_inherited_debt_threshold)
+
+    pr_check_data
+    |> Enum.flat_map(fn pr ->
+      Enum.map(pr.failed_checks, fn check -> {check, pr.number} end)
+    end)
+    |> Enum.group_by(fn {check, _} -> check end, fn {_, num} -> num end)
+    |> Enum.filter(fn {_check, prs} -> length(Enum.uniq(prs)) >= threshold end)
+    |> Enum.map(fn {check, prs} ->
+      pr_numbers = prs |> Enum.uniq() |> Enum.sort()
+
+      %{
+        rule: "BH008",
+        file: "#{owner}/#{repo}",
+        severity: :warn,
+        auto_fixable: false,
+        type: :inherited_main_debt,
+        check_name: check,
+        pr_count: length(pr_numbers),
+        affected_prs: pr_numbers,
+        reason:
+          "Check `#{check}` is failing on #{length(pr_numbers)} open PRs " <>
+            "(##{Enum.join(pr_numbers, ", #")}). When ≥#{threshold} PRs share " <>
+            "the same failing check the cause is almost always inherited from " <>
+            "a degraded main baseline rather than any single PR diff. " <>
+            "Recommended action: file a single root-fix PR targeting main.",
+        action: :file_root_fix_pr_on_main,
+        detail: %{
+          recommendation: "file_root_fix_pr_on_main",
+          threshold: threshold
+        }
+      }
+    end)
+  end
+
   # ─── scan/2 facade ────────────────────────────────────────────────────
 
   @doc """
