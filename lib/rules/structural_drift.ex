@@ -653,7 +653,9 @@ defmodule Hypatia.Rules.StructuralDrift do
       sd010_tracked_node_modules(repo_path) ++
       sd011_missing_gitignore(repo_path) ++
       sd013_path_specific_gitignore(repo_path) ++
-      sd014_safedom_example_dialect(repo_path)
+      sd014_safedom_example_dialect(repo_path) ++
+      sd022_stale_path_after_rename(repo_path) ++
+      sd023_state_a2ml_divergence(repo_path)
 
     needs_intensive = Enum.any?(findings, & &1[:trigger_intensive])
     needs_alert = Enum.any?(findings, & &1[:alert_user])
@@ -801,6 +803,170 @@ defmodule Hypatia.Rules.StructuralDrift do
       in? and Regex.match?(~r/^\s*#/, line) -> branch_block_items(rest, true, acc)
       in? and item != nil -> branch_block_items(rest, true, [Enum.at(item, 1) | acc])
       true -> branch_block_items(rest, false, acc)
+    end
+  end
+
+  # ─── SD022: Stale path references after directory rename ───────────────
+  #
+  # When a source directory is renamed (e.g. `src/ephapax/` → `src/paint_core/`
+  # in a single commit), trailing-edge documentation references frequently
+  # outlive the rename. This rule scans docs for `src/<dir>/` references and
+  # flags any whose `<dir>` is NOT a real directory in the current tree.
+  #
+  # Discovered on JoshuaJewell/paint-type 2026-06-02: PR #48 renamed
+  # src/ephapax → src/paint_core in the Cargo workspace; 25 docs (49
+  # occurrences) still pointed at the old path. Caught by manual sweep
+  # in PR #49. This rule prevents the next recurrence.
+  #
+  # Exemption: CHANGELOG.md (historical references are documentation, not
+  # drift) and anything under `third_party/` (vendored).
+
+  @doc """
+  SD022: Detect documentation that references a `src/<dir>/` path
+  whose `<dir>` is not a real directory in the current tree.
+
+  Severity: medium (doc-only; doesn't break the build, but misleads readers).
+  Action: sed sweep `s|src/<stale-dir>|src/<new-dir>|g` once the rename
+  target is identified (typically via `git log --diff-filter=R`).
+  Triggers: intensive scan (where one rename-drift hits, others follow).
+  """
+  def sd022_stale_path_after_rename(repo_path) do
+    src_root = Path.join(repo_path, "src")
+
+    real_subdirs =
+      case File.ls(src_root) do
+        {:ok, entries} ->
+          entries
+          |> Enum.filter(&File.dir?(Path.join(src_root, &1)))
+          |> MapSet.new()
+
+        {:error, _} ->
+          MapSet.new()
+      end
+
+    if MapSet.size(real_subdirs) == 0 do
+      []
+    else
+      doc_files =
+        find_files_by_ext(repo_path, [
+          ".md",
+          ".adoc",
+          ".txt",
+          ".a2ml",
+          ".contractile",
+          ".toml",
+          ".twasm"
+        ])
+
+      doc_files
+      |> Enum.reject(fn rel ->
+        rel == "CHANGELOG.md" or String.starts_with?(rel, "third_party/")
+      end)
+      |> Enum.flat_map(fn rel ->
+        path = Path.join(repo_path, rel)
+
+        case File.read(path) do
+          {:ok, content} ->
+            ~r{\bsrc/([A-Za-z0-9_][A-Za-z0-9_-]*)/}
+            |> Regex.scan(content)
+            |> Enum.map(fn [_, dir] -> dir end)
+            |> Enum.uniq()
+            |> Enum.reject(&MapSet.member?(real_subdirs, &1))
+            |> Enum.map(fn stale_dir ->
+              %{
+                rule: "SD022",
+                file: rel,
+                severity: :medium,
+                reason:
+                  "doc references `src/#{stale_dir}/` but no such directory exists in the tree (likely surviving a directory rename)",
+                action: :rename_sweep,
+                stale_dir: stale_dir,
+                trigger_intensive: true
+              }
+            end)
+
+          _ ->
+            []
+        end
+      end)
+    end
+  end
+
+  # ─── SD023: STATE.a2ml divergence (top-level vs 6a2/) ──────────────────
+  #
+  # The estate v2 convention puts STATE at `.machine_readable/6a2/STATE.a2ml`.
+  # Some repos retain a legacy top-level `.machine_readable/STATE.a2ml`. When
+  # both exist, they MUST agree on the `last-updated` field — otherwise one
+  # is stale and consumers (Hypatia, agents reading 6a2) see the wrong reality.
+  #
+  # Discovered on JoshuaJewell/paint-type 2026-06-02: top-level STATE.a2ml
+  # was 2026-06-01 with 22% completion while 6a2/STATE.a2ml was 2026-05-11
+  # with 10% completion. Caught by manual sweep; PR #49 unified them.
+
+  @doc """
+  SD023: Detect divergence between `.machine_readable/STATE.a2ml` and
+  `.machine_readable/6a2/STATE.a2ml` when both exist.
+
+  Severity: medium (one is stale; consumers may read either).
+  Action: pick the freshest as truth, mirror to the other, document
+  in CHANGELOG which is canonical going forward.
+  """
+  def sd023_state_a2ml_divergence(repo_path) do
+    top = Path.join([repo_path, ".machine_readable", "STATE.a2ml"])
+    six = Path.join([repo_path, ".machine_readable", "6a2", "STATE.a2ml"])
+
+    with true <- File.exists?(top),
+         true <- File.exists?(six),
+         {:ok, top_content} <- File.read(top),
+         {:ok, six_content} <- File.read(six) do
+      top_date = extract_last_updated(top_content)
+      six_date = extract_last_updated(six_content)
+
+      cond do
+        top_date == nil or six_date == nil ->
+          []
+
+        top_date == six_date ->
+          []
+
+        true ->
+          [
+            %{
+              rule: "SD023",
+              file: ".machine_readable/STATE.a2ml + .machine_readable/6a2/STATE.a2ml",
+              severity: :medium,
+              reason:
+                "STATE.a2ml divergence: top-level last-updated=#{top_date}, 6a2/ last-updated=#{six_date}. One is stale; consumers may read either.",
+              action: :unify_state,
+              top_last_updated: top_date,
+              six_last_updated: six_date,
+              trigger_intensive: false
+            }
+          ]
+      end
+    else
+      _ -> []
+    end
+  end
+
+  defp extract_last_updated(content) do
+    # Matches both TOML (`last-updated = "2026-06-02"`) and Scheme
+    # (`(last-updated "2026-06-02")`) variants.
+    case Regex.run(~r/last[-_]updated\s*[=\s]\s*"([^"]+)"/, content) do
+      [_, date] -> date
+      _ -> nil
+    end
+  end
+
+  defp find_files_by_ext(repo_path, exts) do
+    case System.cmd("git", ["-C", repo_path, "ls-files"], stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.filter(fn rel -> Path.extname(rel) in exts end)
+
+      _ ->
+        []
     end
   end
 end

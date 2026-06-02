@@ -294,4 +294,120 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert Map.has_key?(result, :dispatch)
     end
   end
+
+  describe "sd022_stale_path_after_rename/1" do
+    test "flags docs referencing src/<dir>/ where dir no longer exists", %{repo: repo} do
+      # Real layout: only src/paint_core/ exists
+      File.mkdir_p!(Path.join([repo, "src", "paint_core"]))
+      # Doc still references old src/ephapax/
+      File.write!(Path.join(repo, "EXPLAINME.adoc"), "See src/ephapax/lib.rs for the tile API.")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"], cd: repo,
+        env: [{"GIT_AUTHOR_NAME", "T"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+              {"GIT_COMMITTER_NAME", "T"}, {"GIT_COMMITTER_EMAIL", "t@t"}])
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert Enum.any?(findings, &(&1.rule == "SD022"))
+      assert Enum.any?(findings, &(&1.stale_dir == "ephapax"))
+      assert Enum.all?(findings, &(&1.severity == :medium))
+      assert Enum.all?(findings, & &1.trigger_intensive)
+    end
+
+    test "ignores CHANGELOG.md (historical references are intentional)", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, "src", "paint_core"]))
+      File.write!(Path.join(repo, "CHANGELOG.md"), "Renamed src/ephapax to src/paint_core.")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"], cd: repo,
+        env: [{"GIT_AUTHOR_NAME", "T"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+              {"GIT_COMMITTER_NAME", "T"}, {"GIT_COMMITTER_EMAIL", "t@t"}])
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert findings == []
+    end
+
+    test "ignores third_party/ subtree (vendored)", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, "src", "paint_core"]))
+      File.mkdir_p!(Path.join([repo, "third_party", "x"]))
+      File.write!(Path.join([repo, "third_party", "x", "README.md"]), "uses src/ephapax/foo")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"], cd: repo,
+        env: [{"GIT_AUTHOR_NAME", "T"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+              {"GIT_COMMITTER_NAME", "T"}, {"GIT_COMMITTER_EMAIL", "t@t"}])
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert findings == []
+    end
+
+    test "returns empty when src/ has no subdirs", %{repo: repo} do
+      File.write!(Path.join(repo, "README.md"), "test")
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert findings == []
+    end
+  end
+
+  describe "sd023_state_a2ml_divergence/1" do
+    test "flags divergent last-updated between top-level and 6a2/", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "[metadata]\nlast-updated = \"2026-06-02\"\n"
+      )
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "6a2", "STATE.a2ml"]),
+        "[metadata]\nlast-updated = \"2026-05-11\"\n"
+      )
+
+      findings = StructuralDrift.sd023_state_a2ml_divergence(repo)
+      assert length(findings) == 1
+      assert hd(findings).rule == "SD023"
+      assert hd(findings).top_last_updated == "2026-06-02"
+      assert hd(findings).six_last_updated == "2026-05-11"
+    end
+
+    test "no finding when dates match", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "last-updated = \"2026-06-02\""
+      )
+      File.write!(
+        Path.join([repo, ".machine_readable", "6a2", "STATE.a2ml"]),
+        "last-updated = \"2026-06-02\""
+      )
+
+      assert StructuralDrift.sd023_state_a2ml_divergence(repo) == []
+    end
+
+    test "no finding when only one of the two files exists", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable"]))
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "last-updated = \"2026-06-02\""
+      )
+
+      assert StructuralDrift.sd023_state_a2ml_divergence(repo) == []
+    end
+
+    test "matches Scheme-style (last-updated \"...\") variant", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "(state (metadata (last-updated \"2026-06-02\")))"
+      )
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "6a2", "STATE.a2ml"]),
+        "last-updated = \"2026-05-11\""
+      )
+
+      findings = StructuralDrift.sd023_state_a2ml_divergence(repo)
+      assert length(findings) == 1
+    end
+  end
 end
