@@ -20,6 +20,7 @@ this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- feat(rules): WorkflowAudit WF024 `chapel_runs_on_drift` auto-fix + WF025 `cron_schedule_drift` + BaselineHealth BH008 `inherited_main_debt` (#422)
 - feat(rules): StructuralDrift SD021 `workflow_branch_refs` — flag workflow trigger branches that aren't real repo branches (#363)
 - feat(rules): WorkflowAudit WF023 `stale_continue_on_error` — flag continue-on-error masks gated on a now-closed issue (#364)
 - feat(rules): HonestCompletion `stale_issue_refs` — flag comments referencing closed/merged issues (#366)
@@ -36,6 +37,14 @@ this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(rules): BuildSystemRules — cross-repo lint from affinescript#361 (#317)
 - feat(rules): lang-policy refresh 2026-05-25 — ban ReScript, retarget TS, reject MPL-1.0 (#318)
 - feat(rules): BaselineHealth (BH001-BH003) — detect red-baseline conditions estate-wide (#316)
+
+### Fixed
+
+- fix(rules): SC-010 `transitive_dep_drift` set `auto_fixable: false` — manual-only review (#415)
+
+### Changed
+
+- chore(license): scoped MPL-2.0 carve-outs for upstream-derived submodules (#414)
 
 ### Fixed
 
