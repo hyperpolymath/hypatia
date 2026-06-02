@@ -323,4 +323,83 @@ defmodule Hypatia.Rules.ProofObligation do
 
   # Best tactic hint for the eliminate tier (generic auto-tactic).
   defp best_tactic_hint, do: "simp; omega; decide"
+
+  # ─── Baseline-delta admit-count regression detector ──────────────────────
+  #
+  # Counts the literal proof-debt markers in a source blob, with light
+  # comment-guarding so a phrase like `(* sorry: TODO *)` doesn't inflate
+  # the count. Used by `check_admit_regression/2` to flag PRs whose head
+  # tree carries more admits than the base — a cheap soundness signal that
+  # complements per-module `Print Assumptions` whitelists.
+  #
+  # Markers counted (literal, case-sensitive where it matters):
+  #   Coq        → `Admitted.`  `Axiom `   (followed by an identifier)
+  #   Agda/Idris → `postulate`
+  #   Lean / Coq → `sorry`
+  #   Idris2     → `believe_me`
+  #
+  # Comment guard: strip Coq `(* … *)`, Lean/Rust `--`/`//` line comments,
+  # and Agda `--` line comments before counting. Block comments inside
+  # block comments are left alone (single-level strip is sufficient for
+  # the false-positive cases observed in practice).
+
+  @admit_markers [
+    {~r/\bAdmitted\.\B|\bAdmitted\./, :admitted},
+    {~r/\bAxiom\s+[A-Za-z_]/, :axiom},
+    {~r/\bsorry\b/, :sorry},
+    {~r/\bbelieve_me\b/, :believe_me},
+    {~r/\bpostulate\b/, :postulate}
+  ]
+
+  @doc """
+  Count literal proof-debt markers (`Admitted.`, `Axiom`, `sorry`,
+  `believe_me`, `postulate`) in a source blob. Single-level comment guard
+  strips `(* … *)`, `// …`, and `-- …` before counting so quoted markers
+  inside comments don't inflate the count.
+  """
+  @spec count_admit_markers(String.t()) :: non_neg_integer()
+  def count_admit_markers(text) when is_binary(text) do
+    stripped =
+      text
+      |> String.replace(~r/\(\*.*?\*\)/s, " ")
+      |> String.replace(~r/(?m)\/\/[^\n]*$/, "")
+      |> String.replace(~r/(?m)--[^\n]*$/, "")
+
+    Enum.reduce(@admit_markers, 0, fn {re, _kind}, acc ->
+      acc + length(Regex.scan(re, stripped))
+    end)
+  end
+
+  def count_admit_markers(_), do: 0
+
+  @doc """
+  Compare admit-marker counts between a base tree and a head tree.
+
+  Both arguments are maps of `%{filename => content}`. Returns:
+    * `:ok`                          — head_count ≤ base_count
+    * `{:warn, {base, head}}`        — head_count > base_count (regression)
+
+  Intended for use as a soft gate on proof-bearing PRs: combined with a
+  per-module `Print Assumptions` whitelist this catches the "snuck-in
+  extra Admitted" failure mode the whitelist alone cannot.
+  """
+  @spec check_admit_regression(map(), map()) ::
+          :ok | {:warn, {non_neg_integer(), non_neg_integer()}}
+  def check_admit_regression(base_files, head_files)
+      when is_map(base_files) and is_map(head_files) do
+    base_count = sum_admit_markers(base_files)
+    head_count = sum_admit_markers(head_files)
+
+    if head_count > base_count do
+      {:warn, {base_count, head_count}}
+    else
+      :ok
+    end
+  end
+
+  defp sum_admit_markers(files) do
+    Enum.reduce(files, 0, fn {_name, content}, acc ->
+      acc + count_admit_markers(content)
+    end)
+  end
 end

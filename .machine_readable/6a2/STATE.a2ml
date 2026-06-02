@@ -84,6 +84,13 @@ actions = [
 ]
 
 [session-history]
+# 2026-06-02: PR #422 — WorkflowAudit WF024 chapel_runs_on_drift auto-fix
+#             (Chapel jobs missing ubuntu-22.04 pin) + WF025 cron_schedule_drift
+#             + BaselineHealth BH008 inherited_main_debt (workflows on red main
+#             before a branch is cut). PR #415 — flipped SC-010
+#             transitive_dep_drift to auto_fixable:false (manual review only).
+#             PR #414 — scoped MPL-2.0 carve-outs for upstream-derived
+#             submodules (license carve-out documentation).
 # 2026-05-31: Cohort #333 + Group-B CI/CD detection rules. Merged
 #             duplicate_cron_schedule (#362), WF021 concurrency_missing_readonly
 #             (#365), WF022 unanchored_heading_regex (#360). Reverted a duplicate
