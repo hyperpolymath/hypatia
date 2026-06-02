@@ -1576,6 +1576,113 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
+  # ─── WF025: CodeQL cron-canonical conformance ─────────────────────────
+  #
+  # standards#286 fixed the canonical CodeQL schedule at `0 6 1 * *` (monthly,
+  # 06:00 UTC on the 1st of each month) — the estate-wide cron drift sweep
+  # that triggered this rule is tracked at standards#288 / standards#323 / #324.
+  #
+  # Two failure shapes (a sub-category drives gitbot-fleet routing):
+  #
+  #   :weekly_to_monthly      — `0 6 * * 1` style (any dow != *). Maps to the
+  #                              #288-class follow-up (weekly → monthly).
+  #
+  #   :non_canonical_monthly  — monthly but at a different (HH:MM) / day-of-
+  #                              month. Maps to the #324-class follow-up
+  #                              (non-canonical monthly → canonical monthly).
+  #
+  # Both are auto-fixable via the same recipe `codeql-cron-monthly` —
+  # rewrite to `0 6 1 * *`. Severity `:warn` (drift, not breakage).
+
+  @codeql_canonical_cron "0 6 1 * *"
+
+  @doc """
+  WF025: Detect `.github/workflows/codeql.yml` cron entries that are NOT the
+  canonical `0 6 1 * *` monthly schedule.
+
+  Sub-category drives downstream routing:
+    `:weekly_to_monthly`      — #288-class follow-up
+    `:non_canonical_monthly`  — #324-class follow-up
+
+  See standards#286 (canonical fix), standards#288 (estate cron drift sweep),
+  standards#323 (recurring drift-detection), standards#324 (non-canonical
+  one-off fan-out).
+  """
+  def check_codeql_cron_drift(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if codeql_workflow_file?(filename) do
+        stripped = strip_comments(content)
+        crons = extract_cron_expressions(stripped)
+
+        crons
+        |> Enum.reject(&(&1 == @codeql_canonical_cron))
+        |> Enum.map(fn raw ->
+          subcat = cron_drift_subcategory(raw)
+
+          %{
+            rule: "WF025",
+            rule_id: "WF-025",
+            type: :codeql_cron_drift,
+            sub_category: subcat,
+            file: filename,
+            severity: :warn,
+            auto_fixable: true,
+            recipe_id: "codeql-cron-monthly",
+            canonical: @codeql_canonical_cron,
+            observed: raw,
+            reason:
+              "CodeQL workflow uses non-canonical cron `#{raw}`. The estate-wide " <>
+                "canonical (per standards#286) is `#{@codeql_canonical_cron}` " <>
+                "(monthly, 06:00 UTC on the 1st). Sub-category " <>
+                "`#{subcat}` — routes through #{routing_label(subcat)}.",
+            action: :rewrite_cron_to_canonical
+          }
+        end)
+      else
+        []
+      end
+    end)
+  end
+
+  @doc """
+  Public for testability: classify a cron expression against the canonical
+  `0 6 1 * *` shape.
+
+    `:canonical`              — exact match
+    `:weekly_to_monthly`      — DOW field is not `*` (fires N times per week)
+    `:non_canonical_monthly`  — DOW is `*` but HH/MM/DOM differ
+    `:malformed`              — not a valid 5-field cron expression
+  """
+  def cron_drift_subcategory(@codeql_canonical_cron), do: :canonical
+
+  def cron_drift_subcategory(raw) when is_binary(raw) do
+    case String.split(String.trim(raw), ~r/\s+/, trim: true) do
+      [_min, _hour, _dom, _mon, dow] when dow != "*" -> :weekly_to_monthly
+      [_min, _hour, _dom, _mon, _dow] -> :non_canonical_monthly
+      _ -> :malformed
+    end
+  end
+
+  defp routing_label(:weekly_to_monthly), do: "standards#288 (weekly→monthly fan-out)"
+
+  defp routing_label(:non_canonical_monthly),
+    do: "standards#324 (non-canonical→canonical fan-out)"
+
+  defp routing_label(:malformed), do: "manual triage (malformed cron)"
+  defp routing_label(_), do: "manual triage"
+
+  defp codeql_workflow_file?(filename) do
+    base = Path.basename(filename)
+    base == "codeql.yml" or base == "codeql.yaml"
+  end
+
+  defp extract_cron_expressions(stripped) do
+    ~r/^\s*-\s*cron:\s*["']?([^"'\n#]+?)["']?\s*$/m
+    |> Regex.scan(stripped, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.map(&String.trim/1)
+  end
+
   # ─── WF024: Chapel ≥2.8.0 ABI / runs-on mismatch ──────────────────────
 
   # Chapel debian packages (`chapel-*.deb` from chapel-lang/chapel releases,
