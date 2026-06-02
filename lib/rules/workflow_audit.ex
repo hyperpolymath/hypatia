@@ -1640,6 +1640,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 file: filename,
                 severity: :high,
                 runs_on: bad,
+                auto_fixable: true,
+                recipe_id: "chapel-runs-on-pin-22-04",
                 reason:
                   "Workflow installs a Chapel ≥2.8.0 .deb (CHAPEL_DEB_URL or " <>
                     "chapel-*.deb), but `runs-on:` is `#{Enum.join(bad, ", ")}`. " <>
@@ -1657,4 +1659,129 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end
     end)
   end
+
+  # ─── WF024 sub-patterns: 4 prior Chapel-2.8.0 sharp edges ─────────────
+  #
+  # Surfaced by panic-attack#99 (Chapel Wave 2 — 6 cold-cache CI iterations).
+  # Each sub-pattern has its own fix recipe so future sessions can route
+  # them through the gitbot-fleet auto-remediation pipeline without rebuilding
+  # the diagnostic from scratch.
+  #
+  #   A. `MANPATH` is unset on minimal runners — Chapel install scripts
+  #      that do `MANPATH=...:$MANPATH` produce `unbound variable` under
+  #      `set -u`. Recipe: guard with `${MANPATH:-}`.
+  #
+  #   B. `CHPL_LLVM` is unset — chpl needs `CHPL_LLVM=bundled` (or `system`)
+  #      to find its backend. Pre-2.8.0 builds defaulted; 2.8.0 errors.
+  #      Recipe: export `CHPL_LLVM=bundled` (or `system`) before running.
+  #
+  #   C. `chpl --about` dropped in 2.8.0 — diagnostics that scrape `--about`
+  #      output now fail. Recipe: switch to `chpl --version`.
+  #
+  #   D. `printchplenv --simple` output reformatted — old globs that match
+  #      `comm-gasnet*` against the simple output now miss. Recipe: switch
+  #      to `find <CHPL_HOME> -name comm-gasnet` (path-walk, not output-grep).
+
+  @doc """
+  WF024 sub-patterns: detect the 4 additional Chapel-2.8.0 sharp edges
+  alongside the runs-on ABI mismatch. Each emits its own finding with a
+  distinct `recipe_id` so the gitbot-fleet auto-remediation pipeline can
+  apply the right targeted fix without re-deriving the diagnostic.
+
+  Returned shapes share `rule: "WF024"`, `auto_fixable: true`, and
+  `severity: :medium` (the sharp edges are CI-fatal but each has a
+  one-line workaround once recognised — promoted from `:high` reserved
+  for the ABI mismatch itself).
+  """
+  def check_chapel_sharp_edges(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      chapel? =
+        Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped)) or
+          Regex.match?(~r/\bchpl\b/, stripped)
+
+      if chapel? do
+        []
+        |> append_if(
+          # A. MANPATH unset under set -u
+          Regex.match?(~r/\bMANPATH=[^\n]*\$MANPATH\b/, stripped) and
+            not Regex.match?(~r/\$\{MANPATH:-\}/, stripped),
+          %{
+            rule: "WF024",
+            type: :chapel_manpath_unset,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-manpath-guard",
+            reason:
+              "Workflow extends `MANPATH` without guarding for the unset case " <>
+                "(`$MANPATH` on a minimal runner triggers `unbound variable` under " <>
+                "`set -u`). Replace with `${MANPATH:-}`. See panic-attack#99.",
+            action: :guard_manpath_default
+          }
+        )
+        |> append_if(
+          # B. CHPL_LLVM unset (no export anywhere in workflow)
+          not Regex.match?(~r/\bCHPL_LLVM\s*[:=]/, stripped),
+          %{
+            rule: "WF024",
+            type: :chapel_chpl_llvm_unset,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-chpl-llvm-export",
+            reason:
+              "Workflow invokes `chpl` without exporting `CHPL_LLVM`. Chapel 2.8.0 " <>
+                "no longer auto-detects the backend; add `export CHPL_LLVM=bundled` " <>
+                "(or `system`) before any chpl invocation. See panic-attack#99.",
+            action: :export_chpl_llvm_bundled
+          }
+        )
+        |> append_if(
+          # C. `chpl --about` was dropped in 2.8.0
+          Regex.match?(~r/\bchpl\s+--about\b/, stripped),
+          %{
+            rule: "WF024",
+            type: :chapel_chpl_about_dropped,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-replace-chpl-about-with-version",
+            reason:
+              "`chpl --about` was removed in Chapel 2.8.0. Diagnostics that scrape " <>
+                "`--about` output now fail. Replace with `chpl --version`. " <>
+                "See panic-attack#99.",
+            action: :replace_chpl_about_with_version
+          }
+        )
+        |> append_if(
+          # D. `printchplenv --simple | grep comm-gasnet*`  (brittle glob)
+          Regex.match?(
+            ~r/printchplenv\s+--simple[^|\n]*\|[^|\n]*\bcomm-gasnet/,
+            stripped
+          ),
+          %{
+            rule: "WF024",
+            type: :chapel_printchplenv_glob_brittle,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-find-comm-gasnet",
+            reason:
+              "`printchplenv --simple` output reformatted in Chapel 2.8.0; " <>
+                "globs that grep its output for `comm-gasnet*` now miss. Switch to " <>
+                "`find \"$CHPL_HOME\" -name comm-gasnet` (path-walk, not output-grep). " <>
+                "See panic-attack#99.",
+            action: :replace_printchplenv_grep_with_find
+          }
+        )
+      else
+        []
+      end
+    end)
+  end
+
+  defp append_if(list, true, finding), do: list ++ [finding]
+  defp append_if(list, false, _finding), do: list
 end
