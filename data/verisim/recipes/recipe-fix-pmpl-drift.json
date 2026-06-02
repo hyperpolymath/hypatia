@@ -1,0 +1,68 @@
+{
+  "id": "recipe-fix-pmpl-drift",
+  "triangle_tier": "eliminate",
+  "pattern_ids": ["PA-license-pmpl_drift"],
+  "description": "Flip legacy PMPL-1.0-or-later SPDX stamps to the repo's per-category target (MPL-2.0 for sole-owner, AGPL-3.0-or-later for son-shared) per the 2026-06-02 owner directive. Skips palimpsest carve-out repos and third-party content.",
+  "confidence": 0.95,
+  "languages": ["*"],
+  "auto_fixable": true,
+  "fix_script": "fix-pmpl-drift.sh",
+  "policy_reference": "2026-06-02 estate-license-policy-umbrella directive (jonathan.jewell@gmail.com)",
+  "category_classification": {
+    "sole_owner_default": {
+      "target": "MPL-2.0",
+      "detection": "LICENSE file SPDX-License-Identifier: MPL-2.0"
+    },
+    "son_shared": {
+      "target": "AGPL-3.0-or-later",
+      "detection": "LICENSE file SPDX-License-Identifier: AGPL-3.0-or-later",
+      "confirmed_repos": ["idaptik", "burble", "standards", "rattlescript", "vcl-ut"]
+    },
+    "all_rights_reserved": {
+      "target": "DO NOT TOUCH",
+      "confirmed_repos": ["007"]
+    },
+    "palimpsest_carve_out": {
+      "target": "DO NOT FLIP (keep PMPL-1.0-or-later)",
+      "confirmed_repos": ["palimpsest-license", "palimpsest-plasma"],
+      "prospective_special_case": {
+        "repo": "consent-aware-http",
+        "current_location": "subdir at hyperpolymath/standards/consent-aware-http/",
+        "license_design": "MPL-2.0 source + CC-BY-4.0 spec + PMPL-2.0-or-later referenced",
+        "see_memory": "feedback_consent_aware_http_hybrid_licensing.md"
+      }
+    },
+    "third_party_or_forks": {
+      "target": "DO NOT TOUCH",
+      "rule": "Never sweep upstream-tracked content"
+    }
+  },
+  "exclude_repos": [
+    "007",
+    "palimpsest-license",
+    "palimpsest-plasma",
+    "game-server-admin",
+    "airborne-submarine-squadron",
+    "paint-type"
+  ],
+  "exclude_subpaths": [
+    "rescript-tea/",
+    "rescript-vite/",
+    "affinescript-vite/",
+    "idaptik-rescript13-staging/",
+    "consent-aware-http/"
+  ],
+  "first_landed": "2026-06-02",
+  "initial_sweep_prs": {
+    "neurophone#102": "canonical reference (138 files)",
+    "developer-ecosystem#103/104/105/106": "phased per-subdir (7033 files)",
+    "nextgen-databases#29/30": "phased per-subdir (226 files)",
+    "standards#344/345": "phased AGPL target (3417 files)",
+    "stapeln#86/87": "phased per-subdir (875 files)",
+    "reposystem#90": "Phase 1 (401 files)",
+    "ephapax#285": "single (343 files)",
+    "sanctify-php#47, ubicity#73, zerotier-k8s-link#63, verisimiser#156, squisher-corpus#26, rattlescript#29, pimcore-fortress#22, tree-navigator#41, snapcreate#29, php-aegis#43, nafa-app#26, vscode-k9#22, supernorma#38, sdp-hkdf-deployment#26, robot-vacuum-cleaner#64, gitbot-fleet#250, vcl-ut#46, resource-record-fluctuator#38, proof-of-work#83, project-wharf#49, julia-professional-registry#25": "single-PR sweeps"
+  },
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}
