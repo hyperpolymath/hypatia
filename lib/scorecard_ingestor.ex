@@ -101,10 +101,19 @@ defmodule Hypatia.ScorecardIngestor do
       remediation: "Integrate with OSS-Fuzz or add language-specific fuzzing."
     },
     "License" => %{
-      id: "SC-010", pa_rule: "SC010", risk: :low, auto_fixable: true,
+      # `auto_fixable: false` per owner directive 2026-06-02 (triggered by
+      # neurophone#99). Licence/SPDX edits are manual, per-file, owner-only.
+      # See `feedback_no_automated_licence_edits.md` and
+      # `feedback_estate_license_policy_umbrella.md`. SPDX choice is owner-
+      # specific (5-way classification) and cannot be auto-derived.
+      id: "SC-010", pa_rule: "SC010", risk: :low, auto_fixable: false,
       category: "LicenseCompliance",
       description: "No license file found",
-      remediation: "Add LICENSE file with SPDX identifier to repository root."
+      remediation:
+        "Owner must manually add LICENSE file. SPDX choice depends on owner classification " <>
+          "(sole repo → MPL-2.0; 007 → ARR; son-shared → AGPL-3.0-or-later; " <>
+          "fork → leave alone; palimpsest carve-out → PMPL-1.0-or-later). " <>
+          "Do NOT auto-generate."
     },
     "Maintained" => %{
       id: "SC-011", pa_rule: "SC011", risk: :high, auto_fixable: false,

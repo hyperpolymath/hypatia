@@ -1306,6 +1306,40 @@ defmodule Hypatia.Rules.CicdRules do
   # ---------------------------------------------------------------------------
   # License Validation
   # ---------------------------------------------------------------------------
+  #
+  # POLICY — Manual Only (owner directive 2026-06-02; triggered by neurophone#99)
+  # ----------------------------------------------------------------------------
+  # Findings emitted by this section are **report-only / review-strategy**.
+  # They MUST NEVER reach `:auto_execute` confidence, regardless of how
+  # cleanly the SPDX validator fires. Licence / SPDX remediation is
+  # manual, per-file, owner-only. Every prior LLM-driven sweep has
+  # scrambled headers, mis-licensed third-party code, or reverted owner
+  # decisions (see neurophone#99 closed 2026-06-02).
+  #
+  # Five-way classification (verbatim owner directive 2026-06-02):
+  #   "mpl-2.0 is for my sole repos, all rights reserved is for 007,
+  #    agpl-3.0-or-later is for those shared with my son, and leave other
+  #    people's forked stuff alone … only palimpsest license for obvious
+  #    reasons should be talking about palipsest and palimpsest plasma,
+  #    and consent-aware-http, but in that case prospectively"
+  #
+  #   1. Sole owner repos (default) → MPL-2.0
+  #   2. The 007 repo               → All Rights Reserved (out-of-scope)
+  #   3. Shared with son            → AGPL-3.0-or-later (idaptik, paint-type, …)
+  #   4. Third-party / forks        → leave alone, flag-only
+  #   5. Palimpsest carve-out       → PMPL-1.0-or-later for EXACTLY
+  #                                    palimpsest-license, palimpsest-plasma,
+  #                                    and consent-aware-http (prospective)
+  #
+  # Canonical memory files:
+  #   ~/.claude/projects/.../feedback_estate_license_policy_umbrella.md
+  #   ~/.claude/projects/.../feedback_no_automated_licence_edits.md
+  #
+  # Downstream consumers (recipe-generator, dispatch-runner) MUST treat
+  # any licence-category finding as `auto_fixable: false` / strategy
+  # `:review`. The `license_finding_severity_cap/1` and
+  # `license_finding_strategy/0` functions below encode that cap.
+  # ----------------------------------------------------------------------------
 
   @required_spdx "MPL-2.0"
   # `MPL-2.0` is intentionally absent here — it's the required identifier
@@ -1366,6 +1400,63 @@ defmodule Hypatia.Rules.CicdRules do
   end
 
   def license_exception_paths_for(_), do: []
+
+  # ---------------------------------------------------------------------------
+  # License-finding strategy cap (owner directive 2026-06-02)
+  # ---------------------------------------------------------------------------
+  #
+  # License/SPDX findings MUST NEVER drive auto-execute fixes. These helpers
+  # are the canonical cap consulted by downstream pipelines (recipe-generator,
+  # dispatch-runner). Do not bypass.
+
+  @doc """
+  Strategy for any licence-related finding. Always `:review` (never
+  `:auto_execute`). Owner must approve and apply licence edits manually.
+  """
+  def license_finding_strategy, do: :review
+
+  @doc """
+  Maximum severity any licence-related finding may carry. Capped at `:warn`
+  so the dispatcher never escalates to auto-execute confidence.
+  """
+  def license_finding_severity_cap(_severity), do: :warn
+
+  @doc """
+  Returns true if a finding category / recipe / pattern id is licence-related
+  and therefore subject to the auto-fix refusal gate. Mirrors the regex used
+  in `gitbot-fleet/scripts/dispatch-runner.sh`.
+  """
+  def license_related_finding?(category_or_recipe) when is_binary(category_or_recipe) do
+    lower = String.downcase(category_or_recipe)
+
+    String.contains?(lower, "license") or
+      String.contains?(lower, "spdx") or
+      String.contains?(lower, "pmpl") or
+      String.contains?(lower, "mpl-2") or
+      String.contains?(lower, "agpl") or
+      String.contains?(lower, "palimpsest")
+  end
+
+  def license_related_finding?(_), do: false
+
+  @doc """
+  Five-way licence classification per owner directive 2026-06-02. Returned
+  as a map for downstream tooling that needs to render policy in error
+  messages or PR descriptions.
+  """
+  def owner_license_classification do
+    %{
+      sole_owner_repos: "MPL-2.0",
+      "007": "All Rights Reserved",
+      shared_with_son: "AGPL-3.0-or-later",
+      third_party_forks: :leave_alone,
+      palimpsest_carve_out: %{
+        license: "PMPL-1.0-or-later",
+        repos: ["palimpsest-license", "palimpsest-plasma", "consent-aware-http"],
+        note: "consent-aware-http is prospective only — do NOT retroactively flip"
+      }
+    }
+  end
 
   @doc """
   Validate a license SPDX identifier, optionally scoped to a repo name.
