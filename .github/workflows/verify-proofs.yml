@@ -71,9 +71,15 @@ jobs:
         with:
           path: |
             /usr/local/bin/idris2
+            /usr/local/bin/idris2_app
             /usr/local/lib/idris2
             ~/.idris2
-          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}
+          # `idris2` is only a launcher script; it execs its sibling
+          # idris2_app/idris2.so. The previous cache omitted idris2_app/, so
+          # every cache *hit* restored a launcher with no image and died with
+          # `idris2_app/idris2.so: not found` (exit 127) before any proof ran.
+          # Key bumped to -2 to discard those poisoned caches.
+          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-2
 
       - name: Build Idris 2 from source
         if: steps.cache-idris.outputs.cache-hit != 'true'
