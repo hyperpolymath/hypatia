@@ -6,6 +6,8 @@
 
 module Verify.Fuel
 
+import Data.Nat
+
 %default total
 
 -- | Fuel is a natural number representing remaining computation steps
@@ -27,7 +29,7 @@ data FuelResult : Type -> Type where
 export
 Functor FuelResult where
   map f (Complete r remaining) = Complete (f r) remaining
-  map f (Exhausted partial used) = Exhausted (map f partial) used
+  map f (Exhausted partialRes used) = Exhausted (map f partialRes) used
   map f (FuelError msg) = FuelError msg
 
 -- | Applicative instance for FuelResult
@@ -35,7 +37,7 @@ export
 Applicative FuelResult where
   pure x = Complete x 0
   (Complete f _) <*> (Complete x remaining) = Complete (f x) remaining
-  (Complete _ _) <*> (Exhausted partial used) = Exhausted Nothing used
+  (Complete _ _) <*> (Exhausted partialRes used) = Exhausted Nothing used
   (Complete _ _) <*> (FuelError msg) = FuelError msg
   (Exhausted _ used) <*> _ = Exhausted Nothing used
   (FuelError msg) <*> _ = FuelError msg
@@ -44,7 +46,7 @@ Applicative FuelResult where
 export
 Monad FuelResult where
   (Complete x remaining) >>= f = f x
-  (Exhausted partial used) >>= f = Exhausted Nothing used
+  (Exhausted partialRes used) >>= f = Exhausted Nothing used
   (FuelError msg) >>= f = FuelError msg
 
 -- | A computation that consumes fuel
@@ -107,7 +109,7 @@ Monad FuelComputation where
   (MkFuelComputation run) >>= f = MkFuelComputation $ \fuel =>
     case run fuel of
       Complete x remaining => runWithFuel (f x) remaining
-      Exhausted partial used => Exhausted Nothing used
+      Exhausted partialRes used => Exhausted Nothing used
       FuelError msg => FuelError msg
 
 -- | Loop with fuel limit
@@ -119,9 +121,12 @@ fuelLoop body initial = MkFuelComputation $ \fuel => go initial fuel
   where
     go : state -> Fuel -> FuelResult result
     go st Z = Exhausted Nothing 0
+    -- Recurse on the structural predecessor `n` (not `remaining`) so the
+    -- loop is provably total: each iteration consumes at least one fuel unit,
+    -- bounding the iteration count by the initial fuel.
     go st (S n) =
       case runWithFuel (body st) (S n) of
-        Complete (Left newState) remaining => go newState remaining
+        Complete (Left newState) _ => go newState n
         Complete (Right result) remaining => Complete result remaining
         Exhausted _ used => Exhausted Nothing used
         FuelError msg => FuelError msg
@@ -153,9 +158,9 @@ export
 Show a => Show (FuelResult a) where
   show (Complete result remaining) =
     "Complete(" ++ show result ++ ", " ++ show remaining ++ " fuel remaining)"
-  show (Exhausted partial used) =
+  show (Exhausted partialRes used) =
     "Exhausted after " ++ show used ++ " steps" ++
-    maybe "" (\p => ", partial: " ++ show p) partial
+    maybe "" (\p => ", partial: " ++ show p) partialRes
   show (FuelError msg) = "FuelError: " ++ msg
 
 -- | Example: Proof step simulation

@@ -10,13 +10,34 @@
 --
 -- Corresponds to: lib/verisimdb_connector.ex
 
-module Hypatia.Verification.VerisimdbConnector
+module VerisimdbConnector
 
-import Hypatia.ABI.Types
-import Data.So
 import Data.String
+import Data.Maybe
 
 %default total
+
+------------------------------------------------------------------------
+-- Section 0: ABI types (mirror of Hypatia.ABI.Types)
+-- Defined locally so this proof obligation type-checks standalone:
+-- verify-proofs.yml runs `idris2 --check` per file with no package path.
+------------------------------------------------------------------------
+
+||| Severity levels (mirrors Hypatia.ABI.Types.Severity).
+public export
+data Severity = Critical | High | Medium | Low | Info
+
+||| A canonical weakness pattern (mirrors Hypatia.ABI.Types.Pattern).
+public export
+record Pattern where
+  constructor MkPattern
+  patternId : String
+  description : String
+  severity : Severity
+  affectedRepos : List String
+  file : String
+  line : Nat
+  cwe : Maybe String
 
 ------------------------------------------------------------------------
 -- Section 1: Raw Data Representation
@@ -55,15 +76,15 @@ parseSeverity "low"      = Just Low
 parseSeverity "info"     = Just Info
 parseSeverity _          = Nothing
 
-||| Proof: parseSeverity is a total mapping for valid inputs.
+||| Proof: parseSeverity is total — every input either maps to some
+||| severity or to Nothing (there is no third "stuck" outcome).
 public export
-parseSeverityTotal : (s : String) -> (exists : Bool ** if exists then (parseSeverity s = Just sev) else (parseSeverity s = Nothing))
-parseSeverityTotal "critical" = (True ** Refl)
-parseSeverityTotal "high"     = (True ** Refl)
-parseSeverityTotal "medium"   = (True ** Refl)
-parseSeverityTotal "low"      = (True ** Refl)
-parseSeverityTotal "info"     = (True ** Refl)
-parseSeverityTotal _          = (False ** Refl)
+parseSeverityTotal : (s : String)
+                  -> Either (sev : Severity ** parseSeverity s = Just sev)
+                            (parseSeverity s = Nothing)
+parseSeverityTotal s with (parseSeverity s)
+  parseSeverityTotal s | Just sev = Left (sev ** Refl)
+  parseSeverityTotal s | Nothing  = Right Refl
 
 ||| Convert a RawFinding to the clean Pattern type.
 ||| This function ensures that all mandatory fields are present.
@@ -96,18 +117,29 @@ cleanFindingSoundness : (raw : RawFinding)
                            (Either (raw.severity = Nothing)
                             (raw.line = Nothing)))))
                      -> cleanFinding raw = Nothing
-cleanFindingSoundness (MkRawFinding Nothing _ _ _ _ _) (Left _) = Refl
-cleanFindingSoundness (MkRawFinding (Just _) Nothing _ _ _ _) (Right (Left _)) = Refl
-cleanFindingSoundness (MkRawFinding (Just _) (Just _) Nothing _ _ _) (Right (Right (Left _))) = Refl
-cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) Nothing _ _) (Right (Right (Right (Left _)))) = Refl
-cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just _) Nothing _) (Right (Right (Right (Right _)))) = Refl
-cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) _ with (parseSeverity sevS)
+-- One of the first four mandatory fields is Nothing: the do-block
+-- short-circuits before parseSeverity, so cleanFinding = Nothing directly.
+cleanFindingSoundness (MkRawFinding Nothing _ _ _ _ _) _ = Refl
+cleanFindingSoundness (MkRawFinding (Just _) Nothing _ _ _ _) _ = Refl
+cleanFindingSoundness (MkRawFinding (Just _) (Just _) Nothing _ _ _) _ = Refl
+cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) Nothing _ _) _ = Refl
+-- severity is present but line is Nothing: parseSeverity runs first, so we
+-- case on it — either branch then hits `Nothing` for the line bind.
+cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) Nothing _) _ with (parseSeverity sevS)
+  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) Nothing _) _ | Nothing = Refl
+  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) Nothing _) _ | Just _ = Refl
+-- all mandatory fields present: if parseSeverity fails, cleanFinding = Nothing;
+-- if it succeeds, cleanFinding = Just _, so the hypothesis (some field = Nothing)
+-- is contradictory and is refuted.
+cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) hyp with (parseSeverity sevS)
   cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) _ | Nothing = Refl
-  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) (Left _) | (Just _) impossible
-  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) (Right (Left _)) | (Just _) impossible
-  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) (Right (Right (Left _))) | (Just _) impossible
-  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) (Right (Right (Right (Left _)))) | (Just _) impossible
-  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) (Right (Right (Right (Right _)))) | (Just _) impossible
+  cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just _) _) hyp | Just _ =
+    case hyp of
+      Left p => absurd p
+      Right (Left p) => absurd p
+      Right (Right (Left p)) => absurd p
+      Right (Right (Right (Left p))) => absurd p
+      Right (Right (Right (Right p))) => absurd p
 
 ------------------------------------------------------------------------
 -- Section 3: Transit to Logtalk Facts
@@ -134,12 +166,10 @@ toFact p =
 
 ||| Proof: data preservation — fields in the Fact match the Pattern exactly.
 public export
-factPreservesData : (p : Pattern)
-                 -> (exists r : String ** p.affectedRepos = [r])
-                 -> (toFact p).repo = head p.affectedRepos &&
-                    (toFact p).file = p.file &&
-                    (toFact p).category = p.description &&
-                    (toFact p).severity = p.severity
-factPreservesData p (r ** prf) =
-  let fact = toFact p
-  in rewrite prf in Refl
+factPreservesData : (p : Pattern) -> (r : String) -> p.affectedRepos = [r]
+                 -> ( (toFact p).repo = r
+                    , (toFact p).file = p.file
+                    , (toFact p).category = p.description
+                    , (toFact p).severity = p.severity )
+factPreservesData p r prf =
+  rewrite prf in (Refl, Refl, Refl, Refl)

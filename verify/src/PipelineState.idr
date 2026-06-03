@@ -1,13 +1,11 @@
 -- SPDX-License-Identifier: MPL-2.0
--- PipelineState.idr - Type-safe pipeline state machine using proven patterns
+-- PipelineState.idr - Type-safe pipeline state machine
 --
--- Integrates SafeStateMachine from proven library for CI/CD pipeline states.
--- Only valid state transitions are representable at the type level.
+-- Modeled on the SafeStateMachine pattern from the `proven` library:
+-- only valid state transitions are representable at the type level.
+-- Self-contained — the transition relation and proofs need no external deps.
 
 module PipelineState
-
-import Proven.SafeStateMachine
-import Data.Vect
 
 %default total
 

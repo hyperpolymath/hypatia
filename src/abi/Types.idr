@@ -8,6 +8,8 @@
 
 module Hypatia.ABI.Types
 
+import Data.So
+
 %default total
 
 ||| Severity levels for findings, ordered by criticality
@@ -103,7 +105,7 @@ public export
 record ApiResponse (a : Type) where
   constructor MkApiResponse
   success : Bool
-  data : Maybe a
+  payload : Maybe a    -- ^ wire field name is "data"; `data` is an Idris2 keyword
   error : Maybe String
   timestamp : String
 

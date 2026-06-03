@@ -86,12 +86,8 @@ record BayesConfidence where
 ||| alpha / (alpha + beta) is always in [0, 1] because alpha <= alpha + beta.
 public export
 bayesToBounded : BayesConfidence -> BoundedConfidence
-bayesToBounded (MkBayes a b) =
-  MkBounded a (a + b) {denPositive = nonEmpty} {numBounded = lteAddRight {m = a}}
-  where
-    lteAddRight : {m : Nat} -> LTE m (m + b)
-    lteAddRight {m = Z} = LTEZero
-    lteAddRight {m = S m'} = LTESucc (lteAddRight {m = m'})
+bayesToBounded (MkBayes a b @{ne}) =
+  MkBounded a (a + b) {denPositive = ne} {numBounded = lteAddRight a}
 
 ||| Record a success: increment alpha.
 ||| Proof that the result is still valid (alpha + 1 + beta >= 1).
@@ -124,11 +120,7 @@ public export
 successPreservesBounds : (bc : BayesConfidence)
                       -> let bc' = recordSuccess bc
                          in LTE bc'.alpha (bc'.alpha + bc'.beta)
-successPreservesBounds (MkBayes a b) = addLeqAdd a b
-  where
-    addLeqAdd : (a : Nat) -> (b : Nat) -> LTE (S a) (S a + b)
-    addLeqAdd a Z = rewrite plusZeroRightNeutral a in lteRefl
-    addLeqAdd a (S b') = lteSuccRight (addLeqAdd a b')
+successPreservesBounds (MkBayes a b) = lteAddRight (S a)
 
 ------------------------------------------------------------------------
 -- Proof: failure preserves [0, 1] bounds
@@ -160,28 +152,26 @@ clampNat : (val : Nat) -> (floor : Nat) -> (cap : Nat) -> (den : Nat)
         -> {auto capLeqDen : LTE cap den}
         -> (n : Nat ** LTE n den)
 clampNat val floor cap den =
-  if isLTE val floor
-    then (floor ** lteTransitive floorLeqCap capLeqDen)
-    else if isLTE cap val
+  if leNat val floor
+    then (floor ** transitive floorLeqCap capLeqDen)
+    else if leNat cap val
       then (cap ** capLeqDen)
       else case isLTE val den of
         Yes prf => (val ** prf)
         No contra => (cap ** capLeqDen)  -- unreachable when val < cap <= den
   where
-    isLTE : (a : Nat) -> (b : Nat) -> Bool
-    isLTE Z _ = True
-    isLTE (S _) Z = False
-    isLTE (S a) (S b) = isLTE a b
+    leNat : (a : Nat) -> (b : Nat) -> Bool
+    leNat Z _ = True
+    leNat (S _) Z = False
+    leNat (S a) (S b) = leNat a b
 
 ||| Proof: clamped value is always <= denominator (i.e., <= 1).
 public export
 clampUpperBound : (val, floor, cap, den : Nat)
                -> {auto flc : LTE floor cap}
                -> {auto cld : LTE cap den}
-               -> let (n ** prf) = clampNat val floor cap den in LTE n den
-clampUpperBound val floor cap den =
-  let (_ ** prf) = clampNat val floor cap den
-  in prf
+               -> LTE (fst (clampNat val floor cap den)) den
+clampUpperBound val floor cap den = snd (clampNat val floor cap den)
 
 ------------------------------------------------------------------------
 -- Confidence monotonicity under success
@@ -195,14 +185,12 @@ clampUpperBound val floor cap den =
 public export
 successNonDecreasing : (a : Nat) -> (b : Nat)
                     -> LTE (a * (S a + b)) (S a * (a + b))
-successNonDecreasing Z b = LTEZero
-successNonDecreasing (S a') b =
-  -- S a' * (S (S a') + b) vs S (S a') * (S a' + b)
-  -- = S a' * S(S a' + b) vs (S a' + b) + S a' * (S a' + b)
-  -- By induction, a' * (S a' + b) <= S a' * (a' + b)
-  -- We lift this through successor arithmetic.
-  let ih = successNonDecreasing a' b
-  in lteAddRight ih
+-- a * (S a + b) = a * S(a + b) = a + a*(a+b)  [multRightSuccPlus]
+-- S a * (a + b) = (a + b) + a*(a+b)            [def of *]
+-- so the goal reduces to a + a*(a+b) <= (a+b) + a*(a+b), i.e. a <= a + b.
+successNonDecreasing a b =
+  rewrite multRightSuccPlus a (a + b) in
+    plusLteMonotoneRight (a * (a + b)) a (a + b) (lteAddRight a)
 
 ------------------------------------------------------------------------
 -- Confidence monotonicity under failure
@@ -216,10 +204,13 @@ successNonDecreasing (S a') b =
 public export
 failureNonIncreasing : (a : Nat) -> (b : Nat)
                     -> LTE (a * (a + b)) (a * (a + S b))
-failureNonIncreasing Z _ = LTEZero
-failureNonIncreasing (S a') b =
-  rewrite plusSuccRightSucc a' b in
-    lteRefl  -- a * (a + S b) = a * S(a + b) and LTE is reflexive after rewrite
+-- a * (a + S b) = a * S(a + b) = a + a*(a+b)  [multRightSuccPlus]
+-- so the goal a*(a+b) <= a + a*(a+b) is a <= addend on the left.
+failureNonIncreasing a b =
+  rewrite sym (plusSuccRightSucc a b) in     -- a + S b => S (a + b)
+  rewrite multRightSuccPlus a (a + b) in     -- a * S(a + b) => a + a*(a+b)
+  rewrite plusCommutative a (a * (a + b)) in
+    lteAddRight (a * (a + b))
 
 ------------------------------------------------------------------------
 -- Weighted average preserves bounds
@@ -244,14 +235,8 @@ public export
 multLteMonoRight : (a, b, c : Nat) -> LTE a b -> LTE (a * c) (b * c)
 multLteMonoRight Z b c _ = LTEZero
 multLteMonoRight (S a') (S b') c (LTESucc prf) =
-  let ih = multLteMonoRight a' b' c prf
-  in plusLteMonoRight c ih
-  where
-    plusLteMonoRight : (c : Nat) -> LTE (a' * c) (b' * c)
-                    -> LTE (c + a' * c) (c + b' * c)
-    plusLteMonoRight Z prf = prf
-    plusLteMonoRight (S c') prf =
-      LTESucc (plusLteMonoRight c' prf)
+  -- S a' * c = c + a'*c, S b' * c = c + b'*c; add c on the left of the IH.
+  plusLteMonotoneLeft c (a' * c) (b' * c) (multLteMonoRight a' b' c prf)
 
 ||| Proof: sum of cross-products bounded by twice the product of denominators.
 ||| Given n1 <= d1 and n2 <= d2:
@@ -261,16 +246,9 @@ averageBounded : (n1, d1, n2, d2 : Nat)
               -> LTE n1 d1 -> LTE n2 d2
               -> LTE (n1 * d2 + n2 * d1) (d1 * d2 + d1 * d2)
 averageBounded n1 d1 n2 d2 prf1 prf2 =
-  let left  = multLteMonoRight n1 d1 d2 prf1  -- n1 * d2 <= d1 * d2
-      right = multLteMonoRight n2 d2 d1 prf2  -- n2 * d1 <= d2 * d1
-      -- We need n2 * d1 <= d1 * d2, which requires d2 * d1 = d1 * d2
-      -- For now, use the weaker bound: n1*d2 + n2*d1 <= d1*d2 + d2*d1
-  in plusLteMonoBoth left right
-  where
-    plusLteMonoBoth : LTE a c -> LTE b d -> LTE (a + b) (c + d)
-    plusLteMonoBoth LTEZero q = lteTransitive q (lteAddLeft q)
-      where
-        lteAddLeft : {c : Nat} -> LTE b d -> LTE b (c + d)
-        lteAddLeft {c = Z} prf = prf
-        lteAddLeft {c = S c'} prf = lteSuccRight (lteAddLeft {c = c'} prf)
-    plusLteMonoBoth (LTESucc p) q = LTESucc (plusLteMonoBoth p q)
+  let left  : LTE (n1 * d2) (d1 * d2)
+      left  = multLteMonoRight n1 d1 d2 prf1
+      -- n2 * d1 <= d2 * d1, rewritten to d1 * d2 via commutativity.
+      right : LTE (n2 * d1) (d1 * d2)
+      right = rewrite multCommutative d1 d2 in multLteMonoRight n2 d2 d1 prf2
+  in plusLteMonotone left right
