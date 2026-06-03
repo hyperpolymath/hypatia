@@ -228,7 +228,6 @@ lowConfidenceReports : (c : Double)
                     -> dispatchStrategy c = ReportOnly
 lowConfidenceReports c notHigh notMed with (c >= 0.95)
   lowConfidenceReports c notHigh notMed | False with (c >= 0.85)
-    lowConfidenceReports c notHigh Oh | False | False impossible
     lowConfidenceReports c notHigh notMed | False | False = Refl
 
 ------------------------------------------------------------------------
@@ -363,17 +362,12 @@ successNonDecreasing (MkBayes a b) = successLemma a b
     ||| which is just LTE a (a + b), i.e. b >= 0.
     successLemma : (a : Nat) -> (b : Nat)
                 -> LTE (a * (S a + b)) (S a * (a + b))
-    successLemma Z b = LTEZero
-    successLemma (S a') b = rewrite sym (plusSuccRightSucc a' b) in
-      let -- S a' * (S (a' + b)) = S a' * S (a' + b)
-          --                      = S (a' + b) + a' * S (a' + b)
-          -- S (S a') * (S a' + b) = (S a' + b) + S a' * (S a' + b)
-          -- We need: S a' * S(S a' + b) <= S(S a') * (S a' + b)
-          -- This is: (S a') * (S (S a' + b)) <= (S (S a')) * (S a' + b)
-          -- By induction on structure, this holds because
-          -- the difference is exactly b >= 0.
-          ih = successLemma a' b
-      in lteAddRight ih
+    -- a * (S a + b) = a * S(a+b) = a + a*(a+b)   [multRightSuccPlus]
+    -- S a * (a + b) = (a + b) + a*(a+b)           [def of *]
+    -- so the goal reduces to a + a*(a+b) <= (a+b) + a*(a+b), i.e. a <= a + b.
+    successLemma a b =
+      rewrite multRightSuccPlus a (a + b) in
+        plusLteMonotoneRight (a * (a + b)) a (a + b) (lteAddRight a)
 
 ||| Proof: recording a failure never increases the confidence.
 ||| After failure, alpha stays the same but beta increases, so
@@ -391,12 +385,13 @@ failureNonIncreasing (MkBayes a b) = failureLemma a b
     ||| So a * (a + S b) <= a * (a + b) + a is actually equality (LTE from reflexivity).
     failureLemma : (a : Nat) -> (b : Nat)
                 -> LTE (a * (a + S b)) (a * (a + b) + a)
-    failureLemma Z b = LTEZero
-    failureLemma (S a') b =
-      -- S a' * (S a' + S b) = S a' * S(a' + S b)
-      -- Rewrite a + S b = S(a + b) so the multiplication aligns
-      rewrite plusSuccRightSucc a' b in
-        lteRefl
+    -- a * (a + S b) = a * S(a+b) = a + a*(a+b), which equals a*(a+b) + a
+    -- by commutativity, so the bound holds by reflexivity.
+    failureLemma a b =
+      rewrite sym (plusSuccRightSucc a b) in   -- a + S b => S (a + b)
+      rewrite multRightSuccPlus a (a + b) in   -- a * S(a+b) => a + a*(a+b)
+      rewrite plusCommutative a (a * (a + b)) in
+        reflexive
 
 ------------------------------------------------------------------------
 -- Section 6: Safety Triangle Soundness
@@ -417,14 +412,14 @@ public export
 eliminateNeverDowngraded : (pat : Pattern) -> (recipe : Recipe)
                         -> (sub : SubstituteResult)
                         -> Not (actionTier (route pat (EliminateFound recipe) sub) = Substitute)
-eliminateNeverDowngraded pat recipe sub prf = absurd prf
+eliminateNeverDowngraded pat recipe sub Refl impossible
 
 ||| Proof: when eliminate is available, route never produces Control.
 public export
 eliminateNeverControl : (pat : Pattern) -> (recipe : Recipe)
                      -> (sub : SubstituteResult)
                      -> Not (actionTier (route pat (EliminateFound recipe) sub) = Control)
-eliminateNeverControl pat recipe sub prf = absurd prf
+eliminateNeverControl pat recipe sub Refl impossible
 
 ||| Proof: substitute is only chosen when eliminate is unavailable.
 public export
@@ -510,22 +505,22 @@ clampNeverExceedsMax ReportOnly  Nascent    = LTEZero
 clampNeverExceedsMax Review      Nascent    = LTEZero
 clampNeverExceedsMax AutoExecute Nascent    = LTEZero
 clampNeverExceedsMax ReportOnly  Adolescent = LTEZero
-clampNeverExceedsMax Review      Adolescent = lteRefl
-clampNeverExceedsMax AutoExecute Adolescent = lteRefl
+clampNeverExceedsMax Review      Adolescent = LTESucc LTEZero           -- 1 <= 1
+clampNeverExceedsMax AutoExecute Adolescent = LTESucc LTEZero           -- 1 <= 1 (clamped)
 clampNeverExceedsMax ReportOnly  Mature     = LTEZero
-clampNeverExceedsMax Review      Mature     = lteRefl
-clampNeverExceedsMax AutoExecute Mature     = lteRefl
+clampNeverExceedsMax Review      Mature     = LTESucc LTEZero           -- 1 <= 2
+clampNeverExceedsMax AutoExecute Mature     = LTESucc (LTESucc LTEZero) -- 2 <= 2
 clampNeverExceedsMax ReportOnly  Veteran    = LTEZero
-clampNeverExceedsMax Review      Veteran    = lteRefl
-clampNeverExceedsMax AutoExecute Veteran    = lteRefl
+clampNeverExceedsMax Review      Veteran    = LTESucc LTEZero           -- 1 <= 2
+clampNeverExceedsMax AutoExecute Veteran    = LTESucc (LTESucc LTEZero) -- 2 <= 2
 
 ||| Proof: nascent recipes can never auto-execute.
 public export
 nascentNeverAutoExecutes : (strategy : DispatchStrategy)
                         -> Not (clampStrategy strategy Nascent = AutoExecute)
-nascentNeverAutoExecutes ReportOnly  prf = absurd prf
-nascentNeverAutoExecutes Review      prf = absurd prf
-nascentNeverAutoExecutes AutoExecute prf = absurd prf
+nascentNeverAutoExecutes ReportOnly  Refl impossible
+nascentNeverAutoExecutes Review      Refl impossible
+nascentNeverAutoExecutes AutoExecute Refl impossible
 
 ||| Proof: veteran recipes have no dispatch restrictions.
 public export

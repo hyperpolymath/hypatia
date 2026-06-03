@@ -22,6 +22,7 @@
 module DispatchStrategy
 
 import Data.Nat
+import Decidable.Equality
 
 %default total
 
@@ -136,9 +137,9 @@ lowConfidenceIsReport : (c : ConfidencePct) -> Not (LTE 85 c.value)
                      -> dispatch c = ReportOnly
 lowConfidenceIsReport (MkPct v) not85 with (isLTE 95 v)
   lowConfidenceIsReport (MkPct v) not85 | Yes prf95 =
-    absurd (not85 (lteTransitive (lteSuccRight (lteSuccRight (lteSuccRight
+    absurd (not85 (transitive (lteSuccRight (lteSuccRight (lteSuccRight
       (lteSuccRight (lteSuccRight (lteSuccRight (lteSuccRight (lteSuccRight
-      (lteSuccRight (lteSuccRight lteRefl)))))))))) prf95))
+      (lteSuccRight (lteSuccRight reflexive)))))))))) prf95))
   lowConfidenceIsReport (MkPct v) not85 | No _ with (isLTE 85 v)
     lowConfidenceIsReport (MkPct v) not85 | No _ | Yes prf85 = absurd (not85 prf85)
     lowConfidenceIsReport (MkPct v) not85 | No _ | No _ = Refl
@@ -170,22 +171,24 @@ public export
 dispatchFromZone : (c : ConfidencePct) -> classify c = ZoneHigh -> dispatch c = AutoExecute
 dispatchFromZone (MkPct v) prf with (isLTE 95 v)
   dispatchFromZone (MkPct v) prf | Yes _ = Refl
-  dispatchFromZone (MkPct v) prf | No _ = absurd prf
+  dispatchFromZone (MkPct v) prf | No _ with (isLTE 85 v)
+    dispatchFromZone (MkPct v) Refl | No _ | Yes _ impossible
+    dispatchFromZone (MkPct v) Refl | No _ | No _ impossible
 
 public export
 dispatchFromZoneMid : (c : ConfidencePct) -> classify c = ZoneMid -> dispatch c = Review
 dispatchFromZoneMid (MkPct v) prf with (isLTE 95 v)
-  dispatchFromZoneMid (MkPct v) prf | Yes _ = absurd prf
+  dispatchFromZoneMid (MkPct v) Refl | Yes _ impossible
   dispatchFromZoneMid (MkPct v) prf | No _ with (isLTE 85 v)
     dispatchFromZoneMid (MkPct v) prf | No _ | Yes _ = Refl
-    dispatchFromZoneMid (MkPct v) prf | No _ | No _ = absurd prf
+    dispatchFromZoneMid (MkPct v) Refl | No _ | No _ impossible
 
 public export
 dispatchFromZoneLow : (c : ConfidencePct) -> classify c = ZoneLow -> dispatch c = ReportOnly
 dispatchFromZoneLow (MkPct v) prf with (isLTE 95 v)
-  dispatchFromZoneLow (MkPct v) prf | Yes _ = absurd prf
+  dispatchFromZoneLow (MkPct v) Refl | Yes _ impossible
   dispatchFromZoneLow (MkPct v) prf | No _ with (isLTE 85 v)
-    dispatchFromZoneLow (MkPct v) prf | No _ | Yes _ = absurd prf
+    dispatchFromZoneLow (MkPct v) Refl | No _ | Yes _ impossible
     dispatchFromZoneLow (MkPct v) prf | No _ | No _ = Refl
 
 ||| Core monotonicity theorem:
@@ -202,7 +205,7 @@ dispatchMonotone (MkPct va) (MkPct vb) bLeqA with (isLTE 95 va)
   -- Case 1: a is in high zone (AutoExecute, autonomy = 2)
   dispatchMonotone (MkPct va) (MkPct vb) bLeqA | Yes _ with (isLTE 95 vb)
     -- b is also high
-    dispatchMonotone (MkPct va) (MkPct vb) bLeqA | Yes _ | Yes _ = lteRefl
+    dispatchMonotone (MkPct va) (MkPct vb) bLeqA | Yes _ | Yes _ = reflexive
     -- b is not high
     dispatchMonotone (MkPct va) (MkPct vb) bLeqA | Yes _ | No _ with (isLTE 85 vb)
       -- b is mid (Review, autonomy = 1)
@@ -217,12 +220,12 @@ dispatchMonotone (MkPct va) (MkPct vb) bLeqA with (isLTE 95 va)
     dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | Yes midA with (isLTE 95 vb)
       -- b is high: impossible because b.value <= a.value < 95
       dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | Yes midA | Yes highB =
-        absurd (notHighA (lteTransitive highB bLeqA))
+        absurd (notHighA (transitive highB bLeqA))
       -- b is not high
       dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | Yes midA | No _ with (isLTE 85 vb)
         -- b is also mid
         dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | Yes midA | No _ | Yes _ =
-          lteRefl  -- 1 <= 1
+          reflexive  -- 1 <= 1
         -- b is low
         dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | Yes midA | No _ | No _ =
           LTEZero  -- 0 <= 1
@@ -230,17 +233,17 @@ dispatchMonotone (MkPct va) (MkPct vb) bLeqA with (isLTE 95 va)
     dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | No notMidA with (isLTE 95 vb)
       -- b is high: impossible because b.value <= a.value < 85
       dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | No notMidA | Yes highB =
-        absurd (notMidA (lteTransitive (lteSuccRight (lteSuccRight (lteSuccRight
+        absurd (notMidA (transitive (lteSuccRight (lteSuccRight (lteSuccRight
           (lteSuccRight (lteSuccRight (lteSuccRight (lteSuccRight (lteSuccRight
-          (lteSuccRight (lteSuccRight lteRefl)))))))))) (lteTransitive highB bLeqA)))
+          (lteSuccRight (lteSuccRight reflexive)))))))))) (transitive highB bLeqA)))
       -- b is not high
       dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | No notMidA | No _ with (isLTE 85 vb)
         -- b is mid: impossible because b.value <= a.value < 85
         dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | No notMidA | No _ | Yes midB =
-          absurd (notMidA (lteTransitive midB bLeqA))
+          absurd (notMidA (transitive midB bLeqA))
         -- b is also low: both ReportOnly
         dispatchMonotone (MkPct va) (MkPct vb) bLeqA | No notHighA | No notMidA | No _ | No _ =
-          lteRefl  -- 0 <= 0
+          reflexive  -- 0 <= 0
 
 ------------------------------------------------------------------------
 -- Section 6: Annealing stage caps
@@ -277,22 +280,22 @@ clampNeverExceedsMax ReportOnly  Nascent    = LTEZero
 clampNeverExceedsMax Review      Nascent    = LTEZero
 clampNeverExceedsMax AutoExecute Nascent    = LTEZero
 clampNeverExceedsMax ReportOnly  Adolescent = LTEZero
-clampNeverExceedsMax Review      Adolescent = lteRefl
-clampNeverExceedsMax AutoExecute Adolescent = lteRefl
+clampNeverExceedsMax Review      Adolescent = reflexive
+clampNeverExceedsMax AutoExecute Adolescent = reflexive
 clampNeverExceedsMax ReportOnly  Mature     = LTEZero
 clampNeverExceedsMax Review      Mature     = LTESucc LTEZero
-clampNeverExceedsMax AutoExecute Mature     = lteRefl
+clampNeverExceedsMax AutoExecute Mature     = reflexive
 clampNeverExceedsMax ReportOnly  Veteran    = LTEZero
 clampNeverExceedsMax Review      Veteran    = LTESucc LTEZero
-clampNeverExceedsMax AutoExecute Veteran    = lteRefl
+clampNeverExceedsMax AutoExecute Veteran    = reflexive
 
 ||| Proof: nascent recipes can never auto-execute.
 public export
 nascentNeverAutoExecutes : (s : Strategy)
                         -> Not (clampToStage s Nascent = AutoExecute)
-nascentNeverAutoExecutes ReportOnly  prf = absurd prf
-nascentNeverAutoExecutes Review      prf = absurd prf
-nascentNeverAutoExecutes AutoExecute prf = absurd prf
+nascentNeverAutoExecutes ReportOnly  Refl impossible
+nascentNeverAutoExecutes Review      Refl impossible
+nascentNeverAutoExecutes AutoExecute Refl impossible
 
 ||| Proof: veteran recipes have no restrictions.
 public export

@@ -21,6 +21,7 @@ modules = Hypatia.ABI.Types
         , Hypatia.ABI.GRPC
         , Hypatia.ABI.REST
         , Hypatia.ABI.FFI
+        , Hypatia.ABI.RuleEngine
 
 builddir = "../../build/abi"
 
