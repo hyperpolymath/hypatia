@@ -6,26 +6,28 @@ name: Verify Proofs (Idris / Lean / TLA+)
 on:
   push:
     paths:
-    - .github/workflows/verify-idris.yml
-    - .github/workflows/verify-lean.yml
-    - .github/workflows/verify-tlaplus.yml
+    - .github/workflows/verify-proofs.yml
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
     - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
+    - src/abi/**
+    - src/Hypatia/ABI/**
+    - verify/**
     branches:
     - main
   pull_request:
     paths:
-    - .github/workflows/verify-idris.yml
-    - .github/workflows/verify-lean.yml
-    - .github/workflows/verify-tlaplus.yml
+    - .github/workflows/verify-proofs.yml
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
     - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
+    - src/abi/**
+    - src/Hypatia/ABI/**
+    - verify/**
     branches:
     - main
   schedule:
@@ -106,6 +108,17 @@ jobs:
             exit 1
           fi
 
+      # The standalone files above are only half the Idris proof surface. The
+      # richest proofs (RuleEngine's safety-triangle / dispatch / Bayesian
+      # monotonicity, the FFI ApiResponse proof, the pipeline state machine)
+      # live in the ABI and verify *packages*, which the per-file --check loop
+      # never builds. Gate them here so they can't silently rot again.
+      - name: Build the ABI proof package (Types, GraphQL, gRPC, REST, FFI, RuleEngine)
+        run: idris2 --build src/abi/hypatia-abi.ipkg
+
+      - name: Build the verify package (PipelineState, Verify.Fuel)
+        run: idris2 --build verify/hypatia-verify.ipkg
+
       - name: Summary
         if: always()
         run: |
@@ -128,7 +141,10 @@ jobs:
 
     env:
       ELAN_VERSION: v4.0.0
-      LEAN_TOOLCHAIN: leanprover/lean4:stable
+      # Pinned (not :stable) so the proofs are checked against the exact Lean
+      # they were verified with. Matches verification/proofs/lean4/lean-toolchain;
+      # bump both together. A moving :stable can break version-sensitive lemmas.
+      LEAN_TOOLCHAIN: leanprover/lean4:v4.30.0
 
     steps:
       - name: Checkout
