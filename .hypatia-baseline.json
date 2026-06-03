@@ -243,5 +243,78 @@
     "type": "SD009",
     "file": "ffi/zig/src/main.zig",
     "action": "add_spdx_header"
+  },
+  {
+    "severity": "low",
+    "rule_module": "workflow_audit",
+    "type": "inbox_steward_missing",
+    "file": ".github/workflows/inbox-steward.yml",
+    "action": "create",
+    "reason": "Inbox steward automation for PR processing"
+  },
+  {
+    "severity": "low",
+    "rule_module": "workflow_audit",
+    "type": "inbox_steward_intake_missing",
+    "file": ".github/workflows/inbox-steward-intake.yml",
+    "action": "create",
+    "reason": "Hypatia intake for inbox steward reports"
+  },
+  {
+    "severity": "medium",
+    "rule_module": "inbox_automation",
+    "type": "IA001",
+    "file": ".",
+    "action": "enable_auto_merge",
+    "reason": "Enable auto-merge for trusted contributors and Dependabot PRs that pass all checks"
+  },
+  {
+    "severity": "medium",
+    "rule_module": "inbox_automation",
+    "type": "IA002",
+    "file": ".",
+    "action": "require_dogfood_gate",
+    "reason": "All PRs must pass Dogfood Gate before auto-merge"
+  },
+  {
+    "severity": "medium",
+    "rule_module": "inbox_automation",
+    "type": "IA003",
+    "file": ".",
+    "action": "require_scorecard",
+    "reason": "All PRs must pass Scorecard Enforcer before auto-merge"
+  },
+  {
+    "severity": "high",
+    "rule_module": "inbox_automation",
+    "type": "IA004",
+    "file": ".",
+    "action": "require_hypatia_scan",
+    "reason": "All PRs must pass Hypatia Security Scan before auto-merge"
+  },
+  {
+    "severity": "low",
+    "rule_module": "inbox_automation",
+    "type": "IA005",
+    "file": ".",
+    "action": "trusted_contributors",
+    "reason": "Define trusted contributors whose PRs can be auto-merged without approval",
+    "trusted": ["hyperpolymath", "dependabot", "renovate"]
+  },
+  {
+    "severity": "medium",
+    "rule_module": "inbox_automation",
+    "type": "IA006",
+    "file": ".",
+    "action": "propagate_rules",
+    "reason": "Propagate learned rules from auto-merged PRs to other repos via .git-private-farm"
+  },
+  {
+    "severity": "low",
+    "rule_module": "inbox_automation",
+    "type": "IA007",
+    "file": ".",
+    "action": "monitor_application",
+    "reason": "Monitor that inbox automation applies to repos not currently in inbox"
   }
 ]

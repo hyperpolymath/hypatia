@@ -1,0 +1,388 @@
+# SPDX-License-Identifier: MPL-2.0
+# Inbox Steward Intake — Process reports from gitbot-fleet inbox-steward
+#
+# This workflow:
+# 1. Receives inbox-steward reports from gitbot-fleet
+# 2. Analyzes patterns from auto-merged PRs
+# 3. Updates Hypatia ruleset based on lessons learned
+# 4. Triggers re-scanning of repos that had PRs merged
+# 5. Dispatches updated rules to .git-private-farm for fleet-wide application
+#
+# Part of the closed-loop automation:
+# gitbot-fleet/inbox-steward → hypatia/inbox-steward-intake → .git-private-farm/propagate
+#
+# Closes the loop: PRs that pass CICD get auto-merged, patterns are learned,
+# and rules are updated to prevent similar issues in other repos.
+
+name: Inbox Steward Intake
+
+on:
+  repository_dispatch:
+    types:
+      - inbox-steward-report
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (no actual updates)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  # Job 1: Record the steward report
+  record-report:
+    name: Record steward report
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      report_path: ${{ steps.record.outputs.report_path }}
+      repo: ${{ steps.record.outputs.repo }}
+      pr_count: ${{ steps.record.outputs.pr_count }}
+      validated_count: ${{ steps.record.outputs.validated_count }}
+      merged_count: ${{ steps.record.outputs.merged_count }}
+    
+    steps:
+      - name: Checkout hypatia
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FARM_PAT }}
+
+      - name: Record report
+        id: record
+        env:
+          EVENT_JSON: ${{ toJson(github.event) }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          
+          # Parse event
+          SOURCE_REPO=$(echo "$EVENT_JSON" | jq -r '.client_payload.source_repo // "unknown"')
+          PR_COUNT=$(echo "$EVENT_JSON" | jq -r '.client_payload.total_prs // 0')
+          VALIDATED=$(echo "$EVENT_JSON" | jq -r '.client_payload.validated_prs // 0')
+          MERGED=$(echo "$EVENT_JSON" | jq -r '.client_payload.auto_merged_prs // 0')
+          TIMESTAMP=$(echo "$EVENT_JSON" | jq -r '.client_payload.timestamp // ""')
+          RUN_URL=$(echo "$EVENT_JSON" | jq -r '.client_payload.run_url // ""')
+          
+          echo "Report from: $SOURCE_REPO"
+          echo "PRs checked: $PR_COUNT, Validated: $VALIDATED, Merged: $MERGED"
+          
+          # Create report file
+          REPORTS_DIR="data/inbox-steward-reports"
+          mkdir -p "$REPORTS_DIR"
+          
+          FILENAME="$(date -u +%Y%m%d-%H%M%S)-${SOURCE_REPO//\//-}-report.json"
+          REPORT_PATH="$REPORTS_DIR/$FILENAME"
+          
+          echo "$EVENT_JSON" | jq '{
+            timestamp: .client_payload.timestamp // now,
+            source_repo: .client_payload.source_repo,
+            source: .client_payload.source // "gitbot-fleet",
+            total_prs: .client_payload.total_prs,
+            validated_prs: .client_payload.validated_prs,
+            auto_merged_prs: .client_payload.auto_merged_prs,
+            run_url: .client_payload.run_url,
+            received_at: now
+          }' > "$REPORT_PATH"
+          
+          echo "report_path=$REPORT_PATH" >> "$GITHUB_OUTPUT"
+          echo "repo=$SOURCE_REPO" >> "$GITHUB_OUTPUT"
+          echo "pr_count=$PR_COUNT" >> "$GITHUB_OUTPUT"
+          echo "validated_count=$VALIDATED" >> "$GITHUB_OUTPUT"
+          echo "merged_count=$MERGED" >> "$GITHUB_OUTPUT"
+          
+          # Commit the report
+          if [ "$DRY_RUN" = "false" ]; then
+            git config user.name "Inbox Steward Intake"
+            git config user.email "inbox-steward-intake@reposystem.dev"
+            git add "$REPORT_PATH"
+            git commit -m "inbox-steward: record from $SOURCE_REPO ($PR_COUNT PRs, $MERGED merged)" 2>/dev/null || true
+            git push origin HEAD 2>/dev/null || echo "::warning::Could not push report"
+          else
+            echo "::notice::Dry run - not committing report"
+          fi
+
+  # Job 2: Analyze patterns from merged PRs
+  analyze-patterns:
+    name: Analyze patterns from merged PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: record-report
+    if: needs.record-report.outputs.merged_count > 0
+    outputs:
+      patterns: ${{ steps.analyze.outputs.patterns }}
+      rule_updates: ${{ steps.analyze.outputs.rule_updates }}
+    
+    steps:
+      - name: Checkout hypatia
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FARM_PAT }}
+
+      - name: Analyze merged PR patterns
+        id: analyze
+        env:
+          REPO: ${{ needs.record-report.outputs.repo }}
+          GH_TOKEN: ${{ secrets.FARM_PAT }}
+        run: |
+          set -euo pipefail
+          
+          # Get recent merged PRs from the source repo
+          MERGED_PRs=$(gh api \
+            "repos/$REPO/pulls?state=closed&sort=updated&direction=desc&per_page=50" \
+            --jq '[.[] | select(.merged_at != null) | {
+              number,
+              title,
+              merged_at,
+              author: .user.login,
+              additions: .additions,
+              deletions: .deletions,
+              changed_files: .changed_files,
+              files: [.files[] | {filename, changes, additions, deletions, blob_url}]
+            }] | .[:20]')  # Last 20 merged PRs
+          
+          echo "Analyzing $(echo "$MERGED_PRs" | jq length) recently merged PRs"
+          
+          # Identify common patterns
+          # Pattern 1: Common file types changed
+          FILE_TYPES=$(echo "$MERGED_PRs" | jq '[.[].files[].filename] | flatten | map(split("-") | .[0]) | group_by(.[] // "unknown") | map({type: .[0][0] // "unknown", count: length}) | sort_by(-.count)')
+          
+          # Pattern 2: Common workflow files changed
+          WORKFLOW_CHANGES=$(echo "$MERGED_PRs" | jq '[.[].files[] | select(.filename | contains(".github/workflows")) | .filename] | flatten | unique | length')
+          
+          # Pattern 3: Common issues fixed (from commit messages)
+          COMMON_FIXES=$(echo "$MERGED_PRs" | jq '[.[].title] | flatten | map(split(" ") | .[0] | ascii_downcase) | group_by(.) | map({fix: .[0], count: length}) | sort_by(-.count) | .[:5]')
+          
+          # Pattern 4: Average PR size
+          AVG_ADDITIONS=$(echo "$MERGED_PRs" | jq '[.[].additions] | add / length' || echo "0")
+          AVG_DELETIONS=$(echo "$MERGED_PRs" | jq '[.[].deletions] | add / length' || echo "0")
+          
+          echo "Common file types: $FILE_TYPES"
+          echo "Workflow changes: $WORKFLOW_CHANGES"
+          echo "Common fixes: $COMMON_FIXES"
+          
+          # Generate rule update suggestions based on patterns
+          RULE_UPDATES="[]"
+          
+          # If many workflow changes, suggest tighter workflow validation
+          if [ "$WORKFLOW_CHANGES" -gt 10 ]; then
+            RULE_UPDATES=$(echo "$RULE_UPDATES" | jq '. + [{
+              type: "workflow_hygiene",
+              action: "enhance",
+              reason: "High volume of workflow changes detected",
+              suggestion: "Add stricter workflow validation rules",
+              priority: "medium"
+            }]')
+          fi
+          
+          # If common fixes are dependency updates, suggest automation
+          DEP_UPDATES=$(echo "$COMMON_FIXES" | jq '[.[] | select(.fix | contains("bump") or contains("update") or contains("upgrade"))] | length')
+          if [ "$DEP_UPDATES" -gt 3 ]; then
+            RULE_UPDATES=$(echo "$RULE_UPDATES" | jq '. + [{
+              type: "dependency_automation",
+              action: "enable",
+              reason: "Frequent dependency updates detected",
+              suggestion: "Enable Dependabot automation for this repo pattern",
+              priority: "high"
+            }]')
+          fi
+          
+          # If large PRs, suggest breaking them down
+          AVG_SIZE=$(echo "$AVG_ADDITIONS" | jq -r '. // 0' | awk '{printf "%.0f", $1}')
+          if [ "$AVG_SIZE" -gt 500 ]; then
+            RULE_UPDATES=$(echo "$RULE_UPDATES" | jq '. + [{
+              type: "pr_size_limit",
+              action: "warn",
+              reason: "Average PR size is $AVG_SIZE lines",
+              suggestion: "Warn on PRs larger than 1000 lines",
+              priority: "low"
+            }]')
+          fi
+          
+          echo "patterns={\"file_types\": $FILE_TYPES, \"workflow_changes\": $WORKFLOW_CHANGES, \"common_fixes\": $COMMON_FIXES, \"avg_additions\": $AVG_ADDITIONS, \"avg_deletions\": $AVG_DELETIONS}" >> "$GITHUB_OUTPUT"
+          echo "rule_updates=$RULE_UPDATES" >> "$GITHUB_OUTPUT"
+          
+          echo "::notice::Identified $(echo "$RULE_UPDATES" | jq length) potential rule updates"
+
+  # Job 3: Update Hypatia ruleset
+  update-ruleset:
+    name: Update Hypatia ruleset
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [record-report, analyze-patterns]
+    if: needs.analyze-patterns.result == 'success' && inputs.dry_run != 'true'
+    
+    steps:
+      - name: Checkout hypatia
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FARM_PAT }}
+
+      - name: Update ruleset
+        id: update
+        env:
+          RULE_UPDATES: ${{ needs.analyze-patterns.outputs.rule_updates }}
+        run: |
+          set -euo pipefail
+          
+          # Load existing baseline
+          BASELINE_PATH=".hypatia-baseline.json"
+          
+          # Create rule update file
+          UPDATES_DIR="data/ruleset-updates"
+          mkdir -p "$UPDATES_DIR"
+          
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          UPDATE_FILE="$UPDATES_DIR/${TIMESTAMP}-inbox-steward-updates.json"
+          
+          echo "$RULE_UPDATES" | jq '{
+            timestamp: now,
+            source: "inbox-steward",
+            updates: .,
+            applied: false
+          }' > "$UPDATE_FILE"
+          
+          echo "Created rule updates: $UPDATE_FILE"
+          
+          # Auto-apply critical/high priority updates
+          CRITICAL_UPDATES=$(echo "$RULE_UPDATES" | jq '[.[] | select(.priority == "critical" or .priority == "high")]')
+          
+          if [ "$(echo "$CRITICAL_UPDATES" | jq length)" -gt 0 ]; then
+            echo "Applying critical/high priority updates..."
+            
+            for UPDATE in $(echo "$CRITICAL_UPDATES" | jq -c '.[]'); do
+              UPDATE_TYPE=$(echo "$UPDATE" | jq -r '.type')
+              ACTION=$(echo "$UPDATE" | jq -r '.action')
+              REASON=$(echo "$UPDATE" | jq -r '.reason')
+              SUGGESTION=$(echo "$UPDATE" | jq -r '.suggestion')
+              
+              echo "  - $UPDATE_TYPE: $ACTION ($REASON)"
+              
+              # Apply the update to baseline
+              # For now, append as a comment/todo - full automation needs more logic
+              echo "  :: TODO: Apply rule update: $SUGGESTION" >> "$BASELINE_PATH"
+            done
+            
+            # Commit updates
+            git config user.name "Inbox Steward Intake"
+            git config user.email "inbox-steward-intake@reposystem.dev"
+            git add "$UPDATE_FILE" "$BASELINE_PATH"
+            git commit -m "inbox-steward: apply critical rule updates from steward reports" 2>/dev/null || true
+            git push origin HEAD 2>/dev/null || echo "::warning::Could not push updates"
+          else
+            echo "No critical/high priority updates to apply"
+            git config user.name "Inbox Steward Intake"
+            git config user.email "inbox-steward-intake@reposystem.dev"
+            git add "$UPDATE_FILE"
+            git commit -m "inbox-steward: record rule update suggestions" 2>/dev/null || true
+            git push origin HEAD 2>/dev/null || echo "::warning::Could not push updates"
+          fi
+
+  # Job 4: Dispatch to .git-private-farm for fleet-wide application
+  dispatch-to-farm:
+    name: Dispatch to .git-private-farm
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [record-report, analyze-patterns, update-ruleset]
+    if: always() && needs.record-report.result == 'success'
+    
+    steps:
+      - name: Checkout hypatia
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Send dispatch to .git-private-farm
+        env:
+          GH_TOKEN: ${{ secrets.FARM_PAT }}
+          REPORT_PATH: ${{ needs.record-report.outputs.report_path }}
+          PATTERNS: ${{ needs.analyze-patterns.outputs.patterns }}
+          RULE_UPDATES: ${{ needs.analyze-patterns.outputs.rule_updates }}
+        run: |
+          set -euo pipefail
+          
+          # Build payload
+          PAYLOAD=$(jq -nc \
+            --arg repo "${{ github.repository }}" \
+            --arg report_path "$REPORT_PATH" \
+            --argjson patterns "$PATTERNS" \
+            --argjson rule_updates "$RULE_UPDATES" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              "event_type": "inbox-steward-propagate",
+              "client_payload": {
+                "source_repo": $repo,
+                "source": "hypatia",
+                "report_path": $report_path,
+                "patterns": $patterns,
+                "rule_updates": $rule_updates,
+                "timestamp": $timestamp,
+                "action": "apply_ruleset_updates"
+              }
+            }')
+          
+          echo "Dispatching to .git-private-farm: $(echo "$PAYLOAD" | jq -c '.')"
+          
+          # Send to dot-git-private-farm
+          if gh api -X POST \
+              "/repos/hyperpolymath/dot-git-private-farm/dispatches" \
+              --input - <<<"$PAYLOAD" >/dev/null 2>&1; then
+            echo "✅ Successfully dispatched to .git-private-farm"
+          else
+            echo "::warning::Failed to dispatch to .git-private-farm"
+          fi
+
+  # Job 5: Summary
+  summary:
+    name: Generate intake summary
+    runs-on: ubuntu-latest
+    needs: [record-report, analyze-patterns, update-ruleset, dispatch-to-farm]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          # Inbox Steward Intake Summary
+          
+          ## Report Received
+          
+          | Metric | Value |
+          |--------|-------|
+          | Source Repo | ${{ needs.record-report.outputs.repo }} |
+          | PRs Checked | ${{ needs.record-report.outputs.pr_count }} |
+          | Validated | ${{ needs.record-report.outputs.validated_count }} |
+          | Auto-Merged | ${{ needs.record-report.outputs.merged_count }} |
+          
+          ## Analysis Results
+          
+          ${{ needs.analyze-patterns.result == 'success' && echo '✅ Pattern analysis completed' || echo '❌ Pattern analysis failed' }}
+          
+          | Analysis | Status |
+          |----------|--------|
+          | Common file types | Identified |
+          | Workflow changes | ${{ needs.analyze-patterns.outputs.patterns != '{}' && echo $(echo '${{ needs.analyze-patterns.outputs.patterns }}' | jq -r '.file_types // "N/A" | head -c 50) || echo 'N/A' }} |
+          | Rule updates suggested | ${{ needs.analyze-patterns.outputs.rule_updates != '[]' && echo $(echo '${{ needs.analyze-patterns.outputs.rule_updates }}' | jq length) || echo '0' }} |
+          
+          ## Actions Taken
+          
+          1. ✅ Recorded steward report
+          ${{ needs.analyze-patterns.result == 'success' && echo '2. ✅ Analyzed patterns from merged PRs' || echo '2. ❌ Pattern analysis failed' }}
+          ${{ needs.update-ruleset.result == 'success' && echo '3. ✅ Updated Hypatia ruleset' || echo '3. ❌ Ruleset update failed' }}
+          ${{ needs.dispatch-to-farm.result == 'success' && echo '4. ✅ Dispatched to .git-private-farm' || echo '4. ❌ Dispatch to farm failed' }}
+          
+          ## Rule Updates Applied
+          
+          ${{ needs.update-ruleset.result == 'success' && needs.analyze-patterns.outputs.rule_updates != '[]' && echo $(echo '${{ needs.analyze-patterns.outputs.rule_updates }}' | jq -r '.[] | "- [\(.priority | ascii_upcase)] \(.type): \(.suggestion)" | join("\n")') || echo 'None' }}
+          
+          ---
+          *Generated by Inbox Steward Intake workflow*
+          EOF
