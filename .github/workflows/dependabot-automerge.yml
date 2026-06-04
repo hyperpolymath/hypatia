@@ -57,6 +57,7 @@ jobs:
     permissions:
       contents: write        # needed to enable auto-merge
       pull-requests: write   # needed to approve
+    timeout-minutes: 5
 
     steps:
       - name: Fetch Dependabot metadata
