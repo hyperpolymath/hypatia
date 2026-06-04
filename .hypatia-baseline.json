@@ -24,7 +24,7 @@
     "severity": "low",
     "rule_module": "code_safety",
     "type": "ncl_docker_not_podman",
-    "file": ".machine_readable/svc/self-validating/hypatia-metadata.k9.ncl",
+    "file": ".machine_readable/self-validating/hypatia-metadata.k9.ncl",
     "action": "flag"
   },
   {
