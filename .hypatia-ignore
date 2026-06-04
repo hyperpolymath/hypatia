@@ -73,4 +73,4 @@ code_safety/expect_in_hot_path:fixer/src/scanner.rs
 # NOT permitted. The ncl_docker_not_podman rule is matching the lexical
 # "docker" string and flagging the policy itself; this is recursive
 # self-flagging.
-code_safety/ncl_docker_not_podman:.machine_readable/svc/k9/hypatia-metadata.k9.ncl
+code_safety/ncl_docker_not_podman:.machine_readable/svc/self-validating/hypatia-metadata.k9.ncl

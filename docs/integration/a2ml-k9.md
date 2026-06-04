@@ -475,7 +475,7 @@ cat /tmp/echidna-validation-report-*.md
 
 ## References
 
-- **K9 Specification:** See bundeno/contractiles/k9/
+- **K9 Specification:** See bundeno/contractiles/self-validating/
 - **a2ml Format:** See echidna/AI.a2ml
 - **Fleet Coordinator:** See gitbot-fleet/fleet-coordinator.sh
 - **ECHIDNA Validation:** See echidna/src/rust/main.rs

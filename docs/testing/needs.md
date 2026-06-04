@@ -40,7 +40,7 @@
 
 **6. standards (Mixed — multi-standard monorepo)**
 - Command: `hypatia scan /var/mnt/eclipse/repos/standards --format text --severity low`
-- Key findings: 4 banned Python files (avow/consent-aware), 7 banned TypeScript (a2ml/axel/k9-svc/lol/rsr-certifier), 7 JSON decode without validation in lol crawlers, HTTP URL in Nickel config
+- Key findings: 4 banned Python files (avow/consent-aware), 7 banned TypeScript (a2ml/axel/self-validating/lol/rsr-certifier), 7 JSON decode without validation in lol crawlers, HTTP URL in Nickel config
 
 ## Current State
 
