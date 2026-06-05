@@ -22,6 +22,7 @@ concurrency:
 jobs:
   pr-fuzzing:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # Gated on the presence of fuzz targets — without `fuzz/` (cargo-fuzz)
     # or a ClusterFuzzLite OSS-Fuzz-style harness, the build_fuzzers step
     # has nothing to compile and fails. Job re-activates the moment the
@@ -44,6 +45,7 @@ jobs:
 
   batch-fuzzing:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
       - uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
