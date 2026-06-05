@@ -44,7 +44,8 @@ later  = "verisimdb entity model + PolicyDrift; CodeCite/ProofTrace"
 
 [wave-0-artifacts]
 a1 = "decision contract — LANDED on hypatia/main (PR #442, merged 2026-06-05). doc + schema + +/- fixtures, ajv-validated."
-a2 = "CVE/bump gate — this commit. 01-cve-bump-gate.adoc + schemas/bump-decision.schema.json (extends a1) + bump fixtures, ajv-validated."
+a2 = "CVE/bump gate — LANDED on hypatia/main (PR #443, merged 2026-06-05). bump-decision.schema (extends a1) + bump fixtures, ajv-validated."
+a3 = "attestation — this commit. 02-attestation.adoc + schemas/attestation.schema.json + structural fixtures; ed25519 sign/verify/tamper round-trip PASSED + ajv-validated (signed-valid verifies; verdict-tamper -> integrity fail; sig-tamper -> authenticity fail)."
 
 [gated-pr-ledger]
 # Applying the gate by hand to all open PRs across 11 in-scope repos (2026-06-05).
@@ -63,4 +64,4 @@ hold          = "6a2/STATE,META + anchors/ANCHOR in {hypatia,gitbot-fleet,.git-p
 other-agents  = "claude/nice-ptolemy-lNB8E (standards), claude/loving-cannon-AtUSm (echidna), claude/abi-tier2-and-l10-trans-cycle (vcl-ut), claude/affinescript-migration-wip (reposystem)"
 
 [next]
-step = "finish CVE/bump-gate artifact (this commit); then run live `panic-attack bridge triage` on the held bumps (needs panic-attack built --features http + OSV network) to emit gated decisions for the backlog."
+step = "attestation landed (this commit); NEXT = pool<->TRUST + Kin-backed lease/coordination spec (in standards). Open operational follow-on: live `panic-attack bridge triage` on the held bumps."

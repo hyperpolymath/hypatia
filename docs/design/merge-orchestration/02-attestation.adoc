@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Merge Orchestration — Bot Attestations (Wave-0, artifact 3)
+:toc: macro
+
+[IMPORTANT]
+====
+A bot's opinion enters the Kin Council as a *signed* attestation, not a bare
+claim. This reuses panic-attack's `intent → evidence → seal` chain (Ed25519).
+Spec + schema + structural fixtures + a *real* sign / verify / tamper round-trip.
+The permanent verifier is Rust/Elixir at runtime; this artifact proves the scheme.
+====
+
+== Shape
+
+[source]
+----
+attestation: {
+  bot, subject{repo, number, head_sha},
+  verdict (approve|hold|veto), confidence, rationale,
+  intent_hash, evidence_hash,
+  seal{ chain_hash, alg="ed25519", sig, pubkey },
+  nonce, tool_version, timestamp
+}
+----
+
+== The chain (reused from panic-attack `attestation/`)
+
+[source]
+----
+intent_hash   = sha256(tool_version | subject | nonce | timestamp)   # pre-commitment
+evidence_hash = sha256(what the bot examined)                        # rolling evidence
+chain_hash    = sha256(intent_hash | evidence_hash | verdict)        # binding
+seal.sig      = Ed25519(chain_hash)                                  # authenticity
+----
+
+Verification has *two* halves: *integrity* (recompute `chain_hash` from the
+fields and compare to `seal.chain_hash`) AND *authenticity* (Ed25519-verify
+`seal.sig` over `seal.chain_hash` with `seal.pubkey`). Tampering any covered
+field breaks integrity; forging without the key breaks authenticity.
+
+== Three structural invariants (schema-encoded)
+
+[cols="1,4",options=header]
+|===
+| Invariant | Rule
+| *A1* | Unsigned ⇒ reject. `seal{chain_hash, alg, sig}` are all required.
+| *A2* | `seal.alg` must be `ed25519` — no `none` / weak algorithms.
+| *A3* | A `veto` must carry a non-empty `rationale`.
+|===
+
+== How it feeds the council (artifact 1)
+
+The decision manifest's `attestations[]` entries *are* these (the heavy `seal`
+is stored / looked up by `chain_hash`). The `authority_bot`'s attestation is
+weighted in the Kin Council; any `verdict = veto` becomes a manifest veto, which
+the monotone-veto invariant forces to `safety = flag`.
+
+== Tested for real
+
+* *Schema (ajv 8):* `signed-valid.json` passes; `negative/neg-unsigned.json`
+  (A1), `neg-alg-none.json` (A2), `neg-veto-no-rationale.json` (A3) all rejected.
+* *Ed25519 round-trip (`node:crypto`):* a genuine attestation *verifies*;
+  tampering the `verdict` is *rejected* (integrity); corrupting the `sig` is
+  *rejected* (authenticity). `signed-valid.json` carries a real signature +
+  public key and is re-verifiable.
+
+Permanent home: a Rust/Elixir verifier test when the runtime lands.
