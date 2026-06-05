@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Merge Orchestration — Decision Contract (Wave-0, artifact 1)
+:toc: macro
+
+[IMPORTANT]
+====
+This is the *narrow waist* of the merge-orchestration feature: the frozen data
+contract that every other component reads or writes. Freezing it lets the
+sensory / deliberation / actuation tracks be built in parallel against the
+golden fixtures with no further coordination. *This PR adds only the contract*
+(this doc + JSON Schema + fixtures). It changes no runtime behaviour.
+====
+
+== The decision is a tuple, not a score
+
+A merge decision answers three near-orthogonal questions. Collapsing them into a
+single confidence score (e.g. "0.98 → merge, 0.90 → squash") is a category error:
+a scruffy low-confidence chore should still *squash* (correct shape) while *not
+arming* (correct caution).
+
+[cols="1,2,3",options=header]
+|===
+| Axis | Question | Output
+| *Route*  | Who is the authority for this change? | `authority_bot` + `contributing_bots[]`
+| *Method* | What shape should history take?       | `squash` \| `rebase` \| `merge_commit`
+| *Safety* | How far do we dare act unattended?    | `arm_auto` \| `review` \| `flag`
+|===
+
+* *Method* is set by repo policy ⊕ commit hygiene — never by confidence.
+* *Safety* is set by aggregate council confidence + vetoes, then clamped by the repo's pool.
+* *Route* selects whose attestation is authoritative (proof → echidnabot, bump →
+  Patch-Bridge, structure → rhodibot, security → panicbot, CI → robot-repo-automaton;
+  license/SPDX → *no auto-authority*, hard flag).
+
+== Two invariants the contract enforces
+
+. *Monotone veto.* Any entry in `vetoes[]` forces `safety = flag`, regardless of
+  confidence or pool. A veto is never out-voted. The license/SPDX guardrail and
+  proof-drift are expressed as vetoes.
+. *Object vs meta (reflexivity guard).* `change_level = meta` — touching CI
+  workflows, hypatia rules, `bot_directives`, pool/TRUST levels, or the `standards`
+  repo — forces `safety = flag` and routes to owner review. The actuator may
+  *propose* changes to the oracle but never self-approve them.
+
+Both invariants are encoded as conditionals in the JSON Schema so fixtures that
+violate them fail validation.
+
+== Manifest fields (extends `lib/dispatch_manifest.ex`)
+
+Existing dispatch-manifest fields are retained (`repo`, `tier`, `severity`,
+`confidence`, `timestamp`, `recipe_id`, `category`). New fields:
+
+[cols="1,1,3",options=header]
+|===
+| Field | Type | Meaning
+| `pr` | object | `{repo, number, head_sha, base, author, author_kind}`
+| `change_class` | enum | chore \| bump \| fix \| feature \| refactor \| security \| docs \| proof \| meta
+| `change_level` | enum | object \| meta  (reflexivity guard)
+| `route` | object | `{authority_bot, contributing_bots[]}`; `authority_bot=null` ⇒ hard flag
+| `method` | enum | squash \| rebase \| merge_commit
+| `method_basis` | string | e.g. `repo-default`, `commit-structure:fixup-bundle`
+| `safety` | enum | arm_auto \| review \| flag
+| `pool` | enum | P0 \| P1 \| P2 \| P3 \| mass_squash
+| `attestations` | array | signed `{bot, verdict, confidence, rationale, evidence_hash, sig}`
+| `vetoes` | array | `{bot, reason}` — non-empty ⇒ `safety=flag`
+| `clamped_by` | string\|null | what lowered the decision (`pool-cap`, `veto:license`, `novelty`, `meta`)
+| `rationale` | string | human-readable summary
+|===
+
+Schema: `schemas/decision-manifest.schema.json`. +
+Golden fixtures: `fixtures/chore-squash-autoarm.json`, `fixtures/license-touch-flag.json`.
+
+== Frozen vs open
+
+*Frozen by this PR:* the field set, the three enums (method / safety / pool), and
+the two invariants. Downstream tracks may rely on these.
+
+*Open (later Wave-0 artifacts):*
+
+. attestation signature scheme — reuses panic-attack `intent → evidence → seal` (Ed25519);
+. pool ↔ TRUST-level mapping + lease/coordination (Kin.Gate-backed) — lands in `standards`;
+. verisimdb entity model (Repo / PR / Finding / Decision / Outcome / Policy) + `PolicyDrift`;
+. CodeCite / ProofTrace code-provenance (`CITE` + `PROVE` contractiles).
+
+== Where this sits
+
+`bot_directives` (declarative policy) → *this manifest* (the deliberated decision,
+written by hypatia) → `.git-private-farm` (independent re-verify + execute) →
+sealed outcome → verisimdb (memory + drift). hypatia writes this; it never executes.
