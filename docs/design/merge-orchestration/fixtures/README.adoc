@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Decision-contract fixtures (conformance cases)
+
+These fixtures are the conformance suite for
+`../schemas/decision-manifest.schema.json`. They are dual-purpose: worked
+examples for downstream tracks, and a test that the two contract invariants
+actually fire.
+
+== Positive fixtures (MUST validate)
+
+* `chore-squash-autoarm.json` — green chore in a P2 repo → `squash` + `arm_auto`.
+* `license-touch-flag.json` — SPDX edit → veto-clamped `flag`, even in aggressive pool P3.
+
+== Negative fixtures (MUST be rejected)
+
+* `negative/neg-veto-not-flagged.json` — a veto present but `safety=arm_auto`;
+  must fail *invariant 1* (monotone veto).
+* `negative/neg-meta-not-flagged.json` — `change_level=meta` but
+  `safety=arm_auto`; must fail *invariant 2* (object/meta reflexivity guard).
+
+A contract whose negative cases are not rejected is not enforcing anything;
+that is what these prove.
+
+== How this was validated
+
+Validated with a JSON-Schema validator (ajv 8, draft-07): the two positives
+pass and the two negatives are rejected for the expected invariant. The harness
+is ephemeral (the estate is no-npm); the *permanent* home for this conformance
+check is an ExUnit test that runs against this directory once the Elixir
+decision module lands (later Wave-0 artifact). Until then, re-running is:
+
+[source,sh]
+----
+# in a throwaway dir, not the repo:
+npm i ajv@8
+node validate.cjs <schema> \
+  fixtures/chore-squash-autoarm.json@@pass \
+  fixtures/license-touch-flag.json@@pass \
+  fixtures/negative/neg-veto-not-flagged.json@@fail \
+  fixtures/negative/neg-meta-not-flagged.json@@fail
+----

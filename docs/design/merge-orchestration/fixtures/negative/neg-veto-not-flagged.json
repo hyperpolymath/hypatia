@@ -1,0 +1,17 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. A veto is present but safety=arm_auto. MUST be REJECTED by the schema (invariant 1, monotone veto). NOT a real manifest.",
+  "pr": {"repo": "hyperpolymath/example", "number": 1, "head_sha": "abc123", "base": "main", "author": "panicbot", "author_kind": "bot"},
+  "change_class": "bump",
+  "change_level": "object",
+  "route": {"authority_bot": "panicbot", "contributing_bots": []},
+  "method": "squash",
+  "method_basis": "repo-default",
+  "safety": "arm_auto",
+  "pool": "P2",
+  "confidence": 0.9,
+  "attestations": [{"bot": "panicbot", "verdict": "veto", "confidence": 1.0, "rationale": "unmitigable CVE, reachable"}],
+  "vetoes": [{"bot": "panicbot", "reason": "unmitigable CVE reachable"}],
+  "clamped_by": null,
+  "rationale": "INVALID: a veto is present but the decision is armed; the schema must reject this.",
+  "timestamp": "2026-06-05T12:10:00Z"
+}
