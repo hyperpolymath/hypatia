@@ -25,7 +25,7 @@ check_deps() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         log_error "Missing dependencies: ${missing[*]}"
-        log_error "Install: nix-shell -p ripgrep jq nickel"
+        log_error "Install: guix shell ripgrep jq nickel"
         exit 1
     fi
 }
