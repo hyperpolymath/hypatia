@@ -344,6 +344,7 @@ jobs:
   summary:
     name: Generate intake summary
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [record-report, analyze-patterns, update-ruleset, dispatch-to-farm]
     if: always()
     
