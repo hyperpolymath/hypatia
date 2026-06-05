@@ -39,6 +39,10 @@ Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/C
 | `verification/proofs/idris2/Quarantine.idr` | Idris2 | ~95 | State transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release restoration, Routing blockage | COMPLETE |
 | `verification/proofs/idris2/BatchRollback.idr` | Idris2 | ~85 | Transactionality (all-or-nothing), Reversibility (snapshot restoration), Fault tolerance (failure handling) | COMPLETE |
 | `verification/proofs/lean4/RateLimiting.lean` | Lean 4 | ~175 | Counter never exceeds configured bound, tryAccept preserves invariant, prune preserves invariant, inductive sequence processing, rejection guarantee, concrete configs (per-bot/global/burst) | COMPLETE |
+| `verification/proofs/lean4/BayesianUpdate.lean` | Lean 4 | ~190 | H7: posterior in (0,1), monotone in successes/failures, zero-observation identity, floor/cap clamp | COMPLETE |
+| `verification/proofs/lean4/ParserTotality.lean` | Lean 4 | ~190 | VCL `FROM`-clause parser totality, determinism, round-trip, malformed-input rejection | COMPLETE |
+| `verification/proofs/lean4/PageRankInvariants.lean` | Lean 4 | ~120 | PageRank preconditions (edge-weight / out-degree non-negativity). **Convergence theorem in progress (Mathlib).** | PARTIAL |
+| `verification/proofs/lean4/ESNSpectralScaling.lean` | Lean 4 | ~145 | ESN scaling preconditions (floor-clamped denominator positive). **Echo-state stability in progress (Mathlib).** | PARTIAL |
 | `verification/proofs/idris2/NeuralConsensus.idr` | Idris2 | ~170 | H9: uniform-mean aggregation of Vect n Prediction is in [0,1], bounded below by n * min(inputs), denominator > 0 for non-empty ensembles, 8-network specialization | COMPLETE |
 | `verification/proofs/tlaplus/KinGate.tla` | TLA+ | ~130 | H8: Kin gate atomicity. Acquire/Release/Expire transitions + MutualExclusionByType + MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView + GrantsAreWellBracketed + EveryRequestProcessed (liveness) | COMPLETE — TLC model-check 2026-04-17 passed on 3 bots × 2 repos × MaxRequests=4: 1,778,860 distinct states, depth 13, no errors in 51s (Eclipse Temurin 21 JRE, tla2tools 2.19) |
 | ~~`verification/proofs/agda/OutcomeLog.agda`~~ | ~~Agda~~ | ~~~220~~ | ~~H6: outcome log monotonicity (strictly increasing timestamps)~~ | RETIRED 2026-04-22 — downgraded to a runtime assertion in `lib/outcome_tracker.ex:assert_h6_monotone/2`. Echidnabot audits the JSONL for violations. See commit history. |
@@ -109,7 +113,7 @@ Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/C
 | Pattern | Count | Files |
 |---------|-------|-------|
 | `believe_me` | 0 | - |
-| `assert_total` | 1 | `VerisimdbConnector.idr` (list reasoning) |
+| `assert_total` | 0 | - |
 | `postulate` | 0 | - |
 | `sorry` | 0 | - |
 | `Admitted` | 0 | - |
@@ -133,8 +137,9 @@ Tracking status of formal verification proofs for the Hypatia neurosymbolic CI/C
 | Batch rollback | `BatchRollback.idr` | Full |
 | VeriSimDB connector | `VerisimdbConnector.idr` | Full |
 | Neural ensemble aggregation | `NeuralConsensus.idr` | Full (bounds + min-lower-bound) |
+| VCL parser totality | `ParserTotality.lean` | Full (FROM-clause subset) |
 | VCL query correctness | - | Partial |
-| Neural network convergence | - | Not yet proven |
+| Neural network convergence | `PageRankInvariants.lean`, `ESNSpectralScaling.lean` | Preconditions proven; full convergence/stability in progress (Lean + Mathlib) |
 
 ## File Locations
 
