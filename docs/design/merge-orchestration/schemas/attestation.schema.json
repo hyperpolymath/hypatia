@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/attestation.schema.json",
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — signed bot attestation (Wave-0 artifact 3). Reuses panic-attack intent->evidence->seal. Copyright (c) 2026 Jonathan D.A. Jewell.",
+  "title": "BotAttestation",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["bot", "subject", "verdict", "confidence", "intent_hash", "evidence_hash", "seal", "nonce", "tool_version", "timestamp"],
+  "properties": {
+    "bot": {"type": "string"},
+    "subject": {
+      "type": "object",
+      "required": ["repo", "number", "head_sha"],
+      "properties": {"repo": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "head_sha": {"type": "string"}}
+    },
+    "verdict": {"enum": ["approve", "hold", "veto"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "rationale": {"type": "string"},
+    "intent_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "seal": {
+      "type": "object",
+      "$comment": "A1 — unsigned attestations are rejected: chain_hash + alg + sig are all required.",
+      "required": ["chain_hash", "alg", "sig"],
+      "properties": {
+        "chain_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "alg": {"const": "ed25519", "$comment": "A2 — no 'none'/weak algorithms."},
+        "sig": {"type": "string", "minLength": 1},
+        "pubkey": {"type": "string"}
+      }
+    },
+    "nonce": {"type": "string", "minLength": 32},
+    "tool_version": {"type": "string"},
+    "timestamp": {"type": "string"}
+  },
+  "allOf": [
+    {
+      "$comment": "A3 — a veto must carry a non-empty rationale.",
+      "if": {"properties": {"verdict": {"const": "veto"}}},
+      "then": {"required": ["rationale"], "properties": {"rationale": {"type": "string", "minLength": 1}}}
+    }
+  ]
+}

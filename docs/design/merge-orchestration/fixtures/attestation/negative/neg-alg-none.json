@@ -1,0 +1,14 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. seal.alg=none (not ed25519). MUST be REJECTED (A2). Not a real attestation.",
+  "bot": "panicbot",
+  "subject": {"repo": "hyperpolymath/example", "number": 1, "head_sha": "abc123"},
+  "verdict": "approve",
+  "confidence": 0.9,
+  "rationale": "looks fine",
+  "intent_hash": "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "evidence_hash": "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "seal": {"chain_hash": "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "alg": "none", "sig": "0000"},
+  "nonce": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "tool_version": "panic-attack/2.5.0",
+  "timestamp": "2026-06-05T15:00:00Z"
+}
