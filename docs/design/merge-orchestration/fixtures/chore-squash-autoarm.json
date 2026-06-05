@@ -1,0 +1,23 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — golden fixture: green chore in a P2 repo -> squash + auto-arm.",
+  "pr": {"repo": "hyperpolymath/panll", "number": 412, "head_sha": "a1b2c3d", "base": "main", "author": "claude", "author_kind": "claude"},
+  "change_class": "chore",
+  "change_level": "object",
+  "route": {"authority_bot": "robot-repo-automaton", "contributing_bots": ["rhodibot", "ci"]},
+  "method": "squash",
+  "method_basis": "repo-default;commit-structure:fixup-bundle",
+  "safety": "arm_auto",
+  "pool": "P2",
+  "confidence": 0.97,
+  "attestations": [
+    {"bot": "ci", "verdict": "approve", "confidence": 0.99, "rationale": "all checks green"},
+    {"bot": "rhodibot", "verdict": "approve", "confidence": 0.95, "rationale": "RSR unchanged; format-only diff"}
+  ],
+  "vetoes": [],
+  "clamped_by": null,
+  "rationale": "Format-only chore, CI green, no proof/license/meta touch; pool P2 permits auto-arm.",
+  "tier": "eliminate",
+  "severity": "Info",
+  "category": "chore/format",
+  "timestamp": "2026-06-05T12:00:00Z"
+}

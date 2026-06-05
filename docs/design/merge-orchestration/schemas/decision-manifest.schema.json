@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/decision-manifest.schema.json",
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — Merge Orchestration decision manifest (Wave-0 draft). Copyright (c) 2026 Jonathan D.A. Jewell.",
+  "title": "MergeDecisionManifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["pr", "change_class", "change_level", "route", "method", "safety", "pool", "attestations", "vetoes", "rationale", "timestamp"],
+  "properties": {
+    "pr": {
+      "type": "object",
+      "required": ["repo", "number", "head_sha", "base", "author", "author_kind"],
+      "properties": {
+        "repo": {"type": "string", "examples": ["hyperpolymath/hypatia"]},
+        "number": {"type": "integer", "minimum": 1},
+        "head_sha": {"type": "string"},
+        "base": {"type": "string", "default": "main"},
+        "author": {"type": "string"},
+        "author_kind": {"enum": ["human", "dependabot", "renovate", "bot", "claude"]}
+      }
+    },
+    "change_class": {"enum": ["chore", "bump", "fix", "feature", "refactor", "security", "docs", "proof", "meta"]},
+    "change_level": {"enum": ["object", "meta"], "description": "meta = edits the oracle/rules (CI, hypatia rules, bot_directives, pool/TRUST levels, standards repo)"},
+    "route": {
+      "type": "object",
+      "required": ["authority_bot", "contributing_bots"],
+      "properties": {
+        "authority_bot": {"type": ["string", "null"], "description": "null = no auto-authority (hard flag), e.g. license/SPDX"},
+        "contributing_bots": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "method": {"enum": ["squash", "rebase", "merge_commit"]},
+    "method_basis": {"type": "string"},
+    "safety": {"enum": ["arm_auto", "review", "flag"]},
+    "pool": {"enum": ["P0", "P1", "P2", "P3", "mass_squash"]},
+    "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "attestations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bot", "verdict", "confidence"],
+        "properties": {
+          "bot": {"type": "string"},
+          "verdict": {"enum": ["approve", "hold", "veto"]},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "rationale": {"type": "string"},
+          "evidence_hash": {"type": "string"},
+          "sig": {"type": "string", "description": "Ed25519 over evidence_hash (Wave-0 artifact 2)"}
+        }
+      }
+    },
+    "vetoes": {
+      "type": "array",
+      "description": "Non-empty forces safety=flag (monotone).",
+      "items": {
+        "type": "object",
+        "required": ["bot", "reason"],
+        "properties": {"bot": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    },
+    "clamped_by": {"type": ["string", "null"]},
+    "rationale": {"type": "string"},
+    "tier": {"enum": ["eliminate", "substitute", "control"]},
+    "severity": {"enum": ["Critical", "High", "Medium", "Low", "Info"]},
+    "recipe_id": {"type": "string"},
+    "category": {"type": "string"},
+    "timestamp": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "$comment": "Invariant 1 — any veto forces flag.",
+      "if": {"properties": {"vetoes": {"type": "array", "minItems": 1}}},
+      "then": {"properties": {"safety": {"const": "flag"}}}
+    },
+    {
+      "$comment": "Invariant 2 — meta-level changes force flag.",
+      "if": {"properties": {"change_level": {"const": "meta"}}},
+      "then": {"properties": {"safety": {"const": "flag"}}}
+    }
+  ]
+}
