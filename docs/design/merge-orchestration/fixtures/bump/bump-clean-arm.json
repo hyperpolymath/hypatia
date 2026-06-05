@@ -1,0 +1,24 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — golden: clean cargo patch bump, CVE-clear, green -> arm in P2.",
+  "pr": {"repo": "hyperpolymath/reposystem", "number": 98, "head_sha": "c0ffee0", "base": "main", "author": "dependabot[bot]", "author_kind": "dependabot"},
+  "change_class": "bump",
+  "change_level": "object",
+  "route": {"authority_bot": "patch-bridge", "contributing_bots": ["ci"]},
+  "method": "squash",
+  "method_basis": "repo-default;dependabot-single-commit",
+  "safety": "arm_auto",
+  "pool": "P2",
+  "confidence": 0.96,
+  "attestations": [
+    {"bot": "patch-bridge", "verdict": "approve", "confidence": 0.98, "rationale": "no CVEs on clap_complete; patch bump"},
+    {"bot": "ci", "verdict": "approve", "confidence": 0.99, "rationale": "all checks green"}
+  ],
+  "vetoes": [],
+  "clamped_by": null,
+  "rationale": "clap_complete 4.6.0->4.6.5 patch, CVE-clear, CI green; pool P2 permits auto-arm.",
+  "bump": {"ecosystem": "cargo", "package": "clap_complete", "from_version": "4.6.0", "to_version": "4.6.5", "semver_jump": "patch", "bridge": {"worst_classification": "none", "reachable_unmitigable": false, "cve_ids": []}},
+  "tier": "eliminate",
+  "severity": "Info",
+  "category": "deps/bump",
+  "timestamp": "2026-06-05T14:00:00Z"
+}

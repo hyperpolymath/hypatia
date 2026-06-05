@@ -1,0 +1,18 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. nix ecosystem but safety=arm_auto. MUST be REJECTED (B3, Nix removed). Not a real manifest.",
+  "pr": {"repo": "hyperpolymath/example", "number": 4, "head_sha": "bbb222", "base": "main", "author": "dependabot[bot]", "author_kind": "dependabot"},
+  "change_class": "bump",
+  "change_level": "object",
+  "route": {"authority_bot": "patch-bridge", "contributing_bots": ["ci"]},
+  "method": "squash",
+  "method_basis": "repo-default",
+  "safety": "arm_auto",
+  "pool": "P2",
+  "confidence": 0.95,
+  "attestations": [{"bot": "ci", "verdict": "approve", "confidence": 0.99, "rationale": "green"}],
+  "vetoes": [],
+  "clamped_by": null,
+  "rationale": "INVALID: a nix bump armed for auto-merge; Nix is removed estate-wide, schema must reject this (B3).",
+  "bump": {"ecosystem": "nix", "package": "nixpkgs", "from_version": "4bd9165", "to_version": "331800d", "semver_jump": "minor", "bridge": {"worst_classification": "none", "reachable_unmitigable": false, "cve_ids": []}},
+  "timestamp": "2026-06-05T14:20:00Z"
+}
