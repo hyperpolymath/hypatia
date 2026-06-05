@@ -29,6 +29,7 @@ jobs:
   rust-check:
     name: Rust Check & Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -54,6 +55,7 @@ jobs:
   rust-fmt:
     name: Rust Format
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -70,6 +72,7 @@ jobs:
   rust-test:
     name: Rust Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [rust-check]
     steps:
       - name: Checkout repository
@@ -95,6 +98,7 @@ jobs:
   rust-test-coverage:
     name: Rust Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: [rust-test]
     steps:
       - name: Checkout repository
@@ -133,6 +137,7 @@ jobs:
   haskell-build:
     name: Haskell Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # registry/ is the Haskell sub-project; gate this job on its presence so
     # PRs that don't touch (and don't ship) the Haskell tree don't fail here.
     # The job re-activates the moment `registry/hypatia.cabal` lands.
@@ -190,6 +195,7 @@ jobs:
   haskell-lint:
     name: HLint
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     if: hashFiles('registry/**/*.hs') != ''
     steps:
       - name: Checkout repository
@@ -218,6 +224,7 @@ jobs:
   k9iser-validate:
     name: k9iser manifest + build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -253,6 +260,7 @@ jobs:
   ci-status:
     name: CI Status
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs:
       - rust-check
       - rust-fmt

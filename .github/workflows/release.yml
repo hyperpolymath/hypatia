@@ -17,6 +17,7 @@ jobs:
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
@@ -50,6 +51,7 @@ jobs:
   build-rust:
     name: Build Rust - ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     needs: [prepare]
     strategy:
       fail-fast: false
@@ -157,6 +159,7 @@ jobs:
   build-haskell:
     name: Build Haskell Registry
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: [prepare]
     if: hashFiles('registry/hypatia.cabal') != '' || hashFiles('registry/hypatia.cabal') != ''
     defaults:
@@ -212,6 +215,7 @@ jobs:
   build-docker:
     name: Build Container Images
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: [prepare, build-rust, build-haskell]
     permissions:
       contents: read
@@ -284,6 +288,7 @@ jobs:
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: [prepare, build-rust, build-haskell, build-docker]
     if: ${{ !inputs.dry_run }}
     permissions:
@@ -364,6 +369,7 @@ jobs:
   publish-hackage:
     name: Publish to Hackage
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: [prepare, github-release]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.is_prerelease == 'false' && hashFiles('registry/hypatia.cabal') != '' }}
     defaults:
@@ -395,6 +401,7 @@ jobs:
   build-and-push:
     name: Build and Push
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
