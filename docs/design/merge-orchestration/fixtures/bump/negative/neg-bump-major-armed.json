@@ -1,0 +1,18 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. Major jump but safety=arm_auto. MUST be REJECTED (B2). Not a real manifest.",
+  "pr": {"repo": "hyperpolymath/example", "number": 3, "head_sha": "aaa111", "base": "main", "author": "dependabot[bot]", "author_kind": "dependabot"},
+  "change_class": "bump",
+  "change_level": "object",
+  "route": {"authority_bot": "patch-bridge", "contributing_bots": ["ci"]},
+  "method": "squash",
+  "method_basis": "repo-default",
+  "safety": "arm_auto",
+  "pool": "P3",
+  "confidence": 0.9,
+  "attestations": [{"bot": "ci", "verdict": "approve", "confidence": 0.99, "rationale": "green"}],
+  "vetoes": [],
+  "clamped_by": null,
+  "rationale": "INVALID: a major-version bump armed for auto-merge; the schema must reject this.",
+  "bump": {"ecosystem": "cargo", "package": "redis", "from_version": "0.27.6", "to_version": "1.2.2", "semver_jump": "major", "bridge": {"worst_classification": "none", "reachable_unmitigable": false, "cve_ids": []}},
+  "timestamp": "2026-06-05T14:15:00Z"
+}

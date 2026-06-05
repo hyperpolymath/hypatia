@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+#
+# LEDGER.a2ml — Merge Orchestration workstream: canonical, compaction-proof state.
+# This is the durable record for the cross-repo "merge orchestration" feature.
+# It is NOT the repo's canonical 6a2/STATE.a2ml (held pending realignment) — it is
+# the workstream ledger. READ THIS FIRST to re-orient after any context reset.
+@profile(id=a2ml/state)
+
+[metadata]
+workstream = "merge-orchestration"
+version = "0.2.0"
+last-updated = "2026-06-05"
+owner = "paraordinate (Jonathan D.A. Jewell)"
+branch = "claude/peaceful-pascal-IRlgq"   # same branch name across all in-scope repos
+status = "active — Wave 0 (contracts)"
+
+[thesis]
+# A merge decision is a TUPLE over three near-orthogonal axes, never one score:
+#   route  = who is authoritative (proof->echidnabot, bump->patch-bridge, structure->rhodibot,
+#            security->panicbot, CI->robot-repo-automaton; license/SPDX->none, hard flag)
+#   method = history shape (squash|rebase|merge_commit), set by repo policy + commit hygiene
+#   safety = arm_auto|review|flag, set by council confidence + vetoes, clamped by pool
+# Consensus = "Kin Council": competence-weighted aggregation + MONOTONE VETO (any veto -> flag).
+#   NOT Byzantine (bots are cooperative specialists; integrity comes from signed attestations).
+# Reflexivity guard: change_level=meta (edits CI / hypatia rules / bot_directives / standards)
+#   -> always flag. The actuator may PROPOSE oracle changes, never self-approve them.
+
+[decisions]
+# Owner rulings banked 2026-06-05:
+nix = "REMOVED estate-wide — guix.scm / guix channels only. flake.nix to be deleted; nix bumps CLOSED not merged."
+mr-layout = "6a2/ subdir is canonical; standards CLAUDE.md to be reconciled to it."
+leases = "central, Kin.Gate-backed (NOT per-repo files) — fixes the bootstrap race; this IS the kin enhancement."
+codecite-prooftrace = "their own CITE + PROVE contractile pair."
+operating-mode = "full GitHub ops (token re-authed 2026-06-05)."
+ledger = "this file."
+
+[build-order]
+# Owner-chosen sequence:
+step-1 = "CVE/bump gate (unblocks the held dependabot backlog) — IN PROGRESS"
+step-2 = "Attestation schema (Ed25519, reuse panic-attack intent->evidence->seal)"
+step-3 = "Pool<->TRUST + Kin-backed lease/coordination spec (lands in standards)"
+later  = "verisimdb entity model + PolicyDrift; CodeCite/ProofTrace"
+
+[wave-0-artifacts]
+a1 = "decision contract — LANDED on hypatia/main (PR #442, merged 2026-06-05). doc + schema + +/- fixtures, ajv-validated."
+a2 = "CVE/bump gate — this commit. 01-cve-bump-gate.adoc + schemas/bump-decision.schema.json (extends a1) + bump fixtures, ajv-validated."
+
+[gated-pr-ledger]
+# Applying the gate by hand to all open PRs across 11 in-scope repos (2026-06-05).
+# ARMED: hypatia#442 (now merged). Everything else HELD (reason / unblock):
+held-license      = "standards#376,#373 -> veto:license (owner-only, never auto)"
+held-meta-ci      = "vcl-ut#51; echidna#237 (actions bump edits workflows) -> meta:edits-CI-oracle"
+held-proof        = "vcl-ut#52; echidna#234 -> needs proof attestation (echidnabot offline) + rebase/coord"
+held-bumps        = "echidna#236,#233,#228; reposystem x10 cargo (#95-#107) -> needs CVE gate (axum/nom/redis/toml=major)"
+held-nix          = "reposystem#103,#108,#109 -> veto:nix -> CLOSE, do not merge"
+held-core-code    = "echidna#232 -> core-tier code change -> conservative/review (docs/chore would arm)"
+held-realignment  = "verisimdb#107 -> held:6a2-realignment + owner-review-requested"
+
+[coordination]
+do-not-touch  = "branch claude/peaceful-pascal-IRlgq; gitbot-fleet dispatch-runner.sh license gate; my contractile/bot_directive/merge-orchestration territory"
+hold          = "6a2/STATE,META + anchors/ANCHOR in {hypatia,gitbot-fleet,.git-private-farm,verisimdb,standards} pending realignment"
+other-agents  = "claude/nice-ptolemy-lNB8E (standards), claude/loving-cannon-AtUSm (echidna), claude/abi-tier2-and-l10-trans-cycle (vcl-ut), claude/affinescript-migration-wip (reposystem)"
+
+[next]
+step = "finish CVE/bump-gate artifact (this commit); then run live `panic-attack bridge triage` on the held bumps (needs panic-attack built --features http + OSV network) to emit gated decisions for the backlog."
