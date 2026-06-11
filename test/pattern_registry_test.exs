@@ -87,8 +87,7 @@ defmodule Hypatia.PatternRegistryTest do
       patterns = Map.get(registry, "patterns", %{}) |> Map.values()
 
       # Find the pattern with our unique description
-      matching =
-        Enum.filter(patterns, fn p -> Map.get(p, "description") == unique_desc end)
+      matching = Enum.filter(patterns, fn p -> Map.get(p, "description") == unique_desc end)
 
       assert length(matching) == 1
       pattern = hd(matching)
@@ -106,6 +105,187 @@ defmodule Hypatia.PatternRegistryTest do
       # This reads from disk -- ensure registry exists from previous sync
       patterns = PatternRegistry.all_patterns()
       assert is_list(patterns)
+    end
+  end
+
+  describe "rebuild semantics" do
+    test "rejects suppressed weak_points at intake" do
+      unique_desc = "test-suppressed-#{System.unique_integer([:positive])}"
+
+      scans = [
+        %{
+          repo: "suppress-repo",
+          scan: %{
+            "weak_points" => [
+              %{
+                "category" => "HardcodedSecret",
+                "description" => unique_desc,
+                "severity" => "Critical",
+                "suppressed" => true
+              }
+            ]
+          }
+        }
+      ]
+
+      {:ok, registry} = PatternRegistry.sync_from_scans(scans)
+      patterns = Map.get(registry, "patterns", %{}) |> Map.values()
+
+      assert Enum.filter(patterns, &(Map.get(&1, "description") == unique_desc)) == []
+    end
+
+    test "caps heuristic UnboundedAllocation severity at Medium" do
+      unique_desc = "test-heuristic-cap-#{System.unique_integer([:positive])}"
+
+      scans = [
+        %{
+          repo: "cap-repo-#{System.unique_integer([:positive])}",
+          scan: %{
+            "weak_points" => [
+              %{
+                "category" => "UnboundedAllocation",
+                "description" => unique_desc,
+                "severity" => "Critical"
+              }
+            ]
+          }
+        }
+      ]
+
+      {:ok, registry} = PatternRegistry.sync_from_scans(scans)
+
+      pattern =
+        registry
+        |> Map.get("patterns", %{})
+        |> Map.values()
+        |> Enum.find(&(Map.get(&1, "description") == unique_desc))
+
+      assert pattern["severity"] == "Medium"
+    end
+
+    test "identical re-sync does not inflate occurrence counts" do
+      unique_desc = "test-noinflate-#{System.unique_integer([:positive])}"
+      repo = "noinflate-repo-#{System.unique_integer([:positive])}"
+
+      scans = [
+        %{
+          repo: repo,
+          scan: %{
+            "weak_points" => [
+              %{"category" => "PanicPath", "description" => unique_desc, "severity" => "Medium"},
+              %{"category" => "PanicPath", "description" => unique_desc, "severity" => "Medium"}
+            ]
+          }
+        }
+      ]
+
+      {:ok, _} = PatternRegistry.sync_from_scans(scans)
+      {:ok, registry} = PatternRegistry.sync_from_scans(scans)
+
+      pattern =
+        registry
+        |> Map.get("patterns", %{})
+        |> Map.values()
+        |> Enum.find(&(Map.get(&1, "description") == unique_desc))
+
+      assert pattern["occurrences"] == 2
+      assert pattern["trend"] == "stable"
+      assert pattern["repo_occurrences"] == %{repo => 2}
+    end
+
+    test "repo going clean resolves its patterns but carries unscanned repos" do
+      unique_desc = "test-resolve-#{System.unique_integer([:positive])}"
+      repo_a = "resolve-a-#{System.unique_integer([:positive])}"
+      repo_b = "resolve-b-#{System.unique_integer([:positive])}"
+
+      wp = %{"category" => "PanicPath", "description" => unique_desc, "severity" => "Medium"}
+
+      {:ok, _} =
+        PatternRegistry.sync_from_scans([
+          %{repo: repo_a, scan: %{"weak_points" => [wp]}},
+          %{repo: repo_b, scan: %{"weak_points" => [wp]}}
+        ])
+
+      # repo_a rescanned clean; repo_b NOT in this batch -> must carry over
+      {:ok, registry} =
+        PatternRegistry.sync_from_scans([%{repo: repo_a, scan: %{"weak_points" => []}}])
+
+      pattern =
+        registry
+        |> Map.get("patterns", %{})
+        |> Map.values()
+        |> Enum.find(&(Map.get(&1, "description") == unique_desc))
+
+      assert pattern["occurrences"] == 1
+      assert pattern["repos_affected_list"] == [repo_b]
+      assert pattern["trend"] == "decreasing"
+
+      # repo_b rescanned clean too -> fully resolved, no repos to dispatch to
+      {:ok, registry} =
+        PatternRegistry.sync_from_scans([%{repo: repo_b, scan: %{"weak_points" => []}}])
+
+      pattern =
+        registry
+        |> Map.get("patterns", %{})
+        |> Map.values()
+        |> Enum.find(&(Map.get(&1, "description") == unique_desc))
+
+      assert pattern["occurrences"] == 0
+      assert pattern["repos_affected_list"] == []
+      assert pattern["trend"] == "resolved"
+      assert pattern["resolved_at"] != nil
+    end
+
+    test "legacy entries without repo_occurrences migrate and preserve identity" do
+      # Simulate a legacy append-era entry by syncing, then stripping
+      # repo_occurrences from the persisted registry is not possible via the
+      # public API; instead verify that a fresh finding for the same pattern
+      # in a NEW repo merges without disturbing first_seen.
+      unique_desc = "test-legacy-#{System.unique_integer([:positive])}"
+      repo_a = "legacy-a-#{System.unique_integer([:positive])}"
+      repo_b = "legacy-b-#{System.unique_integer([:positive])}"
+
+      wp = %{"category" => "PanicPath", "description" => unique_desc, "severity" => "Medium"}
+
+      {:ok, reg1} =
+        PatternRegistry.sync_from_scans([%{repo: repo_a, scan: %{"weak_points" => [wp]}}])
+
+      first_seen =
+        reg1
+        |> Map.get("patterns", %{})
+        |> Map.values()
+        |> Enum.find(&(Map.get(&1, "description") == unique_desc))
+        |> Map.get("first_seen")
+
+      {:ok, reg2} =
+        PatternRegistry.sync_from_scans([%{repo: repo_b, scan: %{"weak_points" => [wp]}}])
+
+      pattern =
+        reg2
+        |> Map.get("patterns", %{})
+        |> Map.values()
+        |> Enum.find(&(Map.get(&1, "description") == unique_desc))
+
+      assert pattern["first_seen"] == first_seen
+      assert Enum.sort(pattern["repos_affected_list"]) == Enum.sort([repo_a, repo_b])
+      assert pattern["occurrences"] == 2
+    end
+  end
+
+  describe "active_patterns/0" do
+    test "excludes resolved patterns" do
+      unique_desc = "test-active-#{System.unique_integer([:positive])}"
+      repo = "active-repo-#{System.unique_integer([:positive])}"
+
+      wp = %{"category" => "PanicPath", "description" => unique_desc, "severity" => "Medium"}
+
+      {:ok, _} = PatternRegistry.sync_from_scans([%{repo: repo, scan: %{"weak_points" => [wp]}}])
+      {:ok, _} = PatternRegistry.sync_from_scans([%{repo: repo, scan: %{"weak_points" => []}}])
+
+      refute Enum.any?(
+               PatternRegistry.active_patterns(),
+               &(Map.get(&1, "description") == unique_desc)
+             )
     end
   end
 end
