@@ -1,0 +1,101 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; assail-classifications.a2ml — audited panic-attack findings for hypatia.
+;;
+;; Read by panic-attack >= 2.5.5 (load_user_classifications): findings
+;; matching (file, category) are flipped to suppressed = true AFTER the
+;; structural kanren suppression pass. Entries here are AUDITED-SOUND
+;; residuals, not exemptions of convenience — every entry must cite its
+;; rationale, and the registry lives apart from the source so a code
+;; edit cannot self-suppress (see panic-attack CLAUDE.md, User-
+;; Classification Registry).
+;;
+;; Audit trail: 2026-06-11 estate-loop session — fresh panic-attack
+;; 2.5.5 scan of hypatia; every entry below was inspected at source.
+
+(assail-classifications
+  ;; ── Soundness-gate negative fixtures ─────────────────────────────
+  ;; test/soundness/fixtures/code_safety/ exists to PROVE the scanner
+  ;; catches these constructs; the findings are the fixtures working
+  ;; as designed. Mirrors lib/hypatia/scanner_suppression.ex, which
+  ;; already exempts these paths for hypatia's own scanner.
+  (classification
+    (file "test/soundness/fixtures/code_safety/transmute.rs")
+    (category "UnsafeCode")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects mem::transmute"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/admitted.v")
+    (category "ProofDrift")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects Admitted"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/believe_me.idr")
+    (category "ProofDrift")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects believe_me"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/sorry.lean")
+    (category "ProofDrift")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects sorry"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/obj_magic_ocaml.ml")
+    (category "UnsafeTypeCoercion")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects Obj.magic"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/unsafe_coerce.hs")
+    (category "UnsafeTypeCoercion")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects unsafeCoerce"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/elixir_code_eval.ex")
+    (category "DynamicCodeExecution")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects Code.eval_string"))
+  (classification
+    (file "test/soundness/fixtures/code_safety/zig_ptr_cast.zig")
+    (category "UnsafeCode")
+    (audit "test/soundness — deliberate negative fixture")
+    (rationale "fixture asserting the scanner detects Zig pointer casts"))
+
+  ;; ── Remediation scripts: pattern strings, not vulnerabilities ────
+  (classification
+    (file "scripts/fix-scripts/fix-deno-permissions.sh")
+    (category "ExcessivePermissions")
+    (audit "remediation tool — replaces `deno -A` with scoped permission flags; scripts/fix-scripts/ is already exempt in scanner_suppression.ex")
+    (rationale "contains -A as the SEARCH pattern it removes from other repos"))
+
+  ;; ── FFI boundary unsafe: documented, load-bearing ────────────────
+  (classification
+    (file "clients/rust/hypatia-client/src/ffi.rs")
+    (category "UnsafeCode")
+    (audit "in-file # Safety section (ffi.rs:7-30) enumerates the invariant for every unsafe block; carries hypatia allow pragmas")
+    (rationale "libloading C-ABI boundary calls against libhypatia_ffi.so; each block's invariant documented at source"))
+
+  ;; ── Test harnesses ───────────────────────────────────────────────
+  (classification
+    (file "tests/e2e.sh")
+    (category "CommandInjection")
+    (audit "tests/e2e.sh:88-93 — heredoc writes a deliberately insecure fixture")
+    (rationale "the eval is fixture CONTENT generated for the scanner-detection test, not executed by the harness"))
+  (classification
+    (file "integration/run-tests.sh")
+    (category "HardcodedSecret")
+    (audit "integration/run-tests.sh:268 — ARANGODB_PASSWORD=testpassword")
+    (rationale "throwaway credential for the ephemeral integration-test database container"))
+
+  ;; ── Env-var binding misread as a secret ──────────────────────────
+  (classification
+    (file "hooks/lib/cache.sh")
+    (category "HardcodedSecret")
+    (audit "hooks/lib/cache.sh:17-22 — CICD_CACHE_PASSWORD=\"${CICD_CACHE_PASSWORD:-}\"")
+    (rationale "empty-default env-var binding, documented in-file; no literal secret present"))
+
+  ;; ── Rule definitions detecting themselves ────────────────────────
+  (classification
+    (file "lib/hypatia/scanner_suppression.ex")
+    (category "HardcodedSecret")
+    (audit "scanner suppression rule definitions contain secret-shaped pattern strings")
+    (rationale "detector/suppression pattern table, not credentials — same class as the scripts/fix-* carve-out in scanner_suppression.ex"))
+)

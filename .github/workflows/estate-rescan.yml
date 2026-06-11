@@ -1,0 +1,245 @@
+# SPDX-License-Identifier: MPL-2.0
+# Hypatia Estate Rescan — refresh verisimdb-data/scans with current truth
+#
+# The canonical security reports (verisimdb-data/scans/*.json) were
+# produced by manual local panic-attack runs and went stale: by 2026-06
+# the majority of recorded Critical/High findings referenced files that
+# no longer existed, or content that had already been fixed, while two
+# active repos (vcl-ut, bag-of-actions) had no scan at all. Hypatia kept
+# reasoning over that snapshot and the fleet kept dispatching fixes for
+# phantom findings.
+#
+# This workflow is the missing freshness link: it rebuilds the scan
+# store centrally with the CURRENT panic-attack (which carries the
+# kanren/context/classification FP-suppression absent from the old
+# data), so the analyzer's input reflects reality on a daily cadence —
+# and on demand the moment a fix lands.
+#
+# Triggers:
+#   - schedule: daily full sweep (staggered off remediation-sweep 03:17
+#     and the .git-private-farm Monday maintenance run).
+#   - workflow_dispatch: manual, optionally targeted via `repos`.
+#   - repository_dispatch (type: estate-rescan): targeted refresh, fired
+#     by gitbot-fleet's dispatch-runner after it lands fixes, so resolved
+#     findings flush from the store without waiting for the nightly run.
+#
+# Scope guard: only PUBLIC, non-archived, non-fork repos are scanned —
+# verisimdb-data is public, so private-repo findings must never be
+# written into it. Repos named 007* are excluded per the owner's
+# licence/scanning policy (out of scope for any scanning).
+
+name: Hypatia Estate Rescan
+
+on:
+  schedule:
+    - cron: '47 4 * * *'
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: 'Space-separated repo names to rescan (default: all public org repos)'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Scan and report, but do not push to verisimdb-data'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+  repository_dispatch:
+    types: [estate-rescan]
+
+permissions:
+  contents: read
+
+# Serialize: concurrent sweeps would race on the verisimdb-data push.
+# cancel-in-progress: false so a targeted post-fix rescan request queues
+# behind a running nightly sweep instead of killing it.
+concurrency:
+  group: estate-rescan
+  cancel-in-progress: false
+
+jobs:
+  rescan:
+    name: Rescan estate with panic-attack
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Resolve panic-attack version
+        id: pa_ref
+        run: echo "sha=$(git ls-remote https://github.com/hyperpolymath/panic-attack.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache built panic-attack
+        id: pa_cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/panic-attack-bin
+          # Exact-SHA key, no restore-keys: a partial hit would scan with
+          # stale rules (same reasoning as the hypatia-scan build cache).
+          key: panic-attack-${{ runner.os }}-${{ steps.pa_ref.outputs.sha }}
+
+      - name: Build panic-attack (if needed)
+        if: steps.pa_cache.outputs.cache-hit != 'true'
+        env:
+          PA_SHA: ${{ steps.pa_ref.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/hyperpolymath/panic-attack.git "$RUNNER_TEMP/panic-attack"
+          cd "$RUNNER_TEMP/panic-attack"
+          git fetch --depth 1 origin "$PA_SHA" && git checkout "$PA_SHA"
+          cargo build --release
+          mkdir -p "$HOME/panic-attack-bin"
+          cp target/release/panic-attack "$HOME/panic-attack-bin/"
+
+      - name: Resolve repo list
+        id: repos
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          INPUT_REPOS: ${{ inputs.repos }}
+          PAYLOAD_REPOS: ${{ github.event.client_payload.repos }}
+        run: |
+          set -euo pipefail
+          REQUESTED="${INPUT_REPOS:-${PAYLOAD_REPOS:-}}"
+          if [ -n "$REQUESTED" ]; then
+            # Targeted rescan: validate each requested name against the
+            # public-repo constraint rather than trusting the payload.
+            printf '%s' "$REQUESTED" | tr ' ,' '\n\n' | sed '/^$/d' | sort -u > /tmp/requested.txt
+            : > /tmp/repo-list.txt
+            while IFS= read -r name; do
+              # Names come from a repository_dispatch payload — enforce a
+              # strict charset before using them anywhere.
+              if ! printf '%s' "$name" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+                echo "::warning::Skipping invalid repo name in payload: $name"
+                continue
+              fi
+              VISIBILITY=$(gh api "repos/hyperpolymath/$name" --jq '[.private, .archived, .fork] | @tsv' 2>/dev/null || echo "missing")
+              if [ "$VISIBILITY" = "$(printf 'false\tfalse\tfalse')" ]; then
+                echo "$name" >> /tmp/repo-list.txt
+              else
+                echo "::warning::Skipping $name (private/archived/fork/missing — not eligible for the public scan store)"
+              fi
+            done < /tmp/requested.txt
+          else
+            gh api "users/hyperpolymath/repos?type=public&per_page=100" --paginate \
+              --jq '.[] | select(.archived == false and .fork == false and .disabled == false) | .name' \
+              | grep -Ev '^007' \
+              | grep -Ev '^(verisimdb-data|hyperpolymath-archive)' \
+              | sort -u > /tmp/repo-list.txt
+          fi
+          COUNT=$(wc -l < /tmp/repo-list.txt)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Rescanning $COUNT repos"
+
+      - name: Checkout verisimdb-data
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/hyperpolymath/verisimdb-data.git" "$RUNNER_TEMP/verisimdb-data"
+
+      - name: Scan repos
+        id: scan
+        run: |
+          set -uo pipefail
+          PA="$HOME/panic-attack-bin/panic-attack"
+          DATA="$RUNNER_TEMP/verisimdb-data"
+          FAILED=0
+          SCANNED=0
+          while IFS= read -r name; do
+            workdir="$RUNNER_TEMP/work/$name"
+            rm -rf "$workdir"
+            if ! git clone --depth 1 --quiet "https://github.com/hyperpolymath/$name.git" "$workdir" 2>/dev/null; then
+              echo "::warning::clone failed: $name"
+              FAILED=$((FAILED+1))
+              continue
+            fi
+            if "$PA" assail "$workdir" --output "$RUNNER_TEMP/scan-raw.json" >/dev/null 2>&1; then
+              # Normalize program_path to the repo name: runner paths are
+              # meaningless to consumers and leaked local paths were one of
+              # the defects of the manual-scan era (`/var$REPOS_DIR/...`).
+              jq --arg name "$name" '.program_path = $name' \
+                "$RUNNER_TEMP/scan-raw.json" > "$DATA/scans/$name.json"
+              SCANNED=$((SCANNED+1))
+            else
+              echo "::warning::scan failed: $name"
+              FAILED=$((FAILED+1))
+            fi
+            rm -rf "$workdir"
+          done < /tmp/repo-list.txt
+          echo "scanned=$SCANNED" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "Scanned $SCANNED repos ($FAILED failures)"
+
+      - name: Regenerate index.json
+        run: |
+          set -euo pipefail
+          DATA="$RUNNER_TEMP/verisimdb-data"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # Preserve human/LLM-authored summaries from the previous index;
+          # recompute the live counts from the scan files themselves.
+          cp "$DATA/index.json" /tmp/old-index.json 2>/dev/null || echo '{}' > /tmp/old-index.json
+          REPOS_JSON='{}'
+          for f in "$DATA"/scans/*.json; do
+            name=$(basename "$f" .json)
+            ENTRY=$(jq --arg now "$NOW" --slurpfile old /tmp/old-index.json --arg name "$name" '
+              {
+                last_scan: $now,
+                weak_points: ([.weak_points[]? | select((.suppressed // false) | not)] | length),
+                suppressed: ([.weak_points[]? | select(.suppressed // false)] | length),
+                critical: ([.weak_points[]? | select(((.suppressed // false) | not) and .severity == "Critical")] | length),
+                high: ([.weak_points[]? | select(((.suppressed // false) | not) and .severity == "High")] | length),
+                summary: ($old[0].repos[$name].summary // null)
+              }' "$f")
+            REPOS_JSON=$(jq --arg name "$name" --argjson entry "$ENTRY" '. + {($name): $entry}' <<<"$REPOS_JSON")
+          done
+          jq -n --arg now "$NOW" --argjson repos "$REPOS_JSON" \
+            '{repos: $repos, total_scans: ($repos | length), last_updated: $now}' \
+            > "$DATA/index.json"
+          jq -r '"index.json: \(.total_scans) repos, last_updated \(.last_updated)"' "$DATA/index.json"
+
+      - name: Push to verisimdb-data
+        if: inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          SCANNED: ${{ steps.scan.outputs.scanned }}
+        run: |
+          set -euo pipefail
+          DATA="$RUNNER_TEMP/verisimdb-data"
+          cd "$DATA"
+          git config user.name "hypatia-estate-rescan"
+          git config user.email "hypatia-bot@users.noreply.github.com"
+          git add scans/ index.json
+          if git diff --cached --quiet; then
+            echo "No scan changes to push."
+            exit 0
+          fi
+          git commit -m "scan: estate rescan ($SCANNED repos, panic-attack refresh)"
+          # Retry with rebase: another writer (ingest.yml, manual push) may
+          # land between our clone and push.
+          for delay in 2 4 8 16; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push failed; rebasing and retrying in ${delay}s"
+            sleep "$delay"
+            git pull --rebase origin main || true
+          done
+          git push origin HEAD:main
+
+      - name: Job summary
+        env:
+          COUNT: ${{ steps.repos.outputs.count }}
+          SCANNED: ${{ steps.scan.outputs.scanned }}
+          FAILED: ${{ steps.scan.outputs.failed }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          {
+            echo "## Estate Rescan"
+            echo "- Repos targeted: $COUNT"
+            echo "- Scanned OK: $SCANNED"
+            echo "- Failures: $FAILED"
+            echo "- Dry run: ${DRY:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"
