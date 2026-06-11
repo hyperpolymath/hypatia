@@ -35,7 +35,11 @@ jobs:
       - name: Check for A2ML files
         id: detect
         run: |
-          COUNT=$(find . -name '*.a2ml' -not -path './.git/*' | wc -l)
+          # audits/assail-classifications.a2ml is panic-attack's user-classification
+          # registry — an S-expression dialect by that tool's spec (see panic-attack
+          # CLAUDE.md), not the TOML-like manifest A2ML this gate validates. Exclude
+          # it rather than feeding it to a validator for a different dialect.
+          COUNT=$(find . -name '*.a2ml' -not -path './.git/*' -not -name 'assail-classifications.a2ml' | wc -l)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -eq 0 ]; then
             echo "::warning::No .a2ml manifest files found. Every RSR repo should have 0-AI-MANIFEST.a2ml"
@@ -47,6 +51,19 @@ jobs:
         with:
           path: '.'
           strict: 'false'
+          # Re-state the action's default carve-outs (a custom value REPLACES
+          # the default list), plus panic-attack's user-classification
+          # registry: that file is an S-expression dialect by panic-attack's
+          # spec, not the TOML-like manifest A2ML this action validates.
+          paths-ignore: |
+            vendor/
+            vendored/
+            verified-container-spec/
+            .audittraining/
+            integration/fixtures/
+            test/fixtures/
+            tests/fixtures/
+            assail-classifications.a2ml
 
       - name: Write summary
         run: |

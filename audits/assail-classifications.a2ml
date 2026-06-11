@@ -1,4 +1,5 @@
 ;; SPDX-License-Identifier: MPL-2.0
+;; Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 ;; assail-classifications.a2ml — audited panic-attack findings for hypatia.
 ;;
 ;; Read by panic-attack >= 2.5.5 (load_user_classifications): findings
