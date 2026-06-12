@@ -99,7 +99,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
     root = Path.join([repo_path, ".github", "workflows"])
 
     cond do
-      not File.dir?(root) -> []
+      not File.dir?(root) ->
+        []
+
       true ->
         root
         |> File.ls!()
@@ -122,10 +124,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
     github.head_ref github.ref
   ]
   @untrusted_pattern Regex.compile!(
-    "\\$\\{\\{\\s*(" <>
-      (@untrusted_contexts |> Enum.map(&Regex.escape/1) |> Enum.join("|")) <>
-      ")"
-  )
+                       "\\$\\{\\{\\s*(" <>
+                         (@untrusted_contexts |> Enum.map(&Regex.escape/1) |> Enum.join("|")) <>
+                         ")"
+                     )
 
   # ─── WH001: Template injection ──────────────────────────────────────
 
@@ -146,6 +148,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
     |> Enum.flat_map(fn path ->
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
+
       scan_run_blocks(content)
       |> Enum.flat_map(fn {line_no, run_text} ->
         if Regex.match?(@untrusted_pattern, run_text) do
@@ -322,7 +325,13 @@ defmodule Hypatia.Rules.WorkflowHardening do
   def wh004_scan_content(filename, content) do
     Regex.scan(~r/^\s*-?\s*uses:\s*(\S+)/m, content, return: :index)
     |> Enum.flat_map(fn [{full_start, _}, {slug_start, slug_len}] ->
-      slug = String.slice(content, slug_start, slug_len)
+      # `return: :index` yields BYTE offsets; String.slice/3 counts
+      # graphemes. Any multi-byte character earlier in the file (em-dash
+      # in a comment, emoji) shifted the slice, producing mangled slugs
+      # ("tions/checkout@…", "urin 21 JRE…") that bypassed the
+      # 40-hex-pinned exemption below and flagged SHA-pinned actions as
+      # unpinned. binary_part/3 is the byte-correct slice.
+      slug = binary_part(content, slug_start, slug_len)
 
       cond do
         String.starts_with?(slug, "./") or String.starts_with?(slug, "docker://") ->
@@ -377,7 +386,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       Regex.scan(~r/(?m)^\s*password:\s*(\S.*)$/, content, return: :index)
       |> Enum.flat_map(fn [{full_start, _}, {val_start, val_len}] ->
-        val = String.slice(content, val_start, val_len)
+        # byte offsets from return: :index — see wh004_scan_content
+        val = binary_part(content, val_start, val_len)
         line_no = line_number_for_offset(content, full_start)
 
         if String.contains?(val, "${{ secrets.") or String.contains?(val, "${{secrets.") do
@@ -546,7 +556,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      Regex.scan(~r/\$\{\{\s*(toJSON|toJson|fromJSON|fromJson)\(\s*secrets\s*\)\s*\}\}/, content, return: :index)
+      Regex.scan(~r/\$\{\{\s*(toJSON|toJson|fromJSON|fromJson)\(\s*secrets\s*\)\s*\}\}/, content,
+        return: :index
+      )
       |> Enum.map(fn [{idx, _} | _] ->
         line_no = line_number_for_offset(content, idx)
 
@@ -587,7 +599,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
       Regex.scan(~r/::(?:set-output|save-state|set-env|add-path)\b/, content, return: :index)
       |> Enum.map(fn [{idx, _}] ->
         line_no = line_number_for_offset(content, idx)
-        slice = String.slice(content, idx, 20)
+        slice = byte_preview(content, idx, 20)
 
         %{
           rule: "WH010",
@@ -631,7 +643,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
       )
       |> Enum.map(fn [{idx, _}] ->
         line_no = line_number_for_offset(content, idx)
-        slice = String.slice(content, idx, 60)
+        slice = byte_preview(content, idx, 60)
 
         %{
           rule: "WH011",
@@ -842,6 +854,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   defp append_line({id, no, body}, line), do: {id, no, [line | body]}
 
   defp flush(acc, nil), do: acc
+
   defp flush(acc, {id, no, body}) do
     [{id, no, body |> Enum.reverse() |> Enum.join("\n")} | acc]
   end
@@ -852,6 +865,23 @@ defmodule Hypatia.Rules.WorkflowHardening do
     |> String.graphemes()
     |> Enum.count(&(&1 == "\n"))
     |> Kernel.+(1)
+  end
+
+  # Fixed-length excerpt starting at a BYTE offset (regex match start, so
+  # always on a character boundary). Clamps to the remaining bytes —
+  # binary_part/3 raises on overrun — and trims any trailing partial
+  # UTF-8 sequence so the preview stays Jason-encodable.
+  defp byte_preview(content, idx, len) do
+    avail = max(byte_size(content) - idx, 0)
+    trim_partial_utf8(binary_part(content, idx, min(len, avail)))
+  end
+
+  defp trim_partial_utf8(bin) do
+    if String.valid?(bin) or byte_size(bin) == 0 do
+      bin
+    else
+      trim_partial_utf8(binary_part(bin, 0, byte_size(bin) - 1))
+    end
   end
 
   defp group_by_severity(findings) do

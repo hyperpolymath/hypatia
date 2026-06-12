@@ -220,7 +220,7 @@ if [ -f "$TARGET_REPO/Justfile" ]; then
     grep -q "^heal:" "$TARGET_REPO/Justfile" 2>/dev/null || { echo -e "${YELLOW}  [UX004] Missing 'heal' recipe in Justfile${NC}"; ISSUE_COUNT=$((ISSUE_COUNT + 1)); }
 fi
 [ ! -f "$TARGET_REPO/.machine_readable/MUST.contractile" ] && echo -e "${YELLOW}  [UX005] Missing MUST.contractile${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
-[ ! -f "$TARGET_REPO/guix.scm" ] && [ ! -f "$TARGET_REPO/flake.nix" ] && echo -e "${YELLOW}  [UX006] Missing guix.scm AND flake.nix${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
+[ ! -f "$TARGET_REPO/guix.scm" ] && echo -e "${YELLOW}  [UX006] Missing guix.scm${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
 [ ! -f "$TARGET_REPO/llm-warmup-user.md" ] && echo -e "${YELLOW}  [UX007] Missing llm-warmup-user.md${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
 [ ! -f "$TARGET_REPO/EXPLAINME.adoc" ] && echo -e "${YELLOW}  [UX008] Missing EXPLAINME.adoc${NC}" && ISSUE_COUNT=$((ISSUE_COUNT + 1))
 if [ -f "$TARGET_REPO/0-AI-MANIFEST.a2ml" ]; then

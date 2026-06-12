@@ -58,8 +58,9 @@ defmodule Hypatia.ScannerSuppression do
   @default_exemptions %{
     # `:any` key under a module: applies to every rule type in that module.
     "security_errors" => %{
-      :any => @training_corpus_paths ++
-                [".github/workflows/integration.yml"]
+      :any =>
+        @training_corpus_paths ++
+          [".github/workflows/integration.yml"]
     },
     "code_safety" => %{
       :any => @training_corpus_paths
@@ -148,14 +149,22 @@ defmodule Hypatia.ScannerSuppression do
   # 2026-05-27 on affinescript#357, panll#54, claude-integrations#43).
   def suppressed?(file, "cicd_rules", "banned_language_file", opts) do
     cond do
-      String.ends_with?(file, ".py") -> false
-      String.ends_with?(file, ".go") -> false
-      String.ends_with?(file, "/Makefile") or String.ends_with?(file, "Makefile") -> false
-      String.ends_with?(file, "/Gemfile") or String.ends_with?(file, "Gemfile") -> false
+      String.ends_with?(file, ".py") ->
+        false
+
+      String.ends_with?(file, ".go") ->
+        false
+
+      String.ends_with?(file, "/Makefile") or String.ends_with?(file, "Makefile") ->
+        false
+
+      String.ends_with?(file, "/Gemfile") or String.ends_with?(file, "Gemfile") ->
+        false
+
       true ->
         repo_path = Keyword.get(opts, :repo_path, nil)
         rel = relative(file, repo_path)
-        ts_carveout_match?(rel)
+        ts_carveout_match?(rel) or blocked_pattern_allow_match?(rel)
     end
   end
 
@@ -184,6 +193,28 @@ defmodule Hypatia.ScannerSuppression do
 
   defp ts_carveout_match?(rel) do
     Enum.any?(@banned_lang_ts_carveouts, &Regex.match?(&1, rel))
+  end
+
+  # Honour the `path_allow_prefixes` of the matching CicdRules blocked
+  # pattern. Those lists are the SINGLE SOURCE OF TRUTH for the
+  # banned-language exemption tables in standards/.claude/CLAUDE.md
+  # (TypeScript/ReScript/V-lang carve-outs: /bindings/deno/, /vscode/,
+  # upstream forks, Coq `.v` proof scripts, …). The hand-copied
+  # @banned_lang_ts_carveouts above predates this delegation and had
+  # drifted to 3 of the ~12 documented carve-outs, so e.g.
+  # `k9-svc/bindings/deno/mod.ts` was flagged Critical on standards#382
+  # despite its documented exemption. Python/Go stay hard-refused above
+  # (total bans, no prefixes to honour).
+  defp blocked_pattern_allow_match?(rel) do
+    Hypatia.Rules.CicdRules.blocked_patterns()
+    |> Enum.any?(fn p ->
+      glob = Map.get(p, :glob)
+      prefixes = Map.get(p, :path_allow_prefixes, [])
+
+      glob != nil and prefixes != [] and
+        String.ends_with?(rel, String.replace(glob, "*", "")) and
+        Enum.any?(prefixes, &String.contains?(rel, &1))
+    end)
   end
 
   @doc """
@@ -264,20 +295,24 @@ defmodule Hypatia.ScannerSuppression do
   # and can't tell #[cfg(test)] context); the `test-` prefix is the strong
   # signal that this is fixture data, not a real credential.
   defp rust_test_literal_re,
-    do: ~r/(?i)(?:password|secret|api[_-]?key|token)\s*[:=]\s*["'](?:test|dummy|fake|example|placeholder)[-_].*?["']/
+    do:
+      ~r/(?i)(?:password|secret|api[_-]?key|token)\s*[:=]\s*["'](?:test|dummy|fake|example|placeholder)[-_].*?["']/
 
   defp directive_re,
     do: ~r/(?:^|[\s#\/\-;])hypatia:\s*allow\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
 
   defp directive_matches?(line, rule_module, rule_type) do
     case Regex.run(directive_re(), line) do
-      nil -> false
+      nil ->
+        false
+
       [_full, declared_mod] ->
         # No slash: bare type form `hypatia: allow secret_detected`
         declared_mod in [rule_type, rule_module, "*"]
+
       [_full, declared_mod, declared_type] ->
-        (declared_mod in [rule_module, "*"]) and
-          (declared_type in [rule_type, "*"])
+        declared_mod in [rule_module, "*"] and
+          declared_type in [rule_type, "*"]
     end
   end
 
@@ -341,12 +376,15 @@ defmodule Hypatia.ScannerSuppression do
   end
 
   defp relative(file, nil), do: file
+
   defp relative(file, repo_path) do
     cond do
       String.starts_with?(file, repo_path <> "/") ->
         String.replace_prefix(file, repo_path <> "/", "")
+
       String.starts_with?(file, repo_path) ->
         String.replace_prefix(file, repo_path, "")
+
       true ->
         file
     end

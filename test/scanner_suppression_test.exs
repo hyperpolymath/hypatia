@@ -113,6 +113,40 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+  describe "suppressed?/4 — banned_language_file honours CicdRules path_allow_prefixes" do
+    test "documented TS interop carve-out (bindings/deno) is suppressed" do
+      # Regression: the hand-copied @banned_lang_ts_carveouts list had
+      # drifted to 3 of the ~12 documented carve-outs, so
+      # k9-svc/bindings/deno/mod.ts was flagged Critical (standards#382)
+      # despite its CLAUDE.md exemption. The rule now delegates to the
+      # CicdRules path_allow_prefixes single source of truth.
+      assert ScannerSuppression.suppressed?(
+               "/repo/k9-svc/bindings/deno/mod.ts",
+               "cicd_rules",
+               "banned_language_file",
+               repo_path: "/repo"
+             )
+    end
+
+    test "non-carve-out TypeScript is still banned" do
+      refute ScannerSuppression.suppressed?(
+               "/repo/src/app.ts",
+               "cicd_rules",
+               "banned_language_file",
+               repo_path: "/repo"
+             )
+    end
+
+    test "python under a TS carve-out path is still hard-refused" do
+      refute ScannerSuppression.suppressed?(
+               "/repo/bindings/deno/tool.py",
+               "cicd_rules",
+               "banned_language_file",
+               repo_path: "/repo"
+             )
+    end
+  end
+
   describe "context_safe_line?/2 — line-level exemptions for secret_detected" do
     test "GitHub Actions secrets reference is not a leak" do
       assert ScannerSuppression.context_safe_line?(
