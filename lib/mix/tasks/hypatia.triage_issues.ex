@@ -104,7 +104,10 @@ defmodule Mix.Tasks.Hypatia.TriageIssues do
 
     labels =
       opts
-      |> Keyword.get(:labels, "hypatia,hypatia-security-alert,hypatia-advisory,automated-by-hypatia")
+      |> Keyword.get(
+        :labels,
+        "hypatia,hypatia-security-alert,hypatia-advisory,automated-by-hypatia"
+      )
       |> String.split(",", trim: true)
 
     classes = parse_classes(Keyword.get(opts, :classes))
@@ -136,10 +139,18 @@ defmodule Mix.Tasks.Hypatia.TriageIssues do
   defp parse_classes(nil), do: @close_classes
 
   defp parse_classes(csv) do
+    # Resolve against the known-class table instead of atomizing CLI
+    # input: dynamic atom creation from arbitrary input leaks atoms (PA013).
+    allowed = Map.new(@close_classes, fn c -> {Atom.to_string(c), c} end)
+
     csv
     |> String.split(",", trim: true)
-    |> Enum.map(&String.to_atom/1)
-    |> Enum.filter(&(&1 in @close_classes))
+    |> Enum.flat_map(fn s ->
+      case Map.fetch(allowed, s) do
+        {:ok, atom} -> [atom]
+        :error -> []
+      end
+    end)
   end
 
   # ─── Discovery ─────────────────────────────────────────────────────────
@@ -315,7 +326,8 @@ defmodule Mix.Tasks.Hypatia.TriageIssues do
         Enum.map(candidates, fn %{issue: i, class: c, reason: r} ->
           %{
             "number" => i["number"],
-            "repo" => i["repository_url"] |> to_string() |> String.split("/repos/") |> List.last(),
+            "repo" =>
+              i["repository_url"] |> to_string() |> String.split("/repos/") |> List.last(),
             "title" => i["title"],
             "url" => i["html_url"],
             "class" => Atom.to_string(c),
@@ -353,8 +365,7 @@ defmodule Mix.Tasks.Hypatia.TriageIssues do
 
     {closed, failed} =
       Enum.reduce(candidates, {0, 0}, fn %{issue: i, reason: r}, {ok, bad} ->
-        repo =
-          i["repository_url"] |> to_string() |> String.split("/repos/") |> List.last()
+        repo = i["repository_url"] |> to_string() |> String.split("/repos/") |> List.last()
 
         case close_issue(repo, i["number"], r, token) do
           :ok -> {ok + 1, bad}

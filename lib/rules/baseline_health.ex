@@ -312,8 +312,11 @@ defmodule Hypatia.Rules.BaselineHealth do
 
       Regex.scan(@uses_sha_pattern, content, return: :index)
       |> Enum.flat_map(fn [{full_start, _}, {repo_start, repo_len}, {sha_start, sha_len}] ->
-        action_repo = String.slice(content, repo_start, repo_len)
-        sha = String.slice(content, sha_start, sha_len) |> String.downcase()
+        # byte offsets from return: :index — String.slice counts graphemes,
+        # so any earlier multi-byte char shifted these and sent garbage
+        # owner/repo + sha pairs to the GitHub API (false BH004 criticals).
+        action_repo = binary_part(content, repo_start, repo_len)
+        sha = binary_part(content, sha_start, sha_len) |> String.downcase()
         line_no = line_number_for_offset(content, full_start)
         check_action_sha_alive(action_repo, sha, rel, line_no)
       end)
@@ -699,9 +702,7 @@ defmodule Hypatia.Rules.BaselineHealth do
         names =
           recent_heads
           |> Enum.flat_map(fn sha ->
-            case curl_github(
-                   "repos/#{owner}/#{repo}/commits/#{sha}/check-runs?per_page=100"
-                 ) do
+            case curl_github("repos/#{owner}/#{repo}/commits/#{sha}/check-runs?per_page=100") do
               {:ok, %{"check_runs" => runs}} when is_list(runs) ->
                 runs
                 |> Enum.filter(&(&1["conclusion"] == "success"))
