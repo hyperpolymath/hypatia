@@ -45,7 +45,8 @@ later  = "verisimdb entity model + PolicyDrift; CodeCite/ProofTrace"
 [wave-0-artifacts]
 a1 = "decision contract — LANDED on hypatia/main (PR #442, merged 2026-06-05). doc + schema + +/- fixtures, ajv-validated."
 a2 = "CVE/bump gate — LANDED on hypatia/main (PR #443, merged 2026-06-05). bump-decision.schema (extends a1) + bump fixtures, ajv-validated."
-a3 = "attestation — this commit. 02-attestation.adoc + schemas/attestation.schema.json + structural fixtures; ed25519 sign/verify/tamper round-trip PASSED + ajv-validated (signed-valid verifies; verdict-tamper -> integrity fail; sig-tamper -> authenticity fail)."
+a3 = "attestation — LANDED on hypatia/main (PR #444, merged 2026-06-05). ed25519 sign/verify/tamper round-trip PASSED + ajv A1/A2/A3."
+a4 = "CVE/bump gate in CI — this commit. ci-templates/bridge-gate.yml (reviewable template; wiring is META) + bridge-verdict.sh (B1 core) + mock BridgeReports; bridge-verdict tested (clean->PASS exit0, unmitigable->FLAG exit1); workflow YAML valid."
 
 [gated-pr-ledger]
 # Applying the gate by hand to all open PRs across 11 in-scope repos (2026-06-05).
@@ -53,8 +54,8 @@ a3 = "attestation — this commit. 02-attestation.adoc + schemas/attestation.sch
 held-license      = "standards#376,#373 -> veto:license (owner-only, never auto)"
 held-meta-ci      = "vcl-ut#51; echidna#237 (actions bump edits workflows) -> meta:edits-CI-oracle"
 held-proof        = "vcl-ut#52; echidna#234 -> needs proof attestation (echidnabot offline) + rebase/coord"
-held-bumps        = "echidna#236,#233,#228; reposystem x10 cargo (#95-#107) -> needs CVE gate (axum/nom/redis/toml=major)"
-held-nix          = "reposystem#103,#108,#109 -> veto:nix -> CLOSE, do not merge"
+held-bumps        = "2026-06-12 re-triage: echidna#243 (actions->meta/review); reposystem #106 redis + #95 toml (major->review); 8 cargo minor/patch (#96-#107) -> needs CVE gate = bridge-gate.yml run in CI."
+held-nix          = "CLOSED 2026-06-12: reposystem#113/#112/#109 (B3 + @dependabot ignore). Root fix still open: remove flake.nix (separate Nix campaign)."
 held-core-code    = "echidna#232 -> core-tier code change -> conservative/review (docs/chore would arm)"
 held-realignment  = "verisimdb#107 -> held:6a2-realignment + owner-review-requested"
 
@@ -64,4 +65,4 @@ hold          = "6a2/STATE,META + anchors/ANCHOR in {hypatia,gitbot-fleet,.git-p
 other-agents  = "claude/nice-ptolemy-lNB8E (standards), claude/loving-cannon-AtUSm (echidna), claude/abi-tier2-and-l10-trans-cycle (vcl-ut), claude/affinescript-migration-wip (reposystem)"
 
 [next]
-step = "attestation landed (this commit); NEXT = pool<->TRUST + Kin-backed lease/coordination spec (in standards). Open operational follow-on: live `panic-attack bridge triage` on the held bumps."
+step = "artifact 4 (bridge-gate.yml CI template) lands this commit. To clear the 8 cve-check bumps: wire bridge-gate.yml into bump-PR CI (META, owner-reviewed). Build step 3 remaining: pool<->TRUST + Kin-backed lease/coordination spec (in standards). NOTE 2026-06-12: dev sandbox blocks crates.io+OSV (403) -> bridge runs in CI only, OR add a network allowlist on the environment (code.claude.com docs)."

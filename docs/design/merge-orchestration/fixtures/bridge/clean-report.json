@@ -1,0 +1,20 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 -- mock panic-attack BridgeReport: phantom/unreachable CVE only -> B1 PASS.",
+  "schema_version": "0.2.0",
+  "project": "hyperpolymath/example",
+  "total_dependencies": 486,
+  "vulnerable_dependencies": 1,
+  "cves": [
+    {
+      "vulnerability": {"id": "GHSA-aaaa-bbbb-cccc", "cve": "CVE-2026-1111", "summary": "info-leak in an unused codec path", "severity": "medium"},
+      "reachability": {"is_imported": false, "import_sites": [], "status": "Unreachable"},
+      "classification": "Informational",
+      "rationale": "phantom dependency: present in Cargo.lock but never imported in any .rs file",
+      "action": "none (consider removing the unused dependency)"
+    }
+  ],
+  "mitigated": 0,
+  "unmitigable": 0,
+  "concatenative": 0,
+  "informational": 1
+}
