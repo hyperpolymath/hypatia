@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Merge Orchestration — CVE/bump gate in CI (Wave-0, artifact 4)
+:toc: macro
+
+[IMPORTANT]
+====
+The CVE half of the bump gate (rule *B1*) needs OSV, which only a CI runner can
+reach — not the dev sandbox (it blocks `crates.io` + `api.osv.dev`). This artifact
+is the workflow that runs it *there*, shipped as a *reviewable template*. Wiring it
+into a repo's `.github/workflows/` is a *meta* change (it edits the CI oracle) →
+owner-reviewed, never auto.
+====
+
+== What it does
+
+On a `dependabot/` or `renovate/` PR:
+
+. *B3 (nix)* and *B2 (major, via `dependabot/fetch-metadata`)* gate with no network → fail (block auto-merge);
+. builds `panic-attack --features http`, runs `bridge triage` (queries OSV) → `BridgeReport`;
+. *B1*: any reachable `Unmitigable` CVE → fail (`safety=flag`); else pass (arm-eligible, pool-gated).
+
+A failing gate blocks auto-merge; only a clean patch/minor CVE-clear bump passes.
+
+== Files
+
+* `ci-templates/bridge-gate.yml` — the workflow (copy to `.github/workflows/` to wire; *meta*, owner-reviewed).
+* `ci-templates/bridge-verdict.sh` — the B1 decision core (the workflow inlines the same `jq`); standalone + testable.
+* `fixtures/bridge/{clean,unmitigable}-report.json` — mock `BridgeReport`s.
+
+== Tested here (the part that doesn't need OSV)
+
+`bridge-verdict.sh` against the mocks: `clean-report` → *PASS* (exit 0);
+`unmitigable-report` → *FLAG* (exit 1). The OSV/triage half is exercised only by
+running the workflow in CI — which is the owner's wiring step, not something the
+sandbox can do (and faking an OSV result was explicitly off the table).
+
+== Scanner hygiene (dogfooding)
+
+The workflow passes `github` context via `env:` only — never `${{ }}` interpolated
+into a `run:` line — per hypatia's own workflow-injection rules. The gate must
+survive the same audit it helps enforce.
+
+== How it clears the held backlog
+
+The 8 `needs-CVE-check` reposystem bumps (#96–#107, cargo minor/patch) resolve here:
+each gets a real `BridgeReport` and a B1 verdict. The 3 nix bumps were already
+closed (B3); the 2 majors (#106 redis, #95 toml) + echidna #243 (actions/meta) stay
+`review`.

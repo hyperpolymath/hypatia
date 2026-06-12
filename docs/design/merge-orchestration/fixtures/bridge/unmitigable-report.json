@@ -1,0 +1,20 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 -- mock panic-attack BridgeReport: reachable unmitigable CVE -> B1 FLAG.",
+  "schema_version": "0.2.0",
+  "project": "hyperpolymath/example",
+  "total_dependencies": 486,
+  "vulnerable_dependencies": 1,
+  "cves": [
+    {
+      "vulnerability": {"id": "RUSTSEC-2026-0002", "cve": "CVE-2026-2222", "summary": "RCE in parser", "severity": "high"},
+      "reachability": {"is_imported": true, "import_sites": ["src/lib.rs:42"], "status": "Reachable"},
+      "classification": "Unmitigable",
+      "rationale": "no fixed version published; reachable from the crate's public API",
+      "action": "await upstream fix; consider a layered control"
+    }
+  ],
+  "mitigated": 0,
+  "unmitigable": 1,
+  "concatenative": 0,
+  "informational": 0
+}
