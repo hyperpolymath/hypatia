@@ -55,8 +55,16 @@ at parse → `startup_failure` (zero jobs, no logs). Hits public repos too.
   forks/archived), `CI_HEALTH_DENYLIST`, idempotent, dry-run honoured.
 * `sweep.sh` — estate driver: enumerate → detect → remediate (cap
   `MAX_BURN_PRS`) → upsert one rolling tracking issue.
-* `action-superset.txt` — curated non-GitHub actions the estate uses, applied as
-  `owner/repo@*` alongside `hyperpolymath/*`.
+* `baton-bridge.sh` — the complement to detect/sweep: where those *detect* that
+  GitHub CI is blocked (`A-BILLING`/`B-ALLOWLIST`), this *runs the checks anyway*
+  as Batons on **owned compute** (zero GitHub Actions minutes) via
+  `hyperpolymath/bag-of-actions` (`mix bag.sweep`), then upserts a separate
+  rolling tracking issue with the HMAC-attested verdicts. Invoke from a
+  cron/systemd timer on the **.git-private-farm** — *never* from a GitHub Action
+  (that would burn the minutes it exists to avoid and re-couple it to billing).
+  Env: `BAG_OF_ACTIONS_DIR` (required), `MANIFEST`, `OWNER`, `ISSUE_REPO`, `DRY_RUN`.
+  This is the piece that survives `A-BILLING`: a billing-blocked private repo's
+  checks still get real verdicts, with no dependency on any GitHub run.
 * `../../.github/workflows/ci-health-sweep.yml` — daily cron (03:47 UTC) +
   `workflow_dispatch` (manual defaults to dry-run).
 
