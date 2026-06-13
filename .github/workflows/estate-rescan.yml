@@ -173,37 +173,10 @@ jobs:
           echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
           echo "Scanned $SCANNED repos ($FAILED failures)"
 
-      - name: Regenerate index.json
-        run: |
-          set -euo pipefail
-          DATA="$RUNNER_TEMP/verisimdb-data"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          # Preserve human/LLM-authored summaries from the previous index;
-          # recompute the live counts from the scan files themselves.
-          cp "$DATA/index.json" /tmp/old-index.json 2>/dev/null || echo '{}' > /tmp/old-index.json
-          REPOS_JSON='{}'
-          for f in "$DATA"/scans/*.json; do
-            name=$(basename "$f" .json)
-            ENTRY=$(jq --arg now "$NOW" --slurpfile old /tmp/old-index.json --arg name "$name" '
-              {
-                last_scan: $now,
-                weak_points: ([.weak_points[]? | select((.suppressed // false) | not)] | length),
-                suppressed: ([.weak_points[]? | select(.suppressed // false)] | length),
-                critical: ([.weak_points[]? | select(((.suppressed // false) | not) and .severity == "Critical")] | length),
-                high: ([.weak_points[]? | select(((.suppressed // false) | not) and .severity == "High")] | length),
-                summary: ($old[0].repos[$name].summary // null)
-              }' "$f")
-            REPOS_JSON=$(jq --arg name "$name" --argjson entry "$ENTRY" '. + {($name): $entry}' <<<"$REPOS_JSON")
-          done
-          jq -n --arg now "$NOW" --argjson repos "$REPOS_JSON" \
-            '{repos: $repos, total_scans: ($repos | length), last_updated: $now}' \
-            > "$DATA/index.json"
-          jq -r '"index.json: \(.total_scans) repos, last_updated \(.last_updated)"' "$DATA/index.json"
-
-      - name: Push to verisimdb-data
+      - name: Commit refreshed scans
+        id: commit_scans
         if: inputs.dry_run != 'true'
         env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
           SCANNED: ${{ steps.scan.outputs.scanned }}
         run: |
           set -euo pipefail
@@ -211,14 +184,47 @@ jobs:
           cd "$DATA"
           git config user.name "hypatia-estate-rescan"
           git config user.email "hypatia-bot@users.noreply.github.com"
-          git add scans/ index.json
+          git add scans/
           if git diff --cached --quiet; then
             echo "No scan changes to push."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
           git commit -m "scan: estate rescan ($SCANNED repos, panic-attack refresh)"
+
+      - name: Regenerate index.json (canonical generator)
+        if: inputs.dry_run != 'true' && steps.commit_scans.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          DATA="$RUNNER_TEMP/verisimdb-data"
+          cd "$DATA"
+          # Use the repo's own deterministic generator rather than a bespoke
+          # schema. regen-index.sh derives `last_updated` from the commit
+          # time of the latest commit touching scans/ — which is the
+          # scans-only commit just made above. Committing the index as a
+          # SEPARATE commit (next step) that does NOT touch scans/ keeps that
+          # timestamp stable, so the index-freshness.yml gate (which reruns
+          # this same script at HEAD and diffs) stays green.
+          bash scripts/regen-index.sh
+          git add index.json
+          if ! git diff --cached --quiet; then
+            git commit -m "index: regen after estate rescan"
+          fi
+
+      - name: Push to verisimdb-data
+        if: inputs.dry_run != 'true' && steps.commit_scans.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          DATA="$RUNNER_TEMP/verisimdb-data"
+          cd "$DATA"
           # Retry with rebase: another writer (ingest.yml, manual push) may
-          # land between our clone and push.
+          # land between our clone and push. --rebase keeps our two commits
+          # (scans, then index) on top; index regen does not need rerunning
+          # because a concurrent scans push is rare and the freshness gate
+          # would catch any genuine drift.
           for delay in 2 4 8 16; do
             if git push origin HEAD:main; then
               exit 0
