@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: MPL-2.0
+# Centralized roadmap sweeper: adds recently-touched issues & PRs from every
+# owned repo (except son-shared) into the Hyperpolymath Master Roadmap (#35).
+#
+# WHY centralized (one workflow, one secret) instead of a per-repo workflow:
+#   - the PAT secret lives in exactly ONE repo (this one), not ~250 copies;
+#   - one file to maintain, one place to rotate the token.
+# GITHUB_TOKEN is scoped to this repo only and cannot read other repos, so all
+# cross-repo reads use the classic PAT (ADD_TO_PROJECT_PAT: scopes project +
+# public_repo). Private repos are therefore NOT covered yet — widening the PAT
+# to `repo` (one secret, one place) is a deliberate later step.
+name: Roadmap Sync (#35)
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 min (public repo → free minutes; adjust freely)
+  workflow_dispatch:          # manual on-demand run
+
+permissions: {}              # GITHUB_TOKEN unused; all work goes through the PAT
+
+concurrency:
+  group: roadmap-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.ADD_TO_PROJECT_PAT }}
+      PROJECT_OWNER: hyperpolymath
+      PROJECT_NUMBER: '35'
+      # son-shared repos — excluded per estate boundaries (AGPL, son's work)
+      EXCLUDE: 'idaptik burble rattlescript vcl-ut'
+      WINDOW_MIN: '45'         # look-back window (> cron interval for overlap)
+    steps:
+      - name: Sweep recent issues/PRs into roadmap #35
+        run: |
+          set -euo pipefail
+          SINCE=$(date -u -d "${WINDOW_MIN} minutes ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "::group::Setup"
+          echo "Window since: $SINCE"
+          PID=$(gh api graphql \
+            -f query='query($o:String!,$n:Int!){user(login:$o){projectV2(number:$n){id title}}}' \
+            -f o="$PROJECT_OWNER" -F n="$PROJECT_NUMBER" --jq '.data.user.projectV2.id')
+          echo "Project node id: $PID"
+          echo "::endgroup::"
+
+          # Owned, non-fork, non-archived repos the PAT can see (public with the
+          # current token scope). Excludes are skipped below.
+          mapfile -t REPOS < <(gh api --paginate \
+            '/user/repos?affiliation=owner&per_page=100' \
+            --jq '.[] | select(.fork==false and .archived==false) | .name')
+          echo "Visible owned repos: ${#REPOS[@]}"
+
+          scanned=0; items=0; adds=0
+          for r in "${REPOS[@]}"; do
+            skip=0
+            for x in $EXCLUDE; do [ "$r" = "$x" ] && skip=1 && break; done
+            if [ "$skip" = "1" ]; then echo "skip (son-shared): $r"; continue; fi
+            scanned=$((scanned+1))
+
+            # The issues endpoint returns BOTH issues and PRs, filtered by
+            # updated_at >= since. node_id works for either content type.
+            NODES=$(gh api --paginate \
+              "repos/$PROJECT_OWNER/$r/issues?state=open&since=$SINCE&per_page=100" \
+              --jq '.[].node_id' 2>/dev/null || true)
+            for nid in $NODES; do
+              [ -z "$nid" ] && continue
+              items=$((items+1))
+              # addProjectV2ItemById is idempotent: re-adding an existing item
+              # returns the existing item id, so overlapping windows are safe.
+              if gh api graphql \
+                   -f query='mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}' \
+                   -f p="$PID" -f c="$nid" >/dev/null 2>&1; then
+                adds=$((adds+1))
+              else
+                echo "::warning::could not add node $nid (from $r)"
+              fi
+            done
+          done
+
+          echo "----------------------------------------"
+          echo "Repos scanned: $scanned (excluded: $EXCLUDE)"
+          echo "Recent items seen: $items | add-calls ok: $adds (idempotent)"
+          echo "NOTE: private repos are not covered until ADD_TO_PROJECT_PAT gains 'repo' scope."
