@@ -1,0 +1,288 @@
+// // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// SPDX-License-Identifier: MPL-2.0
+= Protected Subjects & the Reflexivity Taxonomy
+:toc: macro
+:icons: font
+:revdate: 2026-06-13
+:status: DESIGN — for owner review before implementation
+
+[abstract]
+Hypatia today treats almost every scanned subject uniformly: detect →
+route through the safety triangle → dispatch by confidence. That is wrong
+for a minority of subjects that are *part of the apparatus itself*, that
+*fan out across the estate*, or that *define the estate's own
+languages/formats*. Acting on those can start a self-amplifying change
+process, or break many repos at once. This document gives (1) a taxonomy
+for classifying "things", (2) a single-engine pathway that recognises
+protected subjects and disposes of their findings differently, (3) the
+actuation distinction inside the gitbot-fleet, and (4) the special cases
+(rhodibot, echidnabot/panicbot, self-language/self-doc). It is a design
+for review — no pipeline code should change until the taxonomy is agreed.
+
+toc::[]
+
+== Motivating incident (why this is not hypothetical)
+
+empty-linter PR #21 merged red; the follow-up auto-remediation `d0db0a1`
+applied Hypatia's own WF017 recipe (`if: ${{ secrets.X != '' }}`) — which
+is *itself broken* (`secrets` is unavailable in `if:`; the edit was also
+invalid YAML) — and silently disabled `instant-sync.yml`, the workflow
+that drives `repository-dispatch` to `.git-private-farm`. Estate
+propagation went dark. See
+`empty-linter/docs/reports/incident-2026-06-11-cicd-pr21.adoc`.
+
+Two lessons drive this design:
+
+. *A fixer that edits a CI/CD-critical, estate-wide subject can convert a
+  cosmetic finding into an estate-wide outage.* empty-linter is consumed
+  by the estate's CI/CD; it is not a leaf app. It needed a stricter
+  disposition than "auto-fix at ≥0.95 confidence".
+. *Hypatia already had the right signal but not the right gate.* The
+  external `Hypatia` status correctly distinguished blocking findings
+  (workflow_audit, XSS) from advisory ones (`migration_rules`
+  `deprecated_api` on `*.res`) — once the blockers were fixed, the status
+  went green with 56 advisory findings remaining. The danger was never the
+  *status*; it was the *fleet auto-executing* a `module_replace`
+  (`Belt.Array`→`Array`, different signatures) on a CI/CD-critical repo.
+  That is the cell we must lock.
+
+== Design stance: one engine, not two rulesets
+
+The owner's framing — "not saying have two rulesets (but maybe we have to)
+but a way of ensuring there is a pathway that recognises this type of thing
+and deals with it differently" — is exactly right. We do *not* fork the
+rule catalog. *Detection is subject-agnostic* (a broken gate is a broken
+gate everywhere). What must differ is the *disposition*: the dispatch
+strategy cap, the fix locus, the priority, and the guards.
+
+This pattern already exists in the codebase and works:
+
+* `lib/rules/cicd_rules.ex` — `license_finding_strategy/0 ⇒ :review`,
+  `license_finding_severity_cap/1 ⇒ :warn`, `license_related_finding?/1`,
+  `owner_license_classification/0`. License is "one detection, special
+  disposition": the rule still fires anywhere, but the *finding* is capped
+  to review and never auto-executed.
+* `lib/kin/gate.ex` — `check_bot_directives/2` (Check 0) already reads a
+  per-repo `.bot_directives` file to decide whether a bot+action is
+  permitted at all.
+* `lib/kin/contingency.ex` — emergency levels `:advisory` / `:caution`
+  ("hold all auto-execute, allow review-tier") / `:freeze` / `:shutdown`.
+
+*Protected Subjects generalises the license cap, enforced in Kin.Gate,
+expressed in the vocabulary of Contingency `:caution`.* License becomes one
+instance of a general mechanism; reflexivity/criticality is another.
+
+== The taxonomy
+
+A *subject* is anything a finding can attach to: a repo, a path/artifact, a
+bot, a recipe, a language/format. Classification is a *vector over four
+orthogonal axes*; named *classes* are policy-bearing regions of that space.
+
+=== Axis A — Ownership / Influence (where can we fix it?)
+
+[cols="1,3",options="header"]
+|===
+| Value | Meaning
+| `owned-upstream` | We author the source-of-truth and can fix the *class* at origin, then propagate (empty-linter, the `.git-private-farm` workflow templates, AffineScript, the a2ml/k9-svc specs, Hypatia's own recipes).
+| `owned-leaf` | We own it, but nothing downstream derives from it.
+| `consumed` | We depend on it but don't own the source (pin/wrap, don't fix at source).
+| `third-party` | Upstream / forked. DO NOT TOUCH — flag-only (already the license stance).
+|===
+
+=== Axis B — Role in the apparatus (what does it do *for us*?)
+
+[cols="1,3",options="header"]
+|===
+| Value | Meaning
+| `observer` | Produces findings/signals (panic-attack, scanners, sustainabot-as-advisor). Read-only; mistakes make noise, not damage.
+| `actuator` | Changes the world (rhodibot PRs, robot-repo-automaton commits, dispatch-runner, seambot). Mistakes persist and cascade.
+| `substrate` | The data/coordination layer others ride on (verisim-data, `.git-private-farm`, dispatch manifests).
+| `subject-only` | An ordinary target with no apparatus role.
+|===
+
+=== Axis C — Reflexivity (does acting on it loop back on the system?)
+
+[cols="1,3",options="header"]
+|===
+| Value | Meaning
+| `none` | No feedback into Hypatia/fleet.
+| `tool-self` | The subject *is* a tool Hypatia/fleet uses (empty-linter in CI/CD, Hypatia itself, gitbot-fleet scripts).
+| `tool-twin` | The subject is the upstream/sibling of a bot (echidna ↔ echidnabot, panic-attack ↔ panicbot). The pair must stay coherent.
+| `template-ancestor` | Apparatus is *derived* from it (rhodibot's base template). Changing it implies re-deriving descendants; state drift has implications.
+| `self-language` / `self-doc` | It defines/validates the estate's *own* languages/formats (AffineScript, a2ml, k9-svc, gossamer, burble). Circular authority: the checker's notion of "correct" *is* the spec.
+|===
+
+=== Axis D — Blast radius (how far does a change reach?)
+
+`estate-wide` (shared CI/CD, propagation hub) · `cluster` (a bounded
+related set) · `local` (this repo only).
+
+=== Named classes (the policy-bearing regions)
+
+Classes compose; when several apply, take the *strictest* disposition (a
+meet over the policy lattice).
+
+[cols="1,2,3",options="header"]
+|===
+| Class | Predicate (over axes) | Disposition
+| *C0 Ordinary* | role=subject-only, reflexivity=none | Normal triangle + confidence gates. Status quo.
+| *C1 CI/CD-load-bearing* | role ∈ {actuator, substrate} OR reflexivity=tool-self; blast=estate-wide | **Never auto_execute** (cap at `:review`); require actionlint + dry re-scan guard; **prefer `fix_locus: upstream`**; **priority boost** (blast-weighted). *empty-linter, `.git-private-farm`, the workflow templates, Hypatia itself.*
+| *C2 Fleet-actuator* | role=actuator (the bot itself) | Strictest. Changes to an actuator are **owner-review**. An actuator may **never auto-edit another actuator or itself** (no self-modification without owner). This is the primary runaway brake.
+| *C3 Tool-twin* | reflexivity=tool-twin | Findings on either side are **paired**: echidna+echidnabot evaluated together behind a coherence gate; never auto-fix one side alone. Record the dependency *direction* but apply the gate regardless.
+| *C4 Template-ancestor* | reflexivity=template-ancestor | A change implies descendant re-derivation. Route to `:review` and emit a *descendant-impact manifest*; the owner decides propagation. *rhodibot template.*
+| *C5 Self-language / self-doc* | reflexivity ∈ {self-language, self-doc} | A finding is *ambiguous between "artifact wrong" and "rule/spec stale".* Force `report_only` + escalate to owner **as a spec question**; never auto-rewrite an artifact to satisfy a rule that may itself be out of date. *a2ml, k9-svc, gossamer, burble, AffineScript.*
+| *C6 Third-party* | ownership=third-party | DO NOT TOUCH; flag-only. (Already the license/fork stance.)
+|===
+
+== The pathway (control flow)
+
+Insert a *classification + policy* stage between pattern registration and
+routing. Everything else is unchanged.
+
+----
+scans → PatternRegistry
+      → SubjectClassifier        (NEW) tag each finding's subject with the A–D vector
+      → TriangleRouter           (unchanged: Eliminate > Substitute > Control)
+      → CriticalityPolicy.cap    (NEW) cap strategy, set fix_locus, set priority, attach guards
+      → Kin.Gate                 (EXTEND) enforce cap as a new Check; refuse self-actuation
+      → FleetDispatcher          honours cap + guards; selects bot by role
+      → dispatch-runner          honours guards: actionlint, dry re-scan, owner-gate
+      → OutcomeTracker           feeds confidence; watches reflexive subjects for oscillation
+----
+
+`CriticalityPolicy.cap(finding, subject_vector, proposed_strategy)` returns
+`{strategy, fix_locus, priority, guards}`. It is pure and table-driven (like
+`license_finding_strategy/0`), so it is unit-testable and auditable.
+
+== Runaway / oscillation protection (the core fear)
+
+"hypatia could alter a subject … that then starts a process of change … a
+runaway process." Three concrete brakes, all reusing existing machinery:
+
+. *No-self-actuation invariant (Graph of Trust).* The trust graph already
+  ranks repos/bots/recipes. Add an edge "`X` is on the actuation path of
+  bot `B`" and forbid `B` from auto-fixing any node on its own path
+  (cycle detection). Enforced in `Kin.Gate`. This is the structural
+  guarantee that an actuator cannot bootstrap a change to its own machinery.
+. *Oscillation damper (LSM + ESN).* The Liquid State Machine (temporal
+  anomaly) and Echo State Network (trajectory forecast) already exist. Use
+  them to detect fix→rescan→fix loops on reflexive subjects — a finding
+  that reappears post-fix, or a confidence trajectory that won't settle —
+  and trip the existing `Quarantine`.
+. *Convergence budget (Rate Limiter).* The rate limiter is per-bot/global/
+  burst. Add a *per-subject-class* budget for C1/C2: at most N automated
+  change-cycles per window before forcing owner review. Stops slow runaways
+  that evade the burst limiter.
+
+== Priority (so the high-consequence work surfaces first)
+
+"useful to set as priorities … if we do nothing about these bits the
+consequences could affect many things." Define:
+
+  estate_impact(finding) = severity × blast_radius × subject_centrality
+
+`subject_centrality` is the Graph-of-Trust PageRank already computed.
+Sorting the dispatch queue by `estate_impact` makes C1 subjects
+(empty-linter, `.git-private-farm`) rise to the top — *and* because C1 is
+capped at `:review`, they become "do first, but with human eyes." High
+priority and high protection are two readings of the same property.
+
+== Upstream-fix locus (fix the class once)
+
+"useful as it tells us we can fix certain things upstream, that in other
+cases we cannot." For `owned-upstream` subjects set `fix_locus: :upstream`:
+target the source-of-truth (the recipe, the `.git-private-farm` template,
+the AffineScript binding) rather than patch each downstream copy. For
+`consumed` ⇒ `:local-wrap`; for `third-party` ⇒ `:flag-only`.
+
+Applied to this incident: the WF017 broken-gate is an `owned-upstream`
+class problem. The empty-linter PR was a *local* patch; the real fix is
+*upstream* — (a) WF017's `:add_secret_presence_gate` recipe must emit the
+env-mapping pattern, not `if: secrets.X != ''`, and (b) the
+`.git-private-farm` workflow template must carry the corrected gate so all
+consumers inherit it. `fix_locus` makes "fix upstream once" a first-class
+routing decision instead of an afterthought.
+
+== The actuation distinction, stated crisply (owner's part *b*)
+
+Bots differ by *mode of action*, and mode-of-action should bound *autonomy*:
+
+[cols="1,1,2",options="header"]
+|===
+| | Ordinary subject | Reflexive subject (tool/template/self-lang)
+| *Observer* (panic-attack, scanners, sustainabot) | High autonomy; guard = signal quality (FP rate, novelty gating — already present). | Moderate: observing a reflexive subject is safe, but its *findings* inherit the subject's class cap.
+| *Actuator* (rhodibot, robot-repo-automaton, dispatch-runner, seambot) | Bounded by confidence + criticality cap + actionlint/dry-run/closed-loop. | **DANGER CELL — never auto_execute.** Owner-review minimum, with a blast-radius preview. This is where runaway lives.
+|===
+
+So "some of them act differently because they are actuation things" becomes
+a 2×2; the *actuator × reflexive* cell is locked to owner-review. The lock
+lives in `Kin.Gate`, not in any single bot, so no bot can opt out of it.
+
+== The special cases (owner's part *c*), placed in the taxonomy
+
+* *rhodibot* — two *distinct* subjects, do not conflate:
+  ** rhodibot *as a bot* ⇒ C2 (fleet-actuator): strict, no self-modification.
+  ** the rhodibot *template* ⇒ C4 (template-ancestor): a change implies
+     re-deriving descendants; route to review + descendant-impact manifest.
+  The taxonomy's separation of "the bot" (Axis B) from "what it's derived
+  from" (Axis C) is exactly what keeps these from being muddled.
+* *echidnabot ↔ echidna*, *panicbot ↔ panic-attack* ⇒ C3 (tool-twin). They
+  relate in *different directions* (echidnabot may be echidna-driven;
+  panicbot consumes panic-attack output), so the twin record stores the
+  dependency direction — but the *coherence gate* (never fix one side
+  alone) applies either way.
+* *self-language / self-doc checkers* (a2ml, k9-svc, gossamer, burble,
+  AffineScript) ⇒ C5. The crucial move: when a rule fires on a
+  self-language artifact, treat it as *possibly a stale-spec signal*, not a
+  defect to auto-correct. Escalate as a spec question. This protects the
+  estate from Hypatia "correcting" valid artifacts to match its own
+  outdated rule — the self-referential failure mode.
+
+== Concrete implementation sketch (for after sign-off)
+
+NOTE: Design only. No pipeline change should land until the taxonomy and
+the class dispositions are agreed.
+
+. `lib/kin/criticality.ex` — pure module:
+  `classify(subject) :: vector` and
+  `cap(finding, vector, strategy) :: {strategy, fix_locus, priority, guards}`.
+  Table-driven, mirroring `cicd_rules.ex` license functions. Folds the
+  existing license cap in as class C6/license.
+. *Registry & overrides* — seed `classify/1` from two sources:
+  ** the *consumed-by graph* (who depends on this repo / on
+     `.git-private-farm` propagation) — derive `blast_radius` automatically;
+  ** explicit owner overrides via a per-repo `.hypatia-criticality` file
+     (parallel to the existing `.bot_directives` / `.hypatia-ignore`), so
+     the owner can pin a class without code changes.
+. `Kin.Gate` — add *Check N: criticality cap* after `check_bot_directives`:
+  downgrade `auto_execute → review/report` for protected classes; refuse
+  any action where the target is on the acting bot's actuation path.
+. `FleetDispatcher` / `dispatch-runner` — honour `guards` (actionlint +
+  dry re-scan must pass before a workflow edit lands; owner-gate for C2/C4).
+. `Coordinator` (neural) — feed `estate_impact` priority into queue
+  ordering; wire LSM/ESN oscillation signal to `Quarantine` for reflexive
+  subjects.
+. *Self-test*: Hypatia's own CI must run each remediation recipe's output
+  through actionlint. The WF017 incident would have been caught here.
+
+== What this is *not*
+
+* Not a second rule catalog — detection stays unified.
+* Not a licence-policy change — licence remains owner-only/manual; this only
+  *generalises the mechanism* the licence cap already uses.
+* Not an auto-rollout — the dispositions (especially C2/C5 owner-gates)
+  change fleet behaviour on the safety-critical path and need owner sign-off.
+
+== Open questions for the owner
+
+. Class boundaries: is empty-linter C1 only, or also C5 (it lints
+  invisible characters in *our* docs/code — a mild self-tool)?
+. For C5 self-language subjects, who is the escalation target for a
+  "spec question" — you directly, or a per-language maintainer (e.g.
+  Joshua for AGPL-shared repos)?
+. Convergence budget N for C1/C2 — how many automated cycles per window
+  before forced owner review? (Suggest 1: any second touch in a window ⇒
+  review.)
+. Should the `.hypatia-criticality` override file be per-repo (like
+  `.bot_directives`) or centralised in verisim-data, or both (central
+  default + per-repo override)?
