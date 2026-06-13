@@ -146,35 +146,42 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Naïve YAML scan: any `^  <key>:$` under top-level `jobs:`
       # without a subsequent `^    timeout-minutes:` line before the
       # next sibling block.
+      # Reusable-workflow caller jobs (a job-level `^    uses:` calling
+      # `org/repo/.github/workflows/x.yml@ref`) are EXEMPT: a workflow_call
+      # job cannot carry a job-level `timeout-minutes:` — the timeout lives
+      # in the called workflow's own jobs. Flagging them is a false positive.
       lines = String.split(content, "\n")
-      in_jobs = false
-      jobs_with_timeout = MapSet.new()
-      jobs_seen = MapSet.new()
-      current_job = nil
+      acc0 = {MapSet.new(), MapSet.new(), MapSet.new(), false, nil}
 
-      {jobs_seen, jobs_with_timeout} =
-        Enum.reduce(lines, {jobs_seen, jobs_with_timeout, false, nil}, fn line, {seen, with_to, in_j, curj} ->
+      {jobs_seen, jobs_with_timeout, reusable_jobs} =
+        Enum.reduce(lines, acc0, fn line, {seen, with_to, reusable, in_j, curj} ->
           cond do
             String.match?(line, ~r/^jobs:\s*$/) ->
-              {seen, with_to, true, nil}
+              {seen, with_to, reusable, true, nil}
 
             in_j and String.match?(line, ~r/^  [A-Za-z0-9_-]+:\s*$/) ->
               [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
-              {MapSet.put(seen, name), with_to, in_j, name}
+              {MapSet.put(seen, name), with_to, reusable, in_j, name}
 
             in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
-              {seen, MapSet.put(with_to, curj), in_j, curj}
+              {seen, MapSet.put(with_to, curj), reusable, in_j, curj}
+
+            in_j and curj && String.match?(line, ~r/^    uses:\s*\S/) ->
+              {seen, with_to, MapSet.put(reusable, curj), in_j, curj}
 
             String.match?(line, ~r/^[A-Za-z]/) ->
-              {seen, with_to, false, curj}
+              {seen, with_to, reusable, false, curj}
 
             true ->
-              {seen, with_to, in_j, curj}
+              {seen, with_to, reusable, in_j, curj}
           end
         end)
-        |> then(fn {s, w, _, _} -> {s, w} end)
+        |> then(fn {s, w, r, _, _} -> {s, w, r} end)
 
-      missing = MapSet.difference(jobs_seen, jobs_with_timeout)
+      missing =
+        jobs_seen
+        |> MapSet.difference(jobs_with_timeout)
+        |> MapSet.difference(reusable_jobs)
 
       Enum.map(missing, fn job_name ->
         %{
