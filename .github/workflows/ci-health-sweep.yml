@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: MPL-2.0
+# Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+# CI-Health Sweep — estate-wide detection + auto-remediation of the
+# infrastructure CI failure classes diagnosed 2026-06-13 (see
+# scripts/ci-health/README.adoc):
+#   A-BILLING     account spending-limit/payment wall   -> REPORT (owner-only)
+#   B-ALLOWLIST   selected + no hyperpolymath/* pattern  -> AUTO-FIX (allow-list)
+#   B-STARTUPFAIL observed startup_failure runs          -> REPORT
+#   D-BURN        bare [push, pull_request] double-trigger-> AUTO-FIX (PR)
+#
+# Complements hypatia-remediation-sweep.yml (Dependabot) — same fleet-sweep
+# shape, staggered cron to avoid token-rate-limit collisions.
+name: CI-Health Sweep
+
+on:
+  schedule:
+    - cron: '47 3 * * *'   # daily 03:47 UTC (staggered off remediation-sweep 03:17)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Detect + report only (no allow-list PUTs, no PRs)'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      owner:
+        description: 'Owner to sweep'
+        required: false
+        default: 'hyperpolymath'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    name: Detect + remediate estate CI health
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run CI-health sweep
+        env:
+          # PAT needs classic `repo` + `workflow` scope (repo admin for the
+          # allow-list PUT, PR create, and issue upsert). Reused from the
+          # existing remediation pipeline.
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          OWNER: ${{ inputs.owner || 'hyperpolymath' }}
+          # Scheduled runs remediate live (owner opted into auto-remediation);
+          # manual dispatch defaults to dry-run for safety.
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}
+          MAX_BURN_PRS: '15'
+          ISSUE_REPO: hypatia
+          CI_HEALTH_DENYLIST: '007'   # ARR-special / cross-owner repos to never touch
+        run: |
+          chmod +x scripts/ci-health/*.sh
+          ./scripts/ci-health/sweep.sh

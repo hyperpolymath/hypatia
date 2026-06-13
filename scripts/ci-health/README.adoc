@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath)
+// Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= CI-Health Sweep — estate failure-class detector + auto-remediator
+:toc: macro
+:icons: font
+
+Detects and auto-remediates the *infrastructure* CI failure classes that
+repeatedly reddened estate CI, diagnosed 2026-06-13 from `tma-mark2#52`. These
+are **not** workflow-logic bugs — which is why earlier rounds of per-workflow
+"surface fixes" had zero effect. The cause lived in account billing and repo
+Actions settings.
+
+toc::[]
+
+== Failure classes
+
+[cols="1,3,1",options="header"]
+|===
+| Class | Signature | Action
+
+| `A-BILLING`
+| A `failure` run whose job annotation reads _"the job was not started because
+recent account payments have failed or your spending limit needs to be
+increased"_. Blocks **all billable jobs** (private repos). Manifests on
+code-scanning gates as _"waiting for results from CodeQL"_ (no result is ever
+uploaded because the job never starts).
+| **Report only** — owner clears it in GitHub → Settings → Billing & plans.
+
+| `B-ALLOWLIST`
+| `allowed_actions: selected` with `patterns_allowed` missing `hyperpolymath/*`.
+Only GitHub-owned + verified-marketplace actions resolve, so every
+`hyperpolymath/*` reusable + every non-verified third-party action is blocked
+at parse → `startup_failure` (zero jobs, no logs). Hits public repos too.
+| **Auto-fix** — PUT the curated superset (`action-superset.txt`), keep
+`sha_pinning_required`.
+
+| `B-STARTUPFAIL`
+| Observed `startup_failure` runs.
+| **Report** — the API never exposes the reason; the **web-UI red banner does**
+(it names the blocked action). Usually a missing allow-list pattern.
+
+| `D-BURN`
+| A workflow on bare `on: [push, pull_request]` — runs **twice** per PR commit
+(branch push + PR synchronize).
+| **Auto-fix** — open a PR scoping `push` to the default branch + adding
+`concurrency: cancel-in-progress` (safe: these are read-only PR checks).
+|===
+
+== Components
+
+* `detect.sh <repo>` — API-only classifier; emits TSV `repo CLASS SEV detail`.
+* `remediate.sh <repo> <CLASS> <dry_run>` — applies B-ALLOWLIST (allow-list PUT)
+  and D-BURN (idempotent signed PR). Guardrails: own repos only (skips
+  forks/archived), `CI_HEALTH_DENYLIST`, idempotent, dry-run honoured.
+* `sweep.sh` — estate driver: enumerate → detect → remediate (cap
+  `MAX_BURN_PRS`) → upsert one rolling tracking issue.
+* `action-superset.txt` — curated non-GitHub actions the estate uses, applied as
+  `owner/repo@*` alongside `hyperpolymath/*`.
+* `../../.github/workflows/ci-health-sweep.yml` — daily cron (03:47 UTC) +
+  `workflow_dispatch` (manual defaults to dry-run).
+
+== Operating notes / off-switch
+
+* Needs `secrets.HYPATIA_DISPATCH_PAT` (classic `repo` + `workflow` scope — repo
+  admin for the allow-list PUT, PR create, issue upsert).
+* Scheduled runs remediate **live**; manual `workflow_dispatch` defaults to
+  **dry-run**. To pause auto-remediation, set the schedule run to dry-run or
+  disable the workflow.
+* Sweep gotchas baked in: drive off the API owner (never local dir names — some
+  estate clones' `origin` ≠ dir name, e.g. `mirror-007` → `hyperpolymath/007`);
+  PR-create always passes an explicit `base`; forks/archived/deleted remotes are
+  skipped, not failed.
+* New shared third-party action? Add it to `action-superset.txt`.
