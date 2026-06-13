@@ -47,10 +47,77 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert findings == []
     end
 
+    test "ignores a full-SHA pin with a trailing version comment (setup-java FP guard)" do
+      content = """
+      jobs:
+        verify:
+          runs-on: ubuntu-latest
+          steps:
+            - name: Set up Temurin JRE 21
+              uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      """
+
+      findings = WorkflowAudit.check_unpinned_actions(%{"verify-proofs.yml" => content})
+      assert findings == []
+    end
+
     test "provides known SHA when available" do
       content = "    - uses: actions/checkout@v4\n"
       [finding] = WorkflowAudit.check_unpinned_actions(%{"ci.yml" => content})
       assert finding.known_sha == "34e114876b0b11c390a56381ad16ebd13914f8d5"
+    end
+  end
+
+  describe "check_missing_timeout_minutes/1" do
+    test "flags a runner job with no timeout-minutes" do
+      content = """
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+          steps:
+            - run: echo hi
+      """
+
+      findings = WorkflowAudit.check_missing_timeout_minutes(%{"ci.yml" => content})
+      assert [%{rule: "missing_timeout_minutes", job: "build"}] = findings
+    end
+
+    test "does not flag a job that declares timeout-minutes" do
+      content = """
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+          timeout-minutes: 10
+          steps:
+            - run: echo hi
+      """
+
+      assert WorkflowAudit.check_missing_timeout_minutes(%{"ci.yml" => content}) == []
+    end
+
+    test "does not flag a reusable-workflow caller job (uses:) — it cannot hold a job-level timeout" do
+      content = """
+      jobs:
+        governance:
+          uses: hyperpolymath/standards/.github/workflows/governance-reusable.yml@5eb28d7d8790d5389b7b6a5233fe6265a775e3d0
+      """
+
+      assert WorkflowAudit.check_missing_timeout_minutes(%{"governance.yml" => content}) == []
+    end
+
+    test "still flags a runner job alongside a reusable caller job" do
+      content = """
+      jobs:
+        call:
+          uses: hyperpolymath/standards/.github/workflows/x-reusable.yml@5eb28d7d8790d5389b7b6a5233fe6265a775e3d0
+        build:
+          runs-on: ubuntu-latest
+          steps:
+            - run: echo hi
+      """
+
+      findings = WorkflowAudit.check_missing_timeout_minutes(%{"mixed.yml" => content})
+      assert [%{job: "build"}] = findings
     end
   end
 
