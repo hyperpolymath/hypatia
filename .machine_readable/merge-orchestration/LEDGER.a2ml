@@ -9,8 +9,8 @@
 
 [metadata]
 workstream = "merge-orchestration"
-version = "0.2.0"
-last-updated = "2026-06-05"
+version = "0.3.0"
+last-updated = "2026-06-14"
 owner = "paraordinate (Jonathan D.A. Jewell)"
 branch = "claude/peaceful-pascal-IRlgq"   # same branch name across all in-scope repos
 status = "active — Wave 0 (contracts)"
@@ -66,4 +66,4 @@ hold          = "6a2/STATE,META + anchors/ANCHOR in {hypatia,gitbot-fleet,.git-p
 other-agents  = "claude/nice-ptolemy-lNB8E (standards), claude/loving-cannon-AtUSm (echidna), claude/abi-tier2-and-l10-trans-cycle (vcl-ut), claude/affinescript-migration-wip (reposystem)"
 
 [next]
-step = "Wave-0 design COMPLETE (a1-a5). RUNTIME COMPLETE + OUTPUT GLUE: 4 increments (Strategist + Kin.Council + Dispatcher [hypatia]; actuator [.git-private-farm #77]) + Dispatcher.decide_all/write_manifest emitting the merge-decision JSONL the dispatch-runner/actuator consume (Jason encoder injectable so it tests dep-free; prod uses Jason). 22 ExUnit (hypatia) + 5 bash (farm), 0 failures, local elixir 1.14. REMAINING: the INPUT/sensory layer (fetch open PRs + build contexts from bot attestations + bot_directive pools, feed into Dispatcher) is the big remaining wiring; plus real central Kin.Gate lease storage; GoT/MoE competence weights into KinCouncil (currently uniform); owner follow-ons (required-checks per repo; a5 standards adoption; P3 handshake + mass_squash; .git-private-farm Actions billing is dead -- fix before the actuator runs scheduled)."
+step = "Wave-0 design COMPLETE (a1-a5). RUNTIME COMPLETE: sense -> deliberate -> actuate all landed. SENSE: Sensor (pure classify -> change_class[route]/change_level[meta guard]/license_touch + to_context emitting the Strategist ctx + sense/sense_and_decide + store-backed file_pool_resolver/dir_attestation_resolver over the token-free shared store) [hypatia, PR pending]. DELIBERATE: Strategist (route x method x safety, monotone veto + meta guard + pool clamp) + Kin.Council (competence-weighted veto). ACTUATE: Dispatcher.dispatch/decide_all/write_manifest [hypatia] -> merge-decisions.jsonl -> .git-private-farm actuator (#77, independent re-verify + execute). 39 ExUnit (hypatia) + 5 bash (farm), 0 failures, local elixir 1.14; sense_and_decide integration asserts the full arm/clamp/meta-flag/license-veto-flag distribution end to end. #491 (glue) merged 2026-06-14. REMAINING (operationalisation, NOT the brain): the observation PRODUCER -- the token-bearing fetch (gh/API in a CI job or the farm hand) that deposits per-PR observation records + signed attestations into the shared store the Sensor reads (brain stays token-free by design); real central Kin.Gate lease storage; GoT/MoE competence weights into KinCouncil (currently uniform); owner follow-ons (required-checks per repo; a5 standards adoption; P3 handshake + mass_squash; .git-private-farm Actions billing is dead -- fix before the actuator runs scheduled)."
