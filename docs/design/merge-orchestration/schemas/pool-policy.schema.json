@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/pool-policy.schema.json",
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — per-repo pool/tier assignment (the bot_directive merge policy); maps to standards TRUST levels. Wave-0 artifact 5. Copyright (c) 2026 Jonathan D.A. Jewell.",
+  "title": "RepoPoolPolicy",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["repo", "pool", "product_tier"],
+  "properties": {
+    "repo": {"type": "string", "examples": ["hyperpolymath/panll"]},
+    "pool": {"enum": ["P0", "P1", "P2", "P3", "mass_squash"]},
+    "product_tier": {"enum": ["core", "standard", "extended", "augmented"]},
+    "system_membership": {"enum": ["in-system", "edge", "out-of-system"]},
+    "campaign_ref": {"type": ["string", "null"], "description": "required when pool=mass_squash; time-boxed authorization id"}
+  },
+  "allOf": [
+    {
+      "$comment": "PL1 — a core-tier repo may not be P3 (don't aggressively auto-merge the infra that does the auto-merging).",
+      "if": {"properties": {"product_tier": {"const": "core"}}},
+      "then": {"properties": {"pool": {"enum": ["P0", "P1"]}}}
+    },
+    {
+      "$comment": "PL2 — mass_squash requires a campaign_ref (time-boxed authorization).",
+      "if": {"properties": {"pool": {"const": "mass_squash"}}},
+      "then": {"required": ["campaign_ref"], "properties": {"campaign_ref": {"type": "string", "minLength": 1}}}
+    }
+  ]
+}

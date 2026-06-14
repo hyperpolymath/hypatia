@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/lease.schema.json",
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — a Kin.Gate-backed coordination lease (central, not per-repo files). Wave-0 artifact 5. Copyright (c) 2026 Jonathan D.A. Jewell.",
+  "title": "CoordinationLease",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["lease_id", "holder", "repo", "territory", "status", "acquired_at"],
+  "properties": {
+    "lease_id": {"type": "string"},
+    "holder": {"type": "string", "description": "agent id, e.g. claude/peaceful-pascal-IRlgq"},
+    "repo": {"type": "string"},
+    "territory": {
+      "type": "object",
+      "required": ["branch", "paths", "is_meta"],
+      "properties": {
+        "branch": {"type": "string"},
+        "paths": {"type": "array", "items": {"type": "string"}},
+        "is_meta": {"type": "boolean", "description": "true if any path edits the oracle/rules (.github/workflows, hypatia rules, bot_directives, contractiles, standards)"}
+      }
+    },
+    "intent": {"type": "string"},
+    "status": {"enum": ["held", "released", "expired"]},
+    "acquired_at": {"type": "string"},
+    "expires_at": {"type": ["string", "null"]},
+    "owner_authorized": {"type": "boolean", "default": false}
+  },
+  "allOf": [
+    {
+      "$comment": "LE1 — a held lease must carry an expires_at (TTL). No immortal locks.",
+      "if": {"properties": {"status": {"const": "held"}}},
+      "then": {"required": ["expires_at"], "properties": {"expires_at": {"type": "string", "minLength": 1}}}
+    },
+    {
+      "$comment": "LE2 — a meta-territory claim requires owner authorization (reflexivity guard at lease level).",
+      "if": {"properties": {"territory": {"properties": {"is_meta": {"const": true}}}}},
+      "then": {"properties": {"owner_authorized": {"const": true}}}
+    }
+  ]
+}
