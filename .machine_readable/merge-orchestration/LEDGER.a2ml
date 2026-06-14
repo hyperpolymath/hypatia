@@ -46,7 +46,8 @@ later  = "verisimdb entity model + PolicyDrift; CodeCite/ProofTrace"
 a1 = "decision contract — LANDED on hypatia/main (PR #442, merged 2026-06-05). doc + schema + +/- fixtures, ajv-validated."
 a2 = "CVE/bump gate — LANDED on hypatia/main (PR #443, merged 2026-06-05). bump-decision.schema (extends a1) + bump fixtures, ajv-validated."
 a3 = "attestation — LANDED on hypatia/main (PR #444, merged 2026-06-05). ed25519 sign/verify/tamper round-trip PASSED + ajv A1/A2/A3."
-a4 = "CVE/bump gate in CI — this commit. ci-templates/bridge-gate.yml (reviewable template; wiring is META) + bridge-verdict.sh (B1 core) + mock BridgeReports; bridge-verdict tested (clean->PASS exit0, unmitigable->FLAG exit1); workflow YAML valid."
+a4 = "CVE/bump gate in CI — LANDED on hypatia/main (PR #459). bridge-gate.yml template + bridge-verdict.sh (B1 core) + mock BridgeReports, tested. WIRED into 5 cargo repos (reposystem#114, hypatia#460, verisimdb#133, panic-attack#127, echidna#246 — all merged 2026-06-13); 8 reposystem bumps rebased through it; 3 nix bumps closed (B3)."
+a5 = "pool/lease spec — this commit. 04-pool-lease-spec.adoc + schemas/{pool-policy,lease}.schema.json + fixtures; pools P0-P3+mass_squash <-> TRUST levels + clamp law; central Kin.Gate-backed lease (the runtime tier). ajv-validated: PL1/PL2/LE1/LE2 all reject correctly. standards adoption (TRUST trust-deny meta extension + INTENT lease-schema fill) is an owner-applied follow-on per standards' own ask-before-touching."
 
 [gated-pr-ledger]
 # Applying the gate by hand to all open PRs across 11 in-scope repos (2026-06-05).
@@ -65,4 +66,4 @@ hold          = "6a2/STATE,META + anchors/ANCHOR in {hypatia,gitbot-fleet,.git-p
 other-agents  = "claude/nice-ptolemy-lNB8E (standards), claude/loving-cannon-AtUSm (echidna), claude/abi-tier2-and-l10-trans-cycle (vcl-ut), claude/affinescript-migration-wip (reposystem)"
 
 [next]
-step = "artifact 4 (bridge-gate.yml CI template) lands this commit. To clear the 8 cve-check bumps: wire bridge-gate.yml into bump-PR CI (META, owner-reviewed). Build step 3 remaining: pool<->TRUST + Kin-backed lease/coordination spec (in standards). NOTE 2026-06-12: dev sandbox blocks crates.io+OSV (403) -> bridge runs in CI only, OR add a network allowlist on the environment (code.claude.com docs)."
+step = "Wave-0 design COMPLETE (a1-a5, all ajv/crypto-tested). Owner follow-ons: (1) add 'bridge-gate' to required status checks per repo so B1/B3 actually block; (2) apply the a5 standards adoption (TRUST trust-deny meta extension + INTENT lease-schema fill + k9 lease validator) -- owner-applied per standards INTENT ask-before-touching; (3) optional bridge-gate hardening (released binary / standards reusable workflow). NEXT MAJOR BUILD beyond Wave-0 contracts = the Elixir runtime: MergeStrategist decision head + Kin.Council aggregator + the .git-private-farm actuator."

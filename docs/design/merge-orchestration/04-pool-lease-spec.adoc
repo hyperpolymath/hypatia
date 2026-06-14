@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Merge Orchestration — Pools, TRUST mapping & the coordination runtime tier (Wave-0, artifact 5)
+:toc: macro
+
+[IMPORTANT]
+====
+This is build step 3: the *runtime tier*. It defines (a) the per-repo *pool*
+that caps how aggressively the orchestrator may act, mapped onto the estate's
+existing TRUST levels; and (b) the *coordination lease* — a central,
+Kin.Gate-backed claim that stops two agents colliding on the same territory.
+Spec + schemas + fixtures, validated.
+
+The *normative landing* in `standards` (extending `TRUST.contractile`, filling
+`INTENT.contractile`) is an *owner-applied* follow-on: `standards`' own
+`INTENT.contractile` lists `.machine_readable/` and `contractiles/` as
+*ask-before-touching*, so this spec proposes the exact edits rather than making
+them. (Nice self-application of the governance.)
+====
+
+== Pools cap aggression; they don't command it
+
+A repo's *pool* is the maximum aggression the orchestrator may use on it. The
+per-PR decision (artifact 1) can always be *more* conservative than the pool
+(a veto, novelty, a meta change) — never less. `pool ⊗ decision = clamp`,
+monotone.
+
+[cols="1,1,1,3",options=header]
+|===
+| Pool | TRUST level | safety cap | Meaning
+| *P3* aggressive | `maximal` | `arm_auto` | `.git-private-farm` slams green, attested, non-vetoed PRs through — with the owner handshake.
+| *P2* normal | `standard` | `arm_auto` | auto-arm green chores + CVE-clear bumps; features → review.
+| *P1* conservative | `restricted` | `review` | auto-arm nothing; everything green still goes to review. Default for *core* repos.
+| *P0* frozen | `minimal` | `flag` | nothing auto; everything to the owner.
+| *mass_squash* | `maximal` (time-boxed) | `arm_auto` in scope | a campaign: squash a named bucket under one authorization, then it expires.
+|===
+
+The TRUST levels are the estate's existing `TRUST.contractile` tiers
+(`maximal | standard | restricted | minimal`). Pools are the merge-side name
+for the same graduated-permission idea, so the orchestrator inherits the
+governance vocabulary instead of inventing one.
+
+== Two pool invariants (schema-encoded)
+
+* *PL1* — a `core`-tier repo may not be `P3`. You do not aggressively
+  auto-merge the infrastructure that *does* the auto-merging
+  (`core ⇒ pool ∈ {P0, P1}`).
+* *PL2* — `mass_squash` requires a `campaign_ref` (time-boxed authorization);
+  there is no standing aggressive-bulk mode.
+
+== The coordination lease (the missing runtime tier)
+
+`.machine_readable/` today is *declarative* (contractiles) + *validating* (k9).
+It has no place for *transactional* multi-agent state — who is acting on what
+*right now*. That gap is the exact collision this whole effort kept guarding
+against. A *lease* fills it.
+
+A lease is *central and Kin.Gate-backed*, not a per-repo file. A per-repo lock
+file has a bootstrap race (two agents pull, both write the lock, both push —
+last-writer-wins, both believe they hold it). `Kin.Gate` ("one bot per repo at a
+time") is the atomic-acquire authority; the lease is its record.
+
+Shape (`schemas/lease.schema.json`): `{lease_id, holder, repo, territory{branch,
+paths[], is_meta}, intent, status(held|released|expired), acquired_at,
+expires_at, owner_authorized}`. Protocol: acquire → honor → release / expire (TTL).
+
+== Two lease invariants (schema-encoded)
+
+* *LE1* — a `held` lease must carry an `expires_at` (TTL). No immortal locks; a
+  crashed agent's claim self-expires.
+* *LE2* — a claim whose `territory.is_meta` is true (it would edit the
+  oracle/rules: CI, hypatia rules, `bot_directives`, contractiles, `standards`)
+  requires `owner_authorized = true`. The reflexivity guard at lease level: an
+  agent cannot self-authorise a meta claim.
+
+== Proposed `standards` adoption (owner-applied)
+
+. *Extend `TRUST.contractile`'s `trust-deny`* with the generalised meta set
+  (today it has `modify-license`, `disable-ci-checks` — add the rest of the oracle):
++
+[source,lisp]
+----
+    "modify-ci-workflows"      ; .github/workflows/** — the CI oracle
+    "modify-hypatia-rules"     ; lib/rules/** — the scanner oracle
+    "modify-bot-directives"    ; .machine_readable/bot_directives/**
+    "modify-pool-trust-levels" ; this spec's pools / TRUST tiers
+----
+. *Fill `INTENT.contractile`* (a stub on this axis) with the lease/claim schema
+  as a declared intent kind — a lease *is* a time-bounded intent.
+. *Add a k9 Yard validator* that rejects overlapping or stale leases.
+
+These are governance edits to a license-sensitive, ask-before-touching repo —
+owner-applied, never swept by an agent.
+
+== Tested
+
+`schemas/pool-policy.schema.json` + `schemas/lease.schema.json`, validated with
+ajv 8: positives pass; `neg-core-aggressive` (PL1), `neg-masssquash-no-campaign`
+(PL2), `neg-held-no-expiry` (LE1), `neg-meta-unauthorized` (LE2) all rejected.
+
+== Where it sits
+
+Pool-policy is the per-repo `bot_directive` the brain reads — artifact 1's
+`pool` field gets its semantics here. The lease is the runtime claim the brain
+acquires before acting and the actuator checks before executing. Together they
+complete the safety substrate of the sense → deliberate → actuate loop.

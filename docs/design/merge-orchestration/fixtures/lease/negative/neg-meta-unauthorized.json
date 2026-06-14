@@ -1,0 +1,16 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. meta-territory claim (edits .github/workflows) without owner_authorized. MUST be REJECTED (LE2: meta claims need owner authorization).",
+  "lease_id": "lease-2026-06-14-0003",
+  "holder": "robot-repo-automaton",
+  "repo": "hyperpolymath/reposystem",
+  "territory": {
+    "branch": "dependabot/cargo/some-bump",
+    "paths": [".github/workflows/bridge-gate.yml"],
+    "is_meta": true
+  },
+  "intent": "self-authorise a CI-oracle edit (forbidden)",
+  "status": "held",
+  "acquired_at": "2026-06-14T03:00:00Z",
+  "expires_at": "2026-06-14T05:00:00Z",
+  "owner_authorized": false
+}
