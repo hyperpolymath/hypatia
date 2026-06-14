@@ -11,10 +11,12 @@ defmodule Hypatia.MergeOrchestration.Strategist do
     * the object/meta reflexivity guard (`:meta` ⇒ `:flag`),
     * the pool clamp (a pool only ever makes a decision *more* conservative).
 
-  No I/O. The brain decides; it never executes. Confidence aggregation here is a
-  simple mean over approving attestations; the competence-weighted Graph-of-Trust
-  version is `Kin.Council` (the next increment).
+  Confidence and bot-vetoes come from `KinCouncil.aggregate/2` over the PR's
+  attestations (artifact 3); a license/SPDX touch adds a symbolic owner-only
+  veto. No I/O — the brain decides; it never executes.
   """
+
+  alias Hypatia.MergeOrchestration.KinCouncil
 
   @auto_threshold 0.95
   @review_threshold 0.85
@@ -24,7 +26,9 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
   @doc "Decide the merge action for a PR context map."
   def decide(ctx) do
-    {safety, clamped_by} = decide_safety(ctx)
+    council = KinCouncil.aggregate(Map.get(ctx, :attestations, []), weight: Map.get(ctx, :weight, &default_weight/1))
+    vetoes = council.vetoes ++ symbolic_vetoes(ctx)
+    {safety, clamped_by} = decide_safety(ctx, council.confidence, vetoes)
 
     %{
       pr: ctx.pr,
@@ -34,27 +38,20 @@ defmodule Hypatia.MergeOrchestration.Strategist do
       method: decide_method(ctx),
       safety: safety,
       pool: ctx.pool,
+      confidence: council.confidence,
       attestations: Map.get(ctx, :attestations, []),
-      vetoes: Map.get(ctx, :vetoes, []),
+      vetoes: vetoes,
       clamped_by: clamped_by,
       rationale: rationale(ctx, safety, clamped_by)
     }
   end
 
   # --- Safety axis: confidence + veto + meta, clamped by pool (monotone) ---
-  defp decide_safety(ctx) do
+  defp decide_safety(ctx, confidence, vetoes) do
     cond do
-      Map.get(ctx, :vetoes, []) != [] ->
-        {:flag, "veto:" <> veto_reason(ctx)}
-
-      ctx.change_level == :meta ->
-        {:flag, "meta"}
-
-      true ->
-        ctx
-        |> aggregate_confidence()
-        |> confidence_to_safety()
-        |> clamp_to_pool(ctx.pool)
+      vetoes != [] -> {:flag, "veto:" <> first_reason(vetoes)}
+      ctx.change_level == :meta -> {:flag, "meta"}
+      true -> confidence |> confidence_to_safety() |> clamp_to_pool(ctx.pool)
     end
   end
 
@@ -62,10 +59,8 @@ defmodule Hypatia.MergeOrchestration.Strategist do
   defp confidence_to_safety(conf) when conf >= @review_threshold, do: :review
   defp confidence_to_safety(_), do: :flag
 
-  # Pool caps the decision; never raises it.
   defp clamp_to_pool(base, pool) do
-    cap = pool_cap(pool)
-    safer = min_safety(base, cap)
+    safer = min_safety(base, pool_cap(pool))
     {safer, if(safer != base, do: "pool-cap:#{pool}", else: nil)}
   end
 
@@ -102,20 +97,17 @@ defmodule Hypatia.MergeOrchestration.Strategist do
     %{authority_bot: authority, contributing_bots: Map.get(ctx, :contributing_bots, ["ci"])}
   end
 
-  # --- Confidence aggregation (Kin.Council stub: mean of approve attestations) ---
-  defp aggregate_confidence(ctx) do
-    case ctx |> Map.get(:attestations, []) |> Enum.filter(&(&1.verdict == :approve)) |> Enum.map(& &1.confidence) do
-      [] -> 0.0
-      cs -> Enum.sum(cs) / length(cs)
-    end
+  # license/SPDX is a symbolic, owner-only veto (not a bot attestation).
+  defp symbolic_vetoes(ctx) do
+    if Map.get(ctx, :license_touch, false),
+      do: [%{bot: "policy-gate", reason: "license/SPDX -- owner-only"}],
+      else: []
   end
 
-  defp veto_reason(ctx) do
-    case Map.get(ctx, :vetoes, []) do
-      [%{reason: r} | _] -> r
-      _ -> "unspecified"
-    end
-  end
+  defp default_weight(_attestation), do: 1.0
+
+  defp first_reason([%{reason: r} | _]), do: r
+  defp first_reason(_), do: "unspecified"
 
   defp rationale(ctx, safety, clamped_by) do
     base = "#{ctx.change_class}/#{ctx.change_level} -> #{safety}"
