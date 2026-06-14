@@ -26,7 +26,11 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
   @doc "Decide the merge action for a PR context map."
   def decide(ctx) do
-    council = KinCouncil.aggregate(Map.get(ctx, :attestations, []), weight: Map.get(ctx, :weight, &default_weight/1))
+    council =
+      KinCouncil.aggregate(Map.get(ctx, :attestations, []),
+        weight: Map.get(ctx, :weight, &default_weight/1)
+      )
+
     vetoes = council.vetoes ++ symbolic_vetoes(ctx)
     {safety, clamped_by} = decide_safety(ctx, council.confidence, vetoes)
 
@@ -84,17 +88,26 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
   # --- Route axis: change-class ⇒ authoritative sensor ---
   defp decide_route(ctx) do
-    authority =
-      cond do
-        Map.get(ctx, :license_touch, false) -> nil
-        ctx.change_class == :proof -> "echidnabot"
-        ctx.change_class == :bump -> "patch-bridge"
-        ctx.change_class == :security -> "panicbot"
-        ctx.change_class in [:chore, :docs, :refactor] -> "robot-repo-automaton"
-        true -> "rhodibot"
-      end
+    %{
+      authority_bot: route_authority(ctx),
+      contributing_bots: Map.get(ctx, :contributing_bots, ["ci"])
+    }
+  end
 
-    %{authority_bot: authority, contributing_bots: Map.get(ctx, :contributing_bots, ["ci"])}
+  @doc """
+  The authoritative bot for a context's change-class (the route axis), or `nil`
+  for a license touch (owner-only). Public so the competence weighting
+  (`KinCompetence`) shares this single source of truth for "who is the specialist".
+  """
+  def route_authority(ctx) do
+    cond do
+      Map.get(ctx, :license_touch, false) -> nil
+      ctx.change_class == :proof -> "echidnabot"
+      ctx.change_class == :bump -> "patch-bridge"
+      ctx.change_class == :security -> "panicbot"
+      ctx.change_class in [:chore, :docs, :refactor] -> "robot-repo-automaton"
+      true -> "rhodibot"
+    end
   end
 
   # license/SPDX is a symbolic, owner-only veto (not a bot attestation).
