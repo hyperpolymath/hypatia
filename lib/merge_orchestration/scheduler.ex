@@ -32,16 +32,43 @@ defmodule Hypatia.MergeOrchestration.Scheduler do
   @fleet ~w(echidnabot patch-bridge panicbot robot-repo-automaton rhodibot sustainabot ci)
   @default_store "data/verisim"
 
-  @doc "Run one merge-orchestration cycle. Returns the `Loop.run/1` summary (+ `:manifest_path`)."
+  @doc """
+  Run one merge-orchestration cycle. Returns the `Loop.run/1` summary.
+
+  `:actuation` (`:manifest` default | `:baton` | `:both`) selects the actuation
+  backend; `:budget`/`:submit` tune the Baton backends (see `Loop.run/1`). The
+  result carries `:manifest_path` and/or `:batons` according to the backend.
+  """
   def cycle(opts \\ []) do
     store = Keyword.get(opts, :store) || System.get_env("MERGE_ORCH_STORE") || @default_store
     trust = Keyword.get_lazy(opts, :trust, fn -> trust_snapshot(opts) end)
 
-    passthrough = Keyword.take(opts, [:holder, :now, :encode, :decode, :acquire])
+    passthrough =
+      Keyword.take(opts, [:holder, :now, :encode, :decode, :acquire, :actuation, :budget, :submit])
+
     result = Loop.run([store: store, trust: trust] ++ passthrough)
 
-    Logger.info("[merge-orchestration] cycle #{inspect(result.stats)} -> #{result.manifest_path}")
+    Logger.info(
+      "[merge-orchestration] cycle #{inspect(result.stats)} -> #{actuation_summary(result)}"
+    )
+
     result
+  end
+
+  # Describe what the cycle actuated, whichever backend(s) ran.
+  defp actuation_summary(result) do
+    [
+      result[:manifest_path],
+      case result[:batons] do
+        nil -> nil
+        batons -> "#{length(batons)} baton(s)"
+      end
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> "(no actuation)"
+      parts -> Enum.join(parts, " + ")
+    end
   end
 
   defp trust_snapshot(opts) do

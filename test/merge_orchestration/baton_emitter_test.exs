@@ -22,10 +22,15 @@ defmodule Hypatia.MergeOrchestration.BatonEmitterTest do
 
     assert s.check_id == "merge-hyperpolymath__a-7"
     assert s.command == ["gh", "pr", "merge", "7", "--repo", "hyperpolymath/a", "--squash"]
-    # routes to the only node holding the token capability; the brain lacks it
-    assert s.required_cap == "secret-access"
-    # a merge mutates -> the planner gates it on a verifier (independent re-verify)
+    # routes to the only node holding the token capability; the brain lacks it.
+    # underscore form — the bag-of-actions Zig bridge / Bag.Planner tag (a
+    # hyphenated tag is unprovable and would route to no node).
+    assert s.required_cap == "secret_access"
+    # a merge mutates -> the planner gates it on a verifier (independent re-verify);
+    # the spec MUST carry one or Bag.Planner returns {:rejected, :mutation_requires_verifier}
     assert s.mutating == true
+    assert s.verifier.by == "git-private-farm:decide_action"
+    assert s.verifier.reverifies == dec(%{}).route
     assert s.risk == :low
     assert s.attestation.lease_id == "L1"
     assert s.attestation.rationale =~ "arm_auto"
@@ -51,7 +56,7 @@ defmodule Hypatia.MergeOrchestration.BatonEmitterTest do
       )
 
     assert length(submitted) == 1
-    assert hd(submitted).spec.required_cap == "secret-access"
+    assert hd(submitted).spec.required_cap == "secret_access"
     assert {:pass, "mesh-github-runner", "merge-hyperpolymath__a-7"} = hd(submitted).result
   end
 end
