@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+#
+# The scheduled-trigger (cron) half of the merge-orchestration runtime. Runs one
+# `mix hypatia.merge_orchestrate` cycle: read the shared store -> sense ->
+# deliberate -> gate -> write the merge-decision manifest, then upload it as an
+# artifact. The in-brain GenServer tick (Hypatia.MergeOrchestration.Ticker, off
+# by default) is the other half.
+#
+# The brain stays token-free: this computes + uploads the decision manifest; the
+# .git-private-farm actuator (separate, token-bearing) re-verifies and merges.
+# Point MERGE_ORCH_STORE at a populated store (e.g. a checked-out verisim-data)
+# via a repo variable; the default data/verisim is the in-repo store.
+name: Merge Orchestrate (scheduled)
+
+on:
+  workflow_dispatch: null
+  schedule:
+  # Hourly, offset off the top of the hour to dodge runner congestion.
+  - cron: 17 * * * *
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  cycle:
+    name: One merge-orchestration cycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MERGE_ORCH_STORE: ${{ vars.MERGE_ORCH_STORE || 'data/verisim' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Setup Erlang/Elixir
+        uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93  # v1.18.2
+        with:
+          otp-version: '27.0'
+          elixir-version: '1.17'
+
+      - name: Restore Mix cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Run one cycle
+        # Store comes from the MERGE_ORCH_STORE env (set above); the task reads it.
+        run: mix hypatia.merge_orchestrate --store "$MERGE_ORCH_STORE"
+
+      - name: Upload decision manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: merge-decisions
+          path: ${{ env.MERGE_ORCH_STORE }}/merge-decisions.jsonl
+          if-no-files-found: ignore
+          retention-days: 7

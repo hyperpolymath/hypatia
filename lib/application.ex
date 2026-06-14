@@ -23,63 +23,69 @@ defmodule Hypatia.Application do
     # Tests use a different port to avoid collisions with the running dev server.
     http_port = Application.get_env(:hypatia, :http_port, 9090)
 
-    children = [
-      # Layer 0: HTTP -- public endpoints (groove, health)
-      {Bandit, plug: Hypatia.Web.Router, port: http_port, scheme: :http},
-      # Layer 0: Query -- VCL client for structured data access
-      Hypatia.VCL.Client,
-      # Layer 0.5: Dispatch -- GenStage pipeline for controlled parallel processing
-      Hypatia.Dispatch.Pipeline,
-      # Layer 0.7: Diagnostics -- system health monitoring and auto-recovery
-      Hypatia.Diagnostics.Monitor,
-      # Layer 0.8: Watcher -- live monitoring aggregator (subscribes to
-      # telemetry events, maintains rolling windows in ETS, backs the
-      # /api/status endpoint and `mix hypatia.watch` TUI).
-      Hypatia.Watcher,
-      # Pub/sub for SSE clients watching /api/events live. Each HTTP
-      # request handler registers itself here; Watcher dispatches each
-      # event into the registry. OTP-built Registry — no new dep.
-      {Registry, keys: :duplicate, name: Hypatia.Watcher.PubSub},
-      # Layer 0.9: Alerts -- threshold evaluator that subscribes to
-      # the Watcher's telemetry stream and dispatches to enabled
-      # sinks (Log always, Webhook if HYPATIA_ALERT_WEBHOOK_URL,
-      # File if HYPATIA_ALERT_LOG_FILE).
-      Hypatia.Watcher.Alerts,
-      # Layer 0.95: Persistence -- 5-minute trend snapshots to
-      # data/verisim/metrics/YYYY-MM-DD.jsonl. ETS is ephemeral by
-      # design; this is the historical trail.
-      Hypatia.Watcher.Persistence,
-      # Layer 0.97: Anomaly detector -- rolling success-rate baseline
-      # over the outcome stream; fires hypatia.anomaly.detected when
-      # the recent window diverges from baseline by > 2σ. The Alerts
-      # module above picks it up as a high/critical alert depending
-      # on whether the ESN drift state concurs.
-      Hypatia.Watcher.AnomalyDetector,
-      # Layer 1: Safety -- rate limiting and bot quarantine
-      Hypatia.Safety.RateLimiter,
-      Hypatia.Safety.Quarantine,
-      # Layer 3: Intelligence -- feedback loop, rules, and health monitoring
-      Hypatia.Rules.Learning,
-      Hypatia.LearningScheduler,
-      Hypatia.SelfDiagnostics,
-      # Layer 4: Neural -- blackboard + 8 networks, phased execution
-      # Blackboard MUST start before coordinator and network GenServers
-      Hypatia.Neural.Blackboard,
-      # New network GenServers (GNN, VAE, SequenceModel)
-      Hypatia.Neural.GraphNeuralNetwork,
-      Hypatia.Neural.VariationalAutoencoder,
-      Hypatia.Neural.SequenceModel,
-      # Coordinator orchestrates all 8 networks via blackboard
-      Hypatia.Neural.Coordinator,
-      # Layer 5: Kin -- ecosystem coordination, watchdog, and self-healing
-      Hypatia.Kin.Contingency,    # must start first (emergency state persisted)
-      Hypatia.Kin.Arbiter,        # conflict resolution (stateless on startup)
-      Hypatia.Kin.Gate,           # action review checkpoint
-      Hypatia.Kin.Coordinator,    # sibling heartbeat polling
-      Hypatia.Kin.Watchdog        # internal OTP process monitoring
-      # Layer 6: TUI -- optional Ada terminal dashboard (disabled by default)
-      # Enable via `config :hypatia, :tui_enabled, true` in config/runtime.exs
-    ] ++ tui_children()
+    children =
+      [
+        # Layer 0: HTTP -- public endpoints (groove, health)
+        {Bandit, plug: Hypatia.Web.Router, port: http_port, scheme: :http},
+        # Layer 0: Query -- VCL client for structured data access
+        Hypatia.VCL.Client,
+        # Layer 0.5: Dispatch -- GenStage pipeline for controlled parallel processing
+        Hypatia.Dispatch.Pipeline,
+        # Layer 0.7: Diagnostics -- system health monitoring and auto-recovery
+        Hypatia.Diagnostics.Monitor,
+        # Layer 0.8: Watcher -- live monitoring aggregator (subscribes to
+        # telemetry events, maintains rolling windows in ETS, backs the
+        # /api/status endpoint and `mix hypatia.watch` TUI).
+        Hypatia.Watcher,
+        # Pub/sub for SSE clients watching /api/events live. Each HTTP
+        # request handler registers itself here; Watcher dispatches each
+        # event into the registry. OTP-built Registry — no new dep.
+        {Registry, keys: :duplicate, name: Hypatia.Watcher.PubSub},
+        # Layer 0.9: Alerts -- threshold evaluator that subscribes to
+        # the Watcher's telemetry stream and dispatches to enabled
+        # sinks (Log always, Webhook if HYPATIA_ALERT_WEBHOOK_URL,
+        # File if HYPATIA_ALERT_LOG_FILE).
+        Hypatia.Watcher.Alerts,
+        # Layer 0.95: Persistence -- 5-minute trend snapshots to
+        # data/verisim/metrics/YYYY-MM-DD.jsonl. ETS is ephemeral by
+        # design; this is the historical trail.
+        Hypatia.Watcher.Persistence,
+        # Layer 0.97: Anomaly detector -- rolling success-rate baseline
+        # over the outcome stream; fires hypatia.anomaly.detected when
+        # the recent window diverges from baseline by > 2σ. The Alerts
+        # module above picks it up as a high/critical alert depending
+        # on whether the ESN drift state concurs.
+        Hypatia.Watcher.AnomalyDetector,
+        # Layer 1: Safety -- rate limiting and bot quarantine
+        Hypatia.Safety.RateLimiter,
+        Hypatia.Safety.Quarantine,
+        # Layer 3: Intelligence -- feedback loop, rules, and health monitoring
+        Hypatia.Rules.Learning,
+        Hypatia.LearningScheduler,
+        Hypatia.SelfDiagnostics,
+        # Layer 4: Neural -- blackboard + 8 networks, phased execution
+        # Blackboard MUST start before coordinator and network GenServers
+        Hypatia.Neural.Blackboard,
+        # New network GenServers (GNN, VAE, SequenceModel)
+        Hypatia.Neural.GraphNeuralNetwork,
+        Hypatia.Neural.VariationalAutoencoder,
+        Hypatia.Neural.SequenceModel,
+        # Coordinator orchestrates all 8 networks via blackboard
+        Hypatia.Neural.Coordinator,
+        # Layer 5: Kin -- ecosystem coordination, watchdog, and self-healing
+        # must start first (emergency state persisted)
+        Hypatia.Kin.Contingency,
+        # conflict resolution (stateless on startup)
+        Hypatia.Kin.Arbiter,
+        # action review checkpoint
+        Hypatia.Kin.Gate,
+        # sibling heartbeat polling
+        Hypatia.Kin.Coordinator,
+        # internal OTP process monitoring
+        Hypatia.Kin.Watchdog
+        # Layer 6: TUI -- optional Ada terminal dashboard (disabled by default)
+        # Enable via `config :hypatia, :tui_enabled, true` in config/runtime.exs
+      ] ++ tui_children() ++ merge_orchestration_children()
 
     opts = [strategy: :one_for_one, name: Hypatia.Supervisor]
     Supervisor.start_link(children, opts)
@@ -88,6 +94,19 @@ defmodule Hypatia.Application do
   defp tui_children do
     if Application.get_env(:hypatia, :tui_enabled, false) do
       [Hypatia.TUI.Port]
+    else
+      []
+    end
+  end
+
+  # Layer 7: Merge-orchestration tick -- runs one Loop cycle on an interval
+  # (sense -> deliberate -> gate -> manifest). Disabled by default; enable via
+  # `config :hypatia, :merge_orchestration, enabled: true, interval_ms: 900_000`.
+  # The brain stays token-free: the tick writes the decision manifest the
+  # .git-private-farm actuator independently re-verifies and merges.
+  defp merge_orchestration_children do
+    if Application.get_env(:hypatia, :merge_orchestration, [])[:enabled] do
+      [Hypatia.MergeOrchestration.Ticker]
     else
       []
     end
