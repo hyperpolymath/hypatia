@@ -11,8 +11,7 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
         change_class: :chore,
         change_level: :object,
         pool: :p2,
-        attestations: [%{bot: "ci", verdict: :approve, confidence: 0.99}],
-        vetoes: []
+        attestations: [%{bot: "ci", verdict: :approve, confidence: 0.99}]
       },
       overrides
     )
@@ -25,8 +24,18 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
     assert d.clamped_by == nil
   end
 
-  test "monotone veto: any veto -> flag, even in aggressive P3" do
-    d = Strategist.decide(ctx(%{pool: :p3, vetoes: [%{bot: "panicbot", reason: "license/SPDX"}]}))
+  test "monotone veto: a veto attestation -> flag, even in aggressive P3" do
+    d =
+      Strategist.decide(
+        ctx(%{
+          pool: :p3,
+          attestations: [
+            %{bot: "ci", verdict: :approve, confidence: 0.99},
+            %{bot: "panicbot", verdict: :veto, rationale: "reachable unmitigable CVE"}
+          ]
+        })
+      )
+
     assert d.safety == :flag
     assert d.clamped_by =~ "veto:"
   end
@@ -47,10 +56,29 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
     assert Strategist.decide(ctx(%{pool: :p0})).safety == :flag
   end
 
-  test "method is set by class, not confidence: a low-confidence chore still squashes (but is not armed)" do
+  test "method is set by class, not confidence: a low-confidence chore still squashes" do
     d = Strategist.decide(ctx(%{attestations: [%{bot: "ci", verdict: :approve, confidence: 0.10}]}))
     assert d.method == :squash
     assert d.safety in [:review, :flag]
+  end
+
+  test "competence weighting flows through: a zero-weight dissenter doesn't sink a trusted approval" do
+    d =
+      Strategist.decide(
+        ctx(%{
+          attestations: [
+            %{bot: "rhodibot", verdict: :approve, confidence: 1.0},
+            %{bot: "noise", verdict: :approve, confidence: 0.0}
+          ],
+          weight: fn
+            %{bot: "noise"} -> 0.0
+            _ -> 1.0
+          end
+        })
+      )
+
+    assert d.confidence == 1.0
+    assert d.safety == :arm_auto
   end
 
   test "route: bump -> patch-bridge; proof -> echidnabot + merge_commit" do
@@ -60,9 +88,10 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
     assert proof.method == :merge_commit
   end
 
-  test "license touch -> no auto-authority and hard flag" do
-    d = Strategist.decide(ctx(%{license_touch: true, vetoes: [%{bot: "policy-gate", reason: "license"}]}))
+  test "license touch -> no auto-authority and a hard (symbolic) flag" do
+    d = Strategist.decide(ctx(%{license_touch: true}))
     assert d.route.authority_bot == nil
     assert d.safety == :flag
+    assert d.clamped_by =~ "veto:"
   end
 end
