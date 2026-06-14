@@ -185,10 +185,27 @@ defmodule Hypatia.MergeOrchestration.Sensor do
   defp verdict_atom("veto"), do: :veto
   defp verdict_atom(_), do: :hold
 
-  # accept both "key" and :key
-  defp pick(map, key) when is_map(map), do: Map.get(map, key) || Map.get(map, safe_atom(key))
-  defp safe_atom(k) when is_binary(k), do: String.to_atom(k)
-  defp safe_atom(k), do: k
+  # Accept both "key" (on-disk JSON, string-keyed) and :key (in-memory) maps
+  # without ever minting an atom from data — that is the CWE-400 atom-exhaustion
+  # footgun the estate scanner flags. The key set is fixed and small, so a
+  # bounded compile-time lookup is both safe (no raise, unlike to_existing_atom)
+  # and exhaustive.
+  defp pick(map, key) when is_map(map) do
+    case Map.fetch(map, key) do
+      {:ok, v} -> v
+      :error -> Map.get(map, known_atom(key))
+    end
+  end
+
+  defp known_atom("bot"), do: :bot
+  defp known_atom("verdict"), do: :verdict
+  defp known_atom("confidence"), do: :confidence
+  defp known_atom("rationale"), do: :rationale
+  defp known_atom("subject"), do: :subject
+  defp known_atom("repo"), do: :repo
+  defp known_atom("number"), do: :number
+  defp known_atom("pool"), do: :pool
+  defp known_atom(_), do: nil
 
   # ── Store-backed resolvers (the production default source) ────────────────────
 
