@@ -11,9 +11,8 @@ defmodule Hypatia.MergeOrchestration.Dispatcher do
   `.git-private-farm` actuator already consume — and it mints the Kin.Gate
   coordination lease (artifact 5) for the PR's territory.
 
-  Pure: it returns the manifest entry + lease as data. The I/O (writing the
-  manifest via `DispatchManifest.write/1`, acquiring the lease in `Kin.Gate`) is
-  the caller's thin glue, so this stays test-isolated.
+  `dispatch/1` and `decide_all/1` are pure (data in, data out). `write_manifest/2`
+  is the thin operational glue that emits the merge-decision JSONL.
   """
 
   alias Hypatia.MergeOrchestration.Strategist
@@ -22,6 +21,42 @@ defmodule Hypatia.MergeOrchestration.Dispatcher do
   def dispatch(ctx) do
     decision = Strategist.decide(ctx)
     {decision, to_manifest_entry(decision), lease_for(ctx, decision)}
+  end
+
+  @doc "Batch-decide over many PR contexts; returns decisions/entries/leases + stats (pure)."
+  def decide_all(pr_contexts) do
+    results = Enum.map(pr_contexts, &dispatch/1)
+    entries = Enum.map(results, fn {_d, e, _l} -> e end)
+
+    %{
+      decisions: Enum.map(results, fn {d, _e, _l} -> d end),
+      entries: entries,
+      leases: Enum.map(results, fn {_d, _e, l} -> l end),
+      stats: %{
+        total: length(entries),
+        auto_execute: Enum.count(entries, &(&1["strategy"] == "auto_execute")),
+        review: Enum.count(entries, &(&1["strategy"] == "review")),
+        report_only: Enum.count(entries, &(&1["strategy"] == "report_only"))
+      }
+    }
+  end
+
+  @doc """
+  Operational glue: decide over PR contexts and write the merge-decision manifest
+  (JSONL) that the dispatch-runner + the `.git-private-farm` actuator consume.
+  `opts[:dir]` (default the verisim dispatch dir); `opts[:encode]` (default `Jason.encode!/1`).
+  Returns `{:ok, path, stats}`.
+  """
+  def write_manifest(pr_contexts, opts \\ []) do
+    encode = Keyword.get_lazy(opts, :encode, fn -> &Jason.encode!/1 end)
+    dir = Keyword.get(opts, :dir, "data/verisim/dispatch")
+    path = Path.join(dir, "merge-decisions.jsonl")
+
+    %{entries: entries, stats: stats} = decide_all(pr_contexts)
+    File.mkdir_p!(dir)
+    body = Enum.map_join(entries, "\n", encode)
+    File.write!(path, if(body == "", do: "", else: body <> "\n"))
+    {:ok, path, stats}
   end
 
   @doc "Map a decision onto the existing DispatchManifest entry shape, plus a `merge` extension."
