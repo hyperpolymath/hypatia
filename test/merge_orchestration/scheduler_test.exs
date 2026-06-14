@@ -72,6 +72,22 @@ defmodule Hypatia.MergeOrchestration.SchedulerTest do
     File.rm_rf!(store)
   end
 
+  test "the :actuation backend (+ :submit) passes through to the loop" do
+    store = seed_store()
+
+    r =
+      Scheduler.cycle(
+        [store: store, got: nil, actuation: :baton, submit: fn spec -> {:ok, spec.check_id} end] ++
+          codec()
+      )
+
+    assert r.stats.armed == 1
+    refute Map.has_key?(r, :manifest_path)
+    assert [%{spec: spec, result: {:ok, _}}] = r.batons
+    assert spec.required_cap == "secret_access"
+    File.rm_rf!(store)
+  end
+
   test "the store path falls back to MERGE_ORCH_STORE when :store is not given" do
     store = seed_store()
     System.put_env("MERGE_ORCH_STORE", store)

@@ -30,6 +30,36 @@ defmodule Hypatia.MergeOrchestration.LoopTest do
   defp approve_ci,
     do: fn _repo, _n -> [%{"bot" => "ci", "verdict" => "approve", "confidence" => 0.99}] end
 
+  # a store with exactly one armable PR (cargo bump, P2, CI-approved) — the same
+  # shape the run/1 manifest test arms, reused by the actuation-backend tests.
+  defp armed_store do
+    store = tmp("loop-actuation")
+
+    for sub <- ~w(observations pools attestations leases),
+        do: File.mkdir_p!(Path.join(store, sub))
+
+    e = enc()
+
+    File.write!(
+      Path.join([store, "observations", "hyperpolymath__a__1.json"]),
+      e.(bump("hyperpolymath/a", 1))
+    )
+
+    File.write!(Path.join([store, "pools", "hyperpolymath__a.json"]), e.(%{"pool" => "P2"}))
+
+    File.write!(
+      Path.join([store, "attestations", "ci.json"]),
+      e.(%{
+        "subject" => %{"repo" => "hyperpolymath/a", "number" => 1},
+        "bot" => "ci",
+        "verdict" => "approve",
+        "confidence" => 0.99
+      })
+    )
+
+    store
+  end
+
   # ── the gate bites: in-cycle one-arm-per-repo ────────────────────────────────
 
   test "two armed PRs for the same repo in one cycle: first arms, second is deferred to report_only" do
@@ -159,6 +189,66 @@ defmodule Hypatia.MergeOrchestration.LoopTest do
 
     # the lease for repo a was persisted by the gate
     assert File.exists?(Path.join([store, "leases", "hyperpolymath__a.json"]))
+    File.rm_rf!(store)
+  end
+
+  # ── actuation backends: :manifest (default) | :baton | :both ─────────────────
+
+  test ":actuation :baton submits one Baton per armed entry and writes no manifest" do
+    store = armed_store()
+    # stand in for Bag.Mesh.submit_planned/2 — record what the planner would route
+    submit = fn spec -> {:routed, spec.required_cap, spec.mutating, spec.verifier != nil} end
+
+    r =
+      Loop.run(
+        store: store,
+        holder: "hypatia",
+        now: @now,
+        encode: enc(),
+        decode: dec(),
+        actuation: :baton,
+        submit: submit
+      )
+
+    assert r.stats.armed == 1
+    # token-free brain: no manifest is written in pure :baton mode
+    refute Map.has_key?(r, :manifest_path)
+    refute File.exists?(Path.join(store, "merge-decisions.jsonl"))
+
+    # one Baton, routed to the secret_access node, mutating + verifier present
+    assert [%{spec: spec, result: {:routed, "secret_access", true, true}}] = r.batons
+    assert spec.command == ["gh", "pr", "merge", "1", "--repo", "hyperpolymath/a", "--squash"]
+    File.rm_rf!(store)
+  end
+
+  test ":actuation :both writes the durable manifest AND submits Batons" do
+    store = armed_store()
+
+    r =
+      Loop.run(
+        store: store,
+        holder: "hypatia",
+        now: @now,
+        encode: enc(),
+        decode: dec(),
+        actuation: :both,
+        submit: fn _spec -> :ok end
+      )
+
+    assert String.ends_with?(r.manifest_path, "merge-decisions.jsonl")
+    assert File.exists?(r.manifest_path)
+    assert length(r.batons) == 1
+    File.rm_rf!(store)
+  end
+
+  test ":actuation defaults to :manifest — no Batons, no Bag.* reference" do
+    store = armed_store()
+    # no :submit / :budget injected and bag-of-actions is not a dependency here;
+    # this must not raise (the Bag.Mesh call is only built in the Baton backends).
+    r = Loop.run(store: store, holder: "hypatia", now: @now, encode: enc(), decode: dec())
+
+    assert String.ends_with?(r.manifest_path, "merge-decisions.jsonl")
+    refute Map.has_key?(r, :batons)
     File.rm_rf!(store)
   end
 

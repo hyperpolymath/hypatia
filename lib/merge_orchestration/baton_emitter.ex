@@ -28,7 +28,14 @@ defmodule Hypatia.MergeOrchestration.BatonEmitter do
 
   # the capability `mesh-github-runner` holds in bag-of-actions' nodes.scm — i.e.
   # "can run gh with a GitHub token". Only that node has it; the brain does not.
-  @runner_cap "secret-access"
+  #
+  # The string MUST match the capability tag the bag-of-actions Zig bridge parses
+  # (`estate.Capability.fromString`) and the Elixir `Bag.Planner` matches on:
+  # `"secret_access"` (underscore). An unknown tag is treated as unprovable and
+  # NEVER satisfied (fail-closed), so a hyphenated `"secret-access"` would route
+  # to *no* node and the merge would silently suspend — verified against
+  # bag-of-actions `src/main.zig` (`match` subcommand) and `bag/test/planner_test.exs`.
+  @runner_cap "secret_access"
 
   @doc "Build a `Bag.Mesh.submit_planned` spec for one armed decision (+ its lease)."
   def to_spec(decision, lease \\ %{}) do
@@ -41,6 +48,13 @@ defmodule Hypatia.MergeOrchestration.BatonEmitter do
       required_cap: @runner_cap,
       # a merge mutates -> the planner gates it on a verifier (independent re-verify)
       mutating: true,
+      # The verifier the planner REQUIRES before it will plan mutating work
+      # (`Bag.Planner`: `mutating and is_nil(verifier) -> {:rejected, ...}`). It
+      # names the independent re-verification that runs on the token-bearing node
+      # *before* the merge — the `.git-private-farm` actuator's `decide_action`
+      # (veto / meta / not-armed / ci-green / P3 / mass_squash), re-checking the
+      # council's signed verdict rather than trusting the brain's say-so.
+      verifier: %{by: "git-private-farm:decide_action", reverifies: decision.route},
       risk: risk(decision.pool),
       # carried for the trust proof-chain / structured residue; the planner ignores
       # extra keys, but the verdict's residue can reference the council's verdict.

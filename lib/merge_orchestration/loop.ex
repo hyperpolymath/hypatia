@@ -38,14 +38,28 @@ defmodule Hypatia.MergeOrchestration.Loop do
   prod) so the logic tests run dependency-free.
   """
 
-  alias Hypatia.MergeOrchestration.{Sensor, Strategist, Dispatcher, KinCompetence}
+  alias Hypatia.MergeOrchestration.{Sensor, Strategist, Dispatcher, KinCompetence, BatonEmitter}
   alias Hypatia.MergeOrchestration.KinGate.FileStore
 
   @doc """
   Run one cycle over the store. Opts: `:store` (required), `:holder` ("hypatia"),
   `:now`, `:trust` (GoT snapshot `%{bot => score}`; empty ⇒ uniform council),
   `:encode`/`:decode` (Jason), `:acquire` (defaults to `KinGate.FileStore` over
-  `<store>/leases`). Returns the plan summary plus `:manifest_path`.
+  `<store>/leases`).
+
+  `:actuation` selects the actuation backend for the *armed* decisions:
+
+    * `:manifest` (default) — write `merge-decisions.jsonl`; the `.git-private-farm`
+      actuator polls it. Returns the plan summary plus `:manifest_path`.
+    * `:baton` — submit one Bag-of-Actions Baton per armed entry via
+      `BatonEmitter.emit/2` (capability-routed actuation, off GitHub minutes).
+      Returns the plan summary plus `:batons`; no manifest is written.
+    * `:both` — do both (manifest as the durable record/fallback, Batons as the
+      live path). Returns the plan summary plus `:manifest_path` *and* `:batons`.
+
+  For the Baton backends the `Bag.Mesh` call is late-bound (`apply/3`) so this
+  module stays compile-decoupled from `bag-of-actions`; inject `:submit` (a
+  `spec -> result` fn) in tests, and `:budget` (a `Bag.Budget`) in production.
   """
   def run(opts) do
     store = Keyword.fetch!(opts, :store)
@@ -54,6 +68,7 @@ defmodule Hypatia.MergeOrchestration.Loop do
     holder = Keyword.get(opts, :holder, "hypatia")
     now = Keyword.get(opts, :now, DateTime.utc_now())
     trust = Keyword.get(opts, :trust, %{})
+    actuation = Keyword.get(opts, :actuation, :manifest)
     leases_dir = Path.join(store, "leases")
 
     acquire =
@@ -64,8 +79,33 @@ defmodule Hypatia.MergeOrchestration.Loop do
     observations = read_observations(store, decode)
     {resolve_pool, resolve_attestations} = Sensor.store_resolvers(store, decode: decode)
 
-    result = plan(observations, resolve_pool, resolve_attestations, trust, holder, acquire)
-    Map.put(result, :manifest_path, write_manifest(store, result.entries, encode))
+    plan(observations, resolve_pool, resolve_attestations, trust, holder, acquire)
+    |> actuate_manifest(store, encode, actuation)
+    |> actuate_batons(opts, actuation)
+  end
+
+  # ── actuation backends (selected by :actuation) ──────────────────────────────
+
+  defp actuate_manifest(result, store, encode, actuation) when actuation in [:manifest, :both],
+    do: Map.put(result, :manifest_path, write_manifest(store, result.entries, encode))
+
+  defp actuate_manifest(result, _store, _encode, _actuation), do: result
+
+  defp actuate_batons(result, opts, actuation) when actuation in [:baton, :both] do
+    # lazy: an injected `:submit` (tests) means `default_submit/1` — and thus any
+    # reference to `Bag.*` — is never built.
+    submit = Keyword.get_lazy(opts, :submit, fn -> default_submit(opts) end)
+    Map.put(result, :batons, BatonEmitter.emit(result, submit: submit))
+  end
+
+  defp actuate_batons(result, _opts, _actuation), do: result
+
+  # The live `Bag.Mesh.submit_planned(spec, budget)` call, late-bound via `apply/3`
+  # so an unconfigured `:manifest`-only run never references `bag-of-actions`. The
+  # default budget is also late-bound (`Bag.Budget.unlimited/0`).
+  defp default_submit(opts) do
+    budget = Keyword.get_lazy(opts, :budget, fn -> apply(Bag.Budget, :unlimited, []) end)
+    fn spec -> apply(Bag.Mesh, :submit_planned, [spec, budget]) end
   end
 
   @doc """
