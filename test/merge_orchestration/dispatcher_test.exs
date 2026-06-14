@@ -53,4 +53,33 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
     assert l["territory"]["is_meta"] == true
     assert l["owner_authorized"] == false
   end
+
+  test "decide_all batches decisions and tallies stats by strategy" do
+    r =
+      Dispatcher.decide_all([
+        ctx(%{}),
+        ctx(%{pool: :p1}),
+        ctx(%{attestations: [%{bot: "x", verdict: :veto, rationale: "r"}]})
+      ])
+
+    assert r.stats == %{total: 3, auto_execute: 1, review: 1, report_only: 1}
+    assert length(r.entries) == 3
+    assert length(r.leases) == 3
+  end
+
+  test "write_manifest writes one JSONL line per decision and returns stats" do
+    dir = Path.join(System.tmp_dir!(), "moj-#{System.unique_integer([:positive])}")
+
+    {:ok, path, stats} =
+      Dispatcher.write_manifest([ctx(%{}), ctx(%{pool: :p1})],
+        dir: dir,
+        encode: fn e -> "STRATEGY=" <> e["strategy"] end
+      )
+
+    lines = path |> File.read!() |> String.trim() |> String.split("\n")
+    assert length(lines) == 2
+    assert "STRATEGY=auto_execute" in lines
+    assert stats.total == 2
+    File.rm_rf!(dir)
+  end
 end
