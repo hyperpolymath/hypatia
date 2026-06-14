@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Execution substrate: Bag-of-Actions (continuation runtime)
+:toc: macro
+:icons: font
+
+[NOTE]
+====
+*Status: DESIGN ONLY.* `hyperpolymath/bag-of-actions` is not yet in this
+work's session scope, so its exact Baton format / `Bag.Mesh` API could not be
+read first-hand. This doc records the mapping and the integration sketch so the
+build is ready the moment the repo is in scope. Nothing here is wired.
+====
+
+toc::[]
+
+== Why this doc
+
+The cron + tick (artifact-7) make the merge-orchestration loop *runnable on a
+schedule* — a GenServer tick in the brain, or an hourly GitHub Actions cron.
+Both write the decision manifest (`merge-decisions.jsonl`) that the
+`.git-private-farm` actuator polls and executes.
+
+That JSONL+poll seam is the weakest link: it is a *passive* hand-off (the farm
+must poll), the "no double-merge" guarantee is a `MapSet` + a file lock rather
+than a type, and it runs on GitHub-hosted Actions minutes (the farm's billing
+is currently the blocker on scheduled actuation).
+
+*Bag-of-Actions* (BoA) is the owner-flagged alternative: a "distributed OS for
+mobile continuations". It is a near-exact structural fit for what the
+merge-orchestration runtime already is — capability-gated, non-duplicated,
+attested merge actions — and it dissolves all three weaknesses above.
+
+== What Bag-of-Actions is
+
+* *Batons* — units of work are serialized execution states that *migrate to the
+  node matching their required capabilities*, rather than being pushed onto a
+  fixed queue / DAG.
+* *Capability routing* — dynamic dispatch by hardware, identity, and trust.
+* *Ephapax linear types* — one-time consumption of resources (tokens, memory,
+  credits); work is never lost or duplicated.
+* *Trust attestation* — a cryptographic proof-chain for every state transition.
+* *Freeze / Thaw* — pause execution on one node (Wasm host), resume on another.
+* *Elixir/OTP orchestration* — `Bag.Mesh.submit(...)`; Zig/Wasm hosts execute;
+  they communicate via serialized Batons. Capabilities are declared in
+  `nodes.scm` and proved in `verification/` (`Bag.Estate`).
+
+== The mapping (one-to-one)
+
+[cols="1,1,2",options="header"]
+|===
+| merge-orchestration | Bag-of-Actions | what it buys
+
+| `KinGate` per-repo *lease*
+| *capability routing* — the Baton routes to the node holding the repo capability
+| the lease stops being a flat-file lock and *becomes the routing key*
+
+| in-cycle dedup + lease (no double-merge)
+| *Ephapax linear types* — one-time consumption
+| "no double-merge" upgraded from a `MapSet`/`O_EXCL` lock to a *type-level* guarantee
+
+| a3 *attestation* chain (intent → evidence → seal)
+| *trust attestation* — proof-chain per state transition
+| the council's signed verdict rides in the Baton; each transition extends the chain
+
+| sense → deliberate → *actuate* hand-off (brain holds no token; farm does)
+| *Freeze / Thaw* migration
+| the decided Baton *freezes* on the brain and *thaws* on the token-bearing farm node — replacing "write JSONL, farm polls" with a real continuation hand-off
+
+| the cron/tick + the dead farm Actions billing
+| self-hosted *BEAM mesh + Guix builds*
+| runs the loop *off* GitHub-hosted minutes — which is why it bears on the billing question
+|===
+
+== Integration sketch
+
+=== Brain side (hypatia, additive)
+
+A new emit backend alongside `Loop.write_manifest/3` — call it
+`MergeOrchestration.BatonEmitter`:
+
+[source,elixir]
+----
+# for each ARMED decision (one that held its KinGate lease), submit a Baton
+# whose REQUIRED CAPABILITY is {repo, :github_merge_token}. The brain has no
+# such capability, so the Baton cannot execute here — it must migrate.
+Bag.Mesh.submit(%{
+  action: :merge_pr,
+  repo: decision.pr.repo,
+  pr: decision.pr.number,
+  method: decision.method,            # squash | rebase | merge_commit
+  requires: [{:repo, decision.pr.repo}, :github_merge_token],
+  proof: signed_attestation(decision) # the council verdict -> trust chain
+})
+----
+
+`write_manifest` stays as the durable record / fallback; BatonEmitter is the
+*live* path. Both are driven from the same `Loop.plan` result, so the gate
+(in-cycle + lease + LE2) is unchanged — only the *delivery* differs.
+
+=== The hand-off
+
+. Brain runs `Loop.plan` → gated decisions. For each armed one it submits a
+  Baton (above). The Baton *freezes* — the brain holds no `:github_merge_token`.
+. Capability routing migrates the Baton to the node that *does* hold
+  `{repo, :github_merge_token}` — the `.git-private-farm` host.
+. The Baton *thaws* there and runs the merge action, which independently
+  re-verifies (the actuator's existing `decide_action`: veto / meta / not-armed
+  / ci-green / P3-handshake / mass_squash-campaign) before `gh pr merge`.
+. The merge consumes the linear *merge token* exactly once → no double-merge by
+  construction. The outcome + each transition append to the trust proof-chain.
+
+=== BoA side (gated on scope)
+
+* A `merge_pr` action definition (Ephapax/Wasm) that takes the linear merge
+  token and the decision payload.
+* Capability declarations in `nodes.scm`: per-repo capabilities + the
+  `:github_merge_token` capability bound to the farm node (and *only* there —
+  this is the token-free-brain invariant expressed as a capability fact, proved
+  in `Bag.Estate`).
+
+== What it buys over JSONL + poll
+
+* *Type-level no-double-merge* (Ephapax) instead of a lock + a `MapSet`.
+* *Capability-routed actuation* — no hard-coded "the farm polls a file"; the
+  Baton finds the token-holder.
+* *Resumable* — a crashed actuation thaws and retries on another capable node.
+* *Self-hosted* — runs on the BEAM mesh, off GitHub Actions minutes; this is the
+  path that makes the farm billing fix *moot* rather than a workaround. (Owner
+  has deferred the billing fix itself; this is the longer arc it sits on.)
+
+== Honest caveats
+
+* BoA is research-grade (Milestones 1–4, no release artifacts). This is a
+  *direction*, not a drop-in.
+* The integration is *additive*: the `merge-decisions.jsonl` manifest remains
+  the record and the fallback; the actuator's independent re-verification stays
+  exactly as-is (defense in depth holds whether delivery is poll or Baton).
+* Building it needs: (a) BoA added to session scope to read the real Baton
+  format + `Bag.Mesh` surface; (b) `BatonEmitter` on the hypatia side; (c) the
+  `merge_pr` action + capability facts on the BoA side.
+
+== Cross-references
+
+* `00-decision-contract.adoc` — the decision tuple the Baton carries.
+* `02-attestation.adoc` — the signed verdict that becomes the trust-chain link.
+* `04-pool-lease-spec.adoc` — the lease that becomes the routing capability.
+* `.machine_readable/merge-orchestration/LEDGER.a2ml` — workstream state.
