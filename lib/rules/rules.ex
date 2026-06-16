@@ -246,6 +246,19 @@ defmodule Hypatia.Rules do
             findings
           end
 
+        # Detect vulnerable rustls-webpki versions (CRL BIT STRING DoS panic)
+        # GHSA-82j2-j2ch-gfr8 / RUSTSEC-2026-0104, CVSS 7.5 HIGH; fixed in 0.103.13.
+        # Transitive/lockfile-only: Dependabot frequently will NOT auto-PR this --
+        # remediation needs a manual `cargo update -p rustls-webpki` (see estate
+        # baseline dev-notes/2026-06-16-estate-dependency-security-control-plane.md).
+        findings =
+          if Regex.match?(~r/name = "rustls-webpki"\s+version = "0\.(101\.\d+|102\.\d+|103\.([0-9]|1[0-2]))"/, content) do
+            [%{rule: "rustls-webpki-crl-panic-dos", severity: :high,
+               description: "Vulnerable rustls-webpki version detected in Cargo.lock -- update to >= 0.103.13 (GHSA-82j2-j2ch-gfr8 / RUSTSEC-2026-0104, DoS via panic on malformed CRL BIT STRING)"} | findings]
+          else
+            findings
+          end
+
         findings
       else
         findings
