@@ -190,6 +190,7 @@ defmodule Hypatia.Rules.SecurityErrors do
     "glib-variantstriter-unsoundness" => "Update glib to v0.22.3, v0.20.7, v0.19.10 or v0.18.6",
     "protobuf-recursion-crash" => "Update protobuf to >= 3.7.2",
     "idna-punycode-mishandling" => "Update idna to >= 1.0.0",
+    "rustls-webpki-crl-panic-dos" => "Update rustls-webpki to >= 0.103.13 (cargo update -p rustls-webpki); transitive dep, Dependabot may not auto-PR",
     "jsonwebtoken-type-confusion" => "Update jsonwebtoken to >= 10.3.0",
     "npm-js-yaml-vulnerability" => "Update js-yaml to >= 3.14.2 or 4.1.1",
     "npm-serialize-javascript-vulnerability" => "Update serialize-javascript to >= 6.0.2 or 7.0.0",
