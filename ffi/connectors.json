@@ -1,0 +1,22 @@
+{
+  "_spdx": "MPL-2.0",
+  "_note": "Golden source-of-truth for the hexadeca-connector wire contract. The Zig enum (ffi/zig/src/hexadeca.zig), the Idris2 ABI (src/abi/Types.idr), and the Rust client (clients/rust/hypatia-client/src/connector.rs) MUST all agree with this list, in this exact order; id is the C ABI wire id. Drift is guarded by test/hexadeca_contract_test.exs. Wire ordering is load-bearing -- do not renumber.",
+  "connectors": [
+    { "id": 0, "name": "grpc" },
+    { "id": 1, "name": "graphql" },
+    { "id": 2, "name": "rest" },
+    { "id": 3, "name": "flatbuffers" },
+    { "id": 4, "name": "bebop" },
+    { "id": 5, "name": "jsonrpc" },
+    { "id": 6, "name": "websocket" },
+    { "id": 7, "name": "mqtt" },
+    { "id": 8, "name": "trpc" },
+    { "id": 9, "name": "capnproto" },
+    { "id": 10, "name": "soap" },
+    { "id": 11, "name": "verisimdb-rest" },
+    { "id": 12, "name": "bsp" },
+    { "id": 13, "name": "scip" },
+    { "id": 14, "name": "ipfs" },
+    { "id": 15, "name": "arrow-flight" }
+  ]
+}
