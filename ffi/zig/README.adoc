@@ -31,10 +31,79 @@ zig build test         # run all tests (main, json_writer, file_ops, integration
 == Source Files
 
 * `src/main.zig` — All 7 C ABI exports + lifecycle/utility functions
+* `src/hexadeca.zig` — 16-protocol Hexadeca-Connector surface + dispatch seam (see below)
 * `src/json_writer.zig` — Zero-allocation JSON writer for FFI responses
 * `src/file_ops.zig` — verisim-data flat-file I/O helpers
-* `src/connectors/` — Storage connector modules
+* `src/connectors/` — Per-protocol transport shims (reference fidelity; see below)
 * `test/integration_test.zig` — Integration tests against a test data fixture
+
+== Hexadeca-Connector Surface
+
+Beyond the seven core C ABI functions, `src/hexadeca.zig` defines the
+*Hexadeca-Connector*: a sixteen-protocol unified API surface that wraps the
+same core ABI. Each connector speaks a different transport but routes through
+one core, so a consumer talks to Hypatia over whichever wire it prefers.
+
+[cols="1,2,4"]
+|===
+|id |connector |notes
+
+|0 |`grpc` |
+|1 |`graphql` |M14 live GraphQL endpoint target
+|2 |`rest` |
+|3 |`flatbuffers` |zero-copy binary
+|4 |`bebop` |zero-copy binary
+|5 |`jsonrpc` |
+|6 |`websocket` |
+|7 |`mqtt` |
+|8 |`trpc` |
+|9 |`capnproto` |zero-copy binary RPC
+|10 |`soap` |
+|11 |`verisimdb-rest` |gated on verisim-api deploy
+|12 |`bsp` |Build Server Protocol (Umoja substrate)
+|13 |`scip` |Source Code Index Protocol (Umoja substrate)
+|14 |`ipfs` |Umoja substrate
+|15 |`arrow-flight` |high-throughput columnar (Umoja substrate)
+|===
+
+The integer `id` is the *C ABI wire id*: it is load-bearing and must not be
+renumbered. Port layout is `base + id + 1` (`HexadecaSuite.portFor`).
+
+=== Tri-language contract
+
+The connector set is mirrored in three places that *must agree*:
+
+* Zig — `ffi/zig/src/hexadeca.zig` (`Connector` enum + `comptime` count assertion)
+* Idris2 — `src/abi/Types.idr` (`Connector` + the `connectorCount = Refl` proof)
+* Rust — `clients/rust/hypatia-client/src/connector.rs` (`#[repr(u8)]` enum)
+
+`ffi/connectors.json` is the *golden source-of-truth*, and
+`test/hexadeca_contract_test.exs` (run under `mix test`) fails CI if any of
+the three mirrors drifts in name or order. To add, remove, or reorder a
+connector, update the golden fixture and all three mirrors together.
+
+=== Transaction-based ephemerality
+
+Connectors are *ephemeral per transaction*, not long-running daemons. A
+request materialises the connector, decodes its wire format into a
+`CoreRequest`, calls `coreDispatch` (the single core seam), re-encodes the
+response, and tears down. In-process consumers — and the Rust client — call
+`coreDispatch` directly and skip transport encoding entirely. The surface is
+therefore stateless, and a new transport can be added without touching the
+core ABI.
+
+=== Status
+
+The surface, the enum, the port table, the tri-language contract, and the
+drift guard are *live*. The per-protocol _wire bodies_ in
+`src/connectors/*.zig` are at reference fidelity — a `start(port)` shim — and
+are fleshed out *on demand*, one transport at a time, as a live consumer
+needs it. Highest value first is whichever a live endpoint requires
+(`rest`/`graphql` for the M14 HTTP/GraphQL endpoint, or
+`verisimdb-rest`/`arrow-flight`/`grpc` once verisim-api deploys). The
+zero-copy binary wires (`bebop`, `capnproto`) are the last-mile throughput
+optimisation, justified by measured volume; the `bebop` body would bind the
+external `hyperpolymath/bebop-ffi` codec when implemented.
 
 == Data Path
 
