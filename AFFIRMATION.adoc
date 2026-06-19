@@ -6,12 +6,12 @@
 // document follows A2ML / RSR conventions and should be reconciled against
 // `standards` if the schema differs.
 = AFFIRMATION — hypatia
-:affirmed-at: 2026-06-18T18:00Z
+:affirmed-at: 2026-06-19T21:45Z
 :affirmed-by: Claude (Opus 4.8) on behalf of Jonathan D.A. Jewell (hyperpolymath)
 
 As of *{affirmed-at}*, this repository affirms the following about its current
 state and commitments. Companion detail:
-`docs/status/estate-musts-intends-wishes-2026-06-18.md`.
+`docs/status/estate-musts-intends-wishes-2026-06-19.md`.
 
 == We affirm (current normative state — MUST)
 
