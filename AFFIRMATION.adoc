@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+//
+// NOTE: The hyperpolymath `standards` repo defines the canonical AFFIRMATION
+// format; it was not reachable from this authoring session's scope, so this
+// document follows A2ML / RSR conventions and should be reconciled against
+// `standards` if the schema differs.
+= AFFIRMATION — hypatia
+:affirmed-at: 2026-06-18T18:00Z
+:affirmed-by: Claude (Opus 4.8) on behalf of Jonathan D.A. Jewell (hyperpolymath)
+
+As of *{affirmed-at}*, this repository affirms the following about its current
+state and commitments. Companion detail:
+`docs/status/estate-musts-intends-wishes-2026-06-18.md`.
+
+== We affirm (current normative state — MUST)
+
+* *Guix-only builds.* Nix is retired estate-wide (owner ruling 2026-06-05);
+  `guix.scm` / guix channels are the sole reproducible-build manifests. No
+  `flake.nix` remains; all references reconciled.
+* *The formal-proof corpus verifies and is CI-gated* across Idris 2 (v0.7.0),
+  Lean 4 (v4.30.0) and TLA+ — zero escape hatches
+  (`believe_me` / `sorry` / `postulate` / `assert_total` / `admit` /
+  `native_decide`). One obligation remains open — neural-convergence
+  (PageRank + ESN) — blocked only on Mathlib network access; the handover is
+  at `docs/proofs/HANDOVER-neural-convergence.md`.
+* *The hexadeca-connector wire contract cannot silently drift.* The Zig enum,
+  the Idris2 ABI and the Rust client are pinned to one golden source
+  (`ffi/connectors.json`) by `test/hexadeca_contract_test.exs` under
+  `mix test`.
+* *Workflow hygiene.* Every runner job declares `timeout-minutes`; the
+  `workflow_audit` rule no longer false-positives reusable-workflow
+  (`uses:`) jobs.
+* *SPDX `MPL-2.0` headers* on source files; SHA-pinned GitHub Actions;
+  HTTPS-only; no hardcoded secrets.
+
+== We intend (planned — INTEND)
+
+* Deploy *verisim-api* (the VeriSimDB Rust core) to unlock native
+  graph/vector/temporal modalities and let the hexadeca transport bodies be
+  fleshed out on demand.
+* Ensure merged rule fixes reach *live* self-scans — the deployed scanner
+  currently lags `main` (issue #484).
+* Triage the code-scanning alert backlog (#470, #369); deliver M13 SARIF,
+  M14 live GraphQL endpoint, M15 bearer-auth + persistent watcher.
+* Carry the *merge-orchestration runtime*: the decision layer here, signed
+  `attest` verbs in gitbot-fleet, the pool actuator in `.git-private-farm`.
+
+== We wish (aspirational — WISH)
+
+* An Nx/EXLA neural backend if reservoir sizes outgrow pure Elixir.
+* Cross-organisation federation with VCL drift policies.
+* Bring the GitHub wikis to bleeding-edge (#482) and complete the
+  doc/contractile currency + rot sweep (#483).
+
+== Held (under coordinated realignment — not affirmed here)
+
+The `6a2` `STATE` / `META` / `ANCHOR` files and the `trust` / `intend`
+contractiles + `bot_directives` are under the active merge-orchestration
+realignment and are deliberately not re-attested in this document.
+
+== Provenance
+
+Affirmation authored {affirmed-at} by {affirmed-by}. The canonical
+AFFIRMATION format lives in `hyperpolymath/standards`; reconcile this file
+against it when that repo is in scope.
