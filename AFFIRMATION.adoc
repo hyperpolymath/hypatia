@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// NOTE: The hyperpolymath `standards` repo defines the canonical AFFIRMATION
-// format; it was not reachable from this authoring session's scope, so this
-// document follows A2ML / RSR conventions and should be reconciled against
-// `standards` if the schema differs.
+// RECONCILIATION (verified 2026-06-19 via public web): the hyperpolymath
+// `standards` repo defines NO AFFIRMATION format — only the seven A2ML files
+// (STATE/META/ECOSYSTEM/PLAYBOOK/AGENTIC/NEUROSYM/ANCHOR). This document is
+// therefore a NEW artifact following A2ML / RSR conventions; if the estate
+// wants it canonical, propose it upstream as an 8th A2ML format.
 = AFFIRMATION — hypatia
 :affirmed-at: 2026-06-19T21:45Z
 :affirmed-by: Claude (Opus 4.8) on behalf of Jonathan D.A. Jewell (hyperpolymath)
@@ -61,6 +62,8 @@ realignment and are deliberately not re-attested in this document.
 
 == Provenance
 
-Affirmation authored {affirmed-at} by {affirmed-by}. The canonical
-AFFIRMATION format lives in `hyperpolymath/standards`; reconcile this file
-against it when that repo is in scope.
+Affirmation authored {affirmed-at} by {affirmed-by}. Reconciliation: as of
+2026-06-19, `hyperpolymath/standards` defines no AFFIRMATION format (verified
+via public web) — only the seven A2ML files; this document follows the
+A2ML / RSR conventions there and may be proposed upstream as a new (8th) A2ML
+format.
