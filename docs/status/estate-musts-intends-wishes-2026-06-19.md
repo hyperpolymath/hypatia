@@ -5,7 +5,7 @@
 
 **Snapshot:** 2026-06-19 (UTC) · authored by Claude (Opus 4.8)
 
-Framing: **must** = normative/blocking (hypatia's own rules are the estate norm) · **intend** = planned/in-flight · **wish** = aspirational. `READINESS.md` formally grades 6 bots (assessed 2026-04-04); the other 5 rows are from issues + the 2026-06 session and marked _(inferred)_.
+Framing: **must** = normative/blocking (hypatia's own rules are the estate norm) · **intend** = planned/in-flight · **wish** = aspirational. `READINESS.md` formally grades 6 bots (assessed 2026-04-04); the other 5 rows are **grounded from each bot's repo files** (README / Cargo.toml / CLAUDE) and lack only a formal CRG grade.
 
 ## Where we are
 
@@ -25,21 +25,21 @@ Core three bots + coordinator are Grade B/Beta and operating estate-wide (1635 d
 | triage 6 Dependabot alerts 1H/1M/4L (#278) · close `record_outcome` loop · dispatch PAT ✅ | consume Hypatia route/blast-radius metadata (#264) · LicensePolicy never-auto-execute (#253) · bots gain signed `attest` verbs | 29 `expect_in_hot_path` hygiene (#255) · SafeDOM standing recipe (#214) · promote C-grade bots to B |
 | ✅ this session: Nix removed (#260/#262); findings-submissions documented; Bustfile (#261) | | |
 
-## each gitbot
+## each gitbot (the 5 below READINESS.md are now grounded from repo files)
 
-| Bot | Grade | MUST | INTEND | WISH |
+| Bot | State | MUST | INTEND | WISH |
 |---|---|---|---|---|
-| rhodibot (git ops) | B | keep 9/9 dispatch flows green | signed `attest` verb | — |
-| echidnabot (quality/proofs) | B | — | consume typed `VerifyOutcome` (#245) | SDK packaging surface |
-| sustainabot (eco/econ) | B | fix broken Cargo path dep on missing `bots/panic-attacker` (#246) | SafeDOM recipe (#214) · add `guix.scm` | — |
-| glambot (aesthetic) | C | promote C→B (calibration) | apply suggestions systematically | richer visual analyzers |
-| seambot (seams) | C | promote C→B | cross-repo seam data | — |
-| finishingbot (completion) | C | promote C→B (calibration) | — | — |
-| gsbot (Discord, Rust/SPARK) _(inf)_ | — | no Python ✅; Bronze RSR | add `guix.scm` | SPARK-verify `domain.rs` |
-| cipherbot _(inf)_ | — | clear secret-FP in `analyzers/infra.rs` + `expect` hygiene (#207/#255) | — | — |
-| accessibilitybot _(inf)_ | — | `expect_in_hot_path` hygiene (#255) | — | — |
-| panicbot _(inf)_ | — | reach-classification correctness | consume patch-bridge registry (#358) | — |
-| the-hotchocolabot _(inf)_ | — | it's a stub — needs real impl or status clarity | build out | — |
+| rhodibot — git ops | B / Beta | keep 9/9 dispatch flows green | signed `attest` verb | — |
+| echidnabot — quality/proofs | B / Beta | — | consume typed `VerifyOutcome` (#245) | SDK packaging surface |
+| sustainabot — eco/econ | B / Beta | fix broken Cargo path dep on missing `bots/panic-attacker` (#246) | SafeDOM recipe (#214) · add `guix.scm` | — |
+| glambot — aesthetic | C / Alpha-stable | promote C→B (calibration) | apply suggestions systematically | richer visual analyzers |
+| seambot — integration seams | C / Alpha-stable | promote C→B | cross-repo seam data | — |
+| finishingbot — completion | C / Alpha-stable | promote C→B (calibration) | — | — |
+| gsbot — Discord garment-sustainability (Rust/SPARK, v0.2.0; poise/serenity + SQLite; Python-ported) | ungraded; functional, Bronze RSR | add `guix.scm` (none yet); keep Python-free | SPARK-verify the pure `domain.rs` scoring kernel | — |
+| cipherbot — crypto-hygiene / post-quantum readiness (Rust, v0.1.0; 4 modes; SARIF; `.bot_directives/cipherbot.scm`) | ungraded; built | clear secret-detection FP in `analyzers/infra.rs` + `expect` hygiene (#207/#255) | — | — |
+| accessibilitybot — WCAG 2.3 AAA (Rust, v0.1.0; 9 analyzers A/AA/AAA; **71 tests passing**; SARIF) | ungraded; well-built | `expect_in_hot_path` hygiene (#255) | — | — |
+| panicbot — panic-attack audit wrapper (Rust, v0.1.0; depends on shared-context) | ungraded; built | reach-classification correctness | consume patch-bridge registry (#358) | — |
+| the-hotchocolabot | ungraded; **stub** (CLAUDE.md: "new project") | real implementation, or clarify status | build out | — |
 
 ## .git-private-farm — itself
 
