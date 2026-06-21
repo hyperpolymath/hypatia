@@ -7,8 +7,10 @@ name: Hypatia Security Scan
 on:
   push:
     branches: [main, master, develop]
+  # No `branches:` filter — a required check whose workflow is branch-gated is
+  # never created on a non-matching base and blocks merge forever at
+  # "Expected — Waiting for status to be reported" (cf. affinescript#645).
   pull_request:
-    branches: [main, master]
   schedule:
     - cron: '0 0 * * 0'
   workflow_dispatch:
