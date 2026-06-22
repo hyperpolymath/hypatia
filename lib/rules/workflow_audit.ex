@@ -886,7 +886,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 gate_re =
                   ~r/(?:^|\n)\s*(?:-\s+)?if:[^\n]*secrets\.#{Regex.escape(secret_name)}[^\n]*!=\s*['"]['"]?/
 
-                if Regex.match?(gate_re, step_block) do
+                # Also accept the valid env+output cross-step gate: a prior step
+                # reads the secret into `env:` and writes a presence boolean to
+                # $GITHUB_OUTPUT, and the consuming step is gated with
+                # `if: steps.<id>.outputs.<name>`. The `secrets` context is NOT
+                # available in step-level `if:`, so the same-step
+                # `if: secrets.X != ''` form above is itself unusable — this
+                # env+output pattern is the correct GitHub Actions idiom.
+                env_output_gate? =
+                  Regex.match?(~r/if:[^\n]*steps\.[A-Za-z0-9_-]+\.outputs\./, step_block) and
+                    String.contains?(stripped, "GITHUB_OUTPUT")
+
+                if Regex.match?(gate_re, step_block) or env_output_gate? do
                   []
                 else
                   [%{
