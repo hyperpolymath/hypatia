@@ -199,9 +199,13 @@ defmodule Hypatia.Rules.RootHygiene do
   Check for required files that are missing.
   """
   def scan_required_missing(root_files) do
+    # NB: SECURITY.md is intentionally NOT listed here. It is a community-health
+    # file that GitHub recognises in root, `.github/`, or `docs/`, and is owned
+    # by Hypatia.Rules.CicdRules.check_repo_requirements/1 (which checks all
+    # three locations). Listing it here too caused a double-report and a
+    # false-positive when it lives under `.github/SECURITY.md`.
     required = [
       %{file: "LICENSE", alternatives: ["LICENSE.txt"], severity: :critical},
-      %{file: "SECURITY.md", alternatives: [], severity: :high},
       %{file: ".editorconfig", alternatives: [], severity: :medium},
       %{file: "0-AI-MANIFEST.a2ml", alternatives: ["AI.a2ml"], severity: :high}
     ]
