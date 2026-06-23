@@ -67,7 +67,7 @@ jobs:
 
       - name: Cache Idris 2 install
         id: cache-idris
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             /usr/local/bin/idris2
@@ -158,7 +158,7 @@ jobs:
 
       - name: Cache Lean toolchain and build
         id: cache-lean
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             ~/.elan
@@ -218,7 +218,7 @@ jobs:
 
       - name: Cache tla2tools.jar
         id: cache-tla
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: ~/.local/share/tla2tools.jar
           key: tla2tools-v1.8.0
