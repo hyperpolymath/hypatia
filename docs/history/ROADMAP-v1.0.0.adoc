@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = hypatia: Route to v1.0.0
 :toc: macro
 :toclevels: 3

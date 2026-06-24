@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = lib/ — Core Elixir Pipeline
 
 The Elixir source for the Hypatia CI/CD intelligence layer.

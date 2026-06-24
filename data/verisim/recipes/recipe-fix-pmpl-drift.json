@@ -15,7 +15,7 @@
     },
     "son_shared": {
       "target": "AGPL-3.0-or-later",
-      "detection": "LICENSE file SPDX-License-Identifier: AGPL-3.0-or-later",
+      "detection": "LICENSE file SPDX-License-Identifier: MPL-2.0",
       "confirmed_repos": ["idaptik", "burble", "standards", "rattlescript", "vcl-ut"]
     },
     "all_rights_reserved": {

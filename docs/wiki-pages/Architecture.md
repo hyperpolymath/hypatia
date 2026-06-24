@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Architecture
 
 Hypatia is split into eleven layers, each supervised under the OTP `Hypatia.Supervisor`. The supervision tree starts in this exact order so each layer can depend on the ones below it.
