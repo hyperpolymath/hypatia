@@ -1,7 +1,7 @@
 image:https://raw.githubusercontent.com/hyperpolymath/palimpsest-license/main/assets/badges/svg/badge-standard.svg[PMPL-1.0,link="https://github.com/hyperpolymath/palimpsest-license"]
 
 
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Hypatia: Neurosymbolic CI/CD Intelligence Platform
 :toc: macro
 :toclevels: 3

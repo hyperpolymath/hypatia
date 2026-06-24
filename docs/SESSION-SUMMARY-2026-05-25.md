@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Session summary — 2026-05-23 → 2026-05-25
 
 Comprehensive record of work done across PRs #309 → #319. Audience: both humans (narrative top section) and machines (structured tables at the bottom). Read from top.

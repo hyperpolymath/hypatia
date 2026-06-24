@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- NEURAL-ARCHITECTURE.md — Hypatia neural subsystem architecture -->
 <!-- Last updated: 2026-02-22 -->
 <!-- Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk> -->

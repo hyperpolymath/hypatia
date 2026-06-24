@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = ffi/ — Foreign Function Interface
 
 C-compatible FFI bridge between the Idris2 ABI and consuming runtimes.

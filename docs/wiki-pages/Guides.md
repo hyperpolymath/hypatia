@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Guides
 
 Task-oriented walkthroughs. For end-to-end tutorials see the in-tree guides under [`docs/guides/`](https://github.com/hyperpolymath/hypatia/blob/main/docs/guides/).

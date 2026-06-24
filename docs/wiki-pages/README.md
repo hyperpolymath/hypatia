@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Wiki page sources
 
 This directory holds the **canonical source** for every page in the public GitHub wiki at <https://github.com/hyperpolymath/hypatia/wiki>.

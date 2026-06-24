@@ -1,7 +1,7 @@
 = Hypatia GUI (Gossamer + Ephapax)
 :toc:
 
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 
 Replacement for the earlier AffineScript GUI at `src/ui/tea/`. Per
 issue #177 the GUI is migrated to Gossamer (UI framework) on top of
