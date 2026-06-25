@@ -9,6 +9,14 @@ on:
 
 permissions: read-all
 
+# Restored after #258 ("consolidate 37 workflows → 23") dropped it: the merge
+# moved the container jobs out of container.yml into this file, but env: is
+# file-scoped and didn't travel with them, leaving env.REGISTRY/env.IMAGE_NAME
+# undefined (breaking ghcr login/metadata/push tags + the attest subject-name).
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
