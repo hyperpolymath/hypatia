@@ -777,7 +777,27 @@ defmodule Hypatia.CLI do
         results
       end
 
+    # ─── Uniform suppression pass ──────────────────────────────────────
+    #
+    # Several rule paths above (structural_drift, code_scanning_alerts,
+    # git_state, workflow_audit) historically appended findings directly,
+    # bypassing ScannerSuppression — so `.hypatia-ignore` entries and the
+    # built-in @default_exemptions never took effect for them (e.g. the
+    # `code_scanning_alerts/CSA002:hyperpolymath/hypatia` and
+    # `structural_drift/SD013:.gitignore` entries that were present but
+    # silently inert). Funnel *every* assembled finding through the same
+    # path-based predicate here, exactly once. suppressed?/4 still hard-
+    # refuses to suppress total-ban findings (banned_language_file), so
+    # this cannot silence the language gate.
     results
+    |> Enum.reject(fn f ->
+      Hypatia.ScannerSuppression.suppressed?(
+        Map.get(f, :file, ""),
+        Map.get(f, :rule_module, ""),
+        to_string(Map.get(f, :type, "")),
+        repo_path: repo_path
+      )
+    end)
   end
 
   # ─── Code safety scanning ────────────────────────────────────────────
