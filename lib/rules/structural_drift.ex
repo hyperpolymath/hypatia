@@ -867,11 +867,25 @@ defmodule Hypatia.Rules.StructuralDrift do
 
         case File.read(path) do
           {:ok, content} ->
-            ~r{\bsrc/([A-Za-z0-9_][A-Za-z0-9_-]*)/}
+            # Negative lookbehind: only a *repo-root-relative* `src/<dir>/`
+            # is rename-drift. A `src/` preceded by another path segment
+            # (`vcl-ut/src/bridges/`, `cli/src/commands/`, `echidna/src/rust/`,
+            # `integration/src/ci_simulation/`, `examples/nestjs/src/i18n/`)
+            # belongs to that other tree/crate/repo, not this repo's `src/`.
+            ~r{(?<![\w./-])src/([A-Za-z0-9_][A-Za-z0-9_-]*)/}
             |> Regex.scan(content)
             |> Enum.map(fn [_, dir] -> dir end)
             |> Enum.uniq()
-            |> Enum.reject(&MapSet.member?(real_subdirs, &1))
+            |> Enum.reject(fn dir ->
+              # Real repo-root `src/<dir>/`, OR a crate-/module-relative
+              # reference that resolves against the referencing file's OWN
+              # directory (e.g. a `scripts/<crate>/Cargo.toml` declaring
+              # `path = "src/bin/…"`, or `ffi/zig/README.adoc` describing
+              # its sibling `src/connectors/`). Only a reference that
+              # resolves NOWHERE is genuine post-rename drift.
+              MapSet.member?(real_subdirs, dir) or
+                File.dir?(Path.join([repo_path, Path.dirname(rel), "src", dir]))
+            end)
             |> Enum.map(fn stale_dir ->
               %{
                 rule: "SD022",
