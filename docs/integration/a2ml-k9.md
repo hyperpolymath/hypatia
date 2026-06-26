@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Hypatia a2ml & K9 Integration
 
 **Status:** ✅ IMPLEMENTED

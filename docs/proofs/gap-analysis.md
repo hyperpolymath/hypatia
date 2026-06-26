@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Proofs Gap Analysis
 
 **Date:** 2026-04-22

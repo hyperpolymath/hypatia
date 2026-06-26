@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Gemini Audit Report (M2: Pillar Repo Audits)
 Date: 2026-04-15
 Repository: /var/mnt/eclipse/repos/hypatia

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # PROOF-NEEDS.md — hypatia
 
 ## Current State (Updated 2026-06-05)
