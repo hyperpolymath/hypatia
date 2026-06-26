@@ -39,7 +39,7 @@ Source-of-truth ordering for the cross-tool link semantics:
   `schema/panll-harness-v2.schema.json`, `schemas/config.cue`,
   and `contracts/<panel-id>.toml`.
 * `hyperpolymath/gossamer` — per-Gossamer guidance for host integration;
-  `src/core/Bridge.eph` is the canonical pattern.
+  `bridge.eph` is the canonical pattern.
 * `hyperpolymath/boj-server` — per-BoJ guidance for cartridge
   construction.
 
@@ -278,7 +278,7 @@ discipline. Full reasoning in issue #177.
 * `hyperpolymath/ephapax` — the language. README carries the
   receipts; `docs/specs/DESIGN-DECISIONS.adoc` has the 17 ADRs.
 * `hyperpolymath/gossamer` — host / window / IPC framework built on
-  Ephapax; `src/core/Bridge.eph` is the canonical pattern.
+  Ephapax; `bridge.eph` is the canonical pattern.
 * `hyperpolymath/burble` — session / P2P coordination layer.
   Integration deferred; see `BURBLE-DEFERRAL.md`.
 * `hyperpolymath/panll` — unified dashboard system.

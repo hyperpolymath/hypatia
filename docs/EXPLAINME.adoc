@@ -74,11 +74,11 @@ This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), a
 
 | *Idris2 ABI* (hyperpolymath standard)
 | `src/abi/` — formal specs for GraphQL, gRPC, REST with dependent type proofs; `ffiReturnsApiResponse` proof in `FFI.idr`
-| gossamer (`src/interface/abi/`), burble (`src/Burble/ABI/`), verisimdb, proven, typed-wasm — every repo with an FFI layer
+| gossamer (`gossamer/src/interface/abi/`), burble (`burble/src/Burble/ABI/`), verisimdb, proven, typed-wasm — every repo with an FFI layer
 
 | *Zig FFI* (hyperpolymath standard)
 | `ffi/zig/src/` — 7 C-compatible exported functions (`hypatia_health_check`, `hypatia_scan_repo`, `hypatia_dispatch`, etc.)
-| gossamer (`src/interface/ffi/`), burble (`ffi/zig/src/ffi.zig`), tangle, ephapax — same Idris2→Zig→C pattern
+| gossamer (`gossamer/src/interface/ffi/`), burble (`ffi/zig/src/ffi.zig`), tangle, ephapax — same Idris2→Zig→C pattern
 
 | *VeriSimDB + VCL query layer*
 | Built-in Elixir VCL parser + FileExecutor; queries verisim-data flat-file store; 954 patterns tracked across 298 repos
@@ -118,7 +118,7 @@ This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), a
 | `lib/vcl/` | VCL client, file executor, query functions
 | `src/abi/` | Idris2 specs (Types, GraphQL, gRPC, REST, FFI)
 | `ffi/zig/src/` | 7 C-compatible exported functions
-| `src/rust/` | Adapters, CLI, data layer, fixer (workspace)
+| `adapters/ cli/ data/ fixer/ integration/` | Rust workspace (root crates)
 | `proofs/agda/` | Formal verification of safety triangle correctness
 |===
 
