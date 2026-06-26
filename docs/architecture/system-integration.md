@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Hypatia System Integration - Complete Flow
 
 **Status:** ✅ Fully wired and functional (2026-01-25)
