@@ -65,7 +65,7 @@
       (vql             "lib/vql/"    "Built-in VQL parser, file executor, query cache")
       (idris2-abi      "src/abi/"    "Types, GraphQL, gRPC, REST with proofs")
       (zig-ffi         "ffi/zig/"    "7 exported C ABI functions")
-      (rust            "src/rust/"   "Adapters, CLI, data, fixer, integration"))
+      (rust            "Cargo.toml"  "Root workspace: adapters, cli, data, fixer, integration"))
     (data-flow
       "panic-attack scan -> verisimdb-data -> Elixir pipeline -> triangle route -> fleet dispatch"))
 
@@ -79,7 +79,7 @@
      ├── lib/                        # Elixir pipeline (8 core + VQL + neural + safety)
      ├── src/abi/                    # Idris2 ABI (Types, GraphQL, gRPC, REST, FFI)
      ├── ffi/zig/                    # Zig FFI bridge (7 functions)
-     ├── src/rust/                   # Rust workspace (adapters, cli, data, fixer)
+     ├── adapters/ cli/ data/ fixer/ integration/  # Rust workspace (root crates)
      ├── .machine_readable/          # State, meta, ecosystem, bot directives
      └── .bot_directives/            # Bot instructions")
 

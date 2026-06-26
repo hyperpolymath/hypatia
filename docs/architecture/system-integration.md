@@ -133,7 +133,7 @@ git push
 
 ```bash
 # Single file
-./hypatia-cli.sh scan src/auth/JWT.res
+./hypatia-cli.sh scan /path/to/your/repos/svalinn/src/auth/JWT.res
 
 # Entire repo
 ./hypatia-cli.sh scan /path/to/your/repos/svalinn
