@@ -29,3 +29,23 @@ jobs:
   hypatia:
     uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@e2ef79eecdd623ff631fcbf3fe0268ba4f4ce166
     secrets: inherit
+
+  # TEMPORARY (triage scaffolding — remove before merge): echo the uploaded
+  # findings JSON to the job log so the full self-scan finding list is
+  # retrievable without artifact download. Used to triage the medium-severity
+  # self-scan findings on claude/hypatia-scan-triage.
+  print-findings:
+    needs: hypatia
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download findings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: hypatia-scan-findings
+      - name: Print findings JSON
+        run: |
+          echo "===HYPATIA-FINDINGS-BEGIN==="
+          cat hypatia-findings.json
+          echo "===HYPATIA-FINDINGS-END==="
