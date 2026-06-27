@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Integration Tests
 
 This directory contains integration tests for the hypatia platform.
