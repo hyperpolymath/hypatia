@@ -960,9 +960,9 @@ defmodule Hypatia.Rules.StructuralDrift do
     # written unanchored (crate-relative `scripts/x/src/bin`, doc-relative
     # `ffi/zig` → `src/connectors`, or prefixed `cli/src/commands`). Only a
     # `<dir>` that exists nowhere is a drift candidate.
-    {real_basenames, top_dirs} = src_dir_index(repo_path)
+    {real_basenames, _top_dirs} = src_dir_index(repo_path)
 
-    if MapSet.size(real_basenames) == 0 do
+    if MapSet.size(real_basenames) == 0 and not File.dir?(Path.join(repo_path, "src")) do
       []
     else
       # Corpus / vendored / historical docs cite paths that are illustrative by
@@ -1003,11 +1003,7 @@ defmodule Hypatia.Rules.StructuralDrift do
             # belongs to that other tree/crate/repo, not this repo's `src/`.
             ~r{(?<![\w./-])src/([A-Za-z0-9_][A-Za-z0-9_-]*)/}
             |> Regex.scan(content)
-            |> Enum.map(fn [_, prefix, dir] -> {prefix, dir} end)
-            |> Enum.reject(fn {prefix, dir} ->
-              real_path_reference?(prefix, dir, real_basenames, top_dirs)
-            end)
-            |> Enum.map(fn {_prefix, dir} -> dir end)
+            |> Enum.map(fn [_, dir] -> dir end)
             |> Enum.uniq()
             |> Enum.reject(fn dir ->
               # Real repo-root `src/<dir>/`, OR a crate-/module-relative
@@ -1016,7 +1012,7 @@ defmodule Hypatia.Rules.StructuralDrift do
               # `path = "src/bin/…"`, or `ffi/zig/README.adoc` describing
               # its sibling `src/connectors/`). Only a reference that
               # resolves NOWHERE is genuine post-rename drift.
-              MapSet.member?(real_subdirs, dir) or
+              MapSet.member?(real_basenames, dir) or
                 File.dir?(Path.join([repo_path, Path.dirname(rel), "src", dir]))
             end)
             |> Enum.map(fn stale_dir ->
@@ -1037,23 +1033,6 @@ defmodule Hypatia.Rules.StructuralDrift do
         end
       end)
     end
-  end
-
-  # A `src/<dir>/` reference is REAL (not drift) when either:
-  #   * <dir> exists as a `**/src/<dir>` directory anywhere in the tree
-  #     (resolves regardless of how it was anchored), or
-  #   * it carries a path prefix whose leading segment is NOT a real
-  #     top-level directory of this repo — i.e. it cites another repo or an
-  #     example project (`vcl-ut/src/core`, `examples/nestjs/src/i18n`).
-  defp real_path_reference?(prefix, dir, real_basenames, top_dirs) do
-    MapSet.member?(real_basenames, dir) or foreign_prefix?(prefix, top_dirs)
-  end
-
-  defp foreign_prefix?("", _top_dirs), do: false
-
-  defp foreign_prefix?(prefix, top_dirs) do
-    first = prefix |> String.trim_trailing("/") |> String.split("/") |> List.first()
-    first != nil and not MapSet.member?(top_dirs, first)
   end
 
   # Index every `**/src/<name>` directory in the tracked tree (via the file
