@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: MPL-2.0
+# HYP-S007 — A2ML Profile Drift Detector
+# Flags a 6a2 file whose content has drifted from the A2ML profile it
+# declares via @profile(id=...). "Drift" = the file no longer satisfies its
+# declared profile definition (missing required section, disallowed directive,
+# cardinality/reference-class violation, or attestation floor not met).
+#
+# This rule operates on the A2ML profile mechanism specified in
+# a2ml/SPEC.adoc Section 8 and the profile definitions in a2ml/profiles/.
+# It is the dogfooding check that keeps the 6a2 estate honest about the
+# profiles it claims to satisfy.
+#
+# FLAG-ONLY by construction: strategy :review, auto_fixable: false. This rule
+# is structural; it has nothing to do with licences. It must never emit a
+# licence/SPDX finding and must never auto-edit a file.
+
+@rule(version="1.0"):
+id: HYP-S007
+name: "A2ML profile drift detector"
+description: "Flag a 6a2 file whose content drifts from its declared @profile"
+severity: medium
+category: Dogfooding
+strategy: review
+auto_fixable: false
+source: standards/hypatia-rules
+@end
+
+@scanner(type="file-tree"):
+find:
+  - glob: "**/.machine_readable/6a2/*.a2ml"
+  - glob: "**/.machine_readable/anchors/ANCHOR.a2ml"
+  - glob: "a2ml/profiles/*/PROFILE.a2ml"
+  - glob: "a2ml/profiles/REGISTRY.a2ml"
+@end
+
+@logic(engine="built-in"):
+# 1. For each 6a2 file, read the @profile(id=ns/name) declaration in its
+#    preamble. A 6a2 file with no @profile declaration is itself a finding
+#    (undeclared: cannot be validated through the mechanism).
+# 2. Resolve ns/name against a2ml/profiles/REGISTRY.a2ml; confirm the
+#    definition's sha256 equals the registry-pinned hash. A hash mismatch is a
+#    finding (registry desync).
+# 3. Load the profile definition (the five axes) and extract the file's facts:
+#    section titles (TOML [sections] or, for the key-based anchor dialect,
+#    top-level keys), directive occurrences, and @ref classes.
+# 4. Compute conformance exactly as src/A2ML/Profiles.idr conformsB:
+#      - every required_section present,
+#      - every occurring directive permitted by allowed_directives,
+#      - required_directives cardinality satisfied,
+#      - required reference_classes present,
+#      - mode >= min_attestation.
+# 5. Emit one finding per violation (mirrors Profiles.idr ProfileViolation).
+steps:
+  - read_profile_decl: "@profile(id=*)"
+  - resolve_against_registry: "a2ml/profiles/REGISTRY.a2ml"
+  - verify_definition_hash: "sha256"
+  - extract_doc_facts: { sections: true, directives: true, ref_classes: true }
+  - check_conformance: "conformsB"
+  - emit_violations
+@end
+
+@action:
+emit_signal: compliance.finding.new
+message_template: "Profile drift: {file} declares @profile({profile_id}) but {violation} (see a2ml/profiles/{profile_dir})"
+recipe: none
+@end
+
+@end
