@@ -202,11 +202,20 @@ defmodule Hypatia.Neural.LiquidStateMachine do
 
   defp encode_event(_), do: 0.0
 
-  defp severity_score("critical"), do: 1.0
-  defp severity_score("high"), do: 0.8
-  defp severity_score("medium"), do: 0.5
-  defp severity_score("low"), do: 0.3
-  defp severity_score("info"), do: 0.1
+  # Case-insensitive: verisim-data uses title-case ("High"/"Critical"),
+  # which previously fell through to the 0.5 default and weakened event
+  # encoding. Mirrors RadialNeuralNetwork.severity_score/1.
+  defp severity_score(sev) when is_binary(sev) do
+    case String.downcase(sev) do
+      "critical" -> 1.0
+      "high" -> 0.8
+      "medium" -> 0.5
+      "low" -> 0.3
+      "info" -> 0.1
+      _ -> 0.5
+    end
+  end
+
   defp severity_score(_), do: 0.5
 
   defp outcome_score("success"), do: 1.0
