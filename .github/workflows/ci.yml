@@ -141,7 +141,6 @@ jobs:
     # registry/ is the Haskell sub-project; gate this job on its presence so
     # PRs that don't touch (and don't ship) the Haskell tree don't fail here.
     # The job re-activates the moment `registry/hypatia.cabal` lands.
-    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -196,7 +195,6 @@ jobs:
     name: HLint
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: hashFiles('registry/**/*.hs') != ''
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

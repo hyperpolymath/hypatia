@@ -71,7 +71,6 @@ jobs:
     name: Cargo check + clippy + fmt
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: hashFiles('Cargo.toml') != ''
 
     steps:
       - name: Checkout repository
@@ -100,7 +99,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: rustci_check
-    if: hashFiles('Cargo.toml') != ''
 
     steps:
       - name: Checkout repository
