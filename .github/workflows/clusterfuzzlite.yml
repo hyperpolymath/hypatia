@@ -27,7 +27,6 @@ jobs:
     # or a ClusterFuzzLite OSS-Fuzz-style harness, the build_fuzzers step
     # has nothing to compile and fails. Job re-activates the moment the
     # fuzz tree lands.
-    if: hashFiles('fuzz/Cargo.toml') != '' || hashFiles('.clusterfuzzlite/build.sh') != ''
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
         with:

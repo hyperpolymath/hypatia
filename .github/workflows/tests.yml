@@ -63,7 +63,6 @@ jobs:
   e2e-rust:
     name: E2E — Rust CLI Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -315,7 +314,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [build-images]
-    if: hashFiles('registry/hypatia.cabal') != ''
     services:
       arangodb:
         image: arangodb:3.11
