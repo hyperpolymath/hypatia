@@ -72,6 +72,15 @@ defmodule Hypatia.ScannerSuppression do
     # code_safety / security_errors exemptions for the training corpus.
     "migration_rules" => %{
       :any => @training_corpus_paths
+    },
+    # structural_drift's SD0xx rules scan docs/manifests for stale path
+    # references. The training corpus under `.audittraining/` deliberately
+    # contains example trees (e.g. `examples/nestjs/src/i18n/`) and the
+    # rule-definition files under `lib/rules/` quote the very patterns they
+    # detect — flagging either is self-recursion, same class as the
+    # code_safety / migration_rules exemptions above.
+    "structural_drift" => %{
+      :any => @training_corpus_paths
     }
   }
 

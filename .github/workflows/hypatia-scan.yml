@@ -4,8 +4,10 @@ name: Hypatia Security Scan
 on:
   push:
     branches: [main, master, develop]
+  # No `branches:` filter — a required check whose workflow is branch-gated is
+  # never created on a non-matching base and blocks merge forever at
+  # "Expected — Waiting for status to be reported" (cf. affinescript#645).
   pull_request:
-    branches: [main, master]
   schedule:
     - cron: '0 0 * * 0'
   workflow_dispatch:
@@ -15,5 +17,6 @@ permissions:
   security-events: read
 
 jobs:
-  scan:
-    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@5a93d9d57cc04de4002d6d0ecd336fc7a8698910
+  hypatia:
+    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@830b0f6178cd190cbe9afee3c48c97c2cbbbc04a
+    secrets: inherit

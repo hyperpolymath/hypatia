@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Benchmark baselines
 
 This directory holds the per-benchmark baselines that `.github/workflows/bench.yml`

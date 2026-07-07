@@ -47,11 +47,16 @@ defmodule Hypatia.Rules.CicdRules do
   defp has_file?(info, %{file: file}) do
     repo_path = Map.get(info, :repo_path)
 
+    # Community-health files (SECURITY.md, CONTRIBUTING.md, …) are recognised
+    # by GitHub in any of root, `.github/`, or `docs/`. Check all three so the
+    # rule doesn't false-positive when SECURITY.md lives under `.github/`.
+    candidates = [file, Path.join(".github", file), Path.join("docs", file)]
+
     cond do
       # Repo-rooted check: nested paths like `.github/dependabot.yml` can
       # only be confirmed via on-disk inspection. The root_files list is
       # not enough — without this the rule was a false-positive factory.
-      is_binary(repo_path) and File.exists?(Path.join(repo_path, file)) -> true
+      is_binary(repo_path) and Enum.any?(candidates, &File.exists?(Path.join(repo_path, &1))) -> true
       file in Map.get(info, :files, []) -> true
       true -> false
     end

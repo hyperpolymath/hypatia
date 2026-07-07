@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Hypatia System Integration - Complete Flow
 
 **Status:** ✅ Fully wired and functional (2026-01-25)
@@ -133,7 +135,7 @@ git push
 
 ```bash
 # Single file
-./hypatia-cli.sh scan src/auth/JWT.res
+./hypatia-cli.sh scan /path/to/your/repos/svalinn/src/auth/JWT.res
 
 # Entire repo
 ./hypatia-cli.sh scan /path/to/your/repos/svalinn

@@ -384,24 +384,27 @@ defmodule Hypatia.ScorecardIngestor do
           String.contains?(c, "snyk")
       end)
 
-    codeql_content =
-      Enum.find(contents, fn c ->
+    # Collect ALL workflows that mention CodeQL, not just the first. Files like
+    # workflow-linter.yml also reference "codeql" (in comments/checks) but carry
+    # no language matrix; `Enum.find` could return one of those and miss the
+    # real codeql.yml's `language: actions`, producing a false "nominal-only".
+    codeql_contents =
+      Enum.filter(contents, fn c ->
         String.contains?(c, "codeql") or String.contains?(c, "CodeQL")
       end)
 
     cond do
       # No SAST tool of any kind — the original SC-014 missing finding.
-      is_nil(codeql_content) and not has_non_codeql_sast ->
+      codeql_contents == [] and not has_non_codeql_sast ->
         make_pattern("SC-014", "SAST", repo_name,
           "No SAST tool (CodeQL/SonarCloud/Semgrep) detected in #{repo_name}")
 
-      # Effective-vs-nominal: CodeQL workflow PRESENT but pointed at a
-      # language the repo does not contain (and not `actions`). It runs
-      # but records zero results, so Scorecard reports "0 commits checked"
-      # even though a SAST workflow exists. Presence != efficacy.
+      # Effective-vs-nominal: a CodeQL workflow is PRESENT but none of them are
+      # pointed at a language the repo contains (or `actions`). It runs but
+      # records zero results. Effective if ANY codeql workflow is effective.
       # Refs hyperpolymath/hypatia#261 (generalises modshells #72).
-      not is_nil(codeql_content) and not has_non_codeql_sast and
-          not codeql_effective?(codeql_content, repo_path) ->
+      codeql_contents != [] and not has_non_codeql_sast and
+          not Enum.any?(codeql_contents, &codeql_effective?(&1, repo_path)) ->
         make_pattern("SC-014", "SAST", repo_name,
           "Nominal-only SAST in #{repo_name}: codeql.yml language matrix " <>
             "contains no language present in the repo and lacks `actions`, " <>
