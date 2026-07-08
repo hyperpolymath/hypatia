@@ -257,11 +257,22 @@ defmodule Hypatia.Neural.MixtureOfExperts do
     }
   end
 
-  defp severity_to_score("critical"), do: 1.0
-  defp severity_to_score("high"), do: 0.8
-  defp severity_to_score("medium"), do: 0.5
-  defp severity_to_score("low"), do: 0.3
-  defp severity_to_score("info"), do: 0.1
+  # Match severity strings case-insensitively. The verisim-data registry
+  # uses title-case ("High", "Critical") while other callers use lowercase;
+  # matching only lowercase collapsed real "High"/"Critical" findings to the
+  # 0.5 default, under-weighting security findings in gating and expert
+  # prediction. Mirrors the workaround in RadialNeuralNetwork.severity_score/1.
+  defp severity_to_score(sev) when is_binary(sev) do
+    case String.downcase(sev) do
+      "critical" -> 1.0
+      "high" -> 0.8
+      "medium" -> 0.5
+      "low" -> 0.3
+      "info" -> 0.1
+      _ -> 0.5
+    end
+  end
+
   defp severity_to_score(_), do: 0.5
 
   defp sigmoid(x), do: 1.0 / (1.0 + :math.exp(-x))

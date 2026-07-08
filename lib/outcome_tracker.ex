@@ -659,6 +659,11 @@ defmodule Hypatia.OutcomeTracker do
     filename = "#{year}-#{month_str}.jsonl"
     path = Path.join([Path.expand(@verisimdb_data_path), "outcomes", filename])
 
+    # Ensure the outcomes dir exists before the append. `File.write/3` with
+    # `:append` fails with :enoent on a missing dir, which the case below
+    # silently logs — the outcome would be dropped rather than recorded.
+    File.mkdir_p!(Path.dirname(path))
+
     # H6 — outcome log monotonicity. Was previously proven in
     # verification/proofs/agda/OutcomeLog.agda; that proof was replaced
     # by this runtime assertion + an echidnabot audit over the JSONL.
@@ -721,10 +726,17 @@ defmodule Hypatia.OutcomeTracker do
 
     case Jason.encode(fleet_record) do
       {:ok, json} ->
-        File.write(path, json <> "\n", [:append, :utf8])
+        # Same silent-drop class as write_outcome_log/1: File.write with :append
+        # fails :enoent on a missing dir, dropping the fleet learning signal.
+        File.mkdir_p!(Path.dirname(path))
+
+        case File.write(path, json <> "\n", [:append, :utf8]) do
+          :ok -> :ok
+          {:error, reason} -> Logger.error("Failed to write fleet outcome: #{inspect(reason)}")
+        end
 
       {:error, reason} ->
-        Logger.error("Failed to write fleet outcome: #{inspect(reason)}")
+        Logger.error("Failed to encode fleet outcome: #{inspect(reason)}")
     end
   end
 
