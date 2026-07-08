@@ -68,12 +68,18 @@ defmodule Hypatia.Neural.TrainingPipeline do
           []
       end
 
-    # Group by recipe_id, build running confidence series (cumulative success rate)
+    # Group by recipe_id, build running confidence series (cumulative success rate).
+    # The canonical outcome schema keys on "pattern" + "fixed_at" (~96% of the
+    # corpus); only the small fleet-import slice carries "recipe_id"/"timestamp".
+    # Fall back to those the same way GraphOfTrust.build_edges/1 does, otherwise
+    # 6682/6964 outcomes collapse into a single nil-keyed, unordered blob and the
+    # ESN forecaster trains on one meaningless blended trajectory.
     outcomes
-    |> Enum.group_by(&Map.get(&1, "recipe_id"))
+    |> Enum.group_by(&(Map.get(&1, "recipe_id") || Map.get(&1, "pattern")))
     |> Enum.map(fn {recipe_id, recipe_outcomes} ->
-      # Sort by timestamp for temporal ordering
-      sorted = Enum.sort_by(recipe_outcomes, &Map.get(&1, "timestamp", ""))
+      # Sort by timestamp for temporal ordering (fixed_at is the canonical field)
+      sorted =
+        Enum.sort_by(recipe_outcomes, &(Map.get(&1, "timestamp") || Map.get(&1, "fixed_at") || ""))
 
       # Build confidence time series (running average of successes)
       {series, _} =
