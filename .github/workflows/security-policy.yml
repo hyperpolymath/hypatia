@@ -83,7 +83,6 @@ jobs:
     name: Haskell Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -229,7 +228,6 @@ jobs:
     name: Generate Haskell SBOM
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
@@ -493,7 +491,6 @@ jobs:
     name: Haskell Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
