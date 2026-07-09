@@ -63,6 +63,7 @@ jobs:
   e2e-rust:
     name: E2E — Rust CLI Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
