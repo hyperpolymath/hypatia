@@ -257,7 +257,9 @@ async fn execute_scan(
         let total = total_repos;
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await
+            let _permit = sem
+                .acquire()
+                .await
                 .expect("invariant: semaphore is held by this scope, not closed");
             let result = process_scan_repo(&repo, &config_clone, &min_sev, &cats).await;
 
@@ -484,7 +486,9 @@ fn parse_findings_count(json_str: &str) -> usize {
     match serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
         Ok(arr) => arr.len(),
         Err(e) => {
-            eprintln!("warn: scanner output not parseable as JSON array ({e}); counting as 0 findings");
+            eprintln!(
+                "warn: scanner output not parseable as JSON array ({e}); counting as 0 findings"
+            );
             0
         }
     }
@@ -662,7 +666,9 @@ async fn execute_fix(
         let fix_only = args.fix_only.clone();
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await
+            let _permit = sem
+                .acquire()
+                .await
                 .expect("invariant: semaphore is held by this scope, not closed");
             let start = std::time::Instant::now();
             let path = PathBuf::from(&repo);
@@ -1003,8 +1009,7 @@ fn generate_markdown_report(repos: &[String]) -> String {
 /// Generate HTML report
 fn generate_html_report(repos: &[String]) -> String {
     let mut report = String::new();
-    report
-        .push_str("<!DOCTYPE html>\n<html><head><title>hypatia Report</title></head><body>\n");
+    report.push_str("<!DOCTYPE html>\n<html><head><title>hypatia Report</title></head><body>\n");
     report.push_str("<h1>hypatia Batch Report</h1>\n");
     report.push_str("<table border='1'><tr><th>Repository</th><th>Status</th></tr>\n");
     for repo in repos {
