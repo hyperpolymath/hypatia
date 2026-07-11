@@ -333,7 +333,9 @@ defmodule Hypatia.Rules.GitState do
   GS007: Detect non-main remote branches.
   Policy: single main branch only. Other remote branches are stale and
   should be deleted after merging.
-  Severity: medium.
+  Severity: advisory — stale-branch accumulation is ambient repo hygiene,
+  not a defect in any given change, and its count fluctuates per-PR, so it
+  must never hard-gate a merge. Surfaced for cleanup, never blocking.
   Action: delete remote branches after merge verification.
   """
   def gs007_stale_remote_branches(repo_path) do
@@ -355,7 +357,7 @@ defmodule Hypatia.Rules.GitState do
             %{
               rule: "GS007",
               file: ".",
-              severity: :medium,
+              severity: :advisory,
               reason:
                 "Repository has #{length(branches)} non-main remote branch(es). Policy: single main branch only.",
               action: :delete_remote_branches,
