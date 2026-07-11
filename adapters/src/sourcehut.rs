@@ -424,7 +424,7 @@ impl ForgeAdapter for SourcehutAdapter {
                     "{}/~{}/{}",
                     self.base_url.replace("sr.ht", "git.sr.ht"),
                     owner,
-                    &repo.name
+                    repo.name
                 );
                 repo.owner = owner.to_string();
                 repo
@@ -461,7 +461,7 @@ impl ForgeAdapter for SourcehutAdapter {
             "{}/~{}/{}",
             self.base_url.replace("sr.ht", "git.sr.ht"),
             owner,
-            &repository.name
+            repository.name
         );
         repository.owner = owner.to_string();
 
@@ -578,7 +578,7 @@ tasks:
                     "{}/~{}/job/{}",
                     self.base_url.replace("sr.ht", "builds.sr.ht"),
                     owner,
-                    &run.id
+                    run.id
                 );
                 run
             })
@@ -621,7 +621,7 @@ tasks:
             "{}/~{}/job/{}",
             self.base_url.replace("sr.ht", "builds.sr.ht"),
             owner,
-            &run.id
+            run.id
         );
 
         Ok(run)

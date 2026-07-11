@@ -170,9 +170,8 @@ impl Scanner {
                     file_path: path.display().to_string(),
                     line_number: Some(1),
                     description: "Workflow file missing SPDX license header".to_string(),
-                    fix_suggestion:
-                        "Add '# SPDX-License-Identifier: MPL-2.0' as first line"
-                            .to_string(),
+                    fix_suggestion: "Add '# SPDX-License-Identifier: MPL-2.0' as first line"
+                        .to_string(),
                     auto_fixable: true,
                     category: IssueCategory::MissingSpdx,
                 });
