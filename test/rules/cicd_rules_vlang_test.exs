@@ -56,6 +56,7 @@ defmodule Hypatia.Rules.CicdRules.VlangTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :vlang_detected)) == nil,
              ".v files in Coq proof directories must never be flagged as V-lang"
     end
@@ -128,6 +129,7 @@ defmodule Hypatia.Rules.CicdRules.VlangTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :vlang_detected)) == nil,
              "interop-target dirs (where we expose work to V consumers) are exempt"
     end

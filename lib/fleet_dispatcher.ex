@@ -255,6 +255,7 @@ defmodule Hypatia.FleetDispatcher do
 
       unknown ->
         Logger.warning("DependabotFix: unknown tier '#{unknown}', routing to sustainabot")
+
         dispatch_to_sustainabot(%{
           type: :eco_score,
           repo: get_pattern_repo(pattern),

@@ -42,7 +42,11 @@ defmodule Hypatia.MergeOrchestration.Sensor do
   """
   def sense(observations, resolve_pool, resolve_attestations) when is_list(observations) do
     Enum.map(observations, fn obs ->
-      to_context(obs, resolve_pool.(obs["repo"]), resolve_attestations.(obs["repo"], obs["number"]))
+      to_context(
+        obs,
+        resolve_pool.(obs["repo"]),
+        resolve_attestations.(obs["repo"], obs["number"])
+      )
     end)
   end
 
@@ -126,9 +130,12 @@ defmodule Hypatia.MergeOrchestration.Sensor do
   end
 
   defp proof_path?(p),
-    do: ext(p) in [".agda", ".idr", ".idr2", ".lean", ".v", ".thy"] or String.contains?(p, "proofs/")
+    do:
+      ext(p) in [".agda", ".idr", ".idr2", ".lean", ".v", ".thy"] or
+        String.contains?(p, "proofs/")
 
-  defp doc_path?(p), do: ext(p) in [".adoc", ".md", ".txt", ".rst"] or String.contains?(p, "docs/")
+  defp doc_path?(p),
+    do: ext(p) in [".adoc", ".md", ".txt", ".rst"] or String.contains?(p, "docs/")
 
   defp security?(files, branch, labels) do
     Enum.any?(files, fn p ->
@@ -146,7 +153,8 @@ defmodule Hypatia.MergeOrchestration.Sensor do
     do: String.starts_with?(branch, "chore/") or String.starts_with?(downcase(title), "chore")
 
   defp refactor?(branch, title),
-    do: String.starts_with?(branch, "refactor/") or String.starts_with?(downcase(title), "refactor")
+    do:
+      String.starts_with?(branch, "refactor/") or String.starts_with?(downcase(title), "refactor")
 
   defp ext(p), do: p |> Path.extname() |> String.downcase()
   defp downcase(nil), do: ""
@@ -221,6 +229,7 @@ defmodule Hypatia.MergeOrchestration.Sensor do
   """
   def store_resolvers(dir, opts \\ []) do
     decode = Keyword.get(opts, :decode, &json_decode!/1)
+
     {file_pool_resolver(Path.join(dir, "pools"), decode),
      dir_attestation_resolver(Path.join(dir, "attestations"), decode)}
   end
@@ -229,6 +238,7 @@ defmodule Hypatia.MergeOrchestration.Sensor do
   def file_pool_resolver(dir, decode \\ &__MODULE__.json_decode!/1) do
     fn repo ->
       path = Path.join(dir, flatten_repo(repo) <> ".json")
+
       case File.read(path) do
         {:ok, body} -> decode.(body)
         _ -> nil

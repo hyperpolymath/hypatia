@@ -78,11 +78,12 @@ defmodule Hypatia.CrossRepoLearningTest do
 
   describe "repo_confidence/3" do
     test "returns structured result for unknown recipe/repo" do
-      result = CrossRepoLearning.repo_confidence(
-        "recipe-nonexistent-xyzzy",
-        "repo-nonexistent",
-        :moderate
-      )
+      result =
+        CrossRepoLearning.repo_confidence(
+          "recipe-nonexistent-xyzzy",
+          "repo-nonexistent",
+          :moderate
+        )
 
       assert is_map(result)
       assert result.repo == "repo-nonexistent"
@@ -93,11 +94,12 @@ defmodule Hypatia.CrossRepoLearningTest do
 
     test "supports all drift policies" do
       for policy <- [:conservative, :moderate, :aggressive, :language_aware] do
-        result = CrossRepoLearning.repo_confidence(
-          "recipe-nonexistent-xyzzy",
-          "repo-nonexistent",
-          policy
-        )
+        result =
+          CrossRepoLearning.repo_confidence(
+            "recipe-nonexistent-xyzzy",
+            "repo-nonexistent",
+            policy
+          )
 
         assert is_map(result)
         assert is_float(result.blended_confidence)

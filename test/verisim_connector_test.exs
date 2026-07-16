@@ -26,10 +26,11 @@ defmodule Hypatia.VerisimConnectorTest do
     test "scan data includes weak_points" do
       scans = VerisimConnector.fetch_all_scans()
       # At least one scan should have weak points
-      has_wp = Enum.any?(scans, fn scan ->
-        wp = Map.get(scan.scan, "weak_points", [])
-        length(wp) > 0
-      end)
+      has_wp =
+        Enum.any?(scans, fn scan ->
+          wp = Map.get(scan.scan, "weak_points", [])
+          length(wp) > 0
+        end)
 
       assert has_wp
     end
@@ -68,5 +69,4 @@ defmodule Hypatia.VerisimConnectorTest do
       assert Map.has_key?(index, "repos")
     end
   end
-
 end

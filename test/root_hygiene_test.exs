@@ -15,8 +15,8 @@ defmodule Hypatia.Rules.RootHygieneTest do
     test "flags SCM files in root" do
       findings = RootHygiene.scan_banned(["STATE.scm", "META.scm"])
       assert length(findings) == 2
-      assert Enum.all?(findings, & &1.severity == :critical)
-      assert Enum.all?(findings, & &1.action == :move)
+      assert Enum.all?(findings, &(&1.severity == :critical))
+      assert Enum.all?(findings, &(&1.action == :move))
     end
 
     test "flags AI.djot" do
@@ -81,20 +81,26 @@ defmodule Hypatia.Rules.RootHygieneTest do
   describe "scan_required_missing/1" do
     test "flags missing LICENSE" do
       findings = RootHygiene.scan_required_missing(["README.adoc"])
-      license_finding = Enum.find(findings, & &1.file == "LICENSE")
+      license_finding = Enum.find(findings, &(&1.file == "LICENSE"))
       assert license_finding != nil
       assert license_finding.severity == :critical
     end
 
     test "accepts LICENSE.txt as alternative" do
-      findings = RootHygiene.scan_required_missing(["LICENSE.txt", "SECURITY.md",
-                                                     ".editorconfig", "0-AI-MANIFEST.a2ml"])
+      findings =
+        RootHygiene.scan_required_missing([
+          "LICENSE.txt",
+          "SECURITY.md",
+          ".editorconfig",
+          "0-AI-MANIFEST.a2ml"
+        ])
+
       assert findings == []
     end
 
     test "flags missing SECURITY.md" do
       findings = RootHygiene.scan_required_missing(["LICENSE"])
-      security = Enum.find(findings, & &1.file == "SECURITY.md")
+      security = Enum.find(findings, &(&1.file == "SECURITY.md"))
       assert security != nil
     end
   end
@@ -115,10 +121,11 @@ defmodule Hypatia.Rules.RootHygieneTest do
         %{file: "Dockerfile", action: :rename, severity: :high, reason: "test"},
         %{file: "STATE.scm", action: :move, severity: :critical, reason: "test"}
       ]
+
       recs = RootHygiene.dispatch_recommendations(findings)
       assert length(recs) == 2
-      assert Enum.find(recs, & &1.file == "Dockerfile").bot == :rhodibot
-      assert Enum.find(recs, & &1.file == "STATE.scm").bot == :finishbot
+      assert Enum.find(recs, &(&1.file == "Dockerfile")).bot == :rhodibot
+      assert Enum.find(recs, &(&1.file == "STATE.scm")).bot == :finishbot
     end
   end
 end

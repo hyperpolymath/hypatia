@@ -21,6 +21,7 @@ defmodule Hypatia.ContractTest do
     Supervisor.terminate_child(Hypatia.Supervisor, module)
     Supervisor.delete_child(Hypatia.Supervisor, module)
     start_supervised!(module)
+
     on_exit(fn ->
       if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
       Supervisor.start_child(Hypatia.Supervisor, module)
@@ -106,6 +107,7 @@ defmodule Hypatia.ContractTest do
         for _ <- 1..10, do: RateLimiter.record_dispatch(bot)
         :timer.sleep(30)
         assert {:rate_limited, _kind, retry_ms} = RateLimiter.check(bot)
+
         assert_post "retry_after_ms is positive" do
           retry_ms > 0
         end

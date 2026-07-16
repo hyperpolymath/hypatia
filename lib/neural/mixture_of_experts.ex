@@ -24,8 +24,10 @@ defmodule Hypatia.Neural.MixtureOfExperts do
 
   require Logger
 
-  @top_k 2  # Activate top 2 experts per finding
-  @load_balance_weight 0.01  # Auxiliary loss weight for balancing
+  # Activate top 2 experts per finding
+  @top_k 2
+  # Auxiliary loss weight for balancing
+  @load_balance_weight 0.01
   @learning_rate 0.01
 
   defstruct experts: %{}, gating_weights: %{}, expert_stats: %{}, last_trained: nil
@@ -33,30 +35,40 @@ defmodule Hypatia.Neural.MixtureOfExperts do
   # --- Expert Definitions ---
 
   @expert_domains [
-    :security,        # CVEs, vulnerabilities, secret exposure
-    :quality,         # Code quality, complexity, duplication
-    :sustainability,  # License compliance, dependency health
-    :accessibility,   # A11y issues, WCAG compliance
-    :performance,     # Performance anti-patterns, resource leaks
-    :documentation,   # Missing docs, outdated docs
-    :infrastructure   # CI/CD, container, deployment issues
+    # CVEs, vulnerabilities, secret exposure
+    :security,
+    # Code quality, complexity, duplication
+    :quality,
+    # License compliance, dependency health
+    :sustainability,
+    # A11y issues, WCAG compliance
+    :accessibility,
+    # Performance anti-patterns, resource leaks
+    :performance,
+    # Missing docs, outdated docs
+    :documentation,
+    # CI/CD, container, deployment issues
+    :infrastructure
   ]
 
   # --- Public API ---
 
   @doc "Initialize the MoE with default expert weights"
   def init do
-    experts = Map.new(@expert_domains, fn domain ->
-      {domain, init_expert(domain)}
-    end)
+    experts =
+      Map.new(@expert_domains, fn domain ->
+        {domain, init_expert(domain)}
+      end)
 
-    gating_weights = Map.new(@expert_domains, fn domain ->
-      {domain, 1.0 / length(@expert_domains)}
-    end)
+    gating_weights =
+      Map.new(@expert_domains, fn domain ->
+        {domain, 1.0 / length(@expert_domains)}
+      end)
 
-    expert_stats = Map.new(@expert_domains, fn domain ->
-      {domain, %{activations: 0, correct: 0, total: 0}}
-    end)
+    expert_stats =
+      Map.new(@expert_domains, fn domain ->
+        {domain, %{activations: 0, correct: 0, total: 0}}
+      end)
 
     %__MODULE__{
       experts: experts,
@@ -71,20 +83,22 @@ defmodule Hypatia.Neural.MixtureOfExperts do
     gate_scores = compute_gate(moe.gating_weights, features)
 
     # Top-k expert selection (sparse activation)
-    top_experts = gate_scores
-    |> Enum.sort_by(fn {_domain, score} -> -score end)
-    |> Enum.take(@top_k)
+    top_experts =
+      gate_scores
+      |> Enum.sort_by(fn {_domain, score} -> -score end)
+      |> Enum.take(@top_k)
 
     # Normalize top-k scores
     total = Enum.reduce(top_experts, 0.0, fn {_d, s}, acc -> acc + s end)
     normalized = Enum.map(top_experts, fn {d, s} -> {d, s / max(total, 0.001)} end)
 
     # Weighted expert predictions
-    predictions = Enum.map(normalized, fn {domain, weight} ->
-      expert = Map.get(moe.experts, domain)
-      confidence = expert_predict(expert, features)
-      {domain, weight, confidence}
-    end)
+    predictions =
+      Enum.map(normalized, fn {domain, weight} ->
+        expert = Map.get(moe.experts, domain)
+        confidence = expert_predict(expert, features)
+        {domain, weight, confidence}
+      end)
 
     aggregated = Enum.reduce(predictions, 0.0, fn {_d, w, c}, acc -> acc + w * c end)
     selected_experts = Enum.map(predictions, fn {d, _w, _c} -> d end)
@@ -97,41 +111,46 @@ defmodule Hypatia.Neural.MixtureOfExperts do
     features = extract_features(finding)
     gate_scores = compute_gate(moe.gating_weights, features)
 
-    top_experts = gate_scores
-    |> Enum.sort_by(fn {_d, s} -> -s end)
-    |> Enum.take(@top_k)
+    top_experts =
+      gate_scores
+      |> Enum.sort_by(fn {_d, s} -> -s end)
+      |> Enum.take(@top_k)
 
     target = if actual_outcome == :success, do: 1.0, else: 0.0
 
     # Update each activated expert
-    updated_experts = Enum.reduce(top_experts, moe.experts, fn {domain, _score}, acc ->
-      expert = Map.get(acc, domain)
-      updated = train_expert(expert, features, target)
-      Map.put(acc, domain, updated)
-    end)
+    updated_experts =
+      Enum.reduce(top_experts, moe.experts, fn {domain, _score}, acc ->
+        expert = Map.get(acc, domain)
+        updated = train_expert(expert, features, target)
+        Map.put(acc, domain, updated)
+      end)
 
     # Update gating weights based on expert accuracy
     updated_gating = update_gating(moe.gating_weights, top_experts, features, target, moe.experts)
 
     # Update stats
-    updated_stats = Enum.reduce(top_experts, moe.expert_stats, fn {domain, _score}, acc ->
-      stats = Map.get(acc, domain, %{activations: 0, correct: 0, total: 0})
-      correct_inc = if actual_outcome == :success, do: 1, else: 0
-      Map.put(acc, domain, %{
-        activations: stats.activations + 1,
-        correct: stats.correct + correct_inc,
-        total: stats.total + 1
-      })
-    end)
+    updated_stats =
+      Enum.reduce(top_experts, moe.expert_stats, fn {domain, _score}, acc ->
+        stats = Map.get(acc, domain, %{activations: 0, correct: 0, total: 0})
+        correct_inc = if actual_outcome == :success, do: 1, else: 0
+
+        Map.put(acc, domain, %{
+          activations: stats.activations + 1,
+          correct: stats.correct + correct_inc,
+          total: stats.total + 1
+        })
+      end)
 
     # Load balancing: penalize over-activated experts
     balanced_gating = apply_load_balancing(updated_gating, updated_stats)
 
-    %{moe |
-      experts: updated_experts,
-      gating_weights: balanced_gating,
-      expert_stats: updated_stats,
-      last_trained: DateTime.utc_now()
+    %{
+      moe
+      | experts: updated_experts,
+        gating_weights: balanced_gating,
+        expert_stats: updated_stats,
+        last_trained: DateTime.utc_now()
     }
   end
 
@@ -151,10 +170,11 @@ defmodule Hypatia.Neural.MixtureOfExperts do
 
   defp compute_gate(gating_weights, features) do
     # Softmax over domain affinities
-    domain_affinities = Map.new(gating_weights, fn {domain, base_weight} ->
-      feature_affinity = domain_feature_affinity(domain, features)
-      {domain, base_weight * (1.0 + feature_affinity)}
-    end)
+    domain_affinities =
+      Map.new(gating_weights, fn {domain, base_weight} ->
+        feature_affinity = domain_feature_affinity(domain, features)
+        {domain, base_weight * (1.0 + feature_affinity)}
+      end)
 
     # Softmax normalization
     max_val = domain_affinities |> Map.values() |> Enum.max()
@@ -169,14 +189,44 @@ defmodule Hypatia.Neural.MixtureOfExperts do
     severity = Map.get(features, :severity_score, 0.5)
 
     case domain do
-      :security -> if String.contains?(pattern, "cve") or String.contains?(pattern, "secret") or severity > 0.8, do: 2.0, else: 0.0
-      :quality -> if String.contains?(pattern, "complexity") or String.contains?(pattern, "duplication"), do: 2.0, else: 0.0
-      :sustainability -> if String.contains?(pattern, "license") or String.contains?(pattern, "dependency"), do: 2.0, else: 0.0
-      :accessibility -> if String.contains?(pattern, "a11y") or String.contains?(pattern, "wcag"), do: 2.0, else: 0.0
-      :performance -> if String.contains?(pattern, "perf") or String.contains?(pattern, "leak"), do: 2.0, else: 0.0
-      :documentation -> if String.contains?(pattern, "doc") or String.contains?(pattern, "readme"), do: 2.0, else: 0.0
-      :infrastructure -> if String.contains?(pattern, "ci") or String.contains?(pattern, "container"), do: 2.0, else: 0.0
-      _ -> 0.0
+      :security ->
+        if String.contains?(pattern, "cve") or String.contains?(pattern, "secret") or
+             severity > 0.8,
+           do: 2.0,
+           else: 0.0
+
+      :quality ->
+        if String.contains?(pattern, "complexity") or String.contains?(pattern, "duplication"),
+          do: 2.0,
+          else: 0.0
+
+      :sustainability ->
+        if String.contains?(pattern, "license") or String.contains?(pattern, "dependency"),
+          do: 2.0,
+          else: 0.0
+
+      :accessibility ->
+        if String.contains?(pattern, "a11y") or String.contains?(pattern, "wcag"),
+          do: 2.0,
+          else: 0.0
+
+      :performance ->
+        if String.contains?(pattern, "perf") or String.contains?(pattern, "leak"),
+          do: 2.0,
+          else: 0.0
+
+      :documentation ->
+        if String.contains?(pattern, "doc") or String.contains?(pattern, "readme"),
+          do: 2.0,
+          else: 0.0
+
+      :infrastructure ->
+        if String.contains?(pattern, "ci") or String.contains?(pattern, "container"),
+          do: 2.0,
+          else: 0.0
+
+      _ ->
+        0.0
     end
   end
 
@@ -221,10 +271,11 @@ defmodule Hypatia.Neural.MixtureOfExperts do
   end
 
   defp expert_predict(expert, features) do
-    weighted_sum = Enum.reduce(expert.weights, 0.0, fn {feature, weight}, acc ->
-      value = Map.get(features, feature, 0.5)
-      acc + weight * value
-    end)
+    weighted_sum =
+      Enum.reduce(expert.weights, 0.0, fn {feature, weight}, acc ->
+        value = Map.get(features, feature, 0.5)
+        acc + weight * value
+      end)
 
     sigmoid(weighted_sum + expert.bias)
   end
@@ -232,12 +283,14 @@ defmodule Hypatia.Neural.MixtureOfExperts do
   defp train_expert(expert, features, target) do
     prediction = expert_predict(expert, features)
     error = target - prediction
-    gradient = prediction * (1.0 - prediction)  # sigmoid derivative
+    # sigmoid derivative
+    gradient = prediction * (1.0 - prediction)
 
-    updated_weights = Map.new(expert.weights, fn {feature, weight} ->
-      value = Map.get(features, feature, 0.5)
-      {feature, weight + @learning_rate * error * gradient * value}
-    end)
+    updated_weights =
+      Map.new(expert.weights, fn {feature, weight} ->
+        value = Map.get(features, feature, 0.5)
+        {feature, weight + @learning_rate * error * gradient * value}
+      end)
 
     updated_bias = expert.bias + @learning_rate * error * gradient
 
@@ -253,7 +306,10 @@ defmodule Hypatia.Neural.MixtureOfExperts do
       frequency: Map.get(finding, "frequency", 0.5),
       recency: Map.get(finding, "recency", 0.5),
       fix_rate: Map.get(finding, "fix_rate", 0.5),
-      pattern_type: String.downcase(Map.get(finding, "pattern", "") <> " " <> Map.get(finding, "category", ""))
+      pattern_type:
+        String.downcase(
+          Map.get(finding, "pattern", "") <> " " <> Map.get(finding, "category", "")
+        )
     }
   end
 

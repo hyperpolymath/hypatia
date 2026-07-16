@@ -40,7 +40,11 @@ defmodule Hypatia.SARIFTest do
       assert result["ruleId"] == "hypatia/code_safety/elixir_system_shell"
       assert result["level"] == "error"
       assert result["message"]["text"] =~ "shell injection"
-      assert result["locations"] |> List.first() |> get_in(["physicalLocation", "artifactLocation", "uri"]) == "lib/foo.ex"
+
+      assert result["locations"]
+             |> List.first()
+             |> get_in(["physicalLocation", "artifactLocation", "uri"]) == "lib/foo.ex"
+
       assert is_binary(result["partialFingerprints"]["hypatiaFindingHash/v1"])
 
       assert rule["id"] == "hypatia/code_safety/elixir_system_shell"
@@ -85,8 +89,11 @@ defmodule Hypatia.SARIFTest do
           reason: "r"
         }
 
-        [result] = SARIF.from_findings([finding], "/tmp") |> get_in(["runs", Access.at(0), "results"])
-        assert result["level"] == expected_level, "severity #{inspect(severity)} → #{expected_level}"
+        [result] =
+          SARIF.from_findings([finding], "/tmp") |> get_in(["runs", Access.at(0), "results"])
+
+        assert result["level"] == expected_level,
+               "severity #{inspect(severity)} → #{expected_level}"
       end)
     end
   end
@@ -96,12 +103,31 @@ defmodule Hypatia.SARIFTest do
       doc =
         SARIF.from_findings(
           [
-            %{severity: "high", rule_module: "x", type: "y", file: "/home/user/hypatia/lib/foo.ex", reason: "r"}
+            %{
+              severity: "high",
+              rule_module: "x",
+              type: "y",
+              file: "/home/user/hypatia/lib/foo.ex",
+              reason: "r"
+            }
           ],
           "/home/user/hypatia"
         )
 
-      uri = doc |> get_in(["runs", Access.at(0), "results", Access.at(0), "locations", Access.at(0), "physicalLocation", "artifactLocation", "uri"])
+      uri =
+        doc
+        |> get_in([
+          "runs",
+          Access.at(0),
+          "results",
+          Access.at(0),
+          "locations",
+          Access.at(0),
+          "physicalLocation",
+          "artifactLocation",
+          "uri"
+        ])
+
       assert uri == "lib/foo.ex"
     end
 
@@ -112,7 +138,20 @@ defmodule Hypatia.SARIFTest do
           "/home/user/hypatia"
         )
 
-      uri = doc |> get_in(["runs", Access.at(0), "results", Access.at(0), "locations", Access.at(0), "physicalLocation", "artifactLocation", "uri"])
+      uri =
+        doc
+        |> get_in([
+          "runs",
+          Access.at(0),
+          "results",
+          Access.at(0),
+          "locations",
+          Access.at(0),
+          "physicalLocation",
+          "artifactLocation",
+          "uri"
+        ])
+
       assert uri == "passwd"
     end
 
@@ -123,7 +162,20 @@ defmodule Hypatia.SARIFTest do
           "/tmp"
         )
 
-      uri = doc |> get_in(["runs", Access.at(0), "results", Access.at(0), "locations", Access.at(0), "physicalLocation", "artifactLocation", "uri"])
+      uri =
+        doc
+        |> get_in([
+          "runs",
+          Access.at(0),
+          "results",
+          Access.at(0),
+          "locations",
+          Access.at(0),
+          "physicalLocation",
+          "artifactLocation",
+          "uri"
+        ])
+
       assert uri == "."
     end
   end

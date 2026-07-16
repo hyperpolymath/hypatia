@@ -32,18 +32,17 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
 
   @default_num_centers 20
   @kmeans_max_iterations 50
-  @width_scale 1.5  # Scale factor for RBF widths
+  # Scale factor for RBF widths
+  @width_scale 1.5
 
-  defstruct [
-    centers: [],
-    widths: [],
-    output_weights: [],
-    num_inputs: 0,
-    num_centers: 0,
-    num_outputs: 1,
-    trained: false,
-    training_stats: %{}
-  ]
+  defstruct centers: [],
+            widths: [],
+            output_weights: [],
+            num_inputs: 0,
+            num_centers: 0,
+            num_outputs: 1,
+            trained: false,
+            training_stats: %{}
 
   # --- Public API ---
 
@@ -69,34 +68,40 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
     widths = compute_widths(centers)
 
     # Step 3: Compute hidden layer activations for all training data
-    activations = Enum.map(data, fn input ->
-      Enum.map(Enum.zip(centers, widths), fn {center, width} ->
-        gaussian(input, center, width)
+    activations =
+      Enum.map(data, fn input ->
+        Enum.map(Enum.zip(centers, widths), fn {center, width} ->
+          gaussian(input, center, width)
+        end)
       end)
-    end)
 
     # Step 4: Solve for output weights (least squares)
     output_weights = solve_least_squares(activations, targets)
 
     # Compute training error
-    predictions = Enum.map(activations, fn acts ->
-      Enum.zip(acts, output_weights) |> Enum.reduce(0.0, fn {a, w}, acc -> acc + a * w end)
-    end)
+    predictions =
+      Enum.map(activations, fn acts ->
+        Enum.zip(acts, output_weights) |> Enum.reduce(0.0, fn {a, w}, acc -> acc + a * w end)
+      end)
 
-    mse = Enum.zip(predictions, targets)
-    |> Enum.reduce(0.0, fn {p, t}, acc -> acc + (p - t) * (p - t) end)
-    |> Kernel./(length(targets))
+    mse =
+      Enum.zip(predictions, targets)
+      |> Enum.reduce(0.0, fn {p, t}, acc -> acc + (p - t) * (p - t) end)
+      |> Kernel./(length(targets))
 
-    Logger.info("RBF trained: #{num_centers} centers, #{num_inputs} inputs, MSE=#{Float.round(mse, 6)}")
+    Logger.info(
+      "RBF trained: #{num_centers} centers, #{num_inputs} inputs, MSE=#{Float.round(mse, 6)}"
+    )
 
-    %{rbf |
-      centers: centers,
-      widths: widths,
-      output_weights: output_weights,
-      num_inputs: num_inputs,
-      num_centers: num_centers,
-      trained: true,
-      training_stats: %{mse: mse, samples: length(data), centers: num_centers}
+    %{
+      rbf
+      | centers: centers,
+        widths: widths,
+        output_weights: output_weights,
+        num_inputs: num_inputs,
+        num_centers: num_centers,
+        trained: true,
+        training_stats: %{mse: mse, samples: length(data), centers: num_centers}
     }
   end
 
@@ -109,12 +114,14 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
   def predict(%__MODULE__{trained: false}, _input), do: {0.5, 0.0}
 
   def predict(%__MODULE__{} = rbf, input) do
-    activations = Enum.map(Enum.zip(rbf.centers, rbf.widths), fn {center, width} ->
-      gaussian(input, center, width)
-    end)
+    activations =
+      Enum.map(Enum.zip(rbf.centers, rbf.widths), fn {center, width} ->
+        gaussian(input, center, width)
+      end)
 
-    output = Enum.zip(activations, rbf.output_weights)
-    |> Enum.reduce(0.0, fn {a, w}, acc -> acc + a * w end)
+    output =
+      Enum.zip(activations, rbf.output_weights)
+      |> Enum.reduce(0.0, fn {a, w}, acc -> acc + a * w end)
 
     # Confidence = max activation (how close to a known center)
     confidence = Enum.max(activations, fn -> 0.0 end)
@@ -129,7 +136,9 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
     centers
     |> Enum.with_index()
     |> Enum.min_by(fn {center, _idx} -> euclidean_distance(input, center) end)
-    |> then(fn {center, idx} -> %{index: idx, center: center, distance: euclidean_distance(input, center)} end)
+    |> then(fn {center, idx} ->
+      %{index: idx, center: center, distance: euclidean_distance(input, center)}
+    end)
   end
 
   @doc "Detect novel findings (far from all centers)"
@@ -159,8 +168,10 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
       Map.get(finding, "frequency", 0.5),
       Map.get(finding, "fix_rate", 0.5),
       category_score(Map.get(finding, "category", "")),
-      Map.get(finding, "age_days", 30) / 365.0,  # Normalize to ~[0,1]
-      Map.get(finding, "affected_files", 1) / 100.0  # Normalize
+      # Normalize to ~[0,1]
+      Map.get(finding, "age_days", 30) / 365.0,
+      # Normalize
+      Map.get(finding, "affected_files", 1) / 100.0
     ]
   end
 
@@ -172,27 +183,31 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
 
     Enum.reduce_while(1..@kmeans_max_iterations, initial_centers, fn _iter, centers ->
       # Assign each point to nearest center
-      clusters = Enum.group_by(data, fn point ->
-        centers
-        |> Enum.with_index()
-        |> Enum.min_by(fn {center, _} -> euclidean_distance(point, center) end)
-        |> elem(1)
-      end)
+      clusters =
+        Enum.group_by(data, fn point ->
+          centers
+          |> Enum.with_index()
+          |> Enum.min_by(fn {center, _} -> euclidean_distance(point, center) end)
+          |> elem(1)
+        end)
 
       # Recompute centers
-      new_centers = Enum.map(0..(k-1), fn i ->
-        cluster = Map.get(clusters, i, [])
-        if cluster == [] do
-          Enum.at(centers, i)
-        else
-          centroid(cluster)
-        end
-      end)
+      new_centers =
+        Enum.map(0..(k - 1), fn i ->
+          cluster = Map.get(clusters, i, [])
+
+          if cluster == [] do
+            Enum.at(centers, i)
+          else
+            centroid(cluster)
+          end
+        end)
 
       # Check convergence
-      max_shift = Enum.zip(centers, new_centers)
-      |> Enum.map(fn {old, new} -> euclidean_distance(old, new) end)
-      |> Enum.max(fn -> 0.0 end)
+      max_shift =
+        Enum.zip(centers, new_centers)
+        |> Enum.map(fn {old, new} -> euclidean_distance(old, new) end)
+        |> Enum.max(fn -> 0.0 end)
 
       if max_shift < 0.001 do
         {:halt, new_centers}
@@ -206,18 +221,20 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
     n = length(points)
     dim = length(List.first(points, []))
 
-    sums = Enum.reduce(points, List.duplicate(0.0, dim), fn point, acc ->
-      Enum.zip(acc, point) |> Enum.map(fn {a, p} -> a + p end)
-    end)
+    sums =
+      Enum.reduce(points, List.duplicate(0.0, dim), fn point, acc ->
+        Enum.zip(acc, point) |> Enum.map(fn {a, p} -> a + p end)
+      end)
 
     Enum.map(sums, fn s -> s / n end)
   end
 
   defp compute_widths(centers) do
     Enum.map(centers, fn center ->
-      distances = Enum.map(centers, fn other ->
-        if other == center, do: 999.0, else: euclidean_distance(center, other)
-      end)
+      distances =
+        Enum.map(centers, fn other ->
+          if other == center, do: 999.0, else: euclidean_distance(center, other)
+        end)
 
       nearest = Enum.min(distances, fn -> 1.0 end)
       max(nearest * @width_scale, 0.01)
@@ -227,8 +244,9 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
   # --- RBF Kernel ---
 
   defp gaussian(input, center, width) do
-    dist_sq = Enum.zip(input, center)
-    |> Enum.reduce(0.0, fn {i, c}, acc -> acc + (i - c) * (i - c) end)
+    dist_sq =
+      Enum.zip(input, center)
+      |> Enum.reduce(0.0, fn {i, c}, acc -> acc + (i - c) * (i - c) end)
 
     :math.exp(-dist_sq / (2.0 * width * width))
   end
@@ -278,6 +296,7 @@ defmodule Hypatia.Neural.RadialNeuralNetwork do
 
   defp category_score(cat) do
     cat = String.downcase(cat)
+
     cond do
       String.contains?(cat, "security") -> 0.9
       String.contains?(cat, "quality") -> 0.7

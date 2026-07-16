@@ -57,7 +57,9 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
   end
 
   test "method is set by class, not confidence: a low-confidence chore still squashes" do
-    d = Strategist.decide(ctx(%{attestations: [%{bot: "ci", verdict: :approve, confidence: 0.10}]}))
+    d =
+      Strategist.decide(ctx(%{attestations: [%{bot: "ci", verdict: :approve, confidence: 0.10}]}))
+
     assert d.method == :squash
     assert d.safety in [:review, :flag]
   end

@@ -29,6 +29,7 @@ defmodule Hypatia.ReflexiveTest do
     Supervisor.terminate_child(Hypatia.Supervisor, module)
     Supervisor.delete_child(Hypatia.Supervisor, module)
     start_supervised!(module)
+
     on_exit(fn ->
       if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
       Supervisor.start_child(Hypatia.Supervisor, module)
@@ -146,8 +147,14 @@ defmodule Hypatia.ReflexiveTest do
     test "stats/0 exposes expected counter keys" do
       stats = RateLimiter.stats()
 
-      for key <- [:total_dispatched, :total_queued, :total_rate_limited,
-                  :queue_size, :active_bots, :global_window_size] do
+      for key <- [
+            :total_dispatched,
+            :total_queued,
+            :total_rate_limited,
+            :queue_size,
+            :active_bots,
+            :global_window_size
+          ] do
         assert Map.has_key?(stats, key), "stats/0 missing :#{key}"
       end
     end

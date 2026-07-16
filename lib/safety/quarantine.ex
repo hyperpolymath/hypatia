@@ -29,16 +29,21 @@ defmodule Hypatia.Safety.Quarantine do
 
   @consecutive_failure_threshold 5
   @fp_rate_threshold 0.3
-  @fp_window 20  # Last N outcomes
+  # Last N outcomes
+  @fp_window 20
   # Future: minimum trust level for quarantined bots -- @trust_floor 0.2
   @soft_duration_ms 24 * 60 * 60 * 1_000
   @hard_duration_ms 72 * 60 * 60 * 1_000
-  @check_interval_ms 15 * 60 * 1_000  # Check every 15 min
+  # Check every 15 min
+  @check_interval_ms 15 * 60 * 1_000
 
   defstruct [
-    quarantined: %{},  # bot_name => %{level, reason, since, until, outcomes}
-    bot_outcomes: %{}, # bot_name => [{outcome, timestamp}, ...]
-    reroute_rules: %{} # quarantined_bot => replacement_bot
+    # bot_name => %{level, reason, since, until, outcomes}
+    quarantined: %{},
+    # bot_name => [{outcome, timestamp}, ...]
+    bot_outcomes: %{},
+    # quarantined_bot => replacement_bot
+    reroute_rules: %{}
   ]
 
   # --- GenServer API ---
@@ -121,11 +126,13 @@ defmodule Hypatia.Safety.Quarantine do
 
   def handle_cast({:quarantine, bot_name, level, reason}, state) do
     now = System.system_time(:millisecond)
-    duration = case level do
-      :soft -> @soft_duration_ms
-      :hard -> @hard_duration_ms
-      :permanent -> nil
-    end
+
+    duration =
+      case level do
+        :soft -> @soft_duration_ms
+        :hard -> @hard_duration_ms
+        :permanent -> nil
+      end
 
     q = %{
       level: level,
@@ -142,10 +149,12 @@ defmodule Hypatia.Safety.Quarantine do
   def handle_cast({:release, bot_name}, state) do
     Logger.info("Bot #{bot_name} released from quarantine")
 
-    {:noreply, %{state |
-      quarantined: Map.delete(state.quarantined, bot_name),
-      reroute_rules: Map.delete(state.reroute_rules, bot_name)
-    }}
+    {:noreply,
+     %{
+       state
+       | quarantined: Map.delete(state.quarantined, bot_name),
+         reroute_rules: Map.delete(state.reroute_rules, bot_name)
+     }}
   end
 
   def handle_cast({:set_reroute, from, to}, state) do
@@ -155,9 +164,10 @@ defmodule Hypatia.Safety.Quarantine do
   def handle_info(:check_expirations, state) do
     now = System.system_time(:millisecond)
 
-    expired = state.quarantined
-    |> Enum.filter(fn {_bot, q} -> q.until != nil and now >= q.until end)
-    |> Enum.map(fn {bot, _q} -> bot end)
+    expired =
+      state.quarantined
+      |> Enum.filter(fn {_bot, q} -> q.until != nil and now >= q.until end)
+      |> Enum.map(fn {bot, _q} -> bot end)
 
     Enum.each(expired, fn bot ->
       Logger.info("Bot #{bot} auto-released from quarantine (expired)")
@@ -179,12 +189,20 @@ defmodule Hypatia.Safety.Quarantine do
     else
       cond do
         consecutive_failures(outcomes) >= @consecutive_failure_threshold ->
-          do_auto_quarantine(state, bot_name, :hard,
-            "#{@consecutive_failure_threshold} consecutive failures")
+          do_auto_quarantine(
+            state,
+            bot_name,
+            :hard,
+            "#{@consecutive_failure_threshold} consecutive failures"
+          )
 
         false_positive_rate(outcomes) > @fp_rate_threshold ->
-          do_auto_quarantine(state, bot_name, :soft,
-            "False positive rate #{Float.round(false_positive_rate(outcomes) * 100, 1)}% > #{@fp_rate_threshold * 100}%")
+          do_auto_quarantine(
+            state,
+            bot_name,
+            :soft,
+            "False positive rate #{Float.round(false_positive_rate(outcomes) * 100, 1)}% > #{@fp_rate_threshold * 100}%"
+          )
 
         true ->
           state
@@ -194,13 +212,21 @@ defmodule Hypatia.Safety.Quarantine do
 
   defp do_auto_quarantine(state, bot_name, level, reason) do
     now = System.system_time(:millisecond)
-    duration = case level do
-      :soft -> @soft_duration_ms
-      :hard -> @hard_duration_ms
-      _ -> nil
-    end
 
-    q = %{level: level, reason: reason, since: now, until: if(duration, do: now + duration, else: nil)}
+    duration =
+      case level do
+        :soft -> @soft_duration_ms
+        :hard -> @hard_duration_ms
+        _ -> nil
+      end
+
+    q = %{
+      level: level,
+      reason: reason,
+      since: now,
+      until: if(duration, do: now + duration, else: nil)
+    }
+
     Logger.warning("Bot #{bot_name} AUTO-QUARANTINED (#{level}): #{reason}")
 
     %{state | quarantined: Map.put(state.quarantined, bot_name, q)}

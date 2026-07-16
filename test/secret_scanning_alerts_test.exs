@@ -29,7 +29,8 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
 
   describe "ssa002_severity_summary/2" do
     test "returns empty list when GITHUB_TOKEN is not set" do
-      assert SecretScanningAlerts.ssa002_severity_summary("hyperpolymath", "test-nonexistent") == []
+      assert SecretScanningAlerts.ssa002_severity_summary("hyperpolymath", "test-nonexistent") ==
+               []
     end
   end
 
@@ -41,7 +42,10 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
 
   describe "ssa004_dismissed_without_fix/2" do
     test "returns empty list when GITHUB_TOKEN is not set" do
-      assert SecretScanningAlerts.ssa004_dismissed_without_fix("hyperpolymath", "test-nonexistent") ==
+      assert SecretScanningAlerts.ssa004_dismissed_without_fix(
+               "hyperpolymath",
+               "test-nonexistent"
+             ) ==
                []
     end
   end
@@ -58,7 +62,10 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
       tmp = Path.join(System.tmp_dir!(), "ssa-test-#{System.unique_integer([:positive])}")
       File.mkdir_p!(tmp)
       System.cmd("git", ["init", "-q"], cd: tmp)
-      System.cmd("git", ["remote", "add", "origin", "http://gitea.example.com/foo/bar.git"], cd: tmp)
+
+      System.cmd("git", ["remote", "add", "origin", "http://gitea.example.com/foo/bar.git"],
+        cd: tmp
+      )
 
       assert {:error, msg} = SecretScanningAlerts.scan_from_path(tmp)
       assert msg =~ "Remote URL is not a GitHub URL"

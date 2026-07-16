@@ -41,7 +41,12 @@ defmodule Hypatia.Watcher.AnomalyDetectorTest do
   describe "outcome ingestion" do
     test "rolling window accumulates outcome.recorded events" do
       for _ <- 1..5 do
-        T.outcome_recorded(recipe_id: "r", repo: "x", outcome: "success", verification: "verified")
+        T.outcome_recorded(
+          recipe_id: "r",
+          repo: "x",
+          outcome: "success",
+          verification: "verified"
+        )
       end
 
       Process.sleep(100)
@@ -60,22 +65,35 @@ defmodule Hypatia.Watcher.AnomalyDetectorTest do
 
   describe "evaluate (clear regression)" do
     test "emits hypatia.anomaly.detected when recent rate drops 100% → 0%" do
-      :ok = :telemetry.attach("anomaly-test-handler",
-        [:hypatia, :anomaly, :detected],
-        fn _event, measurements, metadata, _config ->
-          send(self(), {:caught, measurements, metadata})
-        end,
-        nil)
+      :ok =
+        :telemetry.attach(
+          "anomaly-test-handler",
+          [:hypatia, :anomaly, :detected],
+          fn _event, measurements, metadata, _config ->
+            send(self(), {:caught, measurements, metadata})
+          end,
+          nil
+        )
 
       on_exit(fn -> :telemetry.detach("anomaly-test-handler") end)
 
       # 170 baseline successes + 30 recent failures = clear regression
       for _ <- 1..170 do
-        T.outcome_recorded(recipe_id: "r", repo: "x", outcome: "success", verification: "verified")
+        T.outcome_recorded(
+          recipe_id: "r",
+          repo: "x",
+          outcome: "success",
+          verification: "verified"
+        )
       end
 
       for _ <- 1..30 do
-        T.outcome_recorded(recipe_id: "r", repo: "x", outcome: "failure", verification: "unverified")
+        T.outcome_recorded(
+          recipe_id: "r",
+          repo: "x",
+          outcome: "failure",
+          verification: "unverified"
+        )
       end
 
       # Let the cast queue drain
@@ -99,12 +117,15 @@ defmodule Hypatia.Watcher.AnomalyDetectorTest do
     test "does NOT emit when recent rate matches baseline" do
       caller = self()
 
-      :ok = :telemetry.attach("anomaly-stable-handler",
-        [:hypatia, :anomaly, :detected],
-        fn _event, _measurements, _metadata, _config ->
-          send(caller, :unexpected_anomaly)
-        end,
-        nil)
+      :ok =
+        :telemetry.attach(
+          "anomaly-stable-handler",
+          [:hypatia, :anomaly, :detected],
+          fn _event, _measurements, _metadata, _config ->
+            send(caller, :unexpected_anomaly)
+          end,
+          nil
+        )
 
       on_exit(fn -> :telemetry.detach("anomaly-stable-handler") end)
 

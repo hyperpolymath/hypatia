@@ -46,9 +46,9 @@ defmodule Hypatia.VCL.ProofResolver do
   """
   def resolve(expression, opts \\ []) when is_binary(expression) do
     case parse_expression(expression) do
-      {:proven, class, prover}  -> lookup_proven(class, prover, opts)
-      {:sanctify, class}         -> lookup_sanctify(class, opts)
-      {:error, reason}           -> {:error, reason}
+      {:proven, class, prover} -> lookup_proven(class, prover, opts)
+      {:sanctify, class} -> lookup_sanctify(class, opts)
+      {:error, reason} -> {:error, reason}
     end
   end
 

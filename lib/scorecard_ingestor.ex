@@ -47,55 +47,82 @@ defmodule Hypatia.ScorecardIngestor do
   @scorecard_checks %{
     # Categories aligned with recipe target_categories for automatic matching
     "Binary-Artifacts" => %{
-      id: "SC-001", pa_rule: "SC001", risk: :high, auto_fixable: false,
+      id: "SC-001",
+      pa_rule: "SC001",
+      risk: :high,
+      auto_fixable: false,
       category: "BinaryArtifact",
       description: "Compiled binaries found in source repository",
       remediation: "Remove generated executable artifacts. Build from source."
     },
     "Branch-Protection" => %{
-      id: "SC-002", pa_rule: "SC002", risk: :high, auto_fixable: false,
+      id: "SC-002",
+      pa_rule: "SC002",
+      risk: :high,
+      auto_fixable: false,
       category: "BranchProtection",
       description: "Default branch lacks protection rules",
       remediation: "Enable branch protection: require reviews, prevent force push."
     },
     "CI-Tests" => %{
-      id: "SC-003", pa_rule: "SC003", risk: :low, auto_fixable: false,
+      id: "SC-003",
+      pa_rule: "SC003",
+      risk: :low,
+      auto_fixable: false,
       category: "ContinuousIntegration",
       description: "No CI test runs detected before merging PRs",
       remediation: "Add CI workflow that runs tests on pull requests."
     },
     "CII-Best-Practices" => %{
-      id: "SC-004", pa_rule: "SC004", risk: :low, auto_fixable: false,
+      id: "SC-004",
+      pa_rule: "SC004",
+      risk: :low,
+      auto_fixable: false,
       category: "BestPracticesBadge",
       description: "No OpenSSF Best Practices Badge",
       remediation: "Sign up for the OpenSSF Best Practices program."
     },
     "Code-Review" => %{
-      id: "SC-005", pa_rule: "SC005", risk: :high, auto_fixable: false,
+      id: "SC-005",
+      pa_rule: "SC005",
+      risk: :high,
+      auto_fixable: false,
       category: "CodeReview",
       description: "Code changes merged without review",
       remediation: "Require code review approvals before merging."
     },
     "Contributors" => %{
-      id: "SC-006", pa_rule: "SC006", risk: :low, auto_fixable: false,
+      id: "SC-006",
+      pa_rule: "SC006",
+      risk: :low,
+      auto_fixable: false,
       category: "ContributorDiversity",
       description: "Limited organizational diversity in contributors",
       remediation: "Informational only -- no remediation needed."
     },
     "Dangerous-Workflow" => %{
-      id: "SC-007", pa_rule: "SC007", risk: :critical, auto_fixable: true,
+      id: "SC-007",
+      pa_rule: "SC007",
+      risk: :critical,
+      auto_fixable: true,
       category: "DangerousWorkflow",
       description: "GitHub Actions workflow contains dangerous patterns",
       remediation: "Remove untrusted code checkouts, avoid secret logging."
     },
     "Dependency-Update-Tool" => %{
-      id: "SC-008", pa_rule: "SC008", risk: :high, auto_fixable: true,
+      id: "SC-008",
+      pa_rule: "SC008",
+      risk: :high,
+      auto_fixable: true,
       category: "DependencyUpdate",
       description: "No automated dependency update tool configured",
       remediation: "Add .github/dependabot.yml or renovate.json configuration."
     },
     "Fuzzing" => %{
-      id: "SC-009", pa_rule: "SC009", risk: :medium, auto_fixable: false,
+      id: "SC-009",
+      pa_rule: "SC009",
+      risk: :medium,
+      auto_fixable: false,
       category: "FuzzTesting",
       description: "No fuzz testing detected",
       remediation: "Integrate with OSS-Fuzz or add language-specific fuzzing."
@@ -106,7 +133,10 @@ defmodule Hypatia.ScorecardIngestor do
       # See `feedback_no_automated_licence_edits.md` and
       # `feedback_estate_license_policy_umbrella.md`. SPDX choice is owner-
       # specific (5-way classification) and cannot be auto-derived.
-      id: "SC-010", pa_rule: "SC010", risk: :low, auto_fixable: false,
+      id: "SC-010",
+      pa_rule: "SC010",
+      risk: :low,
+      auto_fixable: false,
       category: "LicenseCompliance",
       description: "No license file found",
       remediation:
@@ -116,61 +146,91 @@ defmodule Hypatia.ScorecardIngestor do
           "Do NOT auto-generate."
     },
     "Maintained" => %{
-      id: "SC-011", pa_rule: "SC011", risk: :high, auto_fixable: false,
+      id: "SC-011",
+      pa_rule: "SC011",
+      risk: :high,
+      auto_fixable: false,
       category: "ProjectMaintenance",
       description: "Repository shows insufficient maintenance activity",
       remediation: "Informational -- indicates project health."
     },
     "Packaging" => %{
-      id: "SC-012", pa_rule: "SC012", risk: :medium, auto_fixable: false,
+      id: "SC-012",
+      pa_rule: "SC012",
+      risk: :medium,
+      auto_fixable: false,
       category: "PackagePublishing",
       description: "Project not published as installable package",
       remediation: "Add packaging workflow for relevant package registry."
     },
     "Pinned-Dependencies" => %{
-      id: "SC-013", pa_rule: "SC013", risk: :medium, auto_fixable: true,
+      id: "SC-013",
+      pa_rule: "SC013",
+      risk: :medium,
+      auto_fixable: true,
       category: "DependencyPinning",
       description: "Dependencies not pinned to specific hashes",
       remediation: "Pin GitHub Actions and Docker base images by SHA hash."
     },
     "SAST" => %{
-      id: "SC-014", pa_rule: "SC014", risk: :medium, auto_fixable: true,
+      id: "SC-014",
+      pa_rule: "SC014",
+      risk: :medium,
+      auto_fixable: true,
       category: "StaticAnalysis",
       description: "No static analysis security testing detected",
       remediation: "Add CodeQL or equivalent SAST workflow."
     },
     "SBOM" => %{
-      id: "SC-015", pa_rule: "SC015", risk: :medium, auto_fixable: false,
+      id: "SC-015",
+      pa_rule: "SC015",
+      risk: :medium,
+      auto_fixable: false,
       category: "SoftwareBOM",
       description: "No Software Bill of Materials found",
       remediation: "Generate SBOM using CycloneDX or SPDX tools."
     },
     "Security-Policy" => %{
-      id: "SC-016", pa_rule: "SC016", risk: :medium, auto_fixable: true,
+      id: "SC-016",
+      pa_rule: "SC016",
+      risk: :medium,
+      auto_fixable: true,
       category: "SecurityPolicy",
       description: "No vulnerability disclosure policy (SECURITY.md)",
       remediation: "Add SECURITY.md documenting how to report vulnerabilities."
     },
     "Signed-Releases" => %{
-      id: "SC-017", pa_rule: "SC017", risk: :high, auto_fixable: false,
+      id: "SC-017",
+      pa_rule: "SC017",
+      risk: :high,
+      auto_fixable: false,
       category: "ReleaseSigning",
       description: "Release artifacts not cryptographically signed",
       remediation: "Sign releases with GPG/sigstore and attach signatures."
     },
     "Token-Permissions" => %{
-      id: "SC-018", pa_rule: "SC018", risk: :high, auto_fixable: true,
+      id: "SC-018",
+      pa_rule: "SC018",
+      risk: :high,
+      auto_fixable: true,
       category: "TokenPermissions",
       description: "Workflow tokens not following least privilege",
       remediation: "Set top-level permissions: read-all, declare writes per job."
     },
     "Vulnerabilities" => %{
-      id: "SC-019", pa_rule: "SC019", risk: :high, auto_fixable: false,
+      id: "SC-019",
+      pa_rule: "SC019",
+      risk: :high,
+      auto_fixable: false,
       category: "KnownVulnerabilities",
       description: "Open vulnerabilities in code or dependencies",
       remediation: "Fix code vulnerabilities or update affected dependencies."
     },
     "Webhooks" => %{
-      id: "SC-020", pa_rule: "SC020", risk: :critical, auto_fixable: false,
+      id: "SC-020",
+      pa_rule: "SC020",
+      risk: :critical,
+      auto_fixable: false,
       category: "WebhookSecurity",
       description: "Webhooks configured without authentication tokens",
       remediation: "Set webhook secret tokens for request authentication."
@@ -221,7 +281,8 @@ defmodule Hypatia.ScorecardIngestor do
 
     case System.cmd("scorecard", ["--repo", github_url, "--format", "json"],
            stderr_to_stdout: true,
-           env: [{"SCORECARD_V6", "1"}]) do
+           env: [{"SCORECARD_V6", "1"}]
+         ) do
       {output, 0} ->
         case Jason.decode(output) do
           {:ok, json} ->
@@ -234,7 +295,10 @@ defmodule Hypatia.ScorecardIngestor do
         end
 
       {output, code} ->
-        Logger.warning("Scorecard exited #{code} for #{repo_name}: #{String.slice(output, 0, 200)}")
+        Logger.warning(
+          "Scorecard exited #{code} for #{repo_name}: #{String.slice(output, 0, 200)}"
+        )
+
         {:error, {:exit_code, code}}
     end
   end
@@ -302,8 +366,7 @@ defmodule Hypatia.ScorecardIngestor do
     ]
 
     unless Enum.any?(security_paths, &File.exists?/1) do
-      make_pattern("SC-016", "Security-Policy", repo_name,
-        "No SECURITY.md found in #{repo_name}")
+      make_pattern("SC-016", "Security-Policy", repo_name, "No SECURITY.md found in #{repo_name}")
     end
   end
 
@@ -312,14 +375,16 @@ defmodule Hypatia.ScorecardIngestor do
 
     case File.ls(workflows_dir) do
       {:ok, files} ->
-        yml_files = Enum.filter(files, fn f ->
-          String.ends_with?(f, ".yml") or String.ends_with?(f, ".yaml")
-        end)
+        yml_files =
+          Enum.filter(files, fn f ->
+            String.ends_with?(f, ".yml") or String.ends_with?(f, ".yaml")
+          end)
 
         missing_perms =
           yml_files
           |> Enum.filter(fn f ->
             path = Path.join(workflows_dir, f)
+
             case File.read(path) do
               {:ok, content} -> not String.contains?(content, "permissions:")
               _ -> false
@@ -327,11 +392,16 @@ defmodule Hypatia.ScorecardIngestor do
           end)
 
         if length(missing_perms) > 0 do
-          make_pattern("SC-018", "Token-Permissions", repo_name,
-            "#{length(missing_perms)} workflow(s) missing permissions declaration in #{repo_name}")
+          make_pattern(
+            "SC-018",
+            "Token-Permissions",
+            repo_name,
+            "#{length(missing_perms)} workflow(s) missing permissions declaration in #{repo_name}"
+          )
         end
 
-      _ -> nil
+      _ ->
+        nil
     end
   end
 
@@ -341,8 +411,12 @@ defmodule Hypatia.ScorecardIngestor do
     renovate2 = Path.join(repo_path, ".renovaterc.json")
 
     unless File.exists?(dependabot) or File.exists?(renovate1) or File.exists?(renovate2) do
-      make_pattern("SC-008", "Dependency-Update-Tool", repo_name,
-        "No dependabot.yml or renovate.json found in #{repo_name}")
+      make_pattern(
+        "SC-008",
+        "Dependency-Update-Tool",
+        repo_name,
+        "No dependabot.yml or renovate.json found in #{repo_name}"
+      )
     end
   end
 
@@ -356,8 +430,7 @@ defmodule Hypatia.ScorecardIngestor do
     ]
 
     unless Enum.any?(license_paths, &File.exists?/1) do
-      make_pattern("SC-010", "License", repo_name,
-        "No LICENSE file found in #{repo_name}")
+      make_pattern("SC-010", "License", repo_name, "No LICENSE file found in #{repo_name}")
     end
   end
 
@@ -396,8 +469,12 @@ defmodule Hypatia.ScorecardIngestor do
     cond do
       # No SAST tool of any kind — the original SC-014 missing finding.
       codeql_contents == [] and not has_non_codeql_sast ->
-        make_pattern("SC-014", "SAST", repo_name,
-          "No SAST tool (CodeQL/SonarCloud/Semgrep) detected in #{repo_name}")
+        make_pattern(
+          "SC-014",
+          "SAST",
+          repo_name,
+          "No SAST tool (CodeQL/SonarCloud/Semgrep) detected in #{repo_name}"
+        )
 
       # Effective-vs-nominal: a CodeQL workflow is PRESENT but none of them are
       # pointed at a language the repo contains (or `actions`). It runs but
@@ -405,11 +482,15 @@ defmodule Hypatia.ScorecardIngestor do
       # Refs hyperpolymath/hypatia#261 (generalises modshells #72).
       codeql_contents != [] and not has_non_codeql_sast and
           not Enum.any?(codeql_contents, &codeql_effective?(&1, repo_path)) ->
-        make_pattern("SC-014", "SAST", repo_name,
+        make_pattern(
+          "SC-014",
+          "SAST",
+          repo_name,
           "Nominal-only SAST in #{repo_name}: codeql.yml language matrix " <>
             "contains no language present in the repo and lacks `actions`, " <>
             "so CodeQL records zero results on every commit. " <>
-            "Remediation: set the CodeQL matrix to `language: actions`.")
+            "Remediation: set the CodeQL matrix to `language: actions`."
+        )
 
       true ->
         nil
@@ -433,13 +514,30 @@ defmodule Hypatia.ScorecardIngestor do
   end
 
   defp repo_codeql_languages(repo_path) do
-    case System.cmd("find", [repo_path, "-type", "f",
-                             "-not", "-path", "*/.git/*",
-                             "-not", "-path", "*/node_modules/*",
-                             "-not", "-path", "*/_build/*",
-                             "-not", "-path", "*/deps/*",
-                             "-not", "-path", "*/target/*"],
-                    stderr_to_stdout: true) do
+    case System.cmd(
+           "find",
+           [
+             repo_path,
+             "-type",
+             "f",
+             "-not",
+             "-path",
+             "*/.git/*",
+             "-not",
+             "-path",
+             "*/node_modules/*",
+             "-not",
+             "-path",
+             "*/_build/*",
+             "-not",
+             "-path",
+             "*/deps/*",
+             "-not",
+             "-path",
+             "*/target/*"
+           ],
+           stderr_to_stdout: true
+         ) do
       {out, 0} ->
         out
         |> String.split("\n", trim: true)
@@ -458,29 +556,38 @@ defmodule Hypatia.ScorecardIngestor do
 
     case File.ls(workflows_dir) do
       {:ok, files} ->
-        yml_files = Enum.filter(files, fn f ->
-          String.ends_with?(f, ".yml") or String.ends_with?(f, ".yaml")
-        end)
+        yml_files =
+          Enum.filter(files, fn f ->
+            String.ends_with?(f, ".yml") or String.ends_with?(f, ".yaml")
+          end)
 
         unpinned =
           yml_files
           |> Enum.filter(fn f ->
             path = Path.join(workflows_dir, f)
+
             case File.read(path) do
               {:ok, content} ->
                 # Check for actions using tags instead of SHA hashes
                 # Match pattern: uses: owner/repo@v1 (tag) vs uses: owner/repo@abc123 (SHA)
                 Regex.match?(~r/uses:\s+[\w-]+\/[\w-]+@v\d/, content)
-              _ -> false
+
+              _ ->
+                false
             end
           end)
 
         if length(unpinned) > 0 do
-          make_pattern("SC-013", "Pinned-Dependencies", repo_name,
-            "#{length(unpinned)} workflow(s) with tag-pinned (not SHA-pinned) actions in #{repo_name}")
+          make_pattern(
+            "SC-013",
+            "Pinned-Dependencies",
+            repo_name,
+            "#{length(unpinned)} workflow(s) with tag-pinned (not SHA-pinned) actions in #{repo_name}"
+          )
         end
 
-      _ -> nil
+      _ ->
+        nil
     end
   end
 
@@ -505,7 +612,8 @@ defmodule Hypatia.ScorecardIngestor do
       "repos_affected" => 1,
       "occurrences" => 1,
       "source" => "scorecard",
-      "triangle_tier" => if(Map.get(check_def, :auto_fixable, false), do: "eliminate", else: "control")
+      "triangle_tier" =>
+        if(Map.get(check_def, :auto_fixable, false), do: "eliminate", else: "control")
     }
   end
 
@@ -515,7 +623,9 @@ defmodule Hypatia.ScorecardIngestor do
     reason = Map.get(check, "reason", "")
 
     case Map.get(@scorecard_checks, name) do
-      nil -> nil
+      nil ->
+        nil
+
       check_def ->
         risk = Map.get(check_def, :risk, :medium)
 
