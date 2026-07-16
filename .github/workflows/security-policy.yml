@@ -159,7 +159,7 @@ jobs:
           generateSarif: "1"
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.0.0
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.0.0
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -308,7 +308,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.0.0
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.0.0
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -586,7 +586,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.0.0
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.0.0
         if: always()
         with:
           sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
@@ -729,7 +729,7 @@ jobs:
           generateSarif: "1"
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.0.0
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.0.0
         if: always()
         with:
           sarif_file: semgrep.sarif
