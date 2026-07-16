@@ -57,7 +57,10 @@ defmodule Hypatia.Rules.CodeScanningAlertsTest do
       tmp = Path.join(System.tmp_dir!(), "csa-test-#{System.unique_integer([:positive])}")
       File.mkdir_p!(tmp)
       System.cmd("git", ["init", "-q"], cd: tmp)
-      System.cmd("git", ["remote", "add", "origin", "http://gitea.example.com/foo/bar.git"], cd: tmp)
+
+      System.cmd("git", ["remote", "add", "origin", "http://gitea.example.com/foo/bar.git"],
+        cd: tmp
+      )
 
       assert {:error, msg} = CodeScanningAlerts.scan_from_path(tmp)
       assert msg =~ "Remote URL is not a GitHub URL"

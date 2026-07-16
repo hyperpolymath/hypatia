@@ -38,7 +38,8 @@ defmodule Hypatia.Kin.Contingency do
   end
 
   @doc "Set emergency level. Requires reason."
-  def set_level(new_level, reason) when new_level in [:normal, :advisory, :caution, :freeze, :shutdown] do
+  def set_level(new_level, reason)
+      when new_level in [:normal, :advisory, :caution, :freeze, :shutdown] do
     GenServer.call(__MODULE__, {:set_level, new_level, reason})
   end
 
@@ -80,7 +81,9 @@ defmodule Hypatia.Kin.Contingency do
   """
   def available? do
     case GenServer.whereis(__MODULE__) do
-      nil -> false
+      nil ->
+        false
+
       pid ->
         Process.alive?(pid) and
           match?({:ok, _}, safe_call(:level))
@@ -100,7 +103,8 @@ defmodule Hypatia.Kin.Contingency do
       level: :normal,
       level_reason: nil,
       level_set_at: nil,
-      isolated_bots: %{},       # bot_id => %{reason, isolated_at}
+      # bot_id => %{reason, isolated_at}
+      isolated_bots: %{},
       event_log: [],
       rollback_history: []
     }
@@ -109,7 +113,9 @@ defmodule Hypatia.Kin.Contingency do
     state = load_persisted_state(state)
 
     if state.level != :normal do
-      Logger.warning("Contingency: loaded persisted emergency level :#{state.level} -- #{state.level_reason}")
+      Logger.warning(
+        "Contingency: loaded persisted emergency level :#{state.level} -- #{state.level_reason}"
+      )
     end
 
     Logger.info("Kin.Contingency started -- emergency level: :#{state.level}")
@@ -129,12 +135,9 @@ defmodule Hypatia.Kin.Contingency do
       Logger.warning("Contingency: level changed :#{old_level} -> :#{new_level} -- #{reason}")
     end
 
-    new_state = %{state |
-      level: new_level,
-      level_reason: reason,
-      level_set_at: DateTime.utc_now()
-    }
-    |> log_event(:level_change, %{from: old_level, to: new_level, reason: reason})
+    new_state =
+      %{state | level: new_level, level_reason: reason, level_set_at: DateTime.utc_now()}
+      |> log_event(:level_change, %{from: old_level, to: new_level, reason: reason})
 
     persist_state(new_state)
     {:reply, :ok, new_state}
@@ -142,13 +145,15 @@ defmodule Hypatia.Kin.Contingency do
 
   @impl true
   def handle_call({:permitted, dispatch_tier}, _from, state) do
-    permitted = case state.level do
-      :normal -> true
-      :advisory -> true
-      :caution -> dispatch_tier != :auto_execute
-      :freeze -> false
-      :shutdown -> false
-    end
+    permitted =
+      case state.level do
+        :normal -> true
+        :advisory -> true
+        :caution -> dispatch_tier != :auto_execute
+        :freeze -> false
+        :shutdown -> false
+      end
+
     {:reply, permitted, state}
   end
 
@@ -157,8 +162,10 @@ defmodule Hypatia.Kin.Contingency do
     Logger.warning("Contingency: ISOLATING bot #{bot_id} -- #{reason}")
     entry = %{reason: reason, isolated_at: DateTime.utc_now()}
     new_isolated = Map.put(state.isolated_bots, bot_id, entry)
-    new_state = %{state | isolated_bots: new_isolated}
-    |> log_event(:bot_isolated, %{bot_id: bot_id, reason: reason})
+
+    new_state =
+      %{state | isolated_bots: new_isolated}
+      |> log_event(:bot_isolated, %{bot_id: bot_id, reason: reason})
 
     persist_state(new_state)
     {:reply, :ok, new_state}
@@ -169,8 +176,10 @@ defmodule Hypatia.Kin.Contingency do
     if Map.has_key?(state.isolated_bots, bot_id) do
       Logger.info("Contingency: RESTORING bot #{bot_id}")
       new_isolated = Map.delete(state.isolated_bots, bot_id)
-      new_state = %{state | isolated_bots: new_isolated}
-      |> log_event(:bot_restored, %{bot_id: bot_id})
+
+      new_state =
+        %{state | isolated_bots: new_isolated}
+        |> log_event(:bot_restored, %{bot_id: bot_id})
 
       persist_state(new_state)
       {:reply, :ok, new_state}
@@ -191,12 +200,15 @@ defmodule Hypatia.Kin.Contingency do
 
   @impl true
   def handle_call({:rollback_wave, repo_list, reason}, _from, state) do
-    Logger.error("Contingency: ROLLBACK WAVE initiated for #{length(repo_list)} repos -- #{reason}")
+    Logger.error(
+      "Contingency: ROLLBACK WAVE initiated for #{length(repo_list)} repos -- #{reason}"
+    )
 
-    results = Enum.map(repo_list, fn repo ->
-      result = attempt_rollback(repo)
-      {repo, result}
-    end)
+    results =
+      Enum.map(repo_list, fn repo ->
+        result = attempt_rollback(repo)
+        {repo, result}
+      end)
 
     entry = %{
       at: DateTime.utc_now(),
@@ -205,8 +217,9 @@ defmodule Hypatia.Kin.Contingency do
       results: results
     }
 
-    new_state = %{state | rollback_history: Enum.take([entry | state.rollback_history], 50)}
-    |> log_event(:rollback_wave, %{repos: length(repo_list), reason: reason})
+    new_state =
+      %{state | rollback_history: Enum.take([entry | state.rollback_history], 50)}
+      |> log_event(:rollback_wave, %{repos: length(repo_list), reason: reason})
 
     {:reply, results, new_state}
   end
@@ -230,10 +243,12 @@ defmodule Hypatia.Kin.Contingency do
   end
 
   defp log_event(state, event_type, data) do
-    entry = Map.merge(data, %{
-      event: event_type,
-      at: DateTime.utc_now()
-    })
+    entry =
+      Map.merge(data, %{
+        event: event_type,
+        at: DateTime.utc_now()
+      })
+
     %{state | event_log: Enum.take([entry | state.event_log], 500)}
   end
 
@@ -246,9 +261,14 @@ defmodule Hypatia.Kin.Contingency do
       "level" => to_string(state.level),
       "reason" => state.level_reason,
       "set_at" => state.level_set_at && DateTime.to_iso8601(state.level_set_at),
-      "isolated_bots" => Enum.map(state.isolated_bots, fn {id, info} ->
-        %{"bot_id" => id, "reason" => info.reason, "isolated_at" => DateTime.to_iso8601(info.isolated_at)}
-      end)
+      "isolated_bots" =>
+        Enum.map(state.isolated_bots, fn {id, info} ->
+          %{
+            "bot_id" => id,
+            "reason" => info.reason,
+            "isolated_at" => DateTime.to_iso8601(info.isolated_at)
+          }
+        end)
     }
 
     case Jason.encode(data, pretty: true) do
@@ -265,30 +285,38 @@ defmodule Hypatia.Kin.Contingency do
         case Jason.decode(content) do
           {:ok, data} ->
             level = String.to_existing_atom(Map.get(data, "level", "normal"))
+
             isolated =
               data
               |> Map.get("isolated_bots", [])
               |> Enum.map(fn entry ->
-                {entry["bot_id"], %{
-                  reason: entry["reason"],
-                  isolated_at: parse_dt(entry["isolated_at"])
-                }}
+                {entry["bot_id"],
+                 %{
+                   reason: entry["reason"],
+                   isolated_at: parse_dt(entry["isolated_at"])
+                 }}
               end)
               |> Map.new()
 
-            %{state |
-              level: level,
-              level_reason: Map.get(data, "reason"),
-              level_set_at: parse_dt(Map.get(data, "set_at")),
-              isolated_bots: isolated
+            %{
+              state
+              | level: level,
+                level_reason: Map.get(data, "reason"),
+                level_set_at: parse_dt(Map.get(data, "set_at")),
+                isolated_bots: isolated
             }
-          _ -> state
+
+          _ ->
+            state
         end
-      _ -> state
+
+      _ ->
+        state
     end
   end
 
   defp parse_dt(nil), do: nil
+
   defp parse_dt(ts) do
     case DateTime.from_iso8601(ts) do
       {:ok, dt, _} -> dt

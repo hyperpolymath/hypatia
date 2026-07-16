@@ -79,7 +79,10 @@ defmodule Hypatia.Neural.TrainingPipeline do
     |> Enum.map(fn {recipe_id, recipe_outcomes} ->
       # Sort by timestamp for temporal ordering (fixed_at is the canonical field)
       sorted =
-        Enum.sort_by(recipe_outcomes, &(Map.get(&1, "timestamp") || Map.get(&1, "fixed_at") || ""))
+        Enum.sort_by(
+          recipe_outcomes,
+          &(Map.get(&1, "timestamp") || Map.get(&1, "fixed_at") || "")
+        )
 
       # Build confidence time series (running average of successes)
       {series, _} =
@@ -139,17 +142,22 @@ defmodule Hypatia.Neural.TrainingPipeline do
                 Logger.info(
                   "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (adversarial patterns)"
                 )
+
                 Rebalancer.adversarial_esn_series(primary.series, rebalance_opts)
 
               :c ->
                 Logger.info(
                   "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (corpus dips)"
                 )
+
                 data_path = Keyword.get(rebalance_opts, :data_path, "data/verisim")
                 templates = Rebalancer.load_failure_templates(data_path)
 
                 if templates == [] do
-                  Logger.warning("TrainingPipeline: no failure templates found, falling back to Strategy A")
+                  Logger.warning(
+                    "TrainingPipeline: no failure templates found, falling back to Strategy A"
+                  )
+
                   Rebalancer.augment_esn_series(primary.series, rebalance_opts)
                 else
                   Logger.info("TrainingPipeline: #{length(templates)} failure templates loaded")
@@ -160,6 +168,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
                 Logger.info(
                   "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (synthetic regressions)"
                 )
+
                 Rebalancer.augment_esn_series(primary.series, rebalance_opts)
             end
           else
@@ -273,9 +282,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
 
     {vectors, targets} =
       if Keyword.get(opts, :rebalance, true) and real_vectors != [] do
-        Logger.info(
-          "TrainingPipeline: rebalancing RBF training set (synthetic coverage)"
-        )
+        Logger.info("TrainingPipeline: rebalancing RBF training set (synthetic coverage)")
 
         Rebalancer.rebalance_rbf(
           {real_vectors, real_targets},
@@ -346,7 +353,11 @@ defmodule Hypatia.Neural.TrainingPipeline do
       "confidence" => Map.get(pattern, "confidence", 0.5),
       "complexity" => Map.get(pattern, "complexity", 0.5),
       "frequency" =>
-        Map.get(pattern, "frequency", Map.get(pattern, "occurrences", Map.get(pattern, "count", 1)))
+        Map.get(
+          pattern,
+          "frequency",
+          Map.get(pattern, "occurrences", Map.get(pattern, "count", 1))
+        )
         |> normalize_frequency(),
       "fix_rate" => Map.get(pattern, "fix_rate", 0.5),
       "category" => Map.get(pattern, "category", ""),

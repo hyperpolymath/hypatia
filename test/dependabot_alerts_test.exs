@@ -100,7 +100,12 @@ defmodule Hypatia.Rules.DependabotAlertsTest do
       File.write!(Path.join(repo, "README.md"), "# test")
       System.cmd("git", ["add", "."], cd: repo)
       System.cmd("git", ["commit", "-m", "init"], cd: repo)
-      System.cmd("git", ["remote", "add", "origin", "https://github.com/hyperpolymath/test-repo.git"], cd: repo)
+
+      System.cmd(
+        "git",
+        ["remote", "add", "origin", "https://github.com/hyperpolymath/test-repo.git"],
+        cd: repo
+      )
 
       on_exit(fn -> File.rm_rf!(repo) end)
 

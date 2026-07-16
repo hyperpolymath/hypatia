@@ -208,6 +208,7 @@ defmodule Hypatia.VCL.QueryTest do
       if length(shell_recipes) > 0 do
         Enum.each(shell_recipes, fn recipe ->
           languages = Map.get(recipe, "languages", [])
+
           assert "shell" in languages or "*" in languages,
                  "Expected shell or wildcard in languages for #{recipe["id"]}"
         end)
@@ -248,6 +249,7 @@ defmodule Hypatia.VCL.QueryTest do
       Enum.each(subs, fn sub ->
         assert Map.has_key?(sub, "category"),
                "substitution missing 'category'"
+
         assert Map.has_key?(sub, "pa_rule"),
                "substitution missing 'pa_rule'"
       end)
@@ -334,9 +336,11 @@ defmodule Hypatia.VCL.QueryTest do
       assert is_list(scans)
 
       Enum.each(scans, fn %{scan: scan} ->
-        severities = scan
+        severities =
+          scan
           |> Map.get("weak_points", [])
           |> Enum.map(& &1["severity"])
+
         assert "High" in severities,
                "Expected High severity in #{inspect(severities)}"
       end)
@@ -347,9 +351,11 @@ defmodule Hypatia.VCL.QueryTest do
       assert is_list(scans)
 
       Enum.each(scans, fn %{scan: scan} ->
-        severities = scan
+        severities =
+          scan
           |> Map.get("weak_points", [])
           |> Enum.map(& &1["severity"])
+
         assert "Medium" in severities
       end)
     end
@@ -371,9 +377,11 @@ defmodule Hypatia.VCL.QueryTest do
       assert is_list(scans)
 
       Enum.each(scans, fn %{scan: scan} ->
-        categories = scan
+        categories =
+          scan
           |> Map.get("weak_points", [])
           |> Enum.map(& &1["category"])
+
         assert "PanicPath" in categories
       end)
     end
@@ -423,6 +431,7 @@ defmodule Hypatia.VCL.QueryTest do
 
       Enum.each(recipes, fn recipe ->
         confidence = Map.get(recipe, "confidence", 0.0)
+
         assert confidence >= 0.9,
                "Expected confidence >= 0.9, got #{confidence} for #{recipe["id"]}"
       end)
@@ -501,6 +510,7 @@ defmodule Hypatia.VCL.QueryTest do
 
       if length(patterns) >= 2 do
         counts = Enum.map(patterns, &Map.get(&1, "repos_affected", 0))
+
         assert counts == Enum.sort(counts, :desc),
                "Expected descending order by repos_affected"
       end
@@ -681,6 +691,7 @@ defmodule Hypatia.VCL.QueryTest do
 
       if length(repos) >= 2 do
         counts = Enum.map(repos, & &1.count)
+
         assert counts == Enum.sort(counts, :desc),
                "Expected repos sorted by count descending"
       end

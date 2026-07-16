@@ -30,6 +30,7 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
              ".d.ts declaration files are exempt (headers, not implementation)"
     end
@@ -43,6 +44,7 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
              "consumer-facing TS bindings are exempt (parallel to v-bindings/v-adapter)"
     end
@@ -65,6 +67,7 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
              "build orchestration is exempt (not application code)"
     end
@@ -89,6 +92,7 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
              "upstream forks are not estate-authored — linguist ships TS as ML training samples"
     end
@@ -111,6 +115,7 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
              "Mix-style vendored deps under /deps/ are not estate-authored"
     end
@@ -125,6 +130,7 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
       ]
 
       results = CicdRules.check_commit_blocks(files)
+
       assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
              "VSCode extension entry points wait on AS VSCode-extension API binding"
     end

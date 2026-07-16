@@ -46,10 +46,11 @@ defmodule Hypatia.DispatchManifest do
         end
       end)
 
-    content = Enum.map_join(lines, "\n", fn entry ->
-      {:ok, json} = Jason.encode(entry)
-      json
-    end)
+    content =
+      Enum.map_join(lines, "\n", fn entry ->
+        {:ok, json} = Jason.encode(entry)
+        json
+      end)
 
     # Add trailing newline if content is not empty
     content = if content != "", do: content <> "\n", else: ""
@@ -160,12 +161,14 @@ defmodule Hypatia.DispatchManifest do
 
   defp resolve_program_path(pattern_or_finding, repo) do
     # Try repo_paths map first (from PatternRegistry), fall back to repo-paths.json, then standard
-    path = case Map.get(pattern_or_finding, "repo_paths", %{}) do
-      paths when is_map(paths) and map_size(paths) > 0 ->
-        Map.get(paths, repo)
-      _ ->
-        nil
-    end
+    path =
+      case Map.get(pattern_or_finding, "repo_paths", %{}) do
+        paths when is_map(paths) and map_size(paths) > 0 ->
+          Map.get(paths, repo)
+
+        _ ->
+          nil
+      end
 
     cond do
       is_binary(path) and path != "" and path != "." -> path
@@ -201,13 +204,16 @@ defmodule Hypatia.DispatchManifest do
   defp resolve_from_index(repo) do
     repos_dir = System.get_env("HYPATIA_REPOS_DIR", File.cwd!())
     default_path = Path.join(repos_dir, repo)
+
     case File.read(@repo_paths_file) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, map} -> Map.get(map, repo, default_path)
           _ -> default_path
         end
-      _ -> default_path
+
+      _ ->
+        default_path
     end
   end
 end

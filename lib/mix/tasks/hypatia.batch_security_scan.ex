@@ -29,7 +29,8 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
   @echidna_rules_dir "~/repos/echidna/rules"
 
   @alert_categories %{
-    "workflow-security" => ~w(TokenPermissionsID PinnedDependenciesID missing-workflow-permissions),
+    "workflow-security" =>
+      ~w(TokenPermissionsID PinnedDependenciesID missing-workflow-permissions),
     "code-security" => ~w(hard-coded-cryptographic-value remote-property-injection sql-injection),
     "code-quality" => ~w(unused-local-variable syntax-error unused-import),
     "dependency-vuln" => ~w(VulnerabilitiesID unmaintained),
@@ -38,17 +39,25 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     "missing-tests" => ~w(CITestsID FuzzingID SASTID)
   }
 
-  @auto_fixable MapSet.new(
-                  ~w(TokenPermissionsID PinnedDependenciesID missing-workflow-permissions
-                     SecurityPolicyID BranchProtectionID unused-local-variable)
-                )
+  @auto_fixable MapSet.new(~w(TokenPermissionsID PinnedDependenciesID missing-workflow-permissions
+                     SecurityPolicyID BranchProtectionID unused-local-variable))
 
   @impl Mix.Task
   def run(_args) do
     Mix.shell().info("🔍 Scanning #{@org} org for security alerts...")
 
     {repos_out, 0} =
-      System.cmd("gh", ["repo", "list", @org, "--limit", "300", "--json", "name", "--jq", ".[].name"])
+      System.cmd("gh", [
+        "repo",
+        "list",
+        @org,
+        "--limit",
+        "300",
+        "--json",
+        "name",
+        "--jq",
+        ".[].name"
+      ])
 
     repos = String.split(repos_out, "\n", trim: true)
     Mix.shell().info("Found #{length(repos)} repos")
@@ -63,7 +72,9 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
         alerts = fetch_alerts(repo)
 
         case alerts do
-          [] -> {acc, count}
+          [] ->
+            {acc, count}
+
           _ ->
             generate_repo_training_data(repo, alerts)
             {acc ++ alerts, count + 1}
@@ -194,7 +205,9 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     cat_rows =
       by_category
       |> Enum.sort_by(fn {_c, {total, _f}} -> -total end)
-      |> Enum.map_join("\n", fn {cat, {total, fixable}} -> "| #{cat} | #{total} | #{fixable} |" end)
+      |> Enum.map_join("\n", fn {cat, {total, fixable}} ->
+        "| #{cat} | #{total} | #{fixable} |"
+      end)
 
     repo_rows =
       by_repo

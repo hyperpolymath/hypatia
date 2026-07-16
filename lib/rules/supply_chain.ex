@@ -481,8 +481,7 @@ defmodule Hypatia.Rules.SupplyChain do
           rule: "SC009",
           file: repo_path |> Path.basename(),
           severity: :warn,
-          reason:
-            "no SECURITY.md — vulnerability-disclosure contact is undefined",
+          reason: "no SECURITY.md — vulnerability-disclosure contact is undefined",
           action: :report,
           detail: %{
             fix:
@@ -634,7 +633,9 @@ defmodule Hypatia.Rules.SupplyChain do
     root = Path.join([repo_path, ".github", "workflows"])
 
     cond do
-      not File.dir?(root) -> []
+      not File.dir?(root) ->
+        []
+
       true ->
         root
         |> File.ls!()
@@ -675,7 +676,7 @@ defmodule Hypatia.Rules.SupplyChain do
       slug != canonical and
         not String.starts_with?(slug, "actions/") == false and
         levenshtein(slug, canonical) <= 2 and
-        (action_owner(slug) != action_owner(canonical))
+        action_owner(slug) != action_owner(canonical)
     end)
   end
 
@@ -698,7 +699,8 @@ defmodule Hypatia.Rules.SupplyChain do
     cond do
       n == 0 -> m
       m == 0 -> n
-      abs(n - m) > 2 -> 3  # short-circuit: caller only cares about <= 2
+      # short-circuit: caller only cares about <= 2
+      abs(n - m) > 2 -> 3
       true -> dp_levenshtein(a_list, b_list, m)
     end
   end

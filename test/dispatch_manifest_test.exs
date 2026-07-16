@@ -27,9 +27,14 @@ defmodule Hypatia.DispatchManifestTest do
 
       actions = [
         {:eliminate, recipe, pattern},
-        {:control, %{"id" => "PA006-race", "category" => "RaceCondition",
-                     "description" => "Data race", "severity" => "High",
-                     "routed_repo" => "test-repo"}}
+        {:control,
+         %{
+           "id" => "PA006-race",
+           "category" => "RaceCondition",
+           "description" => "Data race",
+           "severity" => "High",
+           "routed_repo" => "test-repo"
+         }}
       ]
 
       {:ok, path, stats} = DispatchManifest.write(actions)

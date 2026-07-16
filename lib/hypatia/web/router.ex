@@ -23,10 +23,10 @@ defmodule Hypatia.Web.Router do
   # GroovePlug handles /.well-known/groove/* before the router's own
   # match/dispatch cycle.  It halts on groove paths, so the router
   # never sees them.
-  plug Hypatia.Web.GroovePlug
+  plug(Hypatia.Web.GroovePlug)
 
-  plug :match
-  plug :dispatch
+  plug(:match)
+  plug(:dispatch)
 
   @doc """
   GET / -- Single-page live operational dashboard. HTML + vanilla JS,
@@ -86,7 +86,7 @@ defmodule Hypatia.Web.Router do
   # /api/* is gated to loopback in Hypatia.Web.ApiRouter — keeps
   # operational data off the public surface while leaving /health
   # reachable for container orchestrators.
-  forward "/api", to: Hypatia.Web.ApiRouter
+  forward("/api", to: Hypatia.Web.ApiRouter)
 
   @doc """
   POST /graphql -- GraphQL-shaped query endpoint (M14).
