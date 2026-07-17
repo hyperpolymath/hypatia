@@ -24,24 +24,46 @@ defmodule Hypatia.Data.ArangoDB do
 
   @default_url "http://localhost:8529"
   @default_db "hypatia"
-  @sync_interval_ms 10 * 60 * 1_000  # Sync from verisim-data every 10 min
+  # Sync from verisim-data every 10 min
+  @sync_interval_ms 10 * 60 * 1_000
 
   # All collections in the extended schema
   @document_collections [
-    "repos", "findings", "patterns", "bots", "recipes", "outcomes",
-    "contributors", "confidence_history", "anomalies", "dispatch_batches",
-    "neural_states", "sessions", "rulesets", "learning_data"
+    "repos",
+    "findings",
+    "patterns",
+    "bots",
+    "recipes",
+    "outcomes",
+    "contributors",
+    "confidence_history",
+    "anomalies",
+    "dispatch_batches",
+    "neural_states",
+    "sessions",
+    "rulesets",
+    "learning_data"
   ]
 
   @edge_collections [
-    "trusts", "depends_on", "dispatches", "applies_to",
-    "repo_has_finding", "finding_matches_pattern", "bot_executes_recipe",
-    "recipe_has_outcome", "contributor_fixes"
+    "trusts",
+    "depends_on",
+    "dispatches",
+    "applies_to",
+    "repo_has_finding",
+    "finding_matches_pattern",
+    "bot_executes_recipe",
+    "recipe_has_outcome",
+    "contributor_fixes"
   ]
 
   defstruct [
-    :base_url, :database, :auth_header,
-    connected: false, last_sync: nil, sync_timer: nil
+    :base_url,
+    :database,
+    :auth_header,
+    connected: false,
+    last_sync: nil,
+    sync_timer: nil
   ]
 
   # --- GenServer API ---
@@ -73,7 +95,10 @@ defmodule Hypatia.Data.ArangoDB do
       Logger.info("ArangoDB connected: #{url}/#{db}")
       {:ok, %{state | sync_timer: timer}}
     else
-      Logger.warning("ArangoDB not available at #{url} -- running in degraded mode (flat files only)")
+      Logger.warning(
+        "ArangoDB not available at #{url} -- running in degraded mode (flat files only)"
+      )
+
       {:ok, state}
     end
   end
@@ -109,6 +134,7 @@ defmodule Hypatia.Data.ArangoDB do
       "evidence_count" => evidence_count,
       "last_updated" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
+
     upsert("trusts", "#{from_key}_#{to_key}", edge)
   end
 
@@ -116,6 +142,7 @@ defmodule Hypatia.Data.ArangoDB do
   def record_confidence(recipe_id, confidence, event_type, delta, trigger) do
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
     key = "#{recipe_id}_#{System.system_time(:millisecond)}"
+
     doc = %{
       "recipe_id" => recipe_id,
       "timestamp" => ts,
@@ -124,6 +151,7 @@ defmodule Hypatia.Data.ArangoDB do
       "delta" => delta,
       "trigger" => trigger
     }
+
     upsert("confidence_history", key, doc)
   end
 
@@ -131,6 +159,7 @@ defmodule Hypatia.Data.ArangoDB do
   def record_anomaly(event, deviation, source_network, severity) do
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
     key = "anomaly_#{System.system_time(:millisecond)}"
+
     doc = %{
       "event" => event,
       "deviation" => deviation,
@@ -139,12 +168,14 @@ defmodule Hypatia.Data.ArangoDB do
       "severity" => to_string(severity),
       "resolved" => false
     }
+
     upsert("anomalies", key, doc)
   end
 
   @doc "Save neural network state"
   def save_neural_state(network_name, state_data, cycle_count, accuracy_metrics) do
     key = to_string(network_name)
+
     doc = %{
       "network" => key,
       "state_data" => state_data,
@@ -152,6 +183,7 @@ defmodule Hypatia.Data.ArangoDB do
       "last_updated" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "accuracy_metrics" => accuracy_metrics
     }
+
     upsert("neural_states", key, doc)
   end
 
@@ -170,23 +202,29 @@ defmodule Hypatia.Data.ArangoDB do
 
   @doc "Get confidence history for a recipe (for ESN training)"
   def get_confidence_history(recipe_id, limit \\ 500) do
-    query("""
-    FOR h IN confidence_history
-      FILTER h.recipe_id == @recipe_id
-      SORT h.timestamp ASC
-      LIMIT @limit
-      RETURN {confidence: h.confidence, timestamp: h.timestamp, event: h.event_type}
-    """, %{"recipe_id" => recipe_id, "limit" => limit})
+    query(
+      """
+      FOR h IN confidence_history
+        FILTER h.recipe_id == @recipe_id
+        SORT h.timestamp ASC
+        LIMIT @limit
+        RETURN {confidence: h.confidence, timestamp: h.timestamp, event: h.event_type}
+      """,
+      %{"recipe_id" => recipe_id, "limit" => limit}
+    )
   end
 
   @doc "Get repos with declining trust (AQL graph traversal)"
   def repos_with_declining_trust(threshold \\ 0.4) do
-    query("""
-    FOR r IN repos
-      FILTER r.trust_score < @threshold AND r.status == 'active'
-      SORT r.trust_score ASC
-      RETURN {name: r.name, trust: r.trust_score, findings: r.finding_count, last_scanned: r.last_scanned}
-    """, %{"threshold" => threshold})
+    query(
+      """
+      FOR r IN repos
+        FILTER r.trust_score < @threshold AND r.status == 'active'
+        SORT r.trust_score ASC
+        RETURN {name: r.name, trust: r.trust_score, findings: r.finding_count, last_scanned: r.last_scanned}
+      """,
+      %{"threshold" => threshold}
+    )
   end
 
   @doc "Get unresolved anomalies"
@@ -201,15 +239,18 @@ defmodule Hypatia.Data.ArangoDB do
 
   @doc "Find cross-repo patterns (same pattern across multiple repos)"
   def cross_repo_patterns(min_repos \\ 5) do
-    query("""
-    FOR f IN findings
-      FILTER f.status == 'open'
-      COLLECT pattern = f.pattern_id INTO repos = f.repo
-      LET unique_repos = LENGTH(UNIQUE(repos))
-      FILTER unique_repos >= @min_repos
-      SORT unique_repos DESC
-      RETURN {pattern: pattern, repo_count: unique_repos, repos: UNIQUE(repos)}
-    """, %{"min_repos" => min_repos})
+    query(
+      """
+      FOR f IN findings
+        FILTER f.status == 'open'
+        COLLECT pattern = f.pattern_id INTO repos = f.repo
+        LET unique_repos = LENGTH(UNIQUE(repos))
+        FILTER unique_repos >= @min_repos
+        SORT unique_repos DESC
+        RETURN {pattern: pattern, repo_count: unique_repos, repos: UNIQUE(repos)}
+      """,
+      %{"min_repos" => min_repos}
+    )
   end
 
   @doc "Bot performance ranking with quarantine status"
@@ -295,6 +336,7 @@ defmodule Hypatia.Data.ArangoDB do
 
   defp try_connect(state) do
     url = "#{state.base_url}/_api/version"
+
     case http_get(url, state.auth_header) do
       {:ok, %{"server" => "arango"}} -> %{state | connected: true}
       _ -> %{state | connected: false}
@@ -305,19 +347,16 @@ defmodule Hypatia.Data.ArangoDB do
     db_url = "#{state.base_url}/_db/#{state.database}"
 
     # Create database if it doesn't exist
-    http_post("#{state.base_url}/_api/database", state.auth_header,
-      %{"name" => state.database})
+    http_post("#{state.base_url}/_api/database", state.auth_header, %{"name" => state.database})
 
     # Create document collections
     Enum.each(@document_collections, fn name ->
-      http_post("#{db_url}/_api/collection", state.auth_header,
-        %{"name" => name, "type" => 2})
+      http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 2})
     end)
 
     # Create edge collections
     Enum.each(@edge_collections, fn name ->
-      http_post("#{db_url}/_api/collection", state.auth_header,
-        %{"name" => name, "type" => 3})
+      http_post("#{db_url}/_api/collection", state.auth_header, %{"name" => name, "type" => 3})
     end)
 
     # Create indices for common queries
@@ -334,30 +373,44 @@ defmodule Hypatia.Data.ArangoDB do
     http_post("#{db_url}/_api/gharial", state.auth_header, %{
       "name" => "hypatia_graph",
       "edgeDefinitions" => [
-        %{"collection" => "trusts", "from" => ["repos", "bots", "recipes", "contributors"], "to" => ["repos", "bots", "recipes", "contributors"]},
+        %{
+          "collection" => "trusts",
+          "from" => ["repos", "bots", "recipes", "contributors"],
+          "to" => ["repos", "bots", "recipes", "contributors"]
+        },
         %{"collection" => "depends_on", "from" => ["repos"], "to" => ["repos"]},
         %{"collection" => "dispatches", "from" => ["findings"], "to" => ["bots"]},
         %{"collection" => "applies_to", "from" => ["recipes"], "to" => ["patterns"]},
         %{"collection" => "repo_has_finding", "from" => ["repos"], "to" => ["findings"]},
-        %{"collection" => "finding_matches_pattern", "from" => ["findings"], "to" => ["patterns"]},
+        %{
+          "collection" => "finding_matches_pattern",
+          "from" => ["findings"],
+          "to" => ["patterns"]
+        },
         %{"collection" => "bot_executes_recipe", "from" => ["bots"], "to" => ["recipes"]},
         %{"collection" => "recipe_has_outcome", "from" => ["recipes"], "to" => ["outcomes"]},
         %{"collection" => "contributor_fixes", "from" => ["contributors"], "to" => ["outcomes"]}
       ]
     })
 
-    Logger.info("ArangoDB schema ensured: #{length(@document_collections)} document + #{length(@edge_collections)} edge collections")
+    Logger.info(
+      "ArangoDB schema ensured: #{length(@document_collections)} document + #{length(@edge_collections)} edge collections"
+    )
   end
 
   defp create_index(state, collection, fields) do
     db_url = "#{state.base_url}/_db/#{state.database}"
-    http_post("#{db_url}/_api/index?collection=#{collection}", state.auth_header,
-      %{"type" => "persistent", "fields" => fields})
+
+    http_post("#{db_url}/_api/index?collection=#{collection}", state.auth_header, %{
+      "type" => "persistent",
+      "fields" => fields
+    })
   end
 
   defp do_upsert(state, collection, key, document) do
     _db_url = "#{state.base_url}/_db/#{state.database}"
     doc = Map.put(document, "_key", key)
+
     aql = """
     UPSERT {_key: @key}
     INSERT @doc
@@ -365,6 +418,7 @@ defmodule Hypatia.Data.ArangoDB do
     IN @@collection
     RETURN NEW
     """
+
     do_query(state, aql, %{"key" => key, "doc" => doc, "@collection" => collection})
   end
 
@@ -378,6 +432,7 @@ defmodule Hypatia.Data.ArangoDB do
     db_url = "#{state.base_url}/_db/#{state.database}"
     url = "#{db_url}/_api/cursor"
     body = %{"query" => aql, "bindVars" => bind_vars}
+
     case http_post(url, state.auth_header, body) do
       {:ok, %{"result" => result}} -> {:ok, result}
       {:ok, %{"error" => true, "errorMessage" => msg}} -> {:error, msg}
@@ -401,46 +456,64 @@ defmodule Hypatia.Data.ArangoDB do
 
   defp sync_scans(state, base_path) do
     scans_dir = Path.join(base_path, "scans")
+
     case File.ls(scans_dir) do
       {:ok, repos} ->
         Enum.each(repos, fn repo_dir ->
           scan_path = Path.join([scans_dir, repo_dir, "latest.json"])
+
           case File.read(scan_path) do
             {:ok, content} ->
               case Jason.decode(content) do
                 {:ok, scan} ->
                   findings = Map.get(scan, "findings", [])
+
                   do_upsert(state, "repos", repo_dir, %{
                     "name" => repo_dir,
                     "finding_count" => length(findings),
                     "last_scanned" => Map.get(scan, "timestamp", ""),
                     "status" => "active"
                   })
+
                   # Sync individual findings
                   Enum.each(findings, fn finding ->
                     f_key = "#{repo_dir}_#{:erlang.phash2(finding)}"
-                    do_upsert(state, "findings", f_key, Map.merge(finding, %{
-                      "repo" => repo_dir,
-                      "status" => "open"
-                    }))
+
+                    do_upsert(
+                      state,
+                      "findings",
+                      f_key,
+                      Map.merge(finding, %{
+                        "repo" => repo_dir,
+                        "status" => "open"
+                      })
+                    )
                   end)
-                _ -> :skip
+
+                _ ->
+                  :skip
               end
-            _ -> :skip
+
+            _ ->
+              :skip
           end
         end)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 
   defp sync_outcomes(state, base_path) do
     outcomes_dir = Path.join(base_path, "outcomes")
+
     case File.ls(outcomes_dir) do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
         |> Enum.each(fn file ->
           path = Path.join(outcomes_dir, file)
+
           case File.read(path) do
             {:ok, content} ->
               content
@@ -450,36 +523,50 @@ defmodule Hypatia.Data.ArangoDB do
                   {:ok, outcome} ->
                     key = "outcome_#{:erlang.phash2(outcome)}"
                     do_upsert(state, "outcomes", key, outcome)
-                  _ -> :skip
+
+                  _ ->
+                    :skip
                 end
               end)
-            _ -> :skip
+
+            _ ->
+              :skip
           end
         end)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 
   defp sync_recipes(state, base_path) do
     recipes_dir = Path.join(base_path, "recipes")
+
     case File.ls(recipes_dir) do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".json"))
         |> Enum.each(fn file ->
           path = Path.join(recipes_dir, file)
+
           case File.read(path) do
             {:ok, content} ->
               case Jason.decode(content) do
                 {:ok, recipe} ->
                   key = Map.get(recipe, "id", Path.rootname(file))
                   do_upsert(state, "recipes", key, recipe)
-                _ -> :skip
+
+                _ ->
+                  :skip
               end
-            _ -> :skip
+
+            _ ->
+              :skip
           end
         end)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 
@@ -512,14 +599,21 @@ defmodule Hypatia.Data.ArangoDB do
 
     json_body = Jason.encode!(body)
 
-    case :httpc.request(:post, {String.to_charlist(url), headers, ~c"application/json", json_body},
-      [{:timeout, 10_000}], []) do
+    case :httpc.request(
+           :post,
+           {String.to_charlist(url), headers, ~c"application/json", json_body},
+           [{:timeout, 10_000}],
+           []
+         ) do
       {:ok, {{_, code, _}, _, resp_body}} when code in 200..299 ->
         Jason.decode(to_string(resp_body))
+
       {:ok, {{_, code, _}, _, resp_body}} when code in 300..499 ->
         Jason.decode(to_string(resp_body))
+
       {:ok, {{_, status, _}, _, resp_body}} ->
         {:error, {status, to_string(resp_body)}}
+
       {:error, reason} ->
         {:error, reason}
     end

@@ -85,7 +85,9 @@ defmodule Hypatia.MergeOrchestration.Dispatcher do
   @doc "Mint the Kin.Gate coordination lease (artifact-5 schema) for this decision's territory."
   def lease_for(ctx, decision) do
     %{
-      "lease_id" => "lease-" <> String.replace(decision.pr.repo, "/", "-") <> "-" <> to_string(decision.pr.number),
+      "lease_id" =>
+        "lease-" <>
+          String.replace(decision.pr.repo, "/", "-") <> "-" <> to_string(decision.pr.number),
       "holder" => Map.get(ctx, :holder, "hypatia"),
       "repo" => decision.pr.repo,
       "territory" => %{

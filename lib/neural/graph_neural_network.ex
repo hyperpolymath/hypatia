@@ -22,11 +22,16 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
   use GenServer
 
   defstruct [
-    :node_embeddings,  # %{agent_id => [Float]}
-    :edge_weights,     # %{{from, to} => Float}
-    :clusters,         # %{agent_id => cluster_id}
-    :layer_count,      # number of message-passing layers
-    :embedding_dim     # dimension of node embeddings
+    # %{agent_id => [Float]}
+    :node_embeddings,
+    # %{{from, to} => Float}
+    :edge_weights,
+    # %{agent_id => cluster_id}
+    :clusters,
+    # number of message-passing layers
+    :layer_count,
+    # dimension of node embeddings
+    :embedding_dim
   ]
 
   def start_link(opts \\ []) do
@@ -42,6 +47,7 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
       layer_count: 3,
       embedding_dim: 16
     }
+
     {:ok, state}
   end
 
@@ -60,10 +66,11 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
   @impl true
   def handle_call({:analyse, finding}, _from, state) do
     # Read novelty from blackboard (Phase 1 output)
-    novelty = case Hypatia.Neural.Blackboard.read(:rbf, :novelty) do
-      {:ok, v} -> v
-      :not_found -> %{score: 0.5, status: :unknown}
-    end
+    novelty =
+      case Hypatia.Neural.Blackboard.read(:rbf, :novelty) do
+        {:ok, v} -> v
+        :not_found -> %{score: 0.5, status: :unknown}
+      end
 
     # Compute graph metrics
     result = %{
@@ -83,9 +90,10 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
   def handle_call(:get_state, _from, state) do
     snap = %{
       "node_embeddings" => stringify_keys(state.node_embeddings),
-      "edge_weights" => Enum.map(state.edge_weights, fn {{from, to}, w} ->
-        %{"from" => to_string(from), "to" => to_string(to), "weight" => w}
-      end),
+      "edge_weights" =>
+        Enum.map(state.edge_weights, fn {{from, to}, w} ->
+          %{"from" => to_string(from), "to" => to_string(to), "weight" => w}
+        end),
       "clusters" => stringify_keys(state.clusters),
       "layer_count" => state.layer_count,
       "embedding_dim" => state.embedding_dim,
@@ -106,7 +114,9 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
           acc
       end)
 
-    node_embeddings = Map.get(map, "node_embeddings", state.node_embeddings) || state.node_embeddings
+    node_embeddings =
+      Map.get(map, "node_embeddings", state.node_embeddings) || state.node_embeddings
+
     clusters = Map.get(map, "clusters", state.clusters) || state.clusters
 
     restored = %{
@@ -128,9 +138,10 @@ defmodule Hypatia.Neural.GraphNeuralNetwork do
   defp stringify_keys(other), do: other
 
   defp compute_centrality(agent_id, state) do
-    edges = state.edge_weights
-    |> Enum.filter(fn {{from, _to}, _w} -> from == agent_id end)
-    |> length()
+    edges =
+      state.edge_weights
+      |> Enum.filter(fn {{from, _to}, _w} -> from == agent_id end)
+      |> length()
 
     total = map_size(state.edge_weights)
     if total > 0, do: edges / total, else: 0.0

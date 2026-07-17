@@ -105,11 +105,12 @@ defmodule Hypatia.Rules.Learning do
         fp_count = length(Map.get(state.false_positives, issue_type, []))
 
         # Apply recency weighting
-        weighted_successes = Enum.reduce(fixes, 0, fn fix, acc ->
-          age_hours = calculate_age_hours(fix.timestamp)
-          weight = :math.exp(-age_hours / 24.0)
-          if fix.outcome == :success, do: acc + weight, else: acc
-        end)
+        weighted_successes =
+          Enum.reduce(fixes, 0, fn fix, acc ->
+            age_hours = calculate_age_hours(fix.timestamp)
+            weight = :math.exp(-age_hours / 24.0)
+            if fix.outcome == :success, do: acc + weight, else: acc
+          end)
 
         base = weighted_successes / total
         penalty = min(fp_count * 0.15, 0.5)
@@ -205,13 +206,15 @@ defmodule Hypatia.Rules.Learning do
 
     decayed_fps =
       Map.new(state.false_positives, fn {issue_type, contexts} ->
-        filtered = Enum.reject(contexts, fn ctx ->
-          if is_map(ctx) && Map.has_key?(ctx, :timestamp) do
-            DateTime.compare(ctx.timestamp, thirty_days_ago) == :lt
-          else
-            false
-          end
-        end)
+        filtered =
+          Enum.reject(contexts, fn ctx ->
+            if is_map(ctx) && Map.has_key?(ctx, :timestamp) do
+              DateTime.compare(ctx.timestamp, thirty_days_ago) == :lt
+            else
+              false
+            end
+          end)
+
         {issue_type, filtered}
       end)
 

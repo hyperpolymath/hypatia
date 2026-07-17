@@ -4,7 +4,7 @@
 defmodule Hypatia.Rules.ScorecardCompliance do
   @moduledoc """
   Enforces OpenSSF Scorecard best practices as automated Elixir rules.
-  
+
   These rules specifically target the 'High Risk' items flagged by Scorecard
   to prevent quality gate failures before they reach the remote repository.
   """
@@ -33,17 +33,26 @@ defmodule Hypatia.Rules.ScorecardCompliance do
   Check for automated vulnerability/secret scanning (Vulnerability-Scanning).
   """
   def check_vulnerability_scanning(file_list) do
-    has_scanner = Enum.any?(file_list, fn f -> 
-      String.contains?(f, "secret-scanner.yml") or 
-      String.contains?(f, "gitleaks") or 
-      String.contains?(f, "trufflehog")
-    end)
+    has_scanner =
+      Enum.any?(file_list, fn f ->
+        String.contains?(f, "secret-scanner.yml") or
+          String.contains?(f, "gitleaks") or
+          String.contains?(f, "trufflehog")
+      end)
 
     if has_scanner do
       []
     else
-      [%{type: :scorecard_violation, metric: :vulnerability_scanning, file: ".github/workflows/secret-scanner.yml",
-         severity: :high, detail: "Missing automated secret/vulnerability scanning. Gitleaks or TruffleHog integration is required."}]
+      [
+        %{
+          type: :scorecard_violation,
+          metric: :vulnerability_scanning,
+          file: ".github/workflows/secret-scanner.yml",
+          severity: :high,
+          detail:
+            "Missing automated secret/vulnerability scanning. Gitleaks or TruffleHog integration is required."
+        }
+      ]
     end
   end
 
@@ -55,14 +64,30 @@ defmodule Hypatia.Rules.ScorecardCompliance do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       cond do
         String.contains?(content, "permissions: write-all") ->
-          [%{type: :scorecard_violation, metric: :token_permissions, file: filename,
-             severity: :critical, detail: "Dangerous 'write-all' permissions detected. Use granular permissions."}]
-        
+          [
+            %{
+              type: :scorecard_violation,
+              metric: :token_permissions,
+              file: filename,
+              severity: :critical,
+              detail: "Dangerous 'write-all' permissions detected. Use granular permissions."
+            }
+          ]
+
         String.contains?(content, "permissions: read-all") ->
-          [%{type: :scorecard_violation, metric: :token_permissions, file: filename,
-             severity: :high, detail: "Broad 'read-all' permissions detected. Scorecard mandates granular blocks (e.g., contents: read)."}]
-        
-        true -> []
+          [
+            %{
+              type: :scorecard_violation,
+              metric: :token_permissions,
+              file: filename,
+              severity: :high,
+              detail:
+                "Broad 'read-all' permissions detected. Scorecard mandates granular blocks (e.g., contents: read)."
+            }
+          ]
+
+        true ->
+          []
       end
     end)
   end
@@ -71,15 +96,24 @@ defmodule Hypatia.Rules.ScorecardCompliance do
   Check for automated dependency update configuration (Dependency-Update-Tool).
   """
   def check_dependency_tool(_repo_path, file_list) do
-    has_dependabot = Enum.any?(file_list, fn f -> 
-      String.ends_with?(f, ".github/dependabot.yml") or String.ends_with?(f, ".github/dependabot.yaml")
-    end)
+    has_dependabot =
+      Enum.any?(file_list, fn f ->
+        String.ends_with?(f, ".github/dependabot.yml") or
+          String.ends_with?(f, ".github/dependabot.yaml")
+      end)
 
     if has_dependabot do
       []
     else
-      [%{type: :scorecard_violation, metric: :dependency_update_tool, file: ".github/dependabot.yml",
-         severity: :high, detail: "Missing Dependabot configuration. Automated dependency updates are required."}]
+      [
+        %{
+          type: :scorecard_violation,
+          metric: :dependency_update_tool,
+          file: ".github/dependabot.yml",
+          severity: :high,
+          detail: "Missing Dependabot configuration. Automated dependency updates are required."
+        }
+      ]
     end
   end
 
@@ -162,7 +196,10 @@ defmodule Hypatia.Rules.ScorecardCompliance do
            "Docker image ships an older toolchain. Bump the rust-toolchain " <>
            "file or pin the dependency to a 1.90-compatible version."}
 
-      Regex.match?(~r/(error: failed to run custom build command|build script .+ panicked|panicked at .*build\.rs)/i, log_text) ->
+      Regex.match?(
+        ~r/(error: failed to run custom build command|build script .+ panicked|panicked at .*build\.rs)/i,
+        log_text
+      ) ->
         {:build_script_panic,
          "Build-script panic: a transitive crate's `build.rs` crashed " <>
            "before any fuzz target could be linked. Inspect the panic " <>
@@ -239,15 +276,24 @@ defmodule Hypatia.Rules.ScorecardCompliance do
   Check for CII Best Practices badge (or entry point for the badge).
   """
   def check_cii_best_practices(file_list) do
-    has_marker = Enum.any?(file_list, fn f -> 
-      String.ends_with?(f, "CII-ENFORCEMENT.adoc") or String.contains?(f, "best-practices.coreinfrastructure.org")
-    end)
+    has_marker =
+      Enum.any?(file_list, fn f ->
+        String.ends_with?(f, "CII-ENFORCEMENT.adoc") or
+          String.contains?(f, "best-practices.coreinfrastructure.org")
+      end)
 
     if has_marker do
       []
     else
-      [%{type: :scorecard_violation, metric: :cii_best_practices, file: "README.md",
-         severity: :low, detail: "Missing CII Best Practices marker or badge."}]
+      [
+        %{
+          type: :scorecard_violation,
+          metric: :cii_best_practices,
+          file: "README.md",
+          severity: :low,
+          detail: "Missing CII Best Practices marker or badge."
+        }
+      ]
     end
   end
 end

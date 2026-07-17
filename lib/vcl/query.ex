@@ -37,23 +37,30 @@ defmodule Hypatia.VCL.Query do
   @doc "Fetch all scan results. Replaces VerisimConnector.fetch_all_scans/0."
   def fetch_scans(opts \\ []) do
     limit = Keyword.get(opts, :limit)
-    query = if limit do
-      "SELECT DOCUMENT FROM STORE scans LIMIT #{limit}"
-    else
-      "SELECT DOCUMENT FROM STORE scans"
-    end
+
+    query =
+      if limit do
+        "SELECT DOCUMENT FROM STORE scans LIMIT #{limit}"
+      else
+        "SELECT DOCUMENT FROM STORE scans"
+      end
 
     case Client.query(query) do
       {:ok, results} ->
-        scans = Enum.map(results, fn data ->
-          repo_name = data
-            |> Map.get("_source", "unknown.json")
-            |> String.replace(".json", "")
-          %{repo: repo_name, scan: Map.delete(data, "_source")}
-        end)
+        scans =
+          Enum.map(results, fn data ->
+            repo_name =
+              data
+              |> Map.get("_source", "unknown.json")
+              |> String.replace(".json", "")
+
+            %{repo: repo_name, scan: Map.delete(data, "_source")}
+          end)
+
         {:ok, scans}
 
-      {:error, _} = error -> error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -80,7 +87,8 @@ defmodule Hypatia.VCL.Query do
       {:ok, _} ->
         {:ok, []}
 
-      {:error, _} = error -> error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -88,18 +96,20 @@ defmodule Hypatia.VCL.Query do
   def fetch_recipes(opts \\ []) do
     language = Keyword.get(opts, :language)
 
-    query = if language do
-      ~s(SELECT DOCUMENT FROM STORE recipes WHERE FIELD languages CONTAINS "#{language}")
-    else
-      "SELECT DOCUMENT FROM STORE recipes"
-    end
+    query =
+      if language do
+        ~s(SELECT DOCUMENT FROM STORE recipes WHERE FIELD languages CONTAINS "#{language}")
+      else
+        "SELECT DOCUMENT FROM STORE recipes"
+      end
 
     case Client.query(query) do
       {:ok, results} ->
         recipes = Enum.map(results, &Map.delete(&1, "_source"))
         {:ok, recipes}
 
-      {:error, _} = error -> error
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -114,14 +124,21 @@ defmodule Hypatia.VCL.Query do
 
   @doc "Fetch proven substitutions."
   def fetch_substitutions do
-    path = Path.join(Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"), "recipes/proven-substitutions.json")
+    path =
+      Path.join(
+        Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
+        "recipes/proven-substitutions.json"
+      )
+
     case File.read(path) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, data} -> {:ok, Map.get(data, "substitutions", [])}
           {:error, reason} -> {:error, reason}
         end
-      {:error, reason} -> {:error, reason}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -130,16 +147,20 @@ defmodule Hypatia.VCL.Query do
     recipe_id = Keyword.get(opts, :recipe_id)
     limit = Keyword.get(opts, :limit)
 
-    query = cond do
-      recipe_id && limit ->
-        ~s(SELECT TEMPORAL, DOCUMENT FROM STORE outcomes WHERE FIELD recipe_id == "#{recipe_id}" LIMIT #{limit})
-      recipe_id ->
-        ~s(SELECT TEMPORAL, DOCUMENT FROM STORE outcomes WHERE FIELD recipe_id == "#{recipe_id}")
-      limit ->
-        "SELECT TEMPORAL, DOCUMENT FROM STORE outcomes LIMIT #{limit}"
-      true ->
-        "SELECT TEMPORAL, DOCUMENT FROM STORE outcomes"
-    end
+    query =
+      cond do
+        recipe_id && limit ->
+          ~s(SELECT TEMPORAL, DOCUMENT FROM STORE outcomes WHERE FIELD recipe_id == "#{recipe_id}" LIMIT #{limit})
+
+        recipe_id ->
+          ~s(SELECT TEMPORAL, DOCUMENT FROM STORE outcomes WHERE FIELD recipe_id == "#{recipe_id}")
+
+        limit ->
+          "SELECT TEMPORAL, DOCUMENT FROM STORE outcomes LIMIT #{limit}"
+
+        true ->
+          "SELECT TEMPORAL, DOCUMENT FROM STORE outcomes"
+      end
 
     Client.query(query)
   end
@@ -157,15 +178,19 @@ defmodule Hypatia.VCL.Query do
   def scans_by_severity(severity) do
     case fetch_scans() do
       {:ok, scans} ->
-        filtered = Enum.filter(scans, fn %{scan: scan} ->
-          weak_points = Map.get(scan, "weak_points", [])
-          Enum.any?(weak_points, fn wp ->
-            Map.get(wp, "severity") == severity
+        filtered =
+          Enum.filter(scans, fn %{scan: scan} ->
+            weak_points = Map.get(scan, "weak_points", [])
+
+            Enum.any?(weak_points, fn wp ->
+              Map.get(wp, "severity") == severity
+            end)
           end)
-        end)
+
         {:ok, filtered}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -173,15 +198,19 @@ defmodule Hypatia.VCL.Query do
   def scans_by_category(category) do
     case fetch_scans() do
       {:ok, scans} ->
-        filtered = Enum.filter(scans, fn %{scan: scan} ->
-          weak_points = Map.get(scan, "weak_points", [])
-          Enum.any?(weak_points, fn wp ->
-            Map.get(wp, "category") == category
+        filtered =
+          Enum.filter(scans, fn %{scan: scan} ->
+            weak_points = Map.get(scan, "weak_points", [])
+
+            Enum.any?(weak_points, fn wp ->
+              Map.get(wp, "category") == category
+            end)
           end)
-        end)
+
         {:ok, filtered}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -199,12 +228,15 @@ defmodule Hypatia.VCL.Query do
   def recipes_above_confidence(threshold) do
     case fetch_recipes() do
       {:ok, recipes} ->
-        filtered = Enum.filter(recipes, fn recipe ->
-          Map.get(recipe, "confidence", 0.0) >= threshold
-        end)
+        filtered =
+          Enum.filter(recipes, fn recipe ->
+            Map.get(recipe, "confidence", 0.0) >= threshold
+          end)
+
         {:ok, filtered}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -229,12 +261,15 @@ defmodule Hypatia.VCL.Query do
   def cross_repo_patterns(min_repos \\ 3) do
     case fetch_patterns() do
       {:ok, patterns} ->
-        cross_repo = patterns
-          |> Enum.filter(fn p -> (Map.get(p, "repos_affected", 0)) >= min_repos end)
+        cross_repo =
+          patterns
+          |> Enum.filter(fn p -> Map.get(p, "repos_affected", 0) >= min_repos end)
           |> Enum.sort_by(fn p -> Map.get(p, "repos_affected", 0) end, :desc)
+
         {:ok, cross_repo}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -246,17 +281,19 @@ defmodule Hypatia.VCL.Query do
     case fetch_patterns() do
       {:ok, patterns} ->
         # Build repo → pattern map
-        repo_patterns = Enum.reduce(patterns, %{}, fn pattern, acc ->
-          repos = Map.get(pattern, "repos_affected_list", [])
-          pattern_id = Map.get(pattern, "id", "")
+        repo_patterns =
+          Enum.reduce(patterns, %{}, fn pattern, acc ->
+            repos = Map.get(pattern, "repos_affected_list", [])
+            pattern_id = Map.get(pattern, "id", "")
 
-          Enum.reduce(repos, acc, fn repo, inner_acc ->
-            Map.update(inner_acc, repo, [pattern_id], &[pattern_id | &1])
+            Enum.reduce(repos, acc, fn repo, inner_acc ->
+              Map.update(inner_acc, repo, [pattern_id], &[pattern_id | &1])
+            end)
           end)
-        end)
 
         # Find co-occurring patterns
-        correlations = repo_patterns
+        correlations =
+          repo_patterns
           |> Map.values()
           |> Enum.filter(fn pids -> length(pids) >= 2 end)
           |> Enum.flat_map(fn pids ->
@@ -269,7 +306,8 @@ defmodule Hypatia.VCL.Query do
 
         {:ok, correlations}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -280,7 +318,8 @@ defmodule Hypatia.VCL.Query do
   def outcome_timeline(recipe_id) do
     case outcomes_for_recipe(recipe_id) do
       {:ok, outcomes} ->
-        timeline = outcomes
+        timeline =
+          outcomes
           |> Enum.group_by(fn o ->
             timestamp = Map.get(o, "timestamp", "")
             String.slice(timestamp, 0, 10)
@@ -290,7 +329,8 @@ defmodule Hypatia.VCL.Query do
               date: date,
               successes: Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "success")),
               failures: Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "failure")),
-              false_positives: Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "false_positive")),
+              false_positives:
+                Enum.count(day_outcomes, &(Map.get(&1, "outcome") == "false_positive")),
               total: length(day_outcomes)
             }
           end)
@@ -298,7 +338,8 @@ defmodule Hypatia.VCL.Query do
 
         {:ok, timeline}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -315,35 +356,40 @@ defmodule Hypatia.VCL.Query do
 
         # Recent trend (last 10)
         recent = Enum.take(outcomes, -10)
-        recent_success_rate = if recent != [] do
-          Enum.count(recent, &(Map.get(&1, "outcome") == "success")) / length(recent)
-        else
-          0.0
-        end
+
+        recent_success_rate =
+          if recent != [] do
+            Enum.count(recent, &(Map.get(&1, "outcome") == "success")) / length(recent)
+          else
+            0.0
+          end
 
         overall_success_rate = successes / total
 
-        trend = cond do
-          recent_success_rate > overall_success_rate + 0.1 -> :improving
-          recent_success_rate < overall_success_rate - 0.1 -> :declining
-          true -> :stable
-        end
+        trend =
+          cond do
+            recent_success_rate > overall_success_rate + 0.1 -> :improving
+            recent_success_rate < overall_success_rate - 0.1 -> :declining
+            true -> :stable
+          end
 
-        {:ok, %{
-          recipe_id: recipe_id,
-          total_attempts: total,
-          successes: successes,
-          failures: failures,
-          false_positives: false_positives,
-          success_rate: Float.round(overall_success_rate, 4),
-          recent_success_rate: Float.round(recent_success_rate, 4),
-          trend: trend
-        }}
+        {:ok,
+         %{
+           recipe_id: recipe_id,
+           total_attempts: total,
+           successes: successes,
+           failures: failures,
+           false_positives: false_positives,
+           success_rate: Float.round(overall_success_rate, 4),
+           recent_success_rate: Float.round(recent_success_rate, 4),
+           trend: trend
+         }}
 
       {:ok, []} ->
         {:ok, %{recipe_id: recipe_id, total_attempts: 0, trend: :no_data}}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -354,12 +400,16 @@ defmodule Hypatia.VCL.Query do
   def most_vulnerable_repos(limit \\ 20) do
     case fetch_scans() do
       {:ok, scans} ->
-        ranked = scans
+        ranked =
+          scans
           |> Enum.map(fn %{repo: repo, scan: scan} ->
             weak_points = Map.get(scan, "weak_points", [])
-            categories = weak_points
+
+            categories =
+              weak_points
               |> Enum.map(&Map.get(&1, "category", "unknown"))
               |> Enum.uniq()
+
             %{repo: repo, count: length(weak_points), categories: categories}
           end)
           |> Enum.filter(fn %{count: c} -> c > 0 end)
@@ -368,7 +418,8 @@ defmodule Hypatia.VCL.Query do
 
         {:ok, ranked}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -378,18 +429,21 @@ defmodule Hypatia.VCL.Query do
   def category_distribution do
     case fetch_scans() do
       {:ok, scans} ->
-        distribution = scans
+        distribution =
+          scans
           |> Enum.flat_map(fn %{scan: scan} ->
             Map.get(scan, "weak_points", [])
           end)
           |> Enum.group_by(&Map.get(&1, "category", "unknown"))
           |> Enum.map(fn {category, findings} ->
             severities = Enum.frequencies_by(findings, &Map.get(&1, "severity", "Medium"))
+
             %{
               category: category,
               total: length(findings),
               severities: severities,
-              repos: findings
+              repos:
+                findings
                 |> Enum.map(&Map.get(&1, "location", ""))
                 |> Enum.uniq()
                 |> length()
@@ -399,7 +453,8 @@ defmodule Hypatia.VCL.Query do
 
         {:ok, distribution}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -411,27 +466,32 @@ defmodule Hypatia.VCL.Query do
          {:ok, recipes} <- fetch_recipes() do
       total_patterns = length(patterns)
 
-      recipe_pattern_ids = recipes
+      recipe_pattern_ids =
+        recipes
         |> Enum.flat_map(&Map.get(&1, "pattern_ids", []))
         |> MapSet.new()
 
-      covered = Enum.count(patterns, fn p ->
-        pattern_id = Map.get(p, "id", "")
-        MapSet.member?(recipe_pattern_ids, pattern_id)
-      end)
+      covered =
+        Enum.count(patterns, fn p ->
+          pattern_id = Map.get(p, "id", "")
+          MapSet.member?(recipe_pattern_ids, pattern_id)
+        end)
 
-      pa_rule_coverage = recipes
+      pa_rule_coverage =
+        recipes
         |> Enum.flat_map(&Map.get(&1, "pattern_ids", []))
         |> Enum.map(fn pid -> String.split(pid, "-") |> List.first() end)
         |> Enum.uniq()
 
-      {:ok, %{
-        total_patterns: total_patterns,
-        patterns_with_recipe: covered,
-        coverage_pct: if(total_patterns > 0, do: Float.round(covered / total_patterns * 100, 1), else: 0.0),
-        total_recipes: length(recipes),
-        pa_rules_covered: pa_rule_coverage
-      }}
+      {:ok,
+       %{
+         total_patterns: total_patterns,
+         patterns_with_recipe: covered,
+         coverage_pct:
+           if(total_patterns > 0, do: Float.round(covered / total_patterns * 100, 1), else: 0.0),
+         total_recipes: length(recipes),
+         pa_rules_covered: pa_rule_coverage
+       }}
     end
   end
 
@@ -443,26 +503,33 @@ defmodule Hypatia.VCL.Query do
          {:ok, patterns} <- fetch_patterns(),
          {:ok, recipes} <- fetch_recipes(),
          {:ok, outcomes} <- fetch_outcomes() do
-      total_weak_points = scans
+      total_weak_points =
+        scans
         |> Enum.map(fn %{scan: scan} -> length(Map.get(scan, "weak_points", [])) end)
         |> Enum.sum()
 
       success_count = Enum.count(outcomes, &(Map.get(&1, "outcome") == "success"))
       failure_count = Enum.count(outcomes, &(Map.get(&1, "outcome") == "failure"))
 
-      {:ok, %{
-        repos_scanned: length(scans),
-        total_weak_points: total_weak_points,
-        canonical_patterns: length(patterns),
-        fix_recipes: length(recipes),
-        outcomes_recorded: length(outcomes),
-        success_rate: if(outcomes != [], do: Float.round(success_count / length(outcomes) * 100, 1), else: 0.0),
-        failure_count: failure_count,
-        high_confidence_recipes: Enum.count(recipes, &(Map.get(&1, "confidence", 0) >= 0.95)),
-        auto_executable_recipes: Enum.count(recipes, fn r ->
-          Map.get(r, "confidence", 0) >= 0.95 and Map.get(r, "auto_fixable", false)
-        end)
-      }}
+      {:ok,
+       %{
+         repos_scanned: length(scans),
+         total_weak_points: total_weak_points,
+         canonical_patterns: length(patterns),
+         fix_recipes: length(recipes),
+         outcomes_recorded: length(outcomes),
+         success_rate:
+           if(outcomes != [],
+             do: Float.round(success_count / length(outcomes) * 100, 1),
+             else: 0.0
+           ),
+         failure_count: failure_count,
+         high_confidence_recipes: Enum.count(recipes, &(Map.get(&1, "confidence", 0) >= 0.95)),
+         auto_executable_recipes:
+           Enum.count(recipes, fn r ->
+             Map.get(r, "confidence", 0) >= 0.95 and Map.get(r, "auto_fixable", false)
+           end)
+       }}
     end
   end
 

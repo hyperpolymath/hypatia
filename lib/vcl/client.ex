@@ -113,11 +113,13 @@ defmodule Hypatia.VCL.Client do
         cache = maybe_clean_cache(state.cache, now, state.last_cache_clean, state.cache_ttl)
         cache = Map.put(cache, cache_key, {result, now})
 
-        {:reply, result, %{state |
-          query_count: state.query_count + 1,
-          cache: cache,
-          last_cache_clean: if(cache != state.cache, do: now, else: state.last_cache_clean)
-        }}
+        {:reply, result,
+         %{
+           state
+           | query_count: state.query_count + 1,
+             cache: cache,
+             last_cache_clean: if(cache != state.cache, do: now, else: state.last_cache_clean)
+         }}
     end
   end
 
@@ -131,11 +133,12 @@ defmodule Hypatia.VCL.Client do
 
   @impl true
   def handle_call(:stats, _from, state) do
-    {:reply, %{
-      query_count: state.query_count,
-      cache_size: map_size(state.cache),
-      cache_ttl_ms: state.cache_ttl
-    }, state}
+    {:reply,
+     %{
+       query_count: state.query_count,
+       cache_size: map_size(state.cache),
+       cache_ttl_ms: state.cache_ttl
+     }, state}
   end
 
   # ---------------------------------------------------------------------------
@@ -197,19 +200,21 @@ defmodule Hypatia.VCL.Client do
          {:ok, proof, rest} <- parse_proof(rest),
          {:ok, limit, rest} <- parse_limit(rest),
          {:ok, offset, _rest} <- parse_offset(rest) do
-      {:ok, %{
-        modalities: modalities,
-        source: source,
-        where: where_clause,
-        proof: proof,
-        limit: limit,
-        offset: offset
-      }}
+      {:ok,
+       %{
+         modalities: modalities,
+         source: source,
+         where: where_clause,
+         proof: proof,
+         limit: limit,
+         offset: offset
+       }}
     end
   end
 
   defp parse_select(["SELECT" | rest]) do
     {modalities, rest} = take_modalities(rest, [])
+
     if modalities == [] do
       {:error, "Expected at least one modality after SELECT"}
     else
@@ -219,12 +224,24 @@ defmodule Hypatia.VCL.Client do
 
   defp parse_select(_), do: {:error, "Expected SELECT"}
 
-  defp take_modalities(["GRAPH" | rest], acc), do: take_modalities(strip_comma(rest), [:graph | acc])
-  defp take_modalities(["VECTOR" | rest], acc), do: take_modalities(strip_comma(rest), [:vector | acc])
-  defp take_modalities(["TENSOR" | rest], acc), do: take_modalities(strip_comma(rest), [:tensor | acc])
-  defp take_modalities(["SEMANTIC" | rest], acc), do: take_modalities(strip_comma(rest), [:semantic | acc])
-  defp take_modalities(["DOCUMENT" | rest], acc), do: take_modalities(strip_comma(rest), [:document | acc])
-  defp take_modalities(["TEMPORAL" | rest], acc), do: take_modalities(strip_comma(rest), [:temporal | acc])
+  defp take_modalities(["GRAPH" | rest], acc),
+    do: take_modalities(strip_comma(rest), [:graph | acc])
+
+  defp take_modalities(["VECTOR" | rest], acc),
+    do: take_modalities(strip_comma(rest), [:vector | acc])
+
+  defp take_modalities(["TENSOR" | rest], acc),
+    do: take_modalities(strip_comma(rest), [:tensor | acc])
+
+  defp take_modalities(["SEMANTIC" | rest], acc),
+    do: take_modalities(strip_comma(rest), [:semantic | acc])
+
+  defp take_modalities(["DOCUMENT" | rest], acc),
+    do: take_modalities(strip_comma(rest), [:document | acc])
+
+  defp take_modalities(["TEMPORAL" | rest], acc),
+    do: take_modalities(strip_comma(rest), [:temporal | acc])
+
   defp take_modalities(["*" | rest], acc), do: take_modalities(strip_comma(rest), [:all | acc])
   defp take_modalities(rest, acc), do: {Enum.reverse(acc), rest}
 
@@ -275,13 +292,15 @@ defmodule Hypatia.VCL.Client do
   defp parse_from(_), do: {:error, "Expected FROM clause (STORE, FEDERATION, HEXAD, or REMOTE)"}
 
   defp parse_drift_policy(["WITH", "DRIFT", policy | rest]) do
-    drift = case String.upcase(policy) do
-      "STRICT" -> :strict
-      "REPAIR" -> :repair
-      "TOLERATE" -> :tolerate
-      "LATEST" -> :latest
-      _ -> nil
-    end
+    drift =
+      case String.upcase(policy) do
+        "STRICT" -> :strict
+        "REPAIR" -> :repair
+        "TOLERATE" -> :tolerate
+        "LATEST" -> :latest
+        _ -> nil
+      end
+
     {drift, rest}
   end
 
@@ -298,7 +317,9 @@ defmodule Hypatia.VCL.Client do
 
   defp collect_urls([token | rest], acc) when is_binary(token) do
     cond do
-      token == "]" -> {Enum.reverse(acc), rest}
+      token == "]" ->
+        {Enum.reverse(acc), rest}
+
       String.ends_with?(token, "]") ->
         stripped = String.trim_trailing(token, "]")
         acc = if stripped == "", do: acc, else: [stripped | acc]
@@ -312,15 +333,17 @@ defmodule Hypatia.VCL.Client do
   defp collect_urls([], acc), do: {Enum.reverse(acc), []}
 
   defp parse_where(["WHERE" | rest]) do
-    {condition_tokens, rest} = Enum.split_while(rest, fn token ->
-      is_tuple(token) or token not in ["PROOF", "LIMIT", "OFFSET"]
-    end)
+    {condition_tokens, rest} =
+      Enum.split_while(rest, fn token ->
+        is_tuple(token) or token not in ["PROOF", "LIMIT", "OFFSET"]
+      end)
 
-    condition = if condition_tokens == [] do
-      nil
-    else
-      parse_conditions(condition_tokens)
-    end
+    condition =
+      if condition_tokens == [] do
+        nil
+      else
+        parse_conditions(condition_tokens)
+      end
 
     {:ok, condition, rest}
   end
@@ -384,13 +407,19 @@ defmodule Hypatia.VCL.Client do
   defp finalize_conditions(many), do: {:and, Enum.reverse(many)}
 
   defp parse_proof(["PROOF" | rest]) do
-    {proof_tokens, rest} = Enum.split_while(rest, fn token ->
-      is_tuple(token) or token not in ["LIMIT", "OFFSET"]
-    end)
-    proof_raw = proof_tokens |> Enum.map(fn
-      {:quoted, v} -> "\"#{v}\""
-      t -> t
-    end) |> Enum.join(" ")
+    {proof_tokens, rest} =
+      Enum.split_while(rest, fn token ->
+        is_tuple(token) or token not in ["LIMIT", "OFFSET"]
+      end)
+
+    proof_raw =
+      proof_tokens
+      |> Enum.map(fn
+        {:quoted, v} -> "\"#{v}\""
+        t -> t
+      end)
+      |> Enum.join(" ")
+
     {:ok, %{raw: proof_raw}, rest}
   end
 

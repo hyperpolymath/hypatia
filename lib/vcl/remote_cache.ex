@@ -73,7 +73,9 @@ defmodule Hypatia.VCL.RemoteCache do
     clone_url = normalise_url(url)
 
     # Derive a stable, filesystem-safe directory name from the URL.
-    url_hash = :crypto.hash(:sha256, clone_url) |> Base.encode16(case: :lower) |> String.slice(0, 16)
+    url_hash =
+      :crypto.hash(:sha256, clone_url) |> Base.encode16(case: :lower) |> String.slice(0, 16)
+
     local_path = Path.join(cache_dir, url_hash)
 
     ensure_ets()
@@ -109,7 +111,10 @@ defmodule Hypatia.VCL.RemoteCache do
   def evict(url, opts \\ []) do
     cache_dir = Keyword.get(opts, :cache_dir, @default_cache_dir)
     clone_url = normalise_url(url)
-    url_hash = :crypto.hash(:sha256, clone_url) |> Base.encode16(case: :lower) |> String.slice(0, 16)
+
+    url_hash =
+      :crypto.hash(:sha256, clone_url) |> Base.encode16(case: :lower) |> String.slice(0, 16)
+
     local_path = Path.join(cache_dir, url_hash)
 
     ensure_ets()
@@ -333,7 +338,9 @@ defmodule Hypatia.VCL.RemoteCache do
   @max_lock_wait_attempts 120
 
   defp wait_for_lock(lock_key, local_path, attempts) when attempts >= @max_lock_wait_attempts do
-    Logger.warning("VCL RemoteCache: lock wait timeout for #{inspect(lock_key)}, proceeding with existing data")
+    Logger.warning(
+      "VCL RemoteCache: lock wait timeout for #{inspect(lock_key)}, proceeding with existing data"
+    )
 
     if File.dir?(Path.join(local_path, ".git")) do
       {:ok, local_path}
