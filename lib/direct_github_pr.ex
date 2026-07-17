@@ -134,7 +134,11 @@ defmodule Hypatia.DirectGitHubPR do
             if dry_run do
               check_id = extract_check_id(finding) |> elem(1)
               repo = extract_repo_name(finding) |> elem(1)
-              Logger.info("[direct-pr] DRY RUN [#{idx}/#{length(findings)}]: #{repo} (#{check_id})")
+
+              Logger.info(
+                "[direct-pr] DRY RUN [#{idx}/#{length(findings)}]: #{repo} (#{check_id})"
+              )
+
               {finding_id, :dry_run}
             else
               Logger.info("[direct-pr] Processing [#{idx}/#{length(findings)}]: #{finding_id}")
@@ -203,6 +207,7 @@ defmodule Hypatia.DirectGitHubPR do
       # Fall back to scorecard_check name
       true ->
         check_name = Map.get(finding, "scorecard_check", "")
+
         case Map.get(@check_name_to_id, check_name) do
           nil ->
             # Try extracting from the finding ID (e.g., "SC-013-myrepo")
@@ -234,17 +239,27 @@ defmodule Hypatia.DirectGitHubPR do
   # --- Internal: Git Operations ---
 
   defp clone_repo(repo_name) do
-    tmp_dir = Path.join(System.tmp_dir!(), "hypatia-pr-#{repo_name}-#{System.unique_integer([:positive])}")
+    tmp_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "hypatia-pr-#{repo_name}-#{System.unique_integer([:positive])}"
+      )
 
     github_url = "https://github.com/#{@github_org}/#{repo_name}.git"
 
-    case System.cmd("gh", ["repo", "clone", "#{@github_org}/#{repo_name}", tmp_dir, "--", "--depth=1"],
-           stderr_to_stdout: true) do
+    case System.cmd(
+           "gh",
+           ["repo", "clone", "#{@github_org}/#{repo_name}", tmp_dir, "--", "--depth=1"],
+           stderr_to_stdout: true
+         ) do
       {_output, 0} ->
         {:ok, tmp_dir}
 
       {output, code} ->
-        Logger.warning("[direct-pr] Clone failed for #{github_url} (exit #{code}): #{String.slice(output, 0, 200)}")
+        Logger.warning(
+          "[direct-pr] Clone failed for #{github_url} (exit #{code}): #{String.slice(output, 0, 200)}"
+        )
+
         {:error, {:clone_failed, repo_name, code}}
     end
   end
@@ -323,7 +338,8 @@ defmodule Hypatia.DirectGitHubPR do
       {"GIT_COMMITTER_EMAIL", @git_author_email}
     ]
 
-    with {_, 0} <- System.cmd("git", ["add", "-A"], cd: tmp_dir, env: env, stderr_to_stdout: true),
+    with {_, 0} <-
+           System.cmd("git", ["add", "-A"], cd: tmp_dir, env: env, stderr_to_stdout: true),
          {_, 0} <-
            System.cmd("git", ["commit", "-m", String.trim(commit_msg)],
              cd: tmp_dir,
@@ -340,7 +356,8 @@ defmodule Hypatia.DirectGitHubPR do
   defp push_branch(tmp_dir, branch_name) do
     case System.cmd("git", ["push", "-u", "origin", branch_name],
            cd: tmp_dir,
-           stderr_to_stdout: true) do
+           stderr_to_stdout: true
+         ) do
       {_output, 0} ->
         :ok
 

@@ -23,7 +23,8 @@ defmodule Hypatia.ConfidenceAnnealingTest do
 
       assert state.outcome_count == 52
       assert state.stage == :veteran
-      assert state.temperature < 0.1  # Should be well cooled by 52 outcomes
+      # Should be well cooled by 52 outcomes
+      assert state.temperature < 0.1
     end
 
     test "zero outcomes produces nascent state" do
@@ -69,21 +70,27 @@ defmodule Hypatia.ConfidenceAnnealingTest do
       assert state.stage == :nascent
 
       # Get to adolescent (5 outcomes)
-      state = Enum.reduce(1..5, state, fn _, s ->
-        ConfidenceAnnealing.record_outcome(s, :success)
-      end)
+      state =
+        Enum.reduce(1..5, state, fn _, s ->
+          ConfidenceAnnealing.record_outcome(s, :success)
+        end)
+
       assert state.stage == :adolescent
 
       # Get to mature (15 outcomes)
-      state = Enum.reduce(1..10, state, fn _, s ->
-        ConfidenceAnnealing.record_outcome(s, :success)
-      end)
+      state =
+        Enum.reduce(1..10, state, fn _, s ->
+          ConfidenceAnnealing.record_outcome(s, :success)
+        end)
+
       assert state.stage == :mature
 
       # Get to veteran (50 outcomes)
-      state = Enum.reduce(1..35, state, fn _, s ->
-        ConfidenceAnnealing.record_outcome(s, :success)
-      end)
+      state =
+        Enum.reduce(1..35, state, fn _, s ->
+          ConfidenceAnnealing.record_outcome(s, :success)
+        end)
+
       assert state.stage == :veteran
     end
 
@@ -104,7 +111,8 @@ defmodule Hypatia.ConfidenceAnnealingTest do
 
   describe "anneal/2" do
     test "high temperature pulls confidence toward 0.5" do
-      hot_state = ConfidenceAnnealing.new_state()  # T=1.0
+      # T=1.0
+      hot_state = ConfidenceAnnealing.new_state()
 
       # A high raw confidence should be pulled down toward 0.5
       annealed = ConfidenceAnnealing.anneal(0.95, hot_state)

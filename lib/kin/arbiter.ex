@@ -48,14 +48,14 @@ defmodule Hypatia.Kin.Arbiter do
 
   # Categories that are known to never conflict with each other
   @non_conflicting_pairs MapSet.new([
-    {"license", "security"},
-    {"accessibility", "security"},
-    {"documentation", "security"},
-    {"formatting", "security"},
-    {"license", "accessibility"},
-    {"license", "documentation"},
-    {"formatting", "documentation"}
-  ])
+                           {"license", "security"},
+                           {"accessibility", "security"},
+                           {"documentation", "security"},
+                           {"formatting", "security"},
+                           {"license", "accessibility"},
+                           {"license", "documentation"},
+                           {"formatting", "documentation"}
+                         ])
 
   # --- Client API ---
 
@@ -117,9 +117,12 @@ defmodule Hypatia.Kin.Arbiter do
   @impl true
   def init(_opts) do
     state = %{
-      active_actions: %{},     # action_id => action
-      resolution_history: [],  # list of past arbitration decisions
-      synergy_log: []          # detected synergies between bot actions
+      # action_id => action
+      active_actions: %{},
+      # list of past arbitration decisions
+      resolution_history: [],
+      # detected synergies between bot actions
+      synergy_log: []
     }
 
     Logger.info("Kin.Arbiter started -- bot conflict resolution active.")
@@ -157,7 +160,14 @@ defmodule Hypatia.Kin.Arbiter do
   @impl true
   def handle_cast({:register_active, action}, state) do
     action_id = action_id(action)
-    new_active = Map.put(state.active_actions, action_id, Map.put(action, :registered_at, DateTime.utc_now()))
+
+    new_active =
+      Map.put(
+        state.active_actions,
+        action_id,
+        Map.put(action, :registered_at, DateTime.utc_now())
+      )
+
     {:noreply, %{state | active_actions: new_active}}
   end
 
@@ -177,7 +187,9 @@ defmodule Hypatia.Kin.Arbiter do
 
       # Same repo, check if categories conflict
       non_conflicting?(action_a, action_b) ->
-        new_state = log_resolution(state, action_a, action_b, :compatible, "non-conflicting categories")
+        new_state =
+          log_resolution(state, action_a, action_b, :compatible, "non-conflicting categories")
+
         {{:compatible, action_a, action_b}, new_state}
 
       # Same repo, same pattern = direct conflict, priority wins
@@ -202,21 +214,30 @@ defmodule Hypatia.Kin.Arbiter do
     {winner, loser, reason} =
       cond do
         priority_a < priority_b ->
-          {action_a, action_b, "#{action_a.bot_id} (priority #{priority_a}) outranks #{action_b.bot_id} (priority #{priority_b})"}
+          {action_a, action_b,
+           "#{action_a.bot_id} (priority #{priority_a}) outranks #{action_b.bot_id} (priority #{priority_b})"}
+
         priority_b < priority_a ->
-          {action_b, action_a, "#{action_b.bot_id} (priority #{priority_b}) outranks #{action_a.bot_id} (priority #{priority_a})"}
+          {action_b, action_a,
+           "#{action_b.bot_id} (priority #{priority_b}) outranks #{action_a.bot_id} (priority #{priority_a})"}
+
         true ->
           # Same priority: higher confidence wins
           conf_a = Map.get(action_a, :confidence, 0.0)
           conf_b = Map.get(action_b, :confidence, 0.0)
+
           if conf_a >= conf_b do
-            {action_a, action_b, "same priority, #{action_a.bot_id} has higher confidence (#{conf_a} vs #{conf_b})"}
+            {action_a, action_b,
+             "same priority, #{action_a.bot_id} has higher confidence (#{conf_a} vs #{conf_b})"}
           else
-            {action_b, action_a, "same priority, #{action_b.bot_id} has higher confidence (#{conf_b} vs #{conf_a})"}
+            {action_b, action_a,
+             "same priority, #{action_b.bot_id} has higher confidence (#{conf_b} vs #{conf_a})"}
           end
       end
 
-    Logger.info("Arbiter: #{winner.bot_id} wins over #{loser.bot_id} on #{winner.repo} -- #{reason}")
+    Logger.info(
+      "Arbiter: #{winner.bot_id} wins over #{loser.bot_id} on #{winner.repo} -- #{reason}"
+    )
 
     result = {:winner, winner, loser, reason}
     new_state = log_resolution(state, action_a, action_b, :priority_resolved, reason)
@@ -232,13 +253,25 @@ defmodule Hypatia.Kin.Arbiter do
 
   defp categorize_action(action) do
     pattern = Map.get(action, :pattern_id, "")
+
     cond do
-      String.contains?(pattern, "license") or String.contains?(pattern, "spdx") -> "license"
-      String.contains?(pattern, "CommandInjection") or String.contains?(pattern, "PathTraversal") -> "security"
-      String.contains?(pattern, "accessibility") or String.contains?(pattern, "a11y") -> "accessibility"
-      String.contains?(pattern, "doc") -> "documentation"
-      String.contains?(pattern, "format") -> "formatting"
-      true -> "general"
+      String.contains?(pattern, "license") or String.contains?(pattern, "spdx") ->
+        "license"
+
+      String.contains?(pattern, "CommandInjection") or String.contains?(pattern, "PathTraversal") ->
+        "security"
+
+      String.contains?(pattern, "accessibility") or String.contains?(pattern, "a11y") ->
+        "accessibility"
+
+      String.contains?(pattern, "doc") ->
+        "documentation"
+
+      String.contains?(pattern, "format") ->
+        "formatting"
+
+      true ->
+        "general"
     end
   end
 
@@ -255,12 +288,15 @@ defmodule Hypatia.Kin.Arbiter do
       |> Map.values()
       |> Enum.filter(fn active ->
         active.repo == action.repo and
-        not non_conflicting?(action, active) and
-        (Map.get(action, :pattern_id) == Map.get(active, :pattern_id) or files_overlap?(action, active))
+          not non_conflicting?(action, active) and
+          (Map.get(action, :pattern_id) == Map.get(active, :pattern_id) or
+             files_overlap?(action, active))
       end)
 
     case conflicts do
-      [] -> :clear
+      [] ->
+        :clear
+
       [first | _] ->
         {_, resolution_state} = resolve_by_priority(action, first, state)
         {:conflict, first, resolution_state}
@@ -287,20 +323,36 @@ defmodule Hypatia.Kin.Arbiter do
     cond do
       # echidnabot proving + rhodibot fixing = verified fix
       a.bot_id == "echidnabot" and b.bot_id in ["rhodibot", "panicbot"] ->
-        %{type: :verified_fix, bot_a: a.bot_id, bot_b: b.bot_id, repo: a.repo,
-          description: "#{a.bot_id} can formally verify #{b.bot_id}'s fix"}
+        %{
+          type: :verified_fix,
+          bot_a: a.bot_id,
+          bot_b: b.bot_id,
+          repo: a.repo,
+          description: "#{a.bot_id} can formally verify #{b.bot_id}'s fix"
+        }
 
       # panicbot scanning + sustainabot auditing = defense in depth
       a.bot_id == "panicbot" and b.bot_id == "sustainabot" ->
-        %{type: :defense_in_depth, bot_a: a.bot_id, bot_b: b.bot_id, repo: a.repo,
-          description: "security scan + supply chain audit on same repo"}
+        %{
+          type: :defense_in_depth,
+          bot_a: a.bot_id,
+          bot_b: b.bot_id,
+          repo: a.repo,
+          description: "security scan + supply chain audit on same repo"
+        }
 
       # glambot + seambot = full UX coverage
       a.bot_id == "glambot" and b.bot_id == "seambot" ->
-        %{type: :ux_coverage, bot_a: a.bot_id, bot_b: b.bot_id, repo: a.repo,
-          description: "accessibility + integration coverage on same repo"}
+        %{
+          type: :ux_coverage,
+          bot_a: a.bot_id,
+          bot_b: b.bot_id,
+          repo: a.repo,
+          description: "accessibility + integration coverage on same repo"
+        }
 
-      true -> nil
+      true ->
+        nil
     end
   end
 

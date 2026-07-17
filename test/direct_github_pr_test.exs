@@ -141,7 +141,9 @@ defmodule Hypatia.DirectGitHubPRTest do
     test "reads JSONL and processes findings in dry_run mode" do
       # Create a temporary JSONL file with test findings
       tmp_dir = System.tmp_dir!()
-      jsonl_path = Path.join(tmp_dir, "hypatia-test-batch-#{System.unique_integer([:positive])}.jsonl")
+
+      jsonl_path =
+        Path.join(tmp_dir, "hypatia-test-batch-#{System.unique_integer([:positive])}.jsonl")
 
       lines = [
         Jason.encode!(@sc013_finding),
@@ -167,7 +169,9 @@ defmodule Hypatia.DirectGitHubPRTest do
 
     test "respects filter_check option" do
       tmp_dir = System.tmp_dir!()
-      jsonl_path = Path.join(tmp_dir, "hypatia-test-filter-#{System.unique_integer([:positive])}.jsonl")
+
+      jsonl_path =
+        Path.join(tmp_dir, "hypatia-test-filter-#{System.unique_integer([:positive])}.jsonl")
 
       lines = [
         Jason.encode!(@sc013_finding),
@@ -188,7 +192,9 @@ defmodule Hypatia.DirectGitHubPRTest do
 
     test "respects max_prs option" do
       tmp_dir = System.tmp_dir!()
-      jsonl_path = Path.join(tmp_dir, "hypatia-test-max-#{System.unique_integer([:positive])}.jsonl")
+
+      jsonl_path =
+        Path.join(tmp_dir, "hypatia-test-max-#{System.unique_integer([:positive])}.jsonl")
 
       lines = [
         Jason.encode!(@sc013_finding),
@@ -212,7 +218,9 @@ defmodule Hypatia.DirectGitHubPRTest do
 
     test "handles empty JSONL file gracefully" do
       tmp_dir = System.tmp_dir!()
-      jsonl_path = Path.join(tmp_dir, "hypatia-test-empty-#{System.unique_integer([:positive])}.jsonl")
+
+      jsonl_path =
+        Path.join(tmp_dir, "hypatia-test-empty-#{System.unique_integer([:positive])}.jsonl")
 
       File.write!(jsonl_path, "")
 
@@ -224,7 +232,9 @@ defmodule Hypatia.DirectGitHubPRTest do
 
     test "skips malformed JSONL lines" do
       tmp_dir = System.tmp_dir!()
-      jsonl_path = Path.join(tmp_dir, "hypatia-test-malformed-#{System.unique_integer([:positive])}.jsonl")
+
+      jsonl_path =
+        Path.join(tmp_dir, "hypatia-test-malformed-#{System.unique_integer([:positive])}.jsonl")
 
       lines = [
         "not valid json",
@@ -262,6 +272,7 @@ defmodule Hypatia.DirectGitHubPRTest do
       assert File.exists?(script), "#{script} does not exist"
 
       stat = File.stat!(script)
+
       assert Bitwise.band(stat.mode, 0o100) != 0,
              "#{script} is not executable (mode: #{Integer.to_string(stat.mode, 8)})"
     end
@@ -283,18 +294,19 @@ defmodule Hypatia.DirectGitHubPRTest do
 
   describe "fix-token-permissions.sh integration" do
     test "adds permissions to a workflow without one" do
-      tmp_dir = create_test_repo_with_workflow("""
-      name: CI
-      on:
-        push:
-          branches: [main]
+      tmp_dir =
+        create_test_repo_with_workflow("""
+        name: CI
+        on:
+          push:
+            branches: [main]
 
-      jobs:
-        test:
-          runs-on: ubuntu-latest
-          steps:
-            - uses: actions/checkout@v4
-      """)
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v4
+        """)
 
       script = Path.expand("../scripts/fix-token-permissions.sh", __DIR__)
       {output, exit_code} = System.cmd("bash", [script, tmp_dir], stderr_to_stdout: true)
@@ -314,14 +326,15 @@ defmodule Hypatia.DirectGitHubPRTest do
     end
 
     test "skips workflows that already have permissions" do
-      tmp_dir = create_test_repo_with_workflow("""
-      name: CI
-      on: push
-      permissions: read-all
-      jobs:
-        test:
-          runs-on: ubuntu-latest
-      """)
+      tmp_dir =
+        create_test_repo_with_workflow("""
+        name: CI
+        on: push
+        permissions: read-all
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+        """)
 
       script = Path.expand("../scripts/fix-token-permissions.sh", __DIR__)
       {output, exit_code} = System.cmd("bash", [script, tmp_dir], stderr_to_stdout: true)
@@ -334,13 +347,14 @@ defmodule Hypatia.DirectGitHubPRTest do
     end
 
     test "is idempotent -- running twice produces same result" do
-      tmp_dir = create_test_repo_with_workflow("""
-      name: CI
-      on: push
-      jobs:
-        test:
-          runs-on: ubuntu-latest
-      """)
+      tmp_dir =
+        create_test_repo_with_workflow("""
+        name: CI
+        on: push
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+        """)
 
       script = Path.expand("../scripts/fix-token-permissions.sh", __DIR__)
 
@@ -362,7 +376,9 @@ defmodule Hypatia.DirectGitHubPRTest do
   # --- Helpers ---
 
   defp create_test_repo_with_workflow(workflow_content) do
-    tmp_dir = Path.join(System.tmp_dir!(), "hypatia-test-wf-#{System.unique_integer([:positive])}")
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "hypatia-test-wf-#{System.unique_integer([:positive])}")
+
     workflows_dir = Path.join([tmp_dir, ".github", "workflows"])
     File.mkdir_p!(workflows_dir)
 

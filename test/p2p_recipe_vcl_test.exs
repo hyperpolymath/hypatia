@@ -48,6 +48,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
     test "always returns a list for any pattern_id input" do
       Enum.each(@pattern_id_samples, fn id ->
         result = RecipeMatcher.find_recipes(id)
+
         assert is_list(result),
                "find_recipes(#{inspect(id)}) returned #{inspect(result)}, expected list"
       end)
@@ -62,6 +63,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
 
       Enum.each(unknown_ids, fn id ->
         result = RecipeMatcher.find_recipes(id)
+
         assert result == [],
                "find_recipes(#{inspect(id)}) expected [], got #{inspect(result)}"
       end)
@@ -77,12 +79,14 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
         |> Enum.flat_map(fn r -> Map.get(r, "pattern_ids", []) end)
         |> Enum.frequencies()
 
-      multi_pattern_ids = pattern_counts |> Enum.filter(fn {_, c} -> c > 1 end) |> Enum.map(&elem(&1, 0))
+      multi_pattern_ids =
+        pattern_counts |> Enum.filter(fn {_, c} -> c > 1 end) |> Enum.map(&elem(&1, 0))
 
       # For any pattern_id with multiple recipes, confidence must be sorted descending
       Enum.each(multi_pattern_ids, fn id ->
         results = RecipeMatcher.find_recipes(id)
         confidences = Enum.map(results, &Map.get(&1, "confidence", 0.0))
+
         assert confidences == Enum.sort(confidences, :desc),
                "find_recipes(#{inspect(id)}) confidence not sorted descending: #{inspect(confidences)}"
       end)
@@ -103,6 +107,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
         Enum.each(@languages, fn lang ->
           id = "#{pa}-test-pattern"
           result = RecipeMatcher.best_recipe(id, lang)
+
           assert is_nil(result) or is_map(result),
                  "best_recipe(#{inspect(id)}, #{inspect(lang)}) returned #{inspect(result)}"
         end)
@@ -120,11 +125,14 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
 
         Enum.each(pattern_ids, fn pid ->
           result = RecipeMatcher.best_recipe(pid, test_lang)
+
           if result != nil do
             assert Map.has_key?(result, "id"),
                    "Recipe returned by best_recipe missing 'id': #{inspect(result)}"
+
             assert Map.has_key?(result, "triangle_tier"),
                    "Recipe returned by best_recipe missing 'triangle_tier': #{inspect(result)}"
+
             assert Map.has_key?(result, "confidence"),
                    "Recipe returned by best_recipe missing 'confidence': #{inspect(result)}"
           end
@@ -166,6 +174,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
 
       Enum.each(tiered_recipes, fn recipe ->
         tier = Map.get(recipe, "triangle_tier")
+
         assert tier in @valid_tiers,
                "Recipe #{Map.get(recipe, "id")} has invalid triangle_tier: #{inspect(tier)}"
       end)
@@ -196,6 +205,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
       |> Enum.each(fn [c1, c2] ->
         s1 = TriangleRouter.dispatch_strategy(c1)
         s2 = TriangleRouter.dispatch_strategy(c2)
+
         assert tier_rank.(s1) <= tier_rank.(s2),
                "dispatch_strategy monotonicity violated: " <>
                  "strategy(#{c1})=#{s1} > strategy(#{c2})=#{s2}"
@@ -203,7 +213,9 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
     end
 
     test "dispatch_strategy covers all three tiers across the [0,1] range" do
-      strategies = @confidence_samples |> Enum.map(&TriangleRouter.dispatch_strategy/1) |> Enum.uniq()
+      strategies =
+        @confidence_samples |> Enum.map(&TriangleRouter.dispatch_strategy/1) |> Enum.uniq()
+
       assert :auto_execute in strategies
       assert :review in strategies
       assert :report_only in strategies
@@ -261,6 +273,7 @@ defmodule Hypatia.P2P.RecipeMatcherTest do
         Enum.each(@test_repos, fn repo ->
           Enum.each(@test_languages, fn lang ->
             result = TriangleRouter.route(pattern, repo, lang)
+
             assert valid_route_tuple?(result),
                    "route/3 returned invalid tuple #{inspect(result)} " <>
                      "for pattern=#{Map.get(pattern, "id")}, repo=#{repo}, lang=#{lang}"
@@ -295,6 +308,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       nil -> start_supervised!(Client)
       _pid -> :ok
     end
+
     :ok
   end
 
@@ -311,6 +325,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       Enum.each(@modalities, fn mod ->
         query = "SELECT #{mod} FROM STORE scans"
         result = Client.parse(query)
+
         assert match?({:ok, _}, result),
                "Expected {:ok, _} for query #{inspect(query)}, got #{inspect(result)}"
       end)
@@ -325,6 +340,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       Enum.each(@stores, fn store ->
         query = "SELECT DOCUMENT FROM STORE #{store}"
         result = Client.parse(query)
+
         assert match?({:ok, _}, result),
                "Store #{inspect(store)} failed to parse: #{inspect(result)}"
       end)
@@ -334,6 +350,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       Enum.each(@limit_values, fn limit ->
         query = "SELECT DOCUMENT FROM STORE scans LIMIT #{limit}"
         {:ok, ast} = Client.parse(query)
+
         assert ast.limit == limit,
                "LIMIT #{limit} not parsed correctly: got #{inspect(ast.limit)}"
       end)
@@ -352,6 +369,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       Enum.each(operators, fn {op, val} ->
         query = "SELECT DOCUMENT FROM STORE scans WHERE FIELD confidence #{op} #{val}"
         result = Client.parse(query)
+
         assert match?({:ok, _}, result),
                "Operator #{op} failed to parse: #{inspect(result)}"
       end)
@@ -371,6 +389,7 @@ defmodule Hypatia.P2P.VQLParserTest do
 
       Enum.each(invalid_queries, fn query ->
         result = Client.parse(query)
+
         assert match?({:error, _}, result),
                "Expected {:error, _} for invalid query #{inspect(String.slice(query, 0, 80))}, " <>
                  "got #{inspect(result)}"
@@ -384,9 +403,10 @@ defmodule Hypatia.P2P.VQLParserTest do
 
   describe "parse -> execute round-trip invariant" do
     test "parsed AST executes without error for valid stores" do
-      valid_store_queries = Enum.map(@stores, fn store ->
-        "SELECT DOCUMENT FROM STORE #{store} LIMIT 3"
-      end)
+      valid_store_queries =
+        Enum.map(@stores, fn store ->
+          "SELECT DOCUMENT FROM STORE #{store} LIMIT 3"
+        end)
 
       Enum.each(valid_store_queries, fn query ->
         {:ok, ast} = Client.parse(query)
@@ -400,6 +420,7 @@ defmodule Hypatia.P2P.VQLParserTest do
     test "LIMIT in parsed AST is respected by execute" do
       {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans LIMIT 1")
       {:ok, results} = Client.execute(ast)
+
       assert length(results) <= 1,
              "execute with LIMIT 1 returned #{length(results)} results"
     end
@@ -422,7 +443,9 @@ defmodule Hypatia.P2P.VQLParserTest do
 
   describe "AST field type invariant" do
     test "parsed AST has correct field types for full query" do
-      query = "SELECT DOCUMENT, TEMPORAL FROM STORE scans WHERE FIELD severity == High LIMIT 10 OFFSET 5"
+      query =
+        "SELECT DOCUMENT, TEMPORAL FROM STORE scans WHERE FIELD severity == High LIMIT 10 OFFSET 5"
+
       {:ok, ast} = Client.parse(query)
 
       assert is_list(ast.modalities)
@@ -443,6 +466,7 @@ defmodule Hypatia.P2P.VQLParserTest do
     test "limit is always a positive integer when present" do
       Enum.each(@limit_values, fn limit ->
         {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans LIMIT #{limit}")
+
         assert is_integer(ast.limit) and ast.limit > 0,
                "LIMIT #{limit} yielded non-positive-integer: #{inspect(ast.limit)}"
       end)
@@ -472,6 +496,7 @@ defmodule Hypatia.P2P.VQLParserTest do
       Enum.each(pairs, fn {m1, m2} ->
         query = "SELECT #{m1}, #{m2} FROM STORE scans"
         {:ok, ast} = Client.parse(query)
+
         assert length(ast.modalities) == 2,
                "Multi-modality query #{inspect(query)} yielded #{length(ast.modalities)} modalities"
       end)

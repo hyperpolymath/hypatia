@@ -2,7 +2,7 @@
 defmodule Hypatia.Web.DispatchChannel do
   @moduledoc """
   Server-Sent Events (SSE) channel for real-time dispatch monitoring.
-  
+
   Provides event streaming for:
   - Dispatch status updates
   - Bot health changes
@@ -34,7 +34,7 @@ defmodule Hypatia.Web.DispatchChannel do
 
   @doc """
   Join the dispatch events channel.
-  
+
   Subscribes to real-time dispatch events with optional filters.
   """
   def join("dispatch:events", _params, socket) do
@@ -43,10 +43,10 @@ defmodule Hypatia.Web.DispatchChannel do
 
     # Subscribe to pipeline events
     Pipeline.subscribe_events(self())
-    
+
     # Send initial system status
     push_system_status(socket)
-    
+
     {:ok, socket}
   end
 
@@ -89,7 +89,7 @@ defmodule Hypatia.Web.DispatchChannel do
 
   @doc """
   Broadcast an event to all subscribers.
-  
+
   Called by dispatch pipeline when events occur.
   """
   def broadcast_event(%{type: type, data: data}) do
@@ -98,7 +98,7 @@ defmodule Hypatia.Web.DispatchChannel do
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
       data: data
     }
-    
+
     broadcast(@channel_name, "event", event_payload)
   end
 
@@ -108,12 +108,16 @@ defmodule Hypatia.Web.DispatchChannel do
   def broadcast_dispatch_started(%{request_id: id, repo: repo, pattern_id: pattern} = event) do
     broadcast_event(%{
       type: @event_types.dispatch_started,
-      data: Map.merge(%{
-        request_id: id,
-        repo: repo,
-        pattern_id: pattern,
-        status: "started"
-      }, event)
+      data:
+        Map.merge(
+          %{
+            request_id: id,
+            repo: repo,
+            pattern_id: pattern,
+            status: "started"
+          },
+          event
+        )
     })
   end
 
@@ -123,11 +127,15 @@ defmodule Hypatia.Web.DispatchChannel do
   def broadcast_dispatch_completed(%{request_id: id, success: success} = event) do
     broadcast_event(%{
       type: if(success, do: @event_types.dispatch_completed, else: @event_types.dispatch_failed),
-      data: Map.merge(%{
-        request_id: id,
-        success: success,
-        status: if(success, do: "completed", else: "failed")
-      }, event)
+      data:
+        Map.merge(
+          %{
+            request_id: id,
+            success: success,
+            status: if(success, do: "completed", else: "failed")
+          },
+          event
+        )
     })
   end
 
@@ -164,15 +172,17 @@ defmodule Hypatia.Web.DispatchChannel do
   # ====================================================================
 
   defp push_system_status(socket) do
-    metrics = Pipeline.get_metrics() || %{
-      received: 0,
-      dispatched: 0,
-      buffered: 0,
-      dropped: 0
-    }
-    
+    metrics =
+      Pipeline.get_metrics() ||
+        %{
+          received: 0,
+          dispatched: 0,
+          buffered: 0,
+          dropped: 0
+        }
+
     health = if Contingency.available?(), do: "healthy", else: "degraded"
-    
+
     status = %{
       system: "hypatia-dispatch",
       health: health,
@@ -180,7 +190,7 @@ defmodule Hypatia.Web.DispatchChannel do
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
       version: Application.spec(:hypatia, :vsn) || "unknown"
     }
-    
+
     push(socket, "system_status", status)
   end
 
@@ -201,7 +211,6 @@ defmodule Hypatia.Web.DispatchChannel do
       _ -> :ok
     end
   end
-
 end
 
 # ====================================================================

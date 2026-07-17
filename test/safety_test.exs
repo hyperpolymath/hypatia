@@ -12,6 +12,7 @@ defmodule Hypatia.Safety.RateLimiterTest do
       nil -> start_supervised!(RateLimiter)
       _pid -> :ok
     end
+
     :ok
   end
 
@@ -125,6 +126,7 @@ defmodule Hypatia.Safety.QuarantineTest do
       nil -> start_supervised!(Quarantine)
       _pid -> :ok
     end
+
     :ok
   end
 
@@ -210,6 +212,7 @@ defmodule Hypatia.Safety.QuarantineTest do
       for _ <- 1..5 do
         Quarantine.record_outcome("failbot", :failure)
       end
+
       :timer.sleep(100)
 
       assert {:quarantined, :hard, reason} = Quarantine.check("failbot")
@@ -231,9 +234,11 @@ defmodule Hypatia.Safety.QuarantineTest do
       for _ <- 1..4 do
         Quarantine.record_outcome("fpbot", :false_positive)
       end
+
       for _ <- 1..3 do
         Quarantine.record_outcome("fpbot", :success)
       end
+
       # 4/7 = 57% FP rate -- should trigger soft quarantine
       # But outcomes are stored newest-first, so consecutive_failures check runs first
       # Let's ensure the ordering is right: successes first, then FPs

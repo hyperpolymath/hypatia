@@ -72,7 +72,10 @@ defmodule Mix.Tasks.Hypatia.VerifyActionShas do
     unique_pairs = pins |> Enum.uniq() |> Enum.sort()
 
     unless quiet?,
-      do: Mix.shell().info("  found #{length(pins)} pin sites; #{length(unique_pairs)} unique (org/action, sha) pairs")
+      do:
+        Mix.shell().info(
+          "  found #{length(pins)} pin sites; #{length(unique_pairs)} unique (org/action, sha) pairs"
+        )
 
     to_verify =
       if paranoid? do
@@ -104,7 +107,10 @@ defmodule Mix.Tasks.Hypatia.VerifyActionShas do
     end
 
     if fakes != [] do
-      Mix.shell().error("\n#{length(fakes)} fabricated SHA(s) found across #{length(fake_pin_sites)} pin site(s)")
+      Mix.shell().error(
+        "\n#{length(fakes)} fabricated SHA(s) found across #{length(fake_pin_sites)} pin site(s)"
+      )
+
       exit({:shutdown, 2})
     end
   end
@@ -215,7 +221,9 @@ defmodule Mix.Tasks.Hypatia.VerifyActionShas do
 
   defp output_text(fakes, fake_pin_sites, quiet?) do
     if fakes == [] do
-      unless quiet?, do: Mix.shell().info("\n✓ All action SHA pins verify against upstream — zero fakes found.")
+      unless quiet?,
+        do:
+          Mix.shell().info("\n✓ All action SHA pins verify against upstream — zero fakes found.")
     else
       Mix.shell().info("\n=== Fabricated SHA pins (count: #{length(fakes)}) ===")
 

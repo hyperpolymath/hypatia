@@ -23,11 +23,16 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
   use GenServer
 
   defstruct [
-    :encoder_weights,   # input → latent (mu, sigma)
-    :decoder_weights,   # latent → reconstruction
-    :latent_dim,        # dimension of latent space
-    :clusters,          # learned cluster centers
-    :cluster_labels     # human-readable cluster names
+    # input → latent (mu, sigma)
+    :encoder_weights,
+    # latent → reconstruction
+    :decoder_weights,
+    # dimension of latent space
+    :latent_dim,
+    # learned cluster centers
+    :clusters,
+    # human-readable cluster names
+    :cluster_labels
   ]
 
   def start_link(opts \\ []) do
@@ -43,6 +48,7 @@ defmodule Hypatia.Neural.VariationalAutoencoder do
       clusters: [],
       cluster_labels: %{}
     }
+
     {:ok, state}
   end
 

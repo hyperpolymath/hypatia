@@ -32,8 +32,12 @@ defmodule Hypatia.Neural.GraphOfTrust do
   @max_iterations 50
   # Future: trust decays 5% per cycle without new data -- @decay_rate 0.95
 
-  defstruct nodes: %{}, edges: [], trust_scores: %{}, last_computed: nil,
-            cross_repo_edges: [], language_clusters: %{}
+  defstruct nodes: %{},
+            edges: [],
+            trust_scores: %{},
+            last_computed: nil,
+            cross_repo_edges: [],
+            language_clusters: %{}
 
   # --- Public API ---
 
@@ -63,14 +67,16 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
     Logger.info(
       "Graph of Trust built: #{map_size(graph.nodes)} nodes, " <>
-      "#{length(graph.edges)} edges (#{length(cross_repo_edges)} cross-repo)"
+        "#{length(graph.edges)} edges (#{length(cross_repo_edges)} cross-repo)"
     )
+
     graph
   end
 
   @doc "Get trust score for a specific entity"
   def trust_score(%__MODULE__{trust_scores: scores}, entity_id) do
-    Map.get(scores, entity_id, 0.5)  # Default trust = 0.5 (neutral)
+    # Default trust = 0.5 (neutral)
+    Map.get(scores, entity_id, 0.5)
   end
 
   @doc "Get the most trusted recipes (for dispatch prioritization)"
@@ -151,9 +157,10 @@ defmodule Hypatia.Neural.GraphOfTrust do
     scores = Map.new(Map.keys(nodes), fn id -> {id, initial_score} end)
 
     # Build adjacency: source -> [{target, weight}]
-    adjacency = Enum.reduce(edges, %{}, fn {src, tgt, weight}, acc ->
-      Map.update(acc, src, [{tgt, weight}], fn existing -> [{tgt, weight} | existing] end)
-    end)
+    adjacency =
+      Enum.reduce(edges, %{}, fn {src, tgt, weight}, acc ->
+        Map.update(acc, src, [{tgt, weight}], fn existing -> [{tgt, weight} | existing] end)
+      end)
 
     # Iterative convergence
     final_scores = iterate_trust(scores, adjacency, n, 0)
@@ -182,36 +189,39 @@ defmodule Hypatia.Neural.GraphOfTrust do
         {src, total}
       end)
 
-    new_scores = Map.new(scores, fn {node_id, _old_score} ->
-      incoming = Enum.reduce(adjacency, 0.0, fn {src, targets}, acc ->
-        case Enum.find(targets, fn {tgt, _w} -> tgt == node_id end) do
-          {_tgt, weight} when is_number(weight) and weight > 0 ->
-            src_score = Map.get(scores, src, 0.0)
-            total = Map.get(out_weight_sum, src, 0.0)
+    new_scores =
+      Map.new(scores, fn {node_id, _old_score} ->
+        incoming =
+          Enum.reduce(adjacency, 0.0, fn {src, targets}, acc ->
+            case Enum.find(targets, fn {tgt, _w} -> tgt == node_id end) do
+              {_tgt, weight} when is_number(weight) and weight > 0 ->
+                src_score = Map.get(scores, src, 0.0)
+                total = Map.get(out_weight_sum, src, 0.0)
 
-            if total > 0 do
-              acc + src_score * weight / total
-            else
-              acc
+                if total > 0 do
+                  acc + src_score * weight / total
+                else
+                  acc
+                end
+
+              _ ->
+                # Zero or negative weights carry no trust — skip them. Negative
+                # edges would break the non-negative-matrix premise PageRank
+                # needs; they are filtered at source in `build_edges/1`.
+                acc
             end
+          end)
 
-          _ ->
-            # Zero or negative weights carry no trust — skip them. Negative
-            # edges would break the non-negative-matrix premise PageRank
-            # needs; they are filtered at source in `build_edges/1`.
-            acc
-        end
+        new_score = (1 - @damping_factor) / n + @damping_factor * incoming
+        {node_id, new_score}
       end)
 
-      new_score = (1 - @damping_factor) / n + @damping_factor * incoming
-      {node_id, new_score}
-    end)
-
     # Check convergence
-    max_delta = Enum.reduce(new_scores, 0.0, fn {id, new}, acc ->
-      old = Map.get(scores, id, 0.0)
-      max(acc, abs(new - old))
-    end)
+    max_delta =
+      Enum.reduce(new_scores, 0.0, fn {id, new}, acc ->
+        old = Map.get(scores, id, 0.0)
+        max(acc, abs(new - old))
+      end)
 
     if max_delta < @convergence_threshold do
       normalize_scores(new_scores)
@@ -260,9 +270,12 @@ defmodule Hypatia.Neural.GraphOfTrust do
           recipe = Map.get(outcome, "recipe_id", Map.get(outcome, "pattern", "unknown"))
 
           [
-            {recipe, repo, 1.0},      # recipe fixes repo
-            {bot, recipe, 1.0},       # bot executes recipe
-            {repo, bot, 0.5}          # repo provides context to bot
+            # recipe fixes repo
+            {recipe, repo, 1.0},
+            # bot executes recipe
+            {bot, recipe, 1.0},
+            # repo provides context to bot
+            {repo, bot, 0.5}
           ]
 
         _ ->
@@ -285,8 +298,9 @@ defmodule Hypatia.Neural.GraphOfTrust do
       |> Enum.map(fn {repo, repo_outcomes} ->
         recipes =
           repo_outcomes
-          |> Enum.map(&(Map.get(&1, "recipe_id", Map.get(&1, "pattern", "unknown"))))
+          |> Enum.map(&Map.get(&1, "recipe_id", Map.get(&1, "pattern", "unknown")))
           |> MapSet.new()
+
         {repo, recipes}
       end)
       |> Enum.reject(fn {repo, _} -> repo == "unknown" end)
@@ -352,13 +366,16 @@ defmodule Hypatia.Neural.GraphOfTrust do
                 |> elem(0)
                 |> String.downcase()
 
-              true -> "unknown"
+              true ->
+                "unknown"
             end
 
-          {:error, _} -> "unknown"
+          {:error, _} ->
+            "unknown"
         end
 
-      {:error, _} -> "unknown"
+      {:error, _} ->
+        "unknown"
     end
   end
 
@@ -400,17 +417,22 @@ defmodule Hypatia.Neural.GraphOfTrust do
         |> Enum.filter(&String.ends_with?(&1, ".json"))
         |> Enum.map(fn f ->
           path = Path.join(recipes_dir, f)
+
           case File.read(path) do
             {:ok, content} ->
               case Jason.decode(content) do
                 {:ok, recipe} -> recipe
                 _ -> nil
               end
-            _ -> nil
+
+            _ ->
+              nil
           end
         end)
         |> Enum.reject(&is_nil/1)
-      _ -> []
+
+      _ ->
+        []
     end
   end
 end

@@ -25,22 +25,27 @@ defmodule Hypatia.Dispatch.Pipeline do
   # ====================================================================
 
   def start_link(opts \\ []) do
-    initial_state = Keyword.merge([
-      concurrency: @default_concurrency,
-      max_demand: @max_demand,
-      batch_size: @batch_size,
-      max_buffer: @max_buffer,
-      buffer: [],
-      subscribers: [],  # Event subscribers (PIDs)
-      metrics: %{
-        received: 0,
-        dispatched: 0,
-        buffered: 0,
-        dropped: 0,
-        latency: 0,
-        subscribers: 0
-      }
-    ], opts)
+    initial_state =
+      Keyword.merge(
+        [
+          concurrency: @default_concurrency,
+          max_demand: @max_demand,
+          batch_size: @batch_size,
+          max_buffer: @max_buffer,
+          buffer: [],
+          # Event subscribers (PIDs)
+          subscribers: [],
+          metrics: %{
+            received: 0,
+            dispatched: 0,
+            buffered: 0,
+            dropped: 0,
+            latency: 0,
+            subscribers: 0
+          }
+        ],
+        opts
+      )
 
     GenStage.start_link(__MODULE__, initial_state, name: __MODULE__)
   end
@@ -122,7 +127,10 @@ defmodule Hypatia.Dispatch.Pipeline do
   Consumers should implement GenStage consumer behaviour.
   """
   def subscribe(consumer_pid) do
-    GenStage.sync_subscribe(consumer_pid, to: __MODULE__, min_max_demand: {@batch_size, @max_demand})
+    GenStage.sync_subscribe(consumer_pid,
+      to: __MODULE__,
+      min_max_demand: {@batch_size, @max_demand}
+    )
   end
 
   # ====================================================================
@@ -133,13 +141,14 @@ defmodule Hypatia.Dispatch.Pipeline do
   Get current pipeline metrics.
   """
   def get_metrics() do
-    GenStage.call(__MODULE__, :metrics, 5000) || %{
-      received: 0,
-      dispatched: 0,
-      buffered: 0,
-      dropped: 0,
-      latency: 0
-    }
+    GenStage.call(__MODULE__, :metrics, 5000) ||
+      %{
+        received: 0,
+        dispatched: 0,
+        buffered: 0,
+        dropped: 0,
+        latency: 0
+      }
   end
 
   @doc """
@@ -178,7 +187,7 @@ defmodule Hypatia.Dispatch.Pipeline do
   # All handle_cast clauses grouped together
   @impl true
   def handle_cast({:subscribe, pid}, state) do
-    subscribers = [pid | (state.subscribers || [])]
+    subscribers = [pid | state.subscribers || []]
     metrics = update_metrics(state.metrics, :subscribers, 1)
     {:noreply, %{state | subscribers: subscribers, metrics: metrics}}
   end
@@ -196,6 +205,7 @@ defmodule Hypatia.Dispatch.Pipeline do
     Enum.each(state.subscribers || [], fn subscriber ->
       GenServer.cast(subscriber, {:pipeline_event, event})
     end)
+
     {:noreply, state}
   end
 
@@ -339,7 +349,9 @@ defmodule Hypatia.Dispatch.Pipeline do
       success_count = Enum.count(results, &(&1 == :ok))
       failure_count = length(results) - success_count
 
-      Logger.info("Processed #{length(events)} events: #{success_count} success, #{failure_count} failed")
+      Logger.info(
+        "Processed #{length(events)} events: #{success_count} success, #{failure_count} failed"
+      )
 
       {:noreply, [], state}
     end
@@ -374,7 +386,7 @@ defmodule Hypatia.Dispatch.Pipeline do
       Dispatched:  #{metrics.dispatched}
       Buffered:    #{metrics.buffered}
       Dropped:     #{metrics.dropped}
-      Throughput:  #{(metrics.dispatched / max(metrics.received, 1)) * 100}%
+      Throughput:  #{metrics.dispatched / max(metrics.received, 1) * 100}%
     """)
   end
 end

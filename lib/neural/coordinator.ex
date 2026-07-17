@@ -486,8 +486,7 @@ defmodule Hypatia.Neural.Coordinator do
       trust_graph: %{
         nodes: map_size(state.trust_graph.nodes),
         edges: length(state.trust_graph.edges),
-        repos_needing_attention:
-          length(GraphOfTrust.repos_needing_attention(state.trust_graph))
+        repos_needing_attention: length(GraphOfTrust.repos_needing_attention(state.trust_graph))
       },
       moe: %{
         utilization: MixtureOfExperts.expert_utilization(state.moe),
@@ -657,8 +656,7 @@ defmodule Hypatia.Neural.Coordinator do
         trust_result = %{
           trusted_bots: Enum.take(trusted_bots, 5),
           trusted_recipes: Enum.take(trusted_recipes, 5),
-          repos_needing_attention:
-            length(GraphOfTrust.repos_needing_attention(state.trust_graph))
+          repos_needing_attention: length(GraphOfTrust.repos_needing_attention(state.trust_graph))
         }
 
         Blackboard.write(:pagerank, :trust_result, trust_result)
@@ -758,10 +756,14 @@ defmodule Hypatia.Neural.Coordinator do
     networks = trace.networks || %{}
 
     # Extract individual confidence signals
-    moe_conf = extract_confidence(networks, :moe, :domain_confidence, fn r -> r.confidence end, 0.5)
+    moe_conf =
+      extract_confidence(networks, :moe, :domain_confidence, fn r -> r.confidence end, 0.5)
+
     rbf_conf = extract_confidence(networks, :rbf, :novelty_result, fn r -> r.similarity end, 0.0)
     lsm_score = extract_confidence(networks, :lsm, :temporal_result, fn r -> r.score end, 0.5)
-    esn_pred = extract_confidence(networks, :esn, :trajectory_result, fn r -> r.predicted_next end, 0.5)
+
+    esn_pred =
+      extract_confidence(networks, :esn, :trajectory_result, fn r -> r.predicted_next end, 0.5)
 
     # Adaptive weighting: if a network contributed, its weight counts.
     # Networks that didn't contribute get zero weight.
@@ -815,22 +817,40 @@ defmodule Hypatia.Neural.Coordinator do
   defp has_network?(networks, key), do: Map.has_key?(networks, key)
 
   defp gnn_confidence(networks) do
-    extract_confidence(networks, :gnn, :graph_metrics, fn r ->
-      Map.get(r, :interaction_strength, 0.5)
-    end, 0.5)
+    extract_confidence(
+      networks,
+      :gnn,
+      :graph_metrics,
+      fn r ->
+        Map.get(r, :interaction_strength, 0.5)
+      end,
+      0.5
+    )
   end
 
   defp vae_confidence(networks) do
-    extract_confidence(networks, :vae, :interpretation, fn r ->
-      # VAE doesn't produce a confidence directly; use cluster coherence
-      if r.cluster_id != nil, do: 0.6, else: 0.3
-    end, 0.3)
+    extract_confidence(
+      networks,
+      :vae,
+      :interpretation,
+      fn r ->
+        # VAE doesn't produce a confidence directly; use cluster coherence
+        if r.cluster_id != nil, do: 0.6, else: 0.3
+      end,
+      0.3
+    )
   end
 
   defp seq_confidence(networks) do
-    extract_confidence(networks, :sequence, :prediction, fn r ->
-      Map.get(r, :confidence, 0.0)
-    end, 0.0)
+    extract_confidence(
+      networks,
+      :sequence,
+      :prediction,
+      fn r ->
+        Map.get(r, :confidence, 0.0)
+      end,
+      0.0
+    )
   end
 
   defp is_novel?(trace) do
@@ -908,6 +928,9 @@ defmodule Hypatia.Neural.Coordinator do
   defp resolve_rebalance_strategy_str("a", _cycle), do: :a
   defp resolve_rebalance_strategy_str("b", _cycle), do: :b
   defp resolve_rebalance_strategy_str("c", _cycle), do: :c
-  defp resolve_rebalance_strategy_str("rotate", cycle), do: Enum.at([:a, :b, :c], rem(cycle - 1, 3))
+
+  defp resolve_rebalance_strategy_str("rotate", cycle),
+    do: Enum.at([:a, :b, :c], rem(cycle - 1, 3))
+
   defp resolve_rebalance_strategy_str(_other, _cycle), do: :a
 end

@@ -20,7 +20,9 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
 
   test "a SECURITY touch (or label) is security" do
     assert {:security, _, _} = Sensor.classify(obs(%{"files" => ["SECURITY.md"]}))
-    assert {:security, _, _} = Sensor.classify(obs(%{"files" => ["x.ex"], "labels" => ["security"]}))
+
+    assert {:security, _, _} =
+             Sensor.classify(obs(%{"files" => ["x.ex"], "labels" => ["security"]}))
   end
 
   test "all-docs is docs; mixed code+docs is not" do
@@ -31,7 +33,9 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
   test "chore and refactor by branch/title; anything else is a feature" do
     assert {:chore, _, _} = Sensor.classify(obs(%{"branch" => "chore/tidy"}))
     assert {:refactor, _, _} = Sensor.classify(obs(%{"title" => "refactor: split module"}))
-    assert {:feature, _, _} = Sensor.classify(obs(%{"files" => ["lib/x.ex"], "title" => "add thing"}))
+
+    assert {:feature, _, _} =
+             Sensor.classify(obs(%{"files" => ["lib/x.ex"], "title" => "add thing"}))
   end
 
   # ── classify: change_level (the meta reflexivity guard) ──────────────────────
@@ -41,16 +45,24 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
   end
 
   test "touching bot_directives or lib/rules is meta" do
-    assert {_, :meta, _} = Sensor.classify(obs(%{"files" => [".machine_readable/bot_directives/x.scm"]}))
+    assert {_, :meta, _} =
+             Sensor.classify(obs(%{"files" => [".machine_readable/bot_directives/x.scm"]}))
+
     assert {_, :meta, _} = Sensor.classify(obs(%{"files" => ["lib/rules/cicd_rules.ex"]}))
   end
 
   test "standards contractiles are meta; the same path elsewhere is object" do
     assert {_, :meta, _} =
-             Sensor.classify(%{"repo" => "hyperpolymath/standards", "files" => ["contractiles/TRUST.ncl"]})
+             Sensor.classify(%{
+               "repo" => "hyperpolymath/standards",
+               "files" => ["contractiles/TRUST.ncl"]
+             })
 
     assert {_, :object, _} =
-             Sensor.classify(%{"repo" => "hyperpolymath/panll", "files" => ["contractiles/TRUST.ncl"]})
+             Sensor.classify(%{
+               "repo" => "hyperpolymath/panll",
+               "files" => ["contractiles/TRUST.ncl"]
+             })
   end
 
   test "ordinary library code is object-level" do
@@ -93,12 +105,20 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
   # ── normalisers ──────────────────────────────────────────────────────────────
 
   test "normalize_attestation: disk (string-keyed) and in-memory (atom-keyed) both land on the council shape" do
-    disk = %{"bot" => "panicbot", "verdict" => "veto", "confidence" => 0.2, "rationale" => "license/SPDX"}
+    disk = %{
+      "bot" => "panicbot",
+      "verdict" => "veto",
+      "confidence" => 0.2,
+      "rationale" => "license/SPDX"
+    }
+
     assert %{bot: "panicbot", verdict: :veto, confidence: 0.2, rationale: "license/SPDX"} =
              Sensor.normalize_attestation(disk)
 
     # missing rationale ⇒ key dropped so KinCouncil's default applies
-    assert %{bot: "ci", verdict: :approve} = mem = Sensor.normalize_attestation(%{bot: "ci", verdict: :approve, confidence: 0.9})
+    assert %{bot: "ci", verdict: :approve} =
+             mem = Sensor.normalize_attestation(%{bot: "ci", verdict: :approve, confidence: 0.9})
+
     refute Map.has_key?(mem, :rationale)
   end
 
@@ -122,17 +142,30 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
 
     observations = [
       # A: bump @ P2, council-approved → arm_auto
-      %{"repo" => "hyperpolymath/a", "number" => 1, "branch" => "dependabot/cargo/x", "files" => ["Cargo.lock"]},
+      %{
+        "repo" => "hyperpolymath/a",
+        "number" => 1,
+        "branch" => "dependabot/cargo/x",
+        "files" => ["Cargo.lock"]
+      },
       # B: docs @ P1 → clamped to review
       %{"repo" => "hyperpolymath/b", "number" => 2, "files" => ["docs/x.adoc"]},
       # C: workflow edit → meta → flag
-      %{"repo" => "hyperpolymath/c", "number" => 3, "branch" => "ci/pin", "files" => [".github/workflows/ci.yml"]},
+      %{
+        "repo" => "hyperpolymath/c",
+        "number" => 3,
+        "branch" => "ci/pin",
+        "files" => [".github/workflows/ci.yml"]
+      },
       # D: LICENSE touch → owner-only veto → flag
       %{"repo" => "hyperpolymath/d", "number" => 4, "files" => ["LICENSE"]}
     ]
 
     resolve_pool = fn repo -> Map.get(pools, repo) end
-    resolve_atts = fn _repo, _n -> [%{"bot" => "ci", "verdict" => "approve", "confidence" => 0.99}] end
+
+    resolve_atts = fn _repo, _n ->
+      [%{"bot" => "ci", "verdict" => "approve", "confidence" => 0.99}]
+    end
 
     %{stats: stats, decisions: decisions} =
       Sensor.sense_and_decide(observations, resolve_pool, resolve_atts)
@@ -185,8 +218,16 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
       dir = Path.join(System.tmp_dir!(), "moj-store-#{System.unique_integer([:positive])}")
       File.mkdir_p!(Path.join(dir, "pools"))
       File.mkdir_p!(Path.join(dir, "attestations"))
-      File.cp!(Path.join(@fix, "attestation/signed-valid.json"), Path.join(dir, "attestations/ci.json"))
-      File.cp!(Path.join(@fix, "pool/valid-p2-standard.json"), Path.join(dir, "pools/hyperpolymath__panll.json"))
+
+      File.cp!(
+        Path.join(@fix, "attestation/signed-valid.json"),
+        Path.join(dir, "attestations/ci.json")
+      )
+
+      File.cp!(
+        Path.join(@fix, "pool/valid-p2-standard.json"),
+        Path.join(dir, "pools/hyperpolymath__panll.json")
+      )
 
       {resolve_pool, resolve_atts} = Sensor.store_resolvers(dir)
 

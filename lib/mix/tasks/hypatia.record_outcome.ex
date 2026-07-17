@@ -68,9 +68,15 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
 
     outcome_atom =
       case Keyword.fetch!(opts, :outcome) do
-        "success" -> :success
-        "failure" -> :failure
-        "false_positive" -> :false_positive
+        "success" ->
+          :success
+
+        "failure" ->
+          :failure
+
+        "false_positive" ->
+          :false_positive
+
         other ->
           Mix.shell().error("invalid --outcome '#{other}' (use success|failure|false_positive)")
           exit({:shutdown, 1})
@@ -91,7 +97,13 @@ defmodule Mix.Tasks.Hypatia.RecordOutcome do
     {record, verification} =
       if verify? do
         {:ok, record, v} =
-          Hypatia.OutcomeTracker.record_outcome_for_fix(recipe, repo, file, outcome_atom, call_opts)
+          Hypatia.OutcomeTracker.record_outcome_for_fix(
+            recipe,
+            repo,
+            file,
+            outcome_atom,
+            call_opts
+          )
 
         {record, v}
       else

@@ -28,10 +28,14 @@ uploaded because the job never starts).
 | **Report only** — owner clears it in GitHub → Settings → Billing & plans.
 
 | `B-ALLOWLIST`
-| `allowed_actions: selected` with `patterns_allowed` missing `hyperpolymath/*`.
-Only GitHub-owned + verified-marketplace actions resolve, so every
-`hyperpolymath/*` reusable + every non-verified third-party action is blocked
-at parse → `startup_failure` (zero jobs, no logs). Hits public repos too.
+| `allowed_actions: selected` with `patterns_allowed` that does **not cover the
+curated superset** — either empty (post-wipe: `hyperpolymath/*` absent) or
+incomplete (has `hyperpolymath/*` but missing a third-party action, e.g.
+`gitleaks`). Only GitHub-owned + verified-marketplace actions resolve, so every
+uncovered `hyperpolymath/*` reusable + non-verified third-party action is blocked
+at parse → `startup_failure` (zero jobs, no logs). Hits public repos too. The
+required set mirrors `remediate.sh`'s PUT body exactly, so a fix converges to
+zero-missing and this stops re-firing (idempotent).
 | **Auto-fix** — PUT the curated superset (`action-superset.txt`), keep
 `sha_pinning_required`.
 

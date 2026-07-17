@@ -26,7 +26,11 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
   end
 
   test "a veto -> report_only / control, and the veto rides along in the manifest" do
-    {_d, m, _l} = Dispatcher.dispatch(ctx(%{attestations: [%{bot: "panicbot", verdict: :veto, rationale: "license/SPDX"}]}))
+    {_d, m, _l} =
+      Dispatcher.dispatch(
+        ctx(%{attestations: [%{bot: "panicbot", verdict: :veto, rationale: "license/SPDX"}]})
+      )
+
     assert m["strategy"] == "report_only"
     assert m["tier"] == "control"
     assert [%{bot: "panicbot"}] = m["merge"]["vetoes"]

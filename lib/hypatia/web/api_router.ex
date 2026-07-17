@@ -20,10 +20,10 @@ defmodule Hypatia.Web.ApiRouter do
   require Logger
   import Bitwise, only: [|||: 2, bxor: 2]
 
-  plug :match
-  plug :auth_gate
-  plug :loopback_only
-  plug :dispatch
+  plug(:match)
+  plug(:auth_gate)
+  plug(:loopback_only)
+  plug(:dispatch)
 
   get "/status" do
     snap = Hypatia.Watcher.snapshot()
@@ -165,11 +165,13 @@ defmodule Hypatia.Web.ApiRouter do
   end
 
   defp parse_atom(value) when is_atom(value), do: value
+
   defp parse_atom(value) when is_binary(value) do
     String.to_existing_atom(value)
   rescue
     ArgumentError -> :unknown
   end
+
   defp parse_atom(_), do: :unknown
 
   @doc """
@@ -363,7 +365,10 @@ defmodule Hypatia.Web.ApiRouter do
       Plug.Crypto.secure_compare(a, b)
     else
       byte_size(a) == byte_size(b) and
-        a |> :binary.bin_to_list() |> Enum.zip(:binary.bin_to_list(b)) |> Enum.reduce(0, fn {x, y}, acc -> acc ||| Bitwise.bxor(x, y) end) == 0
+        a
+        |> :binary.bin_to_list()
+        |> Enum.zip(:binary.bin_to_list(b))
+        |> Enum.reduce(0, fn {x, y}, acc -> acc ||| Bitwise.bxor(x, y) end) == 0
     end
   end
 

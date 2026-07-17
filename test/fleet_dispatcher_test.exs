@@ -25,9 +25,7 @@ defmodule Hypatia.FleetDispatcherTest do
   describe "dispatch_routed_action/1" do
     test "dispatches eliminate action" do
       result =
-        FleetDispatcher.dispatch_routed_action(
-          {:eliminate, @sample_recipe, @sample_pattern}
-        )
+        FleetDispatcher.dispatch_routed_action({:eliminate, @sample_recipe, @sample_pattern})
 
       # Fleet dispatcher logs dispatch; returns :ok or {:ok, _}
       assert result in [:ok, {:ok, :dispatched}, {:ok, :logged}] or
@@ -42,9 +40,7 @@ defmodule Hypatia.FleetDispatcherTest do
       }
 
       result =
-        FleetDispatcher.dispatch_routed_action(
-          {:substitute, recipe, @sample_pattern}
-        )
+        FleetDispatcher.dispatch_routed_action({:substitute, recipe, @sample_pattern})
 
       assert result in [:ok, {:ok, :dispatched}, {:ok, :logged}] or
                match?({:ok, _}, result)
@@ -69,6 +65,7 @@ defmodule Hypatia.FleetDispatcherTest do
       }
 
       result = FleetDispatcher.dispatch_finding(finding)
+
       assert result in [:ok, {:ok, :dispatched}, {:ok, :logged}] or
                match?({:ok, _}, result)
     end

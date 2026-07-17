@@ -24,7 +24,14 @@ defmodule Mix.Tasks.Hypatia.WatchTest do
   describe "render/3" do
     test "renders all event kinds with their dotted-string names" do
       T.scan_complete(50, 3, path: "/tmp/x", severity_floor: "low")
-      T.dispatch_decision(0.95, strategy: :auto_execute, tier: :eliminate, recipe_id: "r1", repo: "x")
+
+      T.dispatch_decision(0.95,
+        strategy: :auto_execute,
+        tier: :eliminate,
+        recipe_id: "r1",
+        repo: "x"
+      )
+
       T.outcome_recorded(recipe_id: "r1", repo: "x", outcome: "success", verification: "verified")
       T.quarantine_triggered(kind: :recipe, id: "bad", reason: "verification_rate", level: :auto)
       Process.sleep(50)
