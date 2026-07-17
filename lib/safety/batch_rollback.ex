@@ -55,6 +55,7 @@ defmodule Hypatia.Safety.BatchRollback do
     # 2. Mark all as false_positive
     Enum.each(outcomes, fn outcome ->
       recipe_id = Map.get(outcome, "recipe_id")
+
       if recipe_id do
         Hypatia.OutcomeTracker.record_outcome(
           recipe_id,
@@ -72,13 +73,14 @@ defmodule Hypatia.Safety.BatchRollback do
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "affected_outcomes" => length(outcomes),
       "action" => "revert",
-      "instructions" => Enum.map(outcomes, fn o ->
-        %{
-          "repo" => Map.get(o, "repo"),
-          "file" => Map.get(o, "file"),
-          "action" => "git revert"
-        }
-      end)
+      "instructions" =>
+        Enum.map(outcomes, fn o ->
+          %{
+            "repo" => Map.get(o, "repo"),
+            "file" => Map.get(o, "file"),
+            "action" => "git revert"
+          }
+        end)
     }
 
     rollback_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "rollbacks.jsonl"])
@@ -87,7 +89,10 @@ defmodule Hypatia.Safety.BatchRollback do
     # 4. Update batch status
     update_batch_status(batch_id, "rolled_back")
 
-    Logger.warning("Rollback complete: #{length(outcomes)} outcomes reverted for batch #{batch_id}")
+    Logger.warning(
+      "Rollback complete: #{length(outcomes)} outcomes reverted for batch #{batch_id}"
+    )
+
     {:ok, length(outcomes)}
   end
 
@@ -100,12 +105,14 @@ defmodule Hypatia.Safety.BatchRollback do
 
   defp find_batch_outcomes(batch_id) do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+
     case File.ls(outcomes_dir) do
       {:ok, files} ->
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
         |> Enum.flat_map(fn f ->
           path = Path.join(outcomes_dir, f)
+
           case File.read(path) do
             {:ok, content} ->
               content
@@ -116,25 +123,33 @@ defmodule Hypatia.Safety.BatchRollback do
                 _ -> false
               end)
               |> Enum.map(fn {:ok, o} -> o end)
-            _ -> []
+
+            _ ->
+              []
           end
         end)
-      _ -> []
+
+      _ ->
+        []
     end
   end
 
   defp update_batch_status(batch_id, status) do
     batch_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "batches.jsonl"])
-    update = Jason.encode!(%{
-      "batch_id" => batch_id,
-      "status" => status,
-      "updated" => DateTime.utc_now() |> DateTime.to_iso8601()
-    })
+
+    update =
+      Jason.encode!(%{
+        "batch_id" => batch_id,
+        "status" => status,
+        "updated" => DateTime.utc_now() |> DateTime.to_iso8601()
+      })
+
     File.write(batch_path, update <> "\n", [:append, :utf8])
   end
 
   defp list_batches_from_file(limit) do
     batch_path = Path.join([Path.expand(@verisimdb_data_path), "dispatch", "batches.jsonl"])
+
     case File.read(batch_path) do
       {:ok, content} ->
         content
@@ -144,7 +159,9 @@ defmodule Hypatia.Safety.BatchRollback do
         |> Enum.map(fn {:ok, b} -> b end)
         |> Enum.reverse()
         |> Enum.take(limit)
-      _ -> []
+
+      _ ->
+        []
     end
   end
 end

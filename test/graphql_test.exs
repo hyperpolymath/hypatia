@@ -83,7 +83,11 @@ defmodule Hypatia.Web.GraphQLTest do
     test "empty query → error envelope" do
       result = GraphQL.execute("{}")
       assert is_list(result["errors"])
-      assert Enum.any?(result["errors"], &(&1["message"] =~ "empty_query" or &1["message"] =~ "no_fields"))
+
+      assert Enum.any?(
+               result["errors"],
+               &(&1["message"] =~ "empty_query" or &1["message"] =~ "no_fields")
+             )
     end
 
     test "unknown field → unknown_field marker on that field's data" do

@@ -88,9 +88,11 @@ defmodule Hypatia.VCL.ClientTest do
     end
 
     test "parses all six modalities together" do
-      {:ok, ast} = Client.parse(
-        "SELECT GRAPH, VECTOR, TENSOR, SEMANTIC, DOCUMENT, TEMPORAL FROM STORE scans"
-      )
+      {:ok, ast} =
+        Client.parse(
+          "SELECT GRAPH, VECTOR, TENSOR, SEMANTIC, DOCUMENT, TEMPORAL FROM STORE scans"
+        )
+
       assert length(ast.modalities) == 6
       assert :graph in ast.modalities
       assert :vector in ast.modalities
@@ -165,86 +167,84 @@ defmodule Hypatia.VCL.ClientTest do
 
   describe "parse/1 -- WHERE clause" do
     test "parses FIELD equality condition" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE scans WHERE FIELD category == PanicPath"
-      )
+      {:ok, ast} =
+        Client.parse("SELECT DOCUMENT FROM STORE scans WHERE FIELD category == PanicPath")
+
       assert {:field, "category", :eq, "PanicPath"} = ast.where
     end
 
     test "parses FIELD inequality condition (!=)" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE scans WHERE FIELD severity != Low"
-      )
+      {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE scans WHERE FIELD severity != Low")
       assert {:field, "severity", :neq, "Low"} = ast.where
     end
 
     test "parses FIELD greater-than condition (>)" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence > 0.9"
-      )
+      {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence > 0.9")
       assert {:field, "confidence", :gt, "0.9"} = ast.where
     end
 
     test "parses FIELD greater-than-or-equal condition (>=)" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence >= 0.95"
-      )
+      {:ok, ast} =
+        Client.parse("SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence >= 0.95")
+
       assert {:field, "confidence", :gte, "0.95"} = ast.where
     end
 
     test "parses FIELD less-than condition (<)" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence < 0.5"
-      )
+      {:ok, ast} = Client.parse("SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence < 0.5")
       assert {:field, "confidence", :lt, "0.5"} = ast.where
     end
 
     test "parses FIELD less-than-or-equal condition (<=)" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence <= 0.85"
-      )
+      {:ok, ast} =
+        Client.parse("SELECT DOCUMENT FROM STORE recipes WHERE FIELD confidence <= 0.85")
+
       assert {:field, "confidence", :lte, "0.85"} = ast.where
     end
 
     test "parses FIELD CONTAINS condition" do
-      {:ok, ast} = Client.parse(
-        ~s(SELECT DOCUMENT FROM STORE recipes WHERE FIELD languages CONTAINS "shell")
-      )
+      {:ok, ast} =
+        Client.parse(
+          ~s(SELECT DOCUMENT FROM STORE recipes WHERE FIELD languages CONTAINS "shell")
+        )
+
       assert {:field, "languages", :contains, "shell"} = ast.where
     end
 
     test "parses FIELD LIKE condition" do
-      {:ok, ast} = Client.parse(
-        "SELECT DOCUMENT FROM STORE scans WHERE FIELD _source LIKE echidna"
-      )
+      {:ok, ast} =
+        Client.parse("SELECT DOCUMENT FROM STORE scans WHERE FIELD _source LIKE echidna")
+
       assert {:field, "_source", :like, "echidna"} = ast.where
     end
 
     test "parses FIELD MATCHES condition" do
-      {:ok, ast} = Client.parse(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FIELD _source MATCHES "echo.*")
-      )
+      {:ok, ast} =
+        Client.parse(~s(SELECT DOCUMENT FROM STORE scans WHERE FIELD _source MATCHES "echo.*"))
+
       assert {:field, "_source", :matches, "echo.*"} = ast.where
     end
 
     test "parses FULLTEXT CONTAINS with quoted string" do
-      {:ok, ast} = Client.parse(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT CONTAINS "unwrap")
-      )
+      {:ok, ast} =
+        Client.parse(~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT CONTAINS "unwrap"))
+
       assert {:fulltext, :contains, "unwrap"} = ast.where
     end
 
     test "parses FULLTEXT MATCHES with quoted regex" do
-      {:ok, ast} = Client.parse(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT MATCHES "panic.*unwrap")
-      )
+      {:ok, ast} =
+        Client.parse(~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT MATCHES "panic.*unwrap"))
+
       assert {:fulltext, :matches, "panic.*unwrap"} = ast.where
     end
 
     test "parses compound AND conditions" do
-      {:ok, ast} = Client.parse(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FIELD category == PanicPath AND FULLTEXT CONTAINS "unwrap")
-      )
+      {:ok, ast} =
+        Client.parse(
+          ~s(SELECT DOCUMENT FROM STORE scans WHERE FIELD category == PanicPath AND FULLTEXT CONTAINS "unwrap")
+        )
+
       assert {:and, conditions} = ast.where
       assert length(conditions) == 2
     end
@@ -355,7 +355,9 @@ defmodule Hypatia.VCL.ClientTest do
 
   describe "parse/1 -- complex combined queries" do
     test "parses full query with all clauses" do
-      query = ~s(SELECT DOCUMENT, TEMPORAL FROM STORE outcomes WHERE FIELD recipe_id == "recipe-shell-quote-vars" LIMIT 100 OFFSET 10)
+      query =
+        ~s(SELECT DOCUMENT, TEMPORAL FROM STORE outcomes WHERE FIELD recipe_id == "recipe-shell-quote-vars" LIMIT 100 OFFSET 10)
+
       {:ok, ast} = Client.parse(query)
       assert :document in ast.modalities
       assert :temporal in ast.modalities
@@ -365,7 +367,9 @@ defmodule Hypatia.VCL.ClientTest do
     end
 
     test "parses FEDERATION query with WHERE and LIMIT" do
-      query = ~s(SELECT DOCUMENT FROM FEDERATION /scans/* WHERE FULLTEXT CONTAINS "weak_points" LIMIT 5)
+      query =
+        ~s(SELECT DOCUMENT FROM FEDERATION /scans/* WHERE FULLTEXT CONTAINS "weak_points" LIMIT 5)
+
       {:ok, ast} = Client.parse(query)
       assert {:federation, "/scans/*", nil} = ast.source
       assert {:fulltext, :contains, "weak_points"} = ast.where
@@ -441,26 +445,28 @@ defmodule Hypatia.VCL.ClientTest do
     @describetag :verisim_data
     test "WHERE FIELD equality filters results" do
       {:ok, all} = Client.query("SELECT DOCUMENT FROM STORE scans")
-      {:ok, filtered} = Client.query(
-        "SELECT DOCUMENT FROM STORE scans WHERE FIELD _source == echidna.json"
-      )
+
+      {:ok, filtered} =
+        Client.query("SELECT DOCUMENT FROM STORE scans WHERE FIELD _source == echidna.json")
 
       assert length(filtered) < length(all)
       assert length(filtered) == 1
     end
 
     test "WHERE FULLTEXT CONTAINS filters by content" do
-      {:ok, results} = Client.query(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT CONTAINS "weak_points")
-      )
+      {:ok, results} =
+        Client.query(~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT CONTAINS "weak_points"))
+
       assert is_list(results)
       assert length(results) >= 1
     end
 
     test "WHERE FULLTEXT MATCHES filters by regex" do
-      {:ok, results} = Client.query(
-        ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT MATCHES "echidna|verisim")
-      )
+      {:ok, results} =
+        Client.query(
+          ~s(SELECT DOCUMENT FROM STORE scans WHERE FULLTEXT MATCHES "echidna|verisim")
+        )
+
       assert is_list(results)
       assert length(results) >= 1
     end
@@ -469,17 +475,13 @@ defmodule Hypatia.VCL.ClientTest do
   describe "query/1 -- FEDERATION execution" do
     @describetag :verisim_data
     test "FEDERATION cross-store query returns results" do
-      {:ok, results} = Client.query(
-        "SELECT DOCUMENT FROM FEDERATION /all/* LIMIT 10"
-      )
+      {:ok, results} = Client.query("SELECT DOCUMENT FROM FEDERATION /all/* LIMIT 10")
       assert is_list(results)
       assert length(results) >= 1
     end
 
     test "FEDERATION scoped to scans returns scan data" do
-      {:ok, results} = Client.query(
-        "SELECT DOCUMENT FROM FEDERATION /scans/*"
-      )
+      {:ok, results} = Client.query("SELECT DOCUMENT FROM FEDERATION /scans/*")
       assert is_list(results)
       assert length(results) >= 3
     end

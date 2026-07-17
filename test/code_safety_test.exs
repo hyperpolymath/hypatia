@@ -148,8 +148,9 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       let c = z.unwrap();
       """
 
-      [finding] = CodeSafety.scan_content(code, "rust")
-                   |> Enum.filter(&(&1.rule == :unwrap_without_check))
+      [finding] =
+        CodeSafety.scan_content(code, "rust")
+        |> Enum.filter(&(&1.rule == :unwrap_without_check))
 
       assert finding.occurrences == 3
     end
@@ -303,28 +304,31 @@ defmodule Hypatia.Rules.CodeSafetyTest do
 
   describe "check_rust_safety/2" do
     test "flags lib.rs missing forbid(unsafe_code)" do
-      findings = CodeSafety.check_rust_safety(
-        ["src/lib.rs"],
-        %{"src/lib.rs" => "pub fn hello() {}"}
-      )
+      findings =
+        CodeSafety.check_rust_safety(
+          ["src/lib.rs"],
+          %{"src/lib.rs" => "pub fn hello() {}"}
+        )
 
       assert Enum.any?(findings, &(&1.rule == :missing_forbid_unsafe))
     end
 
     test "passes lib.rs with forbid(unsafe_code)" do
-      findings = CodeSafety.check_rust_safety(
-        ["src/lib.rs"],
-        %{"src/lib.rs" => "#![forbid(unsafe_code)]\npub fn hello() {}"}
-      )
+      findings =
+        CodeSafety.check_rust_safety(
+          ["src/lib.rs"],
+          %{"src/lib.rs" => "#![forbid(unsafe_code)]\npub fn hello() {}"}
+        )
 
       assert findings == []
     end
 
     test "ignores non-entry-point files" do
-      findings = CodeSafety.check_rust_safety(
-        ["src/utils.rs"],
-        %{"src/utils.rs" => "pub fn helper() {}"}
-      )
+      findings =
+        CodeSafety.check_rust_safety(
+          ["src/utils.rs"],
+          %{"src/utils.rs" => "pub fn helper() {}"}
+        )
 
       assert findings == []
     end
@@ -332,10 +336,11 @@ defmodule Hypatia.Rules.CodeSafetyTest do
 
   describe "check_scm_locations/1" do
     test "flags SCM files outside .machine_readable/" do
-      findings = CodeSafety.check_scm_locations([
-        "repo/STATE.a2ml",
-        "repo/.machine_readable/STATE.a2ml"
-      ])
+      findings =
+        CodeSafety.check_scm_locations([
+          "repo/STATE.a2ml",
+          "repo/.machine_readable/STATE.a2ml"
+        ])
 
       # Only the root one should be flagged
       assert length(findings) == 1
@@ -343,9 +348,10 @@ defmodule Hypatia.Rules.CodeSafetyTest do
     end
 
     test "passes when SCM files are in correct location" do
-      findings = CodeSafety.check_scm_locations([
-        "repo/.machine_readable/STATE.a2ml"
-      ])
+      findings =
+        CodeSafety.check_scm_locations([
+          "repo/.machine_readable/STATE.a2ml"
+        ])
 
       assert findings == []
     end

@@ -34,11 +34,16 @@ defmodule Hypatia.Rules.BuildSystemRules do
   """
   def scan_dune_test_alias_inline_field(content) do
     if Regex.match?(~r/\(test\b[^()]*(?:\([^()]*\)[^()]*)*?\(alias\b/s, content) do
-      [%{rule: "dune_test_alias_inline_field", severity: :high,
-         description:
-           "(test ...) stanza has (alias ...) inline field — dune 3.x rejects with " <>
-           "`Error: Unknown field \"alias\"`. Replace with (executable ...) + " <>
-           "separate (rule (alias <name>) (action ...)). See affinescript#361."}]
+      [
+        %{
+          rule: "dune_test_alias_inline_field",
+          severity: :high,
+          description:
+            "(test ...) stanza has (alias ...) inline field — dune 3.x rejects with " <>
+              "`Error: Unknown field \"alias\"`. Replace with (executable ...) + " <>
+              "separate (rule (alias <name>) (action ...)). See affinescript#361."
+        }
+      ]
     else
       []
     end
@@ -77,12 +82,17 @@ defmodule Hypatia.Rules.BuildSystemRules do
         ~r/(?<![a-zA-Z])"dependencies"\s*:\s*\{[^}]*"#{Regex.escape(org_prefix)}\//s
 
       if Regex.match?(regex, content) do
-        [%{rule: "npm_org_scoped_pre_publish_dependency", severity: :medium,
-           description:
-             "#{org_prefix}* package in \"dependencies\" (not \"optionalDependencies\"). " <>
-             "Pre-publish hazard: if the package isn't on npm yet, `npm install` will " <>
-             "404 and block every CI run. Move to optionalDependencies until published, " <>
-             "or verify the package exists on the registry. See affinescript#361."}]
+        [
+          %{
+            rule: "npm_org_scoped_pre_publish_dependency",
+            severity: :medium,
+            description:
+              "#{org_prefix}* package in \"dependencies\" (not \"optionalDependencies\"). " <>
+                "Pre-publish hazard: if the package isn't on npm yet, `npm install` will " <>
+                "404 and block every CI run. Move to optionalDependencies until published, " <>
+                "or verify the package exists on the registry. See affinescript#361."
+          }
+        ]
       else
         []
       end

@@ -95,15 +95,16 @@ defmodule Hypatia.VCL.FileExecutor do
       dir ->
         base_path = Path.join(expand_path(), dir)
 
-        results = case store_id do
-          "scans" -> load_json_directory(base_path, ".json")
-          "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
-          "recipes" -> load_json_directory(base_path, ".json", "recipe-")
-          "outcomes" -> load_jsonl_directory(base_path)
-          "dispatch" -> load_jsonl_directory(base_path)
-          "index" -> load_single_json(Path.join(base_path, "index.json"))
-          _ -> load_json_directory(base_path, ".json")
-        end
+        results =
+          case store_id do
+            "scans" -> load_json_directory(base_path, ".json")
+            "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
+            "recipes" -> load_json_directory(base_path, ".json", "recipe-")
+            "outcomes" -> load_jsonl_directory(base_path)
+            "dispatch" -> load_jsonl_directory(base_path)
+            "index" -> load_single_json(Path.join(base_path, "index.json"))
+            _ -> load_json_directory(base_path, ".json")
+          end
 
         filtered = apply_where(results, ast.where)
         sorted = apply_modality_sort(filtered, ast.modalities)
@@ -119,7 +120,8 @@ defmodule Hypatia.VCL.FileExecutor do
 
   defp execute_federation_query(pattern, drift_policy, ast, _opts) do
     # Federation patterns like /scans/*, /recipes/*, etc.
-    store_name = pattern
+    store_name =
+      pattern
       |> String.trim_leading("/")
       |> String.split("/")
       |> List.first()
@@ -127,16 +129,18 @@ defmodule Hypatia.VCL.FileExecutor do
     case Map.get(@store_map, store_name) do
       nil ->
         # Query across ALL stores
-        results = Enum.flat_map(["scans", "patterns", "recipes", "outcomes"], fn store ->
-          base_path = Path.join(expand_path(), store)
-          case store do
-            "scans" -> load_json_directory(base_path, ".json")
-            "patterns" -> load_single_json(Path.join(expand_path(), "patterns/registry.json"))
-            "recipes" -> load_json_directory(base_path, ".json", "recipe-")
-            "outcomes" -> load_jsonl_directory(base_path)
-            _ -> []
-          end
-        end)
+        results =
+          Enum.flat_map(["scans", "patterns", "recipes", "outcomes"], fn store ->
+            base_path = Path.join(expand_path(), store)
+
+            case store do
+              "scans" -> load_json_directory(base_path, ".json")
+              "patterns" -> load_single_json(Path.join(expand_path(), "patterns/registry.json"))
+              "recipes" -> load_json_directory(base_path, ".json", "recipe-")
+              "outcomes" -> load_jsonl_directory(base_path)
+              _ -> []
+            end
+          end)
 
         filtered = apply_where(results, ast.where)
         drifted = apply_drift_policy(filtered, drift_policy)
@@ -146,11 +150,12 @@ defmodule Hypatia.VCL.FileExecutor do
       dir ->
         base_path = Path.join(expand_path(), dir)
 
-        results = cond do
-          store_name in ["outcomes", "dispatch"] -> load_jsonl_directory(base_path)
-          store_name == "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
-          true -> load_json_directory(base_path, ".json")
-        end
+        results =
+          cond do
+            store_name in ["outcomes", "dispatch"] -> load_jsonl_directory(base_path)
+            store_name == "patterns" -> load_single_json(Path.join(base_path, "registry.json"))
+            true -> load_json_directory(base_path, ".json")
+          end
 
         filtered = apply_where(results, ast.where)
         drifted = apply_drift_policy(filtered, drift_policy)
@@ -298,26 +303,29 @@ defmodule Hypatia.VCL.FileExecutor do
 
   defp execute_hexad_query(entity_id, ast, _opts) do
     # Entity ID could be a repo name, pattern ID, or recipe ID
-    result = cond do
-      # Try as scan (repo name)
-      File.exists?(scan_path(entity_id)) ->
-        load_single_json(scan_path(entity_id))
+    result =
+      cond do
+        # Try as scan (repo name)
+        File.exists?(scan_path(entity_id)) ->
+          load_single_json(scan_path(entity_id))
 
-      # Try as recipe
-      File.exists?(recipe_path(entity_id)) ->
-        load_single_json(recipe_path(entity_id))
+        # Try as recipe
+        File.exists?(recipe_path(entity_id)) ->
+          load_single_json(recipe_path(entity_id))
 
-      # Try as pattern ID in registry
-      true ->
-        case load_single_json(Path.join(expand_path(), "patterns/registry.json")) do
-          [%{"patterns" => patterns}] ->
-            case Map.get(patterns, entity_id) do
-              nil -> []
-              pattern -> [pattern]
-            end
-          _ -> []
-        end
-    end
+        # Try as pattern ID in registry
+        true ->
+          case load_single_json(Path.join(expand_path(), "patterns/registry.json")) do
+            [%{"patterns" => patterns}] ->
+              case Map.get(patterns, entity_id) do
+                nil -> []
+                pattern -> [pattern]
+              end
+
+            _ ->
+              []
+          end
+      end
 
     filtered = apply_where(result, ast.where)
     {:ok, filtered}
@@ -337,6 +345,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
   defp apply_where(results, {:fulltext, :contains, text}) do
     text_lower = String.downcase(text)
+
     Enum.filter(results, fn item ->
       item_text = item |> Jason.encode!() |> String.downcase()
       String.contains?(item_text, text_lower)
@@ -366,34 +375,52 @@ defmodule Hypatia.VCL.FileExecutor do
     item_value = deep_get(item, field)
 
     case op do
-      :eq -> to_string(item_value) == value
-      :neq -> to_string(item_value) != value
-      :gt -> compare_values(item_value, value) == :gt
-      :gte -> compare_values(item_value, value) in [:gt, :eq]
-      :lt -> compare_values(item_value, value) == :lt
-      :lte -> compare_values(item_value, value) in [:lt, :eq]
+      :eq ->
+        to_string(item_value) == value
+
+      :neq ->
+        to_string(item_value) != value
+
+      :gt ->
+        compare_values(item_value, value) == :gt
+
+      :gte ->
+        compare_values(item_value, value) in [:gt, :eq]
+
+      :lt ->
+        compare_values(item_value, value) == :lt
+
+      :lte ->
+        compare_values(item_value, value) in [:lt, :eq]
+
       :contains ->
         cond do
           is_list(item_value) -> value in Enum.map(item_value, &to_string/1)
           is_binary(item_value) -> String.contains?(item_value, value)
           true -> false
         end
+
       :like ->
         is_binary(item_value) and
           String.contains?(String.downcase(item_value), String.downcase(value))
+
       :matches ->
         case Regex.compile(value, "i") do
           {:ok, regex} -> is_binary(item_value) and Regex.match?(regex, item_value)
           _ -> false
         end
-      {:raw, _} -> false
+
+      {:raw, _} ->
+        false
     end
   end
 
   defp deep_get(item, field) when is_map(item) do
     # Support dotted paths like "triangle_status.eliminate"
     case String.split(field, ".", parts: 2) do
-      [key] -> Map.get(item, key)
+      [key] ->
+        Map.get(item, key)
+
       [key, rest] ->
         case Map.get(item, key) do
           child when is_map(child) -> deep_get(child, rest)
@@ -406,12 +433,15 @@ defmodule Hypatia.VCL.FileExecutor do
 
   defp compare_values(a, b) when is_number(a) do
     case Float.parse(b) do
-      {b_num, _} -> cond do
-        a > b_num -> :gt
-        a < b_num -> :lt
-        true -> :eq
-      end
-      :error -> :lt
+      {b_num, _} ->
+        cond do
+          a > b_num -> :gt
+          a < b_num -> :lt
+          true -> :eq
+        end
+
+      :error ->
+        :lt
     end
   end
 
@@ -521,8 +551,10 @@ defmodule Hypatia.VCL.FileExecutor do
       # Tag each result with its language family for downstream use
       item
       |> Map.put("_language_family", Atom.to_string(family))
-      |> Map.put("_drift_discount",
-        if(family == :unknown, do: 0.75, else: 1.0))
+      |> Map.put(
+        "_drift_discount",
+        if(family == :unknown, do: 0.75, else: 1.0)
+      )
     end)
   end
 
@@ -536,17 +568,23 @@ defmodule Hypatia.VCL.FileExecutor do
         Hypatia.CrossRepoLearning.drift_discount(:language_aware, repo, repo)
         # We just need the language, not the discount -- detect via scan
         scan_path = Path.join([expand_path(), "scans", "#{repo}.json"])
+
         case File.read(scan_path) do
           {:ok, content} ->
             case Jason.decode(content) do
               {:ok, data} ->
                 String.downcase(Map.get(data, "primary_language", "unknown"))
-              _ -> "unknown"
+
+              _ ->
+                "unknown"
             end
-          _ -> "unknown"
+
+          _ ->
+            "unknown"
         end
 
-      true -> "unknown"
+      true ->
+        "unknown"
     end
   end
 
@@ -557,10 +595,14 @@ defmodule Hypatia.VCL.FileExecutor do
   defp apply_modality_sort(results, modalities) do
     cond do
       :temporal in modalities ->
-        Enum.sort_by(results, fn item ->
-          Map.get(item, "timestamp") || Map.get(item, "last_seen") ||
-            Map.get(item, "last_scan") || ""
-        end, :desc)
+        Enum.sort_by(
+          results,
+          fn item ->
+            Map.get(item, "timestamp") || Map.get(item, "last_seen") ||
+              Map.get(item, "last_scan") || ""
+          end,
+          :desc
+        )
 
       :semantic in modalities ->
         Enum.sort_by(results, fn item ->
@@ -578,7 +620,10 @@ defmodule Hypatia.VCL.FileExecutor do
 
   defp apply_pagination(results, nil, nil), do: results
   defp apply_pagination(results, limit, nil) when is_integer(limit), do: Enum.take(results, limit)
-  defp apply_pagination(results, nil, offset) when is_integer(offset), do: Enum.drop(results, offset)
+
+  defp apply_pagination(results, nil, offset) when is_integer(offset),
+    do: Enum.drop(results, offset)
+
   defp apply_pagination(results, limit, offset) do
     results |> Enum.drop(offset || 0) |> Enum.take(limit)
   end
@@ -598,6 +643,7 @@ defmodule Hypatia.VCL.FileExecutor do
         end)
         |> Enum.map(fn f ->
           full_path = Path.join(path, f)
+
           case File.read(full_path) do
             {:ok, content} ->
               case Jason.decode(content) do
@@ -608,9 +654,13 @@ defmodule Hypatia.VCL.FileExecutor do
                   else
                     %{"_source" => f, "_data" => data}
                   end
-                {:error, _} -> nil
+
+                {:error, _} ->
+                  nil
               end
-            {:error, _} -> nil
+
+            {:error, _} ->
+              nil
           end
         end)
         |> Enum.reject(&is_nil/1)

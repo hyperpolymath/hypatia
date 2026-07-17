@@ -29,9 +29,12 @@ defmodule Hypatia.Safety.RateLimiter do
   @drain_interval_ms 5_000
 
   defstruct [
-    bot_windows: %{},    # bot_name => [timestamp_ms, ...]
-    global_window: [],   # [timestamp_ms, ...]
-    queue: :queue.new(),  # Queued dispatches when rate limited
+    # bot_name => [timestamp_ms, ...]
+    bot_windows: %{},
+    # [timestamp_ms, ...]
+    global_window: [],
+    # Queued dispatches when rate limited
+    queue: :queue.new(),
     total_dispatched: 0,
     total_queued: 0,
     total_rate_limited: 0
@@ -76,9 +79,10 @@ defmodule Hypatia.Safety.RateLimiter do
     now = System.system_time(:millisecond)
 
     # Clean windows
-    bot_window = state.bot_windows
-    |> Map.get(bot_name, [])
-    |> Enum.filter(fn ts -> now - ts < @per_bot_window_ms end)
+    bot_window =
+      state.bot_windows
+      |> Map.get(bot_name, [])
+      |> Enum.filter(fn ts -> now - ts < @per_bot_window_ms end)
 
     global_window = Enum.filter(state.global_window, fn ts -> now - ts < @global_window_ms end)
 
@@ -88,17 +92,23 @@ defmodule Hypatia.Safety.RateLimiter do
       length(burst_window) >= @burst_limit ->
         oldest = Enum.min(burst_window)
         retry_after = @burst_window_ms - (now - oldest)
-        {:reply, {:rate_limited, :burst, retry_after}, update_windows(state, bot_name, bot_window, global_window)}
+
+        {:reply, {:rate_limited, :burst, retry_after},
+         update_windows(state, bot_name, bot_window, global_window)}
 
       length(bot_window) >= @per_bot_limit ->
         oldest = Enum.min(bot_window)
         retry_after = @per_bot_window_ms - (now - oldest)
-        {:reply, {:rate_limited, :per_bot, retry_after}, update_windows(state, bot_name, bot_window, global_window)}
+
+        {:reply, {:rate_limited, :per_bot, retry_after},
+         update_windows(state, bot_name, bot_window, global_window)}
 
       length(global_window) >= @global_limit ->
         oldest = Enum.min(global_window)
         retry_after = @global_window_ms - (now - oldest)
-        {:reply, {:rate_limited, :global, retry_after}, update_windows(state, bot_name, bot_window, global_window)}
+
+        {:reply, {:rate_limited, :global, retry_after},
+         update_windows(state, bot_name, bot_window, global_window)}
 
       true ->
         {:reply, :ok, update_windows(state, bot_name, bot_window, global_window)}
@@ -114,6 +124,7 @@ defmodule Hypatia.Safety.RateLimiter do
       active_bots: map_size(state.bot_windows),
       global_window_size: length(state.global_window)
     }
+
     {:reply, stats, state}
   end
 
@@ -121,19 +132,23 @@ defmodule Hypatia.Safety.RateLimiter do
     now = System.system_time(:millisecond)
     bot_window = Map.get(state.bot_windows, bot_name, [])
 
-    {:noreply, %{state |
-      bot_windows: Map.put(state.bot_windows, bot_name, [now | bot_window]),
-      global_window: [now | state.global_window],
-      total_dispatched: state.total_dispatched + 1
-    }}
+    {:noreply,
+     %{
+       state
+       | bot_windows: Map.put(state.bot_windows, bot_name, [now | bot_window]),
+         global_window: [now | state.global_window],
+         total_dispatched: state.total_dispatched + 1
+     }}
   end
 
   def handle_cast({:enqueue, entry}, state) do
-    {:noreply, %{state |
-      queue: :queue.in(entry, state.queue),
-      total_queued: state.total_queued + 1,
-      total_rate_limited: state.total_rate_limited + 1
-    }}
+    {:noreply,
+     %{
+       state
+       | queue: :queue.in(entry, state.queue),
+         total_queued: state.total_queued + 1,
+         total_rate_limited: state.total_rate_limited + 1
+     }}
   end
 
   def handle_info(:drain_queue, state) do
@@ -145,9 +160,10 @@ defmodule Hypatia.Safety.RateLimiter do
   # --- Internal ---
 
   defp update_windows(state, bot_name, bot_window, global_window) do
-    %{state |
-      bot_windows: Map.put(state.bot_windows, bot_name, bot_window),
-      global_window: global_window
+    %{
+      state
+      | bot_windows: Map.put(state.bot_windows, bot_name, bot_window),
+        global_window: global_window
     }
   end
 
@@ -155,16 +171,19 @@ defmodule Hypatia.Safety.RateLimiter do
     case :queue.out(state.queue) do
       {{:value, entry}, remaining_queue} ->
         bot = Map.get(entry, "bot", Map.get(entry, :bot, "unknown"))
+
         case check_internal(state, bot) do
           :ok ->
             # Dispatch via fleet dispatcher
             Logger.info("Rate limiter: draining queued dispatch to #{bot}")
             Hypatia.FleetDispatcher.dispatch_finding(entry)
             drain_queued(%{state | queue: remaining_queue})
+
           {:rate_limited, _, _} ->
             # Still rate limited, put back
             state
         end
+
       {:empty, _} ->
         state
     end
@@ -172,7 +191,12 @@ defmodule Hypatia.Safety.RateLimiter do
 
   defp check_internal(state, bot_name) do
     now = System.system_time(:millisecond)
-    bot_window = state.bot_windows |> Map.get(bot_name, []) |> Enum.filter(fn ts -> now - ts < @per_bot_window_ms end)
+
+    bot_window =
+      state.bot_windows
+      |> Map.get(bot_name, [])
+      |> Enum.filter(fn ts -> now - ts < @per_bot_window_ms end)
+
     global_window = Enum.filter(state.global_window, fn ts -> now - ts < @global_window_ms end)
 
     cond do

@@ -36,8 +36,10 @@ defmodule Hypatia.Kin.Protocol do
   """
 
   @kin_dir Path.expand("~/.hypatia/kin")
-  @stale_threshold_seconds 24 * 60 * 60  # 24 hours for CLI tools
-  @critical_stale_seconds 7 * 24 * 60 * 60  # 7 days = definitely dead
+  # 24 hours for CLI tools
+  @stale_threshold_seconds 24 * 60 * 60
+  # 7 days = definitely dead
+  @critical_stale_seconds 7 * 24 * 60 * 60
 
   @known_kin %{
     "hypatia" => %{
@@ -90,13 +92,14 @@ defmodule Hypatia.Kin.Protocol do
     File.mkdir_p!(@kin_dir)
     path = heartbeat_path("hypatia")
 
-    heartbeat = Map.merge(status_map, %{
-      "kin_id" => "hypatia",
-      "role" => "coordinator",
-      "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-      "version" => Mix.Project.config()[:version] || "0.1.0",
-      "capabilities" => ["neural", "triangle", "dispatch", "learning", "vcl"]
-    })
+    heartbeat =
+      Map.merge(status_map, %{
+        "kin_id" => "hypatia",
+        "role" => "coordinator",
+        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
+        "version" => Mix.Project.config()[:version] || "0.1.0",
+        "capabilities" => ["neural", "triangle", "dispatch", "learning", "vcl"]
+      })
 
     case Jason.encode(heartbeat, pretty: true) do
       {:ok, json} -> File.write!(path, json <> "\n")
@@ -107,13 +110,17 @@ defmodule Hypatia.Kin.Protocol do
   @doc "Check if a heartbeat is stale (older than threshold)."
   def stale?(heartbeat_data) do
     case Map.get(heartbeat_data, "timestamp") do
-      nil -> true
+      nil ->
+        true
+
       ts ->
         case DateTime.from_iso8601(ts) do
           {:ok, dt, _} ->
             age = DateTime.diff(DateTime.utc_now(), dt, :second)
             age > @stale_threshold_seconds
-          _ -> true
+
+          _ ->
+            true
         end
     end
   end
@@ -121,13 +128,17 @@ defmodule Hypatia.Kin.Protocol do
   @doc "Check if a heartbeat is critically stale (7+ days)."
   def critically_stale?(heartbeat_data) do
     case Map.get(heartbeat_data, "timestamp") do
-      nil -> true
+      nil ->
+        true
+
       ts ->
         case DateTime.from_iso8601(ts) do
           {:ok, dt, _} ->
             age = DateTime.diff(DateTime.utc_now(), dt, :second)
             age > @critical_stale_seconds
-          _ -> true
+
+          _ ->
+            true
         end
     end
   end
@@ -135,18 +146,23 @@ defmodule Hypatia.Kin.Protocol do
   @doc "Age of heartbeat in human-readable form."
   def heartbeat_age(heartbeat_data) do
     case Map.get(heartbeat_data, "timestamp") do
-      nil -> "never"
+      nil ->
+        "never"
+
       ts ->
         case DateTime.from_iso8601(ts) do
           {:ok, dt, _} ->
             age = DateTime.diff(DateTime.utc_now(), dt, :second)
+
             cond do
               age < 60 -> "#{age}s ago"
               age < 3600 -> "#{div(age, 60)}m ago"
               age < 86400 -> "#{div(age, 3600)}h ago"
               true -> "#{div(age, 86400)}d ago"
             end
-          _ -> "unknown"
+
+          _ ->
+            "unknown"
         end
     end
   end

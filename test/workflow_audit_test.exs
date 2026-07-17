@@ -33,9 +33,10 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
             - uses: actions/checkout@v4
             - uses: actions/configure-pages@v5
       """
+
       findings = WorkflowAudit.check_unpinned_actions(%{"ci.yml" => content})
       assert length(findings) == 2
-      assert Enum.all?(findings, & &1.type == :unpinned_action)
+      assert Enum.all?(findings, &(&1.type == :unpinned_action))
     end
 
     test "ignores SHA-pinned actions" do
@@ -43,6 +44,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       steps:
         - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       """
+
       findings = WorkflowAudit.check_unpinned_actions(%{"ci.yml" => content})
       assert findings == []
     end
@@ -125,26 +127,26 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     test "flags write-all" do
       content = "permissions: write-all\njobs:\n  build:"
       findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
-      assert Enum.any?(findings, & &1.type == :broad_permissions)
+      assert Enum.any?(findings, &(&1.type == :broad_permissions))
     end
 
     test "flags missing permissions" do
       content = "name: CI\njobs:\n  build:\n    runs-on: ubuntu-latest"
       findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
-      assert Enum.any?(findings, & &1.type == :missing_permissions)
+      assert Enum.any?(findings, &(&1.type == :missing_permissions))
     end
 
     test "accepts read-all" do
       content = "permissions: read-all\n# SPDX-License-Identifier: MPL-2.0\njobs:"
       findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
-      refute Enum.any?(findings, & &1.type == :broad_permissions)
-      refute Enum.any?(findings, & &1.type == :missing_permissions)
+      refute Enum.any?(findings, &(&1.type == :broad_permissions))
+      refute Enum.any?(findings, &(&1.type == :missing_permissions))
     end
 
     test "flags missing SPDX header" do
       content = "permissions: read-all\njobs:\n  build:"
       findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
-      assert Enum.any?(findings, & &1.type == :missing_spdx)
+      assert Enum.any?(findings, &(&1.type == :missing_spdx))
     end
   end
 
@@ -154,6 +156,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
         "ci.yml" => "same content here",
         "build.yml" => "same content here"
       }
+
       findings = WorkflowAudit.check_duplicates(Map.keys(contents), contents)
       assert length(findings) == 1
       assert hd(findings).type == :duplicate_workflow
@@ -164,6 +167,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
         "ci.yml" => "content A",
         "build.yml" => "content B"
       }
+
       findings = WorkflowAudit.check_duplicates(Map.keys(contents), contents)
       assert findings == []
     end
@@ -179,6 +183,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
         build:
           runs-on: ubuntu-latest
       """
+
       findings = WorkflowAudit.check_npermissions_typo(%{"ci.yml" => content})
       assert length(findings) == 1
       assert hd(findings).rule == "WF013"
@@ -196,6 +201,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
         build:
           runs-on: ubuntu-latest
       """
+
       findings = WorkflowAudit.check_npermissions_typo(%{"ci.yml" => content})
       assert findings == []
     end
@@ -207,6 +213,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
         build:
           runs-on: ubuntu-latest
       """
+
       findings = WorkflowAudit.check_npermissions_typo(%{"ci.yml" => content})
       assert findings == []
     end
@@ -216,6 +223,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
         "ci.yml" => "npermissions:\n  contents: read\n",
         "deploy.yml" => "npermissions:\n  contents: write\n"
       }
+
       findings = WorkflowAudit.check_npermissions_typo(contents)
       assert length(findings) == 2
     end
@@ -264,6 +272,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
     test "flags javascript-typescript matrix on a repo with no JS/TS source" do
       contents = %{".github/workflows/codeql.yml" => @codeql_js_ts}
+
       findings =
         WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
           has_codeql_supported_language: false
@@ -279,6 +288,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
     test "does NOT flag when matrix is `actions` (workflow-only scan)" do
       contents = %{".github/workflows/codeql.yml" => @codeql_actions}
+
       findings =
         WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
           has_codeql_supported_language: false
@@ -291,6 +301,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       # Even if codeql.yml lists javascript-typescript, if the repo actually
       # has JS/TS files the analyze job will scan them — no mismatch.
       contents = %{".github/workflows/codeql.yml" => @codeql_js_ts}
+
       findings =
         WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
           has_codeql_supported_language: true
@@ -326,6 +337,7 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       """
 
       contents = %{".github/workflows/codeql.yml" => multi}
+
       findings =
         WorkflowAudit.check_codeql_language_matrix_mismatch(contents,
           has_codeql_supported_language: false
@@ -379,7 +391,9 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
                 path: .standards-checkout
       """
 
-      findings = WorkflowAudit.check_workflow_sha_as_foreign_ref(%{"governance-reusable.yml" => wf})
+      findings =
+        WorkflowAudit.check_workflow_sha_as_foreign_ref(%{"governance-reusable.yml" => wf})
+
       assert length(findings) == 1
       [f] = findings
       assert f.type == :workflow_sha_as_foreign_ref
@@ -512,7 +526,8 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
                 ref: ${{ github.ref }}
       """
 
-      assert [] = WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
+      assert [] =
+               WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
     end
 
     test "does not fire when ref is a literal pin" do
@@ -529,7 +544,8 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
                 ref: main
       """
 
-      assert [] = WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
+      assert [] =
+               WorkflowAudit.check_reusable_caller_context_self_checkout(%{"reusable.yml" => wf})
     end
   end
 

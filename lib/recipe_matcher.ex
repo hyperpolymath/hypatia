@@ -130,7 +130,9 @@ defmodule Hypatia.RecipeMatcher do
           nil -> fuzzy_match_recipe(pattern, language)
           recipe -> recipe
         end
-      recipe -> recipe
+
+      recipe ->
+        recipe
     end
   end
 

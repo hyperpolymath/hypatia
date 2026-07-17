@@ -29,20 +29,21 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   require Logger
 
   @reservoir_size 100
-  @spectral_radius 0.9  # Edge of chaos for maximum computation
-  @leak_rate 0.3  # Neuron leakiness (fading memory speed)
+  # Edge of chaos for maximum computation
+  @spectral_radius 0.9
+  # Neuron leakiness (fading memory speed)
+  @leak_rate 0.3
   @input_scaling 0.5
-  @sparsity 0.1  # 10% connectivity in reservoir
+  # 10% connectivity in reservoir
+  @sparsity 0.1
 
-  defstruct [
-    reservoir_weights: nil,
-    input_weights: nil,
-    readout_weights: nil,
-    state: nil,
-    history: [],
-    max_history: 1000,
-    trained: false
-  ]
+  defstruct reservoir_weights: nil,
+            input_weights: nil,
+            readout_weights: nil,
+            state: nil,
+            history: [],
+            max_history: 1000,
+            trained: false
 
   # --- Public API ---
 
@@ -97,13 +98,17 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   @doc "Train readout weights on collected history with labels"
   def train(%__MODULE__{} = lsm, labeled_events) do
     # Collect reservoir states for each event sequence
-    {states, targets} = Enum.reduce(labeled_events, {[], []}, fn {events, target}, {s_acc, t_acc} ->
-      # Run event sequence through reservoir
-      final_lsm = Enum.reduce(events, %{lsm | state: List.duplicate(0.0, length(lsm.state))},
-        fn event, acc -> process_event(acc, event) end)
+    {states, targets} =
+      Enum.reduce(labeled_events, {[], []}, fn {events, target}, {s_acc, t_acc} ->
+        # Run event sequence through reservoir
+        final_lsm =
+          Enum.reduce(events, %{lsm | state: List.duplicate(0.0, length(lsm.state))}, fn event,
+                                                                                         acc ->
+            process_event(acc, event)
+          end)
 
-      {[final_lsm.state | s_acc], [target | t_acc]}
-    end)
+        {[final_lsm.state | s_acc], [target | t_acc]}
+      end)
 
     # Ridge regression for readout weights
     readout = ridge_regression(Enum.reverse(states), Enum.reverse(targets))
@@ -120,13 +125,18 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   def detect_anomalies(%__MODULE__{history: history}) do
     norms = Enum.map(history, fn h -> h.state_norm end)
     mean = Enum.sum(norms) / length(norms)
-    variance = Enum.reduce(norms, 0.0, fn n, acc -> acc + (n - mean) * (n - mean) end) / length(norms)
+
+    variance =
+      Enum.reduce(norms, 0.0, fn n, acc -> acc + (n - mean) * (n - mean) end) / length(norms)
+
     std_dev = :math.sqrt(max(variance, 0.0001))
 
     # Flag events with state norm > 2 standard deviations from mean
     history
     |> Enum.filter(fn h -> abs(h.state_norm - mean) > 2 * std_dev end)
-    |> Enum.map(fn h -> %{event: h.event, deviation: abs(h.state_norm - mean) / std_dev, timestamp: h.timestamp} end)
+    |> Enum.map(fn h ->
+      %{event: h.event, deviation: abs(h.state_norm - mean) / std_dev, timestamp: h.timestamp}
+    end)
   end
 
   @doc "Get temporal summary of reservoir dynamics"
@@ -143,21 +153,23 @@ defmodule Hypatia.Neural.LiquidStateMachine do
 
   defp generate_reservoir(size) do
     # Sparse random matrix scaled to spectral radius
-    matrix = for _i <- 1..size do
-      for _j <- 1..size do
-        if :rand.uniform() < @sparsity do
-          (:rand.uniform() * 2.0 - 1.0)
-        else
-          0.0
+    matrix =
+      for _i <- 1..size do
+        for _j <- 1..size do
+          if :rand.uniform() < @sparsity do
+            :rand.uniform() * 2.0 - 1.0
+          else
+            0.0
+          end
         end
       end
-    end
 
     # Approximate spectral radius scaling
-    max_abs = matrix
-    |> List.flatten()
-    |> Enum.map(&abs/1)
-    |> Enum.max(fn -> 1.0 end)
+    max_abs =
+      matrix
+      |> List.flatten()
+      |> Enum.map(&abs/1)
+      |> Enum.max(fn -> 1.0 end)
 
     scale = @spectral_radius / max(max_abs, 0.001)
     Enum.map(matrix, fn row -> Enum.map(row, fn v -> v * scale end) end)
@@ -175,11 +187,12 @@ defmodule Hypatia.Neural.LiquidStateMachine do
     # Leaky integrate-and-fire update
     for i <- 0..(size - 1) do
       # Recurrent input
-      recurrent = Enum.reduce(0..(size - 1), 0.0, fn j, acc ->
-        w_ij = w |> Enum.at(i) |> Enum.at(j)
-        s_j = Enum.at(state, j)
-        acc + w_ij * s_j
-      end)
+      recurrent =
+        Enum.reduce(0..(size - 1), 0.0, fn j, acc ->
+          w_ij = w |> Enum.at(i) |> Enum.at(j)
+          s_j = Enum.at(state, j)
+          acc + w_ij * s_j
+        end)
 
       # External input
       external = Enum.at(iw, i) * input
@@ -197,7 +210,8 @@ defmodule Hypatia.Neural.LiquidStateMachine do
     outcome = outcome_score(Map.get(event, "outcome", "unknown"))
     type = type_score(Map.get(event, "type", "scan"))
 
-    (severity * 0.4 + outcome * 0.4 + type * 0.2) * 2.0 - 1.0  # Scale to [-1, 1]
+    # Scale to [-1, 1]
+    (severity * 0.4 + outcome * 0.4 + type * 0.2) * 2.0 - 1.0
   end
 
   defp encode_event(_), do: 0.0
@@ -251,7 +265,9 @@ defmodule Hypatia.Neural.LiquidStateMachine do
     avg_first = Enum.sum(first_half) / max(length(first_half), 1)
     avg_second = Enum.sum(second_half) / max(length(second_half), 1)
 
-    diff = avg_first - avg_second  # first_half is more recent
+    # first_half is more recent
+    diff = avg_first - avg_second
+
     cond do
       diff > 0.1 -> :increasing
       diff < -0.1 -> :decreasing
@@ -276,6 +292,7 @@ defmodule Hypatia.Neural.LiquidStateMachine do
       |> Enum.reduce(w, fn {state, target}, w_acc ->
         pred = dot_product(state, w_acc)
         error = target - pred
+
         Enum.zip(w_acc, state)
         |> Enum.map(fn {wi, si} -> wi + lr * error * si end)
       end)

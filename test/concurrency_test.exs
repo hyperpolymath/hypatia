@@ -45,6 +45,7 @@ defmodule Hypatia.Concurrency.RecipeMatcherTest do
 
       # All results should have the same length (stable file set)
       lengths = results |> Enum.map(&length/1) |> Enum.uniq()
+
       assert length(lengths) == 1,
              "Concurrent all_recipes() returned different lengths: #{inspect(lengths)}"
     end
@@ -71,6 +72,7 @@ defmodule Hypatia.Concurrency.RecipeMatcherTest do
 
       Enum.each(by_id, fn {id, all_results} ->
         unique_results = Enum.uniq(all_results)
+
         assert length(unique_results) == 1,
                "find_recipes(#{inspect(id)}) returned different results concurrently: " <>
                  "#{inspect(unique_results)}"
@@ -191,6 +193,7 @@ defmodule Hypatia.Concurrency.SafetyModulesTest do
 
       # GenServer must still be alive and responsive
       pid = GenServer.whereis(RateLimiter)
+
       assert pid != nil and Process.alive?(pid),
              "RateLimiter crashed under concurrent load"
 
@@ -216,6 +219,7 @@ defmodule Hypatia.Concurrency.SafetyModulesTest do
       :timer.sleep(100)
 
       after_stats = RateLimiter.stats()
+
       assert after_stats.total_dispatched >= before_stats.total_dispatched,
              "total_dispatched decreased after concurrent dispatches (non-monotonic)"
     end
@@ -237,6 +241,7 @@ defmodule Hypatia.Concurrency.SafetyModulesTest do
       Enum.each(tasks, &Task.await(&1, 5_000))
 
       pid = GenServer.whereis(Quarantine)
+
       assert pid != nil and Process.alive?(pid),
              "Quarantine crashed under concurrent load"
     end
@@ -259,6 +264,7 @@ defmodule Hypatia.Concurrency.SafetyModulesTest do
       # After mixed outcomes, bot should not be quarantined
       # (5 consecutive failures needed, but we mixed them)
       result = Quarantine.check(bot)
+
       assert result == :ok or match?({:quarantined, _, _}, result),
              "Unexpected result from check/1 after concurrent outcomes: #{inspect(result)}"
     end
@@ -285,6 +291,7 @@ defmodule Hypatia.Concurrency.VQLClientTest do
       nil -> start_supervised!(Client)
       _pid -> :ok
     end
+
     :ok
   end
 
@@ -321,6 +328,7 @@ defmodule Hypatia.Concurrency.VQLClientTest do
       tasks =
         for i <- 1..20 do
           store = Enum.at(~w(scans recipes outcomes index), rem(i, 4))
+
           Task.async(fn ->
             Client.parse("SELECT DOCUMENT FROM STORE #{store} LIMIT #{i}")
           end)

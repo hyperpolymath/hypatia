@@ -112,8 +112,10 @@ defmodule Hypatia.Watcher.Alerts do
   end
 
   @impl true
-  def handle_info({:hypatia_event, [:hypatia, :quarantine, :triggered], _meas, metadata, ts},
-        state) do
+  def handle_info(
+        {:hypatia_event, [:hypatia, :quarantine, :triggered], _meas, metadata, ts},
+        state
+      ) do
     kind = metadata[:kind] || metadata["kind"]
     id = metadata[:id] || metadata["id"]
     key = "quarantine:#{inspect(kind)}:#{inspect(id)}"
@@ -129,8 +131,10 @@ defmodule Hypatia.Watcher.Alerts do
     {:noreply, maybe_emit(state, key, alert)}
   end
 
-  def handle_info({:hypatia_event, [:hypatia, :soundness, :violation], _meas, metadata, ts},
-        state) do
+  def handle_info(
+        {:hypatia_event, [:hypatia, :soundness, :violation], _meas, metadata, ts},
+        state
+      ) do
     rule_module = metadata[:rule_module] || metadata["rule_module"]
     rule_id = metadata[:rule_id] || metadata["rule_id"]
 
@@ -146,8 +150,10 @@ defmodule Hypatia.Watcher.Alerts do
     {:noreply, emit(state, alert)}
   end
 
-  def handle_info({:hypatia_event, [:hypatia, :anomaly, :detected], measurements, metadata, ts},
-        state) do
+  def handle_info(
+        {:hypatia_event, [:hypatia, :anomaly, :detected], measurements, metadata, ts},
+        state
+      ) do
     kind = metadata[:kind] || metadata["kind"]
     key = "anomaly:#{kind}"
     concurs = metadata[:esn_drift_concurs] || metadata["esn_drift_concurs"]
@@ -173,7 +179,9 @@ defmodule Hypatia.Watcher.Alerts do
              format_rate(recent) <>
              " vs baseline " <>
              format_rate(baseline) <>
-             " (" <> format_sigma(sigma) <> "σ)" <>
+             " (" <>
+             format_sigma(sigma) <>
+             "σ)" <>
              if(concurs, do: " — ESN drift concurs", else: ""), sev}
       end
 
@@ -309,9 +317,7 @@ defmodule Hypatia.Watcher.Alerts do
         e -> Logger.error("Alert sink #{inspect(sink)} crashed: #{Exception.message(e)}")
       catch
         kind, reason ->
-          Logger.error(
-            "Alert sink #{inspect(sink)} threw #{inspect(kind)}: #{inspect(reason)}"
-          )
+          Logger.error("Alert sink #{inspect(sink)} threw #{inspect(kind)}: #{inspect(reason)}")
       end
     end)
 

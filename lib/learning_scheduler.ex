@@ -231,9 +231,7 @@ defmodule Hypatia.LearningScheduler do
     Logger.info("LearningScheduler: running daily action-SHA verification...")
 
     try do
-      case System.cmd("mix", ["hypatia.verify_action_shas", "--quiet"],
-             stderr_to_stdout: true
-           ) do
+      case System.cmd("mix", ["hypatia.verify_action_shas", "--quiet"], stderr_to_stdout: true) do
         {_output, 0} ->
           Logger.info("LearningScheduler: action_sha verify clean (zero fakes)")
 
