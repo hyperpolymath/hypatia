@@ -132,11 +132,14 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       # detector tranche is partial by design -> provisional, always
       assert sc.provisional == true
       assert sc.tier == "none"
-      # not exactly 0: absence criteria (1.1.3 no-makefile) pass on an empty
-      # tree — emptiness satisfies a prohibition. Everything else fails.
+      # not zero: prohibition criteria pass on an empty tree — emptiness
+      # satisfies a ban (no Makefile, no Python/Go/V/npm). Everything requiring
+      # a file present fails. Score stays well below the bronze floor (75).
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["1.1.3"] == :pass
-      assert sc.score < 10.0
+      assert verdicts["5.1.1"] == :pass
+      assert verdicts["5.1.5"] == :pass
+      assert sc.score < 75.0
     end
 
     test "a well-formed universal tree scores above zero and detects descriptiles", %{
@@ -187,6 +190,31 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       {:ok, sc} = RsrConformance.score(catalogue, tmp)
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["3.2.1"] == :fail
+    end
+
+    test "3.2.1 ignores a markup-dialect manifest — only record files are validated", %{
+      tmp_dir: tmp
+    } do
+      # A well-formed record-dialect descriptile ...
+      mk!(tmp, ".machine_readable/descriptiles/STATE.a2ml", """
+      [metadata]
+      version = "0.1.0"
+      """)
+
+      # ... alongside a MARKUP-dialect manifest (opens with @directive + prose),
+      # which the record-dialect reader cannot parse. It must NOT fail 3.2.1 —
+      # it is a different A2ML surface, not malformed record dialect.
+      mk!(tmp, ".machine_readable/descriptiles/0-AI-MANIFEST.a2ml", """
+      # 0-AI-MANIFEST.a2ml
+      @manifest(version="2.0.0"):
+      This manifest declares the AI-assistant context for the repo.
+      @end
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+      assert verdicts["3.2.1"] == :pass
     end
   end
 
