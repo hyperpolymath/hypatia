@@ -20,16 +20,26 @@ defmodule Hypatia.Rules.RsrConformance do
     * score = passed weight / applicable **verified** weight;
     * tier from the catalogue's thresholds.
 
-  Detection, however, is deliberately partial in this increment: a built-in
-  table of ~30 file-presence/parse checks covers the mechanically-checkable
-  criteria (community-health files, the descriptile substrate, workflows).
-  Every other criterion — including all `detect = "manual"` ones and those
-  whose `detect` names a scanner rule this oracle does not yet execute — is
-  returned as `:unverified`, counted in `automatable_coverage`, and **never**
-  silently passed. Because coverage < 100%, every scorecard this increment
-  produces carries `provisional = true`: per the no-overclaim doctrine a firm
-  tier claim requires full detection coverage (and the spec's ratification
-  bar requires exactly that before RSR v2.0 leaves Draft).
+  Detection is layered:
+
+    1. **Delegated** — criteria whose detection is *authoritative* only via a
+       live scanner run once per score (`delegated_index/1` →
+       `Hypatia.CLI.collect_findings/2`): the language bans (carve-out-aware,
+       via `cicd_rules/banned_language_file`) and SHA-pinning (via
+       `workflow_audit/{unpinned_action,wrong_sha_pin}`). Mapping is keyed on
+       *observed* `(module,type)` finding keys, which deliberately do NOT match
+       the SSOT's aspirational `detect` strings.
+    2. **File-presence/parse tranche** — a built-in table for community-health
+       files, the descriptile substrate, workflows, REUSE dir, guix stub.
+    3. Everything else — `detect = "manual"`, intrinsically external criteria
+       (OpenSSF Scorecard `4.2.x`), and flag-only licence (`7.1.1`) — is
+       returned `:unverified`, counted in `automatable_coverage`, and **never**
+       silently passed.
+
+  Because some criteria are intrinsically external or flag-only, coverage < 100%
+  is expected, so every scorecard carries `provisional = true`: per the
+  no-overclaim doctrine a firm tier claim requires either full offline coverage
+  or an accepted external attestation, a spec decision for RSR v2.0.x (§10).
 
   ## Weight interpretation
 
@@ -69,10 +79,11 @@ defmodule Hypatia.Rules.RsrConformance do
   def score(%{criteria: criteria} = catalogue, repo_path) do
     caps = declared_capabilities(repo_path)
     weights = criterion_weights(catalogue)
+    delegated = delegated_index(repo_path)
 
     results =
       Enum.map(criteria, fn %Criterion{} = c ->
-        verdict = evaluate(c, repo_path, caps)
+        verdict = evaluate(c, repo_path, caps, delegated)
 
         %{
           id: c.id,
@@ -238,15 +249,78 @@ defmodule Hypatia.Rules.RsrConformance do
 
   # --- evaluation ------------------------------------------------------------
 
-  defp evaluate(%Criterion{} = c, repo, caps) do
+  defp evaluate(%Criterion{} = c, repo, caps, delegated) do
     if applicable?(c, caps) do
-      case Map.fetch(detectors(), c.id) do
-        {:ok, fun} -> fun.(repo)
-        :error -> :unverified
+      # Criteria whose detection is DELEGATED to a live scanner take priority
+      # over the file-presence tranche (they are authoritative — e.g. the
+      # language bans respect the estate carve-outs, which a raw extension
+      # check cannot). `:skip` falls through to the built-in detector table,
+      # then to :unverified.
+      case delegated_verdict(c.id, delegated) do
+        :skip ->
+          case Map.fetch(detectors(), c.id) do
+            {:ok, fun} -> fun.(repo)
+            :error -> :unverified
+          end
+
+        verdict ->
+          verdict
       end
     else
       :na
     end
+  end
+
+  # --- delegation to live scanner rules --------------------------------------
+
+  # Run the offline content-scanners ONCE per score and index the findings the
+  # oracle can map to a criterion. Observed (module,type) keys — not the SSOT's
+  # aspirational `detect` strings — drive the mapping (the two disagree):
+  #   * language bans  -> cicd_rules/banned_language_file, keyed by file ext,
+  #     already carve-out-filtered by the scanner;
+  #   * SHA pinning    -> workflow_audit/{unpinned_action,wrong_sha_pin}.
+  # A scan failure degrades to %{} (every delegated criterion then :skip's to
+  # the file-presence tranche / :unverified) — never a false pass, never a crash.
+  defp delegated_index(repo) do
+    findings = safe_scan(repo, [:cicd_rules, :workflow_audit])
+
+    banned_exts =
+      for f <- findings,
+          f.rule_module == "cicd_rules",
+          f.type == "banned_language_file",
+          into: MapSet.new(),
+          do: f.file |> to_string() |> Path.extname()
+
+    unpinned? =
+      Enum.any?(findings, fn f ->
+        f.rule_module == "workflow_audit" and f.type in ["unpinned_action", "wrong_sha_pin"]
+      end)
+
+    %{banned_exts: banned_exts, unpinned: unpinned?, scanned: findings != [] or true}
+  end
+
+  defp safe_scan(repo, rules) do
+    Hypatia.CLI.collect_findings(repo, rules)
+  rescue
+    _ -> []
+  catch
+    _, _ -> []
+  end
+
+  # Verdict for a delegated criterion, or `:skip` if this criterion is not
+  # delegated. A language ban PASSES iff the scanner emitted no
+  # banned_language_file finding for that extension (no such file, or every
+  # such file is inside an approved carve-out — both are compliant).
+  defp delegated_verdict("5.1.1", d), do: ban_verdict(d, [".py"])
+  defp delegated_verdict("5.1.2", d), do: ban_verdict(d, [".ts", ".tsx"])
+  defp delegated_verdict("5.1.3", d), do: ban_verdict(d, [".res", ".resi"])
+  defp delegated_verdict("5.1.5", d), do: ban_verdict(d, [".go"])
+  defp delegated_verdict("4.1.3", %{unpinned: true}), do: :fail
+  defp delegated_verdict("4.1.3", %{unpinned: false}), do: :pass
+  defp delegated_verdict(_, _), do: :skip
+
+  defp ban_verdict(%{banned_exts: exts}, wanted) do
+    if Enum.any?(wanted, &MapSet.member?(exts, &1)), do: :fail, else: :pass
   end
 
   # Built-in detector tranche: file-presence and record-dialect-parse checks,
@@ -293,14 +367,12 @@ defmodule Hypatia.Rules.RsrConformance do
       "6.1.2" => present(".github/workflows/hypatia-scan.yml"),
       "6.1.3" => present(".github/workflows/governance.yml"),
       "6.2.1" => present(".github/workflows/dogfood-gate.yml"),
-      # Language-policy bans that are unambiguous file-presence checks (no
-      # estate carve-outs of consequence). TS/ReScript (5.1.2/5.1.3) are NOT
-      # here: their carve-out logic belongs to the live cicd_rules scanner, so
-      # they stay :unverified rather than risk a false positive.
+      # Language bans 5.1.1/5.1.2/5.1.3/5.1.5 and SHA-pinning 4.1.3 are handled
+      # by delegated_verdict/2 (live scanner, carve-out-aware) — not here.
+      # v.mod / package-lock.json have no carve-out subtlety, so a file-presence
+      # check is authoritative for them.
       "1.2.1" => any_of(["guix.scm", "build/guix.scm"]),
-      "5.1.1" => no_ext([".py"]),
       "5.1.4" => no_file_named("v.mod"),
-      "5.1.5" => no_ext([".go"]),
       "5.1.6" => no_file_named("package-lock.json"),
       "7.1.2" => present("LICENSES"),
       "8.1.4" => &guix_not_stub/1,
@@ -385,13 +457,6 @@ defmodule Hypatia.Rules.RsrConformance do
     yml = Path.wildcard(Path.join([repo, ".github", "workflows", "*.yml"]))
     yaml = Path.wildcard(Path.join([repo, ".github", "workflows", "*.yaml"]))
     if yml ++ yaml == [], do: :fail, else: :pass
-  end
-
-  # :pass iff NO tracked file with one of `exts` exists anywhere in the tree
-  # (vendored/build/.git dirs excluded). Used only for unambiguous language
-  # bans — Python, Go — where the estate has no carve-out.
-  defp no_ext(exts) do
-    fn repo -> if tree_hits(repo, Enum.map(exts, &("*" <> &1))) == [], do: :pass, else: :fail end
   end
 
   # :pass iff NO file with exactly `name` exists anywhere in the tree.

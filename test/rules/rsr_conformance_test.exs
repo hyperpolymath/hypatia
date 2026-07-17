@@ -241,6 +241,46 @@ defmodule Hypatia.Rules.RsrConformanceTest do
     end
   end
 
+  describe "delegation to live scanner rules" do
+    @describetag :tmp_dir
+
+    test "a planted .py fails 5.1.1 via the carve-out-aware scanner", %{tmp_dir: tmp} do
+      mk!(tmp, "src/bad.py", "print('x')\n")
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+      assert verdicts["5.1.1"] == :fail
+    end
+
+    test "an unpinned action fails 4.1.3 (sha-pinning delegated to workflow_audit)", %{
+      tmp_dir: tmp
+    } do
+      mk!(tmp, ".github/workflows/w.yml", """
+      name: x
+      jobs:
+        a:
+          steps:
+            - uses: actions/checkout@v4
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+      assert verdicts["4.1.3"] == :fail
+    end
+
+    test "a clean tree passes the delegated language bans", %{tmp_dir: tmp} do
+      mk!(tmp, "README.adoc")
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+      # no banned files -> the scanner emits nothing -> bans pass
+      assert verdicts["5.1.1"] == :pass
+      assert verdicts["5.1.2"] == :pass
+      assert verdicts["5.1.5"] == :pass
+    end
+  end
+
   describe "self-application smoke" do
     test "scoring the hypatia repo itself returns a scorecard without raising" do
       {:ok, catalogue} = RsrCriteria.load(@ssot)
