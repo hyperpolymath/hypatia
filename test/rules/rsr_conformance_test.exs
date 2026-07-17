@@ -191,6 +191,31 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["3.2.1"] == :fail
     end
+
+    test "3.2.1 ignores a markup-dialect manifest — only record files are validated", %{
+      tmp_dir: tmp
+    } do
+      # A well-formed record-dialect descriptile ...
+      mk!(tmp, ".machine_readable/descriptiles/STATE.a2ml", """
+      [metadata]
+      version = "0.1.0"
+      """)
+
+      # ... alongside a MARKUP-dialect manifest (opens with @directive + prose),
+      # which the record-dialect reader cannot parse. It must NOT fail 3.2.1 —
+      # it is a different A2ML surface, not malformed record dialect.
+      mk!(tmp, ".machine_readable/descriptiles/0-AI-MANIFEST.a2ml", """
+      # 0-AI-MANIFEST.a2ml
+      @manifest(version="2.0.0"):
+      This manifest declares the AI-assistant context for the repo.
+      @end
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+      assert verdicts["3.2.1"] == :pass
+    end
   end
 
   describe "scorecard serialization" do

@@ -332,27 +332,52 @@ defmodule Hypatia.Rules.RsrConformance do
   defp descriptile(name),
     do: present(Path.join([".machine_readable", "descriptiles", name <> ".a2ml"]))
 
-  # 3.2.1: every descriptile (plus rsr-profile if present) parses as record
-  # dialect. An absent substrate is :fail — nothing to validate is not valid.
+  # 3.2.1: every RECORD-DIALECT .a2ml under the substrate parses. Markup-dialect
+  # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`
+  # / prose rather than a `[section]` header) are a DIFFERENT A2ML surface and
+  # are not validated by the record-dialect reader — requiring them to parse as
+  # record dialect would false-fail every conformant repo. An absent substrate,
+  # or no record-dialect file at all, is :fail — nothing to validate is not
+  # valid.
   defp descriptiles_parse(repo) do
-    files =
+    candidates =
       Path.wildcard(Path.join([repo, ".machine_readable", "descriptiles", "*.a2ml"])) ++
         Enum.filter(
           [Path.join([repo, ".machine_readable", "rsr-profile.a2ml"])],
           &File.exists?/1
         )
 
+    record_files = Enum.filter(candidates, &record_dialect?/1)
+
     cond do
-      files == [] ->
+      record_files == [] ->
         :fail
 
-      Enum.all?(files, fn f ->
+      Enum.all?(record_files, fn f ->
         match?({:ok, _}, with({:ok, t} <- File.read(f), do: RecordDialect.parse(t)))
       end) ->
         :pass
 
       true ->
         :fail
+    end
+  end
+
+  # A record-dialect file's first non-comment, non-blank line is a `[section]`
+  # header. Markup-dialect files open with `@` or prose. Cheap classifier that
+  # avoids validating one surface with the other's reader.
+  defp record_dialect?(path) do
+    with {:ok, content} <- File.read(path) do
+      content
+      |> String.split("\n")
+      |> Stream.map(&String.trim/1)
+      |> Enum.find(&(&1 != "" and not String.starts_with?(&1, "#")))
+      |> case do
+        line when is_binary(line) -> String.starts_with?(line, "[")
+        _ -> false
+      end
+    else
+      _ -> false
     end
   end
 
