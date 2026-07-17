@@ -291,7 +291,22 @@ defmodule Hypatia.Rules.RsrConformance do
       "3.2.2" => present(".machine_readable/rsr-profile.a2ml"),
       "6.1.1" => &workflows_present/1,
       "6.1.2" => present(".github/workflows/hypatia-scan.yml"),
-      "6.1.3" => present(".github/workflows/governance.yml")
+      "6.1.3" => present(".github/workflows/governance.yml"),
+      "6.2.1" => present(".github/workflows/dogfood-gate.yml"),
+      # Language-policy bans that are unambiguous file-presence checks (no
+      # estate carve-outs of consequence). TS/ReScript (5.1.2/5.1.3) are NOT
+      # here: their carve-out logic belongs to the live cicd_rules scanner, so
+      # they stay :unverified rather than risk a false positive.
+      "1.2.1" => any_of(["guix.scm", "build/guix.scm"]),
+      "5.1.1" => no_ext([".py"]),
+      "5.1.4" => no_file_named("v.mod"),
+      "5.1.5" => no_ext([".go"]),
+      "5.1.6" => no_file_named("package-lock.json"),
+      "7.1.2" => present("LICENSES"),
+      "8.1.4" => &guix_not_stub/1,
+      "10.1.1" => present("GOVERNANCE.adoc"),
+      "10.1.3" => present("AFFIRMATION.adoc"),
+      "11.1.1" => present("AUDIT.adoc")
     }
   end
 
@@ -346,6 +361,59 @@ defmodule Hypatia.Rules.RsrConformance do
     yaml = Path.wildcard(Path.join([repo, ".github", "workflows", "*.yaml"]))
     if yml ++ yaml == [], do: :fail, else: :pass
   end
+
+  # :pass iff NO tracked file with one of `exts` exists anywhere in the tree
+  # (vendored/build/.git dirs excluded). Used only for unambiguous language
+  # bans — Python, Go — where the estate has no carve-out.
+  defp no_ext(exts) do
+    fn repo -> if tree_hits(repo, Enum.map(exts, &("*" <> &1))) == [], do: :pass, else: :fail end
+  end
+
+  # :pass iff NO file with exactly `name` exists anywhere in the tree.
+  defp no_file_named(name) do
+    fn repo -> if tree_hits(repo, [name]) == [], do: :pass, else: :fail end
+  end
+
+  # 8.1.4: a present guix.scm must not be a scaffold stub (placeholders / empty
+  # inputs / null source). Applicable-but-absent counts as :fail.
+  defp guix_not_stub(repo) do
+    files =
+      [Path.join(repo, "guix.scm"), Path.join(repo, "build/guix.scm")]
+      |> Enum.filter(&File.exists?/1)
+
+    cond do
+      files == [] ->
+        :fail
+
+      Enum.any?(files, fn f ->
+        case File.read(f) do
+          {:ok, c} ->
+            String.contains?(c, "{{") or String.contains?(c, "(inputs (list))") or
+                String.contains?(c, "(source #f)")
+
+          _ ->
+            true
+        end
+      end) ->
+        :fail
+
+      true ->
+        :pass
+    end
+  end
+
+  # Files matching any of `patterns` (glob basenames) at any depth, excluding
+  # .git and vendored/build directories. Globs both root and nested so a
+  # root-level `foo.py` is caught as well as `src/foo.py`.
+  defp tree_hits(repo, patterns) do
+    Enum.flat_map(patterns, fn p ->
+      Path.wildcard(Path.join(repo, "**/" <> p)) ++ Path.wildcard(Path.join(repo, p))
+    end)
+    |> Enum.reject(&excluded_path?/1)
+  end
+
+  @excluded_segments ~w(/.git/ /deps/ /_build/ /node_modules/ /target/ /.deno/)
+  defp excluded_path?(path), do: Enum.any?(@excluded_segments, &String.contains?(path, &1))
 
   defp exists?(repo, rel), do: File.exists?(Path.join(repo, rel))
 end

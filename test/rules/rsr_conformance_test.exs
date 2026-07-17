@@ -132,11 +132,14 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       # detector tranche is partial by design -> provisional, always
       assert sc.provisional == true
       assert sc.tier == "none"
-      # not exactly 0: absence criteria (1.1.3 no-makefile) pass on an empty
-      # tree — emptiness satisfies a prohibition. Everything else fails.
+      # not zero: prohibition criteria pass on an empty tree — emptiness
+      # satisfies a ban (no Makefile, no Python/Go/V/npm). Everything requiring
+      # a file present fails. Score stays well below the bronze floor (75).
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["1.1.3"] == :pass
-      assert sc.score < 10.0
+      assert verdicts["5.1.1"] == :pass
+      assert verdicts["5.1.5"] == :pass
+      assert sc.score < 75.0
     end
 
     test "a well-formed universal tree scores above zero and detects descriptiles", %{
