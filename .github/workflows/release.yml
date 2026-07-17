@@ -161,61 +161,6 @@ jobs:
           retention-days: 7
 
   # ============================================================================
-  # Build Haskell Binary
-  # ============================================================================
-
-  build-haskell:
-    name: Build Haskell Registry
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [prepare]
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        id: setup
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Restore cached dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache
-        env:
-          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ env.key }}-plan-${{ hashFiles('registry/hypatia.cabal') }}
-          restore-keys: ${{ env.key }}-
-
-      - name: Build dependencies
-        run: cabal build all --only-dependencies
-
-      - name: Build registry
-        run: cabal build exe:registry
-
-      - name: Create distribution
-        run: |
-          mkdir -p dist
-          cp $(cabal list-bin registry) dist/
-          cp ../README.adoc ../LICENSE dist/
-          cd dist
-          tar -czvf ../hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz *
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: hypatia-registry-x86_64-linux
-          path: registry/hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz
-          retention-days: 7
-
-  # ============================================================================
   # Build Docker Images
   # ============================================================================
 
@@ -223,7 +168,7 @@ jobs:
     name: Build Container Images
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [prepare, build-rust, build-haskell]
+    needs: [prepare, build-rust]
     permissions:
       contents: read
       packages: write
@@ -232,17 +177,14 @@ jobs:
     strategy:
       matrix:
         component:
+          # Only the CLI image remains. The adapter/registry/engine images were
+          # retired: their Containerfiles were deleted (deploy/Containerfile.*),
+          # the Haskell `registry/` and Logtalk `engine/` sources removed, and the
+          # ghcr registry package archived (see note at end of file). The adapter
+          # still ships as the `forge-adapter` binary via build-rust; recover its
+          # image with `git show f2fe2df^:deploy/Containerfile.adapter` if wanted.
           - name: cli
             dockerfile: deploy/Containerfile
-            context: .
-          - name: adapter
-            dockerfile: deploy/Containerfile.adapter
-            context: .
-          - name: registry
-            dockerfile: deploy/Containerfile.registry
-            context: .
-          - name: engine
-            dockerfile: deploy/Containerfile.engine
             context: .
 
     steps:
@@ -307,7 +249,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [prepare, build-rust, build-haskell, build-docker]
+    needs: [prepare, build-rust, build-docker]
     if: ${{ !inputs.dry_run }}
     permissions:
       contents: write
@@ -336,16 +278,11 @@ jobs:
 
           ### Components
           - **CLI** (`hyper`): Command-line interface for CI/CD operations
-          - **Adapters** (`forge-adapter`): Multi-forge adapters (GitHub, GitLab, Bitbucket)
-          - **Registry**: Type-safe rule registry (Haskell)
-          - **Engine**: Neurosymbolic rule engine (Logtalk)
+          - **Adapters** (`forge-adapter`): Multi-forge adapters (GitHub, GitLab, Bitbucket) — shipped as a binary in the release archives
 
           ### Docker Images
           ```bash
           docker pull ghcr.io/${{ github.repository }}-cli:${{ needs.prepare.outputs.version }}
-          docker pull ghcr.io/${{ github.repository }}-adapter:${{ needs.prepare.outputs.version }}
-          docker pull ghcr.io/${{ github.repository }}-registry:${{ needs.prepare.outputs.version }}
-          docker pull ghcr.io/${{ github.repository }}-engine:${{ needs.prepare.outputs.version }}
           ```
 
           ### Installation
@@ -387,41 +324,6 @@ jobs:
         with:
           subject-path: 'release-assets/*'
 
-  # ============================================================================
-  # Publish Haskell Package
-  # ============================================================================
-
-  publish-hackage:
-    name: Publish to Hackage
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [prepare, github-release]
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Build source distribution
-        run: cabal sdist
-
-      - name: Publish to Hackage
-        if: env.HACKAGE_TOKEN != ''
-        run: |
-          cabal upload --publish dist-newstyle/sdist/*.tar.gz
-        env:
-          HACKAGE_TOKEN: ${{ secrets.HACKAGE_TOKEN }}
-          HACKAGE_USERNAME: ${{ secrets.HACKAGE_USERNAME }}
-          HACKAGE_PASSWORD: ${{ secrets.HACKAGE_TOKEN }}
-
   build-and-push:
     name: Build and Push
     runs-on: ubuntu-latest
@@ -435,12 +337,9 @@ jobs:
       fail-fast: false
       matrix:
         component:
+          # CLI-only: adapter/engine images retired (see build-docker note above).
           - name: cli
             dockerfile: deploy/Containerfile
-          - name: adapter
-            dockerfile: deploy/Containerfile.adapter
-          - name: engine
-            dockerfile: deploy/Containerfile.engine
 
     steps:
       - name: Checkout repository
@@ -491,5 +390,11 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-  # NOTE: Haskell registry container removed — source directory deleted in f2fe2df
-  # The hypatia-registry package on ghcr.io is now archived
+  # NOTE: The adapter/registry/engine container images were retired; this workflow
+  # now builds only the CLI image.
+  #   - registry (Haskell) + engine (SWI-Prolog/Logtalk): sources deleted (f2fe2df).
+  #     Logtalk was an early idea for the rule engine, superseded by the native
+  #     Elixir ruleset. The hypatia-registry package on ghcr.io is now archived.
+  #   - adapter (Rust): still ships as the `forge-adapter` binary via build-rust;
+  #     only its service image was dropped. Recover it if ever wanted again with
+  #     `git show f2fe2df^:deploy/Containerfile.adapter`.
