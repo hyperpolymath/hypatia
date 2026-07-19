@@ -250,6 +250,52 @@ defmodule Hypatia.Rules.SupplyChainTest do
       assert finding.detail.projected_open_prs == 3
       refute finding.detail.grouped_by_dependency
     end
+
+    test "flags one ecosystem with an excessive explicit limit", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      File.write!(Path.join([repo, ".github", "dependabot.yml"]), """
+      version: 2
+      updates:
+        - package-ecosystem: bundler
+          directory: /
+          schedule:
+            interval: weekly
+          open-pull-requests-limit: 99
+      """)
+
+      assert [finding] = SupplyChain.sc012_dependabot_pr_fanout(repo)
+      assert finding.severity == :high
+      assert finding.detail.ecosystem == "bundler"
+      assert finding.detail.projected_open_prs == 99
+    end
+
+    test "flags excessive repository-wide capacity across distinct ecosystems", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      blocks =
+        ~w(cargo npm pip mix)
+        |> Enum.map_join("\n", fn ecosystem ->
+          """
+            - package-ecosystem: #{ecosystem}
+              directory: /
+              schedule:
+                interval: weekly
+              open-pull-requests-limit: 5
+          """
+        end)
+
+      File.write!(
+        Path.join([repo, ".github", "dependabot.yml"]),
+        "version: 2\nupdates:\n#{blocks}"
+      )
+
+      assert [finding] = SupplyChain.sc012_dependabot_pr_fanout(repo)
+      assert finding.severity == :warn
+      assert finding.detail.ecosystem == "all"
+      assert finding.detail.update_blocks == 4
+      assert finding.detail.projected_open_prs == 20
+    end
   end
 
   # ─── SC003 / SC007 / SC010 (token-gated) ────────────────────────────

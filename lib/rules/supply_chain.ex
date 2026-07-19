@@ -593,7 +593,8 @@ defmodule Hypatia.Rules.SupplyChain do
   Dependabot's default limit is five *per update block*, so eleven Cargo
   directories expressed as eleven blocks permit 55 simultaneous PRs.
 
-  Also reports multi-directory configurations that omit
+  It also reports a single ecosystem queue above five PRs, a repository-wide
+  configured capacity above twelve PRs, and multi-directory configurations that omit
   `groups.<name>.group-by: dependency-name`, because a shared dependency then
   produces one PR per directory rather than one cross-directory PR.
 
@@ -609,47 +610,79 @@ defmodule Hypatia.Rules.SupplyChain do
         content = File.read!(path)
         rel = Path.relative_to(path, repo_path)
 
-        content
-        |> dependabot_update_blocks()
-        |> Enum.group_by(& &1.ecosystem)
-        |> Enum.flat_map(fn {ecosystem, blocks} ->
-          projected = Enum.sum(Enum.map(blocks, & &1.limit))
-          directories = Enum.sum(Enum.map(blocks, & &1.directory_count))
-          duplicated? = length(blocks) > 1
+        update_blocks = dependabot_update_blocks(content)
 
-          ungrouped_multidir? =
-            directories > 1 and not Enum.any?(blocks, & &1.group_by_dependency)
+        ecosystem_findings =
+          update_blocks
+          |> Enum.group_by(& &1.ecosystem)
+          |> Enum.flat_map(fn {ecosystem, blocks} ->
+            projected = Enum.sum(Enum.map(blocks, & &1.limit))
+            directories = Enum.sum(Enum.map(blocks, & &1.directory_count))
+            ungrouped_multidir? =
+              directories > 1 and not Enum.any?(blocks, & &1.group_by_dependency)
 
-          if (duplicated? and projected > 5) or ungrouped_multidir? do
-            severity = if projected > 10, do: :high, else: :warn
+            if projected > 5 or ungrouped_multidir? do
+              severity = if projected > 10, do: :high, else: :warn
 
+              [
+                %{
+                  rule: "SC012",
+                  file: rel,
+                  severity: severity,
+                  reason:
+                    "Dependabot `#{ecosystem}` configuration can fan out to " <>
+                      "#{projected} simultaneous version-update PRs across " <>
+                      "#{directories} director#{if directories == 1, do: "y", else: "ies"}",
+                  action: :report,
+                  detail: %{
+                    ecosystem: ecosystem,
+                    update_blocks: length(blocks),
+                    directories: directories,
+                    projected_open_prs: projected,
+                    grouped_by_dependency: Enum.any?(blocks, & &1.group_by_dependency),
+                    fix:
+                      "Consolidate same-ecosystem paths into one `directories:` block, " <>
+                        "set a small `open-pull-requests-limit`, and add " <>
+                        "`groups.<name>.group-by: dependency-name`."
+                  }
+                }
+              ]
+            else
+              []
+            end
+          end)
+
+        total_projected = Enum.sum(Enum.map(update_blocks, & &1.limit))
+
+        repository_findings =
+          if total_projected > 12 and ecosystem_findings == [] do
             [
               %{
                 rule: "SC012",
                 file: rel,
-                severity: severity,
+                severity: if(total_projected > 20, do: :high, else: :warn),
                 reason:
-                  "Dependabot `#{ecosystem}` configuration can fan out to " <>
-                    "#{projected} simultaneous version-update PRs across " <>
-                    "#{directories} director#{if directories == 1, do: "y", else: "ies"}",
+                  "Dependabot configuration admits up to #{total_projected} " <>
+                    "simultaneous version-update PRs across #{length(update_blocks)} ecosystems",
                 action: :report,
                 detail: %{
-                  ecosystem: ecosystem,
-                  update_blocks: length(blocks),
-                  directories: directories,
-                  projected_open_prs: projected,
-                  grouped_by_dependency: Enum.any?(blocks, & &1.group_by_dependency),
+                  ecosystem: "all",
+                  update_blocks: length(update_blocks),
+                  directories: Enum.sum(Enum.map(update_blocks, & &1.directory_count)),
+                  projected_open_prs: total_projected,
+                  grouped_by_dependency: false,
                   fix:
-                    "Consolidate same-ecosystem paths into one `directories:` block, " <>
-                      "set a small `open-pull-requests-limit`, and add " <>
-                      "`groups.<name>.group-by: dependency-name`."
+                    "Remove update entries for unused ecosystems, cap package ecosystems " <>
+                      "at three and GitHub Actions at two, and keep the repository-wide " <>
+                      "version-PR capacity at twelve or less."
                 }
               }
             ]
           else
             []
           end
-        end)
+
+        ecosystem_findings ++ repository_findings
     end
   end
 
