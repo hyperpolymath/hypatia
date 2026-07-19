@@ -6,7 +6,7 @@ defmodule Hypatia.Rules.SupplyChain do
   Supply-chain integrity rules drawn from OSSF Scorecard, SLSA, OWASP
   Top-10 CI/CD, and GitHub Actions hardening guide.
 
-  Rule IDs SC001-SC011.
+  Rule IDs SC001-SC012.
 
   These rules concern the **provenance and integrity** of code, actions,
   and release artifacts — distinct from `WorkflowHardening` (content
@@ -27,6 +27,7 @@ defmodule Hypatia.Rules.SupplyChain do
   | SC009 | scorecard `Security-Policy` | `SECURITY.md` missing |
   | SC010 | scorecard `Webhooks` | Repo webhooks configured without a secret |
   | SC011 | scorecard `Signed-Releases` + Endor `R-END-02` | Release workflow doesn't emit signed artifacts / provenance attestation |
+  | SC012 | GitHub Dependabot limits + estate incident 2026-07-19 | Duplicate ecosystem blocks multiply the open-PR limit; multi-directory updates are not grouped |
 
   Module-level conventions match `WorkflowHardening`: pure-local for
   the file-presence rules, GitHub-API for the org/repo-state rules.
@@ -584,6 +585,74 @@ defmodule Hypatia.Rules.SupplyChain do
     end)
   end
 
+  # ─── SC012: Dependabot update fan-out ───────────────────────────────
+
+  @doc """
+  SC012: A Dependabot configuration can multiply its open version-update
+  capacity by repeating the same package ecosystem in separate update blocks.
+  Dependabot's default limit is five *per update block*, so eleven Cargo
+  directories expressed as eleven blocks permit 55 simultaneous PRs.
+
+  Also reports multi-directory configurations that omit
+  `groups.<name>.group-by: dependency-name`, because a shared dependency then
+  produces one PR per directory rather than one cross-directory PR.
+
+  This is a static cost-amplification check. It does not inspect or restrict
+  Dependabot security updates, which GitHub manages under a separate limit.
+  """
+  def sc012_dependabot_pr_fanout(repo_path) do
+    case locate_dependabot(repo_path) do
+      nil ->
+        []
+
+      path ->
+        content = File.read!(path)
+        rel = Path.relative_to(path, repo_path)
+
+        content
+        |> dependabot_update_blocks()
+        |> Enum.group_by(& &1.ecosystem)
+        |> Enum.flat_map(fn {ecosystem, blocks} ->
+          projected = Enum.sum(Enum.map(blocks, & &1.limit))
+          directories = Enum.sum(Enum.map(blocks, & &1.directory_count))
+          duplicated? = length(blocks) > 1
+
+          ungrouped_multidir? =
+            directories > 1 and not Enum.any?(blocks, & &1.group_by_dependency)
+
+          if (duplicated? and projected > 5) or ungrouped_multidir? do
+            severity = if projected > 10, do: :high, else: :warn
+
+            [
+              %{
+                rule: "SC012",
+                file: rel,
+                severity: severity,
+                reason:
+                  "Dependabot `#{ecosystem}` configuration can fan out to " <>
+                    "#{projected} simultaneous version-update PRs across " <>
+                    "#{directories} director#{if directories == 1, do: "y", else: "ies"}",
+                action: :report,
+                detail: %{
+                  ecosystem: ecosystem,
+                  update_blocks: length(blocks),
+                  directories: directories,
+                  projected_open_prs: projected,
+                  grouped_by_dependency: Enum.any?(blocks, & &1.group_by_dependency),
+                  fix:
+                    "Consolidate same-ecosystem paths into one `directories:` block, " <>
+                      "set a small `open-pull-requests-limit`, and add " <>
+                      "`groups.<name>.group-by: dependency-name`."
+                }
+              }
+            ]
+          else
+            []
+          end
+        end)
+    end
+  end
+
   # ─── Scan facade ────────────────────────────────────────────────────
 
   @doc """
@@ -617,6 +686,7 @@ defmodule Hypatia.Rules.SupplyChain do
         sc008_static_secret_publish(repo_path) ++
         sc009_security_md_missing(repo_path) ++
         sc011_release_without_signing(repo_path) ++
+        sc012_dependabot_pr_fanout(repo_path) ++
         api_findings
 
     %{
@@ -643,6 +713,52 @@ defmodule Hypatia.Rules.SupplyChain do
         |> Enum.map(&Path.join(root, &1))
         |> Enum.filter(&File.regular?/1)
     end
+  end
+
+  defp locate_dependabot(repo_path) do
+    ["dependabot.yml", "dependabot.yaml"]
+    |> Enum.map(&Path.join([repo_path, ".github", &1]))
+    |> Enum.find(&File.regular?/1)
+  end
+
+  # Dependabot's file has a deliberately small top-level grammar. Splitting on
+  # update-entry headers avoids introducing a general YAML parser (and its
+  # boolean-key ambiguities) into the scanner while retaining the values SC012
+  # needs. Nested list items never contain `package-ecosystem`, so they cannot
+  # be mistaken for update blocks.
+  defp dependabot_update_blocks(content) do
+    Regex.scan(
+      ~r/(?ms)^\s{2}-\s+package-ecosystem:\s*["']?([^"'\s]+)["']?\s*$\n(.*?)(?=^\s{2}-\s+package-ecosystem:|\z)/,
+      content,
+      capture: :all_but_first
+    )
+    |> Enum.map(fn [ecosystem, body] ->
+      explicit_limit =
+        case Regex.run(~r/^\s+open-pull-requests-limit:\s*(\d+)\s*$/m, body,
+               capture: :all_but_first
+             ) do
+          [limit] -> String.to_integer(limit)
+          _ -> 5
+        end
+
+      singular_directories = length(Regex.scan(~r/^\s+directory:\s*[^#\n]+/m, body))
+
+      plural_directories =
+        case Regex.run(~r/(?ms)^\s+directories:\s*$\n(.*?)(?=^\s{4}\S|\z)/, body,
+               capture: :all_but_first
+             ) do
+          [directory_body] -> length(Regex.scan(~r/^\s+-\s+["']?\//m, directory_body))
+          _ -> 0
+        end
+
+      %{
+        ecosystem: ecosystem,
+        limit: explicit_limit,
+        directory_count: max(singular_directories + plural_directories, 1),
+        group_by_dependency:
+          Regex.match?(~r/^\s+group-by:\s*["']?dependency-name["']?\s*$/m, body)
+      }
+    end)
   end
 
   defp locate_codeowners(repo_path) do

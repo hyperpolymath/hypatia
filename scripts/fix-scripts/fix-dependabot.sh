@@ -22,8 +22,10 @@ ecosystems=()
 [[ -f "${REPO}/Cargo.toml" ]] && ecosystems+=("cargo")
 [[ -f "${REPO}/mix.exs" ]] && ecosystems+=("mix")
 [[ -f "${REPO}/deno.json" || -f "${REPO}/deno.jsonc" ]] && ecosystems+=("npm")
-[[ -f "${REPO}/gleam.toml" ]] && ecosystems+=("hex")
-[[ -f "${REPO}/build.zig" ]] && ecosystems+=("zig")  # No dependabot support yet, skip
+# Dependabot has no native Gleam package ecosystem. Do not emit the invalid
+# `hex` ecosystem for gleam.toml; those updates need a separate Gleam-aware tool.
+# Dependabot also has no native Zig ecosystem, so build.zig is intentionally
+# ignored here rather than counted as an ecosystem with no generated block.
 [[ -d "${REPO}/.github/workflows" ]] && ecosystems+=("github-actions")
 
 cat > "$TARGET" <<'YAML'
@@ -41,7 +43,10 @@ for eco in "${ecosystems[@]}"; do
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    groups:
+      dependency-updates:
+        patterns: ["*"]
 YAML
       ;;
     mix)
@@ -50,7 +55,10 @@ YAML
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    groups:
+      dependency-updates:
+        patterns: ["*"]
 YAML
       ;;
     npm)
@@ -59,16 +67,10 @@ YAML
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
-YAML
-      ;;
-    hex)
-      cat >> "$TARGET" <<'YAML'
-  - package-ecosystem: "hex"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
+    groups:
+      dependency-updates:
+        patterns: ["*"]
 YAML
       ;;
     github-actions)
@@ -77,7 +79,10 @@ YAML
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
 YAML
       ;;
   esac
@@ -90,7 +95,10 @@ if [[ ${#ecosystems[@]} -eq 0 ]]; then
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
 YAML
 fi
 

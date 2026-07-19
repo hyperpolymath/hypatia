@@ -178,6 +178,80 @@ defmodule Hypatia.Rules.SupplyChainTest do
     end
   end
 
+  # ─── SC012 ─────────────────────────────────────────────────────────────
+
+  describe "sc012_dependabot_pr_fanout/1" do
+    test "flags repeated ecosystem blocks and reports projected capacity", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      blocks =
+        1..11
+        |> Enum.map_join("\n", fn n ->
+          """
+            - package-ecosystem: "cargo"
+              directory: "/bot-#{n}"
+              schedule:
+                interval: weekly
+          """
+        end)
+
+      File.write!(
+        Path.join([repo, ".github", "dependabot.yml"]),
+        "version: 2\nupdates:\n#{blocks}"
+      )
+
+      assert [finding] = SupplyChain.sc012_dependabot_pr_fanout(repo)
+      assert finding.rule == "SC012"
+      assert finding.severity == :high
+      assert finding.detail.update_blocks == 11
+      assert finding.detail.directories == 11
+      assert finding.detail.projected_open_prs == 55
+    end
+
+    test "passes grouped multi-directory configuration with one global limit", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      File.write!(Path.join([repo, ".github", "dependabot.yaml"]), """
+      version: 2
+      updates:
+        - package-ecosystem: "cargo"
+          directories:
+            - "/bot-a"
+            - "/bot-b"
+            - "/bot-c"
+          schedule:
+            interval: weekly
+          open-pull-requests-limit: 3
+          groups:
+            monorepo-dependencies:
+              group-by: dependency-name
+      """)
+
+      assert SupplyChain.sc012_dependabot_pr_fanout(repo) == []
+    end
+
+    test "flags ungrouped multi-directory configuration", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      File.write!(Path.join([repo, ".github", "dependabot.yml"]), """
+      version: 2
+      updates:
+        - package-ecosystem: cargo
+          directories:
+            - /one
+            - /two
+          schedule:
+            interval: weekly
+          open-pull-requests-limit: 3
+      """)
+
+      assert [finding] = SupplyChain.sc012_dependabot_pr_fanout(repo)
+      assert finding.severity == :warn
+      assert finding.detail.projected_open_prs == 3
+      refute finding.detail.grouped_by_dependency
+    end
+  end
+
   # ─── SC003 / SC007 / SC010 (token-gated) ────────────────────────────
 
   describe "API-backed rules with no token" do
