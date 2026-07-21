@@ -225,15 +225,31 @@ jobs:
           # (scans, then index) on top; index regen does not need rerunning
           # because a concurrent scans push is rare and the freshness gate
           # would catch any genuine drift.
+          # A permission failure is NOT contention and will never clear by
+          # retrying — but the old loop retried it 5x with backoff, so a hard
+          # 403 presented as flaky-looking noise and the fact-store silently
+          # went stale (frozen 2026-07-06 .. 2026-07-21 before this was found).
+          # Retry only on contention; fail fast and loudly on auth/permission.
+          ERR="$RUNNER_TEMP/push-err.txt"
+          push_once() {
+            local rc=0
+            git push origin HEAD:main 2>"$ERR" || rc=$?
+            cat "$ERR" >&2
+            if [ "$rc" -ne 0 ] && grep -qiE '403|permission to .+ denied|authentication failed' "$ERR"; then
+              echo "::error title=verisimdb-data push denied::HYPATIA_DISPATCH_PAT cannot write to hyperpolymath/verisimdb-data. Read works (the clone succeeded), so the token is valid but lacks Contents:write on that repo. Grant it and re-run — retrying cannot fix a permission error."
+              exit 78
+            fi
+            return "$rc"
+          }
           for delay in 2 4 8 16; do
-            if git push origin HEAD:main; then
+            if push_once; then
               exit 0
             fi
-            echo "push failed; rebasing and retrying in ${delay}s"
+            echo "push failed (treating as contention); rebasing and retrying in ${delay}s"
             sleep "$delay"
             git pull --rebase origin main || true
           done
-          git push origin HEAD:main
+          push_once
 
       - name: Job summary
         env:
