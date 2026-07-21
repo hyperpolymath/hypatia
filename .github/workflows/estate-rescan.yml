@@ -68,6 +68,35 @@ jobs:
     timeout-minutes: 300
 
     steps:
+      # Fail in seconds, not in twenty minutes.
+      #
+      # The write to verisimdb-data is the LAST thing this job does, after a
+      # ~300-repo scan. So every time the token was wrong, the run burned the
+      # entire scan and then died at the final step. That is how a hard
+      # permission wall stayed unnoticed for 26 days: the failure was
+      # expensive to reach and looked like a flaky tail-end push.
+      #
+      # This probe is the same differential test that finally identified the
+      # fault: create a ref and delete it again. It touches no content, makes
+      # no commit, and takes about a second.
+      - name: Preflight — can we actually write to verisimdb-data?
+        if: inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          R="hyperpolymath/verisimdb-data"
+          PROBE="preflight/${GITHUB_RUN_ID}"
+          SHA="$(gh api "repos/${R}/git/ref/heads/main" --jq .object.sha)"
+          if ! gh api -X POST "repos/${R}/git/refs" \
+                 -f "ref=refs/heads/${PROBE}" -f "sha=${SHA}" --jq .ref >/dev/null 2>"$RUNNER_TEMP/probe-err.txt"; then
+            cat "$RUNNER_TEMP/probe-err.txt" >&2
+            echo "::error title=verisimdb-data is not writable::HYPATIA_DISPATCH_PAT cannot create a branch on ${R}, so this rescan would discard ~20 minutes of scanning at the final step. Grant the token repository access to ${R} with Contents: Read and write AND Pull requests: Read and write. Note a fine-grained PAT must list the repo explicitly; org/user-wide scope is not inherited."
+            exit 78
+          fi
+          gh api -X DELETE "repos/${R}/git/refs/heads/${PROBE}" >/dev/null
+          echo "verisimdb-data is writable — proceeding with the scan."
+
       - name: Resolve panic-attack version
         id: pa_ref
         run: echo "sha=$(git ls-remote https://github.com/hyperpolymath/panic-attack.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
