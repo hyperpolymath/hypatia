@@ -274,13 +274,29 @@ jobs:
               --body "Automated estate rescan from hyperpolymath/hypatia run ${RUN_ID}. Squash-merged: it is the only merge method that satisfies required_signatures + required_linear_history on this repo.")"
             pr_num="${pr_url##*/}"
             echo "opened ${pr_url}"
-            if ! gh pr merge "$pr_num" --repo "$REPO" --squash --delete-branch; then
-              echo "::error title=verisimdb-data merge refused::PR #${pr_num} (${suffix}) opened but would not merge. Check the Base ruleset and that the token has Pull requests: Read and write."
+            # --auto, not a bare merge. A plain `gh pr merge --squash` is
+            # evaluated the instant the PR is created, before the base-branch
+            # policy has settled, and returns
+            #     "not mergeable: the base branch policy prohibits the merge"
+            # — while the merge then lands ~30s later anyway. That exact
+            # false negative made run 29843933209 report failure for a rescan
+            # that HAD in fact merged (verisimdb-data#54, merged 15:37:35Z).
+            # --auto queues it and lets GitHub merge when the policy allows.
+            if ! gh pr merge "$pr_num" --repo "$REPO" --squash --auto --delete-branch; then
+              echo "::error title=verisimdb-data merge could not be queued::PR #${pr_num} (${suffix}) opened but auto-merge was refused. Check the Base ruleset and that the token has Pull requests: Read and write."
               return 1
             fi
-            state="$(gh pr view "$pr_num" --repo "$REPO" --json state --jq .state)"
+            # Poll for the END STATE. Never infer the merge from the exit code
+            # of the command that requested it.
+            state=""
+            for _ in $(seq 1 40); do
+              state="$(gh pr view "$pr_num" --repo "$REPO" --json state --jq .state)"
+              [ "$state" = "MERGED" ] && break
+              [ "$state" = "CLOSED" ] && break
+              sleep 15
+            done
             if [ "$state" != "MERGED" ]; then
-              echo "::error title=verisimdb-data not updated::PR #${pr_num} (${suffix}) is ${state}, not MERGED. The fact-store did NOT receive this rescan."
+              echo "::error title=verisimdb-data not updated::PR #${pr_num} (${suffix}) is ${state:-UNKNOWN} after 10 minutes, not MERGED. The fact-store did NOT receive this rescan."
               return 1
             fi
             echo "merged ${pr_url}"
