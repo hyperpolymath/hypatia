@@ -204,6 +204,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+          --health-start-period 40s
 
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
@@ -293,6 +294,19 @@ jobs:
           TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
           RUST_LOG: debug
 
+      # This job installs the RUST toolchain and then ran `mix test` — with no
+      # BEAM anywhere on the runner. `mix` was simply not on PATH, so the step
+      # died with exit 127 (command not found) and took `Integration Tests` red
+      # with it. Same pins as the E2E job, so the two agree on the toolchain.
+      - name: Setup Erlang/Elixir
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.18.2
+        with:
+          otp-version: '27.0'
+          elixir-version: '1.17'
+
+      - name: Install Elixir dependencies
+        run: mix deps.get
+
       - name: Run Elixir integration tests
         run: mix test --include integration
         env:
@@ -343,6 +357,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+          --health-start-period 40s
 
     defaults:
       run:
@@ -486,6 +501,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+          --health-start-period 40s
 
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
