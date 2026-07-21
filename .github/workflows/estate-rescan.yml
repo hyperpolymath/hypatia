@@ -212,44 +212,85 @@ jobs:
             git commit -m "index: regen after estate rescan"
           fi
 
-      - name: Push to verisimdb-data
+      - name: Publish to verisimdb-data (branch -> PR -> rebase-merge)
         if: inputs.dry_run != 'true' && steps.commit_scans.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           DATA="$RUNNER_TEMP/verisimdb-data"
+          REPO="hyperpolymath/verisimdb-data"
           cd "$DATA"
-          # Retry with rebase: another writer (ingest.yml, manual push) may
-          # land between our clone and push. --rebase keeps our two commits
-          # (scans, then index) on top; index regen does not need rerunning
-          # because a concurrent scans push is rare and the freshness gate
-          # would catch any genuine drift.
-          # A permission failure is NOT contention and will never clear by
-          # retrying — but the old loop retried it 5x with backoff, so a hard
-          # 403 presented as flaky-looking noise and the fact-store silently
-          # went stale (frozen 2026-07-06 .. 2026-07-21 before this was found).
-          # Retry only on contention; fail fast and loudly on auth/permission.
+
+          # WHY THIS IS NO LONGER A DIRECT PUSH TO main.
+          #
+          # `git push origin HEAD:main` CANNOT succeed against this repo, and
+          # no token change will make it succeed. verisimdb-data carries an
+          # active `Base` ruleset on ~DEFAULT_BRANCH whose rules include
+          # `pull_request` and `required_signatures` (plus deletion,
+          # non_fast_forward, required_linear_history). Its only bypass actor
+          # is RepositoryRole(id=5) in mode `pull_request` — i.e. nobody may
+          # push straight to main, admin included.
+          #
+          # Measured timeline, which is what identified this:
+          #   Base ruleset created ....... 2026-04-12
+          #   bot pushed fine (16 commits) through 2026-06-25 17:40
+          #   Base ruleset UPDATED ....... 2026-06-26 08:57
+          #   bot pushes since ........... none
+          # The fact-store then sat 26 days stale while the old loop retried
+          # the resulting 403 five times, making a hard permission wall look
+          # like flakiness.
+          #
+          # NB the repo's `pushed_at` still looked recent throughout, because
+          # humans kept committing. Judge bot-data freshness by the last
+          # commit AUTHORED BY THE BOT, never by pushed_at.
+          #
+          # A feature branch is unrestricted (the ruleset targets only the
+          # default branch), and merging a PR satisfies both `pull_request`
+          # and `required_signatures` — GitHub signs the commits it creates
+          # server-side, which a runner's raw `git push` can never do.
+
+          BRANCH="estate-rescan/${RUN_ID}"
           ERR="$RUNNER_TEMP/push-err.txt"
-          push_once() {
-            local rc=0
-            git push origin HEAD:main 2>"$ERR" || rc=$?
+
+          if ! git push origin "HEAD:refs/heads/${BRANCH}" 2>"$ERR"; then
             cat "$ERR" >&2
-            if [ "$rc" -ne 0 ] && grep -qiE '403|permission to .+ denied|authentication failed' "$ERR"; then
-              echo "::error title=verisimdb-data push denied::HYPATIA_DISPATCH_PAT cannot write to hyperpolymath/verisimdb-data. Read works (the clone succeeded), so the token is valid but lacks Contents:write on that repo. Grant it and re-run — retrying cannot fix a permission error."
+            if grep -qiE '403|permission to .+ denied|authentication failed' "$ERR"; then
+              echo "::error title=verisimdb-data branch push denied::HYPATIA_DISPATCH_PAT could not create a branch on ${REPO}. The clone succeeded, so the token is valid but lacks Contents:write. Unlike a push to main, this one IS a token problem — the Base ruleset does not restrict non-default branches."
               exit 78
             fi
-            return "$rc"
-          }
-          for delay in 2 4 8 16; do
-            if push_once; then
-              exit 0
-            fi
-            echo "push failed (treating as contention); rebasing and retrying in ${delay}s"
-            sleep "$delay"
-            git pull --rebase origin main || true
-          done
-          push_once
+            exit 1
+          fi
+          echo "pushed ${BRANCH}"
+
+          PR_URL="$(gh pr create --repo "$REPO" --base main --head "${BRANCH}" \
+            --title "scan: estate rescan (run ${RUN_ID})" \
+            --body "Automated estate rescan from hyperpolymath/hypatia run ${RUN_ID}. Two commits, deliberately kept separate: a scans-only commit, then an index regen that does not touch scans/ so index-freshness stays green.")"
+          PR_NUM="${PR_URL##*/}"
+          echo "opened ${PR_URL}"
+
+          # --rebase, NOT --squash. Squash would collapse the scans commit and
+          # the index commit into one, which breaks the invariant that
+          # regen-index.sh depends on (see the index step above): its
+          # `last_updated` is derived from the newest commit touching scans/,
+          # so the index must land as a separate commit that does not.
+          # Rebase also satisfies `required_linear_history`.
+          if ! gh pr merge "$PR_NUM" --repo "$REPO" --rebase --delete-branch 2>"$ERR"; then
+            cat "$ERR" >&2
+            echo "::error title=verisimdb-data merge refused::Branch ${BRANCH} pushed and PR #${PR_NUM} opened, but the merge was refused. Check the Base ruleset on ${REPO} and that the token may merge pull requests."
+            exit 78
+          fi
+
+          # POSTCONDITION — never assume the merge landed. A refused merge that
+          # exits 0 is exactly the class of silent failure that let this repo
+          # go stale for 26 days in the first place.
+          STATE="$(gh pr view "$PR_NUM" --repo "$REPO" --json state --jq .state)"
+          if [ "$STATE" != "MERGED" ]; then
+            echo "::error title=verisimdb-data not updated::PR #${PR_NUM} is ${STATE}, not MERGED. The fact-store did NOT receive this rescan."
+            exit 1
+          fi
+          echo "verisimdb-data updated via ${PR_URL}"
 
       - name: Job summary
         env:
