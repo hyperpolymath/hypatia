@@ -349,98 +349,29 @@ jobs:
           DRAGONFLY_URL: redis://localhost:6379
 
   # ============================================================================
-  # Haskell Integration Tests
+  # REMOVED — "Haskell Integration Tests" (haskell-integration)
+  #
+  # The job ran `cabal build all` / `cabal test all` with
+  # `defaults.run.working-directory: registry`, and cached on
+  # `hashFiles('registry/hypatia.cabal')`.
+  #
+  # `registry/` does not exist. It was deliberately deleted in f2fe2df
+  # (2026-03-06), whose own commit message reads:
+  #     "Remove registry/ (30 files - Haskell, superseded by Elixir)"
+  # The CI job was left behind and has failed EVERY run since: 11 failures
+  # and 1 cancellation across the last 12 runs, never once green. The repo
+  # now contains 0 .cabal files, no cabal.project, no stack.yaml, and a
+  # single .hs file — test/soundness/fixtures/code_safety/unsafe_coerce.hs,
+  # which is a scanner test fixture, not a Haskell project.
+  #
+  # Each run installed GHC 9.6 + cabal 3.10 and stood up an ArangoDB service
+  # container before failing at the first `run:` step with
+  #     No such file or directory ... /home/runner/work/hypatia/hypatia/registry
+  # so removing it also stops burning those runner minutes.
+  #
+  # If Haskell returns to this repo, reinstate the job together with the
+  # project, not before.
   # ============================================================================
-
-  haskell-integration:
-    name: Haskell Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [build-images]
-    services:
-      arangodb:
-        image: arangodb:3.11
-        env:
-          ARANGO_ROOT_PASSWORD: testpassword
-        ports:
-          - 8529:8529
-        # THREE separate faults made this probe unable to ever succeed. All
-        # three were measured against the real arangodb:3.11 image, not inferred:
-        #
-        #   1. `curl` is NOT installed in the image      -> use wget (present)
-        #   2. `localhost` resolves to ::1 there, but    -> use 127.0.0.1
-        #      ArangoDB binds IPv4 only
-        #   3. `/_api/version` requires authentication   -> use
-        #      whenever ARANGO_ROOT_PASSWORD is set,        /_admin/server/availability
-        #      so it returns 401 forever; and busybox
-        #      wget has no --user/--password option at
-        #      all, so the probe CANNOT be authenticated
-        #
-        # Measured, polling once a second for 25s from container start:
-        #   /_api/version               -> exit 1 at EVERY timepoint (401)
-        #   /_admin/server/availability -> exit 1 for 3s, then exit 0 onwards
-        #
-        # Fault 3 is why this looked intermittent. A probe that never passes
-        # leaves the service permanently `starting`; whether the job survived
-        # depended on a race in the runner's own poll (if it read
-        # .State.Health.Status before Docker had recorded any health state it
-        # saw an empty string and reported "healthy" — which is why one job
-        # once logged "arangodb service is healthy" BEFORE the container had
-        # even logged "Initializing root user"). Do not read that log line as
-        # evidence the probe works.
-        #
-        # NB: keep comments OUTSIDE the `options: >-` folded scalar — inside it
-        # `#` is literal text, gets folded into the docker args, and breaks
-        # `docker create` with "invalid reference format".
-        options: >-
-          --health-cmd "wget -q --spider http://127.0.0.1:8529/_admin/server/availability || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-          --health-start-period 40s
-
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Restore cached dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: cache
-        with:
-          path: ~/.cabal/store
-          key: ${{ runner.os }}-ghc-9.6-cabal-integration-${{ hashFiles('registry/hypatia.cabal') }}
-          restore-keys: ${{ runner.os }}-ghc-9.6-cabal-
-
-      - name: Install dependencies
-        run: cabal build all --only-dependencies
-
-      - name: Wait for ArangoDB
-        run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:8529/_api/version > /dev/null; then
-              echo "ArangoDB is ready"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Run Haskell integration tests
-        run: cabal test all
-        env:
-          ARANGODB_URL: http://localhost:8529
-          ARANGODB_DATABASE: cicd_hyper_a
-          ARANGODB_USER: root
-          ARANGODB_PASSWORD: testpassword
 
   # ============================================================================
   # End-to-End Tests
@@ -639,7 +570,6 @@ jobs:
       - integration-tests
       - e2e-tests
       - coverage-report
-      - haskell-integration
     if: always()
     steps:
       - name: Check integration status
@@ -652,7 +582,6 @@ jobs:
             ["integration-tests"]="${{ needs.integration-tests.result }}"
             ["e2e-tests"]="${{ needs.e2e-tests.result }}"
             ["coverage-report"]="${{ needs.coverage-report.result }}"
-            ["haskell-integration"]="${{ needs.haskell-integration.result }}"
           )
 
           failed=false
