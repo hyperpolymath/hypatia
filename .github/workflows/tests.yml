@@ -191,12 +191,15 @@ jobs:
           ARANGO_NO_AUTH: "0"
         ports:
           - 8529:8529
+        # `curl` is NOT installed in arangodb:3.11, and `localhost` resolves to
+        # ::1 there while ArangoDB binds IPv4 only — so the old curl+localhost
+        # probe could never succeed and the service was killed as unhealthy
+        # despite the server logging "ready for business". Use wget (present)
+        # against 127.0.0.1 (reachable). Verified locally: healthy in 15s.
+        # NB: keep comments OUTSIDE the `options: >-` folded scalar — inside it
+        # `#` is literal text, gets folded into the docker args, and breaks
+        # `docker create` with "invalid reference format".
         options: >-
-          # `curl` is NOT installed in arangodb:3.11, and `localhost` resolves to
-          # ::1 there while ArangoDB binds IPv4 only — so the old curl+localhost
-          # probe could never succeed and the service was killed as unhealthy
-          # despite the server logging "ready for business". Use wget (present)
-          # against 127.0.0.1 (reachable). Verified locally: healthy in 15s.
           --health-cmd "wget -q --spider http://127.0.0.1:8529/_api/version || exit 1"
           --health-interval 10s
           --health-timeout 5s
@@ -327,12 +330,15 @@ jobs:
           ARANGO_ROOT_PASSWORD: testpassword
         ports:
           - 8529:8529
+        # `curl` is NOT installed in arangodb:3.11, and `localhost` resolves to
+        # ::1 there while ArangoDB binds IPv4 only — so the old curl+localhost
+        # probe could never succeed and the service was killed as unhealthy
+        # despite the server logging "ready for business". Use wget (present)
+        # against 127.0.0.1 (reachable). Verified locally: healthy in 15s.
+        # NB: keep comments OUTSIDE the `options: >-` folded scalar — inside it
+        # `#` is literal text, gets folded into the docker args, and breaks
+        # `docker create` with "invalid reference format".
         options: >-
-          # `curl` is NOT installed in arangodb:3.11, and `localhost` resolves to
-          # ::1 there while ArangoDB binds IPv4 only — so the old curl+localhost
-          # probe could never succeed and the service was killed as unhealthy
-          # despite the server logging "ready for business". Use wget (present)
-          # against 127.0.0.1 (reachable). Verified locally: healthy in 15s.
           --health-cmd "wget -q --spider http://127.0.0.1:8529/_api/version || exit 1"
           --health-interval 10s
           --health-timeout 5s
@@ -467,12 +473,15 @@ jobs:
           ARANGO_ROOT_PASSWORD: testpassword
         ports:
           - 8529:8529
+        # `curl` is NOT installed in arangodb:3.11, and `localhost` resolves to
+        # ::1 there while ArangoDB binds IPv4 only — so the old curl+localhost
+        # probe could never succeed and the service was killed as unhealthy
+        # despite the server logging "ready for business". Use wget (present)
+        # against 127.0.0.1 (reachable). Verified locally: healthy in 15s.
+        # NB: keep comments OUTSIDE the `options: >-` folded scalar — inside it
+        # `#` is literal text, gets folded into the docker args, and breaks
+        # `docker create` with "invalid reference format".
         options: >-
-          # `curl` is NOT installed in arangodb:3.11, and `localhost` resolves to
-          # ::1 there while ArangoDB binds IPv4 only — so the old curl+localhost
-          # probe could never succeed and the service was killed as unhealthy
-          # despite the server logging "ready for business". Use wget (present)
-          # against 127.0.0.1 (reachable). Verified locally: healthy in 15s.
           --health-cmd "wget -q --spider http://127.0.0.1:8529/_api/version || exit 1"
           --health-interval 10s
           --health-timeout 5s
