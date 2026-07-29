@@ -89,7 +89,20 @@ defmodule Mix.Tasks.Hypatia.DeployPreventionWorkflows do
       |> Enum.uniq()
     else
       Mix.shell().info("Fetching repos with alerts from GitHub...")
-      {out, 0} = System.cmd("gh", ["repo", "list", @org, "--limit", "300", "--json", "name", "--jq", ".[].name"])
+
+      {out, 0} =
+        System.cmd("gh", [
+          "repo",
+          "list",
+          @org,
+          "--limit",
+          "300",
+          "--json",
+          "name",
+          "--jq",
+          ".[].name"
+        ])
+
       out |> String.split("\n", trim: true)
     end
   end

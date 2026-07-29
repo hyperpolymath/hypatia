@@ -22,7 +22,8 @@ defmodule Hypatia.Neural.Persistence do
 
   require Logger
 
-  @state_dir Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim") |> Path.join("neural-states")
+  @state_dir Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
+             |> Path.join("neural-states")
 
   @doc "Save all neural network states"
   def save_all(coordinator_state) do
@@ -64,10 +65,15 @@ defmodule Hypatia.Neural.Persistence do
 
   defp save_trust_graph(graph) do
     data = %{
-      "nodes" => Enum.map(graph.nodes, fn {id, type} -> %{"id" => id, "type" => to_string(type)} end),
-      "edges" => Enum.map(graph.edges, fn {src, tgt, weight} -> %{"src" => src, "tgt" => tgt, "weight" => weight} end),
+      "nodes" =>
+        Enum.map(graph.nodes, fn {id, type} -> %{"id" => id, "type" => to_string(type)} end),
+      "edges" =>
+        Enum.map(graph.edges, fn {src, tgt, weight} ->
+          %{"src" => src, "tgt" => tgt, "weight" => weight}
+        end),
       "trust_scores" => graph.trust_scores,
-      "last_computed" => if(graph.last_computed, do: DateTime.to_iso8601(graph.last_computed), else: nil)
+      "last_computed" =>
+        if(graph.last_computed, do: DateTime.to_iso8601(graph.last_computed), else: nil)
     }
 
     save_state("trust", data)
@@ -77,13 +83,21 @@ defmodule Hypatia.Neural.Persistence do
 
   defp save_moe(moe) do
     data = %{
-      "gating_weights" => Enum.map(moe.gating_weights, fn {k, v} -> %{"domain" => to_string(k), "weight" => v} end),
-      "expert_stats" => Enum.map(moe.expert_stats, fn {k, v} ->
-        %{"domain" => to_string(k), "activations" => v.activations, "correct" => v.correct, "total" => v.total}
-      end),
-      "expert_weights" => Enum.map(moe.experts, fn {domain, expert} ->
-        %{"domain" => to_string(domain), "weights" => expert.weights, "bias" => expert.bias}
-      end),
+      "gating_weights" =>
+        Enum.map(moe.gating_weights, fn {k, v} -> %{"domain" => to_string(k), "weight" => v} end),
+      "expert_stats" =>
+        Enum.map(moe.expert_stats, fn {k, v} ->
+          %{
+            "domain" => to_string(k),
+            "activations" => v.activations,
+            "correct" => v.correct,
+            "total" => v.total
+          }
+        end),
+      "expert_weights" =>
+        Enum.map(moe.experts, fn {domain, expert} ->
+          %{"domain" => to_string(domain), "weights" => expert.weights, "bias" => expert.bias}
+        end),
       "last_trained" => if(moe.last_trained, do: DateTime.to_iso8601(moe.last_trained), else: nil)
     }
 
@@ -161,6 +175,7 @@ defmodule Hypatia.Neural.Persistence do
 
   defp save_state(network, data) do
     path = Path.join(Path.expand(@state_dir), "#{network}.json")
+
     case Jason.encode(data, pretty: true) do
       {:ok, json} -> File.write(path, json)
       _ -> :error
@@ -169,13 +184,16 @@ defmodule Hypatia.Neural.Persistence do
 
   defp load_state(network) do
     path = Path.join(Path.expand(@state_dir), "#{network}.json")
+
     case File.read(path) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, data} -> {:ok, data}
           _ -> :not_found
         end
-      _ -> :not_found
+
+      _ ->
+        :not_found
     end
   end
 

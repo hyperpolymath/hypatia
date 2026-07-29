@@ -98,7 +98,7 @@ cd "$REPO_PATH"
 if [ -n "$SPECIFIC_FILE" ]; then
   FILES="$SPECIFIC_FILE"
 else
-  FILES=$(grep -rl "SPDX-License-Identifier: PMPL-1.0-or-later" . 2>/dev/null | grep -vE "$GREP_EXCLUDE" || true)
+  FILES=$(grep -rl "SPDX-License-Identifier: MPL-2.0" . 2>/dev/null | grep -vE "$GREP_EXCLUDE" || true)
 fi
 
 COUNT=$(echo "$FILES" | grep -c . 2>/dev/null || echo 0)
@@ -117,7 +117,7 @@ if [ -n "$DRY_RUN" ]; then
 fi
 
 # ─── Flip ───
-echo "$FILES" | xargs sed -i "s|SPDX-License-Identifier: PMPL-1.0-or-later|SPDX-License-Identifier: $TARGET|g"
+echo "$FILES" | xargs sed -i "s|SPDX-License-Identifier: MPL-2.0|SPDX-License-Identifier: $TARGET|g"
 
-REMAINING=$(grep -rl "SPDX-License-Identifier: PMPL-1.0-or-later" . 2>/dev/null | grep -vE "$GREP_EXCLUDE" | wc -l)
+REMAINING=$(grep -rl "SPDX-License-Identifier: MPL-2.0" . 2>/dev/null | grep -vE "$GREP_EXCLUDE" | wc -l)
 echo "Flipped $COUNT files. Remaining PMPL in scope: $REMAINING."

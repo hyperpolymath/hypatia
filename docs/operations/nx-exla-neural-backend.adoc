@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = Nx / EXLA neural backend — migration plan
 :author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 :date: 2026-05-24

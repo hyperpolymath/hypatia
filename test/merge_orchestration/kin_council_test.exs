@@ -5,13 +5,25 @@ defmodule Hypatia.MergeOrchestration.KinCouncilTest do
   alias Hypatia.MergeOrchestration.KinCouncil
 
   test "uniform weights: confidence is the plain mean of approvals" do
-    atts = [%{bot: "a", verdict: :approve, confidence: 1.0}, %{bot: "b", verdict: :approve, confidence: 0.0}]
+    atts = [
+      %{bot: "a", verdict: :approve, confidence: 1.0},
+      %{bot: "b", verdict: :approve, confidence: 0.0}
+    ]
+
     assert KinCouncil.aggregate(atts).confidence == 0.5
   end
 
   test "competence weighting: the more-competent voice dominates" do
-    atts = [%{bot: "a", verdict: :approve, confidence: 1.0}, %{bot: "b", verdict: :approve, confidence: 0.0}]
-    w = fn %{bot: "a"} -> 3.0; _ -> 1.0 end
+    atts = [
+      %{bot: "a", verdict: :approve, confidence: 1.0},
+      %{bot: "b", verdict: :approve, confidence: 0.0}
+    ]
+
+    w = fn
+      %{bot: "a"} -> 3.0
+      _ -> 1.0
+    end
+
     assert KinCouncil.aggregate(atts, weight: w).confidence == 0.75
   end
 
@@ -27,8 +39,16 @@ defmodule Hypatia.MergeOrchestration.KinCouncilTest do
   end
 
   test "incompetent experts recuse (weight 0), not out-voted" do
-    atts = [%{bot: "expert", verdict: :approve, confidence: 0.9}, %{bot: "noise", verdict: :approve, confidence: 0.1}]
-    w = fn %{bot: "noise"} -> 0.0; _ -> 1.0 end
+    atts = [
+      %{bot: "expert", verdict: :approve, confidence: 0.9},
+      %{bot: "noise", verdict: :approve, confidence: 0.1}
+    ]
+
+    w = fn
+      %{bot: "noise"} -> 0.0
+      _ -> 1.0
+    end
+
     assert KinCouncil.aggregate(atts, weight: w).confidence == 0.9
   end
 

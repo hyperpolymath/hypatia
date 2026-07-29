@@ -3,13 +3,15 @@ defmodule Hypatia.Paths do
   @moduledoc "Central path resolution for hypatia's local verisim data store."
 
   def verisimdb_data do
-    Application.get_env(:hypatia, :verisimdb_data_path,
-      Path.expand("data/verisim", File.cwd!()))
+    Application.get_env(:hypatia, :verisimdb_data_path, Path.expand("data/verisim", File.cwd!()))
   end
 
   def fleet do
-    Application.get_env(:hypatia, :fleet_path,
-      Path.expand("~/Documents/hyperpolymath-repos/gitbot-fleet"))
+    Application.get_env(
+      :hypatia,
+      :fleet_path,
+      Path.expand("~/Documents/hyperpolymath-repos/gitbot-fleet")
+    )
   end
 
   def patterns, do: Path.join(verisimdb_data(), "patterns")

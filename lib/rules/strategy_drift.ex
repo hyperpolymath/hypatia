@@ -169,7 +169,9 @@ defmodule Hypatia.Rules.StrategyDrift do
     url =
       base_url <>
         "/api/v1/proof_attempts/certificates?class=" <>
-        URI.encode_www_form(class) <> "&prover=" <> URI.encode_www_form(prover) <>
+        URI.encode_www_form(class) <>
+        "&prover=" <>
+        URI.encode_www_form(prover) <>
         "&evidence_limit=100"
 
     case http_get(url, timeout_ms) do

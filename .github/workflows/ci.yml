@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -58,7 +58,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -76,7 +76,7 @@ jobs:
     needs: [rust-check]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -102,7 +102,7 @@ jobs:
     needs: [rust-test]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -111,7 +111,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5 # v2.82.0
+        uses: taiki-e/install-action@7572810d7dd469b651bb7793945692cf78da5dd7 # v2.85.0
         with:
           tool: cargo-llvm-cov
 
@@ -132,22 +132,48 @@ jobs:
           fail_ci_if_error: false
 
   # ============================================================================
-  # Haskell Jobs (registry)
+  # Haskell Jobs (registry) — dormant-ready.
+  # The Haskell sub-project (registry/) is currently absent (its source was
+  # removed). `detect-haskell` gates the Haskell jobs on the presence of
+  # registry/hypatia.cabal so they SKIP cleanly while it is gone and
+  # re-activate automatically the moment it lands again. This realises the
+  # intent that was previously only described in a comment but never enforced,
+  # which left haskell-build and haskell-lint failing unconditionally.
   # ============================================================================
+  detect-haskell:
+    name: Detect Haskell tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check for registry/hypatia.cabal
+        id: check
+        run: |
+          if [ -f registry/hypatia.cabal ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::registry/hypatia.cabal absent — Haskell build/lint jobs skipped (dormant)."
+          fi
+
   haskell-build:
     name: Haskell Build & Test
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: detect-haskell
+    if: needs.detect-haskell.outputs.present == 'true'
     # registry/ is the Haskell sub-project; gate this job on its presence so
     # PRs that don't touch (and don't ship) the Haskell tree don't fail here.
     # The job re-activates the moment `registry/hypatia.cabal` lands.
-    if: hashFiles('registry/hypatia.cabal') != ''
     defaults:
       run:
         working-directory: registry
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Haskell
         uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
@@ -163,7 +189,7 @@ jobs:
           cabal build all --dry-run
 
       - name: Restore cached dependencies
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cache
         env:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
@@ -177,7 +203,7 @@ jobs:
         run: cabal build all --only-dependencies
 
       - name: Save cached dependencies
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
@@ -196,10 +222,11 @@ jobs:
     name: HLint
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: hashFiles('registry/**/*.hs') != ''
+    needs: detect-haskell
+    if: needs.detect-haskell.outputs.present == 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup HLint
         uses: haskell-actions/hlint-setup@fe9cd1cd1af94a23900c06738e73f6ddb092966a # v2.4.10
@@ -207,7 +234,7 @@ jobs:
           version: '3.8'
 
       - name: Run HLint
-        uses: haskell-actions/hlint-run@0b0024319753ba0c8b2fa21b7018ed252aed8181 # v2.4.9
+        uses: haskell-actions/hlint-run@eaca4cfbf4a69f4eb875df38b6bc3e1657020378 # v2.4.10
         with:
           path: registry/
           fail-on: warning
@@ -227,7 +254,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Parse k9iser.toml + verify declared paths exist
         run: |

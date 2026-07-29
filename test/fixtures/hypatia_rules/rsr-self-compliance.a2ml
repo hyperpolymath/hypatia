@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: MPL-2.0
+# HYP-S004 — RSR Self-Compliance
+# Validates the standards repo against its own RSR (Rhodium Standard
+# Repositories) definition. A constitution that exempts itself from its
+# own laws has no authority — this rule enforces self-dogfooding.
+
+@rule(version="1.0"):
+id: HYP-S004
+name: "RSR self-compliance"
+description: "Standards repo must satisfy every requirement it imposes on others"
+severity: critical
+category: Dogfooding
+auto_fixable: false
+source: standards/hypatia-rules
+
+@scanner(type="file-tree"):
+target_repo: "standards"
+reference: "rhodium-standard-repositories/RSR.adoc"
+@end
+
+@required_files:
+# RSR-mandated files that standards itself must have
+- path: "README.adoc"
+  reason: "RSR R-001"
+- path: "SECURITY.md"
+  reason: "RSR R-002"
+- path: "CONTRIBUTING.md"
+  reason: "RSR R-003"
+- path: "LICENSE"
+  reason: "RSR R-004"
+- path: "CODE_OF_CONDUCT.md"
+  reason: "RSR R-005"
+- path: ".editorconfig"
+  reason: "RSR R-010"
+- path: "Justfile"
+  reason: "RSR R-020 (no Makefiles)"
+- path: "guix.scm"
+  reason: "RSR R-030 (primary pkg manager)"
+- path: "flake.nix"
+  reason: "RSR R-031 (fallback pkg manager)"
+- path: ".machine_readable/"
+  reason: "RSR R-040 (A2ML metadata)"
+@end
+
+@required_workflows:
+- name: "hypatia-scan.yml"
+  reason: "RSR R-050 (self-scan)"
+- name: "mirror.yml"
+  reason: "RSR R-051 (forge mirroring)"
+- name: "scorecard.yml"
+  reason: "RSR R-052 (OpenSSF Scorecard)"
+- name: "rsr-antipattern.yml"
+  reason: "RSR R-053 (antipattern check)"
+@end
+
+@forbidden_files:
+- glob: "**/*.ts"
+  reason: "TypeScript banned — use AffineScript (RS/TS/JS → AffineScript → typed-wasm per estate language defaults)"
+- glob: "**/*.res"
+  reason: "ReScript banned — use AffineScript (RS/TS/JS → AffineScript → typed-wasm per estate language defaults)"
+- glob: "**/*.py"
+  reason: "Python banned"
+- glob: "**/*.go"
+  reason: "Go banned — use Rust"
+- glob: "Dockerfile"
+  reason: "Use Containerfile (Podman)"
+- glob: "Makefile"
+  reason: "Use Justfile"
+- glob: "STATE.a2ml"
+  at: "/"
+  reason: "A2ML files go in .machine_readable/ only"
+@end
+
+@action:
+emit_signal: compliance.finding.new
+message_template: "RSR self-compliance violation: {reason} ({path})"
+recipe: none
+halt_on_violation: true
+@end
+
+@end

@@ -3,7 +3,7 @@ defmodule Hypatia.Diagnostics.Monitor do
   @moduledoc """
   System-wide diagnostics monitor that proactively detects failures
   and alerts users before issues become critical.
-  
+
   Features:
   - Component health monitoring
   - Performance drift detection
@@ -51,7 +51,7 @@ defmodule Hypatia.Diagnostics.Monitor do
   @impl true
   def init(_) do
     schedule_checks()
-    
+
     initial_state = %{
       components: [],
       failures: [],
@@ -59,7 +59,7 @@ defmodule Hypatia.Diagnostics.Monitor do
       recovery_attempts: %{},
       metrics_history: []
     }
-    
+
     Logger.info("Diagnostics monitor started - checking every #{div(@check_interval, 1000)}s")
     {:ok, initial_state}
   end
@@ -183,21 +183,25 @@ defmodule Hypatia.Diagnostics.Monitor do
   defp detect_failures(components) do
     Enum.filter(components, fn
       # Hard failures
-      {:error, reason} -> {:failure, reason}
-      
+      {:error, reason} ->
+        {:failure, reason}
+
       # Performance issues
       {:ok, {_, metrics}} when is_map(metrics) ->
         cond do
           Map.get(metrics, :dropped, 0) > Map.get(metrics, :dispatched, 1) * @error_rate_threshold ->
             {:failure, :high_error_rate}
-          
-          Map.get(metrics, :buffered, 0) > Map.get(metrics, :max_buffer, 1) * @buffer_warning_threshold ->
+
+          Map.get(metrics, :buffered, 0) >
+              Map.get(metrics, :max_buffer, 1) * @buffer_warning_threshold ->
             {:failure, :buffer_overflow}
-          
-          true -> nil
+
+          true ->
+            nil
         end
-      
-      _ -> nil
+
+      _ ->
+        nil
     end)
   end
 
@@ -209,23 +213,24 @@ defmodule Hypatia.Diagnostics.Monitor do
     Enum.each(failures, fn {:failure, reason} ->
       # Broadcast to users via SSE
       broadcast_alert(reason)
-      
+
       # Log for persistence
       Logger.error("DIAGNOSTICS ALERT: #{inspect(reason)}")
-      
+
       # Attempt recovery
       attempt_recovery(reason)
     end)
   end
 
   defp broadcast_alert(reason) do
-    alert_type = case reason do
-      :pipeline_unresponsive -> :critical
-      :pipeline_crashed -> :critical
-      :high_error_rate -> :warning
-      :buffer_overflow -> :warning
-      _ -> :error
-    end
+    alert_type =
+      case reason do
+        :pipeline_unresponsive -> :critical
+        :pipeline_crashed -> :critical
+        :high_error_rate -> :warning
+        :buffer_overflow -> :warning
+        _ -> :error
+      end
 
     Hypatia.Web.DispatchChannel.broadcast_event(%{
       type: :system_alert,
@@ -248,50 +253,53 @@ defmodule Hypatia.Diagnostics.Monitor do
     case reason do
       :pipeline_unresponsive ->
         recover_pipeline()
-      
+
       :pipeline_crashed ->
         recover_pipeline()
-      
+
       :learning_unresponsive ->
         recover_learning()
-      
+
       :learning_crashed ->
         recover_learning()
-      
+
       :neural_unresponsive ->
         recover_neural()
-      
+
       :neural_crashed ->
         recover_neural()
-      
+
       _ ->
-        :ok  # No automatic recovery for this failure type
+        # No automatic recovery for this failure type
+        :ok
     end
   end
 
   defp recover_pipeline() do
     Logger.info("Attempting pipeline recovery...")
-    
+
     # Try graceful flush first
     case Hypatia.Dispatch.Pipeline.flush_buffer() do
       :ok ->
         Logger.info("Pipeline recovered via flush")
         :ok
-      
+
       _ ->
         # If flush fails, try restart
         Logger.info("Pipeline flush failed, attempting restart...")
-        
+
         case GenServer.stop(Hypatia.Dispatch.Pipeline, :normal, 5000) do
           :ok ->
             case Hypatia.Dispatch.Pipeline.start_link() do
               {:ok, _} ->
                 Logger.info("Pipeline restarted successfully")
                 :ok
+
               _ ->
                 Logger.error("Pipeline restart failed")
                 :error
             end
+
           _ ->
             Logger.error("Pipeline stop failed")
             :error
@@ -312,10 +320,12 @@ defmodule Hypatia.Diagnostics.Monitor do
 
         try do
           GenServer.stop(Hypatia.Rules.Learning, :normal, 5000)
+
           case Hypatia.Rules.Learning.start_link() do
             {:ok, _} ->
               Logger.info("Learning system restarted successfully")
               :ok
+
             _ ->
               Logger.error("Learning system restart failed")
               :error
@@ -347,10 +357,12 @@ defmodule Hypatia.Diagnostics.Monitor do
 
         try do
           GenServer.stop(Hypatia.Neural.Coordinator, :normal, 5000)
+
           case Hypatia.Neural.Coordinator.start_link() do
             {:ok, _} ->
               Logger.info("Neural coordinator restarted successfully")
               :ok
+
             _ ->
               Logger.error("Neural coordinator restart failed")
               :error
@@ -366,20 +378,19 @@ defmodule Hypatia.Diagnostics.Monitor do
   defp attempt_recoveries(failures, state) do
     Enum.reduce(failures, state, fn {:failure, reason}, acc ->
       _recovery_result = attempt_recovery(reason)
-      
+
       # Track recovery attempts
       attempt_count = Map.get(acc.recovery_attempts, reason, 0) + 1
       attempts = Map.put(acc.recovery_attempts, reason, attempt_count)
-      
+
       # Give up after max attempts
       if attempt_count >= @max_recovery_attempts do
         Logger.warning("Max recovery attempts reached for: #{inspect(reason)}")
       end
-      
+
       %{acc | recovery_attempts: attempts}
     end)
   end
-
 end
 
 # ====================================================================

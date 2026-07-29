@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = src/ — Idris2 ABI and Verification Source
 
 Formal interface definitions and proofs for the Hypatia C ABI.

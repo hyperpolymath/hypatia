@@ -255,17 +255,23 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   @spec dependabot_stalled?(map(), pos_integer()) :: :stalled | :ok
   def dependabot_stalled?(%{author: %{login: "dependabot[bot]"}} = pr, days_threshold \\ 7) do
     created = Map.get(pr, :createdAt, "")
-    has_review_requests = (Map.get(pr, :reviewRequests, []) != [])
+    has_review_requests = Map.get(pr, :reviewRequests, []) != []
 
     cond do
-      created == "" -> :ok
-      not has_review_requests -> :ok
+      created == "" ->
+        :ok
+
+      not has_review_requests ->
+        :ok
+
       true ->
         case DateTime.from_iso8601(created) do
           {:ok, dt, _} ->
             age_days = DateTime.diff(DateTime.utc_now(), dt, :day)
             if age_days >= days_threshold, do: :stalled, else: :ok
-          _ -> :ok
+
+          _ ->
+            :ok
         end
     end
   end

@@ -47,6 +47,7 @@ defmodule Hypatia.E2E.PipelineTest do
     test "fetch_all_scans/0 returns at least 3 scan maps" do
       scans = VerisimConnector.fetch_all_scans()
       assert is_list(scans)
+
       assert length(scans) >= 3,
              "Expected >= 3 scans from verisim-data, got #{length(scans)}"
     end
@@ -57,8 +58,10 @@ defmodule Hypatia.E2E.PipelineTest do
       Enum.each(scans, fn scan_entry ->
         assert Map.has_key?(scan_entry, :repo),
                "Scan entry missing :repo key: #{inspect(Map.keys(scan_entry))}"
+
         assert Map.has_key?(scan_entry, :scan),
                "Scan entry missing :scan key: #{inspect(Map.keys(scan_entry))}"
+
         assert is_binary(scan_entry.repo)
         assert is_map(scan_entry.scan)
       end)
@@ -68,10 +71,11 @@ defmodule Hypatia.E2E.PipelineTest do
       scans = VerisimConnector.fetch_all_scans()
 
       # At least one scan should have actual findings
-      scans_with_findings = Enum.filter(scans, fn entry ->
-        findings = Map.get(entry.scan, "weak_points", [])
-        is_list(findings) and length(findings) > 0
-      end)
+      scans_with_findings =
+        Enum.filter(scans, fn entry ->
+          findings = Map.get(entry.scan, "weak_points", [])
+          is_list(findings) and length(findings) > 0
+        end)
 
       assert length(scans_with_findings) >= 1,
              "Expected at least one scan with weak_points data"
@@ -88,11 +92,13 @@ defmodule Hypatia.E2E.PipelineTest do
       {:ok, registry} = PatternRegistry.sync_from_scans(scans)
 
       assert is_map(registry)
+
       assert Map.has_key?(registry, "patterns"),
              "Registry missing 'patterns' key: #{inspect(Map.keys(registry))}"
 
       patterns = Map.get(registry, "patterns", %{})
       assert is_map(patterns)
+
       assert map_size(patterns) >= 1,
              "Expected at least 1 canonical pattern in registry"
     end
@@ -106,6 +112,7 @@ defmodule Hypatia.E2E.PipelineTest do
       Enum.each(patterns, fn pattern ->
         assert Map.has_key?(pattern, "id"),
                "Pattern missing 'id': #{inspect(Map.take(pattern, ~w(description category)))}"
+
         assert Map.has_key?(pattern, "repos_affected_list"),
                "Pattern missing 'repos_affected_list': #{pattern["id"]}"
       end)
@@ -130,6 +137,7 @@ defmodule Hypatia.E2E.PipelineTest do
         repo = List.first(repos, "test-repo")
 
         result = TriangleRouter.route(pattern, repo, "unknown")
+
         assert valid_route_tuple?(result),
                "route/3 returned invalid tuple for pattern #{Map.get(pattern, "id")}: #{inspect(result)}"
       end)
@@ -176,6 +184,7 @@ defmodule Hypatia.E2E.PipelineTest do
         if result == nil do
           IO.warn("Recipe not found for #{pattern_id}/#{lang} -- data may have quality issues")
         end
+
         # Either found or nil -- must not crash
         assert is_nil(result) or is_map(result)
       end)
@@ -236,17 +245,23 @@ defmodule Hypatia.E2E.PipelineTest do
       Enum.each(lines, fn line ->
         assert {:ok, entry} = Jason.decode(line),
                "Manifest line is not valid JSON: #{inspect(line)}"
+
         # Validate manifest entry shape (see lib/dispatch_manifest.ex)
         assert Map.has_key?(entry, "tier"),
                "Manifest entry missing 'tier': #{inspect(entry)}"
+
         assert Map.has_key?(entry, "strategy"),
                "Manifest entry missing 'strategy': #{inspect(entry)}"
+
         assert Map.has_key?(entry, "confidence"),
                "Manifest entry missing 'confidence': #{inspect(entry)}"
+
         assert Map.has_key?(entry, "repo"),
                "Manifest entry missing 'repo': #{inspect(entry)}"
+
         assert entry["tier"] in ["eliminate", "substitute", "control"],
                "Manifest entry has invalid tier: #{inspect(entry["tier"])}"
+
         assert entry["strategy"] in ["auto_execute", "review", "report_only"],
                "Manifest entry has invalid strategy: #{inspect(entry["strategy"])}"
       end)
@@ -263,6 +278,7 @@ defmodule Hypatia.E2E.PipelineTest do
         nil -> start_supervised!(VQLClient)
         _pid -> :ok
       end
+
       :ok
     end
 
@@ -286,9 +302,10 @@ defmodule Hypatia.E2E.PipelineTest do
 
     test "VCL WHERE filter narrows results compared to full query" do
       {:ok, all} = VQLClient.query("SELECT DOCUMENT FROM STORE scans")
-      {:ok, filtered} = VQLClient.query(
-        "SELECT DOCUMENT FROM STORE scans WHERE FIELD _source == echidna.json"
-      )
+
+      {:ok, filtered} =
+        VQLClient.query("SELECT DOCUMENT FROM STORE scans WHERE FIELD _source == echidna.json")
+
       assert length(all) >= length(filtered)
     end
   end
@@ -310,9 +327,11 @@ defmodule Hypatia.E2E.PipelineTest do
 
       # Stage 3 (sample 5 patterns to keep fast)
       sample_patterns = Enum.take(patterns, 5)
+
       routed =
         Enum.flat_map(sample_patterns, fn pattern ->
           repos = Map.get(pattern, "repos_affected_list", ["test"])
+
           Enum.map(repos, fn repo ->
             TriangleRouter.route(pattern, repo, "unknown")
           end)

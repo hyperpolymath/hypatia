@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Integration Tests
 
 This directory contains integration tests for the hypatia platform.
@@ -172,7 +173,7 @@ cargo test --features slow-tests
 Each test file follows this pattern:
 
 ```rust
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 
 use anyhow::Result;
 use tracing::info;

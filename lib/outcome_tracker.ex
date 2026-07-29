@@ -15,7 +15,11 @@ defmodule Hypatia.OutcomeTracker do
   alias Hypatia.ConfidenceAnnealing
 
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
-  @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
+  @fleet_path Application.compile_env(
+                :hypatia,
+                :fleet_path,
+                "~/Documents/hyperpolymath-repos/gitbot-fleet"
+              )
 
   # Bayesian confidence updating via Beta distribution
   # Prior strength controls how much weight initial confidence carries
@@ -26,9 +30,10 @@ defmodule Hypatia.OutcomeTracker do
 
   # Path for persisted annealing states (per-recipe temperature tracking)
   @annealing_state_path Application.compile_env(
-    :hypatia, :annealing_state_path,
-    "data/verisim/annealing-states"
-  )
+                          :hypatia,
+                          :annealing_state_path,
+                          "data/verisim/annealing-states"
+                        )
 
   @doc """
   Record an outcome from a fix attempt.
@@ -105,20 +110,29 @@ defmodule Hypatia.OutcomeTracker do
 
   defp do_verify_fix(repo_path, pattern_id, category) do
     case System.cmd("panic-attack", ["assail", repo_path, "--output-format", "json", "--quiet"],
-           stderr_to_stdout: true) do
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         case Jason.decode(output) do
           {:ok, scan} ->
             weak_points = Map.get(scan, "weak_points", [])
-            still_found = Enum.any?(weak_points, fn wp ->
-              Map.get(wp, "category", "") == category
-            end)
+
+            still_found =
+              Enum.any?(weak_points, fn wp ->
+                Map.get(wp, "category", "") == category
+              end)
 
             if still_found do
-              Logger.warning("Verification FAILED for #{pattern_id} in #{repo_path} -- pattern still present")
+              Logger.warning(
+                "Verification FAILED for #{pattern_id} in #{repo_path} -- pattern still present"
+              )
+
               :still_present
             else
-              Logger.info("Verification PASSED for #{pattern_id} in #{repo_path} -- pattern removed")
+              Logger.info(
+                "Verification PASSED for #{pattern_id} in #{repo_path} -- pattern removed"
+              )
+
               :verified
             end
 
@@ -280,7 +294,9 @@ defmodule Hypatia.OutcomeTracker do
     else
       successes = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
       failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
-      false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
+
+      false_positives =
+        Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
 
       recipe_path = find_recipe_file(recipe_id)
 
@@ -291,9 +307,12 @@ defmodule Hypatia.OutcomeTracker do
               {:ok, recipe} ->
                 base_confidence = Map.get(recipe, "confidence", 0.5)
 
-                raw_confidence = bayesian_update(
-                  base_confidence, successes, failures + false_positives
-                )
+                raw_confidence =
+                  bayesian_update(
+                    base_confidence,
+                    successes,
+                    failures + false_positives
+                  )
 
                 # Apply temperature-based annealing to the raw confidence.
                 # This flattens confidence toward 0.5 when the recipe has
@@ -315,7 +334,11 @@ defmodule Hypatia.OutcomeTracker do
                 case Jason.encode(updated_recipe, pretty: true) do
                   {:ok, json} ->
                     File.write!(recipe_path, json <> "\n")
-                    Logger.info("Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}")
+
+                    Logger.info(
+                      "Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}"
+                    )
+
                     {:ok, new_confidence}
 
                   {:error, reason} ->
@@ -383,7 +406,9 @@ defmodule Hypatia.OutcomeTracker do
     else
       # Look at last 10 outcomes
       recent = Enum.take(outcomes, -10)
-      success_rate = Enum.count(recent, fn o -> Map.get(o, "outcome") == "success" end) / length(recent)
+
+      success_rate =
+        Enum.count(recent, fn o -> Map.get(o, "outcome") == "success" end) / length(recent)
 
       cond do
         success_rate >= 0.8 -> :improving
@@ -491,7 +516,9 @@ defmodule Hypatia.OutcomeTracker do
 
       successes = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
       failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
-      false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
+
+      false_positives =
+        Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
 
       dispatches = length(outcomes)
       attempts = successes + failures + false_positives
@@ -519,14 +546,21 @@ defmodule Hypatia.OutcomeTracker do
 
       status =
         cond do
-          verification_map.rate == :no_data -> :no_data
-          verification_map.rate == :insufficient_data -> :insufficient_data
+          verification_map.rate == :no_data ->
+            :no_data
+
+          verification_map.rate == :insufficient_data ->
+            :insufficient_data
+
           is_float(verification_map.rate) and verification_map.rate < quarantine_threshold ->
             :quarantine_candidate
+
           is_float(verification_map.rate) and verification_map.rate < degraded_threshold ->
             :degraded
+
           is_float(verification_map.rate) ->
             :healthy
+
           true ->
             :unverified
         end
@@ -659,6 +693,11 @@ defmodule Hypatia.OutcomeTracker do
     filename = "#{year}-#{month_str}.jsonl"
     path = Path.join([Path.expand(@verisimdb_data_path), "outcomes", filename])
 
+    # Ensure the outcomes dir exists before the append. `File.write/3` with
+    # `:append` fails with :enoent on a missing dir, which the case below
+    # silently logs — the outcome would be dropped rather than recorded.
+    File.mkdir_p!(Path.dirname(path))
+
     # H6 — outcome log monotonicity. Was previously proven in
     # verification/proofs/agda/OutcomeLog.agda; that proof was replaced
     # by this runtime assertion + an echidnabot audit over the JSONL.
@@ -680,13 +719,17 @@ defmodule Hypatia.OutcomeTracker do
   # on the hot path.
   defp assert_h6_monotone(path, new_ts) when is_binary(new_ts) do
     case tail_timestamp(path) do
-      {:ok, last_ts} when new_ts > last_ts -> :ok
+      {:ok, last_ts} when new_ts > last_ts ->
+        :ok
+
       {:ok, last_ts} ->
         Logger.error(
           "H6 violation: outcome log non-monotone at #{path} " <>
             "(last=#{last_ts}, new=#{new_ts})"
         )
-      :none -> :ok
+
+      :none ->
+        :ok
     end
   end
 
@@ -721,10 +764,17 @@ defmodule Hypatia.OutcomeTracker do
 
     case Jason.encode(fleet_record) do
       {:ok, json} ->
-        File.write(path, json <> "\n", [:append, :utf8])
+        # Same silent-drop class as write_outcome_log/1: File.write with :append
+        # fails :enoent on a missing dir, dropping the fleet learning signal.
+        File.mkdir_p!(Path.dirname(path))
+
+        case File.write(path, json <> "\n", [:append, :utf8]) do
+          :ok -> :ok
+          {:error, reason} -> Logger.error("Failed to write fleet outcome: #{inspect(reason)}")
+        end
 
       {:error, reason} ->
-        Logger.error("Failed to write fleet outcome: #{inspect(reason)}")
+        Logger.error("Failed to encode fleet outcome: #{inspect(reason)}")
     end
   end
 
@@ -826,12 +876,13 @@ defmodule Hypatia.OutcomeTracker do
   defp update_annealing_state(recipe_id, outcome) do
     state = load_annealing_state(recipe_id)
 
-    outcome_atom = case outcome do
-      :success -> :success
-      :failure -> :failure
-      :false_positive -> :false_positive
-      _ -> :failure
-    end
+    outcome_atom =
+      case outcome do
+        :success -> :success
+        :failure -> :failure
+        :false_positive -> :false_positive
+        _ -> :failure
+      end
 
     new_state = ConfidenceAnnealing.record_outcome(state, outcome_atom)
     save_annealing_state(recipe_id, new_state)
@@ -863,7 +914,9 @@ defmodule Hypatia.OutcomeTracker do
     else
       successes = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
       failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
-      false_positives = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
+
+      false_positives =
+        Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
 
       state = ConfidenceAnnealing.from_existing(successes, failures, false_positives)
       save_annealing_state(recipe_id, state)
@@ -903,11 +956,14 @@ defmodule Hypatia.OutcomeTracker do
         |> Enum.map(&String.to_existing_atom/1),
       last_reheat:
         case Map.get(data, "last_reheat") do
-          nil -> nil
-          ts -> case DateTime.from_iso8601(ts) do
-            {:ok, dt, _} -> dt
-            _ -> nil
-          end
+          nil ->
+            nil
+
+          ts ->
+            case DateTime.from_iso8601(ts) do
+              {:ok, dt, _} -> dt
+              _ -> nil
+            end
         end,
       created_at:
         case DateTime.from_iso8601(Map.get(data, "created_at", "")) do

@@ -37,11 +37,13 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 pub fn setup_test_logging() {
     let _ = tracing_subscriber::registry()
         .with(fmt::layer().with_test_writer())
-        .with(EnvFilter::from_default_env().add_directive(
-            "info"
-                .parse()
-                .expect("invariant: 'info' is a well-formed tracing directive"),
-        ))
+        .with(
+            EnvFilter::from_default_env().add_directive(
+                "info"
+                    .parse()
+                    .expect("invariant: 'info' is a well-formed tracing directive"),
+            ),
+        )
         .try_init();
 }
 

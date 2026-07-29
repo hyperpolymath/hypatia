@@ -69,7 +69,9 @@ defmodule Hypatia.VCL.RemoteExecutor do
         on_timeout: :kill_task
       )
       |> Enum.flat_map(fn
-        {:ok, {url, items}} -> Enum.map(items, &tag_source(&1, url))
+        {:ok, {url, items}} ->
+          Enum.map(items, &tag_source(&1, url))
+
         {:exit, reason} ->
           Logger.warning("RemoteExecutor task exited: #{inspect(reason)}")
           []

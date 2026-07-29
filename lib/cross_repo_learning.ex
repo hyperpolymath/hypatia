@@ -73,9 +73,10 @@ defmodule Hypatia.CrossRepoLearning do
 
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @cross_repo_index_path Application.compile_env(
-    :hypatia, :cross_repo_index_path,
-    "data/verisim/cross-repo-index"
-  )
+                           :hypatia,
+                           :cross_repo_index_path,
+                           "data/verisim/cross-repo-index"
+                         )
 
   # Drift policy discount factors for cross-repo confidence transfer
   @drift_policies %{
@@ -121,14 +122,14 @@ defmodule Hypatia.CrossRepoLearning do
 
   @type drift_policy :: :conservative | :moderate | :aggressive | :language_aware
   @type repo_confidence :: %{
-    repo: String.t(),
-    recipe_id: String.t(),
-    local_confidence: float(),
-    transferred_confidence: float(),
-    blended_confidence: float(),
-    local_outcomes: non_neg_integer(),
-    transfer_sources: [String.t()]
-  }
+          repo: String.t(),
+          recipe_id: String.t(),
+          local_confidence: float(),
+          transferred_confidence: float(),
+          blended_confidence: float(),
+          local_outcomes: non_neg_integer(),
+          transfer_sources: [String.t()]
+        }
 
   # --- Public API ---
 
@@ -219,9 +220,7 @@ defmodule Hypatia.CrossRepoLearning do
     anomalies = recipe_anomalies ++ language_anomalies
 
     if length(anomalies) > 0 do
-      Logger.warning(
-        "CrossRepoLearning: #{length(anomalies)} ecosystem anomalies detected"
-      )
+      Logger.warning("CrossRepoLearning: #{length(anomalies)} ecosystem anomalies detected")
     end
 
     anomalies
@@ -263,24 +262,49 @@ defmodule Hypatia.CrossRepoLearning do
               outcome = Map.get(record, "outcome", "unknown")
 
               key = "#{recipe}:#{repo}"
-              entry = Map.get(idx, key, %{"successes" => 0, "failures" => 0, "false_positives" => 0, "total" => 0})
 
-              updated = case outcome do
-                "success" -> %{entry | "successes" => entry["successes"] + 1, "total" => entry["total"] + 1}
-                "failure" -> %{entry | "failures" => entry["failures"] + 1, "total" => entry["total"] + 1}
-                "false_positive" -> %{entry | "false_positives" => entry["false_positives"] + 1, "total" => entry["total"] + 1}
-                _ -> %{entry | "total" => entry["total"] + 1}
-              end
+              entry =
+                Map.get(idx, key, %{
+                  "successes" => 0,
+                  "failures" => 0,
+                  "false_positives" => 0,
+                  "total" => 0
+                })
+
+              updated =
+                case outcome do
+                  "success" ->
+                    %{
+                      entry
+                      | "successes" => entry["successes"] + 1,
+                        "total" => entry["total"] + 1
+                    }
+
+                  "failure" ->
+                    %{entry | "failures" => entry["failures"] + 1, "total" => entry["total"] + 1}
+
+                  "false_positive" ->
+                    %{
+                      entry
+                      | "false_positives" => entry["false_positives"] + 1,
+                        "total" => entry["total"] + 1
+                    }
+
+                  _ ->
+                    %{entry | "total" => entry["total"] + 1}
+                end
 
               Map.put(idx, key, Map.merge(updated, %{"repo" => repo, "recipe_id" => recipe}))
             end)
           end)
 
-        {:error, _} -> %{}
+        {:error, _} ->
+          %{}
       end
 
     # Write index as JSON
     index_path = Path.join(index_dir, "repo-recipe-index.json")
+
     case Jason.encode(index, pretty: true) do
       {:ok, json} ->
         File.write!(index_path, json <> "\n")
@@ -316,7 +340,8 @@ defmodule Hypatia.CrossRepoLearning do
 
   def drift_discount(policy, _source_repo, _target_repo) do
     case Map.get(@drift_policies, policy) do
-      :language_dependent -> 0.75  # Fallback if called incorrectly
+      # Fallback if called incorrectly
+      :language_dependent -> 0.75
       factor when is_number(factor) -> factor
       _ -> 0.75
     end
@@ -352,7 +377,8 @@ defmodule Hypatia.CrossRepoLearning do
         Enum.reduce(transferable, {0.0, 0.0, []}, fn {repo, successes, total}, {ws, tw, srcs} ->
           raw_conf = successes / max(total, 1)
           discount = drift_discount(policy, repo, target_repo)
-          weight = total * discount  # More outcomes = more weight
+          # More outcomes = more weight
+          weight = total * discount
 
           {ws + raw_conf * weight, tw + weight, [repo | srcs]}
         end)
@@ -410,7 +436,8 @@ defmodule Hypatia.CrossRepoLearning do
           |> Enum.to_list()
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -440,7 +467,8 @@ defmodule Hypatia.CrossRepoLearning do
           |> Enum.to_list()
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -472,7 +500,8 @@ defmodule Hypatia.CrossRepoLearning do
           |> Enum.to_list()
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -491,17 +520,19 @@ defmodule Hypatia.CrossRepoLearning do
       failure_rate = if total > 0, do: failures / total, else: 0.0
 
       if failure_rate >= @anomaly_failure_rate_threshold and
-         length(repos) >= @anomaly_min_repos do
-        [%{
-          type: :recipe_degradation,
-          recipe_id: recipe_id,
-          failure_rate: Float.round(failure_rate, 3),
-          affected_repos: length(repos),
-          total_outcomes: total,
-          repos: Enum.take(repos, 10),
-          severity: if(failure_rate >= 0.5, do: :critical, else: :warning),
-          detected_at: DateTime.utc_now() |> DateTime.to_iso8601()
-        }]
+           length(repos) >= @anomaly_min_repos do
+        [
+          %{
+            type: :recipe_degradation,
+            recipe_id: recipe_id,
+            failure_rate: Float.round(failure_rate, 3),
+            affected_repos: length(repos),
+            total_outcomes: total,
+            repos: Enum.take(repos, 10),
+            severity: if(failure_rate >= 0.5, do: :critical, else: :warning),
+            detected_at: DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+        ]
       else
         []
       end
@@ -524,16 +555,18 @@ defmodule Hypatia.CrossRepoLearning do
       failure_rate = if total > 0, do: failures / total, else: 0.0
 
       if failure_rate >= @anomaly_failure_rate_threshold and
-         length(repos) >= @anomaly_min_repos do
-        [%{
-          type: :language_family_anomaly,
-          language_family: family,
-          failure_rate: Float.round(failure_rate, 3),
-          affected_repos: length(repos),
-          total_outcomes: total,
-          severity: if(failure_rate >= 0.5, do: :critical, else: :warning),
-          detected_at: DateTime.utc_now() |> DateTime.to_iso8601()
-        }]
+           length(repos) >= @anomaly_min_repos do
+        [
+          %{
+            type: :language_family_anomaly,
+            language_family: family,
+            failure_rate: Float.round(failure_rate, 3),
+            affected_repos: length(repos),
+            total_outcomes: total,
+            severity: if(failure_rate >= 0.5, do: :critical, else: :warning),
+            detected_at: DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+        ]
       else
         []
       end
@@ -567,10 +600,12 @@ defmodule Hypatia.CrossRepoLearning do
                 "unknown"
             end
 
-          {:error, _} -> "unknown"
+          {:error, _} ->
+            "unknown"
         end
 
-      {:error, _} -> "unknown"
+      {:error, _} ->
+        "unknown"
     end
   end
 end
