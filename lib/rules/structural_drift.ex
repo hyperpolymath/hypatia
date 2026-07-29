@@ -976,7 +976,11 @@ defmodule Hypatia.Rules.StructuralDrift do
         "test/fixtures/",
         "tests/fixtures/",
         "scripts/fix-scripts/",
-        "third_party/"
+        "third_party/",
+        # Archived session notes record the tree AS IT WAS. A path that was
+        # valid when written is not rename drift; "fixing" it would falsify
+        # the record.
+        "docs/archive/"
       ]
 
       find_files_by_ext(repo_path, [
@@ -989,13 +993,16 @@ defmodule Hypatia.Rules.StructuralDrift do
         ".twasm"
       ])
       |> Enum.reject(fn rel ->
-        rel == "CHANGELOG.md" or Enum.any?(corpus_prefixes, &String.starts_with?(rel, &1))
+        rel == "CHANGELOG.md" or Enum.any?(corpus_prefixes, &String.starts_with?(rel, &1)) or
+          nested_project_doc?(repo_path, rel)
       end)
       |> Enum.flat_map(fn rel ->
         path = Path.join(repo_path, rel)
 
         case File.read(path) do
-          {:ok, content} ->
+          {:ok, raw} ->
+            content = strip_full_line_comments(raw, Path.extname(rel))
+
             # Negative lookbehind: only a *repo-root-relative* `src/<dir>/`
             # is rename-drift. A `src/` preceded by another path segment
             # (`vcl-ut/src/bridges/`, `cli/src/commands/`, `echidna/src/rust/`,
@@ -1033,6 +1040,69 @@ defmodule Hypatia.Rules.StructuralDrift do
         end
       end)
     end
+  end
+
+  # Drop whole-line comments before matching. A commented-out example is not a
+  # live claim about the tree.
+  #
+  # Measured 2026-07-29 on gitbot-fleet's .machine_readable/INTENT.contractile,
+  # where SD022 fired on
+  #
+  #     ; "src/abi/ - formal proofs, changes require re-verification"
+  #
+  # inside a `; *REMINDER: List areas where LLMs should check...*` block --
+  # template boilerplate, entirely commented out. Same family as the known
+  # unwrap-rule-matches-comments defect.
+  #
+  # Deliberately conservative: only `;` (scheme-shaped contractile/twasm) and
+  # `#` in TOML-shaped files. Markdown/AsciiDoc are left alone, since `#` there
+  # is a heading and may legitimately carry a path.
+  defp strip_full_line_comments(content, ext) do
+    leaders =
+      case ext do
+        e when e in [".contractile", ".twasm"] -> [";"]
+        e when e in [".toml", ".a2ml"] -> ["#", ";"]
+        _ -> []
+      end
+
+    if leaders == [] do
+      content
+    else
+      content
+      |> String.split("\n")
+      |> Enum.reject(fn line ->
+        t = String.trim_leading(line)
+        Enum.any?(leaders, &String.starts_with?(t, &1))
+      end)
+      |> Enum.join("\n")
+    end
+  end
+
+  # A doc inside a NESTED PROJECT ROOT (a subdirectory carrying its own build
+  # manifest) describes THAT project, whose layout is governed by its own
+  # repository -- not by this one. Reporting its paths as this repo's rename
+  # drift is noise the mirror cannot act on.
+  #
+  # Measured 2026-07-29 on gitbot-fleet: `bots/echidnabot/` is a vendored copy
+  # of the standalone echidnabot repo. Its CANONICAL_SOURCE.md documents
+  # `src/abi/` and states in the same table that the ABI namespace is
+  # "owner-managed in standalone; fleet does not need it for deploy". `src/abi/`
+  # exists upstream and is deliberately absent here, so SD022 fired on a doc
+  # that is correct. 10 of 11 findings in that repo were this shape.
+  #
+  # Only subtrees BELOW the repo root count -- a root manifest means the repo
+  # itself is the project, and its drift is in scope.
+  defp nested_project_doc?(repo_path, rel) do
+    manifests = ["Cargo.toml", "mix.exs", "package.json", "go.mod", "pyproject.toml"]
+
+    rel
+    |> Path.dirname()
+    |> Path.split()
+    |> Enum.scan(fn seg, acc -> Path.join(acc, seg) end)
+    |> Enum.reject(&(&1 in [".", ""]))
+    |> Enum.any?(fn dir ->
+      Enum.any?(manifests, &File.exists?(Path.join([repo_path, dir, &1])))
+    end)
   end
 
   # Index every `**/src/<name>` directory in the tracked tree (via the file
