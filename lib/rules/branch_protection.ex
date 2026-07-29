@@ -30,7 +30,8 @@ defmodule Hypatia.Rules.BranchProtection do
   | BP005 | CIS GH 1.6.x + NIST PO.3.2 | `require_code_owner_reviews: true` but CODEOWNERS missing/empty |
   | BP006 | CIS GH | `enforce_admins: false` |
   | BP007 | scorecard `Branch-Protection` tier 1 | default branch allows force-push or deletion |
-  | BP008 | this estate (2026-05-28) | required status-check context never emits a check (phantom context blocks auto-merge) |
+  | BP008 | this estate (2026-05-28) | required status-check context never emits a check (phantom context blocks auto-merge) — CLASSIC protection, sampled on main |
+  | BP009 | this estate (2026-07-29) | ruleset-required context never emits on a PR head — the case BP008 structurally cannot see |
 
   ## Dispatch
 
@@ -462,6 +463,151 @@ defmodule Hypatia.Rules.BranchProtection do
     end
   end
 
+
+  # ─── BP009: phantom required context in a RULESET ───────────────────
+
+  @doc """
+  BP009: a **ruleset**-required status-check context that never appears on
+  a pull-request head, so no PR can ever satisfy it.
+
+  This is BP008's blind spot, and the distinction is not academic —
+  measured across this estate on 2026-07-29:
+
+    * **236** required-context rows live in *rulesets*; BP008 reads only
+      classic `branches/main/protection`, so it sees almost none of them.
+    * BP008 samples **default-branch commits**. Merges are gated on
+      **PR heads**. The two differ, and for the estate's worst phantom
+      they differ decisively: `Dependabot` emitted **10** check-runs on
+      `main` (GitHub's managed `dynamic/dependabot/dependabot-updates`
+      runner, fired on a schedule) and **0** on any PR head. BP008 would
+      therefore have scored it *healthy* while it made every PR in 25
+      repos unmergeable.
+
+  So sampling main can produce both false negatives (a scheduled or
+  push-only job that never runs on a PR) and false positives (a
+  `pull_request`-only workflow that never appears on main). BP009 samples
+  PR heads, which is what actually gates a merge.
+
+  Severity: `:critical` — unlike BP008 this is a proven merge-stopper,
+  not a hygiene warning.
+
+  Requires `GITHUB_TOKEN`. Returns `[]` cleanly without one.
+  """
+  def bp009_phantom_ruleset_context(owner, repo, opts \\ []) do
+    n =
+      opts
+      |> Keyword.get(:recent_prs, 5)
+      |> max(1)
+      |> min(20)
+
+    with contexts when contexts != [] <- ruleset_required_contexts(owner, repo),
+         {:ok, seen} <- fetch_recent_pr_check_names(owner, repo, n) do
+      contexts
+      |> Enum.reject(&MapSet.member?(seen, &1))
+      |> Enum.map(fn ctx ->
+        %{
+          rule: "BP009",
+          file: "#{owner}/#{repo}",
+          severity: :critical,
+          reason:
+            "ruleset-required status check `#{ctx}` has emitted zero " <>
+              "check-runs across the last #{n} pull-request heads — every " <>
+              "PR in this repo is unmergeable until it is removed or a job " <>
+              "of exactly that name runs on `pull_request`",
+          action: :report,
+          detail: %{
+            source: :ruleset,
+            phantom_context: ctx,
+            sampled_prs: n,
+            fix:
+              "Remove `#{ctx}` from the ruleset's required_status_checks, " <>
+                "or give it a job that runs on `pull_request`. NOTE: emptying " <>
+                "the context list returns HTTP 422 — the whole " <>
+                "`required_status_checks` rule must be dropped instead. " <>
+                "A ruleset PUT REPLACES the object, so rebuild the payload " <>
+                "from a live GET and preserve `bypass_actors`."
+          }
+        }
+      end)
+    else
+      _ -> []
+    end
+  end
+
+  # BP009 helper. Collects required contexts from every ACTIVE ruleset
+  # that targets branches (tag-target rulesets do not gate PRs).
+  defp ruleset_required_contexts(owner, repo) do
+    case curl_github("repos/#{owner}/#{repo}/rulesets?includes_parents=true") do
+      {:ok, sets} when is_list(sets) ->
+        sets
+        |> Enum.map(& &1["id"])
+        |> Enum.reject(&is_nil/1)
+        |> Enum.flat_map(fn id ->
+          case curl_github("repos/#{owner}/#{repo}/rulesets/#{id}") do
+            {:ok, %{"enforcement" => "active", "target" => "branch", "rules" => rules}}
+            when is_list(rules) ->
+              rules
+              |> Enum.filter(&(&1["type"] == "required_status_checks"))
+              |> Enum.flat_map(fn r ->
+                get_in(r, ["parameters", "required_status_checks"]) || []
+              end)
+              |> Enum.map(& &1["context"])
+              |> Enum.reject(&is_nil/1)
+
+            _ ->
+              []
+          end
+        end)
+        |> Enum.uniq()
+
+      _ ->
+        []
+    end
+  end
+
+  # BP009 helper. Samples check-run names on the HEAD SHAs of recent pull
+  # requests. `state=all` deliberately — a merged PR's head still carries
+  # the checks that ran on it, and open PRs alone are too thin a sample.
+  defp fetch_recent_pr_check_names(owner, repo, n) do
+    with {:ok, prs} <-
+           curl_github("repos/#{owner}/#{repo}/pulls?state=all&per_page=#{n}&sort=updated&direction=desc") do
+      shas =
+        prs
+        |> Enum.map(&get_in(&1, ["head", "sha"]))
+        |> Enum.reject(&is_nil/1)
+
+      names =
+        Enum.reduce(shas, MapSet.new(), fn sha, acc ->
+          acc =
+            case curl_github("repos/#{owner}/#{repo}/commits/#{sha}/check-runs?per_page=100") do
+              {:ok, %{"check_runs" => runs}} when is_list(runs) ->
+                Enum.reduce(runs, acc, fn
+                  %{"name" => name}, set when is_binary(name) -> MapSet.put(set, name)
+                  _, set -> set
+                end)
+
+              _ ->
+                acc
+            end
+
+          # Commit statuses are a separate surface from check-runs; a
+          # required context may be satisfied by either.
+          case curl_github("repos/#{owner}/#{repo}/commits/#{sha}/status") do
+            {:ok, %{"statuses" => sts}} when is_list(sts) ->
+              Enum.reduce(sts, acc, fn
+                %{"context" => c}, set when is_binary(c) -> MapSet.put(set, c)
+                _, set -> set
+              end)
+
+            _ ->
+              acc
+          end
+        end)
+
+      {:ok, names}
+    end
+  end
+
   # ─── scan/2 facade ──────────────────────────────────────────────────
 
   @doc """
@@ -488,7 +634,8 @@ defmodule Hypatia.Rules.BranchProtection do
           bp005_codeowners_required_but_missing(owner, repo) ++
           bp006_enforce_admins_off(owner, repo) ++
           bp007_force_push_or_delete_allowed(owner, repo) ++
-          bp008_phantom_required_context(owner, repo)
+          bp008_phantom_required_context(owner, repo) ++
+          bp009_phantom_ruleset_context(owner, repo)
       else
         []
       end
