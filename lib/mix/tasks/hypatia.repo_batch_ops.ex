@@ -366,18 +366,14 @@ defmodule Mix.Tasks.Hypatia.RepoBatchOps do
   end
 
   defp last_commit(repo_path) do
-    case System.cmd("git", ["-C", repo_path, "log", "-1", "--format=%ci"],
-           stderr_to_stdout: true
-         ) do
+    case System.cmd("git", ["-C", repo_path, "log", "-1", "--format=%ci"], stderr_to_stdout: true) do
       {out, 0} -> String.trim(out)
       _ -> ""
     end
   end
 
   defp current_branch(repo_path) do
-    case System.cmd("git", ["-C", repo_path, "branch", "--show-current"],
-           stderr_to_stdout: true
-         ) do
+    case System.cmd("git", ["-C", repo_path, "branch", "--show-current"], stderr_to_stdout: true) do
       {out, 0} -> String.trim(out)
       _ -> "unknown"
     end
@@ -455,19 +451,37 @@ defmodule Mix.Tasks.Hypatia.RepoBatchOps do
 
   defp filter_repos(repos, opts) do
     Enum.reduce(opts, repos, fn
-      {:language, ""}, acc -> acc
-      {:language, lang}, acc -> Enum.filter(acc, &(lang in &1.languages))
-      {:type, ""}, acc -> acc
-      {:type, t}, acc -> Enum.filter(acc, &(&1.type == t))
-      {:ecosystem, ""}, acc -> acc
-      {:ecosystem, e}, acc -> Enum.filter(acc, &(&1.ecosystem == e))
+      {:language, ""}, acc ->
+        acc
+
+      {:language, lang}, acc ->
+        Enum.filter(acc, &(lang in &1.languages))
+
+      {:type, ""}, acc ->
+        acc
+
+      {:type, t}, acc ->
+        Enum.filter(acc, &(&1.type == t))
+
+      {:ecosystem, ""}, acc ->
+        acc
+
+      {:ecosystem, e}, acc ->
+        Enum.filter(acc, &(&1.ecosystem == e))
+
       {:has_banned, true}, acc ->
         Enum.filter(acc, fn r ->
           r.has_typescript or r.has_python or r.has_go or r.has_ruby or r.has_makefile
         end)
-      {:has_jekyll, true}, acc -> Enum.filter(acc, & &1.has_jekyll)
-      {:missing_scm, true}, acc -> Enum.filter(acc, &(&1.missing_scm != []))
-      _, acc -> acc
+
+      {:has_jekyll, true}, acc ->
+        Enum.filter(acc, & &1.has_jekyll)
+
+      {:missing_scm, true}, acc ->
+        Enum.filter(acc, &(&1.missing_scm != []))
+
+      _, acc ->
+        acc
     end)
   end
 

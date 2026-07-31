@@ -40,10 +40,10 @@ defmodule Hypatia.HistoricalTrends do
   require Logger
 
   @scan_history_path Application.compile_env(
-                      :hypatia,
-                      :scan_history_path,
-                      "data/verisim/scan-history"
-                    )
+                       :hypatia,
+                       :scan_history_path,
+                       "data/verisim/scan-history"
+                     )
 
   @doc """
   Record a scan snapshot. Call this at the tail of
@@ -178,8 +178,7 @@ defmodule Hypatia.HistoricalTrends do
     |> load_range(to_date)
     |> Enum.flat_map(fn rec ->
       Enum.map(Map.get(rec, "repos", %{}), fn {repo, summary} ->
-        {repo,
-         %{scanned_at: rec["scanned_at"], count: Map.get(summary, "weak_point_count", 0)}}
+        {repo, %{scanned_at: rec["scanned_at"], count: Map.get(summary, "weak_point_count", 0)}}
       end)
     end)
     |> Enum.group_by(fn {repo, _} -> repo end, fn {_, point} -> point end)

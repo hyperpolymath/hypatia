@@ -99,13 +99,13 @@ defmodule Hypatia.ConfidenceAnnealing do
   @type stage :: :nascent | :adolescent | :mature | :veteran
 
   @type annealing_state :: %{
-    temperature: float(),
-    outcome_count: non_neg_integer(),
-    stage: stage(),
-    recent_outcomes: [atom()],
-    last_reheat: DateTime.t() | nil,
-    created_at: DateTime.t()
-  }
+          temperature: float(),
+          outcome_count: non_neg_integer(),
+          stage: stage(),
+          recent_outcomes: [atom()],
+          last_reheat: DateTime.t() | nil,
+          created_at: DateTime.t()
+        }
 
   # --- Public API ---
 
@@ -133,7 +133,8 @@ defmodule Hypatia.ConfidenceAnnealing do
   Used when bootstrapping annealing for recipes that already have
   outcome history. Sets temperature based on existing outcome count.
   """
-  @spec from_existing(non_neg_integer(), non_neg_integer(), non_neg_integer()) :: annealing_state()
+  @spec from_existing(non_neg_integer(), non_neg_integer(), non_neg_integer()) ::
+          annealing_state()
   def from_existing(successes, failures, false_positives) do
     total = successes + failures + false_positives
     temperature = compute_temperature(total)
@@ -164,7 +165,8 @@ defmodule Hypatia.ConfidenceAnnealing do
 
   Returns the updated annealing state.
   """
-  @spec record_outcome(annealing_state(), :success | :failure | :false_positive) :: annealing_state()
+  @spec record_outcome(annealing_state(), :success | :failure | :false_positive) ::
+          annealing_state()
   def record_outcome(state, outcome) do
     new_count = state.outcome_count + 1
 
@@ -178,21 +180,24 @@ defmodule Hypatia.ConfidenceAnnealing do
     {temperature, last_reheat} =
       if drift_detected?(recent) do
         reheated = min(base_temp * @reheat_multiplier, @reheat_cap)
+
         Logger.warning(
           "Confidence annealing: drift detected at outcome ##{new_count}, " <>
-          "reheating #{Float.round(base_temp, 4)} -> #{Float.round(reheated, 4)}"
+            "reheating #{Float.round(base_temp, 4)} -> #{Float.round(reheated, 4)}"
         )
+
         {reheated, DateTime.utc_now()}
       else
         {base_temp, state.last_reheat}
       end
 
-    %{state |
-      temperature: temperature,
-      outcome_count: new_count,
-      stage: compute_stage(new_count),
-      recent_outcomes: recent,
-      last_reheat: last_reheat
+    %{
+      state
+      | temperature: temperature,
+        outcome_count: new_count,
+        stage: compute_stage(new_count),
+        recent_outcomes: recent,
+        last_reheat: last_reheat
     }
   end
 
@@ -255,8 +260,9 @@ defmodule Hypatia.ConfidenceAnnealing do
     if strategy_rank > max_rank do
       Logger.info(
         "Annealing clamped #{strategy} -> #{max_tier} " <>
-        "(stage=#{state.stage}, outcomes=#{state.outcome_count})"
+          "(stage=#{state.stage}, outcomes=#{state.outcome_count})"
       )
+
       max_tier
     else
       strategy

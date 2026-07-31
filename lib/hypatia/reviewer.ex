@@ -28,6 +28,7 @@ defmodule Hypatia.Reviewer do
   require Logger
 
   alias Hypatia.Rules
+
   alias Hypatia.Rules.{
     ScorecardCompliance,
     GreenWeb,
@@ -49,12 +50,12 @@ defmodule Hypatia.Reviewer do
     defstruct [:path, :line, :body, :severity, :rule]
 
     @type t :: %__MODULE__{
-      path: String.t(),
-      line: non_neg_integer() | nil,
-      body: String.t(),
-      severity: :info | :low | :medium | :high | :critical,
-      rule: String.t()
-    }
+            path: String.t(),
+            line: non_neg_integer() | nil,
+            body: String.t(),
+            severity: :info | :low | :medium | :high | :critical,
+            rule: String.t()
+          }
   end
 
   # ─── Public API ─────────────────────────────────────────────────────
@@ -99,6 +100,7 @@ defmodule Hypatia.Reviewer do
       grouped = Enum.group_by(comments, & &1.severity)
 
       severity_order = [:critical, :high, :medium, :low, :info]
+
       severity_emoji = %{
         critical: ":red_circle:",
         high: ":orange_circle:",
@@ -113,12 +115,15 @@ defmodule Hypatia.Reviewer do
         |> Enum.flat_map(fn severity ->
           items = Map.get(grouped, severity, [])
           emoji = Map.get(severity_emoji, severity, ":question:")
-          header = "### #{emoji} #{severity |> to_string() |> String.capitalize()} (#{length(items)})\n"
 
-          detail_lines = Enum.map(items, fn c ->
-            loc = if c.line, do: ":#{c.line}", else: ""
-            "- **`#{c.path}#{loc}`** -- #{c.body} (`#{c.rule}`)"
-          end)
+          header =
+            "### #{emoji} #{severity |> to_string() |> String.capitalize()} (#{length(items)})\n"
+
+          detail_lines =
+            Enum.map(items, fn c ->
+              loc = if c.line, do: ":#{c.line}", else: ""
+              "- **`#{c.path}#{loc}`** -- #{c.body} (`#{c.rule}`)"
+            end)
 
           [header | detail_lines] ++ [""]
         end)
@@ -153,6 +158,7 @@ defmodule Hypatia.Reviewer do
 
       header ->
         header = String.trim(header)
+
         case Regex.run(~r{\sb/(.+)$}, header) do
           [_, path] ->
             # Extract only added lines with their line numbers
@@ -262,6 +268,7 @@ defmodule Hypatia.Reviewer do
   defp run_workflow_checks(path, content) do
     try do
       workflow_contents = %{path => content}
+
       case WorkflowAudit.audit([path], workflow_contents) do
         %{findings: findings} -> normalize_findings(findings)
         result -> normalize_findings(result)
@@ -283,6 +290,7 @@ defmodule Hypatia.Reviewer do
   defp run_green_web_checks(path, content) do
     try do
       file_contents = %{path => content}
+
       normalize_findings(GreenWeb.check_hosting_provider([], file_contents)) ++
         normalize_findings(GreenWeb.check_container_registry([], file_contents))
     rescue
@@ -297,9 +305,11 @@ defmodule Hypatia.Reviewer do
       _ -> []
     end)
   end
+
   defp normalize_findings(%{findings: findings}) when is_list(findings) do
     normalize_findings(findings)
   end
+
   defp normalize_findings(_), do: []
 
   # ─── Helpers ───────────────────────────────────────────────────────
@@ -349,12 +359,19 @@ defmodule Hypatia.Reviewer do
     basename = Path.basename(path) |> String.downcase()
 
     basename in [
-      "containerfile", "dockerfile",
-      "docker-compose.yml", "docker-compose.yaml",
-      "compose.yml", "compose.yaml",
-      "vercel.json", "netlify.toml", "fly.toml",
-      "render.yaml", "railway.toml",
-      "wrangler.toml", "wrangler.jsonc"
+      "containerfile",
+      "dockerfile",
+      "docker-compose.yml",
+      "docker-compose.yaml",
+      "compose.yml",
+      "compose.yaml",
+      "vercel.json",
+      "netlify.toml",
+      "fly.toml",
+      "render.yaml",
+      "railway.toml",
+      "wrangler.toml",
+      "wrangler.jsonc"
     ]
   end
 
@@ -371,7 +388,9 @@ defmodule Hypatia.Reviewer do
       line_num when is_integer(line_num) ->
         # Map the file line number to the nearest added line
         case Enum.find(added_lines, fn {n, _} -> n >= line_num end) do
-          {n, _} -> n
+          {n, _} ->
+            n
+
           nil ->
             case List.last(added_lines) do
               {n, _} -> n
@@ -395,11 +414,11 @@ defmodule Hypatia.Reviewer do
         {~c"Accept", ~c"application/vnd.github.v3.diff"},
         {~c"User-Agent", ~c"hypatia-reviewer/1.0"}
       ] ++
-      if token != "" do
-        [{~c"Authorization", String.to_charlist("token #{token}")}]
-      else
-        []
-      end
+        if token != "" do
+          [{~c"Authorization", String.to_charlist("token #{token}")}]
+        else
+          []
+        end
 
     case :httpc.request(:get, {String.to_charlist(url), headers}, [{:timeout, 15_000}], []) do
       {:ok, {{_, 200, _}, _resp_headers, body}} ->

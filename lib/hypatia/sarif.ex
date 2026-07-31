@@ -92,7 +92,9 @@ defmodule Hypatia.SARIF do
 
   defp build_results_and_rules(findings, repo_root) do
     Enum.reduce(findings, {[], %{}}, fn finding, {results, rules} ->
-      mod = stringify(Map.get(finding, :rule_module) || Map.get(finding, "rule_module") || "hypatia")
+      mod =
+        stringify(Map.get(finding, :rule_module) || Map.get(finding, "rule_module") || "hypatia")
+
       type = stringify(Map.get(finding, :type) || Map.get(finding, "type") || "finding")
       sev = stringify(Map.get(finding, :severity) || Map.get(finding, "severity") || "")
       file = Map.get(finding, :file) || Map.get(finding, "file") || ""

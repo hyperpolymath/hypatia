@@ -50,8 +50,11 @@ defmodule Hypatia.HistoricalTrendsTest do
 
     test "appends rather than overwriting" do
       now = ~U[2099-11-16 10:00:00Z]
-      ids = ["scan-test-append-1-#{System.unique_integer([:positive])}",
-             "scan-test-append-2-#{System.unique_integer([:positive])}"]
+
+      ids = [
+        "scan-test-append-1-#{System.unique_integer([:positive])}",
+        "scan-test-append-2-#{System.unique_integer([:positive])}"
+      ]
 
       for id <- ids do
         {:ok, _, _} =
@@ -116,7 +119,11 @@ defmodule Hypatia.HistoricalTrendsTest do
     end
 
     test "returns empty for repos with no recorded history" do
-      assert HistoricalTrends.weak_point_trend("nonexistent-repo-x9q", ~D[1999-01-01], ~D[1999-12-31]) == []
+      assert HistoricalTrends.weak_point_trend(
+               "nonexistent-repo-x9q",
+               ~D[1999-01-01],
+               ~D[1999-12-31]
+             ) == []
     end
   end
 

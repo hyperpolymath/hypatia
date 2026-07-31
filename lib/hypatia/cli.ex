@@ -144,8 +144,12 @@ defmodule Hypatia.CLI do
 
       [] ->
         cond do
-          opts[:version] -> IO.puts("hypatia #{@version}")
-          opts[:help] -> print_usage()
+          opts[:version] ->
+            IO.puts("hypatia #{@version}")
+
+          opts[:help] ->
+            print_usage()
+
           true ->
             IO.puts(:stderr, "Error: no command specified. Run 'hypatia help' for usage.")
             System.halt(2)
@@ -293,7 +297,16 @@ defmodule Hypatia.CLI do
 
   # ─── Finding collection across rule modules ──────────────────────────
 
-  defp collect_findings(repo_path, rules) do
+  @doc """
+  Run the named rule modules against `repo_path` and return normalized findings
+  (`%{rule_module, type, severity, file, reason, action}`). Public so the RSR
+  conformance oracle can delegate content-scan criteria to the live scanners
+  rather than reimplement per-file detection. `rules` is a list of module atoms
+  (e.g. `[:cicd_rules, :structural_drift]`); GitHub-API modules
+  (`:dependabot_alerts`, `:secret_scanning_alerts`, `:code_scanning_alerts`,
+  `:scorecard`) require network + token and return nothing offline.
+  """
+  def collect_findings(repo_path, rules) do
     results = []
 
     # Root Hygiene
@@ -441,9 +454,10 @@ defmodule Hypatia.CLI do
 
         repo_info = %{
           visibility: "public",
-          has_deps: File.exists?(Path.join(repo_path, "mix.lock")) or
-                      File.exists?(Path.join(repo_path, "Cargo.lock")) or
-                      File.exists?(Path.join(repo_path, "deno.lock")),
+          has_deps:
+            File.exists?(Path.join(repo_path, "mix.lock")) or
+              File.exists?(Path.join(repo_path, "Cargo.lock")) or
+              File.exists?(Path.join(repo_path, "deno.lock")),
           files: root_files,
           # `repo_path` is consulted by the must-have-file check to verify
           # *nested* paths (`.github/dependabot.yml`, `.github/workflows/*`)
@@ -548,7 +562,8 @@ defmodule Hypatia.CLI do
                     severity: to_string(d.severity),
                     type: "deprecated_api",
                     file: file,
-                    reason: "#{d.api} deprecated -- use #{d.replacement} (#{d.count} occurrences)",
+                    reason:
+                      "#{d.api} deprecated -- use #{d.replacement} (#{d.count} occurrences)",
                     action: to_string(d.strategy)
                   }
                 end)
@@ -578,8 +593,7 @@ defmodule Hypatia.CLI do
                   type: Map.get(p, "category", "unknown"),
                   file: repo_path,
                   reason: Map.get(p, "description", ""),
-                  action:
-                    if(Map.get(p, "auto_fixable", false), do: "auto_fix", else: "flag"),
+                  action: if(Map.get(p, "auto_fixable", false), do: "auto_fix", else: "flag"),
                   remediation: Map.get(p, "remediation", ""),
                   scorecard_check: Map.get(p, "scorecard_check", "")
                 }
@@ -612,6 +626,7 @@ defmodule Hypatia.CLI do
                 end)
                 |> Enum.map(fn f ->
                   path = Path.join(workflows_dir, f)
+
                   case File.read(path) do
                     {:ok, content} -> {f, content}
                     _ -> nil
@@ -665,7 +680,8 @@ defmodule Hypatia.CLI do
 
             results ++ normalized
 
-          _ -> results
+          _ ->
+            results
         end
       else
         results
@@ -771,13 +787,34 @@ defmodule Hypatia.CLI do
 
             results ++ normalized
 
-          _ -> results
+          _ ->
+            results
         end
       else
         results
       end
 
+    # ─── Uniform suppression pass ──────────────────────────────────────
+    #
+    # Several rule paths above (structural_drift, code_scanning_alerts,
+    # git_state, workflow_audit) historically appended findings directly,
+    # bypassing ScannerSuppression — so `.hypatia-ignore` entries and the
+    # built-in @default_exemptions never took effect for them (e.g. the
+    # `code_scanning_alerts/CSA002:hyperpolymath/hypatia` and
+    # `structural_drift/SD013:.gitignore` entries that were present but
+    # silently inert). Funnel *every* assembled finding through the same
+    # path-based predicate here, exactly once. suppressed?/4 still hard-
+    # refuses to suppress total-ban findings (banned_language_file), so
+    # this cannot silence the language gate.
     results
+    |> Enum.reject(fn f ->
+      Hypatia.ScannerSuppression.suppressed?(
+        Map.get(f, :file, ""),
+        Map.get(f, :rule_module, ""),
+        to_string(Map.get(f, :type, "")),
+        repo_path: repo_path
+      )
+    end)
   end
 
   # ─── Code safety scanning ────────────────────────────────────────────
@@ -888,14 +925,15 @@ defmodule Hypatia.CLI do
     end
   end
 
-  defp cli_context_rule?(rule) when rule in [
-         :unwrap_without_check,
-         :unwrap_dangerous_default,
-         :expect_in_hot_path,
-         :panic_macro,
-         :todo_macro,
-         :unimplemented_macro
-       ],
+  defp cli_context_rule?(rule)
+       when rule in [
+              :unwrap_without_check,
+              :unwrap_dangerous_default,
+              :expect_in_hot_path,
+              :panic_macro,
+              :todo_macro,
+              :unimplemented_macro
+            ],
        do: true
 
   defp cli_context_rule?(_), do: false
@@ -903,14 +941,14 @@ defmodule Hypatia.CLI do
   defp cli_context_file?(file) do
     basename = Path.basename(file)
 
+    # `/integration/` covers both `integration/tests/*` and the
+    # `integration/src/{lib,ci_simulation/*}.rs` test-utility tree.
     basename in ["main.rs", "build.rs"] or
       String.contains?(file, "/cli/") or
       String.contains?(file, "/bin/") or
       String.contains?(file, "/tools/") or
       String.contains?(file, "/fixer/") or
       String.contains?(file, "/tests/") or
-      # `/integration/` covers both `integration/tests/*` and the
-      # `integration/src/{lib,ci_simulation/*}.rs` test-utility tree.
       String.contains?(file, "/integration/") or
       String.ends_with?(file, "_test.rs") or
       String.ends_with?(file, "/scenarios.rs") or
@@ -1118,13 +1156,30 @@ defmodule Hypatia.CLI do
   end
 
   defp list_all_files(repo_path) do
-    case System.cmd("find", [repo_path, "-type", "f",
-                             "-not", "-path", "*/.git/*",
-                             "-not", "-path", "*/node_modules/*",
-                             "-not", "-path", "*/_build/*",
-                             "-not", "-path", "*/deps/*",
-                             "-not", "-path", "*/target/*"],
-                    stderr_to_stdout: true) do
+    case System.cmd(
+           "find",
+           [
+             repo_path,
+             "-type",
+             "f",
+             "-not",
+             "-path",
+             "*/.git/*",
+             "-not",
+             "-path",
+             "*/node_modules/*",
+             "-not",
+             "-path",
+             "*/_build/*",
+             "-not",
+             "-path",
+             "*/deps/*",
+             "-not",
+             "-path",
+             "*/target/*"
+           ],
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         output |> String.split("\n", trim: true)
 
@@ -1134,13 +1189,32 @@ defmodule Hypatia.CLI do
   end
 
   defp find_files_by_ext(repo_path, ext) do
-    case System.cmd("find", [repo_path, "-type", "f", "-name", "*#{ext}",
-                             "-not", "-path", "*/.git/*",
-                             "-not", "-path", "*/node_modules/*",
-                             "-not", "-path", "*/_build/*",
-                             "-not", "-path", "*/deps/*",
-                             "-not", "-path", "*/target/*"],
-                    stderr_to_stdout: true) do
+    case System.cmd(
+           "find",
+           [
+             repo_path,
+             "-type",
+             "f",
+             "-name",
+             "*#{ext}",
+             "-not",
+             "-path",
+             "*/.git/*",
+             "-not",
+             "-path",
+             "*/node_modules/*",
+             "-not",
+             "-path",
+             "*/_build/*",
+             "-not",
+             "-path",
+             "*/deps/*",
+             "-not",
+             "-path",
+             "*/target/*"
+           ],
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         output |> String.split("\n", trim: true)
 

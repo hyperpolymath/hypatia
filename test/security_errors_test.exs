@@ -24,7 +24,8 @@ defmodule Hypatia.Rules.SecurityErrorsTest do
 
   describe "error_category/1" do
     test "returns description for known category" do
-      assert "Missing or incorrect workflow permissions" = SecurityErrors.error_category(:workflow_permission)
+      assert "Missing or incorrect workflow permissions" =
+               SecurityErrors.error_category(:workflow_permission)
     end
 
     test "returns nil for unknown category" do
@@ -90,8 +91,10 @@ defmodule Hypatia.Rules.SecurityErrorsTest do
     end
 
     test "the harmful slsa SHA mapping was removed from @sha_pins" do
-      refute Map.has_key?(SecurityErrors.sha_pins(),
-               "slsa-framework/slsa-github-generator@v2.1.0")
+      refute Map.has_key?(
+               SecurityErrors.sha_pins(),
+               "slsa-framework/slsa-github-generator@v2.1.0"
+             )
     end
   end
 end

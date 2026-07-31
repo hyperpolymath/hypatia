@@ -19,6 +19,7 @@
 # banner does (it names the blocked action). That is the human diagnostic.
 set -euo pipefail
 O="${OWNER:-hyperpolymath}"; R="$1"
+HERE="$(cd "$(dirname "$0")" && pwd)"   # for action-superset.txt (allow-list coverage)
 emit(){ printf '%s\t%s\t%s\t%s\n' "$R" "$1" "$2" "$3"; }
 
 # --- A: billing wall (a failure run whose job annotation matches the signature)
@@ -33,12 +34,24 @@ if [ -n "${fail_id:-}" ]; then
   fi
 fi
 
-# --- B: allow-list misconfig (the root cause of estate startup_failure)
+# --- B: allow-list under-coverage (the root cause of estate startup_failure).
+# Fire when selected-mode and the allow-list does NOT cover the full curated
+# superset that remediate.sh PUTs. Catches BOTH an empty list (post-wipe:
+# hyperpolymath/* absent) AND an incomplete one (has hyperpolymath/* but is
+# missing a third-party action, e.g. gitleaks — previously only B-STARTUPFAIL,
+# which has no remediation). The required set mirrors remediate.sh's PUT body
+# exactly (hyperpolymath/* + each superset line as owner/repo@*), so a remediate
+# converges this to zero-missing and detect stops re-firing (idempotent).
 aa=$(gh api "repos/$O/$R/actions/permissions" --jq '.allowed_actions // empty' 2>/dev/null || true)
 if [ "$aa" = "selected" ]; then
-  has=$(gh api "repos/$O/$R/actions/permissions/selected-actions" --jq '(.patterns_allowed // [])|index("hyperpolymath/*") // "MISSING"' 2>/dev/null || echo MISSING)
-  if [ "$has" = "MISSING" ]; then
-    emit B-ALLOWLIST HIGH "selected + no hyperpolymath/* pattern → reusables & non-verified actions startup_failure → apply curated superset"
+  cur=$(gh api "repos/$O/$R/actions/permissions/selected-actions" --jq '(.patterns_allowed // [])[]' 2>/dev/null || true)
+  req=$(printf 'hyperpolymath/*\n'; sed 's/^[[:space:]]*//;s/[[:space:]]*$//;/^$/d;s/$/@*/' "$HERE/action-superset.txt")
+  miss=$(printf '%s\n' "$req" | grep -vxF -f <(printf '%s\n' "$cur" | grep .) - || true)
+  if [ -n "$miss" ]; then
+    ntot=$(printf '%s\n' "$req" | grep -c .)
+    nmiss=$(printf '%s\n' "$miss" | grep -c .)
+    first=$(printf '%s\n' "$miss" | head -n1)
+    emit B-ALLOWLIST HIGH "selected + allow-list missing $nmiss/$ntot curated pattern(s) (e.g. $first) → apply curated superset"
   fi
 fi
 

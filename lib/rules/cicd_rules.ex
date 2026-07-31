@@ -56,9 +56,14 @@ defmodule Hypatia.Rules.CicdRules do
       # Repo-rooted check: nested paths like `.github/dependabot.yml` can
       # only be confirmed via on-disk inspection. The root_files list is
       # not enough — without this the rule was a false-positive factory.
-      is_binary(repo_path) and Enum.any?(candidates, &File.exists?(Path.join(repo_path, &1))) -> true
-      file in Map.get(info, :files, []) -> true
-      true -> false
+      is_binary(repo_path) and Enum.any?(candidates, &File.exists?(Path.join(repo_path, &1))) ->
+        true
+
+      file in Map.get(info, :files, []) ->
+        true
+
+      true ->
+        false
     end
   end
 

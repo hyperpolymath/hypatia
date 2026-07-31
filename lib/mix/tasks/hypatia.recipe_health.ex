@@ -79,7 +79,19 @@ defmodule Mix.Tasks.Hypatia.RecipeHealth do
   end
 
   defp emit_text(rows) do
-    headers = ["recipe_id", "disp", "succ", "fail", "fp", "verified", "still", "scan_fail", "rate", "status"]
+    headers = [
+      "recipe_id",
+      "disp",
+      "succ",
+      "fail",
+      "fp",
+      "verified",
+      "still",
+      "scan_fail",
+      "rate",
+      "status"
+    ]
+
     width = column_widths(rows, headers)
 
     Mix.shell().info(format_row(headers, width))

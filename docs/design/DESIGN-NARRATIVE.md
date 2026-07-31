@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # The Hypatia Story: From Broken Pipeline to Autonomous Security Intelligence
 
 *A design narrative for future reference — what we built, why, and what it means.*

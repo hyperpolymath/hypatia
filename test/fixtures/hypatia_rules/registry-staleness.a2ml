@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: MPL-2.0
+# HYP-S006 — Registry Staleness / Doc Drift
+# Detects when the verifiable spec registry (.machine_readable/REGISTRY.a2ml)
+# no longer matches ground truth, or when DERIVED docs (TOPOLOGY.md) were
+# hand-edited away from their generated form. Drift becomes a routed finding
+# the moment it lands — not something noticed 60 days later.
+#
+# Covers BOTH registry entry shapes:
+#   * LOCAL specs    — recorded source_hash vs a fresh git-ls-files compute.
+#   * EXTERNAL specs (kind="external") — verified pointers to specs whose SSOT
+#     lives in another repo (e.g. AffineScript .affine/.affex/.affmap). The
+#     recorded source_hash is checked against a fresh fetch of canonical_url;
+#     re-pinning is capped to :review (owner decision, not an auto-regen).
+#
+# Companion to scripts/build-registry.sh (the generator) and
+# .github/workflows/registry-verify.yml (the in-repo --check gate). This rule
+# is the estate-side half: it lets Hypatia surface the same drift across the
+# fleet and route it through the hybrid automation router.
+
+@rule(version="1.0"):
+id: HYP-S006
+name: "Registry staleness / doc drift"
+description: "Alert when a spec's recorded source_hash in REGISTRY.a2ml no longer matches a fresh compute (local) or a fresh fetch of canonical_url (external pointer), or a DERIVED doc (TOPOLOGY.md) drifted from its generator"
+severity: medium
+category: StandardsCompliance
+auto_fixable: true
+source: standards/hypatia-rules
+
+@parameters:
+# How long a hash mismatch may persist before the finding escalates.
+stale_after_days: 14
+critical_after_days: 60
+@end
+
+@scanner(type="file-tree"):
+find:
+  - glob: ".machine_readable/REGISTRY.a2ml"
+  - glob: "TOPOLOGY.md"
+  - glob: "scripts/build-registry.sh"
+@end
+
+@logic(engine="built-in"):
+# Two entry shapes share one registry:
+#   * LOCAL  (no `kind`)        — recompute sha256 over `git ls-files -s <home>`
+#                                 exactly as the generator does, compare to the
+#                                 recorded value.
+#   * EXTERNAL (kind="external")— a verified pointer to a spec whose SSOT is
+#                                 another repo. Re-fetch canonical_url and
+#                                 recompute with source_hash_algo (sha256+;
+#                                 md5/sha1 are rejected as UNVERIFIED), compare
+#                                 to the recorded source_hash. This is the
+#                                 network-side check the offline generator and
+#                                 the in-repo registry-verify.yml cannot do.
+steps:
+  - parse_registry: ".machine_readable/REGISTRY.a2ml"
+    extract:
+      - key: "home"
+        as: home
+      - key: "kind"
+        as: kind
+      - key: "canonical_url"
+        as: canonical_url
+      - key: "source_hash_algo"
+        as: algo
+      - key: "sync_status"
+        as: sync_status
+      - key: "source_hash"
+        as: recorded_hash
+  # --- LOCAL specs -------------------------------------------------------
+  - for_each_spec where "kind != external":
+      recompute: "sha256(git ls-files -s ${home})"
+      compare_to: recorded_hash
+      emit_if: "recompute != recorded_hash"
+        finding_kind: registry-hash-stale
+  - check_home_exists where "kind != external":
+      emit_if: "home directory absent"
+      finding_kind: registry-dead-home
+  # --- EXTERNAL specs (verified pointers; SSOT in another repo) ----------
+  - reject_weak_algo where "kind == external":
+      emit_if: "algo in [md5, sha1]"        # security policy: no MD5/SHA1
+      finding_kind: registry-weak-algo
+  - for_each_spec where "kind == external && recorded_hash != 'PENDING-FIRST-SYNC'":
+      fetch: canonical_url
+      recompute: "${algo}(fetched_content)"
+      compare_to: recorded_hash
+      emit_if: "recompute != recorded_hash"
+        finding_kind: registry-pointer-stale
+  - for_each_spec where "kind == external && recorded_hash == 'PENDING-FIRST-SYNC'":
+      # Not drift — upstream has not landed yet. Surface as info, and as a
+      # low finding only once it has sat unsynced beyond the grace window.
+      fetch: canonical_url
+      emit_if: "fetch succeeds"
+        finding_kind: registry-pointer-ready      # ready for first sync (info)
+      emit_if: "still PENDING beyond ${stale_after_days}d"
+        finding_kind: registry-pointer-unsynced   # low
+  # --- DERIVED docs ------------------------------------------------------
+  - check_derived_docs:
+      command: "bash scripts/build-registry.sh --check"
+      emit_if: "non-zero exit"
+      finding_kind: derived-doc-stale
+@end
+
+# ---------------------------------------------------------------------------
+# Hybrid automation router strategy.
+# The router decides whether a finding is auto-executed or held for review.
+# Doc/registry drift is mechanical and safe to regenerate, EXCEPT where the
+# drifted content touches licence/SPDX — those are FLAG-ONLY per the estate
+# Manual-Only licence guardrail (.claude/CLAUDE.md) and hypatia
+# license_finding_strategy/0. The router MUST honour the cap below.
+# ---------------------------------------------------------------------------
+@router:
+default_strategy: auto_execute        # regenerate REGISTRY.a2ml + TOPOLOGY.md
+recipe: rebuild-registry
+# Hard cap: any finding whose drift overlaps a licence/SPDX token is demoted
+# to :review and never auto-applied, mirroring license_finding_strategy/0.
+strategy_caps:
+  - when: "finding touches /SPDX-License-Identifier|PMPL|MPL-2\\.0|AGPL|Palimpsest|licen[cs]e/i"
+    cap: review
+    reason: "Manual-Only licence guardrail — agents flag, owner edits (neurophone#99)"
+  - when: "finding_kind == registry-dead-home"
+    cap: review
+    reason: "A missing home is a structural change, not a regen — needs human triage"
+  - when: "finding_kind in [registry-pointer-stale, registry-pointer-unsynced, registry-weak-algo]"
+    cap: review
+    reason: "External pointers reference another repo's SSOT — re-pinning version_pin/source_hash is an owner decision, never an auto-regen (rebuild-registry cannot recompute a cross-repo hash offline)."
+@end
+
+@action:
+emit_signal: doc.drift
+message_template: >-
+  Registry drift: {finding_kind} for spec '{id}' (home={home} url={canonical_url}).
+  Recorded {recorded_hash}, fresh compute/fetch differs. For LOCAL drift run
+  'just registry' to regenerate; for EXTERNAL pointers re-pin is an owner
+  decision (capped :review). ({age_days}d since generated)
+recipe: rebuild-registry
+severity_escalates_at: 60
+halt_on_violation: false
+dedupe_window_days: 7
+@end
+
+@recipe(id="rebuild-registry"):
+description: "Regenerate the registry + derived topology from the file tree"
+command: "bash scripts/build-registry.sh"
+auto_applicable: true
+# NOTE: auto_applicable is gated by @router strategy_caps above — a licence-
+# overlapping drift is capped to :review and will NOT auto-run this recipe.
+@end
+
+@sibling_rules:
+- HYP-S003 proof-freshness        — same staleness shape, for proof artefacts
+- HYP-S004 rsr-self-compliance    — structural self-dogfooding gate
+- HYP-S005 crg-overclaim-detector — grade-honesty gate
+@end
+
+@end

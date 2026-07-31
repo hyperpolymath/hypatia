@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -65,10 +65,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@682e7d9e49c5e653d371fc6adbda67653461378a # v2.82.4
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
         with:
           tool: cargo-deny
 
@@ -76,37 +76,7 @@ jobs:
         run: cargo deny check || true
 
   # ============================================================================
-  # Haskell Security Audit
-  # ============================================================================
-
-  haskell-audit:
-    name: Haskell Dependency Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    if: hashFiles('registry/hypatia.cabal') != ''
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Generate dependency list
-        run: |
-          cabal build all --dry-run
-          cabal freeze
-          cat cabal.project.freeze
-
-      - name: Check for outdated dependencies
-        run: cabal outdated || true
-
+  # Secret Detection
   # ============================================================================
   # Secret Detection
   # ============================================================================
@@ -117,12 +87,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70 # v3.88.22
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.88.22
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -147,7 +117,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1.0.0
@@ -157,10 +127,10 @@ jobs:
             p/elixir
             p/security-audit
             p/secrets
-          generateSarif: "1"
+          args: --sarif --output=semgrep.sarif
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -178,16 +148,16 @@ jobs:
         language: ['actions']
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         with:
           category: "/language:${{matrix.language}}"
 
@@ -201,7 +171,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -225,65 +195,6 @@ jobs:
             rust-sbom.cdx.xml
           retention-days: 90
 
-  sbom-haskell:
-    name: Generate Haskell SBOM
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    if: hashFiles('registry/hypatia.cabal') != ''
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Generate dependency freeze
-        run: |
-          cabal build all --dry-run
-          cabal freeze
-
-      - name: Create SBOM from freeze file
-        run: |
-          # Parse cabal.project.freeze into CycloneDX format
-          cat << 'EOF' > haskell-sbom.cdx.json
-          {
-            "bomFormat": "CycloneDX",
-            "specVersion": "1.5",
-            "version": 1,
-            "metadata": {
-              "component": {
-                "type": "application",
-                "name": "hypatia",
-                "version": "0.1.0.0"
-              }
-            },
-            "components": []
-          }
-          EOF
-
-          # Extract dependencies from freeze file
-          if [ -f cabal.project.freeze ]; then
-            grep "any\." cabal.project.freeze | while read -r line; do
-              pkg=$(echo "$line" | sed 's/.*any\.\([^ ]*\) ==.*/\1/')
-              ver=$(echo "$line" | sed 's/.*== *\([^,]*\).*/\1/')
-              echo "  - $pkg@$ver"
-            done
-          fi
-
-      - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: haskell-sbom
-          path: registry/haskell-sbom.cdx.json
-          retention-days: 90
-
   # ============================================================================
   # Container Security Scanning
   # ============================================================================
@@ -295,7 +206,7 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build test image
         run: |
@@ -310,7 +221,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -326,12 +237,10 @@ jobs:
     needs:
       - rust-audit
       - rust-deny
-      - haskell-audit
       - secret-scan
       - semgrep
       - codeql
       - sbom-rust
-      - sbom-haskell
     if: always()
     steps:
       - name: Check security scan status
@@ -342,12 +251,10 @@ jobs:
           declare -A jobs=(
             ["rust-audit"]="${{ needs.rust-audit.result }}"
             ["rust-deny"]="${{ needs.rust-deny.result }}"
-            ["haskell-audit"]="${{ needs.haskell-audit.result }}"
             ["secret-scan"]="${{ needs.secret-scan.result }}"
             ["semgrep"]="${{ needs.semgrep.result }}"
             ["codeql"]="${{ needs.codeql.result }}"
             ["sbom-rust"]="${{ needs.sbom-rust.result }}"
-            ["sbom-haskell"]="${{ needs.sbom-haskell.result }}"
           )
 
           failed=false
@@ -374,7 +281,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -382,7 +289,7 @@ jobs:
           toolchain: stable
 
       - name: Cache cargo registry
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -422,10 +329,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@682e7d9e49c5e653d371fc6adbda67653461378a # v2.82.4
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
         with:
           tool: cargo-deny
 
@@ -487,57 +394,6 @@ jobs:
 
   # ============================================================================
   # Haskell Security Audit
-  # ============================================================================
-
-  audit_haskell-audit:
-    name: Haskell Dependency Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    if: hashFiles('registry/hypatia.cabal') != ''
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Cache Cabal dependencies
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
-        with:
-          path: |
-            ~/.cabal/packages
-            ~/.cabal/store
-            registry/dist-newstyle
-          key: ${{ runner.os }}-cabal-${{ hashFiles('registry/hypatia.cabal') }}
-
-      - name: Generate dependency freeze
-        run: |
-          cabal build all --dry-run
-          cabal freeze
-
-      - name: Check for outdated dependencies
-        run: |
-          echo "## Outdated Haskell Dependencies" > haskell-audit-report.md
-          echo "" >> haskell-audit-report.md
-          echo '```' >> haskell-audit-report.md
-          cabal outdated 2>&1 | tee -a haskell-audit-report.md || true
-          echo '```' >> haskell-audit-report.md
-
-      - name: Upload audit results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: haskell-audit-report
-          path: registry/haskell-audit-report.md
-          retention-days: 30
-
-  # ============================================================================
   # Container Security Scanning
   # ============================================================================
 
@@ -555,7 +411,7 @@ jobs:
           - deploy/Containerfile
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Extract image name from Containerfile path
         id: image
@@ -589,7 +445,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         if: always()
         with:
           sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
@@ -605,7 +461,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -667,12 +523,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70 # v3.88.22
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.88.22
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -696,16 +552,16 @@ jobs:
         language: ['actions']
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         with:
           category: "/language:${{matrix.language}}"
 
@@ -718,7 +574,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1.0.0
@@ -729,10 +585,10 @@ jobs:
             p/secrets
             p/dockerfile
             p/supply-chain
-          generateSarif: "1"
+          args: --sarif --output=semgrep.sarif
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.0.0
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.0.0
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -747,7 +603,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check SPDX headers in source files
         run: |
@@ -821,7 +677,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -836,39 +692,6 @@ jobs:
           cargo cyclonedx --format json --output-cdx sbom-rust.cdx.json || true
           cargo cyclonedx --format xml --output-cdx sbom-rust.cdx.xml || true
 
-      - name: Setup Haskell
-        if: hashFiles('registry/hypatia.cabal') != ''
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Generate Haskell SBOM
-        if: hashFiles('registry/hypatia.cabal') != ''
-        working-directory: registry
-        run: |
-          cabal build all --dry-run
-          cabal freeze
-
-          # Create minimal CycloneDX SBOM
-          cat > sbom-haskell.cdx.json << 'EOF'
-          {
-            "bomFormat": "CycloneDX",
-            "specVersion": "1.5",
-            "version": 1,
-            "metadata": {
-              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-              "component": {
-                "type": "application",
-                "name": "hypatia-registry",
-                "version": "0.1.0.0",
-                "purl": "pkg:hackage/hypatia@0.1.0.0"
-              }
-            },
-            "components": []
-          }
-          EOF
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -877,7 +700,6 @@ jobs:
           path: |
             sbom-rust.cdx.json
             sbom-rust.cdx.xml
-            registry/sbom-haskell.cdx.json
           retention-days: 90
 
   # ============================================================================
@@ -888,10 +710,8 @@ jobs:
     name: Security Audit Summary
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs:
       - audit_rust-audit
       - audit_rust-deny
-      - audit_haskell-audit
       - audit_container-scan
       - gitleaks
       - trufflehog
@@ -921,7 +741,6 @@ jobs:
 
           echo "| Rust Audit | $(status_icon '${{ needs.audit_rust-audit.result }}') ${{ needs.audit_rust-audit.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Rust Deny | $(status_icon '${{ needs.audit_rust-deny.result }}') ${{ needs.audit_rust-deny.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Haskell Audit | $(status_icon '${{ needs.audit_haskell-audit.result }}') ${{ needs.audit_haskell-audit.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Container Scan | $(status_icon '${{ needs.audit_container-scan.result }}') ${{ needs.audit_container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Gitleaks | $(status_icon '${{ needs.gitleaks.result }}') ${{ needs.gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| TruffleHog | $(status_icon '${{ needs.trufflehog.result }}') ${{ needs.trufflehog.result }} |" >> $GITHUB_STEP_SUMMARY

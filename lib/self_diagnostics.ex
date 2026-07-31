@@ -26,11 +26,17 @@ defmodule Hypatia.SelfDiagnostics do
   use GenServer
   require Logger
 
-  @health_interval_ms 10 * 60 * 1_000  # 10 minutes
+  # 10 minutes
+  @health_interval_ms 10 * 60 * 1_000
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
-  @fleet_path Application.compile_env(:hypatia, :fleet_path, "~/Documents/hyperpolymath-repos/gitbot-fleet")
+  @fleet_path Application.compile_env(
+                :hypatia,
+                :fleet_path,
+                "~/Documents/hyperpolymath-repos/gitbot-fleet"
+              )
   @circuit_breaker_threshold 3
-  @circuit_breaker_cooldown_ms 15 * 60 * 1_000  # 15 minutes
+  # 15 minutes
+  @circuit_breaker_cooldown_ms 15 * 60 * 1_000
 
   # --- Client API ---
 
@@ -63,7 +69,8 @@ defmodule Hypatia.SelfDiagnostics do
       last_health_check: nil,
       health_status: %{},
       # Circuit breaker
-      circuit: :closed,  # :closed (normal), :open (failing), :half_open (testing)
+      # :closed (normal), :open (failing), :half_open (testing)
+      circuit: :closed,
       consecutive_failures: 0,
       circuit_opened_at: nil,
       # History
@@ -72,7 +79,11 @@ defmodule Hypatia.SelfDiagnostics do
     }
 
     Process.send_after(self(), :check_health, 10_000)
-    Logger.info("SelfDiagnostics started. Health checks every #{div(@health_interval_ms, 60_000)} min.")
+
+    Logger.info(
+      "SelfDiagnostics started. Health checks every #{div(@health_interval_ms, 60_000)} min."
+    )
+
     {:ok, state}
   end
 
@@ -107,10 +118,17 @@ defmodule Hypatia.SelfDiagnostics do
       if failures >= @circuit_breaker_threshold and state.circuit == :closed do
         Logger.error(
           "Circuit breaker OPENED after #{failures} consecutive dispatch failures. " <>
-          "Dispatches will be queued to pending.jsonl. Auto-retry in #{div(@circuit_breaker_cooldown_ms, 60_000)} min."
+            "Dispatches will be queued to pending.jsonl. Auto-retry in #{div(@circuit_breaker_cooldown_ms, 60_000)} min."
         )
+
         Process.send_after(self(), :try_half_open, @circuit_breaker_cooldown_ms)
-        %{state | circuit: :open, consecutive_failures: failures, circuit_opened_at: DateTime.utc_now()}
+
+        %{
+          state
+          | circuit: :open,
+            consecutive_failures: failures,
+            circuit_opened_at: DateTime.utc_now()
+        }
       else
         %{state | consecutive_failures: failures}
       end
@@ -125,6 +143,7 @@ defmodule Hypatia.SelfDiagnostics do
         :half_open ->
           Logger.info("Circuit breaker CLOSED -- dispatch recovered.")
           %{state | circuit: :closed, consecutive_failures: 0, circuit_opened_at: nil}
+
         _ ->
           %{state | consecutive_failures: 0}
       end
@@ -143,7 +162,10 @@ defmodule Hypatia.SelfDiagnostics do
       "fleet_access" => check_fleet_access(),
       "learning_scheduler" => check_learning_scheduler(),
       "recipe_health" => check_recipe_health(),
-      "circuit_breaker" => %{"state" => Atom.to_string(state.circuit), "failures" => state.consecutive_failures}
+      "circuit_breaker" => %{
+        "state" => Atom.to_string(state.circuit),
+        "failures" => state.consecutive_failures
+      }
     }
 
     overall =
@@ -176,11 +198,12 @@ defmodule Hypatia.SelfDiagnostics do
       Logger.warning("Health check DEGRADED. Failed: #{Enum.join(failed, ", ")}")
     end
 
-    %{state |
-      last_health_check: now,
-      health_status: status,
-      total_checks: state.total_checks + 1,
-      health_history: Enum.take([status | state.health_history], 10)
+    %{
+      state
+      | last_health_check: now,
+        health_status: status,
+        total_checks: state.total_checks + 1,
+        health_history: Enum.take([status | state.health_history], 10)
     }
   end
 
@@ -193,9 +216,10 @@ defmodule Hypatia.SelfDiagnostics do
       Path.join(Path.expand(@verisimdb_data_path), "dispatch")
     ]
 
-    results = Enum.map(paths, fn path ->
-      {path, File.dir?(path)}
-    end)
+    results =
+      Enum.map(paths, fn path ->
+        {path, File.dir?(path)}
+      end)
 
     missing = Enum.filter(results, fn {_p, exists} -> not exists end)
 
@@ -231,15 +255,17 @@ defmodule Hypatia.SelfDiagnostics do
   end
 
   defp check_fleet_access do
-    fleet_learning = Path.join([
-      Path.expand(@fleet_path),
-      "shared-context/learning/fix-outcomes.jsonl"
-    ])
+    fleet_learning =
+      Path.join([
+        Path.expand(@fleet_path),
+        "shared-context/learning/fix-outcomes.jsonl"
+      ])
 
     if File.exists?(fleet_learning) do
       case File.stat(fleet_learning) do
         {:ok, %{size: size, mtime: mtime}} ->
           %{"status" => "pass", "size_bytes" => size, "last_modified" => inspect(mtime)}
+
         {:error, reason} ->
           %{"status" => "fail", "error" => inspect(reason)}
       end
@@ -252,10 +278,12 @@ defmodule Hypatia.SelfDiagnostics do
     case Process.whereis(Hypatia.LearningScheduler) do
       nil ->
         %{"status" => "warn", "message" => "LearningScheduler not running"}
+
       pid ->
         if Process.alive?(pid) do
           try do
             status = GenServer.call(pid, :status, 2_000)
+
             %{
               "status" => "pass",
               "last_run" => inspect(Map.get(status, :last_run)),
@@ -265,6 +293,7 @@ defmodule Hypatia.SelfDiagnostics do
           catch
             :exit, {:timeout, _} ->
               %{"status" => "warn", "message" => "LearningScheduler unresponsive (timeout)"}
+
             :exit, _ ->
               %{"status" => "warn", "message" => "LearningScheduler unavailable"}
           end
@@ -285,14 +314,19 @@ defmodule Hypatia.SelfDiagnostics do
           recipe_files
           |> Enum.map(fn f ->
             path = Path.join(recipes_dir, f)
+
             case File.read(path) do
               {:ok, content} ->
                 case Jason.decode(content) do
                   {:ok, recipe} ->
                     {Map.get(recipe, "id", f), Map.get(recipe, "confidence", 0.5)}
-                  _ -> nil
+
+                  _ ->
+                    nil
                 end
-              _ -> nil
+
+              _ ->
+                nil
             end
           end)
           |> Enum.reject(&is_nil/1)
@@ -301,7 +335,8 @@ defmodule Hypatia.SelfDiagnostics do
         %{
           "status" => if(Enum.empty?(low_confidence), do: "pass", else: "warn"),
           "total_recipes" => length(recipe_files),
-          "low_confidence" => Enum.map(low_confidence, fn {id, c} -> %{"id" => id, "confidence" => c} end)
+          "low_confidence" =>
+            Enum.map(low_confidence, fn {id, c} -> %{"id" => id, "confidence" => c} end)
         }
 
       {:error, _} ->
@@ -328,18 +363,26 @@ defmodule Hypatia.SelfDiagnostics do
           Logger.info("Auto-recovery: creating missing directory #{path}")
           File.mkdir_p(path)
         end)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
 
     # Restart LearningScheduler if dead
     case Map.get(checks, "learning_scheduler") do
       %{"status" => "fail"} ->
         Logger.info("Auto-recovery: restarting LearningScheduler")
+
         case Hypatia.LearningScheduler.start_link() do
-          {:ok, _pid} -> Logger.info("LearningScheduler restarted successfully")
-          {:error, reason} -> Logger.error("Failed to restart LearningScheduler: #{inspect(reason)}")
+          {:ok, _pid} ->
+            Logger.info("LearningScheduler restarted successfully")
+
+          {:error, reason} ->
+            Logger.error("Failed to restart LearningScheduler: #{inspect(reason)}")
         end
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 end

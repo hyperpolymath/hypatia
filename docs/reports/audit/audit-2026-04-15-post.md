@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Post-audit Status Report: hypatia
 - **Date:** 2026-04-15
 - **Status:** Complete (M5 Sweep)

@@ -53,7 +53,10 @@ defmodule Hypatia.PatternAnalyzer do
     # rediscovering them from first principles.
     scorecard_patterns = run_scorecard_checks(scans)
     patterns = patterns ++ scorecard_patterns
-    Logger.info("Scorecard: #{length(scorecard_patterns)} repo-level findings added (#{length(patterns)} total)")
+
+    Logger.info(
+      "Scorecard: #{length(scorecard_patterns)} repo-level findings added (#{length(patterns)} total)"
+    )
 
     # Step 3: Route each pattern+repo through the safety triangle.
     # Tag each pattern with its routed_repo so manifest entries are 1:1.
@@ -133,13 +136,18 @@ defmodule Hypatia.PatternAnalyzer do
       |> Enum.uniq()
 
     batches = Enum.chunk_every(all_repos, batch_size)
-    Logger.info("[Batch] Processing #{length(all_repos)} repos in #{length(batches)} batches (size=#{batch_size}, workers=#{max_concurrency})")
+
+    Logger.info(
+      "[Batch] Processing #{length(all_repos)} repos in #{length(batches)} batches (size=#{batch_size}, workers=#{max_concurrency})"
+    )
 
     all_routed =
       batches
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {batch_repos, batch_num} ->
-        Logger.info("[Batch #{batch_num}/#{length(batches)}] Processing #{length(batch_repos)} repos")
+        Logger.info(
+          "[Batch #{batch_num}/#{length(batches)}] Processing #{length(batch_repos)} repos"
+        )
 
         # Filter patterns to those affecting this batch's repos
         batch_patterns =
@@ -153,8 +161,9 @@ defmodule Hypatia.PatternAnalyzer do
           batch_patterns
           |> Task.async_stream(
             fn pattern ->
-              repos = Map.get(pattern, "repos_affected_list", [])
-              |> Enum.filter(&(&1 in batch_repos))
+              repos =
+                Map.get(pattern, "repos_affected_list", [])
+                |> Enum.filter(&(&1 in batch_repos))
 
               Enum.map(repos, fn repo ->
                 language = Map.get(repo_languages, repo, "unknown")
@@ -180,13 +189,14 @@ defmodule Hypatia.PatternAnalyzer do
     Enum.each(all_routed, &FleetDispatcher.dispatch_routed_action/1)
     {:ok, manifest_path, manifest_stats} = DispatchManifest.write(all_routed)
 
-    summary = generate_summary(all_routed, scans)
-    |> Map.merge(%{
-      manifest_path: manifest_path,
-      batches: length(batches),
-      batch_size: batch_size,
-      manifest_stats: manifest_stats
-    })
+    summary =
+      generate_summary(all_routed, scans)
+      |> Map.merge(%{
+        manifest_path: manifest_path,
+        batches: length(batches),
+        batch_size: batch_size,
+        manifest_stats: manifest_stats
+      })
 
     Logger.info("[Batch] Complete: #{length(batches)} batches, #{summary.total_actions} actions")
     {:ok, summary}
@@ -196,20 +206,23 @@ defmodule Hypatia.PatternAnalyzer do
   Generate a summary of the analysis pipeline results.
   """
   def generate_summary(routed_actions, scans) do
-    eliminate_count = Enum.count(routed_actions, fn
-      {:eliminate, _, _} -> true
-      _ -> false
-    end)
+    eliminate_count =
+      Enum.count(routed_actions, fn
+        {:eliminate, _, _} -> true
+        _ -> false
+      end)
 
-    substitute_count = Enum.count(routed_actions, fn
-      {:substitute, _, _} -> true
-      _ -> false
-    end)
+    substitute_count =
+      Enum.count(routed_actions, fn
+        {:substitute, _, _} -> true
+        _ -> false
+      end)
 
-    control_count = Enum.count(routed_actions, fn
-      {:control, _} -> true
-      _ -> false
-    end)
+    control_count =
+      Enum.count(routed_actions, fn
+        {:control, _} -> true
+        _ -> false
+      end)
 
     total_weak_points =
       scans
@@ -296,11 +309,18 @@ defmodule Hypatia.PatternAnalyzer do
   defp apply_neural_recommendation(action, %{is_novel: true} = _rec) do
     # Novel finding -- force to control tier for human review
     pattern = extract_pattern(action)
-    Logger.info("Neural: novel finding detected for #{Map.get(pattern, "id", "?")}, demoting to control")
+
+    Logger.info(
+      "Neural: novel finding detected for #{Map.get(pattern, "id", "?")}, demoting to control"
+    )
+
     {:control, Map.put(pattern, "neural_novel", true)}
   end
 
-  defp apply_neural_recommendation({:eliminate, recipe, pattern}, %{confidence: neural_conf} = rec) do
+  defp apply_neural_recommendation(
+         {:eliminate, recipe, pattern},
+         %{confidence: neural_conf} = rec
+       ) do
     recipe_conf = Map.get(recipe, "confidence", 0.0)
 
     # Only let neural confidence override if it's meaningfully trained.
@@ -310,7 +330,8 @@ defmodule Hypatia.PatternAnalyzer do
     neural_is_trained = neural_conf < 0.70 or neural_conf > 0.76
     effective_conf = if neural_is_trained, do: min(recipe_conf, neural_conf), else: recipe_conf
 
-    updated_recipe = recipe
+    updated_recipe =
+      recipe
       |> Map.put("confidence", effective_conf)
       |> Map.put("neural_confidence", neural_conf)
       |> Map.put("preferred_bots", Map.get(rec, :preferred_bots, []))
@@ -318,8 +339,12 @@ defmodule Hypatia.PatternAnalyzer do
     {:eliminate, updated_recipe, pattern}
   end
 
-  defp apply_neural_recommendation({:substitute, recipe, pattern}, %{confidence: neural_conf} = rec) do
-    updated_recipe = recipe
+  defp apply_neural_recommendation(
+         {:substitute, recipe, pattern},
+         %{confidence: neural_conf} = rec
+       ) do
+    updated_recipe =
+      recipe
       |> Map.put("neural_confidence", neural_conf)
       |> Map.put("preferred_bots", Map.get(rec, :preferred_bots, []))
 
@@ -346,11 +371,14 @@ defmodule Hypatia.PatternAnalyzer do
       scans
       |> Enum.map(fn scan ->
         path = Map.get(scan.scan, "program_path", "")
-        resolved = if is_binary(path) and path != "" and path != "." and File.dir?(path) do
-          path
-        else
-          Path.join(System.get_env("HYPATIA_REPOS_DIR", File.cwd!()), scan.repo)
-        end
+
+        resolved =
+          if is_binary(path) and path != "" and path != "." and File.dir?(path) do
+            path
+          else
+            Path.join(System.get_env("HYPATIA_REPOS_DIR", File.cwd!()), scan.repo)
+          end
+
         {scan.repo, resolved}
       end)
       |> Enum.filter(fn {_repo, path} -> File.dir?(path) end)
@@ -359,7 +387,7 @@ defmodule Hypatia.PatternAnalyzer do
 
     Logger.info(
       "Scorecard local scan: #{stats.total_repos} repos, " <>
-      "#{stats.total_findings} findings -- #{inspect(stats.by_check)}"
+        "#{stats.total_findings} findings -- #{inspect(stats.by_check)}"
     )
 
     patterns

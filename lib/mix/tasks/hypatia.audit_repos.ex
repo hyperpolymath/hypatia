@@ -238,7 +238,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
 
     if no_description?(description) do
       [
-        issue(repo_name, :no_description, :critical,
+        issue(
+          repo_name,
+          :no_description,
+          :critical,
           "Repository has no description",
           "Add a description that explains the project's purpose"
         )
@@ -250,14 +253,20 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
       [
         if(generic_description?(desc),
           do:
-            issue(repo_name, :generic_description, :warning,
+            issue(
+              repo_name,
+              :generic_description,
+              :warning,
               "Description is generic: \"#{desc}\"",
               "Replace with specific project purpose and functionality"
             )
         ),
         if(standards_only?(desc),
           do:
-            issue(repo_name, :standards_only_description, :warning,
+            issue(
+              repo_name,
+              :standards_only_description,
+              :warning,
               "Description only mentions standards/technology: \"#{desc}\"",
               "Focus on WHAT the project does, not just how it's built"
             )
@@ -301,7 +310,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
         Enum.count(significant, fn p -> String.contains?(desc_lower, String.downcase(p)) end)
 
       if matches == 0 do
-        issue(repo_name, :description_name_mismatch, :notice,
+        issue(
+          repo_name,
+          :description_name_mismatch,
+          :notice,
           "Description doesn't reference any key terms from repo name: #{Enum.join(significant, ", ")}",
           "Ensure description reflects the project name's purpose"
         )
@@ -329,7 +341,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
     issues =
       if bad_compliance_tags != [] do
         [
-          issue(repo_name, :insufficient_tags, :notice,
+          issue(
+            repo_name,
+            :insufficient_tags,
+            :notice,
             "Redundant compliance tags: #{Enum.join(bad_compliance_tags, ", ")}",
             "Use only 'rhodium' tag for RSR compliance (remove: #{Enum.join(bad_compliance_tags, ", ")})"
           )
@@ -342,7 +357,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
     cond do
       topics == [] ->
         [
-          issue(repo_name, :no_tags, :warning,
+          issue(
+            repo_name,
+            :no_tags,
+            :warning,
             "No topics/tags set for repository",
             "Add 'rhodium' + #{@min_tags}-#{@max_tags} content tags: #{Enum.join(suggest_tags(repo_name, detected_languages), ", ")}"
           )
@@ -353,7 +371,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
         issues_after_rhodium =
           if not has_rhodium do
             [
-              issue(repo_name, :insufficient_tags, :notice,
+              issue(
+                repo_name,
+                :insufficient_tags,
+                :notice,
                 "Missing 'rhodium' compliance tag",
                 "Add 'rhodium' tag for RSR compliance"
               )
@@ -366,7 +387,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
         issues_after_content =
           if length(content_tags) < @min_tags do
             [
-              issue(repo_name, :insufficient_tags, :notice,
+              issue(
+                repo_name,
+                :insufficient_tags,
+                :notice,
                 "Only #{length(content_tags)} content tags (recommended: #{@min_tags}-#{@max_tags})",
                 "Add content-specific tags: #{Enum.join(suggest_tags(repo_name, detected_languages), ", ")}"
               )
@@ -383,7 +407,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
 
         if has_lang_tag and not is_lang_focused do
           [
-            issue(repo_name, :missing_language_tag, :notice,
+            issue(
+              repo_name,
+              :missing_language_tag,
+              :notice,
               "Has language tags but repo isn't language-focused",
               "Consider removing language tags unless project is FFI/ABI/SSG/playground"
             )
@@ -430,7 +457,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
 
     if is_nil(readme_path) do
       [
-        issue(repo_name, :no_readme, :critical,
+        issue(
+          repo_name,
+          :no_readme,
+          :critical,
           "No README file found",
           "Create README.adoc with project description, installation, and usage"
         )
@@ -446,7 +476,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
       readme_count_issues =
         if length(non_empty_lines) < @min_readme_lines do
           [
-            issue(repo_name, :underdeveloped_readme, :warning,
+            issue(
+              repo_name,
+              :underdeveloped_readme,
+              :warning,
               "README has only #{length(non_empty_lines)} non-empty lines (minimum: #{@min_readme_lines})",
               "Expand README with: overview, installation, usage examples, contributing"
             )
@@ -458,7 +491,10 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
       template_issues =
         if Enum.any?(@template_markers, &Regex.match?(&1, content)) do
           [
-            issue(repo_name, :readme_is_template, :critical,
+            issue(
+              repo_name,
+              :readme_is_template,
+              :critical,
               "README appears to be an unfilled template",
               "Replace template placeholders with actual project content"
             )
@@ -516,7 +552,13 @@ defmodule Mix.Tasks.Hypatia.AuditRepos do
   defp filter_issues(issues, nil), do: issues
 
   defp filter_issues(issues, :descriptions) do
-    keep = [:no_description, :generic_description, :standards_only_description, :description_name_mismatch]
+    keep = [
+      :no_description,
+      :generic_description,
+      :standards_only_description,
+      :description_name_mismatch
+    ]
+
     Enum.filter(issues, &(&1.issue_type in keep))
   end
 

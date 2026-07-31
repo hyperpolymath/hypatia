@@ -108,7 +108,9 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
 
         by_severity =
           Enum.group_by(open, fn a ->
-            sev = get_in(a, ["rule", "security_severity_level"]) || get_in(a, ["rule", "severity"])
+            sev =
+              get_in(a, ["rule", "security_severity_level"]) || get_in(a, ["rule", "severity"])
+
             map_severity(sev)
           end)
 
@@ -120,58 +122,64 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
 
         findings =
           if critical_count > 0 do
-            [%{
-               rule: "CSA002",
-               file: "#{owner}/#{repo}",
-               severity: :critical,
-               reason:
-                 "#{critical_count} critical code-scanning alert(s) -- immediate triage required",
-               action: :escalate,
-               detail: %{critical: critical_count, high: high_count, total: total}
-             }
-             | findings]
+            [
+              %{
+                rule: "CSA002",
+                file: "#{owner}/#{repo}",
+                severity: :critical,
+                reason:
+                  "#{critical_count} critical code-scanning alert(s) -- immediate triage required",
+                action: :escalate,
+                detail: %{critical: critical_count, high: high_count, total: total}
+              }
+              | findings
+            ]
           else
             findings
           end
 
         findings =
           if high_count >= 5 do
-            [%{
-               rule: "CSA002",
-               file: "#{owner}/#{repo}",
-               severity: :high,
-               reason:
-                 "#{high_count} high-severity code-scanning alert(s) -- batch remediation recommended",
-               action: :batch_update,
-               detail: %{high: high_count, total: total}
-             }
-             | findings]
+            [
+              %{
+                rule: "CSA002",
+                file: "#{owner}/#{repo}",
+                severity: :high,
+                reason:
+                  "#{high_count} high-severity code-scanning alert(s) -- batch remediation recommended",
+                action: :batch_update,
+                detail: %{high: high_count, total: total}
+              }
+              | findings
+            ]
           else
             findings
           end
 
         findings =
           if total >= 10 do
-            [%{
-               rule: "CSA002",
-               file: "#{owner}/#{repo}",
-               severity: :medium,
-               reason: "#{total} total open code-scanning alert(s) -- security hygiene review",
-               action: :review,
-               detail: %{
-                 total: total,
-                 by_severity:
-                   Map.new(by_severity, fn {k, v} -> {to_string(k), length(v)} end)
-               }
-             }
-             | findings]
+            [
+              %{
+                rule: "CSA002",
+                file: "#{owner}/#{repo}",
+                severity: :medium,
+                reason: "#{total} total open code-scanning alert(s) -- security hygiene review",
+                action: :review,
+                detail: %{
+                  total: total,
+                  by_severity: Map.new(by_severity, fn {k, v} -> {to_string(k), length(v)} end)
+                }
+              }
+              | findings
+            ]
           else
             findings
           end
 
         findings
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -229,7 +237,8 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
           }
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -273,7 +282,8 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
           }
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -300,11 +310,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
           {f.rule, Map.get(f.detail, :alert_number, f.file)}
         end)
 
-      {:ok, %{
-        findings: deduped,
-        total: length(deduped),
-        by_severity: group_by_severity(deduped)
-      }}
+      {:ok,
+       %{
+         findings: deduped,
+         total: length(deduped),
+         by_severity: group_by_severity(deduped)
+       }}
     end
   end
 
@@ -355,17 +366,21 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
         "#{@github_api_base}/repos/#{owner}/#{repo}/code-scanning/alerts" <>
           "?per_page=#{@max_alerts_per_repo}"
 
-      case System.cmd("curl", [
-             "-s",
-             "-f",
-             "-H",
-             "Accept: application/vnd.github+json",
-             "-H",
-             "Authorization: Bearer #{token}",
-             "-H",
-             "X-GitHub-Api-Version: 2022-11-28",
-             url
-           ], stderr_to_stdout: true) do
+      case System.cmd(
+             "curl",
+             [
+               "-s",
+               "-f",
+               "-H",
+               "Accept: application/vnd.github+json",
+               "-H",
+               "Authorization: Bearer #{token}",
+               "-H",
+               "X-GitHub-Api-Version: 2022-11-28",
+               url
+             ],
+             stderr_to_stdout: true
+           ) do
         {body, 0} ->
           case Jason.decode(body) do
             {:ok, alerts} when is_list(alerts) ->

@@ -87,8 +87,10 @@ defmodule Hypatia.Rules.ProofStrategySelection do
     timeout_ms = Keyword.get(opts, :timeout, @default_timeout_ms)
     base_url = resolve_base_url(opts)
 
-    path = "/api/v1/proof_attempts/strategy?class=" <> uri_encode(obligation_class)
-          <> "&limit=" <> Integer.to_string(limit)
+    path =
+      "/api/v1/proof_attempts/strategy?class=" <>
+        uri_encode(obligation_class) <>
+        "&limit=" <> Integer.to_string(limit)
 
     url = base_url <> path
 
@@ -106,7 +108,10 @@ defmodule Hypatia.Rules.ProofStrategySelection do
         end
 
       {:error, {:http_status, code}} ->
-        Logger.warning("ProofStrategySelection: VeriSimDB returned #{code} for class=#{obligation_class}")
+        Logger.warning(
+          "ProofStrategySelection: VeriSimDB returned #{code} for class=#{obligation_class}"
+        )
+
         {:error, {:http_status, code}}
 
       {:error, reason} ->
@@ -310,10 +315,22 @@ defmodule Hypatia.Rules.ProofStrategySelection do
       String.contains?(lower, ["terminat", "halt", "total", "recursi", "well-founded"]) ->
         "termination"
 
-      String.contains?(lower, ["equiv", "bisimul", "preserves behavior", "preserves behaviour", "refine"]) ->
+      String.contains?(lower, [
+        "equiv",
+        "bisimul",
+        "preserves behavior",
+        "preserves behaviour",
+        "refine"
+      ]) ->
         "equiv"
 
-      String.contains?(lower, ["safe", "invariant", "non-interference", "memory-safe", "crash-free"]) ->
+      String.contains?(lower, [
+        "safe",
+        "invariant",
+        "non-interference",
+        "memory-safe",
+        "crash-free"
+      ]) ->
         "safety"
 
       true ->

@@ -35,7 +35,8 @@ defmodule Hypatia.Kin.Gate do
   use GenServer
   require Logger
 
-  @lock_timeout_ms 30 * 60 * 1_000  # 30 minutes max lock
+  # 30 minutes max lock
+  @lock_timeout_ms 30 * 60 * 1_000
   @stale_scan_threshold_hours 48
   @min_auto_execute_confidence 0.95
   @max_prs_per_repo_per_hour 3
@@ -99,9 +100,12 @@ defmodule Hypatia.Kin.Gate do
   @impl true
   def init(_opts) do
     state = %{
-      repo_locks: %{},         # repo => %{bot_id, locked_at, action_type}
-      pr_rate: %{},            # repo => [timestamps of recent PRs]
-      held: %{},               # held_id => action
+      # repo => %{bot_id, locked_at, action_type}
+      repo_locks: %{},
+      # repo => [timestamps of recent PRs]
+      pr_rate: %{},
+      # held_id => action
+      held: %{},
       stats: %{
         approved: 0,
         held: 0,
@@ -124,12 +128,17 @@ defmodule Hypatia.Kin.Gate do
     case decision do
       {:approved, _} ->
         Logger.info("Gate APPROVED: #{action.bot_id} -> #{action.repo} (#{action.action_type})")
+
       {:held, reason} ->
         Logger.warning("Gate HELD: #{action.bot_id} -> #{action.repo}: #{reason}")
+
       {:rejected, reason} ->
         Logger.warning("Gate REJECTED: #{action.bot_id} -> #{action.repo}: #{reason}")
+
       {:deferred, wait_ms} ->
-        Logger.info("Gate DEFERRED: #{action.bot_id} -> #{action.repo} (retry in #{div(wait_ms, 1000)}s)")
+        Logger.info(
+          "Gate DEFERRED: #{action.bot_id} -> #{action.repo} (retry in #{div(wait_ms, 1000)}s)"
+        )
     end
 
     {:reply, decision, new_state}
@@ -155,6 +164,7 @@ defmodule Hypatia.Kin.Gate do
     case Map.pop(state.held, held_id) do
       {nil, _} ->
         {:reply, {:error, :not_found}, state}
+
       {action, new_held} ->
         Logger.info("Gate: human approved held action #{held_id} for #{action.repo}")
         {:reply, {:approved, action}, %{state | held: new_held}}
@@ -166,6 +176,7 @@ defmodule Hypatia.Kin.Gate do
     case Map.pop(state.held, held_id) do
       {nil, _} ->
         {:reply, {:error, :not_found}, state}
+
       {action, new_held} ->
         Logger.info("Gate: human rejected held action #{held_id}: #{reason}")
         write_to_log(@rejected_file, action, reason)
@@ -176,9 +187,11 @@ defmodule Hypatia.Kin.Gate do
   @impl true
   def handle_cast({:release_lock, repo}, state) do
     new_locks = Map.delete(state.repo_locks, repo)
+
     if Map.has_key?(state.repo_locks, repo) do
       Logger.debug("Gate: released lock on #{repo}")
     end
+
     {:noreply, %{state | repo_locks: new_locks}}
   end
 
@@ -227,10 +240,12 @@ defmodule Hypatia.Kin.Gate do
 
     case result do
       {:approved, action} ->
-        new_state = state
-        |> acquire_lock(action)
-        |> record_pr(action)
-        |> update_stats(:approved)
+        new_state =
+          state
+          |> acquire_lock(action)
+          |> record_pr(action)
+          |> update_stats(:approved)
+
         {{:approved, action}, new_state}
 
       {:held, reason} ->
@@ -263,15 +278,17 @@ defmodule Hypatia.Kin.Gate do
     ]
 
     case Enum.find_value(directives_paths, fn path ->
-      case File.read(path) do
-        {:ok, content} ->
-          case Jason.decode(content) do
-            {:ok, directives} -> directives
-            _ -> nil
-          end
-        _ -> nil
-      end
-    end) do
+           case File.read(path) do
+             {:ok, content} ->
+               case Jason.decode(content) do
+                 {:ok, directives} -> directives
+                 _ -> nil
+               end
+
+             _ ->
+               nil
+           end
+         end) do
       nil ->
         # No directives file = all bots allowed (open by default)
         :pass
@@ -282,20 +299,27 @@ defmodule Hypatia.Kin.Gate do
 
         # Check if this bot is explicitly blocked
         blocked = Map.get(directives, "blocked_bots", [])
+
         if bot_id in blocked do
           {:reject, "bot #{bot_id} blocked by .bot_directives in #{action.repo}"}
         else
           # Check if action type is restricted
           allowed_actions = Map.get(directives, "allowed_actions", %{})
+
           case Map.get(allowed_actions, bot_id) do
-            nil -> :pass  # no restrictions for this bot
+            # no restrictions for this bot
+            nil ->
+              :pass
+
             actions when is_list(actions) ->
               if action_type in actions do
                 :pass
               else
                 {:hold, "#{action_type} not in allowed actions for #{bot_id} in #{action.repo}"}
               end
-            _ -> :pass
+
+            _ ->
+              :pass
           end
         end
     end
@@ -304,29 +328,44 @@ defmodule Hypatia.Kin.Gate do
   # Check 1: Is another bot already working on this repo?
   defp check_repo_lock(action, state) do
     case Map.get(state.repo_locks, action.repo) do
-      nil -> :pass
-      %{bot_id: same_bot} when same_bot == action.bot_id -> :pass  # same bot can re-enter
+      nil ->
+        :pass
+
+      # same bot can re-enter
+      %{bot_id: same_bot} when same_bot == action.bot_id ->
+        :pass
+
       %{bot_id: _other_bot} ->
-        {:defer, 60_000}  # wait 1 minute, another bot has the lock
+        # wait 1 minute, another bot has the lock
+        {:defer, 60_000}
     end
   end
 
   # Check 2: Is the scan data too old?
   defp check_scan_staleness(action, _state) do
     case Map.get(action, :scan_timestamp) do
-      nil -> :pass  # no timestamp = trust the caller
+      # no timestamp = trust the caller
+      nil ->
+        :pass
+
       ts when is_binary(ts) ->
         case DateTime.from_iso8601(ts) do
           {:ok, dt, _} ->
             age_hours = DateTime.diff(DateTime.utc_now(), dt, :hour)
+
             if age_hours > @stale_scan_threshold_hours do
-              {:hold, "scan data is #{age_hours}h old (threshold: #{@stale_scan_threshold_hours}h) -- rescan recommended"}
+              {:hold,
+               "scan data is #{age_hours}h old (threshold: #{@stale_scan_threshold_hours}h) -- rescan recommended"}
             else
               :pass
             end
-          _ -> :pass
+
+          _ ->
+            :pass
         end
-      _ -> :pass
+
+      _ ->
+        :pass
     end
   end
 
@@ -334,10 +373,12 @@ defmodule Hypatia.Kin.Gate do
   defp check_confidence_floor(action, _state) do
     if action.dispatch_tier == :auto_execute do
       confidence = Map.get(action, :confidence, 0.0)
+
       if confidence >= @min_auto_execute_confidence do
         :pass
       else
-        {:hold, "confidence #{confidence} below auto-execute threshold #{@min_auto_execute_confidence}"}
+        {:hold,
+         "confidence #{confidence} below auto-execute threshold #{@min_auto_execute_confidence}"}
       end
     else
       :pass
@@ -356,7 +397,8 @@ defmodule Hypatia.Kin.Gate do
         |> Enum.filter(&(&1 > hour_ago))
 
       if length(recent) >= @max_prs_per_repo_per_hour do
-        {:hold, "#{length(recent)} PRs to #{action.repo} in last hour (max: #{@max_prs_per_repo_per_hour})"}
+        {:hold,
+         "#{length(recent)} PRs to #{action.repo} in last hour (max: #{@max_prs_per_repo_per_hour})"}
       else
         :pass
       end
@@ -371,13 +413,17 @@ defmodule Hypatia.Kin.Gate do
       state.held
       |> Map.values()
       |> Enum.find(fn held ->
-        held.repo == action.repo and held.pattern_id == action.pattern_id and held.bot_id != action.bot_id
+        held.repo == action.repo and held.pattern_id == action.pattern_id and
+          held.bot_id != action.bot_id
       end)
 
     case conflicting do
-      nil -> :pass
+      nil ->
+        :pass
+
       held ->
-        {:reject, "conflicts with held action from #{held.bot_id} on same pattern #{action.pattern_id}"}
+        {:reject,
+         "conflicts with held action from #{held.bot_id} on same pattern #{action.pattern_id}"}
     end
   end
 
@@ -385,12 +431,19 @@ defmodule Hypatia.Kin.Gate do
   defp check_neural_consensus(action, _state) do
     if action.dispatch_tier == :auto_execute do
       case check_neural_available() do
-        false -> :pass  # neural layer not available, don't block
+        # neural layer not available, don't block
+        false ->
+          :pass
+
         true ->
           # Ask the neural coordinator for a confidence assessment
           case neural_agrees?(action) do
-            true -> :pass
-            false -> {:hold, "neural network disagrees with dispatch confidence -- human review recommended"}
+            true ->
+              :pass
+
+            false ->
+              {:hold,
+               "neural network disagrees with dispatch confidence -- human review recommended"}
           end
       end
     else
@@ -408,11 +461,15 @@ defmodule Hypatia.Kin.Gate do
   defp neural_agrees?(action) do
     try do
       finding = %{"id" => action.pattern_id, "category" => "unknown"}
+
       case Hypatia.Neural.Coordinator.dispatch_recommendation(finding) do
         %{confidence: neural_conf} ->
           # Neural agrees if its confidence is within 0.15 of the recipe confidence
           abs(neural_conf - Map.get(action, :confidence, 0.0)) < 0.15
-        _ -> true  # if prediction fails, don't block
+
+        # if prediction fails, don't block
+        _ ->
+          true
       end
     rescue
       _ -> true
@@ -430,6 +487,7 @@ defmodule Hypatia.Kin.Gate do
         locked_at: System.monotonic_time(:millisecond),
         action_type: action.action_type
       }
+
       %{state | repo_locks: Map.put(state.repo_locks, action.repo, lock)}
     else
       state
@@ -472,7 +530,9 @@ defmodule Hypatia.Kin.Gate do
     case Jason.encode(entry) do
       {:ok, json} ->
         File.write!(path, json <> "\n", [:append])
-      _ -> :ok
+
+      _ ->
+        :ok
     end
   end
 end

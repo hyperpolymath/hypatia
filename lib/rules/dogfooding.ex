@@ -134,8 +134,7 @@ defmodule Hypatia.Rules.Dogfooding do
                 severity: "high",
                 file: filepath,
                 line: line,
-                description:
-                  "Stale reference '#{old_name}' -- now '#{new_name}' (#{reason})"
+                description: "Stale reference '#{old_name}' -- now '#{new_name}' (#{reason})"
               }
             ]
           else
@@ -471,7 +470,17 @@ defmodule Hypatia.Rules.Dogfooding do
           path = Path.join(dir, entry)
 
           cond do
-            File.dir?(path) and entry not in [".git", "node_modules", "target", "_build", "deps", ".deno", "external_corpora", ".lake"] ->
+            File.dir?(path) and
+                entry not in [
+                  ".git",
+                  "node_modules",
+                  "target",
+                  "_build",
+                  "deps",
+                  ".deno",
+                  "external_corpora",
+                  ".lake"
+                ] ->
               do_walk(path, extensions, depth + 1, max_depth)
 
             File.regular?(path) ->

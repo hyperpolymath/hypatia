@@ -22,11 +22,16 @@ defmodule Hypatia.Neural.SequenceModel do
   use GenServer
 
   defstruct [
-    :hidden_state,     # current hidden state
-    :hidden_dim,       # hidden dimension
-    :sequence_buffer,  # recent decisions for context
-    :max_sequence,     # maximum sequence length
-    :weights           # trained weights (nil until trained)
+    # current hidden state
+    :hidden_state,
+    # hidden dimension
+    :hidden_dim,
+    # recent decisions for context
+    :sequence_buffer,
+    # maximum sequence length
+    :max_sequence,
+    # trained weights (nil until trained)
+    :weights
   ]
 
   def start_link(opts \\ []) do
@@ -42,6 +47,7 @@ defmodule Hypatia.Neural.SequenceModel do
       max_sequence: 50,
       weights: nil
     }
+
     {:ok, state}
   end
 
@@ -81,10 +87,11 @@ defmodule Hypatia.Neural.SequenceModel do
     _blackboard = Hypatia.Neural.Blackboard.snapshot()
 
     # Predict from sequence buffer (placeholder -- needs training)
-    prediction = case state.sequence_buffer do
-      [] -> %{next_step: "unknown", confidence: 0.0}
-      [last | _] -> %{next_step: last, confidence: 0.3}
-    end
+    prediction =
+      case state.sequence_buffer do
+        [] -> %{next_step: "unknown", confidence: 0.0}
+        [last | _] -> %{next_step: last, confidence: 0.3}
+      end
 
     result = %{
       predicted_next: prediction.next_step,
@@ -124,8 +131,10 @@ defmodule Hypatia.Neural.SequenceModel do
 
   @impl true
   def handle_cast({:observe, decision}, state) do
-    buffer = [decision | state.sequence_buffer]
-    |> Enum.take(state.max_sequence)
+    buffer =
+      [decision | state.sequence_buffer]
+      |> Enum.take(state.max_sequence)
+
     {:noreply, %{state | sequence_buffer: buffer}}
   end
 end
