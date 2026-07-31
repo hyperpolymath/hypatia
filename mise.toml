@@ -1,108 +1,57 @@
-# SPDX-License-Identifier: CC-BY-SA-4.0
-#
-# Every entry below was checked against `mise registry` before being written.
-# The previous version named 13 tools that do not exist in the registry, so
-# mise emitted ~25 lines of warnings on EVERY shell entry in this repo while
-# installing none of them.
-
 [tools]
-# ---------------------------------------------------------------------------
-# Primary languages for this repo.
-#
-# erlang + elixir were MISSING entirely, despite Elixir being the language of
-# lib/ and the 71 test files. Pinned to the same versions .github/workflows/
-# tests.yml gives erlef/setup-beam, so a local `mix test` runs on the same
-# toolchain as CI rather than on whatever the developer happens to have.
-# ---------------------------------------------------------------------------
-erlang = "27.0"
-elixir = "1.17"
-rust = "latest"
-zig = "latest"
-
-# ---------------------------------------------------------------------------
-# Secondary runtimes retained from the previous file.
-# ---------------------------------------------------------------------------
+# Language runtimes
 node = "latest"
 python = "latest"
+rust = "latest"
 go = "latest"
+zig = "latest"
 java = "latest"
 bun = "latest"
-deno = "latest"   # was `denojs` — not a registry name
+denojs = "latest"
 
-# ---------------------------------------------------------------------------
-# Package managers / task runner
-# ---------------------------------------------------------------------------
+# Package managers
 npm = "latest"
 yarn = "latest"
 pnpm = "latest"
-just = "latest"   # the actual task runner for this repo (see Justfile)
+pip = "latest"
+cargo = "latest"
+go-task = "latest"
 
-# ---------------------------------------------------------------------------
-# Formatting & linting
-# ---------------------------------------------------------------------------
+# Formatting & Linting
+gofmt = "latest"
 black = "latest"
+isort = "latest"
 ruff = "latest"
 prettier = "latest"
 shfmt = "latest"
 stylua = "latest"
 
-# ---------------------------------------------------------------------------
 # Build tools
-# ---------------------------------------------------------------------------
 cmake = "latest"
 make = "latest"
 ninja = "latest"
 
-# ---------------------------------------------------------------------------
-# REMOVED — none of these resolve in the mise registry, so they installed
-# nothing and only produced warnings. Grouped by why they were wrong:
-#
-#   Already provided by a tool that IS listed above:
-#     cargo   -> ships with `rust`
-#     gofmt   -> ships with `go`
-#     pip     -> ships with `python`
-#
-#   Project-level dependencies, not system tools. These belong in
-#   package.json / pyproject.toml / mix.exs, not in a toolchain manager:
-#     vitest, jest, pytest, isort
-#
-#   Task runner that never installed:
-#     go-task -> not a registry name. NB the bare name `task` does not work
-#     either: `mise registry` LISTS it as `aqua:go-task/task`, but resolving
-#     `task@latest` still fails. Appearing in `mise registry` output is not
-#     sufficient to conclude a name resolves — check with `mise ls-remote`.
-#     Dropped entirely; this repo drives everything through the Justfile, so
-#     `just` is listed above instead.
-#
-#   Base system binaries that mise should not be shadowing on Linux:
-#     git, gnu-sed, gnu-grep, gnu-tar
-#
-# If a GNU-vs-BSD coreutils difference ever actually bites on macOS, add
-# `coreutils` (which does exist in the registry) rather than these names.
-# ---------------------------------------------------------------------------
+# Shell tools
+git = "latest"
+gnu-sed = "latest"
+gnu-tar = "latest"
+gnu-grep = "latest"
+
+# Testing
+vitest = "latest"
+pytest = "latest"
+jest = "latest"
 
 [env]
+# Common environment variables
 NODE_ENV = "development"
 PYTHONDONTWRITEBYTECODE = "1"
 PYTHONUNBUFFERED = "1"
 
-# ---------------------------------------------------------------------------
-# REMOVED — an `[alias]` section holding what were clearly meant to be tasks:
-#
-#     [alias]
-#     task  = "go-task"
-#     build = "cargo build --release || npm run build || go build"
-#     test  = "cargo test || npm test || go test ./..."
-#     lint  = "ruff check . || prettier --check . || black --check ."
-#     fmt   = "ruff format . || prettier --write . || black ."
-#
-# mise's `[alias]` maps an alias to a TOOL PLUGIN — it does not define tasks,
-# so none of these ever ran. mise also warns that `[alias]` is deprecated in
-# favour of `[tool_alias]`.
-#
-# They are not re-added as `[tasks]`, because the Justfile already defines
-# `build`, `test`, `fmt`, `fmt-check`, `lint`, `doctor` and `heal` properly and
-# for the languages this repo actually uses. Two competing task runners with
-# the same verb names — one of which silently falls through `||` chains to a
-# different language's build — is worse than one. Use `just <recipe>`.
-# ---------------------------------------------------------------------------
+# Task runner alias
+[alias]
+task = "go-task"
+build = "cargo build --release || npm run build || go build"
+test = "cargo test || npm test || go test ./..."
+lint = "ruff check . || prettier --check . || black --check ."
+fmt = "ruff format . || prettier --write . || black ."
