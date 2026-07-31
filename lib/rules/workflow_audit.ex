@@ -522,8 +522,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
     # Actor-controllable expressions. Anchored loosely so we catch the
     # expression wherever it appears in a run block — the previous full
     # `run: |` block-shape match missed inline `run:` single-liners.
+    # `[\s\S]*?` previously spanned step boundaries: a `run:` in one step and a
+    # context expression in a LATER step's `env:` block matched as though the
+    # value were interpolated into the script. Measured 2026-07-29 on
+    # gitbot-fleet's repo-integrity-guard.yml -- flagged :critical although the
+    # untrusted values are bound via `env:` and consumed as quoted shell vars
+    # through `grep -F`, i.e. exactly the mitigation this rule asks for.
+    #
+    # `[^\n]` per line, and no line may start a new step (`- name:`/`- uses:`)
+    # or open a sibling mapping key at step indent, so the match stays inside
+    # one run block.
     run_context_re =
-      ~r/run:[\s\S]*?\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)[^}]*\}\}/m
+      ~r/run:(?:[^\n]*\n(?!\s*-\s+(?:name|uses|id):|\s{0,10}(?:env|with|if|name|uses):\s))*?[^\n]*\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)[^}]*\}\}/m
 
     unsafe_json_payload_re =
       ~r/-d\s*".*\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)/s
@@ -989,7 +999,30 @@ defmodule Hypatia.Rules.WorkflowAudit do
                   Regex.match?(~r/if:[^\n]*steps\.[A-Za-z0-9_-]+\.outputs\./, step_block) and
                     String.contains?(stripped, "GITHUB_OUTPUT")
 
-                if Regex.match?(gate_re, step_block) or env_output_gate? do
+                # Third valid idiom, previously unrecognised: a job-level
+                # `env:` binds a presence boolean from the secret and steps gate
+                # on it. Measured 2026-07-29 on gitbot-fleet's instant-sync.yml,
+                # which does exactly this on every step plus an else branch, and
+                # was still reported :high.
+                #
+                #     env:
+                #       HAS_TOKEN: ${{ secrets.FARM_DISPATCH_TOKEN != '' }}
+                #     steps:
+                #       - if: env.HAS_TOKEN == 'true'
+                env_boolean_gate? =
+                  case Regex.run(
+                         ~r/(\w+):\s*\$\{\{\s*secrets\.#{Regex.escape(secret_name)}\s*!=\s*['"]['"]?\s*\}\}/,
+                         stripped
+                       ) do
+                    [_, env_name] ->
+                      Regex.match?(~r/if:[^\n]*env\.#{Regex.escape(env_name)}\b/, stripped)
+
+                    _ ->
+                      false
+                  end
+
+                if Regex.match?(gate_re, step_block) or env_output_gate? or
+                     env_boolean_gate? do
                   []
                 else
                   [

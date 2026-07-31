@@ -15,6 +15,7 @@ codecov/codecov-action
 cometkim/rclone-actions
 DavidAnson/markdownlint-cli2-action
 dawidd6/action-download-artifact
+dawidd6/action-send-mail
 DeLaGuardo/setup-clojure
 denoland/setup-deno
 dependabot/fetch-metadata
@@ -66,9 +67,11 @@ r-lib/actions
 ruby/setup-ruby
 rustsec/audit-check
 shivammathur/setup-php
+slsa-framework/slsa-github-generator
 snyk/actions
 softprops/action-gh-release
 SonarSource/sonarcloud-github-action
+SonarSource/sonarqube-scan-action
 Swatinem/rust-cache
 taiki-e/install-action
 trufflesecurity/trufflehog
