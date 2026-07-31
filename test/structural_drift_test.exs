@@ -112,23 +112,25 @@ defmodule Hypatia.Rules.StructuralDriftTest do
 
       # Inject 6 orphan gitlinks directly via git update-index (no .gitmodules)
       fake_sha = "deadbeefdeadbeefdeadbeefdeadbeef00000001"
+
       for i <- 1..6 do
         path = "vendor/dep_#{i}"
         File.mkdir_p!(Path.join(repo, path))
-        System.cmd("git", ["update-index", "--add", "--cacheinfo",
-                           "160000,#{fake_sha},#{path}"],
-                   cd: repo)
+
+        System.cmd("git", ["update-index", "--add", "--cacheinfo", "160000,#{fake_sha},#{path}"],
+          cd: repo
+        )
       end
 
       findings = StructuralDrift.sd005_orphan_gitlinks(repo)
-      summary = Enum.find(findings, & &1[:count] == 6)
+      summary = Enum.find(findings, &(&1[:count] == 6))
       assert summary != nil, "Expected a summary finding with count=6"
       assert summary.severity == :high
       assert summary.rule == "SD005"
       assert String.contains?(summary.reason, "actions/checkout")
       assert String.contains?(summary.reason, "startup_failure")
       # Also should have 6 per-link critical findings
-      per_link = Enum.filter(findings, & &1.file != ".git (index)")
+      per_link = Enum.filter(findings, &(&1.file != ".git (index)"))
       assert length(per_link) == 6
       assert Enum.all?(per_link, &(&1.severity == :critical))
     end
@@ -143,16 +145,18 @@ defmodule Hypatia.Rules.StructuralDriftTest do
 
       # Inject exactly 5 orphan gitlinks (at threshold — no summary)
       fake_sha = "deadbeefdeadbeefdeadbeefdeadbeef00000002"
+
       for i <- 1..5 do
         path = "vendor/sub_#{i}"
         File.mkdir_p!(Path.join(repo, path))
-        System.cmd("git", ["update-index", "--add", "--cacheinfo",
-                           "160000,#{fake_sha},#{path}"],
-                   cd: repo)
+
+        System.cmd("git", ["update-index", "--add", "--cacheinfo", "160000,#{fake_sha},#{path}"],
+          cd: repo
+        )
       end
 
       findings = StructuralDrift.sd005_orphan_gitlinks(repo)
-      summary = Enum.find(findings, & &1[:count] != nil)
+      summary = Enum.find(findings, &(&1[:count] != nil))
       assert summary == nil, "Expected no summary finding for count <= threshold"
       assert length(findings) == 5
     end
@@ -245,6 +249,7 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       lib/app/_build/
       packages/web/node_modules/
       """
+
       File.write!(Path.join(repo, ".gitignore"), content)
 
       findings = StructuralDrift.sd013_path_specific_gitignore(repo)
@@ -259,6 +264,7 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       _build/
       target/
       """
+
       File.write!(Path.join(repo, ".gitignore"), content)
 
       findings = StructuralDrift.sd013_path_specific_gitignore(repo)
@@ -292,6 +298,146 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert Map.has_key?(result, :total)
       assert Map.has_key?(result, :trigger_intensive)
       assert Map.has_key?(result, :dispatch)
+    end
+  end
+
+  describe "sd022_stale_path_after_rename/1" do
+    test "flags docs referencing src/<dir>/ where dir no longer exists", %{repo: repo} do
+      # Real layout: only src/paint_core/ exists
+      File.mkdir_p!(Path.join([repo, "src", "paint_core"]))
+      # Doc still references old src/ephapax/
+      File.write!(Path.join(repo, "EXPLAINME.adoc"), "See src/ephapax/lib.rs for the tile API.")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"],
+        cd: repo,
+        env: [
+          {"GIT_AUTHOR_NAME", "T"},
+          {"GIT_AUTHOR_EMAIL", "t@t"},
+          {"GIT_COMMITTER_NAME", "T"},
+          {"GIT_COMMITTER_EMAIL", "t@t"}
+        ]
+      )
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert Enum.any?(findings, &(&1.rule == "SD022"))
+      assert Enum.any?(findings, &(&1.stale_dir == "ephapax"))
+      assert Enum.all?(findings, &(&1.severity == :medium))
+      assert Enum.all?(findings, & &1.trigger_intensive)
+    end
+
+    test "ignores CHANGELOG.md (historical references are intentional)", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, "src", "paint_core"]))
+      File.write!(Path.join(repo, "CHANGELOG.md"), "Renamed src/ephapax to src/paint_core.")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"],
+        cd: repo,
+        env: [
+          {"GIT_AUTHOR_NAME", "T"},
+          {"GIT_AUTHOR_EMAIL", "t@t"},
+          {"GIT_COMMITTER_NAME", "T"},
+          {"GIT_COMMITTER_EMAIL", "t@t"}
+        ]
+      )
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert findings == []
+    end
+
+    test "ignores third_party/ subtree (vendored)", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, "src", "paint_core"]))
+      File.mkdir_p!(Path.join([repo, "third_party", "x"]))
+      File.write!(Path.join([repo, "third_party", "x", "README.md"]), "uses src/ephapax/foo")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"],
+        cd: repo,
+        env: [
+          {"GIT_AUTHOR_NAME", "T"},
+          {"GIT_AUTHOR_EMAIL", "t@t"},
+          {"GIT_COMMITTER_NAME", "T"},
+          {"GIT_COMMITTER_EMAIL", "t@t"}
+        ]
+      )
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert findings == []
+    end
+
+    test "returns empty when src/ has no subdirs", %{repo: repo} do
+      File.write!(Path.join(repo, "README.md"), "test")
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      assert findings == []
+    end
+  end
+
+  describe "sd023_state_a2ml_divergence/1" do
+    test "flags divergent last-updated between top-level and 6a2/", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "[metadata]\nlast-updated = \"2026-06-02\"\n"
+      )
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "6a2", "STATE.a2ml"]),
+        "[metadata]\nlast-updated = \"2026-05-11\"\n"
+      )
+
+      findings = StructuralDrift.sd023_state_a2ml_divergence(repo)
+      assert length(findings) == 1
+      assert hd(findings).rule == "SD023"
+      assert hd(findings).top_last_updated == "2026-06-02"
+      assert hd(findings).six_last_updated == "2026-05-11"
+    end
+
+    test "no finding when dates match", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "last-updated = \"2026-06-02\""
+      )
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "6a2", "STATE.a2ml"]),
+        "last-updated = \"2026-06-02\""
+      )
+
+      assert StructuralDrift.sd023_state_a2ml_divergence(repo) == []
+    end
+
+    test "no finding when only one of the two files exists", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable"]))
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "last-updated = \"2026-06-02\""
+      )
+
+      assert StructuralDrift.sd023_state_a2ml_divergence(repo) == []
+    end
+
+    test "matches Scheme-style (last-updated \"...\") variant", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        "(state (metadata (last-updated \"2026-06-02\")))"
+      )
+
+      File.write!(
+        Path.join([repo, ".machine_readable", "6a2", "STATE.a2ml"]),
+        "last-updated = \"2026-05-11\""
+      )
+
+      findings = StructuralDrift.sd023_state_a2ml_divergence(repo)
+      assert length(findings) == 1
     end
   end
 end

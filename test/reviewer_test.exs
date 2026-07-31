@@ -69,6 +69,7 @@ defmodule Hypatia.ReviewerTest do
     test "returns list of Comment structs" do
       comments = Reviewer.review_diff(@sample_diff)
       assert is_list(comments)
+
       Enum.each(comments, fn c ->
         assert %Comment{} = c
         assert is_binary(c.path)
@@ -94,8 +95,20 @@ defmodule Hypatia.ReviewerTest do
 
     test "formats findings by severity" do
       comments = [
-        %Comment{path: "lib/app.ex", line: 5, body: "Missing SPDX header", severity: :medium, rule: "missing_spdx"},
-        %Comment{path: "lib/app.ex", line: 10, body: "Potential secret", severity: :critical, rule: "secret_detected"}
+        %Comment{
+          path: "lib/app.ex",
+          line: 5,
+          body: "Missing SPDX header",
+          severity: :medium,
+          rule: "missing_spdx"
+        },
+        %Comment{
+          path: "lib/app.ex",
+          line: 10,
+          body: "Potential secret",
+          severity: :critical,
+          rule: "secret_detected"
+        }
       ]
 
       summary = Reviewer.format_summary(comments)
@@ -106,7 +119,13 @@ defmodule Hypatia.ReviewerTest do
 
     test "includes file paths and rules in output" do
       comments = [
-        %Comment{path: "config/dev.exs", line: 3, body: "Hardcoded token", severity: :high, rule: "hardcoded_secret"}
+        %Comment{
+          path: "config/dev.exs",
+          line: 3,
+          body: "Hardcoded token",
+          severity: :high,
+          rule: "hardcoded_secret"
+        }
       ]
 
       summary = Reviewer.format_summary(comments)

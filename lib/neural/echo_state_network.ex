@@ -36,19 +36,18 @@ defmodule Hypatia.Neural.EchoStateNetwork do
   @teacher_scaling 0.2
   @leak_rate 0.2
   @sparsity 0.15
-  @washout 50  # Discard first 50 steps during training
+  # Discard first 50 steps during training
+  @washout 50
   @ridge_lambda 1.0e-4
 
-  defstruct [
-    reservoir: nil,
-    input_weights: nil,
-    feedback_weights: nil,
-    output_weights: nil,
-    state: nil,
-    predictions: [],
-    max_predictions: 200,
-    trained: false
-  ]
+  defstruct reservoir: nil,
+            input_weights: nil,
+            feedback_weights: nil,
+            output_weights: nil,
+            state: nil,
+            predictions: [],
+            max_predictions: 200,
+            trained: false
 
   # --- Public API ---
 
@@ -63,7 +62,8 @@ defmodule Hypatia.Neural.EchoStateNetwork do
       reservoir: generate_reservoir(size),
       input_weights: generate_weights(size, @input_scaling),
       feedback_weights: generate_weights(size, @teacher_scaling),
-      output_weights: List.duplicate(0.0, size + 1),  # +1 for bias
+      # +1 for bias
+      output_weights: List.duplicate(0.0, size + 1),
       state: List.duplicate(0.0, size)
     }
   end
@@ -89,17 +89,22 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     _size = length(esn.state)
 
     # Collect reservoir states for all time steps
-    {states, _final_esn} = Enum.reduce(time_series, {[], esn}, fn value, {states_acc, current_esn} ->
-      new_state = update_state(current_esn, value)
-      extended = new_state ++ [value]  # Append input as extra feature
-      {[extended | states_acc], %{current_esn | state: new_state}}
-    end)
+    {states, _final_esn} =
+      Enum.reduce(time_series, {[], esn}, fn value, {states_acc, current_esn} ->
+        new_state = update_state(current_esn, value)
+        # Append input as extra feature
+        extended = new_state ++ [value]
+        {[extended | states_acc], %{current_esn | state: new_state}}
+      end)
 
     all_states = Enum.reverse(states)
 
     # Remove washout period
     training_states = Enum.drop(all_states, @washout)
-    training_targets = time_series |> Enum.drop(@washout + 1) |> Enum.take(length(training_states) - 1)
+
+    training_targets =
+      time_series |> Enum.drop(@washout + 1) |> Enum.take(length(training_states) - 1)
+
     training_inputs = Enum.take(training_states, length(training_targets))
 
     # Ridge regression for output weights
@@ -118,18 +123,23 @@ defmodule Hypatia.Neural.EchoStateNetwork do
   def forecast(%__MODULE__{trained: false} = _esn, _steps), do: []
 
   def forecast(%__MODULE__{} = esn, steps) do
-    {predictions, _final} = Enum.reduce(1..steps, {[], esn}, fn _i, {preds, current} ->
-      last_input = case preds do
-        [] -> case current.predictions do
-          [h | _] -> h.prediction
-          [] -> 0.5
-        end
-        [last | _] -> last
-      end
+    {predictions, _final} =
+      Enum.reduce(1..steps, {[], esn}, fn _i, {preds, current} ->
+        last_input =
+          case preds do
+            [] ->
+              case current.predictions do
+                [h | _] -> h.prediction
+                [] -> 0.5
+              end
 
-      {pred, updated} = step(current, last_input)
-      {[pred | preds], updated}
-    end)
+            [last | _] ->
+              last
+          end
+
+        {pred, updated} = step(current, last_input)
+        {[pred | preds], updated}
+      end)
 
     Enum.reverse(predictions)
   end
@@ -141,35 +151,41 @@ defmodule Hypatia.Neural.EchoStateNetwork do
 
   def accuracy_report(%__MODULE__{predictions: preds}) do
     # Compare each prediction with the next actual input
-    pairs = preds
-    |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.map(fn [later, earlier] -> {earlier.prediction, later.input} end)
+    pairs =
+      preds
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.map(fn [later, earlier] -> {earlier.prediction, later.input} end)
 
     if length(pairs) == 0 do
       %{mse: nil, mae: nil, samples: 0}
     else
-      mse = Enum.reduce(pairs, 0.0, fn {pred, actual}, acc ->
-        acc + (pred - actual) * (pred - actual)
-      end) / length(pairs)
+      mse =
+        Enum.reduce(pairs, 0.0, fn {pred, actual}, acc ->
+          acc + (pred - actual) * (pred - actual)
+        end) / length(pairs)
 
-      mae = Enum.reduce(pairs, 0.0, fn {pred, actual}, acc ->
-        acc + abs(pred - actual)
-      end) / length(pairs)
+      mae =
+        Enum.reduce(pairs, 0.0, fn {pred, actual}, acc ->
+          acc + abs(pred - actual)
+        end) / length(pairs)
 
       %{mse: mse, mae: mae, samples: length(pairs)}
     end
   end
 
   @doc "Detect confidence drift (sustained directional change)"
-  def detect_drift(%__MODULE__{predictions: preds}) when length(preds) < 10, do: :insufficient_data
+  def detect_drift(%__MODULE__{predictions: preds}) when length(preds) < 10,
+    do: :insufficient_data
 
   def detect_drift(%__MODULE__{predictions: preds}) do
     recent = preds |> Enum.take(10) |> Enum.map(fn p -> p.prediction end)
 
     # Check for monotonic trend
-    diffs = recent
-    |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.map(fn [a, b] -> a - b end)  # a is more recent
+    diffs =
+      recent
+      |> Enum.chunk_every(2, 1, :discard)
+      # a is more recent
+      |> Enum.map(fn [a, b] -> a - b end)
 
     positive = Enum.count(diffs, fn d -> d > 0 end)
     negative = Enum.count(diffs, fn d -> d < 0 end)
@@ -184,15 +200,16 @@ defmodule Hypatia.Neural.EchoStateNetwork do
   # --- Reservoir Internals ---
 
   defp generate_reservoir(size) do
-    matrix = for _i <- 1..size do
-      for _j <- 1..size do
-        if :rand.uniform() < @sparsity do
-          :rand.uniform() * 2.0 - 1.0
-        else
-          0.0
+    matrix =
+      for _i <- 1..size do
+        for _j <- 1..size do
+          if :rand.uniform() < @sparsity do
+            :rand.uniform() * 2.0 - 1.0
+          else
+            0.0
+          end
         end
       end
-    end
 
     # Scale to spectral radius
     max_abs = matrix |> List.flatten() |> Enum.map(&abs/1) |> Enum.max(fn -> 1.0 end)
@@ -208,10 +225,11 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     size = length(state)
 
     for i <- 0..(size - 1) do
-      recurrent = Enum.reduce(0..(size - 1), 0.0, fn j, acc ->
-        w_ij = w |> Enum.at(i) |> Enum.at(j)
-        acc + w_ij * Enum.at(state, j)
-      end)
+      recurrent =
+        Enum.reduce(0..(size - 1), 0.0, fn j, acc ->
+          w_ij = w |> Enum.at(i) |> Enum.at(j)
+          acc + w_ij * Enum.at(state, j)
+        end)
 
       external = Enum.at(iw, i) * input
       old = Enum.at(state, i)
@@ -222,8 +240,11 @@ defmodule Hypatia.Neural.EchoStateNetwork do
 
   defp compute_output(%__MODULE__{output_weights: ow, trained: true}, state, input) do
     extended = state ++ [input]
-    raw = Enum.zip(extended, ow)
-    |> Enum.reduce(0.0, fn {s, w}, acc -> acc + s * w end)
+
+    raw =
+      Enum.zip(extended, ow)
+      |> Enum.reduce(0.0, fn {s, w}, acc -> acc + s * w end)
+
     sigmoid(raw)
   end
 
@@ -245,6 +266,7 @@ defmodule Hypatia.Neural.EchoStateNetwork do
       |> Enum.reduce(w, fn {state, target}, w_acc ->
         pred = Enum.zip(state, w_acc) |> Enum.reduce(0.0, fn {s, wi}, acc -> acc + s * wi end)
         error = target - pred
+
         Enum.zip(w_acc, state)
         |> Enum.map(fn {wi, si} -> wi + lr * error * si - lr * @ridge_lambda * wi end)
       end)

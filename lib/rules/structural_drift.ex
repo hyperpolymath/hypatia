@@ -24,8 +24,13 @@ defmodule Hypatia.Rules.StructuralDrift do
   # ─── SD001: Legacy .scm state files ────────────────────────────────────
 
   @legacy_scm_files [
-    "STATE.scm", "META.scm", "ECOSYSTEM.scm",
-    "AGENTIC.scm", "NEUROSYM.scm", "PLAYBOOK.scm", "LANGUAGES.scm"
+    "STATE.scm",
+    "META.scm",
+    "ECOSYSTEM.scm",
+    "AGENTIC.scm",
+    "NEUROSYM.scm",
+    "PLAYBOOK.scm",
+    "LANGUAGES.scm"
   ]
 
   @doc """
@@ -73,14 +78,17 @@ defmodule Hypatia.Rules.StructuralDrift do
   """
   def sd002_trustfile_hs(repo_path) do
     case find_files(repo_path, "Trustfile.hs") do
-      [] -> []
+      [] ->
+        []
+
       files ->
         Enum.map(files, fn path ->
           %{
             rule: "SD002",
             file: Path.relative_to(path, repo_path),
             severity: :high,
-            reason: "Legacy Trustfile.hs -- must be Trustfile.a2ml in .machine_readable/contractiles/trust/",
+            reason:
+              "Legacy Trustfile.hs -- must be Trustfile.a2ml in .machine_readable/contractiles/trust/",
             action: :convert_and_move,
             trigger_intensive: true
           }
@@ -98,7 +106,9 @@ defmodule Hypatia.Rules.StructuralDrift do
   """
   def sd003_ai_djot(repo_path) do
     case find_files(repo_path, "AI.djot") do
-      [] -> []
+      [] ->
+        []
+
       files ->
         Enum.map(files, fn path ->
           %{
@@ -116,8 +126,12 @@ defmodule Hypatia.Rules.StructuralDrift do
   # ─── SD004: Misplaced 6a2ml files ──────────────────────────────────────
 
   @a2ml_state_files [
-    "STATE.a2ml", "META.a2ml", "ECOSYSTEM.a2ml",
-    "AGENTIC.a2ml", "NEUROSYM.a2ml", "PLAYBOOK.a2ml"
+    "STATE.a2ml",
+    "META.a2ml",
+    "ECOSYSTEM.a2ml",
+    "AGENTIC.a2ml",
+    "NEUROSYM.a2ml",
+    "PLAYBOOK.a2ml"
   ]
 
   @doc """
@@ -191,23 +205,26 @@ defmodule Hypatia.Rules.StructuralDrift do
           []
         else
           # Check which are in .gitmodules
-          gitmodules_content =
-            if has_gitmodules, do: File.read!(gitmodules_path), else: ""
+          gitmodules_content = if has_gitmodules, do: File.read!(gitmodules_path), else: ""
 
           per_link_findings =
             Enum.flat_map(gitlinks, fn path ->
               if String.contains?(gitmodules_content, "path = #{path}") do
-                []  # Legitimate submodule
+                # Legitimate submodule
+                []
               else
-                [%{
-                  rule: "SD005",
-                  file: path,
-                  severity: :critical,
-                  reason: "Orphan gitlink -- submodule ref without .gitmodules entry. Likely a stray clone caught by bot git-add-all.",
-                  action: :investigate,
-                  trigger_intensive: true,
-                  alert_user: true
-                }]
+                [
+                  %{
+                    rule: "SD005",
+                    file: path,
+                    severity: :critical,
+                    reason:
+                      "Orphan gitlink -- submodule ref without .gitmodules entry. Likely a stray clone caught by bot git-add-all.",
+                    action: :investigate,
+                    trigger_intensive: true,
+                    alert_user: true
+                  }
+                ]
               end
             end)
 
@@ -221,18 +238,21 @@ defmodule Hypatia.Rules.StructuralDrift do
           # after manual inspection of the submodule foreach error).
           summary_finding =
             if orphan_count > @orphan_gitlink_checkout_failure_threshold do
-              [%{
-                rule: "SD005",
-                file: ".git (index)",
-                severity: :high,
-                reason: "#{orphan_count} orphan gitlinks detected -- actions/checkout post-job cleanup " <>
-                        "(git submodule foreach) will startup_failure with this many stale refs. " <>
-                        "Remove all orphan gitlinks before next push.",
-                action: :investigate,
-                trigger_intensive: true,
-                alert_user: true,
-                count: orphan_count
-              }]
+              [
+                %{
+                  rule: "SD005",
+                  file: ".git (index)",
+                  severity: :high,
+                  reason:
+                    "#{orphan_count} orphan gitlinks detected -- actions/checkout post-job cleanup " <>
+                      "(git submodule foreach) will startup_failure with this many stale refs. " <>
+                      "Remove all orphan gitlinks before next push.",
+                  action: :investigate,
+                  trigger_intensive: true,
+                  alert_user: true,
+                  count: orphan_count
+                }
+              ]
             else
               []
             end
@@ -240,7 +260,8 @@ defmodule Hypatia.Rules.StructuralDrift do
           per_link_findings ++ summary_finding
         end
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -270,14 +291,19 @@ defmodule Hypatia.Rules.StructuralDrift do
   @stale_reference_patterns [
     {~r/STATE\.scm/, "References STATE.scm -- should be .machine_readable/6a2/STATE.a2ml"},
     {~r/META\.scm/, "References META.scm -- should be .machine_readable/6a2/META.a2ml"},
-    {~r/ECOSYSTEM\.scm/, "References ECOSYSTEM.scm -- should be .machine_readable/6a2/ECOSYSTEM.a2ml"},
+    {~r/ECOSYSTEM\.scm/,
+     "References ECOSYSTEM.scm -- should be .machine_readable/6a2/ECOSYSTEM.a2ml"},
     {~r/AGENTIC\.scm/, "References AGENTIC.scm -- should be .machine_readable/6a2/AGENTIC.a2ml"},
-    {~r/NEUROSYM\.scm/, "References NEUROSYM.scm -- should be .machine_readable/6a2/NEUROSYM.a2ml"},
-    {~r/PLAYBOOK\.scm/, "References PLAYBOOK.scm -- should be .machine_readable/6a2/PLAYBOOK.a2ml"},
+    {~r/NEUROSYM\.scm/,
+     "References NEUROSYM.scm -- should be .machine_readable/6a2/NEUROSYM.a2ml"},
+    {~r/PLAYBOOK\.scm/,
+     "References PLAYBOOK.scm -- should be .machine_readable/6a2/PLAYBOOK.a2ml"},
     {~r/AI\.djot/, "References AI.djot -- file has been superseded by 0-AI-MANIFEST.a2ml"},
     {~r/Trustfile\.hs/, "References Trustfile.hs -- should be Trustfile.a2ml"},
-    {~r/\.machine_readable\/STATE\.a2ml/, "References .machine_readable/STATE.a2ml -- should be .machine_readable/6a2/STATE.a2ml"},
-    {~r/\.machine_readable\/META\.a2ml/, "References .machine_readable/META.a2ml -- should be .machine_readable/6a2/META.a2ml"}
+    {~r/\.machine_readable\/STATE\.a2ml/,
+     "References .machine_readable/STATE.a2ml -- should be .machine_readable/6a2/STATE.a2ml"},
+    {~r/\.machine_readable\/META\.a2ml/,
+     "References .machine_readable/META.a2ml -- should be .machine_readable/6a2/META.a2ml"}
   ]
 
   @doc """
@@ -302,13 +328,15 @@ defmodule Hypatia.Rules.StructuralDrift do
       @stale_reference_patterns
       |> Enum.flat_map(fn {pattern, reason} ->
         if Regex.match?(pattern, content) do
-          [%{
-            rule: "SD007",
-            file: Path.relative_to(file_path, repo_path),
-            severity: :medium,
-            reason: reason,
-            action: :update_reference
-          }]
+          [
+            %{
+              rule: "SD007",
+              file: Path.relative_to(file_path, repo_path),
+              severity: :medium,
+              reason: reason,
+              action: :update_reference
+            }
+          ]
         else
           []
         end
@@ -353,16 +381,18 @@ defmodule Hypatia.Rules.StructuralDrift do
             # Count occurrences for severity escalation
             count = length(Regex.scan(pattern, content))
 
-            [%{
-              rule: "SD008",
-              file: Path.relative_to(file_path, repo_path),
-              severity: if(count > 3, do: :critical, else: severity),
-              reason: "#{reason} (#{count} occurrence#{if count > 1, do: "s", else: ""})",
-              action: :fix_proof,
-              count: count,
-              trigger_intensive: true,
-              alert_user: true
-            }]
+            [
+              %{
+                rule: "SD008",
+                file: Path.relative_to(file_path, repo_path),
+                severity: if(count > 3, do: :critical, else: severity),
+                reason: "#{reason} (#{count} occurrence#{if count > 1, do: "s", else: ""})",
+                action: :fix_proof,
+                count: count,
+                trigger_intensive: true,
+                alert_user: true
+              }
+            ]
           else
             []
           end
@@ -380,31 +410,50 @@ defmodule Hypatia.Rules.StructuralDrift do
   Action: add appropriate SPDX header.
   """
   def sd009_missing_spdx(repo_path) do
-    source_extensions = [".idr", ".zig", ".rs", ".res", ".ex", ".exs",
-                         ".gleam", ".jl", ".ncl", ".hs", ".ads", ".adb",
-                         ".as", ".ml", ".lean"]
+    source_extensions = [
+      ".idr",
+      ".zig",
+      ".rs",
+      ".res",
+      ".ex",
+      ".exs",
+      ".gleam",
+      ".jl",
+      ".ncl",
+      ".hs",
+      ".ads",
+      ".adb",
+      ".as",
+      ".ml",
+      ".lean"
+    ]
 
     source_extensions
     |> Enum.flat_map(fn ext ->
       find_files_with_extension(repo_path, ext)
-      |> Enum.take(5)  # Sample -- don't scan every file
+      # Sample -- don't scan every file
+      |> Enum.take(5)
       |> Enum.flat_map(fn file_path ->
         case File.read(file_path) do
           {:ok, content} ->
             first_lines = content |> String.split("\n") |> Enum.take(5) |> Enum.join("\n")
+
             if String.contains?(first_lines, "SPDX-License-Identifier") do
               []
             else
-              [%{
-                rule: "SD009",
-                file: Path.relative_to(file_path, repo_path),
-                severity: :medium,
-                reason: "Source file missing SPDX-License-Identifier header",
-                action: :add_spdx_header
-              }]
+              [
+                %{
+                  rule: "SD009",
+                  file: Path.relative_to(file_path, repo_path),
+                  severity: :medium,
+                  reason: "Source file missing SPDX-License-Identifier header",
+                  action: :add_spdx_header
+                }
+              ]
             end
 
-          _ -> []
+          _ ->
+            []
         end
       end)
     end)
@@ -426,47 +475,69 @@ defmodule Hypatia.Rules.StructuralDrift do
       # Check if it's tracked by git (not in .gitignore)
       case System.cmd("git", ["ls-files", "node_modules"], cd: repo_path, stderr_to_stdout: true) do
         {output, 0} when output != "" ->
-          tracked_count =
-            output |> String.split("\n", trim: true) |> length()
+          tracked_count = output |> String.split("\n", trim: true) |> length()
 
-          [%{
-            rule: "SD010",
-            file: "node_modules/",
-            severity: :high,
-            reason: "node_modules/ is tracked in git (#{tracked_count} files) -- must be in .gitignore",
-            action: :untrack_and_gitignore,
-            trigger_intensive: true
-          }]
+          [
+            %{
+              rule: "SD010",
+              file: "node_modules/",
+              severity: :high,
+              reason:
+                "node_modules/ is tracked in git (#{tracked_count} files) -- must be in .gitignore",
+              action: :untrack_and_gitignore,
+              trigger_intensive: true
+            }
+          ]
 
-        _ -> []
+        _ ->
+          []
       end
     else
       # Also check for node_modules in subdirectories (monorepo packages)
-      case System.cmd("find", [repo_path, "-maxdepth", "3", "-type", "d",
-                               "-name", "node_modules",
-                               "-not", "-path", "*/.git/*"],
-                      cd: repo_path, stderr_to_stdout: true) do
+      case System.cmd(
+             "find",
+             [
+               repo_path,
+               "-maxdepth",
+               "3",
+               "-type",
+               "d",
+               "-name",
+               "node_modules",
+               "-not",
+               "-path",
+               "*/.git/*"
+             ],
+             cd: repo_path,
+             stderr_to_stdout: true
+           ) do
         {output, 0} when output != "" ->
           output
           |> String.split("\n", trim: true)
           |> Enum.flat_map(fn dir ->
             case System.cmd("git", ["ls-files", Path.relative_to(dir, repo_path)],
-                           cd: repo_path, stderr_to_stdout: true) do
+                   cd: repo_path,
+                   stderr_to_stdout: true
+                 ) do
               {tracked, 0} when tracked != "" ->
-                [%{
-                  rule: "SD010",
-                  file: Path.relative_to(dir, repo_path) <> "/",
-                  severity: :high,
-                  reason: "Nested node_modules/ tracked in git -- must be in .gitignore",
-                  action: :untrack_and_gitignore,
-                  trigger_intensive: true
-                }]
+                [
+                  %{
+                    rule: "SD010",
+                    file: Path.relative_to(dir, repo_path) <> "/",
+                    severity: :high,
+                    reason: "Nested node_modules/ tracked in git -- must be in .gitignore",
+                    action: :untrack_and_gitignore,
+                    trigger_intensive: true
+                  }
+                ]
 
-              _ -> []
+              _ ->
+                []
             end
           end)
 
-        _ -> []
+        _ ->
+          []
       end
     end
   end
@@ -502,13 +573,15 @@ defmodule Hypatia.Rules.StructuralDrift do
       dir_path = Path.join(repo_path, dir_name)
 
       if File.dir?(dir_path) and not String.contains?(gitignore_content, dir_name) do
-        [%{
-          rule: "SD011",
-          file: ".gitignore",
-          severity: :medium,
-          reason: "#{dir_name}/ directory exists but is not in .gitignore -- add '#{pattern}'",
-          action: :add_gitignore_entry
-        }]
+        [
+          %{
+            rule: "SD011",
+            file: ".gitignore",
+            severity: :medium,
+            reason: "#{dir_name}/ directory exists but is not in .gitignore -- add '#{pattern}'",
+            action: :add_gitignore_entry
+          }
+        ]
       else
         []
       end
@@ -557,14 +630,16 @@ defmodule Hypatia.Rules.StructuralDrift do
               rule: "SD013",
               file: ".gitignore",
               severity: :low,
-              reason: "Path-specific gitignore pattern '#{String.trim(line)}' -- use global '#{global_pattern}' instead",
+              reason:
+                "Path-specific gitignore pattern '#{String.trim(line)}' -- use global '#{global_pattern}' instead",
               action: :globalise_gitignore_pattern,
               detail: %{current: String.trim(line), recommended: global_pattern}
             }
           end)
         end)
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -597,35 +672,39 @@ defmodule Hypatia.Rules.StructuralDrift do
 
     cond do
       has_res and not has_affine ->
-        [%{
-          rule: "SD014",
-          type: :safedom_example_dialect_mismatch,
-          file: "examples/SafeDOMExample.res",
-          severity: :high,
-          reason:
-            "examples/SafeDOMExample.res lingers without the canonical " <>
-              "AffineScript replacement examples/SafeDOMExample.affine. " <>
-              "ReScript is banned in new code as of 2026-04-30 " <>
-              "(estate policy); the canonical .affine version lives in " <>
-              "burble/main. The governance/language-policy check fires " <>
-              "on every push until the .res is replaced.",
-          action: :replace_safedom_with_affine,
-          trigger_intensive: false
-        }]
+        [
+          %{
+            rule: "SD014",
+            type: :safedom_example_dialect_mismatch,
+            file: "examples/SafeDOMExample.res",
+            severity: :high,
+            reason:
+              "examples/SafeDOMExample.res lingers without the canonical " <>
+                "AffineScript replacement examples/SafeDOMExample.affine. " <>
+                "ReScript is banned in new code as of 2026-04-30 " <>
+                "(estate policy); the canonical .affine version lives in " <>
+                "burble/main. The governance/language-policy check fires " <>
+                "on every push until the .res is replaced.",
+            action: :replace_safedom_with_affine,
+            trigger_intensive: false
+          }
+        ]
 
       has_res and has_affine ->
-        [%{
-          rule: "SD014",
-          type: :safedom_example_both_dialects,
-          file: "examples/SafeDOMExample.res",
-          severity: :medium,
-          reason:
-            "Both examples/SafeDOMExample.res and " <>
-              "examples/SafeDOMExample.affine are present. The .affine " <>
-              "is canonical; delete the .res copy.",
-          action: :delete_legacy_safedom_res,
-          trigger_intensive: false
-        }]
+        [
+          %{
+            rule: "SD014",
+            type: :safedom_example_both_dialects,
+            file: "examples/SafeDOMExample.res",
+            severity: :medium,
+            reason:
+              "Both examples/SafeDOMExample.res and " <>
+                "examples/SafeDOMExample.affine are present. The .affine " <>
+                "is canonical; delete the .res copy.",
+            action: :delete_legacy_safedom_res,
+            trigger_intensive: false
+          }
+        ]
 
       true ->
         []
@@ -642,18 +721,20 @@ defmodule Hypatia.Rules.StructuralDrift do
   def scan(repo_path) do
     findings =
       sd001_legacy_scm(repo_path) ++
-      sd002_trustfile_hs(repo_path) ++
-      sd003_ai_djot(repo_path) ++
-      sd004_misplaced_a2ml(repo_path) ++
-      sd005_orphan_gitlinks(repo_path) ++
-      sd006_trustfile_examples(repo_path) ++
-      sd007_stale_references(repo_path) ++
-      sd008_unsound_patterns(repo_path) ++
-      sd009_missing_spdx(repo_path) ++
-      sd010_tracked_node_modules(repo_path) ++
-      sd011_missing_gitignore(repo_path) ++
-      sd013_path_specific_gitignore(repo_path) ++
-      sd014_safedom_example_dialect(repo_path)
+        sd002_trustfile_hs(repo_path) ++
+        sd003_ai_djot(repo_path) ++
+        sd004_misplaced_a2ml(repo_path) ++
+        sd005_orphan_gitlinks(repo_path) ++
+        sd006_trustfile_examples(repo_path) ++
+        sd007_stale_references(repo_path) ++
+        sd008_unsound_patterns(repo_path) ++
+        sd009_missing_spdx(repo_path) ++
+        sd010_tracked_node_modules(repo_path) ++
+        sd011_missing_gitignore(repo_path) ++
+        sd013_path_specific_gitignore(repo_path) ++
+        sd014_safedom_example_dialect(repo_path) ++
+        sd022_stale_path_after_rename(repo_path) ++
+        sd023_state_a2ml_divergence(repo_path)
 
     needs_intensive = Enum.any?(findings, & &1[:trigger_intensive])
     needs_alert = Enum.any?(findings, & &1[:alert_user])
@@ -694,48 +775,92 @@ defmodule Hypatia.Rules.StructuralDrift do
   end
 
   defp find_files(repo_path, filename) do
-    case System.cmd("find", [repo_path, "-maxdepth", "4", "-name", filename,
-                             "-not", "-path", "*/.git/*"], stderr_to_stdout: true) do
+    case System.cmd(
+           "find",
+           [repo_path, "-maxdepth", "4", "-name", filename, "-not", "-path", "*/.git/*"],
+           stderr_to_stdout: true
+         ) do
       {output, 0} -> output |> String.split("\n", trim: true)
       _ -> []
     end
   end
 
   defp find_files_matching(repo_path, regex) do
-    case System.cmd("find", [repo_path, "-maxdepth", "4", "-type", "f",
-                             "-not", "-path", "*/.git/*",
-                             "-not", "-path", "*/node_modules/*",
-                             "-not", "-path", "*/target/*",
-                             "-not", "-path", "*/_build/*"], stderr_to_stdout: true) do
+    case System.cmd(
+           "find",
+           [
+             repo_path,
+             "-maxdepth",
+             "4",
+             "-type",
+             "f",
+             "-not",
+             "-path",
+             "*/.git/*",
+             "-not",
+             "-path",
+             "*/node_modules/*",
+             "-not",
+             "-path",
+             "*/target/*",
+             "-not",
+             "-path",
+             "*/_build/*"
+           ],
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         output
         |> String.split("\n", trim: true)
         |> Enum.filter(fn path -> Regex.match?(regex, Path.basename(path)) end)
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
   defp find_files_with_extension(repo_path, ext) do
-    src_dirs = [
-      Path.join(repo_path, "src"),
-      Path.join(repo_path, "lib"),
-      Path.join(repo_path, "ffi")
-    ]
-    |> Enum.filter(&File.dir?/1)
+    src_dirs =
+      [
+        Path.join(repo_path, "src"),
+        Path.join(repo_path, "lib"),
+        Path.join(repo_path, "ffi")
+      ]
+      |> Enum.filter(&File.dir?/1)
 
     case src_dirs do
-      [] -> []
+      [] ->
+        []
+
       dirs ->
         dirs
         |> Enum.flat_map(fn dir ->
-          case System.cmd("find", [dir, "-maxdepth", "5", "-name", "*#{ext}",
-                                   "-not", "-path", "*/.git/*",
-                                   "-not", "-path", "*/node_modules/*",
-                                   "-not", "-path", "*/target/*",
-                                   "-not", "-path", "*/_build/*",
-                                   "-not", "-path", "*/deps/*"],
-                          stderr_to_stdout: true) do
+          case System.cmd(
+                 "find",
+                 [
+                   dir,
+                   "-maxdepth",
+                   "5",
+                   "-name",
+                   "*#{ext}",
+                   "-not",
+                   "-path",
+                   "*/.git/*",
+                   "-not",
+                   "-path",
+                   "*/node_modules/*",
+                   "-not",
+                   "-path",
+                   "*/target/*",
+                   "-not",
+                   "-path",
+                   "*/_build/*",
+                   "-not",
+                   "-path",
+                   "*/deps/*"
+                 ],
+                 stderr_to_stdout: true
+               ) do
             {output, 0} -> output |> String.split("\n", trim: true)
             _ -> []
           end
@@ -801,6 +926,292 @@ defmodule Hypatia.Rules.StructuralDrift do
       in? and Regex.match?(~r/^\s*#/, line) -> branch_block_items(rest, true, acc)
       in? and item != nil -> branch_block_items(rest, true, [Enum.at(item, 1) | acc])
       true -> branch_block_items(rest, false, acc)
+    end
+  end
+
+  # ─── SD022: Stale path references after directory rename ───────────────
+  #
+  # When a source directory is renamed (e.g. `src/ephapax/` → `src/paint_core/`
+  # in a single commit), trailing-edge documentation references frequently
+  # outlive the rename. This rule scans docs for `src/<dir>/` references and
+  # flags any whose `<dir>` is NOT a real directory in the current tree.
+  #
+  # Discovered on JoshuaJewell/paint-type 2026-06-02: PR #48 renamed
+  # src/ephapax → src/paint_core in the Cargo workspace; 25 docs (49
+  # occurrences) still pointed at the old path. Caught by manual sweep
+  # in PR #49. This rule prevents the next recurrence.
+  #
+  # Exemption: CHANGELOG.md (historical references are documentation, not
+  # drift) and anything under `third_party/` (vendored).
+
+  @doc """
+  SD022: Detect documentation that references a `src/<dir>/` path
+  whose `<dir>` is not a real directory in the current tree.
+
+  Severity: medium (doc-only; doesn't break the build, but misleads readers).
+  Action: sed sweep `s|src/<stale-dir>|src/<new-dir>|g` once the rename
+  target is identified (typically via `git log --diff-filter=R`).
+  Triggers: intensive scan (where one rename-drift hits, others follow).
+  """
+  def sd022_stale_path_after_rename(repo_path) do
+    # `real_basenames` = every <name> for which a directory `**/src/<name>`
+    # (or root `src/<name>`) exists ANYWHERE in the tree. A `src/<dir>/`
+    # reference that resolves to such a directory is real — it was merely
+    # written unanchored (crate-relative `scripts/x/src/bin`, doc-relative
+    # `ffi/zig` → `src/connectors`, or prefixed `cli/src/commands`). Only a
+    # `<dir>` that exists nowhere is a drift candidate.
+    {real_basenames, _top_dirs} = src_dir_index(repo_path)
+
+    if MapSet.size(real_basenames) == 0 and not File.dir?(Path.join(repo_path, "src")) do
+      []
+    else
+      # Corpus / vendored / historical docs cite paths that are illustrative by
+      # nature (training subjects, foreign examples), not this tree's layout.
+      # Mirror the universal exemptions in lib/hypatia/scanner_suppression.ex.
+      corpus_prefixes = [
+        ".audittraining/",
+        "test/",
+        "tests/",
+        "integration/fixtures/",
+        "test/fixtures/",
+        "tests/fixtures/",
+        "scripts/fix-scripts/",
+        "third_party/",
+        # Archived session notes record the tree AS IT WAS. A path that was
+        # valid when written is not rename drift; "fixing" it would falsify
+        # the record.
+        "docs/archive/"
+      ]
+
+      find_files_by_ext(repo_path, [
+        ".md",
+        ".adoc",
+        ".txt",
+        ".a2ml",
+        ".contractile",
+        ".toml",
+        ".twasm"
+      ])
+      |> Enum.reject(fn rel ->
+        rel == "CHANGELOG.md" or Enum.any?(corpus_prefixes, &String.starts_with?(rel, &1)) or
+          nested_project_doc?(repo_path, rel)
+      end)
+      |> Enum.flat_map(fn rel ->
+        path = Path.join(repo_path, rel)
+
+        case File.read(path) do
+          {:ok, raw} ->
+            content = strip_full_line_comments(raw, Path.extname(rel))
+
+            # Negative lookbehind: only a *repo-root-relative* `src/<dir>/`
+            # is rename-drift. A `src/` preceded by another path segment
+            # (`vcl-ut/src/bridges/`, `cli/src/commands/`, `echidna/src/rust/`,
+            # `integration/src/ci_simulation/`, `examples/nestjs/src/i18n/`)
+            # belongs to that other tree/crate/repo, not this repo's `src/`.
+            ~r{(?<![\w./-])src/([A-Za-z0-9_][A-Za-z0-9_-]*)/}
+            |> Regex.scan(content)
+            |> Enum.map(fn [_, dir] -> dir end)
+            |> Enum.uniq()
+            |> Enum.reject(fn dir ->
+              # Real repo-root `src/<dir>/`, OR a crate-/module-relative
+              # reference that resolves against the referencing file's OWN
+              # directory (e.g. a `scripts/<crate>/Cargo.toml` declaring
+              # `path = "src/bin/…"`, or `ffi/zig/README.adoc` describing
+              # its sibling `src/connectors/`). Only a reference that
+              # resolves NOWHERE is genuine post-rename drift.
+              MapSet.member?(real_basenames, dir) or
+                File.dir?(Path.join([repo_path, Path.dirname(rel), "src", dir]))
+            end)
+            |> Enum.map(fn stale_dir ->
+              %{
+                rule: "SD022",
+                file: rel,
+                severity: :medium,
+                reason:
+                  "doc references `src/#{stale_dir}/` but no such directory exists in the tree (likely surviving a directory rename)",
+                action: :rename_sweep,
+                stale_dir: stale_dir,
+                trigger_intensive: true
+              }
+            end)
+
+          _ ->
+            []
+        end
+      end)
+    end
+  end
+
+  # Drop whole-line comments before matching. A commented-out example is not a
+  # live claim about the tree.
+  #
+  # Measured 2026-07-29 on gitbot-fleet's .machine_readable/INTENT.contractile,
+  # where SD022 fired on
+  #
+  #     ; "src/abi/ - formal proofs, changes require re-verification"
+  #
+  # inside a `; *REMINDER: List areas where LLMs should check...*` block --
+  # template boilerplate, entirely commented out. Same family as the known
+  # unwrap-rule-matches-comments defect.
+  #
+  # Deliberately conservative: only `;` (scheme-shaped contractile/twasm) and
+  # `#` in TOML-shaped files. Markdown/AsciiDoc are left alone, since `#` there
+  # is a heading and may legitimately carry a path.
+  defp strip_full_line_comments(content, ext) do
+    leaders =
+      case ext do
+        e when e in [".contractile", ".twasm"] -> [";"]
+        e when e in [".toml", ".a2ml"] -> ["#", ";"]
+        _ -> []
+      end
+
+    if leaders == [] do
+      content
+    else
+      content
+      |> String.split("\n")
+      |> Enum.reject(fn line ->
+        t = String.trim_leading(line)
+        Enum.any?(leaders, &String.starts_with?(t, &1))
+      end)
+      |> Enum.join("\n")
+    end
+  end
+
+  # A doc inside a NESTED PROJECT ROOT (a subdirectory carrying its own build
+  # manifest) describes THAT project, whose layout is governed by its own
+  # repository -- not by this one. Reporting its paths as this repo's rename
+  # drift is noise the mirror cannot act on.
+  #
+  # Measured 2026-07-29 on gitbot-fleet: `bots/echidnabot/` is a vendored copy
+  # of the standalone echidnabot repo. Its CANONICAL_SOURCE.md documents
+  # `src/abi/` and states in the same table that the ABI namespace is
+  # "owner-managed in standalone; fleet does not need it for deploy". `src/abi/`
+  # exists upstream and is deliberately absent here, so SD022 fired on a doc
+  # that is correct. 10 of 11 findings in that repo were this shape.
+  #
+  # Only subtrees BELOW the repo root count -- a root manifest means the repo
+  # itself is the project, and its drift is in scope.
+  defp nested_project_doc?(repo_path, rel) do
+    manifests = ["Cargo.toml", "mix.exs", "package.json", "go.mod", "pyproject.toml"]
+
+    rel
+    |> Path.dirname()
+    |> Path.split()
+    |> Enum.scan(fn seg, acc -> Path.join(acc, seg) end)
+    |> Enum.reject(&(&1 in [".", ""]))
+    |> Enum.any?(fn dir ->
+      Enum.any?(manifests, &File.exists?(Path.join([repo_path, dir, &1])))
+    end)
+  end
+
+  # Index every `**/src/<name>` directory in the tracked tree (via the file
+  # list, so it respects .gitignore and skips _build/deps), returning the set
+  # of <name> basenames plus the set of real top-level directory names.
+  defp src_dir_index(repo_path) do
+    files =
+      case System.cmd("git", ["-C", repo_path, "ls-files"], stderr_to_stdout: true) do
+        {output, 0} -> String.split(output, "\n", trim: true)
+        _ -> []
+      end
+
+    Enum.reduce(files, {MapSet.new(), MapSet.new()}, fn rel, {bases, tops} ->
+      segs = String.split(rel, "/")
+
+      tops =
+        case segs do
+          [_single] -> tops
+          [top | _] -> MapSet.put(tops, top)
+          _ -> tops
+        end
+
+      bases =
+        segs
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.reduce(bases, fn
+          ["src", name], acc -> MapSet.put(acc, name)
+          _, acc -> acc
+        end)
+
+      {bases, tops}
+    end)
+  end
+
+  # ─── SD023: STATE.a2ml divergence (top-level vs 6a2/) ──────────────────
+  #
+  # The estate v2 convention puts STATE at `.machine_readable/6a2/STATE.a2ml`.
+  # Some repos retain a legacy top-level `.machine_readable/STATE.a2ml`. When
+  # both exist, they MUST agree on the `last-updated` field — otherwise one
+  # is stale and consumers (Hypatia, agents reading 6a2) see the wrong reality.
+  #
+  # Discovered on JoshuaJewell/paint-type 2026-06-02: top-level STATE.a2ml
+  # was 2026-06-01 with 22% completion while 6a2/STATE.a2ml was 2026-05-11
+  # with 10% completion. Caught by manual sweep; PR #49 unified them.
+
+  @doc """
+  SD023: Detect divergence between `.machine_readable/STATE.a2ml` and
+  `.machine_readable/6a2/STATE.a2ml` when both exist.
+
+  Severity: medium (one is stale; consumers may read either).
+  Action: pick the freshest as truth, mirror to the other, document
+  in CHANGELOG which is canonical going forward.
+  """
+  def sd023_state_a2ml_divergence(repo_path) do
+    top = Path.join([repo_path, ".machine_readable", "STATE.a2ml"])
+    six = Path.join([repo_path, ".machine_readable", "6a2", "STATE.a2ml"])
+
+    with true <- File.exists?(top),
+         true <- File.exists?(six),
+         {:ok, top_content} <- File.read(top),
+         {:ok, six_content} <- File.read(six) do
+      top_date = extract_last_updated(top_content)
+      six_date = extract_last_updated(six_content)
+
+      cond do
+        top_date == nil or six_date == nil ->
+          []
+
+        top_date == six_date ->
+          []
+
+        true ->
+          [
+            %{
+              rule: "SD023",
+              file: ".machine_readable/STATE.a2ml + .machine_readable/6a2/STATE.a2ml",
+              severity: :medium,
+              reason:
+                "STATE.a2ml divergence: top-level last-updated=#{top_date}, 6a2/ last-updated=#{six_date}. One is stale; consumers may read either.",
+              action: :unify_state,
+              top_last_updated: top_date,
+              six_last_updated: six_date,
+              trigger_intensive: false
+            }
+          ]
+      end
+    else
+      _ -> []
+    end
+  end
+
+  defp extract_last_updated(content) do
+    # Matches both TOML (`last-updated = "2026-06-02"`) and Scheme
+    # (`(last-updated "2026-06-02")`) variants.
+    case Regex.run(~r/last[-_]updated\s*[=\s]\s*"([^"]+)"/, content) do
+      [_, date] -> date
+      _ -> nil
+    end
+  end
+
+  defp find_files_by_ext(repo_path, exts) do
+    case System.cmd("git", ["-C", repo_path, "ls-files"], stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.filter(fn rel -> Path.extname(rel) in exts end)
+
+      _ ->
+        []
     end
   end
 end

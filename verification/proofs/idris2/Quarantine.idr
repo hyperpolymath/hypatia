@@ -11,12 +11,17 @@
 --
 -- Corresponds to: lib/safety/quarantine.ex
 
-module Hypatia.Verification.Quarantine
+module Quarantine
 
-import Hypatia.ABI.Types
 import Data.So
 
 %default total
+
+||| Dispatch strategy — mirrors Hypatia.ABI.Types.DispatchStrategy.
+||| Defined locally so this proof obligation type-checks standalone
+||| (verify-proofs.yml runs `idris2 --check` per file, with no package path).
+public export
+data DispatchStrategy = AutoExecute | Review | ReportOnly
 
 ------------------------------------------------------------------------
 -- Section 1: State Representation
@@ -67,7 +72,8 @@ release _ = Ok
 public export
 failuresTriggerHard : (n : Nat) -> So (n >= 5)
                    -> updateState Ok (ConsecutiveFailures n) = Quarantined Hard
-failuresTriggerHard (S (S (S (S (S n))))) Oh = Refl
+failuresTriggerHard n prf with (n >= 5)
+  failuresTriggerHard n Oh | True = Refl
 
 ||| Proof: high FP rate (> 0.3) ALWAYS results in at least a Soft quarantine from Ok state.
 ||| (Using a simplified boolean check for Double).

@@ -91,25 +91,28 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
         count = length(open)
 
         if count > 0 do
-          [%{
-            rule: "SSA002",
-            file: "#{owner}/#{repo}",
-            severity: :critical,
-            reason: "#{count} open secret-scanning alert(s) -- rotate and purge from history",
-            action: :escalate,
-            detail: %{
-              total: count,
-              by_type:
-                open
-                |> Enum.group_by(&(&1["secret_type"] || "unknown"))
-                |> Map.new(fn {k, v} -> {k, length(v)} end)
+          [
+            %{
+              rule: "SSA002",
+              file: "#{owner}/#{repo}",
+              severity: :critical,
+              reason: "#{count} open secret-scanning alert(s) -- rotate and purge from history",
+              action: :escalate,
+              detail: %{
+                total: count,
+                by_type:
+                  open
+                  |> Enum.group_by(&(&1["secret_type"] || "unknown"))
+                  |> Map.new(fn {k, v} -> {k, length(v)} end)
+              }
             }
-          }]
+          ]
         else
           []
         end
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -150,7 +153,8 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
           }
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -192,7 +196,8 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
           }
         end)
 
-      {:error, _} -> []
+      {:error, _} ->
+        []
     end
   end
 
@@ -220,11 +225,12 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
           {f.rule, Map.get(f.detail, :alert_number, f.file)}
         end)
 
-      {:ok, %{
-        findings: deduped,
-        total: length(deduped),
-        by_severity: group_by_severity(deduped)
-      }}
+      {:ok,
+       %{
+         findings: deduped,
+         total: length(deduped),
+         by_severity: group_by_severity(deduped)
+       }}
     end
   end
 
@@ -250,17 +256,21 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
         "#{@github_api_base}/repos/#{owner}/#{repo}/secret-scanning/alerts" <>
           "?per_page=#{@max_alerts_per_repo}"
 
-      case System.cmd("curl", [
-             "-s",
-             "-f",
-             "-H",
-             "Accept: application/vnd.github+json",
-             "-H",
-             "Authorization: Bearer #{token}",
-             "-H",
-             "X-GitHub-Api-Version: 2022-11-28",
-             url
-           ], stderr_to_stdout: true) do
+      case System.cmd(
+             "curl",
+             [
+               "-s",
+               "-f",
+               "-H",
+               "Accept: application/vnd.github+json",
+               "-H",
+               "Authorization: Bearer #{token}",
+               "-H",
+               "X-GitHub-Api-Version: 2022-11-28",
+               url
+             ],
+             stderr_to_stdout: true
+           ) do
         {body, 0} ->
           case Jason.decode(body) do
             {:ok, alerts} when is_list(alerts) -> {:ok, alerts}

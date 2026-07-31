@@ -350,7 +350,43 @@ jobs:
     steps:
       - name: Generate summary
         run: |
-          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          # Prepare variables
+          REPO="${{ needs.record-report.outputs.repo }}"
+          PR_COUNT="${{ needs.record-report.outputs.pr_count }}"
+          VALIDATED="${{ needs.record-report.outputs.validated_count }}"
+          MERGED="${{ needs.record-report.outputs.merged_count }}"
+          
+          ANALYSIS_RESULT="${{ needs.analyze-patterns.result }}"
+          if [ "$ANALYSIS_RESULT" = "success" ]; then
+            ANALYSIS_STATUS="✅ Pattern analysis completed"
+            PATTERNS="${{ needs.analyze-patterns.outputs.patterns }}"
+            FILE_TYPES=$(echo "$PATTERNS" | jq -r '.file_types // "N/A" | head -c 50' 2>/dev/null || echo "N/A")
+            RULE_UPDATES="${{ needs.analyze-patterns.outputs.rule_updates }}"
+            RULE_COUNT=$(echo "$RULE_UPDATES" | jq length 2>/dev/null || echo "0")
+          else
+            ANALYSIS_STATUS="❌ Pattern analysis failed"
+            FILE_TYPES="N/A"
+            RULE_COUNT="0"
+          fi
+          
+          UPDATE_RESULT="${{ needs.update-ruleset.result }}"
+          if [ "$UPDATE_RESULT" = "success" ]; then
+            UPDATE_STATUS="✅ Updated Hypatia ruleset"
+            RULE_UPDATES="${{ needs.analyze-patterns.outputs.rule_updates }}"
+            RULE_LIST=$(echo "$RULE_UPDATES" | jq -r '.[] | "- [\(.priority | ascii_upcase)] \(.type): \(.suggestion)"' 2>/dev/null || echo "None")
+          else
+            UPDATE_STATUS="❌ Ruleset update failed"
+            RULE_LIST="None"
+          fi
+          
+          DISPATCH_RESULT="${{ needs.dispatch-to-farm.result }}"
+          if [ "$DISPATCH_RESULT" = "success" ]; then
+            DISPATCH_STATUS="✅ Dispatched to .git-private-farm"
+          else
+            DISPATCH_STATUS="❌ Dispatch to farm failed"
+          fi
+          
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           # Inbox Steward Intake Summary
           
           ## Report Received

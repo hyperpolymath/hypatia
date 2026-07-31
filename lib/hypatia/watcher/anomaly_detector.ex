@@ -240,9 +240,7 @@ defmodule Hypatia.Watcher.AnomalyDetector do
     # the recent rate against the baseline, treating the baseline as
     # the "true" distribution.
     sigma =
-      :math.sqrt(
-        max(baseline_rate * (1 - baseline_rate) / max(baseline_count, 1), 0.0001)
-      )
+      :math.sqrt(max(baseline_rate * (1 - baseline_rate) / max(baseline_count, 1), 0.0001))
 
     sigma_distance = (baseline_rate - recent_rate) / sigma
 

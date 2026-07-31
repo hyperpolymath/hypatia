@@ -1,0 +1,13 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. verdict=veto with no rationale. MUST be REJECTED (A3). Not a real attestation.",
+  "bot": "echidnabot",
+  "subject": {"repo": "hyperpolymath/example", "number": 2, "head_sha": "def456"},
+  "verdict": "veto",
+  "confidence": 1.0,
+  "intent_hash": "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "evidence_hash": "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "seal": {"chain_hash": "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "alg": "ed25519", "sig": "abcd"},
+  "nonce": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "tool_version": "echidnabot/1.0.0",
+  "timestamp": "2026-06-05T15:00:00Z"
+}

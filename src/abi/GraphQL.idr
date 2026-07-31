@@ -48,7 +48,7 @@ data Mutation : Type -> Type where
   DispatchFinding : (entry : DispatchEntry) -> Mutation (ApiResponse String)
 
   ||| Record a fix outcome (feeds the learning loop)
-  RecordOutcome : (record : OutcomeRecord) -> Mutation (ApiResponse String)
+  RecordOutcome : (outcome : OutcomeRecord) -> Mutation (ApiResponse String)
 
   ||| Force a learning cycle (normally automatic every 5 min)
   ForceLearningCycle : Mutation (ApiResponse Nat)

@@ -14,6 +14,7 @@
 module SafetyTriangle
 
 import Data.Nat
+import Decidable.Equality
 
 %default total
 
@@ -98,7 +99,7 @@ tierTrichotomy Control    Control    = Left Refl
 public export
 rankConsistent : TierGT a b -> LT (tierRank b) (tierRank a)
 rankConsistent ElimGtSubst = LTESucc (LTESucc LTEZero)  -- 1 < 2
-rankConsistent ElimGtCtrl  = LTESucc (LTESucc LTEZero)  -- 0 < 2? No, need LTESucc LTEZero for 0 < 2
+rankConsistent ElimGtCtrl  = LTESucc LTEZero             -- 0 < 2
 rankConsistent SubstGtCtrl = LTESucc LTEZero             -- 0 < 1
 
 ------------------------------------------------------------------------
@@ -157,21 +158,21 @@ controlOnlyAsFallback = Refl
 public export
 eliminateNeverDowngradedToSubst : (sub : TierAvailability Substitute)
                                -> Not (resultTier (routeTriangle Available sub) = Substitute)
-eliminateNeverDowngradedToSubst Available   prf = absurd prf
-eliminateNeverDowngradedToSubst Unavailable prf = absurd prf
+eliminateNeverDowngradedToSubst Available   Refl impossible
+eliminateNeverDowngradedToSubst Unavailable Refl impossible
 
 ||| Proof: when Eliminate is available, the result is never Control.
 public export
 eliminateNeverDowngradedToCtrl : (sub : TierAvailability Substitute)
                               -> Not (resultTier (routeTriangle Available sub) = Control)
-eliminateNeverDowngradedToCtrl Available   prf = absurd prf
-eliminateNeverDowngradedToCtrl Unavailable prf = absurd prf
+eliminateNeverDowngradedToCtrl Available   Refl impossible
+eliminateNeverDowngradedToCtrl Unavailable Refl impossible
 
 ||| Proof: when Substitute is available and Eliminate isn't, the result
 ||| is never Control.
 public export
 substituteNeverDowngraded : Not (resultTier (routeTriangle Unavailable Available) = Control)
-substituteNeverDowngraded prf = absurd prf
+substituteNeverDowngraded Refl impossible
 
 ------------------------------------------------------------------------
 -- Section 5: Optimality — routing always picks the highest available tier
@@ -194,20 +195,20 @@ routeIsOptimal : (elim : TierAvailability Eliminate)
               -> (sub : TierAvailability Substitute)
               -> (better : Tier)
               -> TierGT better (resultTier (routeTriangle elim sub))
-              -> isAvailable (case better of
+              -> isAvailable (the (TierAvailability better) (case better of
                    Eliminate  => elim
                    Substitute => sub
-                   Control    => Available) = False
+                   Control    => Available)) = False
 -- When Eliminate is available, result is Eliminate.
 -- No tier is greater than Eliminate (TierGT _ Eliminate is uninhabited).
 routeIsOptimal Available _ Eliminate prf = absurd (tierGTIrreflexive prf)
-routeIsOptimal Available _ Substitute prf = absurd prf  -- TierGT Substitute Eliminate impossible
-routeIsOptimal Available _ Control prf = absurd prf     -- TierGT Control Eliminate impossible
+routeIsOptimal Available _ Substitute prf = case prf of _ impossible  -- TierGT Substitute Eliminate impossible
+routeIsOptimal Available _ Control prf = case prf of _ impossible     -- TierGT Control Eliminate impossible
 -- When only Substitute is available, result is Substitute.
 -- Only Eliminate is greater, and it's Unavailable.
 routeIsOptimal Unavailable Available Eliminate ElimGtSubst = Refl
 routeIsOptimal Unavailable Available Substitute prf = absurd (tierGTIrreflexive prf)
-routeIsOptimal Unavailable Available Control prf = absurd prf
+routeIsOptimal Unavailable Available Control prf = case prf of _ impossible
 -- When neither is available, result is Control.
 -- Eliminate is Unavailable, Substitute is Unavailable.
 routeIsOptimal Unavailable Unavailable Eliminate ElimGtCtrl = Refl

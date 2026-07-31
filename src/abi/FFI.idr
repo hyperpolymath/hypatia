@@ -35,7 +35,7 @@ data FFIFunction : Type where
 
   ||| Record outcome — appends to outcomes/YYYY-MM.jsonl.
   ||| Corresponds to: POST /api/v1/outcomes
-  RecordOutcome : (record : OutcomeRecord) -> FFIFunction
+  RecordOutcome : (outcome : OutcomeRecord) -> FFIFunction
 
   ||| Force learning cycle — writes .force-learning signal file.
   ||| Corresponds to: POST /api/v1/learning/force

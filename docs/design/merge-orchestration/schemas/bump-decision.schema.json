@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/bump-decision.schema.json",
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — bump-class decision, extends decision-manifest. Wave-0 artifact 2. Copyright (c) 2026 Jonathan D.A. Jewell.",
+  "title": "BumpDecisionManifest",
+  "allOf": [
+    {"$ref": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/decision-manifest.schema.json"},
+    {
+      "type": "object",
+      "required": ["change_class", "bump"],
+      "properties": {
+        "change_class": {"const": "bump"},
+        "bump": {
+          "type": "object",
+          "required": ["ecosystem", "package", "from_version", "to_version", "semver_jump", "bridge"],
+          "properties": {
+            "ecosystem": {"enum": ["cargo", "nix", "actions", "npm", "hex", "deno", "other"]},
+            "package": {"type": "string"},
+            "from_version": {"type": "string"},
+            "to_version": {"type": "string"},
+            "semver_jump": {"enum": ["patch", "minor", "major"]},
+            "bridge": {
+              "type": "object",
+              "required": ["worst_classification", "reachable_unmitigable"],
+              "properties": {
+                "worst_classification": {"enum": ["Mitigable", "Unmitigable", "Informational", "none"]},
+                "reachable_unmitigable": {"type": "boolean"},
+                "cve_ids": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "B1 — reachable unmitigable CVE forces flag.",
+          "if": {"properties": {"bump": {"properties": {"bridge": {"properties": {"reachable_unmitigable": {"const": true}}}}}}},
+          "then": {"properties": {"safety": {"const": "flag"}}}
+        },
+        {
+          "$comment": "B2 — major version jump may never auto-arm.",
+          "if": {"properties": {"bump": {"properties": {"semver_jump": {"const": "major"}}}}},
+          "then": {"properties": {"safety": {"enum": ["review", "flag"]}}}
+        },
+        {
+          "$comment": "B3 — nix ecosystem forces flag (Nix removed estate-wide).",
+          "if": {"properties": {"bump": {"properties": {"ecosystem": {"const": "nix"}}}}},
+          "then": {"properties": {"safety": {"const": "flag"}}}
+        }
+      ]
+    }
+  ]
+}

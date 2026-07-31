@@ -9,6 +9,14 @@ on:
 
 permissions: read-all
 
+# Restored after #258 ("consolidate 37 workflows → 23") dropped it: the merge
+# moved the container jobs out of container.yml into this file, but env: is
+# file-scoped and didn't travel with them, leaving env.REGISTRY/env.IMAGE_NAME
+# undefined (breaking ghcr login/metadata/push tags + the attest subject-name).
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -17,12 +25,13 @@ jobs:
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Extract version
         id: version
@@ -50,6 +59,7 @@ jobs:
   build-rust:
     name: Build Rust - ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     needs: [prepare]
     strategy:
       fail-fast: false
@@ -84,7 +94,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
@@ -93,7 +103,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ". -> target"
           key: ${{ matrix.target }}
@@ -151,90 +161,35 @@ jobs:
           retention-days: 7
 
   # ============================================================================
-  # Build Haskell Binary
-  # ============================================================================
-
-  build-haskell:
-    name: Build Haskell Registry
-    runs-on: ubuntu-latest
-    needs: [prepare]
-    if: hashFiles('registry/hypatia.cabal') != '' || hashFiles('registry/hypatia.cabal') != ''
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
-        id: setup
-        with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Restore cached dependencies
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        id: cache
-        env:
-          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ env.key }}-plan-${{ hashFiles('registry/hypatia.cabal') }}
-          restore-keys: ${{ env.key }}-
-
-      - name: Build dependencies
-        run: cabal build all --only-dependencies
-
-      - name: Build registry
-        run: cabal build exe:registry
-
-      - name: Create distribution
-        run: |
-          mkdir -p dist
-          cp $(cabal list-bin registry) dist/
-          cp ../README.adoc ../LICENSE dist/
-          cd dist
-          tar -czvf ../hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz *
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: hypatia-registry-x86_64-linux
-          path: registry/hypatia-registry-${{ needs.prepare.outputs.version }}-x86_64-linux.tar.gz
-          retention-days: 7
-
-  # ============================================================================
   # Build Docker Images
   # ============================================================================
 
   build-docker:
     name: Build Container Images
     runs-on: ubuntu-latest
-    needs: [prepare, build-rust, build-haskell]
+    timeout-minutes: 60
+    needs: [prepare, build-rust]
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         component:
+          # Only the CLI image remains. The adapter/registry/engine images were
+          # retired: their Containerfiles were deleted (deploy/Containerfile.*),
+          # the Haskell `registry/` and Logtalk `engine/` sources removed, and the
+          # ghcr registry package archived (see note at end of file). The adapter
+          # still ships as the `forge-adapter` binary via build-rust; recover its
+          # image with `git show f2fe2df^:deploy/Containerfile.adapter` if wanted.
           - name: cli
             dockerfile: deploy/Containerfile
-            context: .
-          - name: adapter
-            dockerfile: deploy/Containerfile.adapter
-            context: .
-          - name: registry
-            dockerfile: deploy/Containerfile.registry
-            context: .
-          - name: engine
-            dockerfile: deploy/Containerfile.engine
             context: .
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download Rust artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -243,11 +198,11 @@ jobs:
           path: artifacts
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Container Registry
         if: ${{ !inputs.dry_run }}
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@06fb636fac595d6fb4b28a5dfcb21a6f5091859c # v4.5.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -255,7 +210,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
           tags: |
@@ -265,7 +220,8 @@ jobs:
             type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -277,6 +233,14 @@ jobs:
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
 
+      - name: Attest container provenance
+        if: ${{ !inputs.dry_run }}
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
   # ============================================================================
   # Create GitHub Release
   # ============================================================================
@@ -284,13 +248,16 @@ jobs:
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [prepare, build-rust, build-haskell, build-docker]
+    timeout-minutes: 60
+    needs: [prepare, build-rust, build-docker]
     if: ${{ !inputs.dry_run }}
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -311,16 +278,11 @@ jobs:
 
           ### Components
           - **CLI** (`hyper`): Command-line interface for CI/CD operations
-          - **Adapters** (`forge-adapter`): Multi-forge adapters (GitHub, GitLab, Bitbucket)
-          - **Registry**: Type-safe rule registry (Haskell)
-          - **Engine**: Neurosymbolic rule engine (Logtalk)
+          - **Adapters** (`forge-adapter`): Multi-forge adapters (GitHub, GitLab, Bitbucket) — shipped as a binary in the release archives
 
           ### Docker Images
           ```bash
           docker pull ghcr.io/${{ github.repository }}-cli:${{ needs.prepare.outputs.version }}
-          docker pull ghcr.io/${{ github.repository }}-adapter:${{ needs.prepare.outputs.version }}
-          docker pull ghcr.io/${{ github.repository }}-registry:${{ needs.prepare.outputs.version }}
-          docker pull ghcr.io/${{ github.repository }}-engine:${{ needs.prepare.outputs.version }}
           ```
 
           ### Installation
@@ -348,7 +310,7 @@ jobs:
           cat checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v2.2.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v2.2.1
         with:
           name: Hypatia v${{ needs.prepare.outputs.version }}
           body_path: release-notes.md
@@ -357,70 +319,40 @@ jobs:
             release-assets/*
           fail_on_unmatched_files: false
 
-  # ============================================================================
-  # Publish Haskell Package
-  # ============================================================================
-
-  publish-hackage:
-    name: Publish to Hackage
-    runs-on: ubuntu-latest
-    needs: [prepare, github-release]
-    if: ${{ !inputs.dry_run && needs.prepare.outputs.is_prerelease == 'false' && hashFiles('registry/hypatia.cabal') != '' }}
-    defaults:
-      run:
-        working-directory: registry
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
-          ghc-version: '9.6'
-          cabal-version: '3.10'
-          cabal-update: true
-
-      - name: Build source distribution
-        run: cabal sdist
-
-      - name: Publish to Hackage
-        if: env.HACKAGE_TOKEN != ''
-        run: |
-          cabal upload --publish dist-newstyle/sdist/*.tar.gz
-        env:
-          HACKAGE_TOKEN: ${{ secrets.HACKAGE_TOKEN }}
-          HACKAGE_USERNAME: ${{ secrets.HACKAGE_USERNAME }}
-          HACKAGE_PASSWORD: ${{ secrets.HACKAGE_TOKEN }}
+          subject-path: 'release-assets/*'
 
   build-and-push:
     name: Build and Push
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
         component:
+          # CLI-only: adapter/engine images retired (see build-docker note above).
           - name: cli
             dockerfile: deploy/Containerfile
-          - name: adapter
-            dockerfile: deploy/Containerfile.adapter
-          - name: engine
-            dockerfile: deploy/Containerfile.engine
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@06fb636fac595d6fb4b28a5dfcb21a6f5091859c # v4.5.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -428,7 +360,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
           tags: |
@@ -437,7 +369,8 @@ jobs:
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: ${{ matrix.component.dockerfile }}
@@ -450,5 +383,18 @@ jobs:
           build-args: |
             VERSION=${{ github.sha }}
 
-  # NOTE: Haskell registry container removed — source directory deleted in f2fe2df
-  # The hypatia-registry package on ghcr.io is now archived
+      - name: Attest container provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  # NOTE: The adapter/registry/engine container images were retired; this workflow
+  # now builds only the CLI image.
+  #   - registry (Haskell) + engine (SWI-Prolog/Logtalk): sources deleted (f2fe2df).
+  #     Logtalk was an early idea for the rule engine, superseded by the native
+  #     Elixir ruleset. The hypatia-registry package on ghcr.io is now archived.
+  #   - adapter (Rust): still ships as the `forge-adapter` binary via build-rust;
+  #     only its service image was dropped. Recover it if ever wanted again with
+  #     `git show f2fe2df^:deploy/Containerfile.adapter`.

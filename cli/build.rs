@@ -62,8 +62,8 @@ fn main() {
 
     // Copy man pages to OUT_DIR for packaging (release builds)
     if env::var("PROFILE").map(|p| p == "release").unwrap_or(false) {
-        let out_dir = env::var("OUT_DIR")
-            .expect("cargo invariant: OUT_DIR is always set in build scripts");
+        let out_dir =
+            env::var("OUT_DIR").expect("cargo invariant: OUT_DIR is always set in build scripts");
         let target_man_dir = Path::new(&out_dir).join("man");
 
         if man_dir.exists() {

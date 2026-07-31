@@ -128,8 +128,7 @@ impl ErrorCatalog {
                 severity: Severity::Low,
                 auto_fixable: true,
                 description: "Workflow file missing SPDX license header".to_string(),
-                fix_pattern: "Add '# SPDX-License-Identifier: MPL-2.0' as first line"
-                    .to_string(),
+                fix_pattern: "Add '# SPDX-License-Identifier: MPL-2.0' as first line".to_string(),
             },
         );
 

@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
+# Lake build artifacts
+/.lake/
+/lake-manifest.json

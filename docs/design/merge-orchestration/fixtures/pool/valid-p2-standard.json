@@ -1,0 +1,7 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — golden: a normal in-system repo at P2/standard.",
+  "repo": "hyperpolymath/panll",
+  "pool": "P2",
+  "product_tier": "standard",
+  "system_membership": "in-system"
+}

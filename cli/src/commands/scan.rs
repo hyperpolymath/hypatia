@@ -309,7 +309,12 @@ pub async fn execute(args: ScanArgs, _config: &Config, format: OutputFormat) -> 
     // Exit with error if critical findings
     // No critical-severity bucket in the summary map means zero criticals; 0
     // is the semantically correct default here (absent key == none observed).
-    let critical_count = results.summary.by_severity.get("critical").copied().unwrap_or(0);
+    let critical_count = results
+        .summary
+        .by_severity
+        .get("critical")
+        .copied()
+        .unwrap_or(0);
     if critical_count > 0 {
         std::process::exit(1);
     }

@@ -10,9 +10,8 @@
 --
 -- Corresponds to: batch-ops/repo-batch-ops.jl and gitbot-fleet integration.
 
-module Hypatia.Verification.BatchRollback
+module BatchRollback
 
-import Hypatia.ABI.Types
 import Data.List
 
 %default total
@@ -51,7 +50,7 @@ data BatchResult = Success Snapshot | Failed Snapshot (List String) -- New state
 public export
 executeBatch : (op : Op) -> (initial : Snapshot) -> BatchResult
 executeBatch op initial =
-  let results = map (\rs => { content $= op } rs) initial
+  let results = map op initial
   in Success results
 
 ||| Rollback a batch by restoring the original snapshot.
@@ -67,9 +66,10 @@ rollback current original = original
 public export
 executeWithFailure : (op : Op) -> (initial : Snapshot) -> (failAt : Nat) -> BatchResult
 executeWithFailure op initial failAt =
-  let (done, remaining) = splitAt failAt initial
-      applied = map (\rs => { content $= op } rs) done
-  in Failed (applied ++ remaining) (map name remaining)
+  -- Use fst/snd (not a pattern-let) so the `Failed` head stays manifest,
+  -- letting the rollback proofs reduce without a vacuous Success branch.
+  let parts = splitAt failAt initial
+  in Failed (map op (fst parts) ++ snd parts) (map name (snd parts))
 
 ||| Proof: rollback ALWAYS restores the original snapshot regardless of the failed state.
 public export
@@ -78,10 +78,7 @@ rollbackRestoresOriginal : (initial : Snapshot) -> (op : Op) -> (n : Nat)
                            in case res of
                                 Success s => rollback s initial = initial
                                 Failed s _ => rollback s initial = initial
-rollbackRestoresOriginal initial op n =
-  case executeWithFailure op initial n of
-    Success s => Refl
-    Failed s _ => Refl
+rollbackRestoresOriginal initial op n = Refl
 
 ||| Proof: an operation is reversible if we have the original snapshot.
 ||| This is the core "Batch Rollback" guarantee.
@@ -106,6 +103,5 @@ data TransactionProperty : BatchResult -> Snapshot -> Type where
 public export
 batchIsTransactional : (initial : Snapshot) -> (op : Op) -> (n : Nat)
                     -> TransactionProperty (executeWithFailure op initial n) initial
-batchIsTransactional initial op n with (executeWithFailure op initial n)
-  batchIsTransactional initial op n | Success s = AllApplied s (Success s) Refl
-  batchIsTransactional initial op n | Failed s names = NothingApplied initial (Failed s names) Refl
+batchIsTransactional initial op n =
+  NothingApplied initial (executeWithFailure op initial n) Refl

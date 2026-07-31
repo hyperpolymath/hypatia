@@ -60,9 +60,7 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
     pr_number = opts[:pr]
 
     unless owner && repo && pr_number do
-      Mix.raise(
-        "Usage: mix hypatia.pr_eligibility --owner OWNER --repo REPO --pr NUMBER"
-      )
+      Mix.raise("Usage: mix hypatia.pr_eligibility --owner OWNER --repo REPO --pr NUMBER")
     end
 
     result = check_eligibility(owner, repo, pr_number)
@@ -82,6 +80,7 @@ defmodule Mix.Tasks.Hypatia.PrEligibility do
 
     # Step 2: Run BP008 to find phantom contexts (required but never emitting).
     phantom_findings = BranchProtection.bp008_phantom_required_context(owner, repo)
+
     phantom_contexts =
       phantom_findings
       |> Enum.map(fn finding -> get_in(finding, [:detail, :phantom_context]) end)

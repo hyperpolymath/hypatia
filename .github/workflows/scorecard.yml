@@ -1,19 +1,22 @@
-# SPDX-License-Identifier: MPL-2.0
-name: Scorecards supply-chain security
+# SPDX-License-Identifier: PMPL-1.0-or-later
+name: OSSF Scorecard
 
 on:
-  branch_protection_rule:
-  schedule:
-    - cron: '23 4 * * 1'
   push:
-    branches: [main]
+    branches: [main, master]
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
-  analysis:
+  scorecard:
+    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@81dbf2dd854b1444fd6236fa2352474383b2c2b9
     permissions:
+      contents: read
       security-events: write
       id-token: write
-    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@e0caf11508a3989574713c78f5f444f2ce5e33ef
+    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@81dbf2dd854b1444fd6236fa2352474383b2c2b9
     secrets: inherit

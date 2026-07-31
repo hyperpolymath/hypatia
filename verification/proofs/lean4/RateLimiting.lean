@@ -70,23 +70,32 @@ def invariantHolds (state : RateLimiterState) (now : Nat) : Prop :=
 /-- An empty rate limiter trivially satisfies the invariant. -/
 theorem empty_satisfies_invariant (config : RateLimitConfig) (now : Nat) :
     invariantHolds { config := config, events := [] } now := by
-  simp [invariantHolds, countEventsInWindow, List.filter, List.length]
+  simp [invariantHolds, countEventsInWindow]
 
 /-- Helper: List.filter never increases length. -/
 theorem filter_length_le {α : Type} (p : α → Bool) (xs : List α) :
     (xs.filter p).length ≤ xs.length := by
   induction xs with
-  | nil => simp [List.filter]
+  | nil => simp
   | cons x xs ih =>
-    simp [List.filter]
+    rw [List.filter_cons]
     split
-    · simp [List.length]
-      exact Nat.succ_le_succ ih
+    · exact Nat.succ_le_succ ih
     · exact Nat.le_succ_of_le ih
 
 ------------------------------------------------------------------------
 -- Section 3: Proof that tryAccept preserves the invariant
 ------------------------------------------------------------------------
+
+/-- Adding one event to the front raises the in-window count by at most 1. -/
+theorem count_cons_le (e : Event) (es : List Event) (ws : Nat) :
+    countEventsInWindow (e :: es) ws ≤ countEventsInWindow es ws + 1 := by
+  unfold countEventsInWindow
+  rw [List.filter_cons]
+  split
+  · rw [List.length_cons]
+    omega
+  · omega
 
 /-- After tryAccept, the invariant is preserved.
     If the event is rejected, state is unchanged (trivially preserves).
@@ -94,30 +103,17 @@ theorem filter_length_le {α : Type} (p : α → Bool) (xs : List α) :
 theorem tryAccept_preserves_invariant
     (state : RateLimiterState) (event : Event)
     (h : invariantHolds state event.timestamp) :
-    let (state', _) := tryAccept state event
-    invariantHolds state' event.timestamp := by
-  simp [tryAccept]
+    invariantHolds (tryAccept state event).1 event.timestamp := by
+  unfold tryAccept
   split
-  case isTrue hAllowed =>
-    simp [invariantHolds, countEventsInWindow]
-    -- The event is at timestamp = now, so it's in the window.
-    -- After adding it, count increases by at most 1.
-    -- Since isAllowed was true, currentCount < maxEvents,
-    -- so currentCount + 1 <= maxEvents.
-    simp [isAllowed] at hAllowed
-    simp [invariantHolds, countEventsInWindow] at h
-    -- The new events list is event :: state.events
-    -- Filtering (event :: state.events) for timestamps >= windowStart
-    -- gives at most 1 + (filter of state.events)
-    simp [List.filter]
-    split
-    · -- event.timestamp >= windowStart: count increases by 1
-      simp [List.length]
-      exact hAllowed
-    · -- event.timestamp < windowStart: count unchanged
-      exact h
-  case isFalse _ =>
-    -- Event rejected, state unchanged
+  · -- accepted: events become event :: state.events; event is in its own window,
+    -- and isAllowed gave count < maxEvents, so count + 1 ≤ maxEvents.
+    rename_i hAllowed
+    simp only [invariantHolds] at h ⊢
+    simp only [isAllowed, decide_eq_true_eq] at hAllowed
+    have hc := count_cons_le event state.events (event.timestamp - state.config.windowSize)
+    omega
+  · -- rejected: state unchanged
     exact h
 
 ------------------------------------------------------------------------
@@ -129,23 +125,10 @@ theorem prune_preserves_invariant
     (state : RateLimiterState) (now : Nat)
     (h : invariantHolds state now) :
     invariantHolds (prune state now) now := by
-  simp [prune, invariantHolds, countEventsInWindow]
-  -- After pruning, events = filter (>= windowStart) state.events
-  -- Filtering an already-filtered list is idempotent for the same predicate.
-  -- countEventsInWindow (filter p events) windowStart
-  --   = (filter p (filter p events)).length
-  --   <= (filter p events).length
-  --   = countEventsInWindow events windowStart
-  --   <= maxEvents
-  simp [List.filter]
-  -- The double filter is equivalent to single filter (idempotent)
-  -- filter_filter_same will give us the result
-  have : ∀ (xs : List Event),
-    (xs.filter (fun e => e.timestamp >= now - state.config.windowSize)
-        |>.filter (fun e => e.timestamp >= now - state.config.windowSize)).length
-    ≤ (xs.filter (fun e => e.timestamp >= now - state.config.windowSize)).length :=
-    fun xs => filter_length_le _ _
-  exact Nat.le_trans (this state.events) h
+  -- prune filters the events; counting re-filters with the same predicate, so the
+  -- post-prune count is ≤ the pre-prune count, which h bounds by maxEvents.
+  simp only [invariantHolds, countEventsInWindow, prune] at h ⊢
+  exact Nat.le_trans (filter_length_le _ _) h
 
 ------------------------------------------------------------------------
 -- Section 5: Sequence of events — invariant holds inductively
@@ -167,19 +150,19 @@ theorem processEvents_preserves_invariant
     (hTime : ∀ e, e ∈ events → e.timestamp = t)
     (h : invariantHolds state t) :
     invariantHolds (processEvents state events) t := by
-  induction events with
+  -- Generalize `state`: each step processes one event from a possibly-different
+  -- state, so the induction hypothesis must hold for any starting state.
+  induction events generalizing state with
   | nil => exact h
   | cons e es ih =>
-    simp [processEvents]
-    apply ih
+    simp only [processEvents]
+    apply ih (tryAccept state e).1
     · intro e' he'
       exact hTime e' (List.mem_cons_of_mem e he')
-    · have hET : e.timestamp = t := hTime e (List.mem_cons_self e es)
-      rw [← hET] at h
-      have := tryAccept_preserves_invariant state e h
-      simp at this
-      rw [hET] at this
-      exact this
+    · have hET : e.timestamp = t := hTime e List.mem_cons_self
+      have hpre : invariantHolds state e.timestamp := by rw [hET]; exact h
+      have hstep := tryAccept_preserves_invariant state e hpre
+      rwa [hET] at hstep
 
 ------------------------------------------------------------------------
 -- Section 6: Concrete configurations

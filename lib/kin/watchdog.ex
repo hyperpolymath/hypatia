@@ -15,8 +15,10 @@ defmodule Hypatia.Kin.Watchdog do
   use GenServer
   require Logger
 
-  @check_interval_ms 60_000  # 1 minute
-  @restart_storm_threshold 5  # 5 restarts in the window = storm
+  # 1 minute
+  @check_interval_ms 60_000
+  # 5 restarts in the window = storm
+  @restart_storm_threshold 5
   # Restart storm uses count-based detection: @restart_storm_threshold restarts
   # within the periodic decay window (~10 check cycles = ~10 minutes)
 
@@ -73,22 +75,23 @@ defmodule Hypatia.Kin.Watchdog do
 
   @impl true
   def handle_call(:process_health, _from, state) do
-    report = Enum.map(@monitored_processes, fn {mod, layer, importance} ->
-      pid = Process.whereis(mod)
-      alive = pid != nil and Process.alive?(pid)
-      restart_count = Map.get(state.restart_counts, mod, 0)
-      in_storm = MapSet.member?(state.restart_storms, mod)
+    report =
+      Enum.map(@monitored_processes, fn {mod, layer, importance} ->
+        pid = Process.whereis(mod)
+        alive = pid != nil and Process.alive?(pid)
+        restart_count = Map.get(state.restart_counts, mod, 0)
+        in_storm = MapSet.member?(state.restart_storms, mod)
 
-      %{
-        module: mod,
-        layer: layer,
-        importance: importance,
-        alive: alive,
-        pid: pid,
-        restart_count: restart_count,
-        restart_storm: in_storm
-      }
-    end)
+        %{
+          module: mod,
+          layer: layer,
+          importance: importance,
+          alive: alive,
+          pid: pid,
+          restart_count: restart_count,
+          restart_storm: in_storm
+        }
+      end)
 
     {:reply, report, state}
   end
@@ -96,9 +99,12 @@ defmodule Hypatia.Kin.Watchdog do
   @impl true
   def handle_call({:layer_healthy, layer}, _from, state) do
     layer_procs = Enum.filter(@monitored_processes, fn {_, l, _} -> l == layer end)
-    critical_down = Enum.any?(layer_procs, fn {mod, _, importance} ->
-      importance == :critical and not process_alive?(mod)
-    end)
+
+    critical_down =
+      Enum.any?(layer_procs, fn {mod, _, importance} ->
+        importance == :critical and not process_alive?(mod)
+      end)
+
     {:reply, not critical_down, state}
   end
 
@@ -142,15 +148,20 @@ defmodule Hypatia.Kin.Watchdog do
 
     # Log storms
     new_storm_entries = MapSet.difference(new_storms, state.restart_storms)
+
     Enum.each(new_storm_entries, fn mod ->
-      Logger.error("Watchdog: RESTART STORM detected for #{inspect(mod)} -- backing off supervision")
+      Logger.error(
+        "Watchdog: RESTART STORM detected for #{inspect(mod)} -- backing off supervision"
+      )
     end)
 
     # Handle critical failures
     Enum.each(events, fn
       {:down, mod, _layer, :critical} ->
         Logger.error("Watchdog: CRITICAL process #{inspect(mod)} is down -- system degraded")
-      _ -> :ok
+
+      _ ->
+        :ok
     end)
 
     # Decay restart counts periodically (every 10 checks = ~10 minutes)
@@ -161,12 +172,13 @@ defmodule Hypatia.Kin.Watchdog do
         new_restart_counts
       end
 
-    %{state |
-      process_states: new_process_states,
-      restart_counts: new_restart_counts,
-      restart_storms: new_storms,
-      last_check: now,
-      check_count: state.check_count + 1
+    %{
+      state
+      | process_states: new_process_states,
+        restart_counts: new_restart_counts,
+        restart_storms: new_storms,
+        last_check: now,
+        check_count: state.check_count + 1
     }
   end
 

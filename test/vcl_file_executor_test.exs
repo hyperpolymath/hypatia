@@ -206,20 +206,24 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- WHERE FIELD comparison operators" do
     test "greater-than (:gt) compares string values" do
-      ast = make_ast(%{
-        source: {:store, "scans"},
-        where: {:field, "_source", :gt, "a"}
-      })
+      ast =
+        make_ast(%{
+          source: {:store, "scans"},
+          where: {:field, "_source", :gt, "a"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       # All files starting with letters after "a" (alphabetically)
       assert is_list(results)
     end
 
     test "less-than (:lt) compares string values" do
-      ast = make_ast(%{
-        source: {:store, "scans"},
-        where: {:field, "_source", :lt, "z"}
-      })
+      ast =
+        make_ast(%{
+          source: {:store, "scans"},
+          where: {:field, "_source", :lt, "z"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) >= 1
     end
@@ -227,9 +231,11 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- WHERE FIELD :contains" do
     test "checks string containment" do
-      ast = make_ast(%{
-        where: {:field, "_source", :contains, "echidna"}
-      })
+      ast =
+        make_ast(%{
+          where: {:field, "_source", :contains, "echidna"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) >= 1
     end
@@ -237,9 +243,11 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- WHERE FIELD :like" do
     test "case-insensitive substring match" do
-      ast = make_ast(%{
-        where: {:field, "_source", :like, "ECHIDNA"}
-      })
+      ast =
+        make_ast(%{
+          where: {:field, "_source", :like, "ECHIDNA"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) >= 1
     end
@@ -247,18 +255,22 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- WHERE FIELD :matches" do
     test "regex matching on field value" do
-      ast = make_ast(%{
-        where: {:field, "_source", :matches, "echidna|verisim"}
-      })
+      ast =
+        make_ast(%{
+          where: {:field, "_source", :matches, "echidna|verisim"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) >= 1
     end
 
     test "invalid regex falls back gracefully" do
       # An invalid regex should cause :matches to return false rather than crash
-      ast = make_ast(%{
-        where: {:field, "_source", :matches, "[invalid"}
-      })
+      ast =
+        make_ast(%{
+          where: {:field, "_source", :matches, "[invalid"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert is_list(results)
     end
@@ -315,40 +327,54 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- WHERE AND compound conditions" do
     test "both conditions must match" do
-      ast = make_ast(%{
-        where: {:and, [
-          {:fulltext, :contains, "weak_points"},
-          {:field, "_source", :eq, "echidna.json"}
-        ]}
-      })
+      ast =
+        make_ast(%{
+          where:
+            {:and,
+             [
+               {:fulltext, :contains, "weak_points"},
+               {:field, "_source", :eq, "echidna.json"}
+             ]}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) == 1
       assert hd(results)["_source"] == "echidna.json"
     end
 
     test "no results when one condition is impossible" do
-      ast = make_ast(%{
-        where: {:and, [
-          {:field, "_source", :eq, "echidna.json"},
-          {:field, "_source", :eq, "verisim.json"}
-        ]}
-      })
+      ast =
+        make_ast(%{
+          where:
+            {:and,
+             [
+               {:field, "_source", :eq, "echidna.json"},
+               {:field, "_source", :eq, "verisim.json"}
+             ]}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert results == []
     end
 
     test "multiple AND conditions progressively narrow results" do
-      ast_one = make_ast(%{
-        where: {:fulltext, :contains, "weak_points"}
-      })
+      ast_one =
+        make_ast(%{
+          where: {:fulltext, :contains, "weak_points"}
+        })
+
       {:ok, one_results} = FileExecutor.execute(ast_one)
 
-      ast_two = make_ast(%{
-        where: {:and, [
-          {:fulltext, :contains, "weak_points"},
-          {:field, "_source", :eq, "echidna.json"}
-        ]}
-      })
+      ast_two =
+        make_ast(%{
+          where:
+            {:and,
+             [
+               {:fulltext, :contains, "weak_points"},
+               {:field, "_source", :eq, "echidna.json"}
+             ]}
+        })
+
       {:ok, two_results} = FileExecutor.execute(ast_two)
 
       assert length(two_results) <= length(one_results)
@@ -363,9 +389,11 @@ defmodule Hypatia.VCL.FileExecutorTest do
     test "WHERE on dotted field path accesses nested maps" do
       # Scans may have nested structures; this tests that deep_get works
       # Even if the path does not exist, it should not crash
-      ast = make_ast(%{
-        where: {:field, "nested.field.path", :eq, "value"}
-      })
+      ast =
+        make_ast(%{
+          where: {:field, "nested.field.path", :eq, "value"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert is_list(results)
     end
@@ -377,20 +405,24 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- modality sorting" do
     test "TEMPORAL modality sorts by timestamp descending" do
-      ast = make_ast(%{
-        modalities: [:temporal],
-        source: {:store, "outcomes"}
-      })
+      ast =
+        make_ast(%{
+          modalities: [:temporal],
+          source: {:store, "outcomes"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
 
       if length(results) >= 2 do
-        timestamps = Enum.map(results, fn item ->
-          Map.get(item, "timestamp") || Map.get(item, "last_seen") ||
-            Map.get(item, "last_scan") || ""
-        end)
+        timestamps =
+          Enum.map(results, fn item ->
+            Map.get(item, "timestamp") || Map.get(item, "last_seen") ||
+              Map.get(item, "last_scan") || ""
+          end)
 
         # Check descending order
         pairs = Enum.zip(timestamps, Enum.drop(timestamps, 1))
+
         Enum.each(pairs, fn {a, b} ->
           assert a >= b, "Temporal sort not descending: #{a} < #{b}"
         end)
@@ -398,16 +430,19 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
 
     test "SEMANTIC modality sorts by category" do
-      ast = make_ast(%{
-        modalities: [:semantic],
-        source: {:store, "recipes"}
-      })
+      ast =
+        make_ast(%{
+          modalities: [:semantic],
+          source: {:store, "recipes"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
 
       if length(results) >= 2 do
-        categories = Enum.map(results, fn item ->
-          Map.get(item, "category") || ""
-        end)
+        categories =
+          Enum.map(results, fn item ->
+            Map.get(item, "category") || ""
+          end)
 
         # Check ascending alphabetical order
         assert categories == Enum.sort(categories)
@@ -542,19 +577,23 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
 
     test "HEXAD result respects WHERE clause" do
-      ast = make_ast(%{
-        source: {:hexad, "echidna"},
-        where: {:fulltext, :contains, "weak_points"}
-      })
+      ast =
+        make_ast(%{
+          source: {:hexad, "echidna"},
+          where: {:fulltext, :contains, "weak_points"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) >= 1
     end
 
     test "HEXAD with non-matching WHERE returns empty" do
-      ast = make_ast(%{
-        source: {:hexad, "echidna"},
-        where: {:fulltext, :contains, "zzz_absolutely_nonexistent_xxyy"}
-      })
+      ast =
+        make_ast(%{
+          source: {:hexad, "echidna"},
+          where: {:fulltext, :contains, "zzz_absolutely_nonexistent_xxyy"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert results == []
     end
@@ -566,10 +605,12 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- FEDERATION queries" do
     test "cross-store query returns results from multiple stores" do
-      ast = make_ast(%{
-        source: {:federation, "/all/*", nil},
-        limit: 50
-      })
+      ast =
+        make_ast(%{
+          source: {:federation, "/all/*", nil},
+          limit: 50
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert is_list(results)
       assert length(results) >= 1
@@ -597,19 +638,23 @@ defmodule Hypatia.VCL.FileExecutorTest do
     end
 
     test "federation with LIMIT caps results" do
-      ast = make_ast(%{
-        source: {:federation, "/scans/*", nil},
-        limit: 2
-      })
+      ast =
+        make_ast(%{
+          source: {:federation, "/scans/*", nil},
+          limit: 2
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) <= 2
     end
 
     test "federation with WHERE filters results" do
-      ast = make_ast(%{
-        source: {:federation, "/scans/*", nil},
-        where: {:field, "_source", :eq, "echidna.json"}
-      })
+      ast =
+        make_ast(%{
+          source: {:federation, "/scans/*", nil},
+          where: {:field, "_source", :eq, "echidna.json"}
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) <= 1
     end
@@ -621,21 +666,25 @@ defmodule Hypatia.VCL.FileExecutorTest do
 
   describe "execute/2 -- combined WHERE, LIMIT, and modality" do
     test "WHERE + LIMIT + OFFSET work together" do
-      ast = make_ast(%{
-        where: {:fulltext, :contains, "weak_points"},
-        limit: 1,
-        offset: 0
-      })
+      ast =
+        make_ast(%{
+          where: {:fulltext, :contains, "weak_points"},
+          limit: 1,
+          offset: 0
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) <= 1
     end
 
     test "TEMPORAL modality + LIMIT produces sorted limited results" do
-      ast = make_ast(%{
-        modalities: [:temporal],
-        source: {:store, "outcomes"},
-        limit: 5
-      })
+      ast =
+        make_ast(%{
+          modalities: [:temporal],
+          source: {:store, "outcomes"},
+          limit: 5
+        })
+
       {:ok, results} = FileExecutor.execute(ast)
       assert length(results) <= 5
     end

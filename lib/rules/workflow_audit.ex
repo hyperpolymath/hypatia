@@ -74,13 +74,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
     nperm_typos = check_npermissions_typo(workflow_contents)
     codeql_lang_mismatch = check_codeql_language_matrix_mismatch(workflow_contents, opts)
     workflow_sha_foreign_ref = check_workflow_sha_as_foreign_ref(workflow_contents)
-    reusable_caller_context_self_checkout = check_reusable_caller_context_self_checkout(workflow_contents)
+
+    reusable_caller_context_self_checkout =
+      check_reusable_caller_context_self_checkout(workflow_contents)
+
     missing_timeouts = check_missing_timeout_minutes(workflow_contents)
     scorecard_publish_run = check_scorecard_publish_run_violation(workflow_contents)
     nonroot_container_eacces = check_nonroot_container_checkout_eacces(workflow_contents)
     orphan_reusable_pins = check_orphan_standards_reusable_pin(workflow_contents)
     ungated_secret_action = check_ungated_secret_action(workflow_contents)
-    scorecard_wrapper_missing_perms = check_scorecard_wrapper_missing_job_permissions(workflow_contents)
+
+    scorecard_wrapper_missing_perms =
+      check_scorecard_wrapper_missing_job_permissions(workflow_contents)
+
     workflow_linter_self_ref = check_workflow_linter_self_reference(workflow_contents)
     codeql_missing_actions = check_codeql_missing_actions_language(workflow_contents)
     concurrency_missing = check_concurrency_missing_readonly(workflow_contents)
@@ -88,13 +94,27 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
     %{
       findings:
-        missing ++ unpinned ++ wrong_pins ++ permission_issues ++ duplicates ++
-          caching_issues ++ run_context_issues ++ download_then_run_issues ++ nperm_typos ++
-          codeql_lang_mismatch ++ workflow_sha_foreign_ref ++
-          reusable_caller_context_self_checkout ++ missing_timeouts ++
-          scorecard_publish_run ++ nonroot_container_eacces ++ orphan_reusable_pins ++
-          ungated_secret_action ++ scorecard_wrapper_missing_perms ++
-          workflow_linter_self_ref ++ codeql_missing_actions ++ concurrency_missing ++
+        missing ++
+          unpinned ++
+          wrong_pins ++
+          permission_issues ++
+          duplicates ++
+          caching_issues ++
+          run_context_issues ++
+          download_then_run_issues ++
+          nperm_typos ++
+          codeql_lang_mismatch ++
+          workflow_sha_foreign_ref ++
+          reusable_caller_context_self_checkout ++
+          missing_timeouts ++
+          scorecard_publish_run ++
+          nonroot_container_eacces ++
+          orphan_reusable_pins ++
+          ungated_secret_action ++
+          scorecard_wrapper_missing_perms ++
+          workflow_linter_self_ref ++
+          codeql_missing_actions ++
+          concurrency_missing ++
           heading_regex_issues,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
@@ -146,35 +166,42 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Naïve YAML scan: any `^  <key>:$` under top-level `jobs:`
       # without a subsequent `^    timeout-minutes:` line before the
       # next sibling block.
+      # Reusable-workflow caller jobs (a job-level `^    uses:` calling
+      # `org/repo/.github/workflows/x.yml@ref`) are EXEMPT: a workflow_call
+      # job cannot carry a job-level `timeout-minutes:` — the timeout lives
+      # in the called workflow's own jobs. Flagging them is a false positive.
       lines = String.split(content, "\n")
-      in_jobs = false
-      jobs_with_timeout = MapSet.new()
-      jobs_seen = MapSet.new()
-      current_job = nil
+      acc0 = {MapSet.new(), MapSet.new(), MapSet.new(), false, nil}
 
-      {jobs_seen, jobs_with_timeout} =
-        Enum.reduce(lines, {jobs_seen, jobs_with_timeout, false, nil}, fn line, {seen, with_to, in_j, curj} ->
+      {jobs_seen, jobs_with_timeout, reusable_jobs} =
+        Enum.reduce(lines, acc0, fn line, {seen, with_to, reusable, in_j, curj} ->
           cond do
             String.match?(line, ~r/^jobs:\s*$/) ->
-              {seen, with_to, true, nil}
+              {seen, with_to, reusable, true, nil}
 
             in_j and String.match?(line, ~r/^  [A-Za-z0-9_-]+:\s*$/) ->
               [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
-              {MapSet.put(seen, name), with_to, in_j, name}
+              {MapSet.put(seen, name), with_to, reusable, in_j, name}
 
             in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
-              {seen, MapSet.put(with_to, curj), in_j, curj}
+              {seen, MapSet.put(with_to, curj), reusable, in_j, curj}
+
+            in_j and curj && String.match?(line, ~r/^    uses:\s*\S/) ->
+              {seen, with_to, MapSet.put(reusable, curj), in_j, curj}
 
             String.match?(line, ~r/^[A-Za-z]/) ->
-              {seen, with_to, false, curj}
+              {seen, with_to, reusable, false, curj}
 
             true ->
-              {seen, with_to, in_j, curj}
+              {seen, with_to, reusable, in_j, curj}
           end
         end)
-        |> then(fn {s, w, _, _} -> {s, w} end)
+        |> then(fn {s, w, r, _, _} -> {s, w, r} end)
 
-      missing = MapSet.difference(jobs_seen, jobs_with_timeout)
+      missing =
+        jobs_seen
+        |> MapSet.difference(jobs_with_timeout)
+        |> MapSet.difference(reusable_jobs)
 
       Enum.map(missing, fn job_name ->
         %{
@@ -217,9 +244,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
       if wf in workflow_files do
         []
       else
-        [%{type: :missing_workflow, file: wf,
-           severity: severity_for_workflow(wf),
-           action: :create}]
+        [
+          %{
+            type: :missing_workflow,
+            file: wf,
+            severity: severity_for_workflow(wf),
+            action: :create
+          }
+        ]
       end
     end)
   end
@@ -243,8 +275,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
         [action_ref, ref] =
           case String.split(slug, "@", parts: 2) do
             [_a, r] -> [slug, r]
-            [_a]    -> [slug, ""]
+            [_a] -> [slug, ""]
           end
+
         _ = action_ref
 
         if Hypatia.Rules.SecurityErrors.pin_exempt?(slug) do
@@ -287,16 +320,27 @@ defmodule Hypatia.Rules.WorkflowAudit do
       Regex.scan(~r/uses:\s*([^\s#]+)@([0-9a-f]{40})/m, content)
       |> Enum.flat_map(fn [_full, action, sha] ->
         # Check if we have a known-good SHA for any version of this action
-        matching = Enum.find(Hypatia.Rules.SecurityErrors.sha_pins(), fn {ref, _} ->
-          String.starts_with?(ref, action <> "@")
-        end)
+        matching =
+          Enum.find(Hypatia.Rules.SecurityErrors.sha_pins(), fn {ref, _} ->
+            String.starts_with?(ref, action <> "@")
+          end)
 
         case matching do
           {_ref, known_sha} when known_sha != sha ->
-            [%{type: :wrong_sha_pin, file: filename, action_ref: action,
-               current_sha: sha, expected_sha: known_sha,
-               severity: :info, fix: :update_pin}]
-          _ -> []
+            [
+              %{
+                type: :wrong_sha_pin,
+                file: filename,
+                action_ref: action,
+                current_sha: sha,
+                expected_sha: known_sha,
+                severity: :info,
+                fix: :update_pin
+              }
+            ]
+
+          _ ->
+            []
         end
       end)
     end)
@@ -310,31 +354,56 @@ defmodule Hypatia.Rules.WorkflowAudit do
       findings = []
 
       # Check for write-all (should be read-all + specific)
-      findings = if String.contains?(content, "permissions: write-all") do
-        [%{type: :broad_permissions, file: filename,
-           detail: "permissions: write-all should be permissions: read-all with specific overrides",
-           severity: :high, action: :narrow_permissions} | findings]
-      else
-        findings
-      end
+      findings =
+        if String.contains?(content, "permissions: write-all") do
+          [
+            %{
+              type: :broad_permissions,
+              file: filename,
+              detail:
+                "permissions: write-all should be permissions: read-all with specific overrides",
+              severity: :high,
+              action: :narrow_permissions
+            }
+            | findings
+          ]
+        else
+          findings
+        end
 
       # Check for missing permissions declaration entirely
-      findings = if not Regex.match?(~r/^permissions:/m, content) do
-        [%{type: :missing_permissions, file: filename,
-           detail: "No permissions declaration -- add permissions: read-all",
-           severity: :medium, action: :add_permissions} | findings]
-      else
-        findings
-      end
+      findings =
+        if not Regex.match?(~r/^permissions:/m, content) do
+          [
+            %{
+              type: :missing_permissions,
+              file: filename,
+              detail: "No permissions declaration -- add permissions: read-all",
+              severity: :medium,
+              action: :add_permissions
+            }
+            | findings
+          ]
+        else
+          findings
+        end
 
       # Check for missing SPDX header
-      findings = if not String.contains?(content, "SPDX-License-Identifier:") do
-        [%{type: :missing_spdx, file: filename,
-           detail: "No SPDX-License-Identifier header",
-           severity: :low, action: :add_spdx} | findings]
-      else
-        findings
-      end
+      findings =
+        if not String.contains?(content, "SPDX-License-Identifier:") do
+          [
+            %{
+              type: :missing_spdx,
+              file: filename,
+              detail: "No SPDX-License-Identifier header",
+              severity: :low,
+              action: :add_spdx
+            }
+            | findings
+          ]
+        else
+          findings
+        end
 
       findings
     end)
@@ -356,9 +425,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       Enum.flat_map(cacheable_actions, fn {pattern, name} ->
         if Regex.match?(pattern, content) and not String.contains?(content, "cache:") do
-          [%{type: :missing_caching, file: filename,
-             detail: "#{name} missing built-in caching (e.g., cache: 'npm' or cache: true)",
-             severity: :low, action: :enable_caching}]
+          [
+            %{
+              type: :missing_caching,
+              file: filename,
+              detail: "#{name} missing built-in caching (e.g., cache: 'npm' or cache: true)",
+              severity: :low,
+              action: :enable_caching
+            }
+          ]
         else
           []
         end
@@ -369,20 +444,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
   @doc """
   Detect potential duplicate workflows (same content, different names).
   """
-  def check_duplicates(_workflow_files, workflow_contents) when map_size(workflow_contents) < 2, do: []
+  def check_duplicates(_workflow_files, workflow_contents) when map_size(workflow_contents) < 2,
+    do: []
+
   def check_duplicates(_workflow_files, workflow_contents) do
     # Group by content hash
-    contents_list = Enum.map(workflow_contents, fn {name, content} ->
-      {name, :erlang.md5(content)}
-    end)
+    contents_list =
+      Enum.map(workflow_contents, fn {name, content} ->
+        {name, :erlang.md5(content)}
+      end)
 
     contents_list
     |> Enum.group_by(fn {_, hash} -> hash end)
     |> Enum.flat_map(fn {_hash, entries} ->
       if length(entries) > 1 do
         names = Enum.map(entries, fn {name, _} -> name end)
-        [%{type: :duplicate_workflow, files: names,
-           severity: :low, action: :consolidate}]
+        [%{type: :duplicate_workflow, files: names, severity: :low, action: :consolidate}]
       else
         []
       end
@@ -401,14 +478,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
   def check_npermissions_typo(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       if Regex.match?(~r/^npermissions:/m, content) do
-        [%{
-          rule: "WF013",
-          type: :npermissions_typo,
-          file: filename,
-          severity: :high,
-          reason: "Workflow has 'npermissions' typo -- should be 'permissions'. GitHub Actions silently ignores this, running with overly broad defaults.",
-          action: :fix_typo
-        }]
+        [
+          %{
+            rule: "WF013",
+            type: :npermissions_typo,
+            file: filename,
+            severity: :high,
+            reason:
+              "Workflow has 'npermissions' typo -- should be 'permissions'. GitHub Actions silently ignores this, running with overly broad defaults.",
+            action: :fix_typo
+          }
+        ]
       else
         []
       end
@@ -442,8 +522,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
     # Actor-controllable expressions. Anchored loosely so we catch the
     # expression wherever it appears in a run block — the previous full
     # `run: |` block-shape match missed inline `run:` single-liners.
+    # `[\s\S]*?` previously spanned step boundaries: a `run:` in one step and a
+    # context expression in a LATER step's `env:` block matched as though the
+    # value were interpolated into the script. Measured 2026-07-29 on
+    # gitbot-fleet's repo-integrity-guard.yml -- flagged :critical although the
+    # untrusted values are bound via `env:` and consumed as quoted shell vars
+    # through `grep -F`, i.e. exactly the mitigation this rule asks for.
+    #
+    # `[^\n]` per line, and no line may start a new step (`- name:`/`- uses:`)
+    # or open a sibling mapping key at step indent, so the match stays inside
+    # one run block.
     run_context_re =
-      ~r/run:[\s\S]*?\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)[^}]*\}\}/m
+      ~r/run:(?:[^\n]*\n(?!\s*-\s+(?:name|uses|id):|\s{0,10}(?:env|with|if|name|uses):\s))*?[^\n]*\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)[^}]*\}\}/m
 
     unsafe_json_payload_re =
       ~r/-d\s*".*\$\{\{\s*github\.(?:head_ref|event\.pull_request\.(?:title|body|head\.ref)|event\.issue\.(?:title|body)|event\.comment\.body|event\.review\.body|event\.workflow_run\.(?:head_branch|display_title)|event\.commits)/s
@@ -454,28 +544,34 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       findings =
         if Regex.match?(run_context_re, content) do
-          [%{
-            type: :actions_expression_injection,
-            file: filename,
-            detail:
-              "GitHub context value is interpolated directly inside a run block. Move context into env and use jq/quoted variables.",
-            severity: :critical,
-            action: :sanitize_context
-          } | findings]
+          [
+            %{
+              type: :actions_expression_injection,
+              file: filename,
+              detail:
+                "GitHub context value is interpolated directly inside a run block. Move context into env and use jq/quoted variables.",
+              severity: :critical,
+              action: :sanitize_context
+            }
+            | findings
+          ]
         else
           findings
         end
 
       findings =
         if Regex.match?(unsafe_json_payload_re, content) do
-          [%{
-            type: :unsafe_curl_payload,
-            file: filename,
-            detail:
-              "curl JSON payload is assembled with inline GitHub context interpolation. Build payload with jq --arg.",
-            severity: :high,
-            action: :use_jq_payload
-          } | findings]
+          [
+            %{
+              type: :unsafe_curl_payload,
+              file: filename,
+              detail:
+                "curl JSON payload is assembled with inline GitHub context interpolation. Build payload with jq --arg.",
+              severity: :high,
+              action: :use_jq_payload
+            }
+            | findings
+          ]
         else
           findings
         end
@@ -498,15 +594,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       stripped = strip_comments(content)
+
       if Regex.match?(download_then_run_re, stripped) do
-        [%{
-          type: :download_then_run,
-          file: filename,
-          detail:
-            "Workflow executes remote script directly (curl/wget piped to shell). Download, verify checksum/signature, then execute.",
-          severity: :high,
-          action: :verify_download_integrity
-        }]
+        [
+          %{
+            type: :download_then_run,
+            file: filename,
+            detail:
+              "Workflow executes remote script directly (curl/wget piped to shell). Download, verify checksum/signature, then execute.",
+            severity: :high,
+            action: :verify_download_integrity
+          }
+        ]
       else
         []
       end
@@ -537,20 +636,23 @@ defmodule Hypatia.Rules.WorkflowAudit do
     else
       # Languages CodeQL scans by reading source files in the repo (as
       # opposed to `actions`, which scans workflow YAML).
-      scanning_langs = ~w(javascript-typescript javascript typescript python go java ruby csharp c-cpp swift kotlin)
+      scanning_langs =
+        ~w(javascript-typescript javascript typescript python go java ruby csharp c-cpp swift kotlin)
 
       Enum.flat_map(workflow_contents, fn {filename, content} ->
         if codeql_workflow?(filename) do
           Enum.flat_map(scanning_langs, fn lang ->
             if Regex.match?(~r/language:\s*#{Regex.escape(lang)}(?:\s|$)/m, content) do
-              [%{
-                type: :codeql_language_matrix_mismatch,
-                file: filename,
-                detail:
-                  "codeql.yml lists `language: #{lang}` but the repo has no source files in any CodeQL-scannable language. The analyze job will exit 'no source files' on every run. Switch the matrix to `actions` (which scans workflow files — every repo has those).",
-                severity: :high,
-                action: :switch_codeql_matrix_to_actions
-              }]
+              [
+                %{
+                  type: :codeql_language_matrix_mismatch,
+                  file: filename,
+                  detail:
+                    "codeql.yml lists `language: #{lang}` but the repo has no source files in any CodeQL-scannable language. The analyze job will exit 'no source files' on every run. Switch the matrix to `actions` (which scans workflow files — every repo has those).",
+                  severity: :high,
+                  action: :switch_codeql_matrix_to_actions
+                }
+              ]
             else
               []
             end
@@ -619,20 +721,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
           Regex.match?(~r/^\s+run:\s*[|>]/m, stripped)
 
       if uses_scorecard? and publish_true? and has_step_run? do
-        [%{
-          rule: "WF014",
-          type: :scorecard_publish_with_run_step,
-          file: filename,
-          severity: :high,
-          reason:
-            "Job runs `ossf/scorecard-action` with `publish_results: true` AND " <>
-              "contains a `run:` step. The OSSF publish endpoint enforces " <>
-              "\"scorecard job must only have steps with uses\" — the run-step " <>
-              "presence will fail the publish step and the whole workflow. " <>
-              "Move any `run:` step (e.g. threshold gate) into a `needs: scorecard` " <>
-              "downstream job that consumes the SARIF via upload/download-artifact.",
-          action: :split_scorecard_publish_job
-        }]
+        [
+          %{
+            rule: "WF014",
+            type: :scorecard_publish_with_run_step,
+            file: filename,
+            severity: :high,
+            reason:
+              "Job runs `ossf/scorecard-action` with `publish_results: true` AND " <>
+                "contains a `run:` step. The OSSF publish endpoint enforces " <>
+                "\"scorecard job must only have steps with uses\" — the run-step " <>
+                "presence will fail the publish step and the whole workflow. " <>
+                "Move any `run:` step (e.g. threshold gate) into a `needs: scorecard` " <>
+                "downstream job that consumes the SARIF via upload/download-artifact.",
+            action: :split_scorecard_publish_job
+          }
+        ]
       else
         []
       end
@@ -690,28 +794,31 @@ defmodule Hypatia.Rules.WorkflowAudit do
       stripped = strip_comments(content)
 
       uses_checkout? = Regex.match?(~r/uses:\s*actions\/checkout@/, stripped)
+
       has_user_root? =
         Regex.match?(~r/options:\s*[^\n]*--user\s+(?:root|0)\b/, stripped)
 
       if uses_checkout? and not has_user_root? do
         Enum.flat_map(@nonroot_container_images, fn img ->
           if Regex.match?(~r/image:\s*#{Regex.escape(img)}/, stripped) do
-            [%{
-              rule: "WF015",
-              type: :nonroot_container_checkout_eacces,
-              file: filename,
-              severity: :critical,
-              container_image: img,
-              reason:
-                "Job uses container `#{img}*` (non-root default user) + " <>
-                  "`actions/checkout` without `--user root`. The checkout " <>
-                  "post-step writes to `/__w/_temp/_runner_file_commands` " <>
-                  "as the runner host user; the container's non-root user " <>
-                  "lacks write permission and the job dies with EACCES " <>
-                  "before any user step runs. Add `container.options: " <>
-                  "--user root` (or a post-checkout chown step).",
-              action: :add_container_user_root
-            }]
+            [
+              %{
+                rule: "WF015",
+                type: :nonroot_container_checkout_eacces,
+                file: filename,
+                severity: :critical,
+                container_image: img,
+                reason:
+                  "Job uses container `#{img}*` (non-root default user) + " <>
+                    "`actions/checkout` without `--user root`. The checkout " <>
+                    "post-step writes to `/__w/_temp/_runner_file_commands` " <>
+                    "as the runner host user; the container's non-root user " <>
+                    "lacks write permission and the job dies with EACCES " <>
+                    "before any user step runs. Add `container.options: " <>
+                    "--user root` (or a post-checkout chown step).",
+                action: :add_container_user_root
+              }
+            ]
           else
             []
           end
@@ -791,22 +898,24 @@ defmodule Hypatia.Rules.WorkflowAudit do
         Regex.scan(ref_re, stripped)
         |> Enum.flat_map(fn [_full, sha] ->
           if Enum.any?(orphan_shas, fn orphan -> String.starts_with?(sha, orphan) end) do
-            [%{
-              rule: "WF016",
-              type: :orphan_reusable_sha_pin,
-              file: filename,
-              reusable: reusable_path,
-              current_sha: sha,
-              severity: :critical,
-              reason:
-                "`#{reusable_path}` is pinned at `@#{sha}` which is no longer " <>
-                  "reachable from any branch in the standards repo. Code-review " <>
-                  "tooling resolves the blob (cached) but `workflow_call` at " <>
-                  "run-time refuses orphan SHAs, emitting \"workflow file issue\" " <>
-                  "with zero jobs created. Re-pin to the canonical merge-commit " <>
-                  "SHA from the standards audit.",
-              action: :rewrite_orphan_reusable_pin
-            }]
+            [
+              %{
+                rule: "WF016",
+                type: :orphan_reusable_sha_pin,
+                file: filename,
+                reusable: reusable_path,
+                current_sha: sha,
+                severity: :critical,
+                reason:
+                  "`#{reusable_path}` is pinned at `@#{sha}` which is no longer " <>
+                    "reachable from any branch in the standards repo. Code-review " <>
+                    "tooling resolves the blob (cached) but `workflow_call` at " <>
+                    "run-time refuses orphan SHAs, emitting \"workflow file issue\" " <>
+                    "with zero jobs created. Re-pin to the canonical merge-commit " <>
+                    "SHA from the standards audit.",
+                action: :rewrite_orphan_reusable_pin
+              }
+            ]
           else
             []
           end
@@ -879,26 +988,62 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 gate_re =
                   ~r/(?:^|\n)\s*(?:-\s+)?if:[^\n]*secrets\.#{Regex.escape(secret_name)}[^\n]*!=\s*['"]['"]?/
 
-                if Regex.match?(gate_re, step_block) do
+                # Also accept the valid env+output cross-step gate: a prior step
+                # reads the secret into `env:` and writes a presence boolean to
+                # $GITHUB_OUTPUT, and the consuming step is gated with
+                # `if: steps.<id>.outputs.<name>`. The `secrets` context is NOT
+                # available in step-level `if:`, so the same-step
+                # `if: secrets.X != ''` form above is itself unusable — this
+                # env+output pattern is the correct GitHub Actions idiom.
+                env_output_gate? =
+                  Regex.match?(~r/if:[^\n]*steps\.[A-Za-z0-9_-]+\.outputs\./, step_block) and
+                    String.contains?(stripped, "GITHUB_OUTPUT")
+
+                # Third valid idiom, previously unrecognised: a job-level
+                # `env:` binds a presence boolean from the secret and steps gate
+                # on it. Measured 2026-07-29 on gitbot-fleet's instant-sync.yml,
+                # which does exactly this on every step plus an else branch, and
+                # was still reported :high.
+                #
+                #     env:
+                #       HAS_TOKEN: ${{ secrets.FARM_DISPATCH_TOKEN != '' }}
+                #     steps:
+                #       - if: env.HAS_TOKEN == 'true'
+                env_boolean_gate? =
+                  case Regex.run(
+                         ~r/(\w+):\s*\$\{\{\s*secrets\.#{Regex.escape(secret_name)}\s*!=\s*['"]['"]?\s*\}\}/,
+                         stripped
+                       ) do
+                    [_, env_name] ->
+                      Regex.match?(~r/if:[^\n]*env\.#{Regex.escape(env_name)}\b/, stripped)
+
+                    _ ->
+                      false
+                  end
+
+                if Regex.match?(gate_re, step_block) or env_output_gate? or
+                     env_boolean_gate? do
                   []
                 else
-                  [%{
-                    rule: "WF017",
-                    type: :secret_action_without_presence_gate,
-                    file: filename,
-                    action: action_prefix,
-                    secret: secret_name,
-                    severity: :high,
-                    reason:
-                      "Step uses `#{action_prefix}` with `#{param}: " <>
-                        "\${{ secrets.#{secret_name} }}` but has no " <>
-                        "`if: secrets.#{secret_name} != ''` gate. On repos " <>
-                        "where the secret hasn't been propagated the action " <>
-                        "fails on every push, red-maining the repo. Add the " <>
-                        "step-level gate (or env+if pattern) so the missing-" <>
-                        "secret path is a clean skip instead of a red.",
-                    fix_recipe: :add_secret_presence_gate
-                  }]
+                  [
+                    %{
+                      rule: "WF017",
+                      type: :secret_action_without_presence_gate,
+                      file: filename,
+                      action: action_prefix,
+                      secret: secret_name,
+                      severity: :high,
+                      reason:
+                        "Step uses `#{action_prefix}` with `#{param}: " <>
+                          "\${{ secrets.#{secret_name} }}` but has no " <>
+                          "`if: secrets.#{secret_name} != ''` gate. On repos " <>
+                          "where the secret hasn't been propagated the action " <>
+                          "fails on every push, red-maining the repo. Add the " <>
+                          "step-level gate (or env+if pattern) so the missing-" <>
+                          "secret path is a clean skip instead of a red.",
+                      fix_recipe: :add_secret_presence_gate
+                    }
+                  ]
                 end
 
               _ ->
@@ -916,7 +1061,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # of the known secret-consuming actions. Re-uses the same column-aware
   # step-boundary detection; just changes the final filter predicate.
   defp extract_steps_using_known_actions(content) do
-    prefixes = Enum.map(@secret_consuming_actions, fn {p, _} -> Regex.escape(p) end) |> Enum.join("|")
+    prefixes =
+      Enum.map(@secret_consuming_actions, fn {p, _} -> Regex.escape(p) end) |> Enum.join("|")
+
     filter_re = ~r/uses:\s*(?:#{prefixes})@/
 
     content
@@ -1027,20 +1174,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
               Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
 
             if uses_workflow_sha? and not caller_repo? do
-              [%{
-                type: :workflow_sha_as_foreign_ref,
-                file: filename,
-                detail:
-                  "actions/checkout uses `ref: ${{ github.workflow_sha }}` " <>
-                    "for `repository: #{repo_value}` (not the caller's own " <>
-                    "repo). `github.workflow_sha` resolves to the caller's " <>
-                    "commit SHA, which does not exist in `#{repo_value}` — " <>
-                    "the fetch fails with exit code 128. Pin `ref:` to a " <>
-                    "branch (e.g. `main`), tag, or explicit SHA in the " <>
-                    "target repo, or expose it as an input on the reusable.",
-                severity: :critical,
-                action: :pin_external_checkout_ref
-              }]
+              [
+                %{
+                  type: :workflow_sha_as_foreign_ref,
+                  file: filename,
+                  detail:
+                    "actions/checkout uses `ref: ${{ github.workflow_sha }}` " <>
+                      "for `repository: #{repo_value}` (not the caller's own " <>
+                      "repo). `github.workflow_sha` resolves to the caller's " <>
+                      "commit SHA, which does not exist in `#{repo_value}` — " <>
+                      "the fetch fails with exit code 128. Pin `ref:` to a " <>
+                      "branch (e.g. `main`), tag, or explicit SHA in the " <>
+                      "target repo, or expose it as an input on the reusable.",
+                  severity: :critical,
+                  action: :pin_external_checkout_ref
+                }
+              ]
             else
               []
             end
@@ -1107,22 +1256,24 @@ defmodule Hypatia.Rules.WorkflowAudit do
               caller_derived_ref? = Regex.match?(caller_ref_re, ref_value)
 
               if foreign_literal_self? and caller_derived_ref? do
-                [%{
-                  type: :reusable_caller_context_self_checkout,
-                  file: filename,
-                  detail:
-                    "Reusable workflow (`on: workflow_call`) checks out a " <>
-                      "literal foreign repo `#{repo_value}` at " <>
-                      "`ref: #{ref_value}` — a caller-context variable. In a " <>
-                      "reusable workflow, `github.ref` / `head_ref` / `sha` / " <>
-                      "`workflow_sha` resolve to the *caller's* values, which " <>
-                      "do not exist in `#{repo_value}`, so the fetch fails " <>
-                      "with exit code 128. Pin `ref:` to a literal branch/tag/SHA " <>
-                      "in `#{repo_value}`, omit it (defaults to the default " <>
-                      "branch), or thread an explicit input through from the caller.",
-                  severity: :critical,
-                  action: :pin_reusable_self_checkout_ref
-                }]
+                [
+                  %{
+                    type: :reusable_caller_context_self_checkout,
+                    file: filename,
+                    detail:
+                      "Reusable workflow (`on: workflow_call`) checks out a " <>
+                        "literal foreign repo `#{repo_value}` at " <>
+                        "`ref: #{ref_value}` — a caller-context variable. In a " <>
+                        "reusable workflow, `github.ref` / `head_ref` / `sha` / " <>
+                        "`workflow_sha` resolve to the *caller's* values, which " <>
+                        "do not exist in `#{repo_value}`, so the fetch fails " <>
+                        "with exit code 128. Pin `ref:` to a literal branch/tag/SHA " <>
+                        "in `#{repo_value}`, omit it (defaults to the default " <>
+                        "branch), or thread an explicit input through from the caller.",
+                    severity: :critical,
+                    action: :pin_reusable_self_checkout_ref
+                  }
+                ]
               else
                 []
               end
@@ -1215,8 +1366,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Detect unescaped dots in grep patterns (e.g., grep "foo.bar" matches "fooXbar")
       flaws =
         if Regex.match?(~r/grep\s+(-[a-zA-Z]*\s+)*["'][^"']*(?<!\\)\.[^"']*["']/, content) do
-          [%{rule: "flawed_regex", severity: :low, file: filename,
-             description: "grep with unescaped dot -- may match unintended characters"} | flaws]
+          [
+            %{
+              rule: "flawed_regex",
+              severity: :low,
+              file: filename,
+              description: "grep with unescaped dot -- may match unintended characters"
+            }
+            | flaws
+          ]
         else
           flaws
         end
@@ -1224,8 +1382,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Detect grep -E with * quantifier without preceding atom
       flaws =
         if Regex.match?(~r/grep\s+-[a-zA-Z]*E[a-zA-Z]*\s+["'][^"']*(?<![.\w\\])\*/, content) do
-          [%{rule: "flawed_regex", severity: :low, file: filename,
-             description: "grep -E with bare * quantifier -- likely needs .* or \\w*"} | flaws]
+          [
+            %{
+              rule: "flawed_regex",
+              severity: :low,
+              file: filename,
+              description: "grep -E with bare * quantifier -- likely needs .* or \\w*"
+            }
+            | flaws
+          ]
         else
           flaws
         end
@@ -1269,6 +1434,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   def check_scorecard_wrapper_missing_job_permissions(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       base = Path.basename(filename)
+
       cond do
         base not in ["scorecard.yml", "scorecard.yaml"] ->
           []
@@ -1280,24 +1446,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
           []
 
         true ->
-          [%{
-            rule: "WF018",
-            type: :scorecard_wrapper_missing_job_permissions,
-            file: filename,
-            severity: :high,
-            reason:
-              "scorecard.yml delegates to hyperpolymath/standards " <>
-                "`scorecard-reusable.yml` but the file does not declare " <>
-                "`security-events: write`. Reusable called-workflow " <>
-                "permissions are CAPPED by the caller's grants; the " <>
-                "reusable's own job-level grant cannot exceed what the " <>
-                "caller provides. Result: ossf/scorecard-action cannot " <>
-                "upload SARIF and the run fails with `startup_failure` " <>
-                "(no logs, no findings). Add `permissions: " <>
-                "{security-events: write, id-token: write}` at the job " <>
-                "level (preferred) or workflow level.",
-            fix_recipe: :add_job_level_scorecard_perms
-          }]
+          [
+            %{
+              rule: "WF018",
+              type: :scorecard_wrapper_missing_job_permissions,
+              file: filename,
+              severity: :high,
+              reason:
+                "scorecard.yml delegates to hyperpolymath/standards " <>
+                  "`scorecard-reusable.yml` but the file does not declare " <>
+                  "`security-events: write`. Reusable called-workflow " <>
+                  "permissions are CAPPED by the caller's grants; the " <>
+                  "reusable's own job-level grant cannot exceed what the " <>
+                  "caller provides. Result: ossf/scorecard-action cannot " <>
+                  "upload SARIF and the run fails with `startup_failure` " <>
+                  "(no logs, no findings). Add `permissions: " <>
+                  "{security-events: write, id-token: write}` at the job " <>
+                  "level (preferred) or workflow level.",
+              fix_recipe: :add_job_level_scorecard_perms
+            }
+          ]
       end
     end)
   end
@@ -1334,6 +1502,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   def check_workflow_linter_self_reference(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       base = Path.basename(filename)
+
       cond do
         base not in ["workflow-linter.yml", "workflow-linter.yaml"] ->
           []
@@ -1345,22 +1514,24 @@ defmodule Hypatia.Rules.WorkflowAudit do
           []
 
         true ->
-          [%{
-            rule: "WF019",
-            type: :workflow_linter_self_reference,
-            file: filename,
-            severity: :medium,
-            reason:
-              "workflow-linter.yml greps for `uses:` across all workflow " <>
-                "files but does not exempt itself or the sibling " <>
-                "`scorecard-enforcer.yml`. Its own comments + grep " <>
-                "command line contain literal `uses:` tokens, so the " <>
-                "linter flags itself on every run. Either add " <>
-                "`grep -v workflow-linter.yml | grep -v scorecard-enforcer.yml` " <>
-                "to the pipeline, or migrate to the consolidated " <>
-                "`governance.yml` -> standards reusable.",
-            fix_recipe: :exempt_linter_from_self_grep
-          }]
+          [
+            %{
+              rule: "WF019",
+              type: :workflow_linter_self_reference,
+              file: filename,
+              severity: :medium,
+              reason:
+                "workflow-linter.yml greps for `uses:` across all workflow " <>
+                  "files but does not exempt itself or the sibling " <>
+                  "`scorecard-enforcer.yml`. Its own comments + grep " <>
+                  "command line contain literal `uses:` tokens, so the " <>
+                  "linter flags itself on every run. Either add " <>
+                  "`grep -v workflow-linter.yml | grep -v scorecard-enforcer.yml` " <>
+                  "to the pipeline, or migrate to the consolidated " <>
+                  "`governance.yml` -> standards reusable.",
+              fix_recipe: :exempt_linter_from_self_grep
+            }
+          ]
       end
     end)
   end
@@ -1403,20 +1574,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
       Enum.flat_map(workflow_contents, fn {filename, content} ->
         if codeql_workflow?(filename) and
              not Regex.match?(~r/language:\s*actions(?:\s|$)/m, content) do
-          [%{
-            rule: "WF020",
-            type: :codeql_missing_actions_language,
-            file: filename,
-            severity: :medium,
-            reason:
-              "codeql.yml does not list `language: actions` in its " <>
-                "matrix, but the repo has workflow files. CodeQL's " <>
-                "`actions` language scans workflow YAML for injection " <>
-                "and other CI/CD-specific weaknesses — every repo with " <>
-                "workflows benefits. Add an entry to `matrix.include` " <>
-                "with `language: actions` + `build-mode: none`.",
-            fix_recipe: :add_codeql_actions_language
-          }]
+          [
+            %{
+              rule: "WF020",
+              type: :codeql_missing_actions_language,
+              file: filename,
+              severity: :medium,
+              reason:
+                "codeql.yml does not list `language: actions` in its " <>
+                  "matrix, but the repo has workflow files. CodeQL's " <>
+                  "`actions` language scans workflow YAML for injection " <>
+                  "and other CI/CD-specific weaknesses — every repo with " <>
+                  "workflows benefits. Add an entry to `matrix.include` " <>
+                  "with `language: actions` + `build-mode: none`.",
+              fix_recipe: :add_codeql_actions_language
+            }
+          ]
         else
           []
         end
@@ -1575,4 +1748,320 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end
     end)
   end
+
+  # ─── WF025: CodeQL cron-canonical conformance ─────────────────────────
+  #
+  # standards#286 fixed the canonical CodeQL schedule at `0 6 1 * *` (monthly,
+  # 06:00 UTC on the 1st of each month) — the estate-wide cron drift sweep
+  # that triggered this rule is tracked at standards#288 / standards#323 / #324.
+  #
+  # Two failure shapes (a sub-category drives gitbot-fleet routing):
+  #
+  #   :weekly_to_monthly      — `0 6 * * 1` style (any dow != *). Maps to the
+  #                              #288-class follow-up (weekly → monthly).
+  #
+  #   :non_canonical_monthly  — monthly but at a different (HH:MM) / day-of-
+  #                              month. Maps to the #324-class follow-up
+  #                              (non-canonical monthly → canonical monthly).
+  #
+  # Both are auto-fixable via the same recipe `codeql-cron-monthly` —
+  # rewrite to `0 6 1 * *`. Severity `:warn` (drift, not breakage).
+
+  @codeql_canonical_cron "0 6 1 * *"
+
+  @doc """
+  WF025: Detect `.github/workflows/codeql.yml` cron entries that are NOT the
+  canonical `0 6 1 * *` monthly schedule.
+
+  Sub-category drives downstream routing:
+    `:weekly_to_monthly`      — #288-class follow-up
+    `:non_canonical_monthly`  — #324-class follow-up
+
+  See standards#286 (canonical fix), standards#288 (estate cron drift sweep),
+  standards#323 (recurring drift-detection), standards#324 (non-canonical
+  one-off fan-out).
+  """
+  def check_codeql_cron_drift(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if codeql_workflow_file?(filename) do
+        stripped = strip_comments(content)
+        crons = extract_cron_expressions(stripped)
+
+        crons
+        |> Enum.reject(&(&1 == @codeql_canonical_cron))
+        |> Enum.map(fn raw ->
+          subcat = cron_drift_subcategory(raw)
+
+          %{
+            rule: "WF025",
+            rule_id: "WF-025",
+            type: :codeql_cron_drift,
+            sub_category: subcat,
+            file: filename,
+            severity: :warn,
+            auto_fixable: true,
+            recipe_id: "codeql-cron-monthly",
+            canonical: @codeql_canonical_cron,
+            observed: raw,
+            reason:
+              "CodeQL workflow uses non-canonical cron `#{raw}`. The estate-wide " <>
+                "canonical (per standards#286) is `#{@codeql_canonical_cron}` " <>
+                "(monthly, 06:00 UTC on the 1st). Sub-category " <>
+                "`#{subcat}` — routes through #{routing_label(subcat)}.",
+            action: :rewrite_cron_to_canonical
+          }
+        end)
+      else
+        []
+      end
+    end)
+  end
+
+  @doc """
+  Public for testability: classify a cron expression against the canonical
+  `0 6 1 * *` shape.
+
+    `:canonical`              — exact match
+    `:weekly_to_monthly`      — DOW field is not `*` (fires N times per week)
+    `:non_canonical_monthly`  — DOW is `*` but HH/MM/DOM differ
+    `:malformed`              — not a valid 5-field cron expression
+  """
+  def cron_drift_subcategory(@codeql_canonical_cron), do: :canonical
+
+  def cron_drift_subcategory(raw) when is_binary(raw) do
+    case String.split(String.trim(raw), ~r/\s+/, trim: true) do
+      [_min, _hour, _dom, _mon, dow] when dow != "*" -> :weekly_to_monthly
+      [_min, _hour, _dom, _mon, _dow] -> :non_canonical_monthly
+      _ -> :malformed
+    end
+  end
+
+  defp routing_label(:weekly_to_monthly), do: "standards#288 (weekly→monthly fan-out)"
+
+  defp routing_label(:non_canonical_monthly),
+    do: "standards#324 (non-canonical→canonical fan-out)"
+
+  defp routing_label(:malformed), do: "manual triage (malformed cron)"
+  defp routing_label(_), do: "manual triage"
+
+  defp codeql_workflow_file?(filename) do
+    base = Path.basename(filename)
+    base == "codeql.yml" or base == "codeql.yaml"
+  end
+
+  defp extract_cron_expressions(stripped) do
+    ~r/^\s*-\s*cron:\s*["']?([^"'\n#]+?)["']?\s*$/m
+    |> Regex.scan(stripped, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.map(&String.trim/1)
+  end
+
+  # ─── WF024: Chapel ≥2.8.0 ABI / runs-on mismatch ──────────────────────
+
+  # Chapel debian packages (`chapel-*.deb` from chapel-lang/chapel releases,
+  # also fetched via `CHAPEL_DEB_URL`) link against `libclang-cpp.so.14`.
+  # That SONAME ships on ubuntu-22.04 (LLVM 14, the default toolchain).
+  # ubuntu-24.04 / ubuntu-latest (currently noble) carries `libclang-cpp.so.18`
+  # and the chpl binary aborts at start-up with the classic
+  #   "error while loading shared libraries: libclang-cpp.so.14: cannot open"
+  # message. Caught proven#141 (Chapel pilot CI fix) + panic-attack#99
+  # (Chapel Wave 2 — 6 cold-cache CI iterations debugging this exact ABI
+  # mismatch + 3 more Chapel-2.8.0 sharp edges). The fix is `runs-on:
+  # ubuntu-22.04` for any job invoking a pre-built Chapel deb.
+  @chapel_marker_patterns [
+    ~r/CHAPEL_DEB_URL\b/,
+    ~r/chapel-[0-9]+\.[0-9]+(?:\.[0-9]+)?[-_a-zA-Z0-9]*\.deb\b/
+  ]
+
+  @doc """
+  WF024: Detect a workflow job that downloads/installs a Chapel ≥2.8.0
+  debian package but runs on `ubuntu-latest` or `ubuntu-24.04`, where the
+  binary's `libclang-cpp.so.14` SONAME dependency is unsatisfiable.
+
+  Heuristic: workflow content contains `CHAPEL_DEB_URL` OR a `chapel-*.deb`
+  filename, AND `runs-on:` resolves to anything other than `ubuntu-22.04`.
+
+  Recipe (from panic-attack#99): pin `runs-on: ubuntu-22.04`. Bumping
+  Chapel itself to a 24.04-built artifact would also work but isn't
+  upstream-available as of 2026-06-02.
+  """
+  def check_chapel_abi_runs_on_mismatch(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      chapel? =
+        Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped))
+
+      if chapel? do
+        runs_on_vals =
+          ~r/runs-on:\s*([^\n#]+)/
+          |> Regex.scan(stripped, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&String.trim(&1, "\""))
+          |> Enum.map(&String.trim(&1, "'"))
+
+        bad =
+          Enum.filter(runs_on_vals, fn v ->
+            v in ["ubuntu-latest", "ubuntu-24.04"] or
+              String.starts_with?(v, "ubuntu-24") or
+              String.starts_with?(v, "ubuntu-25")
+          end)
+
+        case bad do
+          [] ->
+            []
+
+          _ ->
+            [
+              %{
+                rule: "WF024",
+                type: :chapel_abi_runs_on_mismatch,
+                file: filename,
+                severity: :high,
+                runs_on: bad,
+                auto_fixable: true,
+                recipe_id: "chapel-runs-on-pin-22-04",
+                reason:
+                  "Workflow installs a Chapel ≥2.8.0 .deb (CHAPEL_DEB_URL or " <>
+                    "chapel-*.deb), but `runs-on:` is `#{Enum.join(bad, ", ")}`. " <>
+                    "The chpl binary links against libclang-cpp.so.14 (LLVM 14, " <>
+                    "ubuntu-22.04 only) — newer Ubuntu images carry .so.18 and " <>
+                    "chpl aborts with `cannot open shared object file` before " <>
+                    "any user step runs. Pin `runs-on: ubuntu-22.04`. See " <>
+                    "panic-attack#99 / proven#141.",
+                action: :pin_runs_on_ubuntu_2204
+              }
+            ]
+        end
+      else
+        []
+      end
+    end)
+  end
+
+  # ─── WF024 sub-patterns: 4 prior Chapel-2.8.0 sharp edges ─────────────
+  #
+  # Surfaced by panic-attack#99 (Chapel Wave 2 — 6 cold-cache CI iterations).
+  # Each sub-pattern has its own fix recipe so future sessions can route
+  # them through the gitbot-fleet auto-remediation pipeline without rebuilding
+  # the diagnostic from scratch.
+  #
+  #   A. `MANPATH` is unset on minimal runners — Chapel install scripts
+  #      that do `MANPATH=...:$MANPATH` produce `unbound variable` under
+  #      `set -u`. Recipe: guard with `${MANPATH:-}`.
+  #
+  #   B. `CHPL_LLVM` is unset — chpl needs `CHPL_LLVM=bundled` (or `system`)
+  #      to find its backend. Pre-2.8.0 builds defaulted; 2.8.0 errors.
+  #      Recipe: export `CHPL_LLVM=bundled` (or `system`) before running.
+  #
+  #   C. `chpl --about` dropped in 2.8.0 — diagnostics that scrape `--about`
+  #      output now fail. Recipe: switch to `chpl --version`.
+  #
+  #   D. `printchplenv --simple` output reformatted — old globs that match
+  #      `comm-gasnet*` against the simple output now miss. Recipe: switch
+  #      to `find <CHPL_HOME> -name comm-gasnet` (path-walk, not output-grep).
+
+  @doc """
+  WF024 sub-patterns: detect the 4 additional Chapel-2.8.0 sharp edges
+  alongside the runs-on ABI mismatch. Each emits its own finding with a
+  distinct `recipe_id` so the gitbot-fleet auto-remediation pipeline can
+  apply the right targeted fix without re-deriving the diagnostic.
+
+  Returned shapes share `rule: "WF024"`, `auto_fixable: true`, and
+  `severity: :medium` (the sharp edges are CI-fatal but each has a
+  one-line workaround once recognised — promoted from `:high` reserved
+  for the ABI mismatch itself).
+  """
+  def check_chapel_sharp_edges(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      chapel? =
+        Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped)) or
+          Regex.match?(~r/\bchpl\b/, stripped)
+
+      if chapel? do
+        []
+        |> append_if(
+          # A. MANPATH unset under set -u
+          Regex.match?(~r/\bMANPATH=[^\n]*\$MANPATH\b/, stripped) and
+            not Regex.match?(~r/\$\{MANPATH:-\}/, stripped),
+          %{
+            rule: "WF024",
+            type: :chapel_manpath_unset,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-manpath-guard",
+            reason:
+              "Workflow extends `MANPATH` without guarding for the unset case " <>
+                "(`$MANPATH` on a minimal runner triggers `unbound variable` under " <>
+                "`set -u`). Replace with `${MANPATH:-}`. See panic-attack#99.",
+            action: :guard_manpath_default
+          }
+        )
+        |> append_if(
+          # B. CHPL_LLVM unset (no export anywhere in workflow)
+          not Regex.match?(~r/\bCHPL_LLVM\s*[:=]/, stripped),
+          %{
+            rule: "WF024",
+            type: :chapel_chpl_llvm_unset,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-chpl-llvm-export",
+            reason:
+              "Workflow invokes `chpl` without exporting `CHPL_LLVM`. Chapel 2.8.0 " <>
+                "no longer auto-detects the backend; add `export CHPL_LLVM=bundled` " <>
+                "(or `system`) before any chpl invocation. See panic-attack#99.",
+            action: :export_chpl_llvm_bundled
+          }
+        )
+        |> append_if(
+          # C. `chpl --about` was dropped in 2.8.0
+          Regex.match?(~r/\bchpl\s+--about\b/, stripped),
+          %{
+            rule: "WF024",
+            type: :chapel_chpl_about_dropped,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-replace-chpl-about-with-version",
+            reason:
+              "`chpl --about` was removed in Chapel 2.8.0. Diagnostics that scrape " <>
+                "`--about` output now fail. Replace with `chpl --version`. " <>
+                "See panic-attack#99.",
+            action: :replace_chpl_about_with_version
+          }
+        )
+        |> append_if(
+          # D. `printchplenv --simple | grep comm-gasnet*`  (brittle glob)
+          Regex.match?(
+            ~r/printchplenv\s+--simple[^|\n]*\|[^|\n]*\bcomm-gasnet/,
+            stripped
+          ),
+          %{
+            rule: "WF024",
+            type: :chapel_printchplenv_glob_brittle,
+            file: filename,
+            severity: :medium,
+            auto_fixable: true,
+            recipe_id: "chapel-find-comm-gasnet",
+            reason:
+              "`printchplenv --simple` output reformatted in Chapel 2.8.0; " <>
+                "globs that grep its output for `comm-gasnet*` now miss. Switch to " <>
+                "`find \"$CHPL_HOME\" -name comm-gasnet` (path-walk, not output-grep). " <>
+                "See panic-attack#99.",
+            action: :replace_printchplenv_grep_with_find
+          }
+        )
+      else
+        []
+      end
+    end)
+  end
+
+  defp append_if(list, true, finding), do: list ++ [finding]
+  defp append_if(list, false, _finding), do: list
 end

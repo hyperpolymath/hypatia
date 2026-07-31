@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 = src/abi/ — Idris2 ABI Definitions
 
 Idris2 modules defining the Hypatia API surface with dependent type proofs.

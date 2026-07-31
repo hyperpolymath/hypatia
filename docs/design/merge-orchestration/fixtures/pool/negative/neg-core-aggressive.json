@@ -1,0 +1,7 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. core tier at P3. MUST be REJECTED (PL1: core repos cannot be aggressive).",
+  "repo": "hyperpolymath/hypatia",
+  "pool": "P3",
+  "product_tier": "core",
+  "system_membership": "in-system"
+}

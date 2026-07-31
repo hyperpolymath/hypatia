@@ -68,9 +68,22 @@ defmodule Hypatia.VCL.RemoteCacheTest do
     )
 
     # Configure git identity for the working clone and commit.
-    git_env = [{"GIT_AUTHOR_NAME", "test"}, {"GIT_AUTHOR_EMAIL", "t@t"}, {"GIT_COMMITTER_NAME", "test"}, {"GIT_COMMITTER_EMAIL", "t@t"}]
+    git_env = [
+      {"GIT_AUTHOR_NAME", "test"},
+      {"GIT_AUTHOR_EMAIL", "t@t"},
+      {"GIT_COMMITTER_NAME", "test"},
+      {"GIT_COMMITTER_EMAIL", "t@t"}
+    ]
+
     {_, 0} = System.cmd("git", ["add", "-A"], cd: work_dir, stderr_to_stdout: true, env: git_env)
-    {_, 0} = System.cmd("git", ["commit", "-m", "seed"], cd: work_dir, stderr_to_stdout: true, env: git_env)
+
+    {_, 0} =
+      System.cmd("git", ["commit", "-m", "seed"],
+        cd: work_dir,
+        stderr_to_stdout: true,
+        env: git_env
+      )
+
     {_, 0} = System.cmd("git", ["push"], cd: work_dir, stderr_to_stdout: true, env: git_env)
 
     # Clean up the ETS table between tests to avoid cross-contamination.
@@ -222,7 +235,8 @@ defmodule Hypatia.VCL.RemoteCacheTest do
     end
 
     test "evicting a non-existent URL is a no-op", ctx do
-      assert :ok == RemoteCache.evict("https://example.com/no-such-repo.git", cache_dir: ctx.cache_dir)
+      assert :ok ==
+               RemoteCache.evict("https://example.com/no-such-repo.git", cache_dir: ctx.cache_dir)
     end
   end
 

@@ -171,7 +171,7 @@ defmodule Hypatia.Rules.GitStateTest do
       findings = GitState.gs007_stale_remote_branches(repo)
       assert length(findings) == 1
       assert hd(findings).rule == "GS007"
-      assert hd(findings).severity == :medium
+      assert hd(findings).severity == :advisory
       assert hd(findings).detail.count == 1
       assert String.contains?(hd(findings).reason, "1 non-main remote branch")
     end

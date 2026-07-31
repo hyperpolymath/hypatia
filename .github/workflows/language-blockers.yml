@@ -16,10 +16,11 @@ permissions: read-all
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Block npm/bun
         run: |
           if [ -f "package-lock.json" ] || [ -f "bun.lockb" ] || [ -f ".npmrc" ]; then
@@ -30,10 +31,11 @@ jobs:
 
   ts_check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Block new TypeScript/JavaScript
         run: |
           NEW_TS=$(git diff --name-only --diff-filter=A HEAD~1 2>/dev/null | grep -E '\.(ts|tsx)$' | grep -v '\.gen\.' || true)

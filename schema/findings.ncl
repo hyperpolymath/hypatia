@@ -2,7 +2,7 @@
 # Hypatia Security Findings Schema
 # Type-safe schema for scanner output
 
-let Severity = [| 'critical, 'high, 'medium, 'low |] in
+let Severity = [| 'critical, 'high, 'medium, 'low, 'advisory |] in
 let FindingType = [|
   'unsafe_crash,
   'unsafe_panic,

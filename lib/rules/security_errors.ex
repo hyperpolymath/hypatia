@@ -150,22 +150,22 @@ defmodule Hypatia.Rules.SecurityErrors do
   # ---------------------------------------------------------------------------
 
   @auto_fixable MapSet.new([
-    "TokenPermissionsID",
-    "PinnedDependenciesID",
-    "missing-workflow-permissions",
-    "missing_permissions",
-    "unpinned_action",
-    "missing_spdx",
-    "SecurityPolicyID",
-    "BranchProtectionID",
-    "unused-local-variable",
-    "missing-spdx-header",
-    "upload-pages-artifact-transitive-deps",
-    "scorecard-run-step-restriction",
-    "deno-lint-include-pattern",
-    "rust-toolchain-sha-missing-input",
-    "workflow-linter-self-detection"
-  ])
+                  "TokenPermissionsID",
+                  "PinnedDependenciesID",
+                  "missing-workflow-permissions",
+                  "missing_permissions",
+                  "unpinned_action",
+                  "missing_spdx",
+                  "SecurityPolicyID",
+                  "BranchProtectionID",
+                  "unused-local-variable",
+                  "missing-spdx-header",
+                  "upload-pages-artifact-transitive-deps",
+                  "scorecard-run-step-restriction",
+                  "deno-lint-include-pattern",
+                  "rust-toolchain-sha-missing-input",
+                  "workflow-linter-self-detection"
+                ])
 
   def auto_fixable?(issue_type), do: MapSet.member?(@auto_fixable, issue_type)
 
@@ -174,7 +174,8 @@ defmodule Hypatia.Rules.SecurityErrors do
   # ---------------------------------------------------------------------------
 
   @fix_suggestions %{
-    "TokenPermissionsID" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
+    "TokenPermissionsID" =>
+      "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "PinnedDependenciesID" => "Replace @vN with @SHA # vN format",
     "SecurityPolicyID" => "Create SECURITY.md with vulnerability reporting instructions",
     "BranchProtectionID" => "Enable branch protection via Settings > Branches",
@@ -182,7 +183,8 @@ defmodule Hypatia.Rules.SecurityErrors do
     "CIIBestPracticesID" => "Register at bestpractices.coreinfrastructure.org",
     "FuzzingID" => "Add ClusterFuzzLite or cargo-fuzz infrastructure",
     "VulnerabilitiesID" => "Run cargo audit / npm audit and update dependencies",
-    "secret_detected" => "Revoke/Rotate the secret immediately and purge git history using git-filter-repo",
+    "secret_detected" =>
+      "Revoke/Rotate the secret immediately and purge git history using git-filter-repo",
     "hard-coded-cryptographic-value" => "Use environment variables or secrets manager",
     "remote-property-injection" => "Add allowlist validation for dynamic property access",
     "unused-local-variable" => "Remove unused code or prefix with underscore",
@@ -190,9 +192,12 @@ defmodule Hypatia.Rules.SecurityErrors do
     "glib-variantstriter-unsoundness" => "Update glib to v0.22.3, v0.20.7, v0.19.10 or v0.18.6",
     "protobuf-recursion-crash" => "Update protobuf to >= 3.7.2",
     "idna-punycode-mishandling" => "Update idna to >= 1.0.0",
+    "rustls-webpki-crl-panic-dos" =>
+      "Update rustls-webpki to >= 0.103.13 (cargo update -p rustls-webpki); transitive dep, Dependabot may not auto-PR",
     "jsonwebtoken-type-confusion" => "Update jsonwebtoken to >= 10.3.0",
     "npm-js-yaml-vulnerability" => "Update js-yaml to >= 3.14.2 or 4.1.1",
-    "npm-serialize-javascript-vulnerability" => "Update serialize-javascript to >= 6.0.2 or 7.0.0",
+    "npm-serialize-javascript-vulnerability" =>
+      "Update serialize-javascript to >= 6.0.2 or 7.0.0",
     "npm-minimatch-vulnerability" => "Update minimatch to >= 9.0.5 or 10.0.0",
     "npm-glob-vulnerability" => "Update glob to >= 11.0.0",
     "npm-h3-vulnerability" => "Update h3 to >= 2.0.1-rc.15",
@@ -200,28 +205,36 @@ defmodule Hypatia.Rules.SecurityErrors do
     "crossbeam-utils-atomiccell-unsoundness" => "Update crossbeam-utils to >= 0.8.7",
     "lock-api-data-race" => "Update lock_api to >= 0.4.2",
     "crossbeam-queue-segqueue-unsoundness" => "Update crossbeam-queue to >= 0.2.3",
-    "upload-pages-artifact-transitive-deps" => "Update to v4 SHA 7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
+    "upload-pages-artifact-transitive-deps" =>
+      "Update to v4 SHA 7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
     "scorecard-run-step-restriction" => "Move run steps to separate check-critical job",
     "deno-lint-include-pattern" => "Add explicit include patterns or use deno task lint",
     "rust-toolchain-sha-missing-input" => "Add \"with: toolchain: stable\" to dtolnay step",
     "workflow-linter-self-detection" => "Add grep -v filters for grep/echo/comments",
     "unpinned_action" => "Replace @vN with @SHA # vN format",
-    "missing_permissions" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
+    "missing_permissions" =>
+      "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "missing_spdx" => "Add SPDX-License-Identifier header to file",
-    "missing-workflow-permissions" => "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
+    "missing-workflow-permissions" =>
+      "Add granular workflow-level permissions (e.g. contents: read; scope each job's permissions to the minimum needed). NOTE: do NOT use \"read-all\" -- scorecard_compliance/token_permissions flags read-all as HIGH severity per current OSSF guidance.",
     "missing-spdx-header" => "Add SPDX-License-Identifier header to file",
-    "stub-crypto-function" => "Replace stub with real cryptographic implementation or add compile_error! guard",
+    "stub-crypto-function" =>
+      "Replace stub with real cryptographic implementation or add compile_error! guard",
     "stub-hash-return" => "Replace format!(\"stub:...\") with real hash computation",
     "todo-crypto" => "Implement the cryptographic function before deployment",
     "fake-signature" => "Replace fake/placeholder crypto value with real implementation",
-    "js-wildcard-cors" => "Replace Access-Control-Allow-Origin: * with specific origin or env var",
-    "js-eval" => "Remove eval() -- use structured alternatives (JSON.parse, Function constructor if needed)",
+    "js-wildcard-cors" =>
+      "Replace Access-Control-Allow-Origin: * with specific origin or env var",
+    "js-eval" =>
+      "Remove eval() -- use structured alternatives (JSON.parse, Function constructor if needed)",
     "js-innerhtml" => "Use textContent, Trusted Types, or rescript-dom-mounter SafeDOM",
     "js-document-write" => "Use DOM manipulation methods instead of document.write",
     "js-hardcoded-secret" => "Move credentials to environment variables or secrets manager",
-    "elixir-system-cmd-interpolation" => "Pass arguments as list to System.cmd, not interpolated string",
+    "elixir-system-cmd-interpolation" =>
+      "Pass arguments as list to System.cmd, not interpolated string",
     "elixir-code-eval" => "Replace Code.eval_* with structured dispatch or compiled modules",
-    "elixir-send-unsanitised" => "Use :erlang.binary_to_term(data, [:safe]) to restrict atom creation",
+    "elixir-send-unsanitised" =>
+      "Use :erlang.binary_to_term(data, [:safe]) to restrict atom creation",
     "elixir-atom-from-user" => "Use String.to_existing_atom/1 instead -- atom table is finite",
     "elixir-no-ssl-verify" => "Set verify: :verify_peer with cacertfile or cacerts option",
     "elixir-port-open-shell" => "Validate and sanitize command before Port.open spawn"
@@ -299,10 +312,13 @@ defmodule Hypatia.Rules.SecurityErrors do
     "actions/upload-pages-artifact@v3" => "56afc609e74202658d3ffba0e8f6dda462b719fa",
     "actions/deploy-pages@v4" => "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     "ruby/setup-ruby@v1" => "09a7688d3b55cf0e976497ff046b70949eeaccfd",
-    "editorconfig-checker/action-editorconfig-checker@main" => "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
-    "hyperpolymath/a2ml-validate-action@main" => "cb3c1e298169dc5ac2b42e257068b0fb5920cd5e",
+    "editorconfig-checker/action-editorconfig-checker@main" =>
+      "4054fa83a075fdf090bd098bdb1c09aaf64a4169",
+    # Bumped 2026-06-01 → 6bff6ec (s-expression form support, panic-attack#94)
+    "hyperpolymath/a2ml-validate-action@main" => "6bff6ec134fc977e86d25166a5c522ddea5c1e78",
     "hyperpolymath/k9-validate-action@main" => "236f0035cc159051c8dd5dc7cd8af1e8cf961462",
-    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" => "21fc3f00a088c954912936f4a68970621b82c2e6"
+    "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main" =>
+      "21fc3f00a088c954912936f4a68970621b82c2e6"
   }
 
   def sha_pins, do: @sha_pins
@@ -359,6 +375,7 @@ defmodule Hypatia.Rules.SecurityErrors do
   @doc "Rationale for a pin exemption, or nil if not exempt."
   def pin_exemption_reason(action_ref) do
     name = action_name(action_ref)
+
     Enum.find_value(@pin_exempt, fn {prefix, reason} ->
       if String.starts_with?(name, prefix), do: reason
     end)
@@ -389,13 +406,25 @@ defmodule Hypatia.Rules.SecurityErrors do
   # ---------------------------------------------------------------------------
 
   @codeql_supported MapSet.new([
-    "javascript-typescript", "python", "go", "java-kotlin",
-    "ruby", "csharp", "cpp", "swift"
-  ])
+                      "javascript-typescript",
+                      "python",
+                      "go",
+                      "java-kotlin",
+                      "ruby",
+                      "csharp",
+                      "cpp",
+                      "swift"
+                    ])
 
   @codeql_unsupported MapSet.new([
-    "rust", "ocaml", "haskell", "ada", "rescript", "gleam", "nickel"
-  ])
+                        "rust",
+                        "ocaml",
+                        "haskell",
+                        "ada",
+                        "rescript",
+                        "gleam",
+                        "nickel"
+                      ])
 
   @file_ext_to_codeql %{
     ".js" => "javascript-typescript",
@@ -463,10 +492,22 @@ defmodule Hypatia.Rules.SecurityErrors do
   # not through ReScript). affinescript ADDED. typescript replacement
   # corrected from "rescript" → "affinescript".
   @allowed_languages MapSet.new([
-    "affinescript", "affine",
-    "rust", "gleam", "julia", "logtalk", "haskell",
-    "bash", "nickel", "guile", "ocaml", "ada", "elixir", "zig", "idris2"
-  ])
+                       "affinescript",
+                       "affine",
+                       "rust",
+                       "gleam",
+                       "julia",
+                       "logtalk",
+                       "haskell",
+                       "bash",
+                       "nickel",
+                       "guile",
+                       "ocaml",
+                       "ada",
+                       "elixir",
+                       "zig",
+                       "idris2"
+                     ])
 
   @banned_languages %{
     "typescript" => "affinescript",
