@@ -31,6 +31,11 @@ defmodule Hypatia.Rules.CodeSafety do
       severity: :medium,
       pattern: ~r/\.expect\(/,
       cwe: "CWE-754",
+      # A one-time initialiser is not a hot path. Without this the rule fires on
+      # `LazyLock::new(|| Regex::new(..).expect(..))`, which compiles exactly once
+      # -- measured 2026-07-29: 11 of 28 findings in gitbot-fleet were this shape,
+      # and the suggested remediation (cache it) described code that already existed.
+      context: :runtime_path,
       description: "expect() in hot path"
     },
     %{
@@ -776,10 +781,14 @@ defmodule Hypatia.Rules.CodeSafety do
 
   def scan_content(content, language) do
     scannable = strip_inline_test_blocks(content, language)
+    runtime_only = strip_lazy_initialisers(scannable, language)
 
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
-      case Regex.scan(rule.pattern, scannable) do
+      subject =
+        if Map.get(rule, :context) == :runtime_path, do: runtime_only, else: scannable
+
+      case Regex.scan(rule.pattern, subject) do
         [] ->
           []
 
@@ -796,6 +805,27 @@ defmodule Hypatia.Rules.CodeSafety do
       end
     end)
   end
+
+  @doc false
+  # Removes the bodies of one-time lazy initialisers before matching rules that
+  # are specifically about work repeated on a hot path.
+  #
+  #     static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(..).expect(..));
+  #
+  # runs once on first access, so an `.expect(` inside it is not a hot-path
+  # concern. Matching it produces a finding whose only honest remediation is
+  # "you already did this". Brace-counting from the initialiser opener keeps the
+  # rest of the file scannable, so a genuine per-call `.expect(` two lines later
+  # is still caught.
+  def strip_lazy_initialisers(content, language) when language in ["rust"] do
+    Regex.replace(
+      ~r/(?:LazyLock|OnceLock|Lazy|OnceCell)::new\s*\(\s*\|\|(?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/s,
+      content,
+      "LAZY_INIT_ELIDED"
+    )
+  end
+
+  def strip_lazy_initialisers(content, _language), do: content
 
   # For Rust:
   #

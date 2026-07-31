@@ -68,6 +68,35 @@ jobs:
     timeout-minutes: 300
 
     steps:
+      # Fail in seconds, not in twenty minutes.
+      #
+      # The write to verisimdb-data is the LAST thing this job does, after a
+      # ~300-repo scan. So every time the token was wrong, the run burned the
+      # entire scan and then died at the final step. That is how a hard
+      # permission wall stayed unnoticed for 26 days: the failure was
+      # expensive to reach and looked like a flaky tail-end push.
+      #
+      # This probe is the same differential test that finally identified the
+      # fault: create a ref and delete it again. It touches no content, makes
+      # no commit, and takes about a second.
+      - name: Preflight — can we actually write to verisimdb-data?
+        if: inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          R="hyperpolymath/verisimdb-data"
+          PROBE="preflight/${GITHUB_RUN_ID}"
+          SHA="$(gh api "repos/${R}/git/ref/heads/main" --jq .object.sha)"
+          if ! gh api -X POST "repos/${R}/git/refs" \
+                 -f "ref=refs/heads/${PROBE}" -f "sha=${SHA}" --jq .ref >/dev/null 2>"$RUNNER_TEMP/probe-err.txt"; then
+            cat "$RUNNER_TEMP/probe-err.txt" >&2
+            echo "::error title=verisimdb-data is not writable::HYPATIA_DISPATCH_PAT cannot create a branch on ${R}, so this rescan would discard ~20 minutes of scanning at the final step. Grant the token repository access to ${R} with Contents: Read and write AND Pull requests: Read and write. Note a fine-grained PAT must list the repo explicitly; org/user-wide scope is not inherited."
+            exit 78
+          fi
+          gh api -X DELETE "repos/${R}/git/refs/heads/${PROBE}" >/dev/null
+          echo "verisimdb-data is writable — proceeding with the scan."
+
       - name: Resolve panic-attack version
         id: pa_ref
         run: echo "sha=$(git ls-remote https://github.com/hyperpolymath/panic-attack.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
@@ -193,47 +222,102 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           git commit -m "scan: estate rescan ($SCANNED repos, panic-attack refresh)"
 
-      - name: Regenerate index.json (canonical generator)
-        if: inputs.dry_run != 'true' && steps.commit_scans.outputs.changed == 'true'
-        run: |
-          set -euo pipefail
-          DATA="$RUNNER_TEMP/verisimdb-data"
-          cd "$DATA"
-          # Use the repo's own deterministic generator rather than a bespoke
-          # schema. regen-index.sh derives `last_updated` from the commit
-          # time of the latest commit touching scans/ — which is the
-          # scans-only commit just made above. Committing the index as a
-          # SEPARATE commit (next step) that does NOT touch scans/ keeps that
-          # timestamp stable, so the index-freshness.yml gate (which reruns
-          # this same script at HEAD and diffs) stays green.
-          bash scripts/regen-index.sh
-          git add index.json
-          if ! git diff --cached --quiet; then
-            git commit -m "index: regen after estate rescan"
-          fi
-
-      - name: Push to verisimdb-data
+      - name: Publish to verisimdb-data (two signed, squash-merged PRs)
         if: inputs.dry_run != 'true' && steps.commit_scans.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           DATA="$RUNNER_TEMP/verisimdb-data"
+          REPO="hyperpolymath/verisimdb-data"
           cd "$DATA"
-          # Retry with rebase: another writer (ingest.yml, manual push) may
-          # land between our clone and push. --rebase keeps our two commits
-          # (scans, then index) on top; index regen does not need rerunning
-          # because a concurrent scans push is rare and the freshness gate
-          # would catch any genuine drift.
-          for delay in 2 4 8 16; do
-            if git push origin HEAD:main; then
-              exit 0
+
+          # WHY TWO PRs, AND WHY SQUASH.
+          #
+          # verisimdb-data's `Base` ruleset requires `pull_request` AND
+          # `required_signatures` on main, plus `required_linear_history`.
+          # That eliminates every other option, as GitHub itself told us:
+          #
+          #     GraphQL: Base branch requires signed commits.
+          #     Rebase merges cannot be automatically signed by GitHub
+          #
+          #   direct push  -> refused, `pull_request` required
+          #   merge commit -> refused, `required_linear_history`
+          #   rebase merge -> refused, cannot be signed (measured, above)
+          #   squash merge -> GitHub authors ONE new commit server-side and
+          #                   signs it. The only method that satisfies all three.
+          #
+          # But a single squash of "scans + index" would break the index
+          # contract. scripts/regen-index.sh line 44 derives the timestamp as:
+          #
+          #     last_updated="$(git log -1 --format=%cI -- "$SCAN_DIR")"
+          #
+          # i.e. the commit time of the newest commit touching scans/. Squashing
+          # both changes together makes that ONE commit touch scans/ as well as
+          # index.json, while index.json still carries a timestamp computed
+          # before that commit existed — so index-freshness.yml, which reruns
+          # this same script at HEAD and diffs, would fail.
+          #
+          # Publishing as two squashes keeps them separate: PR 1 lands exactly
+          # one commit touching scans/, PR 2 lands exactly one commit that does
+          # not. The index is regenerated AGAINST MERGED main, so the timestamp
+          # it records is the real post-merge scans commit.
+
+          publish() {
+            local suffix="$1" title="$2"
+            local branch pr_url pr_num state
+            branch="estate-rescan/${RUN_ID}-${suffix}"
+            git push origin "HEAD:refs/heads/${branch}"
+            pr_url="$(gh pr create --repo "$REPO" --base main --head "$branch" \
+              --title "$title" \
+              --body "Automated estate rescan from hyperpolymath/hypatia run ${RUN_ID}. Squash-merged: it is the only merge method that satisfies required_signatures + required_linear_history on this repo.")"
+            pr_num="${pr_url##*/}"
+            echo "opened ${pr_url}"
+            # --auto, not a bare merge. A plain `gh pr merge --squash` is
+            # evaluated the instant the PR is created, before the base-branch
+            # policy has settled, and returns
+            #     "not mergeable: the base branch policy prohibits the merge"
+            # — while the merge then lands ~30s later anyway. That exact
+            # false negative made run 29843933209 report failure for a rescan
+            # that HAD in fact merged (verisimdb-data#54, merged 15:37:35Z).
+            # --auto queues it and lets GitHub merge when the policy allows.
+            if ! gh pr merge "$pr_num" --repo "$REPO" --squash --auto --delete-branch; then
+              echo "::error title=verisimdb-data merge could not be queued::PR #${pr_num} (${suffix}) opened but auto-merge was refused. Check the Base ruleset and that the token has Pull requests: Read and write."
+              return 1
             fi
-            echo "push failed; rebasing and retrying in ${delay}s"
-            sleep "$delay"
-            git pull --rebase origin main || true
-          done
-          git push origin HEAD:main
+            # Poll for the END STATE. Never infer the merge from the exit code
+            # of the command that requested it.
+            state=""
+            for _ in $(seq 1 40); do
+              state="$(gh pr view "$pr_num" --repo "$REPO" --json state --jq .state)"
+              [ "$state" = "MERGED" ] && break
+              [ "$state" = "CLOSED" ] && break
+              sleep 15
+            done
+            if [ "$state" != "MERGED" ]; then
+              echo "::error title=verisimdb-data not updated::PR #${pr_num} (${suffix}) is ${state:-UNKNOWN} after 10 minutes, not MERGED. The fact-store did NOT receive this rescan."
+              return 1
+            fi
+            echo "merged ${pr_url}"
+          }
+
+          # ---- PR 1: the scans commit made in the previous step -------------
+          publish "scans" "scan: estate rescan (run ${RUN_ID})"
+
+          # ---- regenerate the index against MERGED main ---------------------
+          git fetch --depth=50 origin main
+          git reset --hard FETCH_HEAD
+          bash scripts/regen-index.sh
+          git add index.json
+          if git diff --cached --quiet; then
+            echo "index already current after the scans merge — nothing further to publish."
+            exit 0
+          fi
+          git commit -m "index: regen after estate rescan (run ${RUN_ID})"
+
+          # ---- PR 2: index only, touching no file under scans/ --------------
+          publish "index" "index: regen after estate rescan (run ${RUN_ID})"
 
       - name: Job summary
         env:
