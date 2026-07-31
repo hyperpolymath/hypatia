@@ -180,6 +180,7 @@ criteria = [
   { id = "6.1.3", name = "governance-wf", desc = "governance workflow enforces estate policies",                  tier = "silver", gate = "universal", detect = "workflow_audit/governance",     template_ref = ".github/workflows/governance.yml" },
   { id = "6.1.4", name = "workflow-hardened", desc = "Workflows least-privilege + no injection (workflow linter)", tier = "silver", gate = "universal", detect = "workflow_hardening/aggregate", template_ref = ".github/workflows/workflow-linter.yml" },
   { id = "6.1.5", name = "no-silent-skip", desc = "No '|| echo SKIP' silent-green in build/test recipes",         tier = "gold",   gate = "universal", detect = "honest_completion/silent_skip", template_ref = "-" },
+  { id = "6.1.6", name = "dependabot-valid", desc = "Dependabot configuration only declares ecosystems matching existing project files", tier = "silver", gate = "universal", detect = "workflow_audit/dependabot", template_ref = ".github/dependabot.yml" },
   { id = "6.2.1", name = "dogfood-gate",  desc = "dogfood-gate runs the RSR oracle against itself",               tier = "gold",   gate = "governance-tier", detect = "workflow_audit/dogfood",   template_ref = ".github/workflows/dogfood-gate.yml" },
 ]
 

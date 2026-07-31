@@ -366,6 +366,7 @@ defmodule Hypatia.Rules.RsrConformance do
       "6.1.1" => &workflows_present/1,
       "6.1.2" => present(".github/workflows/hypatia-scan.yml"),
       "6.1.3" => present(".github/workflows/governance.yml"),
+      "6.1.6" => &dependabot_valid/1,
       "6.2.1" => present(".github/workflows/dogfood-gate.yml"),
       # Language bans 5.1.1/5.1.2/5.1.3/5.1.5 and SHA-pinning 4.1.3 are handled
       # by delegated_verdict/2 (live scanner, carve-out-aware) — not here.
@@ -441,7 +442,8 @@ defmodule Hypatia.Rules.RsrConformance do
   defp record_dialect?(path) do
     with {:ok, content} <- File.read(path) do
       content
-      |> String.split("\n")
+      |> String.split("
+")
       |> Stream.map(&String.trim/1)
       |> Enum.find(&(&1 != "" and not String.starts_with?(&1, "#")))
       |> case do
@@ -450,6 +452,32 @@ defmodule Hypatia.Rules.RsrConformance do
       end
     else
       _ -> false
+    end
+  end
+
+  
+  defp dependabot_valid(repo) do
+    path = Path.join(repo, ".github/dependabot.yml")
+    if File.exists?(path) do
+      content = File.read!(path)
+      
+      mix_present? = String.match?(content, ~r/package-ecosystem:\s*["']?mix["']?/)
+      cargo_present? = String.match?(content, ~r/package-ecosystem:\s*["']?cargo["']?/)
+      pip_present? = String.match?(content, ~r/package-ecosystem:\s*["']?pip["']?/)
+      nix_present? = String.match?(content, ~r/package-ecosystem:\s*["']?nix["']?/)
+      
+      valid_mix = not mix_present? or File.exists?(Path.join(repo, "mix.exs"))
+      valid_cargo = not cargo_present? or File.exists?(Path.join(repo, "Cargo.toml"))
+      valid_pip = not pip_present? or (File.exists?(Path.join(repo, "requirements.txt")) or File.exists?(Path.join(repo, "pyproject.toml")))
+      valid_nix = not nix_present? or (File.exists?(Path.join(repo, "flake.nix")) or File.exists?(Path.join(repo, "default.nix")))
+
+      if valid_mix and valid_cargo and valid_pip and valid_nix do
+        :pass
+      else
+        :fail
+      end
+    else
+      :pass
     end
   end
 
