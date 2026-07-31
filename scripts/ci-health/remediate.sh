@@ -32,13 +32,8 @@ read -r isfork isarch <<<"$meta"
 case "$CLASS" in
   B-ALLOWLIST)
     # Build body: hyperpolymath/* + each superset action as owner/repo@*
-    body=$(python3 - "$HERE/action-superset.txt" <<'PY'
-import json,sys
-pats=["hyperpolymath/*"]+[l.strip()+"@*" for l in open(sys.argv[1]) if l.strip()]
-print(json.dumps({"github_owned_allowed":True,"verified_allowed":True,"patterns_allowed":pats}))
-PY
-)
-    if [ "$DRY" = "true" ]; then echo "DRYRUN $R/B-ALLOWLIST would PUT $(printf '%s' "$body"|python3 -c 'import json,sys;print(len(json.load(sys.stdin)["patterns_allowed"]))') patterns"; exit 0; fi
+    body=$(jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | ["hyperpolymath/*"] + . as $pats | {"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":$pats}' "$HERE/action-superset.txt")
+    if [ "$DRY" = "true" ]; then echo "DRYRUN $R/B-ALLOWLIST would PUT $(printf '%s' "$body" | jq '.patterns_allowed | length') patterns"; exit 0; fi
     printf '%s' "$body" | gh api -X PUT "repos/$O/$R/actions/permissions/selected-actions" --input - >/dev/null
     n=$(gh api "repos/$O/$R/actions/permissions/selected-actions" --jq '.patterns_allowed|length')
     echo "FIXED $R/B-ALLOWLIST -> $n patterns (sha-pinning unchanged)"
