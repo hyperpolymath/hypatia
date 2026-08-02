@@ -1,0 +1,23 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — GENERATED signed attestation (real Ed25519). Re-verifiable via the embedded seal.pubkey. Not hand-written.",
+  "bot": "ci",
+  "subject": {
+    "repo": "hyperpolymath/hypatia",
+    "number": 442,
+    "head_sha": "3aa68ac"
+  },
+  "verdict": "approve",
+  "confidence": 0.99,
+  "rationale": "decision contract: docs-only, object-level, CI green",
+  "intent_hash": "sha256:e18ee59c5ce5c39a3d97d7db023b14e67f1174b48ce9eaba02229986f063a692",
+  "evidence_hash": "sha256:0db97e31ad7c4a30653b46c8cdc4652a2e3f94c54a35e092e8f7135145de80cf",
+  "seal": {
+    "chain_hash": "sha256:06cc4bb255ce7d472de0f16ab81046dbbc9bd476a6f15034a1a7cc9d205f97db",
+    "alg": "ed25519",
+    "sig": "8b70b8960f2eb2bbcfa76794314cc002ff4ea3d48fe4f923acd451d46ec07c030222d5fba8b53fd29de0f55a12788ba0bdc20697958530d3790fff965b5d5d07",
+    "pubkey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAmGLva1NmjvXq16noyjV8pUd4zsmvRMj8+OJaERokOxk=\n-----END PUBLIC KEY-----\n"
+  },
+  "nonce": "baaafec4988d78c5e9751cadd0425100375934d8a2f0b7b40ec83b43143c0630",
+  "tool_version": "panic-attack/2.5.0",
+  "timestamp": "2026-06-05T15:00:00Z"
+}

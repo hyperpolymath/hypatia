@@ -65,85 +65,191 @@ defmodule Hypatia.Rules.RootHygiene do
   # ─── Banned root files ─────────────────────────────────────────────────
 
   @banned_root_files [
-    %{pattern: "AI.djot", reason: "Superseded by 0-AI-MANIFEST.a2ml", severity: :high,
-      action: :delete},
-    %{pattern: "STATE.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
-    %{pattern: "META.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
-    %{pattern: "ECOSYSTEM.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
-    %{pattern: "AGENTIC.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
-    %{pattern: "NEUROSYM.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
-    %{pattern: "PLAYBOOK.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
-    %{pattern: "LANGUAGES.scm", reason: "Must be in .machine_readable/ only", severity: :critical,
-      action: :move},
+    %{
+      pattern: "AI.djot",
+      reason: "Superseded by 0-AI-MANIFEST.a2ml",
+      severity: :high,
+      action: :delete
+    },
+    %{
+      pattern: "STATE.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
+    %{
+      pattern: "META.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
+    %{
+      pattern: "ECOSYSTEM.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
+    %{
+      pattern: "AGENTIC.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
+    %{
+      pattern: "NEUROSYM.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
+    %{
+      pattern: "PLAYBOOK.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
+    %{
+      pattern: "LANGUAGES.scm",
+      reason: "Must be in .machine_readable/ only",
+      severity: :critical,
+      action: :move
+    },
     # Docker is permitted estate-wide; Podman/Containerfile is HIGHLY PREFERRED
     # but not mandatory. These are low-severity advisories (do not fail the
     # critical/high gate), nudging Containerfile naming unless a specific tool
     # genuinely needs the Docker-* name.
-    %{pattern: "Dockerfile", reason: "Containerfile preferred over Dockerfile (Podman highly preferred; Docker permitted) -- rename unless a tool requires the Dockerfile name", severity: :low,
-      action: :rename},
-    %{pattern: "docker-compose.yml", reason: "compose.yml / podman-compose highly preferred (Docker permitted)", severity: :low,
-      action: :rename},
-    %{pattern: "docker-compose.yaml", reason: "compose.yml / podman-compose highly preferred (Docker permitted)", severity: :low,
-      action: :rename},
-    %{pattern: "Makefile", reason: "Use Justfile", severity: :medium,
-      action: :replace},
-    %{pattern: "package-lock.json", reason: "npm banned -- use Deno", severity: :high,
-      action: :delete},
-    %{pattern: "yarn.lock", reason: "Yarn banned -- use Deno", severity: :high,
-      action: :delete},
-    %{pattern: "bun.lockb", reason: "Bun banned -- use Deno", severity: :high,
-      action: :delete},
-    %{pattern: "pnpm-lock.yaml", reason: "pnpm banned -- use Deno", severity: :high,
-      action: :delete},
-    %{pattern: ".npmrc", reason: "npm banned -- use Deno", severity: :medium,
-      action: :delete},
-    %{pattern: "tsconfig.json", reason: "TypeScript banned -- use AffineScript", severity: :high,
-      action: :flag},
-    %{pattern: "go.mod", reason: "Go banned -- use Rust", severity: :high,
-      action: :flag},
-    %{pattern: "go.sum", reason: "Go banned -- use Rust", severity: :high,
-      action: :flag},
-    %{pattern: "AI.a2ml", reason: "Stray AI.a2ml in root -- use 0-AI-MANIFEST.a2ml only", severity: :high,
-      action: :delete},
-    %{pattern: "Trustfile.hs", reason: "Legacy Haskell Trustfile -- use Trustfile.a2ml", severity: :high,
-      action: :convert},
-    %{pattern: "AI.djot", reason: "Superseded by 0-AI-MANIFEST.a2ml", severity: :high,
-      action: :delete}
+    %{
+      pattern: "Dockerfile",
+      reason:
+        "Containerfile preferred over Dockerfile (Podman highly preferred; Docker permitted) -- rename unless a tool requires the Dockerfile name",
+      severity: :low,
+      action: :rename
+    },
+    %{
+      pattern: "docker-compose.yml",
+      reason: "compose.yml / podman-compose highly preferred (Docker permitted)",
+      severity: :low,
+      action: :rename
+    },
+    %{
+      pattern: "docker-compose.yaml",
+      reason: "compose.yml / podman-compose highly preferred (Docker permitted)",
+      severity: :low,
+      action: :rename
+    },
+    %{pattern: "Makefile", reason: "Use Justfile", severity: :medium, action: :replace},
+    %{
+      pattern: "package-lock.json",
+      reason: "npm banned -- use Deno",
+      severity: :high,
+      action: :delete
+    },
+    %{pattern: "yarn.lock", reason: "Yarn banned -- use Deno", severity: :high, action: :delete},
+    %{pattern: "bun.lockb", reason: "Bun banned -- use Deno", severity: :high, action: :delete},
+    %{
+      pattern: "pnpm-lock.yaml",
+      reason: "pnpm banned -- use Deno",
+      severity: :high,
+      action: :delete
+    },
+    %{pattern: ".npmrc", reason: "npm banned -- use Deno", severity: :medium, action: :delete},
+    %{
+      pattern: "tsconfig.json",
+      reason: "TypeScript banned -- use AffineScript",
+      severity: :high,
+      action: :flag
+    },
+    %{pattern: "go.mod", reason: "Go banned -- use Rust", severity: :high, action: :flag},
+    %{pattern: "go.sum", reason: "Go banned -- use Rust", severity: :high, action: :flag},
+    %{
+      pattern: "AI.a2ml",
+      reason: "Stray AI.a2ml in root -- use 0-AI-MANIFEST.a2ml only",
+      severity: :high,
+      action: :delete
+    },
+    %{
+      pattern: "Trustfile.hs",
+      reason: "Legacy Haskell Trustfile -- use Trustfile.a2ml",
+      severity: :high,
+      action: :convert
+    },
+    %{
+      pattern: "AI.djot",
+      reason: "Superseded by 0-AI-MANIFEST.a2ml",
+      severity: :high,
+      action: :delete
+    }
   ]
 
   # ─── Stale file patterns ───────────────────────────────────────────────
 
   @stale_patterns [
-    %{regex: ~r/^PLAN-.*\.md$/i, reason: "Executed plan left in root -- move to docs/plans/",
-      severity: :low, action: :move},
-    %{regex: ~r/^SNAPSHOT-.*\.md$/i, reason: "Stale snapshot in root -- move to docs/ or delete",
-      severity: :low, action: :move},
-    %{regex: ~r/^TODO-.*\.md$/i, reason: "TODO file in root -- move to docs/",
-      severity: :low, action: :move},
-    %{regex: ~r/^SESSION-.*\.md$/i, reason: "Session log in root -- move to docs/sessions/",
-      severity: :low, action: :move},
-    %{regex: ~r/^DESIGN-.*\.md$/i, reason: "Design doc in root -- move to docs/design/",
-      severity: :low, action: :move},
-    %{regex: ~r/^.*-STATUS-REPORT-.*\.md$/i, reason: "Status report in root -- move to docs/",
-      severity: :low, action: :move},
-    %{regex: ~r/^.*\.bak$/i, reason: "Backup file in root",
-      severity: :medium, action: :delete},
-    %{regex: ~r/^.*\.tmp$/i, reason: "Temporary file in root",
-      severity: :medium, action: :delete},
-    %{regex: ~r/^.*\.orig$/i, reason: "Merge artifact in root",
-      severity: :medium, action: :delete},
-    %{regex: ~r/^SONNET-TASKS\.md$/i, reason: "Stale AI task file -- delete or move to docs/",
-      severity: :high, action: :delete},
-    %{regex: ~r/^GEMINI\.md$/i, reason: "Stale AI session file -- delete",
-      severity: :medium, action: :delete},
-    %{regex: ~r/^CLAUDE-WORK.*\.md$/i, reason: "AI work file in repo root -- should not be committed",
-      severity: :medium, action: :delete}
+    %{
+      regex: ~r/^PLAN-.*\.md$/i,
+      reason: "Executed plan left in root -- move to docs/plans/",
+      severity: :low,
+      action: :move
+    },
+    %{
+      regex: ~r/^SNAPSHOT-.*\.md$/i,
+      reason: "Stale snapshot in root -- move to docs/ or delete",
+      severity: :low,
+      action: :move
+    },
+    %{
+      regex: ~r/^TODO-.*\.md$/i,
+      reason: "TODO file in root -- move to docs/",
+      severity: :low,
+      action: :move
+    },
+    %{
+      regex: ~r/^SESSION-.*\.md$/i,
+      reason: "Session log in root -- move to docs/sessions/",
+      severity: :low,
+      action: :move
+    },
+    %{
+      regex: ~r/^DESIGN-.*\.md$/i,
+      reason: "Design doc in root -- move to docs/design/",
+      severity: :low,
+      action: :move
+    },
+    %{
+      regex: ~r/^.*-STATUS-REPORT-.*\.md$/i,
+      reason: "Status report in root -- move to docs/",
+      severity: :low,
+      action: :move
+    },
+    %{regex: ~r/^.*\.bak$/i, reason: "Backup file in root", severity: :medium, action: :delete},
+    %{
+      regex: ~r/^.*\.tmp$/i,
+      reason: "Temporary file in root",
+      severity: :medium,
+      action: :delete
+    },
+    %{
+      regex: ~r/^.*\.orig$/i,
+      reason: "Merge artifact in root",
+      severity: :medium,
+      action: :delete
+    },
+    %{
+      regex: ~r/^SONNET-TASKS\.md$/i,
+      reason: "Stale AI task file -- delete or move to docs/",
+      severity: :high,
+      action: :delete
+    },
+    %{
+      regex: ~r/^GEMINI\.md$/i,
+      reason: "Stale AI session file -- delete",
+      severity: :medium,
+      action: :delete
+    },
+    %{
+      regex: ~r/^CLAUDE-WORK.*\.md$/i,
+      reason: "AI work file in repo root -- should not be committed",
+      severity: :medium,
+      action: :delete
+    }
   ]
 
   def allowed_root_files, do: @allowed_root_files
@@ -175,9 +281,19 @@ defmodule Hypatia.Rules.RootHygiene do
   def scan_banned(root_files) do
     Enum.flat_map(root_files, fn file ->
       case Enum.find(@banned_root_files, fn rule -> rule.pattern == file end) do
-        nil -> []
-        rule -> [%{file: file, reason: rule.reason, severity: rule.severity,
-                    action: rule.action, type: :banned}]
+        nil ->
+          []
+
+        rule ->
+          [
+            %{
+              file: file,
+              reason: rule.reason,
+              severity: rule.severity,
+              action: rule.action,
+              type: :banned
+            }
+          ]
       end
     end)
   end
@@ -188,9 +304,19 @@ defmodule Hypatia.Rules.RootHygiene do
   def scan_stale(root_files) do
     Enum.flat_map(root_files, fn file ->
       case Enum.find(@stale_patterns, fn rule -> Regex.match?(rule.regex, file) end) do
-        nil -> []
-        rule -> [%{file: file, reason: rule.reason, severity: rule.severity,
-                    action: rule.action, type: :stale}]
+        nil ->
+          []
+
+        rule ->
+          [
+            %{
+              file: file,
+              reason: rule.reason,
+              severity: rule.severity,
+              action: rule.action,
+              type: :stale
+            }
+          ]
       end
     end)
   end
@@ -199,20 +325,32 @@ defmodule Hypatia.Rules.RootHygiene do
   Check for required files that are missing.
   """
   def scan_required_missing(root_files) do
+    # NB: SECURITY.md is intentionally NOT listed here. It is a community-health
+    # file that GitHub recognises in root, `.github/`, or `docs/`, and is owned
+    # by Hypatia.Rules.CicdRules.check_repo_requirements/1 (which checks all
+    # three locations). Listing it here too caused a double-report and a
+    # false-positive when it lives under `.github/SECURITY.md`.
     required = [
       %{file: "LICENSE", alternatives: ["LICENSE.txt"], severity: :critical},
-      %{file: "SECURITY.md", alternatives: [], severity: :high},
       %{file: ".editorconfig", alternatives: [], severity: :medium},
       %{file: "0-AI-MANIFEST.a2ml", alternatives: ["AI.a2ml"], severity: :high}
     ]
 
     Enum.flat_map(required, fn req ->
       all_options = [req.file | req.alternatives]
+
       if Enum.any?(all_options, &(&1 in root_files)) do
         []
       else
-        [%{file: req.file, reason: "Required file missing", severity: req.severity,
-            action: :create, type: :missing}]
+        [
+          %{
+            file: req.file,
+            reason: "Required file missing",
+            severity: req.severity,
+            action: :create,
+            type: :missing
+          }
+        ]
       end
     end)
   end
@@ -277,25 +415,32 @@ defmodule Hypatia.Rules.RootHygiene do
   """
   def dispatch_recommendations(findings) do
     Enum.map(findings, fn finding ->
-      bot = case finding.action do
-        :delete -> :rhodibot
-        :rename -> :rhodibot
-        :move -> :finishbot
-        :replace -> :finishbot
-        :create -> :finishbot
-        :flag -> :seambot
-      end
+      bot =
+        case finding.action do
+          :delete -> :rhodibot
+          :rename -> :rhodibot
+          :move -> :finishbot
+          :replace -> :finishbot
+          :create -> :finishbot
+          :flag -> :seambot
+        end
 
-      confidence = case finding.severity do
-        :critical -> 0.98
-        :high -> 0.95
-        :medium -> 0.85
-        :low -> 0.70
-        _ -> 0.50
-      end
+      confidence =
+        case finding.severity do
+          :critical -> 0.98
+          :high -> 0.95
+          :medium -> 0.85
+          :low -> 0.70
+          _ -> 0.50
+        end
 
-      %{bot: bot, confidence: confidence, file: finding.file,
-        action: finding.action, reason: finding.reason}
+      %{
+        bot: bot,
+        confidence: confidence,
+        file: finding.file,
+        action: finding.action,
+        reason: finding.reason
+      }
     end)
   end
 end

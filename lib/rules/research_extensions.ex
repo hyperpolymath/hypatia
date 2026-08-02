@@ -108,7 +108,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
     root = Path.join([repo_path, ".github", "workflows"])
 
     cond do
-      not File.dir?(root) -> []
+      not File.dir?(root) ->
+        []
+
       true ->
         root
         |> File.ls!()
@@ -169,11 +171,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      touches_secrets? =
-        Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, content)
+      touches_secrets? = Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, content)
 
-      installs_harden? =
-        Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
+      installs_harden? = Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
 
       if touches_secrets? and not installs_harden? do
         [
@@ -220,11 +220,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      installs_harden? =
-        Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
+      installs_harden? = Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
 
-      audit_mode? =
-        Regex.match?(~r/egress-policy:\s*audit\b/, content)
+      audit_mode? = Regex.match?(~r/egress-policy:\s*audit\b/, content)
 
       protected_branch_trigger? =
         Regex.match?(~r/^\s*on:\s*push\b/m, content) or
@@ -278,8 +276,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      uses_cache? =
-        Regex.match?(~r/uses:\s*actions\/cache(?:@|\s)/, content)
+      uses_cache? = Regex.match?(~r/uses:\s*actions\/cache(?:@|\s)/, content)
 
       if uses_cache? and
            (Regex.match?(untrusted_key_re, content) or
@@ -287,7 +284,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
         # Locate first match for line number.
         idx =
           case Regex.run(untrusted_key_re, content, return: :index) do
-            [{i, _} | _] -> i
+            [{i, _} | _] ->
+              i
+
             _ ->
               case Regex.run(restore_keys_re, content, return: :index) do
                 [{i, _} | _] -> i
@@ -333,11 +332,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
   """
   def re004_container_tag_pin(repo_path) do
     # `docker://owner/image:tag` (no @sha256:)
-    docker_uses_re =
-      ~r/uses:\s*(docker:\/\/\S+?)(?:\s|$)/
+    docker_uses_re = ~r/uses:\s*(docker:\/\/\S+?)(?:\s|$)/
 
-    container_re =
-      ~r/^\s*(?:image|container):\s*(\S+)\s*$/m
+    container_re = ~r/^\s*(?:image|container):\s*(\S+)\s*$/m
 
     repo_path
     |> workflow_files()
@@ -348,7 +345,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       uses_findings =
         Regex.scan(docker_uses_re, content, return: :index)
         |> Enum.flat_map(fn [{full_start, _}, {ref_start, ref_len}] ->
-          ref = String.slice(content, ref_start, ref_len)
+          ref = binary_part(content, ref_start, ref_len)
 
           if String.contains?(ref, "@sha256:") do
             []
@@ -361,7 +358,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       container_findings =
         Regex.scan(container_re, content, return: :index)
         |> Enum.flat_map(fn [{full_start, _}, {ref_start, ref_len}] ->
-          ref = String.slice(content, ref_start, ref_len)
+          ref = binary_part(content, ref_start, ref_len)
 
           cond do
             String.contains?(ref, "@sha256:") ->
@@ -429,11 +426,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
           is_binary(name) and
             Regex.match?(~r/(?:test|spec|check|lint|verify)/i, name)
 
-        has_continue_on_error? =
-          Regex.match?(~r/continue-on-error:\s*true\b/, body)
+        has_continue_on_error? = Regex.match?(~r/continue-on-error:\s*true\b/, body)
 
-        has_or_true? =
-          Regex.match?(~r/\|\|\s*true\b/, body)
+        has_or_true? = Regex.match?(~r/\|\|\s*true\b/, body)
 
         if is_test? and (has_continue_on_error? or has_or_true?) do
           mechanism =
@@ -497,7 +492,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
       if composite? do
         Regex.scan(~r/^\s*-?\s*uses:\s*(\S+)/m, content, return: :index)
         |> Enum.flat_map(fn [{full_start, _}, {slug_start, slug_len}] ->
-          slug = String.slice(content, slug_start, slug_len)
+          # byte offsets from return: :index (see WorkflowHardening.wh004)
+          slug = binary_part(content, slug_start, slug_len)
 
           cond do
             String.starts_with?(slug, "./") or String.starts_with?(slug, "docker://") ->
@@ -560,7 +556,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       # until the next column-0 key.
       case Regex.run(~r/^env:\s*\n((?:[ \t]+[^\n]*\n?)+)/m, content, return: :index) do
         [{full_start, _}, {body_start, body_len}] ->
-          body = String.slice(content, body_start, body_len)
+          body = binary_part(content, body_start, body_len)
 
           if Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, body) do
             line_no = line_number_for_offset(content, full_start)
@@ -609,8 +605,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   def re008_spoofable_bot_gate(repo_path) do
     # github.actor compared to any bot-identity string. Catch both
     # `==` and `!=` orientations and either quote style.
-    bot_gate_re =
-      ~r/github\.actor\s*(?:==|!=)\s*['"]([a-zA-Z0-9_-]+\[bot\])['"]/
+    bot_gate_re = ~r/github\.actor\s*(?:==|!=)\s*['"]([a-zA-Z0-9_-]+\[bot\])['"]/
 
     repo_path
     |> workflow_files()
@@ -620,7 +615,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
       Regex.scan(bot_gate_re, content, return: :index)
       |> Enum.map(fn [{idx, _}, {name_start, name_len}] ->
-        name = String.slice(content, name_start, name_len)
+        name = binary_part(content, name_start, name_len)
         line_no = line_number_for_offset(content, idx)
 
         %{
@@ -667,7 +662,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       Regex.scan(re, content, return: :index)
       |> Enum.map(fn [{idx, _} | _] ->
         line_no = line_number_for_offset(content, idx)
-        slice = String.slice(content, idx, 60)
+        slice = byte_preview(content, idx, 60)
 
         %{
           rule: "RE009",
@@ -712,8 +707,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         Regex.match?(~r/^\s*on:\s*workflow_run\b/m, content) or
           Regex.match?(~r/^\s+workflow_run:/m, content)
 
-      downloads_artifact? =
-        Regex.match?(~r/uses:\s*actions\/download-artifact/, content)
+      downloads_artifact? = Regex.match?(~r/uses:\s*actions\/download-artifact/, content)
 
       run_id_constrained? =
         Regex.match?(~r/run-id:\s*\$\{\{\s*github\.event\.workflow_run\.id/, content) or
@@ -794,8 +788,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       Enum.reduce(lines, {[], nil}, fn {line, no}, {acc, current} ->
         # A new step begins on a `- ` token. We detect both
         # `- name: ...`, `- run: ...`, `- uses: ...` as openers.
-        new_step? =
-          Regex.match?(~r/^\s+-\s+(?:name|run|uses):/, line)
+        new_step? = Regex.match?(~r/^\s+-\s+(?:name|run|uses):/, line)
 
         cond do
           new_step? ->
@@ -870,6 +863,23 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> String.graphemes()
     |> Enum.count(&(&1 == "\n"))
     |> Kernel.+(1)
+  end
+
+  # Fixed-length excerpt starting at a BYTE offset (regex match start, so
+  # always on a character boundary). Clamps to the remaining bytes and
+  # trims any trailing partial UTF-8 sequence (mirrors
+  # WorkflowHardening.byte_preview/3).
+  defp byte_preview(content, idx, len) do
+    avail = max(byte_size(content) - idx, 0)
+    trim_partial_utf8(binary_part(content, idx, min(len, avail)))
+  end
+
+  defp trim_partial_utf8(bin) do
+    if String.valid?(bin) or byte_size(bin) == 0 do
+      bin
+    else
+      trim_partial_utf8(binary_part(bin, 0, byte_size(bin) - 1))
+    end
   end
 
   defp group_by_severity(findings) do

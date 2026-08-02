@@ -69,7 +69,10 @@ defmodule Hypatia.TUI.Port do
         {:noreply, %{state | port: port}}
 
       false ->
-        Logger.warning("TUI.Port: Ada binary not found at #{bin} — build with `gprbuild -P tui/hypatia_tui.gpr`")
+        Logger.warning(
+          "TUI.Port: Ada binary not found at #{bin} — build with `gprbuild -P tui/hypatia_tui.gpr`"
+        )
+
         {:noreply, state}
     end
   end

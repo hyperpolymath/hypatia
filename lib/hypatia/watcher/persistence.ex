@@ -142,7 +142,14 @@ defmodule Hypatia.Watcher.Persistence do
   defp summarise_health(rows) do
     Enum.reduce(
       rows,
-      %{healthy: 0, degraded: 0, quarantine_candidate: 0, insufficient_data: 0, no_data: 0, unverified: 0},
+      %{
+        healthy: 0,
+        degraded: 0,
+        quarantine_candidate: 0,
+        insufficient_data: 0,
+        no_data: 0,
+        unverified: 0
+      },
       fn r, acc -> Map.update(acc, r.status, 1, &(&1 + 1)) end
     )
   end

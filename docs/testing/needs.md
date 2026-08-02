@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # TEST-NEEDS.md — hypatia
 
 ## CRG Grade: B — ACHIEVED 2026-04-04

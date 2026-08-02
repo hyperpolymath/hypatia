@@ -421,7 +421,10 @@ defmodule Hypatia.Watcher do
   defp json_safe(v) when is_binary(v) or is_number(v) or is_boolean(v) or is_nil(v), do: v
   defp json_safe(v) when is_atom(v), do: Atom.to_string(v)
   defp json_safe(v) when is_list(v), do: Enum.map(v, &json_safe/1)
-  defp json_safe(v) when is_map(v), do: Map.new(v, fn {k, val} -> {to_string(k), json_safe(val)} end)
+
+  defp json_safe(v) when is_map(v),
+    do: Map.new(v, fn {k, val} -> {to_string(k), json_safe(val)} end)
+
   defp json_safe(v), do: inspect(v)
 
   # ─── Internals ─────────────────────────────────────────────────────────

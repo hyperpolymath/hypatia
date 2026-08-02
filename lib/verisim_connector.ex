@@ -34,7 +34,9 @@ defmodule Hypatia.VerisimConnector do
   @doc "Fetch all scan results from verisim-data/scans/ via VCL."
   def fetch_all_scans do
     case VCL.fetch_scans() do
-      {:ok, scans} -> scans
+      {:ok, scans} ->
+        scans
+
       {:error, reason} ->
         Logger.warning("VCL scan fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_all_scans_fallback()
@@ -56,8 +58,12 @@ defmodule Hypatia.VerisimConnector do
   @doc "Load the pattern registry from verisim-data/patterns/registry.json via VCL."
   def fetch_pattern_registry do
     case VCL.fetch_pattern_registry() do
-      {:ok, [registry | _]} -> {:ok, registry}
-      {:ok, []} -> {:error, :empty}
+      {:ok, [registry | _]} ->
+        {:ok, registry}
+
+      {:ok, []} ->
+        {:error, :empty}
+
       {:error, reason} ->
         Logger.warning("VCL pattern fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_pattern_registry_fallback()
@@ -71,7 +77,9 @@ defmodule Hypatia.VerisimConnector do
   @doc "Load all recipe files from verisim-data/recipes/ via VCL."
   def fetch_all_recipes do
     case VCL.fetch_recipes() do
-      {:ok, recipes} -> recipes
+      {:ok, recipes} ->
+        recipes
+
       {:error, reason} ->
         Logger.warning("VCL recipe fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_all_recipes_fallback()
@@ -93,8 +101,12 @@ defmodule Hypatia.VerisimConnector do
   @doc "Load the master index from verisim-data/index.json via VCL."
   def fetch_index do
     case VCL.fetch_index() do
-      {:ok, [index | _]} -> {:ok, index}
-      {:ok, []} -> {:error, :not_found}
+      {:ok, [index | _]} ->
+        {:ok, index}
+
+      {:ok, []} ->
+        {:error, :not_found}
+
       {:error, reason} ->
         Logger.warning("VCL index fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_index_fallback()
@@ -108,7 +120,9 @@ defmodule Hypatia.VerisimConnector do
   @doc "Load all outcome records from verisim-data/outcomes/ via VCL."
   def fetch_all_outcomes do
     case VCL.fetch_outcomes() do
-      {:ok, outcomes} -> outcomes
+      {:ok, outcomes} ->
+        outcomes
+
       {:error, reason} ->
         Logger.warning("VCL outcome fetch failed (#{inspect(reason)}), falling back to file I/O")
         fetch_all_outcomes_fallback()

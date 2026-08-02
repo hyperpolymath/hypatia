@@ -161,11 +161,13 @@ defmodule Hypatia.VCL.CrossOrg do
         "POST",
         "-H",
         "Content-Type: application/json"
-      ] ++ token_header(token) ++ [
-        "-d",
-        Jason.encode!(%{query: query, limit: limit}),
-        url
-      ]
+      ] ++
+        token_header(token) ++
+        [
+          "-d",
+          Jason.encode!(%{query: query, limit: limit}),
+          url
+        ]
 
     case System.cmd("curl", args, stderr_to_stdout: true) do
       {body, 0} ->
@@ -224,7 +226,8 @@ defmodule Hypatia.VCL.CrossOrg do
         dismissed? = not override_dismissals and row_dismissed?(row)
 
         cond do
-          severity not in accept_severities and severity not in Enum.map(accept_severities, &to_string/1) ->
+          severity not in accept_severities and
+              severity not in Enum.map(accept_severities, &to_string/1) ->
             {acc, %{stats | dropped_severity: stats.dropped_severity + 1}}
 
           age > max_age_days ->

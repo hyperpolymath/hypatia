@@ -1,0 +1,7 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. mass_squash with no campaign_ref. MUST be REJECTED (PL2: mass_squash needs time-boxed authorization).",
+  "repo": "hyperpolymath/reposystem",
+  "pool": "mass_squash",
+  "product_tier": "standard",
+  "system_membership": "in-system"
+}

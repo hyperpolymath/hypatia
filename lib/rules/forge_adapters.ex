@@ -17,10 +17,13 @@ defmodule Hypatia.Rules.ForgeAdapters do
     cond do
       String.length(name) == 0 ->
         {:error, :empty_name}
+
       Enum.any?(@dangerous_chars, &String.contains?(name, <<&1>>)) ->
         {:error, :dangerous_characters}
+
       not Regex.match?(~r/^[a-zA-Z0-9_\-\.]+$/, name) ->
         {:error, :invalid_characters}
+
       true ->
         :ok
     end
@@ -64,14 +67,15 @@ defmodule Hypatia.Rules.ForgeAdapters do
 
   def enable_branch_protection_command(:github, repo) do
     with :ok <- validate_name(repo) do
-      {:ok, """
-      gh api repos/hyperpolymath/#{repo}/branches/main/protection \
-        -X PUT \
-        -F required_pull_request_reviews='{"required_approving_review_count":1}' \
-        -F enforce_admins=false \
-        -F restrictions=null \
-        -F required_status_checks=null
-      """}
+      {:ok,
+       """
+       gh api repos/hyperpolymath/#{repo}/branches/main/protection \
+         -X PUT \
+         -F required_pull_request_reviews='{"required_approving_review_count":1}' \
+         -F enforce_admins=false \
+         -F restrictions=null \
+         -F required_status_checks=null
+       """}
     end
   end
 

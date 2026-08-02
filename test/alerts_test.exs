@@ -75,8 +75,20 @@ defmodule Hypatia.Watcher.AlertsTest do
     end
 
     test "different ids are not deduped against each other" do
-      T.quarantine_triggered(kind: :recipe, id: "id-a-#{System.unique_integer()}", reason: "r", level: :auto)
-      T.quarantine_triggered(kind: :recipe, id: "id-b-#{System.unique_integer()}", reason: "r", level: :auto)
+      T.quarantine_triggered(
+        kind: :recipe,
+        id: "id-a-#{System.unique_integer()}",
+        reason: "r",
+        level: :auto
+      )
+
+      T.quarantine_triggered(
+        kind: :recipe,
+        id: "id-b-#{System.unique_integer()}",
+        reason: "r",
+        level: :auto
+      )
+
       Process.sleep(100)
 
       recent_summaries = Alerts.recent() |> Enum.map(& &1.summary)

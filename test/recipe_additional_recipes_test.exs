@@ -195,7 +195,8 @@ defmodule Hypatia.RecipeAdditionalRecipesTest do
       pattern = %{
         "id" => "PA018-4-ignore-calls-in-packages-cor",
         "pa_rule" => "PA018",
-        "description" => "4 ignore() calls in packages/core/compiler-source/tests (may discard important results)"
+        "description" =>
+          "4 ignore() calls in packages/core/compiler-source/tests (may discard important results)"
       }
 
       recipe = RecipeMatcher.best_recipe_for_pattern(pattern, "rescript")
@@ -218,7 +219,11 @@ defmodule Hypatia.RecipeAdditionalRecipesTest do
 
       recipes = RecipeMatcher.all_recipes()
       new_recipes = Enum.filter(recipes, fn r -> Map.get(r, "id") in new_ids end)
-      tiers = Enum.map(new_recipes, fn r -> Map.get(r, "triangle_tier") end) |> Enum.uniq() |> Enum.sort()
+
+      tiers =
+        Enum.map(new_recipes, fn r -> Map.get(r, "triangle_tier") end)
+        |> Enum.uniq()
+        |> Enum.sort()
 
       assert "control" in tiers
       assert "eliminate" in tiers

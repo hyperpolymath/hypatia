@@ -40,15 +40,19 @@ defmodule Hypatia.ZigFFI.SmokeTest do
   describe "Zig FFI source integrity" do
     test "ffi/zig/src/main.zig exists and is non-empty" do
       path = Path.join(@zig_src_dir, "main.zig")
+
       assert File.exists?(path),
              "main.zig not found at #{path}"
+
       {:ok, content} = File.read(path)
+
       assert byte_size(content) > 0,
              "main.zig is empty"
     end
 
     test "ffi/zig/build.zig exists" do
       path = Path.join(@zig_ffi_dir, "build.zig")
+
       assert File.exists?(path),
              "build.zig not found at #{path}"
     end
@@ -77,12 +81,14 @@ defmodule Hypatia.ZigFFI.SmokeTest do
       path = Path.join(@zig_src_dir, "main.zig")
       {:ok, content} = File.read(path)
       first_2k = String.slice(content, 0, 2000)
+
       assert String.contains?(first_2k, "SPDX-License-Identifier"),
              "main.zig missing SPDX-License-Identifier header"
     end
 
     test "ffi/zig/test/integration_test.zig exists" do
       path = Path.join([@zig_ffi_dir, "test", "integration_test.zig"])
+
       assert File.exists?(path),
              "integration_test.zig not found at #{path}"
     end
@@ -101,6 +107,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
     test "verisim-data root directory exists" do
       expanded = Path.expand(@data_path)
+
       assert File.exists?(expanded),
              "verisim-data root not found at #{expanded} (VERISIMDB_DATA_PATH or compile_env)"
     end
@@ -110,6 +117,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
       Enum.each(@required_store_dirs, fn store ->
         store_path = Path.join(expanded, store)
+
         assert File.exists?(store_path),
                "Store directory '#{store}' not found at #{store_path} -- " <>
                  "hypatia_health_check would return degraded"
@@ -121,6 +129,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
       Enum.each(@required_store_files, fn file ->
         file_path = Path.join(expanded, file)
+
         assert File.exists?(file_path),
                "Store file '#{file}' not found at #{file_path} -- " <>
                  "VCL index queries would fail"
@@ -133,6 +142,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
       {:ok, files} = File.ls(scans_path)
       json_files = Enum.filter(files, &String.ends_with?(&1, ".json"))
+
       assert length(json_files) >= 3,
              "Expected at least 3 scan JSON files in #{scans_path}, found #{length(json_files)}"
     end
@@ -150,6 +160,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
       |> Enum.each(fn file ->
         path = Path.join(scans_path, file)
         {:ok, content} = File.read(path)
+
         assert {:ok, _} = Jason.decode(content),
                "Scan file #{file} contains invalid JSON"
       end)
@@ -160,7 +171,13 @@ defmodule Hypatia.ZigFFI.SmokeTest do
       recipes_path = Path.join(expanded, "recipes")
 
       {:ok, files} = File.ls(recipes_path)
-      recipe_files = Enum.filter(files, &(String.starts_with?(&1, "recipe-") and String.ends_with?(&1, ".json")))
+
+      recipe_files =
+        Enum.filter(
+          files,
+          &(String.starts_with?(&1, "recipe-") and String.ends_with?(&1, ".json"))
+        )
+
       assert length(recipe_files) >= 4,
              "Expected at least 4 recipe files in #{recipes_path}, found #{length(recipe_files)}"
     end
@@ -179,6 +196,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
       # At 0.95 (exact boundary) -> auto_execute
       assert TriangleRouter.dispatch_strategy(0.95) == :auto_execute,
              "Expected :auto_execute at 0.95 confidence (Zig FFI spec boundary)"
+
       # At 0.951 -> auto_execute
       assert TriangleRouter.dispatch_strategy(0.951) == :auto_execute
       # At 1.0 -> auto_execute
@@ -199,7 +217,13 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
     test "dispatch_strategy covers exactly 3 strategies across [0, 1]" do
       sample_range = for i <- 0..100, do: i / 100.0
-      strategies = sample_range |> Enum.map(&TriangleRouter.dispatch_strategy/1) |> Enum.uniq() |> Enum.sort()
+
+      strategies =
+        sample_range
+        |> Enum.map(&TriangleRouter.dispatch_strategy/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+
       assert strategies == [:auto_execute, :report_only, :review],
              "Expected exactly 3 strategies, got: #{inspect(strategies)}"
     end
@@ -228,6 +252,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
       Enum.each(required_modules, fn mod ->
         path = Path.join(@abi_dir, mod)
+
         assert File.exists?(path),
                "Idris2 ABI module #{mod} not found at #{path}"
       end)
@@ -241,6 +266,7 @@ defmodule Hypatia.ZigFFI.SmokeTest do
         path = Path.join(@abi_dir, file)
         {:ok, content} = File.read(path)
         first_2k = String.slice(content, 0, 2000)
+
         assert String.contains?(first_2k, "SPDX-License-Identifier"),
                "#{file} missing SPDX-License-Identifier header"
       end)

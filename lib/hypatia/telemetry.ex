@@ -85,7 +85,11 @@ defmodule Hypatia.Telemetry do
   # keyword list to keep call sites self-documenting.
 
   def scan_complete(duration_ms, findings, metadata) when is_integer(duration_ms) do
-    safe_execute(@scan_complete, %{duration_ms: duration_ms, findings: findings}, Map.new(metadata))
+    safe_execute(
+      @scan_complete,
+      %{duration_ms: duration_ms, findings: findings},
+      Map.new(metadata)
+    )
   end
 
   def dispatch_decision(confidence, metadata) when is_number(confidence) do

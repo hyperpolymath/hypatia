@@ -255,6 +255,7 @@ defmodule Hypatia.FleetDispatcher do
 
       unknown ->
         Logger.warning("DependabotFix: unknown tier '#{unknown}', routing to sustainabot")
+
         dispatch_to_sustainabot(%{
           type: :eco_score,
           repo: get_pattern_repo(pattern),
@@ -742,9 +743,20 @@ defmodule Hypatia.FleetDispatcher do
 
     case Jason.encode(observation) do
       {:ok, json_line} ->
-        File.write(learning_file, json_line <> "\n", [:append, :utf8])
-        Logger.info("Fix outcome recorded to learning pipeline: #{learning_file}")
-        {:ok, :recorded}
+        # :append fails :enoent on a missing dir; without mkdir_p the outcome is
+        # dropped while we still log/return success. Match the write result so a
+        # real failure is surfaced, not swallowed.
+        File.mkdir_p!(Path.dirname(learning_file))
+
+        case File.write(learning_file, json_line <> "\n", [:append, :utf8]) do
+          :ok ->
+            Logger.info("Fix outcome recorded to learning pipeline: #{learning_file}")
+            {:ok, :recorded}
+
+          {:error, reason} ->
+            Logger.error("Failed to write fix outcome: #{inspect(reason)}")
+            {:error, reason}
+        end
 
       {:error, reason} ->
         Logger.error("Failed to encode fix outcome: #{inspect(reason)}")

@@ -66,7 +66,7 @@ fi
 MAKE_FILES=$(echo "$STAGED_FILES" | grep -E '^Makefile$' || true)
 if [ -n "$MAKE_FILES" ]; then
     echo -e "${RED}ERROR: Makefile not allowed per RSR policy${NC}"
-    echo "Use Just, Guix, or Nix instead."
+    echo "Use Just or Guix instead."
     ERRORS=$((ERRORS + 1))
 fi
 

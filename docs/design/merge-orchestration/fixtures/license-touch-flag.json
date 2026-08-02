@@ -1,0 +1,24 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — golden fixture: license/SPDX edit -> hard flag, veto-clamped even in aggressive pool P3.",
+  "pr": {"repo": "hyperpolymath/echidna", "number": 188, "head_sha": "deadbee", "base": "main", "author": "dependabot", "author_kind": "dependabot"},
+  "change_class": "docs",
+  "change_level": "object",
+  "route": {"authority_bot": null, "contributing_bots": ["panicbot"]},
+  "method": "squash",
+  "method_basis": "repo-default",
+  "safety": "flag",
+  "pool": "P3",
+  "confidence": null,
+  "attestations": [
+    {"bot": "panicbot", "verdict": "veto", "confidence": 1.0, "rationale": "SPDX header modified in 3 files"}
+  ],
+  "vetoes": [
+    {"bot": "policy-gate", "reason": "license/SPDX edit -- owner-only, manual, per estate directive 2026-06-02 (neurophone#99)"}
+  ],
+  "clamped_by": "veto:license",
+  "rationale": "License/SPDX edit detected; flag-only regardless of aggressive pool P3. Surfaced to owner.",
+  "tier": "control",
+  "severity": "High",
+  "category": "license/spdx",
+  "timestamp": "2026-06-05T12:05:00Z"
+}

@@ -1,0 +1,15 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. status=held with no expires_at. MUST be REJECTED (LE1: held leases need a TTL).",
+  "lease_id": "lease-2026-06-14-0002",
+  "holder": "claude/peaceful-pascal-IRlgq",
+  "repo": "hyperpolymath/reposystem",
+  "territory": {
+    "branch": "claude/peaceful-pascal-IRlgq",
+    "paths": ["docs/**"],
+    "is_meta": false
+  },
+  "intent": "immortal lock (not allowed)",
+  "status": "held",
+  "acquired_at": "2026-06-14T03:00:00Z",
+  "owner_authorized": false
+}

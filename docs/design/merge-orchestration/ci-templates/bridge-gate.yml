@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: MPL-2.0
+# bridge-gate.yml -- DRAFT CI gate for dependency-bump PRs (merge-orchestration artifact 4).
+#
+# Runs panic-attack's Patch-Bridge (OSV-backed) on a bump PR and applies the bump-gate:
+#   B3 (nix) and B2 (major) gate with NO network; B1 (reachable unmitigable CVE) is the
+#   OSV-dependent core. A failing gate blocks auto-merge; a clean patch/minor CVE-clear
+#   bump passes (and becomes arm-eligible, pool-gated).
+#
+# NOT auto-wired. Copying this into a repo's .github/workflows/ is a META change
+# (it edits the CI oracle) -> owner-reviewed, never auto. The runner must reach
+# crates.io + api.osv.dev (CI has network; the dev sandbox does not).
+#
+# Scanner hygiene: github context is passed via `env:` only, never `${{ }}` inline
+# in a run line -- so this workflow survives the same audit it helps enforce.
+name: bridge-gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  bridge-gate:
+    if: ${{ startsWith(github.head_ref, 'dependabot/') || startsWith(github.head_ref, 'renovate/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependabot metadata
+        id: dep
+        if: ${{ github.actor == 'dependabot[bot]' }}
+        uses: dependabot/fetch-metadata@v2
+
+      - name: B3/B2 metadata gate (no network)
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          UPDATE_TYPE: ${{ steps.dep.outputs.update-type }}
+        run: |
+          if [[ "$HEAD_REF" == dependabot/nix/* ]]; then
+            echo "::error::B3: nix bump -- Nix removed estate-wide; close, do not merge."
+            exit 1
+          fi
+          if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+            echo "::error::B2: major version bump -- presumed breaking; review + merge manually (auto-merge blocked)."
+            exit 1
+          fi
+
+      - name: Build panic-attack (Patch-Bridge)
+        # NOTE: cold Rust build is slow; add Swatinem/rust-cache@v2 above this in production.
+        run: |
+          git clone --depth 1 https://github.com/hyperpolymath/panic-attack /tmp/pa
+          cd /tmp/pa
+          cargo build --release --features http
+          echo "/tmp/pa/target/release" >> "$GITHUB_PATH"
+
+      - name: Bridge triage (queries OSV) -> BridgeReport
+        run: panic-attack bridge triage . --output bridge-report.json
+
+      - name: Apply B1 verdict (reachable unmitigable CVE -> flag)
+        run: |
+          blockers=$(jq '[.cves[]? | select(.classification=="Unmitigable" and .reachability.status=="Reachable")] | length' bridge-report.json)
+          if [ "$blockers" -gt 0 ]; then
+            echo "::error::B1: $blockers reachable unmitigable CVE(s) -> safety=flag (auto-merge blocked)"
+            jq -r '.cves[]? | select(.classification=="Unmitigable" and .reachability.status=="Reachable") | "  - \(.vulnerability.cve // .vulnerability.id): \(.rationale)"' bridge-report.json
+            exit 1
+          fi
+          echo "B1 PASS: no reachable unmitigable CVEs -> arm-eligible (pool-gated)."

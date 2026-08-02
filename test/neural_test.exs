@@ -71,7 +71,7 @@ defmodule Hypatia.NeuralTest do
 
     test "train/3 with sufficient data trains the network" do
       rbf = RadialNeuralNetwork.init()
-      data = for _ <- 1..10, do: (for _ <- 1..8, do: :rand.uniform())
+      data = for _ <- 1..10, do: for(_ <- 1..8, do: :rand.uniform())
       targets = for _ <- 1..10, do: :rand.uniform()
 
       trained = RadialNeuralNetwork.train(rbf, data, targets)
@@ -97,7 +97,7 @@ defmodule Hypatia.NeuralTest do
 
     test "predict/2 on trained network returns values" do
       rbf = RadialNeuralNetwork.init()
-      data = for _ <- 1..10, do: (for _ <- 1..4, do: :rand.uniform())
+      data = for _ <- 1..10, do: for(_ <- 1..4, do: :rand.uniform())
       targets = for _ <- 1..10, do: :rand.uniform()
 
       trained = RadialNeuralNetwork.train(rbf, data, targets)
@@ -124,11 +124,13 @@ defmodule Hypatia.NeuralTest do
 
     test "predict/2 returns confidence for a finding" do
       moe = MixtureOfExperts.init()
+
       finding = %{
         "category" => "CommandInjection",
         "severity" => "High",
         "language" => "shell"
       }
+
       {confidence, experts} = MixtureOfExperts.predict(moe, finding)
       assert is_float(confidence)
       assert is_list(experts)
@@ -136,11 +138,13 @@ defmodule Hypatia.NeuralTest do
 
     test "train/3 updates expert stats" do
       moe = MixtureOfExperts.init()
+
       finding = %{
         "category" => "CommandInjection",
         "severity" => "High",
         "language" => "shell"
       }
+
       updated = MixtureOfExperts.train(moe, finding, :success)
       assert is_map(updated.expert_stats)
     end

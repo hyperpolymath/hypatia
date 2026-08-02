@@ -61,7 +61,8 @@ defmodule Hypatia.Rules.HonestCompletion do
       really_believe_me_count: count_pattern(repo_path, "really_believe_me"),
       stub_count: count_stubs(repo_path),
       has_ci: File.dir?(Path.join(repo_path, ".github/workflows")),
-      has_tests_dir: File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
+      has_tests_dir:
+        File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
       # State file location convention varies across the estate:
       # most repos use .machine_readable/STATE.a2ml directly; some
       # (including hypatia) namespace it under a profile dir like
@@ -110,18 +111,23 @@ defmodule Hypatia.Rules.HonestCompletion do
   def audit(repo_path) do
     state_path = find_state_file(repo_path)
 
-    claims = case state_path do
-      nil -> %{completion_percentage: nil, claimed_tests: nil, claimed_files: nil}
-      path ->
-        case File.read(path) do
-          {:ok, content} ->
-            case parse_state_file(content) do
-              {:ok, c} -> c
-              _ -> %{}
-            end
-          _ -> %{}
-        end
-    end
+    claims =
+      case state_path do
+        nil ->
+          %{completion_percentage: nil, claimed_tests: nil, claimed_files: nil}
+
+        path ->
+          case File.read(path) do
+            {:ok, content} ->
+              case parse_state_file(content) do
+                {:ok, c} -> c
+                _ -> %{}
+              end
+
+            _ ->
+              %{}
+          end
+      end
 
     evidence = collect_evidence(repo_path)
     findings = generate_findings(claims, evidence)
@@ -146,101 +152,206 @@ defmodule Hypatia.Rules.HonestCompletion do
     findings = []
 
     # Dangerous patterns in formally verified repos
-    findings = if evidence.believe_me_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.believe_me_count} believe_me found",
-         severity: :critical, deduction: 15} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.believe_me_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail: "#{evidence.believe_me_count} believe_me found",
+            severity: :critical,
+            deduction: 15
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.sorry_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.sorry_count} sorry (Lean) found",
-         severity: :critical, deduction: 15} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.sorry_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail: "#{evidence.sorry_count} sorry (Lean) found",
+            severity: :critical,
+            deduction: 15
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.admitted_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.admitted_count} Admitted (Coq/Rocq) found",
-         severity: :critical, deduction: 15} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.admitted_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail: "#{evidence.admitted_count} Admitted (Coq/Rocq) found",
+            severity: :critical,
+            deduction: 15
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.unsafe_coerce_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.unsafe_coerce_count} unsafeCoerce (Haskell) found",
-         severity: :critical, deduction: 15} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.unsafe_coerce_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail: "#{evidence.unsafe_coerce_count} unsafeCoerce (Haskell) found",
+            severity: :critical,
+            deduction: 15
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.obj_magic_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.obj_magic_count} Obj.magic (OCaml/ReScript) found",
-         severity: :critical, deduction: 15} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.obj_magic_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail: "#{evidence.obj_magic_count} Obj.magic (OCaml/ReScript) found",
+            severity: :critical,
+            deduction: 15
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.postulate_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.postulate_count} postulate (Idris2/Agda) found -- check if intentional axioms",
-         severity: :high, deduction: 10} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.postulate_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail:
+              "#{evidence.postulate_count} postulate (Idris2/Agda) found -- check if intentional axioms",
+            severity: :high,
+            deduction: 10
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.really_believe_me_count > 0 do
-      [%{type: :dangerous_pattern, detail: "#{evidence.really_believe_me_count} really_believe_me found",
-         severity: :critical, deduction: 15} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.really_believe_me_count > 0 do
+        [
+          %{
+            type: :dangerous_pattern,
+            detail: "#{evidence.really_believe_me_count} really_believe_me found",
+            severity: :critical,
+            deduction: 15
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
     # High TODO/FIXME density suggests incomplete work
-    findings = if evidence.todo_count > 50 do
-      [%{type: :high_todo_density, detail: "#{evidence.todo_count} TODOs remaining",
-         severity: :medium, deduction: 5} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.todo_count > 50 do
+        [
+          %{
+            type: :high_todo_density,
+            detail: "#{evidence.todo_count} TODOs remaining",
+            severity: :medium,
+            deduction: 5
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
-    findings = if evidence.fixme_count > 20 do
-      [%{type: :high_fixme_density, detail: "#{evidence.fixme_count} FIXMEs remaining",
-         severity: :medium, deduction: 5} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.fixme_count > 20 do
+        [
+          %{
+            type: :high_fixme_density,
+            detail: "#{evidence.fixme_count} FIXMEs remaining",
+            severity: :medium,
+            deduction: 5
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
     # No tests = big deduction
-    findings = if not evidence.has_tests_dir and evidence.test_files == 0 do
-      [%{type: :no_tests, detail: "No test directory or test files found",
-         severity: :high, deduction: 20} | findings]
-    else
-      findings
-    end
+    findings =
+      if not evidence.has_tests_dir and evidence.test_files == 0 do
+        [
+          %{
+            type: :no_tests,
+            detail: "No test directory or test files found",
+            severity: :high,
+            deduction: 20
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
     # No CI = deduction
-    findings = if not evidence.has_ci do
-      [%{type: :no_ci, detail: "No .github/workflows/ directory",
-         severity: :medium, deduction: 10} | findings]
-    else
-      findings
-    end
+    findings =
+      if not evidence.has_ci do
+        [
+          %{
+            type: :no_ci,
+            detail: "No .github/workflows/ directory",
+            severity: :medium,
+            deduction: 10
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
     # Stub detection
-    findings = if evidence.stub_count > 10 do
-      [%{type: :high_stub_count, detail: "#{evidence.stub_count} stub functions detected",
-         severity: :medium, deduction: 10} | findings]
-    else
-      findings
-    end
+    findings =
+      if evidence.stub_count > 10 do
+        [
+          %{
+            type: :high_stub_count,
+            detail: "#{evidence.stub_count} stub functions detected",
+            severity: :medium,
+            deduction: 10
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
     # No state file
-    findings = if not evidence.has_state_file do
-      [%{type: :no_state_file, detail: "No STATE.a2ml or STATE.scm found",
-         severity: :low, deduction: 5} | findings]
-    else
-      findings
-    end
+    findings =
+      if not evidence.has_state_file do
+        [
+          %{
+            type: :no_state_file,
+            detail: "No STATE.a2ml or STATE.scm found",
+            severity: :low,
+            deduction: 5
+          }
+          | findings
+        ]
+      else
+        findings
+      end
 
     findings
   end
@@ -257,8 +368,10 @@ defmodule Hypatia.Rules.HonestCompletion do
   defp delta(claimed, adjusted), do: claimed - adjusted
 
   defp honesty_grade(nil, _adjusted), do: :no_claim
+
   defp honesty_grade(claimed, adjusted) do
     gap = abs(claimed - adjusted)
+
     cond do
       gap <= 5 -> :honest
       gap <= 15 -> :optimistic
@@ -273,9 +386,11 @@ defmodule Hypatia.Rules.HonestCompletion do
     a2ml = Path.join(repo_path, ".machine_readable/STATE.a2ml")
     # DEPRECATED: .scm fallback -- will be removed once all repos migrate to .a2ml
     scm = Path.join(repo_path, ".machine_readable/STATE.scm")
+
     cond do
       File.exists?(a2ml) -> a2ml
-      File.exists?(scm) -> scm  # DEPRECATED: .scm fallback path
+      # DEPRECATED: .scm fallback path
+      File.exists?(scm) -> scm
       true -> nil
     end
   end
@@ -295,10 +410,14 @@ defmodule Hypatia.Rules.HonestCompletion do
   end
 
   defp count_files(repo_path, extensions) do
-    case System.cmd("find", [repo_path, "-type", "f"] ++
-           Enum.flat_map(extensions, fn ext -> ["-name", "*#{ext}"] end) ++
-           List.duplicate("-o", max(0, length(extensions) - 1)) |> interleave_find_args(extensions),
-           stderr_to_stdout: true) do
+    case System.cmd(
+           "find",
+           ([repo_path, "-type", "f"] ++
+              Enum.flat_map(extensions, fn ext -> ["-name", "*#{ext}"] end) ++
+              List.duplicate("-o", max(0, length(extensions) - 1)))
+           |> interleave_find_args(extensions),
+           stderr_to_stdout: true
+         ) do
       {output, 0} -> output |> String.split("\n", trim: true) |> length()
       _ -> 0
     end
@@ -312,6 +431,7 @@ defmodule Hypatia.Rules.HonestCompletion do
   defp interleave_find_args(_, extensions) when length(extensions) <= 1 do
     Enum.flat_map(extensions, fn ext -> ["-name", "*#{ext}"] end)
   end
+
   defp interleave_find_args(_, extensions) do
     extensions
     |> Enum.map(fn ext -> ["-name", "*#{ext}"] end)
@@ -320,9 +440,17 @@ defmodule Hypatia.Rules.HonestCompletion do
   end
 
   defp count_pattern(repo_path, pattern) do
-    case System.cmd("grep", ["-r", "--include=*.{res,rs,ex,idr,zig,v,gleam,jl,hs,agda,lean,ml}",
-                              "-c", pattern, repo_path],
-                     stderr_to_stdout: true) do
+    case System.cmd(
+           "grep",
+           [
+             "-r",
+             "--include=*.{res,rs,ex,idr,zig,v,gleam,jl,hs,agda,lean,ml}",
+             "-c",
+             pattern,
+             repo_path
+           ],
+           stderr_to_stdout: true
+         ) do
       {output, _} ->
         output
         |> String.split("\n", trim: true)
@@ -333,7 +461,9 @@ defmodule Hypatia.Rules.HonestCompletion do
           end
         end)
         |> Enum.sum()
-      _ -> 0
+
+      _ ->
+        0
     end
   rescue
     _ -> 0

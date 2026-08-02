@@ -311,7 +311,9 @@ defmodule Mix.Tasks.Hypatia.StrategyEffectiveness do
         }
       end)
 
-    IO.puts(Jason.encode!(%{generated_at: DateTime.utc_now() |> DateTime.to_iso8601(), rows: json}))
+    IO.puts(
+      Jason.encode!(%{generated_at: DateTime.utc_now() |> DateTime.to_iso8601(), rows: json})
+    )
   end
 
   defp verisim_path do

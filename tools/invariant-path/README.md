@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Invariant Path Integration (Hypatia)
 
 Hypatia wrapper script:

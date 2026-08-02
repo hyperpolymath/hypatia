@@ -27,7 +27,11 @@ defmodule Hypatia.Rules.ShaPinConsolidationTest do
       assert Map.has_key?(pins, "denoland/setup-deno@v2")
       assert Map.has_key?(pins, "hyperpolymath/a2ml-validate-action@main")
       assert Map.has_key?(pins, "hyperpolymath/k9-validate-action@main")
-      assert Map.has_key?(pins, "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main")
+
+      assert Map.has_key?(
+               pins,
+               "hyperpolymath/panic-attacker/.github/workflows/scan-and-report.yml@main"
+             )
     end
 
     test "shared entries (in both old maps) match the same SHA" do

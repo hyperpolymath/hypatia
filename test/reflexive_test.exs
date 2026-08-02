@@ -25,14 +25,45 @@ defmodule Hypatia.ReflexiveTest do
 
   # Take a GenServer away from the Application supervisor so start_supervised!/1
   # can start a clean, isolated instance for the test. Restores the child on exit.
+  #
+  # The restore is registered BEFORE the mutation, deliberately. Previously it
+  # was registered after `start_supervised!/1`, so if that raised — or anything
+  # between the delete and the on_exit failed — the child was deleted from
+  # Hypatia.Supervisor and NEVER restored. Every later test needing that module
+  # then failed too, which is why one root failure cascaded into ~20 and why the
+  # failing set changed with the seed. on_exit callbacks still run when setup
+  # raises, so registering first makes the restore unconditional.
   defp take_supervised(module) do
+    on_exit(fn -> restore_supervised(module) end)
+
     Supervisor.terminate_child(Hypatia.Supervisor, module)
     Supervisor.delete_child(Hypatia.Supervisor, module)
     start_supervised!(module)
-    on_exit(fn ->
-      if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
-      Supervisor.start_child(Hypatia.Supervisor, module)
-    end)
+  end
+
+  # Idempotent: safe whether the child spec is absent, present-but-stopped, or
+  # already running, and safe to call twice. Return values are inspected rather
+  # than discarded — a silent restore failure is what made the original cascade
+  # invisible.
+  defp restore_supervised(module) do
+    if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
+
+    # Clear any stale spec left by this test before re-adding it.
+    Supervisor.terminate_child(Hypatia.Supervisor, module)
+    Supervisor.delete_child(Hypatia.Supervisor, module)
+
+    case Supervisor.start_child(Hypatia.Supervisor, module) do
+      {:ok, _pid} -> :ok
+      {:ok, _pid, _info} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, :already_present} -> :ok
+      other ->
+        raise """
+        reflexive_test could not restore #{inspect(module)} to Hypatia.Supervisor: \
+        #{inspect(other)}. Leaving it absent would fail every later test that \
+        depends on it, so failing loudly here instead.
+        """
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -146,8 +177,14 @@ defmodule Hypatia.ReflexiveTest do
     test "stats/0 exposes expected counter keys" do
       stats = RateLimiter.stats()
 
-      for key <- [:total_dispatched, :total_queued, :total_rate_limited,
-                  :queue_size, :active_bots, :global_window_size] do
+      for key <- [
+            :total_dispatched,
+            :total_queued,
+            :total_rate_limited,
+            :queue_size,
+            :active_bots,
+            :global_window_size
+          ] do
         assert Map.has_key?(stats, key), "stats/0 missing :#{key}"
       end
     end

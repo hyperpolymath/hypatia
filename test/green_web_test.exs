@@ -11,7 +11,8 @@ defmodule Hypatia.Rules.GreenWebTest do
   describe "check_hosting_provider/2" do
     test "detects non-green provider (AWS)" do
       contents = %{
-        ".github/workflows/deploy.yml" => "runs-on: ubuntu-latest\n  uses: aws-actions/configure-credentials"
+        ".github/workflows/deploy.yml" =>
+          "runs-on: ubuntu-latest\n  uses: aws-actions/configure-credentials"
       }
 
       findings = GreenWeb.check_hosting_provider([], contents)

@@ -104,11 +104,11 @@ check_language_policy() {
         done
     fi
 
-    # Makefile check (banned - use Just/Guix/Nix)
+    # Makefile check (banned - use Just/Guix)
     MAKE_FILES=$(echo "$STAGED_FILES" | grep -E '^Makefile$' || true)
     if [ -n "$MAKE_FILES" ]; then
         add_error "Makefile not allowed per RSR policy"
-        log_error "Use Just, Guix, or Nix instead"
+        log_error "Use Just or Guix instead"
     fi
 }
 

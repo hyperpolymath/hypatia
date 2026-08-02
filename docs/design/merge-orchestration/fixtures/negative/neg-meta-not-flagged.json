@@ -1,0 +1,17 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — INTENTIONALLY INVALID. change_level=meta but safety=arm_auto. MUST be REJECTED by the schema (invariant 2, object/meta reflexivity guard). NOT a real manifest.",
+  "pr": {"repo": "hyperpolymath/example", "number": 2, "head_sha": "def456", "base": "main", "author": "claude", "author_kind": "claude"},
+  "change_class": "meta",
+  "change_level": "meta",
+  "route": {"authority_bot": null, "contributing_bots": ["rhodibot"]},
+  "method": "squash",
+  "method_basis": "repo-default",
+  "safety": "arm_auto",
+  "pool": "P3",
+  "confidence": 0.99,
+  "attestations": [{"bot": "rhodibot", "verdict": "approve", "confidence": 0.99, "rationale": "looks fine"}],
+  "vetoes": [],
+  "clamped_by": null,
+  "rationale": "INVALID: a meta-level change (edits the oracle/rules) is armed; the schema must reject this.",
+  "timestamp": "2026-06-05T12:11:00Z"
+}

@@ -21,8 +21,10 @@ defmodule Hypatia.Kin.Coordinator do
 
   alias Hypatia.Kin.Protocol
 
-  @poll_interval_ms 5 * 60 * 1_000  # 5 minutes
-  @initial_delay_ms 15_000  # 15 seconds after boot
+  # 5 minutes
+  @poll_interval_ms 5 * 60 * 1_000
+  # 15 seconds after boot
+  @initial_delay_ms 15_000
 
   # --- Client API ---
 
@@ -80,7 +82,11 @@ defmodule Hypatia.Kin.Coordinator do
     }
 
     Process.send_after(self(), :poll_kin, @initial_delay_ms)
-    Logger.info("Kin.Coordinator started. Polling siblings every #{div(@poll_interval_ms, 60_000)} min.")
+
+    Logger.info(
+      "Kin.Coordinator started. Polling siblings every #{div(@poll_interval_ms, 60_000)} min."
+    )
+
     {:ok, state}
   end
 
@@ -106,6 +112,7 @@ defmodule Hypatia.Kin.Coordinator do
       last_poll: state.last_poll,
       poll_count: state.poll_count
     }
+
     {:reply, health, state}
   end
 
@@ -123,18 +130,26 @@ defmodule Hypatia.Kin.Coordinator do
     # Dispatch is ready if scanner has run recently and fleet is reachable
     # But we degrade gracefully: can dispatch from cached findings even if scanner is stale
     ready = scanner_ok or has_cached_findings?()
-    {:reply, %{ready: ready, scanner: scanner_ok, fleet: fleet_ok, cached_fallback: not scanner_ok and ready}, state}
+
+    {:reply,
+     %{
+       ready: ready,
+       scanner: scanner_ok,
+       fleet: fleet_ok,
+       cached_fallback: not scanner_ok and ready
+     }, state}
   end
 
   @impl true
   def handle_call(:degraded_status, _from, state) do
-    degraded = Enum.map(state.kin_states, fn {kin_id, kin_state} ->
-      case kin_state.status do
-        :healthy -> nil
-        status -> {kin_id, status, kin_state.fallback_mode}
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
+    degraded =
+      Enum.map(state.kin_states, fn {kin_id, kin_state} ->
+        case kin_state.status do
+          :healthy -> nil
+          status -> {kin_id, status, kin_state.fallback_mode}
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
 
     {:reply, degraded, state}
   end
@@ -154,9 +169,12 @@ defmodule Hypatia.Kin.Coordinator do
       fallback_mode: nil,
       consecutive_failures: 0
     }
+
     new_kin_states = Map.put(state.kin_states, kin_id, kin_state)
-    new_state = %{state | kin_states: new_kin_states}
-    |> recompute_ecosystem_status()
+
+    new_state =
+      %{state | kin_states: new_kin_states}
+      |> recompute_ecosystem_status()
 
     Logger.debug("Kin sibling #{kin_id} checked in: healthy")
     {:noreply, new_state}
@@ -178,17 +196,16 @@ defmodule Hypatia.Kin.Coordinator do
     # Write hypatia's own heartbeat
     write_self_heartbeat(kin_states)
 
-    new_state = %{state |
-      kin_states: kin_states,
-      last_poll: now,
-      poll_count: state.poll_count + 1
-    }
-    |> recompute_ecosystem_status()
-    |> maybe_self_heal()
-    |> maybe_escalate()
+    new_state =
+      %{state | kin_states: kin_states, last_poll: now, poll_count: state.poll_count + 1}
+      |> recompute_ecosystem_status()
+      |> maybe_self_heal()
+      |> maybe_escalate()
 
     if new_state.ecosystem_status != state.ecosystem_status do
-      Logger.info("Ecosystem status changed: #{state.ecosystem_status} -> #{new_state.ecosystem_status}")
+      Logger.info(
+        "Ecosystem status changed: #{state.ecosystem_status} -> #{new_state.ecosystem_status}"
+      )
     end
 
     new_state
@@ -289,17 +306,20 @@ defmodule Hypatia.Kin.Coordinator do
   defp maybe_self_heal(state) do
     healed =
       state.kin_states
-      |> Enum.filter(fn {_id, s} -> s.status in [:dead, :error] and s.consecutive_failures >= 3 end)
+      |> Enum.filter(fn {_id, s} ->
+        s.status in [:dead, :error] and s.consecutive_failures >= 3
+      end)
       |> Enum.map(fn {kin_id, _s} ->
         result = attempt_heal(kin_id)
         {kin_id, result}
       end)
 
     if healed != [] do
-      log_entries = Enum.map(healed, fn {id, result} ->
-        Logger.info("Self-healing attempt for #{id}: #{inspect(result)}")
-        %{kin_id: id, result: result, at: DateTime.utc_now()}
-      end)
+      log_entries =
+        Enum.map(healed, fn {id, result} ->
+          Logger.info("Self-healing attempt for #{id}: #{inspect(result)}")
+          %{kin_id: id, result: result, at: DateTime.utc_now()}
+        end)
 
       %{state | self_healing_log: Enum.take(log_entries ++ state.self_healing_log, 50)}
     else
@@ -309,9 +329,12 @@ defmodule Hypatia.Kin.Coordinator do
 
   defp attempt_heal("auto-fix") do
     # Restart the systemd timer if it's dead
-    case System.cmd("systemctl", ["--user", "is-active", "hypatia-autofix.timer"], stderr_to_stdout: true) do
+    case System.cmd("systemctl", ["--user", "is-active", "hypatia-autofix.timer"],
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         if String.trim(output) == "active", do: :already_active, else: restart_timer()
+
       _ ->
         restart_timer()
     end
@@ -324,7 +347,9 @@ defmodule Hypatia.Kin.Coordinator do
   end
 
   defp restart_timer do
-    case System.cmd("systemctl", ["--user", "restart", "hypatia-autofix.timer"], stderr_to_stdout: true) do
+    case System.cmd("systemctl", ["--user", "restart", "hypatia-autofix.timer"],
+           stderr_to_stdout: true
+         ) do
       {_, 0} -> :restarted
       {err, _} -> {:restart_failed, String.trim(err)}
     end
@@ -341,15 +366,19 @@ defmodule Hypatia.Kin.Coordinator do
       Enum.each(critical, fn {kin_id, status, failures} ->
         Logger.error(
           "ESCALATION: Kin sibling #{kin_id} has been #{status} for #{failures} consecutive polls. " <>
-          "Manual intervention may be required."
+            "Manual intervention may be required."
         )
       end)
 
-      escalation_entries = Enum.map(critical, fn {kin_id, status, failures} ->
-        %{kin_id: kin_id, status: status, failures: failures, at: DateTime.utc_now()}
-      end)
+      escalation_entries =
+        Enum.map(critical, fn {kin_id, status, failures} ->
+          %{kin_id: kin_id, status: status, failures: failures, at: DateTime.utc_now()}
+        end)
 
-      %{state | escalation_history: Enum.take(escalation_entries ++ state.escalation_history, 100)}
+      %{
+        state
+        | escalation_history: Enum.take(escalation_entries ++ state.escalation_history, 100)
+      }
     else
       state
     end
@@ -358,7 +387,11 @@ defmodule Hypatia.Kin.Coordinator do
   defp write_self_heartbeat(kin_states) do
     sibling_summary =
       Enum.map(kin_states, fn {id, s} ->
-        {id, %{"status" => to_string(s.status), "last_seen" => s.last_seen && DateTime.to_iso8601(s.last_seen)}}
+        {id,
+         %{
+           "status" => to_string(s.status),
+           "last_seen" => s.last_seen && DateTime.to_iso8601(s.last_seen)
+         }}
       end)
       |> Map.new()
 
@@ -377,7 +410,11 @@ defmodule Hypatia.Kin.Coordinator do
       Protocol.known_kin()
       |> Enum.map(fn {kin_id, meta} ->
         sibling_state = Map.get(state.kin_states, kin_id)
-        status = if kin_id == "hypatia", do: :healthy, else: (sibling_state && sibling_state.status) || :unknown
+
+        status =
+          if kin_id == "hypatia",
+            do: :healthy,
+            else: (sibling_state && sibling_state.status) || :unknown
 
         %{
           id: kin_id,
@@ -422,6 +459,7 @@ defmodule Hypatia.Kin.Coordinator do
 
   defp has_cached_findings? do
     scans_dir = Hypatia.Paths.scans()
+
     case File.ls(scans_dir) do
       {:ok, files} -> length(files) > 0
       _ -> false
@@ -430,7 +468,9 @@ defmodule Hypatia.Kin.Coordinator do
 
   defp parse_timestamp(heartbeat) do
     case Map.get(heartbeat, "timestamp") do
-      nil -> nil
+      nil ->
+        nil
+
       ts ->
         case DateTime.from_iso8601(ts) do
           {:ok, dt, _} -> dt

@@ -114,12 +114,24 @@ if $HAS_ELIXIR; then
         fi
     fi
 
-    # Unit tests
-    if mix test --trace 2>&1 | tail -5 | grep -q "0 failures"; then
+    # Unit tests.
+    #
+    # Previously this was `mix test --trace 2>&1 | tail -5 | grep -q "0 failures"`,
+    # which DISCARDED the entire test output. A CI failure therefore reported
+    # exactly one line — "FAIL: Elixir unit tests" — with no failing test name,
+    # no assertion, no stacktrace, making the red job impossible to diagnose
+    # from CI. Capture the run, judge it by mix's own exit status, and echo the
+    # output when it fails.
+    _mix_log="${TMPDIR:-/tmp}/hypatia-mix-test.$$.log"
+    if mix test --trace >"$_mix_log" 2>&1; then
         pass "Elixir unit tests pass"
     else
         fail_test "Elixir unit tests"
+        echo "--- mix test output (tail 120) ---"
+        tail -120 "$_mix_log"
+        echo "--- end mix test output ---"
     fi
+    rm -f "$_mix_log"
 
     echo ""
 fi

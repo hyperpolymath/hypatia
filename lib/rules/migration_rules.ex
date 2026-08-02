@@ -37,9 +37,17 @@ defmodule Hypatia.Rules.MigrationRules do
   def scan_deprecated_usage(content) do
     Enum.flat_map(@deprecated_apis, fn {api, info} ->
       count = length(Regex.scan(~r/#{Regex.escape(api)}/, content))
+
       if count > 0 do
-        [%{api: api, replacement: info.replacement, severity: info.severity,
-           strategy: info.strategy, count: count}]
+        [
+          %{
+            api: api,
+            replacement: info.replacement,
+            severity: info.severity,
+            strategy: info.strategy,
+            count: count
+          }
+        ]
       else
         []
       end
@@ -79,9 +87,23 @@ defmodule Hypatia.Rules.MigrationRules do
   # Merge Conflict Resolution
   # ---------------------------------------------------------------------------
 
-  @modern_api_prefixes ["Array.", "Dict.", "Console.", "String.", "Promise.", "Option.",
-                         "Result.", "Map.", "Set.", "Int.", "Float.", "Math.", "RegExp.",
-                         "Nullable.", "JSON."]
+  @modern_api_prefixes [
+    "Array.",
+    "Dict.",
+    "Console.",
+    "String.",
+    "Promise.",
+    "Option.",
+    "Result.",
+    "Map.",
+    "Set.",
+    "Int.",
+    "Float.",
+    "Math.",
+    "RegExp.",
+    "Nullable.",
+    "JSON."
+  ]
 
   @deprecated_api_prefixes ["Js.", "Belt."]
 
@@ -97,8 +119,10 @@ defmodule Hypatia.Rules.MigrationRules do
     cond do
       uses_modern_api?(ours) and uses_deprecated_api?(theirs) ->
         {:chose_ours, 0.95}
+
       uses_modern_api?(theirs) and uses_deprecated_api?(ours) ->
         {:chose_theirs, 0.95}
+
       true ->
         {:manual_merge, 0.5}
     end

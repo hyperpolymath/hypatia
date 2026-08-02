@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 # Hypatia
 
 **Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem.**

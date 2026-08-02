@@ -1,0 +1,25 @@
+{
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — golden: reachable unmitigable CVE -> veto-flagged (B1).",
+  "pr": {"repo": "hyperpolymath/echidna", "number": 236, "head_sha": "badcafe", "base": "main", "author": "dependabot[bot]", "author_kind": "dependabot"},
+  "change_class": "bump",
+  "change_level": "object",
+  "route": {"authority_bot": "patch-bridge", "contributing_bots": ["ci", "panicbot"]},
+  "method": "squash",
+  "method_basis": "repo-default",
+  "safety": "flag",
+  "pool": "P3",
+  "confidence": null,
+  "attestations": [
+    {"bot": "patch-bridge", "verdict": "veto", "confidence": 1.0, "rationale": "RUSTSEC reachable, no fixed version", "evidence_hash": "sha256:..."}
+  ],
+  "vetoes": [
+    {"bot": "patch-bridge", "reason": "Unmitigable CVE reachable in changed dependency; no semver-compatible fix"}
+  ],
+  "clamped_by": "veto:cve-unmitigable",
+  "rationale": "Reachable unmitigable CVE; flag-only regardless of pool P3. Surfaced to owner.",
+  "bump": {"ecosystem": "cargo", "package": "nalgebra", "from_version": "0.33.3", "to_version": "0.35.0", "semver_jump": "minor", "bridge": {"worst_classification": "Unmitigable", "reachable_unmitigable": true, "cve_ids": ["RUSTSEC-2026-0xxx"]}},
+  "tier": "control",
+  "severity": "High",
+  "category": "deps/cve",
+  "timestamp": "2026-06-05T14:05:00Z"
+}
