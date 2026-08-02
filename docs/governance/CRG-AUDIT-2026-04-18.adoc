@@ -250,7 +250,7 @@ Missing (the v2.0 C annotation-depth bar is where hypatia currently fails):
 | `docs/design/`                               | `batch-ops/`
 | `.audittraining/`                            | `benches/`
 | `.audittraining/prevention/`                 | `cli/`
-| `.machine_readable/agent_instructions/`      | `clients/`
+| `.machine_readable/bot_directives/`      | `clients/`
 | `hooks/`                                     | `config/`
 | `tools/invariant-path/`                      | `configs/`
 |                                              | `deploy/`

@@ -27,8 +27,7 @@ jobs:
   rust-audit:
     name: Rust Dependency Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -62,8 +61,7 @@ jobs:
   rust-deny:
     name: Rust License & Ban Check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -77,15 +75,14 @@ jobs:
 
   # ============================================================================
   # Secret Detection
-  # ============================================================================
+    timeout-minutes: 10  # ============================================================================
   # Secret Detection
   # ============================================================================
 
   secret-scan:
     name: Secret Detection
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,6 +112,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -142,6 +140,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -168,8 +167,7 @@ jobs:
   sbom-rust:
     name: Generate Rust SBOM
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -195,6 +193,68 @@ jobs:
             rust-sbom.cdx.xml
           retention-days: 90
 
+<<<<<<< HEAD
+  sbom-haskell:
+    name: Generate Haskell SBOM
+    runs-on: ubuntu-latest
+    if: hashFiles('registry/hypatia.cabal') != ''
+    defaults:
+      run:
+        working-directory: registry
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
+        with:
+          ghc-version: '9.6'
+          cabal-version: '3.10'
+          cabal-update: true
+
+      - name: Generate dependency freeze
+        run: |
+          cabal build all --dry-run
+          cabal freeze
+
+      - name: Create SBOM from freeze file
+        run: |
+          # Parse cabal.project.freeze into CycloneDX format
+          cat << 'EOF' > haskell-sbom.cdx.json
+          {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "metadata": {
+              "component": {
+                "type": "application",
+                "name": "hypatia",
+                "version": "0.1.0.0"
+              }
+            },
+            "components": []
+          }
+          EOF
+
+          # Extract dependencies from freeze file
+          if [ -f cabal.project.freeze ]; then
+            grep "any\." cabal.project.freeze | while read -r line; do
+              pkg=$(echo "$line" | sed 's/.*any\.\([^ ]*\) ==.*/\1/')
+              ver=$(echo "$line" | sed 's/.*== *\([^,]*\).*/\1/')
+              echo "  - $pkg@$ver"
+            done
+          fi
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: haskell-sbom
+          path: registry/haskell-sbom.cdx.json
+          retention-days: 90
+
+=======
+>>>>>>> origin/main
   # ============================================================================
   # Container Security Scanning
   # ============================================================================

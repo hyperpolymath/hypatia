@@ -23,8 +23,7 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
         with:
@@ -35,8 +34,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
         with:
@@ -47,8 +45,7 @@ jobs:
   fmt:
     name: Format
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
         with:
@@ -58,8 +55,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
+    timeout-minutes: 30    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
         with:
@@ -71,7 +67,6 @@ jobs:
     name: Cargo check + clippy + fmt
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

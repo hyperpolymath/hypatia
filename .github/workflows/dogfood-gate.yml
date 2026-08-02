@@ -27,7 +27,6 @@ jobs:
     name: Validate A2ML manifests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,7 +88,6 @@ jobs:
     name: Validate K9 contracts
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -139,7 +137,6 @@ jobs:
     name: Empty-linter (invisible characters)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -204,7 +201,6 @@ jobs:
     name: Groove manifest check
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -265,6 +261,7 @@ jobs:
     timeout-minutes: 30
     needs: [a2ml-validate, k9-validate, empty-lint, groove-check]
     if: always()
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository

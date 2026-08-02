@@ -84,7 +84,7 @@
   )
 
   (enforcement
-    (k9-validator "contractiles/k9/must-check.k9.ncl")
+    (k9-validator "contractiles/self-validating/must-check.k9.ncl")
     (ci "quality.yml runs must-check on every PR")
   )
 )
