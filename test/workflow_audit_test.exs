@@ -24,6 +24,79 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     end
   end
 
+  describe "check_d_burn_double_trigger/1" do
+    test "flags flow-form on: [push, pull_request]" do
+      content = """
+      name: CI
+      on: [push, pull_request]
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+
+      findings = WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content})
+
+      assert [%{rule: "ERR-WF-014", type: :d_burn_double_trigger, file: "ci.yml"}] =
+               findings
+
+      assert hd(findings).severity == :medium
+    end
+
+    test "flags flow form in the other order with extra members" do
+      content = """
+      on: [ pull_request, workflow_dispatch, push ]
+      """
+
+      assert [_] = WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content})
+    end
+
+    test "flags block form with a bare push: next to pull_request:" do
+      content = """
+      name: CI
+      on:
+        push:
+        pull_request:
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+
+      assert [%{rule: "ERR-WF-014"}] =
+               WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content})
+    end
+
+    test "does not flag a branch-scoped push (the remediated shape)" do
+      content = """
+      name: CI
+      on:
+        push:
+          branches: [main, master]
+        pull_request:
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+
+      assert WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content}) == []
+    end
+
+    test "does not flag pull_request-only or push-only workflows" do
+      pr_only = """
+      on:
+        pull_request:
+      """
+
+      push_only = """
+      on: [push]
+      """
+
+      assert WorkflowAudit.check_d_burn_double_trigger(%{
+               "a.yml" => pr_only,
+               "b.yml" => push_only
+             }) == []
+    end
+  end
+
   describe "check_unpinned_actions/1" do
     test "flags tag references" do
       content = """

@@ -59,7 +59,7 @@ if [ "$aa" = "selected" ]; then
     ntot=$(printf '%s\n' "$req" | grep -c .)
     nmiss=$(printf '%s\n' "$miss" | grep -c .)
     first=$(printf '%s\n' "$miss" | head -n1)
-    emit B-ALLOWLIST HIGH "selected + allow-list missing $nmiss/$ntot curated pattern(s) (e.g. $first) → apply curated superset"
+    emit B-ALLOWLIST HIGH "ERR-SEC-003: selected + allow-list missing $nmiss/$ntot curated pattern(s) (e.g. $first) → apply curated superset"
   fi
 fi
 
@@ -71,6 +71,6 @@ sf=$(gh api "repos/$O/$R/actions/runs?per_page=30" --jq '[.workflow_runs[]|selec
 for path in $(gh api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' 2>/dev/null || true); do
   if gh api "repos/$O/$R/contents/$path" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null \
        | grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request[[:space:]]*\]'; then
-    emit D-BURN MEDIUM "$path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
+    emit D-BURN MEDIUM "ERR-WF-014: $path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
   fi
 done

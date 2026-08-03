@@ -1665,6 +1665,18 @@ defmodule Hypatia.Rules.CicdRules do
       severity: :info,
       detection: [:gh_api_check, :pr_inventory],
       prevention: [:branch_protection]
+    },
+    "ERR-WF-014" => %{
+      type: :d_burn_double_trigger,
+      severity: :medium,
+      detection: [:workflow_audit],
+      prevention: [:concurrency_cancel, :branch_scope]
+    },
+    "ERR-SEC-003" => %{
+      type: :b_allowlist_missing,
+      severity: :high,
+      detection: [:gh_api_check],
+      prevention: [:actions_permissions_sync]
     }
   }
 

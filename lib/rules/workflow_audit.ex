@@ -91,6 +91,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     codeql_missing_actions = check_codeql_missing_actions_language(workflow_contents)
     concurrency_missing = check_concurrency_missing_readonly(workflow_contents)
     heading_regex_issues = check_unanchored_heading_regex(workflow_contents)
+    d_burn_issues = check_d_burn_double_trigger(workflow_contents)
 
     %{
       findings:
@@ -115,7 +116,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           workflow_linter_self_ref ++
           codeql_missing_actions ++
           concurrency_missing ++
-          heading_regex_issues,
+          heading_regex_issues ++
+          d_burn_issues,
       missing_count: length(missing),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
@@ -137,6 +139,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       codeql_missing_actions_count: length(codeql_missing_actions),
       concurrency_missing_count: length(concurrency_missing),
       heading_regex_issues_count: length(heading_regex_issues),
+      d_burn_issues_count: length(d_burn_issues),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -183,10 +186,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
               [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
               {MapSet.put(seen, name), with_to, reusable, in_j, name}
 
-            in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
+            (in_j and curj) && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
               {seen, MapSet.put(with_to, curj), reusable, in_j, curj}
 
-            in_j and curj && String.match?(line, ~r/^    uses:\s*\S/) ->
+            (in_j and curj) && String.match?(line, ~r/^    uses:\s*\S/) ->
               {seen, with_to, MapSet.put(reusable, curj), in_j, curj}
 
             String.match?(line, ~r/^[A-Za-z]/) ->
@@ -1756,6 +1759,60 @@ defmodule Hypatia.Rules.WorkflowAudit do
         []
       end
     end)
+  end
+
+  # ─── ERR-WF-014: bare [push, pull_request] double trigger (D-BURN) ─────
+  #
+  # `on:` firing both push and pull_request with the push trigger unscoped
+  # runs every PR-branch push twice — once as push, once as pull_request —
+  # doubling Actions burn for zero extra signal. The ci-health sweep calls
+  # this class D-BURN; scripts/ci-health/remediate.sh auto-fixes it (scope
+  # push to the default branch + concurrency-cancel).
+
+  @doc """
+  ERR-WF-014: Detect the D-BURN double-trigger shape on the raw YAML string
+  (same convention as every other check in this module):
+
+    * flow form  — `on: [push, pull_request]` (either order, any spacing)
+    * block form — an `on:` block carrying a *bare* `push:` (no sub-keys at
+      all) alongside a `pull_request:` key
+
+  Conservative by design: a `push:` scoped by `branches:`/`paths:`/`tags:`
+  is left alone — that mirrors the ci-health sweep's D-BURN definition, and
+  remediation of scoped-but-still-overlapping triggers needs human eyes.
+  """
+  def check_d_burn_double_trigger(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      if d_burn_double_trigger?(content) do
+        [
+          %{
+            rule: "ERR-WF-014",
+            type: :d_burn_double_trigger,
+            file: filename,
+            severity: :medium,
+            reason:
+              "`on:` fires both push and pull_request with the push trigger unscoped — " <>
+                "every PR-branch push runs this workflow twice (D-BURN). Scope push to " <>
+                "the default branch and add a `concurrency:` cancel block " <>
+                "(scripts/ci-health/remediate.sh D-BURN applies both).",
+            fix_recipe: :scope_push_and_concurrency_cancel
+          }
+        ]
+      else
+        []
+      end
+    end)
+  end
+
+  @d_burn_flow ~r/^on:[ \t]*\[[^\]]*\bpush\b[^\]]*\bpull_request\b[^\]]*\]|^on:[ \t]*\[[^\]]*\bpull_request\b[^\]]*\bpush\b[^\]]*\]/m
+  # A bare `push:` — the next line is not indented deeper, so no sub-keys.
+  @d_burn_bare_push ~r/^([ \t]+)push:[ \t]*\n(?!\1[ \t])/m
+
+  defp d_burn_double_trigger?(content) do
+    Regex.match?(@d_burn_flow, content) or
+      (Regex.match?(~r/^on:[ \t]*$/m, content) and
+         Regex.match?(~r/^[ \t]+pull_request:/m, content) and
+         Regex.match?(@d_burn_bare_push, content))
   end
 
   # ─── WF022: Unanchored heading regex in inline-python workflow scripts ─
