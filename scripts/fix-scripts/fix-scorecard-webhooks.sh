@@ -32,25 +32,22 @@ fi
   echo ""
 
   gh api "/repos/${OWNER}/${REPO_NAME}/hooks" 2>/dev/null | \
-    python3 -c "
-import sys, json
-hooks = json.load(sys.stdin)
-if not hooks:
-    print('No webhooks configured.')
-for h in hooks:
-    url = h.get('config', {}).get('url', '?')
-    has_secret = bool(h.get('config', {}).get('secret'))
-    ssl_ok = h.get('config', {}).get('insecure_ssl') == '0'
-    issues = []
-    if not has_secret:
-        issues.append('NO SECRET')
-    if not url.startswith('https://'):
-        issues.append('HTTP NOT HTTPS')
-    if not ssl_ok:
-        issues.append('SSL DISABLED')
-    status = 'OK' if not issues else 'ISSUE: ' + ', '.join(issues)
-    print(f'{status:20s}  {url}')
-" || echo "  (gh CLI unavailable or insufficient permissions)"
+    jq -r '
+      if length == 0 then
+        "No webhooks configured."
+      else
+        .[] |
+        .config.url as $url |
+        .config.secret as $sec |
+        .config.insecure_ssl as $ssl |
+        (if ($sec == null or $sec == "") then ["NO SECRET"] else [] end) as $e1 |
+        (if ($url | startswith("https://") | not) then ["HTTP NOT HTTPS"] else [] end) as $e2 |
+        (if ($ssl != "0") then ["SSL DISABLED"] else [] end) as $e3 |
+        ($e1 + $e2 + $e3) as $issues |
+        (if ($issues | length) == 0 then "OK" else "ISSUE: " + ($issues | join(", ")) end) as $status |
+        "\($status)\t\($url)"
+      end
+    ' | awk -F'\t' '{ if (NF==2) printf "%-20s  %s\n", $1, $2; else print $0 }' || echo "  (gh CLI unavailable or insufficient permissions)"
 
   echo ""
   echo "## Remediation"

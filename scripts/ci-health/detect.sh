@@ -22,6 +22,14 @@ O="${OWNER:-hyperpolymath}"; R="$1"
 HERE="$(cd "$(dirname "$0")" && pwd)"   # for action-superset.txt (allow-list coverage)
 emit(){ printf '%s\t%s\t%s\t%s\n' "$R" "$1" "$2" "$3"; }
 
+# --- Skip logic (own repos only; one API call for both flags)
+af=$(gh api "repos/$O/$R" --jq '[.archived, .fork] | @tsv' 2>/dev/null || printf 'false\tfalse')
+is_archived=${af%%$'\t'*}; is_fork=${af##*$'\t'}
+if [ "$is_archived" = "true" ] || [ "$is_fork" = "true" ]; then
+    echo "SKIP $R archived/fork" >&2
+    exit 0
+fi
+
 # --- A: billing wall (a failure run whose job annotation matches the signature)
 fail_id=$(gh api "repos/$O/$R/actions/runs?status=failure&per_page=5" --jq '.workflow_runs[0].id // empty' 2>/dev/null || true)
 if [ -n "${fail_id:-}" ]; then
