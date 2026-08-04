@@ -84,13 +84,25 @@ defmodule Hypatia.A2ml.RecordDialectTest do
   end
 
   describe "consuming the real RSR v2.0 criteria SSOT" do
-    test "loads the shipped SSOT into 11 categories and 74 criteria" do
+    test "loads the shipped SSOT into 11 categories with every criterion parsed" do
       {:ok, cat} = RsrCriteria.load(@ssot)
 
       assert cat.version == "2.0.0-draft"
       assert cat.status == "draft"
       assert length(cat.categories) == 11
-      assert length(cat.criteria) == 74
+
+      # Derived, not hardcoded: the frozen literal (74) went stale the first
+      # time a MINOR bump added a criterion (6.1.6, #668). Counting the raw
+      # `{ id = "..."` records keeps the loader honest — a dropped criterion
+      # still fails — without freezing the catalog size.
+      raw_criterion_count =
+        @ssot
+        |> File.read!()
+        |> then(&Regex.scan(~r/^\s*\{\s*id\s*=\s*"/m, &1))
+        |> length()
+
+      assert raw_criterion_count > 0
+      assert length(cat.criteria) == raw_criterion_count
     end
 
     test "tier thresholds parse as integers" do
