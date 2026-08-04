@@ -964,11 +964,14 @@ defmodule Hypatia.Rules.CodeSafety do
   #      fixture credentials that would be unsafe in production but are
   #      normal in test code.
   #
-  #   2. Strip doc-comment lines (`///` outer, `//!` inner). Documentation
-  #      routinely includes code-example snippets that legitimately call
-  #      `.unwrap()` / `panic!` / etc. — flagging the *example* is a
-  #      false positive of the same character as flagging a remediation
-  #      script for the pattern it remediates.
+  #   2. Strip whole-line comments — plain `//`, doc `///`, and inner
+  #      `//!` — plus `/* ... */` blocks that occupy whole lines.
+  #      Documentation and commented-out code routinely contain
+  #      `.unwrap()` / `panic!` / etc.; Rust was the ONE scanned language
+  #      with no plain-comment stripping, so `// TODO: replace this
+  #      .unwrap() with ?` produced HIGH-severity findings (the known
+  #      unwrap-rule-matches-comments defect; same family as
+  #      structural_drift's strip_full_line_comments/2).
   #
   # Inline `#[cfg(test)] fn …` items in the middle of a file aren't
   # stripped (rare), and the per-rule severity downgrade in
@@ -976,7 +979,8 @@ defmodule Hypatia.Rules.CodeSafety do
   defp strip_inline_test_blocks(content, "rust") do
     content
     |> strip_after_cfg_test()
-    |> strip_rust_doc_comments()
+    |> strip_rust_line_comments()
+    |> strip_rust_whole_line_block_comments()
   end
 
   # Idris2: strip `|||` doc-comments, `--` line comments, and `{- ... -}`
@@ -1034,8 +1038,19 @@ defmodule Hypatia.Rules.CodeSafety do
     end
   end
 
-  defp strip_rust_doc_comments(content) do
-    Regex.replace(~r{^[ \t]*//[/!][^\n]*$}m, content, "")
+  # Whole-line `//` comments (subsumes the `///` / `//!` doc forms).
+  # Deliberately line-anchored like every other language's stripper here:
+  # trailing comments after code and `//` inside string literals
+  # ("https://…") are left alone — mid-line stripping would corrupt code.
+  defp strip_rust_line_comments(content) do
+    Regex.replace(~r{^[ \t]*//[^\n]*$}m, content, "")
+  end
+
+  # `/* ... */` blocks occupying whole lines (start-of-line through
+  # end-of-line, possibly spanning lines). Inline blocks after code are
+  # left alone, same conservative posture as above.
+  defp strip_rust_whole_line_block_comments(content) do
+    Regex.replace(~r{^[ \t]*/\*.*?\*/[ \t]*$}sm, content, "")
   end
 
   # Idris2 `|||` doc-comments (one or more on consecutive lines) AND
