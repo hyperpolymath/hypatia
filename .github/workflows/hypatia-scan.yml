@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
+# This workflow is managed by gh actions-lock.
 name: Hypatia Security Scan
 
 on:
@@ -18,6 +19,5 @@ permissions:
 
 jobs:
   hypatia:
-    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@abd93c3c3b8b3fce6843bafde2b3cc78359ebdab
+    uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@fcb8669169b4e9f5d9848608df880ae5fae812b4
     secrets: inherit
-    timeout-minutes: 15
