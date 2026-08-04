@@ -109,6 +109,17 @@ defmodule Hypatia.WatcherTest do
 
   describe "persistence across restart" do
     test "restart restores ETS counters + recent-event tail" do
+      # Take Watcher OUT of the app supervisor first: a bare GenServer.stop of
+      # the supervised instance races its :permanent restart, which re-claims
+      # the name before our start_link/1 — {:error, {:already_started, _}}.
+      # Restore is registered BEFORE the mutation (reflexive_test.exs pattern),
+      # and before the tmp-env cleanup below so it runs LAST (on_exit is LIFO):
+      # the restored supervised Watcher then boots with the default persist
+      # path, not this test's tmp state.
+      on_exit(fn -> restore_supervised_watcher() end)
+      Supervisor.terminate_child(Hypatia.Supervisor, Watcher)
+      Supervisor.delete_child(Hypatia.Supervisor, Watcher)
+
       # Use a per-test tmp dir for isolation.
       tmp = Path.join(System.tmp_dir!(), "watcher-restart-#{System.unique_integer([:positive])}")
       File.mkdir_p!(tmp)
@@ -118,11 +129,6 @@ defmodule Hypatia.WatcherTest do
         Application.delete_env(:hypatia, :watcher_persist_path)
         File.rm_rf!(tmp)
       end)
-
-      # Bring down any existing watcher so we can boot fresh into the tmp.
-      if pid = Process.whereis(Watcher) do
-        if Process.alive?(pid), do: GenServer.stop(pid)
-      end
 
       {:ok, pid1} = Watcher.start_link([])
       T.scan_complete(99, 3, path: "/tmp/x", severity_floor: "low")
@@ -139,6 +145,25 @@ defmodule Hypatia.WatcherTest do
 
       counts_m5 = Watcher.counts(:m5)
       assert Map.get(counts_m5, [:hypatia, :scan, :complete]) == 1
+    end
+  end
+
+  # Idempotent restore of the app-supervised Watcher (reflexive_test.exs
+  # pattern): stop whatever instance holds the name, clear any stale spec,
+  # re-add. Return values inspected — a silent restore failure starves every
+  # later test that depends on the supervised instance.
+  defp restore_supervised_watcher do
+    if pid = Process.whereis(Watcher), do: GenServer.stop(pid, :normal, 5_000)
+
+    Supervisor.terminate_child(Hypatia.Supervisor, Watcher)
+    Supervisor.delete_child(Hypatia.Supervisor, Watcher)
+
+    case Supervisor.start_child(Hypatia.Supervisor, Watcher) do
+      {:ok, _pid} -> :ok
+      {:ok, _pid, _info} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, :already_present} -> :ok
+      other -> raise "could not restore Hypatia.Watcher to Hypatia.Supervisor: #{inspect(other)}"
     end
   end
 
