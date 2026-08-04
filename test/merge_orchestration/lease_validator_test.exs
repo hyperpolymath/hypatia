@@ -38,7 +38,11 @@ defmodule Hypatia.MergeOrchestration.LeaseValidatorTest do
     assert {:le2_meta_unauthorized, "m"} in LeaseValidator.validate([meta], @now)
 
     ok =
-      lease(%{"lease_id" => "m2", "territory" => %{"is_meta" => true}, "owner_authorized" => true})
+      lease(%{
+        "lease_id" => "m2",
+        "territory" => %{"is_meta" => true},
+        "owner_authorized" => true
+      })
 
     assert LeaseValidator.validate([ok], @now) == []
   end

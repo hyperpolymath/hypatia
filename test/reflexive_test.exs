@@ -53,10 +53,18 @@ defmodule Hypatia.ReflexiveTest do
     Supervisor.delete_child(Hypatia.Supervisor, module)
 
     case Supervisor.start_child(Hypatia.Supervisor, module) do
-      {:ok, _pid} -> :ok
-      {:ok, _pid, _info} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-      {:error, :already_present} -> :ok
+      {:ok, _pid} ->
+        :ok
+
+      {:ok, _pid, _info} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+
+      {:error, :already_present} ->
+        :ok
+
       other ->
         raise """
         reflexive_test could not restore #{inspect(module)} to Hypatia.Supervisor: \
