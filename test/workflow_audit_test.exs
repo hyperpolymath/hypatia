@@ -6,8 +6,11 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
   describe "check_missing_workflows/1" do
     test "flags all missing when empty" do
+      # Derived, not hardcoded (#645): the frozen literal (17) went stale when
+      # the governance.yml consolidation retired 11 workflows from the list.
       findings = WorkflowAudit.check_missing_workflows([])
-      assert length(findings) == 17
+      assert length(findings) == length(WorkflowAudit.standard_workflows())
+      assert length(findings) > 0
     end
 
     test "no findings when all present" do
@@ -304,11 +307,14 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
   describe "audit/2" do
     test "returns comprehensive report" do
-      report = WorkflowAudit.audit(["hypatia-scan.yml", "codeql.yml"], %{})
+      present = ["hypatia-scan.yml", "codeql.yml"]
+      standard_count = length(WorkflowAudit.standard_workflows())
+
+      report = WorkflowAudit.audit(present, %{})
       assert is_map(report)
       assert report.workflow_count == 2
-      assert report.missing_count == 15
-      assert report.standard_coverage == round(2 / 17 * 100)
+      assert report.missing_count == standard_count - length(present)
+      assert report.standard_coverage == round(2 / standard_count * 100)
     end
   end
 
