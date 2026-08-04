@@ -88,7 +88,7 @@ defmodule Hypatia.Diagnostics.Monitor do
       components = check_all_components()
       failures = detect_failures(components)
 
-      Process.send_after(self(), :run_checks, @check_interval)
+      schedule_checks()
 
       if failures != [] do
         notify_failures(failures)
@@ -99,13 +99,19 @@ defmodule Hypatia.Diagnostics.Monitor do
     rescue
       error ->
         Logger.error("Diagnostics monitor error: #{inspect(error)}")
-        Process.send_after(self(), :run_checks, @check_interval)
+        schedule_checks()
         state
     end
   end
 
+  # Periodic checks are config-gated so the test env can disable them:
+  # a mid-suite tick whose recovery path GenServer.stops supervised
+  # children (Pipeline/Learning/Coordinator) is invisible order-dependent
+  # test breakage. check_now/0 still works when scheduling is off.
   defp schedule_checks() do
-    Process.send_after(self(), :run_checks, @check_interval)
+    if Application.get_env(:hypatia, :diagnostics_periodic_checks, true) do
+      Process.send_after(self(), :run_checks, @check_interval)
+    end
   end
 
   # ====================================================================
