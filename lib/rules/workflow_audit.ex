@@ -2139,9 +2139,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       stripped = strip_comments(content)
 
+      # Gate accepts any Chapel tell, not just a bare `chpl` invocation: a
+      # workflow can drive Chapel entirely through `printchplenv` and
+      # CHPL_* env vars (the exact shape check D targets) without ever
+      # writing the word `chpl` — the old gate skipped those files whole.
       chapel? =
         Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped)) or
-          Regex.match?(~r/\bchpl\b/, stripped)
+          Regex.match?(~r/\bchpl\b|\bprintchplenv\b|\bCHPL_[A-Z]/, stripped)
 
       if chapel? do
         []
