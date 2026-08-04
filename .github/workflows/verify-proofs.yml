@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: verify-idris.yml, verify-lean.yml, verify-tlaplus.yml
 name: Verify Proofs (Idris / Lean / TLA+)
@@ -57,7 +58,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Install Chez Scheme
         run: |
@@ -67,7 +68,7 @@ jobs:
 
       - name: Cache Idris 2 install
         id: cache-idris
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: |
             /usr/local/bin/idris2
@@ -154,11 +155,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Cache Lean toolchain and build
         id: cache-lean
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.elan
@@ -208,17 +209,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Eclipse Temurin 21 JRE
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        uses: actions/setup-java@v5.6.0
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Cache tla2tools.jar
         id: cache-tla
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ~/.local/share/tla2tools.jar
           key: tla2tools-v1.8.0
@@ -250,7 +251,7 @@ jobs:
 
       - name: Upload TLC log on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: tlc-log
           path: verification/proofs/tlaplus/tlc.log

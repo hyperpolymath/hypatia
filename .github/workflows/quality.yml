@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: docs.yml, quality.yml
 name: Docs & Code Quality
@@ -18,12 +19,13 @@ jobs:
   build-docs:
     name: Build AsciiDoc
     runs-on: ubuntu-latest
-    timeout-minutes: 60    steps:
+    timeout-minutes: 60
+    steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        uses: ruby/setup-ruby@v1.321.0
         with:
           ruby-version: '3.2'
           bundler-cache: true
@@ -109,7 +111,7 @@ jobs:
       # Install Rust via SHA-pinned action rather than using a direct
       # shell-piped installer — satisfies the download_then_run policy.
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rust-docs
@@ -194,7 +196,7 @@ jobs:
           EOF
 
       - name: Upload documentation artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: documentation
           path: _site
@@ -202,7 +204,7 @@ jobs:
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: _site
 
@@ -213,12 +215,13 @@ jobs:
   validate-docs:
     name: Validate Documentation
     runs-on: ubuntu-latest
-    timeout-minutes: 30    steps:
+    timeout-minutes: 30
+    steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        uses: ruby/setup-ruby@v1.321.0
         with:
           ruby-version: '3.2'
 
@@ -282,7 +285,7 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+        uses: actions/deploy-pages@v5.0.0
 
   # ============================================================================
   # Documentation Status
@@ -318,14 +321,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
       
       - name: Check file permissions
         run: |
           find . -type f -perm /111 -name "*.sh" | head -10 || true
       
       - name: Check for secrets
-        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.96.0
+        uses: trufflesecurity/trufflehog@v3.96.0
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -342,7 +345,7 @@ jobs:
           find . -type f -size +1M -not -path "./.git/*" | head -10 || echo "No large files"
       
       - name: EditorConfig check
-        uses: editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c # v2.2.0
+        uses: editorconfig-checker/action-editorconfig-checker@v2.2.0
         continue-on-error: true
 
   docs:
@@ -351,7 +354,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
       - name: Check documentation
         run: |
           MISSING=""
