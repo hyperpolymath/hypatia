@@ -134,6 +134,12 @@ defmodule Hypatia.Rules.CicdRules do
         "/bindings/deno/",
         "/bindings/typescript/",
         "/bindings/ts/",
+        # MCP/LSP adapter glue against TS-native SDKs: the documented
+        # `cartridges/**/adapter/**` class in boj-server-cartridges (and
+        # boj-server's 6 adapters), which names THIS list as its canonical
+        # source of truth. Was never ported here — 44 phantom criticals
+        # per cartridges PR (#602).
+        "/adapter/",
         # (3) PERMANENT exemption — Telegraf
         "avow-protocol/telegram-bot/avow-telegram-bot/",
         # (4) Tooling configs (matched as suffix substrings)
@@ -197,6 +203,9 @@ defmodule Hypatia.Rules.CicdRules do
         # (1) Tooling configs
         "bsconfig.json",
         ".config.res",
+        # (1b) BoJ cartridge panels — the ReScript counterpart of the TS
+        # `cartridges/**/adapter/**` exemption class (#602).
+        "/panels/",
         # (2) Upstream forks
         "rescript/",
         "servers/",
@@ -229,6 +238,7 @@ defmodule Hypatia.Rules.CicdRules do
         # Same eight classes as :rescript_detected
         "bsconfig.json",
         ".config.res",
+        "/panels/",
         "rescript/",
         "servers/",
         "repos-monorepo/",
@@ -511,10 +521,14 @@ defmodule Hypatia.Rules.CicdRules do
         "/academic/formal-verification/",
         "/docs/proofs/",
         "/fixtures/code_safety/",
-        "/linguist/samples/",
-        "/HOL/examples/PSL/",
-        "/echidna/examples/",
-        "/echidna/tests/live_goals/"
+        # No leading slash on the four below: these repos' paths arrive
+        # repo-root-relative ("echidna/examples/x.v"), which a leading-slash
+        # substring can never match; slash-less entries match both the
+        # relative and absolute-runner-path shapes.
+        "linguist/samples/",
+        "HOL/examples/PSL/",
+        "echidna/examples/",
+        "echidna/tests/live_goals/"
       ]
     },
     %{
