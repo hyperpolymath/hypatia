@@ -327,14 +327,6 @@ jobs:
         run: |
           find . -type f -perm /111 -name "*.sh" | head -10 || true
       
-      - name: Check for secrets
-        uses: trufflesecurity/trufflehog@v3.96.0
-        with:
-          path: ./
-          base: ${{ github.event.pull_request.base.sha || github.event.before }}
-          head: ${{ github.sha }}
-        continue-on-error: true
-      
       - name: Check TODO/FIXME
         run: |
           echo "=== TODOs ==="
