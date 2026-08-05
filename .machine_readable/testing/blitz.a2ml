@@ -180,7 +180,7 @@ evidence = ["lib/verisim_connector.ex", "lib/vcl/client.ex"]
 check = "Template placeholders"
 status = "warn"
 evidence = ["lib/rules/dogfooding.ex"]
-gap = "{{OWNER}}/{{REPO}} strings present as rule literals, not unresolved placeholders"
+gap = "hyperpolymath/hypatia strings present as rule literals, not unresolved placeholders"
 fix = "optional — annotate rule data as literal test strings"
 
 [dogfooding.DOG-07]

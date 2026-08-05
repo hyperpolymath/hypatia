@@ -53,9 +53,9 @@ evidence = ["lib/verisim_connector.ex", "lib/vcl/client.ex"]
 
 [isers.DOG-06]
 state = "yes"
-description = "Template placeholders resolved — no stray {{OWNER}} / {{REPO}} / [YOUR-REPO-NAME] in repo config"
+description = "Template placeholders resolved — no stray hyperpolymath / hypatia / [YOUR-REPO-NAME] in repo config"
 evidence = "lib/rules/dogfooding.ex:25-40"
-notes = "The only occurrences of {{OWNER}}/{{REPO}}/[YOUR-REPO-NAME] in the tree are inside lib/rules/dogfooding.ex as the rule's own detection patterns — they are the strings the rule searches for in downstream repos. Explicitly annotated in that file."
+notes = "The only occurrences of hyperpolymath/hypatia/[YOUR-REPO-NAME] in the tree are inside lib/rules/dogfooding.ex as the rule's own detection patterns — they are the strings the rule searches for in downstream repos. Explicitly annotated in that file."
 
 [isers.DOG-07]
 state = "yes"

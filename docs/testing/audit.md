@@ -62,7 +62,7 @@ Primary category per test file. Evidence verified against `test/*.exs`
 | **DOG-03** — Groove manifest | ✅ | `.well-known/groove/manifest.json` exists; ports match Elixir `:9090` |
 | **DOG-04** — K9 contracts | ⚠ | `k9iser.toml` present, but `k9iser build` not invoked in CI, no `generated/k9iser/` artefacts. **Fix:** add a build step to `ci.yml`. |
 | **DOG-05** — VeriSimDB wired | ✅ | `lib/verisim_connector.ex` actually calls `Hypatia.VCL.Client`; not a hollow import |
-| **DOG-06** — Template placeholders | ⚠ | `{{OWNER}}` / `{{REPO}}` strings live only in `lib/rules/dogfooding.ex` as rule data, not as unresolved repo config. **Fix:** add a comment marking them as in-rule string literals; optional. |
+| **DOG-06** — Template placeholders | ⚠ | `hyperpolymath` / `hypatia` strings live only in `lib/rules/dogfooding.ex` as rule data, not as unresolved repo config. **Fix:** add a comment marking them as in-rule string literals; optional. |
 | **DOG-07** — Tool version currency | ✅ | Actions SHA-pinned with v-tag comments; current as of 2026-04 |
 | **DOG-08** — Consumer field contract | ✅ | Scanner JSON fields match consumer scripts |
 | **DOG-09** — Iser applicability | ❌ | No `.machine_readable/dogfooding.a2ml`. **Fix:** add the manifest declaring which isers apply (yes/no/deferred). |
