@@ -142,7 +142,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install just
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.7
         with:
           # Pin an explicit modern just: the Justfile uses `import?`
           # (optional import, just >= 1.19.0). Unversioned `tool: just`
