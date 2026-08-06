@@ -78,8 +78,6 @@ jobs:
 
   # ============================================================================
   # Secret Detection
-    timeout-minutes: 10  # ============================================================================
-  # Secret Detection
   # ============================================================================
 
   secret-scan:
@@ -116,7 +114,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -144,7 +141,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
