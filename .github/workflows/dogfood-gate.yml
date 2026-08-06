@@ -262,7 +262,6 @@ jobs:
     timeout-minutes: 30
     needs: [a2ml-validate, k9-validate, empty-lint, groove-check]
     if: always()
-    timeout-minutes: 5
 
     steps:
       - name: Checkout repository

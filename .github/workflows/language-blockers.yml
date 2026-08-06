@@ -20,7 +20,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Block npm/bun
@@ -36,7 +35,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Block new TypeScript/JavaScript

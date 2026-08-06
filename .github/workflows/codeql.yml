@@ -30,7 +30,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
