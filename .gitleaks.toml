@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Gitleaks configuration — hyperpolymath/hypatia
+#
+# EXTENDS THE ESTATE BASELINE, it does not replace it.
+# `.gitleaks-estate.toml` is staged into the workspace root by
+# hyperpolymath/standards `.github/workflows/secret-scanner-reusable.yml`
+# before the scan runs. gitleaks resolves `[extend] path` against the process
+# CWD (verified — NOT relative to this file), which is the repository root.
+#
+# WHY THIS FILE IS LOCAL RATHER THAN IN THE ESTATE BASELINE.
+# Every entry below is a blind spot. Held here, it blinds this repository only,
+# and the justification sits beside the code it describes. Promoted to the
+# estate baseline it would blind all 400+ repositories — so the baseline keeps
+# only entries that are true everywhere (lockfiles, vendored bundles, published
+# protocol constants).
+#
+# Each entry names WHAT THE VALUE IS. "This file is noisy" is not a reason; if
+# an entry cannot say what the matched value actually is, the secret should be
+# removed from the tree instead.
+#
+# Every finding suppressed here was triaged on 2026-08-06 by reading the
+# matched line with the value redacted. Before adding an entry, plant a
+# realistic secret in the same path and confirm it is STILL detected.
+
+[extend]
+path = ".gitleaks-estate.toml"
+
+[allowlist]
+description = "hyperpolymath/hypatia: locally justified exemptions, extending the estate baseline"
+
+
+paths = [
+  # Tests for hypatia's OWN secret-suppression logic. The assertions must
+  # contain credential-shaped literals, because they assert that such lines
+  # are NOT treated as safe. Exactly the case standards R10.7 describes.
+  '''(^|/)test/scanner_suppression_test\.exs$''',
+
+  # Audit TRAINING material: worked examples of security errors, kept
+  # deliberately as reference cases.
+  '''(^|/)\.audittraining/security-errors/''',
+
+  # Simulated CI scenarios — synthetic inputs describing runs that never
+  # existed.
+  '''(^|/)integration/src/ci_simulation/scenarios\.rs$''',
+
+  # Radicle adapter. The ten matches are `rad:z...` and `did:key:z...`
+  # identifiers in test JSON literals. The `z` prefix is multibase base58btc
+  # and these are PUBLIC by construction — a did:key IS the public key. A
+  # path entry rather than a value regex because gitleaks allowlist regexes
+  # match the MATCH, not the secret, and so never fire for generic-api-key
+  # (see the estate baseline's comment).
+  '''(^|/)adapters/src/radicle\.rs$''',
+
+]
