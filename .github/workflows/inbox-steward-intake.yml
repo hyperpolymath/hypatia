@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Inbox Steward Intake — Process reports from gitbot-fleet inbox-steward
@@ -345,6 +346,7 @@ jobs:
   summary:
     name: Generate intake summary
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [record-report, analyze-patterns, update-ruleset, dispatch-to-farm]
     if: always()
     
