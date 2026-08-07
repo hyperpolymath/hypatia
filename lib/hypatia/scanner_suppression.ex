@@ -62,8 +62,14 @@ defmodule Hypatia.ScannerSuppression do
         @training_corpus_paths ++
           [".github/workflows/integration.yml"]
     },
+    # ⚠ `benches/` is exempted for code_safety ONLY, deliberately not for
+    # security_errors. Cargo's convention puts benchmarks in `benches/`, and a
+    # benchmark that unwraps or panics is normal — the failure costs a
+    # benchmark run, not a user's session, and setup code in a bench has no
+    # error path to take. But a hardcoded credential in a bench file is a real
+    # leak like any other, so the secret rules keep scanning it.
     "code_safety" => %{
-      :any => @training_corpus_paths
+      :any => @training_corpus_paths ++ ["benches/"]
     },
     # migration_rules detects deprecated APIs. The soundness fixtures
     # under test/soundness/fixtures/ DELIBERATELY use deprecated patterns

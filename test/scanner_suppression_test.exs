@@ -300,4 +300,33 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+
+  describe "suppressed?/3 — benches/" do
+    # Cargo puts benchmarks in `benches/`. A benchmark that unwraps or panics is
+    # normal: the failure costs a benchmark run, not a user's session, and setup
+    # code in a bench has no error path to take.
+    test "code_safety is exempt inside benches/" do
+      assert ScannerSuppression.suppressed?(
+               "a2ml/bindings/rust/benches/a2ml_bench.rs",
+               "code_safety",
+               "unwrap_without_check"
+             )
+    end
+
+    # ⚠ The exemption is deliberately NOT extended to security_errors. A
+    # hardcoded credential in a bench file is a real leak like any other, and
+    # widening the exemption by module would have hidden it.
+    test "security_errors is STILL scanned inside benches/" do
+      refute ScannerSuppression.suppressed?(
+               "a2ml/bindings/rust/benches/a2ml_bench.rs",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+
+    test "code_safety outside benches/ is unaffected" do
+      refute ScannerSuppression.suppressed?("src/handlers.rs", "code_safety", "unwrap_without_check")
+    end
+  end
+
 end
