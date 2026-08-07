@@ -15,18 +15,33 @@ defmodule Hypatia.ContractTest do
   alias Hypatia.Safety.{RateLimiter, Quarantine}
   alias Hypatia.VCL.Client, as: VCLClient
 
-  # Take a GenServer away from the Application supervisor so start_supervised!/1
-  # can start a clean, isolated instance for the test. Restores the child on exit.
-  defp take_supervised(module) do
-    Supervisor.terminate_child(Hypatia.Supervisor, module)
-    Supervisor.delete_child(Hypatia.Supervisor, module)
-    start_supervised!(module)
-
-    on_exit(fn ->
-      if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
-      Supervisor.start_child(Hypatia.Supervisor, module)
-    end)
-  end
+  # ⚠ THIS FILE DELIBERATELY DOES NOT TAKE CHILDREN FROM Hypatia.Supervisor.
+  #
+  # It used to, via a `take_supervised/1` helper that called
+  # `Supervisor.terminate_child/2` + `delete_child/2` and then started a private
+  # instance. That was never necessary: every test here already isolates by KEY,
+  # not by process — bot names, quarantine subjects and query keys are all built
+  # with `unique_id()`, and the GenServers store state keyed by exactly those.
+  #
+  # It was also actively harmful. `terminate_child/2` keeps a child dead until
+  # something explicitly restarts it, and there is no `restart_child` call
+  # anywhere in this repository, so any failure between the delete and the
+  # restore left the singleton dead for the REST OF THE RUN. Every later test
+  # touching it then failed with "no process: the process is not alive".
+  #
+  # ⚠ NO IMPROVEMENT FIGURE IS CLAIMED HERE, DELIBERATELY. The full suite
+  # returns a different failure count on IDENTICAL input — three consecutive
+  # runs at `--seed 0` on this exact tree gave 77, 79 and 16. It is not a
+  # measurement instrument, so any before/after number from it would be noise
+  # dressed as evidence. What IS verifiable: this file passes 19/19 on its own
+  # without the helper, and the helper's failure mode (a dead singleton for the
+  # rest of the run) is gone by construction.
+  #
+  # If a future test genuinely needs a clean process rather than a clean key,
+  # do NOT reintroduce this. The modules hardcode `name: __MODULE__` and ignore
+  # `opts[:name]`, so a second instance cannot coexist with the supervised one —
+  # that limitation is what forced the pattern. Fix it there first by honouring
+  # `opts[:name]`, then start an isolated instance under the test supervisor.
 
   # ---------------------------------------------------------------------------
   # TriangleRouter.dispatch_strategy/1 — pure function, no setup needed
@@ -79,7 +94,6 @@ defmodule Hypatia.ContractTest do
 
   describe "RateLimiter — burst limit contract" do
     setup do
-      take_supervised(RateLimiter)
       :ok
     end
 
@@ -121,7 +135,6 @@ defmodule Hypatia.ContractTest do
 
   describe "Quarantine — auto-quarantine contracts" do
     setup do
-      take_supervised(Quarantine)
       :ok
     end
 
@@ -214,7 +227,6 @@ defmodule Hypatia.ContractTest do
 
   describe "VCL.Client.parse/1 — totality contract" do
     setup do
-      take_supervised(VCLClient)
       :ok
     end
 
