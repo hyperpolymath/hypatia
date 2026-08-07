@@ -274,4 +274,30 @@ defmodule Hypatia.ScannerSuppressionTest do
       refute ScannerSuppression.file_allowed?(content, "code_safety", "believe_me")
     end
   end
+
+  describe "context_safe_line?/2 — shell_download_then_run" do
+    # Installers routinely PRINT the command a user should run. That text is
+    # not an execution, and flagging it makes the rule noisy in exactly the
+    # files that are trying to be helpful.
+    test "a download-then-run inside a quoted echo is text, not execution" do
+      line = ~S(    echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh")
+      assert ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+
+    test "printf'd advice is also text" do
+      line = ~S(printf '%s' "curl http://example.com/i.sh | sh")
+      assert ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+
+    # ⚠ The test is NOT "the line starts with echo". This one really executes.
+    test "echo piped INTO sh is a real execution and stays reported" do
+      refute ScannerSuppression.context_safe_line?("shell_download_then_run", ~S(echo hello | sh))
+    end
+
+    test "a genuine curl-pipe-bash stays reported" do
+      line = ~S(curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin)
+      refute ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+  end
+
 end
