@@ -3,318 +3,264 @@
     "severity": "low",
     "rule_module": "code_safety",
     "type": "expect_in_hot_path",
-    "file": "fixer/src/scanner.rs",
-    "action": "flag"
+    "file": "fixer/src/scanner.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "expect_in_hot_path",
-    "file": "integration/src/ci_simulation/assertions.rs",
-    "action": "flag"
+    "file": "integration/src/ci_simulation/assertions.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "expect_in_hot_path",
-    "file": "integration/src/ci_simulation/scenarios.rs",
-    "action": "flag"
+    "file": "integration/src/ci_simulation/scenarios.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "ncl_docker_not_podman",
-    "file": ".machine_readable/self-validating/hypatia-metadata.k9.ncl",
-    "action": "flag"
+    "file": ".machine_readable/self-validating/hypatia-metadata.k9.ncl"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_dangerous_default",
-    "file": "cli/src/commands/batch.rs",
-    "action": "flag"
+    "file": "cli/src/commands/batch.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_dangerous_default",
-    "file": "cli/src/commands/scan.rs",
-    "action": "flag"
+    "file": "cli/src/commands/scan.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_dangerous_default",
-    "file": "scripts/ci-tools/src/bin/check-k9iser-paths.rs",
-    "action": "flag"
+    "file": "scripts/ci-tools/src/bin/check-k9iser-paths.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_dangerous_default",
-    "file": "tools/cii-registrar/src/main.rs",
-    "action": "flag"
+    "file": "tools/cii-registrar/src/main.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "cli/build.rs",
-    "action": "flag"
+    "file": "cli/build.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "cli/src/commands/batch.rs",
-    "action": "flag"
+    "file": "cli/src/commands/batch.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "cli/src/commands/fleet.rs",
-    "action": "flag"
+    "file": "cli/src/commands/fleet.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "cli/src/commands/scan.rs",
-    "action": "flag"
+    "file": "cli/src/commands/scan.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "cli/src/output.rs",
-    "action": "flag"
+    "file": "cli/src/output.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "fixer/src/main.rs",
-    "action": "flag"
+    "file": "fixer/src/main.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "integration/src/ci_simulation/scenarios.rs",
-    "action": "flag"
+    "file": "integration/src/ci_simulation/scenarios.rs"
   },
   {
     "severity": "low",
     "rule_module": "code_safety",
     "type": "unwrap_without_check",
-    "file": "integration/src/lib.rs",
-    "action": "flag"
+    "file": "integration/src/lib.rs"
   },
   {
     "severity": "low",
     "rule_module": "git_state",
     "type": "GS006",
-    "file": ".",
-    "action": "review"
+    "file": "."
   },
   {
     "severity": "low",
     "rule_module": "honest_completion",
     "type": "no_state_file",
-    "file": "/home/user/hypatia",
-    "action": "flag"
+    "file": "/home/user/hypatia"
   },
   {
     "severity": "low",
     "rule_module": "root_hygiene",
     "type": "stale",
-    "file": "DESIGN-NARRATIVE.md",
-    "action": "move"
+    "file": "DESIGN-NARRATIVE.md"
   },
   {
     "severity": "low",
     "rule_module": "structural_drift",
     "type": "SD013",
-    "file": ".gitignore",
-    "action": "globalise_gitignore_pattern"
+    "file": ".gitignore"
   },
   {
     "severity": "low",
     "rule_module": "structural_drift",
     "type": "SD013",
-    "file": ".gitignore",
-    "action": "globalise_gitignore_pattern"
+    "file": ".gitignore"
   },
   {
     "severity": "low",
     "rule_module": "structural_drift",
     "type": "SD013",
-    "file": ".gitignore",
-    "action": "globalise_gitignore_pattern"
+    "file": ".gitignore"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "guix-nix-policy.yml",
-    "action": "create"
+    "file": "guix-nix-policy.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "instant-sync.yml",
-    "action": "create"
+    "file": "instant-sync.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "jekyll-gh-pages.yml",
-    "action": "create"
+    "file": "jekyll-gh-pages.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "jekyll.yml",
-    "action": "create"
+    "file": "jekyll.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "npm-bun-blocker.yml",
-    "action": "create"
+    "file": "npm-bun-blocker.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "rsr-antipattern.yml",
-    "action": "create"
+    "file": "rsr-antipattern.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "scorecard-enforcer.yml",
-    "action": "create"
+    "file": "scorecard-enforcer.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "ts-blocker.yml",
-    "action": "create"
+    "file": "ts-blocker.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "wellknown-enforcement.yml",
-    "action": "create"
+    "file": "wellknown-enforcement.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "missing_workflow",
-    "file": "workflow-linter.yml",
-    "action": "create"
+    "file": "workflow-linter.yml"
   },
   {
     "severity": "medium",
     "rule_module": "git_state",
     "type": "GS001",
-    "file": ".",
-    "action": "commit"
+    "file": "."
   },
   {
     "severity": "medium",
     "rule_module": "git_state",
     "type": "GS007",
-    "file": ".",
-    "action": "delete_remote_branches"
+    "file": "."
   },
   {
     "severity": "medium",
     "rule_module": "structural_drift",
     "type": "SD009",
-    "file": "ffi/zig/src/main.zig",
-    "action": "add_spdx_header"
+    "file": "ffi/zig/src/main.zig"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "inbox_steward_missing",
-    "file": ".github/workflows/inbox-steward.yml",
-    "action": "create",
-    "reason": "Inbox steward automation for PR processing"
+    "file": ".github/workflows/inbox-steward.yml"
   },
   {
     "severity": "low",
     "rule_module": "workflow_audit",
     "type": "inbox_steward_intake_missing",
-    "file": ".github/workflows/inbox-steward-intake.yml",
-    "action": "create",
-    "reason": "Hypatia intake for inbox steward reports"
+    "file": ".github/workflows/inbox-steward-intake.yml"
   },
   {
     "severity": "medium",
     "rule_module": "inbox_automation",
     "type": "IA001",
-    "file": ".",
-    "action": "enable_auto_merge",
-    "reason": "Enable auto-merge for trusted contributors and Dependabot PRs that pass all checks"
+    "file": "."
   },
   {
     "severity": "medium",
     "rule_module": "inbox_automation",
     "type": "IA002",
-    "file": ".",
-    "action": "require_dogfood_gate",
-    "reason": "All PRs must pass Dogfood Gate before auto-merge"
+    "file": "."
   },
   {
     "severity": "medium",
     "rule_module": "inbox_automation",
     "type": "IA003",
-    "file": ".",
-    "action": "require_scorecard",
-    "reason": "All PRs must pass Scorecard Enforcer before auto-merge"
+    "file": "."
   },
   {
     "severity": "high",
     "rule_module": "inbox_automation",
     "type": "IA004",
-    "file": ".",
-    "action": "require_hypatia_scan",
-    "reason": "All PRs must pass Hypatia Security Scan before auto-merge"
+    "file": "."
   },
   {
     "severity": "low",
     "rule_module": "inbox_automation",
     "type": "IA005",
-    "file": ".",
-    "action": "trusted_contributors",
-    "reason": "Define trusted contributors whose PRs can be auto-merged without approval",
-    "trusted": ["hyperpolymath", "dependabot", "renovate"]
+    "file": "."
   },
   {
     "severity": "medium",
     "rule_module": "inbox_automation",
     "type": "IA006",
-    "file": ".",
-    "action": "propagate_rules",
-    "reason": "Propagate learned rules from auto-merged PRs to other repos via .git-private-farm"
+    "file": "."
   },
   {
     "severity": "low",
     "rule_module": "inbox_automation",
     "type": "IA007",
-    "file": ".",
-    "action": "monitor_application",
-    "reason": "Monitor that inbox automation applies to repos not currently in inbox"
+    "file": "."
   }
 ]

@@ -62,8 +62,14 @@ defmodule Hypatia.ScannerSuppression do
         @training_corpus_paths ++
           [".github/workflows/integration.yml"]
     },
+    # ⚠ `benches/` is exempted for code_safety ONLY, deliberately not for
+    # security_errors. Cargo's convention puts benchmarks in `benches/`, and a
+    # benchmark that unwraps or panics is normal — the failure costs a
+    # benchmark run, not a user's session, and setup code in a bench has no
+    # error path to take. But a hardcoded credential in a bench file is a real
+    # leak like any other, so the secret rules keep scanning it.
     "code_safety" => %{
-      :any => @training_corpus_paths
+      :any => @training_corpus_paths ++ ["benches/"]
     },
     # migration_rules detects deprecated APIs. The soundness fixtures
     # under test/soundness/fixtures/ DELIBERATELY use deprecated patterns
@@ -240,6 +246,22 @@ defmodule Hypatia.ScannerSuppression do
       Regex.match?(rust_test_literal_re(), line)
   end
 
+  # A download-and-execute pattern that lives INSIDE A QUOTED STRING is text,
+  # not execution — installers routinely print the command a user should run:
+  #
+  #     echo "  curl --proto '=https' -sSf https://sh.rustup.rs | sh"
+  #
+  # ⚠ The test is NOT "the line starts with echo". `echo foo | sh` really does
+  # execute, and so does `printf '%s' x | bash`. The question is whether the
+  # pipe-to-shell sits inside the quotes or outside them. So the quoted
+  # segments are removed and the pattern re-tested against what remains: if it
+  # no longer matches, every match was inside a string.
+  def context_safe_line?("shell_download_then_run", line) when is_binary(line) do
+    stripped = strip_quoted_segments(line)
+    Regex.match?(download_then_run_re(), line) and
+      not Regex.match?(download_then_run_re(), stripped)
+  end
+
   def context_safe_line?(_rule_type, _line), do: false
 
   @doc """
@@ -279,6 +301,21 @@ defmodule Hypatia.ScannerSuppression do
   end
 
   # ─── Internals ──────────────────────────────────────────────────────────
+
+  # Mirrors code_safety's :shell_download_then_run pattern. Kept here rather
+  # than imported so a change to one is a visible, deliberate change to both.
+  defp download_then_run_re,
+    do: ~r/\b(?:curl|wget)\b[^\n|;]*\|\s*(?:sh|bash)\b/
+
+  # Remove the CONTENTS of single- and double-quoted segments, leaving the
+  # quotes, so that anything written inside a string cannot satisfy a pattern
+  # tested against the remainder. Escaped quotes are honoured.
+  defp strip_quoted_segments(line) do
+    line
+    |> String.replace(~r/"(?:\\.|[^"\\])*"/, "\"\"")
+    |> String.replace(~r/'(?:\\.|[^'\\])*'/, "''")
+  end
+
 
   defp gha_secret_ref_re,
     do: ~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}/
