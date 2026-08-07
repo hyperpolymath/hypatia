@@ -18,7 +18,7 @@ mkdir -p docs/rules
   echo "./scripts/gen-rule-catalogue.sh"
   echo '```'
   echo
-  echo "$(ls lib/rules/*.ex | wc -l) rule modules. IDs are extracted from \`rule:\`/\`id:\` literals;"
+  echo "$(find lib/rules -maxdepth 1 -name '*.ex' | wc -l) rule modules. IDs are extracted from \`rule:\`/\`id:\` literals;"
   echo "a blank ID column means the module emits atom-keyed findings rather than prefixed IDs."
   echo
   echo "| Module | Rule IDs | Purpose |"
@@ -31,6 +31,7 @@ mkdir -p docs/rules
           | { grep -oE '[A-Z]{2,3}-?[A-Z]*-?[0-9]{3}' || true; } | sort -u | tr '\n' ' ' | sed 's/ $//')
     doc=$(awk '/@moduledoc """/{f=1;next} f&&/"""/{exit} f{gsub(/^[ \t]+/,""); if($0!="") {print; exit}}' "$f" \
           | sed 's/|/\\|/g' | cut -c1-140)
+    # shellcheck disable=SC2016  # printf format string: literal by design
     printf '| `%s` | %s | %s |\n' "$m" "${ids:-—}" "${doc:-—}"
   done
 } > "$out"
