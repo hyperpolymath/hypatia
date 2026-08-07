@@ -1021,8 +1021,43 @@ defmodule Hypatia.Rules.WorkflowAudit do
                       false
                   end
 
+                # The RAW-MAPPING form, which is what the estate actually uses:
+                #
+                #     env:
+                #       TOKEN: ${{ secrets.X }}     # raw secret, no comparison
+                #     steps:
+                #       - if: env.TOKEN != ''       # comparison lives in the if
+                #
+                # The clause above only matches when the comparison is inside
+                # the env assignment. Both forms are correct, and this one is
+                # the one the estate documents, so without this clause the rule
+                # reported every correctly-gated workflow — 7 such alerts in
+                # `standards` alone, on files whose comments explain the pattern.
+                #
+                # ⚠ Why the indirection exists at all, and why the rule must not
+                # ask for `if: secrets.X != ''` directly: the `secrets` context
+                # is NOT available in `if:`. A workflow that uses it there is
+                # REJECTED BEFORE ANY JOB IS CREATED — a startup_failure with no
+                # log and no check run, which silently killed CI in 51 estate
+                # repositories. Flagging the env form pushes authors toward the
+                # one construction that cannot work.
+                env_raw_gate? =
+                  case Regex.run(
+                         ~r/(\w+):\s*\$\{\{\s*secrets\.#{Regex.escape(secret_name)}\s*\}\}/,
+                         stripped
+                       ) do
+                    [_, env_name] ->
+                      Regex.match?(
+                        ~r/if:[^\n]*env\.#{Regex.escape(env_name)}\b[^\n]*(!=|==)/,
+                        stripped
+                      )
+
+                    _ ->
+                      false
+                  end
+
                 if Regex.match?(gate_re, step_block) or env_output_gate? or
-                     env_boolean_gate? do
+                     env_boolean_gate? or env_raw_gate? do
                   []
                 else
                   [

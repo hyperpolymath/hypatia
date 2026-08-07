@@ -665,4 +665,64 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert [] = WorkflowAudit.check_unanchored_heading_regex(%{"ci.yml" => wf})
     end
   end
+
+  describe "check_ungated_secret_action/1 — env gate forms" do
+    # ⚠ The `secrets` context is NOT available in `if:`. A workflow using it
+    # there is REJECTED BEFORE ANY JOB IS CREATED — a startup_failure with no
+    # log and no check run, which silently killed CI in 51 estate repositories.
+    # Mapping the secret to `env` and comparing there is therefore the ONLY
+    # valid way to gate on a secret's presence, and the rule must recognise it;
+    # flagging it pushes authors toward the one construction that cannot work.
+
+    test "raw env mapping with the comparison in the if: is a valid gate" do
+      wf = """
+      jobs:
+        dispatch:
+          env:
+            FARM_DISPATCH_TOKEN: ${{ secrets.FARM_DISPATCH_TOKEN }}
+          steps:
+            - name: Trigger
+              if: env.FARM_DISPATCH_TOKEN != ''
+              uses: peter-evans/repository-dispatch@abc
+              with:
+                token: ${{ secrets.FARM_DISPATCH_TOKEN }}
+      """
+
+      assert WorkflowAudit.check_ungated_secret_action(%{"instant-sync.yml" => wf}) == []
+    end
+
+    test "boolean env mapping is still a valid gate" do
+      wf = """
+      jobs:
+        dispatch:
+          env:
+            HAS_TOKEN: ${{ secrets.FARM_DISPATCH_TOKEN != '' }}
+          steps:
+            - name: Trigger
+              if: env.HAS_TOKEN == 'true'
+              uses: peter-evans/repository-dispatch@abc
+              with:
+                token: ${{ secrets.FARM_DISPATCH_TOKEN }}
+      """
+
+      assert WorkflowAudit.check_ungated_secret_action(%{"instant-sync.yml" => wf}) == []
+    end
+
+    test "no gate at all is still reported" do
+      wf = """
+      jobs:
+        dispatch:
+          steps:
+            - name: Trigger
+              uses: peter-evans/repository-dispatch@abc
+              with:
+                token: ${{ secrets.FARM_DISPATCH_TOKEN }}
+      """
+
+      findings = WorkflowAudit.check_ungated_secret_action(%{"instant-sync.yml" => wf})
+      assert length(findings) == 1
+      assert hd(findings).type == :secret_action_without_presence_gate
+    end
+  end
+
 end
