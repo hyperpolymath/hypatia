@@ -147,3 +147,8 @@ verification/proofs/agda/*.agdai
 .elixir_ls/
 .cache/
 dist/
+
+# Agent scratch worktrees. These were once committed as orphan gitlinks
+# (mode 160000 with no .gitmodules), giving every clone four broken
+# submodule pointers. Ignored so it cannot recur.
+.claude/worktrees/

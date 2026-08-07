@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Consolidated workflow (behaviour-preserving merge).
@@ -281,7 +282,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    timeout-minutes: 5
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

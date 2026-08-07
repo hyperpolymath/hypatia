@@ -97,6 +97,7 @@ workflows:
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'returntocorp/semgrep-action@v1'
         - 'taiki-e/install-action@v2.85.3'
+        - 'trufflesecurity/trufflehog@v3.96.0'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -332,3 +333,8 @@ dependencies:
         commit: 'sha1-18b1216eba7f8039b0f8d131d5473787f0edce68'
         owner_id: 43724913
         repo_id: 442947557
+    'trufflesecurity/trufflehog@v3.96.0':
+        ref: 'v3.96.0'
+        commit: 'sha1-6f3c981e7b77f235fd2702dd74af25fc4b72bf11'
+        owner_id: 79229934
+        repo_id: 77726177
