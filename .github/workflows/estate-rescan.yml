@@ -104,7 +104,7 @@ jobs:
 
       - name: Cache built panic-attack
         id: pa_cache
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/panic-attack-bin
           # Exact-SHA key, no restore-keys: a partial hit would scan with

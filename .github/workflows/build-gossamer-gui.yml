@@ -52,7 +52,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check required sources
         run: |
@@ -109,10 +109,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
 
@@ -133,16 +133,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout Hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Rust (stable) with wasm32 target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Install just
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
         with:
           # Pin an explicit modern just: the Justfile uses `import?`
           # (optional import, just >= 1.19.0). Unversioned `tool: just`
@@ -154,7 +154,7 @@ jobs:
 
       - name: Cache Ephapax build
         id: cache-ephapax
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             /tmp/ephapax
@@ -302,7 +302,7 @@ jobs:
 
       - name: Upload wasm artifact
         if: steps.compile.outcome == 'success' && steps.validate.outcome == 'success' && hashFiles('src/ui/public/assets/wasm/hypatia_gui.wasm') != ''
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hypatia-gui-wasm
           path: src/ui/public/assets/wasm/hypatia_gui.wasm

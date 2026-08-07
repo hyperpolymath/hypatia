@@ -52,7 +52,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -124,7 +124,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -224,7 +224,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -299,7 +299,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Send dispatch to .git-private-farm
         env:
@@ -345,6 +345,7 @@ jobs:
   summary:
     name: Generate intake summary
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [record-report, analyze-patterns, update-ruleset, dispatch-to-farm]
     if: always()
     
