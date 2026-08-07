@@ -6,7 +6,7 @@
 
 [metadata]
 version = "0.2.0"
-last-updated = "2026-04-25"
+last-updated = "2026-08-07"
 
 [hypatia-config]
 scan-enabled = true
@@ -15,7 +15,7 @@ scan-depth = "deep"
 # JSON AssailReport from panic-attack; Logtalk removed 2026-04-14
 report-format = "json"
 verisim-data-path = "data/verisim"
-fleet-path = "~/Documents/hyperpolymath-repos/gitbot-fleet"
+fleet-path = "$HYPATIA_FLEET_PATH"   # env var, not a user-specific absolute path
 
 [neural-config]
 confidence-threshold-auto-execute = 0.95
@@ -31,8 +31,8 @@ persistence = "lib/neural/persistence.ex"
 state-dir = "data/verisim/neural-states"
 rebalancer = "lib/neural/rebalancer.ex"
 rebalancer-strategy-a = "done"
-rebalancer-strategy-b = "in_progress"
-rebalancer-strategy-c = "in_progress"
+rebalancer-strategy-b = "done"
+rebalancer-strategy-c = "done"
 
 [symbolic-rules]
 # Project-specific rules beyond the estate-wide RSR ruleset.

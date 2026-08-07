@@ -8,7 +8,7 @@
 name = "PLAYBOOK"
 project = "hypatia"
 version = "0.2.0"
-last-updated = "2026-04-25"
+last-updated = "2026-08-07"
 
 [deployment]
 method = "gitops"
@@ -20,7 +20,7 @@ http-port = 9090
 env-vars = [
   "HYPATIA_VERISIM_URL — URL for verisim-data git-backed store",
   "HYPATIA_FLEET_PATH — path to gitbot-fleet checkout",
-  "HYPATIA_GITHUB_PAT — GitHub PAT with repo scope for live dispatch (M7, pending)",
+  "HYPATIA_DISPATCH_PAT — GitHub PAT with repo scope for live dispatch (M7, done 2026-05-24)",
   "HYPATIA_HTTP_PORT — override HTTP port (default 9090)",
 ]
 start-command = "mix run --no-halt"
