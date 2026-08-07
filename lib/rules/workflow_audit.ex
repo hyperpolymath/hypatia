@@ -63,7 +63,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   """
   def audit(workflow_files, workflow_contents \\ %{}, opts \\ []) do
     missing = check_missing_workflows(workflow_files, opts)
-    unpinned = check_unpinned_actions(workflow_contents)
+    unpinned = check_unpinned_actions(workflow_contents, opts)
     wrong_pins = check_wrong_pins(workflow_contents)
     permission_issues = check_permissions(workflow_contents)
     flawed_regexes = check_flawed_regex(workflow_contents)
@@ -265,7 +265,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   outs (hypatia#262 self-verifying-ref reusables) and `known_sha`
   hints from the `@known_good_shas` table.
   """
-  def check_unpinned_actions(workflow_contents) do
+  def check_unpinned_actions(workflow_contents, opts \\ []) do
+    locked = locked_refs(Keyword.get(opts, :actions_lock))
+
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       Hypatia.Rules.WorkflowHardening.wh004_scan_content(filename, content)
       |> Enum.map(fn finding ->
@@ -280,7 +282,36 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
         _ = action_ref
 
-        if Hypatia.Rules.SecurityErrors.pin_exempt?(slug) do
+        cond do
+          # A repository under GitHub Actions lockfile enforcement pins its
+          # actions in `.github/workflows/actions.lock`, NOT inline. The
+          # lockfile resolves each symbolic ref to a verified commit — plus
+          # owner_id, repo_id and the transitive dependencies of composite
+          # actions, which an inline SHA cannot express at all. On such a
+          # repository `actions/checkout@v7.0.1` IS pinned.
+          #
+          # ⚠ The two mechanisms are mutually exclusive, not additive.
+          # `gh actions-lock` REFUSES a ref that no tag or branch contains,
+          # so inline SHA-pinning an action DROPS it from the lockfile and
+          # REDUCES coverage. Reporting these as unpinned drives exactly
+          # that regression. Established 2026-08-07 on this repository:
+          # inline-pinning 40 refs put 14 workflows into startup_failure
+          # and removed dtolnay/rust-toolchain from 7 lockfile entries.
+          MapSet.member?(locked, normalise_ref(slug)) ->
+            %{
+              type: :lockfile_pinned_accepted,
+              file: filename,
+              action_ref: slug,
+              severity: :info,
+              action: :accept_with_rationale,
+              rationale:
+                "Pinned by .github/workflows/actions.lock, which resolves " <>
+                  "this symbolic ref to a verified commit and locks the " <>
+                  "transitive dependencies of composite actions. Inline " <>
+                  "SHA-pinning would remove it from the lockfile."
+            }
+
+          Hypatia.Rules.SecurityErrors.pin_exempt?(slug) ->
           %{
             type: :pin_exempt_accepted,
             file: filename,
@@ -289,20 +320,59 @@ defmodule Hypatia.Rules.WorkflowAudit do
             action: :accept_with_rationale,
             rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
           }
-        else
-          severity = if ref in ["main", "master"], do: :high, else: :medium
+          true ->
+            severity = if ref in ["main", "master"], do: :high, else: :medium
 
-          %{
-            type: :unpinned_action,
-            file: filename,
-            action_ref: slug,
-            severity: severity,
-            action: :pin_sha,
-            known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
-          }
+            %{
+              type: :unpinned_action,
+              file: filename,
+              action_ref: slug,
+              severity: severity,
+              action: :pin_sha,
+              known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
+            }
         end
       end)
     end)
+  end
+
+  @doc """
+  Extract the set of action refs pinned by a `gh actions-lock` lockfile.
+
+  The lockfile is machine-generated with a stable shape: refs appear as
+  quoted `'owner/repo@ref'` tokens, both as `workflows:` list entries and
+  as `dependencies:` keys. Collecting every such token covers both, and
+  covers transitive composite dependencies for free.
+
+  Returns an empty set for `nil` or unparseable input, so a repository
+  without lockfile enforcement keeps the previous behaviour exactly.
+  """
+  def locked_refs(nil), do: MapSet.new()
+
+  def locked_refs(lock_content) when is_binary(lock_content) do
+    ~r/'([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@[^']+)'/
+    |> Regex.scan(lock_content)
+    |> Enum.map(fn [_, ref] -> normalise_ref(ref) end)
+    |> MapSet.new()
+  end
+
+  def locked_refs(_), do: MapSet.new()
+
+  @doc """
+  Normalise an action ref to the form the lockfile keys on: `owner/repo@ref`,
+  lowercased. Subpath actions (`github/codeql-action/init@v4`) and reusable
+  workflow refs collapse to their root repository, which is how
+  `gh actions-lock` records them.
+  """
+  def normalise_ref(slug) do
+    case String.split(slug, "@", parts: 2) do
+      [path, ref] ->
+        owner_repo = path |> String.split("/") |> Enum.take(2) |> Enum.join("/")
+        String.downcase(owner_repo <> "@" <> ref)
+
+      _ ->
+        String.downcase(slug)
+    end
   end
 
   @doc """
@@ -1021,8 +1091,43 @@ defmodule Hypatia.Rules.WorkflowAudit do
                       false
                   end
 
+                # The RAW-MAPPING form, which is what the estate actually uses:
+                #
+                #     env:
+                #       TOKEN: ${{ secrets.X }}     # raw secret, no comparison
+                #     steps:
+                #       - if: env.TOKEN != ''       # comparison lives in the if
+                #
+                # The clause above only matches when the comparison is inside
+                # the env assignment. Both forms are correct, and this one is
+                # the one the estate documents, so without this clause the rule
+                # reported every correctly-gated workflow — 7 such alerts in
+                # `standards` alone, on files whose comments explain the pattern.
+                #
+                # ⚠ Why the indirection exists at all, and why the rule must not
+                # ask for `if: secrets.X != ''` directly: the `secrets` context
+                # is NOT available in `if:`. A workflow that uses it there is
+                # REJECTED BEFORE ANY JOB IS CREATED — a startup_failure with no
+                # log and no check run, which silently killed CI in 51 estate
+                # repositories. Flagging the env form pushes authors toward the
+                # one construction that cannot work.
+                env_raw_gate? =
+                  case Regex.run(
+                         ~r/(\w+):\s*\$\{\{\s*secrets\.#{Regex.escape(secret_name)}\s*\}\}/,
+                         stripped
+                       ) do
+                    [_, env_name] ->
+                      Regex.match?(
+                        ~r/if:[^\n]*env\.#{Regex.escape(env_name)}\b[^\n]*(!=|==)/,
+                        stripped
+                      )
+
+                    _ ->
+                      false
+                  end
+
                 if Regex.match?(gate_re, step_block) or env_output_gate? or
-                     env_boolean_gate? do
+                     env_boolean_gate? or env_raw_gate? do
                   []
                 else
                   [
