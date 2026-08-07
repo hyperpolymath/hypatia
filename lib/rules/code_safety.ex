@@ -827,14 +827,135 @@ defmodule Hypatia.Rules.CodeSafety do
   # rest of the file scannable, so a genuine per-call `.expect(` two lines later
   # is still caught.
   def strip_lazy_initialisers(content, language) when language in ["rust"] do
-    Regex.replace(
-      ~r/(?:LazyLock|OnceLock|Lazy|OnceCell)::new\s*\(\s*\|\|(?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/s,
-      content,
-      "LAZY_INIT_ELIDED"
-    )
+    elide_lazy_inits(content, 0, [])
   end
 
   def strip_lazy_initialisers(content, _language), do: content
+
+  # ⚠ A COUNTER, NOT A REGEX. This previously used a fixed-depth pattern that
+  # handled two levels of nested parentheses. Regexes cannot count, and the
+  # nesting here is unbounded because the elided body contains a REGEX LITERAL:
+  #
+  #     LazyLock::new(|| Regex::new(r"\[\|\s*((?:'[A-Za-z]+\s*,?\s*)*)\|]").expect(..))
+  #
+  # That pattern's own `((?:...)*)` is one level deeper than the approximation
+  # allowed, so the initialiser was NOT elided and its `.expect(` was reported
+  # as `expect_in_hot_path` — on a `LazyLock` body, which by definition runs
+  # once. Measured 2026-08-07 in k9-svc/lsp: four of five statics elided and the
+  # fifth did not, purely because its pattern had one more capture group.
+  #
+  # ⚠ RUST STRING LITERALS ARE HONOURED. A raw string `r"..."` or `r#"..."#`
+  # routinely contains unbalanced parentheses — a regex like `r"\("` would
+  # otherwise desynchronise the count and swallow the remainder of the file,
+  # silently blinding every code_safety rule after it. Counting must therefore
+  # know where strings begin and end.
+  @lazy_openers ~r/(?:LazyLock|OnceLock|Lazy|OnceCell)::new\s*\(\s*\|\|/
+
+  defp elide_lazy_inits(content, from, acc) do
+    case Regex.run(@lazy_openers, content, offset: from, return: :index) do
+      nil ->
+        IO.iodata_to_binary(Enum.reverse([binary_part(content, from, byte_size(content) - from) | acc]))
+
+      [{start, len} | _] ->
+        open_paren = find_open_paren(content, start)
+        case match_paren(content, open_paren + 1, 1) do
+          nil ->
+            elide_lazy_inits(content, start + len, [binary_part(content, from, start + len - from) | acc])
+
+          close ->
+            before = binary_part(content, from, start - from)
+            elide_lazy_inits(content, close + 1, ["LAZY_INIT_ELIDED", before | acc])
+        end
+    end
+  end
+
+  # Byte offset of the `(` that opens the initialiser call.
+  defp find_open_paren(content, from) do
+    rest = binary_part(content, from, byte_size(content) - from)
+    from + (rest |> :binary.match("(") |> elem(0))
+  end
+
+  # Walk forward tracking paren depth, skipping over Rust string literals.
+  # Returns the offset of the closing paren, or nil if unbalanced.
+  defp match_paren(content, pos, depth) when depth > 0 do
+    if pos >= byte_size(content) do
+      nil
+    else
+      case string_start(content, pos) do
+        {:raw, hashes} ->
+          match_paren(content, skip_raw_string(content, pos, hashes), depth)
+
+        :plain ->
+          match_paren(content, skip_string(content, pos + 1), depth)
+
+        :no ->
+          case binary_part(content, pos, 1) do
+            "(" -> match_paren(content, pos + 1, depth + 1)
+            ")" when depth == 1 -> pos
+            ")" -> match_paren(content, pos + 1, depth - 1)
+            _ -> match_paren(content, pos + 1, depth)
+          end
+      end
+    end
+  end
+
+  # Is a string literal starting at `pos`?
+  #
+  # ⚠ RAW STRINGS MUST BE RECOGNISED SEPARATELY. Rust's `r#"..."#` form exists
+  # precisely so a literal may contain `"` — and regex patterns use it for
+  # exactly that, e.g. `r#"(install|deploy)\s*=\s*"([^"]*)""#`. Treating its
+  # embedded quotes as string delimiters desynchronises the scan, which then
+  # miscounts parentheses and either stops eliding or swallows the rest of the
+  # file. Measured: this exact pattern in k9-svc/lsp survived elision after the
+  # plain-string case was already handled.
+  defp string_start(content, pos) do
+    cond do
+      binary_part(content, pos, 1) == "\"" ->
+        :plain
+
+      binary_part(content, pos, 1) == "r" ->
+        hashes = count_hashes(content, pos + 1, 0)
+        at = pos + 1 + hashes
+
+        if at < byte_size(content) and binary_part(content, at, 1) == "\"" do
+          {:raw, hashes}
+        else
+          :no
+        end
+
+      true ->
+        :no
+    end
+  end
+
+  defp count_hashes(content, pos, n) do
+    if pos < byte_size(content) and binary_part(content, pos, 1) == "#" do
+      count_hashes(content, pos + 1, n + 1)
+    else
+      n
+    end
+  end
+
+  # Skip past `r###"..."###`, matching the same number of hashes.
+  defp skip_raw_string(content, pos, hashes) do
+    terminator = "\"" <> String.duplicate("#", hashes)
+    body_start = pos + 1 + hashes + 1
+
+    case :binary.match(content, terminator, scope: {body_start, byte_size(content) - body_start}) do
+      {at, len} -> at + len
+      :nomatch -> byte_size(content)
+    end
+  end
+
+  # Skip to just past the closing quote of a plain string, honouring escapes.
+  defp skip_string(content, pos) do
+    cond do
+      pos >= byte_size(content) -> pos
+      binary_part(content, pos, 1) == "\\" -> skip_string(content, pos + 2)
+      binary_part(content, pos, 1) == "\"" -> pos + 1
+      true -> skip_string(content, pos + 1)
+    end
+  end
 
   # For Rust:
   #

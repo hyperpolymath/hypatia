@@ -351,4 +351,45 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+
+  describe "strip_lazy_initialisers/2 — a counter, not a regex" do
+    alias Hypatia.Rules.CodeSafety
+
+    @pipes "||"
+
+    # A `LazyLock` body runs ONCE, so `.expect(` inside it is not a hot path.
+    # The previous implementation was a fixed-depth regex, and regexes cannot
+    # count: a pattern one level more nested than it allowed survived elision
+    # and failed the gate.
+    test "elides a body whose regex literal has NESTED capture groups" do
+      src = "static E: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(r\"\\[((?:'[A-Za-z]+)*)\\]\").expect(\"E\"));"
+      refute CodeSafety.strip_lazy_initialisers(src, "rust") =~ ".expect("
+    end
+
+    # ⚠ Rust's r#".."# form exists so a literal may contain `"`. Regex patterns
+    # use it for exactly that. Treating those quotes as delimiters
+    # desynchronises the scan.
+    test "elides a body using a HASH RAW STRING containing quotes" do
+      src = "static R: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(r#\"(a|b)\\s*=\\s*\"([^\"]*)\"\"#).expect(\"R\"));"
+      refute CodeSafety.strip_lazy_initialisers(src, "rust") =~ ".expect("
+    end
+
+    # The rule must not be blinded — elision is scoped to the initialiser body.
+    test "a genuine per-call .expect( is still visible" do
+      src = "static A: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(r\"x\").expect(\"A\"));\nfn f() { m.get(\"k\").expect(\"missing\"); }"
+      assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "expect(\"missing\")"
+    end
+
+    # ⚠ The dangerous failure mode: a desynchronised counter swallows the rest
+    # of the file and silently blinds every later rule.
+    test "an unbalanced paren inside a string does not swallow the file" do
+      src = "static X: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(\"(\").expect(\"x\"));\nfn after() {}"
+      assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "fn after"
+    end
+  end
+
 end
