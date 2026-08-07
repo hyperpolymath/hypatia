@@ -234,6 +234,7 @@ defmodule Hypatia.ScannerSuppression do
   # no longer matches, every match was inside a string.
   def context_safe_line?("shell_download_then_run", line) when is_binary(line) do
     stripped = strip_quoted_segments(line)
+
     Regex.match?(download_then_run_re(), line) and
       not Regex.match?(download_then_run_re(), stripped)
   end
@@ -291,7 +292,6 @@ defmodule Hypatia.ScannerSuppression do
     |> String.replace(~r/"(?:\\.|[^"\\])*"/, "\"\"")
     |> String.replace(~r/'(?:\\.|[^'\\])*'/, "''")
   end
-
 
   defp gha_secret_ref_re,
     do: ~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}/

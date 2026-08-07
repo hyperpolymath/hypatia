@@ -315,14 +315,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
             }
 
           Hypatia.Rules.SecurityErrors.pin_exempt?(slug) ->
-          %{
-            type: :pin_exempt_accepted,
-            file: filename,
-            action_ref: slug,
-            severity: :info,
-            action: :accept_with_rationale,
-            rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
-          }
+            %{
+              type: :pin_exempt_accepted,
+              file: filename,
+              action_ref: slug,
+              severity: :info,
+              action: :accept_with_rationale,
+              rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
+            }
+
           true ->
             severity = if ref in ["main", "master"], do: :high, else: :medium
 

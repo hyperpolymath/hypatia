@@ -854,13 +854,18 @@ defmodule Hypatia.Rules.CodeSafety do
   defp elide_lazy_inits(content, from, acc) do
     case Regex.run(@lazy_openers, content, offset: from, return: :index) do
       nil ->
-        IO.iodata_to_binary(Enum.reverse([binary_part(content, from, byte_size(content) - from) | acc]))
+        IO.iodata_to_binary(
+          Enum.reverse([binary_part(content, from, byte_size(content) - from) | acc])
+        )
 
       [{start, len} | _] ->
         open_paren = find_open_paren(content, start)
+
         case match_paren(content, open_paren + 1, 1) do
           nil ->
-            elide_lazy_inits(content, start + len, [binary_part(content, from, start + len - from) | acc])
+            elide_lazy_inits(content, start + len, [
+              binary_part(content, from, start + len - from) | acc
+            ])
 
           close ->
             before = binary_part(content, from, start - from)

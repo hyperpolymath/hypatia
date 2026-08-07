@@ -863,5 +863,4 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert f.type == :unpinned_action
     end
   end
-
 end
