@@ -152,16 +152,14 @@ defmodule Hypatia.ScannerSuppression do
   # (org policy 2026-05-18 hardening). The former SaltStack carve-out is
   # explicitly rejected here so no `.hypatia-ignore` or path heuristic
   # can re-introduce drift.
-  # TypeScript / ReScript / JavaScript — bannned-by-default but with
-  # narrow, documented carve-outs honoured (see `@banned_lang_ts_carveouts`).
-  # The carve-outs mirror the comment in
-  # `Hypatia.Rules.CicdRules.@blocked_patterns`: `.d.ts` declaration
-  # files for interop, Deno test-runner under `affinescript-deno-test/`,
-  # and JS shims under `affinescript-cli/`. The cicd_rules comment
-  # claimed these were "honoured via ScannerSuppression" but the
-  # previous hard-`false` clause broke the carve-out, generating
-  # ~15 critical false-positives per affected PR scan (observed
-  # 2026-05-27 on affinescript#357, panll#54, claude-integrations#43).
+  # TypeScript / ReScript / JavaScript — banned-by-default with narrow,
+  # documented carve-outs honoured via blocked_pattern_allow_match?/1,
+  # which delegates to the `path_allow_prefixes` on
+  # `Hypatia.Rules.CicdRules.@blocked_patterns` (the single source of
+  # truth). A hand-copied local carve-out table used to sit here too; it
+  # drifted to 3 of the ~12 documented carve-outs (k9-svc/bindings/deno
+  # flagged Critical on standards#382) and was removed once every entry
+  # was verified covered by the canonical lists — do not re-add one.
   def suppressed?(file, "cicd_rules", "banned_language_file", opts) do
     cond do
       String.ends_with?(file, ".py") ->
@@ -179,7 +177,7 @@ defmodule Hypatia.ScannerSuppression do
       true ->
         repo_path = Keyword.get(opts, :repo_path, nil)
         rel = relative(file, repo_path)
-        ts_carveout_match?(rel) or blocked_pattern_allow_match?(rel)
+        blocked_pattern_allow_match?(rel)
     end
   end
 
@@ -192,34 +190,12 @@ defmodule Hypatia.ScannerSuppression do
       match_exemptions?(rel, user_exemptions(repo_path), rule_module, rule_type)
   end
 
-  # Documented TypeScript / JavaScript / ReScript carve-outs — kept
-  # narrow on purpose. The `.d.ts` allowance covers TS declaration
-  # files which are interop-only (no runtime code). The
-  # `affinescript-deno-test/` path is the Deno test harness for the
-  # AffineScript CLI itself — replacing it with AffineScript would be
-  # circular (the CLI under test compiles AffineScript). The
-  # `affinescript-cli/` path covers thin JS shims that bridge to the
-  # compiled WASM runtime.
-  @banned_lang_ts_carveouts [
-    ~r{(^|/)affinescript-deno-test/},
-    ~r{(^|/)affinescript-cli/.*\.js$},
-    ~r{\.d\.ts$}
-  ]
-
-  defp ts_carveout_match?(rel) do
-    Enum.any?(@banned_lang_ts_carveouts, &Regex.match?(&1, rel))
-  end
-
   # Honour the `path_allow_prefixes` of the matching CicdRules blocked
   # pattern. Those lists are the SINGLE SOURCE OF TRUTH for the
   # banned-language exemption tables in standards/.claude/CLAUDE.md
   # (TypeScript/ReScript/V-lang carve-outs: /bindings/deno/, /vscode/,
-  # upstream forks, Coq `.v` proof scripts, …). The hand-copied
-  # @banned_lang_ts_carveouts above predates this delegation and had
-  # drifted to 3 of the ~12 documented carve-outs, so e.g.
-  # `k9-svc/bindings/deno/mod.ts` was flagged Critical on standards#382
-  # despite its documented exemption. Python/Go stay hard-refused above
-  # (total bans, no prefixes to honour).
+  # upstream forks, Coq `.v` proof scripts, …). Python/Go stay
+  # hard-refused above (total bans, no prefixes to honour).
   defp blocked_pattern_allow_match?(rel) do
     Hypatia.Rules.CicdRules.blocked_patterns()
     |> Enum.any?(fn p ->
@@ -258,6 +234,7 @@ defmodule Hypatia.ScannerSuppression do
   # no longer matches, every match was inside a string.
   def context_safe_line?("shell_download_then_run", line) when is_binary(line) do
     stripped = strip_quoted_segments(line)
+
     Regex.match?(download_then_run_re(), line) and
       not Regex.match?(download_then_run_re(), stripped)
   end
@@ -315,7 +292,6 @@ defmodule Hypatia.ScannerSuppression do
     |> String.replace(~r/"(?:\\.|[^"\\])*"/, "\"\"")
     |> String.replace(~r/'(?:\\.|[^'\\])*'/, "''")
   end
-
 
   defp gha_secret_ref_re,
     do: ~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}/

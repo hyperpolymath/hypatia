@@ -135,6 +135,20 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
              "VSCode extension entry points wait on AS VSCode-extension API binding"
     end
 
+    test "exempts cartridges/**/adapter/** MCP/LSP adapter glue (#602)" do
+      files = [
+        "cartridges/cross-cutting/orchestration/stack-orchestrator-mcp/adapter/planner.ts",
+        "boj-server-cartridges/cartridges/languages/zig-lsp/adapter/index.ts",
+        "/home/runner/work/boj-server-cartridges/boj-server-cartridges/cartridges/x/adapter/y.ts"
+      ]
+
+      results = CicdRules.check_commit_blocks(files)
+
+      assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil,
+             "cartridges adapter dirs are a documented exemption class " <>
+               "(boj-server-cartridges CLAUDE.md names this list as its SSOT)"
+    end
+
     test "flags new TS even with carve-out-like names but outside carve-out paths" do
       # `proven/src/something.ts` is NOT in `proven/bindings/deno/`,
       # so it MUST still flag.

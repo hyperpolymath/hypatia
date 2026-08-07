@@ -20,6 +20,13 @@ defmodule Hypatia.Rules.RootHygiene do
   @allowed_root_files [
     "0-AI-MANIFEST.a2ml",
     "AI.a2ml",
+    # Estate governance/philosophy chrome. Added 2026-08-07: these four are
+    # authored, referenced from README and docs/README.adoc, and were making
+    # hypatia fail its own root-hygiene rule.
+    "AFFIRMATION.adoc",
+    "GOVERNANCE.adoc",
+    "PALIMPSEST.adoc",
+    "CHANGELOG.adoc",
     "README.adoc",
     "README.md",
     "LICENSE",

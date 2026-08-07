@@ -298,6 +298,66 @@ defmodule Hypatia.Rules.SupplyChainTest do
     end
   end
 
+  # ─── SC013 ─────────────────────────────────────────────────────────────
+
+  describe "sc013_dependabot_inbox_amplifier/1" do
+    test "flags explicit Dependabot reviewers and assignees", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      File.write!(Path.join([repo, ".github", "dependabot.yml"]), """
+      version: 2
+      updates:
+        - package-ecosystem: npm
+          directory: /
+          schedule:
+            interval: weekly
+          reviewers: [hyperpolymath]
+          assignees:
+            - hyperpolymath
+      """)
+
+      assert [finding] = SupplyChain.sc013_dependabot_inbox_amplifier(repo)
+      assert finding.rule == "SC013"
+      assert Enum.sort(finding.detail.notification_sources) == ["assignees", "reviewers"]
+    end
+
+    test "flags blanket CODEOWNERS when Dependabot is configured", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+      File.write!(Path.join([repo, ".github", "CODEOWNERS"]), "* @hyperpolymath\n")
+
+      File.write!(Path.join([repo, ".github", "dependabot.yml"]), """
+      version: 2
+      updates:
+        - package-ecosystem: github-actions
+          directory: /
+          schedule: { interval: weekly }
+      """)
+
+      assert [finding] = SupplyChain.sc013_dependabot_inbox_amplifier(repo)
+      assert finding.detail.notification_sources == ["blanket-codeowners"]
+      assert finding.detail.codeowners_file == ".github/CODEOWNERS"
+    end
+
+    test "passes targeted security CODEOWNERS policy", %{repo: repo} do
+      File.mkdir_p!(Path.join(repo, ".github"))
+
+      File.write!(
+        Path.join([repo, ".github", "CODEOWNERS"]),
+        "/.github/workflows/ @hyperpolymath\n/SECURITY* @hyperpolymath\n"
+      )
+
+      File.write!(Path.join([repo, ".github", "dependabot.yml"]), """
+      version: 2
+      updates:
+        - package-ecosystem: github-actions
+          directory: /
+          schedule: { interval: weekly }
+      """)
+
+      assert SupplyChain.sc013_dependabot_inbox_amplifier(repo) == []
+    end
+  end
+
   # ─── SC003 / SC007 / SC010 (token-gated) ────────────────────────────
 
   describe "API-backed rules with no token" do

@@ -6,7 +6,7 @@ defmodule Hypatia.Rules.SupplyChain do
   Supply-chain integrity rules drawn from OSSF Scorecard, SLSA, OWASP
   Top-10 CI/CD, and GitHub Actions hardening guide.
 
-  Rule IDs SC001-SC012.
+  Rule IDs SC001-SC013.
 
   These rules concern the **provenance and integrity** of code, actions,
   and release artifacts — distinct from `WorkflowHardening` (content
@@ -28,6 +28,7 @@ defmodule Hypatia.Rules.SupplyChain do
   | SC010 | scorecard `Webhooks` | Repo webhooks configured without a secret |
   | SC011 | scorecard `Signed-Releases` + Endor `R-END-02` | Release workflow doesn't emit signed artifacts / provenance attestation |
   | SC012 | GitHub Dependabot limits + estate incident 2026-07-19 | Duplicate ecosystem blocks multiply the open-PR limit; multi-directory updates are not grouped |
+  | SC013 | GitHub review-request behaviour + estate incident 2026-07-20 | Dependabot directly names inbox recipients or a blanket CODEOWNERS rule requests review on every bot PR |
 
   Module-level conventions match `WorkflowHardening`: pure-local for
   the file-presence rules, GitHub-API for the org/repo-state rules.
@@ -618,6 +619,7 @@ defmodule Hypatia.Rules.SupplyChain do
           |> Enum.flat_map(fn {ecosystem, blocks} ->
             projected = Enum.sum(Enum.map(blocks, & &1.limit))
             directories = Enum.sum(Enum.map(blocks, & &1.directory_count))
+
             ungrouped_multidir? =
               directories > 1 and not Enum.any?(blocks, & &1.group_by_dependency)
 
@@ -686,6 +688,66 @@ defmodule Hypatia.Rules.SupplyChain do
     end
   end
 
+  # ─── SC013: Dependabot inbox amplification ──────────────────────────
+
+  @doc """
+  SC013: Detect policy that converts every Dependabot PR into a personal
+  notification or review-inbox entry.
+
+  Dependabot's `reviewers` and `assignees` keys are direct notification
+  sources.  A blanket `* @owner` CODEOWNERS rule has the same effect for every
+  dependency PR, even when only a lockfile changes.  Targeted CODEOWNERS rules
+  for workflows and other security-sensitive paths remain valid and are not
+  reported.
+  """
+  def sc013_dependabot_inbox_amplifier(repo_path) do
+    dependabot = locate_dependabot(repo_path)
+    codeowners = locate_codeowners(repo_path)
+
+    if dependabot == nil do
+      []
+    else
+      dependabot_content = File.read!(dependabot)
+      codeowners_content = if codeowners, do: File.read!(codeowners), else: ""
+
+      direct_recipients =
+        Regex.scan(~r/^\s+(reviewers|assignees):\s*(?:\[[^\]]*\])?\s*$/m, dependabot_content)
+        |> Enum.map(fn [_, key] -> key end)
+        |> Enum.uniq()
+
+      blanket_codeowners =
+        Regex.match?(~r/^\s*\*\s+@\S+/m, codeowners_content)
+
+      if direct_recipients == [] and not blanket_codeowners do
+        []
+      else
+        sources =
+          direct_recipients ++
+            if(blanket_codeowners, do: ["blanket-codeowners"], else: [])
+
+        [
+          %{
+            rule: "SC013",
+            file: Path.relative_to(dependabot, repo_path),
+            severity: :warn,
+            reason:
+              "Dependabot policy turns routine bot PRs into personal inbox items " <>
+                "via #{Enum.join(sources, ", ")}",
+            action: :report,
+            detail: %{
+              notification_sources: sources,
+              codeowners_file:
+                if(codeowners, do: Path.relative_to(codeowners, repo_path), else: nil),
+              fix:
+                "Remove Dependabot reviewers/assignees and replace blanket CODEOWNERS " <>
+                  "with targeted rules for security-sensitive paths."
+            }
+          }
+        ]
+      end
+    end
+  end
+
   # ─── Scan facade ────────────────────────────────────────────────────
 
   @doc """
@@ -720,6 +782,7 @@ defmodule Hypatia.Rules.SupplyChain do
         sc009_security_md_missing(repo_path) ++
         sc011_release_without_signing(repo_path) ++
         sc012_dependabot_pr_fanout(repo_path) ++
+        sc013_dependabot_inbox_amplifier(repo_path) ++
         api_findings
 
     %{

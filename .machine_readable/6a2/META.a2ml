@@ -7,8 +7,8 @@ project = "hypatia"
 author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 license = "MPL-2.0"
 standard = "RSR 2026"
-last-updated = "2026-04-25"
-media-type = "application/meta+scheme"
+last-updated = "2026-08-07"
+media-type = "application/a2ml"   # record dialect, not Scheme
 
 [development-practices]
 versioning-scheme = "semver"

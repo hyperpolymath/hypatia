@@ -1,0 +1,412 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
+
+# Hypatia debt register
+
+**Audited 2026-08-07 at `d75cb0e`.** Supersedes `tech-debt-2026-05-26.md` (retained as a
+historical snapshot) and is the companion to `proof-debt.md` (proof-specific detail).
+
+Every item carries **evidence** — a file:line, a command and its output, or a run ID.
+Anything that could not be verified is marked **UNVERIFIED** together with the exact check
+that would settle it. Nothing here is inferred from vibes; where an earlier document made a
+claim this audit contradicts, the contradiction is stated.
+
+**Ground truth measured at audit time** (use these, not the numbers in older docs):
+
+| Fact | Value |
+|---|---|
+| `lib/**/*.ex` modules | 133 |
+| `lib/rules/*.ex` | 33 |
+| Neural networks | 8 (not 5) |
+| Supervised children (`lib/application.ex`) | 24 static + 2 conditional |
+| Zig `export fn` | 18 (not 7) |
+| Test files / tests | 99 / 1433 |
+| `just` recipes | 39 |
+| Default suite | 1433 tests, **0 failures**, 242 excluded |
+| `:verisim_data` suite | 1433 tests, **129 failures** (see T-1) |
+
+---
+
+## Severity key
+
+**CRITICAL** — actively misleading, legally exposed, or blocking multiple workstreams.
+**HIGH** — a real gate is absent or inert; correctness claims are unbacked.
+**MEDIUM** — drift that will cause wrong decisions if trusted.
+**LOW** — hygiene.
+
+---
+
+## 1. CI/CD debt
+
+### CI-1 · CRITICAL · One stale lockfile pin kills 4 workflows and 13 jobs · UNTRACKED
+`.github/workflows/actions.lock` pins `dtolnay/rust-toolchain@stable` to
+`4cda84d5c5c54efe2404f9d843567869ab1699d4`, which no longer matches the moving `stable` ref.
+Runner error (run `31170993296`, job `92842543720`):
+
+```
+##[error]Lockfile pin 4cda84d5c5c54efe2404f9d843567869ab1699d4 for
+`dtolnay/rust-toolchain` does not match ref `stable`.
+```
+
+Every affected job dies at **`Set up job`**, before checkout. Casualties on `d75cb0e`:
+**Rust CI** (Check, Format, Test, Clippy), **Tests** (E2E Rust CLI Scan, criterion+baseline,
+stress-test, Integration Tests), **CI** (Rust Format, Rust Check & Clippy), **Docs & Code
+Quality** (Build AsciiDoc). It also blocks all four open Dependabot PRs (#678, #679, #680, #682).
+
+The fix is **structural, not a re-pin**: `@stable` is a moving ref and re-pinning it by SHA
+re-breaks on every Rust release. Stop lockfile-pinning moving refs.
+
+### CI-2 · HIGH · OSSF Scorecard `startup_failure` — caller omits `actions: read` · UNTRACKED
+`scorecard.yml:22-25` grants `contents: read`, `security-events: write`, `id-token: write` but
+**not** `actions: read`. The reusable it calls declares workflow-level
+`permissions: actions: read, contents: read`; a reusable cannot request more than its caller
+grants, so the run is rejected at compile time with **zero jobs**.
+
+Confirmed by contrast at the same standards SHA: `secret-scanner.yml:20-23` includes
+`actions: read` and runs; `governance.yml` has no job-level block so inherits it and runs.
+One-line fix. Note PR #685 (make Scorecard periodic) *hides* the push symptom but leaves the
+scheduled run broken.
+
+### CI-3 · HIGH · Two workflows produce zero jobs on every push · UNTRACKED
+`clusterfuzzlite.yml` and `security-policy.yml` (runs `31170991565`, `31170992148`):
+`job_count=0`, and GitHub lists the run `name` as the **file path** rather than the declared
+`name:` — the signature of a workflow GitHub cannot compile. Both are `active`, not disabled,
+so they fail forever. `clusterfuzzlite.yml` even fired on `push` despite declaring only
+`pull_request`/`schedule`/`workflow_dispatch`.
+
+**UNVERIFIED:** the specific invalid construct. `yaml.safe_load` parses both files cleanly and
+all their actions resolve in `actions.lock`. **To verify:** read the Actions *web UI* banner for
+run `31170991565` — the API does not expose it (`/jobs` empty, `/logs` 404).
+
+### CI-4 · HIGH · Secret Scanner red: 4 gitleaks findings, no `.gitleaks.toml` · TRACKED (PR #684)
+Run `31170993760`: `WRN leaks found: 4` → exit 1. `.gitleaks.toml` does not exist, so the repo
+runs on the estate baseline only. PR #684 adds a well-reasoned config; it is `BEHIND` and
+itself blocked by CI-1.
+
+### CI-5 · HIGH · Fake gate — the E2E Rust CLI Scan cannot fail · UNTRACKED
+`.github/workflows/tests.yml:95-96`:
+
+```yaml
+./target/release/hyper scan /tmp/test-repo 2>&1 || true
+echo "PASS: Rust CLI scan completed"
+```
+
+`|| true` discards the exit code and the next line prints `PASS` unconditionally. This job
+asserts nothing. It is red today **only** because of CI-1 — fix CI-1 alone and it turns green
+while testing nothing. Fix both in the same change or the debt hides itself.
+
+### CI-6 · MEDIUM · Fake gate — the whole `lint` job in Docs & Code Quality · UNTRACKED
+`.github/workflows/quality.yml:318-342`: four steps, none can fail (`|| true` ×2,
+`|| echo` ×1, `continue-on-error: true` ×1). Line `:333` also greps `--include="*.py"` and
+`--include="*.res"` — languages with **zero** files in the repo.
+
+### CI-7 · MEDIUM · All 4 Dependabot PRs blocked by CI-1 · UNTRACKED
+#682, #680, #679, #678 all show the identical `Set up job` failure set. Fixing CI-1 unblocks
+all four at once.
+
+### CI-8 · LOW · Three workflows disabled manually · UNTRACKED
+`pages.yml`, `inbox-steward-intake.yml`, `push-email-notify.yml`. Not necessarily wrong — but
+`pages.yml` is the only consumer of the Idris `Ddraig.idr` build, so that path is unexercised.
+
+---
+
+## 2. Test debt
+
+### T-1 · CRITICAL · 242 excluded tests never run anywhere and fail 129/242 · UNTRACKED
+`test/test_helper.exs` excludes `:verisim_data` unconditionally. The comment above it claims:
+
+> "These tests pass in CI (where verisim-data is available) but are excluded from local
+> development runs"
+
+**Both halves are false.**
+
+*They never run in CI.* The string `--include verisim_data` appears nowhere in
+`.github/workflows/` or the `Justfile`.
+
+*They do not pass.*
+
+```
+$ mix test                      → 1433 tests, 0 failures, 242 excluded
+$ mix test --only verisim_data  → 1433 tests, 129 failures, 1191 excluded
+```
+
+Failures concentrate in `VCL.FileExecutorTest` (27), `RecipeAdditionalRecipesTest` (17),
+`RecipeNewRecipesTest` (11), `E2E.PipelineTest` (11), `RecipeMatcherTest` (10).
+
+**16.9% of the suite is dark, red, and documented as green.** Any statement of the form
+"the suite passes" — including in this repo's own release gate — is scoped to the other 83%.
+Either provision verisim-data in CI and run them, or retag them honestly as unrunnable.
+
+### T-2 · MEDIUM · No Elixir coverage measurement · UNTRACKED
+Rust has `cargo llvm-cov` → Codecov (`ci.yml:100-130`). Elixir has none: no `mix test --cover`,
+no `excoveralls` in `mix.exs`. And the Rust coverage job is itself dead via CI-1, so **no
+coverage figure currently exists for any language**.
+
+### T-3 · MEDIUM · Haskell lane is a permanent no-op · UNTRACKED
+`ci.yml:218` runs `cabal test all`, but `git ls-files '*.cabal'` returns **0 results**. The only
+`.hs` file is a scanner fixture. `ci.yml:140` acknowledges jobs "SKIP cleanly while it is gone".
+
+### T-4 · LOW · Tag hygiene is good · positive finding
+Only `:verisim_data`, `:soundness`, `:requires_app`, `:reflexive`, `:contract`, `:tmp_dir`.
+**No `:skip`, no `:pending`.**
+
+---
+
+## 3. Licence debt
+
+### L-1 · CRITICAL · `NOTICE` describes a licence that is not in the repo · UNTRACKED
+`NOTICE` is the wreckage of a global `PMPL-1.0-or-later` → `MPL-2.0` replacement. Verbatim, it
+claims the project is "licensed under the Palimpsest License (MPL-2.0)", that "**The MPL-2.0 is
+a philosophical extension of the Mozilla Public License 2.0**" (self-referential nonsense), that
+"the full **PMPL** text is available in `LICENSES/MPL-2.0.txt`" (that file is the plain Mozilla
+text — verified identical to `LICENSE` bar two whitespace/scheme diffs), and cites obligations
+"per **PMPL Section 6**" of a text absent from the repo.
+
+This is the file a downstream licensee reads to determine their obligations. **Fixed in this
+pass** — see the accompanying commit.
+
+### L-2 · MEDIUM · Three workflows still stamped `PMPL-1.0-or-later` · UNTRACKED
+`governance.yml:1`, `hypatia-scan.yml:1`, `scorecard.yml:1`. The repo ships a fixer for exactly
+this (`scripts/fix-scripts/fix-pmpl-drift.sh`) and has never run it on itself — a dogfooding gap.
+
+### L-3 · MEDIUM · `guix.scm:37` declares `(license #f)` · UNTRACKED
+Every other manifest declares MPL-2.0. The file's own SPDX header (line 1) contradicts its body.
+
+### L-4 · MEDIUM · No REUSE compliance, no `reuse lint` gate · UNTRACKED
+`LICENSES/` exists but there is **no `.reuse/dep5`**, and `reuse` appears nowhere in workflows,
+`Justfile`, or `.pre-commit-config.yaml`. `LICENSES/AGPL-3.0-or-later.txt` is dead weight — no
+file declares AGPL — and `reuse lint` would flag it as an unused licence.
+
+### L-5 · LOW · SPDX coverage is excellent; 3 gaps · UNTRACKED
+Of 358 tracked source files, **355 carry SPDX at line 1, 0 at any other line, 3 missing**:
+`integration/fixtures/test-repo/src/main.rs`, `test/test_helper.exs`, `test_integration.exs`.
+Repo-wide: 720 MPL-2.0, 146 CC-BY-SA-4.0, 3 PMPL. The code/docs split is intentional and
+consistent; 16 `.md`/`.adoc` files lack a header, and `.github/TEST_CI_CODEQL_HYPATIA.md` is a
+lone MPL-2.0 outlier among docs.
+
+### L-6 · resolved · Issue #417 (8 manifests AGPL vs MPL) is **stale-open**
+All eight named manifests now read `license = "MPL-2.0"`, fixed by `4d2a516` (#552). The issue
+should be closed.
+
+**Correction to an earlier claim in this campaign:** GitHub *does* classify the licence —
+`gh repo view --json licenseInfo` returns `key: mpl-2.0`. Only the `spdxId` field is null, which
+is an API quirk, not repo debt.
+
+---
+
+## 4. Code debt
+
+### C-1 · HIGH · `mix compile --warnings-as-errors` fails (21 warnings) and no Elixir lint gate exists · UNTRACKED
+Breakdown: 10 × `@doc` on a private function, 2 × redefined `@doc`, 2 × ungrouped clauses
+(`lib/vcl/client.ex:135`, `lib/fleet_dispatcher.ex:35`), 1 × multiple clauses with defaults
+(`lib/rules/admin_merge_eligibility.ex:279`), 1 × unused variable (`:363`), 1 × unused alias
+(`lib/rules/rules.ex:31`), 1 × unused import, 2 × unused defaults, 1 × `rescue` before `catch`.
+**No workflow runs this.** The largest component has no static gate at all.
+
+### C-2 · MEDIUM · No Credo, no Dialyzer, anywhere · UNTRACKED
+Not "configured but unwired" — absent. `mix.exs` declares 5 runtime deps and no dev/test tooling.
+
+### C-3 · MEDIUM · `cargo clippy` result is genuinely unknown · UNTRACKED / UNVERIFIED
+`cargo clippy --workspace --all-targets` **timed out at 540 s** on a cold cache; CI's clippy has
+never run either (dies at `Set up job`, CI-1). So no human or machine has seen a clippy result
+recently. `cargo fmt --all --check` passes and `Cargo.lock` is in sync.
+**To verify:** re-run with a warm `target/` (~15-20 min).
+
+### C-4 · MEDIUM · Idris ABI sources duplicated byte-for-byte · UNTRACKED
+`src/Hypatia/ABI/*.idr` and `src/abi/*.idr` — all 6 pairs identical. `src/abi/hypatia-abi.ipkg`
+sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** and `src/abi/*.idr` is a dead
+copy nothing builds. Divergence between them is undetectable today.
+
+### C-5 · LOW · One orphaned module · UNTRACKED
+`Hypatia.VCL.ProofResolver` (`lib/vcl/proof_resolver.ex`) is referenced nowhere outside its own
+file. The other 19 initial candidates were false positives (Mix tasks, short aliases).
+
+### C-6 · LOW · TODO/FIXME backlog is effectively zero · positive finding
+Filtering to genuine markers outside the scanner's own rule modules returns **zero**. Every raw
+hit is a rule pattern, a docstring, or a deliberate fixture.
+
+---
+
+## 5. Proof debt
+
+**The proof gate is real, not fake — this is the healthiest area of the repo.**
+`verify-proofs.yml` runs a genuine per-file loop under `set -euo pipefail` with failure counting
+and `exit 1`, real `idris2 --build` of both ipkgs, a real `lake build`, and a real TLC
+model-check. Last three runs on `main`: **success**. No `|| true`, no `continue-on-error`.
+
+### P-1 · MEDIUM · `proof-debt.md` is stale and cites a script that does not exist · UNTRACKED
+Last revised 2026-05-27. It instructs readers to run `scripts/check-trusted-base.sh` and claims a
+`check-trusted-base` CI job enforces marker annotation. **Neither exists** (`find` and `grep`
+across workflows and `Justfile` both return nothing). Its headline count is derived from
+"agent worktrees under `.claude/worktrees/`" — a directory that no longer exists. All 15 markers
+remain filed under §(d) DEBT; §(a)/(b)/(c) are empty. No triage in 2.5 months.
+
+### P-2 · LOW · Actual escape-hatch count is *lower* than documented · positive finding
+Across 22 `.idr` files: `believe_me` 8, and **`assert_total` 0, `postulate` 0, `%hint` 0,
+`assert_smaller` 0**. All 8 `believe_me` hits are non-executing — 4 in comments carrying an
+explicit `-- hypatia: allow` pragma, 4 in a deliberate scanner fixture. The 5 real Lean proofs
+contain no `sorry`. `AFFIRMATION.adoc`'s "zero escape hatches" claim should be scoped to
+"outside `test/soundness/fixtures/`" to be exactly true.
+
+### P-3 · MEDIUM · Zig FFI correctness claims are entirely ungated · UNTRACKED
+`ffi/zig/` holds 20+ files including 16 protocol connectors and `hexadeca.zig`. There is **no
+`zig build` and no `zig build test` in any workflow** — only incidental `--include='*.zig'` grep
+filters. `Justfile:94` has `zig build`, never invoked by CI. The "18 exported C functions" claim
+is unverified by any gate.
+
+---
+
+## 6. Security debt
+
+### S-1 · MEDIUM · 45-entry baseline with no justification schema · TRACKED in part (#566)
+`.hypatia-baseline.json` holds **45 accepted findings — 36 low, 8 medium, 1 high**, dominated by
+`code_safety/expect_in_hot_path`. The schema carries only `severity`, `rule_module`, `type`,
+`file` — **no `reason`, no `expires`, no owner** — so no entry can be justified or aged out.
+Estate doctrine is fix > inline directive > `.hypatia-ignore` > baseline; a 45-entry baseline
+with no rationale field inverts that. #566 tracks the *gate* being inert, not the payload.
+
+### S-2 · MEDIUM · 11 open code-scanning alerts · TRACKED (#470, #369)
+high 2, medium 2, low 1, warning 1, note 5. Both **high** are Scorecard `TokenPermissionsID` on
+`hypatia-scan.yml` and `dependabot-automerge.yml`.
+
+### S-3 · LOW · `.hypatia-ignore` is small and specific · positive finding
+10 rule/path-scoped lines. Proportionate.
+
+### S-4 · zero open Dependabot alerts · positive finding
+
+---
+
+## 7. Documentation debt
+
+Detailed findings live in the accompanying doc-currency pass; the shape of it:
+
+### D-1 · CRITICAL · Load-bearing docs assert counts that are wrong by 3-16× · fixed in this pass
+`.claude/CLAUDE.md` — the file every agent reads first — claimed 8 core modules (133), 5 neural
+networks (8), 8 GenServers (24), 7 Zig exports (18), and cited `lib/verisimdb_connector.ex`
+(does not exist; it is `lib/verisim_connector.ex`). Six different repo counts (283/292/298/300/302/407)
+circulate across five documents, none with a producer.
+
+### D-2 · HIGH · Retired technology still documented as current · partly fixed in this pass
+41 surviving Logtalk/SWI-Prolog references in human docs for an engine purged 2026-04-14 —
+including an install runbook that says `# Install SWI-Prolog and Logtalk`. Also: a 135-line
+README section on a Haskell registry that **does not exist**, Julia neural networks (**zero
+`.jl` files**), and ArangoDB/Dragonfly architecture 37 lines after the README says ArangoDB was
+ditched. trufflehog is still *executing* in `security-policy.yml` despite #675 retiring it.
+
+### D-3 · HIGH · No rule catalogue exists · UNTRACKED
+33 rule modules emit families `PA/SC/WF/WH/BH/BP/RE/SD/SSA/CSA/AM/ERR/PO` and **no document
+anywhere lists them**. `cli.ex --rules` names only 12 of 33. This is the single largest missing
+document. It should be *generated* from `lib/rules/` so it cannot drift.
+
+### D-4 · MEDIUM · Boilerplate files contradict the real project · fixed in this pass
+`ARCHITECTURE.md` described a `src/ tests/ scripts/` tree Hypatia does not have;
+`GOVERNANCE.md` mandated "2 maintainer approvals" for a single-maintainer project;
+`MAINTAINERS` named a *different person* than `MAINTAINERS.adoc`. All three arrived together in
+an unrelated boilerplate drop (`e596587`).
+
+### D-5 · MEDIUM · Dead links and broken commands · partly fixed in this pass
+17 unresolvable `link:`/markdown targets; `Justfile:351,358` grep a root `READINESS.md` that
+does not exist (so `just crg-grade` always yields `"X"`); `docs/api/cli-reference.adoc` documents
+six commands (`fleet`, `hooks`, `deposit`, `withdraw`, `search`, `config`) that the CLI rejects.
+
+---
+
+## 8. Machine-readable / metadata debt
+
+### M-1 · HIGH · The descriptiles set is in the wrong directory per Hypatia's own oracle · UNTRACKED
+RSR v2.0 criteria 3.1.1-3.1.9 require `.machine_readable/descriptiles/`; the files live in
+`.machine_readable/6a2/`. Hypatia's own scorer reports this as 10 failures:
+
+```
+$ mix hypatia.rsr_score . --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
+tier=none score=65.76% coverage=74%
+failing: 1.2.4, 3.1.1-3.1.8, 3.2.1, 3.2.2, 5.1.1
+```
+
+The test suite already asserts this as a known deviation
+(`test/rules/rsr_conformance_test.exs:290`).
+
+### M-2 · HIGH · `MUST.contractile` declares invariants that would revert landed architecture · fixed in this pass
+It required "5 neural networks … must not be reduced" (there are 8) and — most seriously —
+"**Logtalk rule engine … must be preserved**", directly contradicting ADR-001 which purged it and
+`AGENTIC.a2ml` which *forbids* it. Its `k9-validator` enforcement path
+(`contractiles/self-validating/must-check.k9.ncl`) **does not exist**, which is why the drift went
+undetected. Only 4 of ~14 declared invariants have contract tests.
+
+### M-3 · HIGH · `mix hypatia.rsr_score` cannot find its own SSOT by default · UNTRACKED
+`lib/mix/tasks/hypatia.rsr_score.ex:65-67` resolves the default SSOT via `:code.priv_dir/1`,
+landing inside `_build` rather than the source tree, so the bare command fails with `:enoent`.
+The task's own docstring calls this "the CLI the template dogfood gate and estate corpus run
+both call".
+
+### M-4 · MEDIUM · `0-AI-MANIFEST.a2ml` is 136 days stale and unparseable by the in-repo reader · fixed in this pass
+It is the file agents are instructed to read *first*. Claimed `VQL` (renamed VCL 2026-04-05),
+`verisimdb-data` (renamed verisim-data), `Logtalk rules` (purged), `5 neural networks` (8), and
+`lib/vql/` (does not exist).
+
+### M-5 · MEDIUM · Six `6a2` files stale by 74-136 days, with internal contradictions · fixed in this pass
+`STATE.a2ml` listed M13/M14/M15 under `[critical-next-actions]` while marking the same
+milestones `"done"` 30 lines earlier. `NEUROSYM.a2ml` said rebalancer strategies B/C were
+`in_progress` while `STATE.a2ml` said M9 was `done`. `META.a2ml`/`ECOSYSTEM.a2ml` declared
+`media-type` as Scheme when the files are record dialect. `NEUROSYM.a2ml:18` hardcoded a
+user-specific home path in violation of `MUST.contractile`.
+
+### M-6 · MEDIUM · Wiki has never been published from its declared source · fixed in this pass
+`docs/wiki-pages/README.md` declares itself "the canonical source for every page in the public
+GitHub wiki" and says drift "should be treated as a bug". The live wiki has **two commits, the
+most recent 2026-03-24**, and is 3-10× smaller per page than the source. It publicly documents
+`VQL`, `verisimdb-data`, `5 networks`, `lib/vql/file_executor.ex` and `data/verisimdb/` — none
+of which exist — and two of its outbound links are 404.
+
+### M-7 · LOW · Missing standard metadata · UNTRACKED
+No `CITATION.cff` and no `codemeta.json`, despite a 71 KB academic paper
+(`arcvix-neurosymbolic-ci-intelligence.tex`) living in the repo. Also: a case-duplicate
+`.github/funding.yml` alongside `FUNDING.yml` (only the latter is honoured), and four dead
+`schemas/arangodb-*` files for a database that was ditched.
+
+---
+
+## 9. Dependency / build debt
+
+### B-1 · MEDIUM · `mise.toml` mandates a Python/JS toolchain in a Python-banned estate · UNTRACKED
+Declares `python`, `pip`, `black`, `isort`, `ruff`, `pytest`, `jest`, `vitest`, sets
+`PYTHONDONTWRITEBYTECODE`/`PYTHONUNBUFFERED`, and aliases `lint = "ruff check . || prettier … || black …"`.
+This is the **last surviving Python surface** after #687 deleted `resolve.py` — and unlike a stray
+file, it is the *policy* layer. `mise` itself warns most of these are unresolvable. PR #686
+(banned-language migration backlog) may be the right home.
+
+### B-2 · positive · Dependencies current, lockfiles in sync
+`mix hex.outdated` → all 5 up-to-date. `cargo metadata --locked` → in sync.
+`git ls-files '*.py'` → 0; `.ts`/`.tsx`/`.res` → 0 each.
+
+---
+
+## Top 10 by leverage
+
+| # | Item | Sev | Why | Tracked |
+|---|---|---|---|---|
+| 1 | **CI-1** stale `dtolnay/rust-toolchain` lockfile pin | CRITICAL | One line unblocks 4 workflows, 13 jobs, 4 Dependabot PRs. Real fix is structural: never SHA-pin a moving ref | NO |
+| 2 | **T-1** 242 dark tests, 129 failing, documented as passing | CRITICAL | 16.9% of the suite is fiction; corrupts every downstream quality claim | NO |
+| 3 | **L-1** `NOTICE` describes a licence not in the repo | CRITICAL | Only item with external legal exposure | fixed here |
+| 4 | **CI-2** Scorecard caller missing `actions: read` | HIGH | One line revives a workflow producing 0 jobs; #685 would mask not fix | NO |
+| 5 | **CI-5/CI-6** fake gates that go green when CI-1 is fixed | HIGH | Fix together with CI-1 or the debt hides itself | NO |
+| 6 | **C-1** 21 warnings, no Elixir lint gate | HIGH | Largest component has zero static gating | NO |
+| 7 | **CI-3** two security workflows silently inert | HIGH | Needs the Actions UI banner — API does not expose it | NO |
+| 8 | **D-3** no rule catalogue for 33 modules | HIGH | Largest missing document; should be generated to prevent drift | NO |
+| 9 | **P-3 + C-4** Zig untested, Idris ABI duplicated | MEDIUM | Two languages carry ungated correctness claims | NO |
+| 10 | **M-1/M-3** descriptiles location + `rsr_score` SSOT bug | MEDIUM | Hypatia fails its own oracle and its dogfood CLI can't self-invoke | NO |
+
+**Eight of the top ten are untracked.** The two highest-value single actions are CI-1 (unblocks
+everything else) and T-1 (the repo's quality signal is currently scoped to 83% of its own suite).
+
+---
+
+## Cross-cutting observation
+
+Hypatia has a source of truth for its documentation, a validator for its metadata, and a
+conformance oracle for itself — and **none of the three is wired into CI**.
+`MUST.contractile` points at a validator that does not exist; `docs/wiki-pages/` points at a wiki
+nobody publishes to; `mix hypatia.rsr_score` cannot find its own SSOT. The drift in the metadata
+and the drift in the wiki are the same bug: declared enforcement that was never connected. For a
+project whose thesis is automated governance, closing those enforcement gaps is worth more than
+any individual content fix listed above.

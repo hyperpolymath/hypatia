@@ -65,12 +65,18 @@ defmodule Hypatia.Watcher.AnomalyDetectorTest do
 
   describe "evaluate (clear regression)" do
     test "emits hypatia.anomaly.detected when recent rate drops 100% → 0%" do
+      # Capture the test pid OUTSIDE the handler closure: self() inside the
+      # function body evaluates when the handler runs — in the *emitting*
+      # process (the detector) — so send(self(), ...) posted to the detector's
+      # own mailbox and this test's assert_receive always timed out.
+      test_pid = self()
+
       :ok =
         :telemetry.attach(
           "anomaly-test-handler",
           [:hypatia, :anomaly, :detected],
           fn _event, measurements, metadata, _config ->
-            send(self(), {:caught, measurements, metadata})
+            send(test_pid, {:caught, measurements, metadata})
           end,
           nil
         )
@@ -101,9 +107,6 @@ defmodule Hypatia.Watcher.AnomalyDetectorTest do
 
       :ok = AnomalyDetector.tick_now()
 
-      # Handler runs in the *emitting* process (the detector). It sends
-      # to whatever pid is captured at attach time -- which was the
-      # test process. So we receive in this test's mailbox.
       assert_receive {:caught, measurements, metadata}, 1000
 
       assert measurements.recent_rate < 0.5

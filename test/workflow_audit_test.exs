@@ -6,8 +6,11 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
   describe "check_missing_workflows/1" do
     test "flags all missing when empty" do
+      # Derived, not hardcoded (#645): the frozen literal (17) went stale when
+      # the governance.yml consolidation retired 11 workflows from the list.
       findings = WorkflowAudit.check_missing_workflows([])
-      assert length(findings) == 17
+      assert length(findings) == length(WorkflowAudit.standard_workflows())
+      assert length(findings) > 0
     end
 
     test "no findings when all present" do
@@ -21,6 +24,79 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert length(findings) == 1
       assert hd(findings).file == "hypatia-scan.yml"
       assert hd(findings).severity == :critical
+    end
+  end
+
+  describe "check_d_burn_double_trigger/1" do
+    test "flags flow-form on: [push, pull_request]" do
+      content = """
+      name: CI
+      on: [push, pull_request]
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+
+      findings = WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content})
+
+      assert [%{rule: "ERR-WF-014", type: :d_burn_double_trigger, file: "ci.yml"}] =
+               findings
+
+      assert hd(findings).severity == :medium
+    end
+
+    test "flags flow form in the other order with extra members" do
+      content = """
+      on: [ pull_request, workflow_dispatch, push ]
+      """
+
+      assert [_] = WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content})
+    end
+
+    test "flags block form with a bare push: next to pull_request:" do
+      content = """
+      name: CI
+      on:
+        push:
+        pull_request:
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+
+      assert [%{rule: "ERR-WF-014"}] =
+               WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content})
+    end
+
+    test "does not flag a branch-scoped push (the remediated shape)" do
+      content = """
+      name: CI
+      on:
+        push:
+          branches: [main, master]
+        pull_request:
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+      """
+
+      assert WorkflowAudit.check_d_burn_double_trigger(%{"ci.yml" => content}) == []
+    end
+
+    test "does not flag pull_request-only or push-only workflows" do
+      pr_only = """
+      on:
+        pull_request:
+      """
+
+      push_only = """
+      on: [push]
+      """
+
+      assert WorkflowAudit.check_d_burn_double_trigger(%{
+               "a.yml" => pr_only,
+               "b.yml" => push_only
+             }) == []
     end
   end
 
@@ -231,11 +307,14 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
   describe "audit/2" do
     test "returns comprehensive report" do
-      report = WorkflowAudit.audit(["hypatia-scan.yml", "codeql.yml"], %{})
+      present = ["hypatia-scan.yml", "codeql.yml"]
+      standard_count = length(WorkflowAudit.standard_workflows())
+
+      report = WorkflowAudit.audit(present, %{})
       assert is_map(report)
       assert report.workflow_count == 2
-      assert report.missing_count == 15
-      assert report.standard_coverage == round(2 / 17 * 100)
+      assert report.missing_count == standard_count - length(present)
+      assert report.standard_coverage == round(2 / standard_count * 100)
     end
   end
 
@@ -784,5 +863,4 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert f.type == :unpinned_action
     end
   end
-
 end

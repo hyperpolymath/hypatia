@@ -2,26 +2,39 @@
 
 ## Project Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and Elixir rules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot) via a safety triangle pipeline, with 8 neural networks on a shared blackboard for intelligent dispatch, verisim-data (git-backed canonical flat-file store) with VCL queries, Bayesian confidence updating, and 33 Elixir rule modules for pattern detection.
+
+> **Counts in this file are load-bearing — agents act on them.** They were re-measured
+> against the tree on 2026-08-07. If you change the shape of the system, re-measure
+> (`ls lib/**/*.ex | wc -l`, `grep -c "export fn" ffi/zig/src/main.zig`, the child list in
+> `lib/application.ex`) rather than editing a number by eye. Known-stale claims and the
+> full audit live in `docs/DEBT-REGISTER.md`.
 
 ## Architecture
 
 ```
-Hypatia
-├── Elixir pipeline          # 8 core modules (pattern analysis, dispatch, learning)
-├── Neural subsystem          # 5 networks + coordinator GenServer
+Hypatia                       # 133 Elixir modules total
+├── Elixir pipeline          # core: pattern analysis, dispatch, learning
+├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
+├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
+├── Mix tasks                 # 15 `mix hypatia.*` tasks (rsr_score, watch, triage_issues, …)
+├── Web tier                  # 9 modules — dashboard, SSE, Prometheus /metrics, GraphQL, SARIF
+├── Neural subsystem          # 8 networks on a blackboard + coordinator GenServer
 │   ├── Graph of Trust        # PageRank trust over repos/bots/recipes
 │   ├── Mixture of Experts    # Domain-specific confidence (7 expert domains)
 │   ├── Liquid State Machine  # Temporal anomaly detection
 │   ├── Echo State Network    # Confidence trajectory forecasting
-│   └── Radial Neural Network # Finding similarity + novelty detection
-├── VCL query layer            # Built-in parser, file executor, query cache
+│   ├── Radial Neural Network # Finding similarity + novelty detection
+│   ├── Graph Neural Network  # Structural learning over the repo graph
+│   ├── Variational Autoenc.  # Latent finding representations
+│   └── Sequence Model        # Sequential dispatch modelling
+├── VCL query layer            # 7 modules: parser, file executor, cache, federation, cross-org
 ├── Data layer                 # verisim-data (canonical flat-file store)
-├── Safety systems             # Rate limiter, quarantine, batch rollback
-├── OTP Application           # 8 GenServers: VCL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin
-├── Elixir rules engine       # Error catalog, pattern detection rules (lib/rules/)
+├── Safety systems             # Rate limiter, quarantine, batch rollback (see Known Gaps — inert)
+├── OTP Application           # 24 supervised children (+2 conditional) — see lib/application.ex
+├── Elixir rules engine       # 33 rule modules (lib/rules/) — error catalog, pattern detection
 ├── Idris2 ABI               # Types, GraphQL, gRPC, REST with dependent type proofs
-├── Zig FFI                   # C ABI bridge (7 exported functions)
+├── Zig FFI                   # C ABI bridge (18 exported functions) + 16 protocol connectors
 ├── Rust workspace            # adapters, cli, data, fixer, integration
 ├── Safety triangle           # Eliminate > Substitute > Control
 ├── Fleet dispatcher          # File-based + HTTP dispatch with circuit breaker
@@ -30,13 +43,29 @@ Hypatia
 
 ## Key Commands
 
+`just` is the primary entry point (39 recipes; `CONTRIBUTING.md` treats it as canonical):
+
+```bash
+just --list           # every recipe
+just doctor           # toolchain preflight
+just build-all        # Elixir + Rust + Zig FFI + Idris2 ABI
+just test-elixir      # the Elixir suite
+just fmt-check        # formatting gate
+```
+
+Underlying commands:
+
 ```bash
 mix deps.get    # Install Elixir deps
-mix test        # Run tests
+mix test        # Run tests — seed is PINNED to 0 in test/test_helper.exs (#643),
+                # so runs are deterministic. Probe order-dependence with --seed N.
 mix format      # Format Elixir code
 cargo build     # Build Rust workspace
 cargo test      # Test Rust workspace
 ```
+
+`mix test` excludes 242 `:verisim_data` tests. They are **not** run in CI and do **not** pass —
+see Known Gaps 3 before quoting a green suite.
 
 ## Machine-Readable Artefacts
 
@@ -56,12 +85,12 @@ Files in `.machine_readable/` contain structured project metadata:
 ```
 panic-attack assail (scan repos)
         | JSON results
-verisim-data repo (git-backed flat-file store, 292 repos scanned)
+verisim-data repo (git-backed flat-file store)
         | read scan results
 Elixir pipeline:
-  VerisimdbConnector.fetch_all_scans()
+  VerisimConnector.fetch_all_scans()
         |
-  PatternRegistry.sync_from_scans()     -- 954 canonical patterns
+  PatternRegistry.sync_from_scans()     -- dedupes findings into canonical patterns
         |
   TriangleRouter.route()                -- Eliminate > Substitute > Control
         |
@@ -82,7 +111,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | Module | Purpose |
 |--------|---------|
 | `pattern_analyzer.ex` | Full pipeline orchestrator: scan -> patterns -> triangle -> dispatch |
-| `verisimdb_connector.ex` | VCL-powered data access with file I/O fallback |
+| `verisim_connector.ex` | VCL-powered data access with file I/O fallback (renamed per ADR-002; the old `verisimdb_connector.ex` name is gone) |
 | `pattern_registry.ex` | Deduplicates findings into canonical patterns (PA001-PA020) |
 | `recipe_matcher.ex` | Fuzzy matching: fingerprinted IDs to clean recipe IDs |
 | `triangle_router.ex` | Routes through Eliminate > Substitute > Control hierarchy |
@@ -102,6 +131,10 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `client.ex` | VCL Client GenServer: parser + query cache + execution routing |
 | `file_executor.ex` | Executes VCL ASTs against verisim-data flat files |
 | `query.ex` | High-level query functions: fetch_scans, cross_repo_patterns, pipeline_health |
+| `remote_executor.ex` | Federation executor — `FROM FEDERATION REMOTE IN [...]` |
+| `remote_cache.ex` | Caches federated query results |
+| `cross_org.ex` | Cross-organisation federation with drift policies |
+| `proof_resolver.ex` | Proof-obligation resolution (currently unreferenced — see DEBT-REGISTER C-5) |
 
 ### Neural Network Modules (lib/neural/)
 
@@ -112,7 +145,14 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `liquid_state_machine.ex` | Reservoir | Temporal anomaly detection in event streams |
 | `echo_state_network.ex` | Reservoir | Confidence trajectory forecasting + drift detection |
 | `radial_neural_network.ex` | RBF | Finding similarity, novelty detection, classification |
-| `coordinator.ex` | GenServer | Orchestrates all 5 networks, aggregates predictions |
+| `graph_neural_network.ex` | GNN | Structural learning over the repo/finding graph |
+| `variational_autoencoder.ex` | VAE | Latent representations of findings |
+| `sequence_model.ex` | Sequence | Sequential dispatch modelling |
+| `blackboard.ex` | ETS | Shared board all 8 networks read/write, six phases |
+| `coordinator.ex` | GenServer | Orchestrates all 8 networks over the blackboard |
+| `persistence.ex` | — | Warm-restart state for all 8 networks |
+| `rebalancer.ex` | — | Training-data rebalancing, strategies A/B/C |
+| `prover_recommender.ex` | — | Recommends a prover for a proof obligation |
 
 ### Neural Training (lib/neural/)
 
@@ -122,7 +162,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 
 Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and patterns/registry.json for RBF (8-D feature vectors). Coordinator's `:force_cycle` triggers training automatically.
 
-### Idris2 ABI (src/abi/)
+### Idris2 ABI (src/Hypatia/ABI/)
 
 | File | Purpose |
 |------|---------|
@@ -131,13 +171,24 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `GRPC.idr` | gRPC service definitions (scanner, dispatch, stream, health) |
 | `REST.idr` | REST endpoint definitions (18 endpoints, 6 groups) |
 | `FFI.idr` | GADT constructors for all C ABI functions + ffiReturnsApiResponse proof |
+| `RuleEngine.idr` | Rule-evaluation types |
 
-**Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager)
+**Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
+The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles**. A byte-identical
+copy of all six modules also sits in `src/abi/*.idr` and is built by nothing — divergence between
+them is undetectable. See DEBT-REGISTER C-4.
 
 ### Zig FFI (ffi/zig/src/)
 
 | Function | Purpose |
 |----------|---------|
+| `hypatia_init` / `hypatia_free` | Lifecycle: allocate and release the handle |
+| `hypatia_is_initialized` | Handle-state predicate |
+| `hypatia_process` / `hypatia_process_array` | Core processing entry points |
+| `hypatia_get_string` / `hypatia_free_string` | String marshalling across the ABI |
+| `hypatia_last_error` | Last error for the calling thread |
+| `hypatia_version` / `hypatia_build_info` | Version and build provenance |
+| `hypatia_register_callback` | Host callback registration |
 | `hypatia_health_check` | Health status of all components |
 | `hypatia_scan_repo` | Trigger scan for repository |
 | `hypatia_dispatch` | Dispatch finding to fleet |
@@ -145,6 +196,10 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `hypatia_force_learning_cycle` | Force learning cycle |
 | `hypatia_get_confidence` | Get recipe confidence |
 | `hypatia_dispatch_strategy` | Map confidence to dispatch strategy |
+
+18 exports in `ffi/zig/src/main.zig`, plus 16 protocol connectors under
+`ffi/zig/src/connectors/`. **No CI job builds or tests any of it** — `just build-ffi` exists but
+is never invoked by a workflow (DEBT-REGISTER P-3).
 
 ### Data Layer
 
@@ -158,18 +213,31 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 | `quarantine.ex` | Auto-quarantine on 5+ failures or >30% FP rate; 3 levels (soft/hard/permanent) |
 | `batch_rollback.ex` | Rollback entire dispatch batches with confidence revert |
 
-### Metrics (as of 2026-04-22)
+### Metrics — generate them, do not quote them
 
-- 302 repos scanned, 3385 weak points across ecosystem
-- 1635 dispatched actions (600 auto-execute, 667 review, 368 report)
-- 16671 outcomes recorded (99% success rate, Bayesian confidence updating)
-- 46 recipes (0 uncovered categories), 20 OpenSSF Scorecard recipes, 5 RSR compliance rules
-- 5 neural networks + coordinator in OTP supervision
-- Bayesian Beta-distribution confidence (prior_strength=10, floor=0.10, cap=0.99)
-- Re-scan verification via panic-attacker (confirms fix removed weak point)
-- PanLL data bridge: generates real-time JSON for dashboard panels
-- 3 safety systems: rate limiter, quarantine, batch rollback
-- VCL integrated: built-in parser, file executor, query cache, cross-repo analytics
+There used to be a block of hard numbers here ("302 repos scanned, 3385 weak points, 16671
+outcomes…"). It had **no producer**, so it was copied into five documents and drifted into
+*six mutually inconsistent repo counts* (283 / 292 / 298 / 300 / 302 / 407). It has been removed
+rather than re-dated.
+
+If you need a current figure, run the thing that computes it:
+
+```bash
+mix hypatia.recipe_health              # per-recipe verification rates, quarantine candidates
+mix hypatia.rsr_score . --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml   # RSR conformance
+mix hypatia.strategy_effectiveness     # rebalancer strategy comparison
+mix hypatia.watch                      # live counters; also /metrics (Prometheus) and /api/status
+```
+
+Note the `--ssot` flag is currently **required** — the default path resolution is broken
+(DEBT-REGISTER M-3).
+
+Design constants that are genuinely stable (these are code, not measurements):
+
+- Bayesian Beta-distribution confidence: `prior_strength=10`, `floor=0.10`, `cap=0.99`
+- Dispatch tiers: `>=0.95` auto_execute, `0.85-0.94` review, `<0.85` report_only
+- Rate limits: per-bot 50/min, global 200/min, burst 10/5s
+- Quarantine: 5 consecutive failures, or >30% FP rate over >=5 outcomes
 
 ### Remaining Work (M7+: Production Operations)
 
@@ -187,23 +255,43 @@ verisim-data (git-backed flat files) is the canonical data store. VCL queries ex
 - ~~Live watcher / supervision interface~~ (DONE 2026-05-24, PR #309: 10 commits across 3 phases — telemetry → Watcher GenServer → HTTP API + SSE + HTML dashboard + Prometheus + alerts + 5-min persistence + statistical anomaly detection)
 - ~~Closed-loop quality~~ (DONE 2026-05-24, PR #309: soundness gates (in-process + escript-packaging) + closed-loop verification metric + auto-quarantine in FleetDispatcher)
 
-**Planned (M13-M15):**
-- M13: SARIF output for IDE integration
-- M14: GraphQL API as live HTTP endpoint
-- M15: Bearer-token auth on `/api/*` + persistent Watcher state across restart + cross-host alert federation + ESN tight integration
+**Still planned:**
 - Nx/EXLA backend for the neural layer if/when reservoir sizes outgrow pure Elixir
-- Cross-organization federation with VCL drift policies
-- Neural rebalancer Strategy B (adversarial perturbation) + C (real failure corpus from panic-attack history) (M9 in progress)
-- Ada TUI Elixir supervision wiring (M10 in progress)
+
+*(M13 SARIF, M14 GraphQL endpoint, M15 bearer auth + persistent watcher + alert federation,
+M9 rebalancer strategies B/C, and M10 Ada TUI wiring all shipped — `lib/hypatia/sarif.ex`,
+`lib/hypatia/web/graphql.ex`, `lib/neural/persistence.ex`, `lib/tui/port.ex`. They were listed
+here as "planned" for months after landing.)*
 
 ### Known Gaps
 
-1. **verisim-api not deployed:** VeriSimDB Rust core not running — graph/vector/temporal modalities via flat files only
-2. **Fix script coverage:** 310/600 auto-execute entries have null fix_script — recipes exist but no executable script
-3. **Containerfiles:** Haskell still uses non-Chainguard base images (no Chainguard equivalents)
-4. **Ada TUI not integrated:** Compiles but not wired into Elixir supervision tree
-5. **Neural state persistence:** State dir exists but coordinator hasn't persisted to disk yet
-6. **Neural training data balance:** ~99% success in the historical outcome log. Mitigated 2026-04-22 by `lib/neural/rebalancer.ex` (synthetic regressions + rule-based RBF targets, on by default); the synthetic path is Strategy A. Strategies B (adversarial perturbation) and C (real failure corpus from panic-attack history) remain unstarted.
+Re-verified 2026-08-07. Items 4-6 of the old list (Ada TUI unwired, neural state not persisted,
+fix-script coverage) were **already resolved** and have been removed; they were misleading agents
+into redoing finished work.
+
+1. **verisim-api not deployed** — VeriSimDB Rust core not running; graph/vector/temporal
+   modalities go through flat files only.
+2. **The safety systems are inert.** `rate_limiter.ex`, `quarantine.ex` and `batch_rollback.ex`
+   are fully-built GenServers that **no dispatch path actually calls**. Treat the "3 safety
+   systems" line in any older doc as describing capability, not enforcement. This is the most
+   dangerous stale claim the docs used to make.
+3. **242 tests are dark and red.** The `:verisim_data` tag is excluded unconditionally in
+   `test/test_helper.exs`, never included by any workflow, and `mix test --only verisim_data`
+   yields **129 failures**. "The suite passes" is therefore scoped to 83% of it.
+   (DEBT-REGISTER T-1.)
+4. **Rust CI is entirely blocked** by a stale `dtolnay/rust-toolchain@stable` pin in
+   `.github/workflows/actions.lock` — 13 jobs die at `Set up job`. (DEBT-REGISTER CI-1.)
+5. **ESN training-data schema drift** — the echo-state forecaster has been learning from a
+   shape it no longer receives.
+6. **Silent scanner false-negatives** — wildcard recipes dropped, directory-mode dead patterns.
+7. **Neural training-data balance** — ~99% success in the historical outcome log.
+   `lib/neural/rebalancer.ex` mitigates via synthetic regressions (Strategy A); B and C now exist
+   but their effectiveness is unmeasured outside `mix hypatia.strategy_effectiveness`.
+8. **Containerfiles** — Haskell still uses non-Chainguard base images (no equivalents exist).
+9. **Zig FFI is ungated** — 18 exports and 16 connectors, no `zig build` in any workflow.
+
+The full evidence-backed audit, including CI/CD, licence, proof and metadata debt, is
+`docs/DEBT-REGISTER.md`. Read it before trusting any count in an older document.
 
 ## Code Style
 
@@ -237,6 +325,29 @@ Default exemptions in `lib/hypatia/scanner_suppression.ex` cover:
 `scripts/fix-scripts/`, the rule definition files themselves. **If your
 new file belongs to one of those categories but lives elsewhere, add it
 to that list** rather than baselining the resulting findings.
+
+### When you edit a `path_allow_prefixes` list
+
+These lists (on `@blocked_patterns` in `lib/rules/cicd_rules.ex`) are the **single source of
+truth** for banned-language carve-outs across the estate; sibling repos' CLAUDE.md tables
+mirror them. Two traps, both proven in production:
+
+* **Never give an entry a leading slash unless you mean it.** Matching is
+  `String.contains?/2` against paths that arrive *repo-root-relative*
+  (`echidna/examples/x.v`), so `"/echidna/examples/"` can never match — it silently
+  disables the exemption. Four vlang Coq/Verilog carve-outs were dead this way for months.
+* **Do not hand-copy the list into a second module.** A duplicated table in
+  `scanner_suppression.ex` drifted to 3 of ~12 carve-outs and flagged an exempt file
+  Critical (standards#382). It has been deleted; delegate to
+  `blocked_pattern_allow_match?/1` instead.
+
+### Rust comment stripping (changed 2026-08-07)
+
+`lib/rules/code_safety.ex` now strips whole-line `//` comments and whole-line `/* */` blocks
+for Rust before scanning, so `// TODO: replace this .unwrap() with ?` no longer produces a
+HIGH finding. Stripping is deliberately **line-anchored** — mid-line `//` inside string
+literals (`"https://…"`) is preserved, because stripping it would corrupt code. If you add a
+language, follow the same conservative shape (`strip_*_line_comments/1` in that module).
 
 ### When you write a workflow
 

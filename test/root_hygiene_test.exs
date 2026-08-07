@@ -98,10 +98,12 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert findings == []
     end
 
-    test "flags missing SECURITY.md" do
+    test "does not flag SECURITY.md — owned by CicdRules.check_repo_requirements/1" do
+      # SECURITY.md is a community-health file GitHub recognises in root,
+      # .github/, or docs/; requiring it here double-reported and
+      # false-positived on .github/SECURITY.md (#645 item 3).
       findings = RootHygiene.scan_required_missing(["LICENSE"])
-      security = Enum.find(findings, &(&1.file == "SECURITY.md"))
-      assert security != nil
+      refute Enum.any?(findings, &(&1.file == "SECURITY.md"))
     end
   end
 

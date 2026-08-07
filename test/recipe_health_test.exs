@@ -14,12 +14,26 @@ defmodule Hypatia.RecipeHealthTest do
   @test_recipe_prefix "test-recipe-health-"
 
   setup do
-    # Each test gets a unique recipe_id so its outcomes are isolated in
-    # the shared outcomes log. We don't clean up — the verification_rate
-    # aggregator filters by recipe_id so leftover records from a previous
-    # run only affect their own recipe_id.
-    recipe_id = @test_recipe_prefix <> Integer.to_string(System.unique_integer([:positive]))
-    {:ok, recipe_id: recipe_id}
+    # Each test gets a recipe_id unique ACROSS RUNS, not merely within one.
+    #
+    # `System.unique_integer/1` is unique only within a single BEAM instance:
+    # it restarts from a low base every `mix test`, and it allocates in
+    # stride-32 blocks whose offset moves with whatever ran before this file.
+    # The outcomes log is append-only and never truncated, so a later run
+    # could redraw an id an earlier run had already written records under —
+    # `verification_rate/2` then aggregates BOTH runs' records and the counts
+    # are wrong. That, not test ordering, is why this file flaked in-suite
+    # while passing alone, and why pinning the seed did not stabilise it
+    # (measured 2026-08-07: 194 stale `test-recipe-health-*` ids in the store,
+    # e.g. 10 stale successes + 6 new asserted as 6, observed as 16).
+    #
+    # The monotonic clock component cannot recur after a VM restart, which
+    # removes the collision by construction. `test_helper.exs` also wipes the
+    # throwaway store at suite start; either alone leaves a window.
+    unique =
+      "#{System.system_time(:nanosecond)}-#{System.unique_integer([:positive])}"
+
+    {:ok, recipe_id: @test_recipe_prefix <> unique}
   end
 
   describe "verification_rate/2" do

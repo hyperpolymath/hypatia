@@ -16,11 +16,12 @@
     (author "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"))
 
   (purpose
-    "Neurosymbolic CI/CD intelligence layer. Coordinates gitbot-fleet
-     (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot)
-     via safety triangle pipeline (Eliminate > Substitute > Control).
-     5 neural networks, VQL queries over verisimdb-data, Bayesian confidence,
-     Logtalk rules for pattern detection. Scans 300+ repos.")
+    "Neurosymbolic CI/CD governance scanner for the hyperpolymath estate.
+     Coordinates gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot,
+     seambot, finishbot, panicbot) via the safety triangle pipeline
+     (Eliminate > Substitute > Control). 8 neural networks on a shared
+     blackboard, VCL queries over verisim-data, Bayesian confidence updating,
+     and 33 Elixir rule modules for pattern detection.")
 
   ;; ===================================================================
   ;; CONTEXT TIERS
@@ -60,14 +61,17 @@
   (architecture
     (description "Safety triangle pipeline with neural dispatch")
     (layers
-      (elixir-pipeline "lib/"       "8 core modules — pattern analysis, dispatch, learning")
-      (neural          "lib/neural/" "5 networks + coordinator GenServer")
-      (vql             "lib/vql/"    "Built-in VQL parser, file executor, query cache")
-      (idris2-abi      "src/abi/"    "Types, GraphQL, gRPC, REST with proofs")
-      (zig-ffi         "ffi/zig/"    "7 exported C ABI functions")
+      (elixir-pipeline "lib/"                "133 modules — pattern analysis, dispatch, learning")
+      (rules           "lib/rules/"          "33 rule modules; catalogue at docs/rules/catalogue.md")
+      (neural          "lib/neural/"         "8 networks on a blackboard + coordinator GenServer")
+      (vcl             "lib/vcl/"            "VCL parser, file executor, query cache, federation")
+      (merge-orch      "lib/merge_orchestration/" "12 modules — leases, ledger, ticker")
+      (web             "lib/hypatia/web/"    "dashboard, SSE, Prometheus /metrics, GraphQL, SARIF")
+      (idris2-abi      "src/Hypatia/ABI/"    "Types, GraphQL, gRPC, REST, FFI, RuleEngine with proofs")
+      (zig-ffi         "ffi/zig/"            "18 exported C ABI functions + 16 protocol connectors")
       (rust            "Cargo.toml"  "Root workspace: adapters, cli, data, fixer, integration"))
     (data-flow
-      "panic-attack scan -> verisimdb-data -> Elixir pipeline -> triangle route -> fleet dispatch"))
+      "panic-attack scan -> verisim-data -> Elixir pipeline -> triangle route -> fleet dispatch"))
 
   ;; ===================================================================
   ;; STRUCTURE OVERVIEW (detail in CLAUDE.md)
@@ -76,9 +80,9 @@
   (structure
     "hypatia/
      ├── 0-AI-MANIFEST.a2ml         # THIS FILE
-     ├── lib/                        # Elixir pipeline (8 core + VQL + neural + safety)
-     ├── src/abi/                    # Idris2 ABI (Types, GraphQL, gRPC, REST, FFI)
-     ├── ffi/zig/                    # Zig FFI bridge (7 functions)
+     ├── lib/                        # Elixir: pipeline, rules, VCL, neural, safety, web, merge-orch
+     ├── src/Hypatia/ABI/            # Idris2 ABI — what the ipkg actually compiles
+     ├── ffi/zig/                    # Zig FFI bridge (18 exports + connectors)
      ├── adapters/ cli/ data/ fixer/ integration/  # Rust workspace (root crates)
      ├── .machine_readable/          # State, meta, ecosystem, bot directives
      └── .bot_directives/            # Bot instructions")
@@ -88,7 +92,7 @@
   ;; ===================================================================
 
   (critical-invariants
-    (rule "SCM files ONLY in .machine_readable/ — never in root")
+    (rule "SCM/a2ml files belong in .machine_readable/ — except this manifest, which RSR requires at root")
     (rule "Safety triangle: Eliminate > Substitute > Control — order matters")
     (rule "Confidence gates: >=0.95 auto-execute, 0.85-0.94 review, <0.85 report")
     (rule "MPL-2.0 on all source files")
@@ -101,7 +105,8 @@
   (lifecycle
     (on-enter
       (step "Read THIS file first")
-      (step "Read .claude/CLAUDE.md — contains detailed architecture tables")
+      (step "Read .claude/CLAUDE.md — detailed architecture tables and Scanner Hygiene")
+      (step "Read docs/DEBT-REGISTER.md — what is broken, what is ungated, what is stale")
       (step "Read .machine_readable/6a2/STATE.a2ml for current status"))
 
     (on-exit
@@ -109,9 +114,9 @@
       (step "Summarise outcomes")))
 
   (format-meta
-    (version "2.1.0")
+    (version "2.2.0")
     (media-type "application/a2ml")
     (created "2026-02-15")
-    (last-updated "2026-03-24")
+    (last-updated "2026-08-07")
     (maintained-by "Jonathan D.A. Jewell / hyperpolymath")
     (protocol "https://github.com/hyperpolymath/0-ai-gatekeeper-protocol")))
