@@ -16,16 +16,47 @@ defmodule Hypatia.ContractTest do
   alias Hypatia.VCL.Client, as: VCLClient
 
   # Take a GenServer away from the Application supervisor so start_supervised!/1
-  # can start a clean, isolated instance for the test. Restores the child on exit.
+  # can start a clean, isolated instance for the test. Restores it on exit.
+  #
+  # ⚠ THE on_exit REGISTRATION MUST COME FIRST. It previously came AFTER
+  # start_supervised!/1, so if that call raised — or anything between the delete
+  # and the registration failed — the child was deleted from Hypatia.Supervisor
+  # and NEVER restored. `Supervisor.terminate_child/2` keeps a child dead until
+  # something explicitly restarts it, so EVERY later test needing that module
+  # failed too, with "no process: the process is not alive".
+  #
+  # That is what turned a handful of real failures into 75, and why the failing
+  # SET changed between runs: how many tests fail depends on how many happen to
+  # run after the one that killed the singleton, which varies with the seed.
+  #
+  # on_exit callbacks still run when setup raises, so registering first makes
+  # the restore unconditional. This is the same correction already applied to
+  # test/reflexive_test.exs; contract_test.exs was missed.
   defp take_supervised(module) do
+    on_exit(fn -> restore_supervised(module) end)
+
     Supervisor.terminate_child(Hypatia.Supervisor, module)
     Supervisor.delete_child(Hypatia.Supervisor, module)
     start_supervised!(module)
+  end
 
-    on_exit(fn ->
-      if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
-      Supervisor.start_child(Hypatia.Supervisor, module)
-    end)
+  # Idempotent: safe whether the child spec is absent, present-but-stopped or
+  # already running, and safe to call twice. The result is inspected rather than
+  # discarded — a silent restore failure is what made the original cascade
+  # invisible.
+  defp restore_supervised(module) do
+    if pid = Process.whereis(module), do: GenServer.stop(pid, :normal, 5_000)
+
+    Supervisor.terminate_child(Hypatia.Supervisor, module)
+    Supervisor.delete_child(Hypatia.Supervisor, module)
+
+    case Supervisor.start_child(Hypatia.Supervisor, module) do
+      {:ok, _pid} -> :ok
+      {:ok, _pid, _info} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, :already_present} -> :ok
+      other -> raise "failed to restore #{inspect(module)} to Hypatia.Supervisor: #{inspect(other)}"
+    end
   end
 
   # ---------------------------------------------------------------------------
