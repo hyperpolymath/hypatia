@@ -1,6 +1,3 @@
-image:https://img.shields.io/badge/license-MPL--2.0-blue.svg[MPL-2.0,link="https://www.mozilla.org/en-US/MPL/2.0/"]
-
-
 // SPDX-License-Identifier: CC-BY-SA-4.0
 = Hypatia: Neurosymbolic CI/CD Intelligence Platform
 :toc: macro
@@ -8,15 +5,10 @@ image:https://img.shields.io/badge/license-MPL--2.0-blue.svg[MPL-2.0,link="https
 :icons: font
 :website: https://hypatia.reposystem.dev
 
+image:https://img.shields.io/badge/license-MPL--2.0-blue.svg[MPL-2.0,link="https://www.mozilla.org/en-US/MPL/2.0/"]
 image:https://img.shields.io/badge/Elixir-Rules-purple.svg[Elixir]
 image:https://img.shields.io/badge/verisim--data-Flat--file-green.svg[verisim-data]
 image:https://img.shields.io/badge/Ada_2022-TUI-blue.svg[Ada]
-
-== License & Philosophy
-
-This project must declare **MPL-2.0** for platform/tooling compatibility.
-
-Philosophy: **Palimpsest**. The Palimpsest-MPL (PMPL) text is provided in `LICENSES/MPL-2.0.txt`, and the canonical source is the palimpsest-license repository.
 
 🌐 *Website:* https://hypatia.reposystem.dev[hypatia.reposystem.dev] | Part of the link:https://reposystem.dev[reposystem] ecosystem
 
@@ -24,528 +16,157 @@ toc::[]
 
 == Overview
 
-*Hypatia* is a neurosymbolic CI/CD intelligence platform that combines:
+*Hypatia* is the CI/CD governance scanner for the hyperpolymath estate (~400 repositories).
+It combines:
 
-* *Neural Learning*: Pattern recognition from CI/CD failures across ecosystems
-* *Symbolic Reasoning*: High-performance Elixir rules for fast, deterministic actions
-* *Graph Intelligence*: verisim-data git-backed flat-file store (ArangoDB ditched per #273 architecture audit) for relationship modelling; queried via the in-process VCL parser + FileExecutor.
-* *Distributed Cache*: Dragonfly for sub-millisecond rule lookups
-* *P2P Federation*: Radicle for decentralized ruleset distribution
+* *Symbolic reasoning* — 33 Elixir rule modules producing fast, deterministic findings
+  (link:docs/rules/catalogue.md[full rule catalogue])
+* *Neural learning* — 8 networks on a shared blackboard, learning which fixes actually stick
+* *Bayesian confidence* — every recipe carries a Beta-distributed confidence updated from real
+  outcomes, which gates whether a fix is applied automatically, proposed as a PR, or merely reported
+* *Machine-checked proofs* — Idris2 ABI definitions with dependent types, Lean 4 proofs of the
+  Bayesian update and rate-limiting properties, and a TLA+ model of the Kin gate
 
-=== Core Philosophy
+=== Core philosophy
 
 [quote]
 "Dumb rules from smart learning"
 
-The system learns complex patterns through neural analysis, then *distills* them into simple, fast-acting declarative rules that can be:
+The system learns complex patterns through neural analysis, then *distils* them into simple,
+fast declarative rules that can be pre-emptively injected into new repositories, applied as
+cures to existing ones, and executed without ML inference overhead.
 
-* Pre-emptively injected into new repositories
-* Applied as cures to existing repositories  
-* Executed without ML inference overhead
+== The safety triangle
 
-== Architecture
-
-[source]
-----
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Hypatia Platform                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                 LEARNING LAYER (Neural)                        │ │
-│  │  Pattern Recognition → Anomaly Detection → Rule Distillation   │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │              SYMBOLIC LAYER (Elixir Rules)                     │ │
-│  │  Declarative Rules │ Imperative Procedures │ Inference Engine  │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                    DATA LAYER                                   │ │
-│  │  ArangoDB (Graph) │ Dragonfly (Cache) │ Radicle (P2P Git)      │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                   ACTION LAYER                                  │ │
-│  │  robot-repo-automaton │ Hooks │ Diagnostics │ Auto-Repair      │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│                              ▼                                       │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                  FORGE ADAPTERS                                 │ │
-│  │  GitHub │ GitLab │ Bitbucket │ Codeberg │ sr.ht │ Gitea        │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-----
-
-== Installation
-
-=== Container Runtime (Recommended)
-
-Pull from GitHub Container Registry:
-
-[source,bash]
-----
-# Latest stable release
-podman pull ghcr.io/hyperpolymath/hypatia-cli:latest
-
-# Or specific version
-podman pull ghcr.io/hyperpolymath/hypatia-cli:0.1.0
-
-# All components
-podman pull ghcr.io/hyperpolymath/hypatia-cli:latest
-podman pull ghcr.io/hyperpolymath/hypatia-adapter:latest
-podman pull ghcr.io/hyperpolymath/hypatia-registry:latest
-podman pull ghcr.io/hyperpolymath/hypatia-engine:latest
-----
-
-Run the CLI:
-
-[source,bash]
-----
-podman run --rm ghcr.io/hyperpolymath/hypatia-cli:latest scan /repo
-----
-
-=== Binary Release
-
-Download from GitHub Releases:
-
-[source,bash]
-----
-# Linux x86_64
-curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypatia-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv hyper /usr/local/bin/
-
-# macOS (Apple Silicon)
-curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypatia-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv hyper /usr/local/bin/
-
-# macOS (Intel)
-curl -sSL https://github.com/hyperpolymath/hypatia/releases/latest/download/hypatia-x86_64-apple-darwin.tar.gz | tar xz
-sudo mv hyper /usr/local/bin/
-----
-
-=== Compose
-
-For full stack deployment:
-
-[source,yaml]
-----
-services:
-  hyper-cli:
-    image: ghcr.io/hyperpolymath/hypatia-cli:latest
-    volumes:
-      - ./repos:/repos
-    environment:
-      - HYPER_REGISTRY_URL=http://registry:8080
-
-  adapter:
-    image: ghcr.io/hyperpolymath/hypatia-adapter:latest
-    environment:
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-
-  registry:
-    image: ghcr.io/hyperpolymath/hypatia-registry:latest
-    ports:
-      - "8080:8080"
-
-  engine:
-    image: ghcr.io/hyperpolymath/hypatia-engine:latest
-----
-
-=== Kubernetes / Helm
-
-[source,bash]
-----
-helm repo add hypatia https://hyperpolymath.github.io/hypatia
-helm install hypatia hypatia/hypatia
-----
-
-== Haskell Verification Registry
-
-The *Ruleset Registry* is a Haskell-based system providing:
-
-=== Type-Safe Ruleset DSL
-
-[source,haskell]
-----
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-
-module CicdHyperA.Ruleset where
-
--- | Rule effect types
-data Effect = Preventive | Curative | Diagnostic
-
--- | Type-safe rule definition
-data Rule (e :: Effect) where
-  PreventiveRule :: RuleName -> Condition -> Action -> Rule 'Preventive
-  CurativeRule   :: RuleName -> Pattern -> Fix -> Rule 'Curative
-  DiagnosticRule :: RuleName -> Check -> Report -> Rule 'Diagnostic
-
--- | Condition language
-data Condition
-  = FileExists FilePath
-  | FileContains FilePath Pattern
-  | LanguageUsed Language
-  | DependencyPresent Package
-  | And Condition Condition
-  | Or Condition Condition
-  | Not Condition
-
--- | Example rules
-requireDependabot :: Rule 'Preventive
-requireDependabot = PreventiveRule
-  "require-dependabot"
-  (Not (FileExists ".github/dependabot.yml"))
-  (InjectFile ".github/dependabot.yml" dependabotTemplate)
-
-blockTypeScript :: Rule 'Preventive  
-blockTypeScript = PreventiveRule
-  "block-typescript"
-  (Or (LanguageUsed TypeScript) (FileExists "*.ts"))
-  (RejectCommit "TypeScript not allowed per RSR policy")
-----
-
-=== Property-Based Testing
-
-[source,haskell]
-----
-module CicdHyperA.Properties where
-
-import Test.QuickCheck
-
--- | Rules must be deterministic
-prop_deterministic :: Rule e -> Repo -> Bool
-prop_deterministic rule repo =
-  evaluate rule repo == evaluate rule repo
-
--- | Preventive rules must not modify existing files
-prop_preventive_safe :: Rule 'Preventive -> Repo -> Property
-prop_preventive_safe rule repo =
-  let repo' = apply rule repo
-  in all (unchanged repo repo') (existingFiles repo)
-
--- | Curative rules must improve health score
-prop_curative_improves :: Rule 'Curative -> Repo -> Property
-prop_curative_improves rule repo =
-  healthScore repo < healthScore (apply rule repo)
-----
-
-=== Formal Verification (Liquid Haskell)
-
-[source,haskell]
-----
-{-@ LIQUID "--reflection" @-}
-
-module CicdHyperA.Verified where
-
--- | Refinement type: health score always in range
-{-@ type HealthScore = {v:Int | 0 <= v && v <= 100} @-}
-
--- | Verified: curative rules never decrease health
-{-@ curativeImproves :: Rule 'Curative -> Repo -> 
-      {r:Repo | healthScore r >= healthScore repo} @-}
-curativeImproves :: Rule 'Curative -> Repo -> Repo
-curativeImproves rule repo = apply rule repo
-
--- | Verified: preventive rules preserve existing content
-{-@ preventiveSafe :: Rule 'Preventive -> Repo ->
-      {r:Repo | existingFiles r == existingFiles repo} @-}
-preventiveSafe :: Rule 'Preventive -> Repo -> Repo
-preventiveSafe rule repo = apply rule repo
-----
-
-=== Registry Operations
+Every finding is routed *Eliminate > Substitute > Control*, in that order — remove the hazard
+if you can, replace it if you cannot, and only then add a control around it. Dispatch is then
+gated on confidence:
 
 [cols="1,3"]
 |===
-| Operation | Description
-
-| `deposit`
-| Submit a verified ruleset to the registry. Requires passing all property tests and formal verification.
-
-| `withdraw`
-| Pull a ruleset for local use. Includes signature verification and version pinning.
-
-| `search`
-| Query rulesets by effect type, target forge, language, or category.
-
-| `audit`
-| View the complete history of a ruleset including all changes and verifications.
-
-| `fork`
-| Create a derived ruleset with custom modifications while maintaining provenance.
+| `>= 0.95` | *auto_execute* — applied by robot-repo-automaton
+| `0.85–0.94` | *review* — rhodibot opens a PR
+| `< 0.85` | *report_only* — sustainabot advisory
 |===
 
-[source,bash]
-----
-# Deposit a new ruleset
-hypatia deposit ./my-ruleset.hs \
-  --name "rust-security-hardening" \
-  --description "Security rules for Rust projects" \
-  --sign --verify
-
-# Withdraw for local use
-hypatia withdraw rust-security-hardening \
-  --version "1.2.0" \
-  --output ./rules/
-
-# Search for rulesets
-hypatia search --effect preventive --language rust
-
-# Audit a ruleset
-hypatia audit rust-security-hardening --full
-----
-
-== Integration with robot-repo-automaton
-
-The platform integrates with link:https://github.com/hyperpolymath/robot-repo-automaton[robot-repo-automaton] for automated repository management:
-
-[source,yaml]
-----
-# robot-repo-automaton/config.yml
-cicd_hyper_a:
-  enabled: true
-  registry_url: https://registry.hypatia.hyperpolymath.dev
-  
-  # Rulesets to apply to all repos
-  global_rulesets:
-    - hyperpolymath/rsr-compliance
-    - hyperpolymath/security-baseline
-    - hyperpolymath/quality-gates
-  
-  # Language-specific rulesets
-  language_rulesets:
-    rust:
-      - hyperpolymath/rust-clippy-strict
-      - hyperpolymath/rust-fuzzing
-    gleam:
-      - hyperpolymath/gleam-beam
-    # NB: ReScript rulesets retired 2026-04 alongside ReScript itself
-    # being removed from allowed languages. Use Ephapax (systems) or
-    # Gossamer (UI) for new work.
-  
-  # Automation settings
-  automation:
-    auto_fix_threshold: 0.95  # Auto-apply fixes with >95% confidence
-    pr_threshold: 0.80        # Create PR for 80-95% confidence
-    alert_threshold: 0.50     # Alert human for <80% confidence
-----
-
-=== Hook Integration
-
-[source,bash]
-----
-#!/bin/bash
-# .git/hooks/pre-commit (injected by hypatia)
-
-# Load rulesets from registry (cached in Dragonfly)
-hypatia hooks pre-commit \
-  --rulesets hyperpolymath/rsr-compliance \
-  --cache-ttl 3600
-
-# Runs preventive rules:
-# - Language policy (no TS, Go, Python, Makefile)
-# - Secret detection
-# - Formatting checks
-# - License headers
-----
-
-[source,bash]
-----
-#!/bin/bash
-# .git/hooks/pre-push
-
-hypatia hooks pre-push \
-  --rulesets hyperpolymath/security-baseline \
-  --verify-signatures
-
-# Runs validation:
-# - All commits signed
-# - CI simulation passes
-# - No breaking API changes
-----
-
-== Logtalk Rule Engine
-
-The symbolic layer uses Logtalk for high-performance rule execution:
-
-[source,prolog]
-----
-:- object(cicd_rules).
-
-    %% DECLARATIVE RULES
-    repo_must_have(Repo, 'dependabot.yml') :-
-        repo_uses_dependencies(Repo).
-    repo_must_have(Repo, 'SECURITY.md') :-
-        repo_is_public(Repo).
-
-    %% PREVENTIVE RULES
-    block_commit_if(Commit, typescript_detected) :-
-        commit_adds_file(Commit, File),
-        file_extension(File, '.ts').
-    block_commit_if(Commit, secret_detected) :-
-        commit_content_matches(Commit, Pattern),
-        secret_pattern(Pattern).
-
-    %% CURATIVE RULES
-    auto_fix(Repo, unpinned_actions) :-
-        find_unpinned_actions(Repo, Actions),
-        pin_actions_to_sha(Repo, Actions).
-
-:- end_object.
-----
-
-== Data Layer
-
-=== ArangoDB Graph Schema
-
-[source,json]
-----
-{
-  "collections": {
-    "repos": { "type": "document" },
-    "rules": { "type": "document" },
-    "patterns": { "type": "document" },
-    "rulesets": { "type": "document" }
-  },
-  "edge_collections": {
-    "repo_uses_ruleset": { "from": ["repos"], "to": ["rulesets"] },
-    "ruleset_contains": { "from": ["rulesets"], "to": ["rules"] },
-    "rule_derived_from": { "from": ["rules"], "to": ["patterns"] }
-  }
-}
-----
-
-=== Dragonfly Cache Strategy
-
-[source,yaml]
-----
-# Compiled rules for instant execution
-rules:
-  key: "rule:{ruleset}:{rule_id}"
-  ttl: 3600
-  data: compiled_bytecode
-
-# Repo state for quick lookups
-repos:
-  key: "repo:{forge}:{owner}:{name}"
-  ttl: 300
-  data: { health_score, issues, rulesets_applied }
-
-# Registry index for fast search
-registry:
-  key: "registry:index:{category}"
-  ttl: 86400
-  data: [ruleset_ids]
-----
-
-== Repository Structure
+Unknown findings are forced to `report_only` regardless of score (novelty gating).
 
 [source]
 ----
-hypatia/
-├── registry/                    # Haskell verification registry
-│   ├── src/
-│   │   ├── CicdHyperA/
-│   │   │   ├── Ruleset.hs      # Type-safe DSL
-│   │   │   ├── Verify.hs       # Property tests
-│   │   │   ├── Liquid.hs       # Formal proofs
-│   │   │   ├── Registry.hs     # Git-based storage
-│   │   │   └── API.hs          # REST/GraphQL API
-│   │   └── Main.hs
-│   ├── test/
-│   └── hypatia.cabal
-│
-├── engine/                      # Logtalk rule engine
-│   ├── rules/
-│   │   ├── cicd_rules.lgt
-│   │   ├── rule_distiller.lgt
-│   │   └── forge_adapters.lgt
-│   └── loader.lgt
-│
-├── hooks/                       # Git hook templates
-│   ├── pre-commit
-│   ├── pre-push
-│   └── post-receive
-│
-├── schemas/                     # Data schemas
-│   ├── arangodb.json
-│   ├── dragonfly.yml
-│   └── ruleset.schema.json
-│
-├── adapters/                    # Forge adapters
-│   ├── github.rs
-│   ├── gitlab.rs
-│   ├── bitbucket.rs
-│   └── radicle.rs
-│
-├── integration/                 # External integrations
-│   ├── robot-repo-automaton/
-│   └── git-hud/
-│
-└── deploy/                      # Deployment configs
-    ├── k8s/
-    ├── compose.yaml
-    └── helm/
+panic-attack scan
+      │  findings
+verisim-data (git-backed flat-file store)
+      │
+PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchManifest (JSONL)
+      │                                                            │
+      └────────────── OutcomeTracker <───────────── dispatch-runner.sh
+                     (Bayesian feedback loop)
 ----
 
-== Roadmap
+== Architecture
 
-=== Phase 1: Foundation ✅ Complete
-* [x] Logtalk rule engine with formal schema
-* [x] ArangoDB graph model v2
-* [x] Haskell DSL and registry
-* [x] Basic CLI with all commands
+[cols="1,3"]
+|===
+| `lib/` | 133 Elixir modules — pipeline, rules, VCL, neural, safety, web, merge orchestration
+| `lib/rules/` | 33 rule modules; see link:docs/rules/catalogue.md[the catalogue]
+| `lib/neural/` | 8 networks + blackboard, coordinator, persistence, rebalancer
+| `lib/vcl/` | VCL query layer over verisim-data: parser, file executor, cache, federation
+| `lib/merge_orchestration/` | 12 modules — leases, ledger, ticker
+| `lib/hypatia/web/` | Dashboard, SSE stream, Prometheus `/metrics`, GraphQL, SARIF output
+| `src/Hypatia/ABI/` | Idris2 ABI — Types, GraphQL, gRPC, REST, FFI, RuleEngine
+| `ffi/zig/` | Zig C ABI bridge — 18 exports + 16 protocol connectors
+| `adapters/ cli/ data/ fixer/ integration/` | Rust workspace
+| `verification/` | Lean 4 proofs, TLA+ specs
+|===
 
-=== Phase 2: Verification ✅ 90% Complete
-* [x] Property-based testing framework
-* [x] Idris 2 type-safe state machines
-* [x] Fuel-based termination proofs
-* [ ] Liquid Haskell integration (pending)
+See link:docs/architecture/topology.md[docs/architecture/topology.md] for the full map.
 
-=== Phase 3: Integration ✅ 90% Complete
-* [x] robot-repo-automaton connector
-* [x] Hook injection system (pre-commit, pre-push, post-receive)
-* [x] 4/6 forge adapters (GitHub, GitLab, Bitbucket, Codeberg)
-* [x] Dragonfly caching configs
-* [ ] sourcehut and radicle adapters (pending)
+== Installation
 
-=== Phase 4: Scale 🔄 In Progress
-* [x] K8s manifests and Helm chart
-* [x] Compose production config
-* [x] Monitoring (Prometheus/Grafana)
-* [ ] Radicle P2P federation (pending)
-* [ ] Public registry launch (pending)
-* [ ] Enterprise features (pending)
+Guix is the reproducible-build path; Nix was retired estate-wide on 2026-06-05. Podman, not
+Docker, is the container tool.
+
+[source,bash]
+----
+git clone https://github.com/hyperpolymath/hypatia.git
+cd hypatia
+
+guix shell -m guix.scm     # reproducible environment (optional)
+just doctor                # toolchain preflight
+just build-all             # Elixir + Rust + Zig FFI + Idris2 ABI
+----
+
+`just --list` shows all 39 recipes; `CONTRIBUTING.md` treats `just` as the canonical entry point.
+
+== Usage
+
+The escript exposes five commands:
+
+[source,bash]
+----
+hypatia scan <path> [--format json|text|github|sarif] [--exit-zero]
+hypatia report <path>
+hypatia pr-eligibility --owner <owner> --repo <repo> --pr <n>
+hypatia version
+hypatia help
+----
+
+Mix tasks cover the operational surface — `mix hypatia.rsr_score`, `mix hypatia.recipe_health`,
+`mix hypatia.watch`, `mix hypatia.triage_issues` and eleven more. See the
+https://github.com/hyperpolymath/hypatia/wiki/Operations[Operations wiki page].
+
+Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
+`/metrics` endpoint and a bearer-authenticated `/api/*` on port 9090.
+
+== Integration with robot-repo-automaton
+
+Hypatia writes JSONL dispatch manifests; `dispatch-runner.sh` in gitbot-fleet consumes them and
+routes each entry by its confidence tier. Outcomes flow back through
+`mix hypatia.record_outcome`, which drives the Bayesian update and, when a recipe degrades,
+auto-quarantine.
+
+== Project status
+
+Development state, milestones and known gaps live in machine-readable form:
+
+* `.machine_readable/6a2/STATE.a2ml` — current state and milestone status
+* `.machine_readable/6a2/PLAYBOOK.a2ml` — operational runbook
+* link:ROADMAP.adoc[ROADMAP.adoc] — milestone history
+
+**Before trusting any metric or green board, read link:docs/DEBT-REGISTER.md[docs/DEBT-REGISTER.md].**
+It is the authoritative, evidence-backed account of what is broken, ungated or stale — including
+242 tests that are excluded from every run, the safety systems that are built but not yet invoked
+by any dispatch path, and the CI blockage currently stopping the Rust lane.
 
 == Documentation
 
-* link:CII-ENFORCEMENT.adoc[CII Best Practices Badge Enforcement] - Centralized vs local enforcement architecture
-* link:PALIMPSEST.adoc[Palimpsest Philosophy] - Philosophical underpinnings
+* link:docs/README.adoc[docs/README.adoc] — the documentation index
+* link:docs/rules/catalogue.md[Rule catalogue] — every rule module and ID family
+* link:docs/DEBT-REGISTER.md[Debt register] — what is broken and what is not gated
+* https://github.com/hyperpolymath/hypatia/wiki[Wiki] — getting started, architecture, operations, FAQ
+* link:PALIMPSEST.adoc[Palimpsest Philosophy] — philosophical underpinnings
 
-== Related Projects
+== Related projects
 
-* link:https://github.com/hyperpolymath/robot-repo-automaton[robot-repo-automaton] - Automated repository management
-* link:https://github.com/hyperpolymath/git-hud[git-hud] - CI/CD intelligence system
-* link:https://github.com/hyperpolymath/rhodium-standard-repositories[rhodium-standard-repositories] - Repository standards
-* link:https://github.com/hyperpolymath/palimpsest-license[palimpsest-license] - Philosophical licence
-* link:https://www.bestpractices.dev[OpenSSF Best Practices Badge] - Security certification program
+* link:https://github.com/hyperpolymath/robot-repo-automaton[robot-repo-automaton] — automated repository management
+* link:https://github.com/hyperpolymath/git-hud[git-hud] — CI/CD intelligence system
+* link:https://github.com/hyperpolymath/rhodium-standard-repositories[rhodium-standard-repositories] — repository standards
+* link:https://github.com/hyperpolymath/palimpsest-license[palimpsest-license] — the Palimpsest licence
+* link:https://www.bestpractices.dev[OpenSSF Best Practices Badge] — security certification programme
 
-== License
+== Licence
 
-This project is licensed under link:https://github.com/hyperpolymath/palimpsest-license[MPL-2.0] (Palimpsest-MPL License).
+Hypatia is licensed under the *Mozilla Public License 2.0*. Source files declare `MPL-2.0` and
+documentation declares `CC-BY-SA-4.0`, both via per-file SPDX headers; where a header and prose
+disagree, the header governs.
 
-The Palimpsest License is a file-level copyleft license with ethical use provisions, following the Mozilla approach.
+The *Palimpsest Licence* (PMPL) is a separate licence maintained at
+link:https://github.com/hyperpolymath/palimpsest-license[palimpsest-license]. It is not a
+variant or extension of MPL-2.0 and its text is not distributed here. See link:NOTICE[NOTICE].
 
 image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[MPL-2.0,link="https://opensource.org/licenses/MPL-2.0"]
 
-== OPSM Link
+== OPSM link
 
 [source]
 ----
@@ -553,10 +174,4 @@ OPSM Core
   |
   v
 hypatia (policy/knowledge services used by OPSM)
-
 ----
-
-
-== Architecture
-
-See link:docs/architecture/topology.md[docs/architecture/topology.md] for a visual architecture map and completion dashboard.
