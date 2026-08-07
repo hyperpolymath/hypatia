@@ -701,7 +701,16 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :ncl_http_url,
       severity: :high,
-      pattern: ~r{=\s*"http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)},
+      # ⚠ Also excludes XML NAMESPACE URIs and DOCTYPE public identifiers.
+      # `xmlns="http://www.freedesktop.org/standards/shared-mime-info"` and
+      # `"-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/..."` are
+      # IDENTIFIERS, not endpoints — the XML specification is explicit that a
+      # namespace name is never dereferenced. Rewriting them to https would
+      # change the identifier and BREAK the schema match, so this is not a
+      # finding that could be acted on even in principle. Found in
+      # k9-svc/register.ncl, which embeds mime-info and plist templates.
+      pattern:
+        ~r{(?<!xmlns)(?<!xmlns:[a-z])=\s*"http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|www\.w3\.org/|www\.apple\.com/DTDs/|www\.freedesktop\.org/standards/)},
       cwe: "CWE-319",
       description: "HTTP URL in Nickel config -- must use HTTPS"
     },

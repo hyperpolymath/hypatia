@@ -329,4 +329,26 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+
+  describe "ncl_http_url — XML identifiers are not endpoints" do
+    # An XML namespace name and a DOCTYPE public identifier are IDENTIFIERS.
+    # The XML specification is explicit that a namespace name is never
+    # dereferenced, so rewriting one to https changes the identifier and breaks
+    # the schema match. This is not a finding that could be acted on even in
+    # principle.
+    @ncl ~r{(?<!xmlns)(?<!xmlns:[a-z])=\s*"http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|www\.w3\.org/|www\.apple\.com/DTDs/|www\.freedesktop\.org/standards/)}
+
+    test "an XML namespace URI is not flagged" do
+      refute Regex.match?(@ncl, ~S(<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">))
+    end
+
+    test "a DOCTYPE public identifier is not flagged" do
+      refute Regex.match?(@ncl, ~S(<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">))
+    end
+
+    test "a real insecure endpoint IS still flagged" do
+      assert Regex.match?(@ncl, ~S(endpoint = "http://api.example.com/v1"))
+    end
+  end
+
 end
