@@ -262,5 +262,12 @@
     "rule_module": "inbox_automation",
     "type": "IA007",
     "file": "."
+  },
+  {
+    "severity": "medium",
+    "rule_module": "scorecard",
+    "type": "DependencyPinning",
+    "file": ".",
+    "note": "Ingested from OSSF Scorecard's Pinned-Dependencies check, which inspects workflows for inline SHA refs and has no knowledge of GitHub Actions lockfiles. This repository pins every action in .github/workflows/actions.lock, which resolves each symbolic ref to a verified commit plus the transitive dependencies of composite actions. Inline SHA-pinning to satisfy Scorecard would REMOVE actions from the lockfile (gh actions-lock rejects refs no tag or branch contains) and reduce coverage \u2014 measured 2026-08-07: it put 14 workflows into startup_failure. Acknowledged as an external tool limitation, not accepted debt."
   }
 ]
