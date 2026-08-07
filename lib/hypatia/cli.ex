@@ -401,7 +401,14 @@ defmodule Hypatia.CLI do
 
           %{findings: findings} =
             Hypatia.Rules.WorkflowAudit.audit(yml_files, wf_contents,
-              has_codeql_supported_language: has_codeql_supported_language?(repo_path)
+              has_codeql_supported_language: has_codeql_supported_language?(repo_path),
+              # On a lockfile-enforced repository the lockfile IS the pin;
+              # without it every symbolic ref reads as unpinned.
+              actions_lock:
+                case File.read(Path.join(workflows_dir, "actions.lock")) do
+                  {:ok, lock} -> lock
+                  _ -> nil
+                end
             )
 
           normalized =

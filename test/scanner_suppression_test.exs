@@ -274,4 +274,122 @@ defmodule Hypatia.ScannerSuppressionTest do
       refute ScannerSuppression.file_allowed?(content, "code_safety", "believe_me")
     end
   end
+
+  describe "context_safe_line?/2 — shell_download_then_run" do
+    # Installers routinely PRINT the command a user should run. That text is
+    # not an execution, and flagging it makes the rule noisy in exactly the
+    # files that are trying to be helpful.
+    test "a download-then-run inside a quoted echo is text, not execution" do
+      line = ~S(    echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh")
+      assert ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+
+    test "printf'd advice is also text" do
+      line = ~S(printf '%s' "curl http://example.com/i.sh | sh")
+      assert ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+
+    # ⚠ The test is NOT "the line starts with echo". This one really executes.
+    test "echo piped INTO sh is a real execution and stays reported" do
+      refute ScannerSuppression.context_safe_line?("shell_download_then_run", ~S(echo hello | sh))
+    end
+
+    test "a genuine curl-pipe-bash stays reported" do
+      line = ~S(curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin)
+      refute ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+  end
+
+
+  describe "suppressed?/3 — benches/" do
+    # Cargo puts benchmarks in `benches/`. A benchmark that unwraps or panics is
+    # normal: the failure costs a benchmark run, not a user's session, and setup
+    # code in a bench has no error path to take.
+    test "code_safety is exempt inside benches/" do
+      assert ScannerSuppression.suppressed?(
+               "a2ml/bindings/rust/benches/a2ml_bench.rs",
+               "code_safety",
+               "unwrap_without_check"
+             )
+    end
+
+    # ⚠ The exemption is deliberately NOT extended to security_errors. A
+    # hardcoded credential in a bench file is a real leak like any other, and
+    # widening the exemption by module would have hidden it.
+    test "security_errors is STILL scanned inside benches/" do
+      refute ScannerSuppression.suppressed?(
+               "a2ml/bindings/rust/benches/a2ml_bench.rs",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+
+    test "code_safety outside benches/ is unaffected" do
+      refute ScannerSuppression.suppressed?("src/handlers.rs", "code_safety", "unwrap_without_check")
+    end
+  end
+
+
+  describe "ncl_http_url — XML identifiers are not endpoints" do
+    # An XML namespace name and a DOCTYPE public identifier are IDENTIFIERS.
+    # The XML specification is explicit that a namespace name is never
+    # dereferenced, so rewriting one to https changes the identifier and breaks
+    # the schema match. This is not a finding that could be acted on even in
+    # principle.
+    @ncl ~r{(?<!xmlns)(?<!xmlns:[a-z])=\s*"http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|www\.w3\.org/|www\.apple\.com/DTDs/|www\.freedesktop\.org/standards/)}
+
+    test "an XML namespace URI is not flagged" do
+      refute Regex.match?(@ncl, ~S(<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">))
+    end
+
+    test "a DOCTYPE public identifier is not flagged" do
+      refute Regex.match?(@ncl, ~S(<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">))
+    end
+
+    test "a real insecure endpoint IS still flagged" do
+      assert Regex.match?(@ncl, ~S(endpoint = "http://api.example.com/v1"))
+    end
+  end
+
+
+  describe "strip_lazy_initialisers/2 — a counter, not a regex" do
+    alias Hypatia.Rules.CodeSafety
+
+    @pipes "||"
+
+    # A `LazyLock` body runs ONCE, so `.expect(` inside it is not a hot path.
+    # The previous implementation was a fixed-depth regex, and regexes cannot
+    # count: a pattern one level more nested than it allowed survived elision
+    # and failed the gate.
+    test "elides a body whose regex literal has NESTED capture groups" do
+      src = "static E: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(r\"\\[((?:'[A-Za-z]+)*)\\]\").expect(\"E\"));"
+      refute CodeSafety.strip_lazy_initialisers(src, "rust") =~ ".expect("
+    end
+
+    # ⚠ Rust's r#".."# form exists so a literal may contain `"`. Regex patterns
+    # use it for exactly that. Treating those quotes as delimiters
+    # desynchronises the scan.
+    test "elides a body using a HASH RAW STRING containing quotes" do
+      src = "static R: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(r#\"(a|b)\\s*=\\s*\"([^\"]*)\"\"#).expect(\"R\"));"
+      refute CodeSafety.strip_lazy_initialisers(src, "rust") =~ ".expect("
+    end
+
+    # The rule must not be blinded — elision is scoped to the initialiser body.
+    test "a genuine per-call .expect( is still visible" do
+      src = "static A: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(r\"x\").expect(\"A\"));\nfn f() { m.get(\"k\").expect(\"missing\"); }"
+      assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "expect(\"missing\")"
+    end
+
+    # ⚠ The dangerous failure mode: a desynchronised counter swallows the rest
+    # of the file and silently blinds every later rule.
+    test "an unbalanced paren inside a string does not swallow the file" do
+      src = "static X: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
+              " Regex::new(\"(\").expect(\"x\"));\nfn after() {}"
+      assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "fn after"
+    end
+  end
+
 end
