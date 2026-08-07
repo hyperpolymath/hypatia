@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Inbox Steward Intake — Process reports from gitbot-fleet inbox-steward
@@ -52,7 +53,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -124,7 +125,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -224,7 +225,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.FARM_PAT }}
@@ -299,7 +300,7 @@ jobs:
     
     steps:
       - name: Checkout hypatia
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Send dispatch to .git-private-farm
         env:

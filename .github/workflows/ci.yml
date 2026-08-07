@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Main CI workflow for hypatia
@@ -33,16 +34,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: clippy, rustfmt
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -59,10 +60,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt
@@ -77,15 +78,15 @@ jobs:
     needs: [rust-check]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -103,21 +104,21 @@ jobs:
     needs: [rust-test]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
+        uses: taiki-e/install-action@v2.85.3
         with:
           tool: cargo-llvm-cov
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -126,7 +127,7 @@ jobs:
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@v7.0.0
         with:
           files: lcov.info
           flags: rust
@@ -149,7 +150,7 @@ jobs:
       present: ${{ steps.check.outputs.present }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
       - name: Check for registry/hypatia.cabal
         id: check
         run: |
@@ -174,10 +175,10 @@ jobs:
         working-directory: registry
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Haskell
-        uses: haskell-actions/setup@cd0d9bdd65b20557f41bea4dbe43d0b5fbbfe553 # v2.11.0
+        uses: haskell-actions/setup@v2.11.0
         id: setup
         with:
           ghc-version: '9.6'
@@ -190,7 +191,7 @@ jobs:
           cabal build all --dry-run
 
       - name: Restore cached dependencies
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@v6.1.0
         id: cache
         env:
           key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-cabal-${{ steps.setup.outputs.cabal-version }}
@@ -204,7 +205,7 @@ jobs:
         run: cabal build all --only-dependencies
 
       - name: Save cached dependencies
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/save@v6.1.0
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: ${{ steps.setup.outputs.cabal-store }}
@@ -227,15 +228,15 @@ jobs:
     if: needs.detect-haskell.outputs.present == 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Setup HLint
-        uses: haskell-actions/hlint-setup@fe9cd1cd1af94a23900c06738e73f6ddb092966a # v2.4.10
+        uses: haskell-actions/hlint-setup@v2.4.10
         with:
           version: '3.8'
 
       - name: Run HLint
-        uses: haskell-actions/hlint-run@eaca4cfbf4a69f4eb875df38b6bc3e1657020378 # v2.4.10
+        uses: haskell-actions/hlint-run@v2.4.10
         with:
           path: registry/
           fail-on: warning
@@ -255,7 +256,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
 
       - name: Parse k9iser.toml + verify declared paths exist
         run: |
@@ -276,7 +277,7 @@ jobs:
 
       - name: Upload k9 artefacts
         if: hashFiles('generated/k9iser/**') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: k9iser-artefacts
           path: generated/k9iser/
