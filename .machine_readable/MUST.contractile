@@ -60,14 +60,14 @@
     (must "dispatch manifests must be JSONL format for execution layer compatibility")
 
     ; Neural subsystem
-    (must "5 neural networks (Graph of Trust, MoE, LSM, ESN, RNN) must not be reduced")
+    (must "the 8 neural networks (Graph of Trust, MoE, LSM, ESN, RBF, GNN, VAE, SequenceModel) must not be reduced")
     (must "neural coordinator GenServer must remain the sole entry point for neural dispatch")
     (must "Bayesian confidence updating must not be replaced with simpler heuristics")
 
     ; Data integrity
-    (must "verisimdb-data connector must remain the canonical data source")
-    (must "VQL query layer must not be replaced with raw SQL or direct file access")
-    (must "954 canonical patterns in PatternRegistry must not be bulk-deleted")
+    (must "the verisim-data connector (lib/verisim_connector.ex) must remain the canonical data source")
+    (must "VCL query layer must not be replaced with raw SQL or direct file access")
+    (must "PatternRegistry canonical patterns must not be bulk-deleted")
 
     ; Fleet dispatch
     (must "gitbot-fleet dispatch must respect circuit breaker patterns")
@@ -75,16 +75,52 @@
     (must "outcome tracking feedback loop must not be disabled")
 
     ; OTP supervision
-    (must "8 GenServers (VQL, RateLimiter, Quarantine, Learning, Diag, Neural, Kin, Fleet) must be supervised")
-    (must "Logtalk rule engine for error catalog and pattern detection must be preserved")
+    (must "the supervision tree in lib/application.ex must keep every safety-relevant child supervised: VCL.Client, Safety.RateLimiter, Safety.Quarantine, Rules.Learning, Diagnostics.Monitor, Neural.Coordinator, Watcher, and the Kin processes")
 
     ; Idris2 ABI / Zig FFI
-    (must "Idris2 ABI definitions (Types, GraphQL, gRPC, REST) must maintain dependent type proofs")
-    (must "Zig FFI (7 exported functions) must maintain C ABI compatibility")
+    (must "Idris2 ABI definitions (Types, GraphQL, gRPC, REST, FFI, RuleEngine) must maintain dependent type proofs")
+    (must "the Zig FFI C ABI must remain compatible; exports may be added but not removed or resignatured")
   )
 
+  ; ---------------------------------------------------------------------------
+  ; Corrections applied 2026-08-07 (see docs/DEBT-REGISTER.md M-2).
+  ;
+  ; This block had drifted into declaring invariants that would REVERT landed
+  ; architecture, because its enforcement path never existed:
+  ;
+  ;   * "5 neural networks ... must not be reduced"  -> there are 8.
+  ;   * "Logtalk rule engine ... must be preserved"  -> DELETED. Logtalk was
+  ;     purged 2026-04-14 (ADR-001) and AGENTIC.a2ml explicitly FORBIDS it. A
+  ;     MUST demanding preservation of something another artefact forbids is
+  ;     worse than no invariant at all.
+  ;   * "VQL" / "verisimdb-data"                     -> renamed VCL / verisim-data
+  ;     by ADR-002 on 2026-04-05.
+  ;   * "8 GenServers (... Fleet)"                   -> 24 supervised children and
+  ;     no GenServer named Fleet has ever existed. Restated by role, not count,
+  ;     so it stays true as the tree grows.
+  ;   * "954 canonical patterns"                     -> a 2026-04 measurement with
+  ;     no producer; restated as "must not be bulk-deleted".
+  ;   * "Zig FFI (7 exported functions)"             -> 18. Restated as a
+  ;     compatibility rule rather than a count.
+  ;
+  ; Counts do not belong in invariants unless something recomputes them.
+  ; ---------------------------------------------------------------------------
+
   (enforcement
-    (k9-validator "contractiles/self-validating/must-check.k9.ncl")
-    (ci "quality.yml runs must-check on every PR")
+    ; UNENFORCED. The referenced validator has never existed at any path:
+    ;   contractiles/self-validating/must-check.k9.ncl  -> absent
+    ;   .machine_readable/self-validating/              -> holds only
+    ;                                                      hypatia-metadata.k9.ncl
+    ; and no workflow invokes must-check. That absence is precisely why the
+    ; invariants above drifted for four months undetected. Tracked in
+    ; docs/DEBT-REGISTER.md (M-2); until a validator exists, treat this block as
+    ; documentation, not as a gate.
+    ;
+    ; Partial coverage does exist in test/contract_test.exs, which asserts 4 of
+    ; these invariants: the confidence thresholds, the rate-limiter burst limit,
+    ; the quarantine thresholds, and VCL.Client.parse/1 totality.
+    (k9-validator "MISSING — see docs/DEBT-REGISTER.md M-2")
+    (ci "NOT WIRED — no workflow runs must-check")
+    (partial-coverage "test/contract_test.exs")
   )
 )

@@ -463,7 +463,6 @@ defmodule Hypatia.Rules.BranchProtection do
     end
   end
 
-
   # ─── BP009: phantom required context in a RULESET ───────────────────
 
   @doc """
@@ -570,7 +569,9 @@ defmodule Hypatia.Rules.BranchProtection do
   # the checks that ran on it, and open PRs alone are too thin a sample.
   defp fetch_recent_pr_check_names(owner, repo, n) do
     with {:ok, prs} <-
-           curl_github("repos/#{owner}/#{repo}/pulls?state=all&per_page=#{n}&sort=updated&direction=desc") do
+           curl_github(
+             "repos/#{owner}/#{repo}/pulls?state=all&per_page=#{n}&sort=updated&direction=desc"
+           ) do
       shas =
         prs
         |> Enum.map(&get_in(&1, ["head", "sha"]))

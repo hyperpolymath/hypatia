@@ -300,7 +300,6 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
-
   describe "suppressed?/3 — benches/" do
     # Cargo puts benchmarks in `benches/`. A benchmark that unwraps or panics is
     # normal: the failure costs a benchmark run, not a user's session, and setup
@@ -325,10 +324,13 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
 
     test "code_safety outside benches/ is unaffected" do
-      refute ScannerSuppression.suppressed?("src/handlers.rs", "code_safety", "unwrap_without_check")
+      refute ScannerSuppression.suppressed?(
+               "src/handlers.rs",
+               "code_safety",
+               "unwrap_without_check"
+             )
     end
   end
-
 
   describe "ncl_http_url — XML identifiers are not endpoints" do
     # An XML namespace name and a DOCTYPE public identifier are IDENTIFIERS.
@@ -339,18 +341,23 @@ defmodule Hypatia.ScannerSuppressionTest do
     @ncl ~r{(?<!xmlns)(?<!xmlns:[a-z])=\s*"http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|www\.w3\.org/|www\.apple\.com/DTDs/|www\.freedesktop\.org/standards/)}
 
     test "an XML namespace URI is not flagged" do
-      refute Regex.match?(@ncl, ~S(<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">))
+      refute Regex.match?(
+               @ncl,
+               ~S(<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">)
+             )
     end
 
     test "a DOCTYPE public identifier is not flagged" do
-      refute Regex.match?(@ncl, ~S(<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">))
+      refute Regex.match?(
+               @ncl,
+               ~S(<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">)
+             )
     end
 
     test "a real insecure endpoint IS still flagged" do
       assert Regex.match?(@ncl, ~S(endpoint = "http://api.example.com/v1"))
     end
   end
-
 
   describe "strip_lazy_initialisers/2 — a counter, not a regex" do
     alias Hypatia.Rules.CodeSafety
@@ -362,8 +369,11 @@ defmodule Hypatia.ScannerSuppressionTest do
     # count: a pattern one level more nested than it allowed survived elision
     # and failed the gate.
     test "elides a body whose regex literal has NESTED capture groups" do
-      src = "static E: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
-              " Regex::new(r\"\\[((?:'[A-Za-z]+)*)\\]\").expect(\"E\"));"
+      src =
+        "static E: LazyLock<Regex> = LazyLock::new(" <>
+          @pipes <>
+          " Regex::new(r\"\\[((?:'[A-Za-z]+)*)\\]\").expect(\"E\"));"
+
       refute CodeSafety.strip_lazy_initialisers(src, "rust") =~ ".expect("
     end
 
@@ -371,25 +381,33 @@ defmodule Hypatia.ScannerSuppressionTest do
     # use it for exactly that. Treating those quotes as delimiters
     # desynchronises the scan.
     test "elides a body using a HASH RAW STRING containing quotes" do
-      src = "static R: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
-              " Regex::new(r#\"(a|b)\\s*=\\s*\"([^\"]*)\"\"#).expect(\"R\"));"
+      src =
+        "static R: LazyLock<Regex> = LazyLock::new(" <>
+          @pipes <>
+          " Regex::new(r#\"(a|b)\\s*=\\s*\"([^\"]*)\"\"#).expect(\"R\"));"
+
       refute CodeSafety.strip_lazy_initialisers(src, "rust") =~ ".expect("
     end
 
     # The rule must not be blinded — elision is scoped to the initialiser body.
     test "a genuine per-call .expect( is still visible" do
-      src = "static A: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
-              " Regex::new(r\"x\").expect(\"A\"));\nfn f() { m.get(\"k\").expect(\"missing\"); }"
+      src =
+        "static A: LazyLock<Regex> = LazyLock::new(" <>
+          @pipes <>
+          " Regex::new(r\"x\").expect(\"A\"));\nfn f() { m.get(\"k\").expect(\"missing\"); }"
+
       assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "expect(\"missing\")"
     end
 
     # ⚠ The dangerous failure mode: a desynchronised counter swallows the rest
     # of the file and silently blinds every later rule.
     test "an unbalanced paren inside a string does not swallow the file" do
-      src = "static X: LazyLock<Regex> = LazyLock::new(" <> @pipes <>
-              " Regex::new(\"(\").expect(\"x\"));\nfn after() {}"
+      src =
+        "static X: LazyLock<Regex> = LazyLock::new(" <>
+          @pipes <>
+          " Regex::new(\"(\").expect(\"x\"));\nfn after() {}"
+
       assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "fn after"
     end
   end
-
 end

@@ -503,13 +503,20 @@ defmodule Hypatia.Watcher do
         |> Enum.reduce(%{}, fn
           {id, pid, _type, _modules}, acc when is_pid(pid) ->
             case Process.info(pid, :message_queue_len) do
-              {:message_queue_len, len} -> Map.put(acc, inspect(id), len)
-              _ -> Map.put(acc, inspect(id), nil)
+              {:message_queue_len, len} -> Map.put(acc, depth_label(id), len)
+              _ -> Map.put(acc, depth_label(id), nil)
             end
 
           {id, _, _, _}, acc ->
-            Map.put(acc, inspect(id), nil)
+            Map.put(acc, depth_label(id), nil)
         end)
     end
   end
+
+  # Stable, low-cardinality label for a supervisor child id. Bandit-style
+  # ids are {module, make_ref()} — inspect/1 put a fresh `#Reference<...>`
+  # into the Prometheus label every boot (unbounded label cardinality, and
+  # brace/angle noise in exposition output). Collapse to the module element.
+  defp depth_label({mod, _ref}) when is_atom(mod), do: inspect(mod)
+  defp depth_label(id), do: inspect(id)
 end

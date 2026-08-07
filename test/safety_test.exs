@@ -71,13 +71,30 @@ defmodule Hypatia.Safety.RateLimiterTest do
 
   describe "enqueue/1" do
     test "increments queue size and rate limited count" do
-      entry = %{"bot" => "rhodibot", "action" => "test"}
-      RateLimiter.enqueue(entry)
+      # The entry must belong to a bot that IS rate limited, otherwise this
+      # test races the 5s :drain_queue timer: drain_queued/1 pops the entry
+      # and dispatches it whenever check_internal/2 says :ok, so a tick
+      # landing inside the 50ms sleep empties the queue and `queue_size >= 1`
+      # fails. Where that window falls shifts with total suite duration,
+      # which is why it presented as a seed-dependent flake. Saturating the
+      # burst limit first makes drain put the entry BACK (rate_limiter.ex
+      # returns state unchanged on :rate_limited), so the queue is stable —
+      # and it is the realistic scenario, since work is enqueued precisely
+      # because its bot is rate limited.
+      bot = "rhodibot-enqueue-#{System.unique_integer([:positive])}"
+      for _ <- 1..10, do: RateLimiter.record_dispatch(bot)
+      :timer.sleep(50)
+      assert {:rate_limited, :burst, _} = RateLimiter.check(bot)
+
+      before = RateLimiter.stats()
+      RateLimiter.enqueue(%{"bot" => bot, "action" => "test"})
       :timer.sleep(50)
 
       stats = RateLimiter.stats()
-      assert stats.total_queued >= 1
-      assert stats.total_rate_limited >= 1
+      # Deltas, not absolutes: other tests share this supervised GenServer's
+      # global counters.
+      assert stats.total_queued == before.total_queued + 1
+      assert stats.total_rate_limited == before.total_rate_limited + 1
       assert stats.queue_size >= 1
     end
   end

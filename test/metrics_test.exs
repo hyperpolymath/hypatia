@@ -105,9 +105,21 @@ defmodule Hypatia.Web.MetricsTest do
       assert ctype =~ "version=0.0.4"
     end
 
-    test "body is the same as Metrics.render/0" do
+    test "body has the same metric lines as Metrics.render/0 (values may tick)" do
       conn = conn(:get, "/metrics") |> Metrics.call([])
-      assert conn.resp_body == Metrics.render()
+
+      # Byte-equality raced: uptime_seconds (1s granularity) and any
+      # timer-driven counter can legitimately move between the plug's render
+      # and this one. The claim under test is that the plug serves exactly
+      # what render/0 produces — compare the metric-name/label structure
+      # with each line's trailing sample value stripped.
+      normalize = fn body ->
+        body
+        |> String.split("\n")
+        |> Enum.map(&String.replace(&1, ~r/ \S+$/, ""))
+      end
+
+      assert normalize.(conn.resp_body) == normalize.(Metrics.render())
     end
   end
 end

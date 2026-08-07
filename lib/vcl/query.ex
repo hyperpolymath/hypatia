@@ -302,7 +302,9 @@ defmodule Hypatia.VCL.Query do
           |> Enum.frequencies()
           |> Enum.filter(fn {_, count} -> count >= min_shared end)
           |> Enum.sort_by(fn {_, count} -> count end, :desc)
-          |> Enum.map(fn {{a, b}, count} -> %{pattern_a: a, pattern_b: b, shared_repos: count} end)
+          |> Enum.map(fn {{a, b}, count} ->
+            %{pattern_a: a, pattern_b: b, shared_repos: count}
+          end)
 
         {:ok, correlations}
 
