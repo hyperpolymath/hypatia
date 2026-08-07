@@ -5,7 +5,7 @@
 [metadata]
 project = "hypatia"
 version = "0.1.0"
-last-updated = "2026-05-25"
+last-updated = "2026-08-07"
 status = "active"
 
 [project-context]
@@ -24,7 +24,7 @@ crg-grade-notes = "Promoted D→C 2026-04-25: mix test 0/528 failures (233 veris
 boj-server-mcp = "2026-04-18 — hypatia-mcp cartridge (283 LOC, Deno mod.js + Idris2 ABI + Zig FFI). Path: boj-server/cartridges/hypatia-mcp/"
 gitbot-fleet-consumer = "2026-04-18 — FleetDispatcher routes to gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot, panicbot). 1635 dispatched actions, 16671 outcomes recorded. Path: lib/fleet_dispatcher.ex"
 estate-rsr-scan = "2026-04-18 — hypatia-scan.yml runs in every RSR repo (15+ repos); 302 repos scanned, 3385 weak points logged. Evidence: count of hypatia-scan.yml files across estate .github/workflows/"
-verisim-data-flat-store = "2026-04-18 — git-backed flat-file canonical store consumed via VCL queries + FileExecutor. Path: lib/verisimdb_connector.ex"
+verisim-data-flat-store = "2026-04-18 — git-backed flat-file canonical store consumed via VCL queries + FileExecutor. Path: lib/verisim_connector.ex"
 panll-data-bridge = "2026-04-18 — generates real-time JSON for PanLL dashboard panels"
 scorecard-ingestion = "2026-04-18 — 20 OpenSSF Scorecard checks ingested as local scan patterns. Path: lib/scorecard_ingestor.ex"
 
@@ -78,9 +78,6 @@ actions = [
   # M12 DONE 2026-05-24 (PR #309): soundness gates + closed-loop verification.
   "Complete neural rebalancer Strategy B+C (M9)",
   "Complete Ada TUI Elixir supervision wiring (M10)",
-  "SARIF output for IDE integration (M13)",
-  "GraphQL API as live HTTP endpoint (M14)",
-  "Bearer auth + state persistence + cross-host federation for /api/* (M15)",
 ]
 
 [session-history]

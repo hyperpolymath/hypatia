@@ -205,6 +205,43 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert Enum.any?(findings, &(&1.rule == :believe_me))
     end
 
+    test "Rust // comment mention of .unwrap() is NOT a finding" do
+      code = """
+      // TODO: replace this .unwrap() with ?
+      fn read(p: &str) -> String {
+          std::fs::read_to_string(p).expect("boom")
+      }
+      """
+
+      findings = CodeSafety.scan_content(code, "rust")
+      refute Enum.any?(findings, &(&1.rule == :unwrap_without_check))
+    end
+
+    test "Rust whole-line /* ... */ block with .unwrap() is NOT a finding" do
+      code = """
+      /* old impl:
+         let x = f().unwrap();
+      */
+      fn g() -> i32 { 1 }
+      """
+
+      findings = CodeSafety.scan_content(code, "rust")
+      refute Enum.any?(findings, &(&1.rule == :unwrap_without_check))
+    end
+
+    test "Rust still detects .unwrap() in REAL code, URLs in strings untouched" do
+      code = """
+      fn h() {
+          let u = "https://example.com";
+          let x = std::env::var("K").unwrap();
+          println!("{} {}", u, x);
+      }
+      """
+
+      findings = CodeSafety.scan_content(code, "rust")
+      assert Enum.any?(findings, &(&1.rule == :unwrap_without_check))
+    end
+
     test "Coq (* ... *) comment mention of Admitted is NOT a finding" do
       code = """
       (* This module contains no Admitted proofs. *)

@@ -26,22 +26,21 @@ if [[ -n "$DENO_CONFIG" ]]; then
   if grep -q '"lock"' "$DENO_CONFIG" 2>/dev/null; then
     echo "[fix-pin-js-deps] Lockfile already configured in ${DENO_CONFIG}"
   else
-    if command -v python3 &>/dev/null; then
-      python3 - "$DENO_CONFIG" <<'PYEOF'
-import json, sys
-path = sys.argv[1]
-with open(path) as f:
-    data = json.load(f)
-if "lock" not in data:
-    data["lock"] = True
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    print(f"[fix-pin-js-deps] Added \"lock\": true to {path}")
-PYEOF
-      FIXES=$((FIXES + 1))
+    if command -v jq &>/dev/null; then
+      tmp=$(mktemp)
+      trap 'rm -f "$tmp"' EXIT
+      # jq cannot parse JSONC — a commented deno.jsonc takes the ERROR branch
+      # (skip-with-error is intended; never write garbage back).
+      if jq '.lock = true' "$DENO_CONFIG" > "$tmp"; then
+        chmod --reference="$DENO_CONFIG" "$tmp"  # mktemp is 0600; keep the file's mode
+        mv "$tmp" "$DENO_CONFIG"
+        echo "[fix-pin-js-deps] Added \"lock\": true to ${DENO_CONFIG}"
+        FIXES=$((FIXES + 1))
+      else
+        echo "[fix-pin-js-deps] ERROR: jq failed to parse ${DENO_CONFIG}" >&2
+      fi
     else
-      echo "[fix-pin-js-deps] WARN: python3 not available — add '\"lock\": true' to ${DENO_CONFIG} manually" >&2
+      echo "[fix-pin-js-deps] WARN: jq not available — add '\"lock\": true' to ${DENO_CONFIG} manually" >&2
     fi
   fi
 

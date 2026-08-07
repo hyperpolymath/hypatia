@@ -22,6 +22,14 @@ O="${OWNER:-hyperpolymath}"; R="$1"
 HERE="$(cd "$(dirname "$0")" && pwd)"   # for action-superset.txt (allow-list coverage)
 emit(){ printf '%s\t%s\t%s\t%s\n' "$R" "$1" "$2" "$3"; }
 
+# --- Skip logic (own repos only; one API call for both flags)
+af=$(gh api "repos/$O/$R" --jq '[.archived, .fork] | @tsv' 2>/dev/null || printf 'false\tfalse')
+is_archived=${af%%$'\t'*}; is_fork=${af##*$'\t'}
+if [ "$is_archived" = "true" ] || [ "$is_fork" = "true" ]; then
+    echo "SKIP $R archived/fork" >&2
+    exit 0
+fi
+
 # --- A: billing wall (a failure run whose job annotation matches the signature)
 fail_id=$(gh api "repos/$O/$R/actions/runs?status=failure&per_page=5" --jq '.workflow_runs[0].id // empty' 2>/dev/null || true)
 if [ -n "${fail_id:-}" ]; then
@@ -51,7 +59,7 @@ if [ "$aa" = "selected" ]; then
     ntot=$(printf '%s\n' "$req" | grep -c .)
     nmiss=$(printf '%s\n' "$miss" | grep -c .)
     first=$(printf '%s\n' "$miss" | head -n1)
-    emit B-ALLOWLIST HIGH "selected + allow-list missing $nmiss/$ntot curated pattern(s) (e.g. $first) → apply curated superset"
+    emit B-ALLOWLIST HIGH "ERR-SEC-003: selected + allow-list missing $nmiss/$ntot curated pattern(s) (e.g. $first) → apply curated superset"
   fi
 fi
 
@@ -63,6 +71,6 @@ sf=$(gh api "repos/$O/$R/actions/runs?per_page=30" --jq '[.workflow_runs[]|selec
 for path in $(gh api "repos/$O/$R/contents/.github/workflows" --jq '.[]?|select(.name|test("\\.ya?ml$"))|.path' 2>/dev/null || true); do
   if gh api "repos/$O/$R/contents/$path" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null \
        | grep -qE '^on:[[:space:]]*\[[[:space:]]*push[[:space:]]*,[[:space:]]*pull_request[[:space:]]*\]'; then
-    emit D-BURN MEDIUM "$path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
+    emit D-BURN MEDIUM "ERR-WF-014: $path on bare [push,pull_request] (2x runs/PR) → scope push to default branch + concurrency-cancel"
   fi
 done

@@ -8,15 +8,35 @@ Five minutes from clone to your first scan.
 - Elixir 1.18+ and Erlang/OTP 27 (for the Elixir scanner + supervision tree)
 - Rust 1.94+ (for the high-throughput CLI workers)
 - `git` (every clone path)
+- `just` — the task runner every documented workflow goes through (`just --list`)
 - Optional: `panic-attack` on `$PATH` if you want closed-loop verification of fixes
+
+### Reproducible builds: Guix only
+
+The estate is **Guix-primary**; Nix was retired estate-wide on 2026-06-05 and there is no
+`flake.nix`. The reproducible environment is declared in `guix.scm` at the repo root:
+
+```bash
+guix shell -m guix.scm      # reproducible dev environment
+```
+
+Podman (not Docker) is the container tool. If you are following an older guide that mentions
+Nix or Docker for this project, it predates the migration.
 
 ## Install
 
 ```bash
 git clone https://github.com/hyperpolymath/hypatia.git
 cd hypatia
+just doctor             # toolchain preflight — tells you what is missing
 mix deps.get
 mix escript.build       # builds the `hypatia` escript scanner
+```
+
+Or build everything (Elixir + Rust + Zig FFI + Idris2 ABI) in one step:
+
+```bash
+just build-all
 ```
 
 ## Run your first scan

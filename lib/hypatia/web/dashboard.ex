@@ -273,6 +273,8 @@ defmodule Hypatia.Web.Dashboard do
           "hypatia.neural.cycle",
           "hypatia.soundness.violation",
           "hypatia.anomaly.detected",
+          "hypatia.cross_org.import",
+          "hypatia.cross_org.drift",
         ];
 
         known.forEach((name) => {

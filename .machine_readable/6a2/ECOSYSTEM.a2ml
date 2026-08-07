@@ -5,8 +5,8 @@
 [metadata]
 project = "hypatia"
 ecosystem = "hyperpolymath"
-last-updated = "2026-04-25"
-media-type = "application/vnd.ecosystem+scm"
+last-updated = "2026-08-07"
+media-type = "application/a2ml"   # record dialect, not Scheme
 
 [position]
 type = "component"

@@ -8,7 +8,7 @@
 name = "AGENTIC"
 project = "hypatia"
 version = "0.2.0"
-last-updated = "2026-04-25"
+last-updated = "2026-08-07"
 
 [agent-permissions]
 can-edit-source = true
@@ -24,7 +24,7 @@ forbidden = [
   "Use banned Idris2 patterns: believe_me, assert_total, partial without annotation",
   "Commit secrets or credentials",
   "Use banned languages: TypeScript, Go, Python (non-SaltStack), Node.js, npm, Bun",
-  "Place state files in repository root — .machine_readable/6a2/ ONLY",
+  "Place state files in repository root — .machine_readable/6a2/ ONLY (NOTE: RSR v2.0 3.1.x requires .machine_readable/descriptiles/; migration pending, see docs/DEBT-REGISTER.md M-1)",
   "Use AGPL license (this is a MPL-2.0 repo)",
   "Start GenServer via start_supervised! when Application supervisor already owns it — use take_supervised/1 instead",
   "Claim '0 failures' without running mix test and observing actual output",

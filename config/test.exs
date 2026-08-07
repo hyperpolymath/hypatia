@@ -17,4 +17,9 @@ test_store = Path.expand("../_build/test/verisim-data", __DIR__)
 config :hypatia,
   http_port: 9099,
   verisimdb_data_path: test_store,
-  annealing_state_path: Path.join(test_store, "annealing-states")
+  annealing_state_path: Path.join(test_store, "annealing-states"),
+  # The diagnostics monitor's 30s tick can fire mid-suite; its recovery
+  # path GenServer.stops supervised children (Pipeline/Learning/
+  # Coordinator), which reads as random order-dependent test failures.
+  # Monitor tests drive checks explicitly via check_now/0.
+  diagnostics_periodic_checks: false

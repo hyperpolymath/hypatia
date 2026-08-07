@@ -50,14 +50,36 @@ case "$CLASS" in
     gh api -X POST "repos/$O/$R/git/refs" -f ref="refs/heads/$BR" -f sha="$sha" >/dev/null
     for p in "${targets[@]}"; do
       cur=$(gh api "repos/$O/$R/contents/$p?ref=$BR")
-      newc=$(printf '%s' "$cur" | python3 -c 'import json,sys,re,base64
-d=json.load(sys.stdin); s=base64.b64decode(d["content"]).decode("utf-8")
-pat=re.compile(r"(?m)^on:[ \t]*\[[ \t]*push[ \t]*,[ \t]*pull_request[ \t]*\][ \t]*$")
-blk="on:\n  push:\n    branches: [main, master]\n  pull_request:\n"
-if not re.search(r"(?m)^concurrency:",s):
-    blk+="\n# Estate guardrail: scope push to default branches (PR fires once, not\n# push+PR) and cancel superseded runs. Safe — read-only PR check.\nconcurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true\n"
-print(base64.b64encode(pat.sub(blk.rstrip(chr(10)),s,count=1).encode()).decode())')
-      csha=$(printf '%s' "$cur" | python3 -c 'import json,sys;print(json.load(sys.stdin)["sha"])')
+      ccontent=$(printf '%s' "$cur" | jq -r '.content' | tr -d '\n' | base64 -d)
+      csha=$(printf '%s' "$cur" | jq -r '.sha')
+      if [ -z "$ccontent" ]; then echo "SKIP $R/$p empty-decode (refusing to PUT an empty file)" >&2; continue; fi
+
+      blk="on:
+  push:
+    branches: [main, master]
+  pull_request:"
+
+      if ! printf '%s' "$ccontent" | grep -q '^[[:space:]]*concurrency:'; then
+        blk="$blk
+
+# Estate guardrail: scope push to default branches (PR fires once, not
+# push+PR) and cancel superseded runs. Safe — read-only PR check.
+concurrency:
+  group: \${{ github.workflow }}-\${{ github.ref }}
+  cancel-in-progress: true"
+      fi
+
+      patched=$(printf '%s' "$ccontent" | awk -v blk="$blk" '
+        /^on:[ \t]*\[[ \t]*push[ \t]*,[ \t]*pull_request[ \t]*\][ \t]*$/ && !done {
+          print blk
+          done = 1
+          next
+        }
+        { print }
+      ')
+
+      # printf '%s\n' restores the final newline the $( ) captures strip
+      newc=$(printf '%s\n' "$patched" | base64 | tr -d '\n')
       gh api -X PUT "repos/$O/$R/contents/$p" -f message="ci: cut Actions burn in $p (scope push + concurrency-cancel)" \
         -f content="$newc" -f sha="$csha" -f branch="$BR" >/dev/null
     done

@@ -1,22 +1,43 @@
 Licensing Notice
 ================
 
-This project is authored by Jonathan D.A. Jewell (hyperpolymath) and
-is licensed under the Palimpsest License (MPL-2.0).
+This project is authored by Jonathan D.A. Jewell (hyperpolymath).
 
-The MPL-2.0 is a philosophical extension of the Mozilla Public
-License 2.0, adding provisions for cryptographic provenance, emotional
-lineage preservation, and quantum-safe signatures. The full PMPL text is
-available in LICENSES/MPL-2.0.txt.
+Licence
+-------
 
-For compatibility with automated license detection tools and platforms
-that require OSI-approved licenses, the root LICENSE file contains the
-standard Mozilla Public License 2.0 text. This ensures that package
-registries, CI systems, and other tooling correctly identify the license.
+Hypatia is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**.
 
-The legally binding terms are:
-  - Source files: governed by MPL-2.0 (per SPDX headers)
-  - Combined works: compatible with MPL-2.0 (per PMPL Section 6)
+  - Source files (.ex, .exs, .rs, .idr, .zig, .hs, shell, workflows)
+    are governed by MPL-2.0, declared per-file via SPDX headers.
+  - Documentation (.md, .adoc) is licensed CC-BY-SA-4.0, likewise
+    declared per-file via SPDX headers.
 
-For more information about the Palimpsest License:
-  https://github.com/hyperpolymath/palimpsest-license
+The authoritative texts are:
+
+  LICENSE                        MPL-2.0 (root, for licence detectors)
+  LICENSES/MPL-2.0.txt           MPL-2.0
+  LICENSES/CC-BY-SA-4.0.txt      CC-BY-SA-4.0
+
+Where a file's SPDX header and this notice disagree, the SPDX header
+governs that file.
+
+A note on the Palimpsest Licence
+--------------------------------
+
+Earlier revisions of this repository were distributed under the
+Palimpsest Licence (PMPL-1.0-or-later), and a small number of files may
+still carry a PMPL SPDX header pending migration. PMPL is a *separate*
+licence maintained at https://github.com/hyperpolymath/palimpsest-license
+— it is not a variant, alias or extension of MPL-2.0, and its text is
+not distributed with this repository.
+
+The current licence of this project is MPL-2.0. Any file still bearing a
+PMPL header is a migration defect, tracked in docs/DEBT-REGISTER.md (L-2),
+not a statement that PMPL terms apply to the project as a whole.
+
+(An earlier version of this NOTICE conflated the two licences — it
+described "the Palimpsest License (MPL-2.0)" as "a philosophical
+extension of the Mozilla Public License 2.0" and pointed at
+LICENSES/MPL-2.0.txt for "the full PMPL text". That was the residue of an
+incomplete find-and-replace and was corrected on 2026-08-07.)
