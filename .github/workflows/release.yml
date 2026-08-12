@@ -7,7 +7,7 @@ name: Release & Container
 
 on:
   push: null
-  workflow_dispatch: null
+  workflow_dispatch:
 
 permissions: read-all
 

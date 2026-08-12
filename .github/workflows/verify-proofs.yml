@@ -37,8 +37,8 @@ on:
   # 04:30, 05:00) were inherited from the pre-consolidation
   # verify-{idris,lean,tlaplus}.yml workflows and fired the now-merged
   # workflow three times every Monday. Collapsed to one.
-  - cron: 0 4 * * 1
-  workflow_dispatch: null
+  - cron: '0 4 * * 1'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

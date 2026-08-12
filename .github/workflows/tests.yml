@@ -10,12 +10,12 @@ on:
     branches:
     - main
   pull_request: null
-  workflow_dispatch: null
+  workflow_dispatch:
   schedule:
   # Daily 03:00 UTC — covers Mondays too. The Monday-only `0 3 * * 1`
   # cron from the pre-consolidation tests was a subset of the daily one
   # and was dropped to stop running this workflow twice on Mondays.
-  - cron: 0 3 * * *
+  - cron: '0 3 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
