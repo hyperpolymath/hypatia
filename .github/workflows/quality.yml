@@ -8,7 +8,7 @@ name: Docs & Code Quality
 on:
   push: null
   pull_request: null
-  workflow_dispatch: null
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

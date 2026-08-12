@@ -16,10 +16,10 @@
 name: Merge Orchestrate (scheduled)
 
 on:
-  workflow_dispatch: null
+  workflow_dispatch:
   schedule:
   # Hourly, offset off the top of the hour to dodge runner congestion.
-  - cron: 17 * * * *
+  - cron: '17 * * * *'
 
 concurrency:
   group: ${{ github.workflow }}
