@@ -325,20 +325,19 @@ jobs:
       
       - name: Check file permissions
         run: |
-          find . -type f -perm /111 -name "*.sh" | head -10 || true
+          find . -type f -perm /111 -name "*.sh" | head -10
       
       - name: Check TODO/FIXME
         run: |
           echo "=== TODOs ==="
-          grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.rs" --include="*.res" --include="*.py" --include="*.ex" . | head -20 || echo "None found"
+          grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.rs" --include="*.py" --include="*.ex" . | head -20
       
       - name: Check for large files
         run: |
-          find . -type f -size +1M -not -path "./.git/*" | head -10 || echo "No large files"
+          find . -type f -size +1M -not -path "./.git/*" | head -10
       
       - name: EditorConfig check
         uses: editorconfig-checker/action-editorconfig-checker@v2.2.0
-        continue-on-error: true
 
   docs:
     runs-on: ubuntu-latest
