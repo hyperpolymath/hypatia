@@ -131,21 +131,23 @@ defmodule Hypatia.Rules.StructuralDrift do
     "ECOSYSTEM.a2ml",
     "AGENTIC.a2ml",
     "NEUROSYM.a2ml",
-    "PLAYBOOK.a2ml"
+    "PLAYBOOK.a2ml",
+    "ANCHOR.a2ml"
   ]
 
   @doc """
-  SD004: Detect 6a2ml files outside of .machine_readable/6a2/.
-  These MUST be in .machine_readable/6a2/ and nowhere else.
+  SD004: Detect 6a2ml files in retired locations.
+  Canonical location is .machine_readable/<file>.a2ml.
+  Retired location .machine_readable/6a2/<file>.a2ml is no longer accepted.
   Severity: critical.
-  Action: move to .machine_readable/6a2/.
+  Action: move to .machine_readable/.
   """
   def sd004_misplaced_a2ml(repo_path) do
     @a2ml_state_files
     |> Enum.flat_map(fn a2ml_file ->
       wrong_locations = [
         Path.join(repo_path, a2ml_file),
-        Path.join([repo_path, ".machine_readable", a2ml_file])
+        Path.join([repo_path, ".machine_readable", "6a2", a2ml_file])
       ]
 
       wrong_locations
@@ -155,9 +157,9 @@ defmodule Hypatia.Rules.StructuralDrift do
           rule: "SD004",
           file: Path.relative_to(path, repo_path),
           severity: :critical,
-          reason: "6a2ml file outside canonical location -- must be in .machine_readable/6a2/",
+          reason: "6a2ml file in retired location -- must be in .machine_readable/ directly",
           action: :move,
-          target: ".machine_readable/6a2/#{a2ml_file}"
+          target: ".machine_readable/#{a2ml_file}"
         }
       end)
     end)
