@@ -7,7 +7,9 @@ K9!
 
 {
   pedigree = {
-    name = "hypatia-metadata",
+    name = "hypatia-metadata.k9.ncl",
+    security = { leash = 'Yard },
+    
     leash = 'Kennel,
     schema_version = "1.0.0",
     component_type = "ci-tool-metadata",
@@ -19,7 +21,7 @@ K9!
       allow_subprocess = false,
     },
     metadata = {
-      name = "hypatia-metadata",
+      
       version = "0.1.0",
       description = "Hypatia: neurosymbolic CI/CD intelligence platform — project invariants",
       author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>",

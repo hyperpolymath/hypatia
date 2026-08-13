@@ -8,7 +8,9 @@ K9!
 leash = 'Hunt
 
 pedigree = {
-  name = "fleet-config",
+    name = "fleet-config.k9.ncl",
+    security = { leash = 'Yard },
+  
   leash = 'Hunt,
   signature_required = false,
   schema_version = "1.0.0",

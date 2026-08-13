@@ -8,7 +8,9 @@ K9!
 leash = 'Hunt
 
 pedigree = {
-  name = "deploy-security-scan",
+    name = "deploy-security-scan.k9.ncl",
+    security = { leash = 'Yard },
+  
   leash = 'Hunt,
   signature_required = false,
   schema_version = "1.0.0",
@@ -88,7 +90,7 @@ config = {
 # Generate the Hypatia workflow YAML
 hypatia_workflow = {
   spdx_header = "# SPDX-License-Identifier: MPL-2.0",
-  name = "Hypatia Security Scan",
+  
   permissions = "permissions: read-all",
 
   on_triggers =
@@ -102,22 +104,22 @@ hypatia_workflow = {
     security_scan = {
       runs_on = "ubuntu-latest",
       steps = [
-        { name = "Checkout code", uses = "actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11" },
+        {  uses = "actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11" },
         {
-          name = "Download Hypatia rulesets",
+          
           run = "curl -sSL %{config.hypatia_endpoints.ruleset_registry}/download/%{std.string.join "," config.scan_config.enabled_rulesets} -o rulesets.tar.gz && tar xzf rulesets.tar.gz",
         },
         {
-          name = "Run Hypatia scan",
+          
           run = "hypatia scan --depth %{std.string.from config.scan_config.scan_depth} --rulesets ./rulesets/ --report scan-report.json",
         },
         {
-          name = "Upload findings",
+          
           uses = "github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb",
           with_ = { sarif_file = "scan-report.sarif" },
         },
         {
-          name = "Send learning data",
+          
           if_ = config.learning.enable_learning,
           run = "hypatia learn --privacy %{std.string.from config.learning.privacy_mode} --endpoint %{config.hypatia_endpoints.learning_api}",
         },
