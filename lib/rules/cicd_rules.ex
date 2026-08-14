@@ -171,7 +171,12 @@ defmodule Hypatia.Rules.CicdRules do
         # Exemplars: `*/editors/vscode/`, `*/extensions/vscode/`,
         # `*/clients/vscode/`. The bare `/vscode/` substring suffices since
         # `String.contains?/2` matches any path containing it.
-        "/vscode/"
+        "/vscode/",
+        # (10) CLAUDE.md documented exemptions not yet in this list
+        "a2ml/bindings/deno/",
+        "k9-svc/bindings/deno/",
+        "lol/test/vitest.config.ts",
+        "scripts/check-ts-allowlist.ts"
       ]
     },
     # ReScript ban (org policy 2026-05-25). In-flight estate migration

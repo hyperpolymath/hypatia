@@ -785,16 +785,30 @@ defmodule Hypatia.Rules.WorkflowAudit do
       publish_true? =
         Regex.match?(~r/publish_results:\s*true/, stripped)
 
-      # Filter out `run:` keys that appear inside top-level `defaults:` /
-      # `with:` / commented blocks. Step-level `run:` is the only flavour
-      # the OSSF endpoint cares about — anchored at `^\s+-\s+run:` or
-      # `^\s+run:\s*\|` inside a `steps:` list.
-      has_step_run? =
-        Regex.match?(~r/^\s+- name:[^\n]*\n\s+run:/m, stripped) or
-          Regex.match?(~r/^\s+- run:\s*[|>\n]/m, stripped) or
-          Regex.match?(~r/^\s+run:\s*[|>]/m, stripped)
+      # Only emit if the job that runs `ossf/scorecard-action` with `publish_results: true`
+      # itself contains a `run:` step. We need to check per-job, not per-file.
+      # Split content by job boundaries (job names start at column 0 or 2 spaces)
+      # and find which job has the scorecard action with publish_results.
+      
+      # Find all job sections and check if the scorecard+publish job has run steps
+      job_sections = Regex.split(~r/\n(?:^|  )[a-zA-Z_][a-zA-Z0-9_-]*:\s*\n/m, stripped)
+      
+      scorecard_job_has_run = 
+        Enum.any?(job_sections, fn section ->
+          scorecard_in_job? = Regex.match?(~r/uses:\s*ossf\/scorecard-action@/, section)
+          publish_in_job? = Regex.match?(~r/publish_results:\s*true/, section)
+          
+          if scorecard_in_job? and publish_in_job? do
+            # Check if this same job section has a run: step
+            Regex.match?(~r/^\s+- name:[^\n]*\n\s+run:/m, section) or
+              Regex.match?(~r/^\s+- run:\s*[|>\n]/m, section) or
+              Regex.match?(~r/^\s+run:\s*[|>]/m, section)
+          else
+            false
+          end
+        end)
 
-      if uses_scorecard? and publish_true? and has_step_run? do
+      if uses_scorecard? and publish_true? and scorecard_job_has_run do
         [
           %{
             rule: "WF014",
