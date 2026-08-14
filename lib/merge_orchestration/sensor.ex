@@ -65,6 +65,9 @@ defmodule Hypatia.MergeOrchestration.Sensor do
 
     %{
       pr: %{repo: obs["repo"], number: obs["number"]},
+      title: Map.get(obs, "title", ""),
+      labels: Map.get(obs, "labels", []),
+      state: Map.get(obs, "state", "open"),
       change_class: class,
       change_level: level,
       license_touch: license_touch,

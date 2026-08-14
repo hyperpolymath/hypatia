@@ -112,9 +112,41 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
   # license/SPDX is a symbolic, owner-only veto (not a bot attestation).
   defp symbolic_vetoes(ctx) do
-    if Map.get(ctx, :license_touch, false),
-      do: [%{bot: "policy-gate", reason: "license/SPDX -- owner-only"}],
-      else: []
+    vetoes = []
+
+    # License/SPDX touch veto
+    if Map.get(ctx, :license_touch, false) do
+      vetoes = [%{bot: "policy-gate", reason: "license/SPDX -- owner-only"} | vetoes]
+    end
+
+    # DO NOT MERGE / WIP in title (case-insensitive)
+    title = Map.get(ctx, :title, "")
+    title_lower = String.downcase(title)
+    if String.contains?(title_lower, "do not merge") || String.contains?(title_lower, "wip") do
+      vetoes = [%{bot: "policy-gate", reason: "title contains DO NOT MERGE or WIP"} | vetoes]
+    end
+
+    # do-not-merge / hold labels (case-insensitive)
+    labels = Map.get(ctx, :labels, [])
+    hold_labels = ["do-not-merge", "hold", "do not merge"]
+    labels_lower = Enum.map(labels, &String.downcase/1)
+    if Enum.any?(labels_lower, &(&1 in hold_labels)) do
+      vetoes = [%{bot: "policy-gate", reason: "PR has do-not-merge or hold label"} | vetoes]
+    end
+
+    # litmus/ or test/ branch prefix
+    branch = Map.get(ctx, :branch, "")
+    if String.starts_with?(branch, "litmus/") || String.starts_with?(branch, "test/") do
+      vetoes = [%{bot: "policy-gate", reason: "branch prefix litmus/ or test/"} | vetoes]
+    end
+
+    # Draft state
+    state = Map.get(ctx, :state, "open")
+    if state == "draft" do
+      vetoes = [%{bot: "policy-gate", reason: "PR is in draft state"} | vetoes]
+    end
+
+    vetoes
   end
 
   defp default_weight(_attestation), do: 1.0
