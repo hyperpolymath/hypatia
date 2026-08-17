@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.13
         with:
           tool: cargo-deny
 
@@ -92,7 +92,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@v3.96.0
+        uses: trufflesecurity/trufflehog@v3.97.0
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -130,7 +130,7 @@ jobs:
           args: --sarif --output=semgrep.sarif
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -151,13 +151,13 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.3
+        uses: github/codeql-action/init@v4.37.7
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.3
+        uses: github/codeql-action/analyze@v4.37.7
         with:
           category: "/language:${{matrix.language}}"
 
@@ -221,7 +221,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -332,7 +332,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.13
         with:
           tool: cargo-deny
 
@@ -445,7 +445,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
@@ -528,7 +528,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@v3.96.0
+        uses: trufflesecurity/trufflehog@v3.97.0
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -555,13 +555,13 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.3
+        uses: github/codeql-action/init@v4.37.7
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.3
+        uses: github/codeql-action/analyze@v4.37.7
         with:
           category: "/language:${{matrix.language}}"
 
@@ -588,7 +588,7 @@ jobs:
           args: --sarif --output=semgrep.sarif
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.7
         if: always()
         with:
           sarif_file: semgrep.sarif
