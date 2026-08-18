@@ -114,7 +114,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: ". -> target"
           key: ${{ matrix.target }}
@@ -216,7 +216,7 @@ jobs:
 
       - name: Log in to Container Registry
         if: ${{ !inputs.dry_run }}
-        uses: docker/login-action@v4.5.2
+        uses: docker/login-action@v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -250,7 +250,7 @@ jobs:
 
       - name: Attest container provenance
         if: ${{ !inputs.dry_run }}
-        uses: actions/attest-build-provenance@v4.1.1
+        uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -335,7 +335,7 @@ jobs:
           fail_on_unmatched_files: false
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4.1.1
+        uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: 'release-assets/*'
 
