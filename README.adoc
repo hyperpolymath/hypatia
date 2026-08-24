@@ -129,8 +129,8 @@ auto-quarantine.
 
 Development state, milestones and known gaps live in machine-readable form:
 
-* `.machine_readable/6a2/STATE.a2ml` — current state and milestone status
-* `.machine_readable/6a2/PLAYBOOK.a2ml` — operational runbook
+* `.machine_readable/descriptiles/STATE.a2ml` — current state and milestone status
+* `.machine_readable/descriptiles/PLAYBOOK.a2ml` — operational runbook
 * link:ROADMAP.adoc[ROADMAP.adoc] — milestone history
 
 **Before trusting any metric or green board, read link:docs/DEBT-REGISTER.md[docs/DEBT-REGISTER.md].**
