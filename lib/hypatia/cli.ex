@@ -27,7 +27,7 @@ defmodule Hypatia.CLI do
                                    cicd_rules,code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
-                                   structural_drift
+                                   structural_drift,implementation_inside_canon
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -53,7 +53,8 @@ defmodule Hypatia.CLI do
     :dependabot_alerts,
     :secret_scanning_alerts,
     :code_scanning_alerts,
-    :structural_drift
+    :structural_drift,
+    :implementation_inside_canon
   ]
 
   @severity_order %{
@@ -801,6 +802,22 @@ defmodule Hypatia.CLI do
         results
       end
 
+    # Standards-authored HYP-S009. The evaluator is dormant for repositories
+    # that do not carry the canonical rule definition.
+    results =
+      if :implementation_inside_canon in rules do
+        case Hypatia.Rules.ImplementationInsideCanon.scan(repo_path) do
+          {:ok, %{findings: findings}} ->
+            results ++ findings
+
+          {:error, reason} ->
+            IO.puts(:stderr, "Warning: HYP-S009 unavailable: #{inspect(reason)}")
+            results
+        end
+      else
+        results
+      end
+
     # ─── Uniform suppression pass ──────────────────────────────────────
     #
     # Several rule paths above (structural_drift, code_scanning_alerts,
@@ -1283,7 +1300,8 @@ defmodule Hypatia.CLI do
                                 workflow_audit,cicd_rules,code_safety,
                                 migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
-                                secret_scanning_alerts,code_scanning_alerts
+                                secret_scanning_alerts,code_scanning_alerts,
+                                structural_drift,implementation_inside_canon
         --format, -f <fmt>      Output format: json (default), text, github, sarif, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
