@@ -35,9 +35,11 @@ defmodule Hypatia.Rules.StructuralDrift do
 
   @doc """
   SD001: Detect .scm state files anywhere in the repo.
-  These should have been migrated to .a2ml in .machine_readable/6a2/.
+  These should have been migrated to .a2ml in
+  .machine_readable/descriptiles/.
   Severity: critical (blocks compliance).
-  Action: convert to .a2ml, move to .machine_readable/6a2/, delete .scm.
+  Action: convert to .a2ml, move to .machine_readable/descriptiles/, delete
+  .scm.
   Triggers: intensive scan of entire repo.
   """
   def sd001_legacy_scm(repo_path) do
@@ -47,7 +49,8 @@ defmodule Hypatia.Rules.StructuralDrift do
         locations = [
           Path.join(repo_path, scm_file),
           Path.join([repo_path, ".machine_readable", scm_file]),
-          Path.join([repo_path, ".machine_readable", "6a2", scm_file])
+          Path.join([repo_path, ".machine_readable", "6a2", scm_file]),
+          Path.join([repo_path, ".machine_readable", "descriptiles", scm_file])
         ]
 
         locations
@@ -57,7 +60,8 @@ defmodule Hypatia.Rules.StructuralDrift do
             rule: "SD001",
             file: Path.relative_to(path, repo_path),
             severity: :critical,
-            reason: "Legacy .scm state file -- must be .a2ml in .machine_readable/6a2/",
+            reason:
+              "Legacy .scm state file -- must be converted to .machine_readable/descriptiles/#{String.replace_suffix(scm_file, ".scm", ".a2ml")}",
             action: :convert_and_move,
             trigger_intensive: true
           }
@@ -123,7 +127,7 @@ defmodule Hypatia.Rules.StructuralDrift do
     end
   end
 
-  # ─── SD004: Misplaced 6a2ml files ──────────────────────────────────────
+  # ─── SD004: Retired or misplaced descriptile files ─────────────────────
 
   @a2ml_state_files [
     "STATE.a2ml",
@@ -136,17 +140,18 @@ defmodule Hypatia.Rules.StructuralDrift do
   ]
 
   @doc """
-  SD004: Detect 6a2ml files in retired locations.
-  Canonical location is .machine_readable/<file>.a2ml.
-  Retired location .machine_readable/6a2/<file>.a2ml is no longer accepted.
+  SD004: Detect descriptile files outside their canonical location.
+  Canonical location is .machine_readable/descriptiles/<file>.a2ml.
+  The old .machine_readable/6a2/<file>.a2ml directory is retired.
   Severity: critical.
-  Action: move to .machine_readable/.
+  Action: move to .machine_readable/descriptiles/.
   """
   def sd004_misplaced_a2ml(repo_path) do
     @a2ml_state_files
     |> Enum.flat_map(fn a2ml_file ->
       wrong_locations = [
         Path.join(repo_path, a2ml_file),
+        Path.join([repo_path, ".machine_readable", a2ml_file]),
         Path.join([repo_path, ".machine_readable", "6a2", a2ml_file])
       ]
 
@@ -157,9 +162,9 @@ defmodule Hypatia.Rules.StructuralDrift do
           rule: "SD004",
           file: Path.relative_to(path, repo_path),
           severity: :critical,
-          reason: "6a2ml file in retired location -- must be in .machine_readable/ directly",
+          reason: "Descriptile in retired location -- must be in .machine_readable/descriptiles/",
           action: :move,
-          target: ".machine_readable/#{a2ml_file}"
+          target: ".machine_readable/descriptiles/#{a2ml_file}"
         }
       end)
     end)
@@ -291,21 +296,25 @@ defmodule Hypatia.Rules.StructuralDrift do
   # ─── SD007: Stale references in 0-AI-MANIFEST.a2ml ────────────────────
 
   @stale_reference_patterns [
-    {~r/STATE\.scm/, "References STATE.scm -- should be .machine_readable/6a2/STATE.a2ml"},
-    {~r/META\.scm/, "References META.scm -- should be .machine_readable/6a2/META.a2ml"},
+    {~r/STATE\.scm/,
+     "References STATE.scm -- should be .machine_readable/descriptiles/STATE.a2ml"},
+    {~r/META\.scm/, "References META.scm -- should be .machine_readable/descriptiles/META.a2ml"},
     {~r/ECOSYSTEM\.scm/,
-     "References ECOSYSTEM.scm -- should be .machine_readable/6a2/ECOSYSTEM.a2ml"},
-    {~r/AGENTIC\.scm/, "References AGENTIC.scm -- should be .machine_readable/6a2/AGENTIC.a2ml"},
+     "References ECOSYSTEM.scm -- should be .machine_readable/descriptiles/ECOSYSTEM.a2ml"},
+    {~r/AGENTIC\.scm/,
+     "References AGENTIC.scm -- should be .machine_readable/descriptiles/AGENTIC.a2ml"},
     {~r/NEUROSYM\.scm/,
-     "References NEUROSYM.scm -- should be .machine_readable/6a2/NEUROSYM.a2ml"},
+     "References NEUROSYM.scm -- should be .machine_readable/descriptiles/NEUROSYM.a2ml"},
     {~r/PLAYBOOK\.scm/,
-     "References PLAYBOOK.scm -- should be .machine_readable/6a2/PLAYBOOK.a2ml"},
+     "References PLAYBOOK.scm -- should be .machine_readable/descriptiles/PLAYBOOK.a2ml"},
     {~r/AI\.djot/, "References AI.djot -- file has been superseded by 0-AI-MANIFEST.a2ml"},
     {~r/Trustfile\.hs/, "References Trustfile.hs -- should be Trustfile.a2ml"},
     {~r/\.machine_readable\/STATE\.a2ml/,
-     "References .machine_readable/STATE.a2ml -- should be .machine_readable/6a2/STATE.a2ml"},
+     "References .machine_readable/STATE.a2ml -- should be .machine_readable/descriptiles/STATE.a2ml"},
     {~r/\.machine_readable\/META\.a2ml/,
-     "References .machine_readable/META.a2ml -- should be .machine_readable/6a2/META.a2ml"}
+     "References .machine_readable/META.a2ml -- should be .machine_readable/descriptiles/META.a2ml"},
+    {~r/\.machine_readable\/6a2\//,
+     "References retired .machine_readable/6a2/ -- should be .machine_readable/descriptiles/"}
   ]
 
   @doc """
@@ -1139,54 +1148,55 @@ defmodule Hypatia.Rules.StructuralDrift do
     end)
   end
 
-  # ─── SD023: STATE.a2ml divergence (top-level vs 6a2/) ──────────────────
+  # ─── SD023: STATE.a2ml divergence (canonical vs retired) ───────────────
   #
-  # The estate v2 convention puts STATE at `.machine_readable/6a2/STATE.a2ml`.
-  # Some repos retain a legacy top-level `.machine_readable/STATE.a2ml`. When
-  # both exist, they MUST agree on the `last-updated` field — otherwise one
-  # is stale and consumers (Hypatia, agents reading 6a2) see the wrong reality.
+  # The canonical location is `.machine_readable/descriptiles/STATE.a2ml`.
+  # Some repos retain `.machine_readable/6a2/STATE.a2ml`; that directory is
+  # retired. When both exist, their `last-updated` fields must agree while the
+  # legacy copy is being removed, or consumers see the wrong reality.
   #
-  # Discovered on JoshuaJewell/paint-type 2026-06-02: top-level STATE.a2ml
-  # was 2026-06-01 with 22% completion while 6a2/STATE.a2ml was 2026-05-11
-  # with 10% completion. Caught by manual sweep; PR #49 unified them.
+  # Discovered on JoshuaJewell/paint-type 2026-06-02: two state files had
+  # diverged. Caught by manual sweep; PR #49 unified them.
 
   @doc """
-  SD023: Detect divergence between `.machine_readable/STATE.a2ml` and
+  SD023: Detect divergence between canonical
+  `.machine_readable/descriptiles/STATE.a2ml` and retired
   `.machine_readable/6a2/STATE.a2ml` when both exist.
 
   Severity: medium (one is stale; consumers may read either).
-  Action: pick the freshest as truth, mirror to the other, document
-  in CHANGELOG which is canonical going forward.
+  Action: preserve the freshest canonical content and remove the retired
+  `6a2/` copy.
   """
   def sd023_state_a2ml_divergence(repo_path) do
-    top = Path.join([repo_path, ".machine_readable", "STATE.a2ml"])
-    six = Path.join([repo_path, ".machine_readable", "6a2", "STATE.a2ml"])
+    canonical = Path.join([repo_path, ".machine_readable", "descriptiles", "STATE.a2ml"])
+    legacy = Path.join([repo_path, ".machine_readable", "6a2", "STATE.a2ml"])
 
-    with true <- File.exists?(top),
-         true <- File.exists?(six),
-         {:ok, top_content} <- File.read(top),
-         {:ok, six_content} <- File.read(six) do
-      top_date = extract_last_updated(top_content)
-      six_date = extract_last_updated(six_content)
+    with true <- File.exists?(canonical),
+         true <- File.exists?(legacy),
+         {:ok, canonical_content} <- File.read(canonical),
+         {:ok, legacy_content} <- File.read(legacy) do
+      canonical_date = extract_last_updated(canonical_content)
+      legacy_date = extract_last_updated(legacy_content)
 
       cond do
-        top_date == nil or six_date == nil ->
+        canonical_date == nil or legacy_date == nil ->
           []
 
-        top_date == six_date ->
+        canonical_date == legacy_date ->
           []
 
         true ->
           [
             %{
               rule: "SD023",
-              file: ".machine_readable/STATE.a2ml + .machine_readable/6a2/STATE.a2ml",
+              file:
+                ".machine_readable/descriptiles/STATE.a2ml + .machine_readable/6a2/STATE.a2ml",
               severity: :medium,
               reason:
-                "STATE.a2ml divergence: top-level last-updated=#{top_date}, 6a2/ last-updated=#{six_date}. One is stale; consumers may read either.",
-              action: :unify_state,
-              top_last_updated: top_date,
-              six_last_updated: six_date,
+                "STATE.a2ml divergence: canonical last-updated=#{canonical_date}, retired 6a2/ last-updated=#{legacy_date}. Preserve the canonical file and remove the retired copy.",
+              action: :retire_legacy_state,
+              canonical_last_updated: canonical_date,
+              legacy_last_updated: legacy_date,
               trigger_intensive: false
             }
           ]

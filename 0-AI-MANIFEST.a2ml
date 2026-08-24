@@ -30,7 +30,7 @@
   (context-tiers
     ; Tier 0 (always load): This file + .claude/CLAUDE.md — orientation only
     ; Tier 1 (load if working on code): README.adoc, EXPLAINME.adoc, Justfile, mix.exs
-    ; Tier 2 (load on demand): .machine_readable/6a2/*.a2ml, docs/
+    ; Tier 2 (load on demand): .machine_readable/descriptiles/*.a2ml, docs/
     ; Tier 3 (never load unless asked): test/, _build/, deps/, generated/
     ;
     ; DO NOT READ unless specifically asked:
@@ -49,9 +49,9 @@
   (canonical-locations
     (ai-manifest     "0-AI-MANIFEST.a2ml"           "THIS FILE")
     (ai-instructions ".claude/CLAUDE.md"             "Claude-specific patterns — DETAILED")
-    (state           ".machine_readable/6a2/STATE.a2ml")
-    (meta            ".machine_readable/6a2/META.a2ml")
-    (ecosystem       ".machine_readable/6a2/ECOSYSTEM.a2ml")
+    (state           ".machine_readable/descriptiles/STATE.a2ml")
+    (meta            ".machine_readable/descriptiles/META.a2ml")
+    (ecosystem       ".machine_readable/descriptiles/ECOSYSTEM.a2ml")
     (bot-directives  ".machine_readable/bot_directives/"))
 
   ;; ===================================================================
@@ -107,10 +107,10 @@
       (step "Read THIS file first")
       (step "Read .claude/CLAUDE.md — detailed architecture tables and Scanner Hygiene")
       (step "Read docs/DEBT-REGISTER.md — what is broken, what is ungated, what is stale")
-      (step "Read .machine_readable/6a2/STATE.a2ml for current status"))
+      (step "Read .machine_readable/descriptiles/STATE.a2ml for current status"))
 
     (on-exit
-      (step "Update .machine_readable/6a2/STATE.a2ml if changes made")
+      (step "Update .machine_readable/descriptiles/STATE.a2ml if changes made")
       (step "Summarise outcomes")))
 
   (format-meta

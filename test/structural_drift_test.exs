@@ -36,6 +36,18 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert length(findings) >= 1
     end
 
+    test "detects STATE.scm in retired 6a2/ and directs migration to descriptiles/", %{
+      repo: repo
+    } do
+      legacy_dir = Path.join([repo, ".machine_readable", "6a2"])
+      File.mkdir_p!(legacy_dir)
+      File.write!(Path.join(legacy_dir, "STATE.scm"), "(state)")
+
+      [finding] = StructuralDrift.sd001_legacy_scm(repo)
+      assert finding.file == ".machine_readable/6a2/STATE.scm"
+      assert finding.reason =~ ".machine_readable/descriptiles/STATE.a2ml"
+    end
+
     test "returns empty when no .scm files exist", %{repo: repo} do
       findings = StructuralDrift.sd001_legacy_scm(repo)
       assert findings == []
@@ -86,6 +98,50 @@ defmodule Hypatia.Rules.StructuralDriftTest do
     test "returns empty when no AI.djot exists", %{repo: repo} do
       findings = StructuralDrift.sd003_ai_djot(repo)
       assert findings == []
+    end
+  end
+
+  describe "sd004_misplaced_a2ml/1" do
+    test "flags a descriptile directly under .machine_readable/", %{repo: repo} do
+      machine_dir = Path.join(repo, ".machine_readable")
+      File.mkdir_p!(machine_dir)
+      File.write!(Path.join(machine_dir, "STATE.a2ml"), "[metadata]\n")
+
+      [finding] = StructuralDrift.sd004_misplaced_a2ml(repo)
+      assert finding.file == ".machine_readable/STATE.a2ml"
+      assert finding.target == ".machine_readable/descriptiles/STATE.a2ml"
+    end
+
+    test "flags a descriptile in retired 6a2/ and targets descriptiles/", %{repo: repo} do
+      legacy_dir = Path.join([repo, ".machine_readable", "6a2"])
+      File.mkdir_p!(legacy_dir)
+      File.write!(Path.join(legacy_dir, "STATE.a2ml"), "[metadata]\n")
+
+      [finding] = StructuralDrift.sd004_misplaced_a2ml(repo)
+      assert finding.file == ".machine_readable/6a2/STATE.a2ml"
+      assert finding.target == ".machine_readable/descriptiles/STATE.a2ml"
+      assert finding.reason =~ "retired location"
+    end
+
+    test "accepts a descriptile in canonical descriptiles/", %{repo: repo} do
+      canonical_dir = Path.join([repo, ".machine_readable", "descriptiles"])
+      File.mkdir_p!(canonical_dir)
+      File.write!(Path.join(canonical_dir, "STATE.a2ml"), "[metadata]\n")
+
+      assert StructuralDrift.sd004_misplaced_a2ml(repo) == []
+    end
+  end
+
+  describe "sd007_stale_references/1" do
+    test "flags retired 6a2/ references and provides the canonical path", %{repo: repo} do
+      File.write!(
+        Path.join(repo, "README.md"),
+        "See .machine_readable/6a2/STATE.a2ml for current state."
+      )
+
+      [finding] = StructuralDrift.sd007_stale_references(repo)
+      assert finding.file == "README.md"
+      assert finding.reason =~ ".machine_readable/descriptiles/"
     end
   end
 
@@ -376,11 +432,14 @@ defmodule Hypatia.Rules.StructuralDriftTest do
   end
 
   describe "sd023_state_a2ml_divergence/1" do
-    test "flags divergent last-updated between top-level and 6a2/", %{repo: repo} do
+    test "flags divergent last-updated between canonical descriptiles/ and retired 6a2/", %{
+      repo: repo
+    } do
       File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "descriptiles"]))
 
       File.write!(
-        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        Path.join([repo, ".machine_readable", "descriptiles", "STATE.a2ml"]),
         "[metadata]\nlast-updated = \"2026-06-02\"\n"
       )
 
@@ -392,15 +451,17 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       findings = StructuralDrift.sd023_state_a2ml_divergence(repo)
       assert length(findings) == 1
       assert hd(findings).rule == "SD023"
-      assert hd(findings).top_last_updated == "2026-06-02"
-      assert hd(findings).six_last_updated == "2026-05-11"
+      assert hd(findings).canonical_last_updated == "2026-06-02"
+      assert hd(findings).legacy_last_updated == "2026-05-11"
+      assert hd(findings).action == :retire_legacy_state
     end
 
     test "no finding when dates match", %{repo: repo} do
       File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "descriptiles"]))
 
       File.write!(
-        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        Path.join([repo, ".machine_readable", "descriptiles", "STATE.a2ml"]),
         "last-updated = \"2026-06-02\""
       )
 
@@ -412,11 +473,11 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert StructuralDrift.sd023_state_a2ml_divergence(repo) == []
     end
 
-    test "no finding when only one of the two files exists", %{repo: repo} do
-      File.mkdir_p!(Path.join([repo, ".machine_readable"]))
+    test "no divergence finding when only the canonical file exists", %{repo: repo} do
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "descriptiles"]))
 
       File.write!(
-        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        Path.join([repo, ".machine_readable", "descriptiles", "STATE.a2ml"]),
         "last-updated = \"2026-06-02\""
       )
 
@@ -425,9 +486,10 @@ defmodule Hypatia.Rules.StructuralDriftTest do
 
     test "matches Scheme-style (last-updated \"...\") variant", %{repo: repo} do
       File.mkdir_p!(Path.join([repo, ".machine_readable", "6a2"]))
+      File.mkdir_p!(Path.join([repo, ".machine_readable", "descriptiles"]))
 
       File.write!(
-        Path.join([repo, ".machine_readable", "STATE.a2ml"]),
+        Path.join([repo, ".machine_readable", "descriptiles", "STATE.a2ml"]),
         "(state (metadata (last-updated \"2026-06-02\")))"
       )
 
