@@ -1,0 +1,246 @@
+== Hypatia maintenance audit — corrective / adaptive / perfective (2026-07-07)
+
+Whole-system maintenance pass across the three live surfaces the
+pipeline runs on — *neurosymbolics*, *scanning*, and *actuation* — plus
+a build/test ground-truth check. Each finding is classed as *corrective*
+(a real defect), *adaptive* (drift with data/schema/env), or
+*perfective* (quality/perf/tests).
+
+=== Ground truth (what actually builds & runs)
+
+[width="100%",cols="47%,53%",options="header",]
+|===
+|Check |Result
+|`+mix compile+` |✅ clean (exit 0), 5 pre-existing style warnings
+
+|`+mix test+` (seed 0) |1369 tests, *10 failures*, 242 excluded
+
+|Pristine-`+main+` baseline (same seed) |1369 tests, *11 failures*
+
+|Effect of this PR on the suite |*net −1 to 0 new failures* — introduces
+none
+|===
+
+*Verdict.* The system compiles and the OTP application boots all 8
+supervised GenServers. The core scan→pattern→triangle→dispatch→outcome
+pipeline is structurally sound and its decision logic (0.95/0.85
+confidence tiers, Bayesian updating, recipe-level quarantine) is
+correct. The real rot is in three places: (1) a *silent training-data
+schema drift* that made the ESN forecaster learn nothing; (2) *inert
+safety wiring* — rate limiter, circuit breaker, and batch rollback are
+fully-built GenServers that no dispatch path actually calls; and (3)
+*silent false-negatives* in scanning (wildcard recipes dropped, scanner
+directory-mode dead patterns). The 10–11 test failures are all
+*pre-existing* and confined to the web/rules/watcher layers — none touch
+the core pipeline.
+
+'''''
+
+=== Shipped in this PR (verified)
+
+These are corrective fixes applied and verified green. The first three
+were staged-but-unverified from a prior session; the rest are new this
+pass.
+
+[width="100%",cols="16%,17%,20%,47%",options="header",]
+|===
+|Fix |File |Class |Why it matters
+|*Redirect the test store* to `+_build/test/verisim-data+`
+|`+config/test.exs+` |corrective |The suite was writing
+`+test-recipe-health-*+` records and annealing-state JSON *into the real
+git-tracked verisim-data store*, polluting the Bayesian/neural training
+corpus with synthetic successes. Verified: post-fix runs leave the
+canonical store untouched.
+
+|*Case-insensitive severity* matching
+|`+lib/neural/liquid_state_machine.ex+`,
+`+lib/neural/mixture_of_experts.ex+` |corrective |verisim-data registry
+uses title-case (`+"High"+`/`+"Critical"+`); the lowercase-only match
+collapsed real security findings to the 0.5 default, under-weighting
+them in gating/expert prediction.
+
+|*`+mkdir_p!+` before append* |`+lib/outcome_tracker.ex+`
+(`+write_outcome_log+`) |corrective |`+File.write(:append)+` fails
+`+:enoent+` on a missing dir; the outcome was silently dropped.
+
+|*ESN training keys on `+pattern+`/`+fixed_at+`, not just
+`+recipe_id+`/`+timestamp+`* |`+lib/neural/training_pipeline.ex+`
+|corrective (*marquee*) |*Verified against the corpus: of 6964 outcomes,
+only 282 carry `+recipe_id+`/`+timestamp+`; 6682 carry
+`+pattern+`/`+fixed_at+`.* The old grouping collapsed 96% of records
+into one `+nil+`-keyed, unordered blob, so the ESN trained on a single
+meaningless blended trajectory. Now mirrors the fallback already in
+`+graph_of_trust.ex:260+`.
+
+|*`+mkdir_p!+` + result-match* in fleet-outcome writers
+|`+lib/outcome_tracker.ex+` (`+write_fleet_outcome+`),
+`+lib/fleet_dispatcher.ex+` (`+ingest_fix_outcome+`) |corrective |Same
+silent-drop class: both appended to the gitbot-fleet learning feed
+without ensuring the dir and without checking the write result (one even
+logged/returned success on failure).
+|===
+
+*Working-tree hygiene (main checkout, already applied):* reverted two
+canonical annealing-state files a test run had corrupted
+(`+recipe-todo-to-fill.json+` had 6 synthetic `+"failure"+` outcomes
+injected + `+outcome_count+` bumped 2654→2660) and removed 54 stray
+`+test-recipe-health-*+` artifacts. These are the downstream symptom of
+the `+config/test.exs+` bug above.
+
+'''''
+
+=== Deferred findings (reported, not in this PR)
+
+Ordered by severity within each surface. HIGH items in *actuation* are
+the gating risk for trusting the auto-execute tier and warrant owner
+review before remediation, since they change dispatch/safety behaviour.
+
+==== Neurosymbolics
+
+[width="100%",cols="17%,34%,21%,28%",options="header",]
+|===
+|Sev |file:line |Class |Finding
+|MED |`+training_pipeline.ex+` rebalancer (`+rebalancer.ex:254+`)
+|adaptive |Strategy C treats only `+failure+`/`+false_positive+` as
+failures — silently drops the corpus’s 8 `+regression+` + 7 `+timeout+`
+signals.
+
+|LOW |`+liquid_state_machine.ex:221+`, `+graph_of_trust.ex:256+`,
+`+training_pipeline.ex:84,394+` |adaptive |Remaining case-sensitive
+`+outcome+`/`+triangle_tier+` string matches — same latent class as the
+shipped severity fix; works today only because current data is
+lowercase.
+
+|MED |`+liquid_state_machine.ex:172+`, `+echo_state_network.ex:207+`
+|perfective |Reservoir update is O(n³) (`+Enum.at+` on lists inside
+nested reduces); this is why the coordinator wraps them in 5s Task
+timeouts. Move to tuples/`+:array+` or the planned Nx/EXLA backend.
+
+|LOW |`+mixture_of_experts.ex:278+` |perfective |`+sigmoid/1+` lacks the
+input clamp every other network has — overflow-prone, inconsistent.
+
+|— |CLAUDE.md |adaptive |Doc drift: architecture says "`5 networks`";
+code supervises *8*. Known Gaps #5 (persistence) and #6 (rebalancer
+strategies B/C "`unstarted`") are both *stale* — persistence and all
+three strategies are wired. *Caveat:* only RBF/MoE/trust hydrate on
+boot; ESN/LSM persist summaries only and start cold.
+|===
+
+==== Scanning
+
+[width="100%",cols="17%,34%,21%,28%",options="header",]
+|===
+|Sev |file:line |Class |Finding
+|HIGH |`+vcl/query.ex:92+` + `+vcl/file_executor.ex:375+` |corrective
+|`+FIELD languages CONTAINS+` exact-matches list elements, silently
+dropping the 38 `+"*"+`/`+"any"+` *wildcard recipes* that should match
+every language. Coverage false-negative.
+
+|MED |`+hypatia-scanner-v2.sh:401+` |corrective |Directory-mode `+find+`
+enumerates only `+*.rs/*.res/*.ml+`, so the lockfile (Pattern 7/8) and
+CORS/JWT/secret (Pattern 4-6) rules are *dead code* — those findings are
+never produced in a directory scan.
+
+|MED |`+scorecard_ingestor.ex:93+` vs recipes |adaptive |SC-008 emits
+`+category: "DependencyUpdate"+` but recipes/`+workflow_file_category?+`
+disagree (`+DependencyUpdate+` vs `+DependencyUpdateTool+`) —
+category-string drift makes SC-008 matching order-dependent.
+
+|MED |`+vcl/query.ex:317+` |corrective |`+recipe_effectiveness+`
+recent-trend does `+Enum.take(outcomes, -10)+` on a *newest-first* list
+→ computes the trend on the _oldest_ 10.
+
+|MED |`+poc-scanner.sh:38+` |corrective
+|`+echo … \| while … ((COUNT++))+` runs in a pipe subshell → every
+increment discarded → issue totals under-count.
+
+|MED |`+scorecard_ingestor.ex:473+` |adaptive
+|`+check_pinned_dependencies+` only flags `+@v<digit>+`; misses
+`+@main+`/`+@master+`/bare-semver unpinned actions.
+
+|LOW |`+scanner_suppression.ex:329+` |corrective |Substring
+`+String.contains?("test/")+`/`+("deps/")+` mid-path over-exempts
+(`+latest/+`, `+mydeps/+`) — false-negative vector. Anchor to path
+segments.
+
+|MED |`+scorecard_ingestor.ex+` |perfective |*No
+`+scorecard_ingestor_test.exs+`* — why the category drift (A1/A2) went
+unnoticed.
+
+|LOW |`+recipe_matcher.ex:69+` |perfective |`+all_recipes/0+` re-reads
+every recipe file from disk on every call — O(patterns×recipes) I/O on
+large scans. Add a short-TTL cache.
+|===
+
+==== Actuation (safety-wiring — highest priority for owner)
+
+[width="100%",cols="17%,34%,21%,28%",options="header",]
+|===
+|Sev |file:line |Class |Finding
+|HIGH |`+safety/rate_limiter.ex+` (whole module) |corrective |*Rate
+limiter has zero callers* in the dispatch path — `+execute_graphql+`
+posts with no rate check. The "`rate limiting on all dispatch`"
+requirement is unmet; the GenServer gates nothing.
+
+|HIGH |`+self_diagnostics.ex:49+`, `+fleet_dispatcher.ex:805+`
+|corrective |*Circuit breaker can never trip* —
+`+record_dispatch_failure/success+` have no callers and HTTP failures
+are swallowed as `+{:ok, :file_dispatched}+`, so
+`+consecutive_failures+` stays 0 forever.
+
+|HIGH |`+safety/batch_rollback.ex:101+` |corrective |*Batch rollback is
+a no-op* — filters outcomes on a `+batch_id+` no writer ever sets;
+`+Kin.Contingency+` passes a _repo name_ as the batch_id → 0 outcomes
+reverted. And it never snapshots/restores confidence as its docstring
+promises.
+
+|HIGH |`+dispatch_manifest.ex:83+` |corrective |*Null `+fix_script+`
+shipped as `+auto_execute+`* — strategy is derived from confidence
+alone, so an eliminate recipe ≥0.95 with `+fix_script: null+` (Known Gap
+#2) is written as `+auto_execute+`/`+fix_script: null+`;
+`+auto_fixable+` is ignored. The runner gets an action it can’t execute.
+Clamp to review/report_only when script is nil.
+
+|MED/HIGH |`+dispatch_manifest.ex:85+` vs `+fleet_dispatcher.ex:276+`
+|corrective |*Two dispatch paths disagree on quarantine* — the
+in-process path downgrades `+auto_execute→review+` when
+`+quarantined?+`, the JSONL manifest path (what the bash runner reads)
+does not. A blocked recipe still ships auto via the manifest.
+
+|MED |`+triangle_router.ex:116+` |corrective |*Control-tier recipes
+mis-routed to `+:substitute+`* — the `+_ ->+` clause folds `+"control"+`
+into substitute, so generator recipes (created at
+`+triangle_tier: "control"+`) dispatch as review PRs + proof obligations
+instead of report_only.
+
+|MED |`+dispatch_manifest.ex:57+` vs `+fleet_dispatcher.ex:769+`
+|adaptive |Two writers with *conflicting schemas truncate/append the
+same `+pending.jsonl+`*.
+|===
+
+'''''
+
+=== Recommended sequencing
+
+[arabic]
+. *This PR* — ship the verified corrective/hygiene fixes above (no
+behaviour risk; net-negative on test failures).
+. *Owner review → safety-wiring PR* — actuation HIGH items (rate
+limiter, circuit breaker, batch rollback, null-`+fix_script+` clamp,
+manifest quarantine parity). These are the gate on trusting
+auto-execute; group as one reviewed change with a new end-to-end
+safety-wiring test (their isolation-only tests are exactly why the dead
+wiring went unnoticed).
+. *Scanning false-negatives* — C1 wildcard recipes, C3 scanner dead
+patterns, A1 SC-008 category, + the missing `+scorecard_ingestor+`
+tests.
+. *Doc reconciliation* — CLAUDE.md 5→8 networks, retire stale Gaps
+#5/#6.
+. *Perfective backlog* — O(n³) reservoirs → Nx/EXLA, recipe cache,
+fingerprint unification.
+
+_Recorded by an automated maintenance session. Findings from the
+actuation and scanning surfaces are from focused review agents;
+schema/coverage facts were spot-verified against the live corpus, but
+the deferred HIGH items should be re-confirmed at the call site before
+remediation._
