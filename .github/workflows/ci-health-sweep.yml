@@ -7,7 +7,8 @@
 # scripts/ci-health/README.adoc):
 #   A-BILLING     account spending-limit/payment wall   -> REPORT (owner-only)
 #   B-ALLOWLIST   selected + no hyperpolymath/* pattern  -> AUTO-FIX (allow-list)
-#   B-STARTUPFAIL observed startup_failure runs          -> REPORT
+#   B-LOCKFILE    exact actions.lock annotation          -> REPORT
+#   B-STARTUPFAIL bounded startup_failure observation    -> REPORT/UNCLASSIFIED
 #   D-BURN        bare [push, pull_request] double-trigger-> AUTO-FIX (PR)
 #
 # Complements hypatia-remediation-sweep.yml (Dependabot) — same fleet-sweep
