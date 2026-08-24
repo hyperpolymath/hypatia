@@ -1,0 +1,14 @@
+== Audit Training Data
+
+This folder contains per-repo audit logs documenting security issues
+found and fixed. Used as training data to prevent future issues.
+
+=== Structure
+
+* `+security-errors/+` - Per-repo security issue logs (REPO.md)
+* `+release-candidates/+` - Repos ready for new releases
+* `+package-candidates/+` - Repos suitable for GitHub Packages
+* `+prevention/+` - CI workflows and notification configs to prevent
+issues
+
+=== Generated: 2025-12-29

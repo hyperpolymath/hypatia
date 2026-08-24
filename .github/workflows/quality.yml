@@ -112,7 +112,7 @@ jobs:
       # Install Rust via SHA-pinned action rather than using a direct
       # shell-piped installer — satisfies the download_then_run policy.
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           components: rust-docs
