@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+set -euo pipefail
+
+[ "${1:-}" = "api" ] || { echo "mock-gh only supports api" >&2; exit 2; }
+shift
+endpoint="${1:-}"
+
+if printf ' %s ' "$*" | grep -q ' -X PUT '; then
+  # Consume the body just like gh api --input - and accept the mock mutation.
+  read -r _body || true
+  exit 0
+fi
+
+case "$endpoint" in
+  repos/test-owner/test-repo)
+    printf 'false\tfalse\n'
+    ;;
+  'repos/test-owner/test-repo/actions/runs?status=failure&per_page=5')
+    printf '101\n'
+    ;;
+  'repos/test-owner/test-repo/actions/runs/101/jobs?per_page=100')
+    printf '201\n'
+    ;;
+  'repos/test-owner/test-repo/check-runs/201/annotations?per_page=100')
+    if [ "${MOCK_SCENARIO:-lockfile}" = "lockfile" ]; then
+      # Literal backticks are part of the annotation.
+      # shellcheck disable=SC2016
+      printf 'Lockfile pin deadbeef for `owner/action` does not match ref `stable`.\n'
+    fi
+    ;;
+  repos/test-owner/test-repo/actions/permissions)
+    printf 'all\n'
+    ;;
+  repos/test-owner/test-repo/actions/permissions/selected-actions)
+    if [ "${MOCK_SCENARIO:-}" = "remediate-ok" ]; then
+      jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | ["hyperpolymath/*"] + . | sort' "$MOCK_SUPERSET_FILE"
+    else
+      printf '[]\n'
+    fi
+    ;;
+  'repos/test-owner/test-repo/actions/runs?per_page=30')
+    case "${MOCK_SCENARIO:-lockfile}" in
+      lockfile) printf '3\t1\n' ;;
+      saturated) printf '30\t30\n' ;;
+      *) printf '0\t0\n' ;;
+    esac
+    ;;
+  repos/test-owner/test-repo/contents/.github/workflows)
+    ;;
+  *)
+    echo "unexpected mock gh endpoint: $endpoint" >&2
+    exit 3
+    ;;
+esac

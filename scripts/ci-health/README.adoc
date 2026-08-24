@@ -5,11 +5,11 @@
 :toc: macro
 :icons: font
 
-Detects and auto-remediates the *infrastructure* CI failure classes that
-repeatedly reddened estate CI, diagnosed 2026-06-13 from `tma-mark2#52`. These
-are **not** workflow-logic bugs — which is why earlier rounds of per-workflow
-"surface fixes" had zero effect. The cause lived in account billing and repo
-Actions settings.
+Detects and, where the diagnosis is exact and the repair is safe, remediates
+the recurring CI failure classes that redden estate CI. The original billing
+and Actions-settings classes were diagnosed 2026-06-13 from `tma-mark2#52`;
+lockfile failures and explicitly unclassified startup failures are reported
+separately so an observed conclusion is never mistaken for its cause.
 
 toc::[]
 
@@ -37,12 +37,23 @@ at parse → `startup_failure` (zero jobs, no logs). Hits public repos too. The
 required set mirrors `remediate.sh`'s PUT body exactly, so a fix converges to
 zero-missing and this stops re-firing (idempotent).
 | **Auto-fix** — PUT the curated superset (`action-superset.txt`), keep
-`sha_pinning_required`.
+`sha_pinning_required`, then read the setting back and verify the exact sorted
+pattern set. A mismatch is a failure, not a successful remediation.
+
+| `B-LOCKFILE`
+| One of the five latest failed runs has a job annotation identifying an
+`actions.lock` verification failure, such as a pinned commit that no longer
+matches its ref. This is an exact diagnosis within that bounded run horizon.
+| **Report only** — in a checkout, run `gh actions-lock --verify`, repair the
+reported dependency with the authoritative tool, and commit `actions.lock`.
 
 | `B-STARTUPFAIL`
-| Observed `startup_failure` runs.
-| **Report** — the API never exposes the reason; the **web-UI red banner does**
-(it names the blocked action). Usually a missing allow-list pattern.
+| One or more `startup_failure` conclusions among the latest API page of at
+most 30 workflow runs. The report includes both numerator and denominator and
+marks a 30-run page as saturated; it makes no claim about older runs.
+| **Report only / unclassified** — inspect the web-UI red banner and the
+repository lockfile before choosing a remedy. Do not infer an allow-list defect
+from the conclusion alone.
 
 | `D-BURN`
 | A workflow on bare `on: [push, pull_request]` — runs **twice** per PR commit
@@ -54,6 +65,9 @@ zero-missing and this stops re-firing (idempotent).
 == Components
 
 * `detect.sh <repo>` — API-only classifier; emits TSV `repo CLASS SEV detail`.
+  API errors are warnings on stderr rather than silent passes. Failure
+  annotations are inspected across every job in the five latest failed runs;
+  startup-failure counts cover only the latest page of at most 30 runs.
 * `remediate.sh <repo> <CLASS> <dry_run>` — applies B-ALLOWLIST (allow-list PUT)
   and D-BURN (idempotent signed PR). Guardrails: own repos only (skips
   forks/archived), `CI_HEALTH_DENYLIST`, idempotent, dry-run honoured.

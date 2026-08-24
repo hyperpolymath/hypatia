@@ -27,7 +27,7 @@ for r in "${REPOS[@]}"; do
 done
 
 # Remediate
-while IFS=$'\t' read -r repo cls sev det; do
+while IFS=$'\t' read -r repo cls _sev _det; do
   case "$cls" in
     B-ALLOWLIST) OWNER="$O" "$HERE/remediate.sh" "$repo" "$cls" "$DRY" || true ;;
     D-BURN)
@@ -48,15 +48,15 @@ rep=$(mktemp)
   grep -P '\tA-BILLING\t' "$findings" | awk -F'\t' '{print "- **"$1"** — "$4}' || true
   grep -qP '\tA-BILLING\t' "$findings" || echo "- _none_"
   echo ""
-  echo "### 🟠 B — allow-list / startup_failure"
-  grep -P '\tB-(ALLOWLIST|STARTUPFAIL)\t' "$findings" | awk -F'\t' '{print "- "$1" ("$2"): "$4}' || true
+  echo "### 🟠 B — allow-list / lockfile / bounded startup_failure observations"
+  grep -P '\tB-(ALLOWLIST|LOCKFILE|STARTUPFAIL)\t' "$findings" | awk -F'\t' '{print "- "$1" ("$2"): "$4}' || true
   grep -qP '\tB-' "$findings" || echo "- _none_"
   echo ""
   echo "### 🟡 D-BURN — push/PR double-trigger"
   grep -P '\tD-BURN\t' "$findings" | awk -F'\t' '{print "- "$1": "$4}' || true
   grep -qP '\tD-BURN\t' "$findings" || echo "- _none_"
   echo ""
-  echo "> Auto-remediation: B-ALLOWLIST applied in place; D-BURN opened as PRs (cap $MAXPR/run); A-BILLING is owner-only. See \`scripts/ci-health/README.adoc\`."
+  echo "> Auto-remediation: B-ALLOWLIST is applied in place and verified; D-BURN opens PRs (cap $MAXPR/run). B-LOCKFILE and B-STARTUPFAIL are report-only; A-BILLING is owner-only. See \`scripts/ci-health/README.adoc\`."
 } >"$rep"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$rep" >>"$GITHUB_STEP_SUMMARY"
 

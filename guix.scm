@@ -1,37 +1,28 @@
 ;; SPDX-License-Identifier: MPL-2.0
-;; Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
-;;
-;; Guix development environment for hypatia.
+;; Guix development environment.
 ;; Usage: guix shell -D -f guix.scm
 
 (use-modules (guix packages)
              (guix build-system gnu)
-             (gnu packages erlang)
-             (gnu packages elixir)
+             (guix licenses)
+             (gnu packages base)
+             (gnu packages bash)
+             (gnu packages base)
+             (gnu packages java)
              (gnu packages rust)
-             (gnu packages crates-io)
-             (gnu packages idris)
+             (gnu packages cmake)
              (gnu packages zig)
-             (gnu packages pkg-config)
-             (gnu packages tls))
+             (gnu packages golang)
+             (gnu packages node)
+             (gnu packages python))
 
 (package
   (name "hypatia")
   (version "0.1.0")
   (source #f)
   (build-system gnu-build-system)
-  (native-inputs
-   (list elixir
-         erlang
-         rust
-         rust-cargo
-         idris2
-         zig
-         pkg-config
-         openssl))
-  (synopsis "Neurosymbolic CI/CD intelligence platform")
-  (description
-   "Hypatia is a neurosymbolic CI/CD intelligence platform providing
-security scanning, code analysis, and automated quality enforcement
-across the hyperpolymath ecosystem.")
-  (license #f))
+  (inputs (list coreutils bash  make openjdk rust cmake zig go node python))
+  (synopsis "hypatia")
+  (description "hypatia — part of the hyperpolymath ecosystem.")
+  (home-page "https://github.com/hyperpolymath/hypatia")
+  (license ((@@ (guix licenses) license) "MPL-2.0" "https://github.com/hyperpolymath/palimpsest-license")))
