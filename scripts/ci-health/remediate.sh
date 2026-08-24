@@ -35,8 +35,16 @@ case "$CLASS" in
     body=$(jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | ["hyperpolymath/*"] + . as $pats | {"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":$pats}' "$HERE/action-superset.txt")
     if [ "$DRY" = "true" ]; then echo "DRYRUN $R/B-ALLOWLIST would PUT $(printf '%s' "$body" | jq '.patterns_allowed | length') patterns"; exit 0; fi
     printf '%s' "$body" | gh api -X PUT "repos/$O/$R/actions/permissions/selected-actions" --input - >/dev/null
-    n=$(gh api "repos/$O/$R/actions/permissions/selected-actions" --jq '.patterns_allowed|length')
-    echo "FIXED $R/B-ALLOWLIST -> $n patterns (sha-pinning unchanged)"
+    expected=$(printf '%s' "$body" | jq -c '.patterns_allowed | sort')
+    actual=$(gh api "repos/$O/$R/actions/permissions/selected-actions" --jq '(.patterns_allowed // []) | sort | @json')
+    if [ "$actual" != "$expected" ]; then
+      expected_n=$(printf '%s' "$expected" | jq 'length')
+      actual_n=$(printf '%s' "$actual" | jq 'length')
+      echo "VERIFY-FAIL $R/B-ALLOWLIST expected $expected_n curated patterns, observed $actual_n; possible concurrent wipe" >&2
+      exit 1
+    fi
+    n=$(printf '%s' "$actual" | jq 'length')
+    echo "FIXED $R/B-ALLOWLIST -> $n patterns (sha-pinning unchanged, exact set verified)"
     ;;
   D-BURN)
     if gh api "repos/$O/$R/branches/$BR" --jq '.name' >/dev/null 2>&1; then echo "SKIP $R/D-BURN branch-exists"; exit 0; fi
