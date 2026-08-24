@@ -1,0 +1,38 @@
+== docs/architecture/
+
+Architecture documentation for the hypatia neurosymbolic CI/CD
+intelligence platform.
+
+=== Contents
+
+[width="100%",cols="53%,47%",options="header",]
+|===
+|Document |Purpose
+|togaf-overview.adoc |TOGAF-style as-built architecture overview
+(verified by code audit, 2026-05-18). Canonical.
+
+|mof-metamodel.adoc |OMG MOF M2 metamodel of the core domain (Scan,
+Finding, Pattern, Recipe, RoutedAction, Outcome, OctadEntity,
+NeuralOrgan, …). Canonical.
+
+|boundary-design-options.adoc |Verisimdb-via-SNIF boundary: three
+options (A split / B WASI / C no SNIF) — *OPEN, awaiting owner ruling*
+(https://github.com/hyperpolymath/hypatia/issues/294[#294]).
+
+|NEURAL-ARCHITECTURE.md |Neural subsystem detail: 8-organ blackboard, 6
+phases, training, persistence.
+|===
+
+____
+Legacy Mermaid diagrams under `+docs/diagrams/*.md+` are *superseded* by
+the canonical `+.adoc+` documents above.
+____
+
+=== See Also
+
+* link:../../TOPOLOGY.md[TOPOLOGY.md] — High-level architecture diagram
+and completion dashboard
+* link:../../.machine_readable/STATE.scm[.machine_readable/STATE.scm] —
+Current project state
+* link:../../.claude/CLAUDE.md[.claude/CLAUDE.md] — AI agent
+instructions
