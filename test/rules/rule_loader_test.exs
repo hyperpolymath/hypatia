@@ -60,6 +60,7 @@ defmodule Hypatia.Rules.RuleLoaderTest do
       # This increment does NOT execute @logic — it keeps it for a later pass.
       assert is_binary(by_id["HYP-S006"].logic_raw)
       assert by_id["HYP-S006"].logic_raw =~ "for_each_spec"
+      assert is_binary(by_id["HYP-S006"].parameters_raw)
     end
   end
 

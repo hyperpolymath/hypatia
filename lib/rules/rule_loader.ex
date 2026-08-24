@@ -8,7 +8,7 @@ defmodule Hypatia.Rules.RuleLoader do
   `hyperpolymath/standards` rather than hand-ported into Elixir.
 
   This is HYP-S increment 1: the "single source of truth" wiring the audit asked
-  for. The seven `standards/hypatia-rules/*.a2ml` files (HYP-S001..S007) declare
+  for. The `standards/hypatia-rules/*.a2ml` files (currently HYP-S001..S009) declare
   each rule's identity, severity, scanner globs, router strategy + strategy caps,
   emitted signal, and recipe. Historically those were specified in standards but
   *ghost* in hypatia (no loader existed). This module parses them.
@@ -25,6 +25,8 @@ defmodule Hypatia.Rules.RuleLoader do
       **`strategy_caps`** — the safety-critical part, e.g. the Manual-Only
       licence cap that demotes any licence/SPDX-overlapping finding to `:review`)
     * action (`@action` → `emit_signal`, `recipe`)
+    * the raw `@parameters` block, preserved for narrow, rule-specific
+      evaluators
     * the raw `@logic` block text, preserved verbatim for a later increment that
       executes it (this loader does NOT interpret `@logic` — it does not invent
       detection behaviour it cannot yet verify).
@@ -52,6 +54,9 @@ defmodule Hypatia.Rules.RuleLoader do
               strategy_caps: [],
               action_signal: nil,
               action_recipe: nil,
+              # Verbatim @parameters block. Rule-specific evaluators parse only
+              # the parameters they understand; unknown logic stays inert.
+              parameters_raw: nil,
               # Verbatim @logic block body — NOT interpreted in this increment.
               logic_raw: nil
 
@@ -118,6 +123,7 @@ defmodule Hypatia.Rules.RuleLoader do
       action = find_block(blocks, "action")
       scanner = find_block(blocks, "scanner")
       logic = find_block(blocks, "logic")
+      parameters = find_block(blocks, "parameters")
 
       {:ok,
        %RuleDef{
@@ -135,6 +141,7 @@ defmodule Hypatia.Rules.RuleLoader do
          strategy_caps: router |> body_of() |> extract_strategy_caps(),
          action_signal: action |> body_of() |> scalar("emit_signal"),
          action_recipe: action |> body_of() |> scalar("recipe"),
+         parameters_raw: parameters |> body_of(),
          logic_raw: logic |> body_of()
        }}
     else
