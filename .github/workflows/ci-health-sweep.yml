@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 # CI-Health Sweep — estate-wide detection + auto-remediation of the
 # infrastructure CI failure classes diagnosed 2026-06-13 (see

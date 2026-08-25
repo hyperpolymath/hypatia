@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Consolidated workflow (behaviour-preserving merge).
 # Merged from: bench.yml, e2e.yml, integration.yml, stress-test.yml
 name: Tests (E2E / Integration / Stress / Bench)

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Build the Hypatia GUI wasm artifact from the Ephapax/Gossamer sources.
 #
 # v2 (2026-04-22): real Ephapax toolchain build from source.

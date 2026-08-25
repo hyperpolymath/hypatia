@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Hypatia Remediation Sweep — fleet-wide proactive scan
 #
 # hypatia-scan.yml runs per-repo on push/PR/weekly and produces findings.
