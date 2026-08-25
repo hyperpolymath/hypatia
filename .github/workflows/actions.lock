@@ -11,7 +11,7 @@ workflows:
         - 'actions/setup-node@v7.0.0'
         - 'actions/upload-artifact@v7.0.1'
         - 'dtolnay/rust-toolchain@master'
-        - 'taiki-e/install-action@v2.86.1'
+        - 'taiki-e/install-action@v2.86.5'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/ci.yml':
@@ -24,13 +24,13 @@ workflows:
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.0'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.86.1'
+        - 'taiki-e/install-action@v2.86.5'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@v4.37.7'
+        - 'github/codeql-action@v4.37.8'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
@@ -75,7 +75,7 @@ workflows:
         - 'docker/build-push-action@v7.3.0'
         - 'docker/login-action@v4.6.0'
         - 'docker/metadata-action@v6.2.0'
-        - 'docker/setup-buildx-action@v4.2.0'
+        - 'docker/setup-buildx-action@v4.3.0'
         - 'docker/setup-qemu-action@v4.2.0'
         - 'dtolnay/rust-toolchain@master'
         - 'softprops/action-gh-release@v3.0.2'
@@ -93,10 +93,10 @@ workflows:
         - 'actions/upload-artifact@v7.0.1'
         - 'aquasecurity/trivy-action@v0.36.0'
         - 'dtolnay/rust-toolchain@master'
-        - 'github/codeql-action@v4.37.7'
+        - 'github/codeql-action@v4.37.8'
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'returntocorp/semgrep-action@v1'
-        - 'taiki-e/install-action@v2.86.1'
+        - 'taiki-e/install-action@v2.86.5'
         - 'trufflesecurity/trufflehog@v3.97.0'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
@@ -105,11 +105,11 @@ workflows:
         - 'actions/upload-artifact@v7.0.1'
         - 'codecov/codecov-action@v7.0.0'
         - 'docker/build-push-action@v7.3.0'
-        - 'docker/setup-buildx-action@v4.2.0'
+        - 'docker/setup-buildx-action@v4.3.0'
         - 'dtolnay/rust-toolchain@master'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.86.1'
+        - 'taiki-e/install-action@v2.86.5'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -220,7 +220,7 @@ dependencies:
             - 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd'
     'dawidd6/action-send-mail@v3.12.0':
         ref: 'v3.12.0'
-        commit: 'sha1-2cea9617b09d79a095af21254fbcb7ae95903dde'
+        commit: 'sha1-94de994a9f6fffee200243214e17002e2920bb59'
         owner_id: 9713907
         repo_id: 222439721
     'dependabot/fetch-metadata@v3.1.0':
@@ -243,9 +243,9 @@ dependencies:
         commit: 'sha1-dc802804100637a589fabce1cb79ff13a1411302'
         owner_id: 5429470
         repo_id: 306769011
-    'docker/setup-buildx-action@v4.2.0':
-        ref: 'v4.2.0'
-        commit: 'sha1-bb05f3f5519dd87d3ba754cc423b652a5edd6d2c'
+    'docker/setup-buildx-action@v4.3.0':
+        ref: 'v4.3.0'
+        commit: 'sha1-37fe631027851001ddb9b187196cc803df7f5f0e'
         owner_id: 5429470
         repo_id: 288485773
     'docker/setup-qemu-action@v4.2.0':
@@ -268,9 +268,9 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
-    'github/codeql-action@v4.37.7':
-        ref: 'v4.37.7'
-        commit: 'sha1-ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd'
+    'github/codeql-action@v4.37.8':
+        ref: 'v4.37.8'
+        commit: 'sha1-db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28'
         owner_id: 9919
         repo_id: 259445878
     'gitleaks/gitleaks-action@v3.0.0':
@@ -328,9 +328,9 @@ dependencies:
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.86.1':
-        ref: 'v2.86.1'
-        commit: 'sha1-288e746965032cfcc232e09af2daf5f23c14d780'
+    'taiki-e/install-action@v2.86.5':
+        ref: 'v2.86.5'
+        commit: 'sha1-ba47c86ac325773530516bb756137ac718732518'
         owner_id: 43724913
         repo_id: 442947557
     'trufflesecurity/trufflehog@v3.97.0':

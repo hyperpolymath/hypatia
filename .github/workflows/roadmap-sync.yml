@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
-# This workflow is managed by gh actions-lock.
 # Centralized roadmap sweeper: adds recently-touched issues & PRs from every
 # owned repo (except son-shared) into the Hyperpolymath Master Roadmap (#35).
 #
