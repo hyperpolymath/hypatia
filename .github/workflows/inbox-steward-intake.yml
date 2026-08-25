@@ -333,9 +333,9 @@ jobs:
           
           echo "Dispatching to .git-private-farm: $(echo "$PAYLOAD" | jq -c '.')"
           
-          # Send to dot-git-private-farm
+          # Send to .git-private-farm
           if gh api -X POST \
-              "/repos/hyperpolymath/dot-git-private-farm/dispatches" \
+              "/repos/hyperpolymath/.git-private-farm/dispatches" \
               --input - <<<"$PAYLOAD" >/dev/null 2>&1; then
             echo "✅ Successfully dispatched to .git-private-farm"
           else
