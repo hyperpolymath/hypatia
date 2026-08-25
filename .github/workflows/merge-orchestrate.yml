@@ -33,11 +33,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      MERGE_ORCH_STORE: ${{ vars.MERGE_ORCH_STORE || 'data/verisim' }}
+      MERGE_ORCH_STORE: ${{ vars.MERGE_ORCH_STORE || 'store' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+
+      # The brain needs a POPULATED store. Its in-repo data/verisim has no
+      # observations/ directory -- the farm's merge-observe.yml writes them to
+      # verisimdb-data, the estate's canonical flat-file store. Without this
+      # checkout the cycle reads an empty directory and decides nothing, which
+      # is what it has been doing every hour since the cron was added.
+      # Read-only: the brain stays token-free and never writes here.
+      - name: Checkout the observation store (verisimdb-data)
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/verisimdb-data
+          path: store
 
       - name: Setup Erlang/Elixir
         uses: erlef/setup-beam@v1.24.1
