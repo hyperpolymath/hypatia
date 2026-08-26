@@ -21,6 +21,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # `hashFiles()` is available ONLY in `jobs.<id>.steps.*`. Used in a job-level
+  # `if:` it does not merely evaluate false - GitHub rejects the WHOLE workflow
+  # file, which produces a run with zero jobs and no check run at all rather
+  # than a visible failure. Resolve the gate in a step here and publish it as a
+  # job output instead.
+  detect-fuzz-targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: check
+        run: |
+          if [ -f fuzz/Cargo.toml ] || [ -f .clusterfuzzlite/build.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No fuzz targets (fuzz/Cargo.toml or .clusterfuzzlite/build.sh); fuzzing jobs will skip."
+          fi
+
   pr-fuzzing:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -28,7 +49,8 @@ jobs:
     # or a ClusterFuzzLite OSS-Fuzz-style harness, the build_fuzzers step
     # has nothing to compile and fails. Job re-activates the moment the
     # fuzz tree lands.
-    if: hashFiles('fuzz/Cargo.toml') != '' || hashFiles('.clusterfuzzlite/build.sh') != ''
+    needs: detect-fuzz-targets
+    if: needs.detect-fuzz-targets.outputs.present == 'true'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -47,6 +69,10 @@ jobs:
   batch-fuzzing:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Was UNGATED: on the weekly cron this ran regardless of whether any fuzz
+    # target existed, hitting exactly the failure pr-fuzzing's comment describes.
+    needs: detect-fuzz-targets
+    if: needs.detect-fuzz-targets.outputs.present == 'true'
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
