@@ -32,7 +32,16 @@ jobs:
     outputs:
       present: ${{ steps.check.outputs.present }}
     steps:
+      # Sparse + blobless: this job only needs to know whether two paths exist,
+      # so fetching the tree is enough — no file contents, no history.
       - uses: actions/checkout@v7.0.1
+        with:
+          sparse-checkout: |
+            fuzz
+            .clusterfuzzlite
+          sparse-checkout-cone-mode: false
+          filter: blob:none
+          persist-credentials: false
       - id: check
         run: |
           if [ -f fuzz/Cargo.toml ] || [ -f .clusterfuzzlite/build.sh ]; then
