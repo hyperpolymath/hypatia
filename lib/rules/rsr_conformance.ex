@@ -14,7 +14,8 @@ defmodule Hypatia.Rules.RsrConformance do
   oracle. This module implements the **scoring engine** faithfully:
 
     * applicable set = universal criteria ∪ criteria whose `gate` capability
-      the repo declares in `.machine_readable/rsr-profile.a2ml`;
+      the repo declares in `machine-readable/rsr-profile.a2ml`
+      (legacy `.machine_readable/` also accepted);
       non-applicable criteria are `:na` and excluded from the denominator;
     * verdicts `:pass` / `:partial` (half weight) / `:fail`;
     * score = passed weight / applicable **verified** weight;
@@ -177,13 +178,13 @@ defmodule Hypatia.Rules.RsrConformance do
 
   # --- applicability ---------------------------------------------------------
 
-  # Reads `.machine_readable/rsr-profile.a2ml` (record dialect). Accepts the
+  # Reads `<machine tree>/rsr-profile.a2ml` (record dialect). Accepts the
   # capability list under `[rsr-profile]` or `[profile]`, key `capabilities`.
   # Returns `:none` when the file is absent/unreadable — only universal
   # criteria are then applicable, and criterion 3.2.2 (profile presence,
   # itself universal) fails, which is exactly the intended signal.
   defp declared_capabilities(repo_path) do
-    path = Path.join([repo_path, ".machine_readable", "rsr-profile.a2ml"])
+    path = Hypatia.Paths.machine_tree_join(repo_path, ["rsr-profile.a2ml"])
 
     with {:ok, text} <- File.read(path),
          {:ok, tree} <- RecordDialect.parse(text),
@@ -333,16 +334,16 @@ defmodule Hypatia.Rules.RsrConformance do
       "1.1.2" => any_of(["Justfile", "justfile"]),
       "1.1.3" => absent("Makefile"),
       "1.1.4" => present(".editorconfig"),
-      "1.2.2" => present(".pre-commit-config.yaml"),
+      "1.2.2" => any_of([".pre-commit-config.yaml", "ci/.pre-commit-config.yaml"]),
       "1.2.4" => present(".tool-versions"),
       "2.1.1" => present("README.adoc"),
       "2.1.2" => all_graded(["LICENSE", "LICENSES"]),
-      "2.1.3" => present("SECURITY.md"),
-      "2.1.4" => present("CODE_OF_CONDUCT.md"),
-      "2.1.5" => present("CONTRIBUTING.md"),
-      "2.1.6" => present("CHANGELOG.md"),
-      "2.1.7" => present("MAINTAINERS.adoc"),
-      "2.1.8" => present("GOVERNANCE.adoc"),
+      "2.1.3" => any_of(["SECURITY.md", ".github/SECURITY.md"]),
+      "2.1.4" => any_of(["CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT.md"]),
+      "2.1.5" => any_of(["CONTRIBUTING.md", ".github/CONTRIBUTING.md"]),
+      "2.1.6" => any_of(["CHANGELOG.adoc", "CHANGELOG.md"]),
+      "2.1.7" => any_of(["MAINTAINERS.adoc", "docs/MAINTAINERS.adoc"]),
+      "2.1.8" => any_of(["GOVERNANCE.adoc", "docs/GOVERNANCE.adoc", ".github/GOVERNANCE.md"]),
       "2.1.9" => any_of(["FUNDING.yml", ".github/FUNDING.yml"]),
       "2.1.10" => all_graded([".gitignore", ".gitattributes"]),
       "2.2.1" =>
@@ -352,17 +353,17 @@ defmodule Hypatia.Rules.RsrConformance do
           ".well-known/humans.txt"
         ]),
       "2.3.1" => present("0-AI-MANIFEST.a2ml"),
-      "3.1.1" => present(".machine_readable/descriptiles"),
+      "3.1.1" => present_mr("descriptiles"),
       "3.1.2" => descriptile("STATE"),
       "3.1.3" => descriptile("META"),
       "3.1.4" => descriptile("ECOSYSTEM"),
       "3.1.5" => descriptile("AGENTIC"),
       "3.1.6" => descriptile("NEUROSYM"),
       "3.1.7" => descriptile("PLAYBOOK"),
-      "3.1.8" => descriptile("ANCHOR"),
+      "3.1.8" => any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"]),
       "3.1.9" => descriptile("CLADE"),
       "3.2.1" => &descriptiles_parse/1,
-      "3.2.2" => present(".machine_readable/rsr-profile.a2ml"),
+      "3.2.2" => present_mr("rsr-profile.a2ml"),
       "6.1.1" => &workflows_present/1,
       "6.1.2" => present(".github/workflows/hypatia-scan.yml"),
       "6.1.3" => present(".github/workflows/governance.yml"),
@@ -377,18 +378,35 @@ defmodule Hypatia.Rules.RsrConformance do
       "5.1.6" => no_file_named("package-lock.json"),
       "7.1.2" => present("LICENSES"),
       "8.1.4" => &guix_not_stub/1,
-      "10.1.1" => present("GOVERNANCE.adoc"),
-      "10.1.3" => present("AFFIRMATION.adoc"),
-      "11.1.1" => present("AUDIT.adoc")
+      "10.1.1" => any_of(["GOVERNANCE.adoc", "docs/GOVERNANCE.adoc", ".github/GOVERNANCE.md"]),
+      "10.1.3" => any_of(["AFFIRMATION.adoc", "docs/AFFIRMATION.adoc"]),
+      "11.1.1" => any_of(["AUDIT.adoc", "docs/AUDIT.adoc"])
     }
   end
 
   defp present(rel), do: fn repo -> if exists?(repo, rel), do: :pass, else: :fail end
 
+  # Presence of a path INSIDE the repo's machine tree. The directory is named
+  # `machine-readable/` canonically and `.machine_readable/` in the legacy
+  # layout; this resolves per repo at check time so the oracle can score both
+  # while the estate migrates. Hardcoding either name made whichever half had
+  # not migrated unscoreable.
+  defp present_mr(rel) do
+    fn repo -> if exists?(repo, Path.join(Hypatia.Paths.machine_tree(repo), rel)), do: :pass, else: :fail end
+  end
+
   defp absent(rel), do: fn repo -> if exists?(repo, rel), do: :fail, else: :pass end
 
   defp any_of(rels) do
     fn repo -> if Enum.any?(rels, &exists?(repo, &1)), do: :pass, else: :fail end
+  end
+
+  # any_of within the repo's machine tree, whichever name that tree uses.
+  defp any_of_mr(rels) do
+    fn repo ->
+      mr = Hypatia.Paths.machine_tree(repo)
+      if Enum.any?(rels, &exists?(repo, Path.join(mr, &1))), do: :pass, else: :fail
+    end
   end
 
   # All present -> :pass, some -> :partial, none -> :fail.
@@ -403,7 +421,7 @@ defmodule Hypatia.Rules.RsrConformance do
   end
 
   defp descriptile(name),
-    do: present(Path.join([".machine_readable", "descriptiles", name <> ".a2ml"]))
+    do: present_mr(Path.join(["descriptiles", name <> ".a2ml"]))
 
   # 3.2.1: every RECORD-DIALECT .a2ml under the substrate parses. Markup-dialect
   # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`
@@ -414,9 +432,9 @@ defmodule Hypatia.Rules.RsrConformance do
   # valid.
   defp descriptiles_parse(repo) do
     candidates =
-      Path.wildcard(Path.join([repo, ".machine_readable", "descriptiles", "*.a2ml"])) ++
+      Path.wildcard(Hypatia.Paths.machine_tree_join(repo, ["descriptiles", "*.a2ml"])) ++
         Enum.filter(
-          [Path.join([repo, ".machine_readable", "rsr-profile.a2ml"])],
+          [Hypatia.Paths.machine_tree_join(repo, ["rsr-profile.a2ml"])],
           &File.exists?/1
         )
 

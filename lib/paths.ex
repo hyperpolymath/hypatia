@@ -20,4 +20,34 @@ defmodule Hypatia.Paths do
   def scans, do: Path.join(verisimdb_data(), "scans")
   def dispatch, do: Path.join(verisimdb_data(), "dispatch")
   def neural_states, do: Path.join(verisimdb_data(), "neural-states")
+
+  @machine_tree_canonical "machine-readable"
+  @machine_tree_legacy ".machine_readable"
+
+  @doc """
+  Name of a repository's machine tree directory.
+
+  The canonical name is `machine-readable/`; `.machine_readable/` is the LEGACY
+  form. Both are accepted: the canon, scaffoldia, the julia variant and ~300
+  minted repos still carry the dotted name, so resolving to one form only would
+  make the oracle unable to score whichever half of the estate had not migrated.
+
+  Prefers the canonical name when both are present. Falls back to the canonical
+  name when neither exists, so callers building a path for a repo that has no
+  machine tree at all report against the name it *should* have.
+  """
+  def machine_tree(repo_path) do
+    cond do
+      File.dir?(Path.join(repo_path, @machine_tree_canonical)) -> @machine_tree_canonical
+      File.dir?(Path.join(repo_path, @machine_tree_legacy)) -> @machine_tree_legacy
+      true -> @machine_tree_canonical
+    end
+  end
+
+  @doc "Join a path inside a repository's machine tree, whichever name it uses."
+  def machine_tree_join(repo_path, parts) when is_list(parts) do
+    Path.join([repo_path, machine_tree(repo_path) | parts])
+  end
+
+  def machine_tree_join(repo_path, part), do: machine_tree_join(repo_path, [part])
 end
