@@ -11,7 +11,7 @@ workflows:
         - 'actions/setup-node@v7.0.0'
         - 'actions/upload-artifact@v7.0.1'
         - 'dtolnay/rust-toolchain@master'
-        - 'taiki-e/install-action@v2.86.5'
+        - 'taiki-e/install-action@v2.86.7'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/ci.yml':
@@ -24,7 +24,7 @@ workflows:
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.0'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.86.5'
+        - 'taiki-e/install-action@v2.86.7'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
@@ -58,7 +58,7 @@ workflows:
         - 'actions/deploy-pages@v5.0.0'
         - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/push-email-notify.yml':
-        - 'dawidd6/action-send-mail@v3.12.0'
+        - 'dawidd6/action-send-mail@v18'
     '.github/workflows/quality.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.0'
@@ -96,8 +96,8 @@ workflows:
         - 'github/codeql-action@v4.37.8'
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'returntocorp/semgrep-action@v1'
-        - 'taiki-e/install-action@v2.86.5'
-        - 'trufflesecurity/trufflehog@v3.97.0'
+        - 'taiki-e/install-action@v2.86.7'
+        - 'trufflesecurity/trufflehog@v3.97.1'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -109,11 +109,11 @@ workflows:
         - 'dtolnay/rust-toolchain@master'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.86.5'
+        - 'taiki-e/install-action@v2.86.7'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-java@v5.7.0'
+        - 'actions/setup-java@v6.0.0'
         - 'actions/upload-artifact@v7.0.1'
 dependencies:
     'actions/attest-build-provenance@v4.2.2':
@@ -168,9 +168,9 @@ dependencies:
         commit: 'sha1-ed597411d8f924073f98dfc5c65a23a2325f34cd'
         owner_id: 44036562
         repo_id: 205262760
-    'actions/setup-java@v5.7.0':
-        ref: 'v5.7.0'
-        commit: 'sha1-b6effb05e454b25005698d916606bdc6ffcbf961'
+    'actions/setup-java@v6.0.0':
+        ref: 'v6.0.0'
+        commit: 'sha1-dd06d9cba3e5552c54d9f8ea23572deb30010f7c'
         owner_id: 44036562
         repo_id: 196057608
     'actions/setup-node@v7.0.0':
@@ -218,8 +218,8 @@ dependencies:
         repo_id: 200299178
         uses:
             - 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd'
-    'dawidd6/action-send-mail@v3.12.0':
-        ref: 'v3.12.0'
+    'dawidd6/action-send-mail@v18':
+        ref: 'v18'
         commit: 'sha1-94de994a9f6fffee200243214e17002e2920bb59'
         owner_id: 9713907
         repo_id: 222439721
@@ -328,13 +328,13 @@ dependencies:
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.86.5':
-        ref: 'v2.86.5'
-        commit: 'sha1-ba47c86ac325773530516bb756137ac718732518'
+    'taiki-e/install-action@v2.86.7':
+        ref: 'v2.86.7'
+        commit: 'sha1-b6ff580856c41316412a0b9b60540fbc6f8c82cc'
         owner_id: 43724913
         repo_id: 442947557
-    'trufflesecurity/trufflehog@v3.97.0':
-        ref: 'v3.97.0'
-        commit: 'sha1-bcfcf73aaf4759d4dadc2783177c245a02792318'
+    'trufflesecurity/trufflehog@v3.97.1':
+        ref: 'v3.97.1'
+        commit: 'sha1-20652fbbdefffcdaa493a5bf57ab2ac6b1db715b'
         owner_id: 79229934
         repo_id: 77726177
