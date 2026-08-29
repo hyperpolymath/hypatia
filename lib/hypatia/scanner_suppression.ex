@@ -240,7 +240,8 @@ defmodule Hypatia.ScannerSuppression do
 
     (line_number != 1 and String.starts_with?(stripped_line, "#")) or
       (Regex.match?(download_then_run_re(), line) and
-         not Regex.match?(download_then_run_re(), stripped))
+         not Regex.match?(download_then_run_re(), stripped) and
+         not executable_shell_evaluation?(stripped))
   end
 
   def context_safe_line?(_rule_type, _line, _line_number), do: false
@@ -287,6 +288,17 @@ defmodule Hypatia.ScannerSuppression do
   # than imported so a change to one is a visible, deliberate change to both.
   defp download_then_run_re,
     do: ~r/\b(?:curl|wget)\b[^\n|;]*\|\s*(?:sh|bash)\b/
+
+  # `sh -c '…'` and an `env -S` shebang pass their quoted argument to a
+  # shell, so it is executable rather than display-only text. Check the
+  # quote-stripped line for the invocation: this retains those arguments
+  # without treating an `echo` or `printf` argument as executable.
+  defp executable_shell_evaluation?(stripped_line) do
+    Regex.match?(
+      ~r/^\s*(?:(?:#!\s*\S*|env)\s+-S\s+)?(?:sh|bash)\b(?:\s+-[A-Za-z]+)*\s+-[A-Za-z]*c[A-Za-z]*\b/,
+      stripped_line
+    )
+  end
 
   # Remove the CONTENTS of single- and double-quoted segments, leaving the
   # quotes, so that anything written inside a string cannot satisfy a pattern
