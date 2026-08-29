@@ -45,6 +45,8 @@ workflows:
     '.github/workflows/hypatia-scan.yml': []
     '.github/workflows/inbox-steward-intake.yml':
         - 'actions/checkout@v7.0.1'
+    '.github/workflows/label-triage.yml': []
+    '.github/workflows/labels.yml': []
     '.github/workflows/language-blockers.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/merge-orchestrate.yml':
