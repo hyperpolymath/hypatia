@@ -802,10 +802,21 @@ defmodule Hypatia.Rules.CodeSafety do
       # used by the CLI before aggregating occurrences; otherwise a file-level
       # finding survives even though every matching line is known-safe.
       subject =
-        subject
-        |> String.split("\n")
-        |> Enum.reject(&Hypatia.ScannerSuppression.context_safe_line?(to_string(rule.id), &1))
-        |> Enum.join("\n")
+        if rule.id == :shell_download_then_run do
+          subject
+          |> String.split("\n")
+          |> Enum.with_index(1)
+          |> Enum.reject(fn {line, line_number} ->
+            Hypatia.ScannerSuppression.context_safe_line?(
+              "shell_download_then_run",
+              line,
+              line_number
+            )
+          end)
+          |> Enum.map_join("\n", &elem(&1, 0))
+        else
+          subject
+        end
 
       case Regex.scan(rule.pattern, subject) do
         [] ->

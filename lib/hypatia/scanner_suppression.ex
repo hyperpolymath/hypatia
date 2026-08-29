@@ -214,7 +214,9 @@ defmodule Hypatia.ScannerSuppression do
   secret — it is a reference to the secret store). Centralised so future
   rules can opt in via the same predicate.
   """
-  def context_safe_line?("secret_detected", line) do
+  def context_safe_line?(rule_type, line), do: context_safe_line?(rule_type, line, nil)
+
+  def context_safe_line?("secret_detected", line, _line_number) do
     Regex.match?(gha_secret_ref_re(), line) or
       Regex.match?(gha_vars_ref_re(), line) or
       Regex.match?(shell_param_expansion_re(), line) or
@@ -232,16 +234,16 @@ defmodule Hypatia.ScannerSuppression do
   # pipe-to-shell sits inside the quotes or outside them. So the quoted
   # segments are removed and the pattern re-tested against what remains: if it
   # no longer matches, every match was inside a string.
-  def context_safe_line?("shell_download_then_run", line) when is_binary(line) do
+  def context_safe_line?("shell_download_then_run", line, line_number) when is_binary(line) do
     stripped_line = String.trim_leading(line)
     stripped = strip_quoted_segments(line)
 
-    String.starts_with?(stripped_line, "#") or
+    (line_number != 1 and String.starts_with?(stripped_line, "#")) or
       (Regex.match?(download_then_run_re(), line) and
          not Regex.match?(download_then_run_re(), stripped))
   end
 
-  def context_safe_line?(_rule_type, _line), do: false
+  def context_safe_line?(_rule_type, _line, _line_number), do: false
 
   @doc """
   Return true if an inline `hypatia: allow` directive on `line` or
