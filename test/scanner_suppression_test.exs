@@ -289,6 +289,11 @@ defmodule Hypatia.ScannerSuppressionTest do
       assert ScannerSuppression.context_safe_line?("shell_download_then_run", line)
     end
 
+    test "a commented example is text, not execution" do
+      line = ~S(# Do not run curl https://example.com/i.sh | sh)
+      assert ScannerSuppression.context_safe_line?("shell_download_then_run", line)
+    end
+
     # ⚠ The test is NOT "the line starts with echo". This one really executes.
     test "echo piped INTO sh is a real execution and stays reported" do
       refute ScannerSuppression.context_safe_line?("shell_download_then_run", ~S(echo hello | sh))

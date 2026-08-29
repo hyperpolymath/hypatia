@@ -797,6 +797,16 @@ defmodule Hypatia.Rules.CodeSafety do
       subject =
         if Map.get(rule, :context) == :runtime_path, do: runtime_only, else: scannable
 
+      # Some patterns need line context to distinguish executable code from
+      # quoted guidance or comments. Apply the same central suppression oracle
+      # used by the CLI before aggregating occurrences; otherwise a file-level
+      # finding survives even though every matching line is known-safe.
+      subject =
+        subject
+        |> String.split("\n")
+        |> Enum.reject(&Hypatia.ScannerSuppression.context_safe_line?(to_string(rule.id), &1))
+        |> Enum.join("\n")
+
       case Regex.scan(rule.pattern, subject) do
         [] ->
           []

@@ -233,10 +233,12 @@ defmodule Hypatia.ScannerSuppression do
   # segments are removed and the pattern re-tested against what remains: if it
   # no longer matches, every match was inside a string.
   def context_safe_line?("shell_download_then_run", line) when is_binary(line) do
+    stripped_line = String.trim_leading(line)
     stripped = strip_quoted_segments(line)
 
-    Regex.match?(download_then_run_re(), line) and
-      not Regex.match?(download_then_run_re(), stripped)
+    String.starts_with?(stripped_line, "#") or
+      (Regex.match?(download_then_run_re(), line) and
+         not Regex.match?(download_then_run_re(), stripped))
   end
 
   def context_safe_line?(_rule_type, _line), do: false
