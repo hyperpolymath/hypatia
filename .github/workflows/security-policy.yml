@@ -709,6 +709,7 @@ jobs:
     name: Security Audit Summary
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs:
       - audit_rust-audit
       - audit_rust-deny
       - audit_container-scan
