@@ -763,6 +763,20 @@ defmodule Hypatia.Rules.CodeSafety do
     }
   ]
 
+  @doc """
+  Returns the list of dangerous code patterns for the specified language.
+
+  Each pattern includes an ID, severity level, regex pattern, CWE identifier,
+  and human-readable description. Returns an empty list for unsupported languages.
+
+  ## Examples
+
+      iex> patterns_for_language("rust")
+      [%{id: :unwrap_without_check, severity: :high, ...}, ...]
+
+      iex> patterns_for_language("unknown")
+      []
+  """
   def patterns_for_language("rust"), do: @rust_patterns
   def patterns_for_language("rescript"), do: @rescript_patterns
   def patterns_for_language("affine"), do: @affine_hand_port_patterns
@@ -788,6 +802,20 @@ defmodule Hypatia.Rules.CodeSafety do
   def patterns_for_language("bash"), do: @shell_patterns
   def patterns_for_language(_), do: []
 
+  @doc """
+  Scans source code content for dangerous patterns in the specified language.
+
+  Strips test blocks and lazy initialiser contexts before matching patterns.
+  For rules with `:context => :runtime_path`, only runtime-path code is scanned
+  (e.g., excludes one-time `LazyLock` initialisers for Rust `.expect()` checks).
+
+  Returns a list of findings, each with rule ID, severity, CWE, description, and occurrence count.
+
+  ## Examples
+
+      iex> scan_content("fn main() { x.unwrap() }", "rust")
+      [%{rule: :unwrap_without_check, severity: :high, cwe: "CWE-754", ...}]
+  """
   def scan_content(content, language) do
     scannable = strip_inline_test_blocks(content, language)
     runtime_only = strip_lazy_initialisers(scannable, language)
@@ -1157,6 +1185,11 @@ defmodule Hypatia.Rules.CodeSafety do
     }
   ]
 
+  @doc """
+  Returns the list of container security patterns.
+
+  Detects issues in Dockerfiles, Containerfiles, and container orchestration configs.
+  """
   def container_patterns, do: @container_patterns
 
   # ---------------------------------------------------------------------------
@@ -1193,7 +1226,16 @@ defmodule Hypatia.Rules.CodeSafety do
   @scm_canonical_dir ".machine_readable"
   @scm_file_names ~w(STATE.a2ml META.a2ml ECOSYSTEM.a2ml AGENTIC.a2ml NEUROSYM.a2ml PLAYBOOK.a2ml LANGUAGES.a2ml)
 
+  @doc """
+  Returns the list of banned file extensions with severity and replacement suggestions.
+  """
   def banned_file_extensions, do: @banned_file_extensions
+
+  @doc """
+  Returns the list of canonical SCM (Software Configuration Management) file names.
+
+  These files should only appear in the `.machine_readable/` directory.
+  """
   def scm_file_names, do: @scm_file_names
 
   @doc "Check for missing forbid(unsafe_code) in Rust entry points"
@@ -1260,6 +1302,12 @@ defmodule Hypatia.Rules.CodeSafety do
     end)
   end
 
+  @doc """
+  Scans container code (Dockerfile/Containerfile) for security issues.
+
+  Checks for patterns like missing USER directives, apt without --no-install-recommends,
+  and other container-specific anti-patterns.
+  """
   def scan_container_code(content) do
     Enum.flat_map(@container_patterns, fn rule ->
       if Regex.match?(rule.pattern, content) do
@@ -1291,6 +1339,11 @@ defmodule Hypatia.Rules.CodeSafety do
     end)
   end
 
+  @doc """
+  Returns the list of stub/placeholder cryptographic implementation patterns.
+
+  Used to detect insecure placeholder crypto that should never reach production.
+  """
   def stub_crypto_patterns, do: @stub_crypto_patterns
 
   @doc "Scan JavaScript/TypeScript content for web security issues"
@@ -1314,7 +1367,18 @@ defmodule Hypatia.Rules.CodeSafety do
     end)
   end
 
+  @doc """
+  Returns the list of JavaScript/TypeScript security patterns.
+  """
   def javascript_patterns, do: @javascript_patterns
+
+  @doc """
+  Returns the list of Elixir/BEAM code safety patterns.
+  """
   def elixir_patterns, do: @elixir_patterns
+
+  @doc """
+  Returns the list of shell script security patterns.
+  """
   def shell_patterns, do: @shell_patterns
 end
