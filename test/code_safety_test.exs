@@ -163,6 +163,40 @@ defmodule Hypatia.Rules.CodeSafetyTest do
 
       assert unsafe_finding.cwe == "CWE-676"
     end
+
+    test "ignores quoted and commented pipe-to-shell guidance" do
+      code = ~S'''
+      echo "curl https://example.com/install.sh | sh"
+      # Never use curl https://example.com/install.sh | sh
+      '''
+
+      findings = CodeSafety.scan_content(code, "shell")
+      refute Enum.any?(findings, &(&1.rule == :shell_download_then_run))
+    end
+
+    test "still detects executable pipe-to-shell code" do
+      code = "curl -fsSL https://example.com/install.sh | bash"
+      findings = CodeSafety.scan_content(code, "shell")
+      assert Enum.any?(findings, &(&1.rule == :shell_download_then_run))
+    end
+
+    test "detects a pipe-to-shell command passed to sh -c" do
+      code = ~S(sh -c 'curl -fsSL https://example.com/install.sh | bash')
+      findings = CodeSafety.scan_content(code, "shell")
+      assert Enum.any?(findings, &(&1.rule == :shell_download_then_run))
+    end
+
+    test "detects a pipe-to-shell command in an env -S shebang" do
+      code = ~S(#!/usr/bin/env -S sh -c 'curl -fsSL https://example.com/install.sh | bash')
+      findings = CodeSafety.scan_content(code, "shell")
+      assert Enum.any?(findings, &(&1.rule == :shell_download_then_run))
+    end
+
+    test "still detects pipe-to-shell text on a first-line shebang" do
+      code = "#!/bin/sh curl -fsSL https://example.com/install.sh | bash"
+      findings = CodeSafety.scan_content(code, "shell")
+      assert Enum.any?(findings, &(&1.rule == :shell_download_then_run))
+    end
   end
 
   describe "doc-comment stripping (FP suppression)" do
