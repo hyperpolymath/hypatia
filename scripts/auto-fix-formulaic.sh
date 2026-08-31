@@ -21,8 +21,6 @@ FIXES_APPLIED=0
 REPOS_SCANNED=0
 WARNINGS=0
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
 log() { echo "[hypatia-autofix] $*"; }
 warn() {
   echo "[hypatia-autofix] WARNING: $*" >&2
@@ -31,12 +29,6 @@ warn() {
 fix() {
   echo "[hypatia-autofix] FIX: $*"
   FIXES_APPLIED=$((FIXES_APPLIED + 1))
-}
-
-# Record activity in the repo's .hypatia/ log
-record() {
-  local repo="$1" action="$2" details="${3:-}"
-  bash "${SCRIPT_DIR}/bot-accountability.sh" record "$repo" "hypatia-autofix" "$action" "$details" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
@@ -132,17 +124,10 @@ scan_repo() {
   log "Scanning $(basename "$repo")..."
   REPOS_SCANNED=$((REPOS_SCANNED + 1))
 
-  local before=$FIXES_APPLIED
   fix_tracked_binaries "$repo"
   fix_agpl_references "$repo"
   check_security_md "$repo"
   check_editorconfig "$repo"
-  local after=$FIXES_APPLIED
-
-  local fix_count=$((after - before))
-
-  # Record visit with fix count
-  record "$repo" "diagnostic_scan" "fixes=${fix_count};warnings=${WARNINGS}"
 }
 
 # Reject legacy mutation and incomplete-estate modes explicitly.
