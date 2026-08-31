@@ -94,14 +94,19 @@ defmodule Hypatia.Rules.CicdRules.RescriptNpmJsTest do
              "bsc compilation output is not source"
     end
 
-    test "exempts bootstrap shims" do
+    test "flags .res in the retired affinescript shim paths (carve-out retired 2026-08-31)" do
+      # Neither path ever tracked a .res; the harness is 100% .affine and
+      # the cli is JS-only, so any .res appearing there must flag.
       files = [
         "affinescript-deno-test/src/x.res",
         "affinescript-cli/lib/y.res"
       ]
 
       results = CicdRules.check_commit_blocks(files)
-      assert Enum.find(results, &(&1.rule == :rescript_detected)) == nil
+      rs = Enum.find(results, &(&1.rule == :rescript_detected))
+
+      assert rs, "retired bootstrap-shim carve-out must no longer exempt .res"
+      assert length(rs.files) == 2
     end
   end
 
@@ -152,14 +157,20 @@ defmodule Hypatia.Rules.CicdRules.RescriptNpmJsTest do
              "VSCode extension toolchain runs on Node — lockfile is contractual"
     end
 
-    test "exempts bootstrap shims" do
-      files = [
-        "affinescript-deno-test/package-lock.json",
-        "affinescript-cli/package-lock.json"
-      ]
+    test "exempts the affinescript-cli npm front door; flags the retired deno-test path" do
+      # affinescript-cli/ is the permanent npm distribution shim (front
+      # door), so its lockfile stays exempt. affinescript-deno-test/ lost
+      # its carve-out 2026-08-31 when the harness self-hosted to .affine.
+      results =
+        CicdRules.check_commit_blocks([
+          "affinescript-cli/package-lock.json",
+          "affinescript-deno-test/package-lock.json"
+        ])
 
-      results = CicdRules.check_commit_blocks(files)
-      assert Enum.find(results, &(&1.rule == :nodejs_detected)) == nil
+      nj = Enum.find(results, &(&1.rule == :nodejs_detected))
+
+      assert nj, "affinescript-deno-test/ must flag after carve-out retirement"
+      assert nj.files == ["affinescript-deno-test/package-lock.json"]
     end
 
     test "exempts upstream forks + archived + vendored" do
@@ -285,14 +296,19 @@ defmodule Hypatia.Rules.CicdRules.RescriptNpmJsTest do
       assert Enum.find(results, &(&1.rule == :javascript_detected)) == nil
     end
 
-    test "exempts bootstrap shims" do
-      files = [
-        "affinescript-deno-test/src/x.js",
-        "affinescript-cli/lib/y.js"
-      ]
+    test "exempts the affinescript-cli npm front door; flags the retired deno-test path" do
+      # Same split as :nodejs_detected — cli JS is the permanent front
+      # door; the harness dir is .affine-only and its JS carve-out is gone.
+      results =
+        CicdRules.check_commit_blocks([
+          "affinescript-cli/lib/y.js",
+          "affinescript-deno-test/src/x.js"
+        ])
 
-      results = CicdRules.check_commit_blocks(files)
-      assert Enum.find(results, &(&1.rule == :javascript_detected)) == nil
+      js = Enum.find(results, &(&1.rule == :javascript_detected))
+
+      assert js, "affinescript-deno-test/ must flag after carve-out retirement"
+      assert js.files == ["affinescript-deno-test/src/x.js"]
     end
 
     test "flags ordinary .js even when name resembles a carve-out" do

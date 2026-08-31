@@ -77,7 +77,15 @@ defmodule Hypatia.Rules.CicdRules do
     # TS ban (org policy 2026-04-30 for NEW files; existing TS grandfathered
     # while in-flight migration to AffineScript proceeds — see project
     # tracker `project_estate_ts_to_affinescript_2026_05_28.md`).
-    # Path-prefix allowlist covers nine classes of legitimate `.ts` presence:
+    # Path-prefix allowlist covers seven classes of legitimate `.ts` presence.
+    # Two former classes were retired 2026-08-31, their unblock conditions met:
+    # the avow telegram-bot Telegraf exemption (bot rewritten in AffineScript;
+    # zero `.ts`/`.res` under telegram-bot/ on avow-protocol main) and the
+    # affinescript bootstrap shims (`affinescript-deno-test/` is 100% `.affine`
+    # everywhere it is tracked; `affinescript-cli/` is a permanent JS-only npm
+    # front door, still carved out under the nodejs/javascript rules where its
+    # files actually live). The `tsconfig.json` entry was dropped as dead: this
+    # rule's glob is `*.ts`, so a `.json` path can never reach the allowlist.
     #
     # (1) Declaration files (`.d.ts`) — FFI/library type definitions are
     #     headers, not implementation; they're the boundary, not the code.
@@ -89,31 +97,22 @@ defmodule Hypatia.Rules.CicdRules do
     #     `*/bindings/ts/`. Exemplar: `proven/bindings/deno/` (72 files
     #     exposing Idris2 ABI to Deno consumers).
     #
-    # (3) PERMANENT exemption — `avow-protocol/telegram-bot/avow-telegram-bot/`:
-    #     Telegraf / node-telegram-bot-api are the canonical TS-native
-    #     Bot API libraries; no AffineScript binding planned.
+    # (3) Tooling configs — `vite.config.ts`, `vitest.config.ts`,
+    #     `tsup.config.ts` are build orchestration, not application code.
     #
-    # (4) Tooling configs — `vite.config.ts`, `vitest.config.ts`,
-    #     `tsup.config.ts`, `*.config.ts` are build orchestration,
-    #     not application code.
-    #
-    # (5) Bootstrap shims — `affinescript-deno-test/` (Deno test runner)
-    #     and `affinescript-cli/` (CLI bootstrap) carry TS/JS shims that
-    #     bootstrap the AffineScript toolchain itself.
-    #
-    # (6) Upstream forks not estate-authored — `rescript/` (ReScript
+    # (4) Upstream forks not estate-authored — `rescript/` (ReScript
     #     compiler), `servers/` (third-party MCP servers),
     #     `repos-monorepo/` (mass aggregator), `linguist/` (GitHub's
     #     language classifier — TS in `samples/` is ML training data).
     #
-    # (7) Archived repos — GitHub-archived repos cannot accept PRs;
+    # (5) Archived repos — GitHub-archived repos cannot accept PRs;
     #     their TS is dormant. `hyperpolymath-archive/**`.
     #
-    # (8) Vendored package-manager deps — `**/deps/` covers Elixir Mix
+    # (6) Vendored package-manager deps — `**/deps/` covers Elixir Mix
     #     vendored deps (canonical example: `tma-mark2/deps/phoenix_live_view/`
     #     ships Phoenix LiveView's authored TS). We don't own this code.
     #
-    # (9) Editor-host extensions — `**/vscode/**` covers VSCode extension
+    # (7) Editor-host extensions — `**/vscode/**` covers VSCode extension
     #     entry points (`extension.ts` lives under `editors/vscode/`,
     #     `extensions/vscode/`, or `clients/vscode/`). Blocked on the
     #     AffineScript VSCode-extension API binding (top-50 roadmap);
@@ -140,31 +139,25 @@ defmodule Hypatia.Rules.CicdRules do
         # source of truth. Was never ported here — 44 phantom criticals
         # per cartridges PR (#602).
         "/adapter/",
-        # (3) PERMANENT exemption — Telegraf
-        "avow-protocol/telegram-bot/avow-telegram-bot/",
-        # (4) Tooling configs (matched as suffix substrings)
+        # (3) Tooling configs (matched as suffix substrings)
         "vite.config.ts",
         "vitest.config.ts",
         "tsup.config.ts",
-        "tsconfig.json",
-        # (5) Bootstrap shims
-        "affinescript-deno-test/",
-        "affinescript-cli/",
-        # (6) Upstream forks — not estate-authored; TS exists as vendored
+        # (4) Upstream forks — not estate-authored; TS exists as vendored
         # upstream code or sample fixtures (linguist ships `.ts` files in
         # `samples/` as classification training data for its ML model).
         "rescript/",
         "servers/",
         "repos-monorepo/",
         "linguist/",
-        # (7) Archived repos
+        # (5) Archived repos
         "hyperpolymath-archive/",
-        # (8) Vendored package-manager deps — `deps/` is the canonical Elixir
+        # (6) Vendored package-manager deps — `deps/` is the canonical Elixir
         # Mix vendored-dep directory (also used by other tools that vendor
         # via that name). Exemplar: `tma-mark2/deps/phoenix_live_view/`
         # ships Phoenix LiveView's authored TS.
         "/deps/",
-        # (9) Editor-host extensions — VSCode extension entry points target
+        # (7) Editor-host extensions — VSCode extension entry points target
         # the `vscode` extension-host API which AffineScript does not yet
         # bind. These are blocked on the AS-bindings top-50 roadmap; the
         # carve-out unblocks the gate until host-API bindings ship.
@@ -172,7 +165,7 @@ defmodule Hypatia.Rules.CicdRules do
         # `*/clients/vscode/`. The bare `/vscode/` substring suffices since
         # `String.contains?/2` matches any path containing it.
         "/vscode/",
-        # (10) CLAUDE.md documented exemptions not yet in this list
+        # (8) CLAUDE.md documented exemptions not yet in this list
         "a2ml/bindings/deno/",
         "k9-svc/bindings/deno/",
         "lol/test/vitest.config.ts",
@@ -181,8 +174,11 @@ defmodule Hypatia.Rules.CicdRules do
     },
     # ReScript ban (org policy 2026-05-25). In-flight estate migration
     # tracked under hyperpolymath/standards#252 + STEPS #260-#280.
-    # Path-prefix allowlist covers eight classes of legitimate `.res` /
-    # `.resi` presence (mirrors TS 9-class canon adapted for ReScript):
+    # Path-prefix allowlist covers six classes of legitimate `.res` /
+    # `.resi` presence (mirrors the TS canon adapted for ReScript). The former
+    # bootstrap-shim and Telegraf classes were retired 2026-08-31: both
+    # directories are 100% AffineScript on main and neither ever tracked a
+    # `.res` file, so removal changes no scan outcome.
     #
     # (1) Tooling configs — `bsconfig.json`, `*.config.res` are build
     #     orchestration, not application code.
@@ -195,10 +191,6 @@ defmodule Hypatia.Rules.CicdRules do
     #     AffineScript VSCode-extension API binding (top-50 roadmap).
     # (6) Compiled output — `**/lib/js/**`, `**/lib/es6/**`, `**/lib/bs/**`
     #     are bsc compilation targets, not source.
-    # (7) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
-    #     parallel to TS class 5.
-    # (8) Telegraf carve-out — `avow-protocol/telegram-bot/avow-telegram-bot/`
-    #     parallel to TS class 3 if a `.res` file appears for the bot.
     %{
       id: :rescript_detected,
       glob: "*.res",
@@ -226,12 +218,7 @@ defmodule Hypatia.Rules.CicdRules do
         # (6) Compiled output
         "/lib/js/",
         "/lib/es6/",
-        "/lib/bs/",
-        # (7) Bootstrap shims
-        "affinescript-deno-test/",
-        "affinescript-cli/",
-        # (8) Telegraf carve-out
-        "avow-protocol/telegram-bot/avow-telegram-bot/"
+        "/lib/bs/"
       ]
     },
     %{
@@ -240,7 +227,7 @@ defmodule Hypatia.Rules.CicdRules do
       reason:
         "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant; in-flight migration tracked under standards#252)",
       path_allow_prefixes: [
-        # Same eight classes as :rescript_detected
+        # Same six classes as :rescript_detected
         "bsconfig.json",
         ".config.res",
         "/panels/",
@@ -254,10 +241,7 @@ defmodule Hypatia.Rules.CicdRules do
         "/vscode/",
         "/lib/js/",
         "/lib/es6/",
-        "/lib/bs/",
-        "affinescript-deno-test/",
-        "affinescript-cli/",
-        "avow-protocol/telegram-bot/avow-telegram-bot/"
+        "/lib/bs/"
       ]
     },
     # Node.js / npm ban (org policy 2026-05-25). Matches `package-lock.json`
@@ -278,8 +262,12 @@ defmodule Hypatia.Rules.CicdRules do
     #      `editors/tree-sitter-ephapax/` etc. Class C consumer artifact:
     #      tree-sitter grammars ship via npm with `node-gyp` native binding
     #      because consumers (Atom/Neovim/VSCode) link the native addon.
-    # (2) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
-    #     parallel to TS class 5.
+    # (2) npm front door — `affinescript-cli/` is the permanent npm
+    #     distribution shim for the AffineScript toolchain (downloads the
+    #     pinned native binary, SHA-256-verifies it, caches, execs).
+    #     Deliberately runtime-agnostic JS; reframed 2026-08-31 from
+    #     "bootstrap shim" when the test harness finished self-hosting
+    #     (`affinescript-deno-test/` dropped — 100% `.affine` now).
     # (3) Upstream forks not estate-authored — `rescript/`, `servers/`,
     #     `repos-monorepo/`, `linguist/`.
     # (4) Archived repos — `hyperpolymath-archive/**`.
@@ -310,8 +298,7 @@ defmodule Hypatia.Rules.CicdRules do
         #      links against the native addon. Class C: npm-publishable
         #      consumer artifact, NOT estate-internal npm toolchain use.
         "tree-sitter-",
-        # (2) Bootstrap shims
-        "affinescript-deno-test/",
+        # (2) npm front door (permanent distribution shim)
         "affinescript-cli/",
         # (3) Upstream forks
         "rescript/",
@@ -369,8 +356,10 @@ defmodule Hypatia.Rules.CicdRules do
     #     `**/plugins/**`.
     # (2) Tooling configs — `*.config.js`, `*.config.cjs`, `*.config.mjs`
     #     are build orchestration.
-    # (3) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
-    #     parallel to TS class 5.
+    # (3) npm front door — `affinescript-cli/` ships permanent
+    #     runtime-agnostic JS (the npm distribution shim for the native
+    #     binary); reframed 2026-08-31 from "bootstrap shim" when the test
+    #     harness self-hosted (`affinescript-deno-test/` dropped).
     # (4) Upstream forks — `rescript/`, `servers/`, `repos-monorepo/`,
     #     `linguist/` (samples are ML training data).
     # (5) Archived repos — `hyperpolymath-archive/**`.
@@ -392,8 +381,7 @@ defmodule Hypatia.Rules.CicdRules do
         ".config.js",
         ".config.cjs",
         ".config.mjs",
-        # (3) Bootstrap shims
-        "affinescript-deno-test/",
+        # (3) npm front door (permanent distribution shim)
         "affinescript-cli/",
         # (4) Upstream forks
         "rescript/",
@@ -420,14 +408,13 @@ defmodule Hypatia.Rules.CicdRules do
       reason:
         "Unnecessarily-JavaScript (JSX) banned in NEW code -- use AffineScript where bindings exist (org policy 2026-05-25; tracked under standards#254).",
       path_allow_prefixes: [
-        # Same eight classes as :javascript_detected
+        # Same classes as :javascript_detected, minus the npm front door —
+        # no JSX belongs in affinescript-cli/
         "mcp-bridge/",
         "/plugins/",
         ".config.js",
         ".config.cjs",
         ".config.mjs",
-        "affinescript-deno-test/",
-        "affinescript-cli/",
         "rescript/",
         "servers/",
         "repos-monorepo/",
