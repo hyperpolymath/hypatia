@@ -97,7 +97,6 @@ workflows:
         - 'dtolnay/rust-toolchain@master'
         - 'github/codeql-action@v4.37.8'
         - 'gitleaks/gitleaks-action@v3.0.0'
-        - 'returntocorp/semgrep-action@v1'
         - 'taiki-e/install-action@v2.86.7'
         - 'trufflesecurity/trufflehog@v3.97.1'
     '.github/workflows/tests.yml':
@@ -310,11 +309,6 @@ dependencies:
         commit: 'sha1-c74f04c77a36247a813493945e803178b93d170f'
         owner_id: 6759885
         repo_id: 1275650185
-    'returntocorp/semgrep-action@v1':
-        ref: 'v1'
-        commit: 'sha1-713efdd345f3035192eaa63f56867b88e63e4e5d'
-        owner_id: 147861678
-        repo_id: 715166645
     'ruby/setup-ruby@v1.321.0':
         ref: 'v1.321.0'
         commit: 'sha1-95ef2b042f9d7a56d8268cba8559e2842e2ad01b'
