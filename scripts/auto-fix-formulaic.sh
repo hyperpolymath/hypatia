@@ -55,6 +55,18 @@ fix_tracked_binaries() {
     fi
   done
 
+  # Materialise the listing before consuming it. Bash process substitution does
+  # not propagate the producer's exit status to the while loop, so reading
+  # directly from < <(git ls-files -z) could turn a failed listing into a
+  # successful empty scan.
+  local tracked_list
+  tracked_list=$(mktemp)
+  if ! git ls-files -z >"$tracked_list"; then
+    rm -f "$tracked_list"
+    echo "ERROR: git ls-files failed in $repo; tracked-file diagnostics are incomplete." >&2
+    return 1
+  fi
+
   # Check for large tracked files (>1MB)
   while IFS= read -r -d '' f; do
     if [ -f "$f" ]; then
@@ -64,7 +76,8 @@ fix_tracked_binaries() {
         warn "Large file tracked ($(( size / 1024 ))KB): $f (in $(basename "$repo"))"
       fi
     fi
-  done < <(git ls-files -z 2>/dev/null)
+  done <"$tracked_list"
+  rm -f "$tracked_list"
 }
 
 # ---------------------------------------------------------------------------

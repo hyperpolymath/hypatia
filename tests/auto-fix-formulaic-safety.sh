@@ -62,4 +62,14 @@ if HOME="${FAKE_HOME}" bash "${FIXER}" all >/dev/null 2>&1; then
   exit 1
 fi
 
+# A failed tracked-file listing must fail the diagnostic instead of looking
+# like a successful scan of an empty repository.
+git_error_log="${TEST_ROOT}/git-ls-files-error.log"
+printf '%s\n' 'deliberately invalid git index' >"${FIXTURE}/.git/index"
+if HOME="${FAKE_HOME}" bash "${FIXER}" "${FIXTURE}" >/dev/null 2>"${git_error_log}"; then
+  echo "ERROR: failed git ls-files unexpectedly produced a successful scan" >&2
+  exit 1
+fi
+grep -q 'ERROR: git ls-files failed' "${git_error_log}"
+
 echo "auto-fix-formulaic safety controls: PASS"
