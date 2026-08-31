@@ -64,7 +64,7 @@ fix_tracked_binaries() {
   done
 
   # Check for large tracked files (>1MB)
-  git ls-files -z 2>/dev/null | while IFS= read -r -d '' f; do
+  while IFS= read -r -d '' f; do
     if [ -f "$f" ]; then
       local size
       size=$(stat -c%s "$f" 2>/dev/null || echo 0)
@@ -72,7 +72,7 @@ fix_tracked_binaries() {
         warn "Large file tracked ($(( size / 1024 ))KB): $f (in $(basename "$repo"))"
       fi
     fi
-  done
+  done < <(git ls-files -z 2>/dev/null)
 }
 
 # ---------------------------------------------------------------------------

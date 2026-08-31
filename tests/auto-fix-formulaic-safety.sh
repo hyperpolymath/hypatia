@@ -16,6 +16,8 @@ UNRELATED="${FIXTURE}/unrelated.txt"
 
 mkdir -p "${FAKE_HOME}" "$(dirname "${WORKFLOW}")"
 git -C "${FIXTURE}" init --quiet
+git -C "${FIXTURE}" config user.email test@example.invalid
+git -C "${FIXTURE}" config user.name "Hypatia safety test"
 
 printf '%s\n' \
   'name: CI' \
@@ -26,14 +28,20 @@ printf '%s\n' \
   '    steps:' \
   '      - uses: actions/checkout@v7.0.1' >"${WORKFLOW}"
 printf '%s\n' 'preserve this unrelated work' >"${UNRELATED}"
+git -C "${FIXTURE}" add .github
+git -C "${FIXTURE}" commit --quiet -m 'fixture workflow'
 
 workflow_before="$(sha256sum "${WORKFLOW}")"
 unrelated_before="$(sha256sum "${UNRELATED}")"
+head_before="$(git -C "${FIXTURE}" rev-parse HEAD)"
+status_before="$(git -C "${FIXTURE}" status --porcelain)"
 
 HOME="${FAKE_HOME}" bash "${FIXER}" "${FIXTURE}" >/dev/null
 
 [[ "$(sha256sum "${WORKFLOW}")" == "${workflow_before}" ]]
 [[ "$(sha256sum "${UNRELATED}")" == "${unrelated_before}" ]]
+[[ "$(git -C "${FIXTURE}" rev-parse HEAD)" == "${head_before}" ]]
+[[ "$(git -C "${FIXTURE}" status --porcelain)" == "${status_before}" ]]
 
 heartbeat="${FAKE_HOME}/.hypatia/kin/auto-fix.heartbeat.json"
 [[ -f "${heartbeat}" ]]
