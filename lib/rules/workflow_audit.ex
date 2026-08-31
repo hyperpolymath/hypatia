@@ -269,12 +269,25 @@ defmodule Hypatia.Rules.WorkflowAudit do
   hints from the `@known_good_shas` table.
   """
   def check_unpinned_actions(workflow_contents, opts \\ []) do
-    locked = locked_refs(Keyword.get(opts, :actions_lock))
+    case parse_actions_lock(Keyword.get(opts, :actions_lock)) do
+      {:invalid, finding} ->
+        # A present-but-invalid lock is one indivisible integrity failure. Do
+        # not also recommend inline SHA pins: `gh actions-lock` deliberately
+        # owns those symbolic refs, and replacing them inline can remove their
+        # transitive dependency and repository-identity coverage.
+        [finding]
 
+      {:usable, lock} ->
+        scan_unpinned_actions(workflow_contents, lock)
+    end
+  end
+
+  defp scan_unpinned_actions(workflow_contents, lock) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       Hypatia.Rules.WorkflowHardening.wh004_scan_content(filename, content)
-      |> Enum.map(fn finding ->
+      |> Enum.flat_map(fn finding ->
         slug = finding.detail.uses
+
         # Reconstruct action_ref + ref from the canonical "slug"
         # (e.g. "owner/repo@vN.N.N") emitted by WH004.
         [action_ref, ref] =
@@ -282,8 +295,6 @@ defmodule Hypatia.Rules.WorkflowAudit do
             [_a, r] -> [slug, r]
             [_a] -> [slug, ""]
           end
-
-        _ = action_ref
 
         cond do
           # A repository under GitHub Actions lockfile enforcement pins its
@@ -300,64 +311,52 @@ defmodule Hypatia.Rules.WorkflowAudit do
           # that regression. Established 2026-08-07 on this repository:
           # inline-pinning 40 refs put 14 workflows into startup_failure
           # and removed dtolnay/rust-toolchain from 7 lockfile entries.
-          MapSet.member?(locked, normalise_ref(slug)) ->
-            %{
-              type: :lockfile_pinned_accepted,
-              file: filename,
-              action_ref: slug,
-              severity: :info,
-              action: :accept_with_rationale,
-              rationale:
-                "Pinned by .github/workflows/actions.lock, which resolves " <>
-                  "this symbolic ref to a verified commit and locks the " <>
-                  "transitive dependencies of composite actions. Inline " <>
-                  "SHA-pinning would remove it from the lockfile."
-            }
+          Hypatia.Rules.ActionsLock.pinned?(lock, filename, slug) ->
+            []
 
           Hypatia.Rules.SecurityErrors.pin_exempt?(slug) ->
-            %{
-              type: :pin_exempt_accepted,
-              file: filename,
-              action_ref: slug,
-              severity: :info,
-              action: :accept_with_rationale,
-              rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
-            }
+            [
+              %{
+                type: :pin_exempt_accepted,
+                file: filename,
+                action_ref: slug,
+                severity: :info,
+                action: :accept_with_rationale,
+                rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
+              }
+            ]
 
           true ->
             severity = if ref in ["main", "master"], do: :high, else: :medium
 
-            %{
-              type: :unpinned_action,
-              file: filename,
-              action_ref: slug,
-              severity: severity,
-              action: :pin_sha,
-              known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
-            }
+            [
+              %{
+                type: :unpinned_action,
+                file: filename,
+                action_ref: slug,
+                severity: severity,
+                action: :pin_sha,
+                known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
+              }
+            ]
         end
       end)
     end)
   end
 
   @doc """
-  Extract the set of action refs pinned by a `gh actions-lock` lockfile.
+  Compatibility accessor for dependency refs in a fully valid lockfile.
 
-  The lockfile is machine-generated with a stable shape: refs appear as
-  quoted `'owner/repo@ref'` tokens, both as `workflows:` list entries and
-  as `dependencies:` keys. Collecting every such token covers both, and
-  covers transitive composite dependencies for free.
-
-  Returns an empty set for `nil` or unparseable input, so a repository
-  without lockfile enforcement keeps the previous behaviour exactly.
+  Do not use this global set for authorization: only
+  `Hypatia.Rules.ActionsLock.pinned?/3` also proves workflow association.
   """
   def locked_refs(nil), do: MapSet.new()
 
   def locked_refs(lock_content) when is_binary(lock_content) do
-    ~r/'([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@[^']+)'/
-    |> Regex.scan(lock_content)
-    |> Enum.map(fn [_, ref] -> normalise_ref(ref) end)
-    |> MapSet.new()
+    case Hypatia.Rules.ActionsLock.parse(lock_content) do
+      {:ok, lock} -> Hypatia.Rules.ActionsLock.dependency_refs(lock)
+      {:error, _reason} -> MapSet.new()
+    end
   end
 
   def locked_refs(_), do: MapSet.new()
@@ -369,13 +368,27 @@ defmodule Hypatia.Rules.WorkflowAudit do
   `gh actions-lock` records them.
   """
   def normalise_ref(slug) do
-    case String.split(slug, "@", parts: 2) do
-      [path, ref] ->
-        owner_repo = path |> String.split("/") |> Enum.take(2) |> Enum.join("/")
-        String.downcase(owner_repo <> "@" <> ref)
+    Hypatia.Rules.ActionsLock.normalise_ref(slug)
+  end
 
-      _ ->
-        String.downcase(slug)
+  defp parse_actions_lock(nil), do: {:usable, nil}
+
+  defp parse_actions_lock(content) do
+    case Hypatia.Rules.ActionsLock.parse(content) do
+      {:ok, lock} ->
+        {:usable, lock}
+
+      {:error, reason} ->
+        {:invalid,
+         %{
+           type: :invalid_actions_lock,
+           file: "actions.lock",
+           severity: :high,
+           action: :regenerate,
+           detail:
+             "Invalid .github/workflows/actions.lock: #{inspect(reason)}. " <>
+               "Regenerate and verify it with gh actions-lock."
+         }}
     end
   end
 
@@ -789,15 +802,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # itself contains a `run:` step. We need to check per-job, not per-file.
       # Split content by job boundaries (job names start at column 0 or 2 spaces)
       # and find which job has the scorecard action with publish_results.
-      
+
       # Find all job sections and check if the scorecard+publish job has run steps
       job_sections = Regex.split(~r/\n(?:^|  )[a-zA-Z_][a-zA-Z0-9_-]*:\s*\n/m, stripped)
-      
-      scorecard_job_has_run = 
+
+      scorecard_job_has_run =
         Enum.any?(job_sections, fn section ->
           scorecard_in_job? = Regex.match?(~r/uses:\s*ossf\/scorecard-action@/, section)
           publish_in_job? = Regex.match?(~r/publish_results:\s*true/, section)
-          
+
           if scorecard_in_job? and publish_in_job? do
             # Check if this same job section has a run: step
             Regex.match?(~r/^\s+- name:[^\n]*\n\s+run:/m, section) or
