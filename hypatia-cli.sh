@@ -33,7 +33,7 @@ else
 fi
 BASH_FALLBACK="${HYPATIA_DIR}/hypatia-cli-bash.sh"
 
-# ─── Build escript if missing ───────────────────────────────────────────
+# build_escript builds the Hypatia escript in the script directory and sends build output to stderr.
 
 build_escript() {
     echo "[hypatia] Building escript..." >&2
