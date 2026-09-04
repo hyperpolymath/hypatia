@@ -284,7 +284,7 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5.0.0
+        uses: actions/deploy-pages@v5.0.1
 
   # ============================================================================
   # Documentation Status
@@ -336,7 +336,7 @@ jobs:
           find . -type f -size +1M -not -path "./.git/*" | head -10
       
       - name: EditorConfig check
-        uses: editorconfig-checker/action-editorconfig-checker@v2.2.0
+        uses: editorconfig-checker/action-editorconfig-checker@v3.0.0
 
   docs:
     runs-on: ubuntu-latest

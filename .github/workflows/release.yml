@@ -208,7 +208,7 @@ jobs:
           path: artifacts
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4.2.0
+        uses: docker/setup-qemu-action@v4.3.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.3.0
@@ -324,7 +324,7 @@ jobs:
           cat checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           name: Hypatia v${{ needs.prepare.outputs.version }}
           body_path: release-notes.md
