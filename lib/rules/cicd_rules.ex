@@ -682,6 +682,45 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "eval banned in shell scripts -- use direct expansion or arrays",
       applies_to: ["*.sh"]
     },
+    # --- Scanner-derived rule (2026-09-01) -----------------------------
+    #
+    # Flagged INDEPENDENTLY by both CodeRabbit and Codacy across estate PRs.
+    # Two scanners agreeing is the strongest signal the C2 triage gate can
+    # get, the fix is mechanical, and it matches the estate's own lockfile
+    # doctrine -- which is why this was picked as the proof-of-concept rule
+    # over the higher-volume "SHA-pin your actions" advice. That advice was
+    # REJECTED: it contradicts the standing owner ruling that
+    # `sha_pinning_required` is OFF and `actions.lock` IS the pin (C1).
+    #
+    # A bare `bun install` lets CI resolve versions OUTSIDE the lockfile.
+    # That is the same defect class as the `actions.lock` version drift
+    # which is the estate's dominant startup_failure killer -- CI runs
+    # something the lockfile never sanctioned, and nothing says so.
+    #
+    # `applies_to` is MANDATORY, not decorative: scan_content_patterns/1
+    # filters on `Map.has_key?(p, :applies_to)`, so a rule without one is
+    # silently inert -- it looks complete in this table and can never fire.
+    # Six existing entries are dead this way. The four globs cover both the
+    # root `.github/workflows/` and the nested monorepo copies, mirroring
+    # `workflow_file?/1`.
+    #
+    # `skip_comment_lines` honours C4 (no matching inside comments). This
+    # repo has already shipped that defect once -- the `unwrap` rule matched
+    # commented-out code -- and a commented-out CI step is exactly where a
+    # bare `bun install` survives.
+    %{
+      id: :install_without_frozen_lockfile,
+      pattern: ~r/\bbun\s+install\b(?![^\n]*--frozen-lockfile)/,
+      reason:
+        "CI installs must be `bun install --frozen-lockfile` -- a bare install resolves outside the lockfile and can run versions the lockfile never sanctioned",
+      applies_to: [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml",
+        "**/.github/workflows/*.yml",
+        "**/.github/workflows/*.yaml"
+      ],
+      skip_comment_lines: true
+    },
     %{
       id: :download_then_run_shell,
       pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
@@ -815,7 +854,7 @@ defmodule Hypatia.Rules.CicdRules do
     allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
     exception = Map.get(rule, :exception)
 
-    Path.wildcard("#{repo_path}/**/*", match_dot: false)
+    Path.wildcard("#{repo_path}/**/*", match_dot: true)
     |> Enum.reject(&File.dir?/1)
     |> Enum.map(&Path.relative_to(&1, repo_path))
     |> Enum.filter(fn rel ->
@@ -839,7 +878,16 @@ defmodule Hypatia.Rules.CicdRules do
         cond do
           # Negative rules: fire when pattern is ABSENT
           negative? and not matched? ->
-            [%{rule: rule.id, reason: rule.reason, file: rel, line: 1, match: "(absent)"}]
+            [
+              %{
+                rule: rule.id,
+                severity: Map.get(rule, :severity, "medium"),
+                reason: rule.reason,
+                file: rel,
+                line: 1,
+                match: "(absent)"
+              }
+            ]
 
           negative? ->
             []
@@ -866,11 +914,26 @@ defmodule Hypatia.Rules.CicdRules do
         not Regex.match?(rule.pattern, line) ->
           []
 
+        # C4: a rule may opt out of matching inside comments. Default false,
+        # so no existing rule changes behaviour. Checked BEFORE the pragma
+        # test because a commented-out line needs no `hypatia:ignore`.
+        Map.get(rule, :skip_comment_lines, false) and comment_line?(line) ->
+          []
+
         ignored?(rule.id, lines, n) ->
           []
 
         true ->
-          [%{rule: rule.id, reason: rule.reason, file: rel, line: n, match: String.trim(line)}]
+          [
+            %{
+              rule: rule.id,
+              severity: Map.get(rule, :severity, "medium"),
+              reason: rule.reason,
+              file: rel,
+              line: n,
+              match: String.trim(line)
+            }
+          ]
       end
     end)
   end
@@ -882,6 +945,19 @@ defmodule Hypatia.Rules.CicdRules do
     prev = Enum.at(lines, n - 2, "")
     needle = "hypatia:ignore #{rule_id}"
     String.contains?(here, needle) or String.contains?(prev, needle)
+  end
+
+  # C4 helper: is this line ENTIRELY a comment? Deliberately conservative --
+  # it only recognises a leading comment marker, never a trailing one, so
+  # `run: bun install  # TODO` still matches. A trailing-comment stripper
+  # would need per-language string-literal awareness (a `#` inside a quoted
+  # shell string is not a comment), and getting that wrong silently blinds
+  # the rule. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C) and `--`
+  # (SQL/Ada/Haskell/Lua).
+  defp comment_line?(line) do
+    t = String.trim_leading(line)
+    String.starts_with?(t, "#") or String.starts_with?(t, "//") or
+      String.starts_with?(t, "--")
   end
 
   defp glob_matches?(glob, path) do
