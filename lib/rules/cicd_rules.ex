@@ -943,10 +943,12 @@ defmodule Hypatia.Rules.CicdRules do
   # `run: bun install  # TODO` still matches. A trailing-comment stripper
   # would need per-language string-literal awareness (a `#` inside a quoted
   # shell string is not a comment), and getting that wrong silently blinds
-  # the rule. Covers `#` (YAML/shell/Elixir) and `//` (JS/Rust/C).
+  # the rule. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C) and `--`
+  # (SQL/Ada/Haskell/Lua).
   defp comment_line?(line) do
     t = String.trim_leading(line)
-    String.starts_with?(t, "#") or String.starts_with?(t, "//")
+    String.starts_with?(t, "#") or String.starts_with?(t, "//") or
+      String.starts_with?(t, "--")
   end
 
   defp glob_matches?(glob, path) do
