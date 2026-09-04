@@ -669,6 +669,46 @@ defmodule Hypatia.Rules.CicdRules do
       reason: "eval banned in shell scripts -- use direct expansion or arrays",
       applies_to: ["*.sh"]
     },
+    # --- Scanner-derived rule (2026-09-01) -----------------------------
+    #
+    # Flagged INDEPENDENTLY by both CodeRabbit and Codacy across estate PRs.
+    # Two scanners agreeing is the strongest signal the C2 triage gate can
+    # get, the fix is mechanical, and it matches the estate's own lockfile
+    # doctrine -- which is why this was picked as the proof-of-concept rule
+    # over the higher-volume "SHA-pin your actions" advice. That advice was
+    # REJECTED: it contradicts the standing owner ruling that
+    # `sha_pinning_required` is OFF and `actions.lock` IS the pin (C1).
+    #
+    # A bare `bun install` lets CI resolve versions OUTSIDE the lockfile.
+    # That is the same defect class as the `actions.lock` version drift
+    # which is the estate's dominant startup_failure killer -- CI runs
+    # something the lockfile never sanctioned, and nothing says so.
+    #
+    # `applies_to` is MANDATORY, not decorative: scan_content_patterns/1
+    # filters on `Map.has_key?(p, :applies_to)`, so a rule without one is
+    # silently inert -- it looks complete in this table and can never fire.
+    # Six existing entries are dead this way. The four globs cover both the
+    # root `.github/workflows/` and the nested monorepo copies, mirroring
+    # `workflow_file?/1`.
+    #
+    # `skip_comment_lines` honours C4 (no matching inside comments). This
+    # repo has already shipped that defect once -- the `unwrap` rule matched
+    # commented-out code -- and a commented-out CI step is exactly where a
+    # bare `bun install` survives.
+    %{
+      id: :install_without_frozen_lockfile,
+      pattern: ~r/\bbun\s+install\b(?![^\n]*--frozen-lockfile)/,
+      reason:
+        "CI installs must be `bun install --frozen-lockfile` -- a bare install resolves outside the lockfile and can run versions the lockfile never sanctioned",
+      applies_to: [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml",
+        "**/.github/workflows/*.yml",
+        "**/.github/workflows/*.yaml"
+      ],
+      skip_comment_lines: true,
+      strip_yaml_comments: true
+    },
     %{
       id: :download_then_run_shell,
       pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
@@ -802,7 +842,7 @@ defmodule Hypatia.Rules.CicdRules do
     allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
     exception = Map.get(rule, :exception)
 
-    Path.wildcard("#{repo_path}/**/*", match_dot: false)
+    Path.wildcard("#{repo_path}/**/*", match_dot: true)
     |> Enum.reject(&File.dir?/1)
     |> Enum.map(&Path.relative_to(&1, repo_path))
     |> Enum.filter(fn rel ->
@@ -821,18 +861,28 @@ defmodule Hypatia.Rules.CicdRules do
     case File.read(abs) do
       {:ok, content} ->
         negative? = Map.get(rule, :negative, false)
-        matched? = Regex.match?(rule.pattern, content)
+        matching_content = content_for_matching(rule, content)
+        matched? = Regex.match?(rule.pattern, matching_content)
 
         cond do
           # Negative rules: fire when pattern is ABSENT
           negative? and not matched? ->
-            [%{rule: rule.id, reason: rule.reason, file: rel, line: 1, match: "(absent)"}]
+            [
+              %{
+                rule: rule.id,
+                severity: Map.get(rule, :severity, "medium"),
+                reason: rule.reason,
+                file: rel,
+                line: 1,
+                match: "(absent)"
+              }
+            ]
 
           negative? ->
             []
 
           matched? ->
-            line_findings(rule, rel, content)
+            line_findings(rule, rel, content, matching_content)
 
           true ->
             []
@@ -843,23 +893,78 @@ defmodule Hypatia.Rules.CicdRules do
     end
   end
 
-  defp line_findings(rule, rel, content) do
+  defp line_findings(rule, rel, content, matching_content) do
     lines = String.split(content, "\n")
+    matching_lines = String.split(matching_content, "\n")
 
-    lines
+    Enum.zip(lines, matching_lines)
     |> Enum.with_index(1)
-    |> Enum.flat_map(fn {line, n} ->
+    |> Enum.flat_map(fn {{line, matching_line}, n} ->
       cond do
-        not Regex.match?(rule.pattern, line) ->
+        not Regex.match?(rule.pattern, matching_line) ->
+          []
+
+        # C4: a rule may opt out of matching inside comments. Default false,
+        # so no existing rule changes behaviour. Checked BEFORE the pragma
+        # test because a commented-out line needs no `hypatia:ignore`.
+        Map.get(rule, :skip_comment_lines, false) and comment_line?(line) ->
           []
 
         ignored?(rule.id, lines, n) ->
           []
 
         true ->
-          [%{rule: rule.id, reason: rule.reason, file: rel, line: n, match: String.trim(line)}]
+          [
+            %{
+              rule: rule.id,
+              severity: Map.get(rule, :severity, "medium"),
+              reason: rule.reason,
+              file: rel,
+              line: n,
+              match: String.trim(line)
+            }
+          ]
       end
     end)
+  end
+
+  defp content_for_matching(rule, content) do
+    if Map.get(rule, :strip_yaml_comments, false) do
+      content
+      |> String.split("\n")
+      |> Enum.map_join("\n", &strip_yaml_comment/1)
+    else
+      content
+    end
+  end
+
+  defp strip_yaml_comment(line) do
+    line
+    |> String.graphemes()
+    |> do_strip_yaml_comment(nil, false, nil, [])
+    |> Enum.reverse()
+    |> Enum.join()
+  end
+
+  defp do_strip_yaml_comment([], _quote, _escaped, _previous, acc), do: acc
+
+  defp do_strip_yaml_comment(["#" | _rest], nil, false, previous, acc)
+       when previous in [nil, " ", "\t"],
+       do: acc
+
+  defp do_strip_yaml_comment([char | rest], quote, escaped, _previous, acc) do
+    {next_quote, next_escaped} =
+      case {quote, escaped, char} do
+        {"\"", true, _} -> {"\"", false}
+        {"\"", false, "\\"} -> {"\"", true}
+        {"\"", false, "\""} -> {nil, false}
+        {"'", false, "'"} -> {nil, false}
+        {nil, false, "\""} -> {"\"", false}
+        {nil, false, "'"} -> {"'", false}
+        _ -> {quote, false}
+      end
+
+    do_strip_yaml_comment(rest, next_quote, next_escaped, char, [char | acc])
   end
 
   # Inline pragma: this line OR the previous line carries
@@ -869,6 +974,17 @@ defmodule Hypatia.Rules.CicdRules do
     prev = Enum.at(lines, n - 2, "")
     needle = "hypatia:ignore #{rule_id}"
     String.contains?(here, needle) or String.contains?(prev, needle)
+  end
+
+  # C4 helper: is this line ENTIRELY a comment? Deliberately conservative for
+  # general content rules. YAML rules can opt into the quote-aware trailing
+  # comment handling above. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C)
+  # and `--` (SQL/Ada/Haskell/Lua).
+  defp comment_line?(line) do
+    t = String.trim_leading(line)
+
+    String.starts_with?(t, "#") or String.starts_with?(t, "//") or
+      String.starts_with?(t, "--")
   end
 
   defp glob_matches?(glob, path) do

@@ -77,4 +77,84 @@ defmodule Hypatia.Rules.CicdRules.ContentScannerTest do
       refute Enum.any?(findings, &(&1.rule == :hardcoded_tmp))
     end
   end
+
+  # ── Regression guard: the engine must be able to SEE `.github/` ───────
+  #
+  # `matching_files/2` enumerated with `Path.wildcard(..., match_dot: false)`,
+  # which never matches a dot-prefixed segment. Every workflow lives under
+  # `.github/`, so no workflow was reachable and the only two YAML-scoped
+  # rules could never fire on one. Proven with a byte-identical file: at
+  # `.github/workflows/ci.yml` it produced nothing; at `root-ci.yml` it fired.
+  # If this test ever goes red, the scanner has gone blind to CI again.
+  describe "dot-directory reachability" do
+    test "a rule fires on a file under .github/", %{dir: dir} do
+      wf = Path.join(dir, ".github/workflows")
+      File.mkdir_p!(wf)
+      File.write!(Path.join(wf, "ci.yml"), "steps:\n  - run: npx prettier .\n")
+      findings = CicdRules.scan_content_patterns(dir)
+      assert Enum.any?(findings, &(&1.rule == :npx_in_workflow))
+    end
+  end
+
+  # ── Scanner-derived rule: --frozen-lockfile ───────────────────────────
+  #
+  # Positive, canonical-fix negative, and a C4 comment case. The trio is the
+  # house contract: a rule that fires but cannot be satisfied by the fix it
+  # names is a gate that cannot pass, and one that matches commented-out
+  # code repeats a defect this repo has already shipped once.
+  describe "install_without_frozen_lockfile" do
+    setup %{dir: dir} do
+      wf = Path.join(dir, ".github/workflows")
+      File.mkdir_p!(wf)
+      {:ok, wf: wf}
+    end
+
+    test "fires on a bare `bun install`, at the right line", %{dir: dir, wf: wf} do
+      File.write!(Path.join(wf, "ci.yml"), "steps:\n  - run: echo hi\n  - run: bun install\n")
+      findings = CicdRules.scan_content_patterns(dir)
+      finding = Enum.find(findings, &(&1.rule == :install_without_frozen_lockfile))
+      assert finding
+      # Line 3, not 1 -- the content engine is the only source of a real
+      # `:line`, and it is what makes SARIF `startLine` non-degenerate.
+      assert finding.line == 3
+    end
+
+    test "does NOT fire on the canonical fix", %{dir: dir, wf: wf} do
+      File.write!(Path.join(wf, "ok.yml"), "steps:\n  - run: bun install --frozen-lockfile\n")
+      findings = CicdRules.scan_content_patterns(dir)
+      refute Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+
+    test "C4: does NOT fire on a commented-out install", %{dir: dir, wf: wf} do
+      File.write!(Path.join(wf, "c.yml"), "steps:\n  # - run: bun install\n  - run: echo ok\n")
+      findings = CicdRules.scan_content_patterns(dir)
+      refute Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+
+    test "still fires when the comment marker is TRAILING, not leading", %{dir: dir, wf: wf} do
+      File.write!(Path.join(wf, "t.yml"), "steps:\n  - run: bun install  # TODO pin this\n")
+      findings = CicdRules.scan_content_patterns(dir)
+      assert Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+
+    test "trailing comments cannot supply --frozen-lockfile", %{dir: dir, wf: wf} do
+      File.write!(
+        Path.join(wf, "commented-flag.yml"),
+        ~s(steps:\n  - run: "printf '# keep'; bun install" # --frozen-lockfile\n)
+      )
+
+      findings = CicdRules.scan_content_patterns(dir)
+      assert Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+
+    test "bun install in a trailing comment does not create a finding", %{dir: dir, wf: wf} do
+      File.write!(
+        Path.join(wf, "commented-install.yml"),
+        "steps:\n  - run: echo ok # bun install\n"
+      )
+
+      findings = CicdRules.scan_content_patterns(dir)
+      refute Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+  end
 end

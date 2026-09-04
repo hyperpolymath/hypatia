@@ -27,7 +27,8 @@ defmodule Hypatia.CLI do
                                    cicd_rules,code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
-                                   structural_drift,implementation_inside_canon
+                                   structural_drift,implementation_inside_canon,
+                                   content_patterns
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -54,7 +55,8 @@ defmodule Hypatia.CLI do
     :secret_scanning_alerts,
     :code_scanning_alerts,
     :structural_drift,
-    :implementation_inside_canon
+    :implementation_inside_canon,
+    :content_patterns
   ]
 
   @severity_order %{
@@ -818,6 +820,43 @@ defmodule Hypatia.CLI do
         results
       end
 
+    # ─── Content-pattern rules ───────────────────────────────────────────
+    #
+    # `CicdRules.scan_content_patterns/1` is a glob+regex, per-line content
+    # engine over the `@blocked_patterns` table. It shipped complete but
+    # unwired: until now nothing in `lib/` called it, so every table entry
+    # carrying `:pattern` + `:applies_to` was dormant and only its unit test
+    # ever exercised it. Wiring it here makes rule authoring a matter of
+    # adding a table row rather than writing a module.
+    #
+    # This is the only branch that emits a real `:line`. Everything else
+    # normalizes without one, which is why SARIF's `startLine` was uniformly
+    # 1 before this landed. Suppression is NOT applied here -- the uniform
+    # pass below funnels every finding through ScannerSuppression exactly
+    # once, and doing it twice would be both redundant and a second place
+    # for exemptions to silently diverge.
+    results =
+      if :content_patterns in rules do
+        normalized =
+          repo_path
+          |> Hypatia.Rules.CicdRules.scan_content_patterns()
+          |> Enum.map(fn f ->
+            %{
+              rule_module: "content_patterns",
+              severity: to_string(Map.get(f, :severity, "medium")),
+              type: to_string(f.rule),
+              file: f.file,
+              line: f.line,
+              reason: f.reason,
+              action: "flag"
+            }
+          end)
+
+        results ++ normalized
+      else
+        results
+      end
+
     # ─── Uniform suppression pass ──────────────────────────────────────
     #
     # Several rule paths above (structural_drift, code_scanning_alerts,
@@ -1301,7 +1340,8 @@ defmodule Hypatia.CLI do
                                 migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts,
-                                structural_drift,implementation_inside_canon
+                                structural_drift,implementation_inside_canon,
+                                content_patterns
         --format, -f <fmt>      Output format: json (default), text, github, sarif, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
