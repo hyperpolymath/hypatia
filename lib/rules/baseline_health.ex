@@ -313,7 +313,7 @@ defmodule Hypatia.Rules.BaselineHealth do
   Requires `GITHUB_TOKEN` to confirm the SHA does not exist upstream.
   Returns `[]` cleanly without one.
   """
-  def bh004_dead_action_sha_pin(repo_path) do
+  def bh004_dead_action_sha_pin(repo_path, github_request \\ &curl_github/1) do
     workflow_files = find_workflow_files(repo_path)
 
     workflow_files
@@ -324,7 +324,7 @@ defmodule Hypatia.Rules.BaselineHealth do
       content
       |> uses_sha_references()
       |> Enum.flat_map(fn ref ->
-        check_action_sha_alive(ref.repository, ref.path, ref.sha, rel, ref.line)
+        check_action_sha_alive(ref.repository, ref.path, ref.sha, rel, ref.line, github_request)
       end)
     end)
   end
@@ -368,8 +368,8 @@ defmodule Hypatia.Rules.BaselineHealth do
   def reusable_reachability("diverged"), do: :unreachable
   def reusable_reachability(_), do: :unknown
 
-  defp check_action_sha_alive(action_repo, upstream_path, sha, file, line_no) do
-    case curl_github("repos/#{action_repo}/commits/#{sha}") do
+  defp check_action_sha_alive(action_repo, upstream_path, sha, file, line_no, github_request) do
+    case github_request.("repos/#{action_repo}/commits/#{sha}") do
       {:ok, %{"message" => "No commit found for SHA: " <> _}} ->
         [
           %{
@@ -394,7 +394,14 @@ defmodule Hypatia.Rules.BaselineHealth do
 
       {:ok, %{"sha" => _real_sha}} ->
         if reusable_workflow_path?(upstream_path) do
-          check_reusable_sha_reachable(action_repo, upstream_path, sha, file, line_no)
+          check_reusable_sha_reachable(
+            action_repo,
+            upstream_path,
+            sha,
+            file,
+            line_no,
+            github_request
+          )
         else
           # Ordinary actions may intentionally live on a release/tag branch;
           # existence is sufficient for those. Default-branch reachability is
@@ -418,11 +425,20 @@ defmodule Hypatia.Rules.BaselineHealth do
       (String.ends_with?(path, ".yml") or String.ends_with?(path, ".yaml"))
   end
 
-  defp check_reusable_sha_reachable(action_repo, upstream_path, sha, file, line_no) do
+  defp check_reusable_sha_reachable(
+         action_repo,
+         upstream_path,
+         sha,
+         file,
+         line_no,
+         github_request
+       ) do
     with {:ok, %{"default_branch" => branch}} when is_binary(branch) <-
-           curl_github("repos/#{action_repo}"),
-         {:ok, comparison} <-
-           curl_github("repos/#{action_repo}/compare/#{sha}...#{branch}") do
+           github_request.("repos/#{action_repo}"),
+         {:ok, comparison} when is_map(comparison) <-
+           github_request.(
+             "repos/#{action_repo}/compare/#{sha}...#{URI.encode(branch, &URI.char_unreserved?/1)}"
+           ) do
       case reusable_reachability(comparison) do
         :reachable ->
           []
@@ -443,7 +459,8 @@ defmodule Hypatia.Rules.BaselineHealth do
                 upstream_path: upstream_path,
                 unreachable_sha: sha,
                 default_branch: branch,
-                compare_status: Map.get(comparison, "status") || Map.get(comparison, "message"),
+                compare_status:
+                  Map.get(comparison, "status") || Map.get(comparison, "message", "unknown"),
                 fix:
                   "Pin a commit reachable from `#{branch}`: " <>
                     "`gh api repos/#{action_repo}/commits/#{branch} --jq .sha`"

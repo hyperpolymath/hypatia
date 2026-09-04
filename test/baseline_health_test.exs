@@ -215,6 +215,37 @@ defmodule Hypatia.Rules.BaselineHealthTest do
              }) == :unreachable
     end
 
+    test "encodes a slash-containing default branch and emits BH004", %{repo: repo} do
+      sha = "7fdc2705df74b4e352d2a1cde3e87a5923fdf329"
+      workflow_dir = Path.join([repo, ".github", "workflows"])
+      File.mkdir_p!(workflow_dir)
+
+      File.write!(Path.join(workflow_dir, "hypatia.yml"), """
+      jobs:
+        scan:
+          uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@#{sha}
+      """)
+
+      github_request = fn
+        "repos/hyperpolymath/standards/commits/" <> ^sha ->
+          {:ok, %{"sha" => sha}}
+
+        "repos/hyperpolymath/standards" ->
+          {:ok, %{"default_branch" => "release/next"}}
+
+        "repos/hyperpolymath/standards/compare/" <> ^sha <> "...release%2Fnext" ->
+          {:ok, %{"status" => "diverged"}}
+
+        _unexpected ->
+          {:error, :unexpected_request}
+      end
+
+      assert [finding] = BaselineHealth.bh004_dead_action_sha_pin(repo, github_request)
+      assert finding.rule == "BH004"
+      assert finding.detail.default_branch == "release/next"
+      assert finding.detail.compare_status == "diverged"
+    end
+
     test "returns [] when no workflow files exist", %{repo: repo} do
       # No .github/workflows/ directory at all.
       assert BaselineHealth.bh004_dead_action_sha_pin(repo) == []
