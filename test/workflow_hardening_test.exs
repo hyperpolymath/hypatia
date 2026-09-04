@@ -16,6 +16,27 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
     repo
   end
 
+  defp write_actions_lock(
+         repo,
+         workflow_path,
+         commit \\ "3d3c42e5aac5ba805825da76410c181273ba90b1"
+       ) do
+    content = """
+    version: 'v0.0.2'
+    workflows:
+        '#{workflow_path}':
+            - 'actions/checkout@v7.0.1'
+    dependencies:
+        'actions/checkout@v7.0.1':
+            ref: 'v7.0.1'
+            commit: 'sha1-#{commit}'
+            owner_id: 44036562
+            repo_id: 197814629
+    """
+
+    File.write!(Path.join([repo, ".github", "workflows", "actions.lock"]), content)
+  end
+
   setup context do
     on_exit(fn ->
       if context[:repo] do
@@ -132,6 +153,56 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
 
       findings = WorkflowHardening.wh004_unpinned_uses(repo)
       assert length(findings) == 2
+      File.rm_rf!(repo)
+    end
+
+    test "accepts only a valid lock entry associated with the current workflow" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - uses: actions/checkout@v7.0.1
+        """)
+
+      write_actions_lock(repo, ".github/workflows/test.yml")
+      assert WorkflowHardening.wh004_unpinned_uses(repo) == []
+
+      write_actions_lock(repo, ".github/workflows/other.yml")
+      assert [%{rule: "WH004"}] = WorkflowHardening.wh004_unpinned_uses(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "malformed lock commit fails closed" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - uses: actions/checkout@v7.0.1
+        """)
+
+      write_actions_lock(repo, ".github/workflows/test.yml", "short")
+
+      assert [
+               %{
+                 rule: "invalid_actions_lock",
+                 file: ".github/workflows/actions.lock",
+                 severity: :high,
+                 action: :regenerate
+               }
+             ] = WorkflowHardening.wh004_unpinned_uses(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "invalid lock is reported even when no workflow has a symbolic action" do
+      repo = create_repo_with_workflow("jobs: {}\n")
+      write_actions_lock(repo, ".github/workflows/test.yml", "short")
+
+      assert [%{rule: "invalid_actions_lock", severity: :high}] =
+               WorkflowHardening.wh004_unpinned_uses(repo)
+
       File.rm_rf!(repo)
     end
 

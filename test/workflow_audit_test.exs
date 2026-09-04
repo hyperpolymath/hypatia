@@ -811,22 +811,26 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
     workflows:
         '.github/workflows/ci.yml':
             - 'actions/checkout@v7.0.1'
+        '.github/workflows/c.yml':
+            - 'actions/checkout@v7.0.1'
+            - 'github/codeql-action@v4.37.3'
     dependencies:
         'actions/checkout@v7.0.1':
             ref: 'v7.0.1'
             commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+            owner_id: 44036562
+            repo_id: 197814629
         'github/codeql-action@v4.37.3':
             ref: 'v4.37.3'
             commit: 'sha1-0000000000000000000000000000000000000000'
+            owner_id: 9919
+            repo_id: 148644467
     """
 
     @wf %{"ci.yml" => "jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v7.0.1\n"}
 
     test "a ref covered by the lockfile is accepted, not reported unpinned" do
-      [f] = WorkflowAudit.check_unpinned_actions(@wf, actions_lock: @lock)
-      assert f.type == :lockfile_pinned_accepted
-      assert f.severity == :info
-      assert f.rationale =~ "actions.lock"
+      assert WorkflowAudit.check_unpinned_actions(@wf, actions_lock: @lock) == []
     end
 
     test "the SAME ref without a lockfile is still reported unpinned" do
@@ -847,20 +851,49 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       # `gh actions-lock` records github/codeql-action/init@vN under
       # github/codeql-action@vN; matching the raw slug would miss it.
       wf = %{"c.yml" => "      - uses: github/codeql-action/init@v4.37.3\n"}
-      [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
-      assert f.type == :lockfile_pinned_accepted
+      assert WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock) == []
     end
 
-    test "lockfile matching is case-insensitive on the slug" do
+    test "lockfile matching is case-insensitive on owner/repository identity" do
       wf = %{"c.yml" => "      - uses: Actions/Checkout@v7.0.1\n"}
+      assert WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock) == []
+    end
+
+    test "lockfile matching preserves case-sensitive refs" do
+      wf = %{"c.yml" => "      - uses: actions/checkout@V7.0.1\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
-      assert f.type == :lockfile_pinned_accepted
+      assert f.type == :unpinned_action
     end
 
     test "a different ref of a locked action is NOT accepted" do
       wf = %{"c.yml" => "      - uses: actions/checkout@v6.0.0\n"}
       [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
       assert f.type == :unpinned_action
+    end
+
+    test "a dependency listed only for another workflow does not authorize this one" do
+      wf = %{"other.yml" => "      - uses: actions/checkout@v7.0.1\n"}
+      [f] = WorkflowAudit.check_unpinned_actions(wf, actions_lock: @lock)
+      assert f.type == :unpinned_action
+    end
+
+    test "a malformed lock is explicit and authorizes no refs" do
+      malformed = String.replace(@lock, ~r/sha1-[0-9a-f]{40}/, "sha1-short", global: false)
+      findings = WorkflowAudit.check_unpinned_actions(@wf, actions_lock: malformed)
+
+      assert [%{type: :invalid_actions_lock, action: :regenerate}] = findings
+      refute Enum.any?(findings, &(&1.type == :unpinned_action))
+    end
+
+    test "an invalid lock is visible even when a workflow has no symbolic actions" do
+      malformed = String.replace(@lock, "version: 'v0.0.2'", "version: 'v9'")
+
+      findings =
+        WorkflowAudit.check_unpinned_actions(%{"empty.yml" => "jobs: {}\n"},
+          actions_lock: malformed
+        )
+
+      assert [%{type: :invalid_actions_lock, action: :regenerate}] = findings
     end
   end
 end

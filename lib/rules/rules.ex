@@ -571,27 +571,35 @@ defmodule Hypatia.Rules do
   Check a workflow YAML file for common issues.
   Returns a list of findings.
   """
-  def scan_workflow(content) do
-    findings = []
-
-    # Unpinned actions
-    unpinned = Regex.scan(~r/uses:\s*([^\s]+@v\d+)/, content)
+  def scan_workflow(content, opts \\ []) do
+    filename = Keyword.get(opts, :filename, "workflow.yml")
+    audit_opts = Keyword.take(opts, [:actions_lock])
 
     findings =
-      findings ++
-        Enum.map(unpinned, fn [_full, action_ref] ->
+      %{filename => content}
+      |> Hypatia.Rules.WorkflowAudit.check_unpinned_actions(audit_opts)
+      |> Enum.flat_map(fn
+        %{type: :unpinned_action, action_ref: action_ref} ->
           suggestion =
             case SecurityErrors.pin_action(action_ref) do
               {:ok, pinned} -> " -- fix: #{pinned}"
               _ -> ""
             end
 
-          %{
-            rule: "unpinned_action",
-            severity: :high,
-            description: "Unpinned action: #{action_ref}#{suggestion}"
-          }
-        end)
+          [
+            %{
+              rule: "unpinned_action",
+              severity: :high,
+              description: "Unpinned action: #{action_ref}#{suggestion}"
+            }
+          ]
+
+        %{type: :invalid_actions_lock, detail: detail} ->
+          [%{rule: "invalid_actions_lock", severity: :high, description: detail}]
+
+        _accepted_or_unrelated ->
+          []
+      end)
 
     # Missing permissions
     findings =

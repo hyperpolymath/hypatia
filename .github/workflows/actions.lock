@@ -297,12 +297,12 @@ dependencies:
         repo_id: 623796603
     'hyperpolymath/a2ml-ecosystem@main':
         ref: 'main'
-        commit: 'sha1-c73022e759ed52a6156768a2fde43636ae4d7a7c'
+        commit: 'sha1-c992d2882ee1e62bf5c78b5f9a1893a6a16730e4'
         owner_id: 6759885
         repo_id: 1275649586
     'hyperpolymath/k9-ecosystem@main':
         ref: 'main'
-        commit: 'sha1-c74f04c77a36247a813493945e803178b93d170f'
+        commit: 'sha1-3f250fba42e432c7ff47b48f59525bec3357136b'
         owner_id: 6759885
         repo_id: 1275650185
     'hyperpolymath/smtp-notify-action@v0.2.0':
