@@ -253,7 +253,9 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   Returns `:stalled` if the heuristic fires, `:ok` otherwise.
   """
   @spec dependabot_stalled?(map(), pos_integer()) :: :stalled | :ok
-  def dependabot_stalled?(%{author: %{login: "dependabot[bot]"}} = pr, days_threshold \\ 7) do
+  def dependabot_stalled?(pr, days_threshold \\ 7)
+
+  def dependabot_stalled?(%{author: %{login: "dependabot[bot]"}} = pr, days_threshold) do
     created = Map.get(pr, :createdAt, "")
     has_review_requests = Map.get(pr, :reviewRequests, []) != []
 
@@ -360,7 +362,7 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   """
   @spec obsolete_supersedes?(map(), (String.t() -> String.t() | nil)) ::
           {:obsolete, String.t()} | :not_obsolete
-  def obsolete_supersedes?(%{files: files} = pr, main_lookup)
+  def obsolete_supersedes?(%{files: files}, main_lookup)
       when is_function(main_lookup, 1) do
     # Look at workflow YAML edits that change a `uses: ...@<sha>` line.
     Enum.find_value(files, :not_obsolete, fn file ->
