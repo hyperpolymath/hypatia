@@ -209,6 +209,12 @@ defmodule Hypatia.Rules.BaselineHealthTest do
       assert BaselineHealth.reusable_reachability("unexpected") == :unknown
     end
 
+    test "recognizes GitHub's no-common-ancestor compare response as unreachable" do
+      assert BaselineHealth.reusable_reachability(%{
+               "message" => "No common ancestor between deadbeef and main."
+             }) == :unreachable
+    end
+
     test "returns [] when no workflow files exist", %{repo: repo} do
       # No .github/workflows/ directory at all.
       assert BaselineHealth.bh004_dead_action_sha_pin(repo) == []

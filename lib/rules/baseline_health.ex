@@ -356,6 +356,12 @@ defmodule Hypatia.Rules.BaselineHealth do
   end
 
   @doc false
+  def reusable_reachability(%{"status" => status}) when is_binary(status),
+    do: reusable_reachability(status)
+
+  def reusable_reachability(%{"message" => "No common ancestor between " <> _}),
+    do: :unreachable
+
   def reusable_reachability("ahead"), do: :reachable
   def reusable_reachability("identical"), do: :reachable
   def reusable_reachability("behind"), do: :unreachable
@@ -415,9 +421,9 @@ defmodule Hypatia.Rules.BaselineHealth do
   defp check_reusable_sha_reachable(action_repo, upstream_path, sha, file, line_no) do
     with {:ok, %{"default_branch" => branch}} when is_binary(branch) <-
            curl_github("repos/#{action_repo}"),
-         {:ok, %{"status" => status}} <-
+         {:ok, comparison} <-
            curl_github("repos/#{action_repo}/compare/#{sha}...#{branch}") do
-      case reusable_reachability(status) do
+      case reusable_reachability(comparison) do
         :reachable ->
           []
 
@@ -437,7 +443,7 @@ defmodule Hypatia.Rules.BaselineHealth do
                 upstream_path: upstream_path,
                 unreachable_sha: sha,
                 default_branch: branch,
-                compare_status: status,
+                compare_status: Map.get(comparison, "status") || Map.get(comparison, "message"),
                 fix:
                   "Pin a commit reachable from `#{branch}`: " <>
                     "`gh api repos/#{action_repo}/commits/#{branch} --jq .sha`"
