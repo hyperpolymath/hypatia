@@ -33,15 +33,29 @@ else
 fi
 BASH_FALLBACK="${HYPATIA_DIR}/hypatia-cli-bash.sh"
 
-# ─── Build escript if missing ───────────────────────────────────────────
+# build_escript builds the Hypatia escript in the script directory and sends build output to stderr.
 
 build_escript() {
     echo "[hypatia] Building escript..." >&2
+    # Everything below is BUILD CHATTER, never scan output. Callers run
+    #     hypatia-cli.sh scan . > hypatia-findings.json
+    # so any byte written to stdout here lands inside the JSON payload and
+    # `jq` fails with "Invalid numeric literal" -- reported by the caller as
+    # "Hypatia did not produce a valid JSON findings array", on a scan that
+    # actually succeeded. Observed in CI 2026-09-03.
+    #
+    # Redirect the whole subshell to stderr ONCE. Do NOT write `2>&1 >&2`
+    # inside it: redirections are applied left to right, so `2>&1` first
+    # points fd2 at wherever fd1 currently is -- the caller's findings.json --
+    # and the following `>&2` then points fd1 at that same file. Both streams
+    # end up in the payload, which is the exact opposite of the intent. The
+    # bug is invisible interactively, where fd1 is the tty and the pair is a
+    # no-op; it only fires when a caller redirects stdout, i.e. in CI.
     (
         cd "${HYPATIA_DIR}"
         mix deps.get --quiet 2>/dev/null || true
-        MIX_NO_PUBSUB="${MIX_NO_PUBSUB:-1}" mix escript.build 2>&1 >&2
-    )
+        MIX_NO_PUBSUB="${MIX_NO_PUBSUB:-1}" mix escript.build
+    ) >&2
 }
 
 # A stale escript is a SOUNDNESS hazard, not a convenience issue: an
