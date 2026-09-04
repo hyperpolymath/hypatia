@@ -136,5 +136,25 @@ defmodule Hypatia.Rules.CicdRules.ContentScannerTest do
       findings = CicdRules.scan_content_patterns(dir)
       assert Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
     end
+
+    test "trailing comments cannot supply --frozen-lockfile", %{dir: dir, wf: wf} do
+      File.write!(
+        Path.join(wf, "commented-flag.yml"),
+        ~s(steps:\n  - run: "printf '# keep'; bun install" # --frozen-lockfile\n)
+      )
+
+      findings = CicdRules.scan_content_patterns(dir)
+      assert Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+
+    test "bun install in a trailing comment does not create a finding", %{dir: dir, wf: wf} do
+      File.write!(
+        Path.join(wf, "commented-install.yml"),
+        "steps:\n  - run: echo ok # bun install\n"
+      )
+
+      findings = CicdRules.scan_content_patterns(dir)
+      refute Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
   end
 end
