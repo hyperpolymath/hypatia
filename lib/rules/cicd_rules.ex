@@ -719,7 +719,8 @@ defmodule Hypatia.Rules.CicdRules do
         "**/.github/workflows/*.yml",
         "**/.github/workflows/*.yaml"
       ],
-      skip_comment_lines: true
+      skip_comment_lines: true,
+      strip_yaml_comments: true
     },
     %{
       id: :download_then_run_shell,
@@ -873,7 +874,8 @@ defmodule Hypatia.Rules.CicdRules do
     case File.read(abs) do
       {:ok, content} ->
         negative? = Map.get(rule, :negative, false)
-        matched? = Regex.match?(rule.pattern, content)
+        matching_content = content_for_matching(rule, content)
+        matched? = Regex.match?(rule.pattern, matching_content)
 
         cond do
           # Negative rules: fire when pattern is ABSENT
@@ -893,7 +895,7 @@ defmodule Hypatia.Rules.CicdRules do
             []
 
           matched? ->
-            line_findings(rule, rel, content)
+            line_findings(rule, rel, content, matching_content)
 
           true ->
             []
@@ -904,14 +906,15 @@ defmodule Hypatia.Rules.CicdRules do
     end
   end
 
-  defp line_findings(rule, rel, content) do
+  defp line_findings(rule, rel, content, matching_content) do
     lines = String.split(content, "\n")
+    matching_lines = String.split(matching_content, "\n")
 
-    lines
+    Enum.zip(lines, matching_lines)
     |> Enum.with_index(1)
-    |> Enum.flat_map(fn {line, n} ->
+    |> Enum.flat_map(fn {{line, matching_line}, n} ->
       cond do
-        not Regex.match?(rule.pattern, line) ->
+        not Regex.match?(rule.pattern, matching_line) ->
           []
 
         # C4: a rule may opt out of matching inside comments. Default false,
@@ -938,6 +941,45 @@ defmodule Hypatia.Rules.CicdRules do
     end)
   end
 
+  defp content_for_matching(rule, content) do
+    if Map.get(rule, :strip_yaml_comments, false) do
+      content
+      |> String.split("\n")
+      |> Enum.map_join("\n", &strip_yaml_comment/1)
+    else
+      content
+    end
+  end
+
+  defp strip_yaml_comment(line) do
+    line
+    |> String.graphemes()
+    |> do_strip_yaml_comment(nil, false, nil, [])
+    |> Enum.reverse()
+    |> Enum.join()
+  end
+
+  defp do_strip_yaml_comment([], _quote, _escaped, _previous, acc), do: acc
+
+  defp do_strip_yaml_comment(["#" | _rest], nil, false, previous, acc)
+       when previous in [nil, " ", "\t"],
+       do: acc
+
+  defp do_strip_yaml_comment([char | rest], quote, escaped, _previous, acc) do
+    {next_quote, next_escaped} =
+      case {quote, escaped, char} do
+        {"\"", true, _} -> {"\"", false}
+        {"\"", false, "\\"} -> {"\"", true}
+        {"\"", false, "\""} -> {nil, false}
+        {"'", false, "'"} -> {nil, false}
+        {nil, false, "\""} -> {"\"", false}
+        {nil, false, "'"} -> {"'", false}
+        _ -> {quote, false}
+      end
+
+    do_strip_yaml_comment(rest, next_quote, next_escaped, char, [char | acc])
+  end
+
   # Inline pragma: this line OR the previous line carries
   # `hypatia:ignore <rule_id>` (in any comment syntax we recognise).
   defp ignored?(rule_id, lines, n) do
@@ -947,15 +989,13 @@ defmodule Hypatia.Rules.CicdRules do
     String.contains?(here, needle) or String.contains?(prev, needle)
   end
 
-  # C4 helper: is this line ENTIRELY a comment? Deliberately conservative --
-  # it only recognises a leading comment marker, never a trailing one, so
-  # `run: bun install  # TODO` still matches. A trailing-comment stripper
-  # would need per-language string-literal awareness (a `#` inside a quoted
-  # shell string is not a comment), and getting that wrong silently blinds
-  # the rule. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C) and `--`
-  # (SQL/Ada/Haskell/Lua).
+  # C4 helper: is this line ENTIRELY a comment? Deliberately conservative for
+  # general content rules. YAML rules can opt into the quote-aware trailing
+  # comment handling above. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C)
+  # and `--` (SQL/Ada/Haskell/Lua).
   defp comment_line?(line) do
     t = String.trim_leading(line)
+
     String.starts_with?(t, "#") or String.starts_with?(t, "//") or
       String.starts_with?(t, "--")
   end
