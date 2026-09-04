@@ -60,7 +60,7 @@ workflows:
         - 'actions/deploy-pages@v5.0.0'
         - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/push-email-notify.yml':
-        - 'dawidd6/action-send-mail@v18'
+        - 'hyperpolymath/smtp-notify-action@v0.2.0'
     '.github/workflows/quality.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.0'
@@ -219,11 +219,6 @@ dependencies:
         repo_id: 200299178
         uses:
             - 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd'
-    'dawidd6/action-send-mail@v18':
-        ref: 'v18'
-        commit: 'sha1-94de994a9f6fffee200243214e17002e2920bb59'
-        owner_id: 9713907
-        repo_id: 222439721
     'dependabot/fetch-metadata@v3.1.0':
         ref: 'v3.1.0'
         commit: 'sha1-25dd0e34f4fe68f24cc83900b1fe3fe149efef98'
