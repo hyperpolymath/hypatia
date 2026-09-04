@@ -64,11 +64,9 @@ defmodule Hypatia.Web.ApiRouter do
     end
   end
 
-  @doc """
-  GET /api/recipes/:id -- single-recipe drill-down. Returns the same
-  shape as one row from `/api/recipes`, plus the recipe definition
-  itself when found in the registry.
-  """
+  # GET /api/recipes/:id -- single-recipe drill-down. Returns the same
+  # shape as one row from `/api/recipes`, plus the recipe definition
+  # itself when found in the registry.
   get "/recipes/:id" do
     health = Hypatia.OutcomeTracker.recipe_health()
     row = Enum.find(health, &(&1.recipe_id == id))
@@ -81,11 +79,9 @@ defmodule Hypatia.Web.ApiRouter do
     end
   end
 
-  @doc """
-  GET /api/quarantine -- everything currently auto-quarantined:
-  recipes (verification-rate gate) and bots (consecutive-failure /
-  FP-rate gate from Hypatia.Safety.Quarantine).
-  """
+  # GET /api/quarantine -- everything currently auto-quarantined:
+  # recipes (verification-rate gate) and bots (consecutive-failure /
+  # FP-rate gate from Hypatia.Safety.Quarantine).
   get "/quarantine" do
     recipes =
       Hypatia.OutcomeTracker.recipe_health()
@@ -103,11 +99,9 @@ defmodule Hypatia.Web.ApiRouter do
     })
   end
 
-  @doc """
-  GET /api/alerts -- Recent threshold-rule alerts emitted by
-  Hypatia.Watcher.Alerts (ring buffer, newest first). Powers the
-  dashboard alert ribbon and supports manual triage.
-  """
+  # GET /api/alerts -- Recent threshold-rule alerts emitted by
+  # Hypatia.Watcher.Alerts (ring buffer, newest first). Powers the
+  # dashboard alert ribbon and supports manual triage.
   get "/alerts" do
     rows =
       case Process.whereis(Hypatia.Watcher.Alerts) do
@@ -118,20 +112,18 @@ defmodule Hypatia.Web.ApiRouter do
     json(conn, 200, %{count: length(rows), rows: rows})
   end
 
-  @doc """
-  POST /api/alerts/ingest -- Federation ingress. Peer hypatia
-  instances POST their alerts here via the Peer sink.
-
-  Auth: the auth_gate plug enforces a valid bearer token, so this
-  endpoint is only reachable when HYPATIA_API_BEARER_TOKEN is set
-  and the request carries it. Federation without shared auth is
-  refused at the gate, not here.
-
-  Loop prevention: the ingested alert is tagged with
-  `metadata.federated_from = <peer hostname or "unknown">` so the
-  Peer sink can skip it on broadcast and the dashboard can
-  attribute it.
-  """
+  # POST /api/alerts/ingest -- Federation ingress. Peer hypatia
+  # instances POST their alerts here via the Peer sink.
+  #
+  # Auth: the auth_gate plug enforces a valid bearer token, so this
+  # endpoint is only reachable when HYPATIA_API_BEARER_TOKEN is set
+  # and the request carries it. Federation without shared auth is
+  # refused at the gate, not here.
+  #
+  # Loop prevention: the ingested alert is tagged with
+  # `metadata.federated_from = <peer hostname or "unknown">` so the
+  # Peer sink can skip it on broadcast and the dashboard can
+  # attribute it.
   post "/alerts/ingest" do
     {:ok, body, conn} = Plug.Conn.read_body(conn)
 
@@ -174,20 +166,18 @@ defmodule Hypatia.Web.ApiRouter do
 
   defp parse_atom(_), do: :unknown
 
-  @doc """
-  GET /api/events -- Server-Sent Events stream of telemetry as it
-  fires. Each event arrives as
-
-      event: hypatia.scan.complete
-      data: {"measurements": {...}, "metadata": {...}, "at": ms}
-
-  Optional `?events=hypatia.scan.complete,hypatia.outcome.recorded`
-  filter narrows the stream to specific event kinds.
-
-  Heartbeats every 15s as comment lines (`: keepalive`) defeat proxy
-  idle-timeouts. The handler exits cleanly when the client disconnects
-  (Bandit closes the chunked response).
-  """
+  # GET /api/events -- Server-Sent Events stream of telemetry as it
+  # fires. Each event arrives as
+  #
+  #     event: hypatia.scan.complete
+  #     data: {"measurements": {...}, "metadata": {...}, "at": ms}
+  #
+  # Optional `?events=hypatia.scan.complete,hypatia.outcome.recorded`
+  # filter narrows the stream to specific event kinds.
+  #
+  # Heartbeats every 15s as comment lines (`: keepalive`) defeat proxy
+  # idle-timeouts. The handler exits cleanly when the client disconnects
+  # (Bandit closes the chunked response).
   get "/events" do
     conn = Plug.Conn.fetch_query_params(conn)
     filter = parse_event_filter(conn.query_params["events"])
@@ -368,7 +358,7 @@ defmodule Hypatia.Web.ApiRouter do
         a
         |> :binary.bin_to_list()
         |> Enum.zip(:binary.bin_to_list(b))
-        |> Enum.reduce(0, fn {x, y}, acc -> acc ||| Bitwise.bxor(x, y) end) == 0
+        |> Enum.reduce(0, fn {x, y}, acc -> acc ||| bxor(x, y) end) == 0
     end
   end
 

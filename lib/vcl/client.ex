@@ -123,14 +123,6 @@ defmodule Hypatia.VCL.Client do
     end
   end
 
-  # Route a parsed AST to the right executor. Multi-URL remote federation
-  # goes to RemoteExecutor; every other source stays on FileExecutor.
-  defp dispatch(%{source: {:federation_remote, urls, _policy}} = ast, opts) do
-    Hypatia.VCL.RemoteExecutor.execute(urls, ast, opts)
-  end
-
-  defp dispatch(ast, opts), do: Hypatia.VCL.FileExecutor.execute(ast, opts)
-
   @impl true
   def handle_call(:stats, _from, state) do
     {:reply,
@@ -140,6 +132,14 @@ defmodule Hypatia.VCL.Client do
        cache_ttl_ms: state.cache_ttl
      }, state}
   end
+
+  # Route a parsed AST to the right executor. Multi-URL remote federation
+  # goes to RemoteExecutor; every other source stays on FileExecutor.
+  defp dispatch(%{source: {:federation_remote, urls, _policy}} = ast, opts) do
+    Hypatia.VCL.RemoteExecutor.execute(urls, ast, opts)
+  end
+
+  defp dispatch(ast, opts), do: Hypatia.VCL.FileExecutor.execute(ast, opts)
 
   # ---------------------------------------------------------------------------
   # Built-in VCL Parser (derived from VeriSim.Query.VQLBridge)

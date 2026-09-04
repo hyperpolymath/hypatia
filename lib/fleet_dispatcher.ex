@@ -45,54 +45,6 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
-  # Standard fleet dispatch path for eliminate tier.
-  defp dispatch_eliminate_via_fleet(recipe, pattern) do
-    confidence = Map.get(recipe, "confidence", 0.0)
-    strategy = TriangleRouter.dispatch_strategy(confidence)
-
-    bot_id =
-      case strategy do
-        :auto_execute -> "robot-repo-automaton"
-        :review -> "rhodibot"
-        :report_only -> "sustainabot"
-      end
-
-    action_type =
-      case strategy do
-        :auto_execute -> :commit_push
-        :review -> :pr_create
-        :report_only -> :advisory
-      end
-
-    # Gate review -- every action must pass through the Kin Gate
-    gate_action = %{
-      bot_id: bot_id,
-      repo: get_pattern_repo(pattern),
-      action_type: action_type,
-      confidence: confidence,
-      pattern_id: Map.get(pattern, "id", Map.get(pattern, "description", "")),
-      scan_timestamp: Map.get(pattern, "scan_timestamp"),
-      dispatch_tier: strategy
-    }
-
-    case gate_review(gate_action) do
-      {:approved, _} ->
-        do_eliminate_dispatch(strategy, recipe, pattern, confidence)
-
-      {:held, reason} ->
-        Logger.warning("Gate held eliminate dispatch: #{reason}")
-        {:ok, :held}
-
-      {:rejected, reason} ->
-        Logger.warning("Gate rejected eliminate dispatch: #{reason}")
-        {:error, :gate_rejected, reason}
-
-      {:deferred, wait_ms} ->
-        Logger.info("Gate deferred eliminate dispatch -- retry in #{div(wait_ms, 1000)}s")
-        {:ok, :deferred}
-    end
-  end
-
   def dispatch_routed_action({:substitute, recipe, pattern}) do
     proven_module = Map.get(recipe, "proven_module", "unknown")
 
@@ -123,22 +75,20 @@ defmodule Hypatia.FleetDispatcher do
     })
   end
 
-  @doc """
-  Dispatch a ProofObligation recipe through the Safety Triangle.
-
-  Called by `ProofObligation.obligations_from_patterns/2` and any code
-  that constructs `{:proof_obligation, recipe, pattern}` tuples.
-
-  Triangle routing for proof obligations:
-  - `:eliminate` (auto-provable, confidence >= 0.90) →
-      robot-repo-automaton applies tactic inline
-  - `:eliminate` (confidence < 0.90) →
-      echidnabot with eliminate-tier hint
-  - `:substitute` →
-      echidnabot with VeriSimDB-recommended prover hint
-  - `:control` →
-      sustainabot advisory (sorry/Admitted present, human required)
-  """
+  # Dispatch a ProofObligation recipe through the Safety Triangle.
+  #
+  # Called by `ProofObligation.obligations_from_patterns/2` and any code
+  # that constructs `{:proof_obligation, recipe, pattern}` tuples.
+  #
+  # Triangle routing for proof obligations:
+  # - `:eliminate` (auto-provable, confidence >= 0.90) ->
+  #     robot-repo-automaton applies tactic inline
+  # - `:eliminate` (confidence < 0.90) ->
+  #     echidnabot with eliminate-tier hint
+  # - `:substitute` ->
+  #     echidnabot with VeriSimDB-recommended prover hint
+  # - `:control` ->
+  #     sustainabot advisory (sorry/Admitted present, human required)
   def dispatch_routed_action({:proof_obligation, recipe, pattern}) do
     tier = Map.get(recipe, "triangle_tier", "substitute")
     claim = Map.get(recipe, "claim", Map.get(pattern, "description", ""))
@@ -202,19 +152,17 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
-  @doc """
-  Dispatch a DependabotAlerts recipe through the Safety Triangle.
-
-  Called by `DependabotAlerts.fixes_from_alerts/3` and any code that
-  constructs `{:dependabot_fix, recipe, pattern}` tuples.
-
-  Triangle routing for Dependabot alerts:
-  - `:eliminate` + confidence >= 0.95 -> robot-repo-automaton auto-bumps
-    (subject to Kin Gate, rate limiter, exclusion registry)
-  - `:eliminate` + confidence in [0.85, 0.95) -> rhodibot opens a PR
-  - `:substitute` -> rhodibot opens a PR (major bump / breaking change)
-  - `:control` -> sustainabot advisory (no auto-fix path)
-  """
+  # Dispatch a DependabotAlerts recipe through the Safety Triangle.
+  #
+  # Called by `DependabotAlerts.fixes_from_alerts/3` and any code that
+  # constructs `{:dependabot_fix, recipe, pattern}` tuples.
+  #
+  # Triangle routing for Dependabot alerts:
+  # - `:eliminate` + confidence >= 0.95 -> robot-repo-automaton auto-bumps
+  #   (subject to Kin Gate, rate limiter, exclusion registry)
+  # - `:eliminate` + confidence in [0.85, 0.95) -> rhodibot opens a PR
+  # - `:substitute` -> rhodibot opens a PR (major bump / breaking change)
+  # - `:control` -> sustainabot advisory (no auto-fix path)
   def dispatch_routed_action({:dependabot_fix, recipe, pattern}) do
     tier = Map.get(recipe, "triangle_tier", "control")
     confidence = Map.get(recipe, "confidence", 0.5)
@@ -270,6 +218,54 @@ defmodule Hypatia.FleetDispatcher do
   defp maybe_cve(cve), do: " (#{cve})"
 
   # --- Eliminate dispatch helpers (called after Gate approval) ---
+
+  # Standard fleet dispatch path for eliminate tier.
+  defp dispatch_eliminate_via_fleet(recipe, pattern) do
+    confidence = Map.get(recipe, "confidence", 0.0)
+    strategy = TriangleRouter.dispatch_strategy(confidence)
+
+    bot_id =
+      case strategy do
+        :auto_execute -> "robot-repo-automaton"
+        :review -> "rhodibot"
+        :report_only -> "sustainabot"
+      end
+
+    action_type =
+      case strategy do
+        :auto_execute -> :commit_push
+        :review -> :pr_create
+        :report_only -> :advisory
+      end
+
+    # Gate review -- every action must pass through the Kin Gate
+    gate_action = %{
+      bot_id: bot_id,
+      repo: get_pattern_repo(pattern),
+      action_type: action_type,
+      confidence: confidence,
+      pattern_id: Map.get(pattern, "id", Map.get(pattern, "description", "")),
+      scan_timestamp: Map.get(pattern, "scan_timestamp"),
+      dispatch_tier: strategy
+    }
+
+    case gate_review(gate_action) do
+      {:approved, _} ->
+        do_eliminate_dispatch(strategy, recipe, pattern, confidence)
+
+      {:held, reason} ->
+        Logger.warning("Gate held eliminate dispatch: #{reason}")
+        {:ok, :held}
+
+      {:rejected, reason} ->
+        Logger.warning("Gate rejected eliminate dispatch: #{reason}")
+        {:error, :gate_rejected, reason}
+
+      {:deferred, wait_ms} ->
+        Logger.info("Gate deferred eliminate dispatch -- retry in #{div(wait_ms, 1000)}s")
+        {:ok, :deferred}
+    end
+  end
 
   defp do_eliminate_dispatch(:auto_execute, recipe, pattern, confidence) do
     recipe_id = Map.get(recipe, "id")
