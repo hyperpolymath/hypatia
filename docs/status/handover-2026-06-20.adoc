@@ -70,7 +70,7 @@ backlog, 71-alert code-scanning backlog.
 4 low). Needs the repo’s Dependabot security tab or a
 `+security_events+`-scoped token; no MCP tool exposes Dependabot
 vulnerability alerts in-session. 0 open Dependabot PRs currently;
-action-group bumps (e.g. #294) have merged since the issue was filed, so
+action-group bumps (e.g. #294) have merged since the issue was filed, so
 some lows may already be cleared.
 
 === Fresh-thread items
