@@ -28,7 +28,6 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.WorkflowHardening
   alias Hypatia.Rules.SupplyChain
   alias Hypatia.Rules.BranchProtection
-  alias Hypatia.Rules.AdminMergeEligibility
   # alias Hypatia.Rules.ResearchExtensions  # wired in follow-up after PR #325 merges
 
   @doc """
