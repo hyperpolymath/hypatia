@@ -75,20 +75,22 @@ defmodule Hypatia.FleetDispatcher do
     })
   end
 
-  # Dispatch a ProofObligation recipe through the Safety Triangle.
-  #
-  # Called by `ProofObligation.obligations_from_patterns/2` and any code
-  # that constructs `{:proof_obligation, recipe, pattern}` tuples.
-  #
-  # Triangle routing for proof obligations:
-  # - `:eliminate` (auto-provable, confidence >= 0.90) ->
-  #     robot-repo-automaton applies tactic inline
-  # - `:eliminate` (confidence < 0.90) ->
-  #     echidnabot with eliminate-tier hint
-  # - `:substitute` ->
-  #     echidnabot with VeriSimDB-recommended prover hint
-  # - `:control` ->
-  #     sustainabot advisory (sorry/Admitted present, human required)
+  @doc """
+  Dispatch a ProofObligation recipe through the Safety Triangle.
+
+  Called by `ProofObligation.obligations_from_patterns/2` and any code
+  that constructs `{:proof_obligation, recipe, pattern}` tuples.
+
+  Triangle routing for proof obligations:
+  - `:eliminate` (auto-provable, confidence >= 0.90) →
+      robot-repo-automaton applies tactic inline
+  - `:eliminate` (confidence < 0.90) →
+      echidnabot with eliminate-tier hint
+  - `:substitute` →
+      echidnabot with VeriSimDB-recommended prover hint
+  - `:control` →
+      sustainabot advisory (sorry/Admitted present, human required)
+  """
   def dispatch_routed_action({:proof_obligation, recipe, pattern}) do
     tier = Map.get(recipe, "triangle_tier", "substitute")
     claim = Map.get(recipe, "claim", Map.get(pattern, "description", ""))
@@ -152,17 +154,19 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
-  # Dispatch a DependabotAlerts recipe through the Safety Triangle.
-  #
-  # Called by `DependabotAlerts.fixes_from_alerts/3` and any code that
-  # constructs `{:dependabot_fix, recipe, pattern}` tuples.
-  #
-  # Triangle routing for Dependabot alerts:
-  # - `:eliminate` + confidence >= 0.95 -> robot-repo-automaton auto-bumps
-  #   (subject to Kin Gate, rate limiter, exclusion registry)
-  # - `:eliminate` + confidence in [0.85, 0.95) -> rhodibot opens a PR
-  # - `:substitute` -> rhodibot opens a PR (major bump / breaking change)
-  # - `:control` -> sustainabot advisory (no auto-fix path)
+  @doc """
+  Dispatch a DependabotAlerts recipe through the Safety Triangle.
+
+  Called by `DependabotAlerts.fixes_from_alerts/3` and any code that
+  constructs `{:dependabot_fix, recipe, pattern}` tuples.
+
+  Triangle routing for Dependabot alerts:
+  - `:eliminate` + confidence >= 0.95 → robot-repo-automaton auto-bumps
+    (subject to Kin Gate, rate limiter, exclusion registry)
+  - `:eliminate` + confidence in [0.85, 0.95) → rhodibot opens a PR
+  - `:substitute` → rhodibot opens a PR (major bump / breaking change)
+  - `:control` → sustainabot advisory (no auto-fix path)
+  """
   def dispatch_routed_action({:dependabot_fix, recipe, pattern}) do
     tier = Map.get(recipe, "triangle_tier", "control")
     confidence = Map.get(recipe, "confidence", 0.5)
