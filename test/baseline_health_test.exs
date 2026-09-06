@@ -176,6 +176,76 @@ defmodule Hypatia.Rules.BaselineHealthTest do
   # ─── BH004: dead action SHA pin ─────────────────────────────────────
 
   describe "bh004_dead_action_sha_pin/1" do
+    test "parses both ordinary actions and reusable workflows with exact line numbers" do
+      action_sha = "ea165f8d65b6e75b540449e92b4886f43607fa02"
+      workflow_sha = "7fdc2705df74b4e352d2a1cde3e87a5923fdf329"
+
+      refs =
+        BaselineHealth.uses_sha_references("""
+        jobs:
+          ordinary:
+            steps:
+              - uses: actions/checkout@#{action_sha}
+          reusable:
+            uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@#{workflow_sha}
+        """)
+
+      assert refs == [
+               %{repository: "actions/checkout", path: "", sha: action_sha, line: 4},
+               %{
+                 repository: "hyperpolymath/standards",
+                 path: ".github/workflows/hypatia-scan-reusable.yml",
+                 sha: workflow_sha,
+                 line: 6
+               }
+             ]
+    end
+
+    test "default-branch compare polarity matches GitHub reusable resolution" do
+      assert BaselineHealth.reusable_reachability("identical") == :reachable
+      assert BaselineHealth.reusable_reachability("ahead") == :reachable
+      assert BaselineHealth.reusable_reachability("diverged") == :unreachable
+      assert BaselineHealth.reusable_reachability("behind") == :unreachable
+      assert BaselineHealth.reusable_reachability("unexpected") == :unknown
+    end
+
+    test "recognizes GitHub's no-common-ancestor compare response as unreachable" do
+      assert BaselineHealth.reusable_reachability(%{
+               "message" => "No common ancestor between deadbeef and main."
+             }) == :unreachable
+    end
+
+    test "encodes a slash-containing default branch and emits BH004", %{repo: repo} do
+      sha = "7fdc2705df74b4e352d2a1cde3e87a5923fdf329"
+      workflow_dir = Path.join([repo, ".github", "workflows"])
+      File.mkdir_p!(workflow_dir)
+
+      File.write!(Path.join(workflow_dir, "hypatia.yml"), """
+      jobs:
+        scan:
+          uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@#{sha}
+      """)
+
+      github_request = fn
+        "repos/hyperpolymath/standards/commits/" <> ^sha ->
+          {:ok, %{"sha" => sha}}
+
+        "repos/hyperpolymath/standards" ->
+          {:ok, %{"default_branch" => "release/next"}}
+
+        "repos/hyperpolymath/standards/compare/" <> ^sha <> "...release%2Fnext" ->
+          {:ok, %{"status" => "diverged"}}
+
+        _unexpected ->
+          {:error, :unexpected_request}
+      end
+
+      assert [finding] = BaselineHealth.bh004_dead_action_sha_pin(repo, github_request)
+      assert finding.rule == "BH004"
+      assert finding.detail.default_branch == "release/next"
+      assert finding.detail.compare_status == "diverged"
+    end
+
     test "returns [] when no workflow files exist", %{repo: repo} do
       # No .github/workflows/ directory at all.
       assert BaselineHealth.bh004_dead_action_sha_pin(repo) == []

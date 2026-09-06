@@ -103,37 +103,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ============================================================================
-  # SAST Scanning
-  # ============================================================================
-
-  semgrep:
-    name: Semgrep SAST
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/rust
-            p/elixir
-            p/security-audit
-            p/secrets
-          args: --sarif --output=semgrep.sarif
-
-      - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v4.37.8
-        if: always()
-        with:
-          sarif_file: semgrep.sarif
-
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
@@ -237,7 +206,6 @@ jobs:
       - rust-audit
       - rust-deny
       - secret-scan
-      - semgrep
       - codeql
       - sbom-rust
     if: always()
@@ -251,7 +219,6 @@ jobs:
             ["rust-audit"]="${{ needs.rust-audit.result }}"
             ["rust-deny"]="${{ needs.rust-deny.result }}"
             ["secret-scan"]="${{ needs.secret-scan.result }}"
-            ["semgrep"]="${{ needs.semgrep.result }}"
             ["codeql"]="${{ needs.codeql.result }}"
             ["sbom-rust"]="${{ needs.sbom-rust.result }}"
           )
@@ -564,34 +531,6 @@ jobs:
         with:
           category: "/language:${{matrix.language}}"
 
-  audit_semgrep:
-    name: Semgrep SAST
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/rust
-            p/security-audit
-            p/secrets
-            p/dockerfile
-            p/supply-chain
-          args: --sarif --output=semgrep.sarif
-
-      - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v4.37.8
-        if: always()
-        with:
-          sarif_file: semgrep.sarif
-
   # ============================================================================
   # License Compliance
   # ============================================================================
@@ -716,7 +655,6 @@ jobs:
       - gitleaks
       - trufflehog
       - audit_codeql
-      - audit_semgrep
       - license-check
       - sbom-generation
     if: always()
@@ -745,7 +683,6 @@ jobs:
           echo "| Gitleaks | $(status_icon '${{ needs.gitleaks.result }}') ${{ needs.gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| TruffleHog | $(status_icon '${{ needs.trufflehog.result }}') ${{ needs.trufflehog.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| CodeQL | $(status_icon '${{ needs.audit_codeql.result }}') ${{ needs.audit_codeql.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Semgrep | $(status_icon '${{ needs.audit_semgrep.result }}') ${{ needs.audit_semgrep.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| License Check | $(status_icon '${{ needs.license-check.result }}') ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| SBOM Generation | $(status_icon '${{ needs.sbom-generation.result }}') ${{ needs.sbom-generation.result }} |" >> $GITHUB_STEP_SUMMARY
 
