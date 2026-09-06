@@ -49,17 +49,22 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
              "consumer-facing TS bindings are exempt (parallel to v-bindings/v-adapter)"
     end
 
-    test "exempts avow-protocol/telegram-bot/avow-telegram-bot/ (Telegraf PERMANENT)" do
+    test "flags avow telegram-bot TS (Telegraf carve-out retired 2026-08-31)" do
+      # The bot was rewritten in AffineScript — zero .ts under telegram-bot/
+      # on avow-protocol main — so new TS there must flag like anywhere else.
       files = [
         "avow-protocol/telegram-bot/avow-telegram-bot/src/bot.ts",
         "avow-protocol/telegram-bot/avow-telegram-bot/test-mock.ts"
       ]
 
       results = CicdRules.check_commit_blocks(files)
-      assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil
+      ts = Enum.find(results, &(&1.rule == :typescript_detected))
+
+      assert ts, "retired carve-out must no longer exempt telegram-bot TS"
+      assert length(ts.files) == 2
     end
 
-    test "exempts tooling configs (vite/vitest/tsup/tsconfig)" do
+    test "exempts tooling configs (vite/vitest/tsup)" do
       files = [
         "hyperpolymath-archive/zotero-nesy/vite.config.ts",
         "some-repo/vitest.config.ts",
@@ -72,14 +77,21 @@ defmodule Hypatia.Rules.CicdRules.TypescriptTest do
              "build orchestration is exempt (not application code)"
     end
 
-    test "exempts affinescript-deno-test and affinescript-cli bootstrap shims" do
+    test "flags TS in the retired affinescript shim paths (self-hosted 2026-08-31)" do
+      # affinescript-deno-test/ is 100% .affine on main (affinescript PRs
+      # #735/#736 completed self-hosting); affinescript-cli/ is a JS-only
+      # npm front door, carved out under the nodejs/javascript rules only.
+      # New .ts under either path must flag.
       files = [
         "affinescript-deno-test/runner.ts",
         "affinescript-cli/bin/cli.ts"
       ]
 
       results = CicdRules.check_commit_blocks(files)
-      assert Enum.find(results, &(&1.rule == :typescript_detected)) == nil
+      ts = Enum.find(results, &(&1.rule == :typescript_detected))
+
+      assert ts, "retired bootstrap-shim carve-out must no longer exempt .ts"
+      assert length(ts.files) == 2
     end
 
     test "exempts upstream-fork repos (rescript/servers/repos-monorepo/linguist)" do

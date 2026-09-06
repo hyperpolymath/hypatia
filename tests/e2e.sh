@@ -5,11 +5,12 @@
 # Hypatia — End-to-End Test Suite
 #
 # Tests the neurosymbolic scanner pipeline without docker-compose:
-#   1. Elixir scanner builds and runs
-#   2. Scan a fixture repository
-#   3. Verify findings are detected
-#   4. Verify rule modules produce output
-#   5. Verify JSON output format
+#   1. Legacy formulaic diagnostics remain non-mutating and fail closed
+#   2. Elixir scanner builds and runs
+#   3. Scan a fixture repository
+#   4. Verify findings are detected
+#   5. Verify rule modules produce output
+#   6. Verify JSON output format
 #
 # Usage:
 #   bash tests/e2e.sh
@@ -65,12 +66,30 @@ if ! $HAS_ELIXIR && ! $HAS_RUST; then
 fi
 echo ""
 
+# ─── Formulaic diagnostics safety control ──────────────────────────
+bold "Formulaic diagnostics safety control"
+
+if safety_output="$(bash "${PROJECT_DIR}/tests/auto-fix-formulaic-safety.sh" 2>&1)"; then
+    pass "Legacy formulaic diagnostics are non-mutating and fail closed"
+else
+    fail_test "Legacy formulaic diagnostics safety control"
+    printf '%s\n' "${safety_output}"
+fi
+echo ""
+
 # ─── Create test fixture ────────────────────────────────────────────
 FIXTURE_DIR="$PROJECT_DIR/integration/fixtures/test-repo"
 if [ ! -d "$FIXTURE_DIR" ]; then
     # Create minimal fixture if one doesn't exist
     FIXTURE_DIR=$(mktemp -d)
-    trap "rm -rf $FIXTURE_DIR" EXIT
+    # Invoked indirectly by the EXIT trap below.
+    # shellcheck disable=SC2329
+    cleanup_fixture() {
+        if [[ -n "${FIXTURE_DIR:-}" && "${FIXTURE_DIR}" == "${TMPDIR:-/tmp}/"* ]]; then
+            rm -rf -- "${FIXTURE_DIR}"
+        fi
+    }
+    trap cleanup_fixture EXIT
     mkdir -p "$FIXTURE_DIR/.github/workflows" "$FIXTURE_DIR/src"
 
     # Deliberately insecure workflow for scanner to find
