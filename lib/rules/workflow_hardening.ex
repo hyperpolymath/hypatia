@@ -288,6 +288,24 @@ defmodule Hypatia.Rules.WorkflowHardening do
   release can substitute the implementation.
   """
   def wh004_unpinned_uses(repo_path) do
+    lock_path = Path.join([repo_path, ".github", "workflows", "actions.lock"])
+
+    case File.read(lock_path) do
+      {:error, :enoent} ->
+        wh004_scan_repo(repo_path, nil)
+
+      {:error, reason} ->
+        [invalid_actions_lock_finding(reason)]
+
+      {:ok, content} ->
+        case Hypatia.Rules.ActionsLock.parse(content) do
+          {:ok, lock} -> wh004_scan_repo(repo_path, lock)
+          {:error, reason} -> [invalid_actions_lock_finding(reason)]
+        end
+    end
+  end
+
+  defp wh004_scan_repo(repo_path, lock) do
     # Path-walking wrapper: enumerate workflow files and delegate per-file
     # scanning to `wh004_scan_content/2` so the same detection logic is
     # callable both from a repo-path walker (this function) and from a
@@ -299,8 +317,26 @@ defmodule Hypatia.Rules.WorkflowHardening do
     |> Enum.flat_map(fn path ->
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
+
       wh004_scan_content(rel, content)
+      |> Enum.reject(fn finding ->
+        Hypatia.Rules.ActionsLock.pinned?(lock, rel, finding.detail.uses)
+      end)
     end)
+  end
+
+  defp invalid_actions_lock_finding(reason) do
+    %{
+      rule: "invalid_actions_lock",
+      file: ".github/workflows/actions.lock",
+      severity: :high,
+      reason: "actions.lock failed closed: #{inspect(reason)}",
+      action: :regenerate,
+      detail: %{
+        kind: :invalid_actions_lock,
+        fix: "Regenerate and verify the lock with `gh actions-lock`."
+      }
+    }
   end
 
   @doc """
