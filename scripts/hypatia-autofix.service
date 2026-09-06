@@ -6,5 +6,5 @@ Description=Hypatia formulaic auto-fix scan
 
 [Service]
 Type=oneshot
-ExecStart=%h/Documents/hyperpolymath-repos/hypatia/scripts/auto-fix-formulaic.sh --push all
+ExecStart=%h/Documents/hyperpolymath-repos/hypatia/scripts/auto-fix-formulaic.sh %h/Documents/hyperpolymath-repos/hypatia
 Environment=HOME=%h
