@@ -24,7 +24,8 @@ defmodule Hypatia.CLI do
 
       --rules <list>    Comma-separated rule modules to run (default: all)
                         Available: root_hygiene,honest_completion,workflow_audit,
-                                   cicd_rules,code_safety,migration_rules,scorecard,
+                                   cicd_rules,research_extensions,
+                                   code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
                                    structural_drift,implementation_inside_canon
@@ -45,6 +46,7 @@ defmodule Hypatia.CLI do
     :honest_completion,
     :workflow_audit,
     :cicd_rules,
+    :research_extensions,
     :code_safety,
     :migration_rules,
     :scorecard,
@@ -61,6 +63,11 @@ defmodule Hypatia.CLI do
     "critical" => 1,
     "high" => 2,
     "medium" => 3,
+    # `:warn` is emitted by research_extensions (6 rules) and workflow_audit.
+    # Absent from this map it fell to the `Map.get/3` default of 5, so the
+    # `rank <= threshold` filter below dropped every warn finding at the
+    # default `--severity medium`. Ranked with medium: warn IS medium-tier.
+    "warn" => 3,
     "low" => 4,
     "info" => 5
   }
@@ -526,6 +533,36 @@ defmodule Hypatia.CLI do
           end)
 
         results ++ normalized ++ banned_findings
+      else
+        results
+      end
+
+    # Research Extensions (RE001-RE010) - Snyk/StepSecurity/Endor/academic
+    results =
+      if :research_extensions in rules do
+        case Hypatia.Rules.ResearchExtensions.scan(repo_path) do
+          %{findings: findings} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "research_extensions",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, "."),
+                  # RE004 carries its line under `:detail`; the rest carry
+                  # none. Both shapes degrade to nil, which SARIF renders
+                  # as startLine 1 exactly as before.
+                  line: get_in(f, [:detail, :line]) || Map.get(f, :line),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          _ ->
+            results
+        end
       else
         results
       end
@@ -1297,8 +1334,8 @@ defmodule Hypatia.CLI do
     OPTIONS:
         --rules, -r <list>      Comma-separated rule modules (default: all)
                                 Available: root_hygiene,honest_completion,
-                                workflow_audit,cicd_rules,code_safety,
-                                migration_rules,scorecard,green_web,
+                                workflow_audit,cicd_rules,research_extensions,
+                                code_safety,migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts,
                                 structural_drift,implementation_inside_canon
