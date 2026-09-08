@@ -86,7 +86,14 @@ jobs:
 
       - name: E2E — Scan fixture repo
         run: |
+          rm -rf /tmp/test-repo
           mkdir -p /tmp/test-repo/.github/workflows /tmp/test-repo/src
+          # The Rust CLI opens the target with git2 (Repository::open,
+          # cli/src/commands/mod.rs:38) and exits 1 on a plain directory.
+          # The fixture was only ever mkdir'd, so this step could never have
+          # passed -- the wrong binary name (exit 127) masked it. No commit
+          # is needed; an empty repository is enough.
+          git init -q /tmp/test-repo
           echo 'name: CI' > /tmp/test-repo/.github/workflows/ci.yml
           echo 'on: push' >> /tmp/test-repo/.github/workflows/ci.yml
           echo 'jobs:' >> /tmp/test-repo/.github/workflows/ci.yml
