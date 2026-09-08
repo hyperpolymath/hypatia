@@ -98,6 +98,36 @@ jobs:
           head: HEAD
           extra_args: --only-verified
 
+      # `.gitleaks.toml` carries `[extend] path = ".gitleaks-estate.toml"`, and
+      # gitleaks resolves that against the PROCESS CWD. Only standards'
+      # secret-scanner-reusable.yml staged that file, so these two hand-rolled
+      # jobs died before scanning a single byte:
+      #   FTL failed to load extended config ... no such file or directory
+      # the action then crashed on the results.sarif it never wrote, and the
+      # audit summary reported a CRASHED SCANNER as "possible secrets in
+      # repository" -- a fake red in the worst possible direction for a
+      # security gate. Pinned to the same standards sha that
+      # .github/workflows/secret-scanner.yml already consumes.
+      - name: Fetch estate gitleaks baseline
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/standards
+          ref: 571cc734cd69fb846032ec77a662aa8ee4fc32cd
+          path: .standards-gitleaks
+          sparse-checkout: |
+            config/gitleaks/estate-baseline.toml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Stage estate gitleaks baseline
+        run: |
+          set -euo pipefail
+          cp .standards-gitleaks/config/gitleaks/estate-baseline.toml .gitleaks-estate.toml
+          # Delete the tooling checkout BEFORE scanning, or the scan walks
+          # standards' own tree and reports ITS files as hypatia's.
+          rm -rf .standards-gitleaks
+          test -s .gitleaks-estate.toml
+
       - name: Gitleaks Secret Scan
         uses: gitleaks/gitleaks-action@v3.0.0
         env:
@@ -147,20 +177,20 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx --locked
+        run: cargo install cargo-cyclonedx --locked --version 0.5.9
 
       - name: Generate CycloneDX SBOM
         run: |
-          cargo cyclonedx --format json --output-cdx rust-sbom.cdx.json
-          cargo cyclonedx --format xml --output-cdx rust-sbom.cdx.xml
+          cargo cyclonedx --format json --override-filename rust-sbom.cdx
+          cargo cyclonedx --format xml --override-filename rust-sbom.cdx
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v7.0.1
         with:
           name: rust-sbom
           path: |
-            rust-sbom.cdx.json
-            rust-sbom.cdx.xml
+            **/rust-sbom.cdx.json
+            **/rust-sbom.cdx.xml
           retention-days: 90
 
   # ============================================================================
@@ -477,6 +507,36 @@ jobs:
           EOF
           fi
 
+      # `.gitleaks.toml` carries `[extend] path = ".gitleaks-estate.toml"`, and
+      # gitleaks resolves that against the PROCESS CWD. Only standards'
+      # secret-scanner-reusable.yml staged that file, so these two hand-rolled
+      # jobs died before scanning a single byte:
+      #   FTL failed to load extended config ... no such file or directory
+      # the action then crashed on the results.sarif it never wrote, and the
+      # audit summary reported a CRASHED SCANNER as "possible secrets in
+      # repository" -- a fake red in the worst possible direction for a
+      # security gate. Pinned to the same standards sha that
+      # .github/workflows/secret-scanner.yml already consumes.
+      - name: Fetch estate gitleaks baseline
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: hyperpolymath/standards
+          ref: 571cc734cd69fb846032ec77a662aa8ee4fc32cd
+          path: .standards-gitleaks
+          sparse-checkout: |
+            config/gitleaks/estate-baseline.toml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Stage estate gitleaks baseline
+        run: |
+          set -euo pipefail
+          cp .standards-gitleaks/config/gitleaks/estate-baseline.toml .gitleaks-estate.toml
+          # Delete the tooling checkout BEFORE scanning, or the scan walks
+          # standards' own tree and reports ITS files as hypatia's.
+          rm -rf .standards-gitleaks
+          test -s .gitleaks-estate.toml
+
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v3.0.0
         env:
@@ -623,12 +683,12 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx --locked
+        run: cargo install cargo-cyclonedx --locked --version 0.5.9
 
       - name: Generate Rust SBOM
         run: |
-          cargo cyclonedx --format json --output-cdx sbom-rust.cdx.json || true
-          cargo cyclonedx --format xml --output-cdx sbom-rust.cdx.xml || true
+          cargo cyclonedx --format json --override-filename sbom-rust.cdx || true
+          cargo cyclonedx --format xml --override-filename sbom-rust.cdx || true
 
 
       - name: Upload SBOM artifacts
@@ -636,8 +696,8 @@ jobs:
         with:
           name: sbom
           path: |
-            sbom-rust.cdx.json
-            sbom-rust.cdx.xml
+            **/sbom-rust.cdx.json
+            **/sbom-rust.cdx.xml
           retention-days: 90
 
   # ============================================================================

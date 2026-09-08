@@ -336,7 +336,7 @@ jobs:
           find . -type f -size +1M -not -path "./.git/*" | head -10
       
       - name: EditorConfig check
-        uses: editorconfig-checker/action-editorconfig-checker@v2.2.0
+        uses: editorconfig-checker/action-editorconfig-checker@v3.0.0
 
   docs:
     runs-on: ubuntu-latest

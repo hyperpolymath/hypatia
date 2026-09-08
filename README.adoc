@@ -19,8 +19,8 @@ toc::[]
 *Hypatia* is the CI/CD governance scanner for the hyperpolymath estate (~400 repositories).
 It combines:
 
-* *Symbolic reasoning* — 33 Elixir rule modules producing fast, deterministic findings
-  (link:docs/rules/catalogue.md[full rule catalogue])
+* *Symbolic reasoning* — 35 Elixir rule modules producing fast, deterministic findings
+  (link:docs/rules/catalogue.adoc[full rule catalogue])
 * *Neural learning* — 8 networks on a shared blackboard, learning which fixes actually stick
 * *Bayesian confidence* — every recipe carries a Beta-distributed confidence updated from real
   outcomes, which gates whether a fix is applied automatically, proposed as a PR, or merely reported
@@ -68,7 +68,7 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 [cols="1,3"]
 |===
 | `lib/` | 133 Elixir modules — pipeline, rules, VCL, neural, safety, web, merge orchestration
-| `lib/rules/` | 33 rule modules; see link:docs/rules/catalogue.md[the catalogue]
+| `lib/rules/` | 35 rule modules; see link:docs/rules/catalogue.adoc[the catalogue]
 | `lib/neural/` | 8 networks + blackboard, coordinator, persistence, rebalancer
 | `lib/vcl/` | VCL query layer over verisim-data: parser, file executor, cache, federation
 | `lib/merge_orchestration/` | 12 modules — leases, ledger, ticker
@@ -141,7 +141,7 @@ by any dispatch path, and the CI blockage currently stopping the Rust lane.
 == Documentation
 
 * link:docs/README.adoc[docs/README.adoc] — the documentation index
-* link:docs/rules/catalogue.md[Rule catalogue] — every rule module and ID family
+* link:docs/rules/catalogue.adoc[Rule catalogue] — every rule module and ID family
 * link:docs/DEBT-REGISTER.md[Debt register] — what is broken and what is not gated
 * https://github.com/hyperpolymath/hypatia/wiki[Wiki] — getting started, architecture, operations, FAQ
 * link:PALIMPSEST.adoc[Palimpsest Philosophy] — philosophical underpinnings

@@ -1302,7 +1302,7 @@ defmodule Hypatia.CLI do
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts,
                                 structural_drift,implementation_inside_canon
-        --format, -f <fmt>      Output format: json (default), text, github, sarif, sarif
+        --format, -f <fmt>      Output format: json (default), text, github, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
         --exit-zero             Always exit 0 after a successful scan, even when
