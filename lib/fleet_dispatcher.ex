@@ -213,54 +213,6 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
-  # Standard fleet dispatch path for eliminate tier.
-  defp dispatch_eliminate_via_fleet(recipe, pattern) do
-    confidence = Map.get(recipe, "confidence", 0.0)
-    strategy = TriangleRouter.dispatch_strategy(confidence)
-
-    bot_id =
-      case strategy do
-        :auto_execute -> "robot-repo-automaton"
-        :review -> "rhodibot"
-        :report_only -> "sustainabot"
-      end
-
-    action_type =
-      case strategy do
-        :auto_execute -> :commit_push
-        :review -> :pr_create
-        :report_only -> :advisory
-      end
-
-    # Gate review -- every action must pass through the Kin Gate
-    gate_action = %{
-      bot_id: bot_id,
-      repo: get_pattern_repo(pattern),
-      action_type: action_type,
-      confidence: confidence,
-      pattern_id: Map.get(pattern, "id", Map.get(pattern, "description", "")),
-      scan_timestamp: Map.get(pattern, "scan_timestamp"),
-      dispatch_tier: strategy
-    }
-
-    case gate_review(gate_action) do
-      {:approved, _} ->
-        do_eliminate_dispatch(strategy, recipe, pattern, confidence)
-
-      {:held, reason} ->
-        Logger.warning("Gate held eliminate dispatch: #{reason}")
-        {:ok, :held}
-
-      {:rejected, reason} ->
-        Logger.warning("Gate rejected eliminate dispatch: #{reason}")
-        {:error, :gate_rejected, reason}
-
-      {:deferred, wait_ms} ->
-        Logger.info("Gate deferred eliminate dispatch -- retry in #{div(wait_ms, 1000)}s")
-        {:ok, :deferred}
-    end
-  end
-
   defp maybe_cve(nil), do: ""
   defp maybe_cve(""), do: ""
   defp maybe_cve(cve), do: " (#{cve})"

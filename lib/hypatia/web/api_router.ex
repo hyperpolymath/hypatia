@@ -284,7 +284,13 @@ defmodule Hypatia.Web.ApiRouter do
     json(conn, 404, %{error: "not_found"})
   end
 
-  @doc false
+  @doc """
+  Applies the operational API's bearer-token and loopback access controls.
+
+  A successfully authenticated bearer token bypasses the loopback check. When
+  no non-empty token is configured, the request remains subject to the
+  loopback policy and its explicit non-local override.
+  """
   def protect(conn, _opts) do
     conn = auth_gate(conn, [])
 
