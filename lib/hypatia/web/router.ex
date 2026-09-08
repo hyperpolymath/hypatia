@@ -84,10 +84,16 @@ defmodule Hypatia.Web.Router do
   #
   # Minimal hand-rolled implementation; no introspection, no schema
   # federation, no Absinthe dep. See lib/hypatia/web/graphql.ex for
-  # the supported field set and limitations. Loopback-only by sharing
-  # the bearer-auth gate when HYPATIA_API_BEARER_TOKEN is configured.
+  # the supported field set and limitations. Uses the same optional
+  # bearer-auth and loopback gates as the operational API.
   post "/graphql" do
-    Hypatia.Web.GraphQL.call(conn, [])
+    conn = Hypatia.Web.ApiRouter.protect(conn, [])
+
+    if conn.halted do
+      conn
+    else
+      Hypatia.Web.GraphQL.call(conn, [])
+    end
   end
 
   match _ do

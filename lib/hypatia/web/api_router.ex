@@ -21,8 +21,7 @@ defmodule Hypatia.Web.ApiRouter do
   import Bitwise, only: [|||: 2, bxor: 2]
 
   plug(:match)
-  plug(:auth_gate)
-  plug(:loopback_only)
+  plug(:protect)
   plug(:dispatch)
 
   get "/status" do
@@ -116,7 +115,7 @@ defmodule Hypatia.Web.ApiRouter do
   # instances POST their alerts here via the Peer sink.
   #
   # Auth: when HYPATIA_API_BEARER_TOKEN is set, auth_gate requires a
-  # valid bearer token. When it is unset, access follows the
+  # valid bearer token. When it is unset or empty, access follows the
   # loopback_only policy, including the HYPATIA_API_ALLOW_NONLOCAL
   # override.
   #
@@ -285,14 +284,26 @@ defmodule Hypatia.Web.ApiRouter do
     json(conn, 404, %{error: "not_found"})
   end
 
+  @doc false
+  def protect(conn, _opts) do
+    conn = auth_gate(conn, [])
+
+    if conn.halted do
+      conn
+    else
+      loopback_only(conn, [])
+    end
+  end
+
   # ─── Plug ──────────────────────────────────────────────────────────────
 
   # ─── Auth gate ─────────────────────────────────────────────────────────
   #
-  # If HYPATIA_API_BEARER_TOKEN is set, any /api/* request must carry a
-  # matching Authorization: Bearer <token> header. The token + loopback
-  # checks compose: with neither, /api is loopback-only. With both, /api
-  # is openable to non-local callers provided they present the token.
+  # If HYPATIA_API_BEARER_TOKEN is non-empty, a protected request must
+  # carry a matching Authorization: Bearer <token> header. If it is unset
+  # or empty, the request reaches loopback_only/2, where loopback clients
+  # are allowed and HYPATIA_API_ALLOW_NONLOCAL=true also permits non-local
+  # requests without a bearer token. A valid bearer bypasses the IP check.
   #
   # Token comparison uses Plug.Crypto.secure_compare/2 so timing attacks
   # can't enumerate the secret.
@@ -375,7 +386,7 @@ defmodule Hypatia.Web.ApiRouter do
     cond do
       System.get_env("HYPATIA_API_ALLOW_NONLOCAL") == "true" ->
         Logger.warning(
-          "Hypatia /api access from #{inspect(conn.remote_ip)} allowed by " <>
+          "Hypatia operational API access from #{inspect(conn.remote_ip)} allowed by " <>
             "HYPATIA_API_ALLOW_NONLOCAL env override"
         )
 
@@ -393,7 +404,8 @@ defmodule Hypatia.Web.ApiRouter do
             error: "loopback_only",
             path: conn.request_path,
             hint:
-              "Hypatia /api is loopback-only. Set HYPATIA_API_ALLOW_NONLOCAL=true to " <>
+              "Hypatia operational endpoints are loopback-only. " <>
+                "Set HYPATIA_API_ALLOW_NONLOCAL=true to " <>
                 "permit non-local clients, or tunnel via SSH."
           })
         )
