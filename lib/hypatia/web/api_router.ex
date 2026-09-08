@@ -115,10 +115,10 @@ defmodule Hypatia.Web.ApiRouter do
   # POST /api/alerts/ingest -- Federation ingress. Peer hypatia
   # instances POST their alerts here via the Peer sink.
   #
-  # Auth: the auth_gate plug enforces a valid bearer token, so this
-  # endpoint is only reachable when HYPATIA_API_BEARER_TOKEN is set
-  # and the request carries it. Federation without shared auth is
-  # refused at the gate, not here.
+  # Auth: when HYPATIA_API_BEARER_TOKEN is set, auth_gate requires a
+  # valid bearer token. When it is unset, access follows the
+  # loopback_only policy, including the HYPATIA_API_ALLOW_NONLOCAL
+  # override.
   #
   # Loop prevention: the ingested alert is tagged with
   # `metadata.federated_from = <peer hostname or "unknown">` so the
