@@ -362,7 +362,7 @@ defmodule Hypatia.Rules.AdminMergeEligibility do
   """
   @spec obsolete_supersedes?(map(), (String.t() -> String.t() | nil)) ::
           {:obsolete, String.t()} | :not_obsolete
-  def obsolete_supersedes?(%{files: files}, main_lookup)
+  def obsolete_supersedes?(%{files: files} = _pr, main_lookup)
       when is_function(main_lookup, 1) do
     # Look at workflow YAML edits that change a `uses: ...@<sha>` line.
     Enum.find_value(files, :not_obsolete, fn file ->
