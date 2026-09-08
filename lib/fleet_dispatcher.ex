@@ -31,6 +31,21 @@ defmodule Hypatia.FleetDispatcher do
   - {:eliminate, recipe, pattern} -- auto-fix or PR depending on confidence
   - {:substitute, recipe, pattern} -- PR with proven module + proof obligation
   - {:control, pattern} -- advisory report to sustainabot
+
+  Proof obligation recipes are produced by
+  `ProofObligation.obligations_from_patterns/2` and use triangle routing:
+  - `:eliminate` (auto-provable, confidence >= 0.90) applies a tactic inline
+  - `:eliminate` (confidence < 0.90) goes to echidnabot with an eliminate-tier hint
+  - `:substitute` goes to echidnabot with a VeriSimDB-recommended prover hint
+  - `:control` creates a sustainabot advisory when human review is required
+
+  Dependabot alert recipes are produced by `DependabotAlerts.fixes_from_alerts/3`
+  and use triangle routing:
+  - `:eliminate` + confidence >= 0.95 auto-bumps through robot-repo-automaton
+    (subject to Kin Gate, rate limiter, and exclusion registry)
+  - `:eliminate` + confidence in [0.85, 0.95) opens a rhodibot PR
+  - `:substitute` opens a rhodibot PR for a major or breaking bump
+  - `:control` creates a sustainabot advisory when no auto-fix path is available
   """
   def dispatch_routed_action({:eliminate, recipe, pattern}) do
     # Direct PR path: when HYPATIA_DIRECT_PR=true and the finding is a
@@ -75,22 +90,7 @@ defmodule Hypatia.FleetDispatcher do
     })
   end
 
-  @doc """
-  Dispatch a ProofObligation recipe through the Safety Triangle.
-
-  Called by `ProofObligation.obligations_from_patterns/2` and any code
-  that constructs `{:proof_obligation, recipe, pattern}` tuples.
-
-  Triangle routing for proof obligations:
-  - `:eliminate` (auto-provable, confidence >= 0.90) ->
-      robot-repo-automaton applies tactic inline
-  - `:eliminate` (confidence < 0.90) ->
-      echidnabot with eliminate-tier hint
-  - `:substitute` ->
-      echidnabot with VeriSimDB-recommended prover hint
-  - `:control` ->
-      sustainabot advisory (sorry/Admitted present, human required)
-  """
+  # ProofObligation recipes include optional prover and tactic hints.
   def dispatch_routed_action({:proof_obligation, recipe, pattern}) do
     tier = Map.get(recipe, "triangle_tier", "substitute")
     claim = Map.get(recipe, "claim", Map.get(pattern, "description", ""))
@@ -154,19 +154,7 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
-  @doc """
-  Dispatch a DependabotAlerts recipe through the Safety Triangle.
-
-  Called by `DependabotAlerts.fixes_from_alerts/3` and any code that
-  constructs `{:dependabot_fix, recipe, pattern}` tuples.
-
-  Triangle routing for Dependabot alerts:
-  - `:eliminate` + confidence >= 0.95 -> robot-repo-automaton auto-bumps
-    (subject to Kin Gate, rate limiter, exclusion registry)
-  - `:eliminate` + confidence in [0.85, 0.95) -> rhodibot opens a PR
-  - `:substitute` -> rhodibot opens a PR (major bump / breaking change)
-  - `:control` -> sustainabot advisory (no auto-fix path)
-  """
+  # Dependabot recipes use the standard eliminate dispatch and its safeguards.
   def dispatch_routed_action({:dependabot_fix, recipe, pattern}) do
     tier = Map.get(recipe, "triangle_tier", "control")
     confidence = Map.get(recipe, "confidence", 0.5)
