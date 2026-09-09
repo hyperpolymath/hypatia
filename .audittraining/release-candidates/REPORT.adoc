@@ -143,7 +143,7 @@ file in subdirectory)
 * Consider publishing to crates.io (for Rust)
 . *For bunsenite (existing releases):*
 * Check commits since v1.0.2
-* Review for breaking changes vs. patches
+* Review for breaking changes vs. patches
 * Follow semver for version bump
 . *Manual verification needed:*
 * supernorma - check deno.json

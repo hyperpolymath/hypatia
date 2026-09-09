@@ -32,7 +32,7 @@ lands:
 dashboard expects Hypatia to emit findings/dispatches via a Burble
 session rather than via a direct HTTP read of the harness endpoints.
 . *Multi-operator session.* Two or more operators need to share Hypatia
-state (e.g. a review seat watching the safety triangle live while
+state (e.g. a review seat watching the safety triangle live while
 another operator drives dispatches).
 . *Voice control reaches the GUI.* Burble’s voice-control plane wants to
 fire `+Msg.Navigate(Department.Verification)+` or similar from outside
