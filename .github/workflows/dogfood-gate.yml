@@ -133,6 +133,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 3: Empty-linter — invisible character detection
+  # Canonical scanner ported from rsr-template-repo (rsr#49): byte-safe two-tier
+  # design — typographic invisibles warn, C0/NUL corruption blocks. Toolset map:
+  # hyperpolymath/empty-linter docs/INTEGRATION.adoc
   # ---------------------------------------------------------------------------
   empty-lint:
     name: Empty-linter (invisible characters)
@@ -142,39 +145,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
+      - name: Prove the scanner trips on known-bad fixtures
+        run: tests/invisible-characters-test.sh
+
       - name: Scan for invisible characters
         id: lint
         run: |
-          # Inline invisible character detection (from empty-linter's core patterns).
-          # Checks for: zero-width spaces, zero-width joiners, BOM, soft hyphens,
-          # non-breaking spaces, null bytes, and other invisible Unicode in source files.
-          set +e
-          PATTERNS='\xc2\xa0|\xe2\x80\x8b|\xe2\x80\x8c|\xe2\x80\x8d|\xef\xbb\xbf|\xc2\xad|\xe2\x80\x8e|\xe2\x80\x8f|\xe2\x80\xaa|\xe2\x80\xab|\xe2\x80\xac|\xe2\x80\xad|\xe2\x80\xae|\x00'
-          find "$GITHUB_WORKSPACE" \
-            -not -path '*/.git/*' -not -path '*/node_modules/*' \
-            -not -path '*/.deno/*' -not -path '*/target/*' \
-            -not -path '*/_build/*' -not -path '*/deps/*' \
-            -not -path '*/external_corpora/*' -not -path '*/.lake/*' \
-            -type f \( -name '*.rs' -o -name '*.ex' -o -name '*.exs' -o -name '*.res' \
-              -o -name '*.js' -o -name '*.ts' -o -name '*.json' -o -name '*.toml' \
-              -o -name '*.yml' -o -name '*.yaml' -o -name '*.md' -o -name '*.adoc' \
-              -o -name '*.idr' -o -name '*.zig' -o -name '*.v' -o -name '*.jl' \
-              -o -name '*.gleam' -o -name '*.hs' -o -name '*.ml' -o -name '*.sh' \) \
-            -exec grep -Prl "$PATTERNS" {} \; > /tmp/empty-lint-results.txt 2>/dev/null
-          EL_EXIT=$?
-          set -e
+          RESULTS_FILE="$RUNNER_TEMP/empty-lint-results.bin"
+          BLOCKING_FILE="$RUNNER_TEMP/empty-lint-blocking-results.bin"
+          if ! scripts/check-invisible-characters.sh \
+              "$GITHUB_WORKSPACE" "$RESULTS_FILE" "$BLOCKING_FILE"; then
+            echo "::error::Invisible-character scanner failed; refusing a partial pass"
+            exit 2
+          fi
 
-          FINDINGS=$(wc -l < /tmp/empty-lint-results.txt 2>/dev/null || echo 0)
+          FINDINGS=0
+          while IFS= read -r -d '' filepath; do
+            FINDINGS=$((FINDINGS + 1))
+            REL_PATH="${filepath#"$GITHUB_WORKSPACE"/}"
+            SAFE_PATH="${REL_PATH//'%'/'%25'}"
+            SAFE_PATH="${SAFE_PATH//$'\r'/'%0D'}"
+            SAFE_PATH="${SAFE_PATH//$'\n'/'%0A'}"
+            SAFE_PATH="${SAFE_PATH//':'/'%3A'}"
+            SAFE_PATH="${SAFE_PATH//','/'%2C'}"
+            echo "::warning file=${SAFE_PATH}::Invisible Unicode or C0 characters detected"
+          done < "$RESULTS_FILE"
+
+          BLOCKING=0
+          while IFS= read -r -d '' filepath; do
+            BLOCKING=$((BLOCKING + 1))
+            REL_PATH="${filepath#"$GITHUB_WORKSPACE"/}"
+            SAFE_PATH="${REL_PATH//'%'/'%25'}"
+            SAFE_PATH="${SAFE_PATH//$'\r'/'%0D'}"
+            SAFE_PATH="${SAFE_PATH//$'\n'/'%0A'}"
+            SAFE_PATH="${SAFE_PATH//':'/'%3A'}"
+            SAFE_PATH="${SAFE_PATH//','/'%2C'}"
+            echo "::error file=${SAFE_PATH}::C0 control character or NUL byte detected"
+          done < "$BLOCKING_FILE"
+
           echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
-          echo "exit_code=$EL_EXIT" >> "$GITHUB_OUTPUT"
+          echo "blocking=$BLOCKING" >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
-          # Emit annotations for each file with invisible chars
-          while IFS= read -r filepath; do
-            [ -z "$filepath" ] && continue
-            REL_PATH="${filepath#$GITHUB_WORKSPACE/}"
-            echo "::warning file=${REL_PATH}::Invisible Unicode characters detected (zero-width space, BOM, NBSP, etc.)"
-          done < /tmp/empty-lint-results.txt
+          if [ "$BLOCKING" -gt 0 ]; then
+            echo "## Empty-linter: BLOCKED — $BLOCKING file(s) contain C0/NUL corruption" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Write summary
         run: |

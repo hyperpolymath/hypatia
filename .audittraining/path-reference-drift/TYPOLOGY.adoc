@@ -44,7 +44,7 @@ tree, prose, table |lexical
 |*TP_self_drift* |the repo’s OWN manifest/doc asserts a layout that
 contradicts its tree |TRUE positive |fix the doc
 
-|*TP_real* |a real non-path defect (e.g. workflow missing
+|*TP_real* |a real non-path defect (e.g. workflow missing
 `+timeout-minutes+`) |TRUE positive |fix the source
 
 |*FP_relative* |path is real but unanchored —

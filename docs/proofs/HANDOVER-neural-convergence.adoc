@@ -58,7 +58,7 @@ assertion; Agda retired) |✅
 |parser totality |`+verification/proofs/lean4/ParserTotality.lean+` |✅
 
 |ABI package + verify package |`+src/abi/*.idr+`
-(incl. `+RuleEngine.idr+`), `+verify/src/*.idr+` |✅
+(incl. `+RuleEngine.idr+`), `+verify/src/*.idr+` |✅
 
 |*Neural convergence — PageRank*
 |`+verification/proofs/lean4/PageRankInvariants.lean+` |⛔ preconditions
