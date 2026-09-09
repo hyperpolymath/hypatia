@@ -314,7 +314,7 @@ defmodule Hypatia.CLI do
     results =
       if :root_hygiene in rules do
         root_files = list_root_files(repo_path)
-        %{findings: findings} = Hypatia.Rules.RootHygiene.scan(root_files)
+        %{findings: findings} = Hypatia.Rules.RootHygiene.scan(root_files, repo_path)
 
         normalized =
           Enum.map(findings, fn f ->
