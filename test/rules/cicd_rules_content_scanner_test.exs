@@ -94,6 +94,15 @@ defmodule Hypatia.Rules.CicdRules.ContentScannerTest do
       findings = CicdRules.scan_content_patterns(dir)
       assert Enum.any?(findings, &(&1.rule == :npx_in_workflow))
     end
+
+    test "prunes .git while retaining other dot-directories", %{dir: dir} do
+      git_workflows = Path.join(dir, ".git/workflows")
+      File.mkdir_p!(git_workflows)
+      File.write!(Path.join(git_workflows, "ci.yml"), "steps:\n  - run: npx prettier .\n")
+
+      findings = CicdRules.scan_content_patterns(dir)
+      refute Enum.any?(findings, &(&1.rule == :npx_in_workflow))
+    end
   end
 
   # ── Scanner-derived rule: --frozen-lockfile ───────────────────────────
@@ -129,6 +138,12 @@ defmodule Hypatia.Rules.CicdRules.ContentScannerTest do
       File.write!(Path.join(wf, "c.yml"), "steps:\n  # - run: bun install\n  - run: echo ok\n")
       findings = CicdRules.scan_content_patterns(dir)
       refute Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
+    end
+
+    test "fires on a long-option line", %{dir: dir, wf: wf} do
+      File.write!(Path.join(wf, "long-option.yml"), "-- bun install\n")
+      findings = CicdRules.scan_content_patterns(dir)
+      assert Enum.any?(findings, &(&1.rule == :install_without_frozen_lockfile))
     end
 
     test "still fires when the comment marker is TRAILING, not leading", %{dir: dir, wf: wf} do
