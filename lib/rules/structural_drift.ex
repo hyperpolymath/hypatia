@@ -745,7 +745,8 @@ defmodule Hypatia.Rules.StructuralDrift do
         sd013_path_specific_gitignore(repo_path) ++
         sd014_safedom_example_dialect(repo_path) ++
         sd022_stale_path_after_rename(repo_path) ++
-        sd023_state_a2ml_divergence(repo_path)
+        sd023_state_a2ml_divergence(repo_path) ++
+        sd024_retired_descriptile_policy(repo_path)
 
     needs_intensive = Enum.any?(findings, & &1[:trigger_intensive])
     needs_alert = Enum.any?(findings, & &1[:alert_user])
@@ -761,6 +762,58 @@ defmodule Hypatia.Rules.StructuralDrift do
   end
 
   # ─── Helpers ───────────────────────────────────────────────────────────
+
+  @doc """
+  SD024: Detect executable policy that requires descriptiles in retired paths.
+
+  A canonical tree can never satisfy such a check and SD004 simultaneously.
+  Report the policy file for reference repair; do not suggest recreating the
+  retired file. Documentation and commented examples are outside this rule.
+  """
+  def sd024_retired_descriptile_policy(repo_path) do
+    files =
+      Path.wildcard(Path.join(repo_path, ".github/workflows/*.{yml,yaml}")) ++
+        Path.wildcard(Path.join(repo_path, "scripts/*.sh")) ++
+        Path.wildcard(Path.join(repo_path, ".githooks/*.sh")) ++
+        Enum.map(["Justfile", "justfile"], &Path.join(repo_path, &1))
+
+    Enum.flat_map(files, fn file ->
+      case File.read(file) do
+        {:ok, content} ->
+          content
+          |> String.split("\n")
+          |> Enum.with_index(1)
+          |> Enum.flat_map(fn {line, number} ->
+            legacy =
+              ~r/\.machine_readable\/(?:6a2\/)?(?:STATE|META|ECOSYSTEM|AGENTIC|NEUROSYM|PLAYBOOK|ANCHOR)\.a2ml/
+
+            if not String.starts_with?(String.trim_leading(line), "#") and
+                 Regex.match?(~r/(?:\s-f\s|\s-e\s|check_file\s)/, line) and
+                 Regex.match?(legacy, line) do
+              [
+                %{
+                  rule: "SD024",
+                  file: Path.relative_to(file, repo_path),
+                  line: number,
+                  severity: :high,
+                  reason:
+                    "CI policy requires a retired descriptile path; align the check with .machine_readable/descriptiles/",
+                  category: "RetiredDescriptilePolicy",
+                  action: :update_reference,
+                  recipe_id: "recipe-retired-descriptile-policy",
+                  fix_script: "fix-retired-descriptile-policy.sh"
+                }
+              ]
+            else
+              []
+            end
+          end)
+
+        {:error, _} ->
+          []
+      end
+    end)
+  end
 
   defp group_by_severity(findings) do
     findings
