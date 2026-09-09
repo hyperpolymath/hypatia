@@ -787,9 +787,24 @@ defmodule Hypatia.Rules.StructuralDrift do
             legacy =
               ~r/\.machine_readable\/(?:6a2\/)?(?:STATE|META|ECOSYSTEM|AGENTIC|NEUROSYM|PLAYBOOK|ANCHOR)\.a2ml/
 
+            # Quoted examples are prose, but quoted literal paths and shell
+            # command substitutions still participate in executable checks.
+            code =
+              Regex.replace(~r/"(?:\\.|[^"\\])*"|'[^']*'/, line, fn quoted ->
+                value = String.slice(quoted, 1, String.length(quoted) - 2)
+
+                if Regex.match?(~r/^#{legacy.source}$/, value) or
+                     (String.starts_with?(quoted, "\"") and
+                        (String.contains?(value, "$(") or String.contains?(value, "`"))) do
+                  value
+                else
+                  " "
+                end
+              end)
+
             if not String.starts_with?(String.trim_leading(line), "#") and
-                 Regex.match?(~r/(?:\s-f\s|\s-e\s|check_file\s)/, line) and
-                 Regex.match?(legacy, line) do
+                 Regex.match?(~r/(?:\s-f\s|\s-e\s|check_file\s)/, code) and
+                 Regex.match?(legacy, code) do
               [
                 %{
                   rule: "SD024",

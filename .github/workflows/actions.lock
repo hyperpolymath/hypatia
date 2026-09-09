@@ -36,7 +36,7 @@ workflows:
     '.github/workflows/dogfood-gate.yml':
         - 'actions/checkout@v7.0.1'
         - 'hyperpolymath/deed-ecosystem@main'
-        - 'hyperpolymath/k9-ecosystem@codex/science-ci-20260909'
+        - 'hyperpolymath/k9-ecosystem@main'
     '.github/workflows/estate-rescan.yml':
         - 'actions/cache@v6.1.0'
     '.github/workflows/governance.yml': []
@@ -299,9 +299,9 @@ dependencies:
         commit: 'sha1-f7a40a4d5cc82b2e73f861119baa6818d77a448d'
         owner_id: 6759885
         repo_id: 1275649586
-    'hyperpolymath/k9-ecosystem@codex/science-ci-20260909':
-        ref: 'codex/science-ci-20260909'
-        commit: 'sha1-2ee51eed590b4722efcdca2fe4685ef24600bced'
+    'hyperpolymath/k9-ecosystem@main':
+        ref: 'main'
+        commit: 'sha1-2155aa26a21758f2ba119f61bc7e0e1981c106fb'
         owner_id: 6759885
         repo_id: 1275650185
     'ruby/setup-ruby@v1.321.0':

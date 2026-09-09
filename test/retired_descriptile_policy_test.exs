@@ -34,5 +34,22 @@ defmodule Hypatia.RetiredDescriptilePolicyTest do
     assert StructuralDrift.sd024_retired_descriptile_policy(repo) == []
     File.write!(file, "# if [ ! -f .machine_readable/6a2/STATE.a2ml ]; then exit 1; fi\n")
     assert StructuralDrift.sd024_retired_descriptile_policy(repo) == []
+
+    for prose <- [
+          ~s(echo "test -f .machine_readable/STATE.a2ml"),
+          ~s(printf '%s' 'check_file .machine_readable/META.a2ml')
+        ] do
+      File.write!(file, "run: |\n  #{prose}\n")
+      assert StructuralDrift.sd024_retired_descriptile_policy(repo) == []
+    end
+
+    for command <- [
+          ~s(test -f ".machine_readable/STATE.a2ml"),
+          ~s(test -e '.machine_readable/6a2/META.a2ml'),
+          ~s(check_file '.machine_readable/AGENTIC.a2ml')
+        ] do
+      File.write!(file, "run: |\n  #{command}\n")
+      assert [%{rule: "SD024"}] = StructuralDrift.sd024_retired_descriptile_policy(repo)
+    end
   end
 end
