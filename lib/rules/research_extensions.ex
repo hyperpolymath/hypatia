@@ -171,19 +171,41 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      touches_secrets? = Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, content)
+      # Comments are not runner configuration. Preserve physical line numbers
+      # so existing findings are not reported against a newly added line-1 header.
+      active_lines =
+        content
+        |> String.split("\n")
+        |> Enum.with_index(1)
+        |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
 
-      installs_harden? = Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
+      active_content = Enum.map_join(active_lines, "\n", &elem(&1, 0))
 
-      if touches_secrets? and not installs_harden? do
+      secret_line =
+        Enum.find(active_lines, fn {line, _} ->
+          Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, line)
+        end)
+
+      # A reusable-only caller has no runner or steps in which to install a
+      # hardener. The called workflow owns the runtime policy and is scanned
+      # in its source repository; its absence cannot be inferred at this seam.
+      local_runner? = Regex.match?(~r/^\s+runs-on:/m, active_content)
+
+      installs_harden? =
+        Regex.match?(~r/^\s+(?:-\s+)?uses:\s*step-security\/harden-runner@/m, active_content)
+
+      if not is_nil(secret_line) and local_runner? and not installs_harden? do
+        {_source, line} = secret_line
+
         [
           %{
             rule: "RE001",
             file: rel,
             severity: :warn,
+            line: line,
             reason:
               "workflow #{rel} references `secrets.*` but does not install " <>
-                "`step-security/harden-runner` — no outbound-egress telemetry",
+                "`step-security/harden-runner` — review outbound-egress monitoring",
             action: :report,
             detail: %{
               fix:

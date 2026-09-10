@@ -43,6 +43,40 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert length(findings) == 1
       assert hd(findings).rule == "RE001"
       assert hd(findings).severity == :warn
+      assert hd(findings).line == 7
+      File.rm_rf!(repo)
+    end
+
+    test "reusable-only callers delegate runner hardening to the workflow source" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          mirror:
+            uses: owner/standards/.github/workflows/mirror.yml@main
+            secrets:
+              MIRROR_KEY: ${{ secrets.MIRROR_KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "commented hardening does not hide a real secret reference or move its location" do
+      repo =
+        create_repo_with_workflow("""
+        # A managed header added by the action-lock tool
+        # uses: step-security/harden-runner@main
+        # Example: ${{ secrets.EXAMPLE }}
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 8
+      assert finding.severity == :warn
       File.rm_rf!(repo)
     end
 
