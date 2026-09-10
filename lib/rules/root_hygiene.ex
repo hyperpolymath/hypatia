@@ -378,16 +378,24 @@ defmodule Hypatia.Rules.RootHygiene do
   end
 
   defp gemini_pointer_target(content) do
+    targets = root_instruction_link_targets(content)
+
     cond do
-      Regex.match?(~r/\[[^\]]*AGENTS\.md[^\]]*\]\(\.\/AGENTS\.md\)/, content) ->
+      "AGENTS.md" in targets ->
         {:ok, "AGENTS.md"}
 
-      Regex.match?(~r/\[[^\]]*CLAUDE\.md[^\]]*\]\(\.\/CLAUDE\.md\)/, content) ->
+      "CLAUDE.md" in targets ->
         {:ok, "CLAUDE.md"}
 
       true ->
         :error
     end
+  end
+
+  defp root_instruction_link_targets(content) do
+    ~r/\[[^\]]*\]\(\.\/((?:AGENTS|CLAUDE|GEMINI)\.md)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/
+    |> Regex.scan(content, capture: :all_but_first)
+    |> List.flatten()
   end
 
   defp permitted_gemini_target?(_repo_path, "AGENTS.md"), do: true
@@ -402,7 +410,7 @@ defmodule Hypatia.Rules.RootHygiene do
     case File.read(target_path) do
       {:ok, content} ->
         String.trim(content) != "" and
-          not Regex.match?(~r/\]\(\.\/GEMINI\.md\)/, content)
+          "GEMINI.md" not in root_instruction_link_targets(content)
 
       _ ->
         false
