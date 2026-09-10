@@ -158,9 +158,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # ─── RE001: Harden-Runner absent on secrets-touching workflow ─────────
 
   @doc """
-  RE001: Workflow references `${{ secrets.* }}` but does not install
-  `step-security/harden-runner`. Provenance: StepSecurity Harden-Runner
-  deployment guide.
+  RE001: Reports each locally executed workflow job that references
+  `${{ secrets.* }}` without installing `step-security/harden-runner`
+  in that job. Fully commented lines and reusable-only jobs are ignored.
+
+  Each warning points to the first active secret reference in the affected
+  job. Provenance: StepSecurity Harden-Runner deployment guide.
 
   Severity: `:warn`. Action: `:report`.
   """
