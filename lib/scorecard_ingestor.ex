@@ -561,28 +561,34 @@ defmodule Hypatia.ScorecardIngestor do
             String.ends_with?(f, ".yml") or String.ends_with?(f, ".yaml")
           end)
 
-        unpinned =
-          yml_files
-          |> Enum.filter(fn f ->
-            path = Path.join(workflows_dir, f)
+        # Share the workflow auditor's validated lock semantics. A raw tag
+        # regex contradicts the estate's action-lock policy, while accepting
+        # the mere presence of a lock would silently hide integrity failures.
+        contents = Map.new(yml_files, &{&1, File.read!(Path.join(workflows_dir, &1))})
 
-            case File.read(path) do
-              {:ok, content} ->
-                # Check for actions using tags instead of SHA hashes
-                # Match pattern: uses: owner/repo@v1 (tag) vs uses: owner/repo@abc123 (SHA)
-                Regex.match?(~r/uses:\s+[\w-]+\/[\w-]+@v\d/, content)
+        lock_content =
+          case File.read(Path.join(workflows_dir, "actions.lock")) do
+            {:ok, content} ->
+              content
 
-              _ ->
-                false
-            end
-          end)
+            {:error, :enoent} ->
+              nil
 
-        if length(unpinned) > 0 do
+            {:error, reason} ->
+              raise File.Error, reason: reason, action: "read", path: workflows_dir
+          end
+
+        findings =
+          Hypatia.Rules.WorkflowAudit.check_unpinned_actions(contents, actions_lock: lock_content)
+          |> Enum.reject(&(&1.type == :pin_exempt_accepted))
+
+        if findings != [] do
           make_pattern(
             "SC-013",
             "Pinned-Dependencies",
             repo_name,
-            "#{length(unpinned)} workflow(s) with tag-pinned (not SHA-pinned) actions in #{repo_name}"
+            "#{length(findings)} action-pinning integrity finding(s) in #{repo_name}; " <>
+              "verify .github/workflows/actions.lock with gh actions-lock"
           )
         end
 
