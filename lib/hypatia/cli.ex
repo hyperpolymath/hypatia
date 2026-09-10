@@ -791,6 +791,7 @@ defmodule Hypatia.CLI do
                   reason: f.reason,
                   action: to_string(f.action)
                 }
+                |> Map.merge(Map.take(f, [:line, :category, :recipe_id, :fix_script, :target]))
               end)
 
             results ++ normalized

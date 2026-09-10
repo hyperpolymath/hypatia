@@ -1,0 +1,16 @@
+{
+  "id": "recipe-retired-descriptile-policy",
+  "name": "Align CI descriptile checks with the canonical tree",
+  "description": "Repair the policy reference only after the canonical descriptile exists; never recreate retired copies.",
+  "triangle_tier": "eliminate",
+  "pattern_ids": ["SD024", "structural_drift/SD024"],
+  "target_categories": ["RetiredDescriptilePolicy"],
+  "languages": ["yaml", "shell", "bash", "just"],
+  "confidence": 0.95,
+  "auto_fixable": true,
+  "fix_script": "fix-retired-descriptile-policy.sh",
+  "action": "replace",
+  "formally_proven": false,
+  "successful_fixes": 0,
+  "failed_fixes": 0
+}
