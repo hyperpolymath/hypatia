@@ -97,6 +97,26 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "passes when harden-runner uses values are quoted" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          double-quoted:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: "step-security/harden-runner@main"
+              - run: deploy --token=${{ secrets.DOUBLE_QUOTED_KEY }}
+          single-quoted:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: 'step-security/harden-runner@main'
+              - run: deploy --token=${{ secrets.SINGLE_QUOTED_KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
     test "does not treat nested multiline values as runner configuration or hardening" do
       repo =
         create_repo_with_workflow("""

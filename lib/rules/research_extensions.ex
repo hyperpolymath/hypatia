@@ -315,7 +315,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   defp harden_runner_uses?(line) do
-    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*step-security\/harden-runner@/, line)
+    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?step-security\/harden-runner@/, line)
   end
 
   defp block_scalar?(line), do: Regex.match?(~r/:\s*[>|][0-9+-]*\s*(?:#.*)?$/, line)
