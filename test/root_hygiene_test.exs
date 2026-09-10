@@ -93,6 +93,41 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert finding.action == :delete
     end
 
+    test "accepts arbitrary labels and optional Markdown titles for permitted targets" do
+      for target <- ["AGENTS.md", "CLAUDE.md"],
+          title <- ["", " \"instructions\"", " 'instructions'", " (instructions)"] do
+        repo_path = temporary_repo()
+        File.write!(Path.join(repo_path, target), "# Repository instructions\n")
+
+        File.write!(
+          Path.join(repo_path, "GEMINI.md"),
+          "Read [Repository instructions](./#{target}#{title}).\n"
+        )
+
+        assert RootHygiene.scan_stale(["GEMINI.md"], repo_path) == []
+      end
+    end
+
+    test "rejects circular destinations even with arbitrary labels and titles" do
+      for title <- ["", " \"return\"", " 'return'", " (return)"] do
+        repo_path = temporary_repo()
+        File.write!(Path.join(repo_path, "AGENTS.md"), "Read [Return](./GEMINI.md#{title}).\n")
+        File.write!(Path.join(repo_path, "GEMINI.md"), "Read [Instructions](./AGENTS.md).\n")
+
+        assert [%{file: "GEMINI.md", type: :stale}] =
+                 RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+      end
+    end
+
+    test "does not trust the label of a link to a different destination" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "AGENTS.md"), "# Repository instructions\n")
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [AGENTS.md](./other/AGENTS.md).\n")
+
+      assert [%{file: "GEMINI.md", type: :stale}] =
+               RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+    end
+
     test "flags a GEMINI.md pointer with a missing target" do
       repo_path = temporary_repo()
       File.write!(Path.join(repo_path, "GEMINI.md"), "Read [AGENTS.md](./AGENTS.md).\n")
