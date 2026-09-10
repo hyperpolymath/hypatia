@@ -97,6 +97,41 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "mixed reusable and local jobs do not share runner or hardening state" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          shared:
+            uses: owner/standards/.github/workflows/mirror.yml@main
+            secrets:
+              MIRROR_KEY: ${{ secrets.MIRROR_KEY }}
+          local:
+            runs-on: ubuntu-latest
+            steps:
+              - run: echo no credentials
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+
+      File.write!(Path.join([repo, ".github/workflows", "test.yml"]), """
+      jobs:
+        hardened:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: step-security/harden-runner@main
+            - run: deploy --token=${{ secrets.ONE }}
+        exposed:
+          runs-on: ubuntu-latest
+          steps:
+            - run: deploy --token=${{ secrets.TWO }}
+      """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 10
+      assert finding.severity == :warn
+      File.rm_rf!(repo)
+    end
+
     test "passes when no secrets are referenced" do
       repo =
         create_repo_with_workflow("""
