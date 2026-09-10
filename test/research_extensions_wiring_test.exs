@@ -114,6 +114,23 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
   end
 
   describe "the :warn tier is not discarded" do
+    test "CLI GitHub output and summary include warn findings" do
+      repo = tripwire_repo()
+
+      summary =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          output =
+            ExUnit.CaptureIO.capture_io(fn ->
+              CLI.main(["scan", repo, "--rules", "research_extensions", "--format", "github", "--exit-zero"])
+            end)
+
+          assert output =~ "::warning"
+          refute output =~ "::notice"
+        end)
+
+      assert summary =~ ~r/warn=[1-9][0-9]*/
+    end
+
     # Six of the ten RE rules emit `severity: :warn`. "warn" was absent from
     # CLI's @severity_order, so `Map.get(@severity_order, "warn", 5)` gave it
     # rank 5; the filter `rank <= threshold` at the default threshold of

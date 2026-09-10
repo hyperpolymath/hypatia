@@ -273,7 +273,7 @@ defmodule Hypatia.CLI do
     total = length(filtered)
 
     breakdown =
-      ["critical", "high", "medium", "low", "info"]
+      ["critical", "high", "medium", "warn", "low", "info"]
       |> Enum.map(fn sev -> "#{sev}=#{Map.get(counts, sev, 0)}" end)
       |> Enum.join(", ")
 
@@ -1101,6 +1101,7 @@ defmodule Hypatia.CLI do
           "critical" -> "error"
           "high" -> "error"
           "medium" -> "warning"
+          "warn" -> "warning"
           _ -> "notice"
         end
 
