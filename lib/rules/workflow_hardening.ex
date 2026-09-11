@@ -24,10 +24,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
     `run:` blocks. Same as zizmor `template-injection` and actionlint
     `untrusted-inputs`. The single highest-impact GHA defect class
     (Benedetti et al. 2022 found ~7% of public workflows reachable).
-  - **WH002** — Workflow-level `permissions:` block missing or set to
-    `write-all`. Cassel et al. (MSR 2024) measured ~74% of public
-    workflows at default permissions. Same as scorecard `Token-Permissions`
-    and zizmor `excessive-permissions`.
+  - **WH002** — Workflow-level `permissions:` block missing, set to
+    `write-all`, or has top-level `contents: write`. Cassel et al. (MSR 2024)
+    measured ~74% of public workflows at default permissions. Same as scorecard
+    `Token-Permissions` (TokenPermissionsID) and zizmor `excessive-permissions`.
   - **WH003** — `pull_request_target` (or `workflow_run`) trigger
     combined with checkout of PR head ref. The infamous fork-PR
     credential-leak pattern. Same as zizmor `dangerous-triggers`
@@ -181,8 +181,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   @doc """
   WH002: Workflow has no top-level `permissions:` block at all, OR has
-  `permissions: write-all`. Per Cassel et al. 2024, ~74% of public
-  workflows are at the default (write-all-equivalent for many scopes).
+  `permissions: write-all`, OR has top-level `contents: write`. Per Cassel
+  et al. 2024, ~74% of public workflows are at the default (write-all-equivalent
+  for many scopes). This catches Scorecard TokenPermissionsID alerts.
   """
   def wh002_excessive_permissions(repo_path) do
     repo_path
@@ -192,10 +193,16 @@ defmodule Hypatia.Rules.WorkflowHardening do
       rel = Path.relative_to(path, repo_path)
 
       cond do
-        Regex.match?(~r/^\s*permissions:\s*write-all\b/m, content) ->
+        Regex.match?(~r/^permissions:\s*write-all\b/m, content) ->
           [finding_wh002(rel, "set to `write-all`", :high)]
 
-        not Regex.match?(~r/^\s*permissions:/m, content) ->
+        Regex.match?(~r/^permissions:\s*\n\s+contents:\s*write/m, content) ->
+          [finding_wh002(rel, "with `contents: write`", :high)]
+
+        Regex.match?(~r/^permissions:\s*\n\s+write-all:\s*true/m, content) ->
+          [finding_wh002(rel, "with `write-all: true`", :high)]
+
+        not Regex.match?(~r/^permissions:/m, content) ->
           [finding_wh002(rel, "absent (defaults to broad permissions)", :warn)]
 
         true ->
