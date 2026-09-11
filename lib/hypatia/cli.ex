@@ -301,17 +301,19 @@ defmodule Hypatia.CLI do
   # ─── Finding collection across rule modules ──────────────────────────
 
   @doc """
-  Runs the selected rule modules against a repository and produces findings in a
-  common map format. Findings covered by configured suppressions are excluded.
-  
-  ## Parameters
-  
-    - repo_path: Path to the repository to scan.
-    - rules: Rule module identifiers to run.
-  
-  ## Returns
-  
-  A list of normalized finding maps.
+Runs the selected rule modules against `repo_path` and returns normalized
+finding maps. Each map includes `rule_module`, `type`, `severity`, `file`,
+`reason`, and `action`; line-aware findings may also include `line`.
+Findings covered by configured suppressions are excluded.
+
+## Parameters
+
+  - repo_path: Path to the repository to scan.
+  - rules: Rule module identifiers to run.
+
+## Returns
+
+A list of normalized finding maps.
   """
   @spec collect_findings(String.t(), [atom()]) :: [map()]
   def collect_findings(repo_path, rules) do
