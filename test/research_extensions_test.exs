@@ -97,6 +97,51 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "passes when harden-runner uses values are quoted" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          double-quoted:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: "step-security/harden-runner@main"
+              - run: deploy --token=${{ secrets.DOUBLE_QUOTED_KEY }}
+          single-quoted:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: 'step-security/harden-runner@main'
+              - run: deploy --token=${{ secrets.SINGLE_QUOTED_KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "does not treat nested multiline values as runner configuration or hardening" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          nested-values:
+            env:
+              WORKFLOW_EXAMPLE: |
+                runs-on: ubuntu-latest
+                - uses: step-security/harden-runner@main
+            steps:
+              - run: deploy --token=${{ secrets.NESTED_ONLY }}
+          exposed:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  runs-on: ubuntu-latest
+                  - uses: step-security/harden-runner@main
+                  deploy --token=${{ secrets.EXPOSED }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 15
+      File.rm_rf!(repo)
+    end
+
     test "mixed reusable and local jobs do not share runner or hardening state" do
       repo =
         create_repo_with_workflow("""
