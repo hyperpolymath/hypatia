@@ -24,11 +24,11 @@ defmodule Hypatia.CLI do
 
       --rules <list>    Comma-separated rule modules to run (default: all)
                         Available: root_hygiene,honest_completion,workflow_audit,
-                                   cicd_rules,code_safety,migration_rules,scorecard,
+                                   cicd_rules,research_extensions,
+                                   code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
-                                   structural_drift,implementation_inside_canon,
-                                   content_patterns
+                                   structural_drift,implementation_inside_canon,content_patterns
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -46,6 +46,7 @@ defmodule Hypatia.CLI do
     :honest_completion,
     :workflow_audit,
     :cicd_rules,
+    :research_extensions,
     :code_safety,
     :migration_rules,
     :scorecard,
@@ -63,6 +64,11 @@ defmodule Hypatia.CLI do
     "critical" => 1,
     "high" => 2,
     "medium" => 3,
+    # `:warn` is emitted by research_extensions (6 rules) and workflow_audit.
+    # Absent from this map it fell to the `Map.get/3` default of 5, so the
+    # `rank <= threshold` filter below dropped every warn finding at the
+    # default `--severity medium`. Ranked with medium: warn IS medium-tier.
+    "warn" => 3,
     "low" => 4,
     "info" => 5
   }
@@ -268,7 +274,7 @@ defmodule Hypatia.CLI do
     total = length(filtered)
 
     breakdown =
-      ["critical", "high", "medium", "low", "info"]
+      ["critical", "high", "medium", "warn", "low", "info"]
       |> Enum.map(fn sev -> "#{sev}=#{Map.get(counts, sev, 0)}" end)
       |> Enum.join(", ")
 
@@ -314,6 +320,12 @@ Findings covered by configured suppressions are excluded.
 ## Returns
 
 A list of normalized finding maps.
+
+  `rules` is a list of module atoms (for example, `[:content_patterns,
+  :structural_drift]`). GitHub alert modules (`:dependabot_alerts`,
+  `:secret_scanning_alerts`, and `:code_scanning_alerts`) require network access
+  and credentials; when unavailable, they write a warning to standard error and
+  contribute no findings.
   """
   @spec collect_findings(String.t(), [atom()]) :: [map()]
   def collect_findings(repo_path, rules) do
@@ -323,7 +335,7 @@ A list of normalized finding maps.
     results =
       if :root_hygiene in rules do
         root_files = list_root_files(repo_path)
-        %{findings: findings} = Hypatia.Rules.RootHygiene.scan(root_files)
+        %{findings: findings} = Hypatia.Rules.RootHygiene.scan(root_files, repo_path)
 
         normalized =
           Enum.map(findings, fn f ->
@@ -535,6 +547,36 @@ A list of normalized finding maps.
           end)
 
         results ++ normalized ++ banned_findings
+      else
+        results
+      end
+
+    # Research Extensions (RE001-RE010) - Snyk/StepSecurity/Endor/academic
+    results =
+      if :research_extensions in rules do
+        case Hypatia.Rules.ResearchExtensions.scan(repo_path) do
+          %{findings: findings} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "research_extensions",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, "."),
+                  # RE004 carries its line under `:detail`; the rest carry
+                  # none. Both shapes degrade to nil, which SARIF renders
+                  # as startLine 1 exactly as before.
+                  line: get_in(f, [:detail, :line]) || Map.get(f, :line),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          _ ->
+            results
+        end
       else
         results
       end
@@ -800,6 +842,7 @@ A list of normalized finding maps.
                   reason: f.reason,
                   action: to_string(f.action)
                 }
+                |> Map.merge(Map.take(f, [:line, :category, :recipe_id, :fix_script, :target]))
               end)
 
             results ++ normalized
@@ -1110,6 +1153,7 @@ A list of normalized finding maps.
           "critical" -> "error"
           "high" -> "error"
           "medium" -> "warning"
+          "warn" -> "warning"
           _ -> "notice"
         end
 
@@ -1343,12 +1387,11 @@ A list of normalized finding maps.
     OPTIONS:
         --rules, -r <list>      Comma-separated rule modules (default: all)
                                 Available: root_hygiene,honest_completion,
-                                workflow_audit,cicd_rules,code_safety,
-                                migration_rules,scorecard,green_web,
+                                workflow_audit,cicd_rules,research_extensions,
+                                code_safety,migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts,
-                                structural_drift,implementation_inside_canon,
-                                content_patterns
+                                structural_drift,implementation_inside_canon,content_patterns
         --format, -f <fmt>      Output format: json (default), text, github, sarif, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
