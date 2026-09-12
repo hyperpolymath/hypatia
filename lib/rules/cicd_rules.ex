@@ -819,34 +819,38 @@ defmodule Hypatia.Rules.CicdRules do
   def scan_content_patterns(repo_path) do
     repo_name = Path.basename(repo_path)
 
+    # Enumerate all files once, pruning .git during traversal
+    all_files =
+      Path.wildcard("#{repo_path}/**/*", match_dot: true)
+      |> Enum.reject(&File.dir?/1)
+      |> Enum.map(&Path.relative_to(&1, repo_path))
+      |> Enum.reject(&String.starts_with?(&1, ".git/"))
+
     @blocked_patterns
     |> Enum.filter(fn p -> Map.has_key?(p, :pattern) and Map.has_key?(p, :applies_to) end)
-    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name) end)
+    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name, all_files) end)
   end
 
-  defp scan_one_content_rule(rule, repo_path, repo_name) do
+  defp scan_one_content_rule(rule, repo_path, repo_name, all_files) do
     exception_repos = Map.get(rule, :exception_repos, [])
 
     if repo_name in exception_repos do
       []
     else
       rule
-      |> matching_files(repo_path)
+      |> matching_files(all_files)
       |> Enum.flat_map(fn rel -> scan_one_file(rule, repo_path, rel) end)
     end
   end
 
-  defp matching_files(rule, repo_path) do
+  defp matching_files(rule, all_files) do
     globs = Map.get(rule, :applies_to, [])
     allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
     exception = Map.get(rule, :exception)
 
-    Path.wildcard("#{repo_path}/**/*", match_dot: true)
-    |> Enum.reject(&File.dir?/1)
-    |> Enum.map(&Path.relative_to(&1, repo_path))
+    all_files
     |> Enum.filter(fn rel ->
-      not String.starts_with?(rel, ".git/") and
-        Enum.any?(globs, fn g -> glob_matches?(g, rel) end)
+      Enum.any?(globs, fn g -> glob_matches?(g, rel) end)
     end)
     |> Enum.reject(fn rel ->
       Enum.any?(allow_prefixes, &String.contains?(rel, &1)) or
@@ -939,12 +943,10 @@ defmodule Hypatia.Rules.CicdRules do
   # `run: bun install  # TODO` still matches. A trailing-comment stripper
   # would need per-language string-literal awareness (a `#` inside a quoted
   # shell string is not a comment), and getting that wrong silently blinds
-  # the rule. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C) and `--`
-  # (SQL/Ada/Haskell/Lua).
+  # the rule. Covers `#` (YAML/shell/Elixir) and `//` (JS/Rust/C).
   defp comment_line?(line) do
     t = String.trim_leading(line)
-    String.starts_with?(t, "#") or String.starts_with?(t, "//") or
-      String.starts_with?(t, "--")
+    String.starts_with?(t, "#") or String.starts_with?(t, "//")
   end
 
   defp glob_matches?(glob, path) do

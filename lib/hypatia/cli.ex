@@ -28,7 +28,7 @@ defmodule Hypatia.CLI do
                                    code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
-                                   structural_drift,implementation_inside_canon
+                                   structural_drift,implementation_inside_canon,content_patterns
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -1378,7 +1378,7 @@ defmodule Hypatia.CLI do
                                 code_safety,migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts,
-                                structural_drift,implementation_inside_canon
+                                structural_drift,implementation_inside_canon,content_patterns
         --format, -f <fmt>      Output format: json (default), text, github, sarif, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)
