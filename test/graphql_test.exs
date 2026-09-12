@@ -4,9 +4,20 @@
 defmodule Hypatia.Web.GraphQLTest do
   use ExUnit.Case, async: false
 
+  import Plug.Test
+
   alias Hypatia.Web.GraphQL
+  alias Hypatia.Web.Router
 
   setup do
+    System.delete_env("HYPATIA_API_ALLOW_NONLOCAL")
+    System.delete_env("HYPATIA_API_BEARER_TOKEN")
+
+    on_exit(fn ->
+      System.delete_env("HYPATIA_API_ALLOW_NONLOCAL")
+      System.delete_env("HYPATIA_API_BEARER_TOKEN")
+    end)
+
     case Process.whereis(Hypatia.Watcher.PubSub) do
       nil ->
         {:ok, pid} = Registry.start_link(keys: :duplicate, name: Hypatia.Watcher.PubSub)
@@ -26,6 +37,46 @@ defmodule Hypatia.Web.GraphQLTest do
     end
 
     :ok
+  end
+
+  describe "POST /graphql protection" do
+    test "requires the configured bearer token" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+
+      conn = call_router({127, 0, 0, 1})
+
+      assert conn.status == 401
+      assert Jason.decode!(conn.resp_body)["error"] == "missing_token"
+    end
+
+    test "accepts a valid bearer token from a non-loopback client" do
+      System.put_env("HYPATIA_API_BEARER_TOKEN", "test-secret-abc123")
+
+      conn =
+        {10, 1, 2, 3}
+        |> graphql_conn()
+        |> Plug.Conn.put_req_header("authorization", "Bearer test-secret-abc123")
+        |> Router.call(Router.init([]))
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body)["data"]["health"]["status"] == "ok"
+    end
+
+    test "rejects a non-loopback client when no token is configured" do
+      conn = call_router({10, 1, 2, 3})
+
+      assert conn.status == 403
+      assert Jason.decode!(conn.resp_body)["error"] == "loopback_only"
+    end
+
+    test "allows a non-loopback client through the explicit override" do
+      System.put_env("HYPATIA_API_ALLOW_NONLOCAL", "true")
+
+      conn = call_router({10, 1, 2, 3})
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body)["data"]["health"]["status"] == "ok"
+    end
   end
 
   describe "execute/1 — single field" do
@@ -101,5 +152,18 @@ defmodule Hypatia.Web.GraphQLTest do
       result = GraphQL.execute("{ status { uptime_seconds } }")
       assert is_map(result["data"]["status"])
     end
+  end
+
+  defp call_router(remote_ip) do
+    remote_ip
+    |> graphql_conn()
+    |> Router.call(Router.init([]))
+  end
+
+  defp graphql_conn(remote_ip) do
+    :post
+    |> conn("/graphql", Jason.encode!(%{query: "{ health }"}))
+    |> Map.put(:remote_ip, remote_ip)
+    |> Plug.Conn.put_req_header("content-type", "application/json")
   end
 end
