@@ -307,11 +307,19 @@ defmodule Hypatia.CLI do
   # ─── Finding collection across rule modules ──────────────────────────
 
   @doc """
-  Run the named rule modules against `repo_path` and return unsuppressed findings
-  normalised as `%{rule_module, type, severity, file, reason, action}` maps.
-  Content-pattern findings also include their one-based source `line`. Public so
-  the RSR conformance oracle can delegate content-scan criteria to the live
-  scanners rather than reimplement per-file detection.
+Runs the selected rule modules against `repo_path` and returns normalized
+finding maps. Each map includes `rule_module`, `type`, `severity`, `file`,
+`reason`, and `action`; line-aware findings may also include `line`.
+Findings covered by configured suppressions are excluded.
+
+## Parameters
+
+  - repo_path: Path to the repository to scan.
+  - rules: Rule module identifiers to run.
+
+## Returns
+
+A list of normalized finding maps.
 
   `rules` is a list of module atoms (for example, `[:content_patterns,
   :structural_drift]`). GitHub alert modules (`:dependabot_alerts`,
@@ -319,6 +327,7 @@ defmodule Hypatia.CLI do
   and credentials; when unavailable, they write a warning to standard error and
   contribute no findings.
   """
+  @spec collect_findings(String.t(), [atom()]) :: [map()]
   def collect_findings(repo_path, rules) do
     results = []
 

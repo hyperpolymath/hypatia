@@ -808,9 +808,15 @@ defmodule Hypatia.Rules.CicdRules do
     * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
       immediately preceding line suppresses that finding.
 
-  Returns findings with `rule`, `severity`, `reason`, `file`, `line`, and
-  `match` fields. File paths are relative to `repo_path`, and line numbers are
-  one-based.
+  Activates these previously-dormant rules: :innerhtml_usage,
+  :eval_in_shell, :download_then_run_shell, :hardcoded_tmp,
+  :template_placeholder, :deno_all_perms, :v_build_in_ci (#383),
+  :npx_in_workflow (#383), :http_in_docs (#383), and
+  :install_without_frozen_lockfile.
+
+  Returns a list of findings:
+    [%{rule: :rule_id, severity: "medium", reason: "...", file: "rel/path",
+       line: N, match: "..."}]
   """
   def scan_content_patterns(repo_path) do
     repo_name = Path.basename(repo_path)
