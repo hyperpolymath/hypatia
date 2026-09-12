@@ -27,8 +27,10 @@ defmodule Hypatia.Rules.BaselineHealth do
     flake.
 
   - **BH004** — A workflow `uses:` line references an action by full SHA
-    that does not exist on the upstream repository. Every workflow run
-    using the pin fails immediately on action resolution. Discovered
+    that does not exist on the upstream repository, or references a reusable
+    workflow at a commit that exists but is not reachable from the upstream
+    default branch. Every workflow run using the pin fails immediately on
+    action/workflow resolution. Discovered
     2026-05-26 in `hyperpolymath/rsr-template-repo` and 9 other estate
     repos — a single dead SHA pin (`actions/upload-artifact@65c79d7f…`)
     was propagated by template scaffolding and broke main on each.
@@ -104,7 +106,12 @@ defmodule Hypatia.Rules.BaselineHealth do
   # `uses: <owner>/<repo>@<40-hex-sha>` (with or without a trailing
   # comment) for every action reference. Composite-action callouts
   # (`uses: ./...`) and docker-image refs (`docker://...`) are skipped.
-  @uses_sha_pattern ~r/^\s*-?\s*uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)@([a-fA-F0-9]{40})\b/m
+  # Capture the repository, optional in-repository path, and SHA separately.
+  # The previous form required `@` immediately after owner/repo, so it silently
+  # ignored every cross-repository reusable workflow (`owner/repo/.github/
+  # workflows/x.yml@sha`). That blind spot is how an extant but non-mainline
+  # standards commit reached 251 active workflow files without BH004 noticing.
+  @uses_sha_pattern ~r/^\s*-?\s*uses:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)(\/[a-zA-Z0-9_.\/-]+)?@([a-fA-F0-9]{40})\b/m
 
   # BH005/BH006 — distinguish workflows that ran on the latest PR vs
   # only on the main-branch push. A required check whose name appears
@@ -284,8 +291,12 @@ defmodule Hypatia.Rules.BaselineHealth do
   # ─── BH004: Dead action SHA pin in workflow YAML ──────────────────────
 
   @doc """
-  BH004: For each `uses: <owner>/<repo>@<sha>` reference in workflow YAML,
-  verify the SHA resolves to a real commit on the upstream action repo.
+  BH004: For each `uses: <owner>/<repo>[/path]@<sha>` reference in workflow
+  YAML, verify the SHA resolves to a real commit on the upstream repository.
+  For cross-repository reusable workflows, also verify that commit is reachable
+  from the repository's default branch. GitHub's contents API can retrieve an
+  orphaned/diverged commit, but the Actions workflow resolver rejects it as
+  `workflow was not found` before creating any jobs.
 
   Discovery 2026-05-26: a single dead pin
   (`actions/upload-artifact@65c79d7f54e76e4e3c7a8f34db0f4ac8b515c478`)
@@ -302,7 +313,7 @@ defmodule Hypatia.Rules.BaselineHealth do
   Requires `GITHUB_TOKEN` to confirm the SHA does not exist upstream.
   Returns `[]` cleanly without one.
   """
-  def bh004_dead_action_sha_pin(repo_path) do
+  def bh004_dead_action_sha_pin(repo_path, github_request \\ &curl_github/1) do
     workflow_files = find_workflow_files(repo_path)
 
     workflow_files
@@ -310,21 +321,55 @@ defmodule Hypatia.Rules.BaselineHealth do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      Regex.scan(@uses_sha_pattern, content, return: :index)
-      |> Enum.flat_map(fn [{full_start, _}, {repo_start, repo_len}, {sha_start, sha_len}] ->
-        # byte offsets from return: :index — String.slice counts graphemes,
-        # so any earlier multi-byte char shifted these and sent garbage
-        # owner/repo + sha pairs to the GitHub API (false BH004 criticals).
-        action_repo = binary_part(content, repo_start, repo_len)
-        sha = binary_part(content, sha_start, sha_len) |> String.downcase()
-        line_no = line_number_for_offset(content, full_start)
-        check_action_sha_alive(action_repo, sha, rel, line_no)
+      content
+      |> uses_sha_references()
+      |> Enum.flat_map(fn ref ->
+        check_action_sha_alive(ref.repository, ref.path, ref.sha, rel, ref.line, github_request)
       end)
     end)
   end
 
-  defp check_action_sha_alive(action_repo, sha, file, line_no) do
-    case curl_github("repos/#{action_repo}/commits/#{sha}") do
+  @doc false
+  def uses_sha_references(content) when is_binary(content) do
+    Regex.scan(@uses_sha_pattern, content, return: :index)
+    |> Enum.map(fn [
+                     {full_start, _},
+                     {repo_start, repo_len},
+                     {path_start, path_len},
+                     {sha_start, sha_len}
+                   ] ->
+      # byte offsets from return: :index — String.slice counts graphemes,
+      # so any earlier multi-byte char shifted these and sent garbage
+      # owner/repo + sha pairs to the GitHub API (false BH004 criticals).
+      path =
+        if path_start < 0,
+          do: "",
+          else: binary_part(content, path_start, path_len) |> String.trim_leading("/")
+
+      %{
+        repository: binary_part(content, repo_start, repo_len),
+        path: path,
+        sha: binary_part(content, sha_start, sha_len) |> String.downcase(),
+        line: line_number_for_offset(content, full_start)
+      }
+    end)
+  end
+
+  @doc false
+  def reusable_reachability(%{"status" => status}) when is_binary(status),
+    do: reusable_reachability(status)
+
+  def reusable_reachability(%{"message" => "No common ancestor between " <> _}),
+    do: :unreachable
+
+  def reusable_reachability("ahead"), do: :reachable
+  def reusable_reachability("identical"), do: :reachable
+  def reusable_reachability("behind"), do: :unreachable
+  def reusable_reachability("diverged"), do: :unreachable
+  def reusable_reachability(_), do: :unknown
+
+  defp check_action_sha_alive(action_repo, upstream_path, sha, file, line_no, github_request) do
+    case github_request.("repos/#{action_repo}/commits/#{sha}") do
       {:ok, %{"message" => "No commit found for SHA: " <> _}} ->
         [
           %{
@@ -338,6 +383,7 @@ defmodule Hypatia.Rules.BaselineHealth do
             detail: %{
               line: line_no,
               action_repo: action_repo,
+              upstream_path: upstream_path,
               dead_sha: sha,
               fix:
                 "Bump to the current tag head: " <>
@@ -347,8 +393,21 @@ defmodule Hypatia.Rules.BaselineHealth do
         ]
 
       {:ok, %{"sha" => _real_sha}} ->
-        # SHA resolves cleanly — no finding.
-        []
+        if reusable_workflow_path?(upstream_path) do
+          check_reusable_sha_reachable(
+            action_repo,
+            upstream_path,
+            sha,
+            file,
+            line_no,
+            github_request
+          )
+        else
+          # Ordinary actions may intentionally live on a release/tag branch;
+          # existence is sufficient for those. Default-branch reachability is
+          # a GitHub constraint specifically for cross-repo reusable workflows.
+          []
+        end
 
       {:error, :no_token} ->
         # We can't verify without a token. Don't emit — false positives
@@ -358,6 +417,63 @@ defmodule Hypatia.Rules.BaselineHealth do
 
       _other ->
         []
+    end
+  end
+
+  defp reusable_workflow_path?(path) do
+    String.starts_with?(path, ".github/workflows/") and
+      (String.ends_with?(path, ".yml") or String.ends_with?(path, ".yaml"))
+  end
+
+  defp check_reusable_sha_reachable(
+         action_repo,
+         upstream_path,
+         sha,
+         file,
+         line_no,
+         github_request
+       ) do
+    with {:ok, %{"default_branch" => branch}} when is_binary(branch) <-
+           github_request.("repos/#{action_repo}"),
+         {:ok, comparison} when is_map(comparison) <-
+           github_request.(
+             "repos/#{action_repo}/compare/#{sha}...#{URI.encode(branch, &URI.char_unreserved?/1)}"
+           ) do
+      case reusable_reachability(comparison) do
+        :reachable ->
+          []
+
+        :unreachable ->
+          [
+            %{
+              rule: "BH004",
+              file: file,
+              severity: :critical,
+              reason:
+                "workflow #{file}:#{line_no} pins #{action_repo}/#{upstream_path}@#{String.slice(sha, 0, 8)}…; " <>
+                  "the commit exists but is not reachable from `#{branch}`, so GitHub rejects the reusable workflow as `workflow was not found`",
+              action: :open_followup_pr,
+              detail: %{
+                line: line_no,
+                action_repo: action_repo,
+                upstream_path: upstream_path,
+                unreachable_sha: sha,
+                default_branch: branch,
+                compare_status:
+                  Map.get(comparison, "status") || Map.get(comparison, "message", "unknown"),
+                fix:
+                  "Pin a commit reachable from `#{branch}`: " <>
+                    "`gh api repos/#{action_repo}/commits/#{branch} --jq .sha`"
+              }
+            }
+          ]
+
+        :unknown ->
+          []
+      end
+    else
+      # Network/permission ambiguity is not evidence that a pin is broken.
+      _ -> []
     end
   end
 

@@ -77,7 +77,15 @@ defmodule Hypatia.Rules.CicdRules do
     # TS ban (org policy 2026-04-30 for NEW files; existing TS grandfathered
     # while in-flight migration to AffineScript proceeds — see project
     # tracker `project_estate_ts_to_affinescript_2026_05_28.md`).
-    # Path-prefix allowlist covers nine classes of legitimate `.ts` presence:
+    # Path-prefix allowlist covers seven classes of legitimate `.ts` presence.
+    # Two former classes were retired 2026-08-31, their unblock conditions met:
+    # the avow telegram-bot Telegraf exemption (bot rewritten in AffineScript;
+    # zero `.ts`/`.res` under telegram-bot/ on avow-protocol main) and the
+    # affinescript bootstrap shims (`affinescript-deno-test/` is 100% `.affine`
+    # everywhere it is tracked; `affinescript-cli/` is a permanent JS-only npm
+    # front door, still carved out under the nodejs/javascript rules where its
+    # files actually live). The `tsconfig.json` entry was dropped as dead: this
+    # rule's glob is `*.ts`, so a `.json` path can never reach the allowlist.
     #
     # (1) Declaration files (`.d.ts`) — FFI/library type definitions are
     #     headers, not implementation; they're the boundary, not the code.
@@ -89,31 +97,22 @@ defmodule Hypatia.Rules.CicdRules do
     #     `*/bindings/ts/`. Exemplar: `proven/bindings/deno/` (72 files
     #     exposing Idris2 ABI to Deno consumers).
     #
-    # (3) PERMANENT exemption — `avow-protocol/telegram-bot/avow-telegram-bot/`:
-    #     Telegraf / node-telegram-bot-api are the canonical TS-native
-    #     Bot API libraries; no AffineScript binding planned.
+    # (3) Tooling configs — `vite.config.ts`, `vitest.config.ts`,
+    #     `tsup.config.ts` are build orchestration, not application code.
     #
-    # (4) Tooling configs — `vite.config.ts`, `vitest.config.ts`,
-    #     `tsup.config.ts`, `*.config.ts` are build orchestration,
-    #     not application code.
-    #
-    # (5) Bootstrap shims — `affinescript-deno-test/` (Deno test runner)
-    #     and `affinescript-cli/` (CLI bootstrap) carry TS/JS shims that
-    #     bootstrap the AffineScript toolchain itself.
-    #
-    # (6) Upstream forks not estate-authored — `rescript/` (ReScript
+    # (4) Upstream forks not estate-authored — `rescript/` (ReScript
     #     compiler), `servers/` (third-party MCP servers),
     #     `repos-monorepo/` (mass aggregator), `linguist/` (GitHub's
     #     language classifier — TS in `samples/` is ML training data).
     #
-    # (7) Archived repos — GitHub-archived repos cannot accept PRs;
+    # (5) Archived repos — GitHub-archived repos cannot accept PRs;
     #     their TS is dormant. `hyperpolymath-archive/**`.
     #
-    # (8) Vendored package-manager deps — `**/deps/` covers Elixir Mix
+    # (6) Vendored package-manager deps — `**/deps/` covers Elixir Mix
     #     vendored deps (canonical example: `tma-mark2/deps/phoenix_live_view/`
     #     ships Phoenix LiveView's authored TS). We don't own this code.
     #
-    # (9) Editor-host extensions — `**/vscode/**` covers VSCode extension
+    # (7) Editor-host extensions — `**/vscode/**` covers VSCode extension
     #     entry points (`extension.ts` lives under `editors/vscode/`,
     #     `extensions/vscode/`, or `clients/vscode/`). Blocked on the
     #     AffineScript VSCode-extension API binding (top-50 roadmap);
@@ -140,31 +139,25 @@ defmodule Hypatia.Rules.CicdRules do
         # source of truth. Was never ported here — 44 phantom criticals
         # per cartridges PR (#602).
         "/adapter/",
-        # (3) PERMANENT exemption — Telegraf
-        "avow-protocol/telegram-bot/avow-telegram-bot/",
-        # (4) Tooling configs (matched as suffix substrings)
+        # (3) Tooling configs (matched as suffix substrings)
         "vite.config.ts",
         "vitest.config.ts",
         "tsup.config.ts",
-        "tsconfig.json",
-        # (5) Bootstrap shims
-        "affinescript-deno-test/",
-        "affinescript-cli/",
-        # (6) Upstream forks — not estate-authored; TS exists as vendored
+        # (4) Upstream forks — not estate-authored; TS exists as vendored
         # upstream code or sample fixtures (linguist ships `.ts` files in
         # `samples/` as classification training data for its ML model).
         "rescript/",
         "servers/",
         "repos-monorepo/",
         "linguist/",
-        # (7) Archived repos
+        # (5) Archived repos
         "hyperpolymath-archive/",
-        # (8) Vendored package-manager deps — `deps/` is the canonical Elixir
+        # (6) Vendored package-manager deps — `deps/` is the canonical Elixir
         # Mix vendored-dep directory (also used by other tools that vendor
         # via that name). Exemplar: `tma-mark2/deps/phoenix_live_view/`
         # ships Phoenix LiveView's authored TS.
         "/deps/",
-        # (9) Editor-host extensions — VSCode extension entry points target
+        # (7) Editor-host extensions — VSCode extension entry points target
         # the `vscode` extension-host API which AffineScript does not yet
         # bind. These are blocked on the AS-bindings top-50 roadmap; the
         # carve-out unblocks the gate until host-API bindings ship.
@@ -172,7 +165,7 @@ defmodule Hypatia.Rules.CicdRules do
         # `*/clients/vscode/`. The bare `/vscode/` substring suffices since
         # `String.contains?/2` matches any path containing it.
         "/vscode/",
-        # (10) CLAUDE.md documented exemptions not yet in this list
+        # (8) CLAUDE.md documented exemptions not yet in this list
         "a2ml/bindings/deno/",
         "k9-svc/bindings/deno/",
         "lol/test/vitest.config.ts",
@@ -181,8 +174,11 @@ defmodule Hypatia.Rules.CicdRules do
     },
     # ReScript ban (org policy 2026-05-25). In-flight estate migration
     # tracked under hyperpolymath/standards#252 + STEPS #260-#280.
-    # Path-prefix allowlist covers eight classes of legitimate `.res` /
-    # `.resi` presence (mirrors TS 9-class canon adapted for ReScript):
+    # Path-prefix allowlist covers six classes of legitimate `.res` /
+    # `.resi` presence (mirrors the TS canon adapted for ReScript). The former
+    # bootstrap-shim and Telegraf classes were retired 2026-08-31: both
+    # directories are 100% AffineScript on main and neither ever tracked a
+    # `.res` file, so removal changes no scan outcome.
     #
     # (1) Tooling configs — `bsconfig.json`, `*.config.res` are build
     #     orchestration, not application code.
@@ -195,10 +191,6 @@ defmodule Hypatia.Rules.CicdRules do
     #     AffineScript VSCode-extension API binding (top-50 roadmap).
     # (6) Compiled output — `**/lib/js/**`, `**/lib/es6/**`, `**/lib/bs/**`
     #     are bsc compilation targets, not source.
-    # (7) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
-    #     parallel to TS class 5.
-    # (8) Telegraf carve-out — `avow-protocol/telegram-bot/avow-telegram-bot/`
-    #     parallel to TS class 3 if a `.res` file appears for the bot.
     %{
       id: :rescript_detected,
       glob: "*.res",
@@ -226,12 +218,7 @@ defmodule Hypatia.Rules.CicdRules do
         # (6) Compiled output
         "/lib/js/",
         "/lib/es6/",
-        "/lib/bs/",
-        # (7) Bootstrap shims
-        "affinescript-deno-test/",
-        "affinescript-cli/",
-        # (8) Telegraf carve-out
-        "avow-protocol/telegram-bot/avow-telegram-bot/"
+        "/lib/bs/"
       ]
     },
     %{
@@ -240,7 +227,7 @@ defmodule Hypatia.Rules.CicdRules do
       reason:
         "ReScript banned -- use AffineScript (org policy 2026-05-25; see #57 migration assistant; in-flight migration tracked under standards#252)",
       path_allow_prefixes: [
-        # Same eight classes as :rescript_detected
+        # Same six classes as :rescript_detected
         "bsconfig.json",
         ".config.res",
         "/panels/",
@@ -254,10 +241,7 @@ defmodule Hypatia.Rules.CicdRules do
         "/vscode/",
         "/lib/js/",
         "/lib/es6/",
-        "/lib/bs/",
-        "affinescript-deno-test/",
-        "affinescript-cli/",
-        "avow-protocol/telegram-bot/avow-telegram-bot/"
+        "/lib/bs/"
       ]
     },
     # Node.js / npm ban (org policy 2026-05-25). Matches `package-lock.json`
@@ -278,8 +262,12 @@ defmodule Hypatia.Rules.CicdRules do
     #      `editors/tree-sitter-ephapax/` etc. Class C consumer artifact:
     #      tree-sitter grammars ship via npm with `node-gyp` native binding
     #      because consumers (Atom/Neovim/VSCode) link the native addon.
-    # (2) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
-    #     parallel to TS class 5.
+    # (2) npm front door — `affinescript-cli/` is the permanent npm
+    #     distribution shim for the AffineScript toolchain (downloads the
+    #     pinned native binary, SHA-256-verifies it, caches, execs).
+    #     Deliberately runtime-agnostic JS; reframed 2026-08-31 from
+    #     "bootstrap shim" when the test harness finished self-hosting
+    #     (`affinescript-deno-test/` dropped — 100% `.affine` now).
     # (3) Upstream forks not estate-authored — `rescript/`, `servers/`,
     #     `repos-monorepo/`, `linguist/`.
     # (4) Archived repos — `hyperpolymath-archive/**`.
@@ -310,8 +298,7 @@ defmodule Hypatia.Rules.CicdRules do
         #      links against the native addon. Class C: npm-publishable
         #      consumer artifact, NOT estate-internal npm toolchain use.
         "tree-sitter-",
-        # (2) Bootstrap shims
-        "affinescript-deno-test/",
+        # (2) npm front door (permanent distribution shim)
         "affinescript-cli/",
         # (3) Upstream forks
         "rescript/",
@@ -369,8 +356,10 @@ defmodule Hypatia.Rules.CicdRules do
     #     `**/plugins/**`.
     # (2) Tooling configs — `*.config.js`, `*.config.cjs`, `*.config.mjs`
     #     are build orchestration.
-    # (3) Bootstrap shims — `affinescript-deno-test/`, `affinescript-cli/`
-    #     parallel to TS class 5.
+    # (3) npm front door — `affinescript-cli/` ships permanent
+    #     runtime-agnostic JS (the npm distribution shim for the native
+    #     binary); reframed 2026-08-31 from "bootstrap shim" when the test
+    #     harness self-hosted (`affinescript-deno-test/` dropped).
     # (4) Upstream forks — `rescript/`, `servers/`, `repos-monorepo/`,
     #     `linguist/` (samples are ML training data).
     # (5) Archived repos — `hyperpolymath-archive/**`.
@@ -392,8 +381,7 @@ defmodule Hypatia.Rules.CicdRules do
         ".config.js",
         ".config.cjs",
         ".config.mjs",
-        # (3) Bootstrap shims
-        "affinescript-deno-test/",
+        # (3) npm front door (permanent distribution shim)
         "affinescript-cli/",
         # (4) Upstream forks
         "rescript/",
@@ -420,14 +408,13 @@ defmodule Hypatia.Rules.CicdRules do
       reason:
         "Unnecessarily-JavaScript (JSX) banned in NEW code -- use AffineScript where bindings exist (org policy 2026-05-25; tracked under standards#254).",
       path_allow_prefixes: [
-        # Same eight classes as :javascript_detected
+        # Same classes as :javascript_detected, minus the npm front door —
+        # no JSX belongs in affinescript-cli/
         "mcp-bridge/",
         "/plugins/",
         ".config.js",
         ".config.cjs",
         ".config.mjs",
-        "affinescript-deno-test/",
-        "affinescript-cli/",
         "rescript/",
         "servers/",
         "repos-monorepo/",
@@ -719,7 +706,8 @@ defmodule Hypatia.Rules.CicdRules do
         "**/.github/workflows/*.yml",
         "**/.github/workflows/*.yaml"
       ],
-      skip_comment_lines: true
+      skip_comment_lines: true,
+      strip_yaml_comments: true
     },
     %{
       id: :download_then_run_shell,
@@ -802,8 +790,8 @@ defmodule Hypatia.Rules.CicdRules do
   Content scanner — activates the regex+applies_to rules in @blocked_patterns
   that were previously dormant.
 
-  Walks `repo_path`, opens any file matching one of a rule's `applies_to`
-  globs, and emits a finding for each regex match. Honors:
+  Scans files beneath `repo_path`, excluding `.git` directories, that match each
+  rule's `applies_to` globs and emits one finding for each matching line. Honours:
 
     * `path_allow_prefixes` — substring match against the relative file
       path (mirrors the glob-pattern behaviour).
@@ -812,59 +800,80 @@ defmodule Hypatia.Rules.CicdRules do
       style entries).
     * `exception_repos` — list of repo names; if any matches the basename
       of `repo_path`, the rule is skipped for this scan.
-    * `negative: true` — fires when the regex does NOT match (used by
-      `:missing_permissions` and `:missing_spdx` which test for the
-      ABSENCE of an expected line).
-    * Inline pragma — a line starting with `# hypatia:ignore <rule_id>`
-      or `<!-- hypatia:ignore <rule_id> -->` (for markdown/HTML)
-      suppresses findings for that rule on the SAME line and the
-      following line. Matches the convention used by other Hypatia
-      scanners (scanner_suppression.ex).
+    * `negative: true` — emits one finding at line 1 when the regex is absent.
+    * `skip_comment_lines: true` — ignores matching lines whose first
+      non-whitespace characters are `#` or `//`.
+    * `strip_yaml_comments: true` — removes unquoted YAML comments before
+      matching while preserving the original line numbers and finding text.
+    * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
+      immediately preceding line suppresses that finding.
 
   Activates these previously-dormant rules: :innerhtml_usage,
   :eval_in_shell, :download_then_run_shell, :hardcoded_tmp,
   :template_placeholder, :deno_all_perms, :v_build_in_ci (#383),
-  :npx_in_workflow (#383), :http_in_docs (#383).
+  :npx_in_workflow (#383), :http_in_docs (#383), and
+  :install_without_frozen_lockfile.
 
   Returns a list of findings:
-    [%{rule: :rule_id, reason: "...", file: "rel/path", line: N, match: "..."}]
+    [%{rule: :rule_id, severity: "medium", reason: "...", file: "rel/path",
+       line: N, match: "..."}]
   """
   def scan_content_patterns(repo_path) do
     repo_name = Path.basename(repo_path)
-
-    # Enumerate all files once, pruning .git during traversal
-    all_files =
-      Path.wildcard("#{repo_path}/**/*", match_dot: true)
-      |> Enum.reject(&File.dir?/1)
-      |> Enum.map(&Path.relative_to(&1, repo_path))
-      |> Enum.reject(&String.starts_with?(&1, ".git/"))
+    files = repository_files(repo_path)
 
     @blocked_patterns
     |> Enum.filter(fn p -> Map.has_key?(p, :pattern) and Map.has_key?(p, :applies_to) end)
-    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name, all_files) end)
+    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name, files) end)
   end
 
-  defp scan_one_content_rule(rule, repo_path, repo_name, all_files) do
+  defp scan_one_content_rule(rule, repo_path, repo_name, files) do
     exception_repos = Map.get(rule, :exception_repos, [])
 
     if repo_name in exception_repos do
       []
     else
       rule
-      |> matching_files(all_files)
+      |> matching_files(files)
       |> Enum.flat_map(fn rel -> scan_one_file(rule, repo_path, rel) end)
     end
   end
 
-  defp matching_files(rule, all_files) do
+  defp repository_files(repo_path), do: walk_repository_files(repo_path, "")
+
+  defp walk_repository_files(path, relative_path) do
+    case File.ls(path) do
+      {:ok, entries} ->
+        entries
+        |> Enum.sort()
+        |> Enum.flat_map(fn entry ->
+          abs = Path.join(path, entry)
+          rel = Path.join(relative_path, entry)
+
+          cond do
+            entry == ".git" ->
+              []
+
+            File.dir?(abs) ->
+              walk_repository_files(abs, rel)
+
+            true ->
+              [rel]
+          end
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp matching_files(rule, files) do
     globs = Map.get(rule, :applies_to, [])
     allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
     exception = Map.get(rule, :exception)
 
-    all_files
-    |> Enum.filter(fn rel ->
-      Enum.any?(globs, fn g -> glob_matches?(g, rel) end)
-    end)
+    files
+    |> Enum.filter(fn rel -> Enum.any?(globs, fn g -> glob_matches?(g, rel) end) end)
     |> Enum.reject(fn rel ->
       Enum.any?(allow_prefixes, &String.contains?(rel, &1)) or
         (is_binary(exception) and String.contains?(rel, exception))
@@ -877,7 +886,8 @@ defmodule Hypatia.Rules.CicdRules do
     case File.read(abs) do
       {:ok, content} ->
         negative? = Map.get(rule, :negative, false)
-        matched? = Regex.match?(rule.pattern, content)
+        matching_content = content_for_matching(rule, content)
+        matched? = Regex.match?(rule.pattern, matching_content)
 
         cond do
           # Negative rules: fire when pattern is ABSENT
@@ -897,7 +907,7 @@ defmodule Hypatia.Rules.CicdRules do
             []
 
           matched? ->
-            line_findings(rule, rel, content)
+            line_findings(rule, rel, content, matching_content)
 
           true ->
             []
@@ -908,14 +918,15 @@ defmodule Hypatia.Rules.CicdRules do
     end
   end
 
-  defp line_findings(rule, rel, content) do
+  defp line_findings(rule, rel, content, matching_content) do
     lines = String.split(content, "\n")
+    matching_lines = String.split(matching_content, "\n")
 
-    lines
+    Enum.zip(lines, matching_lines)
     |> Enum.with_index(1)
-    |> Enum.flat_map(fn {line, n} ->
+    |> Enum.flat_map(fn {{line, matching_line}, n} ->
       cond do
-        not Regex.match?(rule.pattern, line) ->
+        not Regex.match?(rule.pattern, matching_line) ->
           []
 
         # C4: a rule may opt out of matching inside comments. Default false,
@@ -942,6 +953,45 @@ defmodule Hypatia.Rules.CicdRules do
     end)
   end
 
+  defp content_for_matching(rule, content) do
+    if Map.get(rule, :strip_yaml_comments, false) do
+      content
+      |> String.split("\n")
+      |> Enum.map_join("\n", &strip_yaml_comment/1)
+    else
+      content
+    end
+  end
+
+  defp strip_yaml_comment(line) do
+    line
+    |> String.graphemes()
+    |> do_strip_yaml_comment(nil, false, nil, [])
+    |> Enum.reverse()
+    |> Enum.join()
+  end
+
+  defp do_strip_yaml_comment([], _quote, _escaped, _previous, acc), do: acc
+
+  defp do_strip_yaml_comment(["#" | _rest], nil, false, previous, acc)
+       when previous in [nil, " ", "\t"],
+       do: acc
+
+  defp do_strip_yaml_comment([char | rest], quote, escaped, _previous, acc) do
+    {next_quote, next_escaped} =
+      case {quote, escaped, char} do
+        {"\"", true, _} -> {"\"", false}
+        {"\"", false, "\\"} -> {"\"", true}
+        {"\"", false, "\""} -> {nil, false}
+        {"'", false, "'"} -> {nil, false}
+        {nil, false, "\""} -> {"\"", false}
+        {nil, false, "'"} -> {"'", false}
+        _ -> {quote, false}
+      end
+
+    do_strip_yaml_comment(rest, next_quote, next_escaped, char, [char | acc])
+  end
+
   # Inline pragma: this line OR the previous line carries
   # `hypatia:ignore <rule_id>` (in any comment syntax we recognise).
   defp ignored?(rule_id, lines, n) do
@@ -951,14 +1001,13 @@ defmodule Hypatia.Rules.CicdRules do
     String.contains?(here, needle) or String.contains?(prev, needle)
   end
 
-  # C4 helper: is this line ENTIRELY a comment? Deliberately conservative --
-  # it only recognises a leading comment marker, never a trailing one, so
-  # `run: bun install  # TODO` still matches. A trailing-comment stripper
-  # would need per-language string-literal awareness (a `#` inside a quoted
-  # shell string is not a comment), and getting that wrong silently blinds
-  # the rule. Covers `#` (YAML/shell/Elixir) and `//` (JS/Rust/C).
+  # C4 helper: is this line ENTIRELY a comment? Deliberately conservative for
+  # general content rules. YAML rules can opt into the quote-aware trailing
+  # comment handling above. Covers `#` (YAML/shell/Elixir) and `//`
+  # (JS/Rust/C). `--` is a long-option prefix in workflow command lines.
   defp comment_line?(line) do
     t = String.trim_leading(line)
+
     String.starts_with?(t, "#") or String.starts_with?(t, "//")
   end
 

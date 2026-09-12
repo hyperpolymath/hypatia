@@ -2,10 +2,22 @@
 defmodule Hypatia.Paths do
   @moduledoc "Central path resolution for hypatia's local verisim data store."
 
+  @doc """
+  Returns the root path for verisimdb data storage.
+
+  Defaults to `data/verisim/` in the current working directory unless configured
+  via `:verisimdb_data_path` application environment variable.
+  """
   def verisimdb_data do
     Application.get_env(:hypatia, :verisimdb_data_path, Path.expand("data/verisim", File.cwd!()))
   end
 
+  @doc """
+  Returns the path to the gitbot-fleet directory.
+
+  Defaults to `~/Documents/hyperpolymath-repos/gitbot-fleet` unless configured
+  via `:fleet_path` application environment variable.
+  """
   def fleet do
     Application.get_env(
       :hypatia,
@@ -14,11 +26,22 @@ defmodule Hypatia.Paths do
     )
   end
 
+  @doc "Returns the patterns subdirectory within verisimdb data."
   def patterns, do: Path.join(verisimdb_data(), "patterns")
+
+  @doc "Returns the recipes subdirectory within verisimdb data."
   def recipes, do: Path.join(verisimdb_data(), "recipes")
+
+  @doc "Returns the outcomes subdirectory within verisimdb data."
   def outcomes, do: Path.join(verisimdb_data(), "outcomes")
+
+  @doc "Returns the scans subdirectory within verisimdb data."
   def scans, do: Path.join(verisimdb_data(), "scans")
+
+  @doc "Returns the dispatch subdirectory within verisimdb data."
   def dispatch, do: Path.join(verisimdb_data(), "dispatch")
+
+  @doc "Returns the neural-states subdirectory within verisimdb data."
   def neural_states, do: Path.join(verisimdb_data(), "neural-states")
 
   @machine_tree_canonical "machine-readable"
