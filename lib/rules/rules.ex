@@ -28,7 +28,7 @@ defmodule Hypatia.Rules do
   alias Hypatia.Rules.WorkflowHardening
   alias Hypatia.Rules.SupplyChain
   alias Hypatia.Rules.BranchProtection
-  # alias Hypatia.Rules.ResearchExtensions  # wired in follow-up after PR #325 merges
+  alias Hypatia.Rules.ResearchExtensions
 
   @doc """
   Run a comprehensive scan on a file's content given its path and language.
@@ -694,9 +694,16 @@ defmodule Hypatia.Rules do
   """
   defdelegate scan_branch_protection(owner, repo), to: BranchProtection, as: :scan
 
-  # ResearchExtensions (RE001-RE010) delegate added in follow-up once
-  # PR #325 lands on main. The facade for the other four families is
-  # below.
+  @doc """
+  Run research-extension checks (RE001-RE010) drawn from Snyk,
+  StepSecurity, Endor Labs and the academic supply-chain literature:
+  absent/audit-only harden-runner, cache-key poisoning via head_ref,
+  tag-pinned containers, exit-swallowing test steps, unpinned nested
+  composite uses, workflow-level secret env, spoofable bot gates,
+  fromJSON(secrets), and provenance-free workflow_run artifacts.
+  Pure local file scan - no GitHub API.
+  """
+  defdelegate scan_research_extensions(repo_path, opts \\ []), to: ResearchExtensions, as: :scan
 
   @doc """
   Run every estate-policy rule available against a repository in one
@@ -718,7 +725,8 @@ defmodule Hypatia.Rules do
     parts = [
       BaselineHealth.scan(repo_path, opts),
       WorkflowHardening.scan(repo_path, opts),
-      SupplyChain.scan(repo_path, opts)
+      SupplyChain.scan(repo_path, opts),
+      ResearchExtensions.scan(repo_path, opts)
     ]
 
     parts =
