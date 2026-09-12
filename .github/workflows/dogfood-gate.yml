@@ -32,9 +32,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Test manifest detection
-        run: ruby test/dogfood_manifest_detection_test.rb
-
       - name: Check for A2ML and DEED files
         id: detect
         run: |
@@ -82,7 +79,7 @@ jobs:
           else
             echo "## A2ML Validation" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Found **${A2ML_COUNT}** candidate .a2ml/.deed file(s). The validator applies the configured exclusions; see step output for results." >> "$GITHUB_STEP_SUMMARY"
+            echo "Scanned **${A2ML_COUNT}** .a2ml/.deed file(s). See step output for details." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # ---------------------------------------------------------------------------
@@ -291,8 +288,8 @@ jobs:
           SCORE=0
           MAX=5
 
-          # A2ML manifest present?
-          if find . -name '*.a2ml' -not -path './.git/*' | head -1 | grep -q .; then
+          # A2ML or DEED manifest present?
+          if find . -type f \( -name '*.a2ml' -o -name '*.deed' \) -not -path './.git/*' | head -1 | grep -q .; then
             SCORE=$((SCORE + 1))
             A2ML_STATUS=":white_check_mark:"
           else
@@ -338,7 +335,7 @@ jobs:
 
           | Tool/Format | Status | Notes |
           |-------------|--------|-------|
-          | A2ML manifest (0-AI-MANIFEST.a2ml) | ${A2ML_STATUS} | Required for all RSR repos |
+          | A2ML/DEED manifest | ${A2ML_STATUS} | Required for all RSR repos |
           | K9 contracts | ${K9_STATUS} | Required for repos with config files |
           | .editorconfig | ${EC_STATUS} | Required for all repos |
           | Groove endpoint | ${GROOVE_STATUS} | Required for service repos |

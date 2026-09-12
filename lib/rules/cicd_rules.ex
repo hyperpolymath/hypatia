@@ -848,11 +848,14 @@ defmodule Hypatia.Rules.CicdRules do
             entry == ".git" ->
               []
 
-            File.dir?(abs) ->
-              walk_repository_files(abs, rel)
-
-            true ->
-              [rel]
+            case File.lstat(abs) do
+              {:ok, %{type: :directory}} ->
+                walk_repository_files(abs, rel)
+              {:ok, %{type: :symbolic_link}} ->
+                []
+              _ ->
+                [rel]
+            end
           end
         end)
 
@@ -1056,7 +1059,13 @@ defmodule Hypatia.Rules.CicdRules do
   """
   def scan_duplicate_cron_schedules(repo_path) do
     Path.wildcard("#{repo_path}/**/*", match_dot: true)
-    |> Enum.reject(&File.dir?/1)
+    |> Enum.reject(fn path ->
+      case File.lstat(path) do
+        {:ok, %{type: :directory}} -> true
+        {:ok, %{type: :symbolic_link}} -> true
+        _ -> false
+      end
+    end)
     |> Enum.map(&Path.relative_to(&1, repo_path))
     |> Enum.filter(&workflow_file?/1)
     |> Enum.flat_map(fn rel ->
