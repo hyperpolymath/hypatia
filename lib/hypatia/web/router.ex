@@ -97,7 +97,13 @@ defmodule Hypatia.Web.Router do
   the bearer-auth gate when HYPATIA_API_BEARER_TOKEN is configured.
   """
   post "/graphql" do
-    Hypatia.Web.GraphQL.call(conn, [])
+    conn = Hypatia.Web.ApiRouter.protect(conn, [])
+
+    if conn.halted do
+      conn
+    else
+      Hypatia.Web.GraphQL.call(conn, [])
+    end
   end
 
   match _ do

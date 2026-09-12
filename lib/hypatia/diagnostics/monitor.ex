@@ -152,6 +152,8 @@ defmodule Hypatia.Diagnostics.Monitor do
     end
   end
 
+  # Probe the neural coordinator without treating a long-running training
+  # cycle as a crash. Other exits and exceptions report a failed health check.
   defp check_neural() do
     try do
       case GenServer.call(Hypatia.Neural.Coordinator, :status, 1000) do

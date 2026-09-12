@@ -24,7 +24,7 @@ if [[ -n "$blocking_results_file" ]]; then
 fi
 scan_error=0
 enumeration_file="$(mktemp /tmp/rsr-invisible-files.XXXXXX)" || exit 2
-# cleanup removes the temporary file list when the scanner exits.
+# Remove the temporary NUL-delimited file enumeration when the scanner exits.
 # shellcheck disable=SC2329
 cleanup() {
   rm -f -- "$enumeration_file"
