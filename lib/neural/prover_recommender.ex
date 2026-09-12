@@ -120,6 +120,8 @@ defmodule Hypatia.Neural.ProverRecommender do
 
   # --- verisim-api bridge ---------------------------------------------------
 
+  # Fetch recent proof attempts from the row-level VeriSim API, falling back
+  # to aggregate strategy data when that endpoint is unavailable.
   defp fetch_attempts(limit, base_url) do
     resolved_url = base_url || @verisim_base_url
     url = "#{resolved_url}/api/v1/proof_attempts?limit=#{limit}"
@@ -131,6 +133,8 @@ defmodule Hypatia.Neural.ProverRecommender do
     end
   end
 
+  # Convert aggregate ClickHouse-backed strategy recommendations into the
+  # synthetic attempt rows expected by the recommender's training pipeline.
   defp fetch_attempts_via_clickhouse(limit, base_url) do
     resolved_url = base_url || @verisim_base_url
     # ClickHouse HTTP: reach it by probing each active class's strategy endpoint
