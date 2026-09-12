@@ -790,8 +790,8 @@ defmodule Hypatia.Rules.CicdRules do
   Content scanner — activates the regex+applies_to rules in @blocked_patterns
   that were previously dormant.
 
-  Walks `repo_path`, opens any file matching one of a rule's `applies_to`
-  globs, and emits a finding for each regex match. Honors:
+  Scans files beneath `repo_path`, excluding `.git` directories, that match each
+  rule's `applies_to` globs and emits one finding for each matching line. Honours:
 
     * `path_allow_prefixes` — substring match against the relative file
       path (mirrors the glob-pattern behaviour).
@@ -800,55 +800,80 @@ defmodule Hypatia.Rules.CicdRules do
       style entries).
     * `exception_repos` — list of repo names; if any matches the basename
       of `repo_path`, the rule is skipped for this scan.
-    * `negative: true` — fires when the regex does NOT match (used by
-      `:missing_permissions` and `:missing_spdx` which test for the
-      ABSENCE of an expected line).
-    * Inline pragma — a line starting with `# hypatia:ignore <rule_id>`
-      or `<!-- hypatia:ignore <rule_id> -->` (for markdown/HTML)
-      suppresses findings for that rule on the SAME line and the
-      following line. Matches the convention used by other Hypatia
-      scanners (scanner_suppression.ex).
+    * `negative: true` — emits one finding at line 1 when the regex is absent.
+    * `skip_comment_lines: true` — ignores matching lines whose first
+      non-whitespace characters are `#` or `//`.
+    * `strip_yaml_comments: true` — removes unquoted YAML comments before
+      matching while preserving the original line numbers and finding text.
+    * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
+      immediately preceding line suppresses that finding.
 
   Activates these previously-dormant rules: :innerhtml_usage,
   :eval_in_shell, :download_then_run_shell, :hardcoded_tmp,
   :template_placeholder, :deno_all_perms, :v_build_in_ci (#383),
-  :npx_in_workflow (#383), :http_in_docs (#383).
+  :npx_in_workflow (#383), :http_in_docs (#383), and
+  :install_without_frozen_lockfile.
 
   Returns a list of findings:
-    [%{rule: :rule_id, reason: "...", file: "rel/path", line: N, match: "..."}]
+    [%{rule: :rule_id, severity: "medium", reason: "...", file: "rel/path",
+       line: N, match: "..."}]
   """
   def scan_content_patterns(repo_path) do
     repo_name = Path.basename(repo_path)
+    files = repository_files(repo_path)
 
     @blocked_patterns
     |> Enum.filter(fn p -> Map.has_key?(p, :pattern) and Map.has_key?(p, :applies_to) end)
-    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name) end)
+    |> Enum.flat_map(fn rule -> scan_one_content_rule(rule, repo_path, repo_name, files) end)
   end
 
-  defp scan_one_content_rule(rule, repo_path, repo_name) do
+  defp scan_one_content_rule(rule, repo_path, repo_name, files) do
     exception_repos = Map.get(rule, :exception_repos, [])
 
     if repo_name in exception_repos do
       []
     else
       rule
-      |> matching_files(repo_path)
+      |> matching_files(files)
       |> Enum.flat_map(fn rel -> scan_one_file(rule, repo_path, rel) end)
     end
   end
 
-  defp matching_files(rule, repo_path) do
+  defp repository_files(repo_path), do: walk_repository_files(repo_path, "")
+
+  defp walk_repository_files(path, relative_path) do
+    case File.ls(path) do
+      {:ok, entries} ->
+        entries
+        |> Enum.sort()
+        |> Enum.flat_map(fn entry ->
+          abs = Path.join(path, entry)
+          rel = Path.join(relative_path, entry)
+
+          cond do
+            entry == ".git" ->
+              []
+
+            File.dir?(abs) ->
+              walk_repository_files(abs, rel)
+
+            true ->
+              [rel]
+          end
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp matching_files(rule, files) do
     globs = Map.get(rule, :applies_to, [])
     allow_prefixes = Map.get(rule, :path_allow_prefixes, [])
     exception = Map.get(rule, :exception)
 
-    Path.wildcard("#{repo_path}/**/*", match_dot: true)
-    |> Enum.reject(&File.dir?/1)
-    |> Enum.map(&Path.relative_to(&1, repo_path))
-    |> Enum.filter(fn rel ->
-      not String.starts_with?(rel, ".git/") and
-        Enum.any?(globs, fn g -> glob_matches?(g, rel) end)
-    end)
+    files
+    |> Enum.filter(fn rel -> Enum.any?(globs, fn g -> glob_matches?(g, rel) end) end)
     |> Enum.reject(fn rel ->
       Enum.any?(allow_prefixes, &String.contains?(rel, &1)) or
         (is_binary(exception) and String.contains?(rel, exception))
@@ -978,13 +1003,12 @@ defmodule Hypatia.Rules.CicdRules do
 
   # C4 helper: is this line ENTIRELY a comment? Deliberately conservative for
   # general content rules. YAML rules can opt into the quote-aware trailing
-  # comment handling above. Covers `#` (YAML/shell/Elixir), `//` (JS/Rust/C)
-  # and `--` (SQL/Ada/Haskell/Lua).
+  # comment handling above. Covers `#` (YAML/shell/Elixir) and `//`
+  # (JS/Rust/C). `--` is a long-option prefix in workflow command lines.
   defp comment_line?(line) do
     t = String.trim_leading(line)
 
-    String.starts_with?(t, "#") or String.starts_with?(t, "//") or
-      String.starts_with?(t, "--")
+    String.starts_with?(t, "#") or String.starts_with?(t, "//")
   end
 
   defp glob_matches?(glob, path) do
