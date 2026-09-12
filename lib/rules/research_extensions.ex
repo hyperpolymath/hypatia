@@ -159,12 +159,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   @doc """
   RE001: Reports each locally executed workflow job that references
-  `${{ secrets.* }}` without a `step-security/harden-runner@...` step in the
-  same job. Full-line comments and reusable-workflow jobs without a direct
-  `runs-on` field are ignored.
+  `${{ secrets.* }}` without installing `step-security/harden-runner`
+  in that job. Fully commented lines and reusable-only jobs are ignored.
 
-  Each finding points to the first matching secret reference in the job.
-  Provenance: StepSecurity Harden-Runner deployment guide.
+  Each warning points to the first active secret reference in the affected
+  job. Provenance: StepSecurity Harden-Runner deployment guide.
 
   Severity: `:warn`. Action: `:report`.
   """
@@ -186,6 +185,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
       active_lines
       |> workflow_job_lines()
       |> Enum.flat_map(fn job_lines ->
+        active_content = Enum.map_join(job_lines, "\n", &elem(&1, 0))
+
         secret_line =
           Enum.find(job_lines, fn {line, _} ->
             Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, line)
@@ -193,8 +194,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
         # Reusable jobs delegate their runtime to the source workflow. A sibling's
         # runner or hardener cannot establish this job's execution policy.
-        local_runner? = direct_job_field?(job_lines, "runs-on")
-        installs_harden? = harden_runner_step?(job_lines)
+        local_runner? = Regex.match?(~r/^\s+runs-on:/m, active_content)
+
+        installs_harden? =
+          Regex.match?(~r/^\s+(?:-\s+)?uses:\s*step-security\/harden-runner@/m, active_content)
 
         if not is_nil(secret_line) and local_runner? and not installs_harden? do
           {_source, line} = secret_line
@@ -222,103 +225,6 @@ defmodule Hypatia.Rules.ResearchExtensions do
       end)
     end)
   end
-
-  defp direct_job_field?(job_lines, field) do
-    case job_field_indent(job_lines) do
-      nil ->
-        false
-
-      field_indent ->
-        Enum.any?(job_lines, fn {line, _} ->
-          indent_of(line) == field_indent and
-            String.starts_with?(String.trim_leading(line), "#{field}:")
-        end)
-    end
-  end
-
-  defp harden_runner_step?(job_lines) do
-    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
-         step_lines when step_lines != [] <- lines_in_steps(job_lines, field_indent),
-         step_indent when is_integer(step_indent) <- step_indent(step_lines, field_indent) do
-      case Enum.reduce_while(step_lines, {false, nil, nil}, fn {line, _},
-                                                               {in_step, property_indent,
-                                                                scalar_indent} ->
-             indent = indent_of(line)
-
-             cond do
-               scalar_indent && indent > scalar_indent ->
-                 {:cont, {in_step, property_indent, scalar_indent}}
-
-               indent == step_indent and Regex.match?(~r/^\s*-\s+/, line) ->
-                 if harden_runner_uses?(line) do
-                   {:halt, true}
-                 else
-                   {:cont, {true, nil, block_scalar?(line) && indent}}
-                 end
-
-               in_step and indent > step_indent ->
-                 direct_property? = is_nil(property_indent) or indent == property_indent
-                 property_indent = property_indent || indent
-
-                 if direct_property? and harden_runner_uses?(line) do
-                   {:halt, true}
-                 else
-                   {:cont, {in_step, property_indent, block_scalar?(line) && indent}}
-                 end
-
-               true ->
-                 {:cont, {in_step, property_indent, nil}}
-             end
-           end) do
-        true -> true
-        _ -> false
-      end
-    else
-      _ -> false
-    end
-  end
-
-  defp job_field_indent([_header | job_lines]) do
-    job_lines
-    |> Enum.map(&elem(&1, 0))
-    |> Enum.reject(&(String.trim(&1) == ""))
-    |> Enum.map(&indent_of/1)
-    |> Enum.min(fn -> nil end)
-  end
-
-  defp job_field_indent([]), do: nil
-
-  defp lines_in_steps(job_lines, field_indent) do
-    case Enum.find_index(job_lines, fn {line, _} ->
-           indent_of(line) == field_indent and
-             String.starts_with?(String.trim_leading(line), "steps:")
-         end) do
-      nil ->
-        []
-
-      index ->
-        job_lines
-        |> Enum.drop(index + 1)
-        |> Enum.take_while(fn {line, _} ->
-          String.trim(line) == "" or indent_of(line) > field_indent
-        end)
-    end
-  end
-
-  defp step_indent(step_lines, field_indent) do
-    step_lines
-    |> Enum.filter(fn {line, _} ->
-      indent_of(line) > field_indent and Regex.match?(~r/^\s*-\s+/, line)
-    end)
-    |> Enum.map(fn {line, _} -> indent_of(line) end)
-    |> Enum.min(fn -> nil end)
-  end
-
-  defp harden_runner_uses?(line) do
-    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?step-security\/harden-runner@/, line)
-  end
-
-  defp block_scalar?(line), do: Regex.match?(~r/:\s*[>|][0-9+-]*\s*(?:#.*)?$/, line)
 
   # Follow block-style jobs by indentation, retaining physical source lines.
   # As with the other research rules, this is a local static text analysis.
