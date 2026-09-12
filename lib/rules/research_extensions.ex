@@ -158,9 +158,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # ─── RE001: Harden-Runner absent on secrets-touching workflow ─────────
 
   @doc """
-  RE001: Workflow references `${{ secrets.* }}` but does not install
-  `step-security/harden-runner`. Provenance: StepSecurity Harden-Runner
-  deployment guide.
+  RE001: Reports each locally executed workflow job that references
+  `${{ secrets.* }}` without installing `step-security/harden-runner`
+  in that job. Fully commented lines and reusable-only jobs are ignored.
+
+  Each warning points to the first active secret reference in the affected
+  job. Provenance: StepSecurity Harden-Runner deployment guide.
 
   Severity: `:warn`. Action: `:report`.
   """
@@ -171,35 +174,92 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      touches_secrets? = Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, content)
+      # Comments are not runner configuration. Preserve physical line numbers
+      # so existing findings are not reported against a newly added line-1 header.
+      active_lines =
+        content
+        |> String.split("\n")
+        |> Enum.with_index(1)
+        |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
 
-      installs_harden? = Regex.match?(~r/uses:\s*step-security\/harden-runner/, content)
+      active_lines
+      |> workflow_job_lines()
+      |> Enum.flat_map(fn job_lines ->
+        active_content = Enum.map_join(job_lines, "\n", &elem(&1, 0))
 
-      if touches_secrets? and not installs_harden? do
-        [
-          %{
-            rule: "RE001",
-            file: rel,
-            severity: :warn,
-            reason:
-              "workflow #{rel} references `secrets.*` but does not install " <>
-                "`step-security/harden-runner` — no outbound-egress telemetry",
-            action: :report,
-            detail: %{
-              fix:
-                "Add as the first step of each job:\n" <>
-                  "  - uses: step-security/harden-runner@<SHA>\n" <>
-                  "    with:\n" <>
-                  "      egress-policy: block\n" <>
-                  "      allowed-endpoints: >\n" <>
-                  "        github.com:443"
+        secret_line =
+          Enum.find(job_lines, fn {line, _} ->
+            Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, line)
+          end)
+
+        # Reusable jobs delegate their runtime to the source workflow. A sibling's
+        # runner or hardener cannot establish this job's execution policy.
+        local_runner? = Regex.match?(~r/^\s+runs-on:/m, active_content)
+
+        installs_harden? =
+          Regex.match?(~r/^\s+(?:-\s+)?uses:\s*step-security\/harden-runner@/m, active_content)
+
+        if not is_nil(secret_line) and local_runner? and not installs_harden? do
+          {_source, line} = secret_line
+
+          [
+            %{
+              rule: "RE001",
+              file: rel,
+              severity: :warn,
+              line: line,
+              reason:
+                "job in #{rel} references `secrets.*` but does not install " <>
+                  "`step-security/harden-runner` — review outbound-egress monitoring",
+              action: :report,
+              detail: %{
+                fix:
+                  "Add harden-runner as the first step of this job, with egress-policy: block " <>
+                    "and an allowlist derived from the job's actual required endpoints."
+              }
             }
-          }
-        ]
-      else
-        []
-      end
+          ]
+        else
+          []
+        end
+      end)
     end)
+  end
+
+  # Follow block-style jobs by indentation, retaining physical source lines.
+  # As with the other research rules, this is a local static text analysis.
+  defp workflow_job_lines(lines) do
+    {_in_jobs, _indent, groups} =
+      Enum.reduce(lines, {false, nil, []}, fn {line, _} = entry, {in_jobs, indent, groups} ->
+        cond do
+          Regex.match?(~r/^jobs:\s*(?:#.*)?$/, line) ->
+            {true, nil, groups}
+
+          not in_jobs ->
+            {false, indent, groups}
+
+          Regex.match?(~r/^\S/, line) ->
+            {false, nil, groups}
+
+          true ->
+            header = Regex.run(~r/^(\s+)(?:[A-Za-z0-9_-]+|"[^"]+"|'[^']+'):/, line)
+            width = if header, do: String.length(Enum.at(header, 1)), else: nil
+
+            cond do
+              width && (is_nil(indent) || width == indent) ->
+                {true, width, [[entry] | groups]}
+
+              groups != [] ->
+                [current | rest] = groups
+                {true, indent, [[entry | current] | rest]}
+
+              true ->
+                {true, indent, groups}
+            end
+        end
+      end)
+
+    groups |> Enum.reverse() |> Enum.map(&Enum.reverse/1)
   end
 
   # ─── RE002: Harden-Runner in audit-only mode ─────────────────────────

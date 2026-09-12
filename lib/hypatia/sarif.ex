@@ -146,6 +146,7 @@ defmodule Hypatia.SARIF do
   defp level_for("critical"), do: "error"
   defp level_for("high"), do: "error"
   defp level_for("medium"), do: "warning"
+  defp level_for("warn"), do: "warning"
   defp level_for(_), do: "note"
 
   defp rel_uri("", _root), do: "."

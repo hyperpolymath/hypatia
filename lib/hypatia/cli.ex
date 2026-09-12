@@ -24,10 +24,11 @@ defmodule Hypatia.CLI do
 
       --rules <list>    Comma-separated rule modules to run (default: all)
                         Available: root_hygiene,honest_completion,workflow_audit,
-                                   cicd_rules,code_safety,migration_rules,scorecard,
+                                   cicd_rules,research_extensions,
+                                   code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
                                    secret_scanning_alerts,code_scanning_alerts,
-                                   structural_drift,implementation_inside_canon
+                                   structural_drift,implementation_inside_canon,content_patterns
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
@@ -45,6 +46,7 @@ defmodule Hypatia.CLI do
     :honest_completion,
     :workflow_audit,
     :cicd_rules,
+    :research_extensions,
     :code_safety,
     :migration_rules,
     :scorecard,
@@ -54,13 +56,19 @@ defmodule Hypatia.CLI do
     :secret_scanning_alerts,
     :code_scanning_alerts,
     :structural_drift,
-    :implementation_inside_canon
+    :implementation_inside_canon,
+    :content_patterns
   ]
 
   @severity_order %{
     "critical" => 1,
     "high" => 2,
     "medium" => 3,
+    # `:warn` is emitted by research_extensions (6 rules) and workflow_audit.
+    # Absent from this map it fell to the `Map.get/3` default of 5, so the
+    # `rank <= threshold` filter below dropped every warn finding at the
+    # default `--severity medium`. Ranked with medium: warn IS medium-tier.
+    "warn" => 3,
     "low" => 4,
     "info" => 5
   }
@@ -266,7 +274,7 @@ defmodule Hypatia.CLI do
     total = length(filtered)
 
     breakdown =
-      ["critical", "high", "medium", "low", "info"]
+      ["critical", "high", "medium", "warn", "low", "info"]
       |> Enum.map(fn sev -> "#{sev}=#{Map.get(counts, sev, 0)}" end)
       |> Enum.join(", ")
 
@@ -299,14 +307,27 @@ defmodule Hypatia.CLI do
   # ─── Finding collection across rule modules ──────────────────────────
 
   @doc """
-  Run the named rule modules against `repo_path` and return normalized findings
-  (`%{rule_module, type, severity, file, reason, action}`). Public so the RSR
-  conformance oracle can delegate content-scan criteria to the live scanners
-  rather than reimplement per-file detection. `rules` is a list of module atoms
-  (e.g. `[:cicd_rules, :structural_drift]`); GitHub-API modules
-  (`:dependabot_alerts`, `:secret_scanning_alerts`, `:code_scanning_alerts`,
-  `:scorecard`) require network + token and return nothing offline.
+Runs the selected rule modules against `repo_path` and returns normalized
+finding maps. Each map includes `rule_module`, `type`, `severity`, `file`,
+`reason`, and `action`; line-aware findings may also include `line`.
+Findings covered by configured suppressions are excluded.
+
+## Parameters
+
+  - repo_path: Path to the repository to scan.
+  - rules: Rule module identifiers to run.
+
+## Returns
+
+A list of normalized finding maps.
+
+  `rules` is a list of module atoms (for example, `[:content_patterns,
+  :structural_drift]`). GitHub alert modules (`:dependabot_alerts`,
+  `:secret_scanning_alerts`, and `:code_scanning_alerts`) require network access
+  and credentials; when unavailable, they write a warning to standard error and
+  contribute no findings.
   """
+  @spec collect_findings(String.t(), [atom()]) :: [map()]
   def collect_findings(repo_path, rules) do
     results = []
 
@@ -314,7 +335,7 @@ defmodule Hypatia.CLI do
     results =
       if :root_hygiene in rules do
         root_files = list_root_files(repo_path)
-        %{findings: findings} = Hypatia.Rules.RootHygiene.scan(root_files)
+        %{findings: findings} = Hypatia.Rules.RootHygiene.scan(root_files, repo_path)
 
         normalized =
           Enum.map(findings, fn f ->
@@ -526,6 +547,36 @@ defmodule Hypatia.CLI do
           end)
 
         results ++ normalized ++ banned_findings
+      else
+        results
+      end
+
+    # Research Extensions (RE001-RE010) - Snyk/StepSecurity/Endor/academic
+    results =
+      if :research_extensions in rules do
+        case Hypatia.Rules.ResearchExtensions.scan(repo_path) do
+          %{findings: findings} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "research_extensions",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, "."),
+                  # RE004 carries its line under `:detail`; the rest carry
+                  # none. Both shapes degrade to nil, which SARIF renders
+                  # as startLine 1 exactly as before.
+                  line: get_in(f, [:detail, :line]) || Map.get(f, :line),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          _ ->
+            results
+        end
       else
         results
       end
@@ -791,6 +842,7 @@ defmodule Hypatia.CLI do
                   reason: f.reason,
                   action: to_string(f.action)
                 }
+                |> Map.merge(Map.take(f, [:line, :category, :recipe_id, :fix_script, :target]))
               end)
 
             results ++ normalized
@@ -814,6 +866,43 @@ defmodule Hypatia.CLI do
             IO.puts(:stderr, "Warning: HYP-S009 unavailable: #{inspect(reason)}")
             results
         end
+      else
+        results
+      end
+
+    # ─── Content-pattern rules ───────────────────────────────────────────
+    #
+    # `CicdRules.scan_content_patterns/1` is a glob+regex, per-line content
+    # engine over the `@blocked_patterns` table. It shipped complete but
+    # unwired: until now nothing in `lib/` called it, so every table entry
+    # carrying `:pattern` + `:applies_to` was dormant and only its unit test
+    # ever exercised it. Wiring it here makes rule authoring a matter of
+    # adding a table row rather than writing a module.
+    #
+    # This is the only branch that emits a real `:line`. Everything else
+    # normalizes without one, which is why SARIF's `startLine` was uniformly
+    # 1 before this landed. Suppression is NOT applied here -- the uniform
+    # pass below funnels every finding through ScannerSuppression exactly
+    # once, and doing it twice would be both redundant and a second place
+    # for exemptions to silently diverge.
+    results =
+      if :content_patterns in rules do
+        normalized =
+          repo_path
+          |> Hypatia.Rules.CicdRules.scan_content_patterns()
+          |> Enum.map(fn f ->
+            %{
+              rule_module: "content_patterns",
+              severity: to_string(Map.get(f, :severity, "medium")),
+              type: to_string(f.rule),
+              file: f.file,
+              line: f.line,
+              reason: f.reason,
+              action: "flag"
+            }
+          end)
+
+        results ++ normalized
       else
         results
       end
@@ -1064,6 +1153,7 @@ defmodule Hypatia.CLI do
           "critical" -> "error"
           "high" -> "error"
           "medium" -> "warning"
+          "warn" -> "warning"
           _ -> "notice"
         end
 
@@ -1297,11 +1387,11 @@ defmodule Hypatia.CLI do
     OPTIONS:
         --rules, -r <list>      Comma-separated rule modules (default: all)
                                 Available: root_hygiene,honest_completion,
-                                workflow_audit,cicd_rules,code_safety,
-                                migration_rules,scorecard,green_web,
+                                workflow_audit,cicd_rules,research_extensions,
+                                code_safety,migration_rules,scorecard,green_web,
                                 git_state,dependabot_alerts,
                                 secret_scanning_alerts,code_scanning_alerts,
-                                structural_drift,implementation_inside_canon
+                                structural_drift,implementation_inside_canon,content_patterns
         --format, -f <fmt>      Output format: json (default), text, github, sarif
         --severity, -s <lvl>    Minimum severity: critical, high, medium (default), low
         --path, -p <dir>        Path to scan (alternative to positional arg)

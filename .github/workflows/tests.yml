@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Consolidated workflow (behaviour-preserving merge).
@@ -530,7 +531,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.86.7
+        uses: taiki-e/install-action@v2.87.9
         with:
           tool: cargo-llvm-cov
 

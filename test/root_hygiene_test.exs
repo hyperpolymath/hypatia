@@ -60,10 +60,97 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert hd(findings).severity == :high
     end
 
-    test "flags GEMINI.md in root" do
+    test "flags GEMINI.md without repository context" do
       findings = RootHygiene.scan_stale(["GEMINI.md"])
       assert length(findings) == 1
       assert hd(findings).action == :delete
+    end
+
+    test "accepts GEMINI.md that points to a maintained AGENTS.md" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "AGENTS.md"), "# Repository instructions\n")
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [AGENTS.md](./AGENTS.md).\n")
+
+      result = RootHygiene.scan(["GEMINI.md", "AGENTS.md"], repo_path)
+      refute Enum.any?(result.findings, &(&1.file == "GEMINI.md" and &1.type == :stale))
+    end
+
+    test "accepts GEMINI.md that points to CLAUDE.md until AGENTS.md exists" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "CLAUDE.md"), "# Repository instructions\n")
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [CLAUDE.md](./CLAUDE.md).\n")
+
+      assert RootHygiene.scan_stale(["GEMINI.md"], repo_path) == []
+    end
+
+    test "flags a CLAUDE.md pointer after AGENTS.md exists" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "AGENTS.md"), "# Canonical instructions\n")
+      File.write!(Path.join(repo_path, "CLAUDE.md"), "# Legacy instructions\n")
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [CLAUDE.md](./CLAUDE.md).\n")
+
+      assert [finding] = RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+      assert finding.action == :delete
+    end
+
+    test "accepts arbitrary labels and optional Markdown titles for permitted targets" do
+      for target <- ["AGENTS.md", "CLAUDE.md"],
+          title <- ["", " \"instructions\"", " 'instructions'", " (instructions)"] do
+        repo_path = temporary_repo()
+        File.write!(Path.join(repo_path, target), "# Repository instructions\n")
+
+        File.write!(
+          Path.join(repo_path, "GEMINI.md"),
+          "Read [Repository instructions](./#{target}#{title}).\n"
+        )
+
+        assert RootHygiene.scan_stale(["GEMINI.md"], repo_path) == []
+      end
+    end
+
+    test "rejects circular destinations even with arbitrary labels and titles" do
+      for title <- ["", " \"return\"", " 'return'", " (return)"] do
+        repo_path = temporary_repo()
+        File.write!(Path.join(repo_path, "AGENTS.md"), "Read [Return](./GEMINI.md#{title}).\n")
+        File.write!(Path.join(repo_path, "GEMINI.md"), "Read [Instructions](./AGENTS.md).\n")
+
+        assert [%{file: "GEMINI.md", type: :stale}] =
+                 RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+      end
+    end
+
+    test "does not trust the label of a link to a different destination" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "AGENTS.md"), "# Repository instructions\n")
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [AGENTS.md](./other/AGENTS.md).\n")
+
+      assert [%{file: "GEMINI.md", type: :stale}] =
+               RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+    end
+
+    test "flags a GEMINI.md pointer with a missing target" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [AGENTS.md](./AGENTS.md).\n")
+
+      assert [finding] = RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+      assert finding.action == :delete
+    end
+
+    test "flags a GEMINI.md pointer when its target points back to GEMINI.md" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "AGENTS.md"), "Read [GEMINI.md](./GEMINI.md).\n")
+      File.write!(Path.join(repo_path, "GEMINI.md"), "Read [AGENTS.md](./AGENTS.md).\n")
+
+      assert [finding] = RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+      assert finding.action == :delete
+    end
+
+    test "flags a stale GEMINI.md session file" do
+      repo_path = temporary_repo()
+      File.write!(Path.join(repo_path, "GEMINI.md"), "# Session notes\nfinished task\n")
+
+      assert [finding] = RootHygiene.scan_stale(["GEMINI.md"], repo_path)
+      assert finding.action == :delete
     end
 
     test "flags CLAUDE-WORK files in root" do
@@ -129,5 +216,14 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert Enum.find(recs, &(&1.file == "Dockerfile")).bot == :rhodibot
       assert Enum.find(recs, &(&1.file == "STATE.scm")).bot == :finishbot
     end
+  end
+
+  defp temporary_repo do
+    path =
+      Path.join(System.tmp_dir!(), "hypatia-root-hygiene-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(path)
+    on_exit(fn -> File.rm_rf(path) end)
+    path
   end
 end

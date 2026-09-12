@@ -43,6 +43,40 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert length(findings) == 1
       assert hd(findings).rule == "RE001"
       assert hd(findings).severity == :warn
+      assert hd(findings).line == 7
+      File.rm_rf!(repo)
+    end
+
+    test "reusable-only callers delegate runner hardening to the workflow source" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          mirror:
+            uses: owner/standards/.github/workflows/mirror.yml@main
+            secrets:
+              MIRROR_KEY: ${{ secrets.MIRROR_KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "commented hardening does not hide a real secret reference or move its location" do
+      repo =
+        create_repo_with_workflow("""
+        # A managed header added by the action-lock tool
+        # uses: step-security/harden-runner@main
+        # Example: ${{ secrets.EXAMPLE }}
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 8
+      assert finding.severity == :warn
       File.rm_rf!(repo)
     end
 
@@ -60,6 +94,86 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
         """)
 
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "passes when harden-runner uses values are quoted" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          double-quoted:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: "step-security/harden-runner@main"
+              - run: deploy --token=${{ secrets.DOUBLE_QUOTED_KEY }}
+          single-quoted:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: 'step-security/harden-runner@main'
+              - run: deploy --token=${{ secrets.SINGLE_QUOTED_KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "does not treat nested multiline values as runner configuration or hardening" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          nested-values:
+            env:
+              WORKFLOW_EXAMPLE: |
+                runs-on: ubuntu-latest
+                - uses: step-security/harden-runner@main
+            steps:
+              - run: deploy --token=${{ secrets.NESTED_ONLY }}
+          exposed:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  runs-on: ubuntu-latest
+                  - uses: step-security/harden-runner@main
+                  deploy --token=${{ secrets.EXPOSED }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 15
+      File.rm_rf!(repo)
+    end
+
+    test "mixed reusable and local jobs do not share runner or hardening state" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          shared:
+            uses: owner/standards/.github/workflows/mirror.yml@main
+            secrets:
+              MIRROR_KEY: ${{ secrets.MIRROR_KEY }}
+          local:
+            runs-on: ubuntu-latest
+            steps:
+              - run: echo no credentials
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+
+      File.write!(Path.join([repo, ".github/workflows", "test.yml"]), """
+      jobs:
+        hardened:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: step-security/harden-runner@main
+            - run: deploy --token=${{ secrets.ONE }}
+        exposed:
+          runs-on: ubuntu-latest
+          steps:
+            - run: deploy --token=${{ secrets.TWO }}
+      """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 10
+      assert finding.severity == :warn
       File.rm_rf!(repo)
     end
 

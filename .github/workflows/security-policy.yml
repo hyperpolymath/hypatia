@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Consolidated workflow (behaviour-preserving merge).
@@ -69,7 +70,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.86.7
+        uses: taiki-e/install-action@v2.87.9
         with:
           tool: cargo-deny
 
@@ -91,7 +92,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@v3.97.1
+        uses: trufflesecurity/trufflehog@v3.97.4
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -149,13 +150,13 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.8
+        uses: github/codeql-action/init@v4.38.0
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.8
+        uses: github/codeql-action/analyze@v4.38.0
         with:
           category: "/language:${{matrix.language}}"
 
@@ -219,7 +220,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v4.37.8
+        uses: github/codeql-action/upload-sarif@v4.38.0
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -328,7 +329,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.86.7
+        uses: taiki-e/install-action@v2.87.9
         with:
           tool: cargo-deny
 
@@ -441,7 +442,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@v4.37.8
+        uses: github/codeql-action/upload-sarif@v4.38.0
         if: always()
         with:
           sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
@@ -554,7 +555,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@v3.97.1
+        uses: trufflesecurity/trufflehog@v3.97.4
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -581,13 +582,13 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.8
+        uses: github/codeql-action/init@v4.38.0
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.8
+        uses: github/codeql-action/analyze@v4.38.0
         with:
           category: "/language:${{matrix.language}}"
 

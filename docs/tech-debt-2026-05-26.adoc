@@ -30,7 +30,7 @@ soundness-relevant escape hatches in Haskell/Rust source.
 
 *Recommended next move:* triage each finding into one of: (a) discharge
 by proof, (b) cover with property-tests + a documented refutation
-budget, or (c) annotate as a known/necessary axiom (e.g. `+funExt+`) in
+budget, or (c) annotate as a known/necessary axiom (e.g. `+funExt+`) in
 `+docs/proof-debt.md+`.
 
 === 2. Licence debt
