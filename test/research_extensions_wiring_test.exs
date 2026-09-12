@@ -25,7 +25,7 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
 
   @tmp_dir System.tmp_dir!()
 
-  # Trips RE001 (touches `secrets.*` with no harden-runner; :warn, no line)
+  # Trips RE001 (touches `secrets.*` with no harden-runner; :warn, source line)
   # and RE004 (`docker://` pinned by tag; :warn, line nested under :detail).
   @tripwire """
   name: Deploy
@@ -81,6 +81,28 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
   end
 
   describe ":line carry-through" do
+    test "RE001 points to the secret reference through CLI and SARIF" do
+      repo = tripwire_repo()
+
+      finding =
+        Enum.find(CLI.collect_findings(repo, [:research_extensions]), &(&1.type == "RE001"))
+
+      assert finding.line == 8
+      sarif = SARIF.from_findings([finding], repo)
+
+      assert get_in(sarif, [
+               "runs",
+               Access.at(0),
+               "results",
+               Access.at(0),
+               "locations",
+               Access.at(0),
+               "physicalLocation",
+               "region",
+               "startLine"
+             ]) == 8
+    end
+
     test "RE004's line, nested under :detail, survives normalization" do
       f = re004(tripwire_repo())
 
@@ -121,7 +143,15 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
         ExUnit.CaptureIO.capture_io(:stderr, fn ->
           output =
             ExUnit.CaptureIO.capture_io(fn ->
-              CLI.main(["scan", repo, "--rules", "research_extensions", "--format", "github", "--exit-zero"])
+              CLI.main([
+                "scan",
+                repo,
+                "--rules",
+                "research_extensions",
+                "--format",
+                "github",
+                "--exit-zero"
+              ])
             end)
 
           assert output =~ "::warning"

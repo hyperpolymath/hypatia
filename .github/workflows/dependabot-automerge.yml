@@ -54,7 +54,7 @@ concurrency:
 jobs:
   automerge:
     # Only run for PRs actually authored by Dependabot.
-    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.actor_id == '49699333' && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

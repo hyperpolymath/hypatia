@@ -304,6 +304,11 @@ dependencies:
         commit: 'sha1-2155aa26a21758f2ba119f61bc7e0e1981c106fb'
         owner_id: 6759885
         repo_id: 1275650185
+    'hyperpolymath/smtp-notify-action@v0.2.0':
+        ref: 'v0.2.0'
+        commit: 'sha1-ede1191ef6ff3ac02c4f4d9efdf837ee517e11d7'
+        owner_id: 6759885
+        repo_id: 1352485172
     'ruby/setup-ruby@v1.321.0':
         ref: 'v1.321.0'
         commit: 'sha1-95ef2b042f9d7a56d8268cba8559e2842e2ad01b'
