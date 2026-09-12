@@ -106,6 +106,23 @@ jobs:
             echo "::warning::Found $CONFIG_COUNT config files but no K9 contracts. Run k9iser to generate contracts."
           fi
 
+      # QUARANTINE PIN -- see .github/workflows/actions.lock.
+      # This action is referenced at the MOVING `@main` ref, so the lockfile is
+      # what actually selects the commit. k9-ecosystem main (3f250fba,
+      # 2026-08-28) carries a dangling symlink:
+      #   editors/vscode/container/.gatekeeper.yaml
+      #     -> ../../../../_shared/container/.gatekeeper.yaml
+      # which is one `..` too many and escapes the repository; no `_shared/`
+      # directory exists. GitHub extracts the WHOLE action repo during
+      # "Prepare all required actions", BEFORE any step `if:` is evaluated, so
+      # the unresolvable link killed this job at setup regardless of how many
+      # K9 files the caller had, and the `k9_count > 0` guard below could not
+      # protect it:
+      #   ##[error]Could not find file '.../editors/vscode/container/.gatekeeper.yaml'
+      # The lockfile therefore pins @main back to c74f04c7 (2026-08-24), the
+      # last commit whose tree contains no symlinks at all. Restore the pin to
+      # main HEAD once k9-ecosystem carries _shared/container/.gatekeeper.yaml
+      # across, or replaces its two symlinks with real files.
       - name: Validate K9 contracts
         if: steps.detect.outputs.k9_count > 0
         uses: hyperpolymath/k9-ecosystem/validate-action@main

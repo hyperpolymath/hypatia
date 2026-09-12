@@ -67,7 +67,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
         - 'dtolnay/rust-toolchain@master'
-        - 'editorconfig-checker/action-editorconfig-checker@v2.2.0'
+        - 'editorconfig-checker/action-editorconfig-checker@v3.0.0'
         - 'ruby/setup-ruby@v1.321.0'
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v4.2.2'
@@ -254,9 +254,9 @@ dependencies:
         commit: 'sha1-6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772'
         owner_id: 1940490
         repo_id: 260749683
-    'editorconfig-checker/action-editorconfig-checker@v2.2.0':
-        ref: 'v2.2.0'
-        commit: 'sha1-840e866d93b8e032123c23bac69dece044d4d84c'
+    'editorconfig-checker/action-editorconfig-checker@v3.0.0':
+        ref: 'v3.0.0'
+        commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
         owner_id: 26415196
         repo_id: 297874902
     'erlef/setup-beam@v1.24.1':

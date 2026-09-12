@@ -21,7 +21,7 @@
      seambot, finishbot, panicbot) via the safety triangle pipeline
      (Eliminate > Substitute > Control). 8 neural networks on a shared
      blackboard, VCL queries over verisim-data, Bayesian confidence updating,
-     and 33 Elixir rule modules for pattern detection.")
+     and 35 Elixir rule modules for pattern detection.")
 
   ;; ===================================================================
   ;; CONTEXT TIERS
@@ -62,7 +62,7 @@
     (description "Safety triangle pipeline with neural dispatch")
     (layers
       (elixir-pipeline "lib/"                "133 modules — pattern analysis, dispatch, learning")
-      (rules           "lib/rules/"          "33 rule modules; catalogue at docs/rules/catalogue.md")
+      (rules           "lib/rules/"          "35 rule modules; catalogue at docs/rules/catalogue.adoc")
       (neural          "lib/neural/"         "8 networks on a blackboard + coordinator GenServer")
       (vcl             "lib/vcl/"            "VCL parser, file executor, query cache, federation")
       (merge-orch      "lib/merge_orchestration/" "12 modules — leases, ledger, ticker")

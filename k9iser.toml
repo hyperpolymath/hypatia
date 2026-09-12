@@ -19,11 +19,6 @@ type = "elixir"
 output = "generated/k9iser/elixir-manifest.k9"
 
 [[source]]
-path = "deno.json"
-type = "deno"
-output = "generated/k9iser/deno-manifest.k9"
-
-[[source]]
 path = "Justfile"
 type = "justfile"
 output = "generated/k9iser/justfile-recipes.k9"
@@ -35,10 +30,6 @@ output = "generated/k9iser/ci-security.k9"
 
 [[constraint]]
 rule = "build.dependencies has no banned_packages"
-severity = "error"
-
-[[constraint]]
-rule = "deno.imports has no npm: specifiers"
 severity = "error"
 
 [[constraint]]

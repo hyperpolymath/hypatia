@@ -6,7 +6,16 @@
 name: Release & Container
 
 on:
-  push: null
+  # Was `push: null`, which fires on EVERY branch push. The release
+  # pipeline then ran on feature branches, where `${GITHUB_REF#refs/tags/v}`
+  # cannot strip its prefix and returns the ref VERBATIM -- so the archive
+  # name became `hypatia-refs/heads/<branch>-<target>.tar.gz`, whose
+  # embedded slashes are directories that do not exist, and tar died with
+  # `Cannot write: Broken pipe` on all five targets. Releases are cut from
+  # tags, so the trigger now says so.
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -49,8 +58,14 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
-          else
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            # `${VAR#prefix}` returns VAR UNCHANGED when the prefix is absent.
+            # Relying on it to parse a tag meant a non-tag ref silently became
+            # the version string. Fail loudly instead of building a nonsense name.
+            echo "::error::Release requires a refs/tags/v* ref or an explicit version input; got '$GITHUB_REF'"
+            exit 1
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
