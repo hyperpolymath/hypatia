@@ -283,6 +283,27 @@ defmodule Hypatia.Rules.RootHygiene do
   end
 
   @doc """
+  Scan root file names with access to their repository root.
+
+  This form recognises a maintained `GEMINI.md` instruction pointer. The
+  filename-only form above remains conservative because it cannot establish
+  whether the pointer's target exists or is safe to follow.
+  """
+  def scan(root_files, repo_path) when is_list(root_files) and is_binary(repo_path) do
+    banned = scan_banned(root_files)
+    stale = scan_stale(root_files, repo_path)
+    missing = scan_required_missing(root_files)
+
+    %{
+      findings: banned ++ stale ++ missing,
+      banned_count: length(banned),
+      stale_count: length(stale),
+      missing_count: length(missing),
+      total: length(banned) + length(stale) + length(missing)
+    }
+  end
+
+  @doc """
   Check root files against the banned list.
   """
   def scan_banned(root_files) do
@@ -326,6 +347,74 @@ defmodule Hypatia.Rules.RootHygiene do
           ]
       end
     end)
+  end
+
+  @doc """
+  Check stale root files with repository context.
+
+  A root `GEMINI.md` is retained only when it points to an existing,
+  non-circular root instruction file: `AGENTS.md`, or `CLAUDE.md` while the
+  repository has not yet adopted `AGENTS.md`.
+  """
+  def scan_stale(root_files, repo_path) when is_list(root_files) and is_binary(repo_path) do
+    root_files
+    |> scan_stale()
+    |> Enum.reject(fn finding ->
+      finding.file == "GEMINI.md" and valid_gemini_instruction_pointer?(repo_path)
+    end)
+  end
+
+  defp valid_gemini_instruction_pointer?(repo_path) do
+    gemini_path = Path.join(repo_path, "GEMINI.md")
+
+    with {:ok, content} <- File.read(gemini_path),
+         {:ok, target} <- gemini_pointer_target(content),
+         true <- permitted_gemini_target?(repo_path, target),
+         true <- maintained_instruction_target?(repo_path, target) do
+      true
+    else
+      _ -> false
+    end
+  end
+
+  defp gemini_pointer_target(content) do
+    targets = root_instruction_link_targets(content)
+
+    cond do
+      "AGENTS.md" in targets ->
+        {:ok, "AGENTS.md"}
+
+      "CLAUDE.md" in targets ->
+        {:ok, "CLAUDE.md"}
+
+      true ->
+        :error
+    end
+  end
+
+  defp root_instruction_link_targets(content) do
+    ~r/\[[^\]]*\]\(\.\/((?:AGENTS|CLAUDE|GEMINI)\.md)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/
+    |> Regex.scan(content, capture: :all_but_first)
+    |> List.flatten()
+  end
+
+  defp permitted_gemini_target?(_repo_path, "AGENTS.md"), do: true
+
+  defp permitted_gemini_target?(repo_path, "CLAUDE.md") do
+    not File.exists?(Path.join(repo_path, "AGENTS.md"))
+  end
+
+  defp maintained_instruction_target?(repo_path, target) do
+    target_path = Path.join(repo_path, target)
+
+    case File.read(target_path) do
+      {:ok, content} ->
+        String.trim(content) != "" and
+          "GEMINI.md" not in root_instruction_link_targets(content)
+
+      _ ->
+        false
+    end
   end
 
   @doc """

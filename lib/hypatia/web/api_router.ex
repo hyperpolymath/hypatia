@@ -63,9 +63,11 @@ defmodule Hypatia.Web.ApiRouter do
     end
   end
 
-  # GET /api/recipes/:id -- single-recipe drill-down. Returns the same
-  # shape as one row from `/api/recipes`, plus the recipe definition
-  # itself when found in the registry.
+  @doc """
+  GET /api/recipes/:id -- single-recipe drill-down. Returns the same
+  shape as one row from `/api/recipes`, plus the recipe definition
+  itself when found in the registry.
+  """
   get "/recipes/:id" do
     health = Hypatia.OutcomeTracker.recipe_health()
     row = Enum.find(health, &(&1.recipe_id == id))
@@ -78,9 +80,11 @@ defmodule Hypatia.Web.ApiRouter do
     end
   end
 
-  # GET /api/quarantine -- everything currently auto-quarantined:
-  # recipes (verification-rate gate) and bots (consecutive-failure /
-  # FP-rate gate from Hypatia.Safety.Quarantine).
+  @doc """
+  GET /api/quarantine -- everything currently auto-quarantined:
+  recipes (verification-rate gate) and bots (consecutive-failure /
+  FP-rate gate from Hypatia.Safety.Quarantine).
+  """
   get "/quarantine" do
     recipes =
       Hypatia.OutcomeTracker.recipe_health()
@@ -98,9 +102,11 @@ defmodule Hypatia.Web.ApiRouter do
     })
   end
 
-  # GET /api/alerts -- Recent threshold-rule alerts emitted by
-  # Hypatia.Watcher.Alerts (ring buffer, newest first). Powers the
-  # dashboard alert ribbon and supports manual triage.
+  @doc """
+  GET /api/alerts -- Recent threshold-rule alerts emitted by
+  Hypatia.Watcher.Alerts (ring buffer, newest first). Powers the
+  dashboard alert ribbon and supports manual triage.
+  """
   get "/alerts" do
     rows =
       case Process.whereis(Hypatia.Watcher.Alerts) do
