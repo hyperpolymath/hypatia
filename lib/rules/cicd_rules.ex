@@ -850,21 +850,19 @@ defmodule Hypatia.Rules.CicdRules do
           abs = Path.join(path, entry)
           rel = Path.join(relative_path, entry)
 
-          cond do
-            entry == ".git" ->
-              []
+          if entry == ".git" do
+            []
+          else
+            case File.lstat(abs) do
+              {:ok, %{type: :directory}} ->
+                walk_repository_files(abs, rel)
 
-            true ->
-              case File.lstat(abs) do
-                {:ok, %{type: :directory}} ->
-                  walk_repository_files(abs, rel)
+              {:ok, %{type: :symbolic_link}} ->
+                []
 
-                {:ok, %{type: :symbolic_link}} ->
-                  []
-
-                _ ->
-                  [rel]
-              end
+              _ ->
+                [rel]
+            end
           end
         end)
 
