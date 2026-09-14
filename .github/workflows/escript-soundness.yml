@@ -1,0 +1,154 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Escript packaging soundness — the gate that must be able to START.
+#
+# WHY THIS FILE EXISTS, SEPARATELY FROM tests.yml
+# -----------------------------------------------
+# test/soundness/run-escript-soundness.sh is correct and it DOES catch the
+# CondClauseError in walk_repository_files/2 that took every one of the 449
+# hypatia-scan-reusable.yml consumers red from 2026-09-12. It was wired into
+# tests.yml. It never protected anything, because tests.yml has NEVER had a
+# single successful run: every run is conclusion=startup_failure with
+# jobs.total_count == 0. A workflow that dies at startup emits zero check
+# runs, so a gate inside it is inert by construction.
+#
+# Ten of hypatia's twenty-two active workflows are in that state. The cause is
+# NOT yet proven: the run page reports an EMPTY reason string
+# (aria-label="failed at startup: "), and two hypotheses were tested and
+# REFUTED — codeql.yml is fully SHA-pinned and still dies, while
+# clusterfuzzlite.yml uses a third-party TAG and succeeds; every workflow file
+# parses as valid YAML.
+#
+# So this workflow does not try to out-guess the cause. It removes the entire
+# attack surface instead: it declares NO `uses:` at all. Nothing to resolve
+# against the actions allow-list, nothing to reconcile against
+# .github/workflows/actions.lock, nothing to SHA-pin. The toolchain arrives as
+# a container image and the source arrives via git clone. Whichever of the
+# candidate causes is the real one, this file is immune to it.
+#
+# Keep it that way. Adding a `uses:` here re-exposes the gate to the very
+# failure mode it was built to escape.
+
+name: Escript Soundness
+
+on:
+  push:
+    branches:
+      - main
+      - 'fix/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: escript-soundness-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # GitHub selects `sh` inside a container when it cannot confirm bash, and
+    # `set -o pipefail` is a bashism that dies under dash with "Illegal option".
+    # Pin the shell rather than writing to the lowest common denominator.
+    shell: bash
+
+jobs:
+  # Deliberately minimal: no `uses:`, no container, no inputs. If this job
+  # produces a check run, then a newly-added workflow in this repository can
+  # start, and any failure below is a real failure rather than a startup death.
+  startup-probe:
+    name: Startup probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm the workflow started
+        run: |
+          echo "This workflow started. jobs.total_count > 0."
+          echo "Runner: $RUNNER_OS"
+
+  escript-soundness:
+    name: Escript packaging soundness
+    runs-on: ubuntu-latest
+    needs: startup-probe
+    timeout-minutes: 20
+    container:
+      image: elixir:1.17-otp-27
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_REF: ${{ github.sha }}
+      TARGET_REPO: ${{ github.repository }}
+      SERVER_URL: ${{ github.server_url }}
+    steps:
+      - name: Install jq
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq jq git
+
+      - name: Fetch source at the exact commit under test
+        run: |
+          set -euo pipefail
+          git init -q source
+          cd source
+          git config --global --add safe.directory "$PWD"
+          git remote add origin \
+            "https://x-access-token:${GH_TOKEN}@${SERVER_URL#https://}/${TARGET_REPO}.git"
+          git fetch -q --depth 1 origin "$TARGET_REF"
+          git checkout -q FETCH_HEAD
+          git rev-parse HEAD
+
+      - name: Install Hex and Rebar
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+
+      - name: Fetch dependencies
+        working-directory: source
+        run: mix deps.get
+
+      # NOTE: deliberately NOT --warnings-as-errors, and this is not laziness.
+      # Turning it on today makes this gate red on arrival, because five real
+      # warnings sit on main — invisible until now precisely because tests.yml,
+      # which carried that step, has never had a single successful run.
+      #
+      # Two of the five are genuine logic defects, not lint:
+      #   * lib/rules/code_scanning_alerts.ex:544,571 rebind `findings` INSIDE an
+      #     `if` whose value is discarded, so CSA006 builds findings and throws
+      #     them away.
+      #   * lib/rules/secret_scanner_verification.ex:168 rebinds `exit`/`output`
+      #     inside `if exit != 0`, so the trufflehog fallback is inert and the
+      #     following `if exit == 0` still tests the ORIGINAL gitleaks exit.
+      # Both are the same shape as the CondClauseError this gate exists to catch:
+      # code that reads as though it acts and does nothing.
+      #
+      # Silencing them with an underscore would cement live bugs; repairing them
+      # changes scanner behaviour across 449 consumers and must be its own
+      # measured PR. Restore --warnings-as-errors in that PR, not this one.
+      - name: Compile
+        working-directory: source
+        run: mix compile
+
+      # The gate itself. Builds the escript fresh and asserts every rule in
+      # test/soundness/manifest.json fires at its expected severity against the
+      # built binary — the packaging path, not the in-process one.
+      - name: Escript packaging soundness
+        working-directory: source
+        run: bash test/soundness/run-escript-soundness.sh
+
+      # The gate above invokes the escript directly. The 449 consumers do NOT:
+      # they call hypatia-cli.sh with HYPATIA_FORMAT=json and --exit-zero, then
+      # validate the output with jq. A guard that asks a different question than
+      # its consumer is the estate's most frequently repeated defect, so ask the
+      # consumer's question too, verbatim.
+      - name: Consumer-shaped invocation
+        working-directory: source
+        run: |
+          set -euo pipefail
+          HYPATIA_FORMAT=json ./hypatia-cli.sh scan . --exit-zero > consumer.json
+          if ! jq -e 'type == "array"' consumer.json > /dev/null; then
+            echo "FATAL: consumer-shaped invocation did not produce a JSON array" >&2
+            head -20 consumer.json >&2
+            exit 1
+          fi
+          echo "Consumer-shaped invocation produced $(jq 'length' consumer.json) findings."

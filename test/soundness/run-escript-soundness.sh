@@ -19,8 +19,10 @@
 # Run locally:
 #     bash test/soundness/run-escript-soundness.sh
 #
-# In CI: wired into .github/workflows/tests.yml as the
-# "Escript packaging soundness" step on the e2e-elixir job.
+# In CI: .github/workflows/escript-soundness.yml, "Escript packaging
+# soundness" step. NOT tests.yml — that workflow startup-dies
+# (jobs.total_count == 0) and has never had a single successful run, so a
+# gate placed in it is inert by construction.
 
 set -euo pipefail
 
@@ -62,14 +64,34 @@ results=()
 # the scanner runs in production than scanning each fixture in
 # isolation. Per-rule assertions then filter the resulting JSON.
 echo "[soundness] Scanning fixtures tree against built escript..." >&2
+# AGENTS.md §5: never 2>/dev/null the thing under test. Capture stderr to a
+# file so a crash (e.g. the CondClauseError that took down 449 consumers on
+# 2026-09-12) is DIAGNOSABLE from the gate output, not merely detected.
+stderr_log=$(mktemp)
+trap 'rm -f "$stderr_log"' EXIT
+# Capture the exit code rather than discarding it with `|| true`. Under
+# --exit-zero a non-zero status can only mean the scanner itself failed,
+# which is a distinct and louder fact than "no findings".
+set +e
 output=$("$ESCRIPT" scan "$REPO_ROOT/test/soundness/fixtures" \
              --format json \
              --severity low \
-             --exit-zero 2>/dev/null || true)
+             --exit-zero 2>"$stderr_log")
+scan_rc=$?
+set -e
 
 if ! echo "$output" | jq -e 'type == "array"' >/dev/null 2>&1; then
     echo "FATAL: escript did not return a JSON array from the fixtures tree" >&2
+    echo "--- stdout (first 20 lines) ---" >&2
     echo "$output" | head -20 >&2
+    # Print the TAIL as well as the head: a toolchain shim (mise, asdf) can emit
+    # dozens of warning lines to stderr, pushing the actual exception past a
+    # head-only window. Measured 2026-09-14 — the CondClauseError was invisible
+    # behind 40 lines of mise registry warnings.
+    echo "--- stderr (first 20 lines) ---" >&2
+    head -20 "$stderr_log" >&2
+    echo "--- stderr (last 40 lines) ---" >&2
+    tail -40 "$stderr_log" >&2
     exit 1
 fi
 
@@ -131,6 +153,16 @@ if [[ ${#failures[@]} -gt 0 ]]; then
     printf 'correct, but the escript build is silently dropping the rule.\n' >&2
     printf 'Investigate the escript build (mix.exs:escript, hypatia-cli.sh)\n' >&2
     printf 'before merging.\n' >&2
+    # Dump stderr on THIS path too, not only the non-JSON path. Measured
+    # 2026-09-14: the same planted defect crashes locally (non-JSON output) but
+    # in CI returns a VALID array with the rules silently absent. Silent rules
+    # are the more dangerous symptom -- indistinguishable from a clean scan --
+    # so the diagnostic belongs on the branch that detects them.
+    printf '\n[soundness] escript exit status: %s\n' "$scan_rc" >&2
+    echo "--- stderr (first 20 lines) ---" >&2
+    head -20 "$stderr_log" >&2
+    echo "--- stderr (last 40 lines) ---" >&2
+    tail -40 "$stderr_log" >&2
     exit 1
 fi
 
