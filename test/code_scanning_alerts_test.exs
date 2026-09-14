@@ -138,4 +138,90 @@ defmodule Hypatia.Rules.CodeScanningAlertsTest do
       refute CodeScanningAlerts.self_referential_alert?(%{"rule" => %{"id" => "x"}})
     end
   end
+
+  # ── CSA006 regression ──────────────────────────────────────────────────
+  #
+  # Until 2026-09-14 `csa006_scorecard_config_advice/2` ALWAYS returned [].
+  # Both arms built their finding with `findings = [f | findings]` inside an
+  # `if`, and Elixir's `if` does not leak bindings, so every assignment was
+  # dead. It compiled clean and emitted only an "unused variable" warning.
+  #
+  # These tests assert the arms produce a NON-EMPTY list. A test that only
+  # asserted `== []` would have passed against the broken version — which is
+  # exactly how the defect survived. The decision functions are pure so the
+  # positive arm needs no GITHUB_TOKEN.
+  describe "csa006 decision functions (the always-empty regression)" do
+    @a_maintained [%{"state" => "open"}, %{"state" => "open"}]
+    @a_code_review [%{"state" => "open"}]
+
+    defp iso_days_ago(n),
+      do: DateTime.utc_now() |> DateTime.add(-n * 86_400, :second) |> DateTime.to_iso8601()
+
+    test "maintained_id_finding FIRES for a repo younger than 90 days" do
+      assert [finding] =
+               CodeScanningAlerts.maintained_id_finding(
+                 @a_maintained,
+                 iso_days_ago(10),
+                 "hyperpolymath",
+                 "brand-new"
+               )
+
+      assert finding.rule == "CSA006"
+      assert finding.severity == :info
+      assert finding.action == :inform
+      assert finding.file == "hyperpolymath/brand-new"
+      assert finding.detail.alert_count == 2
+    end
+
+    test "maintained_id_finding is silent for a repo older than 90 days" do
+      assert CodeScanningAlerts.maintained_id_finding(
+               @a_maintained,
+               iso_days_ago(400),
+               "hyperpolymath",
+               "old"
+             ) == []
+    end
+
+    test "maintained_id_finding is silent on an unparseable created_at" do
+      assert CodeScanningAlerts.maintained_id_finding(
+               @a_maintained,
+               "not-a-date",
+               "hyperpolymath",
+               "weird"
+             ) == []
+    end
+
+    test "code_review_id_finding FIRES for a single-contributor repo" do
+      assert [finding] =
+               CodeScanningAlerts.code_review_id_finding(
+                 @a_code_review,
+                 true,
+                 "hyperpolymath",
+                 "solo"
+               )
+
+      assert finding.rule == "CSA006"
+      assert finding.severity == :medium
+      assert finding.action == :configure
+      assert finding.detail.alert_count == 1
+    end
+
+    test "code_review_id_finding is silent when the repo has several contributors" do
+      assert CodeScanningAlerts.code_review_id_finding(
+               @a_code_review,
+               false,
+               "hyperpolymath",
+               "team"
+             ) == []
+    end
+  end
+
+  describe "csa006_scorecard_config_advice/2" do
+    test "returns empty list when GITHUB_TOKEN is not set" do
+      assert CodeScanningAlerts.csa006_scorecard_config_advice(
+               "hyperpolymath",
+               "test-nonexistent"
+             ) == []
+    end
+  end
 end

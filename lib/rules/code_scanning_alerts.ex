@@ -18,11 +18,11 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   Rule IDs: CSA001-CSA006
 
   ### Scorecard False Positive Handling (CSA005-CSA006)
-  
+
   CSA005: Auto-detects Scorecard MaintainedID and CodeReviewID alerts that are
   known false positives (repos <90 days old, single-contributor repos). These
   are reported as low-severity findings to track the noise without escalating.
-  
+
   CSA006: Provides configuration advice for repos with Scorecard structural
   issues (e.g., single-contributor repos with CodeReviewID alerts). Helps
   maintainers understand why these alerts appear and what (if anything) can
@@ -50,7 +50,8 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   @accepted_dismissals ~w(false\ positive used\ in\ tests won't\ fix)
 
   # Scorecard-specific checks that can be auto-dismissed
-  @scorecard_false_positive_checks ~w(MaintainedID CodeReviewID)  # Checks that often produce false positives
+  # Checks that often produce false positives
+  @scorecard_false_positive_checks ~w(MaintainedID CodeReviewID)
 
   # ─── CSA001: Open code-scanning alerts ─────────────────────────────────
 
@@ -454,13 +455,13 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
 
   @doc """
   CSA005: Auto-dismiss Scorecard alerts that are known false positives.
-  
+
   MaintainedID: Scorecard gives score 0 to repos <90 days old. This is expected
   behavior and will auto-resolve after 90 days.
-  
+
   CodeReviewID: Single-contributor repos cannot have code review. This is a
   structural limitation, not a security issue.
-  
+
   This rule proactively dismisses these alerts to reduce noise in the security tab.
   """
   def csa005_scorecard_false_positives(owner, repo) do
@@ -473,20 +474,22 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
         |> Enum.map(fn alert ->
           rule_id = get_in(alert, ["rule", "id"])
           number = alert["number"]
-          
+
           # Build dismissal reason and comment based on rule_id
-          {reason, comment} = 
+          {reason, comment} =
             case rule_id do
-              "MaintainedID" -> 
-                {"false positive", 
+              "MaintainedID" ->
+                {"false positive",
                  "Repository is less than 90 days old. Scorecard Maintained check gives score 0 for new projects. This is expected behavior and will auto-resolve after 90 days."}
+
               "CodeReviewID" ->
                 {"won't fix",
                  "Single-contributor repository. Code review requires multiple human contributors. This is a structural limitation of the project, not a security issue."}
+
               _ ->
                 {"false positive", "Scorecard false positive - auto-dismissed by Hypatia"}
             end
-          
+
           %{
             rule: "CSA005",
             file: "#{owner}/#{repo}",
@@ -514,7 +517,7 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   @doc """
   CSA006: Meta-finding when a repo has Scorecard alerts that could be prevented
   by configuration changes (e.g., single-contributor repos with CodeReviewID).
-  
+
   This helps repository maintainers understand structural issues that generate
   recurring alerts.
   """
@@ -522,74 +525,110 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
     case fetch_alerts(owner, repo) do
       {:ok, alerts} ->
         # Count Scorecard alerts by rule_id
-        by_rule = 
+        by_rule =
           alerts
           |> Enum.filter(&(get_in(&1, ["tool", "name"]) == "Scorecard"))
           |> Enum.group_by(&get_in(&1, ["rule", "id"]))
-        
-        findings = []
-        
-        # Check for MaintainedID alerts (repo <90 days old)
-        if Map.has_key?(by_rule, "MaintainedID") do
-          maintained_alerts = Map.get(by_rule, "MaintainedID")
-          open_maintained = Enum.filter(maintained_alerts, &(&1["state"] == "open"))
-          
-          if length(open_maintained) > 0 do
-            # Get repo creation date
-            repo_info = fetch_repo_info(owner, repo)
-            created_at = repo_info["created_at"]
-            
-            # Check if repo is <90 days old
-            if is_repo_less_than_90_days?(created_at) do
-              findings = [
-                %{
-                  rule: "CSA006",
-                  file: "#{owner}/#{repo}",
-                  severity: :info,
-                  reason: "Repository has Scorecard MaintainedID alerts but is <90 days old - these are expected and will auto-resolve",
-                  action: :inform,
-                  detail: %{
-                    alert_count: length(open_maintained),
-                    repo_created_at: created_at,
-                    suggestion: "No action needed. These alerts will disappear after 90 days."
-                  }
-                }
-                | findings
-              ]
-            end
-          end
-        end
-        
-        # Check for CodeReviewID alerts in single-contributor repos
-        if Map.has_key?(by_rule, "CodeReviewID") do
-          code_review_alerts = Map.get(by_rule, "CodeReviewID")
-          open_code_review = Enum.filter(code_review_alerts, &(&1["state"] == "open"))
-          
-          if length(open_code_review) > 0 do
-            # Check if repo has only one human contributor
-            if has_single_contributor?(owner, repo) do
-              findings = [
-                %{
-                  rule: "CSA006",
-                  file: "#{owner}/#{repo}",
-                  severity: :medium,
-                  reason: "Repository has Scorecard CodeReviewID alerts but has only one human contributor - code review is impractical",
-                  action: :configure,
-                  detail: %{
-                    alert_count: length(open_code_review),
-                    suggestion: "Add more contributors or accept that code review is not feasible for this project."
-                  }
-                }
-                | findings
-              ]
-            end
-          end
-        end
-        
-        findings
+
+        # Each arm returns a list, and the lists are concatenated. Do NOT
+        # reintroduce a `findings = [... | findings]` rebinding inside an `if`:
+        # Elixir's `if` does not leak bindings, so the assignment is dead and
+        # the function silently returns []. That was this rule's state from its
+        # introduction until 2026-09-14 — it compiled clean, emitted only an
+        # "unused variable" warning, and produced no findings on any of the 449
+        # consumers. Returning lists makes the defect unrepresentable.
+        maintained_id_advice(by_rule, owner, repo) ++
+          code_review_id_advice(by_rule, owner, repo)
 
       {:error, _} ->
         []
+    end
+  end
+
+  # MaintainedID alerts on a repo younger than 90 days are expected and
+  # self-resolving. `fetch_repo_info/2` is a network call, so it stays behind
+  # the open-alert check exactly as before.
+  # Network at the edge, decision in the middle. `fetch_repo_info/2` and
+  # `has_single_contributor?/2` are the only network calls, and each stays
+  # behind the cheap open-alert check exactly as it was before. The decision
+  # functions below are pure, public and therefore testable without a token —
+  # which is what lets the regression test assert a NON-EMPTY result. The old
+  # shape could only ever be tested for `[]`, which is precisely why a rule
+  # that always returned `[]` went unnoticed.
+  defp maintained_id_advice(by_rule, owner, repo) do
+    open_maintained = open_alerts(by_rule, "MaintainedID")
+
+    if open_maintained == [] do
+      []
+    else
+      created_at = fetch_repo_info(owner, repo)["created_at"]
+      maintained_id_finding(open_maintained, created_at, owner, repo)
+    end
+  end
+
+  defp code_review_id_advice(by_rule, owner, repo) do
+    open_code_review = open_alerts(by_rule, "CodeReviewID")
+
+    if open_code_review == [] do
+      []
+    else
+      code_review_id_finding(open_code_review, has_single_contributor?(owner, repo), owner, repo)
+    end
+  end
+
+  defp open_alerts(by_rule, rule_id) do
+    by_rule
+    |> Map.get(rule_id, [])
+    |> Enum.filter(&(&1["state"] == "open"))
+  end
+
+  @doc false
+  # MaintainedID alerts on a repo younger than 90 days are expected and
+  # self-resolving, so they are advice rather than a defect.
+  def maintained_id_finding(open_maintained, created_at, owner, repo) do
+    if is_repo_less_than_90_days?(created_at) do
+      [
+        %{
+          rule: "CSA006",
+          file: "#{owner}/#{repo}",
+          severity: :info,
+          reason:
+            "Repository has Scorecard MaintainedID alerts but is <90 days old - these are expected and will auto-resolve",
+          action: :inform,
+          detail: %{
+            alert_count: length(open_maintained),
+            repo_created_at: created_at,
+            suggestion: "No action needed. These alerts will disappear after 90 days."
+          }
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  @doc false
+  # CodeReviewID alerts on a single-contributor repo are structurally
+  # unsatisfiable rather than a lapse in process.
+  def code_review_id_finding(open_code_review, single_contributor?, owner, repo) do
+    if single_contributor? do
+      [
+        %{
+          rule: "CSA006",
+          file: "#{owner}/#{repo}",
+          severity: :medium,
+          reason:
+            "Repository has Scorecard CodeReviewID alerts but has only one human contributor - code review is impractical",
+          action: :configure,
+          detail: %{
+            alert_count: length(open_code_review),
+            suggestion:
+              "Add more contributors or accept that code review is not feasible for this project."
+          }
+        }
+      ]
+    else
+      []
     end
   end
 
@@ -598,12 +637,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   # Fetch repository info from GitHub API
   defp fetch_repo_info(owner, repo) do
     token = System.get_env("GITHUB_TOKEN")
-    
+
     if token == nil or token == "" do
       %{"created_at" => "", "contributors" => []}
     else
       url = "#{@github_api_base}/repos/#{owner}/#{repo}"
-      
+
       case System.cmd(
              "curl",
              [
@@ -624,7 +663,9 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
             {:ok, info} -> info
             _ -> %{"created_at" => "", "contributors" => []}
           end
-        _ -> %{"created_at" => "", "contributors" => []}
+
+        _ ->
+          %{"created_at" => "", "contributors" => []}
       end
     end
   end
@@ -635,19 +676,21 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
       {:ok, dt, _} ->
         days = DateTime.diff(DateTime.utc_now(), dt, :day)
         days < 90
-      _ -> false
+
+      _ ->
+        false
     end
   end
 
   # Check if repo has only one human contributor
   defp has_single_contributor?(owner, repo) do
     token = System.get_env("GITHUB_TOKEN")
-    
+
     if token == nil or token == "" do
       false
     else
       url = "#{@github_api_base}/repos/#{owner}/#{repo}/contributors?anon=1"
-      
+
       case System.cmd(
              "curl",
              [
@@ -667,19 +710,24 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
           case Jason.decode(body) do
             {:ok, contributors} when is_list(contributors) ->
               # Filter out bots and check human contributors
-              human_contributors = 
+              human_contributors =
                 Enum.filter(contributors, fn c ->
                   type = c["type"] || ""
                   login = c["login"] || ""
                   # Exclude bot accounts
-                  !String.contains?(login, "[bot]") && 
-                  !String.ends_with?(login, "-bot") &&
-                  type != "Bot"
+                  !String.contains?(login, "[bot]") &&
+                    !String.ends_with?(login, "-bot") &&
+                    type != "Bot"
                 end)
+
               length(human_contributors) <= 1
-            _ -> false
+
+            _ ->
+              false
           end
-        _ -> false
+
+        _ ->
+          false
       end
     end
   end
