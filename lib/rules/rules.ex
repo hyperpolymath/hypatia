@@ -602,7 +602,7 @@ defmodule Hypatia.Rules do
 
     # Missing permissions
     findings =
-      if not Regex.match?(~r/^permissions:/m, content) do
+      if not Regex.match?(~r/^[ \t]*permissions:/m, content) do
         [
           %{
             rule: "missing_permissions",

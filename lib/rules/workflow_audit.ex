@@ -458,9 +458,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
           findings
         end
 
-      # Check for missing permissions declaration entirely
+      # Check for a missing permissions declaration at EITHER level.
+      #
+      # ⚠ This test was historically anchored at column 0 (`~r/^permissions:/m`),
+      # so it could only see workflow-level blocks. A job-level `permissions:`
+      # block REPLACES the workflow-level one, so a workflow that scopes every
+      # job individually and omits the top-level block is correctly hardened —
+      # yet it was reported as having no permissions at all. That false reading
+      # is what drove remediation to rewrite the workflow level only, narrowing
+      # `contents: write` on workflows whose jobs relied on it. See WH002 in
+      # `workflow_hardening.ex` for the three probes that judgement requires.
       findings =
-        if not Regex.match?(~r/^permissions:/m, content) do
+        if not Regex.match?(~r/^[ \t]*permissions:/m, content) do
           [
             %{
               type: :missing_permissions,
@@ -1762,10 +1771,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
   def check_concurrency_missing_readonly(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       triggers? = Regex.match?(~r/pull_request|^\s+push:/m, content)
-      no_concurrency? = not Regex.match?(~r/^concurrency:/m, content)
+      no_concurrency? = not Regex.match?(~r/^[ \t]*concurrency:/m, content)
 
       read_only? =
-        Regex.match?(~r/^permissions:/m, content) and not String.contains?(content, ": write")
+        Regex.match?(~r/^[ \t]*permissions:/m, content) and
+          not String.contains?(content, ": write")
 
       if triggers? and no_concurrency? and read_only? and not Regex.match?(@wf021_skip, content) do
         [

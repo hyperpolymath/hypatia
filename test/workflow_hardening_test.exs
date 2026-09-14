@@ -404,4 +404,209 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
   end
+
+  # ── WH002 / WH013: the contents:write pair ────────────────────────────────
+  #
+  # These two rules are inverses and must be tested together. WH002 asks "is
+  # this grant wider than the workflow needs?"; WH013 asks "is this workflow
+  # starved of a grant it uses?". The failure that put 25 repos into a broken
+  # state was WH002 answering the first question WITHOUT the second, so its
+  # remediation removed a capability the workflow depended on.
+
+  describe "wh002_excessive_permissions/1 — three probes, not one" do
+    test "no write performed: narrowing is real hardening, stays :high" do
+      repo =
+        create_repo_with_workflow("""
+        name: CI
+        permissions:
+          contents: write
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix test
+        """)
+
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.rule == "WH002"
+      assert f.severity == :high
+      File.rm_rf!(repo)
+    end
+
+    test "writes and NO job-level block: downgraded to :warn with a two-step recipe" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: write
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :warn
+      assert f.fix_recipe == "add-job-level-contents-write-then-narrow-workflow-level"
+      File.rm_rf!(repo)
+    end
+
+    test "writes WITH a job-level block: :warn, verify the writing job first" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: write
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            permissions:
+              contents: write
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :warn
+      # This branch intentionally carries no fix_recipe: the safe action is a
+      # human check of WHICH job writes, not a mechanical rewrite.
+      refute Map.has_key?(f, :fix_recipe)
+      assert f.reason =~ "verify the WRITING job"
+      File.rm_rf!(repo)
+    end
+
+    test "performs_contents_write?/1 sees the action forms, not just git push" do
+      assert WorkflowHardening.performs_contents_write?(
+               "      - uses: softprops/action-gh-release@v2"
+             )
+
+      assert WorkflowHardening.performs_contents_write?("        run: gh release create v1")
+      assert WorkflowHardening.performs_contents_write?("        run: gh pr merge --auto")
+      refute WorkflowHardening.performs_contents_write?("        run: gh pr view 12")
+    end
+
+    test "job_level_permissions?/1 distinguishes indented from column-0" do
+      refute WorkflowHardening.job_level_permissions?("permissions:\n  contents: read\n")
+      assert WorkflowHardening.job_level_permissions?("jobs:\n  a:\n    permissions:\n")
+    end
+  end
+
+  describe "wh013_permission_starved_write/1 — four arms" do
+    test "arm 1: a correct workflow (write + grant) is silent" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            permissions:
+              contents: write
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "arm 2: starved AND masked — green forever, so :high" do
+      repo =
+        create_repo_with_workflow("""
+        name: Steward
+        permissions:
+          contents: read
+        jobs:
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD 2>/dev/null || echo "::warning::could not push"
+        """)
+
+      [f] = WorkflowHardening.wh013_permission_starved_write(repo)
+      assert f.rule == "WH013"
+      assert f.severity == :high
+      assert f.fix_recipe == "grant-contents-write-to-writing-job-and-unmask"
+      File.rm_rf!(repo)
+    end
+
+    test "arm 3: restoring the grant clears the finding" do
+      repo =
+        create_repo_with_workflow("""
+        name: Steward
+        permissions:
+          contents: read
+        jobs:
+          record:
+            runs-on: ubuntu-latest
+            permissions:
+              contents: write
+            steps:
+              - run: git push origin HEAD 2>/dev/null || echo "::warning::could not push"
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "arm 4: starved but UNMASKED still fires — the job will simply fail" do
+      repo =
+        create_repo_with_workflow("""
+        name: Steward
+        permissions:
+          contents: read
+        jobs:
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      [f] = WorkflowHardening.wh013_permission_starved_write(repo)
+      assert f.severity == :high
+      assert f.fix_recipe == "grant-contents-write-to-writing-job"
+      File.rm_rf!(repo)
+    end
+
+    test "a workflow that performs no write is never starved" do
+      repo =
+        create_repo_with_workflow("""
+        name: CI
+        permissions:
+          contents: read
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix test
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "write-all counts as a grant" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions: write-all
+        jobs:
+          publish:
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "masked_write?/1 recognises the three masks and nothing else" do
+      assert WorkflowHardening.masked_write?("  run: git push origin HEAD 2>/dev/null\n")
+      assert WorkflowHardening.masked_write?("  run: git commit -m x || true\n")
+      assert WorkflowHardening.masked_write?("  run: gh pr create -t x || echo none\n")
+      refute WorkflowHardening.masked_write?("  run: git push origin HEAD\n")
+    end
+  end
 end
