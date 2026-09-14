@@ -305,7 +305,10 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   # ─── Comprehensive scan ────────────────────────────────────────────────
 
   @doc """
-  Run all code-scanning checks for a repository.
+  Run all code-scanning checks for a GitHub repository.
+
+  Returns an error when `GITHUB_TOKEN` is unset or empty. Otherwise, returns
+  the deduplicated findings, their total count and counts grouped by severity.
   """
   def scan(owner, repo) do
     token = System.get_env("GITHUB_TOKEN")
@@ -337,7 +340,7 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   identity.
 
   Findings with an alert number are identified by their rule and alert number.
-  Findings without one are identified by their rule, repository path and
+  Findings without one are identified by their rule, `file` value and
   Scorecard check, so distinct CSA006 advice for the same repository is kept.
   """
   def deduplicate_findings(findings) do
@@ -468,15 +471,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   # ─── CSA005: Scorecard false positives (MaintainedID, CodeReviewID) ───────────
 
   @doc """
-  CSA005: Auto-dismiss Scorecard alerts that are known false positives.
+  CSA005: Build low-severity findings for open Scorecard MaintainedID and
+  CodeReviewID alerts.
 
-  MaintainedID: Scorecard gives score 0 to repos <90 days old. This is expected
-  behavior and will auto-resolve after 90 days.
-
-  CodeReviewID: Single-contributor repos cannot have code review. This is a
-  structural limitation, not a security issue.
-
-  This rule proactively dismisses these alerts to reduce noise in the security tab.
+  Each finding proposes a dismissal reason and comment for later automation;
+  this function does not dismiss the GitHub alert. Returns an empty list when
+  alerts cannot be fetched or none of the supported Scorecard checks are open.
   """
   def csa005_scorecard_false_positives(owner, repo) do
     case fetch_alerts(owner, repo) do
@@ -534,8 +534,9 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
 
   Reports MaintainedID alerts for repositories younger than 90 days and
   CodeReviewID alerts for repositories with at most one human contributor.
-  Returns an empty list when GitHub data is unavailable or neither condition
-  applies.
+  Returns an empty list when alerts cannot be fetched or neither condition
+  applies. If age or contributor data is unavailable, the corresponding advice
+  is omitted.
   """
   def csa006_scorecard_config_advice(owner, repo) do
     case fetch_alerts(owner, repo) do
