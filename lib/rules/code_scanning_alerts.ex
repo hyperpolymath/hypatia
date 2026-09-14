@@ -589,9 +589,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
     |> Enum.filter(&(&1["state"] == "open"))
   end
 
-  @doc false
-  # MaintainedID alerts on a repo younger than 90 days are expected and
-  # self-resolving, so they are advice rather than a defect.
+  @doc """
+  Builds CSA006 advice for open MaintainedID alerts on a new repository.
+
+  Returns a single informational finding when the repository is less than
+  90 days old, or an empty list when the alert does not need advice.
+  """
   def maintained_id_finding(open_maintained, created_at, owner, repo) do
     if is_repo_less_than_90_days?(created_at) do
       [
@@ -615,9 +618,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
     end
   end
 
-  @doc false
-  # CodeReviewID alerts on a single-contributor repo are structurally
-  # unsatisfiable rather than a lapse in process.
+  @doc """
+  Builds CSA006 advice for open CodeReviewID alerts on a repository.
+
+  Returns a single configuration finding for a single-contributor repository,
+  or an empty list when code review is feasible.
+  """
   def code_review_id_finding(open_code_review, single_contributor?, owner, repo) do
     if single_contributor? do
       [
