@@ -878,7 +878,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
         wh010_deprecated_workflow_commands(repo_path) ++
         wh011_curl_pipe_shell(repo_path) ++
         wh012_untrusted_to_github_env(repo_path) ++
-        wh013_permission_starved_write(repo_path)
+        wh013_permission_starved_write(repo_path) ++
+        wh014_masked_scanner_upload(repo_path)
 
     %{
       findings: findings,
@@ -1182,6 +1183,96 @@ defmodule Hypatia.Rules.WorkflowHardening do
         action: finding.action,
         reason: finding.reason
       }
+    end)
+  end
+
+  # ── WH014 ───────────────────────────────────────────────────────────────
+  # Measured 2026-09-14: this shape DELETED 84 real code-scanning alerts from
+  # hyperpolymath/academic-workflow-suite while every run reported success.
+
+  @sarif_upload_re ~r{codeql-action/upload-sarif}
+  # A scanner invocation whose failure is swallowed: `… > something.json || true`
+  @masked_scan_re ~r/>\s*[^\s|;&]*\.json\s*(?:2>[^\s|;&]*\s*)?\|\|\s*true/
+  # A count that manufactures a zero when the artefact is unparseable.
+  @masked_count_re ~r/\|\|\s*echo\s+0\b/
+  # An assertion that the findings artefact is a NON-EMPTY array. `jq -e` sets a
+  # non-zero exit on false/null, and `length > 0` is the estate's canonical form
+  # (standards/.github/workflows/hypatia-scan-reusable.yml).
+  @findings_assertion_re ~r/length\s*>\s*0|jq\s+-e/
+
+  @doc """
+  WH014 — a scanner whose failure is masked, feeding an upload to GitHub code
+  scanning, with nothing asserting the findings artefact is non-empty.
+
+  This is not merely a permissive gate. It **deletes security alerts**.
+
+  GitHub reconciles each code-scanning upload against the previous analysis
+  carrying the same tool name and category: any alert absent from the new
+  analysis is AUTO-CLOSED. So when a scanner crashes and its failure is
+  swallowed:
+
+      hypatia-cli.sh scan . --exit-zero > hypatia-findings.json || true
+      FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
+
+  the workflow proceeds with a count of zero, renders a syntactically valid
+  SARIF containing **zero results**, uploads it, and every previously-open
+  alert for that category is closed. The job is green at every step. Nothing
+  in `statusCheckRollup`, the run conclusion, or the check rollup shows that
+  anything went wrong — the only visible trace is `results_count` falling to 0
+  in `code-scanning/analyses`.
+
+  Measured on 2026-09-14 in `hyperpolymath/academic-workflow-suite`: an analysis
+  carrying **84** findings on 09-11 was followed by six green runs uploading
+  **0** results, closing all 84.
+
+  The rule fires only when all three hold, which keeps it conservative:
+
+    1. the workflow uploads SARIF to code scanning;
+    2. a scanner invocation or its count is masked (`|| true`, `|| echo 0`);
+    3. nothing asserts the findings artefact is a non-empty array.
+
+  Condition 3 is what exempts a correctly-written caller. The estate's
+  `hypatia-scan-reusable.yml` performs exactly that assertion
+  (`type == "array" and length > 0`, `exit 2` otherwise) and so never fires.
+  """
+  def wh014_masked_scanner_upload(repo_path) do
+    repo_path
+    |> workflow_files()
+    |> Enum.flat_map(fn path ->
+      content = File.read!(path)
+      rel = Path.relative_to(path, repo_path)
+
+      uploads? = Regex.match?(@sarif_upload_re, content)
+      masked? = Regex.match?(@masked_scan_re, content) or Regex.match?(@masked_count_re, content)
+      asserts? = Regex.match?(@findings_assertion_re, content)
+
+      if uploads? and masked? and not asserts? do
+        [
+          %{
+            rule: "WH014",
+            file: rel,
+            severity: :high,
+            reason:
+              "workflow #{rel} uploads SARIF to code scanning but masks the scanner's " <>
+                "failure (`|| true` / `|| echo 0`) and never asserts the findings " <>
+                "artefact is a non-empty array. When the scanner fails, this uploads a " <>
+                "SARIF with zero results, and GitHub AUTO-CLOSES every previously-open " <>
+                "alert for that category — silently, with the job green.",
+            action: :report,
+            fix_recipe: "assert-findings-before-sarif-upload",
+            detail: %{
+              fix:
+                "Remove the `|| true` and the `|| echo 0` fallback, then validate before " <>
+                  "uploading: `jq -e 'type == \"array\" and length > 0' findings.json` and " <>
+                  "exit non-zero if it fails. Prefer calling " <>
+                  "hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml, " <>
+                  "which already performs this assertion."
+            }
+          }
+        ]
+      else
+        []
+      end
     end)
   end
 end

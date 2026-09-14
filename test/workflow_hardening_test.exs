@@ -609,4 +609,121 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       refute WorkflowHardening.masked_write?("  run: git push origin HEAD\n")
     end
   end
+
+  # ─── WH014 ──────────────────────────────────────────────────────────
+  #
+  # Regression floor for the alert-DELETION shape measured 2026-09-14 on
+  # hyperpolymath/academic-workflow-suite: a masked scanner plus an
+  # unconditional SARIF upload auto-closed 84 real code-scanning alerts
+  # while every run reported success. The arms below mirror the four-arm
+  # planted-positive control run against the real files.
+
+  describe "wh014_masked_scanner_upload/1" do
+    test "fires on mask + upload with no findings assertion (the measured shape)" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        on: [push]
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  hypatia scan . --exit-zero > hypatia-findings.json || true
+                  COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
+                  node write-sarif.cjs
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: hypatia.sarif
+                  category: hypatia
+        """)
+
+      assert [finding] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      assert finding.rule == "WH014"
+      assert finding.severity == :high
+      assert finding.fix_recipe == "assert-findings-before-sarif-upload"
+      File.rm_rf!(repo)
+    end
+
+    test "does not fire when the findings artefact is asserted non-empty" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        on: [push]
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  hypatia scan . --exit-zero > hypatia-findings.json || true
+                  jq -e 'type == "array" and length > 0' hypatia-findings.json
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: hypatia.sarif
+        """)
+
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "does not fire once the mask is removed" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        on: [push]
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  set -euo pipefail
+                  hypatia scan . --exit-zero > hypatia-findings.json
+                  node write-sarif.cjs
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: hypatia.sarif
+        """)
+
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "does not fire on a masked scanner that never uploads SARIF" do
+      # Masking without an upload cannot delete an alert: GitHub only
+      # reconciles against an analysis that was actually submitted.
+      repo =
+        create_repo_with_workflow("""
+        name: Advisory
+        on: [push]
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: hypatia scan . --exit-zero > hypatia-findings.json || true
+        """)
+
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "fires on the `|| echo 0` count mask alone" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        on: [push]
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(jq '. | length' findings.json 2>/dev/null || echo 0)
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      File.rm_rf!(repo)
+    end
+  end
 end
