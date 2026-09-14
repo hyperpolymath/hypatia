@@ -854,14 +854,17 @@ defmodule Hypatia.Rules.CicdRules do
             entry == ".git" ->
               []
 
-            case File.lstat(abs) do
-              {:ok, %{type: :directory}} ->
-                walk_repository_files(abs, rel)
-              {:ok, %{type: :symbolic_link}} ->
-                []
-              _ ->
-                [rel]
-            end
+            true ->
+              case File.lstat(abs) do
+                {:ok, %{type: :directory}} ->
+                  walk_repository_files(abs, rel)
+
+                {:ok, %{type: :symbolic_link}} ->
+                  []
+
+                _ ->
+                  [rel]
+              end
           end
         end)
 
