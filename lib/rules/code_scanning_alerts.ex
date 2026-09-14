@@ -332,7 +332,14 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
     end
   end
 
-  @doc false
+  @doc """
+  Remove duplicate findings while preserving the first finding for each
+  identity.
+
+  Findings with an alert number are identified by their rule and alert number.
+  Findings without one are identified by their rule, repository path and
+  Scorecard check, so distinct CSA006 advice for the same repository is kept.
+  """
   def deduplicate_findings(findings) do
     Enum.uniq_by(findings, fn finding ->
       alert_number = Map.get(finding.detail, :alert_number)
@@ -522,11 +529,13 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   # ─── CSA006: Scorecard configuration advice ──────────────────────────────
 
   @doc """
-  CSA006: Meta-finding when a repo has Scorecard alerts that could be prevented
-  by configuration changes (e.g., single-contributor repos with CodeReviewID).
+  CSA006: Return advice for open Scorecard alerts caused by repository age or
+  contributor count.
 
-  This helps repository maintainers understand structural issues that generate
-  recurring alerts.
+  Reports MaintainedID alerts for repositories younger than 90 days and
+  CodeReviewID alerts for repositories with at most one human contributor.
+  Returns an empty list when GitHub data is unavailable or neither condition
+  applies.
   """
   def csa006_scorecard_config_advice(owner, repo) do
     case fetch_alerts(owner, repo) do
@@ -590,10 +599,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   end
 
   @doc """
-  Builds CSA006 advice for open MaintainedID alerts on a new repository.
+  Build CSA006 advice for open MaintainedID alerts on a young repository.
 
-  Returns a single informational finding when the repository is less than
-  90 days old, or an empty list when the alert does not need advice.
+  `created_at` is an ISO 8601 timestamp. Returns one informational finding when
+  it represents a repository younger than 90 days, or an empty list when the
+  timestamp is older or invalid. The finding records the MaintainedID check,
+  counts all supplied alerts and identifies the repository as `owner/repo`.
   """
   def maintained_id_finding(open_maintained, created_at, owner, repo) do
     if is_repo_less_than_90_days?(created_at) do
@@ -619,10 +630,12 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
   end
 
   @doc """
-  Builds CSA006 advice for open CodeReviewID alerts on a repository.
+  Build CSA006 advice for open CodeReviewID alerts when code review is
+  impractical.
 
-  Returns a single configuration finding for a single-contributor repository,
-  or an empty list when code review is feasible.
+  Returns one medium-severity finding when `single_contributor?` is true, or an
+  empty list otherwise. The finding records the CodeReviewID check, counts all
+  supplied alerts and identifies the repository as `owner/repo`.
   """
   def code_review_id_finding(open_code_review, single_contributor?, owner, repo) do
     if single_contributor? do
