@@ -896,4 +896,130 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
       assert [%{type: :invalid_actions_lock, action: :regenerate}] = findings
     end
   end
+
+  # ── The job-level blind spot ──────────────────────────────────────────────
+  #
+  # A job-level `permissions:` block REPLACES the workflow-level one; it does
+  # not merge with it. So a workflow that scopes every job and omits the
+  # top-level block is correctly hardened. Anchored at column 0, this rule
+  # could not see that, reported `missing_permissions`, and the remediation
+  # built on it rewrote the workflow level only — narrowing `contents: write`
+  # on workflows whose jobs relied on it. Measured blast radius: 25 repos.
+  describe "check_permissions/1 — job-level declarations (regression)" do
+    @job_level_only """
+    # SPDX-License-Identifier: MPL-2.0
+    name: Release
+    on:
+      push:
+    jobs:
+      build:
+        runs-on: ubuntu-latest
+        permissions:
+          contents: read
+        steps:
+          - run: mix compile
+      publish:
+        runs-on: ubuntu-latest
+        permissions:
+          contents: write
+        steps:
+          - run: gh release create v1
+    """
+
+    test "a workflow scoping every job is NOT missing permissions" do
+      findings = WorkflowAudit.check_permissions(%{"release.yml" => @job_level_only})
+      refute Enum.any?(findings, &(&1.type == :missing_permissions))
+    end
+
+    # The red half of the red-then-green proof. The pre-fix regex is inlined
+    # here deliberately: it documents the exact defect and fails loudly if
+    # anyone re-anchors the rule at column 0.
+    test "the pre-fix column-0 regex DID miss this workflow" do
+      refute Regex.match?(~r/^permissions:/m, @job_level_only)
+      assert Regex.match?(~r/^[ \t]*permissions:/m, @job_level_only)
+    end
+
+    test "a workflow with permissions NOWHERE is still flagged" do
+      content = """
+      # SPDX-License-Identifier: MPL-2.0
+      name: CI
+      on:
+        push:
+      jobs:
+        build:
+          runs-on: ubuntu-latest
+          steps:
+            - run: mix test
+      """
+
+      findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
+      assert Enum.any?(findings, &(&1.type == :missing_permissions))
+    end
+
+    test "a workflow-level declaration still satisfies the rule" do
+      content = "# SPDX-License-Identifier: MPL-2.0\npermissions:\n  contents: read\njobs: {}\n"
+      findings = WorkflowAudit.check_permissions(%{"ci.yml" => content})
+      refute Enum.any?(findings, &(&1.type == :missing_permissions))
+    end
+  end
+
+  describe "check_concurrency_missing_readonly/1 — job-level concurrency (regression)" do
+    # `concurrency:` is also legal per job. The same column-0 anchor made a
+    # job-scoped concurrency group invisible, so WF021 fired on workflows that
+    # already had exactly what it asks for.
+    test "a job-level concurrency group silences WF021" do
+      wf = """
+      name: CI
+      on:
+        pull_request:
+      permissions: read-all
+      jobs:
+        test:
+          runs-on: ubuntu-latest
+          concurrency:
+            group: t-${{ github.ref }}
+            cancel-in-progress: true
+          steps:
+            - run: echo hi
+      """
+
+      assert [] = WorkflowAudit.check_concurrency_missing_readonly(%{"ci.yml" => wf})
+      # red half: the pre-fix anchor could not see it
+      refute Regex.match?(~r/^concurrency:/m, wf)
+    end
+
+    test "a job-scoped read-only workflow with no concurrency anywhere still flags" do
+      wf = """
+      name: CI
+      on:
+        pull_request:
+      jobs:
+        test:
+          runs-on: ubuntu-latest
+          permissions:
+            contents: read
+          steps:
+            - run: echo hi
+      """
+
+      [f] = WorkflowAudit.check_concurrency_missing_readonly(%{"ci.yml" => wf})
+      assert f.rule == "WF021"
+    end
+
+    test "a job-level write scope still exempts the workflow" do
+      wf = """
+      name: Release
+      on:
+        pull_request:
+      jobs:
+        publish:
+          permissions:
+            contents: write
+          steps:
+            - run: echo hi
+      """
+
+      assert [] = WorkflowAudit.check_concurrency_missing_readonly(%{"release.yml" => wf})
+    end
+  end
 end

@@ -640,7 +640,7 @@ defmodule Hypatia.Rules.CicdRules do
     },
     %{
       id: :missing_permissions,
-      pattern: ~r/^permissions:/m,
+      pattern: ~r/^[ \t]*permissions:/m,
       negative: true,
       reason: "Workflows must declare permissions"
     },

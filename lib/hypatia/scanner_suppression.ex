@@ -246,6 +246,57 @@ defmodule Hypatia.ScannerSuppression do
 
   def context_safe_line?(_rule_type, _line, _line_number), do: false
 
+  # ── Comment-masked generic secrets ────────────────────────────────────────
+  #
+  # Three of the 18 `@secret_patterns` in `Hypatia.Rules.SecurityErrors` match
+  # on FORM ALONE — `api_key = "..."`, `secret = "..."`, `password = "..."`.
+  # Any prose example, changelog entry or commented-out config line carrying
+  # that shape is indistinguishable from a real leak, and commented-out
+  # examples are the entire measured false-positive population.
+  #
+  # The other 15 patterns are structurally unforgeable: a `ghp_` + 36 chars,
+  # an `AKIA` + 16, a `-----BEGIN … PRIVATE KEY-----` header. A string of that
+  # shape sitting in a comment is a LEAKED CREDENTIAL that someone commented
+  # out — arguably more urgent, not less. So suppression is keyed on the
+  # LABEL, never on the comment alone.
+  #
+  # This is deliberately applied AFTER `detect_secrets/1` (see `cli.ex`), so
+  # the matched label is known. `context_safe_line?/3` runs before detection
+  # and therefore cannot make this distinction.
+  @form_ambiguous_secret_labels ["Generic API key", "Generic secret", "Password"]
+
+  @doc """
+  Return true when `label` is one of the three form-ambiguous secret labels
+  AND `line` is a whole-line comment — i.e. a commented-out example rather
+  than a leak. Structurally-unforgeable labels are never suppressed.
+  """
+  def comment_masked_secret_label?(label, line, line_number)
+      when is_binary(label) and is_binary(line) do
+    label in @form_ambiguous_secret_labels and whole_line_comment?(line, line_number)
+  end
+
+  def comment_masked_secret_label?(_label, _line, _line_number), do: false
+
+  @doc """
+  Return true when `line` is a whole-line comment.
+
+  ⚠ `--` is NOT treated as a comment introducer here. A leading `--` is
+  overwhelmingly a long-option prefix in the shell and YAML this scanner
+  reads — `--server.password="$ARANGO_PW"` is a live credential on a command
+  line, not SQL commentary.
+
+  ⚠ A shebang is excluded by FORM, not by position: `#!` never suppresses,
+  wherever it appears. Line 1 is additionally excluded outright, matching the
+  `shell_download_then_run` clause above.
+  """
+  def whole_line_comment?(line, line_number \\ nil) when is_binary(line) do
+    t = String.trim_leading(line)
+
+    not String.starts_with?(t, "#!") and
+      line_number != 1 and
+      (String.starts_with?(t, "#") or String.starts_with?(t, "//"))
+  end
+
   @doc """
   Return true if an inline `hypatia: allow` directive on `line` or
   `prev_line` covers `(rule_module, rule_type)`.

@@ -420,4 +420,130 @@ defmodule Hypatia.ScannerSuppressionTest do
       assert CodeSafety.strip_lazy_initialisers(src, "rust") =~ "fn after"
     end
   end
+
+  # ── Comment-masked generic secrets ────────────────────────────────────────
+  #
+  # The suppression is keyed on the LABEL, never on the comment alone. Of the
+  # 18 patterns in @secret_patterns, exactly 3 match on FORM ("this looks like
+  # a password assignment") and are the entire false-positive population. The
+  # other 15 are structurally unforgeable — a `ghp_` + 36 chars in a comment is
+  # still a leaked token, and commenting it out does not revoke it.
+  describe "comment_masked_secret_label?/3" do
+    test "a commented generic API key is documentation, not a leak" do
+      line = ~S(# api_key = "your-api-key-goes-here")
+      assert ScannerSuppression.comment_masked_secret_label?("Generic API key", line, 4)
+    end
+
+    test "the same line uncommented is still reported" do
+      line = ~S(api_key = "your-api-key-goes-here")
+      refute ScannerSuppression.comment_masked_secret_label?("Generic API key", line, 4)
+    end
+
+    test "// comments count too" do
+      line = ~S(// const secret = "placeholder-value-here")
+      assert ScannerSuppression.comment_masked_secret_label?("Generic secret", line, 9)
+    end
+
+    # ⚠ The five controls below are the point of the whole change. Each is a
+    # structurally-unforgeable label: it cannot be produced by accident, so a
+    # comment is not evidence of innocence.
+    test "a commented ghp_ token is NOT suppressed" do
+      line = "# token = ghp_" <> String.duplicate("a", 36)
+      refute ScannerSuppression.comment_masked_secret_label?("GitHub PAT", line, 4)
+    end
+
+    test "a commented AWS access key is NOT suppressed" do
+      line = "# key = AKIA" <> String.duplicate("B", 16)
+      refute ScannerSuppression.comment_masked_secret_label?("AWS Access Key", line, 4)
+    end
+
+    test "a commented private key header is NOT suppressed" do
+      line = "# -----BEGIN RSA PRIVATE KEY-----"
+      refute ScannerSuppression.comment_masked_secret_label?("Private Key", line, 4)
+    end
+
+    test "a leading -- is a long option, not a comment" do
+      line = ~s|  --server.password="$ARANGO_PW" \\|
+      refute ScannerSuppression.comment_masked_secret_label?("Password", line, 12)
+    end
+
+    test "a shebang cannot mask a secret, at line 1 or anywhere else" do
+      line = ~S(#!/bin/sh password="hunter2hunter2")
+      refute ScannerSuppression.comment_masked_secret_label?("Password", line, 1)
+      refute ScannerSuppression.comment_masked_secret_label?("Password", line, 7)
+    end
+
+    test "line 1 never suppresses, even for a plain comment" do
+      line = ~S(# password = "example-value-here")
+      refute ScannerSuppression.comment_masked_secret_label?("Password", line, 1)
+      assert ScannerSuppression.comment_masked_secret_label?("Password", line, 2)
+    end
+
+    test "a non-binary label is rejected rather than crashing" do
+      refute ScannerSuppression.comment_masked_secret_label?(nil, "# x", 3)
+      refute ScannerSuppression.comment_masked_secret_label?(:password, "# x", 3)
+    end
+  end
+
+  # End-to-end: the labels above are asserted as literals, so they would rot
+  # silently if @secret_patterns were renamed. These tests take the label from
+  # detect_secrets/1 itself, so a rename breaks the test rather than the rule.
+  describe "detect_secrets/1 + rejection, on real labels" do
+    defp surviving(line, line_number) do
+      line
+      |> Hypatia.Rules.SecurityErrors.detect_secrets()
+      |> Enum.uniq()
+      |> Enum.reject(&ScannerSuppression.comment_masked_secret_label?(&1, line, line_number))
+    end
+
+    test "a commented password assignment is fully suppressed" do
+      line = ~S(# password = "example-value-here")
+
+      # Arm 4 of the control: this is what the PRE-FIX code did — detection
+      # alone, with no rejection step. It reported the comment as a critical.
+      assert Hypatia.Rules.SecurityErrors.detect_secrets(line) == ["Password"]
+
+      # ...and this is what it does now.
+      assert surviving(line, 6) == []
+    end
+
+    test "the same assignment uncommented survives" do
+      assert surviving(~S(password = "example-value-here"), 6) == ["Password"]
+    end
+
+    test "a commented ghp_ token survives with its real label" do
+      line = "# token = ghp_" <> String.duplicate("a", 36)
+      assert "GitHub PAT" in surviving(line, 6)
+    end
+
+    test "a commented AKIA key survives with its real label" do
+      line = "# key = AKIA" <> String.duplicate("B", 16)
+      assert "AWS Access Key" in surviving(line, 6)
+    end
+
+    test "a commented private key header survives with its real label" do
+      assert "Private Key" in surviving("# -----BEGIN RSA PRIVATE KEY-----", 6)
+    end
+
+    test "a commented line carrying BOTH a generic and a real secret keeps the real one" do
+      line = "# password = \"x-placeholder-y\" ghp_" <> String.duplicate("c", 36)
+      survivors = surviving(line, 6)
+      assert "GitHub PAT" in survivors
+      refute "Password" in survivors
+    end
+  end
+
+  describe "whole_line_comment?/2" do
+    test "indented comments count" do
+      assert ScannerSuppression.whole_line_comment?("      # note", 5)
+    end
+
+    test "a trailing comment on a code line does not count" do
+      refute ScannerSuppression.whole_line_comment?(~S(password = "x"  # note), 5)
+    end
+
+    test "a shebang is excluded by FORM, not by position" do
+      refute ScannerSuppression.whole_line_comment?("#!/usr/bin/env bash", 40)
+    end
+  end
 end

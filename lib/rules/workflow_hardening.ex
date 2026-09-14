@@ -197,18 +197,124 @@ defmodule Hypatia.Rules.WorkflowHardening do
           [finding_wh002(rel, "set to `write-all`", :high)]
 
         Regex.match?(~r/^permissions:\s*\n\s+contents:\s*write/m, content) ->
-          [finding_wh002(rel, "with `contents: write`", :high)]
+          [wh002_contents_write_finding(rel, content)]
 
         Regex.match?(~r/^permissions:\s*\n\s+write-all:\s*true/m, content) ->
           [finding_wh002(rel, "with `write-all: true`", :high)]
 
-        not Regex.match?(~r/^permissions:/m, content) ->
+        # ⚠ A job-level `permissions:` block REPLACES the workflow-level one,
+        # so a workflow that scopes every job individually and omits the
+        # top-level block is CORRECTLY hardened, not unhardened. Anchoring
+        # this test at column 0 (the historical bug) reported those as
+        # "permissions absent" and drove remediation that rewrote the
+        # workflow level only.
+        not permissions_declared_anywhere?(content) ->
           [finding_wh002(rel, "absent (defaults to broad permissions)", :warn)]
 
         true ->
           []
       end
     end)
+  end
+
+  @doc """
+  Return true when a `permissions:` block is declared at EITHER the workflow
+  level (column 0) or the job level (indented). Comments are not matched:
+  `#` is not whitespace.
+  """
+  def permissions_declared_anywhere?(content) when is_binary(content) do
+    Regex.match?(~r/^[ \t]*permissions:/m, content)
+  end
+
+  # Operations that consume `contents: write`. If a workflow performs one of
+  # these, narrowing its effective permission to `read` does not harden it —
+  # it BREAKS it, silently, at the next run rather than at PR time. Nothing in
+  # CI exercises the token, so the YAML stays valid and every check stays
+  # green while the capability is gone.
+  @contents_write_operations [
+    ~r/\bgit\s+push\b/,
+    ~r/\bgit\s+commit\b/,
+    ~r/\bgh\s+pr\s+(create|merge)\b/,
+    ~r/\bgh\s+release\s+(create|upload|edit)\b/,
+    ~r/\bsoftprops\/action-gh-release\b/,
+    ~r/\bpeter-evans\/create-pull-request\b/,
+    ~r/\bactions\/create-release\b/,
+    ~r/\bncipollo\/release-action\b/,
+    ~r/\bstefanzweifel\/git-auto-commit-action\b/
+  ]
+
+  @doc """
+  Return true when the workflow text performs an operation that actually
+  requires `contents: write`.
+  """
+  def performs_contents_write?(content) when is_binary(content) do
+    Enum.any?(@contents_write_operations, &Regex.match?(&1, content))
+  end
+
+  @doc """
+  Return true when at least one JOB declares its own `permissions:` block.
+  A job-level block replaces the workflow-level one, so its presence means
+  a workflow-level narrowing may be correct hardening rather than a break.
+  """
+  def job_level_permissions?(content) when is_binary(content) do
+    Regex.match?(~r/^[ \t]+permissions:/m, content)
+  end
+
+  # The three probes, applied together. Judging a top-level `contents: write`
+  # needs all of them:
+  #   (1) is the workflow-level grant present  — the cond clause above;
+  #   (2) does the file actually perform a write;
+  #   (3) does a job carry its own `permissions:`.
+  # Only (1) alone is NOT a finding — that was the defect that made this rule
+  # recommend breaking narrowings.
+  defp wh002_contents_write_finding(rel, content) do
+    writes? = performs_contents_write?(content)
+    job_scoped? = job_level_permissions?(content)
+
+    cond do
+      # Writes, and no job-level elevation to fall back on. Narrowing the
+      # workflow level here REMOVES a capability the workflow uses.
+      writes? and not job_scoped? ->
+        %{
+          rule: "WH002",
+          file: rel,
+          severity: :warn,
+          reason:
+            "workflow #{rel} has top-level `permissions:` with `contents: write` " <>
+              "AND performs a write (push/commit/release/PR). It is over-broad, but " <>
+              "narrowing the workflow level alone WOULD BREAK IT — no job declares " <>
+              "its own `permissions:`.",
+          action: :report,
+          fix_recipe: "add-job-level-contents-write-then-narrow-workflow-level",
+          detail: %{
+            fix:
+              "Two steps, in this order: (1) add `permissions: {contents: write}` to " <>
+                "the job that performs the write; (2) only then narrow the " <>
+                "workflow-level block to `contents: read`. Doing (2) without (1) " <>
+                "fails at the next write, not at PR time — nothing in CI exercises " <>
+                "the token, so every check stays green."
+          }
+        }
+
+      # Writes, but jobs are individually scoped — narrowing is safe for any
+      # job carrying its own block. Still worth reporting, at low severity.
+      writes? and job_scoped? ->
+        finding_wh002(
+          rel,
+          "with `contents: write` (workflow performs a write, but jobs carry " <>
+            "their own `permissions:` — verify the WRITING job is one of them " <>
+            "before narrowing)",
+          :warn
+        )
+
+      # No write performed: narrowing is genuine least-privilege hardening.
+      true ->
+        finding_wh002(
+          rel,
+          "with `contents: write` (no write operation found — safe to narrow)",
+          :high
+        )
+    end
   end
 
   defp finding_wh002(file, why, sev) do
@@ -519,7 +625,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
         Regex.match?(~r/^\s+pull_request\b/m, content) or
           Regex.match?(~r/^\s*on:\s*pull_request\b/m, content)
 
-      has_concurrency? = Regex.match?(~r/^concurrency:/m, content)
+      has_concurrency? = Regex.match?(~r/^[ \t]*concurrency:/m, content)
 
       if pr_triggered? and not has_concurrency? do
         [
@@ -771,7 +877,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
         wh009_overprovisioned_secrets(repo_path) ++
         wh010_deprecated_workflow_commands(repo_path) ++
         wh011_curl_pipe_shell(repo_path) ++
-        wh012_untrusted_to_github_env(repo_path)
+        wh012_untrusted_to_github_env(repo_path) ++
+        wh013_permission_starved_write(repo_path)
 
     %{
       findings: findings,
@@ -779,6 +886,126 @@ defmodule Hypatia.Rules.WorkflowHardening do
       by_severity: group_by_severity(findings),
       dispatch: dispatch_recommendations(findings)
     }
+  end
+
+  # ─── WH013: Permission-starved write ────────────────────────────────
+
+  @doc """
+  WH013: the workflow PERFORMS an operation requiring `contents: write`
+  (push / commit / release / PR create) but neither the workflow level nor
+  any job grants it.
+
+  This is the inverse of WH002 and it detects a REAL, SILENT BREAKAGE rather
+  than a hardening opportunity. It exists because an over-narrow remediation
+  is invisible to CI: the YAML stays valid, nothing in a PR run exercises the
+  token, so `statusCheckRollup` reads SUCCESS and the workflow looks healthy.
+  The failure surfaces only at the next write, possibly weeks later — and if
+  the write is written defensively, e.g.
+
+      git push origin HEAD 2>/dev/null || echo "::warning::Could not push"
+
+  then a DENIED PUSH EMITS A WARNING, NOT A FAILURE. The workflow stays green
+  forever while recording nothing. That shape is scored `:high`, not `:warn`,
+  because the masking is what makes it undetectable.
+
+  Judging this needs all three probes — a workflow-level grant alone is not
+  the answer, because a job-level `permissions:` block REPLACES the
+  workflow-level one:
+
+    1. is there a workflow-level `contents: write`;
+    2. does the file actually perform a write;
+    3. does a job carry its own `permissions:` (and so possibly its own grant).
+  """
+  def wh013_permission_starved_write(repo_path) do
+    repo_path
+    |> workflow_files()
+    |> Enum.flat_map(fn path ->
+      content = File.read!(path)
+      rel = Path.relative_to(path, repo_path)
+
+      cond do
+        not performs_contents_write?(content) ->
+          []
+
+        # A grant exists at either level. This rule deliberately does not try
+        # to prove the grant is on the RIGHT job — that needs a real YAML
+        # parse, and a false "you are broken" is worse than a missed one.
+        grants_contents_write_anywhere?(content) ->
+          []
+
+        # No grant anywhere, and the write is masked so it can never go red.
+        masked_write?(content) ->
+          [
+            %{
+              rule: "WH013",
+              file: rel,
+              severity: :high,
+              reason:
+                "workflow #{rel} performs a write (push/commit/release/PR) with NO " <>
+                  "`contents: write` at the workflow level or any job level, AND the " <>
+                  "write is masked (`2>/dev/null`, `|| true`, or `|| echo`). The push " <>
+                  "is denied, the error is swallowed, and the workflow stays GREEN " <>
+                  "while recording nothing.",
+              action: :report,
+              fix_recipe: "grant-contents-write-to-writing-job-and-unmask",
+              detail: %{
+                fix:
+                  "Add `permissions: {contents: write}` to the job that performs the " <>
+                    "write, and remove the `2>/dev/null` / `|| echo` mask so a denied " <>
+                    "push fails the job instead of warning."
+              }
+            }
+          ]
+
+        true ->
+          [
+            %{
+              rule: "WH013",
+              file: rel,
+              severity: :high,
+              reason:
+                "workflow #{rel} performs a write (push/commit/release/PR) but grants " <>
+                  "no `contents: write` at the workflow level or any job level — the " <>
+                  "write will be denied at run time.",
+              action: :report,
+              fix_recipe: "grant-contents-write-to-writing-job",
+              detail: %{
+                fix:
+                  "Add `permissions: {contents: write}` to the job that performs the " <>
+                    "write. Do not widen the workflow level if other jobs are correctly " <>
+                    "scoped — a job-level block replaces the workflow-level one."
+              }
+            }
+          ]
+      end
+    end)
+  end
+
+  @doc """
+  Return true when `contents: write` (or `write-all`) is granted at the
+  workflow level or at any job level.
+  """
+  def grants_contents_write_anywhere?(content) when is_binary(content) do
+    Regex.match?(~r/^[ \t]*contents:\s*write\b/m, content) or
+      Regex.match?(~r/^[ \t]*permissions:\s*write-all\b/m, content) or
+      Regex.match?(~r/^[ \t]*write-all:\s*true\b/m, content)
+  end
+
+  # A write whose failure is swallowed: stderr redirected away, or the
+  # command `||`-chained into a warning or a no-op. AGENTS.md §5 — never
+  # `2>/dev/null` the thing under test.
+  @write_masks [
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*2>\s*\/dev\/null/,
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*\|\|\s*(?:true|:)\s*$/m,
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*\|\|\s*echo/
+  ]
+
+  @doc """
+  Return true when a write operation's failure is masked, so a denied write
+  cannot turn the job red.
+  """
+  def masked_write?(content) when is_binary(content) do
+    Enum.any?(@write_masks, &Regex.match?(&1, content))
   end
 
   # ─── Internals ──────────────────────────────────────────────────────
