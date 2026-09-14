@@ -321,11 +321,7 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
           csa005_scorecard_false_positives(owner, repo) ++
           csa006_scorecard_config_advice(owner, repo)
 
-      deduped =
-        findings
-        |> Enum.uniq_by(fn f ->
-          {f.rule, Map.get(f.detail, :alert_number, f.file)}
-        end)
+      deduped = deduplicate_findings(findings)
 
       {:ok,
        %{
@@ -334,6 +330,17 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
          by_severity: group_by_severity(deduped)
        }}
     end
+  end
+
+  @doc false
+  def deduplicate_findings(findings) do
+    Enum.uniq_by(findings, fn finding ->
+      alert_number = Map.get(finding.detail, :alert_number)
+
+      {finding.rule,
+       alert_number ||
+         {finding.file, Map.get(finding.detail, :scorecard_check)}}
+    end)
   end
 
   @doc """
@@ -596,6 +603,7 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
             "Repository has Scorecard MaintainedID alerts but is <90 days old - these are expected and will auto-resolve",
           action: :inform,
           detail: %{
+            scorecard_check: "MaintainedID",
             alert_count: length(open_maintained),
             repo_created_at: created_at,
             suggestion: "No action needed. These alerts will disappear after 90 days."
@@ -621,6 +629,7 @@ defmodule Hypatia.Rules.CodeScanningAlerts do
             "Repository has Scorecard CodeReviewID alerts but has only one human contributor - code review is impractical",
           action: :configure,
           detail: %{
+            scorecard_check: "CodeReviewID",
             alert_count: length(open_code_review),
             suggestion:
               "Add more contributors or accept that code review is not feasible for this project."

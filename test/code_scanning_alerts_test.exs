@@ -170,6 +170,7 @@ defmodule Hypatia.Rules.CodeScanningAlertsTest do
       assert finding.severity == :info
       assert finding.action == :inform
       assert finding.file == "hyperpolymath/brand-new"
+      assert finding.detail.scorecard_check == "MaintainedID"
       assert finding.detail.alert_count == 2
     end
 
@@ -203,6 +204,7 @@ defmodule Hypatia.Rules.CodeScanningAlertsTest do
       assert finding.rule == "CSA006"
       assert finding.severity == :medium
       assert finding.action == :configure
+      assert finding.detail.scorecard_check == "CodeReviewID"
       assert finding.detail.alert_count == 1
     end
 
@@ -213,6 +215,27 @@ defmodule Hypatia.Rules.CodeScanningAlertsTest do
                "hyperpolymath",
                "team"
              ) == []
+    end
+  end
+
+  describe "deduplicate_findings/1" do
+    test "keeps CSA006 advice for distinct Scorecard checks without alert numbers" do
+      maintained = %{
+        rule: "CSA006",
+        file: "hyperpolymath/example",
+        detail: %{scorecard_check: "MaintainedID"}
+      }
+
+      code_review = %{
+        rule: "CSA006",
+        file: "hyperpolymath/example",
+        detail: %{scorecard_check: "CodeReviewID"}
+      }
+
+      assert CodeScanningAlerts.deduplicate_findings([maintained, code_review]) == [
+               maintained,
+               code_review
+             ]
     end
   end
 
