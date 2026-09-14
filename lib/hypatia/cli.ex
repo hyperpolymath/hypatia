@@ -307,19 +307,19 @@ defmodule Hypatia.CLI do
   # ─── Finding collection across rule modules ──────────────────────────
 
   @doc """
-Runs the selected rule modules against `repo_path` and returns normalized
-finding maps. Each map includes `rule_module`, `type`, `severity`, `file`,
-`reason`, and `action`; line-aware findings may also include `line`.
-Findings covered by configured suppressions are excluded.
+  Runs the selected rule modules against `repo_path` and returns normalized
+  finding maps. Each map includes `rule_module`, `type`, `severity`, `file`,
+  `reason`, and `action`; line-aware findings may also include `line`.
+  Findings covered by configured suppressions are excluded.
 
-## Parameters
+  ## Parameters
 
   - repo_path: Path to the repository to scan.
   - rules: Rule module identifiers to run.
 
-## Returns
+  ## Returns
 
-A list of normalized finding maps.
+  A list of normalized finding maps.
 
   `rules` is a list of module atoms (for example, `[:content_patterns,
   :structural_drift]`). GitHub alert modules (`:dependabot_alerts`,
@@ -1117,6 +1117,9 @@ A list of normalized finding maps.
         true ->
           Hypatia.Rules.SecurityErrors.detect_secrets(line)
           |> Enum.uniq()
+          |> Enum.reject(
+            &Hypatia.ScannerSuppression.comment_masked_secret_label?(&1, line, idx + 1)
+          )
           |> Enum.map(fn label ->
             %{
               rule_module: rule_module,
