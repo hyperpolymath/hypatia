@@ -62,14 +62,22 @@ results=()
 # the scanner runs in production than scanning each fixture in
 # isolation. Per-rule assertions then filter the resulting JSON.
 echo "[soundness] Scanning fixtures tree against built escript..." >&2
+# AGENTS.md §5: never 2>/dev/null the thing under test. Capture stderr to a
+# file so a crash (e.g. the CondClauseError that took down 449 consumers on
+# 2026-09-12) is DIAGNOSABLE from the gate output, not merely detected.
+stderr_log=$(mktemp)
+trap 'rm -f "$stderr_log"' EXIT
 output=$("$ESCRIPT" scan "$REPO_ROOT/test/soundness/fixtures" \
              --format json \
              --severity low \
-             --exit-zero 2>/dev/null || true)
+             --exit-zero 2>"$stderr_log" || true)
 
 if ! echo "$output" | jq -e 'type == "array"' >/dev/null 2>&1; then
     echo "FATAL: escript did not return a JSON array from the fixtures tree" >&2
+    echo "--- stdout (first 20 lines) ---" >&2
     echo "$output" | head -20 >&2
+    echo "--- stderr (first 40 lines) ---" >&2
+    head -40 "$stderr_log" >&2
     exit 1
 fi
 
