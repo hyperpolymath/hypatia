@@ -76,8 +76,14 @@ if ! echo "$output" | jq -e 'type == "array"' >/dev/null 2>&1; then
     echo "FATAL: escript did not return a JSON array from the fixtures tree" >&2
     echo "--- stdout (first 20 lines) ---" >&2
     echo "$output" | head -20 >&2
-    echo "--- stderr (first 40 lines) ---" >&2
-    head -40 "$stderr_log" >&2
+    # Print the TAIL as well as the head: a toolchain shim (mise, asdf) can emit
+    # dozens of warning lines to stderr, pushing the actual exception past a
+    # head-only window. Measured 2026-09-14 — the CondClauseError was invisible
+    # behind 40 lines of mise registry warnings.
+    echo "--- stderr (first 20 lines) ---" >&2
+    head -20 "$stderr_log" >&2
+    echo "--- stderr (last 40 lines) ---" >&2
+    tail -40 "$stderr_log" >&2
     exit 1
 fi
 
