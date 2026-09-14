@@ -47,6 +47,13 @@ concurrency:
   group: escript-soundness-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    # GitHub selects `sh` inside a container when it cannot confirm bash, and
+    # `set -o pipefail` is a bashism that dies under dash with "Illegal option".
+    # Pin the shell rather than writing to the lowest common denominator.
+    shell: bash
+
 jobs:
   # Deliberately minimal: no `uses:`, no container, no inputs. If this job
   # produces a check run, then a newly-added workflow in this repository can
@@ -84,8 +91,8 @@ jobs:
           set -euo pipefail
           git init -q source
           cd source
-          git remote add origin "${SERVER_URL#https://}"
-          git remote set-url origin \
+          git config --global --add safe.directory "$PWD"
+          git remote add origin \
             "https://x-access-token:${GH_TOKEN}@${SERVER_URL#https://}/${TARGET_REPO}.git"
           git fetch -q --depth 1 origin "$TARGET_REF"
           git checkout -q FETCH_HEAD
