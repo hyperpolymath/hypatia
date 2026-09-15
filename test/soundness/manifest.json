@@ -92,6 +92,14 @@
       "language": "zig",
       "fixture": "test/soundness/fixtures/code_safety/zig_ptr_cast.zig",
       "expected_severity": "high"
+    },
+    {
+      "_comment": "The first non-code_safety entry. Until 2026-09-15 this manifest covered `code_safety` only (13 entries), so the entire workflow_audit module had NO packaging coverage -- including `missing_timeout_minutes`, the estate widest alert class at 2,526 alerts over 292 repos. The placeholder-message assertion in run-escript-soundness.sh was PROVEN toothless without this entry: rebuilt against a deliberately-broken normalizer, the gate still exited 0.",
+      "rule_module": "workflow_audit",
+      "rule_id": "missing_timeout_minutes",
+      "language": "yaml",
+      "fixture": "test/soundness/fixtures/.github/workflows/missing-timeout.yml",
+      "expected_severity": "medium"
     }
   ]
 }
