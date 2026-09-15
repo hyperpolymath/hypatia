@@ -24,6 +24,7 @@ defmodule Hypatia.CLI do
 
       --rules <list>    Comma-separated rule modules to run (default: all)
                         Available: root_hygiene,honest_completion,workflow_audit,
+                                   workflow_hardening,
                                    cicd_rules,research_extensions,
                                    code_safety,migration_rules,scorecard,
                                    green_web,git_state,dependabot_alerts,
@@ -45,6 +46,7 @@ defmodule Hypatia.CLI do
     :root_hygiene,
     :honest_completion,
     :workflow_audit,
+    :workflow_hardening,
     :cicd_rules,
     :research_extensions,
     :code_safety,
@@ -574,6 +576,43 @@ defmodule Hypatia.CLI do
                   # RE004 carries its line under `:detail`; the rest carry
                   # none. Both shapes degrade to nil, which SARIF renders
                   # as startLine 1 exactly as before.
+                  line: get_in(f, [:detail, :line]) || Map.get(f, :line),
+                  reason: f.reason,
+                  action: to_string(f.action)
+                }
+              end)
+
+            results ++ normalized
+
+          _ ->
+            results
+        end
+      else
+        results
+      end
+
+    # Workflow Hardening (WH001-WH014) - GitHub Actions hardening.
+    #
+    # This family defines 22 rules and shipped with a full test suite, but was
+    # absent from `@all_rule_modules` and had no normalizer here, so it had NO
+    # production caller and emitted NOTHING estate-wide. `scan_all_estate_policies/2`
+    # in `Rules` does call it, but that function itself is called only from tests.
+    # WH014 (#784) was therefore recorded complete while being inert.
+    #
+    # `:detail` is a MAP here (as the comment on `workflow_finding_message/1`
+    # warns), so the line is read out of it rather than used as the message, and
+    # the authored `:reason` is what renders.
+    results =
+      if :workflow_hardening in rules do
+        case Hypatia.Rules.WorkflowHardening.scan(repo_path) do
+          %{findings: findings} ->
+            normalized =
+              Enum.map(findings, fn f ->
+                %{
+                  rule_module: "workflow_hardening",
+                  severity: to_string(f.severity),
+                  type: f.rule,
+                  file: Map.get(f, :file, "."),
                   line: get_in(f, [:detail, :line]) || Map.get(f, :line),
                   reason: f.reason,
                   action: to_string(f.action)
