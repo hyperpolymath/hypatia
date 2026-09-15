@@ -111,9 +111,18 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end
   end
 
-  # Trusted left-hand sides of `${{ ... }}` (NOT script-injection
-  # sources). Anything in github.event.*, github.head_ref, etc. is
-  # treated as attacker-controlled in WH001/WH012.
+  # Left-hand sides of `${{ ... }}` that are ATTACKER-CONTROLLED and so are
+  # script-injection sources for WH001/WH012. Entries are deliberate
+  # PREFIXES (`github.event.commits` must cover `...commits.*.message`), so
+  # the pattern below appends a trailing boundary: without it every entry
+  # also matches a LONGER identifier, and bare `github.ref` swallowed the
+  # benign `github.ref_name` — 449 of 450 estate criticals were that alias.
+  # `github.ref`/`github.ref_name` are NOT here: on `pull_request` they are
+  # `refs/pull/N/merge` (GitHub-generated) and on `push` a ref only someone
+  # with push access can set, so neither is attacker-controlled in the sense
+  # GitHub's script-injection guidance means. A fork PR's branch name reaches
+  # a workflow as `github.head_ref` / `event.pull_request.head.ref`, both
+  # of which ARE listed.
   @untrusted_contexts ~w[
     github.event.issue.title github.event.issue.body
     github.event.pull_request.title github.event.pull_request.body
@@ -121,13 +130,23 @@ defmodule Hypatia.Rules.WorkflowHardening do
     github.event.comment.body github.event.review.body
     github.event.commits github.event.head_commit.message
     github.event.head_commit.author github.event.pages
-    github.head_ref github.ref
+    github.head_ref
   ]
   @untrusted_pattern Regex.compile!(
                        "\\$\\{\\{\\s*(" <>
                          (@untrusted_contexts |> Enum.map(&Regex.escape/1) |> Enum.join("|")) <>
-                         ")"
+                         ")(?![A-Za-z0-9_])"
                      )
+
+  @doc """
+  The attacker-controlled contexts WH001/WH012 match on.
+
+  Exposed so the boundary invariant can be asserted against the REAL list
+  rather than a copy that silently drifts: entries are joined into one
+  alternation and matched as prefixes, so ANY new member is a prefix trap
+  until the trailing boundary proves otherwise.
+  """
+  def untrusted_contexts, do: @untrusted_contexts
 
   # ─── WH001: Template injection ──────────────────────────────────────
 
@@ -1028,7 +1047,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   end
 
   defp extract_multiline_runs(lines) do
-    {acc, _} =
+    {acc, pending} =
       Enum.with_index(lines, 1)
       |> Enum.reduce({[], nil}, fn {line, no}, {acc, current} ->
         cond do
@@ -1051,7 +1070,17 @@ defmodule Hypatia.Rules.WorkflowHardening do
         end
       end)
 
-    acc
+    # A block scalar that runs to EOF is still a block. The reduce above only
+    # emits when a LATER line's indent drops back, so without this flush the
+    # final `run: |` of every workflow file was silently never scanned —
+    # a false NEGATIVE across every rule built on scan_run_blocks/1.
+    case pending do
+      nil ->
+        acc
+
+      {start_no, block_lines, _indent} ->
+        [{block_lines |> Enum.reverse() |> Enum.join("\n"), start_no} | acc]
+    end
   end
 
   defp indent_of(line) do
