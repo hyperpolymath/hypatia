@@ -107,28 +107,37 @@ jobs:
         working-directory: source
         run: mix deps.get
 
-      # NOTE: deliberately NOT --warnings-as-errors, and this is not laziness.
-      # Turning it on today makes this gate red on arrival, because five real
-      # warnings sit on main — invisible until now precisely because tests.yml,
-      # which carried that step, has never had a single successful run.
+      # --warnings-as-errors is ON, and it is load-bearing.
       #
-      # Two of the five are genuine logic defects, not lint:
-      #   * lib/rules/code_scanning_alerts.ex:544,571 rebind `findings` INSIDE an
-      #     `if` whose value is discarded, so CSA006 builds findings and throws
-      #     them away.
-      #   * lib/rules/secret_scanner_verification.ex:168 rebinds `exit`/`output`
-      #     inside `if exit != 0`, so the trufflehog fallback is inert and the
-      #     following `if exit == 0` still tests the ORIGINAL gitleaks exit.
-      # Both are the same shape as the CondClauseError this gate exists to catch:
-      # code that reads as though it acts and does nothing.
+      # It was deliberately omitted when this gate was first written, because
+      # 13 real warnings sat on main — invisible until then precisely because
+      # tests.yml, which carried that step, has never had a single successful
+      # run. Those 13 are now cleared, so the gate is armed.
       #
-      # Silencing them with an underscore would cement live bugs; repairing them
-      # changes scanner behaviour across 449 consumers and must be its own
-      # measured PR. Restore --warnings-as-errors in that PR, not this one.
+      # Two of them were logic defects rather than lint, and both are the
+      # shape this gate exists to catch: code that reads as though it acts and
+      # does nothing.
+      #   * code_scanning_alerts.ex rebound `findings` INSIDE an `if` whose
+      #     value is discarded, so CSA006 built findings and threw them away.
+      #     It ran on all 449 consumers and never produced a finding.
+      #   * secret_scanner_verification.ex was dead in seven independent ways
+      #     at once (string-vs-integer comparison, unguarded System.cmd,
+      #     a 3-tuple destructure of a 2-tuple, the discarded rebinding, and
+      #     writing evidence into the scanned repo). It was referenced
+      #     nowhere, so it was deleted rather than rewritten.
+      #
+      # An earlier version of this note said "five warnings" and blamed the
+      # trufflehog fallback's rebinding for making it inert. Both were wrong:
+      # the measured count was 13, and that module never reached the fallback
+      # because `System.cmd(...) |> elem(0) == 0` compares a string to an
+      # integer and is always false.
+      #
+      # If this step goes red, do NOT silence it with an underscore — an
+      # unused variable here has twice meant a discarded result. Fix the
+      # logic, or delete the code.
       - name: Compile
         working-directory: source
-        run: mix compile
-
+        run: mix compile --warnings-as-errors
       # The gate itself. Builds the escript fresh and asserts every rule in
       # test/soundness/manifest.json fires at its expected severity against the
       # built binary — the packaging path, not the in-process one.
