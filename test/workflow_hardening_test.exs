@@ -82,6 +82,121 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       assert WorkflowHardening.wh001_template_injection(repo) == []
       File.rm_rf!(repo)
     end
+
+    # ── Boundary + membership regression (2026-09-15) ────────────────
+    #
+    # `@untrusted_contexts` entries are joined into one alternation with
+    # `Regex.escape` and matched as PREFIXES. Before the fix the pattern
+    # had no trailing boundary, so every entry also matched any LONGER
+    # identifier sharing its text — and bare `github.ref` (which was also
+    # wrongly a member) therefore matched `github.ref_name`.
+    #
+    # Measured on 523 local checkouts: 450 WH001 criticals, of which 449
+    # were this alias and exactly 1 was real. Each test below pins one
+    # alternative class; the first is the mutant-kill for the boundary.
+
+    # The boundary invariant, asserted over the REAL list rather than a copy.
+    # Every entry is joined into one alternation with `Regex.escape` and
+    # matched as a PREFIX, so without a trailing boundary each member also
+    # matches any longer identifier sharing its text. That is exactly how
+    # `github.ref` came to match `github.ref_name`. This test keeps holding
+    # as the list changes, which a fixture naming one pair cannot do.
+    test "no untrusted context matches a LONGER identifier (boundary invariant)" do
+      for ctx <- WorkflowHardening.untrusted_contexts() do
+        repo =
+          create_repo_with_workflow("""
+          jobs:
+            x:
+              steps:
+                - run: echo "${{ #{ctx}_name }}"
+          """)
+
+        assert WorkflowHardening.wh001_template_injection(repo) == [],
+               "#{ctx} matched the longer identifier #{ctx}_name — " <>
+                 "the alternation has lost its trailing boundary"
+
+        File.rm_rf!(repo)
+      end
+    end
+
+    test "does NOT flag github.ref_name — the boundary mutant-kill" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - run: jq --arg b "${{ github.ref_name }}" -n '$ARGS.named'
+        """)
+
+      assert WorkflowHardening.wh001_template_injection(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "does NOT flag bare github.ref — not attacker-controlled" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - run: echo "ref=${{ github.ref }} sha=${{ github.sha }}"
+        """)
+
+      assert WorkflowHardening.wh001_template_injection(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "still flags github.head_ref after the boundary is added" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - run: echo "branch ${{ github.head_ref }}"
+        """)
+
+      assert [%{rule: "WH001", severity: :critical}] =
+               WorkflowHardening.wh001_template_injection(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "still flags a SUBPATH of a prefix entry (github.event.commits)" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - run: echo "${{ github.event.commits[0].message }}"
+        """)
+
+      assert [%{rule: "WH001", severity: :critical}] =
+               WorkflowHardening.wh001_template_injection(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "flags the real estate hit: pull_request_target + head.ref in run:" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on:
+            pull_request_target:
+              types: [opened]
+          jobs:
+            x:
+              steps:
+                - run: |
+                    PR_BRANCH="${{ github.event.pull_request.head.ref }}"
+                    git fetch pr-fork "$PR_BRANCH"
+          """,
+          "security-gate-pr-target.yml"
+        )
+
+      assert [%{rule: "WH001", severity: :critical}] =
+               WorkflowHardening.wh001_template_injection(repo)
+
+      File.rm_rf!(repo)
+    end
   end
 
   # ─── WH002 ──────────────────────────────────────────────────────────
