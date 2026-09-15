@@ -11,7 +11,7 @@ workflows:
         - 'actions/setup-node@v7.0.0'
         - 'actions/upload-artifact@v7.0.1'
         - 'dtolnay/rust-toolchain@master'
-        - 'taiki-e/install-action@v2.86.7'
+        - 'taiki-e/install-action@v2.87.9'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/ci.yml':
@@ -24,13 +24,13 @@ workflows:
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.0'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.86.7'
+        - 'taiki-e/install-action@v2.87.9'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@v4.37.8'
+        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
@@ -57,13 +57,13 @@ workflows:
     '.github/workflows/mirror.yml': []
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/deploy-pages@v5.0.0'
+        - 'actions/deploy-pages@v5.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/push-email-notify.yml':
-        - 'hyperpolymath/smtp-notify-action@v0.2.0'
+        - 'hyperpolymath/smtp-notify-action@v0.3.0'
     '.github/workflows/quality.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/deploy-pages@v5.0.0'
+        - 'actions/deploy-pages@v5.0.1'
         - 'actions/upload-artifact@v7.0.1'
         - 'actions/upload-pages-artifact@v5.0.0'
         - 'dtolnay/rust-toolchain@master'
@@ -78,9 +78,9 @@ workflows:
         - 'docker/login-action@v4.6.0'
         - 'docker/metadata-action@v6.2.0'
         - 'docker/setup-buildx-action@v4.3.0'
-        - 'docker/setup-qemu-action@v4.2.0'
+        - 'docker/setup-qemu-action@v4.3.0'
         - 'dtolnay/rust-toolchain@master'
-        - 'softprops/action-gh-release@v3.0.2'
+        - 'softprops/action-gh-release@v3.0.3'
         - 'swatinem/rust-cache@v2.9.2'
     '.github/workflows/roadmap-sync.yml': []
     '.github/workflows/rust.yml':
@@ -95,10 +95,10 @@ workflows:
         - 'actions/upload-artifact@v7.0.1'
         - 'aquasecurity/trivy-action@v0.36.0'
         - 'dtolnay/rust-toolchain@master'
-        - 'github/codeql-action@v4.37.8'
+        - 'github/codeql-action@v4.38.0'
         - 'gitleaks/gitleaks-action@v3.0.0'
-        - 'taiki-e/install-action@v2.86.7'
-        - 'trufflesecurity/trufflehog@v3.97.1'
+        - 'taiki-e/install-action@v2.87.9'
+        - 'trufflesecurity/trufflehog@v3.97.4'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -110,11 +110,11 @@ workflows:
         - 'dtolnay/rust-toolchain@master'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.86.7'
+        - 'taiki-e/install-action@v2.87.9'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-java@v6.0.0'
+        - 'actions/setup-java@v6.0.1'
         - 'actions/upload-artifact@v7.0.1'
 dependencies:
     'actions/attest-build-provenance@v4.2.2':
@@ -154,9 +154,9 @@ dependencies:
         commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
         owner_id: 44036562
         repo_id: 197814629
-    'actions/deploy-pages@v5.0.0':
-        ref: 'v5.0.0'
-        commit: 'sha1-cd2ce8fcbc39b97be8ca5fce6e763baed58fa128'
+    'actions/deploy-pages@v5.0.1':
+        ref: 'v5.0.1'
+        commit: 'sha1-368f82528645a54fb793d4d04e342629a3f51346'
         owner_id: 44036562
         repo_id: 438112499
     'actions/download-artifact@v8.0.1':
@@ -169,9 +169,9 @@ dependencies:
         commit: 'sha1-ed597411d8f924073f98dfc5c65a23a2325f34cd'
         owner_id: 44036562
         repo_id: 205262760
-    'actions/setup-java@v6.0.0':
-        ref: 'v6.0.0'
-        commit: 'sha1-dd06d9cba3e5552c54d9f8ea23572deb30010f7c'
+    'actions/setup-java@v6.0.1':
+        ref: 'v6.0.1'
+        commit: 'sha1-de7274f081f381c8f8158605e0321c36c376e2e6'
         owner_id: 44036562
         repo_id: 196057608
     'actions/setup-node@v7.0.0':
@@ -244,14 +244,14 @@ dependencies:
         commit: 'sha1-37fe631027851001ddb9b187196cc803df7f5f0e'
         owner_id: 5429470
         repo_id: 288485773
-    'docker/setup-qemu-action@v4.2.0':
-        ref: 'v4.2.0'
-        commit: 'sha1-96fe6ef7f33517b61c61be40b68a1882f3264fb8'
+    'docker/setup-qemu-action@v4.3.0':
+        ref: 'v4.3.0'
+        commit: 'sha1-1f40c72289eff860ee54a304f1438e3cff362e0a'
         owner_id: 5429470
         repo_id: 288487894
     'dtolnay/rust-toolchain@master':
         ref: 'master'
-        commit: 'sha1-6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772'
+        commit: 'sha1-02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
         owner_id: 1940490
         repo_id: 260749683
     'editorconfig-checker/action-editorconfig-checker@v3.0.0':
@@ -264,9 +264,14 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
-    'github/codeql-action@v4.37.8':
-        ref: 'v4.37.8'
-        commit: 'sha1-db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28'
+    'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63':
+        ref: 'v4.38.0'
+        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+        owner_id: 9919
+        repo_id: 259445878
+    'github/codeql-action@v4.38.0':
+        ref: 'v4.38.0'
+        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         owner_id: 9919
         repo_id: 259445878
     'gitleaks/gitleaks-action@v3.0.0':
@@ -296,7 +301,7 @@ dependencies:
         repo_id: 623796603
     'hyperpolymath/deed-ecosystem@main':
         ref: 'main'
-        commit: 'sha1-f7a40a4d5cc82b2e73f861119baa6818d77a448d'
+        commit: 'sha1-f9d999b60cb5f383679ea19912bcdc49c944973a'
         owner_id: 6759885
         repo_id: 1275649586
     'hyperpolymath/k9-ecosystem@main':
@@ -304,9 +309,9 @@ dependencies:
         commit: 'sha1-2155aa26a21758f2ba119f61bc7e0e1981c106fb'
         owner_id: 6759885
         repo_id: 1275650185
-    'hyperpolymath/smtp-notify-action@v0.2.0':
-        ref: 'v0.2.0'
-        commit: 'sha1-ede1191ef6ff3ac02c4f4d9efdf837ee517e11d7'
+    'hyperpolymath/smtp-notify-action@v0.3.0':
+        ref: 'v0.3.0'
+        commit: 'sha1-22e7bdb322c430c1d0dac6b3bb307f4bb139d0be'
         owner_id: 6759885
         repo_id: 1352485172
     'ruby/setup-ruby@v1.321.0':
@@ -314,9 +319,9 @@ dependencies:
         commit: 'sha1-95ef2b042f9d7a56d8268cba8559e2842e2ad01b'
         owner_id: 210414
         repo_id: 231208785
-    'softprops/action-gh-release@v3.0.2':
-        ref: 'v3.0.2'
-        commit: 'sha1-3d0d9888cb7fd7b750713d6e236d1fcb99157228'
+    'softprops/action-gh-release@v3.0.3':
+        ref: 'v3.0.3'
+        commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
     'swatinem/rust-cache@v2.9.2':
@@ -324,13 +329,13 @@ dependencies:
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.86.7':
-        ref: 'v2.86.7'
-        commit: 'sha1-b6ff580856c41316412a0b9b60540fbc6f8c82cc'
+    'taiki-e/install-action@v2.87.9':
+        ref: 'v2.87.9'
+        commit: 'sha1-c3ec0de9ae7f1019cea21aa96aa0a895b9552063'
         owner_id: 43724913
         repo_id: 442947557
-    'trufflesecurity/trufflehog@v3.97.1':
-        ref: 'v3.97.1'
-        commit: 'sha1-20652fbbdefffcdaa493a5bf57ab2ac6b1db715b'
+    'trufflesecurity/trufflehog@v3.97.4':
+        ref: 'v3.97.4'
+        commit: 'sha1-363923b901c911a9164f50b6c423f47c15372b1c'
         owner_id: 79229934
         repo_id: 77726177
