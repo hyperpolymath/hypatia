@@ -92,8 +92,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
     concurrency_missing = check_concurrency_missing_readonly(workflow_contents)
     heading_regex_issues = check_unanchored_heading_regex(workflow_contents)
     d_burn_issues = check_d_burn_double_trigger(workflow_contents)
+    secret_history = check_secret_history_coverage(workflow_contents)
 
     %{
+      # `flawed_regexes` was computed at the top of this function and
+      # counted into `flawed_regex_count:` below, but was never added to
+      # this list -- so the rule ran on every scan, reported a count
+      # nothing consumes, and discarded every finding it produced. The
+      # cli.ex normalizer's own comment names `flawed_regex` as one of the
+      # `:rule`-keyed sources it handles, so the omission was accidental,
+      # not a deliberate mute. Restoring it is gate-safe: the rule emits
+      # `severity: :low` (rank 4), below the reusable's blocking threshold
+      # of high/critical and below the default `--severity medium`.
       findings:
         missing ++
           unpinned ++
@@ -117,8 +127,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
           codeql_missing_actions ++
           concurrency_missing ++
           heading_regex_issues ++
-          d_burn_issues,
+          d_burn_issues ++
+          flawed_regexes ++
+          secret_history,
       missing_count: length(missing),
+      secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
       wrong_pin_count: length(wrong_pins),
       permission_issues: length(permission_issues),
@@ -1602,6 +1615,141 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   def check_flawed_regex(_), do: []
+
+  # ─── Secret-history coverage (Phase 1c) ───────────────────────────────
+
+  # A repository is covered when it calls the estate rail, which is the only
+  # invocation whose history behaviour is guaranteed by construction:
+  # `standards/.github/workflows/secret-scanner-reusable.yml` checks out at
+  # `fetch-depth: 0`, runs a working-tree pass AND a full-history pass, and the
+  # history pass already refuses to report a pass on a shallow checkout.
+  @secret_history_rail "secret-scanner-reusable.yml"
+
+  # A direct invocation counts as coverage too -- the estate does not mandate
+  # the rail -- but only its presence is asserted here, not its depth, which is
+  # what `secret_scan_without_history` below is for.
+  @direct_secret_scanners ~r/\b(gitleaks|trufflehog)\b/
+
+  @doc """
+  Check that the repository actually has a secret-history gate.
+
+  This is a **coverage** assertion, not a reimplementation. Full-history secret
+  scanning already exists on ~398 repositories via the estate rail; duplicating
+  `gitleaks detect` in Elixir alongside it would add cost and a second thing to
+  keep correct. What was missing is the assertion that the gate is *there*.
+
+  Measured across 573 deduplicated local clones on 2026-09-15: 409 call the
+  hypatia scan rail, 398 call the secret-scanner rail, and **11 run hypatia with
+  no secret-history gate of any kind** -- no rail call and no direct `gitleaks`
+  or `trufflehog` invocation. Those 11 are the fire population.
+
+  Severity is `:medium` by measurement, not by taste. The reusable's blocking
+  gate refuses `high` and `critical`; at `:high` this would put 11 repositories'
+  `main` into a permanently-red required check the moment it shipped, with no
+  PR to review, because hypatia is resolved by `git ls-remote ... HEAD` at
+  runtime. Medium is visible at the default `--severity medium` threshold and
+  blocks nothing.
+
+  Deliberately NOT asserted: `secrets: inherit` on the caller. The rail's own
+  header (lines 28-33) requires it so the gitleaks-*action*'s `GITHUB_TOKEN`
+  reference resolves -- but the same header records that #500 replaced that
+  action with a pinned, checksum-verified binary, which removed the reason.
+  Probing for a requirement the artefact itself documents as superseded would
+  false-positive across the fleet.
+
+  This check reads the repository's own workflow files only. Whether the
+  *history* a scan can see is real is a property of the checkout, and is
+  reported separately by `git_state`'s GS008 shallow-clone probe -- a
+  history-dependent finding produced under a truncated history is vacuous, and
+  the two findings are meant to be read together.
+  """
+  def check_secret_history_coverage(workflow_contents) when is_map(workflow_contents) do
+    # An absence finding has no file to name, so it anchors on the directory
+    # that is its subject. Do not contort this into a filename to satisfy a
+    # fixture-matching gate.
+    contents = Map.values(workflow_contents)
+
+    calls_rail? = Enum.any?(contents, &String.contains?(&1, @secret_history_rail))
+
+    direct_files =
+      Enum.filter(workflow_contents, fn {_f, c} -> Regex.match?(@direct_secret_scanners, c) end)
+
+    cond do
+      calls_rail? ->
+        []
+
+      direct_files == [] ->
+        [
+          %{
+            rule: "missing_secret_history_scan",
+            severity: :medium,
+            file: ".github/workflows",
+            description:
+              "No secret-history scan is wired in this repository -- no call to " <>
+                "`#{@secret_history_rail}` and no direct `gitleaks`/`trufflehog` invocation. " <>
+                "A secret committed and later deleted is invisible to every working-tree " <>
+                "scan, so this repository has no coverage for the class of leak that " <>
+                "matters most. Fix: add a caller for " <>
+                "`hyperpolymath/standards/.github/workflows/#{@secret_history_rail}`, which " <>
+                "checks out at `fetch-depth: 0` and runs both a working-tree and a " <>
+                "full-history pass.",
+            action: :add_secret_history_scan
+          }
+        ]
+
+      true ->
+        # A direct scanner exists. It only provides history coverage if the
+        # checkout feeding it is unshallow AND the scanner is not restricted to
+        # working-tree mode. `gitleaks --no-git` reads the filesystem only, so a
+        # deleted-but-committed secret is missed however deep the checkout is.
+        Enum.flat_map(direct_files, fn {filename, content} ->
+          no_git_only? =
+            String.contains?(content, "--no-git") and
+              not Regex.match?(~r/gitleaks\s+detect(?![^\n]*--no-git)/, content)
+
+          deep_checkout? = Regex.match?(~r/fetch-depth:\s*0\b/, content)
+
+          cond do
+            no_git_only? ->
+              [
+                %{
+                  rule: "secret_scan_without_history",
+                  severity: :low,
+                  file: filename,
+                  description:
+                    "`#{filename}` runs a secret scanner in working-tree mode only " <>
+                      "(`--no-git`), so a secret that was committed and later deleted is " <>
+                      "never examined. Fix: add a second pass without `--no-git`, or call " <>
+                      "`#{@secret_history_rail}`, which runs both passes.",
+                  action: :add_history_pass
+                }
+              ]
+
+            not deep_checkout? ->
+              [
+                %{
+                  rule: "secret_scan_without_history",
+                  severity: :low,
+                  file: filename,
+                  description:
+                    "`#{filename}` invokes a secret scanner but its checkout does not set " <>
+                      "`fetch-depth: 0`, so the scan sees a shallow history and cannot find " <>
+                      "a secret that was committed and later deleted. A history scan " <>
+                      "without history reports a pass it did not earn. Fix: set " <>
+                      "`fetch-depth: 0` on the checkout step, or call " <>
+                      "`#{@secret_history_rail}`.",
+                  action: :set_fetch_depth_zero
+                }
+              ]
+
+            true ->
+              []
+          end
+        end)
+    end
+  end
+
+  def check_secret_history_coverage(_), do: []
 
   # ─── WF018: Scorecard wrapper missing job-level permissions ───────────
   #

@@ -14,7 +14,11 @@ defmodule Hypatia.Rules.GitState do
   - sustainabot: advisory for unpushed changes
   - seambot: verify sync after push
 
-  Rule IDs: GS001-GS007
+  Rule IDs: GS001-GS008
+
+  GS008 is the odd one out: it reports on the *scan environment* (a shallow
+  clone) rather than on the repository's sync state, because a truncated
+  history silently invalidates every history-dependent finding in the report.
   """
 
   # ─── GS001: Uncommitted changes ────────────────────────────────────────
@@ -373,6 +377,66 @@ defmodule Hypatia.Rules.GitState do
     end
   end
 
+  # ─── GS008: Shallow clone (history-coverage instrument health) ────────
+
+  @doc """
+  GS008: Detect a shallow clone -- `.git/shallow` present.
+
+  Severity: medium. This is not a defect in the repository; it is a defect in
+  the *scan environment*, and it is reported so that no history-dependent
+  claim made by this scan is read as a pass.
+
+  `standards/.github/workflows/hypatia-scan-reusable.yml` checks out at
+  `fetch-depth: 0` (verified against origin/main 2026-09-15, line 29), so in
+  production this fires on no consumer at all. When it does fire, that rail has
+  regressed, and every history-sensitive assertion in the same report --
+  including `workflow_audit`'s secret-history coverage check -- is vacuous.
+  A history gate that sees no history is a fake gate by construction, which is
+  the failure class this rule exists to make loud rather than silent.
+
+  Deliberately a filesystem probe and not `git rev-parse --is-shallow-repository`.
+  An unguarded `System.cmd` raises `ErlangError :enoent` wherever git is absent
+  from PATH -- the exact defect that got `lib/rules/secret_scanner_verification.ex`
+  deleted, and one that would crash a scan rather than report a finding.
+
+  Severity is deliberately `:medium`, not `:high`. The reusable's blocking gate
+  refuses `high` and `critical`, and this condition is controlled by a single
+  shared line in `standards`; at `:high` one regression there would turn every
+  consumer red simultaneously. Medium is visible at the default threshold and
+  blocks nothing. Promote only after measuring a non-zero fire count.
+  """
+  def gs008_shallow_clone(repo_path) do
+    if File.exists?(Path.join(repo_path, ".git/shallow")) do
+      [
+        %{
+          rule: "GS008",
+          # ⚠ MUST NOT be `.git/shallow`, however natural that reads. `.git/`
+          # is in `@universal_excludes` (scanner_suppression.ex), so a finding
+          # anchored there is silently deleted by the path filter between
+          # `scan/1` and the CLI output -- the rule fires, `scan/1` returns it,
+          # and nothing reaches the report. Measured 2026-09-15: with
+          # `file: ".git/shallow"` this rule was a complete no-op on a real
+          # `git clone --depth 1`, while passing a full-clone test perfectly.
+          # The exclusion exists to avoid scanning files *inside* `.git/`; it
+          # also eats findings *about* it. The subject here is the repository's
+          # clone depth, so `"."` is both correct and safe, matching GS005/GS007.
+          file: ".",
+          severity: :medium,
+          reason:
+            "Shallow clone -- `.git/shallow` is present, so this repository's history is " <>
+              "truncated. Any history-dependent finding in this scan (notably secret-history " <>
+              "coverage) is vacuous and MUST NOT be read as a pass. The hypatia scan rail " <>
+              "checks out at `fetch-depth: 0`; a shallow tree here means that has regressed. " <>
+              "Fix: set `fetch-depth: 0` on the checkout step feeding the scan, or run " <>
+              "`git fetch --unshallow`.",
+          action: :deepen_checkout
+        }
+      ]
+    else
+      []
+    end
+  end
+
   # ─── Comprehensive scan ───────────────────────────────────────────────
 
   @doc """
@@ -391,7 +455,8 @@ defmodule Hypatia.Rules.GitState do
           gs004_stale_remote_refs(repo_path) ++
           gs005_detached_head(repo_path) ++
           gs006_not_on_default_branch(repo_path) ++
-          gs007_stale_remote_branches(repo_path)
+          gs007_stale_remote_branches(repo_path) ++
+          gs008_shallow_clone(repo_path)
 
       %{
         findings: findings,
