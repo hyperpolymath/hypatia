@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# SOUNDNESS FIXTURE — not a real workflow, and not executed by GitHub.
+# GitHub only runs workflows in the REPOSITORY ROOT `.github/workflows/`; this
+# copy is nested four directories deep and is inert by construction.
+#
+# It exists to give `run-escript-soundness.sh` a workflow_audit finding to
+# assert on. Before 2026-09-15 the manifest covered `code_safety` only, so the
+# entire workflow_audit module — including `missing_timeout_minutes`, the
+# estate's widest alert class at 2,526 alerts over 292 repos — had no packaging
+# coverage at all, and the placeholder-message assertion added to that script
+# had nothing to bite on. Proven by mutant: the gate passed rc=0 against a
+# deliberately-broken normalizer.
+#
+# The ONLY defect here is the absent `timeout-minutes:` on `build`. Everything
+# else is deliberately correct so the fixture asserts one thing:
+#   - actions are pinned to full 40-char SHAs (an unpinned action would trip
+#     `unpinned_action`, whose message the same gate also checks)
+#   - `permissions:` is declared (otherwise `missing_permissions` fires)
+#   - `concurrency:` and a `cache` step are present (otherwise the caching and
+#     concurrency rules fire)
+# If you add a second defect here, add its manifest entry too — an unasserted
+# finding in a fixture is noise that the next person will silence.
+name: Soundness fixture — missing timeout-minutes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache
+          key: fixture-${{ runner.os }}
+      - run: echo "this job deliberately has no timeout-minutes"

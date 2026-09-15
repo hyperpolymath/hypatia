@@ -453,9 +453,17 @@ defmodule Hypatia.CLI do
                 severity: to_string(Map.get(f, :severity, :medium)),
                 type: to_string(type),
                 file: Map.get(f, :file, Map.get(f, :files, "") |> listify()),
-                reason: Map.get(f, :detail, describe_workflow_finding(f)),
+                reason: workflow_finding_message(f),
                 action: to_string(Map.get(f, :action, Map.get(f, :fix, :flag)))
               }
+              # `:action` stays the remediation VERB it already is
+              # (`:pin_sha`, `:add_permissions`, `:narrow_permissions`, ...).
+              # The machine-readable recipe ids ride alongside as their own
+              # keys rather than overloading it -- same shape as the
+              # structural_drift normalizer's `Map.take` above. Before this,
+              # 7 `fix_recipe:` and 7 `recipe_id:` declarations in
+              # workflow_audit.ex were read by nothing at all.
+              |> Map.merge(Map.take(f, [:fix_recipe, :recipe_id, :job]))
             end)
 
           results ++ normalized
@@ -1340,9 +1348,38 @@ defmodule Hypatia.CLI do
     end
   end
 
+  @doc false
+  # `workflow_audit.ex` authors its message under THREE different keys --
+  # measured on 71d9b19: `reason:` 18, `detail:` 11, `description:` 3 -- and
+  # this normalizer used to read only `:detail`. Everything else fell through
+  # to `describe_workflow_finding/1` and shipped a generated placeholder:
+  # `missing_timeout_minutes`, the estate's widest class at 2,526 alerts over
+  # 292 repos, rendered as "Issue in ci.yml" in both the JSON and the SARIF
+  # `message.text`, while the real remediation text sat unused in the source.
+  #
+  # Public because the test suite asserts the rendered message DIFFERS from the
+  # placeholder. A test asserting only "reason is a non-empty string" passes
+  # against the broken version -- which is how this survived.
+  #
+  # `is_binary/1` guards each limb: several rule modules emit a MAP under
+  # `:detail` as structured metadata (branch_protection, baseline_health,
+  # secret_scanning_alerts, code_scanning_alerts, workflow_hardening). None of
+  # those reach this normalizer today, but an unguarded limb would render a map
+  # as the alert message the moment one did.
+  def workflow_finding_message(f) do
+    cond do
+      is_binary(Map.get(f, :detail)) -> f.detail
+      is_binary(Map.get(f, :reason)) -> f.reason
+      is_binary(Map.get(f, :description)) -> f.description
+      true -> describe_workflow_finding(f)
+    end
+  end
+
+  # Last resort only: every one of these strings is GENERATED, not authored. If
+  # a rule's findings render through here, that rule is not emitting a message
+  # under any of the three keys above -- fix the rule, do not extend this list.
   defp describe_workflow_finding(f) do
     cond do
-      Map.has_key?(f, :detail) -> f.detail
       Map.has_key?(f, :action_ref) -> "Action #{f.action_ref} needs attention"
       Map.has_key?(f, :file) -> "Issue in #{f.file}"
       true -> "Workflow issue detected"

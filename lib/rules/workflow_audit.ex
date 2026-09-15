@@ -252,7 +252,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
             type: :missing_workflow,
             file: wf,
             severity: severity_for_workflow(wf),
-            action: :create
+            action: :create,
+            reason:
+              "Required workflow `#{wf}` is absent from .github/workflows/. " <>
+                "The estate baseline expects it; without it this repository is " <>
+                "unscanned for whatever that workflow covers, and its absence is " <>
+                "silent — no job fails, because no job runs."
           }
         ]
       end
@@ -322,7 +327,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 action_ref: slug,
                 severity: :info,
                 action: :accept_with_rationale,
-                rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug)
+                rationale: Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug),
+                reason:
+                  "Action `#{slug}` in #{filename} is not SHA-pinned, and that is " <>
+                    "ACCEPTED: #{String.trim_trailing(Hypatia.Rules.SecurityErrors.pin_exemption_reason(slug), ".")}. " <>
+                    "Recorded so the exemption is visible rather than " <>
+                    "indistinguishable from an unreviewed unpinned action."
               }
             ]
 
@@ -336,12 +346,42 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 action_ref: slug,
                 severity: severity,
                 action: :pin_sha,
-                known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
+                known_sha: Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref),
+                reason:
+                  unpinned_action_message(
+                    filename,
+                    slug,
+                    ref,
+                    Map.get(Hypatia.Rules.SecurityErrors.sha_pins(), action_ref)
+                  )
               }
             ]
         end
       end)
     end)
+  end
+
+  # The remediation text for an unpinned action. This used to be omitted
+  # entirely, so `cli.ex` substituted the generated string
+  # "Action <slug> needs attention" -- which names the problem without saying
+  # what it is or what to do, and is what the GitHub alert displayed.
+  # `known_sha` and the mutability of `ref` are both already known here.
+  defp unpinned_action_message(filename, slug, ref, known_sha) do
+    mutability =
+      if ref in ["main", "master"] do
+        "`#{ref}` is a BRANCH: whatever it points at today can be replaced by " <>
+          "the action's owner at any time, including after review"
+      else
+        "`#{ref}` is a tag, and a tag can be moved to a different commit"
+      end
+
+    fix =
+      case known_sha do
+        sha when is_binary(sha) -> "Pin it to the estate-canonical `#{sha}`."
+        _ -> "Pin it to a full 40-character commit SHA, with the version in a trailing comment."
+      end
+
+    "Action `#{slug}` in #{filename} is not pinned to a commit SHA — #{mutability}. #{fix}"
   end
 
   @doc """
@@ -422,7 +462,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 current_sha: sha,
                 expected_sha: known_sha,
                 severity: :info,
-                fix: :update_pin
+                fix: :update_pin,
+                reason:
+                  "Action `#{action}` in #{filename} is pinned to `#{sha}`, but the " <>
+                    "estate canon for it is `#{known_sha}`. A divergent pin is still a " <>
+                    "pin, so nothing fails — the repository is simply running a " <>
+                    "different revision from the rest of the fleet."
               }
             ]
 
@@ -555,7 +600,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> Enum.flat_map(fn {_hash, entries} ->
       if length(entries) > 1 do
         names = Enum.map(entries, fn {name, _} -> name end)
-        [%{type: :duplicate_workflow, files: names, severity: :low, action: :consolidate}]
+
+        [
+          %{
+            type: :duplicate_workflow,
+            files: names,
+            severity: :low,
+            action: :consolidate,
+            reason:
+              "Workflows #{Enum.join(names, ", ")} are byte-identical. Every push " <>
+                "runs all of them, spending the minutes more than once, and a fix " <>
+                "applied to one copy leaves the others stale. Consolidate to one."
+          }
+        ]
       else
         []
       end
