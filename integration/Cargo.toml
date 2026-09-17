@@ -45,7 +45,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.23", features = ["v4"] }
 
 # Testcontainers for spinning up Docker containers
-testcontainers = { version = "0.27", features = ["watchdog"] }
+testcontainers = { version = "0.28", features = ["watchdog"] }
 testcontainers-modules = { version = "0.15", features = ["redis"] }
 
 # Mock HTTP server
