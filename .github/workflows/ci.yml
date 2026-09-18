@@ -113,7 +113,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.87.12
+        uses: taiki-e/install-action@v2.87.13
         with:
           tool: cargo-llvm-cov
 
@@ -127,7 +127,7 @@ jobs:
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7.0.0
+        uses: codecov/codecov-action@v7.1.0
         with:
           files: lcov.info
           flags: rust
