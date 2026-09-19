@@ -39,7 +39,7 @@ Each bot now has:
 * `README.adoc` - Documentation
 * `LICENSE` - MPL-2.0
 * `SECURITY.md` - Security policy
-* `CONTRIBUTING.adoc` - Contribution guide
+* `../.github/CONTRIBUTING.md` - Contribution guide
 * `CODE_OF_CONDUCT.md` - Community standards
 * `.machine_readable/6scm/` - All 6 SCM files
 * `tasks/Justfile` - Build tasks
