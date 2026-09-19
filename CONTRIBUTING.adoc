@@ -18,7 +18,7 @@ We welcome contributions in many forms:
 [arabic]
 . *Read the AI Manifest:* Start with `+0-AI-MANIFEST.a2ml+` (if present)
 to understand the repository structure.
-. *Environment:* Use `+guix shell -D -f guix.scm+` (or `+direnv allow+`)
+. *Environment:* Use `+guix shell -D -f build/guix.scm+` (or `+direnv allow+`)
 to set up your tools. Guix is the canonical packager per
 https://github.com/hyperpolymath/standards/issues/101[standards#101];
 the prior `+nix develop+` fallback was retired.
