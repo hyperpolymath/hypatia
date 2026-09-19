@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
   Options:
 
     * `--ssot PATH`   the RSR v2.0 criteria SSOT (default:
-      `rhodium-standard-repositories/spec/rsr-criteria-v2.a2ml` under `--standards`,
+      `0-canon/rsr/rsr-criteria-v2.a2ml` under `--standards` (post-reorg home; the pre-reorg path was moved in the September 2026 reorg),
       else the bundled test fixture)
     * `--standards P` root of a checked-out `hyperpolymath/standards` (for the SSOT)
     * `--write`       write `REPO/.machine_readable/scorecards/rsr.scorecard.a2ml`
@@ -58,7 +58,7 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
         opts[:ssot]
 
       opts[:standards] ->
-        Path.join(opts[:standards], "rhodium-standard-repositories/spec/rsr-criteria-v2.a2ml")
+        Path.join(opts[:standards], "0-canon/rsr/rsr-criteria-v2.a2ml")
 
       true ->
         Path.join(:code.priv_dir(:hypatia) |> to_string(), "..")
