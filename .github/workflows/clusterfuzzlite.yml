@@ -35,7 +35,7 @@ jobs:
     steps:
       # Sparse + blobless: this job only needs to know whether two paths exist,
       # so fetching the tree is enough — no file contents, no history.
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           sparse-checkout: |
             fuzz
@@ -62,14 +62,14 @@ jobs:
     needs: detect-fuzz-targets
     if: needs.detect-fuzz-targets.outputs.present == 'true'
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      - uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1  # v1
         with:
           language: rust
           sanitizer: address
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      - uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1  # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 300
@@ -84,12 +84,12 @@ jobs:
     needs: detect-fuzz-targets
     if: needs.detect-fuzz-targets.outputs.present == 'true'
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1  # v1
         with:
           language: rust
           sanitizer: address
-      - uses: google/clusterfuzzlite/actions/run_fuzzers@v1
+      - uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1  # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fuzz-seconds: 1800
