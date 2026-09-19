@@ -703,7 +703,7 @@ fn scan_configurations(repo_path: &Path, skipped_checks: &[String]) -> Result<Ve
     if !skipped_checks.contains(&"missing-contributing".to_string()) {
         let contrib_paths = [
             "CONTRIBUTING.md",
-            "CONTRIBUTING.adoc",
+            "../../../.github/CONTRIBUTING.md",
             ".github/CONTRIBUTING.md",
         ];
         let has_contrib = contrib_paths.iter().any(|p| repo_path.join(p).exists());

@@ -22,7 +22,7 @@
         ("SECURITY.md" "Security policy")
         ("LICENSE" "License"))
       (recommended
-        ("CONTRIBUTING.adoc" "Contribution guide")
+        ("../../.github/CONTRIBUTING.md" "Contribution guide")
         ("CODE_OF_CONDUCT.md" "Community standards")
         ("AGENTS.md" "AI instructions")
         ("DISCOVERY.json" "Machine manifest")

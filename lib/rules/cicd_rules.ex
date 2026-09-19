@@ -1547,7 +1547,7 @@ defmodule Hypatia.Rules.CicdRules do
       "docs/**",
       "EXPLAINME.adoc",
       "CLAUDE.md",
-      "CONTRIBUTING.adoc",
+      "../../.github/CONTRIBUTING.md",
       "FAQ.md"
     ]
   }
