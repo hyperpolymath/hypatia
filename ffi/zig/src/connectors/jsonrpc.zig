@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 6/16 — JSON-RPC. Stub fidelity; see `hexadeca.zig`.
+// Connector 6/16 — JSON-RPC. Stub fidelity; see `unified-api-adapter.zig`.
 
 const std = @import("std");
 

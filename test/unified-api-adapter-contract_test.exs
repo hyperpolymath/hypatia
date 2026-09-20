@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: MPL-2.0
-defmodule Hypatia.HexadecaContractTest do
+defmodule Hypatia.UnifiedApiAdapterContractTest do
   @moduledoc false
   use ExUnit.Case, async: true
 
-  # Single-oracle drift guard for the hexadeca-connector wire contract.
+  # Single-oracle drift guard for the unified-api-adapter wire contract.
   #
   # `ffi/connectors.json` is the golden source-of-truth for the 16-connector
   # surface. The Zig enum, the Idris2 ABI, and the Rust client each mirror it;
   # this test reads the golden plus all three source files and fails if any
   # mirror drifts in name or order. Wire ordering is load-bearing
-  # (see ffi/zig/src/hexadeca.zig).
+  # (see ffi/zig/src/unified-api-adapter.zig).
 
   @root Path.expand("..", __DIR__)
   @golden Path.join(@root, "ffi/connectors.json")
 
   @sources [
-    {"Zig (hexadeca.zig)", Path.join(@root, "ffi/zig/src/hexadeca.zig"),
+    {"Zig (unified-api-adapter.zig)", Path.join(@root, "ffi/zig/src/unified-api-adapter.zig"),
      ~r/\.\w+\s*=>\s*"([a-z0-9-]+)"/},
     {"Idris2 (Types.idr)", Path.join(@root, "src/abi/Types.idr"),
      ~r/connectorName\s+\w+\s*=\s*"([a-z0-9-]+)"/},

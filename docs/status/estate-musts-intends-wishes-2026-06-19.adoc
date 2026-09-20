@@ -12,7 +12,7 @@ CLAUDE) and lack only a formal CRG grade.
 
 Core three bots + coordinator are Grade B/Beta and operating estate-wide
 (1635 dispatches, 99% success). The 2026-06 session cleared the estate’s
-Nix→Guix, CI-timeout, workflow_audit-FP and hexadeca-contract musts. The
+Nix→Guix, CI-timeout, workflow_audit-FP and unified-api-adapter-contract musts. The
 big live workstream is the merge-orchestration runtime (parallel
 session, now merged in hypatia). Remaining musts are mostly blocked on
 the owner.
@@ -28,7 +28,7 @@ the owner.
 triage (#470/#369) · M13 SARIF / M14 GraphQL / M15 auth |Nx/EXLA backend
 · cross-org VCL federation · flesh out bebop/capnproto bodies on demand
 
-|✅ this session: hexadeca contract drift-guarded (#510) + documented
+|✅ this session: unified-api-adapter contract drift-guarded (#510) + documented
 (#511); workflow_audit FPs fixed (#462); Guix-only; CI timeouts | |
 |===
 

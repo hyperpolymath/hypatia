@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 9/16 — tRPC. Stub fidelity; see `hexadeca.zig`.
+// Connector 9/16 — tRPC. Stub fidelity; see `unified-api-adapter.zig`.
 
 const std = @import("std");
 

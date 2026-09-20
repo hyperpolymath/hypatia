@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 5/16 — Bebop. Stub fidelity; see `hexadeca.zig`.
+// Connector 5/16 — Bebop. Stub fidelity; see `unified-api-adapter.zig`.
 
 const std = @import("std");
 

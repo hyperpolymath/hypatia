@@ -139,7 +139,7 @@ hits, contractile trident complete, full mirror fan-out configured.
 
 | Zig FFI modules (`ffi/zig/src/*.zig`)
 | 4 files, 724 LOC
-| `main.zig` 274, `hexadeca.zig` 230, `json_writer.zig` 144, `file_ops.zig` 76. Seven exported C ABI functions per `.claude/CLAUDE.md`.
+| `main.zig` 274, `unified-api-adapter.zig` 230, `json_writer.zig` 144, `file_ops.zig` 76. Seven exported C ABI functions per `.claude/CLAUDE.md`.
 
 | Elixir rule modules (`lib/rules/*.ex`)
 | *19* modules, 6,791 LOC
