@@ -568,13 +568,6 @@ jobs:
           ARANGODB_PASSWORD: testpassword
           DRAGONFLY_URL: redis://localhost:6379
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7.1.0
-        with:
-          files: integration-lcov.info
-          flags: integration
-          fail_ci_if_error: false
-
   # ============================================================================
   # Integration Status
   # ============================================================================

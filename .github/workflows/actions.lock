@@ -18,7 +18,6 @@ workflows:
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.1'
-        - 'codecov/codecov-action@v7.1.0'
         - 'dtolnay/rust-toolchain@master'
         - 'haskell-actions/hlint-run@v2.4.10'
         - 'haskell-actions/hlint-setup@v2.4.10'
@@ -104,7 +103,6 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.1'
         - 'actions/upload-artifact@v7.0.1'
-        - 'codecov/codecov-action@v7.1.0'
         - 'docker/build-push-action@v7.4.0'
         - 'docker/setup-buildx-action@v4.4.0'
         - 'dtolnay/rust-toolchain@master'
@@ -212,13 +210,6 @@ dependencies:
         uses:
             - 'actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae'
             - 'aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514'
-    'codecov/codecov-action@v7.1.0':
-        ref: 'v7.1.0'
-        commit: 'sha1-0b35c9ecc4f0529d0eb674914510c22f85b196b4'
-        owner_id: 8226205
-        repo_id: 200299178
-        uses:
-            - 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd'
     'dependabot/fetch-metadata@v3.1.0':
         ref: 'v3.1.0'
         commit: 'sha1-25dd0e34f4fe68f24cc83900b1fe3fe149efef98'
