@@ -1,6 +1,6 @@
 {
   "_spdx": "MPL-2.0",
-  "_note": "Golden source-of-truth for the hexadeca-connector wire contract. The Zig enum (ffi/zig/src/hexadeca.zig), the Idris2 ABI (src/abi/Types.idr), and the Rust client (clients/rust/hypatia-client/src/connector.rs) MUST all agree with this list, in this exact order; id is the C ABI wire id. Drift is guarded by test/hexadeca_contract_test.exs. Wire ordering is load-bearing -- do not renumber.",
+  "_note": "Golden source-of-truth for the unified-api-adapter wire contract. The Zig enum (ffi/zig/src/unified-api-adapter.zig), the Idris2 ABI (src/abi/Types.idr), and the Rust client (clients/rust/hypatia-client/src/connector.rs) MUST all agree with this list, in this exact order; id is the C ABI wire id. Drift is guarded by test/unified-api-adapter-contract_test.exs. Wire ordering is load-bearing -- do not renumber.",
   "connectors": [
     { "id": 0, "name": "grpc" },
     { "id": 1, "name": "graphql" },

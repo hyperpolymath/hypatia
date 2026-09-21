@@ -327,7 +327,7 @@ fixture. The 5 real Lean proofs contain no `+sorry+`.
 ==== P-3 · MEDIUM · Zig FFI correctness claims are entirely ungated · UNTRACKED
 
 `+ffi/zig/+` holds 20+ files including 16 protocol connectors and
-`+hexadeca.zig+`. There is *no `+zig build+` and no `+zig build test+`
+`+unified-api-adapter.zig+`. There is *no `+zig build+` and no `+zig build test+`
 in any workflow* — only incidental `+--include='*.zig'+` grep filters.
 `+Justfile:94+` has `+zig build+`, never invoked by CI. The "`18
 exported C functions`" claim is unverified by any gate.

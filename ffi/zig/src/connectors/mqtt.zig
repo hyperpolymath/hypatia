@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 8/16 — MQTT. Stub fidelity; see `hexadeca.zig`.
+// Connector 8/16 — MQTT. Stub fidelity; see `unified-api-adapter.zig`.
 
 const std = @import("std");
 

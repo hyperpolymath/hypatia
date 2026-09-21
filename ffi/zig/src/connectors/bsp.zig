@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 13/16 — Build Server Protocol. Stub fidelity; see `hexadeca.zig`.
+// Connector 13/16 — Build Server Protocol. Stub fidelity; see `unified-api-adapter.zig`.
 // Part of the Umoja substrate (BSP/SCIP/IPFS/Arrow Flight).
 
 const std = @import("std");

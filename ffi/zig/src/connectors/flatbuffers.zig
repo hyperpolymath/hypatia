@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 4/16 — FlatBuffers. Stub fidelity; see `hexadeca.zig`.
+// Connector 4/16 — FlatBuffers. Stub fidelity; see `unified-api-adapter.zig`.
 
 const std = @import("std");
 

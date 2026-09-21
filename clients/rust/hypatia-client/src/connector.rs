@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Hexadeca-Connector enum — mirror of the Zig
-// `Connector` enum in `ffi/zig/src/hexadeca.zig` and the Idris2
+// UnifiedApiAdapter enum — mirror of the Zig
+// `Connector` enum in `ffi/zig/src/unified-api-adapter.zig` and the Idris2
 // `Connector` data type in `src/abi/Types.idr`.
 //
 // **Wire ordering is load-bearing.** The integer value of each variant
@@ -15,7 +15,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The sixteen protocol connectors exposed by the Hypatia
-/// hexadeca-connector surface.
+/// unified-api-adapter surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Connector {
@@ -40,7 +40,7 @@ pub enum Connector {
 }
 
 /// The total number of connectors. Pinned at 16 by the
-/// `comptime` assertion in `hexadeca.zig` and the
+/// `comptime` assertion in `unified-api-adapter.zig` and the
 /// `connectorCount : length allConnectors = 16` proof in
 /// `src/abi/Types.idr`.
 pub const CONNECTOR_COUNT: usize = 16;

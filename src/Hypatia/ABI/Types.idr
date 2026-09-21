@@ -141,10 +141,10 @@ record OutcomeRecord where
   bot : String
 
 -- ============================================================
--- Hexadeca-Connector — sixteen protocol adapters
+-- UnifiedApiAdapter — sixteen protocol adapters
 -- ============================================================
 --
--- Mirrors the Zig enum at `ffi/zig/src/hexadeca.zig` and the Rust
+-- Mirrors the Zig enum at `ffi/zig/src/unified-api-adapter.zig` and the Rust
 -- enum at `clients/rust/hypatia-client/src/connector.rs`. Wire
 -- ordering is load-bearing — the integer value of each variant is
 -- the C ABI id used by `hypatia_connector_name(id)`. Do not
@@ -154,7 +154,7 @@ record OutcomeRecord where
 -- Replaces the V-lang client at `api/v/hypatia.v` (deleted 2026-04-13).
 
 ||| The sixteen protocol connectors exposed by the Hypatia
-||| hexadeca-connector surface. Order is the C ABI wire ordering;
+||| unified-api-adapter surface. Order is the C ABI wire ordering;
 ||| see `Hypatia.ABI.Types.connectorWireId` for the mapping.
 public export
 data Connector
@@ -198,7 +198,7 @@ connectorWireId IPFS          = 14
 connectorWireId ArrowFlight   = 15
 
 ||| Canonical wire name of a connector. Must agree with
-||| `Connector.name()` in `ffi/zig/src/hexadeca.zig`.
+||| `Connector.name()` in `ffi/zig/src/unified-api-adapter.zig`.
 public export
 connectorName : Connector -> String
 connectorName GRPC          = "grpc"
@@ -228,7 +228,7 @@ allConnectors =
   ]
 
 ||| Proof that there are exactly sixteen connectors. Pins the
-||| hexadeca invariant at the type level: any code that adds or
+||| unified-api-adapter invariant at the type level: any code that adds or
 ||| removes a connector must update this proof, which forces a
 ||| coordinated update of the Zig enum and the Rust client.
 public export

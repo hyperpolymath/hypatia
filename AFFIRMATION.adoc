@@ -25,9 +25,9 @@ state and commitments. Companion detail:
   `native_decide`). One obligation remains open — neural-convergence
   (PageRank + ESN) — blocked only on Mathlib network access; the handover is
   at `docs/proofs/HANDOVER-neural-convergence.md`.
-* *The hexadeca-connector wire contract cannot silently drift.* The Zig enum,
+* *The unified-api-adapter wire contract cannot silently drift.* The Zig enum,
   the Idris2 ABI and the Rust client are pinned to one golden source
-  (`ffi/connectors.json`) by `test/hexadeca_contract_test.exs` under
+  (`ffi/connectors.json`) by `test/unified-api-adapter-contract_test.exs` under
   `mix test`.
 * *Workflow hygiene.* Every runner job declares `timeout-minutes`; the
   `workflow_audit` rule no longer false-positives reusable-workflow
@@ -38,7 +38,7 @@ state and commitments. Companion detail:
 == We intend (planned — INTEND)
 
 * Deploy *verisim-api* (the VeriSimDB Rust core) to unlock native
-  graph/vector/temporal modalities and let the hexadeca transport bodies be
+  graph/vector/temporal modalities and let the unified-api-adapter transport bodies be
   fleshed out on demand.
 * Ensure merged rule fixes reach *live* self-scans — the deployed scanner
   currently lags `main` (issue #484).

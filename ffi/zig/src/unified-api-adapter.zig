@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Hypatia Hexadeca-Connector — sixteen-protocol unified API surface.
+// Hypatia UnifiedApiAdapter — sixteen-protocol unified API surface.
 //
 // Replaces the V-lang `api/v/hypatia.v` client (deleted 2026-04-13)
 // with a Zig-side multi-transport surface that wraps the existing
@@ -9,7 +9,7 @@
 // `hypatia_dispatch`, `hypatia_record_outcome`, `hypatia_force_learning_cycle`,
 // `hypatia_get_confidence`, `hypatia_dispatch_strategy`).
 //
-// The hexadeca pattern follows
+// The unified-api-adapter pattern follows
 // `developer-ecosystem/.../v-ecosystem/v_api_interfaces/v_api_interfaces.v`:
 //
 //   Core 12 protocols
@@ -126,23 +126,23 @@ const arrow_flight = @import("connectors/arrow_flight.zig");
 // Suite — port-table for the sixteen connectors
 // ============================================================
 
-pub const HexadecaSuite = struct {
+pub const UnifiedApiAdapter = struct {
     base_port: u16,
 
-    pub fn init(base_port: u16) HexadecaSuite {
+    pub fn init(base_port: u16) UnifiedApiAdapter {
         return .{ .base_port = base_port };
     }
 
     /// Returns the bound port for a given connector. Layout matches
     /// the V reference: `base + 1` … `base + 16`.
-    pub fn portFor(self: HexadecaSuite, c: Connector) u16 {
+    pub fn portFor(self: UnifiedApiAdapter, c: Connector) u16 {
         return self.base_port + @as(u16, @intFromEnum(c)) + 1;
     }
 
     /// Start every connector. Each module's `start` is currently a
     /// log-only stub matching the V reference; real bind happens
     /// when each module is fleshed out individually.
-    pub fn startAll(self: HexadecaSuite) void {
+    pub fn startAll(self: UnifiedApiAdapter) void {
         grpc.start(self.portFor(.grpc));
         graphql.start(self.portFor(.graphql));
         rest.start(self.portFor(.rest));
@@ -194,7 +194,7 @@ pub const ConnectorDispatchFn = *const fn (req: []const u8, out: *anyopaque) i32
 // Compile-time assertion: the connector table has exactly 16 entries.
 comptime {
     if (CONNECTOR_COUNT != 16) {
-        @compileError("Hexadeca-Connector requires exactly 16 connectors");
+        @compileError("UnifiedApiAdapter requires exactly 16 connectors");
     }
 }
 
@@ -213,7 +213,7 @@ test "connector names are stable" {
 }
 
 test "port layout matches v-lang reference" {
-    const suite = HexadecaSuite.init(8000);
+    const suite = UnifiedApiAdapter.init(8000);
     try std.testing.expectEqual(@as(u16, 8001), suite.portFor(.grpc));
     try std.testing.expectEqual(@as(u16, 8012), suite.portFor(.verisimdb_rest));
     try std.testing.expectEqual(@as(u16, 8013), suite.portFor(.bsp));

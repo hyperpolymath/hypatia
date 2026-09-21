@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Connector 10/16 — Cap'n Proto. Stub fidelity; see `hexadeca.zig`.
+// Connector 10/16 — Cap'n Proto. Stub fidelity; see `unified-api-adapter.zig`.
 
 const std = @import("std");
 

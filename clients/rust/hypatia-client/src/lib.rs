@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// hypatia-client — Rust client for the Hypatia hexadeca-connector
+// hypatia-client — Rust client for the Hypatia unified-api-adapter
 // surface. Replaces the deleted V-lang client at `api/v/hypatia.v`.
 //
 // Two transports, picked at runtime:
@@ -16,14 +16,14 @@
 // types defined in `types.rs`. Consumers (e.g. 007 F7) only see the
 // `Client` API; transport selection is invisible.
 //
-// The hexadeca surface itself (16 protocol adapters: gRPC, GraphQL,
+// The unified-api-adapter surface itself (16 protocol adapters: gRPC, GraphQL,
 // REST, FlatBuffers, Bebop, JSON-RPC, WebSocket, MQTT, tRPC,
 // Cap'n Proto, SOAP, VeriSimDB-REST, BSP, SCIP, IPFS, Arrow Flight)
-// lives on the Zig side at `hypatia/ffi/zig/src/hexadeca.zig` and is
+// lives on the Zig side at `hypatia/ffi/zig/src/unified-api-adapter.zig` and is
 // mirrored by the Idris2 ABI in `src/abi/Types.idr`. The Rust client
 // knows about all sixteen via `Connector` so that future enumeration
 // and dispatch endpoints (`hypatia_connector_count`,
-// `hypatia_connector_name`, `hypatia_hexadeca_start_all`) are
+// `hypatia_connector_name`, `hypatia_unified_api_adapter_start_all`) are
 // type-safe end-to-end.
 
 pub mod client;
