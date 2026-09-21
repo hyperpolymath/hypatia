@@ -128,13 +128,6 @@ jobs:
       - name: Generate coverage report
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7.1.0
-        with:
-          files: lcov.info
-          flags: rust
-          fail_ci_if_error: false
-
   # ============================================================================
   # Haskell Jobs (registry) — dormant-ready.
   # The Haskell sub-project (registry/) is currently absent (its source was
