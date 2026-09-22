@@ -44,9 +44,13 @@ chrono = { version = "0.4", features = ["serde"] }
 # UUID for test data generation
 uuid = { version = "1.23", features = ["v4"] }
 
-# Testcontainers for spinning up Docker containers
+# Testcontainers for spinning up Docker containers.
+# NOTE: testcontainers-modules is deliberately NOT a dependency here. Dragonfly/Redis
+# is provisioned by integration/compose.test.yaml and reached via DRAGONFLY_URL, so the
+# modules crate was never imported. As of 2026-09-22 the newest published
+# testcontainers-modules is 0.15.0, which still requires testcontainers ^0.27, so
+# the pair was unsatisfiable and resolution failed before any compilation. See #838.
 testcontainers = { version = "0.28", features = ["watchdog"] }
-testcontainers-modules = { version = "0.15", features = ["redis"] }
 
 # Mock HTTP server
 wiremock = "0.6"
