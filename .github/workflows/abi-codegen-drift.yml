@@ -76,47 +76,99 @@ jobs:
       - name: Verify Idris is on PATH
         run: idris2 --version
 
-      # Compiling an EXECUTABLE needs the Chez support tree
-      # (`<libdir>/support/chez/support.ss`); type-checking and building a
-      # LIBRARY does not. `verify-proofs.yml` only ever does the latter, so the
-      # cache this job deliberately shares with it was populated without that
-      # tree and this job died at
-      #   INTERNAL ERROR: Can't find data file chez/support.ss
-      # on its very first run. Measured, not supposed: PR #811's gate run.
+      # Building and RUNNING an Idris2 executable needs the Idris2 support
+      # installation: the Chez data tree at `<libdir>/support/chez/support.ss`
+      # at compile time, and the compiled C library `<libdir>/lib/
+      # libidris2_support.so` -- which the Chez backend copies into the
+      # executable's `_app` directory -- at run time. Type-checking and
+      # building a LIBRARY needs neither.
       #
-      # `support/` is plain data (Scheme and C sources shipped in the Idris2
-      # repo); it needs no build, so a shallow clone is enough to repair it.
-      - name: Ensure the Chez support tree is installed
+      # `verify-proofs.yml` only ever does the latter: `idris2 --check` over
+      # the proof files and `idris2 --build` on two library packages. It never
+      # links a binary. So the cache this job deliberately shares with it
+      # (same key, so the ~20-minute bootstrap is not repeated) was populated
+      # with NEITHER. Measured, not supposed -- twice, on PR #811 and #817:
+      #   INTERNAL ERROR: Can't find data file chez/support.ss        (compile)
+      #   (while loading libidris2_support.so) cannot open shared object file
+      #                                                               (run)
+      #
+      # Sharing a warm cache imports its OMISSIONS as well as its contents.
+      #
+      # Hence the upstream install targets rather than copying files by hand:
+      # `make support` builds the C library, `make install-support` installs
+      # both it and the data tree to `<prefix>/idris2-<version>/{lib,support}`.
+      # Repairing this piece by piece is how the second failure happened; the
+      # tree's own target is complete by construction. It costs seconds -- it
+      # builds only `support/`, never the compiler.
+      - name: Ensure the Idris2 support installation is complete
         run: |
           set -euo pipefail
+          prefix="$(idris2 --prefix)"
           libdir="$(idris2 --libdir)"
           support="${libdir}/support"
-          if [ -f "${support}/chez/support.ss" ]; then
-            echo "chez support present: ${support}/chez/support.ss"
+          csolib="${libdir}/lib/libidris2_support.so"
+
+          if [ -f "${support}/chez/support.ss" ] && [ -f "${csolib}" ]; then
+            echo "support installation already complete under ${libdir}"
           else
-            echo "chez support absent under ${support} -- installing from the Idris2 source tree"
-            rm -rf "${RUNNER_TEMP}/idris2-support-src"
+            echo "incomplete support installation under ${libdir}:"
+            echo "  chez/support.ss:        $([ -f "${support}/chez/support.ss" ] && echo present || echo ABSENT)"
+            echo "  libidris2_support.so:   $([ -f "${csolib}" ] && echo present || echo ABSENT)"
+            src="${RUNNER_TEMP}/idris2-support-src"
+            rm -rf "${src}"
             git clone --depth 1 --branch "${IDRIS2_VERSION}" \
-              https://github.com/idris-lang/Idris2 "${RUNNER_TEMP}/idris2-support-src"
-            mkdir -p "${support}"
-            cp -R "${RUNNER_TEMP}/idris2-support-src/support/." "${support}/"
+              https://github.com/idris-lang/Idris2 "${src}"
+            make -C "${src}" support
+            make -C "${src}" install-support PREFIX="${prefix}"
           fi
-          # Assert, do not assume. A missing support tree previously surfaced as
-          # an opaque INTERNAL ERROR three steps later; fail here, by name.
-          if [ ! -f "${support}/chez/support.ss" ]; then
-            echo "::error::chez/support.ss still missing under ${support}"
+
+          # Assert, do not assume, and assert BOTH -- the first fix asserted
+          # only the compile-time file and the job then died at run time on the
+          # other one. A missing support tree surfaces three steps later as an
+          # opaque INTERNAL ERROR, where it reads like a generator bug.
+          missing=0
+          for f in "${support}/chez/support.ss" "${csolib}"; do
+            if [ ! -f "${f}" ]; then
+              echo "::error::missing after install-support: ${f}"
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
             if [ -d "${libdir}" ]; then
-              find "${libdir}" -maxdepth 3 -name 'support*' -print
+              find "${libdir}" -maxdepth 3 \( -name 'support*' -o -name 'libidris2_support*' \) -print
             fi
             exit 1
           fi
-          echo "support tree: ${support}"
+          echo "support tree:  ${support}"
+          echo "support lib:   ${csolib}"
 
       - name: Build the generator
         run: |
           set -euo pipefail
           cd src/abi
           idris2 --build hypatia-abi-gen.ipkg
+
+          # Assert on the CONSUMER's artefact, not the installer's. The step
+          # above already checked that `<libdir>/lib/libidris2_support.so`
+          # exists; this checks the thing that actually has to load it. The
+          # Chez backend COPIES that library into the executable's `_app`
+          # directory at link time, and a build missing it still exits 0 --
+          # the failure only appears when the binary is first run, one step
+          # later, inside the comparison, where it reads as a drift failure.
+          #
+          # This is the guard/consumer trap: a check on the producer proves
+          # nothing about the consumer. Assert what the consumer needs.
+          app="../../build/abi-gen/exec/hypatia-abi-gen_app"
+          if [ ! -f "${app}/libidris2_support.so" ]; then
+            echo "::error::built executable is missing its runtime support library: ${app}/libidris2_support.so"
+            ls -la "${app}" || true
+            exit 1
+          fi
+
+          # Cheapest possible proof that the binary RUNS. `--help` exercises
+          # load + argument parsing and writes nothing, so it cannot mask a
+          # drift failure below by leaving output behind.
+          ../../build/abi-gen/exec/hypatia-abi-gen --help
 
       - name: Regenerate into a temp dir and compare
         run: |
