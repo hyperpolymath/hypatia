@@ -14,7 +14,7 @@ workflows:
         - 'actions/setup-node@v7.0.0'
         - 'actions/upload-artifact@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
-        - 'taiki-e/install-action@v2.87.15'
+        - 'taiki-e/install-action@v2.87.16'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/ci.yml':
@@ -26,7 +26,7 @@ workflows:
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.0'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.87.15'
+        - 'taiki-e/install-action@v2.87.16'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
@@ -100,7 +100,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         - 'gitleaks/gitleaks-action@v3.0.0'
-        - 'taiki-e/install-action@v2.87.15'
+        - 'taiki-e/install-action@v2.87.16'
         - 'trufflesecurity/trufflehog@v3.97.5'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
@@ -112,7 +112,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.87.15'
+        - 'taiki-e/install-action@v2.87.16'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -317,9 +317,9 @@ dependencies:
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.87.15':
-        ref: 'v2.87.15'
-        commit: 'sha1-4076c08d76dba979c11a7285295b0716c1d67908'
+    'taiki-e/install-action@v2.87.16':
+        ref: 'v2.87.16'
+        commit: 'sha1-9114bf4d891761788c546334fd37538eae1bf8b3'
         owner_id: 43724913
         repo_id: 442947557
     'trufflesecurity/trufflehog@v3.97.5':
