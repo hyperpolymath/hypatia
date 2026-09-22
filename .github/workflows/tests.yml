@@ -168,7 +168,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.4.0
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Build hypatia image
         uses: docker/build-push-action@v7.4.0
@@ -533,7 +533,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.87.13
+        uses: taiki-e/install-action@v2.87.15
         with:
           tool: cargo-llvm-cov
 
