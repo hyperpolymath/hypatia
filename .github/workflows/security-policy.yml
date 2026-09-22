@@ -91,12 +91,110 @@ jobs:
         with:
           fetch-depth: 0
 
+      # TruffleHog refuses to scan when base == head, exiting non-zero with
+      # "BASE and HEAD commits are the same. TruffleHog won't scan anything."
+      # The old inputs were `base: <default_branch>` + `head: HEAD`. On a
+      # `pull_request` those legitimately differ, so the diff scan worked and
+      # the defect was invisible. On `push: main` HEAD *is* the default branch,
+      # so the range was EMPTY and the default branch went completely unscanned
+      # -- while the job merely looked "red", which reads like an auth problem
+      # rather than like zero coverage.
+      #
+      # This step resolves the range EXPLICITLY for every event, read off the
+      # action source at the pinned v3.97.5. That matters, because when both
+      # inputs are left empty the action does not fall through to one
+      # behaviour -- it dispatches on the event itself:
+      #   push                       -> BASE=github.event.before
+      #                                 HEAD=github.event.after
+      #                                 ...and if github.event.commits is
+      #                                 empty it prints "No commits to scan"
+      #                                 and `exit 0`: a GREEN job that scanned
+      #                                 nothing, the same lie in a different
+      #                                 costume.
+      #   schedule/workflow_dispatch -> BASE="", HEAD=""
+      #   pull_request               -> BASE=base.sha, HEAD=head.sha
+      # Passing a non-empty input takes the action's explicit branch instead,
+      # so nothing about push is left to that hidden dispatch and the silent
+      # `exit 0` is unreachable.
+      #
+      # The action always ends at `trufflehog git <repo> --since-commit $BASE
+      # --branch $HEAD`. Measured against the CLI: empty BASE/HEAD expand to
+      # empty-STRING arguments (not absent ones), which TruffleHog accepts as
+      # "all history, all branches" -- verified locally on a scratch repo,
+      # where that found a private key deleted from the worktree and surviving
+      # only in git history.
+      #
+      # So the coverage this buys, stated exactly:
+      #   pull_request -> the PR's own commits
+      #   push         -> the commits the push introduced (everything reachable
+      #                   when the branch is new, since `before` is all-zeros)
+      #   schedule     -> whole git history, 02:00 daily and 03:00 Mondays
+      # Whole-history coverage comes from the SCHEDULED run, not from push.
+      #
+      # Context goes through `env:` rather than into the shell line, per
+      # .claude/CLAUDE.md -- a branch name is attacker-controllable text.
+      - name: Resolve TruffleHog scan range
+        id: th
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -uo pipefail
+          zero='0000000000000000000000000000000000000000'
+          case "$EVENT" in
+            pull_request)
+              base="$PR_BASE"
+              head="$PR_HEAD"
+              if [ -z "$base" ] || [ -z "$head" ] || [ "$base" = "$head" ]; then
+                echo "::error::Degenerate TruffleHog range (base='$base' head='$head'). Refusing to let an unscanned tree report as scanned."
+                exit 1
+              fi
+              n=$(git rev-list --count "${base}..${head}" 2>/dev/null || echo 0)
+              echo "trufflehog mode: pull_request diff | range: ${base}..${head} | commits: ${n}"
+              ;;
+            push)
+              head="$PUSH_AFTER"
+              if [ -z "$head" ] || [ "$head" = "$zero" ]; then
+                echo "::error::push event with no head commit (after='${head}'). Nothing to scan is not the same as nothing found."
+                exit 1
+              fi
+              if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "$zero" ]; then
+                base=''
+                n=$(git rev-list --count "$head" 2>/dev/null || echo 0)
+                echo "trufflehog mode: push, new branch | range: (root)..${head} | commits: ${n}"
+              else
+                base="$PUSH_BEFORE"
+                if [ "$base" = "$head" ]; then
+                  echo "::error::push event with before == after (${base}). An empty range is not a clean scan."
+                  exit 1
+                fi
+                n=$(git rev-list --count "${base}..${head}" 2>/dev/null || echo 0)
+                echo "trufflehog mode: push diff | range: ${base}..${head} | commits: ${n}"
+              fi
+              ;;
+            *)
+              base=''
+              head=''
+              n=$(git rev-list --count --all 2>/dev/null || echo 0)
+              echo "trufflehog mode: whole git history | commits: ${n}"
+              ;;
+          esac
+          if [ "${n:-0}" -eq 0 ]; then
+            echo "::error::0 commits in the resolved range. A scanner with an empty subject cannot report clean."
+            exit 1
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@v3.97.5
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ steps.th.outputs.base }}
+          head: ${{ steps.th.outputs.head }}
           extra_args: --only-verified
 
       # `.gitleaks.toml` carries `[extend] path = ".gitleaks-estate.toml"`, and
@@ -203,6 +301,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name != 'pull_request'
+    # The workflow default is `read-all`, and a job-level map REPLACES that
+    # default rather than merging with it -- so a job that uploads SARIF must
+    # spell out BOTH scopes. Without this the Trivy scan ran fine and only
+    # `upload-sarif` died with "Resource not accessible by integration", which
+    # this workflow then displayed as a failed Container Security Scan. That is
+    # the same confusion as the TruffleHog one: the scanner looked and found
+    # nothing wrong; it was the *filing* of the result that was denied.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -254,22 +362,46 @@ jobs:
             ["sbom-rust"]="${{ needs.sbom-rust.result }}"
           )
 
-          failed=false
+          # This job is named "Security Status" and, until now, could not
+          # report a bad one: it computed `failed=true`, wrote a sentence into
+          # the step summary, and then ended the step successfully. Measured on
+          # run 35772115983, `Security Status` was GREEN while its own
+          # dependency `Secret Detection` was RED. A status check that cannot
+          # go red is decoration, and decoration that looks like a gate is
+          # worse than no gate -- so it now exits non-zero.
+          #
+          # None of the five dependencies carries an `if:`, so `skipped` can
+          # only mean an upstream failure or a cancelled run, and is counted as
+          # a non-success rather than warned about.
+          ok=0
+          total=0
+          failed=0
           for job in "${!jobs[@]}"; do
             result="${jobs[$job]}"
+            total=$((total + 1))
             if [[ "$result" == "success" ]]; then
               echo "- :white_check_mark: $job: $result" >> $GITHUB_STEP_SUMMARY
-            elif [[ "$result" == "failure" ]]; then
-              echo "- :x: $job: $result" >> $GITHUB_STEP_SUMMARY
-              failed=true
+              ok=$((ok + 1))
             else
-              echo "- :warning: $job: $result" >> $GITHUB_STEP_SUMMARY
+              # Says only what is known. `failure` means the job did not
+              # complete; it does NOT mean the scanner found something.
+              echo "- :x: $job: ${result:-<empty>} (did not complete -- no verdict)" >> $GITHUB_STEP_SUMMARY
+              failed=$((failed + 1))
             fi
           done
 
-          if [[ "$failed" == "true" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Security issues detected. Please review the scan results.**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "security scans: ${ok} of ${total} completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "security scans: ${ok} of ${total} completed successfully"
+
+          if [[ "$total" -eq 0 ]]; then
+            echo "::error::0 security scans were evaluated. A status with an empty denominator cannot report clean."
+            exit 1
+          fi
+
+          if [[ "$failed" -gt 0 ]]; then
+            echo "::error::${failed} of ${total} security scans did not complete. Missing evidence is not a pass."
+            exit 1
           fi
 
   audit_rust-audit:
@@ -398,6 +530,12 @@ jobs:
     name: Container Security (Trivy)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Same fault, same cure as `container-scan` above: uploading SARIF needs
+    # `security-events: write`, and a job-level map replaces the workflow's
+    # `read-all` rather than adding to it.
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -554,12 +692,110 @@ jobs:
         with:
           fetch-depth: 0
 
+      # TruffleHog refuses to scan when base == head, exiting non-zero with
+      # "BASE and HEAD commits are the same. TruffleHog won't scan anything."
+      # The old inputs were `base: <default_branch>` + `head: HEAD`. On a
+      # `pull_request` those legitimately differ, so the diff scan worked and
+      # the defect was invisible. On `push: main` HEAD *is* the default branch,
+      # so the range was EMPTY and the default branch went completely unscanned
+      # -- while the job merely looked "red", which reads like an auth problem
+      # rather than like zero coverage.
+      #
+      # This step resolves the range EXPLICITLY for every event, read off the
+      # action source at the pinned v3.97.5. That matters, because when both
+      # inputs are left empty the action does not fall through to one
+      # behaviour -- it dispatches on the event itself:
+      #   push                       -> BASE=github.event.before
+      #                                 HEAD=github.event.after
+      #                                 ...and if github.event.commits is
+      #                                 empty it prints "No commits to scan"
+      #                                 and `exit 0`: a GREEN job that scanned
+      #                                 nothing, the same lie in a different
+      #                                 costume.
+      #   schedule/workflow_dispatch -> BASE="", HEAD=""
+      #   pull_request               -> BASE=base.sha, HEAD=head.sha
+      # Passing a non-empty input takes the action's explicit branch instead,
+      # so nothing about push is left to that hidden dispatch and the silent
+      # `exit 0` is unreachable.
+      #
+      # The action always ends at `trufflehog git <repo> --since-commit $BASE
+      # --branch $HEAD`. Measured against the CLI: empty BASE/HEAD expand to
+      # empty-STRING arguments (not absent ones), which TruffleHog accepts as
+      # "all history, all branches" -- verified locally on a scratch repo,
+      # where that found a private key deleted from the worktree and surviving
+      # only in git history.
+      #
+      # So the coverage this buys, stated exactly:
+      #   pull_request -> the PR's own commits
+      #   push         -> the commits the push introduced (everything reachable
+      #                   when the branch is new, since `before` is all-zeros)
+      #   schedule     -> whole git history, 02:00 daily and 03:00 Mondays
+      # Whole-history coverage comes from the SCHEDULED run, not from push.
+      #
+      # Context goes through `env:` rather than into the shell line, per
+      # .claude/CLAUDE.md -- a branch name is attacker-controllable text.
+      - name: Resolve TruffleHog scan range
+        id: th
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -uo pipefail
+          zero='0000000000000000000000000000000000000000'
+          case "$EVENT" in
+            pull_request)
+              base="$PR_BASE"
+              head="$PR_HEAD"
+              if [ -z "$base" ] || [ -z "$head" ] || [ "$base" = "$head" ]; then
+                echo "::error::Degenerate TruffleHog range (base='$base' head='$head'). Refusing to let an unscanned tree report as scanned."
+                exit 1
+              fi
+              n=$(git rev-list --count "${base}..${head}" 2>/dev/null || echo 0)
+              echo "trufflehog mode: pull_request diff | range: ${base}..${head} | commits: ${n}"
+              ;;
+            push)
+              head="$PUSH_AFTER"
+              if [ -z "$head" ] || [ "$head" = "$zero" ]; then
+                echo "::error::push event with no head commit (after='${head}'). Nothing to scan is not the same as nothing found."
+                exit 1
+              fi
+              if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "$zero" ]; then
+                base=''
+                n=$(git rev-list --count "$head" 2>/dev/null || echo 0)
+                echo "trufflehog mode: push, new branch | range: (root)..${head} | commits: ${n}"
+              else
+                base="$PUSH_BEFORE"
+                if [ "$base" = "$head" ]; then
+                  echo "::error::push event with before == after (${base}). An empty range is not a clean scan."
+                  exit 1
+                fi
+                n=$(git rev-list --count "${base}..${head}" 2>/dev/null || echo 0)
+                echo "trufflehog mode: push diff | range: ${base}..${head} | commits: ${n}"
+              fi
+              ;;
+            *)
+              base=''
+              head=''
+              n=$(git rev-list --count --all 2>/dev/null || echo 0)
+              echo "trufflehog mode: whole git history | commits: ${n}"
+              ;;
+          esac
+          if [ "${n:-0}" -eq 0 ]; then
+            echo "::error::0 commits in the resolved range. A scanner with an empty subject cannot report clean."
+            exit 1
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@v3.97.5
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ steps.th.outputs.base }}
+          head: ${{ steps.th.outputs.head }}
           extra_args: --only-verified
 
   # ============================================================================
@@ -751,26 +987,64 @@ jobs:
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "_Audit completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)_" >> $GITHUB_STEP_SUMMARY
 
+      # Two faults lived in this step, both of which made a broken security
+      # gate read as a working one:
+      #
+      # 1. It inspected 3 of its 8 `needs:`. The table above DISPLAYS all eight;
+      #    displaying a dependency is not gating on it. A failing container scan
+      #    was rendered as :x: and then silently ignored by the decision.
+      # 2. `failure` means "this job did not complete". It NEVER means "this job
+      #    found something" -- a scanner that crashed, timed out, or was refused
+      #    a credential reports the identical result to one that found a secret.
+      #    The old text asserted "TruffleHog found verified secrets" whenever the
+      #    job was red, which manufactured a detection claim out of a scanner
+      #    that had scanned zero bytes. Fake alarms train people to ignore the
+      #    check; the same confusion lets a genuinely broken scanner read clean.
+      #
+      # All eight dependencies are unconditional (none carries an `if:`), so
+      # `skipped` here can only mean an upstream failure or a cancelled run.
+      # It is therefore failed on, not warned about: `::warning::` cannot fail a
+      # job, so warning while calling a skip "not a pass" asserts the opposite.
       - name: Check for failures
         run: |
-          failed=false
+          set -uo pipefail
+          ok=0
+          total=0
+          failed=0
 
-          if [ "${{ needs.audit_rust-audit.result }}" = "failure" ]; then
-            echo "::error::Rust audit failed"
-            failed=true
+          # Says only what is known: the job did not complete, so the evidence
+          # that check was supposed to produce is missing. Never a detection.
+          check() {
+            total=$((total + 1))
+            case "$2" in
+              success)
+                ok=$((ok + 1))
+                ;;
+              *)
+                echo "::error::$1 did not complete successfully (result=${2:-<empty>}) -- no verdict was produced, so its evidence is MISSING. This is not a detection."
+                failed=$((failed + 1))
+                ;;
+            esac
+          }
+
+          check "Rust audit"      "${{ needs.audit_rust-audit.result }}"
+          check "Rust deny"       "${{ needs.audit_rust-deny.result }}"
+          check "Container scan"  "${{ needs.audit_container-scan.result }}"
+          check "Gitleaks"        "${{ needs.gitleaks.result }}"
+          check "TruffleHog"      "${{ needs.trufflehog.result }}"
+          check "CodeQL"          "${{ needs.audit_codeql.result }}"
+          check "License check"   "${{ needs.license-check.result }}"
+          check "SBOM generation" "${{ needs.sbom-generation.result }}"
+
+          # The denominator is the point: "0 of 0 succeeded" must never be green.
+          echo "security checks: ${ok} of ${total} succeeded"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::0 security checks were evaluated. A rollup with an empty denominator cannot report clean."
+            exit 1
           fi
 
-          if [ "${{ needs.gitleaks.result }}" = "failure" ]; then
-            echo "::error::Secret detection failed - possible secrets in repository"
-            failed=true
-          fi
-
-          if [ "${{ needs.trufflehog.result }}" = "failure" ]; then
-            echo "::error::TruffleHog found verified secrets"
-            failed=true
-          fi
-
-          if [ "$failed" = "true" ]; then
-            echo "::error::Security audit found critical issues"
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::${failed} of ${total} security checks did not complete. Missing evidence is not a pass."
             exit 1
           fi
