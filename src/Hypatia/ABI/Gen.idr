@@ -269,9 +269,12 @@ record Opts where
   constructor MkOpts
   outDir  : Maybe String
   abiHash : Maybe String
+  help    : Bool
 
 parseArgs : List String -> Opts -> Opts
 parseArgs []                          acc = acc
+parseArgs ("--help"     :: rest)      acc = parseArgs rest ({ help    := True  } acc)
+parseArgs ("-h"         :: rest)      acc = parseArgs rest ({ help    := True  } acc)
 parseArgs ("--out-dir"  :: v :: rest) acc = parseArgs rest ({ outDir  := Just v } acc)
 parseArgs ("--abi-hash" :: v :: rest) acc = parseArgs rest ({ abiHash := Just v } acc)
 parseArgs (_ :: rest)                 acc = parseArgs rest acc
@@ -297,15 +300,27 @@ emitAll outDir abiHash = do
     then pure ()
     else exitFailure
 
+usage : IO ()
+usage = do
+  putStrLn "usage: hypatia-abi-gen --out-dir <dir> --abi-hash <hex>"
+  putStrLn ""
+  putStrLn "  --out-dir   directory to write the three generated files into"
+  putStrLn "  --abi-hash  `git hash-object src/Hypatia/ABI/Types.idr`"
+  putStrLn "  --help, -h  print this message and exit 0"
+
 main : IO ()
 main = do
   args <- getArgs
-  let opts = parseArgs (drop 1 args) (MkOpts Nothing Nothing)
-  case (opts.outDir, opts.abiHash) of
-    (Just o, Just h) => emitAll o h
-    _ => do
-      putStrLn "usage: hypatia-abi-gen --out-dir <dir> --abi-hash <hex>"
-      putStrLn ""
-      putStrLn "  --out-dir   directory to write the three generated files into"
-      putStrLn "  --abi-hash  `git hash-object src/Hypatia/ABI/Types.idr`"
-      exitFailure
+  let opts = parseArgs (drop 1 args) (MkOpts Nothing Nothing False)
+  -- An explicit `--help` is a successful request for help and exits 0;
+  -- MISSING arguments are a usage error and exit 1. Conflating the two makes
+  -- `--help` unusable as a smoke test, which is exactly what it is used for
+  -- in .github/workflows/abi-codegen-drift.yml -- and forces the caller into
+  -- an `|| true`, which is indistinguishable from a masked failure.
+  if opts.help
+    then usage
+    else case (opts.outDir, opts.abiHash) of
+      (Just o, Just h) => emitAll o h
+      _ => do
+        usage
+        exitFailure
