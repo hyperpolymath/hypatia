@@ -14,7 +14,7 @@
 -- Corresponds to:
 --   - lib/outcome_tracker.ex        (Bayesian confidence updates)
 --   - lib/confidence_annealing.ex   (clamping, floor/cap)
---   - src/abi/Types.idr             (Confidence record)
+--   - src/Hypatia/ABI/Types.idr             (Confidence record)
 
 module ConfidenceBounds
 

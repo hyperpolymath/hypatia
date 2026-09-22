@@ -2,7 +2,7 @@
 
 === Current State (Updated 2026-06-05)
 
-* **src/abi/*.idr**: `+Types.idr+`, `+FFI.idr+`, `+GraphQL.idr+`,
+* **src/Hypatia/ABI/*.idr**: `+Types.idr+`, `+FFI.idr+`, `+GraphQL.idr+`,
 `+GRPC.idr+`, `+REST.idr+`, `+RuleEngine.idr+` — built as the
 `+hypatia-abi+` package under `+--total+`.
 * **verify/src/*.idr**: `+PipelineState.idr+`, `+Verify/Fuel.idr+` —

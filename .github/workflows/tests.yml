@@ -146,7 +146,7 @@ jobs:
           # strings, not as actual escape hatches).
           # `grep -v '^\s*--'` strips Idris2 / Haskell line comments, which
           # legitimately mention these tokens as documentation
-          # ("Zero believe_me." in src/abi/RuleEngine.idr is the canonical
+          # ("Zero believe_me." in src/Hypatia/ABI/RuleEngine.idr is the canonical
           # example).
           DANGEROUS=$(find lib src \( -name '*.idr' -o -name '*.v' -o -name '*.lean' -o -name '*.hs' \) \
             -not -path 'lib/rules/*' \

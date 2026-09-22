@@ -168,7 +168,7 @@ commands = [
     "idris2 --build src/abi/hypatia-abi.ipkg",
     "idris2 --build verify/hypatia-verify.ipkg || echo 'Proof verification: check results'",
 ]
-cache-key = "src/abi/*.idr"
+cache-key = "src/Hypatia/ABI/*.idr"
 cache = true
 
 [layers.ffi-build]

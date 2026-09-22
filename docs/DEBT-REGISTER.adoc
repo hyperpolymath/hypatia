@@ -274,12 +274,15 @@ CI-1). So no human or machine has seen a clippy result recently.
 `+cargo fmt --all --check+` passes and `+Cargo.lock+` is in sync. *To
 verify:* re-run with a warm `+target/+` (~15-20 min).
 
-==== C-4 · MEDIUM · Idris ABI sources duplicated byte-for-byte · UNTRACKED
+==== C-4 · MEDIUM · Idris ABI sources duplicated byte-for-byte · RESOLVED
 
-`+src/Hypatia/ABI/*.idr+` and `+src/abi/*.idr+` — all 6 pairs identical.
+`+src/Hypatia/ABI/*.idr+` and `+src/abi/*.idr+` were all 6 pairs identical.
 `+src/abi/hypatia-abi.ipkg+` sets `+sourcedir = ".."+`, so
-*`+src/Hypatia/ABI/+` is what compiles* and `+src/abi/*.idr+` is a dead
-copy nothing builds. Divergence between them is undetectable today.
+*`+src/Hypatia/ABI/+` is what compiles* and `+src/abi/*.idr+` was a dead
+copy nothing built, whose divergence would have been undetectable.
+*Resolved 2026-09-22 (issue #815):* the six dead modules are deleted; only
+`+hypatia-abi.ipkg+`, `+hypatia-abi-gen.ipkg+` and `+README.adoc+` remain in
+`+src/abi/+`.
 
 ==== C-5 · LOW · One orphaned module · UNTRACKED
 

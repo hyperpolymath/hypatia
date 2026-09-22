@@ -10,19 +10,19 @@ matching its tuple) — the difference: the baseline is a quantitative
 snapshot (regenerable from any scan), this table is the qualitative
 justification (curated by humans).
 
-When the scanner gains support for inline `+hypatia:ignore+` directives
-(see `+lib/rules/+` — currently regex-pattern-based, no directive
-recognition yet), the rows below should map 1:1 to the inline comments
-already placed at each file’s site.
+The scanner recognises inline `+hypatia: allow <module>/<type>+` directives
+(see `+lib/hypatia/scanner_suppression.ex+`, `+file_allowed?/4+`, which scans a
+file's first `+:max_header_lines+` lines). The rows below map 1:1 to the
+inline comments already placed at each file's site.
 
 === Currently accepted findings
 
 [width="100%",cols="20%,20%,20%,20%,20%",options="header",]
 |===
 |File |Rule |Inline marker |Rationale |Revisit when
-|`+src/abi/RuleEngine.idr+` |`+code_safety/believe_me+`,
+|`+src/Hypatia/ABI/RuleEngine.idr+` |`+code_safety/believe_me+`,
 `+structural_drift/SD008+`
-|`+-- hypatia:ignore code_safety/believe_me structural_drift/SD008+`
+|`+-- hypatia: allow code_safety/believe_me structural_drift/SD008+`
 (line 19) |The scanner is counting the literal token `+believe_me+`
 inside an Idris2 comment that asserts there are _no_ such primitives.
 There is no actual `+believe_me+` call site in the module. |The scanner

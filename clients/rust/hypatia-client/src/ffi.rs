@@ -22,7 +22,7 @@
 //   2. `lib.get(b"hypatia_*\0")` — symbol lookup is unsafe because the
 //      caller asserts the type signature. Each lookup matches the exact
 //      `extern "C"` signature exported by `main.zig` and pinned by the
-//      Idris2 ABI dependent-type proofs in `src/abi/Types.idr`. Renumbering
+//      Idris2 ABI dependent-type proofs in `src/Hypatia/ABI/Types.idr`. Renumbering
 //      the Connector enum or changing any exported function's signature
 //      breaks the build at the Idris2 layer first.
 //

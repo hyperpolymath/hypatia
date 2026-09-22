@@ -17,7 +17,7 @@
 -- Corresponds to:
 --   - lib/triangle_router.ex        (dispatch_strategy/1)
 --   - lib/confidence_annealing.ex   (clamp_strategy/2, max_dispatch_tier/1)
---   - src/abi/RuleEngine.idr        (dispatchStrategy, clampStrategy)
+--   - src/Hypatia/ABI/RuleEngine.idr        (dispatchStrategy, clampStrategy)
 
 module DispatchStrategy
 

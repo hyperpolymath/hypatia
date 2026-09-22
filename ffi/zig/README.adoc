@@ -74,7 +74,7 @@ renumbered. Port layout is `base + id + 1` (`UnifiedApiAdapter.portFor`).
 The connector set is mirrored in three places that *must agree*:
 
 * Zig — `ffi/zig/src/unified-api-adapter.zig` (`Connector` enum + `comptime` count assertion)
-* Idris2 — `src/abi/Types.idr` (`Connector` + the `connectorCount = Refl` proof)
+* Idris2 — `src/Hypatia/ABI/Types.idr` (`Connector` + the `connectorCount = Refl` proof)
 * Rust — `clients/rust/hypatia-client/src/connector.rs` (`#[repr(u8)]` enum)
 
 `ffi/connectors.json` is the *golden source-of-truth*, and

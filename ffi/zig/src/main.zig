@@ -28,7 +28,7 @@ fn clearError() void {
 }
 
 //==============================================================================
-// Core Types (must match src/abi/Types.idr)
+// Core Types (must match src/Hypatia/ABI/Types.idr)
 //==============================================================================
 
 /// Result codes (must match Idris2 Result type)

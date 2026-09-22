@@ -321,7 +321,7 @@ defmodule Hypatia.ScannerSuppression do
   File-level allow directive: any of the first `:max_header_lines` (default
   20) of the file may include a `hypatia: allow <module>/<type>` directive
   that suppresses *every* matching finding in the file. Used for files like
-  `src/abi/RuleEngine.idr` which contain intentional `believe_me` usage and
+  `src/Hypatia/ABI/RuleEngine.idr` which contain intentional `believe_me` usage and
   want to declare the allowance once at the top.
   """
   def file_allowed?(content, rule_module, rule_type, opts \\ []) do

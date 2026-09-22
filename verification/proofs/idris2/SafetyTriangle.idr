@@ -9,7 +9,7 @@
 --
 -- Corresponds to:
 --   - lib/triangle_router.ex   (TriangleRouter.route/3)
---   - src/abi/RuleEngine.idr   (route, RoutedAction)
+--   - src/Hypatia/ABI/RuleEngine.idr   (route, RoutedAction)
 
 module SafetyTriangle
 
