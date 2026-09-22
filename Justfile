@@ -311,7 +311,7 @@ tour:
     echo ""
     echo "5. ABI/FFI:"
     echo "     src/abi/   - Idris2 ABI + codegen packages (.ipkg)"
-    echo "     ffi/zig/   - 7 exported C functions"
+    echo "     ffi/zig/   - 18 exported C functions (6 normative per the Idris2 ABI)"
     echo ""
     echo "6. SAFETY SYSTEMS: lib/safety/"
     echo "     rate_limiter.ex   - Per-bot + global dispatch limits"

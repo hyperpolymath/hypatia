@@ -2,15 +2,22 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Zig FFI tests.
+# Zig FFI: tests, and the C ABI export pin.
 #
 # `zig build test` covers all five test roots -- main.zig, json_writer.zig,
 # file_ops.zig, unified-api-adapter.zig and test/integration_test.zig. The
 # adapter root carries the `comptime` 16-connector assertion and the four
 # wire-contract tests; integration_test.zig and file_ops.zig carry the rest.
 #
-# The step prints its denominator. A test runner that runs zero tests still
-# exits 0, so a step that does not say how many it ran is not evidence.
+# `zig build` then pins the C ABI surface by counting the exported symbols in
+# the built shared object, and by naming the six the Idris2 ABI declares
+# normative. `MUST.contractile` states C ABI compatibility as an invariant and
+# nothing else in the repository verifies it, so a breaking change to any of
+# the 18 exports would otherwise land silently (hypatia#696).
+#
+# Both steps print their denominator. A test runner that runs zero tests and a
+# linker that exports zero symbols both exit 0, so a step that does not say how
+# many it saw is not evidence.
 #
 # No `paths:` filter, deliberately -- so it stays eligible to be made a
 # required check without the filter/required deadlock.
@@ -45,6 +52,10 @@ jobs:
       # installed via a third-party action: it adds no `uses:` entry to
       # actions.lock.
       ZIG_SHA256: '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00'
+      # The C ABI surface. This number is the contract, not a measurement of
+      # it -- changing it is a deliberate ABI decision, never a fix for a red
+      # build.
+      EXPECTED_EXPORTS: '18'
 
     steps:
       - name: Checkout
@@ -125,3 +136,47 @@ jobs:
             echo "::error::zig build test reported ${count} tests -- expected at least 8 (hypatia#812)"
             exit 1
           fi
+
+      - name: Pin the C ABI export surface
+        working-directory: ffi/zig
+        run: |
+          set -euo pipefail
+          zig build
+          so='zig-out/lib/libhypatia_ffi.so'
+          test -f "${so}" || {
+            echo "::error::${so} was not built -- nothing to check the ABI against"
+            exit 1
+          }
+
+          # `grep -c` would exit 1 on zero matches, which is the case this
+          # step exists to catch; count through awk so the comparison below is
+          # the only thing that can fail.
+          exports=$(nm -D --defined-only "${so}" | awk '$2 == "T" && $3 ~ /^hypatia_/ { n++ } END { print n + 0 }')
+
+          echo "exported C functions: ${exports} (expected ${EXPECTED_EXPORTS})"
+          {
+            echo "### C ABI surface"
+            echo ""
+            echo "- exported \`hypatia_*\` functions: \`${exports}\` of \`${EXPECTED_EXPORTS}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${exports}" -ne "${EXPECTED_EXPORTS}" ]; then
+            echo "::error::libhypatia_ffi.so exports ${exports} hypatia_* symbols, expected ${EXPECTED_EXPORTS} -- this is a C ABI change (MUST.contractile, hypatia#696)"
+            nm -D --defined-only "${so}" | awk '$2 == "T" && $3 ~ /^hypatia_/ { print "  " $3 }'
+            exit 1
+          fi
+
+          # A count alone cannot see a rename that preserves it. These six are
+          # the functions src/Hypatia/ABI/FFI.idr declares normative -- exactly
+          # the six exports that carry no handle -- so they are named, not
+          # merely counted.
+          missing=0
+          for fn in hypatia_health_check hypatia_scan_repo hypatia_dispatch \
+                    hypatia_record_outcome hypatia_force_learning_cycle \
+                    hypatia_get_confidence; do
+            if ! nm -D --defined-only "${so}" | awk -v f="${fn}" '$2 == "T" && $3 == f { found = 1 } END { exit !found }'; then
+              echo "::error::${fn} is declared normative in src/Hypatia/ABI/FFI.idr but is not exported"
+              missing=$((missing + 1))
+            fi
+          done
+          test "${missing}" -eq 0
