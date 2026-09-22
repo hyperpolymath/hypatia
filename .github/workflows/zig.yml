@@ -103,12 +103,26 @@ jobs:
           zig test ffi/zig/src/unified-api-adapter.zig 2>&1 | tee "${RUNNER_TEMP}/zig-test.log"
 
           # The denominator. `zig test` on a file containing no `test` blocks
-          # exits 0 -- a green tick that proves nothing. Insist that it says
-          # how many it ran, and that the number is not zero.
-          summary=$(grep -Eo '[0-9]+ of [0-9]+ test[s]? passed|All [0-9]+ tests passed' \
-            "${RUNNER_TEMP}/zig-test.log" | tail -1 || true)
-          count=$(printf '%s' "${summary}" | grep -Eo '[0-9]+' | tail -1 || true)
-          count=${count:-0}
+          # exits 0 and prints "All 0 tests passed." -- a green tick that proves
+          # nothing. Insist that it says how many it ran, and that it is not 0.
+          #
+          # awk, not `grep ... || true`: grep exits 1 when it matches nothing,
+          # which under `set -e` needs suppressing, and a suppressed exit code
+          # is indistinguishable from a masked failure to a reader or a
+          # scanner. awk exits 0 whether or not it matched, so the no-match
+          # case needs no suppression and the check below stays the only thing
+          # that can fail this step.
+          count=$(awk '
+            match($0, /All [0-9]+ tests passed/) ||
+            match($0, /[0-9]+ of [0-9]+ tests? passed/) { last = $0 }
+            END {
+              n = 0
+              while (match(last, /[0-9]+/)) {
+                n = substr(last, RSTART, RLENGTH)
+                last = substr(last, RSTART + RLENGTH)
+              }
+              print n + 0
+            }' "${RUNNER_TEMP}/zig-test.log")
 
           echo "zig tests run: ${count}"
           {

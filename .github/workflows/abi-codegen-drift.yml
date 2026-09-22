@@ -76,6 +76,42 @@ jobs:
       - name: Verify Idris is on PATH
         run: idris2 --version
 
+      # Compiling an EXECUTABLE needs the Chez support tree
+      # (`<libdir>/support/chez/support.ss`); type-checking and building a
+      # LIBRARY does not. `verify-proofs.yml` only ever does the latter, so the
+      # cache this job deliberately shares with it was populated without that
+      # tree and this job died at
+      #   INTERNAL ERROR: Can't find data file chez/support.ss
+      # on its very first run. Measured, not supposed: PR #811's gate run.
+      #
+      # `support/` is plain data (Scheme and C sources shipped in the Idris2
+      # repo); it needs no build, so a shallow clone is enough to repair it.
+      - name: Ensure the Chez support tree is installed
+        run: |
+          set -euo pipefail
+          libdir="$(idris2 --libdir)"
+          support="${libdir}/support"
+          if [ -f "${support}/chez/support.ss" ]; then
+            echo "chez support present: ${support}/chez/support.ss"
+          else
+            echo "chez support absent under ${support} -- installing from the Idris2 source tree"
+            rm -rf "${RUNNER_TEMP}/idris2-support-src"
+            git clone --depth 1 --branch "${IDRIS2_VERSION}" \
+              https://github.com/idris-lang/Idris2 "${RUNNER_TEMP}/idris2-support-src"
+            mkdir -p "${support}"
+            cp -R "${RUNNER_TEMP}/idris2-support-src/support/." "${support}/"
+          fi
+          # Assert, do not assume. A missing support tree previously surfaced as
+          # an opaque INTERNAL ERROR three steps later; fail here, by name.
+          if [ ! -f "${support}/chez/support.ss" ]; then
+            echo "::error::chez/support.ss still missing under ${support}"
+            if [ -d "${libdir}" ]; then
+              find "${libdir}" -maxdepth 3 -name 'support*' -print
+            fi
+            exit 1
+          fi
+          echo "support tree: ${support}"
+
       - name: Build the generator
         run: |
           set -euo pipefail
