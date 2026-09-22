@@ -42,7 +42,7 @@
   ; === Sensitive Areas (if in doubt, ask) ===
   (ask-before-touching
     "lib/ — Elixir pipeline modules; incorrect routing can cause fleet misdispatch"
-    "src/abi/ — Idris2 formal proofs; changes require re-verification"
+    "src/Hypatia/ABI/ — Idris2 formal proofs; changes require re-verification"
     "ffi/zig/ — C ABI boundary; changes affect all language consumers"
     "config/ — dispatch thresholds and neural network parameters"
     ".machine_readable/ — checkpoint files, format is specified"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
 == Proof Status — Hypatia
 
 Tracking status of formal verification proofs for the Hypatia
@@ -16,92 +17,96 @@ convenient
 
 ==== Existing Proofs (pre-2026-04-04)
 
-[width="100%",cols="15%,20%,10%,39%,16%",options="header",]
-|===
-|File |Language |LOC |Properties Proven |Status
-|`+src/abi/Types.idr+` |Idris2 |140 |Confidence refined type, Severity
-ordering, core data types |COMPLETE
+NOTE: These tables deliberately carry no line-count column. Hand-maintained LOC
+figures drift silently, nothing consumes them, and every one of the twenty
+previously recorded here had gone wrong. Use `+wc -l+` on the paths below.
 
-|`+src/abi/RuleEngine.idr+` |Idris2 |571 |Safety triangle ordering,
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Properties Proven |Status
+|`+src/Hypatia/ABI/Types.idr+` |Idris2 |Confidence refined type
+(`+So (value >= 0.0 && value <= 1.0)+` auto-proof), core data types,
+and the wire-contract pin `+connectorCount : length allConnectors = 16+`
+|COMPLETE
+
+|`+src/Hypatia/ABI/RuleEngine.idr+` |Idris2 |Safety triangle ordering,
 route totality, dispatch correctness, Bayesian monotonicity, annealing
 caps, end-to-end composition |COMPLETE
 
-|`+src/abi/GraphQL.idr+` |Idris2 |~200 |Query/Mutation/Subscription type
-safety |COMPLETE
+|`+src/Hypatia/ABI/GraphQL.idr+` |Idris2 |Query/Mutation/Subscription
+type safety |COMPLETE
 
-|`+src/abi/GRPC.idr+` |Idris2 |~150 |gRPC service type definitions
+|`+src/Hypatia/ABI/GRPC.idr+` |Idris2 |gRPC service type definitions
 |COMPLETE
 
-|`+src/abi/REST.idr+` |Idris2 |~150 |REST endpoint type definitions
+|`+src/Hypatia/ABI/REST.idr+` |Idris2 |REST endpoint type definitions
 |COMPLETE
 
-|`+src/abi/FFI.idr+` |Idris2 |~100 |GADT constructors,
-ffiReturnsApiResponse proof |COMPLETE
+|`+src/Hypatia/ABI/FFI.idr+` |Idris2 |GADT constructors,
+`+ffiReturnsApiResponse+` proof |COMPLETE
 
-|`+verify/src/PipelineState.idr+` |Idris2 |175 |Pipeline state machine
+|`+verify/src/PipelineState.idr+` |Idris2 |Pipeline state machine
 (ValidTransition GADT), terminal/active classification |COMPLETE
 |===
 
-*Existing total: ~1,486 LOC of proven code*
-
 ==== New Proofs (2026-04-04)
 
-[width="100%",cols="15%,20%,10%,39%,16%",options="header",]
+[width="100%",cols="28%,14%,42%,16%",options="header",]
 |===
-|File |Language |LOC |Properties Proven |Status
-|`+verification/proofs/idris2/ConfidenceBounds.idr+` |Idris2 |~220
+|File |Language |Properties Proven |Status
+|`+verification/proofs/idris2/ConfidenceBounds.idr+` |Idris2
 |[0,1] bounds preserved by construction, Bayesian update,
 success/failure monotonicity, clamping, weighted average |COMPLETE
 
-|`+verification/proofs/idris2/SafetyTriangle.idr+` |Idris2 |~195 |Strict
+|`+verification/proofs/idris2/SafetyTriangle.idr+` |Idris2 |Strict
 total order (irreflexive, asymmetric, transitive), trichotomy, routing
 respects hierarchy, optimality (highest available), completeness (all
 tiers reachable) |COMPLETE
 
-|`+verification/proofs/idris2/DispatchStrategy.idr+` |Idris2 |~230
+|`+verification/proofs/idris2/DispatchStrategy.idr+` |Idris2
 |Confidence-to-strategy monotonicity, boundary proofs (high/mid/low),
 annealing clamp bounds, nascent-never-auto, veteran-unrestricted
 |COMPLETE
 
-|`+verification/proofs/idris2/VerisimdbConnector.idr+` |Idris2 |~110
+|`+verification/proofs/idris2/VerisimdbConnector.idr+` |Idris2
 |Completeness (mandatory fields), Soundness (no "`unknown`" fallbacks),
 Preservation (transit to Logtalk facts) |COMPLETE
 
-|`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |~95 |State
+|`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
 transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
 restoration, Routing blockage |COMPLETE
 
-|`+verification/proofs/idris2/BatchRollback.idr+` |Idris2 |~85
+|`+verification/proofs/idris2/BatchRollback.idr+` |Idris2
 |Transactionality (all-or-nothing), Reversibility (snapshot
 restoration), Fault tolerance (failure handling) |COMPLETE
 
-|`+verification/proofs/lean4/RateLimiting.lean+` |Lean 4 |~175 |Counter
+|`+verification/proofs/lean4/RateLimiting.lean+` |Lean 4 |Counter
 never exceeds configured bound, tryAccept preserves invariant, prune
 preserves invariant, inductive sequence processing, rejection guarantee,
 concrete configs (per-bot/global/burst) |COMPLETE
 
-|`+verification/proofs/lean4/BayesianUpdate.lean+` |Lean 4 |~190 |H7:
+|`+verification/proofs/lean4/BayesianUpdate.lean+` |Lean 4 |H7:
 posterior in (0,1), monotone in successes/failures, zero-observation
 identity, floor/cap clamp |COMPLETE
 
-|`+verification/proofs/lean4/ParserTotality.lean+` |Lean 4 |~190 |VCL
+|`+verification/proofs/lean4/ParserTotality.lean+` |Lean 4 |VCL
 `+FROM+`-clause parser totality, determinism, round-trip,
 malformed-input rejection |COMPLETE
 
-|`+verification/proofs/lean4/PageRankInvariants.lean+` |Lean 4 |~120
+|`+verification/proofs/lean4/PageRankInvariants.lean+` |Lean 4
 |PageRank preconditions (edge-weight / out-degree non-negativity).
 *Convergence theorem in progress (Mathlib).* |PARTIAL
 
-|`+verification/proofs/lean4/ESNSpectralScaling.lean+` |Lean 4 |~145
+|`+verification/proofs/lean4/ESNSpectralScaling.lean+` |Lean 4
 |ESN scaling preconditions (floor-clamped denominator positive).
 *Echo-state stability in progress (Mathlib).* |PARTIAL
 
-|`+verification/proofs/idris2/NeuralConsensus.idr+` |Idris2 |~170 |H9:
+|`+verification/proofs/idris2/NeuralConsensus.idr+` |Idris2 |H9:
 uniform-mean aggregation of Vect n Prediction is in [0,1], bounded below
 by n * min(inputs), denominator > 0 for non-empty ensembles, 8-network
 specialization |COMPLETE
 
-|`+verification/proofs/tlaplus/KinGate.tla+` |TLA+ |~130 |H8: Kin gate
+|`+verification/proofs/tlaplus/KinGate.tla+` |TLA+ |H8: Kin gate
 atomicity. Acquire/Release/Expire transitions + MutualExclusionByType +
 MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView +
 GrantsAreWellBracketed + EveryRequestProcessed (liveness) |COMPLETE —
@@ -110,15 +115,12 @@ TLC model-check 2026-04-17 passed on 3 bots × 2 repos × MaxRequests=4:
 21 JRE, tla2tools 2.19)
 
 |[line-through]#`+verification/proofs/agda/OutcomeLog.agda+`#
-|[line-through]#Agda# |~[line-through]#220# |[line-through]#H6: outcome
+|[line-through]#Agda# |[line-through]#H6: outcome
 log monotonicity (strictly increasing timestamps)# |RETIRED 2026-04-22 —
 downgraded to a runtime assertion in
 `+lib/outcome_tracker.ex:assert_h6_monotone/2+`. Echidnabot audits the
 JSONL for violations. See commit history.
 |===
-
-*New total: ~1,400 LOC of proven code (all TLC-verified or
-Idris2/Lean4-typechecked)*
 
 === Properties Proven
 
@@ -261,26 +263,15 @@ convergence/stability in progress (Lean + Mathlib)
 
 === File Locations
 
+Formal-verification sources live under three roots. The two inventory tables
+above carry the full path of every file; this section names only the roots, so
+that adding a proof does not require editing a third hand-maintained list.
+
 ....
 hypatia/
-├── src/abi/                              # Idris2 ABI definitions + proofs (1027 LOC)
-│   ├── Types.idr
-│   ├── RuleEngine.idr
-│   ├── GraphQL.idr
-│   ├── GRPC.idr
-│   ├── REST.idr
-│   └── FFI.idr
-├── verify/src/                           # Pipeline state machine proofs
-│   └── PipelineState.idr
-└── verification/proofs/                  # Standalone property proofs (NEW)
-    ├── idris2/
-    │   ├── ConfidenceBounds.idr          # [0,1] invariant
-    │   ├── SafetyTriangle.idr            # Ordering + routing correctness
-    │   └── DispatchStrategy.idr          # Monotonicity
-    ├── lean4/
-    │   └── RateLimiting.lean             # Counter bounds
-    └── tlaplus/
-        └── KinGate.tla                   # Mutex under interleaved bot requests
+├── src/Hypatia/ABI/        # Idris2 ABI definitions + proofs (normative wire contract)
+├── verify/src/             # Pipeline state machine proofs
+└── verification/proofs/    # Standalone property proofs (idris2/, lean4/, tlaplus/)
 ....
 
 === Retired proofs
