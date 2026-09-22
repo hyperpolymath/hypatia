@@ -91,7 +91,7 @@ Estimated 400–600 LOC including tests.
 
 === ABI additions
 
-In `src/abi/Types.idr`:
+In `src/Hypatia/ABI/Types.idr`:
 
 [source,idris]
 ----
@@ -113,8 +113,8 @@ record ProofResult where
   timestamp : String
 ----
 
-Add equivalent gRPC + REST endpoint definitions in `src/abi/GRPC.idr`
-and `src/abi/REST.idr`.
+Add equivalent gRPC + REST endpoint definitions in `src/Hypatia/ABI/GRPC.idr`
+and `src/Hypatia/ABI/REST.idr`.
 
 === Telemetry
 

@@ -174,9 +174,9 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `RuleEngine.idr` | Rule-evaluation types |
 
 **Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
-The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles**. A byte-identical
-copy of all six modules also sits in `src/abi/*.idr` and is built by nothing — divergence between
-them is undetectable. See DEBT-REGISTER C-4.
+The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** — that is the
+normative ABI. `src/abi/` holds only the two `.ipkg` files and a README; the byte-identical
+duplicate modules that used to sit there were deleted 2026-09-22 (issue #815, DEBT-REGISTER C-4).
 
 ### Zig FFI (ffi/zig/src/)
 

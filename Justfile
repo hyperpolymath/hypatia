@@ -310,7 +310,7 @@ tour:
     echo "   Rust crates for adapters, CLI tools, data processing, fixes."
     echo ""
     echo "5. ABI/FFI:"
-    echo "     src/abi/   - Idris2 types (GraphQL, gRPC, REST proofs)"
+    echo "     src/abi/   - Idris2 ABI + codegen packages (.ipkg)"
     echo "     ffi/zig/   - 7 exported C functions"
     echo ""
     echo "6. SAFETY SYSTEMS: lib/safety/"

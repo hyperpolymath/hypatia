@@ -3,7 +3,7 @@
 //
 // Hypatia client types — the typed surface that replaces the
 // V-lang client at the deleted `api/v/hypatia.v`. Mirrors the
-// Idris2 ABI types in `src/abi/Types.idr` and the Zig ABI types
+// Idris2 ABI types in `src/Hypatia/ABI/Types.idr` and the Zig ABI types
 // in `ffi/zig/src/main.zig`.
 
 use serde::{Deserialize, Serialize};

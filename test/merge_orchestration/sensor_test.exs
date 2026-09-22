@@ -15,7 +15,7 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
 
   test "a proof file is a proof" do
     assert {:proof, _, _} = Sensor.classify(obs(%{"files" => ["proofs/agda/All.agda"]}))
-    assert {:proof, _, _} = Sensor.classify(obs(%{"files" => ["src/abi/Types.idr"]}))
+    assert {:proof, _, _} = Sensor.classify(obs(%{"files" => ["src/Hypatia/ABI/Types.idr"]}))
   end
 
   test "a SECURITY touch (or label) is security" do

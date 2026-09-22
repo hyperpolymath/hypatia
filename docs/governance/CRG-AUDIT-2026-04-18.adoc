@@ -133,7 +133,7 @@ hits, contractile trident complete, full mirror fan-out configured.
 |===
 | Item | Count | Notes
 
-| Idris2 ABI modules (`src/abi/*.idr`)
+| Idris2 ABI modules (`src/Hypatia/ABI/*.idr`)
 | 6 files, 1,128 LOC
 | `Types.idr` 240, `REST.idr` 95, `GraphQL.idr` 93, `FFI.idr` 66, `GRPC.idr` 64, `RuleEngine.idr` 570. All declare `%default total` at file head.
 
