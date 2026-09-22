@@ -1,0 +1,23 @@
+-- SPDX-License-Identifier: MPL-2.0
+-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+--
+-- Hypatia ABI code generator: emits the Zig and Rust wire enums and the
+-- connectors.json manifest from the normative Idris2 ABI.
+--
+-- `sourcedir = ".."` resolves to `src/` (this ipkg lives in `src/abi/`),
+-- exactly as hypatia-abi.ipkg does, so `Hypatia.ABI.Gen` is
+-- `src/Hypatia/ABI/Gen.idr` and imports `src/Hypatia/ABI/Types.idr` -- the
+-- live module, not the duplicate that sits next to this file.
+
+package hypatia-abi-gen
+version = 0.5.0
+authors = "Jonathan D.A. Jewell"
+brief = "Generates the unified-api-adapter wire contract from the Idris2 ABI"
+depends = base    >= 0.6.0
+        , contrib
+sourcedir = ".."
+main = Hypatia.ABI.Gen
+executable = hypatia-abi-gen
+builddir = "../../build/abi-gen"
+outputdir = "../../build/abi-gen/exec"
+opts = "--total"

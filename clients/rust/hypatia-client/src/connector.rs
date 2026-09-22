@@ -1,108 +1,18 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// UnifiedApiAdapter enum — mirror of the Zig
-// `Connector` enum in `ffi/zig/src/unified-api-adapter.zig` and the Idris2
-// `Connector` data type in `src/abi/Types.idr`.
+// UnifiedApiAdapter enum — re-exported from the generated wire contract.
 //
-// **Wire ordering is load-bearing.** The integer value of each variant
-// is the C ABI id used by `hypatia_connector_name(id)` and
-// `hypatia_connector_port(id, base)`. Renumbering this enum without
-// updating the Zig and Idris2 sides is a hard ABI break — the
-// Idris2 `connectorCount : length allConnectors = 16` proof catches
-// counts but not orderings.
+// The normative source is the Idris2 ABI `src/Hypatia/ABI/Types.idr`.
+// `connector_generated.rs` is emitted from it by `just abi-gen`, as are the
+// Zig enum in `ffi/zig/src/connector_generated.zig` and `ffi/connectors.json`.
+// Do not edit the generated file; edit the ABI and regenerate.
+//
+// The tests below are hand-maintained on purpose. A generated test would
+// re-assert its own source and prove nothing; these pin the wire contract
+// independently of the generator.
 
-use serde::{Deserialize, Serialize};
-
-/// The sixteen protocol connectors exposed by the Hypatia
-/// unified-api-adapter surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum Connector {
-    // ---- Core 12 ----
-    Grpc = 0,
-    GraphQl = 1,
-    Rest = 2,
-    FlatBuffers = 3,
-    Bebop = 4,
-    JsonRpc = 5,
-    WebSocket = 6,
-    Mqtt = 7,
-    Trpc = 8,
-    CapnProto = 9,
-    Soap = 10,
-    VerisimdbRest = 11,
-    // ---- Umoja-substrate 4 ----
-    Bsp = 12,
-    Scip = 13,
-    Ipfs = 14,
-    ArrowFlight = 15,
-}
-
-/// The total number of connectors. Pinned at 16 by the
-/// `comptime` assertion in `unified-api-adapter.zig` and the
-/// `connectorCount : length allConnectors = 16` proof in
-/// `src/abi/Types.idr`.
-pub const CONNECTOR_COUNT: usize = 16;
-
-impl Connector {
-    /// Canonical wire name. Must agree with the Zig side and the
-    /// Idris2 ABI; tests assert all sixteen.
-    pub fn name(self) -> &'static str {
-        match self {
-            Connector::Grpc => "grpc",
-            Connector::GraphQl => "graphql",
-            Connector::Rest => "rest",
-            Connector::FlatBuffers => "flatbuffers",
-            Connector::Bebop => "bebop",
-            Connector::JsonRpc => "jsonrpc",
-            Connector::WebSocket => "websocket",
-            Connector::Mqtt => "mqtt",
-            Connector::Trpc => "trpc",
-            Connector::CapnProto => "capnproto",
-            Connector::Soap => "soap",
-            Connector::VerisimdbRest => "verisimdb-rest",
-            Connector::Bsp => "bsp",
-            Connector::Scip => "scip",
-            Connector::Ipfs => "ipfs",
-            Connector::ArrowFlight => "arrow-flight",
-        }
-    }
-
-    /// All sixteen connectors in wire order.
-    pub fn all() -> [Connector; CONNECTOR_COUNT] {
-        [
-            Connector::Grpc,
-            Connector::GraphQl,
-            Connector::Rest,
-            Connector::FlatBuffers,
-            Connector::Bebop,
-            Connector::JsonRpc,
-            Connector::WebSocket,
-            Connector::Mqtt,
-            Connector::Trpc,
-            Connector::CapnProto,
-            Connector::Soap,
-            Connector::VerisimdbRest,
-            Connector::Bsp,
-            Connector::Scip,
-            Connector::Ipfs,
-            Connector::ArrowFlight,
-        ]
-    }
-
-    /// Try to construct a connector from its wire id. Returns
-    /// `None` for ids outside `0..16`.
-    pub fn from_id(id: u8) -> Option<Connector> {
-        Self::all().get(id as usize).copied()
-    }
-
-    /// Bound port for this connector under a given base port.
-    /// Layout matches the V-lang reference (`base + id + 1`).
-    pub fn port(self, base_port: u16) -> u16 {
-        base_port + (self as u8 as u16) + 1
-    }
-}
+pub use crate::connector_generated::{Connector, CONNECTOR_COUNT};
 
 #[cfg(test)]
 mod tests {

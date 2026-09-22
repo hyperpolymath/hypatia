@@ -56,6 +56,21 @@ invariant-path *ARGS:
 compile-abi:
     cd src/abi && idris2 --build hypatia-abi.ipkg
 
+# Regenerate the wire contract from the normative Idris2 ABI, then commit the
+# result. The provenance stamp is a content hash of Types.idr, so ANY byte
+# change to the ABI -- a comment included -- reddens abi-codegen-drift until
+# this is re-run. That is deliberate: touching the normative ABI should force
+# you to look at what it generated.
+abi-gen:
+    cd src/abi && idris2 --build hypatia-abi-gen.ipkg
+    mkdir -p build/abi-gen/out
+    ./build/abi-gen/exec/hypatia-abi-gen \
+        --out-dir build/abi-gen/out \
+        --abi-hash "$(git hash-object src/Hypatia/ABI/Types.idr)"
+    cp build/abi-gen/out/connector_generated.zig ffi/zig/src/connector_generated.zig
+    cp build/abi-gen/out/connector_generated.rs  clients/rust/hypatia-client/src/connector_generated.rs
+    cp build/abi-gen/out/connectors.json         ffi/connectors.json
+
 # Compile Idris2 verification proofs
 compile-verify:
     cd verify && idris2 --build hypatia-verify.ipkg

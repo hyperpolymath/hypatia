@@ -27,6 +27,8 @@
 // type-safe end-to-end.
 
 pub mod client;
+mod connector_generated;
+
 pub mod connector;
 pub mod error;
 pub mod types;

@@ -105,9 +105,25 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    // Unit tests for the unified API adapter.
+    //
+    // The adapter was reachable from NO test root: main.zig, json_writer.zig,
+    // file_ops.zig and integration_test.zig none of them import it, so its
+    // `comptime` 16-connector assertion and its four tests never executed --
+    // locally or in CI. It is a leaf (it imports connector_generated.zig and
+    // connectors/*.zig by relative path), so it needs no module wiring.
+    const adapter_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/unified-api-adapter.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(&b.addRunArtifact(main_tests).step);
     test_step.dependOn(&b.addRunArtifact(json_tests).step);
     test_step.dependOn(&b.addRunArtifact(file_ops_tests).step);
     test_step.dependOn(&b.addRunArtifact(integration_tests).step);
+    test_step.dependOn(&b.addRunArtifact(adapter_tests).step);
 }

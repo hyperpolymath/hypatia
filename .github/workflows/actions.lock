@@ -3,6 +3,9 @@
 # Docs: https://gh.io/actions-lockfile
 version: 'v0.0.2'
 workflows:
+    '.github/workflows/abi-codegen-drift.yml':
+        - 'actions/cache@v6.1.0'
+        - 'actions/checkout@v7.0.1'
     '.github/workflows/bridge-gate.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/build-gossamer-gui.yml':
@@ -115,6 +118,9 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-java@v6.0.1'
         - 'actions/upload-artifact@v7.0.1'
+    '.github/workflows/zig.yml':
+        - 'actions/cache@v6.1.0'
+        - 'actions/checkout@v7.0.1'
 dependencies:
     'actions/attest-build-provenance@v4.2.2':
         ref: 'v4.2.2'
