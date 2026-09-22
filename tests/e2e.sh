@@ -256,8 +256,26 @@ green "PASS=$PASS" | tr -d '\n'
 echo -n "  "
 if [ "$FAIL" -gt 0 ]; then red "FAIL=$FAIL" | tr -d '\n'; else echo -n "FAIL=0"; fi
 echo -n "  "
-if [ "$SKIP" -gt 0 ]; then yellow "SKIP=$SKIP"; else echo "SKIP=0"; fi
+if [ "$SKIP" -gt 0 ]; then yellow "SKIP=$SKIP" | tr -d '\n'; else echo -n "SKIP=0"; fi
 echo ""
+
+# The denominator. PASS and FAIL are the scenarios that actually executed;
+# SKIP deliberately does not count, because a skipped scenario produced no
+# evidence either way.
+#
+# Without this guard the suite ended `exit "$FAIL"`, so a run in which every
+# scenario skipped — no Elixir, no Rust CLI, a renamed fixture — exited 0 and
+# reported a clean end-to-end pass having tested nothing at all. Green on an
+# empty subject is the failure mode this suite exists to catch in other
+# people's pipelines, so it must not be able to commit it itself.
+RAN=$((PASS + FAIL))
+echo "  Scenarios run: $RAN"
 echo "═══════════════════════════════════════════════════════════════"
+
+if [ "$RAN" -eq 0 ]; then
+    red "  E2E FAILED: 0 scenarios executed (SKIP=$SKIP)."
+    red "  A suite with an empty subject cannot report a pass."
+    exit 1
+fi
 
 exit "$FAIL"
