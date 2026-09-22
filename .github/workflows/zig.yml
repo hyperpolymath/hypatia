@@ -46,7 +46,9 @@ jobs:
 
     env:
       # Matches the owner's local toolchain
-      # (developer/tools/opt/mise/installs/zig/0.16.0).
+      # (developer/tools/opt/mise/installs/zig/0.16.0) and the `zig` pin in
+      # mise.toml. The "Agree with the mise.toml pin" step below asserts that
+      # agreement rather than trusting it.
       ZIG_VERSION: '0.16.0'
       # Official shasum for zig-x86_64-linux-0.16.0.tar.xz. Pinned rather than
       # installed via a third-party action: it adds no `uses:` entry to
@@ -60,6 +62,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+
+      - name: Agree with the mise.toml pin
+        run: |
+          set -euo pipefail
+          # Two files name the Zig version: this workflow and mise.toml. A
+          # comment cross-referencing them would document the coupling without
+          # enforcing it, so they are compared instead (hypatia#813). This runs
+          # before the toolchain install so a disagreement fails in seconds.
+          pinned=$(awk -F'"' '/^[[:space:]]*zig[[:space:]]*=/ { print $2; exit }' mise.toml)
+          if [ -z "${pinned}" ]; then
+            echo "::error::mise.toml declares no pinned zig version -- it must name the same version as ZIG_VERSION (${ZIG_VERSION})"
+            exit 1
+          fi
+          echo "mise.toml zig = ${pinned}; workflow ZIG_VERSION = ${ZIG_VERSION}"
+          if [ "${pinned}" != "${ZIG_VERSION}" ]; then
+            echo "::error::mise.toml pins zig ${pinned} but this workflow installs ${ZIG_VERSION} -- the green result below would not be the version developers build with"
+            exit 1
+          fi
 
       - name: Cache the Zig toolchain
         id: cache-zig

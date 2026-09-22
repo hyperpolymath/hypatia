@@ -267,7 +267,7 @@ heal:
     fi
     if ! command -v zig >/dev/null 2>&1; then
         echo "  Zig (for FFI bridge):"
-        echo "    asdf plugin add zig && asdf install zig 0.13.0"
+        echo "    mise install zig   # version is pinned in mise.toml"
         echo ""
     fi
     if ! command -v panic-attack >/dev/null 2>&1; then
