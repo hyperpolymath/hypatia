@@ -32,7 +32,7 @@ workflows:
         - 'google/clusterfuzzlite@v1'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@1c5b675653bb5c22dbe9b12b556ec555138e09fd'
+        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
@@ -98,7 +98,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.1'
         - 'aquasecurity/trivy-action@v0.36.0'
         - 'dtolnay/rust-toolchain@v1'
-        - 'github/codeql-action@v4.38.1'
+        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'taiki-e/install-action@v2.87.15'
         - 'trufflesecurity/trufflehog@v3.97.5'
@@ -259,12 +259,12 @@ dependencies:
         repo_id: 331103973
     'github/codeql-action@1c5b675653bb5c22dbe9b12b556ec555138e09fd':
         ref: 'v4.38.1'
-        commit: 'sha1-1c5b675653bb5c22dbe9b12b556ec555138e09fd'
+        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         owner_id: 9919
         repo_id: 259445878
-    'github/codeql-action@v4.38.1':
-        ref: 'v4.38.1'
-        commit: 'sha1-1c5b675653bb5c22dbe9b12b556ec555138e09fd'
+    'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63':
+        ref: 'b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         owner_id: 9919
         repo_id: 259445878
     'gitleaks/gitleaks-action@v3.0.0':
