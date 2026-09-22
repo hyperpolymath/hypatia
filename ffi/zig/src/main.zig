@@ -9,6 +9,9 @@
 const std = @import("std");
 const jw = @import("json_writer");
 const file_ops = @import("file_ops");
+const runtime = @import("runtime");
+
+const Dir = std.Io.Dir;
 
 // Version information (keep in sync with project)
 const VERSION = "0.1.0";
@@ -40,13 +43,22 @@ pub const Result = enum(c_int) {
     null_pointer = 4,
 };
 
-/// Library handle (opaque to prevent direct access)
-pub const Handle = opaque {
-    // Internal state hidden from C
+/// Library handle (opaque to prevent direct access).
+///
+/// C sees only a pointer. The state lives in `HandleState` because an `opaque`
+/// type cannot have fields -- the previous declaration gave this one two, which
+/// is a compile error under every Zig version, not a 0.16 regression.
+pub const Handle = opaque {};
+
+/// The state behind a `*Handle`. Never named in the C header.
+const HandleState = struct {
     allocator: std.mem.Allocator,
     initialized: bool,
-    // Add your fields here
 };
+
+fn state(handle: *Handle) *HandleState {
+    return @ptrCast(@alignCast(handle));
+}
 
 //==============================================================================
 // Library Lifecycle
@@ -57,7 +69,7 @@ pub const Handle = opaque {
 export fn hypatia_init() ?*Handle {
     const allocator = std.heap.c_allocator;
 
-    const handle = allocator.create(Handle) catch {
+    const handle = allocator.create(HandleState) catch {
         setError("Failed to allocate handle");
         return null;
     };
@@ -69,12 +81,12 @@ export fn hypatia_init() ?*Handle {
     };
 
     clearError();
-    return handle;
+    return @ptrCast(handle);
 }
 
 /// Free the library handle
 export fn hypatia_free(handle: ?*Handle) void {
-    const h = handle orelse return;
+    const h = state(handle orelse return);
     const allocator = h.allocator;
 
     // Clean up resources
@@ -90,10 +102,10 @@ export fn hypatia_free(handle: ?*Handle) void {
 
 /// Process data (example operation)
 export fn hypatia_process(handle: ?*Handle, input: u32) Result {
-    const h = handle orelse {
+    const h = state(handle orelse {
         setError("Null handle");
         return .null_pointer;
-    };
+    });
 
     if (!h.initialized) {
         setError("Handle not initialized");
@@ -114,10 +126,10 @@ export fn hypatia_process(handle: ?*Handle, input: u32) Result {
 /// Get a string result (example)
 /// Caller must free the returned string
 export fn hypatia_get_string(handle: ?*Handle) ?[*:0]const u8 {
-    const h = handle orelse {
+    const h = state(handle orelse {
         setError("Null handle");
         return null;
-    };
+    });
 
     if (!h.initialized) {
         setError("Handle not initialized");
@@ -153,10 +165,10 @@ export fn hypatia_process_array(
     buffer: ?[*]const u8,
     len: u32,
 ) Result {
-    const h = handle orelse {
+    const h = state(handle orelse {
         setError("Null handle");
         return .null_pointer;
-    };
+    });
 
     const buf = buffer orelse {
         setError("Null buffer");
@@ -212,17 +224,17 @@ export fn hypatia_build_info() [*:0]const u8 {
 //==============================================================================
 
 /// Callback function type (C ABI)
-pub const Callback = *const fn (u64, u32) callconv(.C) u32;
+pub const Callback = *const fn (u64, u32) callconv(.c) u32;
 
 /// Register a callback
 export fn hypatia_register_callback(
     handle: ?*Handle,
     callback: ?Callback,
 ) Result {
-    const h = handle orelse {
+    const h = state(handle orelse {
         setError("Null handle");
         return .null_pointer;
-    };
+    });
 
     const cb = callback orelse {
         setError("Null callback");
@@ -247,7 +259,7 @@ export fn hypatia_register_callback(
 
 /// Check if handle is initialized
 export fn hypatia_is_initialized(handle: ?*Handle) u32 {
-    const h = handle orelse return 0;
+    const h = state(handle orelse return 0);
     return if (h.initialized) 1 else 0;
 }
 
@@ -257,18 +269,20 @@ export fn hypatia_is_initialized(handle: ?*Handle) u32 {
 //==============================================================================
 
 fn hypatiaDataPath() []const u8 {
-    return std.posix.getenv("HYPATIA_DATA_PATH") orelse
-        std.posix.getenv("VERISIMDB_DATA_PATH") orelse
+    return runtime.getEnv("HYPATIA_DATA_PATH") orelse
+        runtime.getEnv("VERISIMDB_DATA_PATH") orelse
         "data/verisim";
 }
 
 // Append data + newline to a file (cwd-relative; creates if missing).
-fn appendLine(path: []const u8, data: []const u8) bool {
-    const file = std.fs.cwd().createFile(path, .{ .truncate = false }) catch return false;
-    defer file.close();
-    file.seekFromEnd(0) catch return false;
-    file.writeAll(data) catch return false;
-    file.writeAll("\n") catch return false;
+fn appendLine(io: std.Io, path: []const u8, data: []const u8) bool {
+    const file = Dir.cwd().createFile(io, path, .{ .truncate = false }) catch return false;
+    defer file.close(io);
+    // 0.16 removed `seekFromEnd`/`writeAll`; a positional write at the current
+    // length is the direct equivalent of seek-to-end-then-write.
+    const end = file.length(io) catch return false;
+    file.writePositionalAll(io, data, end) catch return false;
+    file.writePositionalAll(io, "\n", end + data.len) catch return false;
     return true;
 }
 
@@ -276,6 +290,7 @@ fn appendLine(path: []const u8, data: []const u8) bool {
 /// Returns {"ok":bool,"stores":{"scans":"ok/missing",...}} or null on OOM.
 /// Caller must free with hypatia_free_string.
 export fn hypatia_health_check() ?[*:0]const u8 {
+    const io = runtime.io();
     const allocator = std.heap.c_allocator;
     const base = hypatiaDataPath();
     const stores = [_][]const u8{ "scans", "patterns", "recipes", "outcomes", "dispatch" };
@@ -286,7 +301,7 @@ export fn hypatia_health_check() ?[*:0]const u8 {
         const path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ base, store }) catch return null;
         defer allocator.free(path);
         const accessible: bool = blk: {
-            std.fs.cwd().access(path, .{}) catch break :blk false;
+            Dir.cwd().access(io, path, .{}) catch break :blk false;
             break :blk true;
         };
         if (!accessible) all_ok = false;
@@ -313,6 +328,7 @@ export fn hypatia_health_check() ?[*:0]const u8 {
 /// Returns file contents or {"error":"scan not found","repo":"..."} on miss.
 /// Caller must free with hypatia_free_string.
 export fn hypatia_scan_repo(repo: ?[*:0]const u8) ?[*:0]const u8 {
+    const io = runtime.io();
     const allocator = std.heap.c_allocator;
     const repo_str = std.mem.span(repo orelse {
         setError("Null repo parameter");
@@ -322,7 +338,7 @@ export fn hypatia_scan_repo(repo: ?[*:0]const u8) ?[*:0]const u8 {
     const path = std.fmt.allocPrint(allocator, "{s}/scans/{s}.json", .{ base, repo_str }) catch return null;
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch {
+    const content = Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024)) catch {
         var err_buf: [256]u8 = undefined;
         var ew = jw.JsonWriter.init(&err_buf);
         ew.beginObject();
@@ -340,6 +356,7 @@ export fn hypatia_scan_repo(repo: ?[*:0]const u8) ?[*:0]const u8 {
 /// Dispatch finding — appends entry_json as a line to dispatch/pending.jsonl.
 /// Returns 0 on success, 1 on error.
 export fn hypatia_dispatch(entry_json: ?[*:0]const u8) c_int {
+    const io = runtime.io();
     const entry = entry_json orelse {
         setError("Null entry_json");
         return 1;
@@ -351,12 +368,13 @@ export fn hypatia_dispatch(entry_json: ?[*:0]const u8) c_int {
         return 1;
     };
     defer allocator.free(path);
-    return if (appendLine(path, std.mem.span(entry))) 0 else 1;
+    return if (appendLine(io, path, std.mem.span(entry))) 0 else 1;
 }
 
 /// Record outcome — appends record_json to outcomes/YYYY-MM.jsonl.
 /// Returns 0 on success, 1 on error.
 export fn hypatia_record_outcome(record_json: ?[*:0]const u8) c_int {
+    const io = runtime.io();
     const record = record_json orelse {
         setError("Null record_json");
         return 1;
@@ -364,7 +382,11 @@ export fn hypatia_record_outcome(record_json: ?[*:0]const u8) c_int {
     const allocator = std.heap.c_allocator;
     const base = hypatiaDataPath();
 
-    const ts: i64 = std.time.timestamp();
+    // 0.16 removed `std.time.timestamp`. `Clock.real` is documented as Unix time
+    // (seconds since 1970-01-01T00:00:00Z, leap seconds ignored), and `toSeconds`
+    // converts the nanosecond `Io.Timestamp` back to the same i64 the 0.15 call
+    // returned -- so `epoch.EpochSeconds` below still receives seconds.
+    const ts: i64 = std.Io.Clock.now(.real, io).toSeconds();
     const epoch_secs = std.time.epoch.EpochSeconds{ .secs = @intCast(ts) };
     const epoch_day = epoch_secs.getEpochDay();
     const year_day = epoch_day.calculateYearDay();
@@ -379,12 +401,13 @@ export fn hypatia_record_outcome(record_json: ?[*:0]const u8) c_int {
         return 1;
     };
     defer allocator.free(path);
-    return if (appendLine(path, std.mem.span(record))) 0 else 1;
+    return if (appendLine(io, path, std.mem.span(record))) 0 else 1;
 }
 
 /// Force learning cycle — writes .force-learning signal file to verisim-data root.
 /// Returns 0 on success, 1 on error.
 export fn hypatia_force_learning_cycle() c_int {
+    const io = runtime.io();
     const allocator = std.heap.c_allocator;
     const base = hypatiaDataPath();
     const path = std.fmt.allocPrint(allocator, "{s}/.force-learning", .{base}) catch {
@@ -392,26 +415,27 @@ export fn hypatia_force_learning_cycle() c_int {
         return 1;
     };
     defer allocator.free(path);
-    const f = std.fs.cwd().createFile(path, .{}) catch return 1;
-    f.close();
+    const f = Dir.cwd().createFile(io, path, .{}) catch return 1;
+    f.close(io);
     return 0;
 }
 
 /// Get recipe confidence — reads recipes/recipe-{id}.json, extracts "confidence" field.
 /// Returns confidence as f64, or -1.0 on missing recipe or parse error.
 export fn hypatia_get_confidence(recipe_id: ?[*:0]const u8) f64 {
+    const io = runtime.io();
     const id_str = std.mem.span(recipe_id orelse return -1.0);
     const allocator = std.heap.c_allocator;
     const base = hypatiaDataPath();
     const path = std.fmt.allocPrint(allocator, "{s}/recipes/recipe-{s}.json", .{ base, id_str }) catch return -1.0;
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(allocator, path, 64 * 1024) catch return -1.0;
+    const content = Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return -1.0;
     defer allocator.free(content);
 
     const key = "\"confidence\":";
     const idx = std.mem.indexOf(u8, content, key) orelse return -1.0;
-    const after_key = std.mem.trimLeft(u8, content[idx + key.len ..], " \t");
+    const after_key = std.mem.trimStart(u8, content[idx + key.len ..], " \t");
 
     var end: usize = 0;
     while (end < after_key.len) : (end += 1) {

@@ -2,34 +2,22 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
-# Zig wire-contract tests.
+# Zig FFI: tests, and the C ABI export pin.
 #
-# Scope is deliberately narrow: `zig test ffi/zig/src/unified-api-adapter.zig`,
-# NOT `zig build test`.
+# `zig build test` covers all five test roots -- main.zig, json_writer.zig,
+# file_ops.zig, unified-api-adapter.zig and test/integration_test.zig. The
+# adapter root carries the `comptime` 16-connector assertion and the four
+# wire-contract tests; integration_test.zig and file_ops.zig carry the rest.
 #
-# Why. The adapter carries the `comptime` 16-connector assertion and the four
-# wire-contract tests, and it was reachable from no test root at all -- none of
-# `main.zig`, `json_writer.zig`, `file_ops.zig` or `test/integration_test.zig`
-# imports it -- so those assertions had never executed anywhere, locally or in
-# CI. `build.zig` now roots it too, but `zig build test` is independently RED
-# on `main` for pre-existing reasons (below), so gating on the whole build
-# would land a workflow that is red on arrival and says nothing about this
-# contract.
+# `zig build` then pins the C ABI surface by counting the exported symbols in
+# the built shared object, and by naming the six the Idris2 ABI declares
+# normative. `MUST.contractile` states C ABI compatibility as an invariant and
+# nothing else in the repository verifies it, so a breaking change to any of
+# the 18 exports would otherwise land silently (hypatia#696).
 #
-# Measured 2026-09-22 with Zig 0.16.0: `zig build test` reports
-# "4/11 steps succeeded (3 failed); 7/7 tests passed". Three of the four
-# pre-existing roots (main.zig, file_ops.zig, test/integration_test.zig) fail to
-# COMPILE against the 0.16 standard library -- 16 call sites across six removed
-# or relocated symbols (std.fs.cwd, std.posix.getenv, std.fs.openFileAbsolute,
-# std.fs.createFileAbsolute, std.fs.deleteFileAbsolute, std.time.timestamp),
-# plus an `opaque` type declared with fields at main.zig:46. That is a
-# pre-existing un-migrated tree, not a regression from this change.
-#
-# The 7 passing tests are json_writer.zig's 3 and this adapter's 4 -- so
-# adding the adapter root took `zig build test` from 3 tests to 7.
-#
-# This job runs the maximal subset that is green today. Widen it to
-# `zig build test` once the tree is migrated to the 0.16 std API.
+# Both steps print their denominator. A test runner that runs zero tests and a
+# linker that exports zero symbols both exit 0, so a step that does not say how
+# many it saw is not evidence.
 #
 # No `paths:` filter, deliberately -- so it stays eligible to be made a
 # required check without the filter/required deadlock.
@@ -50,7 +38,7 @@ permissions: read-all
 
 jobs:
   zig-test:
-    name: zig test (wire contract)
+    name: zig build test (FFI + wire contract)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -58,17 +46,40 @@ jobs:
 
     env:
       # Matches the owner's local toolchain
-      # (developer/tools/opt/mise/installs/zig/0.16.0).
+      # (developer/tools/opt/mise/installs/zig/0.16.0) and the `zig` pin in
+      # mise.toml. The "Agree with the mise.toml pin" step below asserts that
+      # agreement rather than trusting it.
       ZIG_VERSION: '0.16.0'
       # Official shasum for zig-x86_64-linux-0.16.0.tar.xz. Pinned rather than
       # installed via a third-party action: it adds no `uses:` entry to
-      # actions.lock, and it cannot float the way `mise.toml`'s `zig = "latest"`
-      # does.
+      # actions.lock.
       ZIG_SHA256: '70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00'
+      # The C ABI surface. This number is the contract, not a measurement of
+      # it -- changing it is a deliberate ABI decision, never a fix for a red
+      # build.
+      EXPECTED_EXPORTS: '18'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+
+      - name: Agree with the mise.toml pin
+        run: |
+          set -euo pipefail
+          # Two files name the Zig version: this workflow and mise.toml. A
+          # comment cross-referencing them would document the coupling without
+          # enforcing it, so they are compared instead (hypatia#813). This runs
+          # before the toolchain install so a disagreement fails in seconds.
+          pinned=$(awk -F'"' '/^[[:space:]]*zig[[:space:]]*=/ { print $2; exit }' mise.toml)
+          if [ -z "${pinned}" ]; then
+            echo "::error::mise.toml declares no pinned zig version -- it must name the same version as ZIG_VERSION (${ZIG_VERSION})"
+            exit 1
+          fi
+          echo "mise.toml zig = ${pinned}; workflow ZIG_VERSION = ${ZIG_VERSION}"
+          if [ "${pinned}" != "${ZIG_VERSION}" ]; then
+            echo "::error::mise.toml pins zig ${pinned} but this workflow installs ${ZIG_VERSION} -- the green result below would not be the version developers build with"
+            exit 1
+          fi
 
       - name: Cache the Zig toolchain
         id: cache-zig
@@ -97,43 +108,101 @@ jobs:
           zig version
           test "$(zig version)" = "${ZIG_VERSION}"
 
-      - name: Run the wire-contract tests
+      - name: Run the Zig tests
+        working-directory: ffi/zig
         run: |
           set -euo pipefail
-          # `zig test` writes its summary to stderr; keep both streams.
-          zig test ffi/zig/src/unified-api-adapter.zig 2>&1 | tee "${RUNNER_TEMP}/zig-test.log"
+          # `--summary all` is what emits the "Build Summary:" line this step
+          # parses; without it a fully cached green build prints nothing to
+          # parse. The summary goes to stderr, so keep both streams.
+          zig build test --summary all 2>&1 | tee "${RUNNER_TEMP}/zig-test.log"
 
-          # The denominator. `zig test` on a file containing no `test` blocks
-          # exits 0 and prints "All 0 tests passed." -- a green tick that proves
-          # nothing. Insist that it says how many it ran, and that it is not 0.
+          # The denominator. `zig build test` with no reachable `test` block
+          # exits 0 and reports "0/0 tests passed" -- a green tick that proves
+          # nothing.
           #
-          # awk, not `grep ... || true`: grep exits 1 when it matches nothing,
-          # which under `set -e` needs suppressing, and a suppressed exit code
-          # is indistinguishable from a masked failure to a reader or a
-          # scanner. awk exits 0 whether or not it matched, so the no-match
-          # case needs no suppression and the check below stays the only thing
-          # that can fail this step.
+          # awk, not grep with its exit code suppressed: grep exits 1 when it
+          # matches nothing, which under `set -e` would have to be swallowed,
+          # and a swallowed exit code is indistinguishable from a masked
+          # failure to a reader or a scanner. awk exits 0 whether or not it
+          # matched, so the no-match case needs no suppression at all and the
+          # check below stays the only thing that can fail this step.
+          #
+          # Both forms carry the same field layout, so one parse covers both:
+          #   Build Summary: 11/11 steps succeeded; 21/21 tests passed
+          #   Build Summary: 9/11 steps succeeded (1 failed); 20/21 tests passed (1 failed)
+          # The denominator is wanted, not the numerator: a run where tests
+          # failed has already failed the step via `pipefail`.
           count=$(awk '
-            match($0, /All [0-9]+ tests passed/) ||
-            match($0, /[0-9]+ of [0-9]+ tests? passed/) { last = $0 }
-            END {
-              n = 0
-              while (match(last, /[0-9]+/)) {
-                n = substr(last, RSTART, RLENGTH)
-                last = substr(last, RSTART + RLENGTH)
-              }
-              print n + 0
+            /^Build Summary:/ {
+              for (i = 1; i <= NF; i++)
+                if ($i == "tests") { split($(i-1), a, "/"); print a[2]; exit }
             }' "${RUNNER_TEMP}/zig-test.log")
+          count="${count:-0}"
 
           echo "zig tests run: ${count}"
           {
-            echo "### Zig wire contract"
+            echo "### Zig tests"
             echo ""
-            echo "- root: \`ffi/zig/src/unified-api-adapter.zig\`"
+            echo "- command: \`zig build test\` (all five roots)"
             echo "- tests run: \`${count}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          if [ "${count}" -lt 1 ]; then
-            echo "::error::zig test reported ${count} tests -- the wire-contract tests did not run"
+          # Floor, not an exact count: hypatia#812 requires this job to cover
+          # more than the 7 tests the old single-file scope reached. An exact
+          # number here would be drift surface -- every new test would redden
+          # a gate that has nothing to say about it.
+          if [ "${count}" -lt 8 ]; then
+            echo "::error::zig build test reported ${count} tests -- expected at least 8 (hypatia#812)"
             exit 1
           fi
+
+      - name: Pin the C ABI export surface
+        working-directory: ffi/zig
+        run: |
+          set -euo pipefail
+          so='zig-out/lib/libhypatia_ffi.so'
+          # Remove the artefact before rebuilding. If `zig build` fails, this
+          # step must not go on to read a shared object left by an earlier
+          # build -- that reads as a pass for a tree that does not compile.
+          # A fresh runner has no such file, but the guarantee should not
+          # depend on the runner being fresh.
+          rm -f "${so}"
+          zig build
+          test -f "${so}" || {
+            echo "::error::${so} was not built -- nothing to check the ABI against"
+            exit 1
+          }
+
+          # `grep -c` would exit 1 on zero matches, which is the case this
+          # step exists to catch; count through awk so the comparison below is
+          # the only thing that can fail.
+          exports=$(nm -D --defined-only "${so}" | awk '$2 == "T" && $3 ~ /^hypatia_/ { n++ } END { print n + 0 }')
+
+          echo "exported C functions: ${exports} (expected ${EXPECTED_EXPORTS})"
+          {
+            echo "### C ABI surface"
+            echo ""
+            echo "- exported \`hypatia_*\` functions: \`${exports}\` of \`${EXPECTED_EXPORTS}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${exports}" -ne "${EXPECTED_EXPORTS}" ]; then
+            echo "::error::libhypatia_ffi.so exports ${exports} hypatia_* symbols, expected ${EXPECTED_EXPORTS} -- this is a C ABI change (MUST.contractile, hypatia#696)"
+            nm -D --defined-only "${so}" | awk '$2 == "T" && $3 ~ /^hypatia_/ { print "  " $3 }'
+            exit 1
+          fi
+
+          # A count alone cannot see a rename that preserves it. These six are
+          # the functions src/Hypatia/ABI/FFI.idr declares normative -- exactly
+          # the six exports that carry no handle -- so they are named, not
+          # merely counted.
+          missing=0
+          for fn in hypatia_health_check hypatia_scan_repo hypatia_dispatch \
+                    hypatia_record_outcome hypatia_force_learning_cycle \
+                    hypatia_get_confidence; do
+            if ! nm -D --defined-only "${so}" | awk -v f="${fn}" '$2 == "T" && $3 == f { found = 1 } END { exit !found }'; then
+              echo "::error::${fn} is declared normative in src/Hypatia/ABI/FFI.idr but is not exported"
+              missing=$((missing + 1))
+            fi
+          done
+          test "${missing}" -eq 0
