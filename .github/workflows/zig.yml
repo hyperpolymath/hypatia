@@ -121,12 +121,12 @@ jobs:
           # exits 0 and reports "0/0 tests passed" -- a green tick that proves
           # nothing.
           #
-          # awk, not `grep ... || true`: grep exits 1 when it matches nothing,
-          # which under `set -e` needs suppressing, and a suppressed exit code
-          # is indistinguishable from a masked failure to a reader or a
-          # scanner. awk exits 0 whether or not it matched, so the no-match
-          # case needs no suppression and the check below stays the only thing
-          # that can fail this step.
+          # awk, not grep with its exit code suppressed: grep exits 1 when it
+          # matches nothing, which under `set -e` would have to be swallowed,
+          # and a swallowed exit code is indistinguishable from a masked
+          # failure to a reader or a scanner. awk exits 0 whether or not it
+          # matched, so the no-match case needs no suppression at all and the
+          # check below stays the only thing that can fail this step.
           #
           # Both forms carry the same field layout, so one parse covers both:
           #   Build Summary: 11/11 steps succeeded; 21/21 tests passed
