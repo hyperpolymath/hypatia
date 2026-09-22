@@ -44,7 +44,7 @@ OutcomeTracker (Bayesian feedback loop)
 |`+lib/safety/+` |Rate limiter, quarantine, batch rollback
 |`+adapters/+` |Rust adapter crate
 |`+cli/+` |Rust CLI crate
-|`+src/abi/+` |Idris2 ABI definitions
+|`+src/Hypatia/ABI/+` |Idris2 ABI definitions (built by `+src/abi/*.ipkg+`)
 |`+ffi/zig/+` |Zig FFI bridge (7 functions)
 |`+mix.exs+` |Elixir project config
 |`+Cargo.toml+` |Rust workspace config

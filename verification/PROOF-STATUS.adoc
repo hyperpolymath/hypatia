@@ -18,8 +18,10 @@ convenient
 ==== Existing Proofs (pre-2026-04-04)
 
 NOTE: These tables deliberately carry no line-count column. Hand-maintained LOC
-figures drift silently, nothing consumes them, and every one of the twenty
-previously recorded here had gone wrong. Use `+wc -l+` on the paths below.
+figures drift silently, nothing consumes them, and sixteen of the twenty
+previously recorded here were wrong — some by more than double. Use `+wc -l+`
+on the paths below. (The four that were right were all tilde-approximations
+that happened to land within two lines; the column was still not worth keeping.)
 
 [width="100%",cols="28%,14%,42%,16%",options="header",]
 |===

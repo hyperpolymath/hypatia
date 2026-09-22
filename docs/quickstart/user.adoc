@@ -40,7 +40,7 @@ toc::[]
 
 Optional (for ABI/FFI layers):
 
-* Idris2 >= 0.7.0 (for ABI definitions in `src/abi/`)
+* Idris2 >= 0.7.0 (for the ABI definitions in `src/Hypatia/ABI/`)
 * Zig >= 0.13.0 (for FFI bridge in `ffi/zig/`)
 
 == Clone and build
