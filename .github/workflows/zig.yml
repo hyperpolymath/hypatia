@@ -161,8 +161,14 @@ jobs:
         working-directory: ffi/zig
         run: |
           set -euo pipefail
-          zig build
           so='zig-out/lib/libhypatia_ffi.so'
+          # Remove the artefact before rebuilding. If `zig build` fails, this
+          # step must not go on to read a shared object left by an earlier
+          # build -- that reads as a pass for a tree that does not compile.
+          # A fresh runner has no such file, but the guarantee should not
+          # depend on the runner being fresh.
+          rm -f "${so}"
+          zig build
           test -f "${so}" || {
             echo "::error::${so} was not built -- nothing to check the ABI against"
             exit 1
