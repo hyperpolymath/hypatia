@@ -257,11 +257,6 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
-    'github/codeql-action@1c5b675653bb5c22dbe9b12b556ec555138e09fd':
-        ref: 'v4.38.1'
-        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
-        owner_id: 9919
-        repo_id: 259445878
     'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63':
         ref: 'b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
