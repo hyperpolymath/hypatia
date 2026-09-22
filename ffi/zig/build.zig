@@ -13,6 +13,15 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Reusable dependency modules
+    // `runtime` is a module rather than a relative import so that the process-wide
+    // `Io` is a single global. A relative `@import("runtime.zig")` from two modules
+    // would instantiate the file -- and its `threaded` global -- once per module.
+    const runtime_mod = b.createModule(.{
+        .root_source_file = b.path("src/runtime.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
     const json_writer_mod = b.createModule(.{
         .root_source_file = b.path("src/json_writer.zig"),
         .target = target,
@@ -24,6 +33,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    file_ops_mod.addImport("runtime", runtime_mod);
 
     // Shared library (for NIF / dlopen consumers)
     const shared_lib = b.addLibrary(.{
@@ -36,6 +46,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "json_writer", .module = json_writer_mod },
                 .{ .name = "file_ops", .module = file_ops_mod },
+                .{ .name = "runtime", .module = runtime_mod },
             },
             .link_libc = true,
         }),
@@ -52,6 +63,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "json_writer", .module = json_writer_mod },
                 .{ .name = "file_ops", .module = file_ops_mod },
+                .{ .name = "runtime", .module = runtime_mod },
             },
             .link_libc = true,
         }),
@@ -67,6 +79,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "json_writer", .module = json_writer_mod },
                 .{ .name = "file_ops", .module = file_ops_mod },
+                .{ .name = "runtime", .module = runtime_mod },
             },
             .link_libc = true,
         }),
@@ -87,6 +100,9 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/file_ops.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &.{
+                .{ .name = "runtime", .module = runtime_mod },
+            },
             .link_libc = true,
         }),
     });
@@ -100,6 +116,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "json_writer", .module = json_writer_mod },
                 .{ .name = "file_ops", .module = file_ops_mod },
+                .{ .name = "runtime", .module = runtime_mod },
             },
             .link_libc = true,
         }),

@@ -7,6 +7,14 @@ const std = @import("std");
 const json_writer = @import("json_writer");
 const file_ops = @import("file_ops");
 
+// Zig 0.16 makes the I/O capability an explicit parameter. These tests supply
+// their own rather than reaching for a process-wide one, which is the point of
+// threading `io` through `file_ops` instead of hiding it in a global there.
+var test_threaded: std.Io.Threaded = .init_single_threaded;
+fn testIo() std.Io {
+    return test_threaded.io();
+}
+
 test "json_writer produces valid JSON object" {
     var buf: [512]u8 = undefined;
     var w = json_writer.JsonWriter.init(&buf);
@@ -72,12 +80,12 @@ test "file_ops data path" {
 
 test "file_ops read nonexistent file returns 0" {
     var buf: [64]u8 = undefined;
-    const n = file_ops.readFile("/tmp/nonexistent-hypatia-test-file-zig", &buf);
+    const n = file_ops.readFile(testIo(), "/tmp/nonexistent-hypatia-test-file-zig", &buf);
     try std.testing.expectEqual(@as(usize, 0), n);
 }
 
 test "file_ops fileExists for nonexistent" {
-    try std.testing.expect(!file_ops.fileExists("/tmp/nonexistent-hypatia-test-zig"));
+    try std.testing.expect(!file_ops.fileExists(testIo(), "/tmp/nonexistent-hypatia-test-zig"));
 }
 
 test "file_ops write and read roundtrip" {
@@ -85,34 +93,34 @@ test "file_ops write and read roundtrip" {
     const data = "hello from zig ffi test";
 
     // Write
-    try std.testing.expect(file_ops.writeFile(test_path, data));
+    try std.testing.expect(file_ops.writeFile(testIo(), test_path, data));
 
     // Verify exists
-    try std.testing.expect(file_ops.fileExists(test_path));
+    try std.testing.expect(file_ops.fileExists(testIo(), test_path));
 
     // Read back
     var buf: [256]u8 = undefined;
-    const n = file_ops.readFile(test_path, &buf);
+    const n = file_ops.readFile(testIo(), test_path, &buf);
     try std.testing.expectEqual(data.len, n);
     try std.testing.expectEqualStrings(data, buf[0..n]);
 
     // Cleanup
-    std.fs.deleteFileAbsolute(test_path) catch {};
+    std.Io.Dir.deleteFileAbsolute(testIo(), test_path) catch {};
 }
 
 test "file_ops appendLine creates and appends" {
     const test_path = "/tmp/hypatia-zig-ffi-test-append.jsonl";
 
     // Clean up from previous runs
-    std.fs.deleteFileAbsolute(test_path) catch {};
+    std.Io.Dir.deleteFileAbsolute(testIo(), test_path) catch {};
 
     // Append two lines
-    try std.testing.expect(file_ops.appendLine(test_path, "{\"line\":1}"));
-    try std.testing.expect(file_ops.appendLine(test_path, "{\"line\":2}"));
+    try std.testing.expect(file_ops.appendLine(testIo(), test_path, "{\"line\":1}"));
+    try std.testing.expect(file_ops.appendLine(testIo(), test_path, "{\"line\":2}"));
 
     // Read back and verify
     var buf: [256]u8 = undefined;
-    const n = file_ops.readFile(test_path, &buf);
+    const n = file_ops.readFile(testIo(), test_path, &buf);
     try std.testing.expect(n > 0);
     const content = buf[0..n];
     // Should contain both lines separated by newlines
@@ -120,5 +128,5 @@ test "file_ops appendLine creates and appends" {
     try std.testing.expect(std.mem.indexOf(u8, content, "{\"line\":2}") != null);
 
     // Cleanup
-    std.fs.deleteFileAbsolute(test_path) catch {};
+    std.Io.Dir.deleteFileAbsolute(testIo(), test_path) catch {};
 }
