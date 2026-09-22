@@ -36,7 +36,7 @@ the head-to-head statistics from each prover's results corpus.
     `data/prover-wars/{challenge,result,winner}/*.jsonl` (proposed
     layout — needs confirmation with the VeriSimDB owner).
 
-  * *ABI* — Idris2 ABI definitions in `src/abi/` already export
+  * *ABI* — Idris2 ABI definitions in `src/Hypatia/ABI/` already export
     `ProofObligation` types. Prover Wars integration adds
     `ProofChallenge` + `ProofResult` to the ABI so cross-language
     consumers see consistent shapes.

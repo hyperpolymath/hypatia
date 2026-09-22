@@ -73,7 +73,7 @@ This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), a
 | Technology | Role in Hypatia | Also Used In
 
 | *Idris2 ABI* (hyperpolymath standard)
-| `src/abi/` — formal specs for GraphQL, gRPC, REST with dependent type proofs; `ffiReturnsApiResponse` proof in `FFI.idr`
+| `src/Hypatia/ABI/` — formal specs for GraphQL, gRPC, REST with dependent type proofs; `ffiReturnsApiResponse` proof in `FFI.idr`
 | gossamer (`gossamer/src/interface/abi/`), burble (`burble/src/Burble/ABI/`), verisimdb, proven, typed-wasm — every repo with an FFI layer
 
 | *Zig FFI* (hyperpolymath standard)
@@ -116,7 +116,7 @@ This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), a
 | `lib/self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery
 | `lib/neural/` | 5 networks (graph-of-trust, moe, lsm, esn, rbf) + coordinator
 | `lib/vcl/` | VCL client, file executor, query functions
-| `src/abi/` | Idris2 specs (Types, GraphQL, gRPC, REST, FFI)
+| `src/Hypatia/ABI/` | Idris2 specs (Types, GraphQL, gRPC, REST, FFI, RuleEngine, Gen)
 | `ffi/zig/src/` | 7 C-compatible exported functions
 | `adapters/ cli/ data/ fixer/ integration/` | Rust workspace (root crates)
 | `proofs/agda/` | Formal verification of safety triangle correctness
