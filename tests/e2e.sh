@@ -141,16 +141,40 @@ if $HAS_ELIXIR; then
     # no assertion, no stacktrace, making the red job impossible to diagnose
     # from CI. Capture the run, judge it by mix's own exit status, and echo the
     # output when it fails.
+    #
+    # `tail -N` was then the second defect, and it is why five consecutive red
+    # runs were undiagnosable (issue #826). ExUnit prints failure diagnostics
+    # INLINE, as each test fails — it does not collect them at the end. Under
+    # `--trace` this suite emits roughly two lines per test across ~1600 tests,
+    # so any fixed tail window contains only trace tail and the summary: grepping
+    # the full logs of five red runs for '^\s*[0-9]+) test ' returned nothing.
+    # A window sized for a summary cannot show diagnostics emitted inline.
+    #
+    # So print the failure BLOCKS, selected by content, not by position: from the
+    # first `  1) test ...` to the end of the log. Fall back to a tail only when
+    # no failure block exists, which means the run died some other way (a compile
+    # error, or a startup crash) and the tail is then the informative part.
     _mix_log="${TMPDIR:-/tmp}/hypatia-mix-test.$$.log"
     if mix test --trace >"$_mix_log" 2>&1; then
         pass "Elixir unit tests pass"
     else
         fail_test "Elixir unit tests"
-        echo "--- mix test output (tail 120) ---"
-        tail -120 "$_mix_log"
+        _n_fail=$(grep -cE '^[[:space:]]*[0-9]+\) test ' "$_mix_log" || true)
+        echo "--- mix test: ${_n_fail} failure block(s) ---"
+        if [ "${_n_fail}" -gt 0 ]; then
+            # Everything from the first failure block onward, capped so a
+            # pathological run cannot flood the CI log.
+            sed -n '/^[[:space:]]*1) test /,$p' "$_mix_log" | head -500
+        else
+            echo "(no ExUnit failure block found — the run did not reach the tests)"
+            tail -120 "$_mix_log"
+        fi
         echo "--- end mix test output ---"
+        echo "full log retained at: $_mix_log"
     fi
-    rm -f "$_mix_log"
+    if [ "${HYPATIA_KEEP_MIX_LOG:-0}" != "1" ]; then
+        rm -f "$_mix_log"
+    fi
 
     echo ""
 fi
