@@ -42,58 +42,22 @@
 const std = @import("std");
 
 // ============================================================
-// 16-variant tagged Connector enum
+// 16-variant tagged Connector enum — GENERATED
 // ============================================================
 //
-// Stable wire ordering — DO NOT renumber. The Idris2 ABI mirrors this
-// in `src/abi/Types.idr` and the Rust client in
-// `clients/rust/hypatia-client/src/connector.rs`. All three must agree.
+// Stable wire ordering — DO NOT renumber, and do not edit by hand.
+// The normative source is the Idris2 ABI `src/Hypatia/ABI/Types.idr`;
+// `connector_generated.zig` is emitted from it by `just abi-gen`, as are
+// the Rust client's enum and `ffi/connectors.json`.
+//
+// This file re-exports the generated declarations and keeps its own
+// hand-written `comptime` assertion and tests below. A generated test
+// would re-assert its own source and prove nothing.
 
-pub const Connector = enum(u8) {
-    // Core 12
-    grpc = 0,
-    graphql = 1,
-    rest = 2,
-    flatbuffers = 3,
-    bebop = 4,
-    jsonrpc = 5,
-    websocket = 6,
-    mqtt = 7,
-    trpc = 8,
-    capnproto = 9,
-    soap = 10,
-    verisimdb_rest = 11,
-    // Umoja-substrate 4
-    bsp = 12,
-    scip = 13,
-    ipfs = 14,
-    arrow_flight = 15,
+const gen = @import("connector_generated.zig");
 
-    pub fn name(self: Connector) [*:0]const u8 {
-        return switch (self) {
-            .grpc => "grpc",
-            .graphql => "graphql",
-            .rest => "rest",
-            .flatbuffers => "flatbuffers",
-            .bebop => "bebop",
-            .jsonrpc => "jsonrpc",
-            .websocket => "websocket",
-            .mqtt => "mqtt",
-            .trpc => "trpc",
-            .capnproto => "capnproto",
-            .soap => "soap",
-            .verisimdb_rest => "verisimdb-rest",
-            .bsp => "bsp",
-            .scip => "scip",
-            .ipfs => "ipfs",
-            .arrow_flight => "arrow-flight",
-        };
-    }
-};
-
-/// The total number of connectors. Compile-time constant; tests
-/// assert that it equals 16.
-pub const CONNECTOR_COUNT: usize = @typeInfo(Connector).@"enum".fields.len;
+pub const Connector = gen.Connector;
+pub const CONNECTOR_COUNT = gen.CONNECTOR_COUNT;
 
 // ============================================================
 // Per-connector stub modules
@@ -105,22 +69,6 @@ pub const CONNECTOR_COUNT: usize = @typeInfo(Connector).@"enum".fields.len;
 // Real socket/encoding work belongs in the connector modules; this
 // file only routes.
 
-const grpc = @import("connectors/grpc.zig");
-const graphql = @import("connectors/graphql.zig");
-const rest = @import("connectors/rest.zig");
-const flatbuffers = @import("connectors/flatbuffers.zig");
-const bebop = @import("connectors/bebop.zig");
-const jsonrpc = @import("connectors/jsonrpc.zig");
-const websocket = @import("connectors/websocket.zig");
-const mqtt = @import("connectors/mqtt.zig");
-const trpc = @import("connectors/trpc.zig");
-const capnproto = @import("connectors/capnproto.zig");
-const soap = @import("connectors/soap.zig");
-const verisimdb_rest = @import("connectors/verisimdb_rest.zig");
-const bsp = @import("connectors/bsp.zig");
-const scip = @import("connectors/scip.zig");
-const ipfs = @import("connectors/ipfs.zig");
-const arrow_flight = @import("connectors/arrow_flight.zig");
 
 // ============================================================
 // Suite — port-table for the sixteen connectors
@@ -143,22 +91,11 @@ pub const UnifiedApiAdapter = struct {
     /// log-only stub matching the V reference; real bind happens
     /// when each module is fleshed out individually.
     pub fn startAll(self: UnifiedApiAdapter) void {
-        grpc.start(self.portFor(.grpc));
-        graphql.start(self.portFor(.graphql));
-        rest.start(self.portFor(.rest));
-        flatbuffers.start(self.portFor(.flatbuffers));
-        bebop.start(self.portFor(.bebop));
-        jsonrpc.start(self.portFor(.jsonrpc));
-        websocket.start(self.portFor(.websocket));
-        mqtt.start(self.portFor(.mqtt));
-        trpc.start(self.portFor(.trpc));
-        capnproto.start(self.portFor(.capnproto));
-        soap.start(self.portFor(.soap));
-        verisimdb_rest.start(self.portFor(.verisimdb_rest));
-        bsp.start(self.portFor(.bsp));
-        scip.start(self.portFor(.scip));
-        ipfs.start(self.portFor(.ipfs));
-        arrow_flight.start(self.portFor(.arrow_flight));
+        // Dispatch is generated: `gen.ALL` and `Connector.module()` come from
+        // the Idris2 ABI, so a new connector needs no edit here.
+        inline for (gen.ALL) |c| {
+            c.module().start(self.portFor(c));
+        }
     }
 };
 

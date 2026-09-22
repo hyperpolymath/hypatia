@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# ABI codegen drift gate.
+#
+# Re-runs `hypatia-abi-gen` against the normative Idris2 ABI and fails if any
+# generated file in the tree differs from what the generator emits now.
+#
+# Deliberately has NO `paths:` filter. `verify-proofs.yml` -- the obvious home
+# for this job -- filters on `src/abi/**`, `src/Hypatia/ABI/**`, `verify/**`
+# and friends, and lists none of the generated targets, so a hand-edit to
+# `ffi/zig/src/connector_generated.zig` would not have fired it at all. An
+# unfiltered workflow also stays eligible to be made a required check without
+# deadlocking PRs that touch none of those paths.
+
+name: ABI codegen drift
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  abi-codegen-drift:
+    name: abi-codegen-drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    env:
+      IDRIS2_VERSION: v0.7.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Chez Scheme
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y chezscheme
+
+      - name: Cache Idris 2 install
+        id: cache-idris
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            /usr/local/bin/idris2
+            /usr/local/bin/idris2_app
+            /usr/local/lib/idris2
+            ~/.idris2
+          # Same key as verify-proofs.yml on purpose: this job shares that
+          # workflow's warm cache rather than paying a second ~20-min
+          # bootstrap. Keep the `-2` suffix in step with it.
+          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-2
+
+      - name: Build Idris 2 from source
+        if: steps.cache-idris.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "${IDRIS2_VERSION}" \
+            https://github.com/idris-lang/Idris2 /tmp/idris2
+          cd /tmp/idris2
+          make bootstrap SCHEME=chezscheme
+          sudo make install PREFIX=/usr/local
+          idris2 --version
+
+      - name: Verify Idris is on PATH
+        run: idris2 --version
+
+      - name: Build the generator
+        run: |
+          set -euo pipefail
+          cd src/abi
+          idris2 --build hypatia-abi-gen.ipkg
+
+      - name: Regenerate into a temp dir and compare
+        run: |
+          set -euo pipefail
+          # NOTE: `set -o pipefail` (via -euo) is load-bearing below. A
+          # pipeline's exit status is its LAST command's, so `generator | tee`
+          # would report success for a generator that died.
+
+          OUT="${RUNNER_TEMP}/abi-gen"
+          rm -rf "${OUT}"
+          mkdir -p "${OUT}"
+
+          # Regenerate into a TEMP dir, never in place. Regenerating in place
+          # and running `git diff` means a generator that silently failed to
+          # run leaves an empty diff -- which reads as green.
+          ./build/abi-gen/exec/hypatia-abi-gen \
+            --out-dir "${OUT}" \
+            --abi-hash "$(git hash-object src/Hypatia/ABI/Types.idr)" \
+            | tee "${RUNNER_TEMP}/gen.log"
+
+          emitted=$(sed -n 's/^connectors emitted:[[:space:]]*//p' "${RUNNER_TEMP}/gen.log")
+          emitted=${emitted:-0}
+
+          # published path <- emitted filename
+          targets="ffi/zig/src/connector_generated.zig:connector_generated.zig
+          clients/rust/hypatia-client/src/connector_generated.rs:connector_generated.rs
+          ffi/connectors.json:connectors.json"
+
+          compared=0
+          drifted=0
+          total=0
+          for pair in ${targets}; do
+            total=$((total + 1))
+            tracked=${pair%%:*}
+            emitted_file="${OUT}/${pair##*:}"
+
+            if [ ! -f "${tracked}" ]; then
+              echo "::error::tracked file missing: ${tracked}"
+              drifted=$((drifted + 1))
+              continue
+            fi
+            if [ ! -s "${emitted_file}" ]; then
+              echo "::error::generator emitted nothing for ${tracked} (${emitted_file} missing or zero bytes)"
+              drifted=$((drifted + 1))
+              continue
+            fi
+
+            compared=$((compared + 1))
+            if diff -u "${tracked}" "${emitted_file}"; then
+              echo "✓ ${tracked}"
+            else
+              echo "::error::${tracked} is out of date -- run \`just abi-gen\` and commit the result"
+              drifted=$((drifted + 1))
+            fi
+          done
+
+          # The denominator. A gate that cannot state how much it checked is
+          # not evidence -- an empty output dir must fail loudly, not print
+          # "ok" because the comparison loop had nothing to iterate over.
+          echo "connectors emitted: ${emitted}"
+          echo "files compared:     ${compared} of ${total}"
+          {
+            echo "### ABI codegen drift"
+            echo ""
+            echo "- connectors emitted: \`${emitted}\`"
+            echo "- files compared: \`${compared} of ${total}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${emitted}" -eq 0 ]; then
+            echo "::error::generator emitted 0 connectors -- it did not run, or the ABI is empty"
+            exit 1
+          fi
+          if [ "${compared}" -ne "${total}" ]; then
+            echo "::error::compared ${compared} of ${total} generated files"
+            exit 1
+          fi
+          if [ "${drifted}" -ne 0 ]; then
+            echo "::error::${drifted} generated file(s) drifted from the Idris2 ABI"
+            exit 1
+          fi
+          echo "No drift: every generated file matches src/Hypatia/ABI/Types.idr"

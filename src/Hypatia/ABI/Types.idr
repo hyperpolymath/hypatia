@@ -144,12 +144,20 @@ record OutcomeRecord where
 -- UnifiedApiAdapter — sixteen protocol adapters
 -- ============================================================
 --
--- Mirrors the Zig enum at `ffi/zig/src/unified-api-adapter.zig` and the Rust
--- enum at `clients/rust/hypatia-client/src/connector.rs`. Wire
--- ordering is load-bearing — the integer value of each variant is
--- the C ABI id used by `hypatia_connector_name(id)`. Do not
--- renumber. The dependent-type proof `connectorWireIdInRange`
--- below pins the count at exactly 16.
+-- This is the NORMATIVE definition of the wire contract. The Zig enum in
+-- `ffi/zig/src/connector_generated.zig`, the Rust enum in
+-- `clients/rust/hypatia-client/src/connector_generated.rs` and the manifest
+-- `ffi/connectors.json` are GENERATED from this module by `just abi-gen`;
+-- edit this file, never them. (Until 2026-09-22 those were hand-maintained
+-- copies and this comment described itself as mirroring them -- the direction
+-- of authority was backwards.)
+--
+-- Wire ordering is load-bearing — the integer value of each variant is
+-- the C ABI id used by `hypatia_connector_name(id)`. Do not renumber.
+-- The proof `connectorCount` below pins the count at exactly 16.
+-- (An earlier version of this comment cited `connectorWireIdInRange`, which
+-- has never existed in this module; `connectorCount` is the real pin, and it
+-- pins the count, not the range.)
 --
 -- Replaces the V-lang client at `api/v/hypatia.v` (deleted 2026-04-13).
 

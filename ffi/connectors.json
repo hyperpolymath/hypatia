@@ -1,6 +1,8 @@
 {
   "_spdx": "MPL-2.0",
-  "_note": "Golden source-of-truth for the unified-api-adapter wire contract. The Zig enum (ffi/zig/src/unified-api-adapter.zig), the Idris2 ABI (src/abi/Types.idr), and the Rust client (clients/rust/hypatia-client/src/connector.rs) MUST all agree with this list, in this exact order; id is the C ABI wire id. Drift is guarded by test/unified-api-adapter-contract_test.exs. Wire ordering is load-bearing -- do not renumber.",
+  "_generated": "by hypatia-abi-gen from src/Hypatia/ABI/Types.idr; DO NOT EDIT -- run `just abi-gen` and commit the result",
+  "_abi_source_blob": "788493e6f54b6d436ea551dbb5d34c6bc0d819ab",
+  "_note": "Wire manifest for the unified-api-adapter. The normative source is the Idris2 ABI (src/Hypatia/ABI/Types.idr); this file, ffi/zig/src/connector_generated.zig and clients/rust/hypatia-client/src/connector_generated.rs are all generated from it. id is the C ABI wire id and ordering is load-bearing -- do not renumber by hand.",
   "connectors": [
     { "id": 0, "name": "grpc" },
     { "id": 1, "name": "graphql" },
