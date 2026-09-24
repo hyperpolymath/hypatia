@@ -1,3 +1,4 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 #
@@ -80,19 +81,30 @@ jobs:
       # installation: the Chez data tree at `<libdir>/support/chez/support.ss`
       # at compile time, and the compiled C library `<libdir>/lib/
       # libidris2_support.so` -- which the Chez backend copies into the
-      # executable's `_app` directory -- at run time. Type-checking and
-      # building a LIBRARY needs neither.
+      # executable's `_app` directory -- at run time.
       #
-      # `verify-proofs.yml` only ever does the latter: `idris2 --check` over
-      # the proof files and `idris2 --build` on two library packages. It never
-      # links a binary. So the cache this job deliberately shares with it
-      # (same key, so the ~20-minute bootstrap is not repeated) was populated
-      # with NEITHER. Measured, not supposed -- twice, on PR #811 and #817:
+      # Neither was present under `$(idris2 --libdir)` on this runner.
+      # Measured, not supposed -- twice, on PR #811 and #817:
       #   INTERNAL ERROR: Can't find data file chez/support.ss        (compile)
       #   (while loading libidris2_support.so) cannot open shared object file
       #                                                               (run)
       #
-      # Sharing a warm cache imports its OMISSIONS as well as its contents.
+      # Why they are missing is a PREFIX MISMATCH, not a missing install step.
+      # Idris2's top-level Makefile is
+      #     install: install-idris2 install-support install-libs
+      # so `verify-proofs.yml`'s `sudo make install PREFIX=/usr/local` DOES
+      # install support -- under `/usr/local/idris2-0.7.0/`. But the binary
+      # resolves `idris2 --libdir` to `/home/runner/.idris2/idris2-0.7.0`, and
+      # that job's cache `path:` list names both prefixes. Library work
+      # (`idris2 --check`, `--build` on the two proof packages) never needs the
+      # difference, so it went unnoticed until a job here linked an executable.
+      #
+      # Two rules follow, and this step obeys both:
+      #   * a warm cache shared with another workflow imports that workflow's
+      #     OMISSIONS as well as its contents -- ask what the populating job
+      #     never did, not merely whether the key hits;
+      #   * anchor on `$(idris2 --libdir)` / `$(idris2 --prefix)`, never on the
+      #     PREFIX someone passed to `make install`. They can differ silently.
       #
       # Hence the upstream install targets rather than copying files by hand:
       # `make support` builds the C library, `make install-support` installs
@@ -100,6 +112,11 @@ jobs:
       # Repairing this piece by piece is how the second failure happened; the
       # tree's own target is complete by construction. It costs seconds -- it
       # builds only `support/`, never the compiler.
+      #
+      # Note the repair is deliberately NOT persisted: `Post Cache` is skipped
+      # on a cache hit, so this job never mutates the shared entry and redoes
+      # the clone+build each run. Do not "optimise" that away -- two workflows
+      # writing one cache key is how the poisoned cache of -1 happened.
       - name: Ensure the Idris2 support installation is complete
         run: |
           set -euo pipefail

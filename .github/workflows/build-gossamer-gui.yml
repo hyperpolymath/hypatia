@@ -139,13 +139,11 @@ jobs:
       - name: Setup Rust (stable) with wasm32 target
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: master
-        with:
           toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Install just
-        uses: taiki-e/install-action@v2.87.15
+        uses: taiki-e/install-action@v2.87.17
         with:
           # Pin an explicit modern just: the Justfile uses `import?`
           # (optional import, just >= 1.19.0). Unversioned `tool: just`

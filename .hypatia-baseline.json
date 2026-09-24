@@ -269,5 +269,21 @@
     "type": "DependencyPinning",
     "file": ".",
     "note": "Ingested from OSSF Scorecard's Pinned-Dependencies check, which inspects workflows for inline SHA refs and has no knowledge of GitHub Actions lockfiles. This repository pins every action in .github/workflows/actions.lock, which resolves each symbolic ref to a verified commit plus the transitive dependencies of composite actions. Inline SHA-pinning to satisfy Scorecard would REMOVE actions from the lockfile (gh actions-lock rejects refs no tag or branch contains) and reduce coverage \u2014 measured 2026-08-07: it put 14 workflows into startup_failure. Acknowledged as an external tool limitation, not accepted debt."
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "zig_ptr_cast",
+    "file": "ffi/zig/src/main.zig",
+    "note": "The mandatory opaque-handle idiom, not an unchecked conversion. ffi/zig/src/main.zig declares `pub const Handle = opaque {}` so the concrete `HandleState` is never named in the C header; recovering it from the opaque pointer requires exactly `@ptrCast(@alignCast(handle))` (line 60) and `@ptrCast(handle)` (line 84). There is no safe alternative -- the opaque handle is the point, and the six normative ABI functions in src/Hypatia/ABI/FFI.idr depend on it. The rule matches a bare ~r/@ptrCast/ at :high (CWE-704), strips no Zig comments, and reports the finding at main.zig:1 rather than the cast site, so no per-line inline directive can reach it. Acknowledged as a rule defect tracked in hyperpolymath/hypatia#834, not accepted debt: that issue's acceptance criteria require main.zig to be clean WITHOUT changing the cast, and this entry is to be deleted when it lands.",
+    "tracking_issue": "hyperpolymath/hypatia#834"
+  },
+  {
+    "severity": "high",
+    "rule_module": "code_safety",
+    "type": "zig_align_cast",
+    "file": "ffi/zig/src/main.zig",
+    "note": "Same site and same cause as the zig_ptr_cast entry above: `@alignCast` is the inner half of `@ptrCast(@alignCast(handle))` at ffi/zig/src/main.zig:60, the required way to recover `*HandleState` from an opaque `*Handle`. Tracked in hyperpolymath/hypatia#834; delete this entry when the rule is fixed.",
+    "tracking_issue": "hyperpolymath/hypatia#834"
   }
 ]

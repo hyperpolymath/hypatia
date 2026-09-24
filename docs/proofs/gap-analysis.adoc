@@ -76,7 +76,7 @@ CI invocation does not.
 This is the one proof currently gated on every push to main and on a
 weekly Monday 04:00 UTC schedule. Pattern to replicate.
 
-==== Idris 2 type library (not proofs) — `+src/abi/+`, `+verify/src/+`
+==== Idris 2 type library (not proofs) — `+src/Hypatia/ABI/+`, `+verify/src/+`
 
 `+Types.idr+`, `+RuleEngine.idr+`, `+PipelineState.idr+` —
 dependent-type library code used by the ABI. Type-checked locally; not

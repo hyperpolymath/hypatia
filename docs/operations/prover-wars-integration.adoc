@@ -36,7 +36,7 @@ the head-to-head statistics from each prover's results corpus.
     `data/prover-wars/{challenge,result,winner}/*.jsonl` (proposed
     layout — needs confirmation with the VeriSimDB owner).
 
-  * *ABI* — Idris2 ABI definitions in `src/abi/` already export
+  * *ABI* — Idris2 ABI definitions in `src/Hypatia/ABI/` already export
     `ProofObligation` types. Prover Wars integration adds
     `ProofChallenge` + `ProofResult` to the ABI so cross-language
     consumers see consistent shapes.
@@ -91,7 +91,7 @@ Estimated 400–600 LOC including tests.
 
 === ABI additions
 
-In `src/abi/Types.idr`:
+In `src/Hypatia/ABI/Types.idr`:
 
 [source,idris]
 ----
@@ -113,8 +113,8 @@ record ProofResult where
   timestamp : String
 ----
 
-Add equivalent gRPC + REST endpoint definitions in `src/abi/GRPC.idr`
-and `src/abi/REST.idr`.
+Add equivalent gRPC + REST endpoint definitions in `src/Hypatia/ABI/GRPC.idr`
+and `src/Hypatia/ABI/REST.idr`.
 
 === Telemetry
 

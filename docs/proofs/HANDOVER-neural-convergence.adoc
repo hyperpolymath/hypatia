@@ -57,7 +57,7 @@ assertion; Agda retired) |✅
 
 |parser totality |`+verification/proofs/lean4/ParserTotality.lean+` |✅
 
-|ABI package + verify package |`+src/abi/*.idr+`
+|ABI package + verify package |`+src/Hypatia/ABI/*.idr+`
 (incl. `+RuleEngine.idr+`), `+verify/src/*.idr+` |✅
 
 |*Neural convergence — PageRank*
@@ -185,8 +185,10 @@ cd verification/proofs/tlaplus && java -cp /path/tla2tools.jar tlc2.TLC -config 
 instance to lean on).
 * Idris reserved words used as identifiers were the bug class: `+data+`,
 `+record+`, `+partial+`.
-* `+src/abi/*.idr+` are the real files; `+src/Hypatia/ABI/*.idr+` are
-*symlinks* into them (build namespace `+Hypatia.ABI.*+`).
+* `+src/Hypatia/ABI/*.idr+` are the real files (build namespace
+`+Hypatia.ABI.*+`, reached via `+sourcedir = ".."+` in the ipkg). They were
+never symlinks: `+src/abi/*.idr+` held byte-identical duplicate files that
+nothing compiled, deleted 2026-09-22 (issue #815).
 
 === Definition of done
 
@@ -203,5 +205,5 @@ instance to lean on).
 Repo-hygiene PR (173 medium scan findings: `+timeout-minutes+` on
 `+ci.yml+`/`+clusterfuzzlite.yml+`, the `+setup-java+` SHA-pin
 false-positive); `+PipelineState+`→real `+proven+` integration;
-documenting the `+src/abi+` symlink layout; the `+gitbot-fleet+` /
+documenting the `+src/Hypatia/ABI+` layout; the `+gitbot-fleet+` /
 `+.git-private-farm+` repos.

@@ -99,7 +99,7 @@ All `/api/*` endpoints are loopback-only by default; set `HYPATIA_API_BEARER_TOK
 
 Foreign callers reach Hypatia through:
 
-- **Idris2 ABI** (`src/abi/`) — `Types.idr`, `GraphQL.idr`, `GRPC.idr`, `REST.idr`, `FFI.idr` (with dependent-type proofs)
+- **Idris2 ABI** (`src/Hypatia/ABI/`) — `Types.idr`, `GraphQL.idr`, `GRPC.idr`, `REST.idr`, `FFI.idr`, `RuleEngine.idr` (with dependent-type proofs)
 - **Zig FFI** (`ffi/zig/`) — 7 exported C functions (`hypatia_health_check`, `hypatia_scan_repo`, `hypatia_dispatch`, `hypatia_record_outcome`, `hypatia_force_learning_cycle`, `hypatia_get_confidence`, `hypatia_dispatch_strategy`)
 
 ## Component table

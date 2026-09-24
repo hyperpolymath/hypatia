@@ -267,7 +267,7 @@ heal:
     fi
     if ! command -v zig >/dev/null 2>&1; then
         echo "  Zig (for FFI bridge):"
-        echo "    asdf plugin add zig && asdf install zig 0.13.0"
+        echo "    mise install zig   # version is pinned in mise.toml"
         echo ""
     fi
     if ! command -v panic-attack >/dev/null 2>&1; then
@@ -310,8 +310,8 @@ tour:
     echo "   Rust crates for adapters, CLI tools, data processing, fixes."
     echo ""
     echo "5. ABI/FFI:"
-    echo "     src/abi/   - Idris2 types (GraphQL, gRPC, REST proofs)"
-    echo "     ffi/zig/   - 7 exported C functions"
+    echo "     src/abi/   - Idris2 ABI + codegen packages (.ipkg)"
+    echo "     ffi/zig/   - 18 exported C functions (6 normative per the Idris2 ABI)"
     echo ""
     echo "6. SAFETY SYSTEMS: lib/safety/"
     echo "     rate_limiter.ex   - Per-bot + global dispatch limits"

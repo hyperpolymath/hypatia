@@ -18,6 +18,7 @@
 
 # ABI/FFI layer
 /src/abi/ @hyperpolymath
+/src/Hypatia/ABI/ @hyperpolymath
 /ffi/zig/ @hyperpolymath
 
 # Neural / scanning engine

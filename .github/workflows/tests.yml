@@ -77,8 +77,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: master
-        with:
           toolchain: stable
 
       - name: Rust cache
@@ -146,7 +144,7 @@ jobs:
           # strings, not as actual escape hatches).
           # `grep -v '^\s*--'` strips Idris2 / Haskell line comments, which
           # legitimately mention these tokens as documentation
-          # ("Zero believe_me." in src/abi/RuleEngine.idr is the canonical
+          # ("Zero believe_me." in src/Hypatia/ABI/RuleEngine.idr is the canonical
           # example).
           DANGEROUS=$(find lib src \( -name '*.idr' -o -name '*.v' -o -name '*.lean' -o -name '*.hs' \) \
             -not -path 'lib/rules/*' \
@@ -392,74 +390,44 @@ jobs:
   # ============================================================================
 
   # ============================================================================
-  # End-to-End Tests
+  # REMOVED — "End-to-End Tests" (e2e-tests)
+  #
+  # The job never executed a test. It was revived by the #842 startup-failure
+  # cure, took its first real measurement in this repo's history, and died in
+  # 19s at `docker compose` with "no configuration file provided". Before that
+  # it read `skipped` on every run. Four independent faults, each fatal:
+  #
+  #   1. It ran `docker compose` with `working-directory: deploy`, and
+  #      `deploy/` contains exactly two files — Containerfile and README.adoc.
+  #      There is no compose file there. The repo's only compose file is
+  #      `integration/compose.test.yaml`, which is not one of the four names
+  #      compose auto-discovers, so it requires an explicit `-f` regardless.
+  #   2. It ran `docker compose up -d hypatia`. No compose file in this repo
+  #      defines a `hypatia` service.
+  #   3. Its entire "E2E test suite" was `curl -sf http://localhost:8080/health`.
+  #      The image it loads, `hypatia:test`, is built from deploy/Containerfile,
+  #      whose last two lines are `ENTRYPOINT ["hyper"]` / `CMD ["--help"]` —
+  #      a CLI. Nothing in it listens on any port, so that health check could
+  #      never have passed under any compose file. (8080 is also barred by
+  #      estate network doctrine.)
+  #   4. `$ARANGO_ROOT_PASSWORD` was never set in the job, so the arangosh
+  #      heredoc authenticated with an empty string.
+  #
+  # The real end-to-end suite already exists and already passes: `tests/e2e.sh`,
+  # run by the `e2e-elixir` job above, whose own header reads "Tests the
+  # neurosymbolic scanner pipeline without docker-compose". It scored
+  # PASS=9 FAIL=0 SKIP=0 on main @ e5220d8. `e2e-rust` separately builds the
+  # Rust CLI and runs `hyper scan` against a fixture repository. This job
+  # duplicated their name and none of their coverage.
+  #
+  # `build-images` is NOT orphaned by this removal — `integration-tests`
+  # downloads and loads the same `docker-images` artifact.
+  #
+  # If a full-stack compose tier is ever wanted, it needs a server to test
+  # first, plus `integration/fixtures/mock-server-config/`, which the compose
+  # file mounts but which is absent from git. Reinstate it together with those,
+  # not before. See issue #843.
   # ============================================================================
-
-  e2e-tests:
-    name: End-to-End Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [integration-tests]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Download images
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: docker-images
-
-      - name: Load images
-        run: gunzip -c images.tar.gz | docker load
-
-      - name: Start full stack
-        working-directory: deploy
-        run: |
-          docker compose up -d arangodb dragonfly
-
-          # Wait for databases
-          sleep 30
-
-          # Initialize database
-          docker compose exec -T arangodb arangosh --server.password="$ARANGO_ROOT_PASSWORD" <<-EOF
-            db._createDatabase('hypatia');
-            db._useDatabase('hypatia');
-            db._create('rules');
-            db._create('workflows');
-            db._create('runs');
-          EOF
-
-          # Start services
-          docker compose up -d hypatia
-
-          # Wait for services to be ready
-          sleep 30
-
-      - name: Run E2E test suite
-        run: |
-          # Test hypatia health
-          curl -sf http://localhost:8080/health || (echo "Health check failed" && exit 1)
-          echo "E2E tests passed"
-
-      - name: Collect logs on failure
-        if: failure()
-        working-directory: deploy
-        run: |
-          docker compose logs > compose-logs.txt
-          docker ps -a
-
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: e2e-failure-logs
-          path: deploy/compose-logs.txt
-          retention-days: 7
-
-      - name: Stop stack
-        if: always()
-        working-directory: deploy
-        run: docker compose down -v
 
   # ============================================================================
   # Coverage Report
@@ -533,7 +501,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.87.15
+        uses: taiki-e/install-action@v2.87.17
         with:
           tool: cargo-llvm-cov
 
@@ -576,46 +544,75 @@ jobs:
     name: Integration Status
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs:
-      - build-images
-      - integration-tests
-      - e2e-tests
-      - coverage-report
+    needs: [build-images, integration-tests, coverage-report]
     if: always()
     steps:
+      # This rollup gates; it does not merely display. Three rules it now
+      # keeps, each of which it previously broke:
+      #
+      #   1. Every job in `needs:` is checked. The list and the map below are
+      #      the same three names — a dependency that is waited on but not
+      #      checked is a dependency that cannot fail the build.
+      #   2. Anything that is not `success` fails the rollup, `skipped` and
+      #      `cancelled` included. A skipped job produced no evidence, and
+      #      "no evidence" is not "passed". Under `if: always()` a skip is the
+      #      normal shape of an upstream failure, so treating it as a warning
+      #      is precisely how a red tier reports green.
+      #   3. It prints its denominator. A gate that cannot say how many things
+      #      it checked cannot be distinguished from one that checked nothing,
+      #      so a zero count is itself a failure.
+      #
+      # Results reach the shell through `env:`, never by interpolating
+      # ${{ }} into a run: line — see .claude/CLAUDE.md.
       - name: Check integration status
+        env:
+          BUILD_IMAGES: ${{ needs.build-images.result }}
+          INTEGRATION_TESTS: ${{ needs.integration-tests.result }}
+          COVERAGE_REPORT: ${{ needs.coverage-report.result }}
         run: |
-          echo "## Integration Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          set -uo pipefail
+          echo "## Integration Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          declare -A jobs=(
-            ["build-images"]="${{ needs.build-images.result }}"
-            ["integration-tests"]="${{ needs.integration-tests.result }}"
-            ["e2e-tests"]="${{ needs.e2e-tests.result }}"
-            ["coverage-report"]="${{ needs.coverage-report.result }}"
-          )
+          total=0
+          ok=0
+          failed=0
 
-          failed=false
-          for job in "${!jobs[@]}"; do
-            result="${jobs[$job]}"
-            if [[ "$result" == "success" ]]; then
-              echo "- :white_check_mark: $job: $result" >> $GITHUB_STEP_SUMMARY
-            elif [[ "$result" == "failure" ]]; then
-              echo "- :x: $job: $result" >> $GITHUB_STEP_SUMMARY
-              failed=true
+          check() {
+            name="$1"
+            result="$2"
+            total=$((total + 1))
+            if [ "$result" = "success" ]; then
+              ok=$((ok + 1))
+              echo "- :white_check_mark: ${name}: ${result}" >> "$GITHUB_STEP_SUMMARY"
             else
-              echo "- :warning: $job: $result" >> $GITHUB_STEP_SUMMARY
+              failed=$((failed + 1))
+              echo "- :x: ${name}: ${result:-<no result>} — this job did not complete, so its evidence is MISSING" >> "$GITHUB_STEP_SUMMARY"
             fi
-          done
+          }
 
-          if [[ "$failed" == "true" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Some integration tests failed. Please review the results.**" >> $GITHUB_STEP_SUMMARY
+          check build-images      "$BUILD_IMAGES"
+          check integration-tests "$INTEGRATION_TESTS"
+          check coverage-report   "$COVERAGE_REPORT"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Checked ${ok} of ${total} integration jobs; ${failed} did not report success." >> "$GITHUB_STEP_SUMMARY"
+          echo "integration-status: ok=${ok} failed=${failed} total=${total}"
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::integration-status checked 0 jobs. A rollup with an empty subject cannot report success."
             exit 1
           fi
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**All integration tests passed successfully!**" >> $GITHUB_STEP_SUMMARY
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::${failed} of ${total} integration jobs did not report success."
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**${failed} of ${total} integration jobs did not report success. Review them before trusting this tier.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**All ${ok} of ${total} integration jobs passed.**" >> "$GITHUB_STEP_SUMMARY"
 
   stress-test:
     runs-on: ubuntu-latest

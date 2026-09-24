@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
-= src/abi/ — Idris2 ABI Definitions
+= src/abi/ — Idris2 ABI build packages
 
-Idris2 modules defining the Hypatia API surface with dependent type proofs.
-These are the authoritative interface definitions — all other layers derive from them.
+This directory holds the Idris2 *package* files for the ABI. It no longer holds
+any `.idr` module.
+
+Both packages set `sourcedir = ".."`, which resolves to `src/`, so the modules
+they compile live in **`src/Hypatia/ABI/`** — that is the normative ABI, the
+single source the wire contract is generated from.
+
+Until 2026-09-22 a byte-identical copy of all six ABI modules also sat in this
+directory, compiled by nothing. Divergence between the two copies would have
+been undetectable, so the dead copy was deleted (issue #815, DEBT-REGISTER C-4).
 
 == Files
 
@@ -10,14 +18,32 @@ These are the authoritative interface definitions — all other layers derive fr
 |===
 |File |Purpose
 
-|`Types.idr` |Core types with dependent type proofs (Severity, TriangleTier, DispatchStrategy, etc.)
-|`GraphQL.idr` |Query/Mutation/Subscription operations with proofs
-|`GRPC.idr` |gRPC service definitions (scanner, dispatch, stream, health)
-|`REST.idr` |REST endpoint definitions (18 endpoints, 6 groups)
-|`FFI.idr` |GADT constructors for all 7 C ABI functions + `ffiReturnsApiResponse` proof
-|`RuleEngine.idr` |Rule engine type definitions and proof obligations
-|`hypatia-abi.ipkg` |Idris2 package file for compilation
+|`hypatia-abi.ipkg` |Type-checks and builds the ABI modules (`Hypatia.ABI.*`)
+|`hypatia-abi-gen.ipkg` |Builds `hypatia-abi-gen`, the generator that emits the Zig enum, the Rust enum and `ffi/connectors.json` from the ABI
 |===
+
+== The modules themselves
+
+[cols="2,3"]
+|===
+|Module |Purpose
+
+|`src/Hypatia/ABI/Types.idr` |Core types with dependent type proofs (Severity, TriangleTier, DispatchStrategy, the 16-connector wire contract)
+|`src/Hypatia/ABI/GraphQL.idr` |Query/Mutation/Subscription operations with proofs
+|`src/Hypatia/ABI/GRPC.idr` |gRPC service definitions (scanner, dispatch, stream, health)
+|`src/Hypatia/ABI/REST.idr` |REST endpoint definitions (18 endpoints, 6 groups)
+|`src/Hypatia/ABI/FFI.idr` |GADT constructors for all 7 C ABI functions + `ffiReturnsApiResponse` proof
+|`src/Hypatia/ABI/RuleEngine.idr` |Rule engine type definitions and proof obligations
+|`src/Hypatia/ABI/Gen.idr` |The generator: evaluates the ABI and emits the generated mirrors
+|===
+
+== Build
+
+[source,bash]
+----
+just compile-abi  # idris2 --build src/abi/hypatia-abi.ipkg
+just abi-gen      # regenerate the Zig/Rust/JSON mirrors and write them in place
+----
 
 == Key Proof
 

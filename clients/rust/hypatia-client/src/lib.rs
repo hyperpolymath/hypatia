@@ -20,7 +20,7 @@
 // REST, FlatBuffers, Bebop, JSON-RPC, WebSocket, MQTT, tRPC,
 // Cap'n Proto, SOAP, VeriSimDB-REST, BSP, SCIP, IPFS, Arrow Flight)
 // lives on the Zig side at `hypatia/ffi/zig/src/unified-api-adapter.zig` and is
-// mirrored by the Idris2 ABI in `src/abi/Types.idr`. The Rust client
+// mirrored by the Idris2 ABI in `src/Hypatia/ABI/Types.idr`. The Rust client
 // knows about all sixteen via `Connector` so that future enumeration
 // and dispatch endpoints (`hypatia_connector_count`,
 // `hypatia_connector_name`, `hypatia_unified_api_adapter_start_all`) are

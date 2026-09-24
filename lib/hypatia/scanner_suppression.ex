@@ -249,7 +249,16 @@ defmodule Hypatia.ScannerSuppression do
   # ── Comment-masked generic secrets ────────────────────────────────────────
   #
   # Three of the 18 `@secret_patterns` in `Hypatia.Rules.SecurityErrors` match
-  # on FORM ALONE — `api_key = "..."`, `secret = "..."`, `password = "..."`.
+  # on FORM ALONE. Spelling those three shapes out is what makes this comment
+  # useful — and it is also, unavoidably, three matches for the very patterns
+  # being described. That is why the line below carries a directive. It is
+  # scoped to that ONE line: a real credential anywhere else in this file
+  # still fails the gate, which a file-level or baseline suppression would
+  # not guarantee.
+  #
+  # hypatia: allow security_errors/secret_detected -- documentation example
+  # `api_key = "..."`, `secret = "..."`, `password = "..."`
+  #
   # Any prose example, changelog entry or commented-out config line carrying
   # that shape is indistinguishable from a real leak, and commented-out
   # examples are the entire measured false-positive population.
@@ -321,7 +330,7 @@ defmodule Hypatia.ScannerSuppression do
   File-level allow directive: any of the first `:max_header_lines` (default
   20) of the file may include a `hypatia: allow <module>/<type>` directive
   that suppresses *every* matching finding in the file. Used for files like
-  `src/abi/RuleEngine.idr` which contain intentional `believe_me` usage and
+  `src/Hypatia/ABI/RuleEngine.idr` which contain intentional `believe_me` usage and
   want to declare the allowance once at the top.
   """
   def file_allowed?(content, rule_module, rule_type, opts \\ []) do

@@ -1,20 +1,40 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 = verification/ — Formal Proofs
 
-Idris2 proof verification for Hypatia's type-level guarantees.
+Idris2, Lean 4 and TLA+ proof sources for Hypatia's type-level guarantees.
 
 == Contents
 
-* `proofs/` — Idris2 proof files (`.idr`) asserting invariants from `src/abi/`
-* `PROOF-STATUS.md` — Current proof completion status
+* `proofs/idris2/` — Idris2 proof files (`.idr`) asserting invariants over the
+  normative ABI in `src/Hypatia/ABI/`
+* `proofs/lean4/`, `proofs/tlaplus/` — Lean 4 and TLA+ proofs
+* `PROOF-STATUS.adoc` — Current proof completion status
 
 == Building Proofs
 
+The `proofs/` tree is not an Idris2 package; each file is type-checked
+independently, exactly as `.github/workflows/verify-proofs.yml` does it:
+
 [source,bash]
 ----
-cd src/abi && idris2 --build hypatia-verify.ipkg
+cd verification/proofs/idris2
+for f in *.idr; do idris2 --check "$f"; done
 ----
+
+The Idris2 *packages* in the repository are built separately:
+
+[source,bash]
+----
+idris2 --build src/abi/hypatia-abi.ipkg      # the normative ABI (src/Hypatia/ABI/)
+idris2 --build verify/hypatia-verify.ipkg    # verify/src/PipelineState.idr
+idris2 --build src/abi/hypatia-abi-gen.ipkg  # the wire-enum generator (just abi-gen)
+----
+
+NOTE: `src/abi/hypatia-abi.ipkg` sets `sourcedir = ".."`, so it compiles the
+modules under `src/Hypatia/ABI/`. The `.ipkg` files live in `src/abi/`; the
+Idris2 sources they build do not.
 
 == Status
 
-See link:PROOF-STATUS.md[PROOF-STATUS.md] for current proof completion per module.
+See link:PROOF-STATUS.adoc[PROOF-STATUS.adoc] for current proof completion per
+module.

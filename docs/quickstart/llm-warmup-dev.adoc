@@ -114,9 +114,10 @@ revert
 |`+tools/cii-registrar+` |CII Best Practices registration
 |===
 
-==== Idris2 ABI (src/abi/)
+==== Idris2 ABI (src/Hypatia/ABI/)
 
-5 modules with dependent type proofs:
+7 modules with dependent type proofs. The `+.ipkg+` files that build them
+live in `+src/abi/+` and set `+sourcedir = ".."+`:
 
 [width="100%",cols="40%,60%",options="header",]
 |===
@@ -132,7 +133,11 @@ health)
 
 |`+FFI.idr+` |GADT constructors for C ABI functions
 
-|`+hypatia-abi.ipkg+` |Package definition
+|`+RuleEngine.idr+` |Rule-evaluation types, safety triangle, dispatch proofs
+
+|`+Gen.idr+` |Wire-enum generator for the Zig and Rust connector enums
+
+|`+src/abi/hypatia-abi.ipkg+` |Package definition
 |===
 
 ==== Zig FFI (ffi/zig/)

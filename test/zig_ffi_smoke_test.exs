@@ -237,18 +237,24 @@ defmodule Hypatia.ZigFFI.SmokeTest do
 
   # ---------------------------------------------------------------------------
   # Smoke: Idris2 ABI source files are present
+  #
+  # Bound to `src/Hypatia/ABI/`, the modules `src/abi/hypatia-abi.ipkg` actually
+  # compiles (its `sourcedir = ".."` resolves to `src/`). Until 2026-09-22 this
+  # pointed at `src/abi/`, which held a byte-identical copy compiled by nothing;
+  # those duplicates are now deleted and only the two .ipkg files remain there.
   # ---------------------------------------------------------------------------
 
   describe "Idris2 ABI source integrity" do
-    @abi_dir Path.expand("../src/abi", __DIR__)
+    @abi_dir Path.expand("../src/Hypatia/ABI", __DIR__)
 
-    test "src/abi directory exists" do
+    test "the Idris2 ABI directory exists" do
       assert File.exists?(@abi_dir),
              "Idris2 ABI directory not found at #{@abi_dir}"
     end
 
-    test "all 5 required Idris2 ABI modules are present" do
-      required_modules = ~w(Types.idr GraphQL.idr GRPC.idr REST.idr FFI.idr)
+    test "all 7 required Idris2 ABI modules are present" do
+      required_modules =
+        ~w(Types.idr GraphQL.idr GRPC.idr REST.idr FFI.idr RuleEngine.idr Gen.idr)
 
       Enum.each(required_modules, fn mod ->
         path = Path.join(@abi_dir, mod)
@@ -259,10 +265,17 @@ defmodule Hypatia.ZigFFI.SmokeTest do
     end
 
     test "Idris2 ABI modules have SPDX headers" do
-      @abi_dir
-      |> File.ls!()
-      |> Enum.filter(&String.ends_with?(&1, ".idr"))
-      |> Enum.each(fn file ->
+      idr_files =
+        @abi_dir
+        |> File.ls!()
+        |> Enum.filter(&String.ends_with?(&1, ".idr"))
+
+      # The denominator. Without it this test passes vacuously the moment the
+      # directory it points at holds no .idr files -- which is exactly what a
+      # mis-repointed @abi_dir looks like.
+      assert idr_files != [], "no .idr files found in #{@abi_dir}"
+
+      Enum.each(idr_files, fn file ->
         path = Path.join(@abi_dir, file)
         {:ok, content} = File.read(path)
         first_2k = String.slice(content, 0, 2000)
