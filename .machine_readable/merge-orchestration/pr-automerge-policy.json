@@ -1,0 +1,245 @@
+{
+  "$schema": "https://github.com/hyperpolymath/hypatia/blob/main/docs/design/merge-orchestration/schemas/pr-automerge-policy.schema.json",
+  "$comment": "SPDX-License-Identifier: MPL-2.0 — Single source of truth for estate PR automerge + pin integrity. Read by BOTH the Elixir brain (Hypatia.Automerge.Policy) and the token-bearing actuator (scripts/estate/pr-automerge.sh). Two independent readers, one policy file: the actuator never trusts the brain's verdict, it re-derives it from the same data.",
+  "version": "1.0.0",
+  "updated": "2026-09-26",
+  "owner": "hyperpolymath",
+  "description": "Declarative policy for the 'safer core' of hypatia: unambiguous bumps/chores/pins get merged and their branches deleted; poisoned pins are excised or vetoed; everything else is flagged. Written after the 2026-09-26 finding that 108 workflow files across 84 hyperpolymath repos (and 23 in metadatastician) carry the codeql-action v4.38.1 commit labelled as v4.38.0.",
+
+  "pin_denylist": [
+    {
+      "id": "PIN-001",
+      "action": "github/codeql-action",
+      "ecosystem": "github-actions",
+      "severity": "critical",
+      "blocked_versions": ["4.38.1"],
+      "blocked_shas": ["1c5b675653bb5c22dbe9b12b556ec555138e09fd"],
+      "blocked_refs": ["v4.38.1"],
+      "reason": "GitHub rejects this commit at workflow start-up: `startup_failure`, zero jobs, no logs, wherever it is used. Kills CodeQL, Hypatia Security Scan and Scorecard on every repo it reaches.",
+      "known_good_version": "4.38.0",
+      "known_good_sha": "b96794f015dfd88f77b49b1c93e0fa7110f94c63",
+      "replacement": "pin_to_known_good",
+      "evidence": [
+        "hyperpolymath/nexia-list#100 — rollback, with the startup_failure signature reproduced across two workflows",
+        "hyperpolymath/standards#1037 — population + the dependabot.yml ignore-rule bypass",
+        "hyperpolymath/standards#1005 AC2 — the 40-repo re-pin"
+      ],
+      "added": "2026-09-23",
+      "added_by": "hypatia/standards#1037",
+      "notes": "The denylist is keyed on SHA as well as version BECAUSE the estate contains files where this SHA is annotated `# v4.38.0`. A version-string-only check sees nothing wrong. This is the whole reason the rule exists at file level rather than on the PR title."
+    },
+    {
+      "id": "PIN-002",
+      "action": "dtolnay/rust-toolchain",
+      "ecosystem": "github-actions",
+      "severity": "high",
+      "blocked_versions": [],
+      "blocked_shas": [],
+      "blocked_refs": [],
+      "reason": "Moving ref (`stable`) must never be SHA-pinned in actions.lock: the pin stops matching the ref on every Rust release and every job using it dies at `Set up job`.",
+      "known_good_version": null,
+      "known_good_sha": null,
+      "replacement": "unpin_moving_ref",
+      "evidence": ["hypatia/docs/DEBT-REGISTER.adoc CI-1 (run 31170993296, job 92842543720)"],
+      "added": "2026-09-26",
+      "added_by": "hypatia debt register CI-1",
+      "notes": "Structural cure, not a re-pin: drop the entry from actions.lock rather than pinning a new SHA."
+    }
+  ],
+
+  "moving_refs_never_lockable": [
+    "stable",
+    "beta",
+    "nightly",
+    "latest",
+    "main",
+    "master",
+    "HEAD"
+  ],
+
+  "safe_change_classes": {
+    "bump_ci_patch_minor": {
+      "description": "Dependabot/renovate bump of a github-actions dependency within the same major, touching only `uses:` lines.",
+      "route": "Patch-Bridge",
+      "method": "squash",
+      "pool": "P2",
+      "safety": "arm_auto",
+      "requires": ["author_is_dependency_bot", "semver_patch_or_minor", "no_denylisted_pin", "delta_is_pin_lines_only"]
+    },
+    "bump_lockfile_only": {
+      "description": "Dependency bump whose diff is confined to lockfiles (Cargo.lock, mix.lock, package-lock.json, go.sum, flake.lock).",
+      "route": "Patch-Bridge",
+      "method": "squash",
+      "pool": "P2",
+      "safety": "arm_auto",
+      "requires": ["author_is_dependency_bot", "no_denylisted_pin", "all_files_are_lockfiles"]
+    },
+    "chore_meta_only": {
+      "description": "Non-code chore: docs, licence headers, linguist exclusions, CODEOWNERS, issue templates, .gitattributes. No runtime path.",
+      "route": "rhodibot",
+      "method": "squash",
+      "pool": "P3",
+      "safety": "arm_auto",
+      "requires": ["no_denylisted_pin", "no_code_path_change", "no_workflow_semantic_change"]
+    },
+    "pin_rollback_denylisted": {
+      "description": "A pin currently on the denylist is replaced by its known-good SHA, in place, with no other edit.",
+      "route": "Patch-Bridge",
+      "method": "squash",
+      "pool": "P1",
+      "safety": "arm_auto",
+      "requires": ["every_changed_line_is_a_denylisted_pin_site", "replacement_equals_known_good"]
+    }
+  },
+
+  "never_auto": [
+    {
+      "id": "NA-001",
+      "match": "semver_major",
+      "reason": "Major bumps change behaviour by definition."
+    },
+    {
+      "id": "NA-002",
+      "match": "security_advisory",
+      "reason": "Security updates are routed to the owner + panicbot; auto-merge of an advisory bump can be an Akerlof claim-grounder problem."
+    },
+    {
+      "id": "NA-003",
+      "match": "new_or_removed_workflow",
+      "reason": "Adding or deleting a workflow is a change to what the estate does, not to which version of it runs."
+    },
+    {
+      "id": "NA-004",
+      "match": "permissions_trigger_or_expression_change",
+      "reason": "Any delta to `permissions:`, `on:`, `if:`, `env:` or `secrets:` is semantic, even inside a workflow."
+    },
+    {
+      "id": "NA-005",
+      "match": "touches_oracle",
+      "reason": "Reflexivity guard: changes to hypatia rules, bot_directives, pool/TRUST levels or the standards repo are proposed, never self-approved."
+    },
+    {
+      "id": "NA-006",
+      "match": "human_authored_unreviewed",
+      "reason": "Automerge is for machine-authored chores. A human PR keeps its human reviewer."
+    }
+  ],
+
+  "meta_guard": {
+    "comment": "Change-level is `meta` (and therefore safety=flag) whenever the delta reaches CI, the oracle, or policy. The single exemption is a pure pin substitution — the actuator must re-prove `pin_only` from the diff itself before honouring it.",
+    "meta_paths": [
+      ".github/workflows/",
+      ".github/actions/",
+      "lib/rules/",
+      "lib/automerge/",
+      ".machine_readable/bot_directives/",
+      ".machine_readable/merge-orchestration/",
+      "stdlib/"
+    ],
+    "meta_repos": ["standards", "rsr-template-repo", "hypatia"],
+    "exemptions": [
+      {
+        "id": "MGX-001",
+        "name": "pin_only_workflow_edit",
+        "description": "Every added/removed line in the diff is a `uses:` pin token substitution on a line that exists on both sides, the action name is unchanged, and the target is not denylisted.",
+        "requires_actuator_reproof": true
+      }
+    ]
+  },
+
+  "lockfile_names": [
+    "Cargo.lock",
+    "mix.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lock",
+    "bun.lockb",
+    "go.sum",
+    "flake.lock",
+    "Manifest.toml",
+    "poetry.lock",
+    "Gemfile.lock",
+    "composer.lock"
+  ],
+
+  "dependency_bots": [
+    "dependabot[bot]",
+    "renovate[bot]",
+    "renovate-bot",
+    "app/dependabot",
+    "app/renovate"
+  ],
+
+  "absence_rules": [
+    {
+      "id": "ABS-001",
+      "field": "description",
+      "test": "empty_or_placeholder",
+      "severity": "high",
+      "auto_fixable": false,
+      "why": "A repository with no description is not discoverable and does not state its own purpose. Authoring one is a judgement call — hypatia must not invent it.",
+      "issue_title": "Repository description is empty",
+      "issue_body_template": "`.github` metadata for this repository has no description.\n\nThis is one of the RSR conformance absences that hypatia cannot fix unambiguously: a description has to say what the project *is*, which is a claim only the maintainer can make.\n\n**What would close this:** a one-line `description` in the repository settings (or a `README.adoc` first paragraph that can be lifted verbatim).\n\nFiled by `hypatia` (ABS-001) with the absence-intake run of {date}. Deduplicated by this marker: `<!-- hypatia-absence:ABS-001 -->`"
+    },
+    {
+      "id": "ABS-002",
+      "field": "topics",
+      "test": "fewer_than_min",
+      "min": 7,
+      "severity": "high",
+      "auto_fixable": false,
+      "why": "RSR requires at least 7 topics: language, ecosystem, status, licence, domain, maturity and one distinguishing topic. Which seven is a judgement call about the project.",
+      "issue_title": "Repository topics are below the RSR minimum of 7",
+      "issue_body_template": "This repository has {topics_count} topic(s); the RSR standard requires at least 7.\n\nCurrent: {topics_list}\n\n**What would close this:** set at least 7 topics in repository settings covering language, ecosystem, status, licence, domain, maturity and one distinguishing topic.\n\nFiled by `hypatia` (ABS-002) with the absence-intake run of {date}. Deduplicated by this marker: `<!-- hypatia-absence:ABS-002 -->`"
+    },
+    {
+      "id": "ABS-003",
+      "field": "chrome",
+      "test": "missing_required_file",
+      "required_files": ["LICENSE", "README.adoc", "SECURITY.adoc"],
+      "severity": "medium",
+      "auto_fixable": "seed_from_template",
+      "why": "Standard project chrome. A seed from rsr-template-repo is unambiguous; a missing licence *choice* is not, so LICENSES/ is seeded but never invented.",
+      "issue_title": "Standard project chrome is incomplete",
+      "issue_body_template": "Missing from the repository root: {missing_list}\n\nRSR template chrome is seeded, not invented: `hypatia` can copy the template skeleton, but the licence *choice* and the security *contact* need a human.\n\nFiled by `hypatia` (ABS-003) with the absence-intake run of {date}. Deduplicated by this marker: `<!-- hypatia-absence:ABS-003 -->`"
+    }
+  ],
+
+  "intake_limits": {
+    "comment": "The 2026-09-26 complaint was that issues had become unreadable. These caps are the cure: intake is capped per run, deduplicated by an in-body marker, and upgradeable — a repeat finding comments on the existing issue instead of filing a new one.",
+    "max_new_issues_per_run": 25,
+    "max_new_issues_per_repo_per_run": 2,
+    "never_reopen_closed": true,
+    "comment_on_existing_instead_of_new": true,
+    "roll_up_when_class_exceeds": 20
+  },
+
+  "stats_thresholds": {
+    "comment": "Live thresholds for the private-farm dashboard. A metric crosses into 'recent/live tracking' when it exceeds these; below them it is reported as a headline number only.",
+    "failing_tests_warn": 1,
+    "failing_tests_critical": 25,
+    "test_coverage_empties_warn": 11,
+    "test_coverage_empties_critical": 47,
+    "bench_coverage_empties_warn": 11,
+    "bench_coverage_empties_critical": 47,
+    "bench_over_limit_ratio_warn": 1.5,
+    "bench_over_limit_ratio_critical": 3.0,
+    "unmerged_pr_age_days_warn": 7,
+    "unmerged_pr_age_days_critical": 30,
+    "unmerged_pr_count_warn": 10,
+    "unmerged_pr_count_critical": 50,
+    "open_issue_count_warn": 250,
+    "open_issue_count_critical": 500
+  },
+
+  "stats_output": {
+    "comment": "Where the dashboard artifact goes. The .git-private-farm repo is not readable or writable from the public estate — this is the contract it consumes.",
+    "artifact_name": "estate-stats.json",
+    "schema_version": "1.0.0",
+    "consumer_repo": "hyperpolymath/.git-private-farm",
+    "consumer_path": "metadatastician/berrywiki/data/estate-stats.json",
+    "producer_path": "docs/status/estate-stats.json",
+    "history_dir": "docs/status/history/"
+  }
+}

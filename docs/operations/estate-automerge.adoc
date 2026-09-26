@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Estate auto-merge: the pin-rollback path, the absence intake, and the stats artifact
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-09-26
+
+== Why this document exists
+
+On 2026-09-26 the estate had 34 open pull requests, every one of them a
+`chore(deps): bump …` from dependabot. Every one of them *looked* mergeable.
+Twenty-four of them re-introduced `github/codeql-action` v4.38.1, the commit
+GitHub rejects at workflow start-up (`startup_failure`, zero jobs, no logs) —
+and two that had already merged (`nexia-list#107`, `dictask#65`) had left
+their repositories red on `main`.
+
+The rollback had itself been applied as a *relabel*: files across the estate
+still carry
+
+    uses: github/codeql-action/init@1c5b6756…  # v4.38.0
+
+which is the poisoned commit wearing a correct-looking comment. A gate that
+greps for the version string sees a correct pin. A gate that greps for the
+commit sees it in 110 files across 85 repositories.
+
+This document describes the machinery that exists to make that class of
+mistake impossible, and the exact limits of what hypatia is allowed to do
+about it on its own.
+
+== The split: brain writes, actuator executes
+
+Two implementations read one policy file, deliberately:
+
+* **The brain** — `lib/rules/pr_automerge.ex` (`PA001`–`PA006`) and
+  `lib/rules/pin_integrity.ex` (`PI001`–`PI005`). Pure functions: a PR record
+  and the policy in, a decision out. No network, no clock, no repo handle.
+  These are what an offline classifier can run and what the unit tests
+  exercise (`test/rules/pr_automerge_test.exs`, `test/rules/pin_integrity_test.exs`).
+* **The actuator** — `scripts/sweeps/estate-pr-automerge.sh`,
+  `scripts/sweeps/estate-pin-integrity.sh`. These hold the token, fetch the
+  live diff, and — before any write — *re-derive* the safety rules against
+  what the repository actually contains right now.
+
+The division is not a stylistic choice. The app token used by the shared CI
+path can create issues and nothing else: no push, no branch create or delete,
+no merge, no label. Merging and branch deletion therefore belong to a host
+that owns a write token — the private farm's actuator — and it must never
+trust the brain's claim that a change is safe. It re-proves it.
+
+The one exemption is `MGX-001`: a workflow edit is `meta` (owner review) —
+change level `meta`, safety `flag` — *except* when every changed line is a
+`uses:` pin token substitution on the same action, which both implementations
+re-prove from the raw diff (`pin_only_edit?/3` / the shell's `nonpin_change`
+counter). A new step, a changed `permissions:` block, a moved `if:` — any of
+those fails the proof and the exemption is void.
+
+== The policy is the single source of truth
+
+`.machine_readable/merge-orchestration/pr-automerge-policy.json` (v1.0.0) holds:
+
+* `pin_denylist` — `PIN-001` (`github/codeql-action`, blocked SHAs
+  `1c5b6756…` and version `4.38.1`, known-good `b96794f0…` / `4.38.0`) and
+  `PIN-002` (`dtolnay/rust-toolchain`); `moving_refs_never_lockable`
+  (`stable`, `latest`, `main`, …).
+* `safe_change_classes` — `bump_ci_patch_minor`, `bump_lockfile_only`,
+  `chore_meta_only`, `pin_rollback_denylisted`.
+* `never_auto` — `NA-001`…`NA-006`: semver major, security advisory, workflow
+  added/removed, `permissions:`/`on:`/`if:`/`env:`/`secrets:` deltas,
+  oracle/reflexivity files, human-authored PRs.
+* `meta_guard` — the paths and repositories where `MGX-001` is the only way
+  past owner review.
+* `absence_rules` — `ABS-001` (empty description), `ABS-002` (fewer than 7
+  topics), `ABS-003` (repository chrome); `intake_limits` (25 new issues per
+  run, 2 per repository per run, roll up a class over 20).
+* `stats_thresholds` / `stats_output` — the dashboard contract, below.
+
+If a rule changes, it changes here first. A rule that exists in only one of
+the two engines is a bug.
+
+== The decision record
+
+Every examined PR gets one line in `pr-decisions.jsonl`:
+
+|===
+| Field | Values
+
+| `disposition`
+| `auto_merge`, `excise_poison_then_merge`, `close_poison_only`,
+  `close_poison_and_majors`, `close_archived_repo`, `flag`
+
+| `blocked_by`
+| `awaiting_required_checks`, `introduces_denylisted_pin`,
+  `introduces_denylisted_pin_and_major_bumps`,
+  `introduces_denylisted_pin_alongside_wanted_updates`, `major_version_delta`,
+  `version_claims_conflict`, `pin_delta_unresolvable`,
+  `dependency_manifest_not_lockfile`, `touches_licence_requires_owner_review`,
+  `repository_is_archived_cannot_merge`, `not_a_dependency_bot`,
+  `not_unambiguously_classifiable`
+
+| `safety`
+| `arm_auto` only for the safe classes; `flag` for everything else
+
+| `pool`
+| `P0`–`P3`; poison dispositions run at `P1`, routine bumps at `P2`
+
+| `pin_delta`
+| one row per changed pin: `action`, `from`, `to`, `source`
+  (`tags` \| `body-claim`)
+|===
+
+Two rules of evidence keep the version numbers honest:
+
+. The diff's `uses:` refs are the ground truth for *what changed*.
+. Upstream tags resolve a ref to a version (`source: tags`); a dependabot body
+  claim fills a gap only when the tags cannot (`source: body-claim`); if the
+  two disagree the decision is `version_claims_conflict`, never a guess.
+
+A lockfile-only PR has no `uses:` line to resolve, so it needs a body claim to
+be classifiable at all. `unresolved` without one.
+
+== The four sweeps
+
+All four are dry runs by default; none of them writes without `--execute` or
+`--rewrite`.
+
+=== `estate-pin-integrity.sh`
+
+Find every denylisted pin in an estate; with `--rewrite`, produce the
+substituted file trees ready for a branch and a PR.
+
+* Flags: `--org` (repeatable), `--policy`, `--out DIR`, `--via search|clone`,
+  `--rewrite`, `--max-repos N`.
+* Artifacts under `--out`: `pin-findings.jsonl`, `pin-repair-plan.jsonl`,
+  `patched/<repo>/<path>` trees; one squash PR is planned per repository
+  (`hypatia/pin-integrity-known-good`).
+* Exit: `0` clean, `1` error, `2` findings, `3` nothing to do.
+* A repair that cannot be proved is a finding, not an action: the substitution
+  refuses when the policy carries no `known_good_sha`, and it refuses when the
+  rewrite would drop a `uses:` site.
+
+=== `estate-pr-automerge.sh`
+
+Classify every open PR in an estate and (with `--execute`) merge the armed
+ones, close the poisoned ones, and delete branches.
+
+* Flags: `--org` (repeatable), `--policy`, `--out DIR`, `--cache DIR`,
+  `--max-repos N`, `--from FILE`, `--execute`.
+* `--execute` re-checks, per decision, that the PR's head SHA is unchanged and
+  that the live diff still contains no denylisted ref. A stale or refused
+  decision is skipped and logged, never applied blind. Every merge and close
+  deletes the branch.
+* Archived repositories are enumerated, not skipped: they get
+  `close_archived_repo` and never a merge.
+
+=== `estate-absence-intake.sh`
+
+Turn unresolvable absences into issues exactly once.
+
+* Flags: `--org` (repeatable), `--policy`, `--out DIR`, `--max-new N`,
+  `--execute`.
+* Dedupe key: `<!-- hypatia-absence:ABS-00N -->` in the issue body. A second
+  run comments, never re-files; a closed issue is never reopened.
+* A class over the roll-up threshold becomes one estate-wide listing issue
+  instead of N repository issues.
+* Exit: `2` dry run, `0` executed.
+
+=== `estate-stats.sh`
+
+Emit the single estate-wide statistics artifact the private dashboard reads.
+
+* Flags: `--org` (repeatable), `--out FILE`, `--decisions FILE`,
+  `--scans DIR`, `--max-issues N`.
+* Output: `estate-stats.json` plus a human-readable `.adoc` companion.
+* Every section carries a `provenance` block; a metric that could not be
+  measured is reported as `unavailable`, never as `0`. Numbers that were never
+  fetched must not be able to look green.
+
+== The dashboard contract
+
+Producer: `estate-stats.sh` → `docs/status/estate-stats.json`
+(schema version from `stats_output.schema_version`).
+
+Consumer: the private farm, at
+`hyperpolymath/.git-private-farm` → `metadatastician/berrywiki/data/estate-stats.json`,
+with dated copies under the history directory recorded in `stats_output`.
+
+Sections: `repositories` (archived/empty-description/topics-low counts),
+`pull_requests` (counts by disposition, poisoned count, oldest/median age),
+`issues` (open count, distinct causes, never-commented), `signals`
+(test-coverage empties, failing tests, bench ratios, where measured).
+Thresholds come from `stats_thresholds`; the artifact does not invent its own.
+
+== Operating procedure
+
+. `./scripts/sweeps/estate-pin-integrity.sh --org hyperpolymath --out /tmp/pin`
+   — read the plan; `--rewrite` to produce patched trees.
+. `./scripts/sweeps/estate-pr-automerge.sh --org hyperpolymath --org metadatastician --out /tmp/pr`
+   — read `pr-decisions.jsonl` and the summary.
+. Review the `flag` rows by hand. They are the cases the machinery refuses to
+   decide: majors, conflicts, unresolvable deltas, licence touches, archived
+   repositories, human authors.
+. `--execute` on a host that owns a write token.
+. `./scripts/sweeps/estate-stats.sh …` after the run; the artifact is the
+   record of what changed.
+
+== What this machinery deliberately will not do
+
+* Merge a major bump, a security advisory, a workflow add/remove, a
+  `permissions:`/`on:`/`if:`/`env:`/`secrets:` delta, or a human's PR.
+* Merge a licence/SPDX touch. A licence is a claim about what the project
+  *is*; it routes to the owner.
+* Reopen a closed absence issue.
+* Trust a PR title, a PR body, or an inline comment as the source of truth for
+  what a pin points at. The ref after `@` is the claim; everything else is
+  annotation.
+* Report an unmeasured metric as zero.
+
+== Tests
+
+`test/rules/pr_automerge_test.exs` and `test/rules/pin_integrity_test.exs` fix
+the behaviour of both rule modules, including the cases that matter most:
+the poisoned commit under a correct-looking comment (`PI002`), the rollback
+that relabels without re-pinning, the diff-marker/YAML-dash line shape,
+string-keyed JSON records, the licence guard, and the `MGX-001` proof. The
+shell engine's `relabel_comment` is kept byte-for-byte identical to the
+Elixir `relabel/2`; where they diverge, the rename-without-repin bug comes
+back.
