@@ -101,7 +101,9 @@ plan="$OUT_DIR/hold-plan.jsonl"
 : > "$findings"
 : > "$plan"
 
+# Write a message to standard error, followed by a newline.
 log() { printf '%s\n' "$*" >&2; }
+# Remove .db.*.tmp files from OUT_DIR on exit, ignoring removal failures.
 cleanup() { rm -f "$OUT_DIR"/.db.*.tmp 2>/dev/null || true; }
 
 # The action and the glob that excludes it, from the policy — one source of
@@ -115,6 +117,9 @@ GLOB_JSON=$(printf '%s\n' "${GLOBS[@]}" | jq -Rsc 'split("\n") | map(select(. !=
 
 log "policy $(jq -r '.version' "$POLICY") · holding ${#HELD_ACTIONS[@]} action(s) · orgs ${ORGS[*]}"
 
+# Print repository names, one per line, for the organisation or user in $1,
+# excluding archived, forked and disabled repositories. If the organisation
+# request fails, try the user endpoint; return its failure status if it fails.
 list_repos() {
   local org="$1"
   gh api "orgs/${org}/repos?per_page=100" --paginate \
@@ -124,10 +129,20 @@ list_repos() {
 }
 
 # ─── The edit ────────────────────────────────────────────────────────────
-# Deliberately a line-oriented insertion rather than a YAML round-trip: a
-# re-serialised dependabot.yml would reorder keys and reformat comments in
-# every repository, which makes the diff unreviewable and the sweep
-# unusable. This touches exactly two lines.
+# Insert exclude-patterns into the local file in $1 using the JSON array of
+# action globs in $2. Match patterns lists containing a bare wildcard whose
+# nearest preceding package-ecosystem entry is github-actions. Skip a list
+# when exclude-patterns occurs in the next three lines after its last content.
+# Insert lines without re-serialising the YAML; each insertion adds one key
+# line and one entry per glob.
+#
+# On success, overwrite the file, print HELD followed by the insertion count
+# and return 0. Leave the file untouched and print NO_ANCHOR (status 3) if no
+# list matches, or ALREADY_HELD (4) if all matching lists are skipped. When
+# PyYAML is available, reject invalid output before writing: print
+# EDIT_UNPARSEABLE with the first error line and return 5. Without PyYAML,
+# write without YAML validation. JSON decoding and file I/O errors propagate
+# as Python diagnostics and a non-zero status; a failed write may be partial.
 edit_dependabot() {
   local file="$1" globs_json="$2"
   python3 - "$file" "$globs_json" <<'PY'
@@ -147,6 +162,7 @@ if lines and lines[-1] == "":
 
 
 def indent_of(line):
+    """Return the number of leading spaces, stopping at tabs or other characters."""
     return len(line) - len(line.lstrip(" "))
 
 
@@ -332,6 +348,10 @@ done < "$OUT_DIR/repos.txt"
 
 # The loop above writes the plan; the summary reads it back so the two can
 # never disagree.
+# Print a JSON summary of the records in $plan, with counts by status, held
+# repository names, exposed names (including rewritten repositories), and
+# details for flag and no_group_wildcard records. Return jq's status, including
+# failures to read or parse the plan.
 summary() {
   jq -s '
     {
