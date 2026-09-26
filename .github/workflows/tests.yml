@@ -67,7 +67,7 @@ jobs:
       - name: Sweep structure gate
         run: |
           set -euo pipefail
-          for s in estate-pin-integrity estate-pr-automerge estate-stats estate-absence-intake; do
+          for s in estate-pin-integrity estate-pr-automerge estate-stats estate-absence-intake estate-dependabot-hold; do
             bash -n "scripts/sweeps/${s}.sh"
             echo "ok: ${s}.sh"
           done
