@@ -152,3 +152,7 @@ dist/
 # (mode 160000 with no .gitmodules), giving every clone four broken
 # submodule pointers. Ignored so it cannot recur.
 .claude/worktrees/
+
+# Sweep cache/artifacts (estate-pr-automerge.sh). Rebuildable; never a source
+# file.
+.pr-automerge/

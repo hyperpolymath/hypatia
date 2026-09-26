@@ -1,0 +1,1109 @@
+{
+  "schema_version": "1.0.0",
+  "policy_version": "1.0.0",
+  "generated_at": "2026-09-26T14:03:46Z",
+  "producer": "hypatia/scripts/sweeps/estate-stats.sh",
+  "thresholds": {
+    "comment": "Live thresholds for the private-farm dashboard. A metric crosses into 'recent/live tracking' when it exceeds these; below them it is reported as a headline number only.",
+    "failing_tests_warn": 1,
+    "failing_tests_critical": 25,
+    "test_coverage_empties_warn": 11,
+    "test_coverage_empties_critical": 47,
+    "bench_coverage_empties_warn": 11,
+    "bench_coverage_empties_critical": 47,
+    "bench_over_limit_ratio_warn": 1.5,
+    "bench_over_limit_ratio_critical": 3,
+    "unmerged_pr_age_days_warn": 7,
+    "unmerged_pr_age_days_critical": 30,
+    "unmerged_pr_count_warn": 10,
+    "unmerged_pr_count_critical": 50,
+    "open_issue_count_warn": 250,
+    "open_issue_count_critical": 500
+  },
+  "repositories": {
+    "total": 416,
+    "active": 413,
+    "archived": 2,
+    "empty_description": {
+      "count": 6,
+      "repos": [
+        "hyperpolymath/first-post",
+        "hyperpolymath/gsbot",
+        "hyperpolymath/hotchocolabot",
+        "hyperpolymath/jtv-halting-islands-ct",
+        "hyperpolymath/JuliaForChildren.jl",
+        "hyperpolymath/stateful-artefacts"
+      ]
+    },
+    "topics_below_min": {
+      "min": 7,
+      "count": 43,
+      "repos": [
+        {
+          "repo": "hyperpolymath/.github",
+          "topics": 0
+        },
+        {
+          "repo": "hyperpolymath/EpistemicTypes.jl",
+          "topics": 0
+        },
+        {
+          "repo": "hyperpolymath/explore",
+          "topics": 0
+        },
+        {
+          "repo": "hyperpolymath/jtv-halting-islands-ct",
+          "topics": 0
+        },
+        {
+          "repo": "hyperpolymath/MetaManifold-WebUI",
+          "topics": 0
+        },
+        {
+          "repo": "hyperpolymath/Protoctist.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/authority-watch",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/sim-public-relations",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/harvard-dehallucinator",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/.github",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/stealth-glider-ecosystem",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/x15-rocket-glider",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/planer-1",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/enterglide-ncc-137-k",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/tardis-rule-disruption",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridIR.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridCore.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/ArangoDB.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridCodec.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridOpenAPI.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridRPC.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridGraphQL.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridTransport.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridStorage.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridControl.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridLive.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridCRDT.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/MaridRaft.jl",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/marid-client",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/marid-elements",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/marid-react",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/marid-vue",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/marid-relationship-explorer",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/knot-knot",
+          "topics": 0
+        },
+        {
+          "repo": "metadatastician/first-post",
+          "topics": 3
+        },
+        {
+          "repo": "hyperpolymath/veridical-simulation-core",
+          "topics": 5
+        },
+        {
+          "repo": "hyperpolymath/cargo-zigbuild",
+          "topics": 6
+        },
+        {
+          "repo": "hyperpolymath/first-post",
+          "topics": 6
+        },
+        {
+          "repo": "hyperpolymath/gsbot",
+          "topics": 6
+        },
+        {
+          "repo": "hyperpolymath/hotchocolabot",
+          "topics": 6
+        },
+        {
+          "repo": "hyperpolymath/lol",
+          "topics": 6
+        },
+        {
+          "repo": "hyperpolymath/stateful-artefacts",
+          "topics": 6
+        },
+        {
+          "repo": "metadatastician/large-language-michelangelo",
+          "topics": 6
+        }
+      ]
+    }
+  },
+  "pull_requests": {
+    "available": true,
+    "source": "pr-decisions.jsonl",
+    "total": 33,
+    "by_disposition": {
+      "auto_merge": 5,
+      "close_archived_repo": 1,
+      "close_poison_and_majors": 4,
+      "close_poison_only": 21,
+      "flag": 2
+    },
+    "by_blocked_by": {
+      "awaiting_required_checks": 5,
+      "dependency_manifest_not_lockfile": 1,
+      "introduces_denylisted_pin": 21,
+      "introduces_denylisted_pin_and_major_bumps": 4,
+      "major_version_delta": 1,
+      "repository_is_archived_cannot_merge": 1
+    },
+    "by_repo_archived": 0,
+    "oldest_age_days": 7,
+    "median_age_days": 4,
+    "poison_carrying": 26,
+    "rows": [
+      {
+        "repo": "hyperpolymath/bgp-backbone-lab",
+        "number": 102,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/blue-screen-of-app",
+        "number": 85,
+        "disposition": "auto_merge",
+        "blocked_by": "awaiting_required_checks",
+        "age_days": 6,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/bofig",
+        "number": 204,
+        "disposition": "close_poison_and_majors",
+        "blocked_by": "introduces_denylisted_pin_and_major_bumps",
+        "age_days": 1,
+        "denylisted_hits": 2
+      },
+      {
+        "repo": "hyperpolymath/casket-ssg",
+        "number": 102,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/chimichanga",
+        "number": 100,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 1,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/claude-gecko-browser-extension",
+        "number": 110,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/claude-gecko-browser-extension",
+        "number": 109,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/Cliodynamics.jl",
+        "number": 72,
+        "disposition": "close_poison_and_majors",
+        "blocked_by": "introduces_denylisted_pin_and_major_bumps",
+        "age_days": 3,
+        "denylisted_hits": 2
+      },
+      {
+        "repo": "hyperpolymath/ensaid-spec",
+        "number": 37,
+        "disposition": "close_poison_and_majors",
+        "blocked_by": "introduces_denylisted_pin_and_major_bumps",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/git-reticulator",
+        "number": 115,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/git-reticulator",
+        "number": 114,
+        "disposition": "auto_merge",
+        "blocked_by": "awaiting_required_checks",
+        "age_days": 4,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/hyperpolymath.github.io",
+        "number": 42,
+        "disposition": "close_poison_and_majors",
+        "blocked_by": "introduces_denylisted_pin_and_major_bumps",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/ipv6-site-enforcer",
+        "number": 99,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/JuliaForChildren.jl",
+        "number": 25,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 3,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/lol",
+        "number": 15,
+        "disposition": "flag",
+        "blocked_by": "dependency_manifest_not_lockfile",
+        "age_days": 5,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/marches",
+        "number": 32,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 3,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/megadog",
+        "number": 71,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 2
+      },
+      {
+        "repo": "hyperpolymath/network-outpost",
+        "number": 29,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/nexia-list",
+        "number": 108,
+        "disposition": "auto_merge",
+        "blocked_by": "awaiting_required_checks",
+        "age_days": 1,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/nextgen-languages",
+        "number": 162,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 0,
+        "denylisted_hits": 2
+      },
+      {
+        "repo": "hyperpolymath/oblibeny",
+        "number": 136,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 0,
+        "denylisted_hits": 2
+      },
+      {
+        "repo": "hyperpolymath/panic-attack",
+        "number": 200,
+        "disposition": "auto_merge",
+        "blocked_by": "awaiting_required_checks",
+        "age_days": 6,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/pow-the-game",
+        "number": 101,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/qubes-sdp",
+        "number": 78,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/reasonably-good-token-vault",
+        "number": 185,
+        "disposition": "auto_merge",
+        "blocked_by": "awaiting_required_checks",
+        "age_days": 4,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/self-destructing-git-garbage",
+        "number": 25,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/social-media-polygraph",
+        "number": 107,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 2
+      },
+      {
+        "repo": "hyperpolymath/tangle",
+        "number": 126,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 5,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/the-metadatastician",
+        "number": 47,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/verisimdb",
+        "number": 284,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 4,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "hyperpolymath/ViableSystems.jl",
+        "number": 27,
+        "disposition": "flag",
+        "blocked_by": "major_version_delta",
+        "age_days": 7,
+        "denylisted_hits": 0
+      },
+      {
+        "repo": "hyperpolymath/zerostep",
+        "number": 97,
+        "disposition": "close_poison_only",
+        "blocked_by": "introduces_denylisted_pin",
+        "age_days": 3,
+        "denylisted_hits": 1
+      },
+      {
+        "repo": "metadatastician/canonical-ums",
+        "number": 20,
+        "disposition": "close_archived_repo",
+        "blocked_by": "repository_is_archived_cannot_merge",
+        "age_days": 3,
+        "denylisted_hits": 2
+      }
+    ]
+  },
+  "issues": {
+    "available": true,
+    "total": 887,
+    "truncated": true,
+    "by_org": {
+      "hyperpolymath": 782,
+      "metadatastician": 105
+    },
+    "by_author": {
+      "hyperpolymath": 853,
+      "arena-ai-coding-agent[bot]": 20,
+      "github-actions[bot]": 13,
+      "nkar123412-hub": 1
+    },
+    "by_label": {
+      "enhancement": 166,
+      "cicd": 112,
+      "bug": 77,
+      "chore": 72,
+      "tech-debt": 69,
+      "documentation": 57,
+      "governance": 51,
+      "security": 43,
+      "proofs": 41,
+      "meta:roadmap": 37,
+      "automation": 36,
+      "scope:estate": 36
+    },
+    "by_month": {
+      "2026-03": 2,
+      "2026-05": 88,
+      "2026-06": 292,
+      "2026-07": 91,
+      "2026-08": 85,
+      "2026-09": 329
+    },
+    "distinct_causes": 843,
+    "top_causes": [
+      {
+        "cause": "Security: Dependency vulnerabilities detected",
+        "count": 12
+      },
+      {
+        "cause": "Triage: N pre-existing red checks surfaced by the actions.lock cure (PR #N)",
+        "count": 12
+      },
+      {
+        "cause": "Repository description is empty",
+        "count": 6
+      },
+      {
+        "cause": "Machine-readable currency: deferred follow-ups (post-checkpoint #N)",
+        "count": 4
+      },
+      {
+        "cause": "Triage: N checks failing on fix/lock-coverage, newly visible after workflow startup was restored",
+        "count": 3
+      },
+      {
+        "cause": "Triage: N pre-existing red checks surfaced by the actions.lock cure (PR #N) — incl. a live ANML gate",
+        "count": 3
+      },
+      {
+        "cause": "Author tiered dev/maintainer/user docs + concept guides",
+        "count": 2
+      },
+      {
+        "cause": "Canonical parse-AST (expected.json) + expand conformance corpus",
+        "count": 2
+      },
+      {
+        "cause": "Crypto: no hashing, HMAC or RSA signing - blocks GitHub App auth from AffineScript (priority)",
+        "count": 2
+      },
+      {
+        "cause": "Governance parity: stamp standard .machine_readable + CONTRIBUTING/SECURITY/COC from standards",
+        "count": 2
+      },
+      {
+        "cause": "Member rollout: ANCHOR satellite+pin+conformance CI; enable upstream-pins",
+        "count": 2
+      },
+      {
+        "cause": "Priority test and benchmark backlog (Proven-Tests adoption)",
+        "count": 2
+      }
+    ],
+    "never_commented": 662,
+    "by_repo_top": [
+      {
+        "key": "standards",
+        "value": 192
+      },
+      {
+        "key": "affinescript",
+        "value": 56
+      },
+      {
+        "key": "hypatia",
+        "value": 53
+      },
+      {
+        "key": "paint-type",
+        "value": 30
+      },
+      {
+        "key": "valence-shell",
+        "value": 28
+      },
+      {
+        "key": "panoply",
+        "value": 24
+      },
+      {
+        "key": "marid",
+        "value": 23
+      },
+      {
+        "key": "echo-types",
+        "value": 22
+      },
+      {
+        "key": "boj-server",
+        "value": 17
+      },
+      {
+        "key": "nextgen-typing",
+        "value": 16
+      },
+      {
+        "key": "proven",
+        "value": 16
+      },
+      {
+        "key": "absolute-zero",
+        "value": 15
+      }
+    ]
+  },
+  "signals": {
+    "available": true,
+    "security_weak_points": {
+      "available": true,
+      "source": "panic-attack scan store (verisimdb-data/scans)",
+      "repos_scanned": 541,
+      "repositories_with_weak_points": 393,
+      "weak_point_classes": {
+        "MutationGap": 809,
+        "UnsafeCode": 772,
+        "CommandInjection": 718,
+        "PanicPath": 674,
+        "UnboundedAllocation": 460,
+        "InsecureProtocol": 382,
+        "UnsafeFFI": 350,
+        "DynamicCodeExecution": 233,
+        "ProofDrift": 231,
+        "UncheckedError": 221,
+        "PathTraversal": 177,
+        "InputBoundary": 119,
+        "HardcodedSecret": 93,
+        "UnsafeDeserialization": 32,
+        "SupplyChain": 18,
+        "ExcessivePermissions": 14,
+        "AtomExhaustion": 11,
+        "ResourceLeak": 8,
+        "UnsafeTypeCoercion": 8,
+        "UncheckedAllocation": 7
+      }
+    },
+    "tests": {
+      "available": true,
+      "source": "github actions api — active workflow definitions + runs on the default branch",
+      "definition": "a workflow is a test surface when its name or path matches (test|spec|ci|check|conformance|gate|audit|verify)",
+      "repos_measured": 408,
+      "repos_unmeasured": 0,
+      "with_test_surface": 350,
+      "coverage_empties": 58,
+      "coverage_empty_repos": [
+        "hyperpolymath/.github",
+        "hyperpolymath/0patch-lsa-sentinel",
+        "hyperpolymath/EchoTypes.jl",
+        "hyperpolymath/action-trust-layers",
+        "hyperpolymath/aggregate-library",
+        "hyperpolymath/anvomidav",
+        "hyperpolymath/awesome-agda",
+        "hyperpolymath/awesome-haskell",
+        "hyperpolymath/awesome-idris2",
+        "hyperpolymath/awesome-ipfs",
+        "hyperpolymath/awesome-ocaml",
+        "hyperpolymath/awesome-provable",
+        "hyperpolymath/bebop-ffi",
+        "hyperpolymath/befunge93-vault-cracker",
+        "hyperpolymath/choreographic-types",
+        "hyperpolymath/claude-gecko-browser-extension",
+        "hyperpolymath/claude-integrations",
+        "hyperpolymath/coord-tui",
+        "hyperpolymath/cyo",
+        "hyperpolymath/deed-ecosystem",
+        "hyperpolymath/echo-types",
+        "hyperpolymath/ensaid-spec",
+        "hyperpolymath/epistemic-types",
+        "hyperpolymath/flatracoon",
+        "hyperpolymath/glyphbase",
+        "hyperpolymath/gnpl",
+        "hyperpolymath/gsbot",
+        "hyperpolymath/homebrew-tap",
+        "hyperpolymath/hotchocolabot",
+        "hyperpolymath/hpm-github-api-rsr",
+        "hyperpolymath/hpm-http-client-rsr",
+        "hyperpolymath/hpm-json-rsr",
+        "hyperpolymath/ipv6-site-enforcer",
+        "hyperpolymath/julia-ecosystem",
+        "hyperpolymath/me-dialect",
+        "hyperpolymath/not-so-serious-software",
+        "hyperpolymath/oikosbot-estate",
+        "hyperpolymath/pow-the-game",
+        "hyperpolymath/protocol-squisher",
+        "hyperpolymath/repo-guardian",
+        "hyperpolymath/rescript-ecosystem",
+        "hyperpolymath/resource-record-fluctuator",
+        "hyperpolymath/scripts",
+        "hyperpolymath/ssg-collection",
+        "hyperpolymath/technical-notes",
+        "hyperpolymath/tentacles-agentic-syllabus",
+        "hyperpolymath/volumod",
+        "hyperpolymath/zotero-tools",
+        "metadatastician/.github",
+        "metadatastician/authority-watch",
+        "metadatastician/berrywiki-course-template",
+        "metadatastician/enterglide-ncc-137-k",
+        "metadatastician/insolvency-tycoon",
+        "metadatastician/planer-1",
+        "metadatastician/selur",
+        "metadatastician/stealth-glider-ecosystem",
+        "metadatastician/tardis-rule-disruption",
+        "metadatastician/x15-rocket-glider"
+      ],
+      "failing": 120,
+      "failing_repos": [
+        {
+          "repo": "hyperpolymath/BowtieRisk.jl",
+          "workflow": "CI",
+          "at": "2026-09-25T20:29:14Z"
+        },
+        {
+          "repo": "hyperpolymath/Causals.jl",
+          "workflow": "CI",
+          "at": "2026-09-26T10:34:16Z"
+        },
+        {
+          "repo": "hyperpolymath/Exnovation.jl",
+          "workflow": "CI",
+          "at": "2026-09-26T10:13:47Z"
+        },
+        {
+          "repo": "hyperpolymath/HardwareResilience.jl",
+          "workflow": "CI",
+          "at": "2026-09-25T08:02:29Z"
+        },
+        {
+          "repo": "hyperpolymath/Hyperpolymath.jl",
+          "workflow": "CI",
+          "at": "2026-09-25T13:03:50Z"
+        },
+        {
+          "repo": "hyperpolymath/JuliaForChildren.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T15:43:01Z"
+        },
+        {
+          "repo": "hyperpolymath/LowLevel.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T00:14:25Z"
+        },
+        {
+          "repo": "hyperpolymath/PolyglotFormalisms.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T13:16:24Z"
+        },
+        {
+          "repo": "hyperpolymath/QuantumCircuit.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T01:08:40Z"
+        },
+        {
+          "repo": "hyperpolymath/SMTLib.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T01:13:02Z"
+        },
+        {
+          "repo": "hyperpolymath/SiliconCore.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T01:12:43Z"
+        },
+        {
+          "repo": "hyperpolymath/SoftwareSovereign.jl",
+          "workflow": "CI",
+          "at": "2026-09-21T01:14:50Z"
+        },
+        {
+          "repo": "hyperpolymath/academic-workflow-suite",
+          "workflow": "Dogfood Gate",
+          "at": "2026-09-21T20:59:45Z"
+        },
+        {
+          "repo": "hyperpolymath/accessibility-everywhere",
+          "workflow": "AffineScript/Deno CI",
+          "at": "2026-09-25T08:16:13Z"
+        },
+        {
+          "repo": "hyperpolymath/ambientops",
+          "workflow": "Rust CI",
+          "at": "2026-09-25T20:53:31Z"
+        },
+        {
+          "repo": "hyperpolymath/anytype",
+          "workflow": "Dogfood Gate",
+          "at": "2026-09-25T08:01:50Z"
+        },
+        {
+          "repo": "hyperpolymath/arghda-core",
+          "workflow": "Rust CI",
+          "at": "2026-09-19T09:33:31Z"
+        },
+        {
+          "repo": "hyperpolymath/asdf-tool-plugins",
+          "workflow": "Dogfood Gate",
+          "at": "2026-09-21T20:20:20Z"
+        },
+        {
+          "repo": "hyperpolymath/awesome-fsharp",
+          "workflow": ".github/workflows/check-links.yml",
+          "at": "2026-09-20T00:43:03Z"
+        },
+        {
+          "repo": "hyperpolymath/awesome-nickel",
+          "workflow": "Lock Sync Gate",
+          "at": "2026-09-23T09:41:07Z"
+        },
+        {
+          "repo": "hyperpolymath/bitfuckit",
+          "workflow": "CI",
+          "at": "2026-09-26T10:32:38Z"
+        },
+        {
+          "repo": "hyperpolymath/blocky-writer",
+          "workflow": "CI",
+          "at": "2026-09-26T00:25:56Z"
+        },
+        {
+          "repo": "hyperpolymath/blue-screen-of-app",
+          "workflow": "CI/CD",
+          "at": "2026-09-21T16:23:59Z"
+        },
+        {
+          "repo": "hyperpolymath/bofig",
+          "workflow": "Elixir CI",
+          "at": "2026-09-26T10:34:11Z"
+        },
+        {
+          "repo": "hyperpolymath/bofj-kitt",
+          "workflow": "Static Analysis Gate",
+          "at": "2026-09-26T10:49:14Z"
+        },
+        {
+          "repo": "hyperpolymath/boinc-boinc",
+          "workflow": "Central Estate CI/CD Audit",
+          "at": "2026-09-21T15:59:43Z"
+        },
+        {
+          "repo": "hyperpolymath/bunsenite",
+          "workflow": "Rust CI",
+          "at": "2026-09-25T21:48:39Z"
+        },
+        {
+          "repo": "hyperpolymath/candy-crash",
+          "workflow": "CI/CD Pipeline",
+          "at": "2026-09-21T15:57:49Z"
+        },
+        {
+          "repo": "hyperpolymath/cloudflare-dns-terraform",
+          "workflow": "DNS Origin Audit",
+          "at": "2026-09-26T06:39:35Z"
+        },
+        {
+          "repo": "hyperpolymath/cloudguard-cli",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:43:17Z"
+        },
+        {
+          "repo": "hyperpolymath/cloudguard-server",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:52:31Z"
+        },
+        {
+          "repo": "hyperpolymath/conflow",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:44:56Z"
+        },
+        {
+          "repo": "hyperpolymath/cookie-rebound",
+          "workflow": "Static Analysis Gate",
+          "at": "2026-09-21T20:21:12Z"
+        },
+        {
+          "repo": "hyperpolymath/coq-jr",
+          "workflow": "Security Checks",
+          "at": "2026-09-21T16:44:05Z"
+        },
+        {
+          "repo": "hyperpolymath/ddraig-ssg",
+          "workflow": "Ddraig CI",
+          "at": "2026-09-26T10:50:13Z"
+        },
+        {
+          "repo": "hyperpolymath/deed-core",
+          "workflow": "ReScript Tests",
+          "at": "2026-09-21T08:23:49Z"
+        },
+        {
+          "repo": "hyperpolymath/dicti0nary-attack",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T01:38:53Z"
+        },
+        {
+          "repo": "hyperpolymath/docmatrix",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:14:43Z"
+        },
+        {
+          "repo": "hyperpolymath/dotmatrix-fileprinter",
+          "workflow": "Rust CI",
+          "at": "2026-09-23T09:42:20Z"
+        },
+        {
+          "repo": "hyperpolymath/double-track-browser",
+          "workflow": "CI",
+          "at": "2026-09-22T06:54:25Z"
+        },
+        {
+          "repo": "hyperpolymath/echidnabot",
+          "workflow": "Rust CI",
+          "at": "2026-09-25T12:10:27Z"
+        },
+        {
+          "repo": "hyperpolymath/excel-economic-numbers-tool",
+          "workflow": "Integration Tests",
+          "at": "2026-09-26T00:02:19Z"
+        },
+        {
+          "repo": "hyperpolymath/filesoup",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:47:34Z"
+        },
+        {
+          "repo": "hyperpolymath/flat-mate",
+          "workflow": "CI",
+          "at": "2026-09-21T19:14:05Z"
+        },
+        {
+          "repo": "hyperpolymath/formatrix-docs",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:45:34Z"
+        },
+        {
+          "repo": "hyperpolymath/fraying-model-computational-testbed",
+          "workflow": "Central Estate CI/CD Audit",
+          "at": "2026-09-21T19:38:28Z"
+        },
+        {
+          "repo": "hyperpolymath/git-reticulator",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:17:58Z"
+        },
+        {
+          "repo": "hyperpolymath/git-scripts",
+          "workflow": ".github/workflows/main-estate-audit.yml",
+          "at": "2026-09-24T06:32:28Z"
+        },
+        {
+          "repo": "hyperpolymath/grim-repo",
+          "workflow": "Dogfood Gate",
+          "at": "2026-09-26T09:48:02Z"
+        },
+        {
+          "repo": "hyperpolymath/gv-clade-index",
+          "workflow": "Static Analysis Gate",
+          "at": "2026-09-21T21:02:49Z"
+        },
+        {
+          "repo": "hyperpolymath/hesiod-dns-map",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:54:00Z"
+        },
+        {
+          "repo": "hyperpolymath/ideas-to-alphas",
+          "workflow": "Static Analysis Gate",
+          "at": "2026-09-21T20:25:07Z"
+        },
+        {
+          "repo": "hyperpolymath/infrastructure-automation",
+          "workflow": "RSR Anti-Pattern Check",
+          "at": "2026-09-19T10:50:57Z"
+        },
+        {
+          "repo": "hyperpolymath/intsoc-transactor",
+          "workflow": "Rust CI",
+          "at": "2026-09-21T20:48:38Z"
+        },
+        {
+          "repo": "hyperpolymath/januskey",
+          "workflow": "Rust CI",
+          "at": "2026-09-24T06:32:59Z"
+        },
+        {
+          "repo": "hyperpolymath/julia-professional-registry",
+          "workflow": "Lock Sync Gate",
+          "at": "2026-09-23T09:37:37Z"
+        },
+        {
+          "repo": "hyperpolymath/julianiser",
+          "workflow": "Rust CI",
+          "at": "2026-09-25T20:27:52Z"
+        },
+        {
+          "repo": "hyperpolymath/kategoria",
+          "workflow": "Proof Gate",
+          "at": "2026-09-21T18:00:43Z"
+        },
+        {
+          "repo": "hyperpolymath/kea",
+          "workflow": "Dogfood Gate",
+          "at": "2026-09-21T20:26:02Z"
+        },
+        {
+          "repo": "hyperpolymath/lithoglyph",
+          "workflow": "Static Analysis Gate",
+          "at": "2026-09-22T23:38:12Z"
+        }
+      ],
+      "never_concluded": 17,
+      "last_run": "2026-09-26T10:52:36Z"
+    },
+    "benches": {
+      "available": false,
+      "reason": "no bench-result producer anywhere in the estate — no store, no workflow artefact contract",
+      "expected": {
+        "per_repo_file": "benches.json",
+        "fields": [
+          "repo",
+          "bench",
+          "value_ns",
+          "limit_ns",
+          "measured_at"
+        ]
+      }
+    }
+  },
+  "paging": {
+    "open_issue_count": {
+      "value": 887,
+      "warn": 250,
+      "critical": 500,
+      "level": "critical"
+    },
+    "unmerged_pr_count": {
+      "value": 33,
+      "warn": 10,
+      "critical": 50,
+      "level": "warn"
+    },
+    "unmerged_pr_age_days": {
+      "value": 7,
+      "warn": 7,
+      "critical": 30,
+      "level": "warn"
+    },
+    "failing_tests": {
+      "value": 120,
+      "warn": 1,
+      "critical": 25,
+      "level": "critical"
+    },
+    "test_coverage_empties": {
+      "value": 58,
+      "warn": 11,
+      "critical": 47,
+      "level": "critical"
+    },
+    "bench_coverage_empties": {
+      "value": null,
+      "warn": 11,
+      "critical": 47,
+      "level": "unavailable"
+    },
+    "bench_over_limit_ratio": {
+      "value": null,
+      "warn": 1.5,
+      "critical": 3,
+      "level": "unavailable"
+    }
+  }
+}

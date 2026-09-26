@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Estate statistics artifacts
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-09-26
+
+`estate-stats.json` is the artifact the private farm dashboard consumes
+(`stats_output` in `.machine_readable/merge-orchestration/pr-automerge-policy.json`
+names this path as the producer path). `estate-stats.adoc` is its
+human-readable companion.
+
+It is generated, not authored:
+
+  ./scripts/sweeps/estate-stats.sh \
+      --org hyperpolymath --org metadatastician \
+      --out docs/status/estate-stats.json \
+      --decisions .pr-automerge/pr-decisions.jsonl \
+      --scans /path/to/verisimdb-data/scans \
+      --checks
+
+`--checks` is the expensive flag (two API calls per active repository, about
+nine minutes across the estate) and it is what measures the test surface and
+suite outcomes. Without it those numbers are `unavailable`, which is
+deliberate: an unmeasured metric must never be able to read as zero.
+
+The copy committed here is the 2026-09-26 run. Its headline numbers:
+
+* 416 repositories (413 active), 6 with no description, 43 below the 7-topic minimum
+* 33 open pull requests; 25 carrying a denylisted pin; oldest 7 days
+* 887 open issues, 843 distinct causes after normalising titles, 662 never commented on
+* test surface: 350 repositories with, 58 without, 120 whose most recent suite failed
+* benches: unavailable — no producer exists in the estate
+* paging: 3 critical (open issues, failing suites, coverage empties),
+  2 warn (PR count, oldest PR age), 2 unavailable (the bench metrics)
+
+The private farm should consume the JSON, never the prose.

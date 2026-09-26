@@ -24,6 +24,61 @@ concurrency:
 permissions: read-all
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Estate rule modules (PI001-PI005, PA001-PA006) and the sweeps that drive
+  # them. These tests exist because of the 2026-09-22 codeql-action rollback
+  # that relabelled a poisoned pin instead of replacing it: a version-string
+  # check saw nothing wrong, and the estate merged the poison back in.
+  # No network, no token: the rules are pure, and the sweeps are only
+  # syntax-checked here — their dry runs live in estate-rescan.yml.
+  # ---------------------------------------------------------------------------
+  estate-rules:
+    name: Estate rules and sweep structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Erlang/Elixir
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: '27.0'
+          elixir-version: '1.17'
+
+      - name: Restore Mix cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Rule tests — pin integrity and PR automerge
+        # Targeted, not `mix test`: the repository has known-red test families
+        # that are unrelated to these rules, and a gate that is red on arrival
+        # teaches people to ignore it.
+        run: mix test test/rules/pin_integrity_test.exs test/rules/pr_automerge_test.exs
+
+      - name: Sweep structure gate
+        run: |
+          set -euo pipefail
+          for s in estate-pin-integrity estate-pr-automerge estate-stats estate-absence-intake; do
+            bash -n "scripts/sweeps/${s}.sh"
+            echo "ok: ${s}.sh"
+          done
+
+      - name: Policy is valid JSON and names its producer
+        run: |
+          set -euo pipefail
+          policy=".machine_readable/merge-orchestration/pr-automerge-policy.json"
+          jq -e '.version and .pin_denylist and .stats_thresholds and .stats_output.producer_path' "$policy" >/dev/null
+          echo "policy $(jq -r .version "$policy") ok"
+
   e2e-elixir:
     name: E2E — Elixir Scanner Pipeline
     runs-on: ubuntu-latest
