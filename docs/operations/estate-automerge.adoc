@@ -167,11 +167,16 @@ Turn unresolvable absences into issues exactly once.
 Emit the single estate-wide statistics artifact the private dashboard reads.
 
 * Flags: `--org` (repeatable), `--out FILE`, `--decisions FILE`,
-  `--scans DIR`, `--max-issues N`.
-* Output: `estate-stats.json` plus a human-readable `.adoc` companion.
+  `--scans DIR`, `--checks`, `--max-repos N`, `--max-issues N`.
+* Output: `estate-stats.json` plus a human-readable `.adoc` companion, and a
+  top-level `paging` block that evaluates every threshold in
+  `stats_thresholds` against the measured value.
 * Every section carries a `provenance` block; a metric that could not be
   measured is reported as `unavailable`, never as `0`. Numbers that were never
   fetched must not be able to look green.
+* `--checks` adds two API calls per active repository and measures the test
+  surface and the suite outcome. This is the expensive flag: roughly nine
+  minutes across 408 repositories, so it is opt-in rather than default.
 
 == The dashboard contract
 
@@ -184,9 +189,43 @@ with dated copies under the history directory recorded in `stats_output`.
 
 Sections: `repositories` (archived/empty-description/topics-low counts),
 `pull_requests` (counts by disposition, poisoned count, oldest/median age),
-`issues` (open count, distinct causes, never-commented), `signals`
-(test-coverage empties, failing tests, bench ratios, where measured).
-Thresholds come from `stats_thresholds`; the artifact does not invent its own.
+`issues` (open count, distinct causes, never-commented), `signals`, and
+`paging`.
+
+`signals` has three sub-blocks that are never merged into one "health score",
+because a security finding and a failing suite are different facts about
+different surfaces:
+
+[cols="2,3,2", options="header"]
+|===
+| Sub-block | Source | Measured today
+
+| `security_weak_points`
+| panic-attack scan store (`verisimdb-data/scans`, via `--scans`)
+| 541 repositories, 393 with weak points
+
+| `tests`
+| GitHub Actions API (via `--checks`): active workflow definitions plus runs
+  on the default branch
+| 408 repositories measured, 350 with a test surface, 58 with none, 120 whose
+  most recent suite failed
+
+| `benches`
+| none — no producer exists in the estate
+| unavailable, with the file/field contract it must satisfy
+|===
+
+The `tests` numbers are a proxy and the artifact says so: a workflow counts as
+a test surface when its name or path matches
+`(test|spec|ci|check|conformance|gate|audit|verify)`, and "failing" means the
+most recent completed test-surface run on the default branch. A repository
+whose calls failed is recorded as `unmeasured` and excluded from the counts —
+a rate limit must never be able to read as "this project has no tests".
+
+`paging` is the block the dashboard should read first: each threshold from
+`stats_thresholds` with its measured value and a `level` of `ok`, `warn`,
+`critical` or `unavailable`. Thresholds come from the policy; the artifact does
+not invent its own.
 
 == Operating procedure
 
@@ -200,6 +239,26 @@ Thresholds come from `stats_thresholds`; the artifact does not invent its own.
 . `--execute` on a host that owns a write token.
 . `./scripts/sweeps/estate-stats.sh …` after the run; the artifact is the
    record of what changed.
+
+== Not yet implemented
+
+Three things are specified in the policy but not yet built, listed here so
+their absence is visible rather than discovered:
+
+* **ABS-003 (repository chrome)** — detection of a missing
+  `LICENSE`/`README.adoc`/`SECURITY.adoc` is specified with
+  `auto_fixable: seed_from_template`. It is not wired into the intake sweep
+  yet. Seeding needs a write token, and filing it as an absence would be
+  wrong (it is fixable, so by the policy's own rule it is fixed, not filed) —
+  which leaves "detect and report in the stats artifact" as the correct
+  handling, not yet written.
+* **Bench results** — `bench_coverage_empties` and `bench_over_limit_ratio`
+  have thresholds and no producer: no store, no workflow artefact contract.
+  Their `expected` shape is recorded in `signals.benches`, so a producer can
+  be written against it. Until then they page as `unavailable`, which is not
+  the same as zero and must not be displayed as such.
+* **Test/bench history** — the artifact is a snapshot. The consumer's
+  `history_dir` is where dated copies accumulate; nothing writes them yet.
 
 == What this machinery deliberately will not do
 
