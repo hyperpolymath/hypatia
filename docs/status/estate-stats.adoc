@@ -1,0 +1,43 @@
+= Estate statistics
+
+Generated 2026-09-26T14:03:46Z by `estate-stats.sh` (policy 1.0.0).
+
+== Pull requests
+- Open PRs: 33
+- By disposition: auto_merge=5, close_archived_repo=1, close_poison_and_majors=4, close_poison_only=21, flag=2
+- Carrying a denylisted pin: 26
+- Oldest: 7 days; median: 4 days
+
+== Issues
+- Open: 887
+- Distinct causes after normalisation: 843
+- Never commented on: 662
+- Top cause: 12× Security: Dependency vulnerabilities detected
+
+== Repository absences
+- Repositories: 416 (413 active, 2 archived)
+- Empty description: 6
+- Fewer than 7 topics: 43
+
+== Test surface
+- Repositories measured: 408 (unmeasured: 0)
+- With a test surface: 350
+- No test surface at all: 58
+- Suites failing on the default branch: 120
+- Never concluded a test run: 17
+
+== Benches
+- unavailable: no bench-result producer anywhere in the estate — no store, no workflow artefact contract
+
+== Security weak points
+- Repositories in the scan store: 541
+- With weak points: 393
+
+== Thresholds (paging)
+- open_issue_count: critical (887, warn 250 / critical 500)
+- unmerged_pr_count: warn (33, warn 10 / critical 50)
+- unmerged_pr_age_days: warn (7, warn 7 / critical 30)
+- failing_tests: critical (120, warn 1 / critical 25)
+- test_coverage_empties: critical (58, warn 11 / critical 47)
+- bench_coverage_empties: unavailable
+- bench_over_limit_ratio: unavailable
