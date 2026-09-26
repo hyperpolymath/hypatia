@@ -240,6 +240,50 @@ not invent its own.
 . `./scripts/sweeps/estate-stats.sh …` after the run; the artifact is the
    record of what changed.
 
+== Diagnosing startup_failure: two causes, one costume
+
+`startup_failure` with zero jobs is the most misleading signature in this
+estate, because two unrelated causes produce it and GitHub shows the same
+message for both: "This run likely failed because of a workflow file issue."
+
+[cols="1,3,3", options="header"]
+|===
+| | Content — the denylist | Actor — a robot-pushed branch
+
+| Which runs fail
+| only the workflows that use a denylisted pin
+| every workflow triggered by the pull request, including files the pull
+  request never touches
+
+| Evidence
+| hypatia PR #859 (human, no workflow edits): 4 of 19 failed, all
+  codeql-action users. Dependabot PR #861: 7 of 19.
+| hypatia#862 (pushed by the estate's agent): 18 of 18, and it stayed 18 of 18
+  with an empty commit and with the workflow edits removed. MetaManifold-WebUI#72
+  and oikosbot#107 — both agent-pushed, both merged — show the same wall.
+
+| What to do
+| substitute the pin; see `estate-pin-integrity.sh`
+| nothing to fix in the branch: push it from a human account, or accept owner
+  review as the gate
+|===
+
+Rule of thumb: **if a workflow the pull request does not touch fails at
+startup, the cause is not the pull request's contents.**
+
+Why this matters more than the mechanics: the entire point of this machinery is
+that a robot proposes pin repairs, and a robot's repair arrives wearing the
+exact costume of the defect it removes. An owner seeing eighteen red X's will
+reasonably conclude the fix is broken. It is not — but nothing in the GitHub
+UI will say so, which is why this page does.
+
+Consequence for gating: `pull_request` runs do not start for branches pushed
+by the estate's automation, so required status checks never satisfy and such a
+pull request sits `BLOCKED` until the owner overrides. Estate automation must
+gate on checks it can actually run itself — the `dynamic`-event PR validation
+runs do execute (`PR #72`, `PR #107`) — and must treat GitHub's own pull
+request checks on its own pull requests as **unavailable, never as passing**.
+
 == Not yet implemented
 
 Three things are specified in the policy but not yet built, listed here so
