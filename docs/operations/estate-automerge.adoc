@@ -284,6 +284,92 @@ gate on checks it can actually run itself — the `dynamic`-event PR validation
 runs do execute (`PR #72`, `PR #107`) — and must treat GitHub's own pull
 request checks on its own pull requests as **unavailable, never as passing**.
 
+== Why this recurs, and what stops it
+
+Repairing a pin is not the same as stopping the pin coming back. The census on
+2026-09-26, over the repositories that carry the poisoned commit:
+
+[cols="1,4", options="header"]
+|===
+| Count | State
+
+| 133 files, 104 repositories
+| carry `github/codeql-action@1c5b6756…` — the commit GitHub refuses at
+  workflow start-up
+
+| 103 of 104
+| use dependabot `groups:` on the `github-actions` ecosystem
+
+| 73 of 104
+| have **no** `ignore` rule for the action at all
+
+| 31 of 104
+| have `ignore: - dependency-name: "github/codeql-action"` — the rule
+  standards#1037 established is **not honoured inside `groups:`**
+
+| 0 of 104
+| have the form that is honoured
+|===
+
+So the generator is still on. Closing a poisoned pull request without holding
+the action does not end it: dependabot re-raises the bump on its next run, and
+the estate gets to sort the same issue again next week. That is not a
+residual risk; it is the observed behaviour — `nexia-list` merged the poisoned
+bump in #107 on 2026-09-23, and its `codeql.yml` still carries the poisoned
+commit today, annotated with the rollback pull request's number.
+
+`scripts/sweeps/estate-dependabot-hold.sh` installs the hold that survives
+grouping — `exclude-patterns` on the group, scoped to the action rather than
+holding the whole group:
+
+[source,yaml]
+----
+    groups:
+      actions:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "github/codeql-action*"
+----
+
+* Two added lines per file, nothing reordered, nothing reformatted — a diff
+  that can be reviewed rather than trusted.
+* Idempotent: a second `--rewrite` over a repository it already fixed reports
+  `held`, not a second edit.
+* `--verify-only` exits non-zero while any repository is still exposed, so the
+  same script is both the cure and the check that the cure is holding. That is
+  the difference between a fix and a chore.
+* It refuses to guess: a repository with no `github-actions` wildcard group to
+  attach the exclusion to is reported as `no_group_wildcard` for a human,
+  never edited blind.
+
+The template is the second generator. `rsr-template-repo` carries the correct
+pin, so new repositories are not born poisoned — but its `dependabot.yml`
+carries the *bypassed* form of the hold, so they are born exposed. Fixing the
+existing repositories without fixing the template just sets the clock running
+again on the next repository created.
+
+The third generator was historical: repairs applied as relabels. That one is
+now visible (`PI002`) rather than a matter of trust.
+
+=== What "once and for all" requires
+
+. Hold the generator — `estate-dependabot-hold.sh --rewrite`, one command,
+  ~104 two-line patches.
+. Fix the template's `dependabot.yml`, or every new repository inherits the
+  exposure.
+. Repair the standing poison — `estate-pin-integrity.sh --rewrite`.
+. Enforce at the boundary: run `estate-dependabot-hold.sh --verify-only` (and
+  the pin rules) as a required check, so the next bad pin cannot merge even if
+  it is proposed. This is the piece that needs repository-admin rights; no
+  sweep can grant itself that.
+. Keep the sweep scheduled and the statistics artifact committed, so the
+  estate's state is a recorded fact rather than anyone's recollection.
+
+Steps 1–3 are mechanical and reproducible. Step 4 is the one that turns
+"fixed" into "cannot drift". Without it, the estate is one dependabot run and
+one distracted afternoon away from the same Friday.
+
 == Not yet implemented
 
 Three things are specified in the policy but not yet built, listed here so
