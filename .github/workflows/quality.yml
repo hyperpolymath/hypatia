@@ -117,9 +117,13 @@ jobs:
           toolchain: stable
           components: rust-docs
 
+      # --locked: the committed Cargo.lock is a hard constraint (#841). A
+      # failure reading "the lock file ... needs to be updated but --locked
+      # was passed" means Cargo.lock is out of date w.r.t. the manifests --
+      # regenerate it deliberately; never drop --locked to get green.
       - name: Generate Rust API documentation
         run: |
-          cargo doc --workspace --no-deps --document-private-items
+          cargo doc --workspace --no-deps --document-private-items --locked
           cp -r target/doc/* _site/api/
 
       # NOTE: a "Generate Haskell API documentation" step (working-directory:

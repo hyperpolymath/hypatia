@@ -1044,7 +1044,13 @@ defmodule Hypatia.CLI do
                   severity: cli_context_severity(file, f.rule, f.severity),
                   type: to_string(f.rule),
                   file: file,
-                  reason: "#{f.description} (#{f.occurrences} occurrences, #{f.cwe})",
+                  # First match line — SARIF's region.startLine reads this
+                  # (sarif.ex) and previously defaulted to 1 for every
+                  # code_safety finding (the main.zig:1 defect, issue #834).
+                  line: List.first(f.lines, 1),
+                  reason:
+                    "#{f.description} (#{f.occurrences} occurrences, #{f.cwe}, " <>
+                      "line #{Enum.join(f.lines, ", ")})",
                   action: "flag"
                 }
               end)
@@ -1168,14 +1174,22 @@ defmodule Hypatia.CLI do
             &Hypatia.ScannerSuppression.comment_masked_secret_label?(&1, line, idx + 1)
           )
           |> Enum.map(fn label ->
+            # Placeholder-shaped values and commented-out lines downgrade to
+            # medium/report instead of critical/revoke_rotate_and_purge
+            # (#746, #748): 45 measured false positives were template
+            # placeholders; the gate blocks on critical, so a placeholder
+            # must not read as a live leak.
+            {severity, action, suffix} =
+              Hypatia.ScannerSuppression.secret_line_disposition(line, idx + 1)
+
             %{
               rule_module: rule_module,
-              severity: "critical",
+              severity: severity,
               type: rule_type,
               file: file,
               line: idx + 1,
-              reason: "Secret found: #{label}",
-              action: "revoke_rotate_and_purge"
+              reason: "Secret found: #{label}#{suffix}",
+              action: action
             }
           end)
       end

@@ -356,6 +356,65 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "ignores commented-out continue-on-error (YAML comment is not a swallow)" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - name: run tests
+                # continue-on-error: true
+                run: cargo test
+        """)
+
+      assert ResearchExtensions.re005_test_swallows_exit(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "ignores || true that only appears in a trailing comment" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - name: run-tests
+                run: cargo test # || true was tried here and removed
+        """)
+
+      assert ResearchExtensions.re005_test_swallows_exit(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "real || true is not shadowed by stripping (both directions)" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - name: run-tests
+                run: cargo test || true # reviewed swallow
+        """)
+
+      findings = ResearchExtensions.re005_test_swallows_exit(repo)
+      assert length(findings) == 1
+      File.rm_rf!(repo)
+    end
+
+    test "honours hypatia:ignore RE005 -- <reason> as a reviewed swallow" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              # hypatia:ignore RE005 -- flaky upstream test harness, reviewed 2026-09-26
+              - name: run-tests
+                run: cargo test || true
+        """)
+
+      assert ResearchExtensions.re005_test_swallows_exit(repo) == []
+      File.rm_rf!(repo)
+    end
+
     test "ignores non-test steps with continue-on-error" do
       repo =
         create_repo_with_workflow("""

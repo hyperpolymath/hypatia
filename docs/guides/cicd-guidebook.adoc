@@ -194,11 +194,11 @@ hypatia/
 │       ├── catalog.rs         # Error catalog (Rust port)
 │       └── sha_pins.rs        # SHA pins reference (Rust port)
 │
-├── engine/                    # Logtalk rule engine
+├── engine/                    # (retired) Logtalk engine — logic now in lib/rules/*.ex
 │   └── rules/
-│       ├── cicd_rules.lgt     # Core rules
-│       ├── forge_adapters.lgt # Multi-forge support
-│       └── rule_distiller.lgt # Rule extraction
+│       ├── cicd_rules.lgt     # Core rules (absorbed into lib/rules/cicd_rules.ex)
+│       ├── forge_adapters.lgt # Multi-forge (absorbed into lib/rules/forge_adapters.ex)
+│       └── rule_distiller.lgt # Rule extraction (absorbed into lib/rules/)
 │
 ├── adapters/                  # Rust forge adapters
 │   └── src/
@@ -1026,7 +1026,7 @@ RUST_LOG=cicd_fixer::scanner=trace cicd-fixer scan /path/to/repo
 
 === Phase 1: Foundation (Complete)
 
-* [x] Logtalk rule engine
+* [x] Logtalk rule engine (retired 2026-03-06, absorbed into the Elixir ruleset)
 * [x] ERROR-CATALOG.scm
 * [x] SHA-PINS.scm
 * [x] cicd-fixer CLI

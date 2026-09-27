@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: CC-BY-SA-4.0
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it as below.
+title: "Hypatia: the neurosymbolic CI/CD governance scanner"
+type: software
+authors:
+  - family-names: Jewell
+    given-names: Jonathan D.A.
+    email: j.d.a.jewell@open.ac.uk
+repository-code: "https://github.com/hyperpolymath/hypatia"
+license: MPL-2.0
+abstract: >-
+  Hypatia is the neurosymbolic CI/CD governance scanner for the
+  hyperpolymath estate: Elixir rule engine, Rust workspace, and
+  machine-checked Idris2/Lean/TLA+ proof debt tracking.
+keywords:
+  - ci-cd
+  - governance
+  - static-analysis
+  - neurosymbolic
+  - supply-chain

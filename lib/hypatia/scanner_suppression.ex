@@ -51,8 +51,7 @@ defmodule Hypatia.ScannerSuppression do
     "scripts/fix-scripts/",
     "test/",
     "tests/",
-    "integration/fixtures/",
-    "integration/run-tests.sh"
+    "integration/fixtures/"
   ]
 
   @default_exemptions %{
@@ -274,6 +273,61 @@ defmodule Hypatia.ScannerSuppression do
   # and therefore cannot make this distinction.
   @form_ambiguous_secret_labels ["Generic API key", "Generic secret", "Password"]
 
+  # ── Placeholder-shaped values (#746, #748) ────────────────────────────────
+  #
+  # Measured 2026-09-03 across 73 repos with a live gate: 45 of 614 critical
+  # findings were commented-out placeholders from templates
+  # (`# export API_KEY="..."`, `# token = "ghp_xxxxxxxxxxxxxxxxxxxx"`), zero
+  # real credentials. The shapes below are placeholder tell-tales: ellipses,
+  # angle-bracket metavariables, long same-character runs, `your-*`/`my-*`
+  # fillers, `changeme`. They cannot plausibly occur in a real generated
+  # credential; and where they might (a pathological all-same-char key) the
+  # cost is a severity downgrade to `medium`, never a suppression.
+  @placeholder_re ~r/(?:\.{3,}|…|<[^<>]{1,40}>|[xX*]{6,}|(?:your|my|our)[-_][a-z0-9_-]{2,}|change[-_]?me\b|redacted\b|dummy[-_]?\w*\b|placeholder\b|insert[-_]?here\b|example\b)/i
+
+  @doc """
+  Return true when `line` carries an obvious placeholder value rather than a
+  real credential (`#746`/`#748`). Used to DOWNGRADE a finding to `medium`,
+  never to drop it.
+  """
+  def placeholder_secret_line?(line) when is_binary(line) do
+    Regex.match?(@placeholder_re, line)
+  end
+
+  def placeholder_secret_line?(_line), do: false
+
+  @doc """
+  Severity/action disposition for a secret-detection hit on `line`.
+
+  Returns `{severity, action, reason_suffix}`:
+
+    * placeholder-shaped value  → `{"medium", "report", ...}` — template
+      filler, inform but do not gate (the `revoke_rotate_and_purge` of a
+      commented placeholder is the expensive direction to be wrong in).
+    * whole-line comment        → `{"medium", "report", " (commented-out
+      credential placeholder — verify before rotating)"}` — a commented
+      leak is still reported (never silenced), just not merge-blocking.
+    * anything else             → `{"critical", "revoke_rotate_and_purge", ""}`.
+
+  Comment detection deliberately uses `whole_line_comment?/2`, which never
+  treats `--` as a comment marker (shell long-options) and never suppresses
+  a shebang line. Note also `comment_masked_secret_label?/3` runs BEFORE
+  this and fully suppresses the three form-ambiguous labels in comments;
+  this disposition covers everything else.
+  """
+  def secret_line_disposition(line, line_number \\ nil) when is_binary(line) do
+    cond do
+      placeholder_secret_line?(line) ->
+        {"medium", "report", " (placeholder-shaped value — verify it is not a real credential)"}
+
+      whole_line_comment?(line, line_number) ->
+        {"medium", "report", " (commented-out credential placeholder — verify before rotating)"}
+
+      true ->
+        {"critical", "revoke_rotate_and_purge", ""}
+    end
+  end
+
   @doc """
   Return true when `label` is one of the three form-ambiguous secret labels
   AND `line` is a whole-line comment — i.e. a commented-out example rather
@@ -396,8 +450,11 @@ defmodule Hypatia.ScannerSuppression do
     do:
       ~r/(?i)(?:password|secret|api[_-]?key|token)\s*[:=]\s*["'](?:test|dummy|fake|example|placeholder)[-_].*?["']/
 
+  # `hypatia:ignore` is a spelling alias for `hypatia: allow` — issue #834's
+  # pragmas (`hypatia:ignore RE005 -- <reason>`, `hypatia:ignore zig_ptr_cast`)
+  # use the verb form; both are honoured identically.
   defp directive_re,
-    do: ~r/(?:^|[\s#\/\-;])hypatia:\s*allow\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
+    do: ~r/(?:^|[\s#\/\-;])hypatia:\s*(?:allow|ignore)\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
 
   defp directive_matches?(line, rule_module, rule_type) do
     case Regex.run(directive_re(), line) do

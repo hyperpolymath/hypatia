@@ -14,6 +14,11 @@ on:
     - verification/proofs/idris2/**
     - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
+    - verification/PROOF-STATUS.adoc
+    - scripts/check-proof-status.sh
+    - scripts/check-trusted-base.sh
+    - docs/proof-debt.adoc
+    - test/soundness/**
     - src/abi/**
     - src/Hypatia/ABI/**
     - verify/**
@@ -27,6 +32,11 @@ on:
     - verification/proofs/idris2/**
     - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
+    - verification/PROOF-STATUS.adoc
+    - scripts/check-proof-status.sh
+    - scripts/check-trusted-base.sh
+    - docs/proof-debt.adoc
+    - test/soundness/**
     - src/abi/**
     - src/Hypatia/ABI/**
     - verify/**
@@ -72,16 +82,18 @@ jobs:
         uses: actions/cache@v6.1.0
         with:
           path: |
-            /usr/local/bin/idris2
-            /usr/local/bin/idris2_app
-            /usr/local/lib/idris2
             ~/.idris2
+          # ONE prefix (#820). The old cache hedged across /usr/local AND
+          # ~/.idris2 because the bootstrap split the world in two; the old
+          # entries are populated under that split layout, so the key is
+          # bumped to -3 to discard them. Only the prefix the binary
+          # actually reads is cached now.
           # `idris2` is only a launcher script; it execs its sibling
-          # idris2_app/idris2.so. The previous cache omitted idris2_app/, so
-          # every cache *hit* restored a launcher with no image and died with
-          # `idris2_app/idris2.so: not found` (exit 127) before any proof ran.
-          # Key bumped to -2 to discard those poisoned caches.
-          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-2
+          # idris2_app/idris2.so. An earlier cache omitted idris2_app/, so
+          # every cache *hit* restored a launcher with no image and died
+          # with `idris2_app/idris2.so: not found` (exit 127) before any
+          # proof ran. ~/.idris2/bin/{idris2,idris2_app} travels together.
+          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-3
 
       - name: Build Idris 2 from source
         if: steps.cache-idris.outputs.cache-hit != 'true'
@@ -91,8 +103,36 @@ jobs:
             https://github.com/idris-lang/Idris2 /tmp/idris2
           cd /tmp/idris2
           make bootstrap SCHEME=chezscheme
-          sudo make install PREFIX=/usr/local
+          # ONE prefix (#820): `make bootstrap` bakes the DEFAULT prefix
+          # ($HOME/.idris2) into the binary, so install there too. The old
+          # `sudo make install PREFIX=/usr/local` wrote the trees under
+          # /usr/local while the binary resolved `--libdir` to
+          # ~/.idris2/idris2-0.7.0 -- which held neither
+          # support/chez/support.ss nor lib/libidris2_support.so. Pure
+          # library work (--check, --build of .ipkg) never links an
+          # executable and so never noticed; the first job that ran a
+          # binary died with "INTERNAL ERROR: Can't find data file
+          # chez/support.ss". Installing to the prefix the binary reads
+          # removes the mismatch and the need for sudo.
+          make install PREFIX="$HOME/.idris2"
           idris2 --version
+
+      - name: Put Idris 2 on PATH
+        run: echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
+
+      # #820 AC1: measure, do not infer. This step prints what prefix the
+      # binary reports and what each candidate location actually holds, so
+      # the layout question is answered by a run rather than by a comment.
+      - name: Measure Idris2 prefix layout
+        run: |
+          set -uo pipefail
+          echo "idris2 --prefix : $(idris2 --prefix 2>&1)"
+          echo "idris2 --libdir : $(idris2 --libdir 2>&1)"
+          echo "--- /usr/local/idris2-0.7.0/ ---"; ls /usr/local/idris2-0.7.0/ 2>&1 || echo "ABSENT"
+          echo "--- ~/.idris2/idris2-0.7.0/ ---"; ls ~/.idris2/idris2-0.7.0/ 2>&1 || echo "ABSENT"
+          echo "--- artefacts the executable path needs ---"
+          ls "$(idris2 --libdir)/support/chez/support.ss" 2>&1 || echo "MISSING: <libdir>/support/chez/support.ss"
+          ls "$(idris2 --libdir)/lib/libidris2_support.so" 2>&1 || echo "MISSING: <libdir>/lib/libidris2_support.so"
 
       - name: Verify Idris is on PATH
         run: idris2 --version
@@ -257,3 +297,36 @@ jobs:
           name: tlc-log
           path: verification/proofs/tlaplus/tlc.log
           retention-days: 14
+
+  # --------------------------------------------------------------------------
+  # Currency gates for the two status documents. A proof-status document that
+  # is wrong is worse than one that is missing: it is read as evidence (#816,
+  # #831). Both scripts are proven by mutant (rename a proof / plant an
+  # un-annotated marker -> red; revert -> green).
+  # --------------------------------------------------------------------------
+
+  proof-status:
+    name: PROOF-STATUS currency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: PROOF-STATUS.adoc agrees with the tree
+        run: bash scripts/check-proof-status.sh
+
+  check-trusted-base:
+    name: check-trusted-base
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: No un-annotated trusted-base markers
+        run: bash scripts/check-trusted-base.sh

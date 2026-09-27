@@ -8,7 +8,8 @@ topology. The coordinator aggregates predictions from all 5 networks and
 provides a unified intelligence layer for the safety triangle pipeline.
 
 *Logtalk is NOT part of the neural architecture.* The Logtalk rule files
-(`+.lgt+`) exist as standalone symbolic reasoning rules that are not
+(`+.lgt+`) were standalone symbolic reasoning rules (the engine was retired
+2026-03-06 and absorbed into `+lib/rules/*.ex+`) that were not
 loaded or executed by the Elixir application. They are a separate,
 disconnected layer.
 

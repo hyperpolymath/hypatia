@@ -106,4 +106,47 @@ defmodule Hypatia.CrossRepoLearningTest do
       end
     end
   end
+
+  describe "primary_language_from_scan_data/1 (#676 determinism)" do
+    test "declared primary_language wins over counts" do
+      data = %{"primary_language" => "Idris", "languages" => %{"rust" => 99}}
+      assert CrossRepoLearning.primary_language_from_scan_data(data) == "idris"
+    end
+
+    test "higher count wins regardless of priority (both directions)" do
+      rust_dominant = %{"languages" => %{"rust" => 5, "idris" => 4}}
+      idris_dominant = %{"languages" => %{"rust" => 4, "idris" => 5}}
+
+      assert CrossRepoLearning.primary_language_from_scan_data(rust_dominant) == "rust"
+      assert CrossRepoLearning.primary_language_from_scan_data(idris_dominant) == "idris"
+    end
+
+    test "equal counts break ties by fixed language priority, not enumeration order" do
+      # DISCRIMINATING TEST: before the #676 fix this resolved via
+      # Enum.max_by/3 — ties fell to map enumeration order ("idris" first
+      # in term order), not the documented priority. Fails before, passes
+      # after.
+      tie = %{"languages" => %{"idris" => 10, "rust" => 10, "zig" => 10}}
+      assert CrossRepoLearning.primary_language_from_scan_data(tie) == "rust"
+    end
+
+    test "equal counts for unlisted languages fall back to lexical order" do
+      tie = %{"languages" => %{"zebra" => 3, "apple" => 3}}
+      assert CrossRepoLearning.primary_language_from_scan_data(tie) == "apple"
+    end
+
+    test "resolution is identical whatever order the map was built in" do
+      a = Enum.reduce(["idris", "rust", "zig"], %{}, fn l, acc -> Map.put(acc, l, 10) end)
+      b = Enum.reduce(["zig", "rust", "idris"], %{}, fn l, acc -> Map.put(acc, l, 10) end)
+
+      assert CrossRepoLearning.primary_language_from_scan_data(a) ==
+               CrossRepoLearning.primary_language_from_scan_data(b)
+    end
+
+    test "absent or empty language data resolves to unknown" do
+      assert CrossRepoLearning.primary_language_from_scan_data(%{}) == "unknown"
+      assert CrossRepoLearning.primary_language_from_scan_data(%{"languages" => %{}}) == "unknown"
+      assert CrossRepoLearning.primary_language_from_scan_data(nil) == "unknown"
+    end
+  end
 end

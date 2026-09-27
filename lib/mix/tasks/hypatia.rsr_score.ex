@@ -52,6 +52,15 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
     end
   end
 
+  # Resolve the SSOT from candidates that exist on disk (#695). The old
+  # default computed `_build/<env>/lib/hypatia/priv/../test/fixtures/…`
+  # from `:code.priv_dir/1`, which lands INSIDE `_build` — the bare command
+  # (the one the template dogfood gate and estate corpus run) failed with
+  # `:enoent` unless `--ssot` was passed. Candidates are tried in order:
+  # source-tree `priv/` (release-shaped home), the current dogfood home
+  # under `test/fixtures/a2ml/`, then the built app's `priv/` (escript/
+  # release). First existing file wins; if none exist, the dogfood path is
+  # returned so the error message names the location it expected.
   defp resolve_ssot(opts) do
     cond do
       opts[:ssot] ->
@@ -61,9 +70,22 @@ defmodule Mix.Tasks.Hypatia.RsrScore do
         Path.join(opts[:standards], "0-canon/rsr/rsr-criteria-v2.a2ml")
 
       true ->
-        Path.join(:code.priv_dir(:hypatia) |> to_string(), "..")
-        |> Path.join("test/fixtures/a2ml/rsr-criteria-v2.a2ml")
-        |> Path.expand()
+        source_tree_root = Path.expand("../../..", __DIR__)
+
+        candidates = [
+          Path.join(source_tree_root, "priv/a2ml/rsr-criteria-v2.a2ml"),
+          Path.join(source_tree_root, "test/fixtures/a2ml/rsr-criteria-v2.a2ml"),
+          built_priv_candidate()
+        ]
+
+        Enum.find(candidates, List.last(candidates), &File.regular?/1)
+    end
+  end
+
+  defp built_priv_candidate do
+    case :code.priv_dir(:hypatia) do
+      dir when is_list(dir) -> Path.join(to_string(dir), "a2ml/rsr-criteria-v2.a2ml")
+      _ -> "/nonexistent/rsr-criteria-v2.a2ml"
     end
   end
 

@@ -43,7 +43,12 @@ defmodule Hypatia.Safety.RateLimiter do
   # --- GenServer API ---
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    # `:name` lets a test own its own instance (started with `name:`, shut
+    # down with the test process) instead of reaching for the app-level
+    # shared one, whose state the rest of the suite touches and whose crash
+    # resets it silently (#857). Production starts it unnamed -> __MODULE__.
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   def init(_opts) do
@@ -53,24 +58,28 @@ defmodule Hypatia.Safety.RateLimiter do
 
   # --- Public API ---
 
-  @doc "Check if a dispatch is allowed for a bot. Returns :ok or {:rate_limited, retry_after_ms}"
-  def check(bot_name) do
-    GenServer.call(__MODULE__, {:check, bot_name})
+  @doc """
+  Check if a dispatch is allowed for a bot. Returns :ok or {:rate_limited, retry_after_ms}.
+
+  `server` defaults to the app-level instance; tests pass their own (#857).
+  """
+  def check(bot_name, server \\ __MODULE__) do
+    GenServer.call(server, {:check, bot_name})
   end
 
   @doc "Record a dispatch (call after successful dispatch)"
-  def record_dispatch(bot_name) do
-    GenServer.cast(__MODULE__, {:record, bot_name})
+  def record_dispatch(bot_name, server \\ __MODULE__) do
+    GenServer.cast(server, {:record, bot_name})
   end
 
   @doc "Enqueue a dispatch for later if rate limited"
-  def enqueue(dispatch_entry) do
-    GenServer.cast(__MODULE__, {:enqueue, dispatch_entry})
+  def enqueue(dispatch_entry, server \\ __MODULE__) do
+    GenServer.cast(server, {:enqueue, dispatch_entry})
   end
 
   @doc "Get rate limiter statistics"
-  def stats do
-    GenServer.call(__MODULE__, :stats)
+  def stats(server \\ __MODULE__) do
+    GenServer.call(server, :stats)
   end
 
   # --- Callbacks ---
@@ -174,9 +183,32 @@ defmodule Hypatia.Safety.RateLimiter do
 
         case check_internal(state, bot) do
           :ok ->
-            # Dispatch via fleet dispatcher
+            # Dispatch via fleet dispatcher. A dispatch that raises must NOT
+            # take the rate limiter down with it: the limiter is
+            # app-supervised, so a crash here is silently restarted with
+            # empty `%__MODULE__{}` state, resetting every bot's window and
+            # all counters underneath the whole suite (#857). Drop the entry,
+            # log the failure, keep the limiter alive.
             Logger.info("Rate limiter: draining queued dispatch to #{bot}")
-            Hypatia.FleetDispatcher.dispatch_finding(entry)
+
+            try do
+              Hypatia.FleetDispatcher.dispatch_finding(entry)
+            rescue
+              e ->
+                Logger.error(
+                  "Rate limiter: queued dispatch to #{bot} raised " <>
+                    Exception.format(:error, e, __STACKTRACE__) <>
+                    " -- dropping the entry; the limiter stays up"
+                )
+            catch
+              kind, reason ->
+                Logger.error(
+                  "Rate limiter: queued dispatch to #{bot} exited " <>
+                    Exception.format(kind, reason, __STACKTRACE__) <>
+                    " -- dropping the entry; the limiter stays up"
+                )
+            end
+
             drain_queued(%{state | queue: remaining_queue})
 
           {:rate_limited, _, _} ->
@@ -189,6 +221,11 @@ defmodule Hypatia.Safety.RateLimiter do
     end
   end
 
+  # Mirrors handle_call({:check, ...}) INCLUDING the burst limit. It used to
+  # check only the per-bot and global windows, so `drain_queued/1`'s "still
+  # rate limited, put back" branch was dead: a burst-saturated bot was still
+  # :ok here, the entry was dispatched instead of requeued, and a raising
+  # dispatch then killed the limiter (#857).
   defp check_internal(state, bot_name) do
     now = System.system_time(:millisecond)
 
@@ -199,7 +236,10 @@ defmodule Hypatia.Safety.RateLimiter do
 
     global_window = Enum.filter(state.global_window, fn ts -> now - ts < @global_window_ms end)
 
+    burst_window = Enum.filter(bot_window, fn ts -> now - ts < @burst_window_ms end)
+
     cond do
+      length(burst_window) >= @burst_limit -> {:rate_limited, :burst, 0}
       length(bot_window) >= @per_bot_limit -> {:rate_limited, :per_bot, 0}
       length(global_window) >= @global_limit -> {:rate_limited, :global, 0}
       true -> :ok

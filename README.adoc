@@ -142,9 +142,10 @@ by any dispatch path, and the CI blockage currently stopping the Rust lane.
 
 * link:docs/README.adoc[docs/README.adoc] — the documentation index
 * link:docs/rules/catalogue.adoc[Rule catalogue] — every rule module and ID family
-* link:docs/DEBT-REGISTER.md[Debt register] — what is broken and what is not gated
+* link:docs/DEBT-REGISTER.adoc[Debt register] — what is broken and what is not gated
+* link:docs/governance/ACTIONS-PINNING.adoc[Actions pinning decision] — how `uses:` refs are pinned here (actions.lock, not inline SHAs)
 * https://github.com/hyperpolymath/hypatia/wiki[Wiki] — getting started, architecture, operations, FAQ
-* link:PALIMPSEST.adoc[Palimpsest Philosophy] — philosophical underpinnings
+* https://github.com/hyperpolymath/standards/blob/main/PALIMPSEST.adoc[Palimpsest Philosophy] — philosophical underpinnings (lives in hyperpolymath/standards)
 
 == Related projects
 

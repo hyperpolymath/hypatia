@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # Test Hypatia integration with verisim-data
 
 IO.puts("=== Hypatia VeriSimDB Integration Test ===\n")

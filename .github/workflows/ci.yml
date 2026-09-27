@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 # Main CI workflow for hypatia
-# Tests Rust (adapters, cli, fixer, data), Haskell (registry), and Logtalk (engine)
+# Tests Rust (adapters, cli, fixer, data) and the Elixir rules. The Haskell
+# (registry) jobs below are dormant-gated on the tree's absence; the Logtalk
+# rule engine was retired 2026-03-06 (absorbed into lib/rules/*.ex).
 
 name: CI
 
@@ -48,11 +50,16 @@ jobs:
           workspaces: ". -> target"
           cache-on-failure: true
 
+      # Every cargo invocation in this workflow passes --locked: the committed
+      # Cargo.lock is a hard constraint, not a hint (#841). A failure reading
+      # "the lock file ... needs to be updated but --locked was passed" means
+      # Cargo.lock is out of date w.r.t. the manifests -- regenerate it
+      # deliberately and commit it; never drop --locked to get green.
       - name: Run cargo check
-        run: cargo check --workspace --all-targets
+        run: cargo check --workspace --all-targets --locked
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   rust-fmt:
     name: Rust Format
@@ -92,10 +99,10 @@ jobs:
           cache-on-failure: true
 
       - name: Run tests
-        run: cargo test --workspace --all-targets
+        run: cargo test --workspace --all-targets --locked
 
       - name: Run doc tests
-        run: cargo test --workspace --doc
+        run: cargo test --workspace --doc --locked
 
   rust-test-coverage:
     name: Rust Coverage

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # Start every run from an empty throwaway store.
 #
 # `config/test.exs` points :verisimdb_data_path and :annealing_state_path at

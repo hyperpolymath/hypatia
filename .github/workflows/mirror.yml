@@ -12,11 +12,95 @@ permissions:
   actions: read
   contents: read
 
+# ============================================================================
+# The seven forge mirrors live in hyperpolymath/standards'
+# mirror-reusable.yml (see its header for the per-forge configuration
+# contract). The pin below was deliberately bumped 2026-09-26 from
+# 571cc734 to 2479cf76 (issue #845): the old revision carried three faults
+# this repo's runs were reddening on every push —
+#
+#   1. mirror-gitea ran `ssh-keyscan ... ${{ vars.GITEA_HOST }}` with NO
+#      non-empty assertion, so an unset variable expanded to an empty
+#      argument and the job died at ssh-keyscan usage — a silent
+#      empty-variable expansion that reads exactly like an auth failure.
+#   2. mirror-disroot / mirror-bitbucket presented deploy keys the forges
+#      rejected (Permission denied / Could not read from remote).
+#   3. no run-level accounting: a forge deliberately left unconfigured was
+#      indistinguishable from one that mirrored.
+#
+# The pinned revision asserts every host/fingerprint variable is non-empty
+# and well-formed BEFORE use (naming the variable on failure), verifies the
+# SSH host key against a pinned SHA256 fingerprint per forge, and prints an
+# explicit "Skipped (... not configured)" notice per forge instead of
+# failing obscurely. Fault 2 is OWNER-side (register the public keys on
+# Disroot/Bitbucket, or leave those vars disabled) — the skip notices make
+# the current state legible either way. Per-forge enablement remains the
+# vars.<FORGE>_MIRROR_ENABLED contract; a forge that is not wanted should
+# be left disabled (skip notice) rather than enabled-and-failing.
+# ============================================================================
+
 jobs:
   mirror:
-    uses: hyperpolymath/standards/.github/workflows/mirror-reusable.yml@571cc734cd69fb846032ec77a662aa8ee4fc32cd
+    uses: hyperpolymath/standards/.github/workflows/mirror-reusable.yml@2479cf769ed5f0481ccf64860a2ab954514c2b59
     secrets: inherit
     permissions:
       actions: read
       contents: read
       security-events: write
+
+  # #845 AC3: a run must state the denominator — mirrors enabled out of the
+  # seven configured forge integrations — so an unconfigured forge reads as
+  # "skipped", never as a mirror. Push verification by remote SHA (AC5) needs
+  # remote read access per forge and is tracked on the issue; this job
+  # reports what THIS repo has actually configured.
+  mirror-coverage:
+    name: Mirror coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: mirror
+    if: always()
+    steps:
+      - name: Report configured forge mirrors
+        env:
+          GITLAB: ${{ vars.GITLAB_MIRROR_ENABLED }}
+          BITBUCKET: ${{ vars.BITBUCKET_MIRROR_ENABLED }}
+          CODEBERG: ${{ vars.CODEBERG_MIRROR_ENABLED }}
+          SOURCEHUT: ${{ vars.SOURCEHUT_MIRROR_ENABLED }}
+          DISROOT: ${{ vars.DISROOT_MIRROR_ENABLED }}
+          GITEA: ${{ vars.GITEA_MIRROR_ENABLED }}
+          RADICLE: ${{ vars.RADICLE_MIRROR_ENABLED }}
+          GITEA_HOST: ${{ vars.GITEA_HOST }}
+        run: |
+          set -euo pipefail
+          enabled=0
+          total=7
+          report() {
+            name="$1"; val="$2"; note="$3"
+            if [ "$val" = "true" ]; then
+              enabled=$((enabled + 1))
+              echo "- ${name}: ENABLED ${note}"
+            else
+              echo "- ${name}: skipped (vars.${name}_MIRROR_ENABLED != 'true') ${note}"
+            fi
+          }
+          {
+            echo "## Forge mirror coverage"
+            echo ""
+            report GITLAB "$GITLAB" ""
+            report BITBUCKET "$BITBUCKET" "(deploy key must be registered on the forge or the job skips)"
+            report CODEBERG "$CODEBERG" ""
+            report SOURCEHUT "$SOURCEHUT" ""
+            report DISROOT "$DISROOT" "(deploy key must be registered on the forge or the job skips)"
+            if [ "$GITEA" = "true" ] && [ -z "$GITEA_HOST" ]; then
+              echo "- GITEA: ENABLED but vars.GITEA_HOST is empty — the reusable will refuse the push and name the variable (#845)"
+            fi
+            report GITEA "$GITEA" "(needs vars.GITEA_HOST + vars.GITEA_SSH_FINGERPRINT)"
+            report RADICLE "$RADICLE" ""
+            echo ""
+            echo "forge mirrors enabled: ${enabled} of ${total}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "forge mirrors enabled: ${enabled} of ${total}"
+          # An empty denominator is a configuration death, not a clean run.
+          if [ "$enabled" -eq 0 ]; then
+            echo "::notice::0 of ${total} forge mirrors configured on this repo. Nothing is mirrored; this is legible, not a failure."
+          fi

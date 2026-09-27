@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
 # Proof-of-concept scanner implementing hypatia rules in bash+ripgrep
-# Demonstrates the patterns work before full Logtalk deployment
+# Demonstrates the patterns work standalone (predates the Elixir ruleset
+# that absorbed the Logtalk engine, retired 2026-03-06)
 
 set -euo pipefail
 
@@ -245,6 +246,6 @@ else
     echo "  - code-safety-lessons.lgt: has_cors_misconfiguration"
     echo "  - code-safety-lessons.lgt: has_auth_bypass, has_privilege_escalation"
     echo ""
-    echo "Run with full Logtalk for detailed analysis and fix suggestions."
+    echo "Run the hypatia CLI for detailed analysis and fix suggestions."
     exit 1
 fi

@@ -32,7 +32,12 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2.9.2
-      - run: cargo check --workspace
+      # Every cargo invocation in this workflow passes --locked: the committed
+      # Cargo.lock is a hard constraint, not a hint (#841). A failure reading
+      # "the lock file ... needs to be updated but --locked was passed" means
+      # Cargo.lock is out of date w.r.t. the manifests -- regenerate it
+      # deliberately and commit it; never drop --locked to get green.
+      - run: cargo check --workspace --locked
 
   test:
     name: Test
@@ -44,7 +49,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2.9.2
-      - run: cargo test --workspace
+      - run: cargo test --workspace --locked
 
   fmt:
     name: Format
@@ -69,7 +74,7 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@v2.9.2
-      - run: cargo clippy --workspace -- -D warnings
+      - run: cargo clippy --workspace --locked -- -D warnings
 
   rustci_check:
     name: Cargo check + clippy + fmt
@@ -89,13 +94,13 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.2
 
       - name: Cargo check
-        run: cargo check --all-targets 2>&1
+        run: cargo check --all-targets --locked 2>&1
 
       - name: Cargo fmt
         run: cargo fmt --all -- --check
 
       - name: Cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
   rustci_test:
     name: Cargo test
@@ -116,7 +121,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.2
 
       - name: Run tests
-        run: cargo test --all-targets
+        run: cargo test --all-targets --locked
 
       - name: Write summary
         if: always()

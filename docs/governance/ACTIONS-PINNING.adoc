@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Decision — how actions are pinned in this repository
+:decision-date: 2026-09-26
+:status: accepted
+
+== Decision
+
+*`+.github/workflows/actions.lock+` is the pinning mechanism for symbolic
+action refs in this repository.* Workflow files keep symbolic refs
+(`+uses: actions/checkout@v7.0.1+`); the lock records each ref's immutable
+resolution (commit SHA, owner/repo ids), and
+`+governance / Actions lockfile verify+` rejects a lock that disagrees with
+live resolution. This is option (b) of issue #825, chosen over bulk
+SHA-pinning (option (a)) and applied uniformly — there is no mix.
+
+This is the explicit decision the issue asked for: `+dtolnay/rust-toolchain@v1+`
+(the 22-site case that prompted it) and every other symbolic ref in the tree
+are pinned by the lock, not by inline SHAs.
+
+== Why not bulk SHA-pinning
+
+. *The repository's tooling IS the lock.* Every workflow header reads "This
+workflow is managed by `+gh actions-lock+`"; the lock is machine-generated
+and verified as a whole, including transitive dependencies of composite
+actions, which inline pins cannot express. A hand-pinned tree and the lock
+would fight each other.
+. *The repo convention is symbolic refs*, measured 40 tag/ref to 8 SHA
+across the workflow tree at the time of the decision. A partial conversion
+would leave the tree harder to reason about, not easier — and the sweep
+denominator (every mutable tag, not just `+dtolnay/rust-toolchain+`) would
+have to cover all of them in one change.
+. *No rule is being violated.* hypatia's active rulesets (measured
+{decision-date}) require no `+sha_pinning_required+`; the estate's
+requirements are lockfile coverage + lock verification, which this repo
+satisfies.
+
+== Evidence the lock actually catches a moved ref
+
+The issue called for a mutant (retag `+@v1+`, watch the gate redden) before
+trusting the mechanism. The mechanism has already caught this exact failure
+mode in this repository without a mutant: `+docs/DEBT-REGISTER.adoc+` CI-1's
+original runner log (run `+31170993296+`) records
+
+....
+##[error]Lockfile pin 4cda84d5c5c54efe2404f9d843567869ab1699d4 for
+`dtolnay/rust-toolchain` does not match ref `stable`.
+....
+
+— i.e. the verifier resolved the live ref, compared it to the lock, and
+failed the run when they differed. A retagged or moved ref reddens
+`+Actions lockfile verify+` rather than executing silently. (What the lock
+gate does *not* prove is that a SHA exists upstream — see the
+`+check-action-pins-resolve+` step in governance; the two gates are
+complementary.)
+
+The deliberate mutant (change a recorded commit in `+actions.lock+`, confirm
+red, revert, confirm green) is still worth running once as a drill and is
+tracked as residual evidence on #825; the accidental retag above is the same
+test performed by the world.
+
+== Obligations this creates
+
+* When a workflow changes its `+uses:+` refs, regenerate the lock with
+  `+gh actions-lock+` *in the same PR* (never hand-edit it; the file says so
+  on line 1-2). A drifted lock kills the affected workflows at
+  `+startup_failure+` with zero jobs — see standards'
+  `+check-lockfile-drift.sh+` (mode 4) and hypatia#723.
+* A mutable tag may move; when it does, the lock diff is the reviewable
+  event. Do not "fix" a red lock gate by editing the lock to match a ref you
+  did not intend to take — update the workflow ref deliberately, then
+  relock.
+* If the estate later adopts repository rulesets with
+  `+sha_pinning_required+`, this decision flips to option (a) with a full
+  sweep; record that reversal here.
+
+== Provenance
+
+Filed as issue #825 while fixing #822 (duplicate `+with:+` blocks in
+`+build-gossamer-gui.yml+`), which deliberately deferred this decision
+rather than half-converting one of 22 identical sites. Decided
+{decision-date} in the #847–#857 consolidation session.

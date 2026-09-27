@@ -573,7 +573,62 @@ defmodule Hypatia.CrossRepoLearning do
     end)
   end
 
-  # --- Private: Language Detection ---
+  # --- Language Detection (deterministic; issue #676) ---
+
+  # Fixed tie-break priority for equally-counted languages. The ORDER is
+  # arbitrary but MUST be stable — it exists so two runs never disagree on
+  # a multi-language repo. Policy-relevant languages first, then common
+  # ones; anything unlisted sorts after all listed languages, lexically.
+  @language_priority ~w(
+    rust elixir idris idris2 zig nickel shell bash javascript typescript
+    rescript haskell ocaml coq lean agda isabelle hol4 fstar ada spark
+    python go java c cpp scheme ruby
+  )
+
+  @doc """
+  Deterministic primary-language resolution from decoded scan data.
+
+  Prefer the declared `primary_language` field; else pick the language with
+  the highest count in the `languages` map. Ties are broken by the fixed
+  `#{@language_priority |> Enum.take(3) |> Enum.join(" > ")}` … priority
+  above, then lexically — a TOTAL order, so the same scan data always
+  resolves to the same language.
+
+  Issue #676 measured opposite-direction flips (`idris→rust` and
+  `rust→idris` in one rescan) traced to `Enum.max_by/3` on a map: with
+  equal counts the winner depends on map enumeration order, which is not
+  a reviewable contract. This function is the single resolution point;
+  `GraphOfTrust` and `VCL.FileExecutor` delegate here so the three readers
+  cannot drift apart again.
+
+  Note: the scan files' singular `language` field is the PRODUCER's
+  classification and was the field observed flipping upstream. It is
+  deliberately NOT consulted here — resolution from the full `languages`
+  count map is strictly more stable.
+  """
+  def primary_language_from_scan_data(data) when is_map(data) do
+    cond do
+      Map.has_key?(data, "primary_language") ->
+        String.downcase(Map.get(data, "primary_language", "unknown"))
+
+      Map.has_key?(data, "languages") ->
+        data
+        |> Map.get("languages", %{})
+        |> Enum.sort_by(fn {lang, count} ->
+          count_score = if is_number(count), do: -count, else: 0
+          prio = Enum.find_index(@language_priority, &(String.downcase(&1) == String.downcase(lang)))
+          {count_score, if(prio, do: prio, else: length(@language_priority)), String.downcase(lang)}
+        end)
+        |> List.first({"unknown", 0})
+        |> elem(0)
+        |> String.downcase()
+
+      true ->
+        "unknown"
+    end
+  end
+
+  def primary_language_from_scan_data(_data), do: "unknown"
 
   # Detect primary language for a repo from scan data.
   # Falls back to "unknown" if scan data isn't available.
@@ -585,20 +640,7 @@ defmodule Hypatia.CrossRepoLearning do
         case Jason.decode(content) do
           {:ok, data} ->
             # Scan data may contain language info directly or in weak_points
-            cond do
-              Map.has_key?(data, "primary_language") ->
-                String.downcase(Map.get(data, "primary_language", "unknown"))
-
-              Map.has_key?(data, "languages") ->
-                data
-                |> Map.get("languages", %{})
-                |> Enum.max_by(fn {_lang, count} -> count end, fn -> {"unknown", 0} end)
-                |> elem(0)
-                |> String.downcase()
-
-              true ->
-                "unknown"
-            end
+            primary_language_from_scan_data(data)
 
           {:error, _} ->
             "unknown"

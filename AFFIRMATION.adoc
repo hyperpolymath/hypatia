@@ -20,11 +20,22 @@ state and commitments. Companion detail:
   `guix.scm` / guix channels are the sole reproducible-build manifests. No
   `flake.nix` remains; all references reconciled.
 * *The formal-proof corpus verifies and is CI-gated* across Idris 2 (v0.7.0),
-  Lean 4 (v4.30.0) and TLA+ — zero escape hatches
-  (`believe_me` / `sorry` / `postulate` / `assert_total` / `admit` /
-  `native_decide`). One obligation remains open — neural-convergence
-  (PageRank + ESN) — blocked only on Mathlib network access; the handover is
-  at `docs/proofs/HANDOVER-neural-convergence.md`.
+  Lean 4 (v4.30.0) and TLA+ — *zero escape hatches outside
+  `test/soundness/fixtures/`* (`believe_me` / `sorry` / `postulate` /
+  `assert_total` / `admit` / `native_decide`). Re-measured 2026-09-26 over
+  the git-tracked tree by `scripts/check-trusted-base.sh`: outside that
+  fixture directory the only matches are comment lines, one carrying the
+  explicit `-- hypatia: allow` pragma
+  (`src/Hypatia/ABI/RuleEngine.idr:19`); 0 `assert_total`, 0 `postulate`,
+  0 `%hint`, 0 `native_decide`, 0 `admit` in code. Inside
+  `test/soundness/fixtures/` the escape-hatch spellings occur *by design* —
+  each file is a known-bad scanner sample whose header says DO NOT FIX, and
+  the `check-trusted-base` CI job fails if one loses its fixture status or
+  an un-annotated marker appears elsewhere. (An earlier revision of this
+  sentence claimed "zero escape hatches" unscoped, which the fixture corpus
+  made literally false; see #831.) One obligation remains open —
+  neural-convergence (PageRank + ESN) — blocked only on Mathlib network
+  access; the handover is at `docs/proofs/HANDOVER-neural-convergence.md`.
 * *The unified-api-adapter wire contract cannot silently drift.* The Zig enum,
   the Idris2 ABI and the Rust client are pinned to one golden source
   (`ffi/connectors.json`) by `test/unified-api-adapter-contract_test.exs` under

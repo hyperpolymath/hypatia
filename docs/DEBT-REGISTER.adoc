@@ -40,8 +40,44 @@ trusted. *LOW* — hygiene.
 
 === 1. CI/CD debt
 
-==== CI-1 · CRITICAL · One stale lockfile pin kills 4 workflows and 13 jobs · UNTRACKED
+==== CI-1 · CRITICAL · Workspace cargo resolution unsatisfiable (testcontainers) · CORRECTED 2026-09-26 (#814)
 
+[NOTE]
+====
+*Corrected 2026-09-26 per issue #814.* This entry originally recorded the
+wrong cause. The original text (kept below, struck through) blamed a stale
+`+dtolnay/rust-toolchain+` lockfile pin and jobs dying at `+Set up job+`.
+*That was no longer true when measured.* The jobs started fine; they died
+during `cargo` dependency resolution — a later phase with a different fix.
+Anyone acting on the struck entry would have bumped a toolchain pin and
+found nothing changed.
+
+*The actual cause, measured 2026-09-22:* `+integration/Cargo.toml+`
+required **both** `+testcontainers ^0.28+` and
+`+testcontainers-modules ^0.15+`, and the latter itself requires
+`+testcontainers ^0.27+`. `+^0.27+` and `+^0.28+` are disjoint under
+Cargo's 0.x semver rules, so the conflict was unsatisfiable *at the
+manifest level*: no `+Cargo.lock+` could fix it, resolution failed before
+any compilation, and **no crate in the workspace was ever compiled** —
+including `+clients/rust/hypatia-client+` and its five wire-contract
+tests (`+count_is_sixteen+`, `+wire_ids_are_stable+`,
+`+names_round_trip+`, `+from_id_round_trip+`,
+`+port_layout_matches_v_lang+`).
+
+*Status as of 2026-09-26:* resolved at the manifest level, not by a
+`+[patch]+` — `+testcontainers-modules+` was dropped (it was never
+imported; Dragonfly/Redis is provisioned by compose and reached via
+`+DRAGONFLY_URL+`), and the tree now resolves a single
+`+testcontainers 0.28.0+`. Every cargo invocation in `+ci.yml+`,
+`+rust.yml+` and `+quality.yml+` now passes `+--locked+` (#841), so the
+committed `+Cargo.lock+` is a hard constraint and
+`+cargo test --workspace --locked+` is the gate. *Residual evidence
+still owed (#814 acceptance):* a CI run showing `+hypatia-client+`'s
+five tests actually executing with a non-zero denominator, and a mutant
+run turning `+wire_ids_are_stable+` red when a wire id is changed.
+====
+
+[.line-through]#
 `+.github/workflows/actions.lock+` pins
 `+dtolnay/rust-toolchain@stable+` to
 `+4cda84d5c5c54efe2404f9d843567869ab1699d4+`, which no longer matches
@@ -63,6 +99,11 @@ AsciiDoc). It also blocks all four open Dependabot PRs (#678, #679,
 The fix is *structural, not a re-pin*: `+@stable+` is a moving ref and
 re-pinning it by SHA re-breaks on every Rust release. Stop
 lockfile-pinning moving refs.
+# (Superseded twice over: the lockfile now records
+`+dtolnay/rust-toolchain@v1+` at
+`+02cb101ec7c40f2c49e1d9714d64511d8e1b74de+` and `+Actions lockfile
+verify+` is green as of #823 — but this was never the reason the
+workspace was red.)
 
 ==== CI-2 · HIGH · OSSF Scorecard `+startup_failure+` — caller omits `+actions: read+` · UNTRACKED
 
@@ -512,9 +553,12 @@ each.
 [width="100%",cols="20%,20%,20%,20%,20%",options="header",]
 |===
 |# |Item |Sev |Why |Tracked
-|1 |*CI-1* stale `+dtolnay/rust-toolchain+` lockfile pin |CRITICAL |One
-line unblocks 4 workflows, 13 jobs, 4 Dependabot PRs. Real fix is
-structural: never SHA-pin a moving ref |NO
+|1 |*CI-1* workspace cargo resolution conflict (was: stale
+`+dtolnay/rust-toolchain+` pin — wrong cause, see the struck entry)
+|CRITICAL |Manifest-level `+testcontainers+` conflict stopped every
+workspace crate compiling; resolved 2026-09-26, `+--locked+` now in force
+(#814, #841). Residual: CI evidence that `+hypatia-client+`'s five wire
+tests run |partly
 
 |2 |*T-1* 242 dark tests, 129 failing, documented as passing |CRITICAL
 |16.9% of the suite is fiction; corrupts every downstream quality claim

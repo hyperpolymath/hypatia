@@ -603,11 +603,53 @@ defmodule Hypatia.Rules.ResearchExtensions do
           is_binary(name) and
             Regex.match?(~r/(?:test|spec|check|lint|verify)/i, name)
 
-        has_continue_on_error? = Regex.match?(~r/continue-on-error:\s*true\b/, body)
+        # Strip YAML comments before matching (issue #834): a commented-out
+        # `# continue-on-error: true` or a trailing note containing `|| true`
+        # is not a swallow. Whole-line comments and whitespace-preceded
+        # trailing comments — YAML and bash agree that `#` begins a comment
+        # only after whitespace or at line start, so `a#b` is untouched.
+        stripped_body =
+          body
+          |> String.split("\n")
+          |> Enum.map_join("\n", fn line ->
+            line
+            |> String.replace(~r/^[ \t]*#.*$/m, "")
+            |> String.replace(~r/[ \t]#.*$/m, "")
+          end)
 
-        has_or_true? = Regex.match?(~r/\|\|\s*true\b/, body)
+        has_continue_on_error? = Regex.match?(~r/continue-on-error:\s*true\b/, stripped_body)
 
-        if is_test? and (has_continue_on_error? or has_or_true?) do
+        has_or_true? = Regex.match?(~r/\|\|\s*true\b/, stripped_body)
+
+        # A step carrying `hypatia:ignore RE005 -- <reason>` (or the
+        # `hypatia: allow research_extensions/RE005` spelling) is reviewed —
+        # the swallow is deliberate and the reason is on the record. The
+        # directive is read from the RAW step text, comments included, so it
+        # can live in a YAML comment next to the swallow it blesses.
+        inside_step_lines =
+          [name, body]
+          |> Enum.filter(&is_binary/1)
+          |> Enum.flat_map(&String.split(&1, "\n"))
+
+        # ... plus the three physical lines above the step opener, so the
+        # directive can also sit where a reviewer's eye lands first.
+        above_step_lines =
+          content
+          |> String.split("\n")
+          |> Enum.slice(max(line_no - 4, 0), 3)
+
+        reviewed? =
+          (inside_step_lines ++ above_step_lines)
+          |> Enum.any?(fn line ->
+            Hypatia.ScannerSuppression.inline_allowed?(
+              line,
+              nil,
+              "research_extensions",
+              "RE005"
+            )
+          end)
+
+        if is_test? and (has_continue_on_error? or has_or_true?) and not reviewed? do
           mechanism =
             cond do
               has_continue_on_error? and has_or_true? ->

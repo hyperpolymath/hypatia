@@ -1,8 +1,5 @@
 # This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
-# This workflow is managed by gh actions-lock.
-# Consolidated workflow (behaviour-preserving merge).
-# Merged from: npm-bun-blocker.yml, ts-blocker.yml
 name: Language Policy Blockers
 
 on:
@@ -15,38 +12,78 @@ concurrency:
 
 permissions: read-all
 
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Block npm/bun
-        run: |
-          if [ -f "package-lock.json" ] || [ -f "bun.lockb" ] || [ -f ".npmrc" ]; then
-            echo "❌ npm/bun artifacts detected. Use Deno instead."
-            exit 1
-          fi
-          echo "✅ No npm/bun violations"
+# ============================================================================
+# Enforces hyperpolymath/standards 3-practice/LANGUAGE-POLICY.adoc in this
+# repo (issue #832). The doctrine, verbatim: "bun is the runtime; python,
+# deno, rescript and typescript are banned." This workflow previously
+# enforced the INVERSE of that policy — it failed any build carrying
+# `bun.lockb` with the message "npm/bun artifacts detected. Use Deno
+# instead", and its TS gate was structurally incapable of failing (it
+# diffed against HEAD~1 on a depth-1 checkout and swallowed the error).
+# Both are superseded per LANGUAGE-POLICY §1.1/§1.2.
+#
+# Every check prints its denominator; a check that looked at nothing must
+# not read as a pass.
+# ============================================================================
 
-  ts_check:
+jobs:
+  language-policy:
+    name: Language Policy
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: Block new TypeScript/JavaScript
+
+      - name: Deno is banned
         run: |
-          NEW_TS=$(git diff --name-only --diff-filter=A HEAD~1 2>/dev/null | grep -E '\.(ts|tsx)$' | grep -v '\.gen\.' || true)
-          NEW_JS=$(git diff --name-only --diff-filter=A HEAD~1 2>/dev/null | grep -E '\.(js|jsx)$' | grep -v '\.res\.js$' | grep -v '\.gen\.' | grep -v 'node_modules' || true)
-          
-          if [ -n "$NEW_TS" ] || [ -n "$NEW_JS" ]; then
-            echo "❌ New TS/JS files detected. Use AffineScript instead."
-            [ -n "$NEW_TS" ] && echo "$NEW_TS"
-            [ -n "$NEW_JS" ] && echo "$NEW_JS"
+          set -euo pipefail
+          hits=$(git ls-files | grep -E '(^|/)deno\.jsonc?$' || true)
+          n=$(printf '%s' "$hits" | grep -c . || true)
+          echo "deno manifests in tree: ${n}"
+          if [ "$n" -gt 0 ]; then
+            echo "::error::Deno is banned (LANGUAGE-POLICY §1.3, owner ruling 2026-09-22). Found:"
+            printf '%s\n' "$hits"
             exit 1
           fi
-          echo "✅ ReScript policy enforced"
+          echo "✅ No Deno manifests"
+
+      - name: TypeScript/ReScript are banned (AffineScript is the destination)
+        run: |
+          set -euo pipefail
+          # Whole-tree, not new-files-only: this repo tracks zero .ts/.tsx/.res
+          # files (measured 2026-09-26), so the stronger check is free — and
+          # the old `git diff HEAD~1` gate could never fire at all.
+          hits=$(git ls-files '*.ts' '*.tsx' '*.res' '*.resi' '*.res.js' | grep -v '\.gen\.' || true)
+          n=$(printf '%s' "$hits" | grep -c . || true)
+          echo "ts/tsx/res files in tree: ${n}"
+          if [ "$n" -gt 0 ]; then
+            echo "::error::TypeScript/ReScript are banned (LANGUAGE-POLICY §1.2/§3). New application code is AffineScript. Found:"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "✅ No TypeScript/ReScript sources"
+
+      - name: Banned runtimes are not provisioned in mise.toml
+        run: |
+          set -euo pipefail
+          # #832 AC5: a banned runtime cannot be reintroduced to mise.toml
+          # silently. Checked here (the language-ban workflow) rather than as
+          # a bespoke grep somewhere new.
+          banned='python|denojs|deno|rescript'
+          hits=$(grep -nE "^(${banned})[[:space:]]*=" mise.toml || true)
+          n=$(printf '%s' "$hits" | grep -c . || true)
+          echo "banned runtimes in mise.toml [tools]: ${n}"
+          if [ "$n" -gt 0 ]; then
+            echo "::error::mise.toml provisions banned runtime(s) (LANGUAGE-POLICY; issue #832). Remove them and any tool that only they can run:"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          pyenv=$(grep -nE '^PYTHON' mise.toml || true)
+          if [ -n "$pyenv" ]; then
+            echo "::error::mise.toml still carries PYTHON* env entries with no Python toolchain to read them (#832):"
+            printf '%s\n' "$pyenv"
+            exit 1
+          fi
+          echo "✅ mise.toml provisions no banned runtime"

@@ -46,10 +46,12 @@ uuid = { version = "1.23", features = ["v4"] }
 
 # Testcontainers for spinning up Docker containers.
 # NOTE: testcontainers-modules is deliberately NOT a dependency here. Dragonfly/Redis
-# is provisioned by integration/compose.test.yaml and reached via DRAGONFLY_URL, so the
-# modules crate was never imported. As of 2026-09-22 the newest published
-# testcontainers-modules is 0.15.0, which still requires testcontainers ^0.27, so
-# the pair was unsatisfiable and resolution failed before any compilation. See #838.
+# is provisioned by the CI service containers in .github/workflows/tests.yml and
+# reached via DRAGONFLY_URL, so the modules crate was never imported. As of
+# 2026-09-22 the newest published testcontainers-modules is 0.15.0, which still
+# requires testcontainers ^0.27, so the pair was unsatisfiable and resolution
+# failed before any compilation. See #838. (The old docker-compose tier that
+# this comment used to name was deleted with #853 — it was CI-dead.)
 testcontainers = { version = "0.28", features = ["watchdog"] }
 
 # Mock HTTP server

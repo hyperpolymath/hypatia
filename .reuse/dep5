@@ -1,0 +1,21 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: hypatia
+Source: https://github.com/hyperpolymath/hypatia
+
+Files: *.adoc *.md docs/* .audittraining/* .claude/* .machine_readable/*
+Copyright: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+License: CC-BY-SA-4.0
+Comment: Documentation, design notes and training corpora follow the
+ README's documentation licence. Files that carry their own line-1 SPDX
+ header take precedence over this entry (REUSE file-header rule).
+
+Files: integration/fixtures/test-repo/src/main.rs
+Copyright: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+License: MPL-2.0
+Comment: Deliberately headerless — this fixture exists so missing-SPDX
+ detection has something to detect. Its licence is recorded here instead.
+
+Files: integration/fixtures/*
+Copyright: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+License: MPL-2.0
+Comment: Test fixtures.

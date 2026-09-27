@@ -1,8 +1,6 @@
 # This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
-# This workflow is managed by gh actions-lock.
-# Consolidated workflow (behaviour-preserving merge).
-# Merged from: security-audit.yml, security.yml
+# Consolidated workflow. Merged from: security-audit.yml, security.yml
 name: Security
 
 on:
@@ -25,386 +23,56 @@ concurrency:
 
 permissions: read-all
 
+# ============================================================================
+# DECISION RECORD — one scan tier, one aggregator (#847, #848, #849, #850, #851)
+#
+# This workflow used to run TWO near-duplicate tiers of the same scans
+# (`rust-audit` vs `audit_rust-audit`, ...), fed by a behaviour-preserving
+# merge of security-audit.yml and security.yml. Two aggregators then consulted
+# different subsets, `container-scan` was consulted by nobody, and "did the
+# security scan pass?" had two answers. Measured before consolidation: 14 jobs,
+# 2 aggregators, 6 duplicated scan pairs.
+#
+# #847 AC1 — which tier survives, with the display names kept. The Tier-B
+# bodies survive (they carry the caching, the estate gitleaks baseline
+# staging, the Trivy matrix and the hardened aggregator), with the Tier-A
+# fixes folded in. Jobs and display names after consolidation:
+#
+#   rust-audit         "Rust Dependency Audit"        (findings fail the job, #849)
+#   rust-deny          "Rust License & Ban Check"     (findings fail the job, #849)
+#   secret-gitleaks    "Secret Detection (Gitleaks)"
+#   secret-trufflehog  "Secret Detection (TruffleHog)" (two-class policy, #848;
+#                                                      scanner pinned, #851)
+#   codeql             "CodeQL Analysis"
+#   container-scan     "Container Security (Trivy)"   (wired into the rollup, #850)
+#   license-check      "License Compliance Check"
+#   sbom               "Generate SBOM"
+#   security-status    "Security Status"              (the single aggregator)
+#
+# Display names RETIRED by this consolidation: "Secret Detection",
+# "CodeQL SAST", "Generate Rust SBOM", "Container Security Scan",
+# "Security Audit Summary".
+#
+# #847 AC2/AC3 — merge order and required contexts. Measured 2026-09-26:
+# the only ACTIVE ruleset requiring status checks on the default branch is
+# "ABI-Codegen-Drift" (`abi-codegen-drift`, `zig build test (FFI + wire
+# contract)`); neither points at a security display name. The ruleset that
+# once required "CodeQL Analysis (actions)" and "CodeQL SAST (actions)"
+# (Optimus-Branch) is enforcement=disabled and no open PR predates the
+# rename. If Optimus-Branch is ever re-enabled, its required contexts must
+# be reconciled with the names above first.
+#
+# #850 AC4 — the aggregator self-checks that every non-aggregator job in
+# this file is named in its `needs:`, so a future orphan job is caught
+# mechanically rather than by reading.
+# ============================================================================
+
 jobs:
+  # ==========================================================================
+  # Rust dependency & licence posture
+  # ==========================================================================
+
   rust-audit:
-    name: Rust Dependency Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: Run cargo audit
-        run: cargo audit --json > rust-audit.json || true
-
-      - name: Check for vulnerabilities
-        run: |
-          if cargo audit 2>&1 | grep -q "Vulnerability"; then
-            echo "::warning::Security vulnerabilities found in Rust dependencies"
-            cargo audit
-          else
-            echo "No known vulnerabilities found"
-          fi
-
-      - name: Upload audit results
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: rust-audit-results
-          path: rust-audit.json
-          retention-days: 30
-
-  rust-deny:
-    name: Rust License & Ban Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.87.18
-        with:
-          tool: cargo-deny
-
-      - name: Check licenses and bans
-        run: cargo deny check || true
-
-  # ============================================================================
-  # Secret Detection
-  # ============================================================================
-
-  secret-scan:
-    name: Secret Detection
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-
-      # TruffleHog refuses to scan when base == head, exiting non-zero with
-      # "BASE and HEAD commits are the same. TruffleHog won't scan anything."
-      # The old inputs were `base: <default_branch>` + `head: HEAD`. On a
-      # `pull_request` those legitimately differ, so the diff scan worked and
-      # the defect was invisible. On `push: main` HEAD *is* the default branch,
-      # so the range was EMPTY and the default branch went completely unscanned
-      # -- while the job merely looked "red", which reads like an auth problem
-      # rather than like zero coverage.
-      #
-      # This step resolves the range EXPLICITLY for every event, read off the
-      # action source at the pinned v3.97.5. That matters, because when both
-      # inputs are left empty the action does not fall through to one
-      # behaviour -- it dispatches on the event itself:
-      #   push                       -> BASE=github.event.before
-      #                                 HEAD=github.event.after
-      #                                 ...and if github.event.commits is
-      #                                 empty it prints "No commits to scan"
-      #                                 and `exit 0`: a GREEN job that scanned
-      #                                 nothing, the same lie in a different
-      #                                 costume.
-      #   schedule/workflow_dispatch -> BASE="", HEAD=""
-      #   pull_request               -> BASE=base.sha, HEAD=head.sha
-      # Passing a non-empty input takes the action's explicit branch instead,
-      # so nothing about push is left to that hidden dispatch and the silent
-      # `exit 0` is unreachable.
-      #
-      # The action always ends at `trufflehog git <repo> --since-commit $BASE
-      # --branch $HEAD`. Measured against the CLI: empty BASE/HEAD expand to
-      # empty-STRING arguments (not absent ones), which TruffleHog accepts as
-      # "all history, all branches" -- verified locally on a scratch repo,
-      # where that found a private key deleted from the worktree and surviving
-      # only in git history.
-      #
-      # So the coverage this buys, stated exactly:
-      #   pull_request -> the PR's own commits
-      #   push         -> the commits the push introduced (everything reachable
-      #                   when the branch is new, since `before` is all-zeros)
-      #   schedule     -> whole git history, 02:00 daily and 03:00 Mondays
-      # Whole-history coverage comes from the SCHEDULED run, not from push.
-      #
-      # Context goes through `env:` rather than into the shell line, per
-      # .claude/CLAUDE.md -- a branch name is attacker-controllable text.
-      - name: Resolve TruffleHog scan range
-        id: th
-        env:
-          EVENT: ${{ github.event_name }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          PUSH_AFTER: ${{ github.event.after }}
-        run: |
-          set -uo pipefail
-          zero='0000000000000000000000000000000000000000'
-          case "$EVENT" in
-            pull_request)
-              base="$PR_BASE"
-              head="$PR_HEAD"
-              if [ -z "$base" ] || [ -z "$head" ] || [ "$base" = "$head" ]; then
-                echo "::error::Degenerate TruffleHog range (base='$base' head='$head'). Refusing to let an unscanned tree report as scanned."
-                exit 1
-              fi
-              n=$(git rev-list --count "${base}..${head}" 2>/dev/null || echo 0)
-              echo "trufflehog mode: pull_request diff | range: ${base}..${head} | commits: ${n}"
-              ;;
-            push)
-              head="$PUSH_AFTER"
-              if [ -z "$head" ] || [ "$head" = "$zero" ]; then
-                echo "::error::push event with no head commit (after='${head}'). Nothing to scan is not the same as nothing found."
-                exit 1
-              fi
-              if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "$zero" ]; then
-                base=''
-                n=$(git rev-list --count "$head" 2>/dev/null || echo 0)
-                echo "trufflehog mode: push, new branch | range: (root)..${head} | commits: ${n}"
-              else
-                base="$PUSH_BEFORE"
-                if [ "$base" = "$head" ]; then
-                  echo "::error::push event with before == after (${base}). An empty range is not a clean scan."
-                  exit 1
-                fi
-                n=$(git rev-list --count "${base}..${head}" 2>/dev/null || echo 0)
-                echo "trufflehog mode: push diff | range: ${base}..${head} | commits: ${n}"
-              fi
-              ;;
-            *)
-              base=''
-              head=''
-              n=$(git rev-list --count --all 2>/dev/null || echo 0)
-              echo "trufflehog mode: whole git history | commits: ${n}"
-              ;;
-          esac
-          if [ "${n:-0}" -eq 0 ]; then
-            echo "::error::0 commits in the resolved range. A scanner with an empty subject cannot report clean."
-            exit 1
-          fi
-          echo "base=$base" >> "$GITHUB_OUTPUT"
-          echo "head=$head" >> "$GITHUB_OUTPUT"
-
-      - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@v3.97.6
-        with:
-          path: ./
-          base: ${{ steps.th.outputs.base }}
-          head: ${{ steps.th.outputs.head }}
-          extra_args: --only-verified
-
-      # `.gitleaks.toml` carries `[extend] path = ".gitleaks-estate.toml"`, and
-      # gitleaks resolves that against the PROCESS CWD. Only standards'
-      # secret-scanner-reusable.yml staged that file, so these two hand-rolled
-      # jobs died before scanning a single byte:
-      #   FTL failed to load extended config ... no such file or directory
-      # the action then crashed on the results.sarif it never wrote, and the
-      # audit summary reported a CRASHED SCANNER as "possible secrets in
-      # repository" -- a fake red in the worst possible direction for a
-      # security gate. Pinned to the same standards sha that
-      # .github/workflows/secret-scanner.yml already consumes.
-      - name: Fetch estate gitleaks baseline
-        uses: actions/checkout@v7.0.1
-        with:
-          repository: hyperpolymath/standards
-          ref: 571cc734cd69fb846032ec77a662aa8ee4fc32cd
-          path: .standards-gitleaks
-          sparse-checkout: |
-            config/gitleaks/estate-baseline.toml
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-
-      - name: Stage estate gitleaks baseline
-        run: |
-          set -euo pipefail
-          cp .standards-gitleaks/config/gitleaks/estate-baseline.toml .gitleaks-estate.toml
-          # Delete the tooling checkout BEFORE scanning, or the scan walks
-          # standards' own tree and reports ITS files as hypatia's.
-          rm -rf .standards-gitleaks
-          test -s .gitleaks-estate.toml
-
-      - name: Gitleaks Secret Scan
-        uses: gitleaks/gitleaks-action@v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ['actions']
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)
-        with:
-          languages: ${{ matrix.language }}
-          queries: security-extended,security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)
-        with:
-          category: "/language:${{matrix.language}}"
-
-  # ============================================================================
-  # SBOM Generation
-  # ============================================================================
-
-  sbom-rust:
-    name: Generate Rust SBOM
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx --locked --version 0.5.9
-
-      - name: Generate CycloneDX SBOM
-        run: |
-          cargo cyclonedx --format json --override-filename rust-sbom.cdx
-          cargo cyclonedx --format xml --override-filename rust-sbom.cdx
-
-      - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: rust-sbom
-          path: |
-            **/rust-sbom.cdx.json
-            **/rust-sbom.cdx.xml
-          retention-days: 90
-
-  # ============================================================================
-  # Container Security Scanning
-  # ============================================================================
-
-  container-scan:
-    name: Container Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: github.event_name != 'pull_request'
-    # The workflow default is `read-all`, and a job-level map REPLACES that
-    # default rather than merging with it -- so a job that uploads SARIF must
-    # spell out BOTH scopes. Without this the Trivy scan ran fine and only
-    # `upload-sarif` died with "Resource not accessible by integration", which
-    # this workflow then displayed as a failed Container Security Scan. That is
-    # the same confusion as the TruffleHog one: the scanner looked and found
-    # nothing wrong; it was the *filing* of the result that was denied.
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Build test image
-        run: |
-          docker build -t hypatia:scan -f deploy/Containerfile .
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: 'hypatia:scan'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  # ============================================================================
-  # Security Status Summary
-  # ============================================================================
-
-  security-status:
-    name: Security Status
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - rust-audit
-      - rust-deny
-      - secret-scan
-      - codeql
-      - sbom-rust
-    if: always()
-    steps:
-      - name: Check security scan status
-        run: |
-          echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          declare -A jobs=(
-            ["rust-audit"]="${{ needs.rust-audit.result }}"
-            ["rust-deny"]="${{ needs.rust-deny.result }}"
-            ["secret-scan"]="${{ needs.secret-scan.result }}"
-            ["codeql"]="${{ needs.codeql.result }}"
-            ["sbom-rust"]="${{ needs.sbom-rust.result }}"
-          )
-
-          # This job is named "Security Status" and, until now, could not
-          # report a bad one: it computed `failed=true`, wrote a sentence into
-          # the step summary, and then ended the step successfully. Measured on
-          # run 35772115983, `Security Status` was GREEN while its own
-          # dependency `Secret Detection` was RED. A status check that cannot
-          # go red is decoration, and decoration that looks like a gate is
-          # worse than no gate -- so it now exits non-zero.
-          #
-          # None of the five dependencies carries an `if:`, so `skipped` can
-          # only mean an upstream failure or a cancelled run, and is counted as
-          # a non-success rather than warned about.
-          ok=0
-          total=0
-          failed=0
-          for job in "${!jobs[@]}"; do
-            result="${jobs[$job]}"
-            total=$((total + 1))
-            if [[ "$result" == "success" ]]; then
-              echo "- :white_check_mark: $job: $result" >> $GITHUB_STEP_SUMMARY
-              ok=$((ok + 1))
-            else
-              # Says only what is known. `failure` means the job did not
-              # complete; it does NOT mean the scanner found something.
-              echo "- :x: $job: ${result:-<empty>} (did not complete -- no verdict)" >> $GITHUB_STEP_SUMMARY
-              failed=$((failed + 1))
-            fi
-          done
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "security scans: ${ok} of ${total} completed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "security scans: ${ok} of ${total} completed successfully"
-
-          if [[ "$total" -eq 0 ]]; then
-            echo "::error::0 security scans were evaluated. A status with an empty denominator cannot report clean."
-            exit 1
-          fi
-
-          if [[ "$failed" -gt 0 ]]; then
-            echo "::error::${failed} of ${total} security scans did not complete. Missing evidence is not a pass."
-            exit 1
-          fi
-
-  audit_rust-audit:
     name: Rust Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -429,30 +97,41 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
-      - name: Run cargo audit (JSON output)
-        run: cargo audit --json > rust-audit-report.json || true
-
-      - name: Run cargo audit (human-readable)
-        id: audit
+      # #849: this job used to end with `exit 0  # Don't fail yet, let the
+      # summary job decide`. The deferral never happened -- the summary reads
+      # job *results*, not step outputs, so the scan was green whatever it
+      # found. The job now fails on its own findings, which is the path the
+      # old comment promised. No `|| true`, no unconditional `exit 0`.
+      - name: Run cargo audit
         run: |
-          if cargo audit 2>&1 | grep -q "Vulnerability"; then
-            echo "vulnerabilities_found=true" >> $GITHUB_OUTPUT
-            echo "::warning::Security vulnerabilities found in Rust dependencies"
+          set -uo pipefail
+          set +e
+          cargo audit --json > rust-audit-report.json
+          rc=$?
+          set -e
+          if [ ! -s rust-audit-report.json ] || ! jq -e '.vulnerabilities' rust-audit-report.json >/dev/null 2>&1; then
+            echo "::error::cargo audit produced no parsable report (exit ${rc}). A crashed scanner is not a clean scan."
+            exit 1
+          fi
+          vulns=$(jq -r '.vulnerabilities.count // 0' rust-audit-report.json)
+          warn_classes=$(jq -r '.warnings | keys | length // 0' rust-audit-report.json)
+          echo "cargo-audit advisory database scan: vulnerabilities=${vulns} warning-classes=${warn_classes} (report: rust-audit-report.json)"
+          echo "advisories found: ${vulns} | warning classes: ${warn_classes}"
+          if [ "${vulns}" -gt 0 ]; then
+            echo "::error::cargo audit found ${vulns} vulnerable advisories in the dependency tree. This job fails on its own findings (#849)."
             cargo audit
-            exit 0  # Don't fail yet, let the summary job decide
-          else
-            echo "vulnerabilities_found=false" >> $GITHUB_OUTPUT
-            echo "No known vulnerabilities found"
+            exit 1
           fi
 
       - name: Upload audit results
+        if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
           name: rust-audit-report
           path: rust-audit-report.json
           retention-days: 30
 
-  audit_rust-deny:
+  rust-deny:
     name: Rust License & Ban Check
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -511,86 +190,29 @@ jobs:
           EOF
           fi
 
+      # #849: the old step ran `cargo deny check ... || true`, discarding the
+      # verdict at the source. pipefail + no suppression: a denied licence or
+      # advisory fails this job on its own findings. The report is uploaded
+      # either way so the evidence survives a red run.
       - name: Check licenses and bans
-        run: cargo deny check 2>&1 | tee cargo-deny-report.txt || true
+        run: |
+          set -euo pipefail
+          cargo deny check 2>&1 | tee cargo-deny-report.txt
+          echo "cargo-deny checked: advisories, bans, licenses, sources (report: cargo-deny-report.txt)"
 
       - name: Upload deny results
+        if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
           name: cargo-deny-report
           path: cargo-deny-report.txt
           retention-days: 30
 
-  # ============================================================================
-  # Haskell Security Audit
-  # Container Security Scanning
-  # ============================================================================
+  # ==========================================================================
+  # Secret detection
+  # ==========================================================================
 
-  audit_container-scan:
-    name: Container Security (Trivy)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # Same fault, same cure as `container-scan` above: uploading SARIF needs
-    # `security-events: write`, and a job-level map replaces the workflow's
-    # `read-all` rather than adding to it.
-    permissions:
-      contents: read
-      security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        # Only deploy/Containerfile is currently in the tree; the adapter /
-        # engine / registry variants are part of an earlier multi-image
-        # split that hasn't landed yet. Add them back here when they exist.
-        dockerfile:
-          - deploy/Containerfile
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Extract image name from Containerfile path
-        id: image
-        run: |
-          dockerfile="${{ matrix.dockerfile }}"
-          name=$(basename "$dockerfile" | sed 's/Containerfile/hypatia/' | sed 's/^\.//' | sed 's/^-//')
-          if [ "$name" = "hypatia" ]; then
-            name="hypatia-main"
-          fi
-          echo "name=$name" >> $GITHUB_OUTPUT
-
-      - name: Build container image
-        run: |
-          docker build -t ${{ steps.image.outputs.name }}:scan -f ${{ matrix.dockerfile }} .
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: '${{ steps.image.outputs.name }}:scan'
-          format: 'sarif'
-          output: 'trivy-${{ steps.image.outputs.name }}.sarif'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          ignore-unfixed: true
-
-      - name: Run Trivy (table output)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: '${{ steps.image.outputs.name }}:scan'
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-
-      - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)
-        if: always()
-        with:
-          sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
-          category: 'trivy-${{ steps.image.outputs.name }}'
-
-  # ============================================================================
-  # Secret Detection
-  # ============================================================================
-
-  gitleaks:
+  secret-gitleaks:
     name: Secret Detection (Gitleaks)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -648,14 +270,14 @@ jobs:
 
       # `.gitleaks.toml` carries `[extend] path = ".gitleaks-estate.toml"`, and
       # gitleaks resolves that against the PROCESS CWD. Only standards'
-      # secret-scanner-reusable.yml staged that file, so these two hand-rolled
-      # jobs died before scanning a single byte:
+      # secret-scanner-reusable.yml staged that file, so the hand-rolled job
+      # died before scanning a single byte:
       #   FTL failed to load extended config ... no such file or directory
       # the action then crashed on the results.sarif it never wrote, and the
-      # audit summary reported a CRASHED SCANNER as "possible secrets in
-      # repository" -- a fake red in the worst possible direction for a
-      # security gate. Pinned to the same standards sha that
-      # .github/workflows/secret-scanner.yml already consumes.
+      # summary reported a CRASHED SCANNER as "possible secrets in repository"
+      # -- a fake red in the worst possible direction for a security gate.
+      # Pinned to the same standards sha that .github/workflows/secret-scanner.yml
+      # already consumes.
       - name: Fetch estate gitleaks baseline
         uses: actions/checkout@v7.0.1
         with:
@@ -676,16 +298,33 @@ jobs:
           rm -rf .standards-gitleaks
           test -s .gitleaks-estate.toml
 
-      - name: Run Gitleaks
+      - name: Gitleaks Secret Scan
         uses: gitleaks/gitleaks-action@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
-  trufflehog:
+  secret-trufflehog:
     name: Secret Detection (TruffleHog)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Two separate pins live in this job and they bump TOGETHER:
+      #   1. `uses: trufflesecurity/trufflehog@v3.97.6`  -- the action wrapper
+      #   2. `TRUFFLEHOG_VERSION` / `version:` input below -- the SCANNER
+      #      (the container image the wrapper runs)
+      # The wrapper's final command is `docker run ... "${IMAGE}:${VERSION}"`,
+      # and its `version` input defaults to `latest`, so pinning only the
+      # action (what we did before, #851) left the detector itself floating:
+      # measured on PR #846, the action pin said v3.97.5 while the log said
+      # "trufflehog_version": "3.97.6". Detector behaviour IS this gate's
+      # verdict; it must be reproducible.
+      # NOTE: a digest reference (`image@sha256:...`) is NOT expressible
+      # through this action -- it unconditionally appends ":${VERSION}" to
+      # whatever `image:` holds. The explicit tag below is therefore the
+      # strongest scanner pin the wrapper supports; the version step proves
+      # on every run what actually executed.
+      TRUFFLEHOG_VERSION: '3.97.6'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -702,7 +341,7 @@ jobs:
       # rather than like zero coverage.
       #
       # This step resolves the range EXPLICITLY for every event, read off the
-      # action source at the pinned v3.97.5. That matters, because when both
+      # action source at the pinned v3.97.6. That matters, because when both
       # inputs are left empty the action does not fall through to one
       # behaviour -- it dispatches on the event itself:
       #   push                       -> BASE=github.event.before
@@ -790,20 +429,102 @@ jobs:
           echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
-      - name: TruffleHog Secret Scan
+      # #851 AC3: the run must show which scanner actually executed, so drift
+      # between the pins is visible in the run and not only in this file.
+      - name: Report scanner version actually run
+        run: |
+          set -euo pipefail
+          docker pull "ghcr.io/trufflesecurity/trufflehog:${TRUFFLEHOG_VERSION}"
+          docker run --rm "ghcr.io/trufflesecurity/trufflehog:${TRUFFLEHOG_VERSION}" --version
+
+      # ======================================================================
+      # SECRET-GATE POLICY (#848) -- stated, not implied by a filter flag.
+      #
+      # A leak must be able to redden this gate. `--only-verified` alone
+      # cannot do that: it reports only credentials TruffleHog can verify
+      # against a live service, and a leaked PRIVATE KEY -- the single
+      # highest-severity thing a secret scanner exists to find -- cannot be
+      # verified against any endpoint. Measured: a real 2048-bit RSA key
+      # deleted from the worktree but present in history gave
+      # `verified_secrets: 0, unverified_secrets: 3`, and the old gate was
+      # GREEN. Two passes resolve the tension #848 names (drop the filter
+      # outright and false positives flood a gate people then ignore):
+      #
+      #   Gate A (verified class)   -- findings of ANY detector type whose
+      #     credentials TruffleHog could VERIFY against the live service
+      #     fail the build. (--results=verified, the supported spelling of
+      #     the hidden --only-verified alias.)
+      #
+      #   Gate B (non-verifiable high-severity class) -- findings of the
+      #     PrivateKey detector fail the build REGARDLESS of verification
+      #     status, because key material cannot be verified against an
+      #     endpoint and "unverified" here means "cannot be checked", not
+      #     "probably fine".
+      #
+      #   Everything else unverified -- reported in the denominator below,
+      #     NOT gating. This is the deliberate middle course: the gate is
+      #     quiet on speculative generic-credential noise but cannot be
+      #     green while private-key material sits in history.
+      #
+      # Accepted-noise exclusions: NONE. Every future exclusion must be
+      # written here as an explicit `--exclude-detectors=<name> -- <reason>`
+      # line; an exclusion that lives only in someone's head is not a policy.
+      # ======================================================================
+
+      - name: Gate A — verified credentials fail the gate
         uses: trufflesecurity/trufflehog@v3.97.6
         with:
           path: ./
           base: ${{ steps.th.outputs.base }}
           head: ${{ steps.th.outputs.head }}
-          extra_args: --only-verified
+          version: ${{ env.TRUFFLEHOG_VERSION }}
+          extra_args: --results=verified
 
-  # ============================================================================
-  # SAST (Static Application Security Testing)
-  # ============================================================================
+      - name: Gate B — private keys fail the gate even when unverified
+        uses: trufflesecurity/trufflehog@v3.97.6
+        with:
+          path: ./
+          base: ${{ steps.th.outputs.base }}
+          head: ${{ steps.th.outputs.head }}
+          version: ${{ env.TRUFFLEHOG_VERSION }}
+          extra_args: --include-detectors=PrivateKey --results=verified,unverified,unknown
 
-  audit_codeql:
-    name: CodeQL SAST
+      # #848 AC4: a zero-finding run must be distinguishable from a run that
+      # looked at nothing. The range step prints the scan subject (commits);
+      # this step prints what the scan returned, by verification status. It
+      # is informational (exit 0 by design): the two gates above own the
+      # verdicts, and this pass exists so a red or green run can be read.
+      # Cost note: one extra scan of the same range. The gates cannot be
+      # merged into one action pass without over-failing (one pass cannot
+      # say "verified anything OR unverified private keys" without also
+      # failing on every unverified generic hit), and the wrapper cannot
+      # emit a countable machine-readable output without a dedicated pass.
+      - name: Findings denominator (informational)
+        env:
+          TH_BASE: ${{ steps.th.outputs.base }}
+          TH_HEAD: ${{ steps.th.outputs.head }}
+        run: |
+          set -uo pipefail
+          args=(git file:///tmp/ --no-update --json --results=verified,unverified,unknown,filtered_unverified)
+          if [ -n "$TH_BASE" ]; then args+=(--since-commit "$TH_BASE"); fi
+          if [ -n "$TH_HEAD" ]; then args+=(--branch "$TH_HEAD"); fi
+          docker run --rm -v .:/tmp -w /tmp "ghcr.io/trufflesecurity/trufflehog:${TRUFFLEHOG_VERSION}" "${args[@]}" > th-findings.json
+          if [ ! -s th-findings.json ]; then
+            echo "trufflehog findings: 0 (scanner ran over the resolved range and returned nothing)"
+          else
+            v=$(grep -c '"Verified": *true' th-findings.json || true)
+            u=$(grep -c '"Verified": *false' th-findings.json || true)
+            pk=$(grep -c '"DetectorName": *"PrivateKey"' th-findings.json || true)
+            echo "trufflehog findings: verified=${v} unverified_or_unknown=${u} (of which PrivateKey: ${pk})"
+          fi
+          echo "scanner: ghcr.io/trufflesecurity/trufflehog:${TRUFFLEHOG_VERSION} | range commits: $(git rev-list --count --all 2>/dev/null || echo '?')"
+
+  # ==========================================================================
+  # SAST
+  # ==========================================================================
+
+  codeql:
+    name: CodeQL Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -828,9 +549,81 @@ jobs:
         with:
           category: "/language:${{matrix.language}}"
 
-  # ============================================================================
-  # License Compliance
-  # ============================================================================
+  # ==========================================================================
+  # Container security
+  # ==========================================================================
+
+  # #850: this job used to exist twice -- `container-scan` (consulted by NO
+  # aggregator: its failure reached nothing) and `audit_container-scan`.
+  # One job now, named in the single aggregator's `needs:`, with the
+  # self-check below making a future orphan mechanical.
+  container-scan:
+    name: Container Security (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The workflow default is `read-all`, and a job-level map REPLACES that
+    # default rather than merging with it -- so a job that uploads SARIF must
+    # spell out BOTH scopes. Without this the Trivy scan ran fine and only
+    # `upload-sarif` died with "Resource not accessible by integration",
+    # which this workflow then displayed as a failed container scan. That is
+    # the same confusion as the TruffleHog one: the scanner looked and found
+    # nothing wrong; it was the *filing* of the result that was denied.
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Only deploy/Containerfile is currently in the tree; the adapter /
+        # engine / registry variants are part of an earlier multi-image
+        # split that hasn't landed yet. Add them back here when they exist.
+        dockerfile:
+          - deploy/Containerfile
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Extract image name from Containerfile path
+        id: image
+        run: |
+          dockerfile="${{ matrix.dockerfile }}"
+          name=$(basename "$dockerfile" | sed 's/Containerfile/hypatia/' | sed 's/^\.//' | sed 's/^-//')
+          if [ "$name" = "hypatia" ]; then
+            name="hypatia-main"
+          fi
+          echo "name=$name" >> $GITHUB_OUTPUT
+
+      - name: Build container image
+        run: |
+          docker build -t ${{ steps.image.outputs.name }}:scan -f ${{ matrix.dockerfile }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: '${{ steps.image.outputs.name }}:scan'
+          format: 'sarif'
+          output: 'trivy-${{ steps.image.outputs.name }}.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
+
+      - name: Run Trivy (table output)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: '${{ steps.image.outputs.name }}:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF results
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ steps.image.outputs.name }}.sarif'
+          category: 'trivy-${{ steps.image.outputs.name }}'
+
+  # ==========================================================================
+  # Licence compliance
+  # ==========================================================================
 
   license-check:
     name: License Compliance Check
@@ -890,6 +683,7 @@ jobs:
           echo "**Total files missing SPDX header: $missing_headers**" >> license-report.md
 
           cat license-report.md
+          echo "spdx headers checked; missing: ${missing_headers} (report: license-report.md)"
 
           if [ $missing_headers -gt 0 ]; then
             echo "::warning::$missing_headers files are missing SPDX license headers"
@@ -902,11 +696,11 @@ jobs:
           path: license-report.md
           retention-days: 30
 
-  # ============================================================================
-  # SBOM Generation
-  # ============================================================================
+  # ==========================================================================
+  # SBOM generation
+  # ==========================================================================
 
-  sbom-generation:
+  sbom:
     name: Generate SBOM
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -922,48 +716,85 @@ jobs:
       - name: Install cargo-cyclonedx
         run: cargo install cargo-cyclonedx --locked --version 0.5.9
 
-      - name: Generate Rust SBOM
+      - name: Generate CycloneDX SBOM
         run: |
-          cargo cyclonedx --format json --override-filename sbom-rust.cdx || true
-          cargo cyclonedx --format xml --override-filename sbom-rust.cdx || true
-
+          set -euo pipefail
+          cargo cyclonedx --format json --override-filename rust-sbom.cdx
+          cargo cyclonedx --format xml --override-filename rust-sbom.cdx
+          echo "sbom generated (cyclonedx), files:"
+          find . -name 'rust-sbom.cdx.*' -print
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v7.0.1
         with:
           name: sbom
           path: |
-            **/sbom-rust.cdx.json
-            **/sbom-rust.cdx.xml
+            **/rust-sbom.cdx.json
+            **/rust-sbom.cdx.xml
           retention-days: 90
 
-  # ============================================================================
-  # Security Audit Summary
-  # ============================================================================
+  # ==========================================================================
+  # The single aggregator
+  # ==========================================================================
 
-  audit-summary:
-    name: Security Audit Summary
+  security-status:
+    name: Security Status
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # #847 AC4: one aggregator consults EVERY security job. The list below is
+    # every job in this workflow except this one; the self-check step asserts
+    # that mechanically, so the two cannot drift apart silently (#850 AC4).
     needs:
-      - audit_rust-audit
-      - audit_rust-deny
-      - audit_container-scan
-      - gitleaks
-      - trufflehog
-      - audit_codeql
+      - rust-audit
+      - rust-deny
+      - secret-gitleaks
+      - secret-trufflehog
+      - codeql
+      - container-scan
       - license-check
-      - sbom-generation
+      - sbom
     if: always()
     steps:
-      - name: Generate audit summary
+      # #850 AC4: every job in this workflow except the aggregators must be
+      # named in some aggregator's `needs:`. Parse the job keys out of this
+      # very file and compare; a future orphan job fails HERE rather than
+      # being discovered as an unmonitored gate.
+      - name: "Self-check — no orphan jobs (every job is in this needs list)"
         run: |
-          echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          wf=.github/workflows/security-policy.yml
+          # Top-level job keys: two-space indent under `jobs:`, nothing deeper.
+          mapfile -t all_jobs < <(awk '/^jobs:/{f=1;next} f && /^[^ #]/{exit} f && /^  [A-Za-z0-9_-]+:$/ {sub(/^[[:space:]]+/,""); sub(/:$/,""); print}' "$wf")
+          needs_list=$(sed -n '/^    needs:$/,/^    if:/p' "$wf" | sed -n 's/^      - //p')
+          failed=0
+          echo "jobs in workflow: ${#all_jobs[@]}"
+          echo "aggregator needs:"
+          echo "$needs_list" | sed 's/^/  - /'
+          for j in "${all_jobs[@]}"; do
+            [ "$j" = "security-status" ] && continue
+            if ! grep -qx -- "$j" <<<"$needs_list"; then
+              echo "::error::orphan job '$j' is consulted by no aggregator -- its failure reaches nothing (#850)."
+              failed=1
+            fi
+          done
+          for j in $needs_list; do
+            if ! grep -qx -- "$j" <<<"$(printf '%s\n' "${all_jobs[@]}")"; then
+              echo "::error::aggregator needs '$j' but no such job exists in this workflow (#847)."
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+          echo "ok: every non-aggregator job is named in the aggregator's needs"
+
+      - name: Security scan report and verdict
+        run: |
+          echo "## Security Scan Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          # Function to map status
           status_icon() {
             case "$1" in
               success) echo ":white_check_mark:" ;;
@@ -974,46 +805,39 @@ jobs:
             esac
           }
 
-          echo "| Rust Audit | $(status_icon '${{ needs.audit_rust-audit.result }}') ${{ needs.audit_rust-audit.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rust Deny | $(status_icon '${{ needs.audit_rust-deny.result }}') ${{ needs.audit_rust-deny.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Container Scan | $(status_icon '${{ needs.audit_container-scan.result }}') ${{ needs.audit_container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Gitleaks | $(status_icon '${{ needs.gitleaks.result }}') ${{ needs.gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| TruffleHog | $(status_icon '${{ needs.trufflehog.result }}') ${{ needs.trufflehog.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL | $(status_icon '${{ needs.audit_codeql.result }}') ${{ needs.audit_codeql.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| License Check | $(status_icon '${{ needs.license-check.result }}') ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| SBOM Generation | $(status_icon '${{ needs.sbom-generation.result }}') ${{ needs.sbom-generation.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Dependency Audit | $(status_icon '${{ needs.rust-audit.result }}') ${{ needs.rust-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust License & Ban Check | $(status_icon '${{ needs.rust-deny.result }}') ${{ needs.rust-deny.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Detection (Gitleaks) | $(status_icon '${{ needs.secret-gitleaks.result }}') ${{ needs.secret-gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Detection (TruffleHog) | $(status_icon '${{ needs.secret-trufflehog.result }}') ${{ needs.secret-trufflehog.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL Analysis | $(status_icon '${{ needs.codeql.result }}') ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Security (Trivy) | $(status_icon '${{ needs.container-scan.result }}') ${{ needs.container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Compliance Check | $(status_icon '${{ needs.license-check.result }}') ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Generate SBOM | $(status_icon '${{ needs.sbom.result }}') ${{ needs.sbom.result }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "_Audit completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)_" >> $GITHUB_STEP_SUMMARY
 
-      # Two faults lived in this step, both of which made a broken security
-      # gate read as a working one:
-      #
-      # 1. It inspected 3 of its 8 `needs:`. The table above DISPLAYS all eight;
-      #    displaying a dependency is not gating on it. A failing container scan
-      #    was rendered as :x: and then silently ignored by the decision.
-      # 2. `failure` means "this job did not complete". It NEVER means "this job
-      #    found something" -- a scanner that crashed, timed out, or was refused
-      #    a credential reports the identical result to one that found a secret.
-      #    The old text asserted "TruffleHog found verified secrets" whenever the
-      #    job was red, which manufactured a detection claim out of a scanner
-      #    that had scanned zero bytes. Fake alarms train people to ignore the
-      #    check; the same confusion lets a genuinely broken scanner read clean.
-      #
-      # All eight dependencies are unconditional (none carries an `if:`), so
-      # `skipped` here can only mean an upstream failure or a cancelled run.
-      # It is therefore failed on, not warned about: `::warning::` cannot fail a
-      # job, so warning while calling a skip "not a pass" asserts the opposite.
-      - name: Check for failures
-        run: |
+          # Two faults this gate historically carried, both of which made a
+          # broken security gate read as a working one:
+          #
+          # 1. It inspected a subset of its `needs:`. Displaying a dependency
+          #    is not gating on it -- a failing scan was rendered and then
+          #    silently ignored by the decision.
+          # 2. `failure` means "this job did not complete". It NEVER means
+          #    "this job found something" -- a scanner that crashed, timed
+          #    out, or was refused a credential reports the identical result
+          #    to one that found a secret. Say "did not complete -- no
+          #    verdict", never "found secrets".
+          #
+          # All dependencies are unconditional (none carries an `if:`), so
+          # `skipped` can only mean an upstream failure or a cancelled run,
+          # and is failed on, not warned about.
           set -uo pipefail
           ok=0
           total=0
           failed=0
 
-          # Says only what is known: the job did not complete, so the evidence
-          # that check was supposed to produce is missing. Never a detection.
           check() {
             total=$((total + 1))
             case "$2" in
@@ -1027,17 +851,17 @@ jobs:
             esac
           }
 
-          check "Rust audit"      "${{ needs.audit_rust-audit.result }}"
-          check "Rust deny"       "${{ needs.audit_rust-deny.result }}"
-          check "Container scan"  "${{ needs.audit_container-scan.result }}"
-          check "Gitleaks"        "${{ needs.gitleaks.result }}"
-          check "TruffleHog"      "${{ needs.trufflehog.result }}"
-          check "CodeQL"          "${{ needs.audit_codeql.result }}"
-          check "License check"   "${{ needs.license-check.result }}"
-          check "SBOM generation" "${{ needs.sbom-generation.result }}"
+          check "Rust dependency audit"      "${{ needs.rust-audit.result }}"
+          check "Rust licence & ban check"   "${{ needs.rust-deny.result }}"
+          check "Gitleaks"                   "${{ needs.secret-gitleaks.result }}"
+          check "TruffleHog"                 "${{ needs.secret-trufflehog.result }}"
+          check "CodeQL"                     "${{ needs.codeql.result }}"
+          check "Container scan (Trivy)"     "${{ needs.container-scan.result }}"
+          check "Licence compliance check"   "${{ needs.license-check.result }}"
+          check "SBOM generation"            "${{ needs.sbom.result }}"
 
-          # The denominator is the point: "0 of 0 succeeded" must never be green.
           echo "security checks: ${ok} of ${total} succeeded"
+          echo "security checks: ${ok} of ${total} succeeded" >> $GITHUB_STEP_SUMMARY
 
           if [ "$total" -eq 0 ]; then
             echo "::error::0 security checks were evaluated. A rollup with an empty denominator cannot report clean."

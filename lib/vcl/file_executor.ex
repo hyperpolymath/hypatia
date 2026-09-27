@@ -573,7 +573,8 @@ defmodule Hypatia.VCL.FileExecutor do
           {:ok, content} ->
             case Jason.decode(content) do
               {:ok, data} ->
-                String.downcase(Map.get(data, "primary_language", "unknown"))
+                # Deterministic resolution shared with CrossRepoLearning (#676)
+                Hypatia.CrossRepoLearning.primary_language_from_scan_data(data)
 
               _ ->
                 "unknown"
