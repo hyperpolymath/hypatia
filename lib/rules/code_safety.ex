@@ -819,6 +819,12 @@ defmodule Hypatia.Rules.CodeSafety do
   def scan_content(content, language) do
     scannable = strip_inline_test_blocks(content, language)
     runtime_only = strip_lazy_initialisers(scannable, language)
+    # Every stripper above is line-count-preserving (whole-line comment
+    # removal keeps the newline; lazy-elision pads with the elided span's
+    # newlines), so a byte offset in `subject` maps to the same line number
+    # as in `content` — and in the raw line array below. If a future stripper
+    # breaks that invariant it must say so here.
+    orig_lines = String.split(content, "\n")
 
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
@@ -829,35 +835,78 @@ defmodule Hypatia.Rules.CodeSafety do
       # quoted guidance or comments. Apply the same central suppression oracle
       # used by the CLI before aggregating occurrences; otherwise a file-level
       # finding survives even though every matching line is known-safe.
+      # Rejected lines are BLANKED, not dropped — dropping would shift every
+      # subsequent line number (the main.zig:1 class of defect, issue #834).
       subject =
         if rule.id == :shell_download_then_run do
           subject
           |> String.split("\n")
           |> Enum.with_index(1)
-          |> Enum.reject(fn {line, line_number} ->
-            Hypatia.ScannerSuppression.context_safe_line?(
-              "shell_download_then_run",
-              line,
-              line_number
-            )
+          |> Enum.map(fn {line, line_number} ->
+            if Hypatia.ScannerSuppression.context_safe_line?(
+                 "shell_download_then_run",
+                 line,
+                 line_number
+               ) do
+              ""
+            else
+              line
+            end
           end)
-          |> Enum.map_join("\n", &elem(&1, 0))
+          |> Enum.join("\n")
         else
           subject
         end
 
-      case Regex.scan(rule.pattern, subject) do
+      # Inline `hypatia:ignore <rule>` / `hypatia: allow <rule>` directives
+      # suppress the rule per line (directive line or the line below it),
+      # with the ORIGINAL lines — the directive itself is usually a comment
+      # and has been stripped from `subject` for matching purposes.
+      subject =
+        subject
+        |> String.split("\n")
+        |> Enum.with_index(1)
+        |> Enum.map(fn {line, line_number} ->
+          raw = Enum.at(orig_lines, line_number - 1, line)
+          prev = if line_number >= 2, do: Enum.at(orig_lines, line_number - 2)
+
+          if Hypatia.ScannerSuppression.inline_allowed?(
+               raw,
+               prev,
+               "code_safety",
+               to_string(rule.id)
+             ) do
+            ""
+          else
+            line
+          end
+        end)
+        |> Enum.join("\n")
+
+      case Regex.scan(rule.pattern, subject, return: :index) do
         [] ->
           []
 
         matches ->
+          lines =
+            matches
+            |> Enum.map(fn [{byte_off, _len} | _] ->
+              subject
+              |> binary_part(0, byte_off)
+              |> :binary.matches("\n")
+              |> length()
+              |> Kernel.+(1)
+            end)
+            |> Enum.uniq()
+
           [
             %{
               rule: rule.id,
               severity: rule.severity,
               cwe: rule.cwe,
               description: rule.description,
-              occurrences: length(matches)
+              occurrences: length(matches),
+              lines: lines
             }
           ]
       end
@@ -918,7 +967,12 @@ defmodule Hypatia.Rules.CodeSafety do
 
           close ->
             before = binary_part(content, from, start - from)
-            elide_lazy_inits(content, close + 1, ["LAZY_INIT_ELIDED", before | acc])
+            # Keep the elided span's newline count so byte-offset → line
+            # mapping stays truthful for every line after the initialiser.
+            span = binary_part(content, start, close + 1 - start)
+            nls = span |> :binary.matches("\n") |> length()
+            elided = "LAZY_INIT_ELIDED" <> String.duplicate("\n", nls)
+            elide_lazy_inits(content, close + 1, [elided, before | acc])
         end
     end
   end
@@ -1081,6 +1135,15 @@ defmodule Hypatia.Rules.CodeSafety do
   # OCaml: ML-style `(* ... *)` block comments.
   defp strip_inline_test_blocks(content, "ocaml") do
     strip_ml_style_block_comments(content)
+  end
+
+  # Zig: `//` line comments (`///` doc, `//!` doc-as-module included). Zig has
+  # no block comments. Without this, docs and comments in .zig files describing
+  # `@ptrCast` / `@alignCast` / `@intToPtr` trip the Zig patterns — the
+  # main.zig:1 false positives of issue #834. Whole-line stripping preserves
+  # line numbering (the newline is not part of the match).
+  defp strip_inline_test_blocks(content, "zig") do
+    strip_rust_line_comments(content)
   end
 
   defp strip_inline_test_blocks(content, _other), do: content

@@ -1,174 +1,122 @@
-== Integration Tests
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Integration Tests
 
-This directory contains integration tests for the hypatia platform.
+This directory contains the integration test suite for the hypatia
+platform: the `hypatia-integration-tests` Rust crate (`tests/*.rs`) and its
+fixtures.
 
-=== Overview
+== Overview
 
-The integration test framework validates: - *Fleet Operations*: Bot
-orchestration and inter-bot communication - *ArangoDB*: Graph database
-connectivity, queries, and data operations - *Registry*: Haskell ruleset
-registry operations and validation - *Git Hooks*: Pre-commit, pre-push,
-and post-receive hook execution - *Forge Adapters*: GitHub, GitLab, and
-Bitbucket API integrations
+The integration test framework validates:
 
-=== Directory Structure
+* *Fleet Operations*: Bot orchestration and inter-bot communication
+* *ArangoDB*: Graph database connectivity, queries, and data operations
+* *Registry*: Ruleset registry operations and validation
+* *Git Hooks*: Pre-commit, pre-push, and post-receive hook execution
+* *Forge Adapters*: GitHub, GitLab, and Bitbucket API integrations (wiremock)
+
+== Directory structure
 
 ....
 integration/
 ├── Cargo.toml                    # Test crate configuration
-├── docker-compose.test.yml       # Test environment containers
-├── run-tests.sh                  # Test runner script
-├── README.md                     # This file
+├── README.adoc                   # This file
 ├── tests/
-│   ├── fleet_test.rs            # Bot fleet orchestration tests
-│   ├── arangodb_test.rs         # ArangoDB connectivity tests
-│   ├── registry_test.rs         # Haskell registry tests
-│   ├── hooks_test.rs            # Git hooks execution tests
-│   └── forge_test.rs            # Forge adapter tests (wiremock)
-└── fixtures/
-    ├── test-repo/               # Sample repository for testing
-    │   ├── .github/workflows/   # Test workflow files
-    │   ├── src/                 # Test source files
-    │   └── index.html           # Test HTML with accessibility issues
-    ├── sample-ruleset.json      # Sample ruleset for registry tests
-    └── mock-responses/          # Mock API responses for forges
-        ├── github-repo.json
-        ├── github-workflows.json
-        ├── github-alerts.json
-        ├── gitlab-project.json
-        └── bitbucket-repo.json
+│   ├── fleet_test.rs             # Bot fleet orchestration tests
+│   ├── arangodb_test.rs          # ArangoDB connectivity tests
+│   ├── registry_test.rs          # Registry tests
+│   ├── hooks_test.rs             # Git hooks execution tests
+│   ├── forge_test.rs             # Forge adapter tests (wiremock)
+│   └── ci_simulation_test.rs     # CI simulation tests
+├── fixtures/
+│   ├── test-repo/                # Sample repository for testing
+│   ├── sample-ruleset.json       # Sample ruleset for registry tests
+│   └── mock-responses/           # Mock API responses for forges
+├── src/                          # Support library for the tests
+└── robot-repo-automaton/         # Automation support code
 ....
 
-=== Prerequisites
+== How the suite runs
 
-* Rust 1.75+ with cargo
-* Docker and Docker Compose
-* Git
-* (Optional) redis-cli for health checks
-
-=== Quick Start
+The suite runs in CI as the `integration-tests` job of
+`.github/workflows/tests.yml`. It does *not* use a docker-compose tier: the
+job declares `arangodb` and `dragonfly` as GitHub Actions *service
+containers*, waits for both, seeds the ArangoDB database, and runs:
 
 [source,bash]
 ----
-# Run all integration tests
-./run-tests.sh
+# Rust (workspace-wide, integration feature)
+cargo test --workspace --features integration-tests -- --test-threads=1
 
-# Run with verbose output
-./run-tests.sh --verbose
+# Elixir integration tests (same services)
+mix test --include integration
 
-# Run specific test file
-./run-tests.sh --test fleet_test
-
-# Run without slow tests
-./run-tests.sh --quick
-
-# Generate coverage report
-./run-tests.sh --coverage
-
-# Keep containers running after tests
-./run-tests.sh --keep
+# CLI crate tests
+cargo test --manifest-path cli/Cargo.toml --features integration-tests -- --test-threads=1
 ----
 
-=== Test Categories
-
-==== Fleet Tests (`+fleet_test.rs+`)
-
-Tests bot fleet operations: - Sequential bot execution pipeline - Shared
-context propagation between bots - Alert aggregation from multiple bots
-- Fix deduplication - Error handling and recovery - Metrics collection
-
-==== ArangoDB Tests (`+arangodb_test.rs+`)
-
-Tests database operations: - Connection pooling and health checks -
-Repository CRUD operations - Alert storage and retrieval - Rule
-management - AQL query execution - Bulk insert performance - Graph
-traversal queries
-
-==== Registry Tests (`+registry_test.rs+`)
-
-Tests Haskell registry: - Ruleset registration and validation -
-LiquidHaskell verification (mock) - Duplicate rule detection - Rule
-search by category and severity - Fix template application - JSON
-serialization
-
-==== Hooks Tests (`+hooks_test.rs+`)
-
-Tests git hooks: - Hook installation and permissions - Pre-commit hook
-success/failure - Hook bypass with –no-verify - SPDX header validation -
-SHA pin validation - Permissions validation - Multiple hooks execution -
-Environment variable handling
-
-==== Forge Tests (`+forge_test.rs+`)
-
-Tests forge adapters: - GitHub API mock server - GitLab API mock server
-- Bitbucket API mock server - Authentication headers - Rate limiting
-responses - Webhook payload handling - Error handling (404, 500) -
-Pagination handling - Concurrent requests
-
-=== Test Environment
-
-The test environment uses Docker containers:
-
-[cols=",,",options="header",]
-|===
-|Service |Port |Purpose
-|ArangoDB |8529 |Graph database
-|Dragonfly |6379 |Redis-compatible cache
-|Mock GitHub |1080 |GitHub API mock
-|Mock GitLab |1081 |GitLab API mock
-|Mock Bitbucket |1082 |Bitbucket API mock
-|Webhook Receiver |8088 |Webhook testing
-|===
-
-=== Environment Variables
-
-The test runner sets these automatically:
+Environment the job provides:
 
 [cols=",,",options="header",]
 |===
 |Variable |Default |Description
 |`+ARANGODB_URL+` |http://localhost:8529 |ArangoDB connection URL
-|`+ARANGODB_DATABASE+` |cicd_hyper_a_test |Test database name
-|`+ARANGODB_USERNAME+` |root |Database username
+|`+ARANGODB_DATABASE+` |hypatia |Test database name
+|`+ARANGODB_USER+` |root |Database username
 |`+ARANGODB_PASSWORD+` |testpassword |Database password
 |`+DRAGONFLY_URL+` |redis://localhost:6379 |Dragonfly/Redis URL
-|`+RUST_LOG+` |info |Logging level
-|`+RUST_BACKTRACE+` |1 |Enable backtraces
+|`+RUST_LOG+` |debug |Logging level
 |===
 
-=== Features
+Locally, run the same commands against your own ArangoDB and
+Dragonfly/Redis instances and export the variables above. Individual test
+files can be run with `cargo test --manifest-path integration/Cargo.toml
+--test <name>`.
 
-Enable additional test categories:
+== The compose tier is gone (deliberately)
+
+Earlier revisions of this directory shipped a docker-compose test tier
+(`compose.test.yaml`, `run-tests.sh`, `Containerfile.test`). It was deleted
+2026-09-26 (issue #853) because it was CI-dead — its only caller had already
+been removed with the fictional "End-to-End Tests" job (issue #843) — and
+structurally broken: it bind-mounted
+`integration/fixtures/mock-server-config/`, a directory that never existed
+in git, against `deploy/Containerfile`, whose entrypoint is a CLI that
+listens on no port. Nothing asserted anything about a real subject.
+
+If a full-stack compose tier is ever wanted, it needs a *server* under test
+and real mock-server expectation files first. Reinstate it together with
+those, not before (issues #843, #853).
+
+`integration/tests/*.rs` and the `integration-tests` CI job are the live
+suite and are unaffected by that removal.
+
+== Features
 
 [source,bash]
 ----
 # Run with live service tests (requires real credentials)
-./run-tests.sh --live
+cargo test --features live-tests
 
 # Run with slow tests (extended timeouts, performance tests)
 cargo test --features slow-tests
 ----
 
-=== Writing New Tests
+== Writing new tests
 
-==== Test Structure
+=== Test structure
 
 Each test file follows this pattern:
 
 [source,rust]
 ----
-// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-License-Identifier: MPL-2.0
 
 use anyhow::Result;
 use tracing::info;
 
-mod common;
-use common::setup_test_logging;
-
 #[tokio::test]
 async fn test_example() -> Result<()> {
-    setup_test_logging();
-
     // Test implementation
     info!("Test completed");
     Ok(())
@@ -179,7 +127,7 @@ fn main() {
 }
 ----
 
-==== Using Mock Servers
+=== Using mock servers
 
 [source,rust]
 ----
@@ -202,7 +150,10 @@ async fn test_with_mock() -> Result<()> {
 }
 ----
 
-==== Using Testcontainers
+=== Using testcontainers
+
+Provisioned services (ArangoDB, Dragonfly) are the CI services' job; for a
+one-off container in a test, `testcontainers` is available directly:
 
 [source,rust]
 ----
@@ -222,23 +173,9 @@ async fn test_with_container() -> Result<()> {
 }
 ----
 
-=== Troubleshooting
+== Troubleshooting
 
-==== Container Issues
-
-[source,bash]
-----
-# Check container logs
-docker logs hypatia-test-arangodb
-
-# Restart containers
-docker-compose -f docker-compose.test.yml restart
-
-# Clean up everything
-docker-compose -f docker-compose.test.yml down -v
-----
-
-==== Database Connection
+=== Service containers (CI)
 
 [source,bash]
 ----
@@ -249,43 +186,14 @@ curl http://localhost:8529/_api/version
 redis-cli -h localhost -p 6379 ping
 ----
 
-==== Test Failures
+=== Test failures
 
 [source,bash]
 ----
-# Run with maximum verbosity
-RUST_LOG=debug ./run-tests.sh --verbose
-
 # Run single test with output
-cargo test test_name -- --nocapture
+cargo test --manifest-path integration/Cargo.toml test_name -- --nocapture
 ----
 
-=== CI/CD Integration
-
-For GitHub Actions:
-
-[source,yaml]
-----
-jobs:
-  integration-tests:
-    runs-on: ubuntu-latest
-    services:
-      arangodb:
-        image: arangodb:3.11
-        env:
-          ARANGO_ROOT_PASSWORD: testpassword
-        ports:
-          - 8529:8529
-      dragonfly:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly
-        ports:
-          - 6379:6379
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --manifest-path integration/Cargo.toml
-----
-
-=== License
+== License
 
 MPL-2.0

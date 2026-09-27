@@ -25,8 +25,10 @@ under "Known Gaps".
 | `integration/Containerfile.test`
 | `docker.io/library/rust:1.94-slim-bookworm`
 | (same — single-stage)
-| ✅ Pinned to versioned tag (2026-05-24); cargo-tarpaulin requires
-   the full rustc toolchain which Chainguard does not publish
+| ❌ *Removed* 2026-09-26 (issue #853) with the rest of the compose test
+   tier — the tier was CI-dead and had no test subject. Was pinned to a
+   versioned tag (2026-05-24); cargo-tarpaulin requires the full rustc
+   toolchain which Chainguard does not publish
 |===
 
 Both are pinned to specific tags; neither uses `:latest` (which is
@@ -110,6 +112,12 @@ done when one of:
 
 == Audit history
 
+  * 2026-09-26 — integration/Containerfile.test removed (issue #853) with
+    the compose test tier (compose.test.yaml, run-tests.sh): CI-dead after
+    its only caller was removed in #843/#852, and bind-mounted
+    integration/fixtures/mock-server-config/, a directory that never
+    existed in git. deploy/Containerfile is now the only Containerfile and
+    keeps its Chainguard runtime.
   * 2026-05-24 — initial memo. integration/Containerfile.test pinned
     to rust:1.94-slim-bookworm (matching deploy/Containerfile's
     builder). Backslash line-continuations restored on the apt-get

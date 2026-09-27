@@ -10,7 +10,7 @@
 
 == Introduction
 
-This guide covers development of hypatia components, including writing rules in Logtalk, creating rulesets in Haskell, developing forge adapters, and contributing to the project.
+This guide covers development of hypatia components, including writing rules in Elixir (the rule engine — absorbed from the Logtalk engine, retired 2026-03-06), developing forge adapters, and contributing to the project.
 
 === Development Environment Setup
 
@@ -32,13 +32,9 @@ This guide covers development of hypatia components, including writing rules in 
 | 3.10+
 | Haskell build
 
-| SWI-Prolog
-| 9.2+
-| Logtalk runtime
-
-| Logtalk
-| 3.70+
-| Rule engine
+| Elixir
+| 1.14+
+| Rule engine (lib/rules)
 
 | Deno
 | 1.40+
@@ -64,8 +60,8 @@ cd ../adapters && cargo build
 # Install Haskell dependencies
 cd ../registry && cabal update && cabal build
 
-# Install Logtalk (if not already installed)
-# See https://logtalk.org/download.html
+# Rule engine is Elixir — fetch deps and run the test suite
+# (the Logtalk engine these docs predated was retired 2026-03-06)
 
 # Start development environment
 cd ../deploy
@@ -99,12 +95,12 @@ cabal test
 │                              │                                           │
 │                              ▼                                           │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                   SYMBOLIC LAYER (Logtalk)                          │ │
+│  │                   SYMBOLIC LAYER (Elixir rules)                    │ │
 │  │                                                                      │ │
-│  │   cicd_rules.lgt      - Core rule definitions                       │ │
-│  │   rule_distiller.lgt  - Neural→Symbolic distillation                │ │
-│  │   learning.lgt        - Feedback learning integration               │ │
-│  │   forge_adapters.lgt  - Multi-forge operations                      │ │
+│  │   cicd_rules.ex       - Core rule definitions                       │ │
+│  │   rules.ex            - Facade / rule loading                       │ │
+│  │   learning.ex         - Feedback learning integration               │ │
+│  │   forge_adapters.ex   - Multi-forge operations                      │ │
 │  │                                                                      │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                              │                                           │
@@ -126,7 +122,7 @@ cabal test
 
 . *User Request*: CLI or API call
 . *Registry Lookup*: Fetch ruleset from cache or Git storage
-. *Engine Execution*: Logtalk evaluates rules against repository state
+. *Engine Execution*: The Elixir ruleset evaluates rules against repository state
 . *Adapter Action*: Forge-specific actions (create PR, update file)
 . *Learning Feedback*: Outcomes feed back to improve rules
 

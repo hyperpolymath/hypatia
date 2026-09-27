@@ -54,14 +54,13 @@ jobs:
         uses: actions/cache@v6.1.0
         with:
           path: |
-            /usr/local/bin/idris2
-            /usr/local/bin/idris2_app
-            /usr/local/lib/idris2
             ~/.idris2
           # Same key as verify-proofs.yml on purpose: this job shares that
           # workflow's warm cache rather than paying a second ~20-min
-          # bootstrap. Keep the `-2` suffix in step with it.
-          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-2
+          # bootstrap. Keep the suffix in step with it. `-3` = the
+          # single-prefix layout (#820); `-2` and earlier entries are the
+          # split-prefix caches and must not be restored.
+          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-3
 
       - name: Build Idris 2 from source
         if: steps.cache-idris.outputs.cache-hit != 'true'
@@ -71,8 +70,14 @@ jobs:
             https://github.com/idris-lang/Idris2 /tmp/idris2
           cd /tmp/idris2
           make bootstrap SCHEME=chezscheme
-          sudo make install PREFIX=/usr/local
+          # ONE prefix (#820), same as verify-proofs.yml: install where the
+          # bootstrap-built binary already looks ($HOME/.idris2), so
+          # `idris2 --libdir` and the install trees cannot disagree.
+          make install PREFIX="$HOME/.idris2"
           idris2 --version
+
+      - name: Put Idris 2 on PATH
+        run: echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
 
       - name: Verify Idris is on PATH
         run: idris2 --version
@@ -117,6 +122,14 @@ jobs:
       # on a cache hit, so this job never mutates the shared entry and redoes
       # the clone+build each run. Do not "optimise" that away -- two workflows
       # writing one cache key is how the poisoned cache of -1 happened.
+      #
+      # #820 SEQUENCING: the bootstrap above now installs ONE prefix, so a
+      # correct install makes this step's repair branch unreachable and it
+      # prints "support installation already complete". That line is the
+      # measurement #820 AC4 asks for. Once a green run shows it (the first
+      # run after the -3 cache lands), this whole step can be deleted -- it
+      # exists to prove the artefacts are present, and deleting the proof
+      # before the measurement is exactly what the issue forbids.
       - name: Ensure the Idris2 support installation is complete
         run: |
           set -euo pipefail

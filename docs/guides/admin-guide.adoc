@@ -26,7 +26,7 @@ hypatia consists of several interconnected components:
          ▼                            ▼                            ▼
 ┌─────────────────┐        ┌─────────────────┐        ┌─────────────────┐
 │    Registry     │        │     Engine      │        │    Adapter      │
-│   (Haskell)     │        │   (Logtalk)     │        │    (Rust)       │
+│   (Haskell)     │        │   (Elixir)      │        │    (Rust)       │
 │   Port: 8080    │        │   Port: 8081    │        │   Port: 8082    │
 └────────┬────────┘        └────────┬────────┘        └────────┬────────┘
          │                          │                          │
@@ -40,7 +40,7 @@ hypatia consists of several interconnected components:
 ----
 
 *Registry*:: Haskell service for ruleset storage, verification, and distribution
-*Engine*:: Logtalk/SWI-Prolog service for rule execution and inference
+*Engine*:: Elixir rules service for rule execution and inference (absorbed from the retired Logtalk/SWI-Prolog engine)
 *Adapter*:: Rust service for forge API integration (GitHub, GitLab, etc.)
 *ArangoDB*:: Graph database for relationship modeling
 *Dragonfly*:: High-performance cache for compiled rules
@@ -114,7 +114,7 @@ GRAFANA_PASSWORD=admin-password-here
 
 | Engine
 | 8081
-| Logtalk rule engine
+| Rule engine (Elixir; Logtalk predecessor retired 2026-03-06)
 
 | Adapter
 | 8082
@@ -320,9 +320,9 @@ source ~/.cargo/env
 # Install GHC (Haskell)
 curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 
-# Install SWI-Prolog and Logtalk
+# Install Elixir (rule engine; the Logtalk/SWI-Prolog engine is retired)
 apt-get install -y swi-prolog
-# Download Logtalk from https://logtalk.org/download.html
+# See https://elixir-lang.org/install.html
 ----
 
 . Build components:
@@ -376,7 +376,7 @@ docker compose up -d --scale registry=5
 
 ==== Engine Service
 
-The Logtalk engine can scale horizontally with session affinity:
+The rule engine can scale horizontally with session affinity:
 
 [source,yaml]
 ----

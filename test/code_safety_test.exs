@@ -448,4 +448,98 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert findings == []
     end
   end
+
+  describe "zig comment stripping and suppression (#834)" do
+    test "Zig // comment mention of @ptrCast / @alignCast is NOT a finding" do
+      code = """
+      const std = @import("std");
+      // The normative idiom is `return @ptrCast(@alignCast(handle));` — see FFI.idr.
+      /// Doc: never @intToPtr a stale integer.
+      fn ok() void {}
+      """
+
+      assert CodeSafety.scan_content(code, "zig") == []
+    end
+
+    test "Zig real @ptrCast in code IS a finding, at the actual line number" do
+      code = """
+      const std = @import("std");
+      // harmless commentary
+      // more commentary
+      fn state(h: *Opaque) *State {
+          return @ptrCast(h);
+      }
+      """
+
+      findings = CodeSafety.scan_content(code, "zig")
+      casts = Enum.find(findings, &(&1.rule == :zig_ptr_cast))
+      assert casts, "real @ptrCast must still fire"
+      assert 5 in casts.lines
+    end
+
+    test "line numbers survive comment stripping (rust .unwrap after comments)" do
+      code = """
+      // line 1 comment
+      // line 2 comment
+      // line 3 comment
+      fn main() {
+          x.unwrap()
+      }
+      """
+
+      findings = CodeSafety.scan_content(code, "rust")
+      unw = Enum.find(findings, &(&1.rule == :unwrap_without_check))
+      assert unw
+      assert 5 in unw.lines
+    end
+
+    test "hypatia:ignore zig_ptr_cast suppresses the real cast (pragmatic review)" do
+      code = """
+      fn state(h: *Opaque) *State {
+          // hypatia:ignore zig_ptr_cast -- opaque-handle recovery, reviewed
+          return @ptrCast(h);
+      }
+      """
+
+      refute Enum.any?(CodeSafety.scan_content(code, "zig"), &(&1.rule == :zig_ptr_cast))
+    end
+
+    test "an unchecked @ptrCast WITHOUT a pragma still fires (both directions)" do
+      code = """
+      fn bad(h: *Opaque) *State {
+          // hypatia:ignore zig_ptr_cast -- covers the line below ONLY
+          return @ptrCast(h);
+      }
+
+      fn worse(h: *Opaque) *State {
+          return @ptrCast(h);
+      }
+      """
+
+      findings = CodeSafety.scan_content(code, "zig")
+      casts = Enum.find(findings, &(&1.rule == :zig_ptr_cast))
+      assert casts, "the unreviewed cast must still fire"
+      assert 7 in casts.lines
+      refute 3 in casts.lines
+    end
+
+    test "hypatia: allow code_safety/zig_ptr_cast bare and qualified forms both work" do
+      qualified = """
+      fn a(h: *Opaque) *State {
+          // hypatia: allow code_safety/zig_ptr_cast -- reviewed
+          return @ptrCast(h);
+      }
+      """
+
+      bare = """
+      fn b(h: *Opaque) *State {
+          // hypatia:ignore zig_ptr_cast -- reviewed
+          return @ptrCast(h);
+      }
+      """
+
+      refute Enum.any?(CodeSafety.scan_content(qualified, "zig"), &(&1.rule == :zig_ptr_cast))
+      refute Enum.any?(CodeSafety.scan_content(bare, "zig"), &(&1.rule == :zig_ptr_cast))
+    end
+  end
 end

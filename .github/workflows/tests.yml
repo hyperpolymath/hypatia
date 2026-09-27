@@ -479,9 +479,12 @@ jobs:
   # downloads and loads the same `docker-images` artifact.
   #
   # If a full-stack compose tier is ever wanted, it needs a server to test
-  # first, plus `integration/fixtures/mock-server-config/`, which the compose
-  # file mounts but which is absent from git. Reinstate it together with those,
-  # not before. See issue #843.
+  # first. The compose scaffolding this comment used to name
+  # (`integration/compose.test.yaml`, `integration/run-tests.sh`,
+  # `integration/Containerfile.test`) was itself deleted 2026-09-26 (issue
+  # #853): it was CI-dead and bind-mounted `integration/fixtures/
+  # mock-server-config/`, which never existed in git. Reinstate together with
+  # a real subject and real fixtures, not before. See issues #843, #853.
   # ============================================================================
 
   # ============================================================================

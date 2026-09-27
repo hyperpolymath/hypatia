@@ -546,4 +546,51 @@ defmodule Hypatia.ScannerSuppressionTest do
       refute ScannerSuppression.whole_line_comment?("#!/usr/bin/env bash", 40)
     end
   end
+
+  describe "placeholder_secret_line?/1 and secret_line_disposition/2 (#746, #748)" do
+    test "template .envrc placeholder is a placeholder" do
+      assert ScannerSuppression.placeholder_secret_line?(~s{# export API_KEY="..."})
+    end
+
+    test "ghp_/glpat_ with xxxxx filler is a placeholder (both spellings)" do
+      assert ScannerSuppression.placeholder_secret_line?(~s{# token = "ghp_xxxxxxxxxxxxxxxxxxxx"})
+      assert ScannerSuppression.placeholder_secret_line?(~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"})
+    end
+
+    test "your-* and changeme fillers are placeholders" do
+      assert ScannerSuppression.placeholder_secret_line?(~s{webhook_secret = "your-webhook-secret"})
+      assert ScannerSuppression.placeholder_secret_line?("password = \"changeme\"")
+    end
+
+    test "a real-looking value is NOT a placeholder (both directions)" do
+      refute ScannerSuppression.placeholder_secret_line?("token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\"")
+      refute ScannerSuppression.placeholder_secret_line?("AWS_SECRET_ACCESS_KEY = \"AKIA1a2B3c4D5e6F7g8H\"")
+    end
+
+    test "placeholder demotes to medium/report regardless of comment" do
+      assert {"medium", "report", _} =
+               ScannerSuppression.secret_line_disposition(~s{# export API_KEY="..."}, 24)
+
+      assert {"medium", "report", _} =
+               ScannerSuppression.secret_line_disposition(~s{API_KEY="..."}, 3)
+    end
+
+    test "commented real-looking secret demotes to medium/report, never silences" do
+      assert {"medium", "report", suffix} =
+               ScannerSuppression.secret_line_disposition(
+                 "# token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\"",
+                 41
+               )
+
+      assert suffix =~ "commented-out"
+    end
+
+    test "uncommented real-looking secret stays critical/revoke_rotate_and_purge" do
+      assert {"critical", "revoke_rotate_and_purge", ""} =
+               ScannerSuppression.secret_line_disposition(
+                 ~s{token = "ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU"},
+                 41
+               )
+    end
+  end
 end

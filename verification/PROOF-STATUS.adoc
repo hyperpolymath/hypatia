@@ -72,7 +72,10 @@ annealing clamp bounds, nascent-never-auto, veteran-unrestricted
 
 |`+verification/proofs/idris2/VerisimdbConnector.idr+` |Idris2
 |Completeness (mandatory fields), Soundness (no "`unknown`" fallbacks),
-Preservation (transit to Logtalk facts) |COMPLETE
+Preservation (transit to Logtalk facts — the retired engine's fact
+format; the proof covers the connector's preservation property as
+specified; status retained unchanged when the engine was retired
+2026-03-06) |COMPLETE
 
 |`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
 transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
@@ -171,7 +174,9 @@ internal types
 `+Nothing+`
 * *P4.3* Severity Parsing: total mapping for all valid severity levels
 * *P4.4* Data Preservation: conversion to Logtalk facts preserves repo,
-file, category, and severity
+file, category, and severity (Logtalk fact format = the retired engine's;
+proof status unchanged by the 2026-03-06 retirement — recorded here so the
+claim is not silently rewritten)
 
 ==== 5. Quarantine Logic (`+Quarantine.idr+`)
 

@@ -355,20 +355,8 @@ defmodule Hypatia.Neural.GraphOfTrust do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, data} ->
-            cond do
-              Map.has_key?(data, "primary_language") ->
-                String.downcase(Map.get(data, "primary_language", "unknown"))
-
-              Map.has_key?(data, "languages") ->
-                data
-                |> Map.get("languages", %{})
-                |> Enum.max_by(fn {_lang, count} -> count end, fn -> {"unknown", 0} end)
-                |> elem(0)
-                |> String.downcase()
-
-              true ->
-                "unknown"
-            end
+            # Deterministic resolution shared with CrossRepoLearning (#676)
+            Hypatia.CrossRepoLearning.primary_language_from_scan_data(data)
 
           {:error, _} ->
             "unknown"

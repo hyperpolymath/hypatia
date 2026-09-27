@@ -57,6 +57,9 @@ const HandleState = struct {
 };
 
 fn state(handle: *Handle) *HandleState {
+    // Opaque-handle recovery, the normative ABI idiom (see src/Hypatia/ABI/FFI.idr):
+    // type and alignment are restored together on the way out of the C boundary.
+    // hypatia:ignore code_safety/* -- not an unchecked cast; reviewed 2026-09-26
     return @ptrCast(@alignCast(handle));
 }
 
@@ -81,6 +84,9 @@ export fn hypatia_init() ?*Handle {
     };
 
     clearError();
+    // Concrete pointer presented as the opaque handle at the ABI boundary,
+    // companion of the state() recovery above.
+    // hypatia:ignore zig_ptr_cast -- not an unchecked cast; reviewed 2026-09-26
     return @ptrCast(handle);
 }
 

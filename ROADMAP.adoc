@@ -6,7 +6,8 @@
 
 == Overview
 
-Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks, VCL query layer, Bayesian confidence updating, and Logtalk rules for pattern detection.
+Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecosystem. It coordinates the gitbot-fleet (rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot) via a safety triangle pipeline, with 5 neural networks, VCL query layer, Bayesian confidence updating, and Elixir rules for pattern detection (absorbed from the Logtalk engine,
+retired 2026-03-06).
 
 == Current State (2026-03-29)
 
@@ -49,8 +50,9 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 | Rust workspace
 | adapters, cli, data, fixer, integration crates
 
-| Logtalk rules
-| Error catalog, pattern detection, RSR compliance rules
+| Elixir rules (`lib/rules/`)
+| Error catalog, pattern detection, RSR compliance rules (absorbed from the
+Logtalk engine, retired 2026-03-06)
 
 | Data layer
 | verisim-data (git-backed flat-file store), neural state persistence, JSONL outcomes
@@ -89,7 +91,7 @@ Elixir pipeline:
 * [x] Outcome tracking with Bayesian confidence updating
 * [x] Re-scan verification via panic-attacker
 * [x] Dispatch manifest (JSONL bridge to bash execution)
-* [x] Logtalk rule engine (error catalog, pattern detection)
+* [x] Logtalk rule engine (error catalog, pattern detection) — retired 2026-03-06, absorbed into the Elixir ruleset
 
 === v2.0 — Neural Intelligence (COMPLETE)
 

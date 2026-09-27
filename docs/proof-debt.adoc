@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
 == Proof Debt — hypatia
 
 *Schema*:
@@ -9,21 +10,24 @@ https://github.com/hyperpolymath/standards/blob/main/docs/TRUSTED-BASE-REDUCTION
 The 2026-05-26 estate proof-debt audit
 (https://github.com/hyperpolymath/standards/pull/195[standards#195])
 reported *5 soundness-relevant escape hatches* in this repo. A follow-up
-local run of `+check-trusted-base.sh+` reports *15* — the delta (10) is
-shadowed copies of the same 5 fixtures inside two stale agent worktrees
-under `+.claude/worktrees/+`. The worktrees are untracked (they do not
-ship with the repo), so a fresh CI checkout still sees 5; the 15-count
-is the worst-case local-tree value the seed should accept without
-flagging.
+local run reported *15* — the delta (10) was shadowed copies of the same
+5 fixtures inside two stale agent worktrees under `+.claude/worktrees/+`.
+Those worktrees are gone as of 2026-09-26 and were never tracked (they
+did not ship with the repo).
 
-*Marker count (canonical / tracked):* 5. *Marker count (local-tree max,
-incl. agent worktrees):* 15.
+*Marker count (canonical / tracked): 6* — re-derived 2026-09-26 by
+running `+scripts/check-trusted-base.sh+` (which now exists in this repo;
+it previously existed only as an instruction, see #831) over
+`+git ls-files+`, not copied from any earlier revision. The count moved
+5 → 6 because the inventory below had missed one fixture:
+`+test/soundness/fixtures/code_safety/obj_magic_ocaml.ml+` (`+Obj.magic+`).
+No escape-hatch marker exists outside
+`+test/soundness/fixtures/+` except annotated comments carrying
+`+hypatia: allow+` — measured, not asserted.
 
 This file is the *initial seed* — every marker starts in §(d) DEBT and
 the maintainer triages each into §(a) / §(b) / §(c) / §(d) as
-classification proceeds. This revision corrects the prior seed (which
-said "`no markers; check-trusted-base passes already`") and brings the
-count line into agreement with the actual scan output.
+classification proceeds.
 
 === (a) DISCHARGED in this repo
 
@@ -43,105 +47,72 @@ logic.)_
 
 === (d) DEBT — actively to be closed
 
-All 15 sites below start in this section. Once classified, each moves to
-§(a) / §(b) / §(c). The 5 canonical sites are deliberate scanner
+All sites below start in this section. Once classified, each moves to
+§(a) / §(b) / §(c). The canonical sites are deliberate scanner
 fixtures (each header literally says
 `+DO NOT FIX — this file exists so the build fails if the rule stops firing+`);
 the preliminary classification is therefore *PROPERTY-TEST* (the fixture
 itself is the property), pending the maintainer’s confirmation.
 
-==== Canonical / tracked sites (5)
+==== Canonical / tracked sites (6)
+
+Line numbers re-derived 2026-09-26 by `+scripts/check-trusted-base.sh+`
+(the executing use in each fixture, not the header comment). The earlier
+inventory listed 5 rows; `+obj_magic_ocaml.ml+` was missing from it.
 
 [width="100%",cols="14%,47%,26%,13%",options="header",]
 |===
 |# |File:line |Kind |Preliminary class
-|1 |`+test/soundness/fixtures/code_safety/admitted.v:7+`
+|1 |`+test/soundness/fixtures/code_safety/admitted.v:10+`
 |coq-axiom-or-admit (`+Admitted.+`) |PROPERTY-TEST (fixture for
 `+code_safety/admitted+` rule)
 
-|2 |`+test/soundness/fixtures/code_safety/sorry.lean:5+`
+|2 |`+test/soundness/fixtures/code_safety/sorry.lean:8+`
 |lean-sorry-or-axiom (`+:= by sorry+`) |PROPERTY-TEST (fixture for
 `+code_safety/sorry+` rule)
 
-|3 |`+test/soundness/fixtures/code_safety/agda_postulate.agda:5+`
+|3 |`+test/soundness/fixtures/code_safety/agda_postulate.agda:8+`
 |agda-postulate (`+postulate+`) |PROPERTY-TEST (fixture for
 `+code_safety/agda_postulate+` rule)
 
-|4 |`+test/soundness/fixtures/code_safety/believe_me.idr:8+`
+|4 |`+test/soundness/fixtures/code_safety/believe_me.idr:11+`
 |idris-believe-or-assert (`+believe_me Z+`) |PROPERTY-TEST (fixture for
 `+code_safety/believe_me+` rule)
 
-|5 |`+test/soundness/fixtures/code_safety/unsafe_coerce.hs:10+`
+|5 |`+test/soundness/fixtures/code_safety/unsafe_coerce.hs:13+`
 |rust-or-hs-unsafe (`+unsafeCoerce n+`) |PROPERTY-TEST (fixture for
 `+code_safety/unsafe_coerce+` rule)
+
+|6 |`+test/soundness/fixtures/code_safety/obj_magic_ocaml.ml:5+`
+|rust-or-hs-unsafe (`+Obj.magic x+`) |PROPERTY-TEST (fixture for
+`+code_safety/obj_magic_ocaml+` rule)
 |===
 
-==== Shadowed copies under stale agent worktrees (10)
+==== Shadowed copies under stale agent worktrees — GONE (historical)
 
-These are byte-identical copies of the 5 canonical fixtures living under
-untracked agent worktrees (`+.claude/worktrees/+`). They will not appear
-on a fresh CI checkout, but local invocations of
-`+check-trusted-base.sh+` count them. Listed here so the count line
-matches the scanner output even when worktrees are present. Disposing of
-these is a *separate* janitorial step (deleting `+.claude/worktrees/+`
-locally) — not a real proof-debt item.
-
-[width="100%",cols="14%,47%,26%,13%",options="header",]
-|===
-|# |File:line |Kind |Preliminary class
-|6
-|`+.claude/worktrees/agent-a4e5738e280951300/test/soundness/fixtures/code_safety/admitted.v:7+`
-|coq-axiom-or-admit |TBD-DEBT (shadowed copy of #1)
-
-|7
-|`+.claude/worktrees/agent-a4e5738e280951300/test/soundness/fixtures/code_safety/sorry.lean:5+`
-|lean-sorry-or-axiom |TBD-DEBT (shadowed copy of #2)
-
-|8
-|`+.claude/worktrees/agent-a4e5738e280951300/test/soundness/fixtures/code_safety/agda_postulate.agda:5+`
-|agda-postulate |TBD-DEBT (shadowed copy of #3)
-
-|9
-|`+.claude/worktrees/agent-a4e5738e280951300/test/soundness/fixtures/code_safety/believe_me.idr:8+`
-|idris-believe-or-assert |TBD-DEBT (shadowed copy of #4)
-
-|10
-|`+.claude/worktrees/agent-a4e5738e280951300/test/soundness/fixtures/code_safety/unsafe_coerce.hs:10+`
-|rust-or-hs-unsafe |TBD-DEBT (shadowed copy of #5)
-
-|11
-|`+.claude/worktrees/agent-a678c735f94059b5b/test/soundness/fixtures/code_safety/admitted.v:7+`
-|coq-axiom-or-admit |TBD-DEBT (shadowed copy of #1)
-
-|12
-|`+.claude/worktrees/agent-a678c735f94059b5b/test/soundness/fixtures/code_safety/sorry.lean:5+`
-|lean-sorry-or-axiom |TBD-DEBT (shadowed copy of #2)
-
-|13
-|`+.claude/worktrees/agent-a678c735f94059b5b/test/soundness/fixtures/code_safety/agda_postulate.agda:5+`
-|agda-postulate |TBD-DEBT (shadowed copy of #3)
-
-|14
-|`+.claude/worktrees/agent-a678c735f94059b5b/test/soundness/fixtures/code_safety/believe_me.idr:8+`
-|idris-believe-or-assert |TBD-DEBT (shadowed copy of #4)
-
-|15
-|`+.claude/worktrees/agent-a678c735f94059b5b/test/soundness/fixtures/code_safety/unsafe_coerce.hs:10+`
-|rust-or-hs-unsafe |TBD-DEBT (shadowed copy of #5)
-|===
+The 2026-05-27 revision of this file listed *10* additional sites:
+byte-identical copies of the canonical fixtures inside two untracked
+agent worktrees (`+.claude/worktrees/agent-a4e5738e280951300/+`,
+`+.claude/worktrees/agent-a678c735f94059b5b/+`). Those worktrees no
+longer exist (re-measured 2026-09-26) and were never tracked, so the
+copies can never return to a fresh checkout. The rows are struck from
+the inventory rather than deleted so the record shows the 15-count was
+real for its time; the live count is the 6 canonical fixtures above.
 
 The full list is reproducible via:
 
 [source,bash]
 ----
-bash /path/to/standards/scripts/check-trusted-base.sh .
+bash scripts/check-trusted-base.sh        # tracked tree (what CI enforces)
+bash scripts/check-trusted-base.sh --all   # include untracked local files
 ----
 
 === Suggested triage process
 
 [arabic]
-. Run `+scripts/check-trusted-base.sh+` locally; it lists every marker
-with file:line.
+. Run `+scripts/check-trusted-base.sh+` locally (it exists in this repo;
+before #831 the instruction named a script that did not); it lists every
+marker with file:line.
 . For each marker, decide:
 * Can this be proven? → §(a) DISCHARGED via a PR that adds the proof.
 * Is this at an FFI / extraction / opaque-primitive boundary? → §(b) or
@@ -149,8 +120,11 @@ with file:line.
 or cite the metatheoretic justification for §(c).
 * Is this temporary debt? → §(d) with a deadline.
 . Update this file in the same PR that lands the disposition.
-. The `+check-trusted-base+` CI job (standards#211) ensures markers are
-never un-annotated AND un-enumerated simultaneously.
+. The `+check-trusted-base+` CI job (in
+`+.github/workflows/verify-proofs.yml+`, running
+`+scripts/check-trusted-base.sh+`; an estate-side enforcement scheme was
+proposed in standards#211) ensures markers are never un-annotated AND
+un-enumerated simultaneously.
 
 === Companion documents
 

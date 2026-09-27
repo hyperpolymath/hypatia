@@ -161,8 +161,12 @@ quality failures)
 * [ ] Workspace `+cargo test+` — blocked by pre-existing
 `+bincode 3.0.0+` compile error
 * [ ] Zig FFI integration tests — `+zig build test+` not wired to CI
-* [ ] Container integration test (compose.test.yaml exists but needs
-validation)
+* [x] Container integration test — the compose tier
+(`+compose.test.yaml+` / `+run-tests.sh+` / `+Containerfile.test+`) was
+CI-dead and structurally broken (mounted a nonexistent fixture directory
+against a CLI entrypoint); deleted 2026-09-26 (#853). The live suite is the
+`+integration-tests+` job with CI service containers. A full-stack compose
+tier would need a real server under test first.
 
 ==== Self-Tests
 

@@ -161,21 +161,25 @@ defmodule Hypatia.Concurrency.SafetyModulesTest do
   alias Hypatia.Safety.Quarantine
 
   setup do
-    case GenServer.whereis(RateLimiter) do
-      nil -> start_supervised!(RateLimiter)
-      _pid -> :ok
-    end
+    # Owned instance per test, not the shared app-level one (#857). These
+    # tests used to reach for whatever `GenServer.whereis(RateLimiter)`
+    # returned — almost always the application-supervised process — so a
+    # crash anywhere in the suite silently reset the state they asserted on,
+    # and their `start_supervised!` branch was dead code. The concurrent
+    # load below now runs against a process this test owns end to end.
+    rl_name = :"rate_limiter_conc_#{System.unique_integer([:positive])}"
+    start_supervised!({RateLimiter, name: rl_name})
 
     case GenServer.whereis(Quarantine) do
       nil -> start_supervised!(Quarantine)
       _pid -> :ok
     end
 
-    :ok
+    %{server: rl_name}
   end
 
   describe "RateLimiter under concurrent load" do
-    test "concurrent check/1 calls never crash the GenServer" do
+    test "concurrent check/2 calls never crash the GenServer", %{server: server} do
       bots = for i <- 1..10, do: "concurrent_bot_#{System.unique_integer([:positive])}_#{i}"
 
       # Flood the rate limiter with concurrent calls from multiple bots
@@ -183,45 +187,47 @@ defmodule Hypatia.Concurrency.SafetyModulesTest do
         for bot <- bots do
           Task.async(fn ->
             for _ <- 1..5 do
-              RateLimiter.check(bot)
-              RateLimiter.record_dispatch(bot)
+              RateLimiter.check(bot, server)
+              RateLimiter.record_dispatch(bot, server)
             end
           end)
         end
 
       Enum.each(tasks, &Task.await(&1, 5_000))
 
-      # GenServer must still be alive and responsive
-      pid = GenServer.whereis(RateLimiter)
+      # The owned GenServer must still be alive and responsive
+      pid = GenServer.whereis(server)
 
       assert pid != nil and Process.alive?(pid),
              "RateLimiter crashed under concurrent load"
 
-      stats = RateLimiter.stats()
+      stats = RateLimiter.stats(server)
       assert is_map(stats)
       assert stats.total_dispatched >= 0
     end
 
-    test "concurrent record_dispatch/1 increments total monotonically" do
+    test "concurrent record_dispatch/2 increments total monotonically", %{server: server} do
       bot = "mono_dispatch_bot_#{System.unique_integer([:positive])}"
-      before_stats = RateLimiter.stats()
+      before_stats = RateLimiter.stats(server)
 
       tasks =
         for _ <- 1..10 do
           Task.async(fn ->
             for _ <- 1..5 do
-              RateLimiter.record_dispatch(bot)
+              RateLimiter.record_dispatch(bot, server)
             end
           end)
         end
 
       Enum.each(tasks, &Task.await(&1, 5_000))
-      :timer.sleep(100)
 
-      after_stats = RateLimiter.stats()
+      # No sleep needed: every task's casts are sent before Task.await
+      # returns, and this call is issued after all of them, so the serial
+      # server has queued them all behind it (#857 AC5 — no timer.sleep).
+      after_stats = RateLimiter.stats(server)
 
-      assert after_stats.total_dispatched >= before_stats.total_dispatched,
-             "total_dispatched decreased after concurrent dispatches (non-monotonic)"
+      assert after_stats.total_dispatched == before_stats.total_dispatched + 50,
+             "expected 50 dispatches recorded on the owned instance, got #{after_stats.total_dispatched - before_stats.total_dispatched}"
     end
   end
 
