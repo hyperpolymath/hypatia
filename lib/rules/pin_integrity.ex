@@ -277,17 +277,23 @@ defmodule Hypatia.Rules.PinIntegrity do
       # v3
       # Pinned to v1.2.3 — do not move
 
-  Returns `nil` when the comment makes no version claim.
+  Returns the first matching version without its `v` prefix. A bare major
+  such as `3` is ignored unless prefixed with `v`; dotted versions need no
+  prefix. Returns `nil` when there is no match or the input is not a string.
   """
   @spec claimed_version(String.t()) :: nil | String.t()
   def claimed_version(comment) when is_binary(comment) do
     # `v3` is a real shape in the estate (dictask carries a poisoned pin
     # annotated `# v3`), so a bare major behind a `v` counts. A bare number
     # without the `v` does not: `# 2 jobs` is prose, not a version claim.
-    case Regex.run(~r/\b(?:v(\d+(?:\.\d+)*)|(\d+\.\d+(?:\.\d+)?))\b/, comment) do
-      [_, version, _] when version != "" -> version
-      [_, _, version] when version != "" -> version
-      _ -> nil
+    # Regex.run drops trailing groups that did not participate, so the
+    # result is one or two captures, never a fixed shape; take the first
+    # non-empty one.
+    case Regex.run(~r/\b(?:v(\d+(?:\.\d+)*)|(\d+\.\d+(?:\.\d+)?))\b/, comment,
+           capture: :all_but_first
+         ) do
+      nil -> nil
+      captures -> Enum.find(captures, &(&1 != ""))
     end
   end
 
@@ -517,7 +523,7 @@ defmodule Hypatia.Rules.PinIntegrity do
 
   defp relabel_line(line, version) when is_binary(version) do
     case String.split(line, "#", parts: 2) do
-      [head, comment] -> head <> "#" <> relabel(comment, version)
+      [head, comment] -> head <> relabel("#" <> comment, version)
       _ -> line
     end
   end
@@ -528,8 +534,15 @@ defmodule Hypatia.Rules.PinIntegrity do
   Relabel a pin's inline comment — but only when the comment **leads** with a
   version claim.
 
-  Both estate shapes are covered:
+  `version` is the replacement without a `v` prefix. The leading claim must
+  end at whitespace or the end of the comment. A rewritten comment has one
+  leading `#`; existing whitespace and trailing prose are preserved. Bare
+  claims with no leading whitespace gain a space after `#`. A `nil` version
+  leaves the comment unchanged.
 
+  With `version` set to `"4.38.0"`, these estate shapes are covered:
+
+      "v3"                                           -> "# v4.38.0"
       "# v3"                                        -> "# v4.38.0"
       "# v4.38.0 (4.38.1 blocked estate-wide; …)"   -> unchanged
 
@@ -543,14 +556,23 @@ defmodule Hypatia.Rules.PinIntegrity do
   @spec relabel(String.t(), nil | String.t()) :: String.t()
   def relabel(comment, version) when is_binary(comment) and is_binary(version) do
     body = String.replace_prefix(comment, "#", "")
+    hashed? = body != comment
 
     case Regex.run(~r/^\s*/, body) do
       [lead] ->
         trimmed = String.slice(body, String.length(lead)..-1//1)
 
+        # pin_sites/1 hands over the comment without its `#`; a bare claim
+        # comes back in the canonical `# vX` shape rather than as `#vX`.
+        # Promoted only after slicing, so the claim's first byte survives.
+        out_lead = if hashed? or lead != "", do: lead, else: " "
+
         case Regex.run(~r/^(v?\d+(?:\.\d+)*)(?:\s|$)/, trimmed) do
-          [_whole, claim] -> "#" <> lead <> String.replace_prefix(trimmed, claim, "v" <> version)
-          _ -> comment
+          [_whole, claim] ->
+            "#" <> out_lead <> String.replace_prefix(trimmed, claim, "v" <> version)
+
+          _ ->
+            comment
         end
 
       _ ->
@@ -613,7 +635,14 @@ defmodule Hypatia.Rules.PinIntegrity do
     |> Enum.map(&Regex.named_captures(@uses_regex, &1))
     |> Enum.flat_map(fn
       %{"action" => action, "ref" => ref} = caps ->
-        [%{action: action, action_base: action_base(action), ref: ref, comment: Map.get(caps, "comment", "") || ""}]
+        [
+          %{
+            action: action,
+            action_base: action_base(action),
+            ref: ref,
+            comment: Map.get(caps, "comment", "") || ""
+          }
+        ]
 
       _ ->
         []
