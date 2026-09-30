@@ -192,6 +192,18 @@ defmodule Hypatia.Rules.RootHygieneTest do
       findings = RootHygiene.scan_required_missing(["LICENSE"])
       refute Enum.any?(findings, &(&1.file == "SECURITY.md"))
     end
+
+    test "accepts 0-AI-MANIFEST.deed as the manifest" do
+      findings =
+        RootHygiene.scan_required_missing(["LICENSE", ".editorconfig", "0-AI-MANIFEST.deed"])
+
+      assert findings == []
+    end
+
+    test "still flags a repo with neither manifest spelling" do
+      findings = RootHygiene.scan_required_missing(["LICENSE", ".editorconfig"])
+      assert [%{file: "0-AI-MANIFEST.a2ml", type: :missing}] = findings
+    end
   end
 
   describe "scan/1" do

@@ -429,7 +429,14 @@ defmodule Hypatia.Rules.RootHygiene do
     required = [
       %{file: "LICENSE", alternatives: ["LICENSE.txt"], severity: :critical},
       %{file: ".editorconfig", alternatives: [], severity: :medium},
-      %{file: "0-AI-MANIFEST.a2ml", alternatives: ["AI.a2ml"], severity: :high}
+      # `.deed` is the DEED-manifest spelling of the same gatekeeper file
+      # (panoply ships it and `Validate DEED manifests` checks it); it is the
+      # manifest, not a missing one.
+      %{
+        file: "0-AI-MANIFEST.a2ml",
+        alternatives: ["0-AI-MANIFEST.deed", "AI.a2ml"],
+        severity: :high
+      }
     ]
 
     Enum.flat_map(required, fn req ->
