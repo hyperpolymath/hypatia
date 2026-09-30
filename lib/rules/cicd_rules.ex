@@ -50,16 +50,11 @@ defmodule Hypatia.Rules.CicdRules do
     # Community-health files (SECURITY.md, CONTRIBUTING.md, …) are recognised
     # by GitHub in any of root, `.github/`, or `docs/`. Check all three so the
     # rule doesn't false-positive when SECURITY.md lives under `.github/`.
-    candidates =
-      for name <- markup_variants(file), dir <- ["", ".github", "docs"] do
-        if dir == "", do: name, else: Path.join(dir, name)
-      end
-
     cond do
       # Repo-rooted check: nested paths like `.github/dependabot.yml` can
       # only be confirmed via on-disk inspection. The root_files list is
       # not enough — without this the rule was a false-positive factory.
-      is_binary(repo_path) and Enum.any?(candidates, &File.exists?(Path.join(repo_path, &1))) ->
+      is_binary(repo_path) and policy_file_present?(repo_path, file) ->
         true
 
       file in Map.get(info, :files, []) ->
@@ -76,6 +71,23 @@ defmodule Hypatia.Rules.CicdRules do
   # (absolute-zero). OpenSSF Scorecard's Security-Policy check accepts the same
   # set. Non-document requirements (`.yml`) are matched exactly.
   @policy_markups ~w(.md .markdown .adoc .rst)
+
+  @doc """
+  Repo-relative paths that satisfy a requirement for `file`: every accepted
+  markup of it, in the root, `.github/` or `docs/`. The single source of truth
+  for "is this policy document present" — the Scorecard ingestor's
+  Security-Policy check delegates here rather than keeping its own list.
+  """
+  def policy_file_candidates(file) do
+    for name <- markup_variants(file), dir <- ["", ".github", "docs"] do
+      if dir == "", do: name, else: Path.join(dir, name)
+    end
+  end
+
+  @doc "True when any `policy_file_candidates/1` path exists under `repo_path`."
+  def policy_file_present?(repo_path, file) do
+    Enum.any?(policy_file_candidates(file), &File.exists?(Path.join(repo_path, &1)))
+  end
 
   defp markup_variants(file) do
     if Path.extname(file) in @policy_markups do
