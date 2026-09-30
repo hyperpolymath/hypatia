@@ -616,8 +616,12 @@ defmodule Hypatia.CrossRepoLearning do
         |> Map.get("languages", %{})
         |> Enum.sort_by(fn {lang, count} ->
           count_score = if is_number(count), do: -count, else: 0
-          prio = Enum.find_index(@language_priority, &(String.downcase(&1) == String.downcase(lang)))
-          {count_score, if(prio, do: prio, else: length(@language_priority)), String.downcase(lang)}
+
+          prio =
+            Enum.find_index(@language_priority, &(String.downcase(&1) == String.downcase(lang)))
+
+          {count_score, if(prio, do: prio, else: length(@language_priority)),
+           String.downcase(lang)}
         end)
         |> List.first({"unknown", 0})
         |> elem(0)

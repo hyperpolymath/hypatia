@@ -1099,7 +1099,8 @@ defmodule Hypatia.Rules.StructuralDrift do
               # its sibling `src/connectors/`). Only a reference that
               # resolves NOWHERE is genuine post-rename drift.
               MapSet.member?(real_basenames, dir) or
-                File.dir?(Path.join([repo_path, Path.dirname(rel), "src", dir]))
+                File.dir?(Path.join([repo_path, Path.dirname(rel), "src", dir])) or
+                not describes_a_local_src_tree?(repo_path, rel)
             end)
             |> Enum.map(fn stale_dir ->
               %{
@@ -1119,6 +1120,18 @@ defmodule Hypatia.Rules.StructuralDrift do
         end
       end)
     end
+  end
+
+  # A root-relative `src/<dir>/` can only be rename drift of a tree that HAS a
+  # `src/`: the repo root's, or the referencing doc's own directory's. In a
+  # repo with neither (standards: an estate-level repo whose specs and audits
+  # quote OTHER repos' layouts, e.g. the k9 spec's `src/tea/` example), the
+  # reference describes a foreign tree and cannot drift here. This was the
+  # single largest SD022 false-positive class — 34 baselined entries in
+  # standards alone (standards#945).
+  defp describes_a_local_src_tree?(repo_path, rel) do
+    File.dir?(Path.join(repo_path, "src")) or
+      File.dir?(Path.join([repo_path, Path.dirname(rel), "src"]))
   end
 
   # Drop whole-line comments before matching. A commented-out example is not a

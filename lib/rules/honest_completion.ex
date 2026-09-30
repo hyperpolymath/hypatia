@@ -63,6 +63,7 @@ defmodule Hypatia.Rules.HonestCompletion do
       has_ci: File.dir?(Path.join(repo_path, ".github/workflows")),
       has_tests_dir:
         File.dir?(Path.join(repo_path, "test")) or File.dir?(Path.join(repo_path, "tests")),
+      has_proof_suite: proof_suite_checked_in_ci?(repo_path),
       # State file location convention varies across the estate:
       # most repos use .machine_readable/STATE.a2ml directly; some
       # (including hypatia) namespace it under a profile dir like
@@ -71,6 +72,26 @@ defmodule Hypatia.Rules.HonestCompletion do
       # on every repo that uses it.
       has_state_file: state_file_exists?(repo_path)
     }
+  end
+
+  # A mechanised proof library's test suite IS its proof check: a green
+  # `agda All.agda` / `lake build` / `coqc` / `idris2 --build` is the oracle
+  # (echo-types#271). Both halves are required — proof sources present AND a
+  # workflow that runs the checker — so an unchecked `.agda` file does not
+  # count as tests.
+  @proof_checker_invocation ~r/(?:^|[\s;&|(])(?:agda\s|lake\s+build|lean\s|coqc\s|dune\s+build|idris2\s+(?:--build|--check|-c)\b)/m
+
+  defp proof_suite_checked_in_ci?(repo_path) do
+    count_files(repo_path, ~w(.agda .lagda.md .lean .idr .v)) > 0 and
+      repo_path
+      |> Path.join(".github/workflows/*.{yml,yaml}")
+      |> Path.wildcard()
+      |> Enum.any?(fn wf ->
+        case File.read(wf) do
+          {:ok, text} -> Regex.match?(@proof_checker_invocation, text)
+          _ -> false
+        end
+      end)
   end
 
   defp state_file_exists?(repo_path) do
@@ -291,7 +312,8 @@ defmodule Hypatia.Rules.HonestCompletion do
 
     # No tests = big deduction
     findings =
-      if not evidence.has_tests_dir and evidence.test_files == 0 do
+      if not evidence.has_tests_dir and evidence.test_files == 0 and
+           not Map.get(evidence, :has_proof_suite, false) do
         [
           %{
             type: :no_tests,
