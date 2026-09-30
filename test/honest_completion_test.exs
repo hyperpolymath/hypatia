@@ -84,6 +84,29 @@ defmodule Hypatia.Rules.HonestCompletionTest do
       assert Enum.any?(findings, &(&1.type == :no_tests))
     end
 
+    test "a CI-checked proof suite counts as tests (echo-types#271)" do
+      evidence = base_evidence(%{has_tests_dir: false, test_files: 0, has_proof_suite: true})
+      findings = HonestCompletion.generate_findings(%{}, evidence)
+      refute Enum.any?(findings, &(&1.type == :no_tests))
+    end
+
+    test "collect_evidence/1 needs proof sources AND a checker in CI" do
+      root = Path.join(System.tmp_dir!(), "hc_proof_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(root, "proofs/agda"))
+      File.write!(Path.join(root, "proofs/agda/All.agda"), "module All where\n")
+      refute HonestCompletion.collect_evidence(root).has_proof_suite
+
+      File.mkdir_p!(Path.join(root, ".github/workflows"))
+
+      File.write!(
+        Path.join(root, ".github/workflows/agda.yml"),
+        "jobs:\n  check:\n    steps:\n      - run: agda --safe proofs/agda/All.agda\n"
+      )
+
+      assert HonestCompletion.collect_evidence(root).has_proof_suite
+      File.rm_rf!(root)
+    end
+
     test "flags high TODO density" do
       claims = %{}
       evidence = base_evidence(%{todo_count: 100, source_files: 50})

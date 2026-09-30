@@ -310,6 +310,32 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+  describe "suppressed?/3 — harvested-registry/ (#865)" do
+    test "secret_detected is exempt inside harvested third-party manifests" do
+      assert ScannerSuppression.suppressed?(
+               "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+
+    test "other security_errors rules still scan harvested-registry/" do
+      refute ScannerSuppression.suppressed?(
+               "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl",
+               "security_errors",
+               "sql-injection"
+             )
+    end
+
+    test "secret_detected outside harvested-registry/ is unaffected" do
+      refute ScannerSuppression.suppressed?(
+               "machine-readable-design/phoenix-service.ncl",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+  end
+
   describe "suppressed?/3 — benches/" do
     # Cargo puts benchmarks in `benches/`. A benchmark that unwraps or panics is
     # normal: the failure costs a benchmark run, not a user's session, and setup
@@ -554,17 +580,28 @@ defmodule Hypatia.ScannerSuppressionTest do
 
     test "ghp_/glpat_ with xxxxx filler is a placeholder (both spellings)" do
       assert ScannerSuppression.placeholder_secret_line?(~s{# token = "ghp_xxxxxxxxxxxxxxxxxxxx"})
-      assert ScannerSuppression.placeholder_secret_line?(~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"})
+
+      assert ScannerSuppression.placeholder_secret_line?(
+               ~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"}
+             )
     end
 
     test "your-* and changeme fillers are placeholders" do
-      assert ScannerSuppression.placeholder_secret_line?(~s{webhook_secret = "your-webhook-secret"})
+      assert ScannerSuppression.placeholder_secret_line?(
+               ~s{webhook_secret = "your-webhook-secret"}
+             )
+
       assert ScannerSuppression.placeholder_secret_line?("password = \"changeme\"")
     end
 
     test "a real-looking value is NOT a placeholder (both directions)" do
-      refute ScannerSuppression.placeholder_secret_line?("token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\"")
-      refute ScannerSuppression.placeholder_secret_line?("AWS_SECRET_ACCESS_KEY = \"AKIA1a2B3c4D5e6F7g8H\"")
+      refute ScannerSuppression.placeholder_secret_line?(
+               "token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\""
+             )
+
+      refute ScannerSuppression.placeholder_secret_line?(
+               "AWS_SECRET_ACCESS_KEY = \"AKIA1a2B3c4D5e6F7g8H\""
+             )
     end
 
     test "placeholder demotes to medium/report regardless of comment" do
