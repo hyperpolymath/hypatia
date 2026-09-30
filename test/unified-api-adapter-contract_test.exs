@@ -93,7 +93,9 @@ defmodule Hypatia.UnifiedApiAdapterContractTest do
 
   test "the JSON manifest numbers connectors sequentially from zero" do
     conns =
-      Path.join(@root, "ffi/connectors.json") |> File.read!() |> Jason.decode!()
+      Path.join(@root, "ffi/connectors.json")
+      |> File.read!()
+      |> Jason.decode!()
       |> Map.fetch!("connectors")
 
     # Derived from the golden, never a hand-written 16: the count is pinned by
@@ -113,7 +115,9 @@ defmodule Hypatia.UnifiedApiAdapterContractTest do
            "scraped #{map_size(ids)} wire ids but #{length(golden_names())} names from #{@golden_path}"
 
     conns =
-      Path.join(@root, "ffi/connectors.json") |> File.read!() |> Jason.decode!()
+      Path.join(@root, "ffi/connectors.json")
+      |> File.read!()
+      |> Jason.decode!()
       |> Map.fetch!("connectors")
 
     for %{"id" => id, "name" => name} <- conns do

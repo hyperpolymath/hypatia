@@ -580,17 +580,28 @@ defmodule Hypatia.ScannerSuppressionTest do
 
     test "ghp_/glpat_ with xxxxx filler is a placeholder (both spellings)" do
       assert ScannerSuppression.placeholder_secret_line?(~s{# token = "ghp_xxxxxxxxxxxxxxxxxxxx"})
-      assert ScannerSuppression.placeholder_secret_line?(~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"})
+
+      assert ScannerSuppression.placeholder_secret_line?(
+               ~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"}
+             )
     end
 
     test "your-* and changeme fillers are placeholders" do
-      assert ScannerSuppression.placeholder_secret_line?(~s{webhook_secret = "your-webhook-secret"})
+      assert ScannerSuppression.placeholder_secret_line?(
+               ~s{webhook_secret = "your-webhook-secret"}
+             )
+
       assert ScannerSuppression.placeholder_secret_line?("password = \"changeme\"")
     end
 
     test "a real-looking value is NOT a placeholder (both directions)" do
-      refute ScannerSuppression.placeholder_secret_line?("token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\"")
-      refute ScannerSuppression.placeholder_secret_line?("AWS_SECRET_ACCESS_KEY = \"AKIA1a2B3c4D5e6F7g8H\"")
+      refute ScannerSuppression.placeholder_secret_line?(
+               "token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\""
+             )
+
+      refute ScannerSuppression.placeholder_secret_line?(
+               "AWS_SECRET_ACCESS_KEY = \"AKIA1a2B3c4D5e6F7g8H\""
+             )
     end
 
     test "placeholder demotes to medium/report regardless of comment" do
