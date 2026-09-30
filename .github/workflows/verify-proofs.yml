@@ -115,7 +115,8 @@ jobs:
           # chez/support.ss". Installing to the prefix the binary reads
           # removes the mismatch and the need for sudo.
           make install PREFIX="$HOME/.idris2"
-          idris2 --version
+          # Not yet on PATH (the next step adds it): call it by its full path.
+          "$HOME/.idris2/bin/idris2" --version
 
       - name: Put Idris 2 on PATH
         run: echo "$HOME/.idris2/bin" >> "$GITHUB_PATH"
