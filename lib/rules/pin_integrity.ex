@@ -53,7 +53,7 @@ defmodule Hypatia.Rules.PinIntegrity do
   or to the owner as `flag` when the repair is not a substitution.
   """
 
-  @uses_regex ~r/^\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]*?)@(?<ref>[^\s#]+)\s*(?:#\s*(?<comment>.*?))?\s*$/
+  @uses_regex ~r/^\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#]+)\s*(?:#\s*(?<comment>.*?))?\s*$/
 
   @doc """
   Parse every `uses:` pin site in a workflow file.
@@ -284,10 +284,14 @@ defmodule Hypatia.Rules.PinIntegrity do
     # `v3` is a real shape in the estate (dictask carries a poisoned pin
     # annotated `# v3`), so a bare major behind a `v` counts. A bare number
     # without the `v` does not: `# 2 jobs` is prose, not a version claim.
-    case Regex.run(~r/\b(?:v(\d+(?:\.\d+)*)|(\d+\.\d+(?:\.\d+)?))\b/, comment) do
-      [_, version, _] when version != "" -> version
-      [_, _, version] when version != "" -> version
-      _ -> nil
+    # Regex.run drops trailing groups that did not participate, so the
+    # result is one or two captures, never a fixed shape; take the first
+    # non-empty one.
+    case Regex.run(~r/\b(?:v(\d+(?:\.\d+)*)|(\d+\.\d+(?:\.\d+)?))\b/, comment,
+           capture: :all_but_first
+         ) do
+      nil -> nil
+      captures -> Enum.find(captures, &(&1 != ""))
     end
   end
 
@@ -362,7 +366,7 @@ defmodule Hypatia.Rules.PinIntegrity do
     |> String.split("\n")
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {line, number} ->
-      case Regex.run(~r/'(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+)@(?<ref>[^\s']+)'/, line) do
+      case Regex.run(~r/'(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+)@(?<ref>[^\s']+)'/, line) do
         nil ->
           []
 
@@ -512,7 +516,7 @@ defmodule Hypatia.Rules.PinIntegrity do
 
   defp relabel_line(line, version) when is_binary(version) do
     case String.split(line, "#", parts: 2) do
-      [head, comment] -> head <> "#" <> relabel(comment, version)
+      [head, comment] -> head <> relabel("#" <> comment, version)
       _ -> line
     end
   end
@@ -538,9 +542,14 @@ defmodule Hypatia.Rules.PinIntegrity do
   @spec relabel(String.t(), nil | String.t()) :: String.t()
   def relabel(comment, version) when is_binary(comment) and is_binary(version) do
     body = String.replace_prefix(comment, "#", "")
+    hashed? = body != comment
 
     case Regex.run(~r/^\s*/, body) do
       [lead] ->
+        # pin_sites/1 hands over the comment without its `#`; a bare claim
+        # comes back in the canonical `# vX` shape rather than as `#vX`.
+        lead = if hashed? or lead != "", do: lead, else: " "
+
         trimmed = String.slice(body, String.length(lead)..-1//1)
 
         case Regex.run(~r/^(v?\d+(?:\.\d+)*)(?:\s|$)/, trimmed) do
@@ -608,7 +617,14 @@ defmodule Hypatia.Rules.PinIntegrity do
     |> Enum.map(&Regex.named_captures(@uses_regex, &1))
     |> Enum.flat_map(fn
       %{"action" => action, "ref" => ref} = caps ->
-        [%{action: action, action_base: action_base(action), ref: ref, comment: Map.get(caps, "comment", "") || ""}]
+        [
+          %{
+            action: action,
+            action_base: action_base(action),
+            ref: ref,
+            comment: Map.get(caps, "comment", "") || ""
+          }
+        ]
 
       _ ->
         []
