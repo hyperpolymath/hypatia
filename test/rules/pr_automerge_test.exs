@@ -99,8 +99,7 @@ defmodule Hypatia.Rules.PrAutomergeTest do
     end
 
     test "a body claim is enough when the refs cannot be resolved" do
-      body =
-        "Bumps [actions/checkout](https://github.com/actions/checkout) from 4.1.7 to 4.2.0.\n"
+      body = "Bumps [actions/checkout](https://github.com/actions/checkout) from 4.1.7 to 4.2.0.\n"
 
       decision =
         PA.classify(
@@ -284,9 +283,8 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       @@ -1,4 +1,4 @@
       -      - uses: github/codeql-action/init@#{@good} # v4.38.0
       +      - uses: github/codeql-action/init@#{@poison} # v4.38.1
-      -      permissions: {}
-      +      permissions:
-      +        contents: read
+             permissions: {}
+         contents: read
       """
 
       refute PA.pin_lines_only?(file(".github/workflows/codeql.yml", patch))
@@ -308,11 +306,7 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       claims = PA.body_claims(body)
 
-      assert Enum.any?(
-               claims,
-               &(&1.action == "actions/checkout" and &1.from == "4.1.7" and &1.to == "4.2.0")
-             )
-
+      assert Enum.any?(claims, &(&1.action == "actions/checkout" and &1.from == "4.1.7" and &1.to == "4.2.0"))
       assert Enum.any?(claims, &(&1.action == "github/codeql-action/init" and &1.to == "4.38.1"))
     end
 
