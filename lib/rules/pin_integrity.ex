@@ -546,15 +546,19 @@ defmodule Hypatia.Rules.PinIntegrity do
 
     case Regex.run(~r/^\s*/, body) do
       [lead] ->
-        # pin_sites/1 hands over the comment without its `#`; a bare claim
-        # comes back in the canonical `# vX` shape rather than as `#vX`.
-        lead = if hashed? or lead != "", do: lead, else: " "
-
         trimmed = String.slice(body, String.length(lead)..-1//1)
 
+        # pin_sites/1 hands over the comment without its `#`; a bare claim
+        # comes back in the canonical `# vX` shape rather than as `#vX`.
+        # Promoted only after slicing, so the claim's first byte survives.
+        out_lead = if hashed? or lead != "", do: lead, else: " "
+
         case Regex.run(~r/^(v?\d+(?:\.\d+)*)(?:\s|$)/, trimmed) do
-          [_whole, claim] -> "#" <> lead <> String.replace_prefix(trimmed, claim, "v" <> version)
-          _ -> comment
+          [_whole, claim] ->
+            "#" <> out_lead <> String.replace_prefix(trimmed, claim, "v" <> version)
+
+          _ ->
+            comment
         end
 
       _ ->
