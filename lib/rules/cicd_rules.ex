@@ -667,7 +667,10 @@ defmodule Hypatia.Rules.CicdRules do
       id: :eval_in_shell,
       pattern: ~r/\beval\b/,
       reason: "eval banned in shell scripts -- use direct expansion or arrays",
-      applies_to: ["*.sh"]
+      applies_to: ["*.sh"],
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     # --- Scanner-derived rule (2026-09-01) -----------------------------
     #
@@ -713,7 +716,10 @@ defmodule Hypatia.Rules.CicdRules do
       id: :download_then_run_shell,
       pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
       reason: "download-then-run banned -- verify checksum/signature before execution",
-      applies_to: ["*.sh", "*.yml", "*.yaml"]
+      applies_to: ["*.sh", "*.yml", "*.yaml"],
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     %{
       id: :js_insecure_random_security_context,
@@ -727,7 +733,10 @@ defmodule Hypatia.Rules.CicdRules do
       pattern: ~r/["'\/]tmp\//,
       reason: "Hardcoded /tmp/ paths -- use mktemp",
       applies_to: ["*.sh"],
-      exception: "Containerfile"
+      exception: "Containerfile",
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     %{
       id: :template_placeholder,

