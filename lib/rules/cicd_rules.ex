@@ -798,13 +798,22 @@ defmodule Hypatia.Rules.CicdRules do
     # `http://www.w3.org/...` XML-namespace pattern (which is identifier-
     # only, not a navigable URL). Severity :medium (advisory; flagrant
     # uses become RFC-9116 / RSR violations).
+    #
+    # Only a URL with a public dotted host can be "upgraded to https", so the
+    # host must contain a dot and must not be reserved (RFC 2606/6761:
+    # example[.com|.org|.net], *.example, *.test, *.invalid, *.localhost, plus
+    # *.local and *.internal). That excludes placeholders (`http://<SERVER_IP>`),
+    # single-label service names (`http://julia-ml:9000` on a docker network)
+    # and fragments like `http://+` — every one a false positive on echidna.
+    # Verbatim licence texts under LICENSES/ are not the repo's to edit.
     %{
       id: :http_in_docs,
       pattern:
-        ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
+        ~r/\bhttp:\/\/(?!localhost(?![\w.-])|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|(?:[\w-]+\.)*example(?:\.(?:com|org|net))?(?![\w.-])|[\w.-]+\.(?:test|invalid|localhost|local|internal)(?![\w.-]))[A-Za-z0-9-]+\.[A-Za-z0-9.-]*[A-Za-z]/,
       reason:
         "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
-      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]
+      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"],
+      path_allow_prefixes: ["LICENSES/"]
     },
     %{
       id: :mu_plugin_no_guard,
