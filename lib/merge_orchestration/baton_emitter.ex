@@ -85,7 +85,8 @@ defmodule Hypatia.MergeOrchestration.BatonEmitter do
   defp default_submit(spec), do: apply(Bag.Mesh, :submit_planned, [spec])
 
   defp gh_flag(:squash), do: "--squash"
-  defp gh_flag(:rebase), do: "--rebase"
+  # :rebase is never emitted -- a stale decision carrying it squashes (see
+  # Strategist.decide_method/1); rebase is disabled estate-wide.
   defp gh_flag(:merge_commit), do: "--merge"
   defp gh_flag(_), do: "--squash"
 
