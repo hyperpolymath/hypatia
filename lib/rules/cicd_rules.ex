@@ -282,7 +282,7 @@ defmodule Hypatia.Rules.CicdRules do
       id: :nodejs_detected,
       glob: "package-lock.json",
       reason:
-        "Node.js banned -- use Deno (org policy 2026-05-25; in-flight migration tracked under standards#253)",
+        "npm lockfile banned -- use Bun (`bun install`, bun.lock; JS runtime order Bun > pnpm > npm, Deno banned 2026-09-22, standards docs/JS-RUNTIME-POLICY.adoc)",
       path_allow_prefixes: [
         # (1a) VSCode extension host-required (/vscode/ as path segment)
         "/vscode/",

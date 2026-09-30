@@ -143,9 +143,10 @@ defmodule Hypatia.Rules.CicdRules.RescriptNpmJsTest do
 
       assert nj, "expected :nodejs_detected finding for non-exempt package-lock.json"
       assert length(nj.files) == 2
-      assert nj.reason =~ "Node.js banned"
-      assert nj.reason =~ "Deno"
-      assert nj.reason =~ "standards#253"
+      # Deno is banned (2026-09-22); the remedy is Bun (JS-RUNTIME-POLICY).
+      assert nj.reason =~ "use Bun"
+      refute nj.reason =~ "use Deno"
+      assert nj.reason =~ "JS-RUNTIME-POLICY"
     end
 
     test "exempts VSCode extension host-required lockfiles" do
