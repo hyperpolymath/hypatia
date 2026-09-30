@@ -43,6 +43,21 @@ cicd_rules/banned_language_file:resolve.py
 # not duplicate them here. This file is for *repo-specific* exemptions that
 # carry a stated reason in the comment above each entry.
 #
+# ⚠ TWO SPELLINGS, ONE MODULE. `<rule_module>` must be the string a finding
+# is EMITTED under, which is not always the module that defines the rule:
+#
+#     cicd_rules/banned_language_file:<path>     banned-language findings
+#     content_patterns/hardcoded_tmp:<path>      every content-pattern rule
+#                                                (hardcoded_tmp, http_in_docs,
+#                                                …) — normalised in cli.ex
+#                                                although defined in CicdRules
+#
+# `cicd_rules/hardcoded_tmp:…` matches NOTHING and fails silently. Copy the
+# id from the alert (`hypatia/<rule_module>/<rule_type>`), never from the
+# source file. The spellings are pinned by test/hardcoded_tmp_pipeline_test.exs;
+# they are not renamed because in-use ignore files across the estate depend
+# on them.
+#
 # Inline-allow alternative: for one or two sites, prefer an inline directive
 # at the call site:
 #

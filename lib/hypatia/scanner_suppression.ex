@@ -86,6 +86,17 @@ defmodule Hypatia.ScannerSuppression do
     # code_safety / migration_rules exemptions above.
     "structural_drift" => %{
       :any => @training_corpus_paths
+    },
+    # ⚠ Keyed "content_patterns", NOT "cicd_rules". The content engine lives
+    # in CicdRules, but cli.ex normalises its findings with
+    # `rule_module: "content_patterns"` (alert ids read
+    # `hypatia/content_patterns/<rule>`). A "cicd_rules" key here would be
+    # vacuous — it names the module, not the string the consumer compares.
+    # Same training-corpus policy as above: a fixture photographing a bad
+    # pattern (launch-scaffolder's frozen /tmp launcher) is provenance, and
+    # the generator's own tests are its detector.
+    "content_patterns" => %{
+      :any => @training_corpus_paths
     }
   }
 

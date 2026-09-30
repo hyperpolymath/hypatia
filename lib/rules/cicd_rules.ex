@@ -725,9 +725,23 @@ defmodule Hypatia.Rules.CicdRules do
     %{
       id: :hardcoded_tmp,
       pattern: ~r/["'\/]tmp\//,
-      reason: "Hardcoded /tmp/ paths -- use mktemp",
+      # Two cures with OPPOSITE requirements (CWE-377). A pid/state file must
+      # be re-findable by the next invocation, so mktemp is wrong for it; a
+      # scratch file must not be predictable, so mktemp is right for it.
+      reason:
+        "Hardcoded /tmp/ path (CWE-377: predictable, shared, symlink-attackable). " <>
+          "Pid/state/log files: use a per-user dir, " <>
+          "${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}}/<app>/ " <>
+          "(mktemp is wrong here: the next run cannot find the file). " <>
+          "Scratch files: mktemp -d with no /tmp template, plus trap 'rm -rf' EXIT.",
       applies_to: ["*.sh"],
-      exception: "Containerfile"
+      exception: "Containerfile",
+      # A comment naming /tmp is documentation, and a mktemp call is the
+      # rule's own cure (its random name defeats the predictable-path attack
+      # even under an explicit /tmp template). Flagging either sends people
+      # back into the alert they just fixed.
+      skip_comment_lines: true,
+      skip_if_line_matches: ~r/\bmktemp\b/
     },
     %{
       id: :template_placeholder,
@@ -803,6 +817,8 @@ defmodule Hypatia.Rules.CicdRules do
     * `negative: true` — emits one finding at line 1 when the regex is absent.
     * `skip_comment_lines: true` — ignores matching lines whose first
       non-whitespace characters are `#` or `//`.
+    * `skip_if_line_matches: ~r/.../` — ignores matching lines that also
+      match this regex (a rule's own remediation, e.g. `mktemp`).
     * `strip_yaml_comments: true` — removes unquoted YAML comments before
       matching while preserving the original line numbers and finding text.
     * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
@@ -939,6 +955,11 @@ defmodule Hypatia.Rules.CicdRules do
         Map.get(rule, :skip_comment_lines, false) and comment_line?(line) ->
           []
 
+        # A rule may name a line shape that is its own remediation
+        # (e.g. hardcoded_tmp and `mktemp`). Default nil: no rule changes.
+        skip_line_match?(rule, line) ->
+          []
+
         ignored?(rule.id, lines, n) ->
           []
 
@@ -956,6 +977,9 @@ defmodule Hypatia.Rules.CicdRules do
       end
     end)
   end
+
+  defp skip_line_match?(%{skip_if_line_matches: %Regex{} = re}, line), do: Regex.match?(re, line)
+  defp skip_line_match?(_rule, _line), do: false
 
   defp content_for_matching(rule, content) do
     if Map.get(rule, :strip_yaml_comments, false) do
@@ -997,12 +1021,28 @@ defmodule Hypatia.Rules.CicdRules do
   end
 
   # Inline pragma: this line OR the previous line carries
-  # `hypatia:ignore <rule_id>` (in any comment syntax we recognise).
+  # `hypatia:ignore <rule_id>` (in any comment syntax we recognise), or the
+  # estate-wide `hypatia: allow <module>/<rule_id>` directive. Before this was
+  # wired, `hypatia: allow` was silently inert here although CLAUDE.md teaches
+  # it as the second rung of the suppression ladder. Both module spellings are
+  # accepted: the findings are EMITTED as `content_patterns` (cli.ex) but the
+  # rule lives in this module, so an author can reasonably write either.
+  #
+  # Rule ids are ATOMS (`:hardcoded_tmp`): the needle hides that through
+  # interpolation, but `inline_allowed?/4` compares strings, so stringify.
+  #
+  # `n == 1` has no previous line: `Enum.at(lines, -1)` would wrap to the LAST
+  # line, letting a trailing pragma suppress a hit on line 1.
   defp ignored?(rule_id, lines, n) do
     here = Enum.at(lines, n - 1, "")
-    prev = Enum.at(lines, n - 2, "")
+    prev = if n > 1, do: Enum.at(lines, n - 2, ""), else: ""
     needle = "hypatia:ignore #{rule_id}"
-    String.contains?(here, needle) or String.contains?(prev, needle)
+
+    String.contains?(here, needle) or String.contains?(prev, needle) or
+      Enum.any?(
+        ["content_patterns", "cicd_rules"],
+        &Hypatia.ScannerSuppression.inline_allowed?(here, prev, &1, to_string(rule_id))
+      )
   end
 
   # C4 helper: is this line ENTIRELY a comment? Deliberately conservative for
