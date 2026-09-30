@@ -1447,7 +1447,13 @@ defmodule Hypatia.CLI do
     end
   end
 
-  @doc false
+  @doc """
+  Qualifies bare workflow filenames relative to `.github/workflows`.
+
+  Accepts a filename or a list of filenames, returning the qualified path or
+  a list of qualified paths. Strings containing `/`, empty strings, and
+  non-string values are returned unchanged. Lists are processed recursively.
+  """
   def qualify_workflow_file(names) when is_list(names),
     do: Enum.map(names, &qualify_workflow_file/1)
 
