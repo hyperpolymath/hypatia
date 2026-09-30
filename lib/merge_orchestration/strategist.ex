@@ -77,11 +77,15 @@ defmodule Hypatia.MergeOrchestration.Strategist do
   defp min_safety(a, b), do: if(@order[a] <= @order[b], do: a, else: b)
 
   # --- Method axis: repo policy default ⊕ commit hygiene (never confidence) ---
+  # Never :rebase: rebase-merge replays commits UNSIGNED (119 of 286 unsigned
+  # estate default-branch commits were such replays) and breaks
+  # required_signatures; the estate disables it repo-side (owner ruling
+  # 2026-09-30). An atomic-green series is squashed like any other change;
+  # only a proof keeps its series, as a (GitHub-signed) merge commit.
   defp decide_method(ctx) do
     cond do
       ctx.change_class in [:chore, :bump] -> :squash
       ctx.change_class == :proof -> :merge_commit
-      Map.get(ctx, :commits_atomic_green, false) -> :rebase
       true -> :squash
     end
   end
