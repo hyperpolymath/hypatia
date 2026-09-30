@@ -53,7 +53,7 @@ defmodule Hypatia.Rules.PinIntegrity do
   or to the owner as `flag` when the repair is not a substitution.
   """
 
-  @uses_regex ~r/^\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]*?)@(?<ref>[^\s#]+)\s*(?:#\s*(?<comment>.*?))?\s*$/
+  @uses_regex ~r/^\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#]+)\s*(?:#\s*(?<comment>.*?))?\s*$/
 
   @doc """
   Parse every `uses:` pin site in a workflow file.
@@ -362,7 +362,7 @@ defmodule Hypatia.Rules.PinIntegrity do
     |> String.split("\n")
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {line, number} ->
-      case Regex.run(~r/'(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+)@(?<ref>[^\s']+)'/, line) do
+      case Regex.run(~r/'(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+)@(?<ref>[^\s']+)'/, line) do
         nil ->
           []
 
