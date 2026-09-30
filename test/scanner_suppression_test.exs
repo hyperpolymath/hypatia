@@ -23,6 +23,13 @@ defmodule Hypatia.ScannerSuppressionTest do
              )
     end
 
+    test "exempts harvested reference material only for secret detection" do
+      path = "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl"
+
+      assert ScannerSuppression.suppressed?(path, "security_errors", "secret_detected")
+      refute ScannerSuppression.suppressed?(path, "security_errors", "wildcard_cors_web")
+    end
+
     test "exempts secret_detected for fix-scripts/ remediation scripts" do
       assert ScannerSuppression.suppressed?(
                "scripts/fix-scripts/fix-hardcoded-secrets.sh",

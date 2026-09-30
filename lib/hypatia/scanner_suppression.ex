@@ -59,7 +59,10 @@ defmodule Hypatia.ScannerSuppression do
     "security_errors" => %{
       :any =>
         @training_corpus_paths ++
-          [".github/workflows/integration.yml"]
+          [".github/workflows/integration.yml"],
+      # Harvested manifests are third-party reference data with intentional
+      # sample credentials. Keep this carve-out limited to secret detection.
+      "secret_detected" => ["harvested-registry/"]
     },
     # ⚠ `benches/` is exempted for code_safety ONLY, deliberately not for
     # security_errors. Cargo's convention puts benchmarks in `benches/`, and a

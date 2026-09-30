@@ -335,6 +335,17 @@ defmodule Hypatia.Rules.PinIntegrityTest do
     end
   end
 
+  describe "locked_refs/1" do
+    test "parses nested action paths while keying the lock to the release unit" do
+      lock = """
+      '.github/workflows/setup.yml':
+          - 'actions/setup-node/dist/index.js@v1'
+      """
+
+      assert %{"v1" => {"actions/setup-node", 2}} = PI.locked_refs(lock)
+    end
+  end
+
   describe "pi004_lock_divergence/3" do
     test "workflow and lockfile disagreeing about the same action" do
       workflow = "- uses: github/codeql-action/init@#{@poison} # v4.38.1\n"

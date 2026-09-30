@@ -419,7 +419,7 @@ defmodule Hypatia.Rules.PrAutomerge do
   #   -      - uses: actions/checkout@v4.1.7
   # so the marker is part of the match. (Without this, every real diff looks
   # like a non-pin change and every PR falls through to `flag`.)
-  @pin_re ~r/^[-+]?\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]*?)@(?<ref>[^\s#]+)/
+  @pin_re ~r{^[-+]?\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*?)@(?<ref>[^\s#]+)}
 
   @doc "Parse a `uses:` line into `%{action, base, ref}`; `nil` when it is not one."
   def parse_pin(line) do
