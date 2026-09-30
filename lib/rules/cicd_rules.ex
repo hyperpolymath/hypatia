@@ -472,7 +472,11 @@ defmodule Hypatia.Rules.CicdRules do
       pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
       reason:
         "npx / `npm run` banned in CI -- use `bunx` or `bun run` instead (npm banned 2026-05-25; Deno banned 2026-09-22, standards LANGUAGE-POLICY §1.3)",
-      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
+      # The ban's own enforcers (echidna scripts/ban-npm.sh) name npx inside a
+      # quoted grep pattern or an echo message; that is text, not execution.
+      # Only a quoted argument counts: `echo "x" && npx foo` still fires.
+      skip_if_line_matches: ~r/\b(?:grep|egrep|rg|echo|printf)\b[^;]*?["'][^"']*\bnpx\b[^"']*["']/
     },
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
