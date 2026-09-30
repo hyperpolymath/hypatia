@@ -630,4 +630,18 @@ defmodule Hypatia.ScannerSuppressionTest do
                )
     end
   end
+
+  describe "proof_source_ambiguous_label?/2 (absolute-zero OND.thy)" do
+    test "generic labels are dropped in proof sources" do
+      assert ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "proofs/OND.thy")
+      assert ScannerSuppression.proof_source_ambiguous_label?("Password", "src/A.lagda.md")
+      assert ScannerSuppression.proof_source_ambiguous_label?("Generic API key", "Foo.v")
+    end
+
+    test "unforgeable labels and non-proof files still fire" do
+      refute ScannerSuppression.proof_source_ambiguous_label?("GitHub PAT", "proofs/OND.thy")
+      refute ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "config.exs")
+      refute ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "README.md")
+    end
+  end
 end

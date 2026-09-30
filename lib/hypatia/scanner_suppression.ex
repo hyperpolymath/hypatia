@@ -345,6 +345,24 @@ defmodule Hypatia.ScannerSuppression do
 
   def comment_masked_secret_label?(_label, _line, _line_number), do: false
 
+  # Proof-assistant sources name lemmas and definitions with `name: "prop"`
+  # (Isabelle `lemma inj_secret: "…"`), which is exactly the `secret: "…"`
+  # form. They carry no runtime configuration, so only the three
+  # form-ambiguous labels are dropped there; structurally-unforgeable shapes
+  # (`ghp_…`, `AKIA…`, PEM blocks) still fire. absolute-zero OND.thy:62.
+  @proof_source_exts ~w(.thy .v .agda .lagda .lean .idr .lidr)
+
+  @doc """
+  Return true when `label` is form-ambiguous and `file` is a proof-assistant
+  source (`.thy`, `.v`, `.agda`, `.lean`, `.idr`, and their literate forms).
+  """
+  def proof_source_ambiguous_label?(label, file) when is_binary(label) and is_binary(file) do
+    label in @form_ambiguous_secret_labels and
+      (Path.extname(file) in @proof_source_exts or String.ends_with?(file, ".lagda.md"))
+  end
+
+  def proof_source_ambiguous_label?(_label, _file), do: false
+
   @doc """
   Return true when `line` is a whole-line comment.
 
