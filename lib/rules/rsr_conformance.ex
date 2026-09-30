@@ -392,9 +392,7 @@ defmodule Hypatia.Rules.RsrConformance do
   # while the estate migrates. Hardcoding either name made whichever half had
   # not migrated unscoreable.
   defp present_mr(rel) do
-    fn repo ->
-      if exists?(repo, Path.join(Hypatia.Paths.machine_tree(repo), rel)), do: :pass, else: :fail
-    end
+    fn repo -> if exists?(repo, Path.join(Hypatia.Paths.machine_tree(repo), rel)), do: :pass, else: :fail end
   end
 
   defp absent(rel), do: fn repo -> if exists?(repo, rel), do: :fail, else: :pass end
