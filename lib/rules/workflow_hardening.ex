@@ -267,7 +267,25 @@ defmodule Hypatia.Rules.WorkflowHardening do
   requires `contents: write`.
   """
   def performs_contents_write?(content) when is_binary(content) do
+    content = strip_foreign_pushes(content)
     Enum.any?(@contents_write_operations, &Regex.match?(&1, content))
+  end
+
+  # `git push <remote>` where <remote> is a NAMED remote other than `origin`
+  # (`gitlab`, `codeberg`, `backup`, …). `contents: write` governs the job's
+  # GITHUB_TOKEN, i.e. pushes to THIS repository; a mirror push to another
+  # forge authenticates with its own SSH key or token and needs no grant.
+  # Flags before the remote (`--force`, `-u`, `--mirror`) are skipped. A bare
+  # `git push`, `git push origin …` and `git push "$REMOTE"` are all kept —
+  # the last because the remote cannot be known statically (standards#943).
+  @foreign_push ~r/\bgit\s+push\b(?:\s+-[-\w=]*)*\s+(?!origin\b)[A-Za-z][\w.-]*/
+
+  @doc """
+  Remove foreign-remote `git push` invocations, leaving any other operation on
+  the same line (`git push gitlab main && git push origin main`) intact.
+  """
+  def strip_foreign_pushes(content) when is_binary(content) do
+    Regex.replace(@foreign_push, content, "")
   end
 
   @doc """
@@ -602,7 +620,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       job_blocks
       |> Enum.flat_map(fn {job_id, line_no, body} ->
-        if Regex.match?(~r/^\s+timeout-minutes:/m, body) do
+        # A reusable-workflow caller (`job: uses: ./.github/workflows/x.yml`)
+        # cannot carry `timeout-minutes:` — GitHub rejects the key there; the
+        # called workflow's own jobs own their timeouts (standards#943).
+        if Regex.match?(~r/^\s+timeout-minutes:/m, body) or reusable_caller_job?(body) do
           []
         else
           [
@@ -1090,6 +1111,32 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end
   end
 
+  @doc """
+  Return true when a job body (as produced by the job extractor, header line
+  first) has a JOB-LEVEL `uses:` key, i.e. it calls a reusable workflow.
+  Step-level `uses:` sits deeper (`- uses:` or under `- name:`) and is not
+  matched: only a `uses:` at the job's own key indentation counts.
+  """
+  def reusable_caller_job?(body) when is_binary(body) do
+    keys =
+      body
+      |> String.split("\n")
+      |> Enum.drop(1)
+      |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "#")))
+
+    case keys do
+      [] ->
+        false
+
+      [first | _] ->
+        key_indent = indent_of(first)
+
+        Enum.any?(keys, fn line ->
+          indent_of(line) == key_indent and Regex.match?(~r/^\s*uses:\s*\S/, line)
+        end)
+    end
+  end
+
   # Extract every job definition from the workflow content. Returns
   # `[{job_id, line_no, body}]`. Approximate — assumes 2-space indent
   # under `jobs:`.
@@ -1098,7 +1145,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
     in_jobs? = false
     jobs_indent = nil
 
-    {acc, _, _, _} =
+    # The final job is still in flight when the lines run out; it must be
+    # flushed too, or the last job of every workflow is never checked.
+    {acc, _, _, last} =
       Enum.with_index(lines, 1)
       |> Enum.reduce({[], in_jobs?, jobs_indent, nil}, fn
         {line, _no}, {acc, false, _ji, _current} ->
@@ -1119,14 +1168,14 @@ defmodule Hypatia.Rules.WorkflowHardening do
               {acc, true, nil, current}
           end
 
-        {line, _no}, {acc, true, jobs_indent, current} ->
+        {line, no}, {acc, true, jobs_indent, current} ->
           case Regex.run(~r/^(\s+)([a-zA-Z0-9_-]+):\s*$/, line) do
             [_, ws, job_id] ->
               this_indent = String.length(ws)
 
               if this_indent == jobs_indent do
                 acc2 = flush(acc, current)
-                {acc2, true, jobs_indent, {job_id, current_line_no(current, line), [line]}}
+                {acc2, true, jobs_indent, {job_id, no, [line]}}
               else
                 # Still in current job body
                 {acc, true, jobs_indent, append_line(current, line)}
@@ -1144,11 +1193,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
           end
       end)
 
-    Enum.reverse(acc)
+    acc |> flush(last) |> Enum.reverse()
   end
-
-  defp current_line_no(nil, _line), do: 0
-  defp current_line_no({_id, no, _body}, _line), do: no
 
   defp append_line(nil, _), do: nil
   defp append_line({id, no, body}, line), do: {id, no, [line | body]}

@@ -59,7 +59,12 @@ defmodule Hypatia.ScannerSuppression do
     "security_errors" => %{
       :any =>
         @training_corpus_paths ++
-          [".github/workflows/integration.yml"]
+          [".github/workflows/integration.yml"],
+      # `harvested-registry/` is a corpus of OTHER projects' manifests kept as
+      # reference material; example credentials are its content, the same
+      # justification as `.audittraining/` (#865). Scoped to `secret_detected`
+      # only — every other security_errors rule still scans it.
+      "secret_detected" => ["harvested-registry/"]
     },
     # ⚠ `benches/` is exempted for code_safety ONLY, deliberately not for
     # security_errors. Cargo's convention puts benchmarks in `benches/`, and a

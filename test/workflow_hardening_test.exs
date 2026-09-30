@@ -733,6 +733,75 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   # while every run reported success. The arms below mirror the four-arm
   # planted-positive control run against the real files.
 
+  describe "standards#943 precision — mirror pushes and reusable callers" do
+    test "WH013 is silent when every push targets a foreign-forge remote" do
+      repo =
+        create_repo_with_workflow("""
+        name: Mirror
+        permissions:
+          contents: read
+        jobs:
+          gitlab:
+            runs-on: ubuntu-latest
+            timeout-minutes: 10
+            steps:
+              - run: |
+                  git remote add gitlab "git@gitlab.com:hyperpolymath/x.git"
+                  git push --force gitlab main
+                  git push -u backup --tags
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "WH013 still fires when an origin push rides alongside a mirror push" do
+      repo =
+        create_repo_with_workflow("""
+        name: Mixed
+        permissions:
+          contents: read
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push gitlab main && git push origin main
+        """)
+
+      assert [%{rule: "WH013"}] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "strip_foreign_pushes/1 keeps bare, origin and variable-remote pushes" do
+      assert WorkflowHardening.performs_contents_write?("run: git push")
+      assert WorkflowHardening.performs_contents_write?("run: git push --force origin HEAD")
+      assert WorkflowHardening.performs_contents_write?(~s(run: git push "$REMOTE" main))
+      refute WorkflowHardening.performs_contents_write?("run: git push --mirror codeberg")
+    end
+
+    test "WH006 skips a job-level reusable-workflow caller, not a job with step uses" do
+      repo =
+        create_repo_with_workflow("""
+        name: CodeQL
+        jobs:
+          analyze-js:
+            uses: ./.github/workflows/codeql-reusable.yml
+            with:
+              language: javascript
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              - name: checkout
+                uses: actions/checkout@v4
+        """)
+
+      assert [%{rule: "WH006", detail: %{job: "build"}}] =
+               WorkflowHardening.wh006_missing_job_timeout(repo)
+
+      File.rm_rf!(repo)
+    end
+  end
+
   describe "wh014_masked_scanner_upload/1" do
     test "fires on mask + upload with no findings assertion (the measured shape)" do
       repo =

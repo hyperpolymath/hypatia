@@ -310,6 +310,32 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+  describe "suppressed?/3 — harvested-registry/ (#865)" do
+    test "secret_detected is exempt inside harvested third-party manifests" do
+      assert ScannerSuppression.suppressed?(
+               "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+
+    test "other security_errors rules still scan harvested-registry/" do
+      refute ScannerSuppression.suppressed?(
+               "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl",
+               "security_errors",
+               "sql-injection"
+             )
+    end
+
+    test "secret_detected outside harvested-registry/ is unaffected" do
+      refute ScannerSuppression.suppressed?(
+               "machine-readable-design/phoenix-service.ncl",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+  end
+
   describe "suppressed?/3 — benches/" do
     # Cargo puts benchmarks in `benches/`. A benchmark that unwraps or panics is
     # normal: the failure costs a benchmark run, not a user's session, and setup

@@ -440,7 +440,7 @@ defmodule Hypatia.Rules.CicdRules do
       id: :npx_in_workflow,
       pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
       reason:
-        "npx / `npm run` banned in CI -- use `deno task` or `deno run` instead (npm fully banned 2026-05-25)",
+        "npx / `npm run` banned in CI -- use `bunx` or `bun run` instead (npm banned 2026-05-25; Deno banned 2026-09-22, standards LANGUAGE-POLICY §1.3)",
       applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]
     },
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
