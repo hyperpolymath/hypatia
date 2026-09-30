@@ -191,18 +191,8 @@ defmodule Hypatia.Rules.PrAutomerge do
   @doc """
   Version deltas for every action this PR re-pins.
 
-  Each removed pin is paired with the first added pin for the same action
-  in the same file. Unpaired pins and unchanged refs are omitted. Returns a
-  flat list of maps with `:action`, `:file`, `:from`, `:to`, `:status`,
-  `:source` and `:major?`.
-
-  `resolution` supplies versions keyed by `{action, ref}`, then
-  `{action_base, ref}`, then `ref`, in that order of preference. If either
-  ref is unresolved, a matching claim from `body_claims/1` supplies both
-  versions; without a claim, both are `nil`.
-
-  `status` is one of `:ok`, `:unresolved` (no source supplied both versions)
-  or `:conflict` (resolved versions and the PR body disagree). `source`
+  `status` is one of `:ok`, `:unresolved` (no source could place a version on
+  the refs) or `:conflict` (upstream tags and the PR body disagree). `source`
   records which source produced the versions that were used, so a reviewer can
   see exactly what the decision rested on.
   """
@@ -246,6 +236,8 @@ defmodule Hypatia.Rules.PrAutomerge do
                   delta(old, new, nil, nil, :unresolved, "none")
               end
               |> Map.put(:file, filename_of(file))
+              # flat_map needs a list: a bare map would be flattened into
+              # its {key, value} pairs.
               |> List.wrap()
             end
         end
@@ -300,8 +292,8 @@ defmodule Hypatia.Rules.PrAutomerge do
     author = field(pr, :author)
     repo_archived = field(pr, :repo_archived) == true
 
-    # The scan facts ride along on the decision: decision_manifest/2 renders
-    # deltas and poison_sites, and callers audit the flags that drove the verdict.
+    # The decision carries the scan it rests on (deltas, licence_touch, …),
+    # so decision_manifest/2 and any reviewer can see what it was decided from.
     base =
       Map.merge(scan, %{
         change_class: "bump",
@@ -331,6 +323,7 @@ defmodule Hypatia.Rules.PrAutomerge do
         reject(base, :close_poison_and_majors, "introduces_denylisted_pin_and_major_bumps", "P1")
 
       scan.poison_sites != [] and scan.pin_only ->
+        # Closing is not merging: a poisoned pin must never arm automerge.
         reject(base, :close_poison_only, "introduces_denylisted_pin", "P1")
 
       scan.poison_sites != [] ->
@@ -390,18 +383,12 @@ defmodule Hypatia.Rules.PrAutomerge do
   @doc """
   Render a decision as the frozen merge-orchestration manifest.
 
-  Takes the decision from `classify/2` and PR metadata with atom or string
-  keys. Includes pin deltas, the denylisted-site count and the current UTC
-  timestamp in ISO 8601 format. The author kind is always `"dependabot"`.
-
-  A decision with `safety: "flag"` gets a string-keyed Patch-Bridge veto,
-  plus a hypatia veto when its change level is `"meta"`, and
-  `"clamped_by" => "veto"`. Other safety values produce no vetoes and a
-  `nil` clamp. Safety and change level are copied from the decision;
-  this function does not validate the result against
-  `docs/design/merge-orchestration/schemas/decision-manifest.schema.json`.
-
-  Missing required keys in the decision or its delta maps raise `KeyError`.
+  Conforms to
+  `docs/design/merge-orchestration/schemas/decision-manifest.schema.json`;
+  the two contract invariants hold by construction — any denial sets
+  `safety: "flag"` and records a veto, and a `meta` change level can only
+  reach `arm_auto` through the `MGX-001` pin-only exemption, which the
+  actuator re-proves from the diff.
   """
   @spec decision_manifest(map(), map()) :: map()
   def decision_manifest(decision, pr) do

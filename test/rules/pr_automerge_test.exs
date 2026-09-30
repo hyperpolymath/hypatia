@@ -281,7 +281,7 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
     test "a patch that also edits a permissions block is not pin-only" do
       patch = """
-      @@ -1,4 +1,4 @@
+      @@ -1,2 +1,3 @@
       -      - uses: github/codeql-action/init@#{@good} # v4.38.0
       +      - uses: github/codeql-action/init@#{@poison} # v4.38.1
       -      permissions: {}
