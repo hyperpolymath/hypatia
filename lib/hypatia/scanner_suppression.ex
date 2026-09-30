@@ -282,7 +282,7 @@ defmodule Hypatia.ScannerSuppression do
   #
   # Measured 2026-09-03 across 73 repos with a live gate: 45 of 614 critical
   # findings were commented-out placeholders from templates
-  # (`# export API_KEY="..."`, `# token = "ghp_xxxxxxxxxxxxxxxxxxxx"`), zero
+  # (API keys filled with ellipses or GitHub tokens filled with x's), zero
   # real credentials. The shapes below are placeholder tell-tales: ellipses,
   # angle-bracket metavariables, long same-character runs, `your-*`/`my-*`
   # fillers, `changeme`. They cannot plausibly occur in a real generated
@@ -459,8 +459,7 @@ defmodule Hypatia.ScannerSuppression do
   # pragmas (`hypatia:ignore RE005 -- <reason>`, `hypatia:ignore zig_ptr_cast`)
   # use the verb form; both are honoured identically.
   defp directive_re,
-    do:
-      ~r/(?:^|[\s#\/\-;])hypatia:\s*(?:allow|ignore)\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
+    do: ~r/(?:^|[\s#\/\-;])hypatia:\s*(?:allow|ignore)\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
 
   defp directive_matches?(line, rule_module, rule_type) do
     case Regex.run(directive_re(), line) do

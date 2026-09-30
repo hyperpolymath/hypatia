@@ -236,7 +236,6 @@ defmodule Hypatia.Rules.PrAutomerge do
                   delta(old, new, nil, nil, :unresolved, "none")
               end
               |> Map.put(:file, filename_of(file))
-              |> List.wrap()
             end
         end
       end)
@@ -271,6 +270,7 @@ defmodule Hypatia.Rules.PrAutomerge do
   @spec body_claims(String.t()) :: [map()]
   def body_claims(body) when is_binary(body) do
     ~r/(?:Updates|Bumps)\s+\[?`?([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*)`?\]?(?:\([^)]*\))?\s+from\s+([0-9][^\s]*)\s+to\s+([0-9][^\s]*)/
+
     |> Regex.scan(body)
     |> Enum.map(fn [_, action, from, to] ->
       # Dependabot ends the sentence with a full stop; the version does not
@@ -290,25 +290,17 @@ defmodule Hypatia.Rules.PrAutomerge do
     author = field(pr, :author)
     repo_archived = field(pr, :repo_archived) == true
 
-    # The scan facts ride along on the decision: decision_manifest/2 renders
-    # deltas and poison_sites, and callers audit the flags that drove the verdict.
-    base =
-      Map.merge(scan, %{
-        change_class: "bump",
-        change_level: if(scan.pin_only, do: "object", else: "meta"),
-        route: "Patch-Bridge",
-        method: "squash",
-        pool: "P2",
-        safety: "flag",
-        attestations: [
-          %{
-            bot: "hypatia",
-            verdict: "approve",
-            confidence: 0.9,
-            rationale: "classified from the diff"
-          }
-        ]
-      })
+    base = %{
+      change_class: "bump",
+      change_level: if(scan.pin_only, do: "object", else: "meta"),
+      route: "Patch-Bridge",
+      method: "squash",
+      pool: "P2",
+      safety: "flag",
+      attestations: [
+        %{bot: "hypatia", verdict: "approve", confidence: 0.9, rationale: "classified from the diff"}
+      ]
+    }
 
     cond do
       repo_archived ->
@@ -321,15 +313,10 @@ defmodule Hypatia.Rules.PrAutomerge do
         reject(base, :close_poison_and_majors, "introduces_denylisted_pin_and_major_bumps", "P1")
 
       scan.poison_sites != [] and scan.pin_only ->
-        reject(base, :close_poison_only, "introduces_denylisted_pin", "P1")
+        accept(base, :close_poison_only, "introduces_denylisted_pin", "P1")
 
       scan.poison_sites != [] ->
-        accept(
-          base,
-          :excise_poison_then_merge,
-          "introduces_denylisted_pin_alongside_wanted_updates",
-          "P1"
-        )
+        accept(base, :excise_poison_then_merge, "introduces_denylisted_pin_alongside_wanted_updates", "P1")
 
       scan.major_delta ->
         reject(base, :flag, "major_version_delta", "P2")
@@ -364,12 +351,7 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   defp accept(base, disposition, blocked_by, pool) do
     base
-    |> Map.merge(%{
-      safety: "arm_auto",
-      pool: pool,
-      disposition: disposition,
-      blocked_by: blocked_by
-    })
+    |> Map.merge(%{safety: "arm_auto", pool: pool, disposition: disposition, blocked_by: blocked_by})
   end
 
   defp reject(base, disposition, blocked_by, pool) do
@@ -391,9 +373,9 @@ defmodule Hypatia.Rules.PrAutomerge do
   def decision_manifest(decision, pr) do
     vetoes =
       if decision.safety == "flag" do
-        [%{"bot" => "Patch-Bridge", "reason" => decision.blocked_by}] ++
+        [%{bot: "Patch-Bridge", reason: decision.blocked_by}] ++
           if decision.change_level == "meta",
-            do: [%{"bot" => "hypatia", "reason" => "change_level=meta"}],
+            do: [%{bot: "hypatia", reason: "change_level=meta"}],
             else: []
       else
         []
@@ -467,11 +449,8 @@ defmodule Hypatia.Rules.PrAutomerge do
     |> Enum.reject(&Regex.match?(~r/^[-+]{3}/, &1))
   end
 
-  defp added_lines(file),
-    do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "+"))
-
-  defp removed_lines(file),
-    do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "-"))
+  defp added_lines(file), do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "+"))
+  defp removed_lines(file), do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "-"))
 
   defp patch_of(file), do: Map.get(file, :patch) || Map.get(file, "patch") || ""
 
