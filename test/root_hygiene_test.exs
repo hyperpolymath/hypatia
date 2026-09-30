@@ -26,8 +26,19 @@ defmodule Hypatia.Rules.RootHygieneTest do
     end
 
     test "flags banned package managers" do
-      findings = RootHygiene.scan_banned(["package-lock.json", "yarn.lock", "bun.lockb"])
+      findings = RootHygiene.scan_banned(["package-lock.json", "yarn.lock", ".npmrc"])
       assert length(findings) == 3
+      refute Enum.any?(findings, &(&1.reason =~ "Deno"))
+    end
+
+    # Bun is the tier-1 JS runtime (standards docs/JS-RUNTIME-POLICY.adoc):
+    # its lockfiles must never be flagged, let alone deleted.
+    test "Bun lockfiles are not flagged" do
+      assert RootHygiene.scan_banned(["bun.lock", "bun.lockb"]) == []
+    end
+
+    test "a pnpm lockfile is a low-severity flag, never a delete" do
+      assert [%{severity: :low, action: :flag}] = RootHygiene.scan_banned(["pnpm-lock.yaml"])
     end
 
     test "ignores allowed files" do
