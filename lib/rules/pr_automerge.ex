@@ -236,6 +236,9 @@ defmodule Hypatia.Rules.PrAutomerge do
                   delta(old, new, nil, nil, :unresolved, "none")
               end
               |> Map.put(:file, filename_of(file))
+              # flat_map needs a list: a bare map would be flattened into
+              # its {key, value} pairs.
+              |> List.wrap()
             end
         end
       end)
@@ -270,7 +273,6 @@ defmodule Hypatia.Rules.PrAutomerge do
   @spec body_claims(String.t()) :: [map()]
   def body_claims(body) when is_binary(body) do
     ~r/(?:Updates|Bumps)\s+\[?`?([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*)`?\]?(?:\([^)]*\))?\s+from\s+([0-9][^\s]*)\s+to\s+([0-9][^\s]*)/
-
     |> Regex.scan(body)
     |> Enum.map(fn [_, action, from, to] ->
       # Dependabot ends the sentence with a full stop; the version does not
@@ -290,17 +292,25 @@ defmodule Hypatia.Rules.PrAutomerge do
     author = field(pr, :author)
     repo_archived = field(pr, :repo_archived) == true
 
-    base = %{
-      change_class: "bump",
-      change_level: if(scan.pin_only, do: "object", else: "meta"),
-      route: "Patch-Bridge",
-      method: "squash",
-      pool: "P2",
-      safety: "flag",
-      attestations: [
-        %{bot: "hypatia", verdict: "approve", confidence: 0.9, rationale: "classified from the diff"}
-      ]
-    }
+    # The decision carries the scan it rests on (deltas, licence_touch, …),
+    # so decision_manifest/2 and any reviewer can see what it was decided from.
+    base =
+      Map.merge(scan, %{
+        change_class: "bump",
+        change_level: if(scan.pin_only, do: "object", else: "meta"),
+        route: "Patch-Bridge",
+        method: "squash",
+        pool: "P2",
+        safety: "flag",
+        attestations: [
+          %{
+            bot: "hypatia",
+            verdict: "approve",
+            confidence: 0.9,
+            rationale: "classified from the diff"
+          }
+        ]
+      })
 
     cond do
       repo_archived ->
@@ -313,10 +323,16 @@ defmodule Hypatia.Rules.PrAutomerge do
         reject(base, :close_poison_and_majors, "introduces_denylisted_pin_and_major_bumps", "P1")
 
       scan.poison_sites != [] and scan.pin_only ->
-        accept(base, :close_poison_only, "introduces_denylisted_pin", "P1")
+        # Closing is not merging: a poisoned pin must never arm automerge.
+        reject(base, :close_poison_only, "introduces_denylisted_pin", "P1")
 
       scan.poison_sites != [] ->
-        accept(base, :excise_poison_then_merge, "introduces_denylisted_pin_alongside_wanted_updates", "P1")
+        accept(
+          base,
+          :excise_poison_then_merge,
+          "introduces_denylisted_pin_alongside_wanted_updates",
+          "P1"
+        )
 
       scan.major_delta ->
         reject(base, :flag, "major_version_delta", "P2")
@@ -351,7 +367,12 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   defp accept(base, disposition, blocked_by, pool) do
     base
-    |> Map.merge(%{safety: "arm_auto", pool: pool, disposition: disposition, blocked_by: blocked_by})
+    |> Map.merge(%{
+      safety: "arm_auto",
+      pool: pool,
+      disposition: disposition,
+      blocked_by: blocked_by
+    })
   end
 
   defp reject(base, disposition, blocked_by, pool) do
@@ -373,9 +394,9 @@ defmodule Hypatia.Rules.PrAutomerge do
   def decision_manifest(decision, pr) do
     vetoes =
       if decision.safety == "flag" do
-        [%{bot: "Patch-Bridge", reason: decision.blocked_by}] ++
+        [%{"bot" => "Patch-Bridge", "reason" => decision.blocked_by}] ++
           if decision.change_level == "meta",
-            do: [%{bot: "hypatia", reason: "change_level=meta"}],
+            do: [%{"bot" => "hypatia", "reason" => "change_level=meta"}],
             else: []
       else
         []
@@ -419,7 +440,7 @@ defmodule Hypatia.Rules.PrAutomerge do
   #   -      - uses: actions/checkout@v4.1.7
   # so the marker is part of the match. (Without this, every real diff looks
   # like a non-pin change and every PR falls through to `flag`.)
-  @pin_re ~r/^[-+]?\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]*?)@(?<ref>[^\s#]+)/
+  @pin_re ~r/^[-+]?\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#]+)/
 
   @doc "Parse a `uses:` line into `%{action, base, ref}`; `nil` when it is not one."
   def parse_pin(line) do
@@ -449,8 +470,11 @@ defmodule Hypatia.Rules.PrAutomerge do
     |> Enum.reject(&Regex.match?(~r/^[-+]{3}/, &1))
   end
 
-  defp added_lines(file), do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "+"))
-  defp removed_lines(file), do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "-"))
+  defp added_lines(file),
+    do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "+"))
+
+  defp removed_lines(file),
+    do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "-"))
 
   defp patch_of(file), do: Map.get(file, :patch) || Map.get(file, "patch") || ""
 
