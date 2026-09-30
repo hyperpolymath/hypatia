@@ -356,23 +356,30 @@ defmodule Hypatia.ScannerSuppression do
 
   def comment_masked_secret_label?(_label, _line, _line_number), do: false
 
-  # Proof-assistant sources name lemmas and definitions with `name: "prop"`
-  # (Isabelle `lemma inj_secret: "…"`), which is exactly the `secret: "…"`
-  # form. They carry no runtime configuration, so only the three
-  # form-ambiguous labels are dropped there; structurally-unforgeable shapes
-  # (`ghp_…`, `AKIA…`, PEM blocks) still fire. absolute-zero OND.thy:62.
+  # Proof-assistant sources name lemmas and facts with `name: "prop"`
+  # (Isabelle `lemma inj_secret: "…"`, `assumes pw_ok: "…"`), which is exactly
+  # the `secret: "…"` form. Only that declaration shape is dropped, and only
+  # for the three form-ambiguous labels: a plain assignment such as
+  # `password = "…"` in a proof source still fires, as do the
+  # structurally-unforgeable shapes (`ghp_…`, `AKIA…`, PEM blocks).
+  # absolute-zero OND.thy:62.
   @proof_source_exts ~w(.thy .v .agda .lagda .lean .idr .lidr)
 
+  @proof_named_fact ~r/^\s*(?:lemma|theorem|corollary|proposition|schematic_goal|definition|abbreviation|fun|function|primrec|inductive|assumes|shows|and|have|show|hence|thus|obtain|note)\s+[A-Za-z_][\w']*\s*:\s*"/
+
   @doc """
-  Return true when `label` is form-ambiguous and `file` is a proof-assistant
-  source (`.thy`, `.v`, `.agda`, `.lean`, `.idr`, and their literate forms).
+  Return true when `label` is form-ambiguous, `file` is a proof-assistant
+  source (`.thy`, `.v`, `.agda`, `.lean`, `.idr`, and their literate forms)
+  and `line` is a named proof declaration (`lemma inj_secret: "…"`).
   """
-  def proof_source_ambiguous_label?(label, file) when is_binary(label) and is_binary(file) do
+  def proof_source_ambiguous_label?(label, file, line)
+      when is_binary(label) and is_binary(file) and is_binary(line) do
     label in @form_ambiguous_secret_labels and
-      (Path.extname(file) in @proof_source_exts or String.ends_with?(file, ".lagda.md"))
+      (Path.extname(file) in @proof_source_exts or String.ends_with?(file, ".lagda.md")) and
+      Regex.match?(@proof_named_fact, line)
   end
 
-  def proof_source_ambiguous_label?(_label, _file), do: false
+  def proof_source_ambiguous_label?(_label, _file, _line), do: false
 
   @doc """
   Return true when `line` is a whole-line comment.

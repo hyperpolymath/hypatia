@@ -30,6 +30,18 @@ defmodule Hypatia.NpxInWorkflowTest do
     assert [_] = findings(dir, ~s|echo "formatting" && npx prettier .|)
   end
 
+  # A quoted message that names npx must not hide an executable command on
+  # the same line (CodeRabbit on #883: the old skip discarded the whole line).
+  for line <- [
+        ~s{echo "npx is banned" && npx foo},
+        ~s{echo "npx is banned"; npm run build},
+        ~s{grep -q "npx" Justfile || npx prettier .}
+      ] do
+    test "executable command beside a quoted npx mention is reported: #{line}", %{dir: dir} do
+      assert [_] = findings(dir, unquote(line))
+    end
+  end
+
   # The three lines hypatia reported on echidna's scripts/ban-npm.sh.
   for line <- [
         ~s{if grep -r "npm install\\|npm i \\|npx \\|npm run" scripts/ 2>/dev/null; then},

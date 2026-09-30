@@ -870,12 +870,36 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # forge. With `&&` and no `||` the spoofable `github.actor` half can only
   # narrow the gate, never open it (panoply / nextgen-typing
   # dependabot-automerge.yml were reported CRITICAL for exactly this shape).
+  #
+  # Fail-safe: the author equality must be a whole, positive, top-level `&&`
+  # conjunct. Any logical `!` (not `!=`) anywhere in the expression keeps the
+  # finding, since `!(user.login == 'bot')` admits every non-bot author.
   defp author_pinned_gate?(line, name) do
     author_re =
-      ~r/github\.event\.pull_request\.user\.login\s*==\s*['"]#{Regex.escape(name)}['"]/
+      ~r/^github\.event\.pull_request\.user\.login\s*==\s*['"]#{Regex.escape(name)}['"]$/
 
-    String.contains?(line, "&&") and not String.contains?(line, "||") and
-      Regex.match?(author_re, line)
+    expr =
+      line
+      |> String.replace(~r/^\s*(?:-\s*)?if:\s*/, "")
+      |> String.replace(~r/\$\{\{|\}\}/, "")
+
+    String.contains?(expr, "&&") and not String.contains?(expr, "||") and
+      not Regex.match?(~r/!(?!=)/, expr) and
+      expr
+      |> String.split("&&")
+      |> Enum.map(&strip_wrapping_parens/1)
+      |> Enum.any?(&Regex.match?(author_re, &1))
+  end
+
+  # Remove whitespace and matched outer parentheses: `( (a == b) )` → `a == b`.
+  # Unmatched parentheses are left in place, so the conjunct cannot match.
+  defp strip_wrapping_parens(conjunct) do
+    trimmed = String.trim(conjunct)
+
+    case Regex.run(~r/^\((.*)\)$/s, trimmed) do
+      [_, inner] -> strip_wrapping_parens(inner)
+      nil -> trimmed
+    end
   end
 
   # ─── RE009: fromJSON(secrets.X) bypasses runner redaction ────────────

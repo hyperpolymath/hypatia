@@ -1173,7 +1173,9 @@ defmodule Hypatia.CLI do
           |> Enum.reject(
             &Hypatia.ScannerSuppression.comment_masked_secret_label?(&1, line, idx + 1)
           )
-          |> Enum.reject(&Hypatia.ScannerSuppression.proof_source_ambiguous_label?(&1, file))
+          |> Enum.reject(
+            &Hypatia.ScannerSuppression.proof_source_ambiguous_label?(&1, file, line)
+          )
           |> Enum.map(fn label ->
             # Placeholder-shaped values and commented-out lines downgrade to
             # medium/report instead of critical/revoke_rotate_and_purge

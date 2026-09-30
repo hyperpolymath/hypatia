@@ -57,7 +57,9 @@ defmodule Hypatia.Rules.CicdRules do
       is_binary(repo_path) and policy_file_present?(repo_path, file) ->
         true
 
-      file in Map.get(info, :files, []) ->
+      # Without a repo_path the listed files are all there is; accept the
+      # same markup variants the on-disk check does (CodeRabbit on #883).
+      Enum.any?(policy_file_candidates(file), &(&1 in Map.get(info, :files, []))) ->
         true
 
       true ->
@@ -475,8 +477,9 @@ defmodule Hypatia.Rules.CicdRules do
       applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
       # The ban's own enforcers (echidna scripts/ban-npm.sh) name npx inside a
       # quoted grep pattern or an echo message; that is text, not execution.
-      # Only a quoted argument counts: `echo "x" && npx foo` still fires.
-      skip_if_line_matches: ~r/\b(?:grep|egrep|rg|echo|printf)\b[^;]*?["'][^"']*\bnpx\b[^"']*["']/
+      # Only those quoted arguments are masked before matching, never the whole
+      # line: `echo "npx is banned" && npx foo` still fires on the real npx.
+      mask_quoted_args_of: ~w(grep egrep rg echo printf)
     },
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
@@ -869,6 +872,10 @@ defmodule Hypatia.Rules.CicdRules do
       non-whitespace characters are `#` or `//`.
     * `skip_if_line_matches: ~r/.../` — ignores matching lines that also
       match this regex (a rule's own remediation, e.g. `mktemp`).
+    * `mask_quoted_args_of: [cmd, ...]` — blanks quoted arguments of the
+      named commands (`echo "npx"` → `echo ""`) before matching, so text
+      that only *names* a banned tool is not reported while an executable
+      use elsewhere on the same line still is.
     * `strip_yaml_comments: true` — removes unquoted YAML comments before
       matching while preserving the original line numbers and finding text.
     * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
@@ -996,7 +1003,7 @@ defmodule Hypatia.Rules.CicdRules do
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {{line, matching_line}, n} ->
       cond do
-        not Regex.match?(rule.pattern, matching_line) ->
+        not Regex.match?(rule.pattern, mask_quoted_args(rule, matching_line)) ->
           []
 
         # C4: a rule may opt out of matching inside comments. Default false,
@@ -1030,6 +1037,22 @@ defmodule Hypatia.Rules.CicdRules do
 
   defp skip_line_match?(%{skip_if_line_matches: %Regex{} = re}, line), do: Regex.match?(re, line)
   defp skip_line_match?(_rule, _line), do: false
+
+  # Blank the quoted arguments of the rule's named commands, repeating until
+  # stable so every quoted argument of `grep -e "a" -e "b"` is masked. Only
+  # the quoted text goes; separators and later commands are kept intact.
+  defp mask_quoted_args(%{mask_quoted_args_of: [_ | _] = cmds}, line) do
+    alt = Enum.map_join(cmds, "|", &Regex.escape/1)
+    re = Regex.compile!("(\\b(?:#{alt})\\b[^;&|\"']*)([\"'])[^\"']+\\2")
+    mask_until_stable(re, line)
+  end
+
+  defp mask_quoted_args(_rule, line), do: line
+
+  defp mask_until_stable(re, line) do
+    masked = Regex.replace(re, line, "\\1\\2\\2")
+    if masked == line, do: line, else: mask_until_stable(re, masked)
+  end
 
   defp content_for_matching(rule, content) do
     if Map.get(rule, :strip_yaml_comments, false) do

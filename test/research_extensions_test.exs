@@ -571,6 +571,36 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert length(ResearchExtensions.re008_spoofable_bot_gate(repo)) == 2
       File.rm_rf!(repo)
     end
+
+    test "still flags a negated author comparison (CodeRabbit on #883)" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            if: github.actor == 'dependabot[bot]' && !(github.event.pull_request.user.login == 'dependabot[bot]')
+          y:
+            if: ${{ !(github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]') }}
+            steps:
+              - run: echo trusted
+        """)
+
+      assert length(ResearchExtensions.re008_spoofable_bot_gate(repo)) == 2
+      File.rm_rf!(repo)
+    end
+
+    test "accepts the author conjunct inside an expression wrapper and parentheses" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            if: ${{ github.actor == 'dependabot[bot]' && (github.event.pull_request.user.login == 'dependabot[bot]') }}
+            steps:
+              - run: echo trusted
+        """)
+
+      assert ResearchExtensions.re008_spoofable_bot_gate(repo) == []
+      File.rm_rf!(repo)
+    end
   end
 
   # ─── RE009 ──────────────────────────────────────────────────────────

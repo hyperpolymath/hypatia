@@ -43,6 +43,24 @@ defmodule Hypatia.Rules.CicdRepoRequirementsTest do
       File.rm_rf!(repo)
     end
 
+    test "without a repo_path, a listed SECURITY.adoc satisfies it" do
+      missing =
+        %{visibility: "public", has_deps: false, files: ["SECURITY.adoc"]}
+        |> CicdRules.check_repo_requirements()
+        |> Enum.map(& &1.missing)
+
+      refute "SECURITY.md" in missing
+    end
+
+    test "without a repo_path, an unrelated listed file does not satisfy it" do
+      missing =
+        %{visibility: "public", has_deps: false, files: ["README.adoc"]}
+        |> CicdRules.check_repo_requirements()
+        |> Enum.map(& &1.missing)
+
+      assert "SECURITY.md" in missing
+    end
+
     test "a non-document requirement is not widened to other extensions" do
       repo = repo_with([".github/workflows/scorecard.adoc"])
       assert ".github/workflows/scorecard.yml" in missing(repo)

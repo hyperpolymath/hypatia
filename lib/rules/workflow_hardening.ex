@@ -216,7 +216,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
           [finding_wh002(rel, "set to `write-all`", :high)]
 
         Regex.match?(~r/^permissions:\s*\n\s+contents:\s*write/m, content) ->
-          [wh002_contents_write_finding(rel, with_local_scripts(content, repo_path))]
+          [wh002_contents_write_finding(rel, local_script_scan(content, repo_path))]
 
         Regex.match?(~r/^permissions:\s*\n\s+write-all:\s*true/m, content) ->
           [finding_wh002(rel, "with `write-all: true`", :high)]
@@ -293,25 +293,91 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # workflow text made WH002 call absolute-zero's wiki-sync.yml "no write
   # operation found — safe to narrow" while scripts/wiki-sync.sh does the
   # `git push` that needs the grant: the recommended narrowing breaks the sync.
-  # Only existing files under the repo are read; nothing outside it is followed.
   @local_script_ref ~r/(?<![\w\/.-])((?:\.\/)?[\w.-]+(?:\/[\w.-]+)*\.(?:sh|bash))\b/
+
+  # Literal `working-directory:` values, at step level or under
+  # `defaults: run:` (workflow or job). Expression values (`${{ … }}`, `$X`)
+  # cannot be resolved statically and are not used as bases.
+  @working_directory ~r/^\s*working-directory:\s*["']?([^"'\s#$]+)["']?\s*(?:#.*)?$/m
 
   @doc """
   Append the text of repo-local shell scripts the workflow invokes, so write
-  detection sees operations performed one call away.
+  detection sees operations performed one call away. Returns `%{content:,
+  unresolved:}` where `unresolved` lists in-repo references that could not be
+  read — missing, or reached through a symbolic link.
+
+  A reference is resolved against the repo root and against every literal
+  `working-directory:` in the workflow (CodeRabbit on #883: a step with
+  `working-directory: scripts` running `bash wiki-sync.sh` reads
+  `scripts/wiki-sync.sh`). Taking the union rather than pairing each `run:`
+  with its own directory can only find MORE writes, which moves WH002 away
+  from "safe to narrow", never towards it.
+
+  Nothing outside the repo is read: a candidate must expand under the root
+  and no path component below the root may be a symbolic link (`File.regular?`
+  follows links, so a linked script or parent directory would otherwise read
+  an arbitrary file).
   """
-  def with_local_scripts(content, repo_path) when is_binary(content) do
+  def local_script_scan(content, repo_path) when is_binary(content) do
     root = Path.expand(repo_path)
 
-    scripts =
+    bases =
+      [
+        root
+        | Enum.map(Regex.scan(@working_directory, content, capture: :all_but_first), fn [d] ->
+            Path.expand(d, root)
+          end)
+      ]
+      |> Enum.uniq()
+      |> Enum.filter(&inside?(&1, root))
+
+    {scripts, unresolved} =
       @local_script_ref
       |> Regex.scan(content, capture: :all_but_first)
-      |> Enum.map(fn [ref] -> Path.expand(ref, root) end)
+      |> Enum.map(fn [ref] -> ref end)
       |> Enum.uniq()
-      |> Enum.filter(&(String.starts_with?(&1, root <> "/") and File.regular?(&1)))
-      |> Enum.map(&File.read!/1)
+      |> Enum.reduce({[], []}, fn ref, {found, missing} ->
+        candidates =
+          bases
+          |> Enum.map(&Path.expand(ref, &1))
+          |> Enum.uniq()
+          |> Enum.filter(&(&1 != root and inside?(&1, root)))
 
-    Enum.join([content | scripts], "\n")
+        readable = Enum.filter(candidates, &unlinked_regular_file?(&1, root))
+
+        cond do
+          # Every candidate escapes the repo: not a repo-local script.
+          candidates == [] -> {found, missing}
+          readable == [] -> {found, [ref | missing]}
+          true -> {readable ++ found, missing}
+        end
+      end)
+
+    texts = scripts |> Enum.uniq() |> Enum.map(&File.read!/1)
+    %{content: Enum.join([content | texts], "\n"), unresolved: Enum.reverse(unresolved)}
+  end
+
+  @doc "Workflow text plus the text of every readable repo-local script it calls."
+  def with_local_scripts(content, repo_path) when is_binary(content) do
+    local_script_scan(content, repo_path).content
+  end
+
+  defp inside?(path, root), do: path == root or String.starts_with?(path, root <> "/")
+
+  # lstat every component from the root down; any symbolic link rejects.
+  defp unlinked_regular_file?(path, root) do
+    parts = path |> Path.relative_to(root) |> Path.split()
+
+    parts
+    |> Enum.scan(root, &Path.join(&2, &1))
+    |> Enum.with_index(1)
+    |> Enum.all?(fn {p, i} ->
+      case File.lstat(p) do
+        {:ok, %File.Stat{type: :regular}} -> i == length(parts)
+        {:ok, %File.Stat{type: :directory}} -> i < length(parts)
+        _ -> false
+      end
+    end)
   end
 
   @doc """
@@ -330,7 +396,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   #   (3) does a job carry its own `permissions:`.
   # Only (1) alone is NOT a finding — that was the defect that made this rule
   # recommend breaking narrowings.
-  defp wh002_contents_write_finding(rel, content) do
+  defp wh002_contents_write_finding(rel, %{content: content, unresolved: unresolved}) do
     writes? = performs_contents_write?(content)
     job_scoped? = job_level_permissions?(content)
 
@@ -367,6 +433,17 @@ defmodule Hypatia.Rules.WorkflowHardening do
           "with `contents: write` (workflow performs a write, but jobs carry " <>
             "their own `permissions:` — verify the WRITING job is one of them " <>
             "before narrowing)",
+          :warn
+        )
+
+      # A called script could not be read, so "no write found" is unproven.
+      # Never tell the owner narrowing is safe on an unread script.
+      unresolved != [] ->
+        finding_wh002(
+          rel,
+          "with `contents: write` (calls #{Enum.join(unresolved, ", ")}, which " <>
+            "could not be read (missing, or behind a symbolic link) — verify it " <>
+            "performs no push/commit/release before narrowing)",
           :warn
         )
 

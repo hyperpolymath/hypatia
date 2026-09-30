@@ -646,17 +646,53 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
-  describe "proof_source_ambiguous_label?/2 (absolute-zero OND.thy)" do
-    test "generic labels are dropped in proof sources" do
-      assert ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "proofs/OND.thy")
-      assert ScannerSuppression.proof_source_ambiguous_label?("Password", "src/A.lagda.md")
-      assert ScannerSuppression.proof_source_ambiguous_label?("Generic API key", "Foo.v")
+  describe "proof_source_ambiguous_label?/3 (absolute-zero OND.thy)" do
+    test "generic labels on a named proof fact are dropped in proof sources" do
+      assert ScannerSuppression.proof_source_ambiguous_label?(
+               "Generic secret",
+               "proofs/OND.thy",
+               ~s|lemma inj_secret: "x = y"|
+             )
+
+      assert ScannerSuppression.proof_source_ambiguous_label?(
+               "Password",
+               "src/A.lagda.md",
+               ~s|  have password: "p \\<noteq> q"|
+             )
     end
 
     test "unforgeable labels and non-proof files still fire" do
-      refute ScannerSuppression.proof_source_ambiguous_label?("GitHub PAT", "proofs/OND.thy")
-      refute ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "config.exs")
-      refute ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "README.md")
+      fact = ~s|lemma inj_secret: "x = y"|
+
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "GitHub PAT",
+               "proofs/OND.thy",
+               fact
+             )
+
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "Generic secret",
+               "config.exs",
+               fact
+             )
+
+      refute ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "README.md", fact)
+    end
+
+    # CodeRabbit on #883: an extension gate alone let a real credential in a
+    # proof file through. Only the named-fact shape is suppressed.
+    test "an assignment-shaped credential in a proof source still fires" do
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "Password",
+               "A.lean",
+               ~s|password = "hunter2"|
+             )
+
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "Generic secret",
+               "proofs/OND.thy",
+               ~s|secret := "sk-live-abc123"|
+             )
     end
   end
 end
