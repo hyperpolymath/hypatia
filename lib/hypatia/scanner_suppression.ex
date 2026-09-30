@@ -370,7 +370,7 @@ defmodule Hypatia.ScannerSuppression do
   @doc """
   Return true when `label` is form-ambiguous, `file` is a proof-assistant
   source (`.thy`, `.v`, `.agda`, `.lean`, `.idr`, and their literate forms)
-  and `line` is a named proof declaration (`lemma inj_secret: "…"`).
+  and `line` is a named proof declaration (`lemma <name>: "<prop>"`).
   """
   def proof_source_ambiguous_label?(label, file, line)
       when is_binary(label) and is_binary(file) and is_binary(line) do
