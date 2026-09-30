@@ -286,14 +286,14 @@ defmodule Hypatia.Rules.PinIntegrity do
     # `v3` is a real shape in the estate (dictask carries a poisoned pin
     # annotated `# v3`), so a bare major behind a `v` counts. A bare number
     # without the `v` does not: `# 2 jobs` is prose, not a version claim.
-    # Regex.run drops trailing groups that did not participate, so the
-    # result is one or two captures, never a fixed shape; take the first
-    # non-empty one.
+    # `capture: :all_but_first` still DROPS trailing unmatched groups, so a
+    # `v`-led match yields one element and a bare `4.38.0` yields two.
     case Regex.run(~r/\b(?:v(\d+(?:\.\d+)*)|(\d+\.\d+(?:\.\d+)?))\b/, comment,
            capture: :all_but_first
          ) do
-      nil -> nil
-      captures -> Enum.find(captures, &(&1 != ""))
+      [version] -> version
+      ["", version] -> version
+      _ -> nil
     end
   end
 
@@ -523,6 +523,8 @@ defmodule Hypatia.Rules.PinIntegrity do
 
   defp relabel_line(line, version) when is_binary(version) do
     case String.split(line, "#", parts: 2) do
+      # Mirror estate-pin-integrity.sh: the head keeps no `#`, the comment
+      # is handed over WITH it, and relabel/2 returns it with it.
       [head, comment] -> head <> relabel("#" <> comment, version)
       _ -> line
     end
@@ -555,6 +557,11 @@ defmodule Hypatia.Rules.PinIntegrity do
   """
   @spec relabel(String.t(), nil | String.t()) :: String.t()
   def relabel(comment, version) when is_binary(comment) and is_binary(version) do
+    # pin_sites/1 hands over the comment with its `#` and spacing already
+    # stripped (`v3`); restore the canonical `# ` so the result is a comment.
+    comment =
+      if comment == "" or String.starts_with?(comment, "#"), do: comment, else: "# " <> comment
+
     body = String.replace_prefix(comment, "#", "")
     hashed? = body != comment
 

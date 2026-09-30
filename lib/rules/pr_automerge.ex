@@ -246,6 +246,8 @@ defmodule Hypatia.Rules.PrAutomerge do
                   delta(old, new, nil, nil, :unresolved, "none")
               end
               |> Map.put(:file, filename_of(file))
+              # flat_map needs a list: a bare map would be flattened into
+              # its {key, value} pairs.
               |> List.wrap()
             end
         end
@@ -300,8 +302,8 @@ defmodule Hypatia.Rules.PrAutomerge do
     author = field(pr, :author)
     repo_archived = field(pr, :repo_archived) == true
 
-    # The scan facts ride along on the decision: decision_manifest/2 renders
-    # deltas and poison_sites, and callers audit the flags that drove the verdict.
+    # The decision carries the scan it rests on (deltas, licence_touch, …),
+    # so decision_manifest/2 and any reviewer can see what it was decided from.
     base =
       Map.merge(scan, %{
         change_class: "bump",
@@ -331,6 +333,7 @@ defmodule Hypatia.Rules.PrAutomerge do
         reject(base, :close_poison_and_majors, "introduces_denylisted_pin_and_major_bumps", "P1")
 
       scan.poison_sites != [] and scan.pin_only ->
+        # Closing is not merging: a poisoned pin must never arm automerge.
         reject(base, :close_poison_only, "introduces_denylisted_pin", "P1")
 
       scan.poison_sites != [] ->
