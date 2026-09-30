@@ -245,7 +245,7 @@ defmodule Hypatia.Rules.PrAutomerge do
     end)
   end
 
-  defp delta(old, new, from, to, status, source) do
+  defp delta(old, _new, from, to, status, source) do
     %{
       action: old.action,
       from: from,
