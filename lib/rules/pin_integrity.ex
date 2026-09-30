@@ -359,8 +359,8 @@ defmodule Hypatia.Rules.PinIntegrity do
   end
 
   @doc """
-  Extract `action@sha` pairs from a `gh actions-lock` file (TOML-ish),
-  keyed by the resolved SHA or ref. Used by PI003 and PI004.
+  Extract `action@ref` entries from a `gh actions-lock` file (TOML-ish),
+  keyed by the literal ref without resolving it. Used by PI003 and PI004.
 
   Reads the first single-quoted `action@ref` on each line and returns
   `%{ref => {action_base, line_number}}`, with one-based line numbers and
