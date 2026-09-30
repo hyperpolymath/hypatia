@@ -277,7 +277,7 @@ defmodule Hypatia.ScannerSuppression do
   #
   # Measured 2026-09-03 across 73 repos with a live gate: 45 of 614 critical
   # findings were commented-out placeholders from templates
-  # (`# export API_KEY="..."`, `# token = "ghp_xxxxxxxxxxxxxxxxxxxx"`), zero
+  # (API keys filled with ellipses or GitHub tokens filled with x's), zero
   # real credentials. The shapes below are placeholder tell-tales: ellipses,
   # angle-bracket metavariables, long same-character runs, `your-*`/`my-*`
   # fillers, `changeme`. They cannot plausibly occur in a real generated
