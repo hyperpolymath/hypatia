@@ -119,8 +119,6 @@ relabel_comment() {
   local body="${comment#\#}"
   local lead="${body%%[![:space:]]*}"
   local trimmed="${body#"$lead"}"
-  # A bare claim (no `#`, no leading space) normalises to `# vX`, as relabel/2 does.
-  [ "$body" = "$comment" ] && [ -z "$lead" ] && lead=" "
   if printf '%s' "$trimmed" | grep -qE '^v?[0-9]+(\.[0-9]+)*([[:space:]]|$)'; then
     printf '%s%s' "#${lead}" \
       "$(printf '%s' "$trimmed" | sed -E "0,/^v?[0-9]+(\.[0-9]+)*/s//v${version}/")"
