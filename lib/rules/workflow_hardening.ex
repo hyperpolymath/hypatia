@@ -216,7 +216,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
           [finding_wh002(rel, "set to `write-all`", :high)]
 
         Regex.match?(~r/^permissions:\s*\n\s+contents:\s*write/m, content) ->
-          [wh002_contents_write_finding(rel, content)]
+          [wh002_contents_write_finding(rel, with_local_scripts(content, repo_path))]
 
         Regex.match?(~r/^permissions:\s*\n\s+write-all:\s*true/m, content) ->
           [finding_wh002(rel, "with `write-all: true`", :high)]
@@ -286,6 +286,32 @@ defmodule Hypatia.Rules.WorkflowHardening do
   """
   def strip_foreign_pushes(content) when is_binary(content) do
     Regex.replace(@foreign_push, content, "")
+  end
+
+  # A `run:` that calls a repo-local script (`bash scripts/wiki-sync.sh`,
+  # `./ci/release.sh`) performs whatever that script performs. Reading only the
+  # workflow text made WH002 call absolute-zero's wiki-sync.yml "no write
+  # operation found — safe to narrow" while scripts/wiki-sync.sh does the
+  # `git push` that needs the grant: the recommended narrowing breaks the sync.
+  # Only existing files under the repo are read; nothing outside it is followed.
+  @local_script_ref ~r/(?<![\w\/.-])((?:\.\/)?[\w.-]+(?:\/[\w.-]+)*\.(?:sh|bash))\b/
+
+  @doc """
+  Append the text of repo-local shell scripts the workflow invokes, so write
+  detection sees operations performed one call away.
+  """
+  def with_local_scripts(content, repo_path) when is_binary(content) do
+    root = Path.expand(repo_path)
+
+    scripts =
+      @local_script_ref
+      |> Regex.scan(content, capture: :all_but_first)
+      |> Enum.map(fn [ref] -> Path.expand(ref, root) end)
+      |> Enum.uniq()
+      |> Enum.filter(&(String.starts_with?(&1, root <> "/") and File.regular?(&1)))
+      |> Enum.map(&File.read!/1)
+
+    Enum.join([content | scripts], "\n")
   end
 
   @doc """

@@ -528,6 +528,48 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   # state was WH002 answering the first question WITHOUT the second, so its
   # remediation removed a capability the workflow depended on.
 
+  describe "wh002_excessive_permissions/1 — writes one call away (absolute-zero wiki-sync)" do
+    defp wiki_sync_repo(script_body, run_line) do
+      repo =
+        create_repo_with_workflow("""
+        name: Wiki Sync
+        permissions:
+          contents: write
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: #{run_line}
+        """)
+
+      File.mkdir_p!(Path.join(repo, "scripts"))
+      File.write!(Path.join(repo, "scripts/wiki-sync.sh"), script_body)
+      repo
+    end
+
+    test "a git push inside a called repo script counts as a write" do
+      repo = wiki_sync_repo("git push origin master\n", "bash scripts/wiki-sync.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :warn
+      refute f.reason =~ "safe to narrow"
+      File.rm_rf!(repo)
+    end
+
+    test "a called script that does not write keeps the :high narrowing advice" do
+      repo = wiki_sync_repo("echo hello\n", "./scripts/wiki-sync.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :high
+      File.rm_rf!(repo)
+    end
+
+    test "a script path escaping the repo is not followed" do
+      repo = wiki_sync_repo("echo hello\n", "bash ../../etc/evil.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :high
+      File.rm_rf!(repo)
+    end
+  end
+
   describe "wh002_excessive_permissions/1 — three probes, not one" do
     test "no write performed: narrowing is real hardening, stays :high" do
       repo =

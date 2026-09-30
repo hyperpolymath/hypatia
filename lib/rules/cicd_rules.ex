@@ -50,7 +50,10 @@ defmodule Hypatia.Rules.CicdRules do
     # Community-health files (SECURITY.md, CONTRIBUTING.md, …) are recognised
     # by GitHub in any of root, `.github/`, or `docs/`. Check all three so the
     # rule doesn't false-positive when SECURITY.md lives under `.github/`.
-    candidates = [file, Path.join(".github", file), Path.join("docs", file)]
+    candidates =
+      for name <- markup_variants(file), dir <- ["", ".github", "docs"] do
+        if dir == "", do: name, else: Path.join(dir, name)
+      end
 
     cond do
       # Repo-rooted check: nested paths like `.github/dependabot.yml` can
@@ -64,6 +67,22 @@ defmodule Hypatia.Rules.CicdRules do
 
       true ->
         false
+    end
+  end
+
+  # A policy document is satisfied by any markup the estate writes it in. The
+  # estate's docs language is AsciiDoc, so `SECURITY.adoc` is the normal form;
+  # requiring the literal `.md` made every such repo a HIGH "missing SECURITY.md"
+  # (absolute-zero). OpenSSF Scorecard's Security-Policy check accepts the same
+  # set. Non-document requirements (`.yml`) are matched exactly.
+  @policy_markups ~w(.md .markdown .adoc .rst)
+
+  defp markup_variants(file) do
+    if Path.extname(file) in @policy_markups do
+      base = Path.rootname(file)
+      Enum.map(@policy_markups, &(base <> &1))
+    else
+      [file]
     end
   end
 
