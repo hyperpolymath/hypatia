@@ -277,7 +277,9 @@ defmodule Hypatia.Rules.PinIntegrity do
       # v3
       # Pinned to v1.2.3 — do not move
 
-  Returns `nil` when the comment makes no version claim.
+  Returns the first matching version without its `v` prefix. A bare major
+  such as `3` is ignored unless prefixed with `v`; dotted versions need no
+  prefix. Returns `nil` when there is no match or the input is not a string.
   """
   @spec claimed_version(String.t()) :: nil | String.t()
   def claimed_version(comment) when is_binary(comment) do
@@ -359,6 +361,11 @@ defmodule Hypatia.Rules.PinIntegrity do
   @doc """
   Extract `action@sha` pairs from a `gh actions-lock` file (TOML-ish),
   keyed by the resolved SHA or ref. Used by PI003 and PI004.
+
+  Reads the first single-quoted `action@ref` on each line and returns
+  `%{ref => {action_base, line_number}}`, with one-based line numbers and
+  action paths reduced to their first two segments. Later entries replace
+  earlier ones with the same ref; no matches produce an empty map.
   """
   @spec locked_refs(String.t()) :: %{String.t() => {String.t(), integer()}}
   def locked_refs(content) do
@@ -529,8 +536,15 @@ defmodule Hypatia.Rules.PinIntegrity do
   Relabel a pin's inline comment — but only when the comment **leads** with a
   version claim.
 
-  Both estate shapes are covered:
+  `version` is the replacement without a `v` prefix. The leading claim must
+  end at whitespace or the end of the comment. A rewritten comment has one
+  leading `#`; existing whitespace and trailing prose are preserved. Bare
+  claims with no leading whitespace gain a space after `#`. A `nil` version
+  leaves the comment unchanged.
 
+  With `version` set to `"4.38.0"`, these estate shapes are covered:
+
+      "v3"                                           -> "# v4.38.0"
       "# v3"                                        -> "# v4.38.0"
       "# v4.38.0 (4.38.1 blocked estate-wide; …)"   -> unchanged
 
@@ -549,14 +563,23 @@ defmodule Hypatia.Rules.PinIntegrity do
       if comment == "" or String.starts_with?(comment, "#"), do: comment, else: "# " <> comment
 
     body = String.replace_prefix(comment, "#", "")
+    hashed? = body != comment
 
     case Regex.run(~r/^\s*/, body) do
       [lead] ->
         trimmed = String.slice(body, String.length(lead)..-1//1)
 
+        # pin_sites/1 hands over the comment without its `#`; a bare claim
+        # comes back in the canonical `# vX` shape rather than as `#vX`.
+        # Promoted only after slicing, so the claim's first byte survives.
+        out_lead = if hashed? or lead != "", do: lead, else: " "
+
         case Regex.run(~r/^(v?\d+(?:\.\d+)*)(?:\s|$)/, trimmed) do
-          [_whole, claim] -> "#" <> lead <> String.replace_prefix(trimmed, claim, "v" <> version)
-          _ -> comment
+          [_whole, claim] ->
+            "#" <> out_lead <> String.replace_prefix(trimmed, claim, "v" <> version)
+
+          _ ->
+            comment
         end
 
       _ ->
