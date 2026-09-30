@@ -832,11 +832,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
+      lines = String.split(content, "\n")
+
       Regex.scan(bot_gate_re, content, return: :index)
       |> Enum.map(fn [{idx, _}, {name_start, name_len}] ->
         name = binary_part(content, name_start, name_len)
-        line_no = line_number_for_offset(content, idx)
-
+        {name, line_number_for_offset(content, idx)}
+      end)
+      |> Enum.reject(fn {name, line_no} ->
+        author_pinned_gate?(Enum.at(lines, line_no - 1, ""), name)
+      end)
+      |> Enum.map(fn {name, line_no} ->
         %{
           rule: "RE008",
           file: rel,
@@ -857,6 +863,19 @@ defmodule Hypatia.Rules.ResearchExtensions do
         }
       end)
     end)
+  end
+
+  # The rule's own recommended fix, already applied: the same condition ANDs in
+  # the PR author (`github.event.pull_request.user.login`), which a fork cannot
+  # forge. With `&&` and no `||` the spoofable `github.actor` half can only
+  # narrow the gate, never open it (panoply / nextgen-typing
+  # dependabot-automerge.yml were reported CRITICAL for exactly this shape).
+  defp author_pinned_gate?(line, name) do
+    author_re =
+      ~r/github\.event\.pull_request\.user\.login\s*==\s*['"]#{Regex.escape(name)}['"]/
+
+    String.contains?(line, "&&") and not String.contains?(line, "||") and
+      Regex.match?(author_re, line)
   end
 
   # ─── RE009: fromJSON(secrets.X) bypasses runner redaction ────────────
