@@ -368,9 +368,13 @@ defmodule Hypatia.ScannerSuppression do
   @proof_named_fact ~r/^\s*(?:lemma|theorem|corollary|proposition|schematic_goal|definition|abbreviation|fun|function|primrec|inductive|assumes|shows|and|have|show|hence|thus|obtain|note)\s+[A-Za-z_][\w']*\s*:\s*"/
 
   @doc """
-  Return true when `label` is form-ambiguous, `file` is a proof-assistant
-  source (`.thy`, `.v`, `.agda`, `.lean`, `.idr`, and their literate forms)
-  and `line` is a named proof declaration (`lemma <name>: "<prop>"`).
+  Return true when `label` is `"Generic API key"`, `"Generic secret"` or
+  `"Password"`, `file` ends in `.thy`, `.v`, `.agda`, `.lagda`, `.lagda.md`,
+  `.lean`, `.idr` or `.lidr`, and `line` starts with a recognised named proof
+  declaration (`lemma <name>: "<prop>"`), allowing leading whitespace.
+
+  Return false for assignments, other labels or extensions, or non-binary
+  arguments. This predicate does not read the file.
   """
   def proof_source_ambiguous_label?(label, file, line)
       when is_binary(label) and is_binary(file) and is_binary(line) do

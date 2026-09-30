@@ -812,14 +812,20 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # ─── RE008: spoofable bot-identity gate ──────────────────────────────
 
   @doc """
-  RE008: A conditional uses `github.actor == 'dependabot[bot]'` (or
-  any other bot login) as a trust gate. `github.actor` is the user
-  *who triggered the run*, not the PR author — on
-  `pull_request_target` from a fork the attacker controls the value.
+  RE008: Find `github.actor` comparisons using `==` or `!=` with a quoted
+  bot login ending in `[bot]` in workflow text.
   Provenance: zizmor `bot-conditions` + Koishybayev et al. (USENIX
   Security 2022).
 
+  Suppress a match when the same line contains an `&&`-separated equality
+  between `github.event.pull_request.user.login` and the same bot login,
+  with no `||` or logical `!` (`!=` is allowed). Expression wrappers and
+  parentheses around that equality are accepted.
+
+  Return one finding per remaining match, with a repo-relative file path
+  and a one-based line number in `detail.line`, or `[]` when none remain.
   Severity: `:critical`. Action: `:report`.
+  Raises `File.Error` if workflow directory listing or file reading fails.
   """
   def re008_spoofable_bot_gate(repo_path) do
     # github.actor compared to any bot-identity string. Catch both

@@ -79,6 +79,10 @@ defmodule Hypatia.Rules.CicdRules do
   markup of it, in the root, `.github/` or `docs/`. The single source of truth
   for "is this policy document present" — the Scorecard ingestor's
   Security-Policy check delegates here rather than keeping its own list.
+
+  A `.md`, `.markdown`, `.adoc` or `.rst` extension is replaced with each of
+  those extensions. Other extensions are kept unchanged. Candidate paths
+  are returned without checking whether they exist.
   """
   def policy_file_candidates(file) do
     for name <- markup_variants(file), dir <- ["", ".github", "docs"] do

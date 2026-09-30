@@ -199,10 +199,20 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # ─── WH002: Excessive workflow permissions ──────────────────────────
 
   @doc """
-  WH002: Workflow has no top-level `permissions:` block at all, OR has
-  `permissions: write-all`, OR has top-level `contents: write`. Per Cassel
+  WH002: Workflow has no `permissions:` declaration at any level, OR has
+  top-level `permissions: write-all`, `write-all: true` in a top-level
+  permissions block, or top-level `contents: write`. Per Cassel
   et al. 2024, ~74% of public workflows are at the default (write-all-equivalent
   for many scopes). This catches Scorecard TokenPermissionsID alerts.
+
+  Return a list of findings with repo-relative file paths. Missing permissions
+  produce `:warn`; write-all grants produce `:high`. For `contents: write`,
+  scan the workflow and referenced local scripts: detected writes or unresolved
+  script references produce `:warn`, otherwise `:high`. Return `[]` when no
+  workflow matches. Job-level permissions alone do not produce a finding.
+
+  Raises `File.Error` if workflow directory listing, workflow reading or
+  reading a selected local script fails.
   """
   def wh002_excessive_permissions(repo_path) do
     repo_path
@@ -301,22 +311,24 @@ defmodule Hypatia.Rules.WorkflowHardening do
   @working_directory ~r/^\s*working-directory:\s*["']?([^"'\s#$]+)["']?\s*(?:#.*)?$/m
 
   @doc """
-  Append the text of repo-local shell scripts the workflow invokes, so write
-  detection sees operations performed one call away. Returns `%{content:,
-  unresolved:}` where `unresolved` lists in-repo references that could not be
-  read — missing, or reached through a symbolic link.
+  Append each selected local shell script's text once to `content`, separated
+  by newlines. Return `%{content: combined_text, unresolved: references}`.
+  References ending in `.sh` or `.bash` are recognised anywhere in the input
+  text, including comments; scripts are not executed or scanned recursively.
 
-  A reference is resolved against the repo root and against every literal
-  `working-directory:` in the workflow (CodeRabbit on #883: a step with
-  `working-directory: scripts` running `bash wiki-sync.sh` reads
-  `scripts/wiki-sync.sh`). Taking the union rather than pairing each `run:`
-  with its own directory can only find MORE writes, which moves WH002 away
-  from "safe to narrow", never towards it.
+  Resolve references against the repo root and every recognised literal
+  `working-directory:` in the workflow. For example, `working-directory: scripts`
+  with `bash wiki-sync.sh` selects `scripts/wiki-sync.sh`. All matching bases
+  are considered, without pairing references with individual steps.
 
-  Nothing outside the repo is read: a candidate must expand under the root
-  and no path component below the root may be a symbolic link (`File.regular?`
-  follows links, so a linked script or parent directory would otherwise read
-  an arbitrary file).
+  Candidates must expand beneath the repo root and have no symbolic links
+  below that root. Missing paths, non-regular files and paths whose metadata
+  cannot be read are rejected. `unresolved` contains each reference with
+  in-repo candidates but no accepted candidate, in first-occurrence order.
+  References whose candidates all escape the repo are ignored.
+
+  Raises `File.Error` if reading an accepted script fails; this error is not
+  converted into an unresolved reference.
   """
   def local_script_scan(content, repo_path) when is_binary(content) do
     root = Path.expand(repo_path)
@@ -357,7 +369,11 @@ defmodule Hypatia.Rules.WorkflowHardening do
     %{content: Enum.join([content | texts], "\n"), unresolved: Enum.reverse(unresolved)}
   end
 
-  @doc "Workflow text plus the text of every readable repo-local script it calls."
+  @doc """
+  Return the combined text from `local_script_scan/2`, discarding its unresolved
+  references. Uses the same reference selection and propagates `File.Error`
+  if reading a selected script fails.
+  """
   def with_local_scripts(content, repo_path) when is_binary(content) do
     local_script_scan(content, repo_path).content
   end
