@@ -144,21 +144,32 @@ defmodule Hypatia.Rules.RootHygiene do
       action: :rename
     },
     %{pattern: "Makefile", reason: "Use Justfile", severity: :medium, action: :replace},
+    # JS runtime order is Bun > pnpm > npm; Deno is banned (2026-09-22).
+    # Source: standards docs/JS-RUNTIME-POLICY.adoc "Hard Rules". Bun
+    # lockfiles (bun.lock / bun.lockb) are permitted and expected, so they
+    # are deliberately absent here: this list used to mark bun.lockb (and
+    # pnpm-lock.yaml) high/delete and say "use Deno", the inverse of policy.
     %{
       pattern: "package-lock.json",
-      reason: "npm banned -- use Deno",
+      reason: "npm lockfile must not be tracked -- use Bun (`bun install`, bun.lock)",
       severity: :high,
       action: :delete
     },
-    %{pattern: "yarn.lock", reason: "Yarn banned -- use Deno", severity: :high, action: :delete},
-    %{pattern: "bun.lockb", reason: "Bun banned -- use Deno", severity: :high, action: :delete},
+    %{pattern: "yarn.lock", reason: "Yarn banned -- use Bun", severity: :high, action: :delete},
     %{
       pattern: "pnpm-lock.yaml",
-      reason: "pnpm banned -- use Deno",
-      severity: :high,
+      reason:
+        "pnpm is tier 2 -- permitted only where an upstream toolchain needs a " <>
+          "node_modules layout; prefer Bun",
+      severity: :low,
+      action: :flag
+    },
+    %{
+      pattern: ".npmrc",
+      reason: "npm config must not be tracked -- use Bun",
+      severity: :medium,
       action: :delete
     },
-    %{pattern: ".npmrc", reason: "npm banned -- use Deno", severity: :medium, action: :delete},
     %{
       pattern: "tsconfig.json",
       reason: "TypeScript banned -- use AffineScript",
