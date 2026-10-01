@@ -454,7 +454,15 @@ defmodule Hypatia.CLI do
                 rule_module: "workflow_audit",
                 severity: to_string(Map.get(f, :severity, :medium)),
                 type: to_string(type),
-                file: Map.get(f, :file, Map.get(f, :files, "") |> listify()),
+                # WorkflowAudit keys findings by bare basename (`ci.yml`) so
+                # its missing-workflow checks can compare names; qualify at
+                # this boundary so SARIF anchors to the real file and
+                # `.hypatia-ignore` entries written as `.github/workflows/x`
+                # match.
+                file:
+                  Map.get(f, :file, Map.get(f, :files, ""))
+                  |> qualify_workflow_file()
+                  |> listify(),
                 reason: workflow_finding_message(f),
                 action: to_string(Map.get(f, :action, Map.get(f, :fix, :flag)))
               }
@@ -1441,6 +1449,22 @@ defmodule Hypatia.CLI do
       true -> "Workflow issue detected"
     end
   end
+
+  @doc """
+  Qualifies bare workflow filenames relative to `.github/workflows`.
+
+  Accepts a filename or a list of filenames, returning the qualified path or
+  a list of qualified paths. Strings containing `/`, empty strings, and
+  non-string values are returned unchanged. Lists are processed recursively.
+  """
+  def qualify_workflow_file(names) when is_list(names),
+    do: Enum.map(names, &qualify_workflow_file/1)
+
+  def qualify_workflow_file(name) when is_binary(name) and name != "" do
+    if String.contains?(name, "/"), do: name, else: Path.join(".github/workflows", name)
+  end
+
+  def qualify_workflow_file(other), do: other
 
   defp listify(val) when is_list(val), do: Enum.join(val, ", ")
   defp listify(val), do: to_string(val)
