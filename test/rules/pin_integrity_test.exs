@@ -253,6 +253,29 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       refute new_content =~ "# v3"
     end
 
+    test "KYAML: a quoted poisoned pin is caught and repaired in place" do
+      kyaml = """
+      {
+        jobs: {
+          a: {
+            steps: [
+              { uses: "actions/checkout@v7.0.1" },
+              {
+                uses: "github/codeql-action/init@#{@poison}", # v4.38.1
+              },
+            ],
+          },
+        },
+      }
+      """
+
+      assert [%{line: 7}] = PI.pi001_denylisted_pin(kyaml, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(kyaml, @policy)
+      assert new_content =~ ~s(uses: "github/codeql-action/init@#{@good}", # v4.38.0)
+      assert PI.pi001_denylisted_pin(new_content, @policy) == []
+    end
+
     test "a file with no denylisted site is returned untouched" do
       clean = "- uses: actions/checkout@v7.0.1\n"
 

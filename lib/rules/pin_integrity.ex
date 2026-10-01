@@ -53,7 +53,12 @@ defmodule Hypatia.Rules.PinIntegrity do
   or to the owner as `flag` when the repair is not a substitution.
   """
 
-  @uses_regex ~r/^\s*-?\s*uses:\s*(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#]+)\s*(?:#\s*(?<comment>.*?))?\s*$/
+  # A `uses:` pin site, in block form (`- uses: a/b@ref # v1`) or KYAML form
+  # (`uses: "a/b@ref", # v1` and one-line `{ uses: "a/b@ref" },`). The key
+  # must open the line — after indentation and an optional `-` or `{` — so a
+  # `uses:` inside a `run:` string never counts. The value may be quoted; the
+  # quote, trailing comma and closing brace are not part of the ref.
+  @uses_regex ~r/^\s*(?:-\s*|\{\s*)?uses:\s*(?<q>["']?)(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}]+)\k<q>\s*\}?\s*,?\s*(?:#\s*(?<comment>.*?))?\s*$/
 
   @doc """
   Parse every `uses:` pin site in a workflow file.
