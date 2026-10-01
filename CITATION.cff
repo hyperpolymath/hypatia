@@ -7,6 +7,7 @@ type: software
 authors:
   - family-names: Jewell
     given-names: Jonathan D.A.
+    orcid: "https://orcid.org/0000-0002-3078-6652"
     email: j.d.a.jewell@open.ac.uk
 repository-code: "https://github.com/hyperpolymath/hypatia"
 license: MPL-2.0
