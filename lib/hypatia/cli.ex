@@ -1202,15 +1202,6 @@ defmodule Hypatia.CLI do
     IO.puts(Jason.encode!(Enum.map(findings, &json_compat_severity/1), pretty: true))
   end
 
-  # Compatibility shim (standards#787 D260). Callers pinned to standards'
-  # hypatia-scan-reusable.yml before bd9313a6 validate the JSON against
-  # critical/high/medium/low/info and reject the whole array on one "warn",
-  # so ~350 repos failed with "Hypatia did not produce one valid findings
-  # array". warn already ranks with medium (@severity_order), so this loses
-  # no information. Remove once no caller is pinned to a rejecting copy.
-  defp json_compat_severity(%{severity: "warn"} = f), do: %{f | severity: "medium"}
-  defp json_compat_severity(f), do: f
-
   defp output(findings, "sarif") do
     # SARIF 2.1.0 — see lib/hypatia/sarif.ex. Output goes to stdout
     # so workflows can redirect to a .sarif file and upload-sarif
@@ -1256,6 +1247,15 @@ defmodule Hypatia.CLI do
       end)
     end
   end
+
+  # Compatibility shim (standards#787 D260). Callers pinned to standards'
+  # hypatia-scan-reusable.yml before bd9313a6 validate the JSON against
+  # critical/high/medium/low/info and reject the whole array on one "warn",
+  # so ~350 repos failed with "Hypatia did not produce one valid findings
+  # array". warn already ranks with medium (@severity_order), so this loses
+  # no information. Remove once no caller is pinned to a rejecting copy.
+  defp json_compat_severity(%{severity: "warn"} = f), do: %{f | severity: "medium"}
+  defp json_compat_severity(f), do: f
 
   defp output_report(findings, repo_path) do
     IO.puts("=" |> String.duplicate(72))
