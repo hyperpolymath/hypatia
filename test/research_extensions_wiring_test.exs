@@ -161,6 +161,40 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
       assert summary =~ ~r/warn=[1-9][0-9]*/
     end
 
+    # Callers on standards' hypatia-scan-reusable.yml before bd9313a6 reject
+    # the whole JSON array if any finding carries severity "warn" (D260).
+    test "CLI JSON output reports warn findings as medium, never as warn" do
+      repo = tripwire_repo()
+
+      json =
+        ExUnit.CaptureIO.capture_io(fn ->
+          ExUnit.CaptureIO.capture_io(:stderr, fn ->
+            CLI.main([
+              "scan",
+              repo,
+              "--rules",
+              "research_extensions",
+              "--format",
+              "json",
+              "--exit-zero"
+            ])
+          end)
+        end)
+
+      findings = Jason.decode!(json)
+      severities = Enum.map(findings, & &1["severity"])
+
+      assert "medium" in severities,
+             "the tripwire repo emits warn-tier RE findings; none reached JSON"
+
+      refute "warn" in severities,
+             "a single \"warn\" makes every pre-bd9313a6 standards validator " <>
+               "reject the whole findings array"
+
+      allowed = ["critical", "high", "medium", "low", "info"]
+      assert Enum.all?(severities, &(&1 in allowed))
+    end
+
     # Six of the ten RE rules emit `severity: :warn`. "warn" was absent from
     # CLI's @severity_order, so `Map.get(@severity_order, "warn", 5)` gave it
     # rank 5; the filter `rank <= threshold` at the default threshold of
