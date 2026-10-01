@@ -199,10 +199,20 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # ─── WH002: Excessive workflow permissions ──────────────────────────
 
   @doc """
-  WH002: Workflow has no top-level `permissions:` block at all, OR has
-  `permissions: write-all`, OR has top-level `contents: write`. Per Cassel
+  WH002: Workflow has no `permissions:` declaration at any level, OR has
+  top-level `permissions: write-all`, `write-all: true` in a top-level
+  permissions block, or top-level `contents: write`. Per Cassel
   et al. 2024, ~74% of public workflows are at the default (write-all-equivalent
   for many scopes). This catches Scorecard TokenPermissionsID alerts.
+
+  Return a list of findings with repo-relative file paths. Missing permissions
+  produce `:warn`; write-all grants produce `:high`. For `contents: write`,
+  scan the workflow and referenced local scripts: detected writes or unresolved
+  script references produce `:warn`, otherwise `:high`. Return `[]` when no
+  workflow matches. Job-level permissions alone do not produce a finding.
+
+  Raises `File.Error` if workflow directory listing, workflow reading or
+  reading a selected local script fails.
   """
   def wh002_excessive_permissions(repo_path) do
     repo_path
@@ -216,7 +226,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
           [finding_wh002(rel, "set to `write-all`", :high)]
 
         Regex.match?(~r/^permissions:\s*\n\s+contents:\s*write/m, content) ->
-          [wh002_contents_write_finding(rel, content)]
+          [wh002_contents_write_finding(rel, local_script_scan(content, repo_path))]
 
         Regex.match?(~r/^permissions:\s*\n\s+write-all:\s*true/m, content) ->
           [finding_wh002(rel, "with `write-all: true`", :high)]
@@ -288,6 +298,104 @@ defmodule Hypatia.Rules.WorkflowHardening do
     Regex.replace(@foreign_push, content, "")
   end
 
+  # A `run:` that calls a repo-local script (`bash scripts/wiki-sync.sh`,
+  # `./ci/release.sh`) performs whatever that script performs. Reading only the
+  # workflow text made WH002 call absolute-zero's wiki-sync.yml "no write
+  # operation found — safe to narrow" while scripts/wiki-sync.sh does the
+  # `git push` that needs the grant: the recommended narrowing breaks the sync.
+  @local_script_ref ~r/(?<![\w\/.-])((?:\.\/)?[\w.-]+(?:\/[\w.-]+)*\.(?:sh|bash))\b/
+
+  # Literal `working-directory:` values, at step level or under
+  # `defaults: run:` (workflow or job). Expression values (`${{ … }}`, `$X`)
+  # cannot be resolved statically and are not used as bases.
+  @working_directory ~r/^\s*working-directory:\s*["']?([^"'\s#$]+)["']?\s*(?:#.*)?$/m
+
+  @doc """
+  Append each selected local shell script's text once to `content`, separated
+  by newlines. Return `%{content: combined_text, unresolved: references}`.
+  References ending in `.sh` or `.bash` are recognised anywhere in the input
+  text, including comments; scripts are not executed or scanned recursively.
+
+  Resolve references against the repo root and every recognised literal
+  `working-directory:` in the workflow. For example, `working-directory: scripts`
+  with `bash wiki-sync.sh` selects `scripts/wiki-sync.sh`. All matching bases
+  are considered, without pairing references with individual steps.
+
+  Candidates must expand beneath the repo root and have no symbolic links
+  below that root. Missing paths, non-regular files and paths whose metadata
+  cannot be read are rejected. `unresolved` contains each reference with
+  in-repo candidates but no accepted candidate, in first-occurrence order.
+  References whose candidates all escape the repo are ignored.
+
+  Raises `File.Error` if reading an accepted script fails; this error is not
+  converted into an unresolved reference.
+  """
+  def local_script_scan(content, repo_path) when is_binary(content) do
+    root = Path.expand(repo_path)
+
+    bases =
+      [
+        root
+        | Enum.map(Regex.scan(@working_directory, content, capture: :all_but_first), fn [d] ->
+            Path.expand(d, root)
+          end)
+      ]
+      |> Enum.uniq()
+      |> Enum.filter(&inside?(&1, root))
+
+    {scripts, unresolved} =
+      @local_script_ref
+      |> Regex.scan(content, capture: :all_but_first)
+      |> Enum.map(fn [ref] -> ref end)
+      |> Enum.uniq()
+      |> Enum.reduce({[], []}, fn ref, {found, missing} ->
+        candidates =
+          bases
+          |> Enum.map(&Path.expand(ref, &1))
+          |> Enum.uniq()
+          |> Enum.filter(&(&1 != root and inside?(&1, root)))
+
+        readable = Enum.filter(candidates, &unlinked_regular_file?(&1, root))
+
+        cond do
+          # Every candidate escapes the repo: not a repo-local script.
+          candidates == [] -> {found, missing}
+          readable == [] -> {found, [ref | missing]}
+          true -> {readable ++ found, missing}
+        end
+      end)
+
+    texts = scripts |> Enum.uniq() |> Enum.map(&File.read!/1)
+    %{content: Enum.join([content | texts], "\n"), unresolved: Enum.reverse(unresolved)}
+  end
+
+  @doc """
+  Return the combined text from `local_script_scan/2`, discarding its unresolved
+  references. Uses the same reference selection and propagates `File.Error`
+  if reading a selected script fails.
+  """
+  def with_local_scripts(content, repo_path) when is_binary(content) do
+    local_script_scan(content, repo_path).content
+  end
+
+  defp inside?(path, root), do: path == root or String.starts_with?(path, root <> "/")
+
+  # lstat every component from the root down; any symbolic link rejects.
+  defp unlinked_regular_file?(path, root) do
+    parts = path |> Path.relative_to(root) |> Path.split()
+
+    parts
+    |> Enum.scan(root, &Path.join(&2, &1))
+    |> Enum.with_index(1)
+    |> Enum.all?(fn {p, i} ->
+      case File.lstat(p) do
+        {:ok, %File.Stat{type: :regular}} -> i == length(parts)
+        {:ok, %File.Stat{type: :directory}} -> i < length(parts)
+        _ -> false
+      end
+    end)
+  end
+
   @doc """
   Return true when at least one JOB declares its own `permissions:` block.
   A job-level block replaces the workflow-level one, so its presence means
@@ -304,7 +412,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   #   (3) does a job carry its own `permissions:`.
   # Only (1) alone is NOT a finding — that was the defect that made this rule
   # recommend breaking narrowings.
-  defp wh002_contents_write_finding(rel, content) do
+  defp wh002_contents_write_finding(rel, %{content: content, unresolved: unresolved}) do
     writes? = performs_contents_write?(content)
     job_scoped? = job_level_permissions?(content)
 
@@ -341,6 +449,17 @@ defmodule Hypatia.Rules.WorkflowHardening do
           "with `contents: write` (workflow performs a write, but jobs carry " <>
             "their own `permissions:` — verify the WRITING job is one of them " <>
             "before narrowing)",
+          :warn
+        )
+
+      # A called script could not be read, so "no write found" is unproven.
+      # Never tell the owner narrowing is safe on an unread script.
+      unresolved != [] ->
+        finding_wh002(
+          rel,
+          "with `contents: write` (calls #{Enum.join(unresolved, ", ")}, which " <>
+            "could not be read (missing, or behind a symbolic link) — verify it " <>
+            "performs no push/commit/release before narrowing)",
           :warn
         )
 

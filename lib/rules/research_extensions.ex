@@ -812,14 +812,20 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # ─── RE008: spoofable bot-identity gate ──────────────────────────────
 
   @doc """
-  RE008: A conditional uses `github.actor == 'dependabot[bot]'` (or
-  any other bot login) as a trust gate. `github.actor` is the user
-  *who triggered the run*, not the PR author — on
-  `pull_request_target` from a fork the attacker controls the value.
+  RE008: Find `github.actor` comparisons using `==` or `!=` with a quoted
+  bot login ending in `[bot]` in workflow text.
   Provenance: zizmor `bot-conditions` + Koishybayev et al. (USENIX
   Security 2022).
 
+  Suppress a match when the same line contains an `&&`-separated equality
+  between `github.event.pull_request.user.login` and the same bot login,
+  with no `||` or logical `!` (`!=` is allowed). Expression wrappers and
+  parentheses around that equality are accepted.
+
+  Return one finding per remaining match, with a repo-relative file path
+  and a one-based line number in `detail.line`, or `[]` when none remain.
   Severity: `:critical`. Action: `:report`.
+  Raises `File.Error` if workflow directory listing or file reading fails.
   """
   def re008_spoofable_bot_gate(repo_path) do
     # github.actor compared to any bot-identity string. Catch both
@@ -832,11 +838,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
+      lines = String.split(content, "\n")
+
       Regex.scan(bot_gate_re, content, return: :index)
       |> Enum.map(fn [{idx, _}, {name_start, name_len}] ->
         name = binary_part(content, name_start, name_len)
-        line_no = line_number_for_offset(content, idx)
-
+        {name, line_number_for_offset(content, idx)}
+      end)
+      |> Enum.reject(fn {name, line_no} ->
+        author_pinned_gate?(Enum.at(lines, line_no - 1, ""), name)
+      end)
+      |> Enum.map(fn {name, line_no} ->
         %{
           rule: "RE008",
           file: rel,
@@ -857,6 +869,43 @@ defmodule Hypatia.Rules.ResearchExtensions do
         }
       end)
     end)
+  end
+
+  # The rule's own recommended fix, already applied: the same condition ANDs in
+  # the PR author (`github.event.pull_request.user.login`), which a fork cannot
+  # forge. With `&&` and no `||` the spoofable `github.actor` half can only
+  # narrow the gate, never open it (panoply / nextgen-typing
+  # dependabot-automerge.yml were reported CRITICAL for exactly this shape).
+  #
+  # Fail-safe: the author equality must be a whole, positive, top-level `&&`
+  # conjunct. Any logical `!` (not `!=`) anywhere in the expression keeps the
+  # finding, since `!(user.login == 'bot')` admits every non-bot author.
+  defp author_pinned_gate?(line, name) do
+    author_re =
+      ~r/^github\.event\.pull_request\.user\.login\s*==\s*['"]#{Regex.escape(name)}['"]$/
+
+    expr =
+      line
+      |> String.replace(~r/^\s*(?:-\s*)?if:\s*/, "")
+      |> String.replace(~r/\$\{\{|\}\}/, "")
+
+    String.contains?(expr, "&&") and not String.contains?(expr, "||") and
+      not Regex.match?(~r/!(?!=)/, expr) and
+      expr
+      |> String.split("&&")
+      |> Enum.map(&strip_wrapping_parens/1)
+      |> Enum.any?(&Regex.match?(author_re, &1))
+  end
+
+  # Remove whitespace and matched outer parentheses: `( (a == b) )` → `a == b`.
+  # Unmatched parentheses are left in place, so the conjunct cannot match.
+  defp strip_wrapping_parens(conjunct) do
+    trimmed = String.trim(conjunct)
+
+    case Regex.run(~r/^\((.*)\)$/s, trimmed) do
+      [_, inner] -> strip_wrapping_parens(inner)
+      nil -> trimmed
+    end
   end
 
   # ─── RE009: fromJSON(secrets.X) bypasses runner redaction ────────────
