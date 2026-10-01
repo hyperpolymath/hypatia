@@ -50,20 +50,57 @@ defmodule Hypatia.Rules.CicdRules do
     # Community-health files (SECURITY.md, CONTRIBUTING.md, …) are recognised
     # by GitHub in any of root, `.github/`, or `docs/`. Check all three so the
     # rule doesn't false-positive when SECURITY.md lives under `.github/`.
-    candidates = [file, Path.join(".github", file), Path.join("docs", file)]
-
     cond do
       # Repo-rooted check: nested paths like `.github/dependabot.yml` can
       # only be confirmed via on-disk inspection. The root_files list is
       # not enough — without this the rule was a false-positive factory.
-      is_binary(repo_path) and Enum.any?(candidates, &File.exists?(Path.join(repo_path, &1))) ->
+      is_binary(repo_path) and policy_file_present?(repo_path, file) ->
         true
 
-      file in Map.get(info, :files, []) ->
+      # Without a repo_path the listed files are all there is; accept the
+      # same markup variants the on-disk check does (CodeRabbit on #883).
+      Enum.any?(policy_file_candidates(file), &(&1 in Map.get(info, :files, []))) ->
         true
 
       true ->
         false
+    end
+  end
+
+  # A policy document is satisfied by any markup the estate writes it in. The
+  # estate's docs language is AsciiDoc, so `SECURITY.adoc` is the normal form;
+  # requiring the literal `.md` made every such repo a HIGH "missing SECURITY.md"
+  # (absolute-zero). OpenSSF Scorecard's Security-Policy check accepts the same
+  # set. Non-document requirements (`.yml`) are matched exactly.
+  @policy_markups ~w(.md .markdown .adoc .rst)
+
+  @doc """
+  Repo-relative paths that satisfy a requirement for `file`: every accepted
+  markup of it, in the root, `.github/` or `docs/`. The single source of truth
+  for "is this policy document present" — the Scorecard ingestor's
+  Security-Policy check delegates here rather than keeping its own list.
+
+  A `.md`, `.markdown`, `.adoc` or `.rst` extension is replaced with each of
+  those extensions. Other extensions are kept unchanged. Candidate paths
+  are returned without checking whether they exist.
+  """
+  def policy_file_candidates(file) do
+    for name <- markup_variants(file), dir <- ["", ".github", "docs"] do
+      if dir == "", do: name, else: Path.join(dir, name)
+    end
+  end
+
+  @doc "True when any `policy_file_candidates/1` path exists under `repo_path`."
+  def policy_file_present?(repo_path, file) do
+    Enum.any?(policy_file_candidates(file), &File.exists?(Path.join(repo_path, &1)))
+  end
+
+  defp markup_variants(file) do
+    if Path.extname(file) in @policy_markups do
+      base = Path.rootname(file)
+      Enum.map(@policy_markups, &(base <> &1))
+    else
+      [file]
     end
   end
 
@@ -441,7 +478,12 @@ defmodule Hypatia.Rules.CicdRules do
       pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
       reason:
         "npx / `npm run` banned in CI -- use `bunx` or `bun run` instead (npm banned 2026-05-25; Deno banned 2026-09-22, standards LANGUAGE-POLICY §1.3)",
-      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
+      # The ban's own enforcers (echidna scripts/ban-npm.sh) name npx inside a
+      # quoted grep pattern or an echo message; that is text, not execution.
+      # Only those quoted arguments are masked before matching, never the whole
+      # line: `echo "npx is banned" && npx foo` still fires on the real npx.
+      mask_quoted_args_of: ~w(grep egrep rg echo printf)
     },
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
@@ -667,7 +709,10 @@ defmodule Hypatia.Rules.CicdRules do
       id: :eval_in_shell,
       pattern: ~r/\beval\b/,
       reason: "eval banned in shell scripts -- use direct expansion or arrays",
-      applies_to: ["*.sh"]
+      applies_to: ["*.sh"],
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     # --- Scanner-derived rule (2026-09-01) -----------------------------
     #
@@ -713,7 +758,10 @@ defmodule Hypatia.Rules.CicdRules do
       id: :download_then_run_shell,
       pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
       reason: "download-then-run banned -- verify checksum/signature before execution",
-      applies_to: ["*.sh", "*.yml", "*.yaml"]
+      applies_to: ["*.sh", "*.yml", "*.yaml"],
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     %{
       id: :js_insecure_random_security_context,
@@ -761,13 +809,22 @@ defmodule Hypatia.Rules.CicdRules do
     # `http://www.w3.org/...` XML-namespace pattern (which is identifier-
     # only, not a navigable URL). Severity :medium (advisory; flagrant
     # uses become RFC-9116 / RSR violations).
+    #
+    # Only a URL with a public dotted host can be "upgraded to https", so the
+    # host must contain a dot and must not be reserved (RFC 2606/6761:
+    # example[.com|.org|.net], *.example, *.test, *.invalid, *.localhost, plus
+    # *.local and *.internal). That excludes placeholders (`http://<SERVER_IP>`),
+    # single-label service names (`http://julia-ml:9000` on a docker network)
+    # and fragments like `http://+` — every one a false positive on echidna.
+    # Verbatim licence texts under LICENSES/ are not the repo's to edit.
     %{
       id: :http_in_docs,
       pattern:
-        ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
+        ~r/\bhttp:\/\/(?!localhost(?![\w.-])|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|(?:[\w-]+\.)*example(?:\.(?:com|org|net))?(?![\w.-])|[\w.-]+\.(?:test|invalid|localhost|local|internal)(?![\w.-]))[A-Za-z0-9-]+\.[A-Za-z0-9.-]*[A-Za-z]/,
       reason:
         "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
-      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]
+      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"],
+      path_allow_prefixes: ["LICENSES/"]
     },
     %{
       id: :mu_plugin_no_guard,
@@ -819,6 +876,10 @@ defmodule Hypatia.Rules.CicdRules do
       non-whitespace characters are `#` or `//`.
     * `skip_if_line_matches: ~r/.../` — ignores matching lines that also
       match this regex (a rule's own remediation, e.g. `mktemp`).
+    * `mask_quoted_args_of: [cmd, ...]` — blanks quoted arguments of the
+      named commands (`echo "npx"` → `echo ""`) before matching, so text
+      that only *names* a banned tool is not reported while an executable
+      use elsewhere on the same line still is.
     * `strip_yaml_comments: true` — removes unquoted YAML comments before
       matching while preserving the original line numbers and finding text.
     * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
@@ -946,7 +1007,7 @@ defmodule Hypatia.Rules.CicdRules do
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {{line, matching_line}, n} ->
       cond do
-        not Regex.match?(rule.pattern, matching_line) ->
+        not Regex.match?(rule.pattern, mask_quoted_args(rule, matching_line)) ->
           []
 
         # C4: a rule may opt out of matching inside comments. Default false,
@@ -980,6 +1041,22 @@ defmodule Hypatia.Rules.CicdRules do
 
   defp skip_line_match?(%{skip_if_line_matches: %Regex{} = re}, line), do: Regex.match?(re, line)
   defp skip_line_match?(_rule, _line), do: false
+
+  # Blank the quoted arguments of the rule's named commands, repeating until
+  # stable so every quoted argument of `grep -e "a" -e "b"` is masked. Only
+  # the quoted text goes; separators and later commands are kept intact.
+  defp mask_quoted_args(%{mask_quoted_args_of: [_ | _] = cmds}, line) do
+    alt = Enum.map_join(cmds, "|", &Regex.escape/1)
+    re = Regex.compile!("(\\b(?:#{alt})\\b[^;&|\"']*)([\"'])[^\"']+\\2")
+    mask_until_stable(re, line)
+  end
+
+  defp mask_quoted_args(_rule, line), do: line
+
+  defp mask_until_stable(re, line) do
+    masked = Regex.replace(re, line, "\\1\\2\\2")
+    if masked == line, do: line, else: mask_until_stable(re, masked)
+  end
 
   defp content_for_matching(rule, content) do
     if Map.get(rule, :strip_yaml_comments, false) do
