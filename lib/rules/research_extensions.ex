@@ -195,7 +195,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
-      content = File.read!(path)
+      content = read_workflow(path)
       rel = Path.relative_to(path, repo_path)
 
       # Comments are not runner configuration. Preserve physical line numbers
@@ -450,7 +450,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
-      content = File.read!(path)
+      content = read_workflow(path)
       rel = Path.relative_to(path, repo_path)
 
       uses_cache? = Regex.match?(~r/uses:\s*actions\/cache(?:@|\s)/, content)
@@ -593,7 +593,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
-      content = File.read!(path)
+      content = read_workflow(path)
       rel = Path.relative_to(path, repo_path)
 
       content
@@ -1037,6 +1037,100 @@ defmodule Hypatia.Rules.ResearchExtensions do
       by_severity: group_by_severity(findings),
       dispatch: dispatch_recommendations(findings)
     }
+  end
+
+  # ─── KYAML (flow-style) workflows ───────────────────────────────────
+
+  # Read a workflow for the line- and indent-based rules. A KYAML workflow
+  # (YAML-POLICY Y-3: the estate's base form, `yq -o kyaml`) is rewritten to
+  # the equivalent block layout one line for one line, so physical line
+  # numbers in findings still point at the source. Block YAML is returned
+  # byte-identical.
+  @doc false
+  def read_workflow(path), do: path |> File.read!() |> flow_to_block()
+
+  # Rewrite a KYAML document to block layout, preserving the line count:
+  # the root `{` and every closer become blank lines, `key: {`/`key: [`
+  # lose their opener, the first key of a `{` sequence item and each scalar
+  # sequence item gain `- `, trailing commas go, and plain double-quoted
+  # scalars are unquoted. Anything whose first significant line is not a
+  # bare `{` is not KYAML and passes through untouched — block YAML's own
+  # `on: [push]` and `permissions: {}` are never rewritten.
+  @doc false
+  def flow_to_block(content) when is_binary(content) do
+    lines = String.split(content, "\n")
+
+    if kyaml_root?(lines) do
+      {out, _stack, _dash} = Enum.reduce(lines, {[], [], false}, &flow_line/2)
+      out |> Enum.reverse() |> Enum.join("\n")
+    else
+      content
+    end
+  end
+
+  # True when the first line that is neither blank nor a comment is a bare `{`.
+  defp kyaml_root?(lines) do
+    lines
+    |> Enum.map(&String.trim/1)
+    |> Enum.find(&(&1 != "" and not String.starts_with?(&1, "#")))
+    |> Kernel.==("{")
+  end
+
+  # Rewrite one KYAML line. The stack holds the open collections (`:map` or
+  # `:seq`); `dash` marks that the next property opens a sequence item.
+  defp flow_line(line, {out, stack, dash}) do
+    trimmed = String.trim(line)
+
+    if trimmed == "" or String.starts_with?(trimmed, "#") do
+      {[dedent(line) | out], stack, dash}
+    else
+      {head, comment} =
+        case Regex.run(~r/^(.*?),?(\s+#[^"]*)?$/, String.trim_trailing(line)) do
+          [_, head, comment] -> {head, comment}
+          [_, head] -> {head, ""}
+        end
+
+      indent = String.duplicate(" ", indent_of(head))
+      body = String.trim(head)
+      in_seq? = match?([:seq | _], stack)
+
+      cond do
+        body in ["}", "]"] ->
+          {["" | out], Enum.drop(stack, 1), false}
+
+        body == "{" ->
+          {["" | out], [:map | stack], in_seq?}
+
+        String.ends_with?(body, ": {") or String.ends_with?(body, ": [") ->
+          kind = if String.ends_with?(body, "{"), do: :map, else: :seq
+          key = String.slice(body, 0..-3//1)
+          {[emit(indent, key, comment, dash) | out], [kind | stack], false}
+
+        in_seq? ->
+          item = Regex.replace(~r/^\{\s*(.*?)\s*\}$/, body, "\\1")
+          {[emit(indent <> "  ", unquote_scalar(item), comment, true) | out], stack, false}
+
+        true ->
+          {[emit(indent, unquote_scalar(body), comment, dash) | out], stack, false}
+      end
+    end
+  end
+
+  # Assemble one block-layout line, two columns left of the KYAML one, with a
+  # `- ` sequence marker in the two columns just above the key when `dash`.
+  defp emit(indent, body, comment, dash) do
+    prefix = if dash, do: String.slice(indent, 2..-1//1) <> "- ", else: indent
+    dedent(prefix <> body <> (comment || ""))
+  end
+
+  # Drop the two columns of indentation the KYAML root mapping adds.
+  defp dedent("  " <> rest), do: rest
+  defp dedent(line), do: line
+
+  # Unquote a `key: "value"` or bare `"value"` whose value holds no quote or
+  # escape; anything else keeps its quotes.
+  defp unquote_scalar(body) do
+    Regex.replace(~r/^((?:[^\s"':]+:\s+)?)"([^"\\]*)"$/, body, "\\1\\2")
   end
 
   # ─── Internals ──────────────────────────────────────────────────────
