@@ -56,6 +56,13 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
     assert Strategist.decide(ctx(%{pool: :p0})).safety == :flag
   end
 
+  test "an atomic-green commit series squashes: rebase is never chosen" do
+    # a non-chore class, so the method cond reaches its commit-hygiene clauses
+    # (the default :chore squashes on the first clause and would prove nothing)
+    d = Strategist.decide(ctx(%{change_class: :security, commits_atomic_green: true}))
+    assert d.method == :squash
+  end
+
   test "method is set by class, not confidence: a low-confidence chore still squashes" do
     d =
       Strategist.decide(ctx(%{attestations: [%{bot: "ci", verdict: :approve, confidence: 0.10}]}))
