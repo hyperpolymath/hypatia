@@ -91,7 +91,10 @@ defmodule Hypatia.Rules.PinIntegrityTest do
   describe "denylisted?/3" do
     test "matches the SHA, the tag and the bare version — all three spellings" do
       assert %{"id" => "PIN-001"} = PI.denylisted?(@policy, "github/codeql-action/init", @poison)
-      assert %{"id" => "PIN-001"} = PI.denylisted?(@policy, "github/codeql-action/analyze", "v4.38.1")
+
+      assert %{"id" => "PIN-001"} =
+               PI.denylisted?(@policy, "github/codeql-action/analyze", "v4.38.1")
+
       assert %{"id" => "PIN-001"} = PI.denylisted?(@policy, "github/codeql-action/init", "4.38.1")
     end
 
@@ -183,7 +186,10 @@ defmodule Hypatia.Rules.PinIntegrityTest do
   describe "claimed_version/1" do
     test "reads the estate's real comment shapes" do
       assert PI.claimed_version("v4.38.0") == "4.38.0"
-      assert PI.claimed_version("v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)") == "4.38.0"
+
+      assert PI.claimed_version("v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)") ==
+               "4.38.0"
+
       assert PI.claimed_version("v3") == "3"
       assert PI.claimed_version("Pinned to v1.2.3 — do not move") == "1.2.3"
     end
@@ -201,6 +207,8 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       # The comment arrives from pin_sites/1 without its leading `#`.
       assert PI.relabel("v3", "4.38.0") == "# v4.38.0"
       assert PI.relabel("# v3", "4.38.0") == "# v4.38.0"
+      # A bare claim without the `v` must keep its first digit.
+      assert PI.relabel("4.38.1", "4.38.0") == "# v4.38.0"
     end
 
     test "leaves a comment that already carries the good version byte-identical" do
@@ -243,6 +251,29 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert second.comment_after == " v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)"
       assert new_content =~ "# v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)"
       refute new_content =~ "# v3"
+    end
+
+    test "KYAML: a quoted poisoned pin is caught and repaired in place" do
+      kyaml = """
+      {
+        jobs: {
+          a: {
+            steps: [
+              { uses: "actions/checkout@v7.0.1" },
+              {
+                uses: "github/codeql-action/init@#{@poison}", # v4.38.1
+              },
+            ],
+          },
+        },
+      }
+      """
+
+      assert [%{line: 7}] = PI.pi001_denylisted_pin(kyaml, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(kyaml, @policy)
+      assert new_content =~ ~s(uses: "github/codeql-action/init@#{@good}", # v4.38.0)
+      assert PI.pi001_denylisted_pin(new_content, @policy) == []
     end
 
     test "a file with no denylisted site is returned untouched" do

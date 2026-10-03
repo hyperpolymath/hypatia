@@ -59,7 +59,12 @@ defmodule Hypatia.ScannerSuppression do
     "security_errors" => %{
       :any =>
         @training_corpus_paths ++
-          [".github/workflows/integration.yml"]
+          [".github/workflows/integration.yml"],
+      # `harvested-registry/` is a corpus of OTHER projects' manifests kept as
+      # reference material; example credentials are its content, the same
+      # justification as `.audittraining/` (#865). Scoped to `secret_detected`
+      # only — every other security_errors rule still scans it.
+      "secret_detected" => ["harvested-registry/"]
     },
     # ⚠ `benches/` is exempted for code_safety ONLY, deliberately not for
     # security_errors. Cargo's convention puts benchmarks in `benches/`, and a
@@ -85,6 +90,17 @@ defmodule Hypatia.ScannerSuppression do
     # detect — flagging either is self-recursion, same class as the
     # code_safety / migration_rules exemptions above.
     "structural_drift" => %{
+      :any => @training_corpus_paths
+    },
+    # ⚠ Keyed "content_patterns", NOT "cicd_rules". The content engine lives
+    # in CicdRules, but cli.ex normalises its findings with
+    # `rule_module: "content_patterns"` (alert ids read
+    # `hypatia/content_patterns/<rule>`). A "cicd_rules" key here would be
+    # vacuous — it names the module, not the string the consumer compares.
+    # Same training-corpus policy as above: a fixture photographing a bad
+    # pattern (launch-scaffolder's frozen /tmp launcher) is provenance, and
+    # the generator's own tests are its detector.
+    "content_patterns" => %{
       :any => @training_corpus_paths
     }
   }
@@ -277,7 +293,7 @@ defmodule Hypatia.ScannerSuppression do
   #
   # Measured 2026-09-03 across 73 repos with a live gate: 45 of 614 critical
   # findings were commented-out placeholders from templates
-  # (`# export API_KEY="..."`, `# token = "ghp_xxxxxxxxxxxxxxxxxxxx"`), zero
+  # (API keys filled with ellipses or GitHub tokens filled with x's), zero
   # real credentials. The shapes below are placeholder tell-tales: ellipses,
   # angle-bracket metavariables, long same-character runs, `your-*`/`my-*`
   # fillers, `changeme`. They cannot plausibly occur in a real generated
@@ -339,6 +355,35 @@ defmodule Hypatia.ScannerSuppression do
   end
 
   def comment_masked_secret_label?(_label, _line, _line_number), do: false
+
+  # Proof-assistant sources name lemmas and facts with `name: "prop"`
+  # (Isabelle `lemma inj_secret: "…"`, `assumes pw_ok: "…"`), which is exactly
+  # the `secret: "…"` form. Only that declaration shape is dropped, and only
+  # for the three form-ambiguous labels: a plain assignment such as
+  # `password = "…"` in a proof source still fires, as do the
+  # structurally-unforgeable shapes (`ghp_…`, `AKIA…`, PEM blocks).
+  # absolute-zero OND.thy:62.
+  @proof_source_exts ~w(.thy .v .agda .lagda .lean .idr .lidr)
+
+  @proof_named_fact ~r/^\s*(?:lemma|theorem|corollary|proposition|schematic_goal|definition|abbreviation|fun|function|primrec|inductive|assumes|shows|and|have|show|hence|thus|obtain|note)\s+[A-Za-z_][\w']*\s*:\s*"/
+
+  @doc """
+  Return true when `label` is `"Generic API key"`, `"Generic secret"` or
+  `"Password"`, `file` ends in `.thy`, `.v`, `.agda`, `.lagda`, `.lagda.md`,
+  `.lean`, `.idr` or `.lidr`, and `line` starts with a recognised named proof
+  declaration (`lemma <name>: "<prop>"`), allowing leading whitespace.
+
+  Return false for assignments, other labels or extensions, or non-binary
+  arguments. This predicate does not read the file.
+  """
+  def proof_source_ambiguous_label?(label, file, line)
+      when is_binary(label) and is_binary(file) and is_binary(line) do
+    label in @form_ambiguous_secret_labels and
+      (Path.extname(file) in @proof_source_exts or String.ends_with?(file, ".lagda.md")) and
+      Regex.match?(@proof_named_fact, line)
+  end
+
+  def proof_source_ambiguous_label?(_label, _file, _line), do: false
 
   @doc """
   Return true when `line` is a whole-line comment.
@@ -454,7 +499,8 @@ defmodule Hypatia.ScannerSuppression do
   # pragmas (`hypatia:ignore RE005 -- <reason>`, `hypatia:ignore zig_ptr_cast`)
   # use the verb form; both are honoured identically.
   defp directive_re,
-    do: ~r/(?:^|[\s#\/\-;])hypatia:\s*(?:allow|ignore)\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
+    do:
+      ~r/(?:^|[\s#\/\-;])hypatia:\s*(?:allow|ignore)\s+([A-Za-z0-9_\*]+)(?:\/([A-Za-z0-9_\*]+))?/i
 
   defp directive_matches?(line, rule_module, rule_type) do
     case Regex.run(directive_re(), line) do

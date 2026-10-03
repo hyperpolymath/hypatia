@@ -359,13 +359,13 @@ defmodule Hypatia.ScorecardIngestor do
   # --- Local Check Implementations ---
 
   defp check_security_policy(repo_path, repo_name) do
-    security_paths = [
-      Path.join(repo_path, "SECURITY.md"),
-      Path.join([repo_path, ".github", "SECURITY.md"]),
-      Path.join(repo_path, "security.md")
-    ]
+    # Same acceptance set as the CI/CD requirement (any markup; root, .github/
+    # or docs/), so the two checks cannot disagree about SECURITY.adoc again.
+    present =
+      Hypatia.Rules.CicdRules.policy_file_present?(repo_path, "SECURITY.md") or
+        File.exists?(Path.join(repo_path, "security.md"))
 
-    unless Enum.any?(security_paths, &File.exists?/1) do
+    unless present do
       make_pattern("SC-016", "Security-Policy", repo_name, "No SECURITY.md found in #{repo_name}")
     end
   end

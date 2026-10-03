@@ -310,6 +310,32 @@ defmodule Hypatia.ScannerSuppressionTest do
     end
   end
 
+  describe "suppressed?/3 — harvested-registry/ (#865)" do
+    test "secret_detected is exempt inside harvested third-party manifests" do
+      assert ScannerSuppression.suppressed?(
+               "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+
+    test "other security_errors rules still scan harvested-registry/" do
+      refute ScannerSuppression.suppressed?(
+               "machine-readable-design/harvested-registry/elixir/phoenix-service.ncl",
+               "security_errors",
+               "sql-injection"
+             )
+    end
+
+    test "secret_detected outside harvested-registry/ is unaffected" do
+      refute ScannerSuppression.suppressed?(
+               "machine-readable-design/phoenix-service.ncl",
+               "security_errors",
+               "secret_detected"
+             )
+    end
+  end
+
   describe "suppressed?/3 — benches/" do
     # Cargo puts benchmarks in `benches/`. A benchmark that unwraps or panics is
     # normal: the failure costs a benchmark run, not a user's session, and setup
@@ -548,23 +574,45 @@ defmodule Hypatia.ScannerSuppressionTest do
   end
 
   describe "placeholder_secret_line?/1 and secret_line_disposition/2 (#746, #748)" do
+    setup do
+      # Generate deterministic credential-shaped fixtures without storing literal
+      # secrets. These values deliberately avoid the placeholder markers.
+      body = Enum.map_join(0..35, &Integer.to_string(&1, 36))
+
+      %{
+        token_line: ~s{token = "ghp_#{body}"},
+        aws_key_line: ~s{AWS_SECRET_ACCESS_KEY = "AKIA#{String.slice(body, 0, 16)}"}
+      }
+    end
+
     test "template .envrc placeholder is a placeholder" do
       assert ScannerSuppression.placeholder_secret_line?(~s{# export API_KEY="..."})
     end
 
     test "ghp_/glpat_ with xxxxx filler is a placeholder (both spellings)" do
       assert ScannerSuppression.placeholder_secret_line?(~s{# token = "ghp_xxxxxxxxxxxxxxxxxxxx"})
-      assert ScannerSuppression.placeholder_secret_line?(~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"})
+
+      assert ScannerSuppression.placeholder_secret_line?(
+               ~s{# token = "glpat-xxxxxxxxxxxxxxxxxxxx"}
+             )
     end
 
     test "your-* and changeme fillers are placeholders" do
-      assert ScannerSuppression.placeholder_secret_line?(~s{webhook_secret = "your-webhook-secret"})
+      assert ScannerSuppression.placeholder_secret_line?(
+               ~s{webhook_secret = "your-webhook-secret"}
+             )
+
       assert ScannerSuppression.placeholder_secret_line?("password = \"changeme\"")
     end
 
-    test "a real-looking value is NOT a placeholder (both directions)" do
-      refute ScannerSuppression.placeholder_secret_line?("token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\"")
-      refute ScannerSuppression.placeholder_secret_line?("AWS_SECRET_ACCESS_KEY = \"AKIA1a2B3c4D5e6F7g8H\"")
+    test "a real-looking value is NOT a placeholder (both directions)", %{
+      token_line: token_line,
+      aws_key_line: aws_key_line
+    } do
+      assert "GitHub PAT" in Hypatia.Rules.SecurityErrors.detect_secrets(token_line)
+      assert "AWS Access Key" in Hypatia.Rules.SecurityErrors.detect_secrets(aws_key_line)
+      refute ScannerSuppression.placeholder_secret_line?(token_line)
+      refute ScannerSuppression.placeholder_secret_line?(aws_key_line)
     end
 
     test "placeholder demotes to medium/report regardless of comment" do
@@ -575,22 +623,76 @@ defmodule Hypatia.ScannerSuppressionTest do
                ScannerSuppression.secret_line_disposition(~s{API_KEY="..."}, 3)
     end
 
-    test "commented real-looking secret demotes to medium/report, never silences" do
+    test "commented real-looking secret demotes to medium/report, never silences", %{
+      token_line: token_line
+    } do
       assert {"medium", "report", suffix} =
                ScannerSuppression.secret_line_disposition(
-                 "# token = \"ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU\"",
+                 "# " <> token_line,
                  41
                )
 
       assert suffix =~ "commented-out"
     end
 
-    test "uncommented real-looking secret stays critical/revoke_rotate_and_purge" do
+    test "uncommented real-looking secret stays critical/revoke_rotate_and_purge", %{
+      token_line: token_line
+    } do
       assert {"critical", "revoke_rotate_and_purge", ""} =
                ScannerSuppression.secret_line_disposition(
-                 ~s{token = "ghp_7Qj3vKpLmN5xRtYwZbC8dFgH4jK6mP9qS2vU"},
+                 token_line,
                  41
                )
+    end
+  end
+
+  describe "proof_source_ambiguous_label?/3 (absolute-zero OND.thy)" do
+    test "generic labels on a named proof fact are dropped in proof sources" do
+      assert ScannerSuppression.proof_source_ambiguous_label?(
+               "Generic secret",
+               "proofs/OND.thy",
+               ~s|lemma inj_secret: "x = y"|
+             )
+
+      assert ScannerSuppression.proof_source_ambiguous_label?(
+               "Password",
+               "src/A.lagda.md",
+               ~s|  have password: "p \\<noteq> q"|
+             )
+    end
+
+    test "unforgeable labels and non-proof files still fire" do
+      fact = ~s|lemma inj_secret: "x = y"|
+
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "GitHub PAT",
+               "proofs/OND.thy",
+               fact
+             )
+
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "Generic secret",
+               "config.exs",
+               fact
+             )
+
+      refute ScannerSuppression.proof_source_ambiguous_label?("Generic secret", "README.md", fact)
+    end
+
+    # CodeRabbit on #883: an extension gate alone let a real credential in a
+    # proof file through. Only the named-fact shape is suppressed.
+    test "an assignment-shaped credential in a proof source still fires" do
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "Password",
+               "A.lean",
+               ~s|password = "hunter2"|
+             )
+
+      refute ScannerSuppression.proof_source_ambiguous_label?(
+               "Generic secret",
+               "proofs/OND.thy",
+               ~s|secret := "sk-live-abc123"|
+             )
     end
   end
 end

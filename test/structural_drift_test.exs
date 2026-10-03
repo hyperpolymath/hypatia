@@ -424,6 +424,34 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert findings == []
     end
 
+    test "a repo without a root src/ does not own root-relative src/ refs (standards#945)",
+         %{repo: repo} do
+      # Nested project has a src/, so the index is non-empty…
+      File.mkdir_p!(Path.join([repo, "tools", "x", "src", "lib"]))
+      File.write!(Path.join([repo, "tools", "x", "src", "lib", "a.rs"]), "")
+      # …but a spec quoting ANOTHER project's layout is not drift here.
+      File.mkdir_p!(Path.join(repo, "spec"))
+      File.write!(Path.join([repo, "spec", "K9.adoc"]), "Do not replace src/tea/ runtime.")
+      # A doc beside the nested src/ still has its references checked.
+      File.write!(Path.join([repo, "tools", "x", "README.md"]), "See src/gone/ for it.")
+      System.cmd("git", ["init"], cd: repo)
+      System.cmd("git", ["add", "."], cd: repo)
+
+      System.cmd("git", ["commit", "-m", "init", "--no-gpg-sign"],
+        cd: repo,
+        env: [
+          {"GIT_AUTHOR_NAME", "T"},
+          {"GIT_AUTHOR_EMAIL", "t@t"},
+          {"GIT_COMMITTER_NAME", "T"},
+          {"GIT_COMMITTER_EMAIL", "t@t"}
+        ]
+      )
+
+      findings = StructuralDrift.sd022_stale_path_after_rename(repo)
+      refute Enum.any?(findings, &(&1.stale_dir == "tea"))
+      assert Enum.any?(findings, &(&1.stale_dir == "gone" and &1.file == "tools/x/README.md"))
+    end
+
     test "returns empty when src/ has no subdirs", %{repo: repo} do
       File.write!(Path.join(repo, "README.md"), "test")
       findings = StructuralDrift.sd022_stale_path_after_rename(repo)

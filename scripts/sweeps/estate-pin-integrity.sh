@@ -111,6 +111,11 @@ known_good_version_for() {
 # `# v4.38.0 (4.38.1 blocked estate-wide; nexia-list#100)` — and prose that
 # merely mentions a version mid-sentence is never rewritten.
 #
+# Takes the comment and a replacement version without `v`; writes the result
+# to stdout without a newline. A rewritten comment has one leading `#`;
+# a bare claim gains `# `, and existing spacing after `#` is preserved.
+# An empty version or the literal `null` returns the comment unchanged.
+#
 # This must stay byte-for-byte identical in spirit to PinIntegrity.relabel/2 in
 # lib/rules/pin_integrity.ex. Two readers, one policy, same edit.
 relabel_comment() {
@@ -119,6 +124,8 @@ relabel_comment() {
   local body="${comment#\#}"
   local lead="${body%%[![:space:]]*}"
   local trimmed="${body#"$lead"}"
+  # A bare claim (no `#`, no leading space) normalises to `# vX`, as relabel/2 does.
+  [ "$body" = "$comment" ] && [ -z "$lead" ] && lead=" "
   if printf '%s' "$trimmed" | grep -qE '^v?[0-9]+(\.[0-9]+)*([[:space:]]|$)'; then
     printf '%s%s' "#${lead}" \
       "$(printf '%s' "$trimmed" | sed -E "0,/^v?[0-9]+(\.[0-9]+)*/s//v${version}/")"

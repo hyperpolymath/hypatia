@@ -50,20 +50,57 @@ defmodule Hypatia.Rules.CicdRules do
     # Community-health files (SECURITY.md, CONTRIBUTING.md, …) are recognised
     # by GitHub in any of root, `.github/`, or `docs/`. Check all three so the
     # rule doesn't false-positive when SECURITY.md lives under `.github/`.
-    candidates = [file, Path.join(".github", file), Path.join("docs", file)]
-
     cond do
       # Repo-rooted check: nested paths like `.github/dependabot.yml` can
       # only be confirmed via on-disk inspection. The root_files list is
       # not enough — without this the rule was a false-positive factory.
-      is_binary(repo_path) and Enum.any?(candidates, &File.exists?(Path.join(repo_path, &1))) ->
+      is_binary(repo_path) and policy_file_present?(repo_path, file) ->
         true
 
-      file in Map.get(info, :files, []) ->
+      # Without a repo_path the listed files are all there is; accept the
+      # same markup variants the on-disk check does (CodeRabbit on #883).
+      Enum.any?(policy_file_candidates(file), &(&1 in Map.get(info, :files, []))) ->
         true
 
       true ->
         false
+    end
+  end
+
+  # A policy document is satisfied by any markup the estate writes it in. The
+  # estate's docs language is AsciiDoc, so `SECURITY.adoc` is the normal form;
+  # requiring the literal `.md` made every such repo a HIGH "missing SECURITY.md"
+  # (absolute-zero). OpenSSF Scorecard's Security-Policy check accepts the same
+  # set. Non-document requirements (`.yml`) are matched exactly.
+  @policy_markups ~w(.md .markdown .adoc .rst)
+
+  @doc """
+  Repo-relative paths that satisfy a requirement for `file`: every accepted
+  markup of it, in the root, `.github/` or `docs/`. The single source of truth
+  for "is this policy document present" — the Scorecard ingestor's
+  Security-Policy check delegates here rather than keeping its own list.
+
+  A `.md`, `.markdown`, `.adoc` or `.rst` extension is replaced with each of
+  those extensions. Other extensions are kept unchanged. Candidate paths
+  are returned without checking whether they exist.
+  """
+  def policy_file_candidates(file) do
+    for name <- markup_variants(file), dir <- ["", ".github", "docs"] do
+      if dir == "", do: name, else: Path.join(dir, name)
+    end
+  end
+
+  @doc "True when any `policy_file_candidates/1` path exists under `repo_path`."
+  def policy_file_present?(repo_path, file) do
+    Enum.any?(policy_file_candidates(file), &File.exists?(Path.join(repo_path, &1)))
+  end
+
+  defp markup_variants(file) do
+    if Path.extname(file) in @policy_markups do
+      base = Path.rootname(file)
+      Enum.map(@policy_markups, &(base <> &1))
+    else
+      [file]
     end
   end
 
@@ -282,7 +319,7 @@ defmodule Hypatia.Rules.CicdRules do
       id: :nodejs_detected,
       glob: "package-lock.json",
       reason:
-        "Node.js banned -- use Deno (org policy 2026-05-25; in-flight migration tracked under standards#253)",
+        "npm lockfile banned -- use Bun (`bun install`, bun.lock; JS runtime order Bun > pnpm > npm, Deno banned 2026-09-22, standards docs/JS-RUNTIME-POLICY.adoc)",
       path_allow_prefixes: [
         # (1a) VSCode extension host-required (/vscode/ as path segment)
         "/vscode/",
@@ -440,8 +477,13 @@ defmodule Hypatia.Rules.CicdRules do
       id: :npx_in_workflow,
       pattern: ~r/(?:^|[\s;&|])(?:npx|npm[[:space:]]+run)\b/m,
       reason:
-        "npx / `npm run` banned in CI -- use `deno task` or `deno run` instead (npm fully banned 2026-05-25)",
-      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"]
+        "npx / `npm run` banned in CI -- use `bunx` or `bun run` instead (npm banned 2026-05-25; Deno banned 2026-09-22, standards LANGUAGE-POLICY §1.3)",
+      applies_to: ["*.yml", "*.yaml", "*.sh", "Justfile", "Mustfile"],
+      # The ban's own enforcers (echidna scripts/ban-npm.sh) name npx inside a
+      # quoted grep pattern or an echo message; that is text, not execution.
+      # Only those quoted arguments are masked before matching, never the whole
+      # line: `echo "npx is banned" && npx foo` still fires on the real npx.
+      mask_quoted_args_of: ~w(grep egrep rg echo printf)
     },
     %{id: :golang_detected, glob: "*.go", reason: "Go banned -- use Rust"},
     # Python ban is total — no exceptions (the former SaltStack carve-out
@@ -667,7 +709,10 @@ defmodule Hypatia.Rules.CicdRules do
       id: :eval_in_shell,
       pattern: ~r/\beval\b/,
       reason: "eval banned in shell scripts -- use direct expansion or arrays",
-      applies_to: ["*.sh"]
+      applies_to: ["*.sh"],
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     # --- Scanner-derived rule (2026-09-01) -----------------------------
     #
@@ -713,7 +758,10 @@ defmodule Hypatia.Rules.CicdRules do
       id: :download_then_run_shell,
       pattern: ~r/\b(curl|wget)\b[^\n|;]*\|\s*(sh|bash)\b/,
       reason: "download-then-run banned -- verify checksum/signature before execution",
-      applies_to: ["*.sh", "*.yml", "*.yaml"]
+      applies_to: ["*.sh", "*.yml", "*.yaml"],
+      # C4: comments describing a payload or a usage example are prose, not
+      # execution (standards#936/#939: every comment-line hit was a false positive).
+      skip_comment_lines: true
     },
     %{
       id: :js_insecure_random_security_context,
@@ -725,9 +773,23 @@ defmodule Hypatia.Rules.CicdRules do
     %{
       id: :hardcoded_tmp,
       pattern: ~r/["'\/]tmp\//,
-      reason: "Hardcoded /tmp/ paths -- use mktemp",
+      # Two cures with OPPOSITE requirements (CWE-377). A pid/state file must
+      # be re-findable by the next invocation, so mktemp is wrong for it; a
+      # scratch file must not be predictable, so mktemp is right for it.
+      reason:
+        "Hardcoded /tmp/ path (CWE-377: predictable, shared, symlink-attackable). " <>
+          "Pid/state/log files: use a per-user dir, " <>
+          "${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}}/<app>/ " <>
+          "(mktemp is wrong here: the next run cannot find the file). " <>
+          "Scratch files: mktemp -d with no /tmp template, plus trap 'rm -rf' EXIT.",
       applies_to: ["*.sh"],
-      exception: "Containerfile"
+      exception: "Containerfile",
+      # A comment naming /tmp is documentation, and a mktemp call is the
+      # rule's own cure (its random name defeats the predictable-path attack
+      # even under an explicit /tmp template). Flagging either sends people
+      # back into the alert they just fixed.
+      skip_comment_lines: true,
+      skip_if_line_matches: ~r/\bmktemp\b/
     },
     %{
       id: :template_placeholder,
@@ -747,13 +809,22 @@ defmodule Hypatia.Rules.CicdRules do
     # `http://www.w3.org/...` XML-namespace pattern (which is identifier-
     # only, not a navigable URL). Severity :medium (advisory; flagrant
     # uses become RFC-9116 / RSR violations).
+    #
+    # Only a URL with a public dotted host can be "upgraded to https", so the
+    # host must contain a dot and must not be reserved (RFC 2606/6761:
+    # example[.com|.org|.net], *.example, *.test, *.invalid, *.localhost, plus
+    # *.local and *.internal). That excludes placeholders (`http://<SERVER_IP>`),
+    # single-label service names (`http://julia-ml:9000` on a docker network)
+    # and fragments like `http://+` — every one a false positive on echidna.
+    # Verbatim licence texts under LICENSES/ are not the repo's to edit.
     %{
       id: :http_in_docs,
       pattern:
-        ~r/\bhttp:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|example\.com)/,
+        ~r/\bhttp:\/\/(?!localhost(?![\w.-])|127\.0\.0\.1|0\.0\.0\.0|::1|www\.w3\.org\/|(?:[\w-]+\.)*example(?:\.(?:com|org|net))?(?![\w.-])|[\w.-]+\.(?:test|invalid|localhost|local|internal)(?![\w.-]))[A-Za-z0-9-]+\.[A-Za-z0-9.-]*[A-Za-z]/,
       reason:
         "HTTP URL in prose -- estate policy mandates HTTPS in docs (use https:// or, if intentional, add an inline `<!-- hypatia:ignore http_in_docs -- <reason> -->` pragma)",
-      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"]
+      applies_to: ["*.md", "*.adoc", "*.rst", "*.txt"],
+      path_allow_prefixes: ["LICENSES/"]
     },
     %{
       id: :mu_plugin_no_guard,
@@ -803,6 +874,12 @@ defmodule Hypatia.Rules.CicdRules do
     * `negative: true` — emits one finding at line 1 when the regex is absent.
     * `skip_comment_lines: true` — ignores matching lines whose first
       non-whitespace characters are `#` or `//`.
+    * `skip_if_line_matches: ~r/.../` — ignores matching lines that also
+      match this regex (a rule's own remediation, e.g. `mktemp`).
+    * `mask_quoted_args_of: [cmd, ...]` — blanks quoted arguments of the
+      named commands (`echo "npx"` → `echo ""`) before matching, so text
+      that only *names* a banned tool is not reported while an executable
+      use elsewhere on the same line still is.
     * `strip_yaml_comments: true` — removes unquoted YAML comments before
       matching while preserving the original line numbers and finding text.
     * Inline pragma — `hypatia:ignore <rule_id>` on a matching line or the
@@ -930,13 +1007,18 @@ defmodule Hypatia.Rules.CicdRules do
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {{line, matching_line}, n} ->
       cond do
-        not Regex.match?(rule.pattern, matching_line) ->
+        not Regex.match?(rule.pattern, mask_quoted_args(rule, matching_line)) ->
           []
 
         # C4: a rule may opt out of matching inside comments. Default false,
         # so no existing rule changes behaviour. Checked BEFORE the pragma
         # test because a commented-out line needs no `hypatia:ignore`.
         Map.get(rule, :skip_comment_lines, false) and comment_line?(line) ->
+          []
+
+        # A rule may name a line shape that is its own remediation
+        # (e.g. hardcoded_tmp and `mktemp`). Default nil: no rule changes.
+        skip_line_match?(rule, line) ->
           []
 
         ignored?(rule.id, lines, n) ->
@@ -955,6 +1037,25 @@ defmodule Hypatia.Rules.CicdRules do
           ]
       end
     end)
+  end
+
+  defp skip_line_match?(%{skip_if_line_matches: %Regex{} = re}, line), do: Regex.match?(re, line)
+  defp skip_line_match?(_rule, _line), do: false
+
+  # Blank the quoted arguments of the rule's named commands, repeating until
+  # stable so every quoted argument of `grep -e "a" -e "b"` is masked. Only
+  # the quoted text goes; separators and later commands are kept intact.
+  defp mask_quoted_args(%{mask_quoted_args_of: [_ | _] = cmds}, line) do
+    alt = Enum.map_join(cmds, "|", &Regex.escape/1)
+    re = Regex.compile!("(\\b(?:#{alt})\\b[^;&|\"']*)([\"'])[^\"']+\\2")
+    mask_until_stable(re, line)
+  end
+
+  defp mask_quoted_args(_rule, line), do: line
+
+  defp mask_until_stable(re, line) do
+    masked = Regex.replace(re, line, "\\1\\2\\2")
+    if masked == line, do: line, else: mask_until_stable(re, masked)
   end
 
   defp content_for_matching(rule, content) do
@@ -997,12 +1098,28 @@ defmodule Hypatia.Rules.CicdRules do
   end
 
   # Inline pragma: this line OR the previous line carries
-  # `hypatia:ignore <rule_id>` (in any comment syntax we recognise).
+  # `hypatia:ignore <rule_id>` (in any comment syntax we recognise), or the
+  # estate-wide `hypatia: allow <module>/<rule_id>` directive. Before this was
+  # wired, `hypatia: allow` was silently inert here although CLAUDE.md teaches
+  # it as the second rung of the suppression ladder. Both module spellings are
+  # accepted: the findings are EMITTED as `content_patterns` (cli.ex) but the
+  # rule lives in this module, so an author can reasonably write either.
+  #
+  # Rule ids are ATOMS (`:hardcoded_tmp`): the needle hides that through
+  # interpolation, but `inline_allowed?/4` compares strings, so stringify.
+  #
+  # `n == 1` has no previous line: `Enum.at(lines, -1)` would wrap to the LAST
+  # line, letting a trailing pragma suppress a hit on line 1.
   defp ignored?(rule_id, lines, n) do
     here = Enum.at(lines, n - 1, "")
-    prev = Enum.at(lines, n - 2, "")
+    prev = if n > 1, do: Enum.at(lines, n - 2, ""), else: ""
     needle = "hypatia:ignore #{rule_id}"
-    String.contains?(here, needle) or String.contains?(prev, needle)
+
+    String.contains?(here, needle) or String.contains?(prev, needle) or
+      Enum.any?(
+        ["content_patterns", "cicd_rules"],
+        &Hypatia.ScannerSuppression.inline_allowed?(here, prev, &1, to_string(rule_id))
+      )
   end
 
   # C4 helper: is this line ENTIRELY a comment? Deliberately conservative for

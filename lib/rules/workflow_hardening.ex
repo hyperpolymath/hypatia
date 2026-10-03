@@ -199,10 +199,20 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # ─── WH002: Excessive workflow permissions ──────────────────────────
 
   @doc """
-  WH002: Workflow has no top-level `permissions:` block at all, OR has
-  `permissions: write-all`, OR has top-level `contents: write`. Per Cassel
+  WH002: Workflow has no `permissions:` declaration at any level, OR has
+  top-level `permissions: write-all`, `write-all: true` in a top-level
+  permissions block, or top-level `contents: write`. Per Cassel
   et al. 2024, ~74% of public workflows are at the default (write-all-equivalent
   for many scopes). This catches Scorecard TokenPermissionsID alerts.
+
+  Return a list of findings with repo-relative file paths. Missing permissions
+  produce `:warn`; write-all grants produce `:high`. For `contents: write`,
+  scan the workflow and referenced local scripts: detected writes or unresolved
+  script references produce `:warn`, otherwise `:high`. Return `[]` when no
+  workflow matches. Job-level permissions alone do not produce a finding.
+
+  Raises `File.Error` if workflow directory listing, workflow reading or
+  reading a selected local script fails.
   """
   def wh002_excessive_permissions(repo_path) do
     repo_path
@@ -216,7 +226,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
           [finding_wh002(rel, "set to `write-all`", :high)]
 
         Regex.match?(~r/^permissions:\s*\n\s+contents:\s*write/m, content) ->
-          [wh002_contents_write_finding(rel, content)]
+          [wh002_contents_write_finding(rel, local_script_scan(content, repo_path))]
 
         Regex.match?(~r/^permissions:\s*\n\s+write-all:\s*true/m, content) ->
           [finding_wh002(rel, "with `write-all: true`", :high)]
@@ -267,7 +277,123 @@ defmodule Hypatia.Rules.WorkflowHardening do
   requires `contents: write`.
   """
   def performs_contents_write?(content) when is_binary(content) do
+    content = strip_foreign_pushes(content)
     Enum.any?(@contents_write_operations, &Regex.match?(&1, content))
+  end
+
+  # `git push <remote>` where <remote> is a NAMED remote other than `origin`
+  # (`gitlab`, `codeberg`, `backup`, …). `contents: write` governs the job's
+  # GITHUB_TOKEN, i.e. pushes to THIS repository; a mirror push to another
+  # forge authenticates with its own SSH key or token and needs no grant.
+  # Flags before the remote (`--force`, `-u`, `--mirror`) are skipped. A bare
+  # `git push`, `git push origin …` and `git push "$REMOTE"` are all kept —
+  # the last because the remote cannot be known statically (standards#943).
+  @foreign_push ~r/\bgit\s+push\b(?:\s+-[-\w=]*)*\s+(?!origin\b)[A-Za-z][\w.-]*/
+
+  @doc """
+  Remove foreign-remote `git push` invocations, leaving any other operation on
+  the same line (`git push gitlab main && git push origin main`) intact.
+  """
+  def strip_foreign_pushes(content) when is_binary(content) do
+    Regex.replace(@foreign_push, content, "")
+  end
+
+  # A `run:` that calls a repo-local script (`bash scripts/wiki-sync.sh`,
+  # `./ci/release.sh`) performs whatever that script performs. Reading only the
+  # workflow text made WH002 call absolute-zero's wiki-sync.yml "no write
+  # operation found — safe to narrow" while scripts/wiki-sync.sh does the
+  # `git push` that needs the grant: the recommended narrowing breaks the sync.
+  @local_script_ref ~r/(?<![\w\/.-])((?:\.\/)?[\w.-]+(?:\/[\w.-]+)*\.(?:sh|bash))\b/
+
+  # Literal `working-directory:` values, at step level or under
+  # `defaults: run:` (workflow or job). Expression values (`${{ … }}`, `$X`)
+  # cannot be resolved statically and are not used as bases.
+  @working_directory ~r/^\s*working-directory:\s*["']?([^"'\s#$]+)["']?\s*(?:#.*)?$/m
+
+  @doc """
+  Append each selected local shell script's text once to `content`, separated
+  by newlines. Return `%{content: combined_text, unresolved: references}`.
+  References ending in `.sh` or `.bash` are recognised anywhere in the input
+  text, including comments; scripts are not executed or scanned recursively.
+
+  Resolve references against the repo root and every recognised literal
+  `working-directory:` in the workflow. For example, `working-directory: scripts`
+  with `bash wiki-sync.sh` selects `scripts/wiki-sync.sh`. All matching bases
+  are considered, without pairing references with individual steps.
+
+  Candidates must expand beneath the repo root and have no symbolic links
+  below that root. Missing paths, non-regular files and paths whose metadata
+  cannot be read are rejected. `unresolved` contains each reference with
+  in-repo candidates but no accepted candidate, in first-occurrence order.
+  References whose candidates all escape the repo are ignored.
+
+  Raises `File.Error` if reading an accepted script fails; this error is not
+  converted into an unresolved reference.
+  """
+  def local_script_scan(content, repo_path) when is_binary(content) do
+    root = Path.expand(repo_path)
+
+    bases =
+      [
+        root
+        | Enum.map(Regex.scan(@working_directory, content, capture: :all_but_first), fn [d] ->
+            Path.expand(d, root)
+          end)
+      ]
+      |> Enum.uniq()
+      |> Enum.filter(&inside?(&1, root))
+
+    {scripts, unresolved} =
+      @local_script_ref
+      |> Regex.scan(content, capture: :all_but_first)
+      |> Enum.map(fn [ref] -> ref end)
+      |> Enum.uniq()
+      |> Enum.reduce({[], []}, fn ref, {found, missing} ->
+        candidates =
+          bases
+          |> Enum.map(&Path.expand(ref, &1))
+          |> Enum.uniq()
+          |> Enum.filter(&(&1 != root and inside?(&1, root)))
+
+        readable = Enum.filter(candidates, &unlinked_regular_file?(&1, root))
+
+        cond do
+          # Every candidate escapes the repo: not a repo-local script.
+          candidates == [] -> {found, missing}
+          readable == [] -> {found, [ref | missing]}
+          true -> {readable ++ found, missing}
+        end
+      end)
+
+    texts = scripts |> Enum.uniq() |> Enum.map(&File.read!/1)
+    %{content: Enum.join([content | texts], "\n"), unresolved: Enum.reverse(unresolved)}
+  end
+
+  @doc """
+  Return the combined text from `local_script_scan/2`, discarding its unresolved
+  references. Uses the same reference selection and propagates `File.Error`
+  if reading a selected script fails.
+  """
+  def with_local_scripts(content, repo_path) when is_binary(content) do
+    local_script_scan(content, repo_path).content
+  end
+
+  defp inside?(path, root), do: path == root or String.starts_with?(path, root <> "/")
+
+  # lstat every component from the root down; any symbolic link rejects.
+  defp unlinked_regular_file?(path, root) do
+    parts = path |> Path.relative_to(root) |> Path.split()
+
+    parts
+    |> Enum.scan(root, &Path.join(&2, &1))
+    |> Enum.with_index(1)
+    |> Enum.all?(fn {p, i} ->
+      case File.lstat(p) do
+        {:ok, %File.Stat{type: :regular}} -> i == length(parts)
+        {:ok, %File.Stat{type: :directory}} -> i < length(parts)
+        _ -> false
+      end
+    end)
   end
 
   @doc """
@@ -286,7 +412,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   #   (3) does a job carry its own `permissions:`.
   # Only (1) alone is NOT a finding — that was the defect that made this rule
   # recommend breaking narrowings.
-  defp wh002_contents_write_finding(rel, content) do
+  defp wh002_contents_write_finding(rel, %{content: content, unresolved: unresolved}) do
     writes? = performs_contents_write?(content)
     job_scoped? = job_level_permissions?(content)
 
@@ -323,6 +449,17 @@ defmodule Hypatia.Rules.WorkflowHardening do
           "with `contents: write` (workflow performs a write, but jobs carry " <>
             "their own `permissions:` — verify the WRITING job is one of them " <>
             "before narrowing)",
+          :warn
+        )
+
+      # A called script could not be read, so "no write found" is unproven.
+      # Never tell the owner narrowing is safe on an unread script.
+      unresolved != [] ->
+        finding_wh002(
+          rel,
+          "with `contents: write` (calls #{Enum.join(unresolved, ", ")}, which " <>
+            "could not be read (missing, or behind a symbolic link) — verify it " <>
+            "performs no push/commit/release before narrowing)",
           :warn
         )
 
@@ -602,7 +739,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       job_blocks
       |> Enum.flat_map(fn {job_id, line_no, body} ->
-        if Regex.match?(~r/^\s+timeout-minutes:/m, body) do
+        # A reusable-workflow caller (`job: uses: ./.github/workflows/x.yml`)
+        # cannot carry `timeout-minutes:` — GitHub rejects the key there; the
+        # called workflow's own jobs own their timeouts (standards#943).
+        if Regex.match?(~r/^\s+timeout-minutes:/m, body) or reusable_caller_job?(body) do
           []
         else
           [
@@ -1090,6 +1230,32 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end
   end
 
+  @doc """
+  Return true when a job body (as produced by the job extractor, header line
+  first) has a JOB-LEVEL `uses:` key, i.e. it calls a reusable workflow.
+  Step-level `uses:` sits deeper (`- uses:` or under `- name:`) and is not
+  matched: only a `uses:` at the job's own key indentation counts.
+  """
+  def reusable_caller_job?(body) when is_binary(body) do
+    keys =
+      body
+      |> String.split("\n")
+      |> Enum.drop(1)
+      |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "#")))
+
+    case keys do
+      [] ->
+        false
+
+      [first | _] ->
+        key_indent = indent_of(first)
+
+        Enum.any?(keys, fn line ->
+          indent_of(line) == key_indent and Regex.match?(~r/^\s*uses:\s*\S/, line)
+        end)
+    end
+  end
+
   # Extract every job definition from the workflow content. Returns
   # `[{job_id, line_no, body}]`. Approximate — assumes 2-space indent
   # under `jobs:`.
@@ -1098,7 +1264,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
     in_jobs? = false
     jobs_indent = nil
 
-    {acc, _, _, _} =
+    # The final job is still in flight when the lines run out; it must be
+    # flushed too, or the last job of every workflow is never checked.
+    {acc, _, _, last} =
       Enum.with_index(lines, 1)
       |> Enum.reduce({[], in_jobs?, jobs_indent, nil}, fn
         {line, _no}, {acc, false, _ji, _current} ->
@@ -1119,14 +1287,14 @@ defmodule Hypatia.Rules.WorkflowHardening do
               {acc, true, nil, current}
           end
 
-        {line, _no}, {acc, true, jobs_indent, current} ->
+        {line, no}, {acc, true, jobs_indent, current} ->
           case Regex.run(~r/^(\s+)([a-zA-Z0-9_-]+):\s*$/, line) do
             [_, ws, job_id] ->
               this_indent = String.length(ws)
 
               if this_indent == jobs_indent do
                 acc2 = flush(acc, current)
-                {acc2, true, jobs_indent, {job_id, current_line_no(current, line), [line]}}
+                {acc2, true, jobs_indent, {job_id, no, [line]}}
               else
                 # Still in current job body
                 {acc, true, jobs_indent, append_line(current, line)}
@@ -1144,11 +1312,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
           end
       end)
 
-    Enum.reverse(acc)
+    acc |> flush(last) |> Enum.reverse()
   end
-
-  defp current_line_no(nil, _line), do: 0
-  defp current_line_no({_id, no, _body}, _line), do: no
 
   defp append_line(nil, _), do: nil
   defp append_line({id, no, body}, line), do: {id, no, [line | body]}

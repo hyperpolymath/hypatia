@@ -454,7 +454,15 @@ defmodule Hypatia.CLI do
                 rule_module: "workflow_audit",
                 severity: to_string(Map.get(f, :severity, :medium)),
                 type: to_string(type),
-                file: Map.get(f, :file, Map.get(f, :files, "") |> listify()),
+                # WorkflowAudit keys findings by bare basename (`ci.yml`) so
+                # its missing-workflow checks can compare names; qualify at
+                # this boundary so SARIF anchors to the real file and
+                # `.hypatia-ignore` entries written as `.github/workflows/x`
+                # match.
+                file:
+                  Map.get(f, :file, Map.get(f, :files, ""))
+                  |> qualify_workflow_file()
+                  |> listify(),
                 reason: workflow_finding_message(f),
                 action: to_string(Map.get(f, :action, Map.get(f, :fix, :flag)))
               }
@@ -1173,6 +1181,9 @@ defmodule Hypatia.CLI do
           |> Enum.reject(
             &Hypatia.ScannerSuppression.comment_masked_secret_label?(&1, line, idx + 1)
           )
+          |> Enum.reject(
+            &Hypatia.ScannerSuppression.proof_source_ambiguous_label?(&1, file, line)
+          )
           |> Enum.map(fn label ->
             # Placeholder-shaped values and commented-out lines downgrade to
             # medium/report instead of critical/revoke_rotate_and_purge
@@ -1199,7 +1210,7 @@ defmodule Hypatia.CLI do
   # ─── Output formatting ───────────────────────────────────────────────
 
   defp output(findings, "json") do
-    IO.puts(Jason.encode!(findings, pretty: true))
+    IO.puts(Jason.encode!(Enum.map(findings, &json_compat_severity/1), pretty: true))
   end
 
   defp output(findings, "sarif") do
@@ -1247,6 +1258,15 @@ defmodule Hypatia.CLI do
       end)
     end
   end
+
+  # Compatibility shim (standards#787 D260). Callers pinned to standards'
+  # hypatia-scan-reusable.yml before bd9313a6 validate the JSON against
+  # critical/high/medium/low/info and reject the whole array on one "warn",
+  # so ~350 repos failed with "Hypatia did not produce one valid findings
+  # array". warn already ranks with medium (@severity_order), so this loses
+  # no information. Remove once no caller is pinned to a rejecting copy.
+  defp json_compat_severity(%{severity: "warn"} = f), do: %{f | severity: "medium"}
+  defp json_compat_severity(f), do: f
 
   defp output_report(findings, repo_path) do
     IO.puts("=" |> String.duplicate(72))
@@ -1438,6 +1458,22 @@ defmodule Hypatia.CLI do
       true -> "Workflow issue detected"
     end
   end
+
+  @doc """
+  Qualifies bare workflow filenames relative to `.github/workflows`.
+
+  Accepts a filename or a list of filenames, returning the qualified path or
+  a list of qualified paths. Strings containing `/`, empty strings, and
+  non-string values are returned unchanged. Lists are processed recursively.
+  """
+  def qualify_workflow_file(names) when is_list(names),
+    do: Enum.map(names, &qualify_workflow_file/1)
+
+  def qualify_workflow_file(name) when is_binary(name) and name != "" do
+    if String.contains?(name, "/"), do: name, else: Path.join(".github/workflows", name)
+  end
+
+  def qualify_workflow_file(other), do: other
 
   defp listify(val) when is_list(val), do: Enum.join(val, ", ")
   defp listify(val), do: to_string(val)

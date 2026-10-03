@@ -352,7 +352,7 @@ defmodule Hypatia.Rules.RsrConformance do
           ".well-known/ai.txt",
           ".well-known/humans.txt"
         ]),
-      "2.3.1" => present("0-AI-MANIFEST.a2ml"),
+      "2.3.1" => any_of(["0-AI-MANIFEST.a2ml", "0-AI-MANIFEST.deed"]),
       "3.1.1" => present_mr("descriptiles"),
       "3.1.2" => descriptile("STATE"),
       "3.1.3" => descriptile("META"),
@@ -392,7 +392,9 @@ defmodule Hypatia.Rules.RsrConformance do
   # while the estate migrates. Hardcoding either name made whichever half had
   # not migrated unscoreable.
   defp present_mr(rel) do
-    fn repo -> if exists?(repo, Path.join(Hypatia.Paths.machine_tree(repo), rel)), do: :pass, else: :fail end
+    fn repo ->
+      if exists?(repo, Path.join(Hypatia.Paths.machine_tree(repo), rel)), do: :pass, else: :fail
+    end
   end
 
   defp absent(rel), do: fn repo -> if exists?(repo, rel), do: :fail, else: :pass end
