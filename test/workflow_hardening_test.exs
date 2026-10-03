@@ -528,6 +528,141 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   # state was WH002 answering the first question WITHOUT the second, so its
   # remediation removed a capability the workflow depended on.
 
+  describe "wh002_excessive_permissions/1 — writes one call away (absolute-zero wiki-sync)" do
+    defp wiki_sync_repo(script_body, run_line) do
+      repo =
+        create_repo_with_workflow("""
+        name: Wiki Sync
+        permissions:
+          contents: write
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: #{run_line}
+        """)
+
+      File.mkdir_p!(Path.join(repo, "scripts"))
+      File.write!(Path.join(repo, "scripts/wiki-sync.sh"), script_body)
+      repo
+    end
+
+    test "a git push inside a called repo script counts as a write" do
+      repo = wiki_sync_repo("git push origin master\n", "bash scripts/wiki-sync.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :warn
+      refute f.reason =~ "safe to narrow"
+      File.rm_rf!(repo)
+    end
+
+    test "a called script that does not write keeps the :high narrowing advice" do
+      repo = wiki_sync_repo("echo hello\n", "./scripts/wiki-sync.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :high
+      File.rm_rf!(repo)
+    end
+
+    test "a script path escaping the repo is not followed" do
+      repo = wiki_sync_repo("echo hello\n", "bash ../../etc/evil.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :high
+      File.rm_rf!(repo)
+    end
+
+    # CodeRabbit on #883: relative commands run in the effective
+    # working directory, not the repo root.
+    defp scripts_dir_repo(steps_yaml, defaults_yaml \\ "") do
+      repo =
+        create_repo_with_workflow("""
+        name: Wiki Sync
+        permissions:
+          contents: write
+        #{defaults_yaml}
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+        #{steps_yaml}
+        """)
+
+      File.mkdir_p!(Path.join(repo, "scripts"))
+      File.write!(Path.join(repo, "scripts/wiki-sync.sh"), "git push origin HEAD\n")
+      repo
+    end
+
+    test "a step-level working-directory is honoured" do
+      repo =
+        scripts_dir_repo("""
+            steps:
+              - working-directory: scripts
+                run: bash wiki-sync.sh
+        """)
+
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      refute f.reason =~ "safe to narrow"
+      assert f.severity == :warn
+      File.rm_rf!(repo)
+    end
+
+    test "an inherited defaults.run.working-directory is honoured" do
+      repo =
+        scripts_dir_repo(
+          """
+              steps:
+                - run: ./wiki-sync.sh
+          """,
+          """
+          defaults:
+            run:
+              working-directory: ./scripts
+          """
+        )
+
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      refute f.reason =~ "safe to narrow"
+      File.rm_rf!(repo)
+    end
+
+    test "an in-repo script that cannot be found is never called safe to narrow" do
+      repo = wiki_sync_repo("echo hello\n", "bash ci/release.sh")
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.severity == :warn
+      assert f.reason =~ "ci/release.sh"
+      refute f.reason =~ "safe to narrow"
+      File.rm_rf!(repo)
+    end
+
+    # CodeRabbit on #883 (CWE-22): File.regular?/1 follows links, so a linked
+    # script or parent directory would read outside the repository.
+    test "a symbolic-linked script is not read" do
+      outside = Path.join(@tmp_dir, "wh_outside_#{System.unique_integer([:positive])}.sh")
+      File.write!(outside, "git push origin HEAD\n")
+      repo = wiki_sync_repo("echo hello\n", "bash scripts/linked.sh")
+      File.ln_s!(outside, Path.join(repo, "scripts/linked.sh"))
+
+      assert WorkflowHardening.with_local_scripts("bash scripts/linked.sh", repo) ==
+               "bash scripts/linked.sh"
+
+      [f] = WorkflowHardening.wh002_excessive_permissions(repo)
+      assert f.reason =~ "symbolic link"
+      File.rm_rf!(repo)
+      File.rm!(outside)
+    end
+
+    test "a script under a symbolic-linked parent directory is not read" do
+      outside = Path.join(@tmp_dir, "wh_outside_dir_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(outside)
+      File.write!(Path.join(outside, "evil.sh"), "git push origin HEAD\n")
+      repo = wiki_sync_repo("echo hello\n", "bash linked/evil.sh")
+      File.ln_s!(outside, Path.join(repo, "linked"))
+
+      assert WorkflowHardening.with_local_scripts("bash linked/evil.sh", repo) ==
+               "bash linked/evil.sh"
+
+      File.rm_rf!(repo)
+      File.rm_rf!(outside)
+    end
+  end
+
   describe "wh002_excessive_permissions/1 — three probes, not one" do
     test "no write performed: narrowing is real hardening, stays :high" do
       repo =

@@ -388,6 +388,12 @@ Three mechanisms, in order of preference:
    ```
    Recognised in `#`, `//`, `--`, `;` comment styles. A file-level
    directive in the first 20 lines covers every match in the file.
+   Content-pattern rules (`hardcoded_tmp`, `http_in_docs`, …) honour the
+   same directive on the matching or preceding line, under either module
+   spelling (`content_patterns/<rule>` or `cicd_rules/<rule>`). Until
+   2026-09-30 they honoured only the bare `hypatia:ignore <rule>` form and
+   silently ignored `hypatia: allow`. The file-level form is **not**
+   wired for content patterns.
 3. **`.hypatia-ignore`** for file-scoped or directory-scoped exemptions
    that have a documented org-policy rationale.
 

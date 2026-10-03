@@ -37,7 +37,8 @@ defmodule Hypatia.MergeOrchestration.BatonEmitterTest do
   end
 
   test "method maps to the gh flag; aggressive pools raise the planner risk" do
-    assert BatonEmitter.to_spec(dec(%{method: :rebase})).command |> List.last() == "--rebase"
+    # rebase replays commits unsigned: a stale :rebase decision must squash
+    assert BatonEmitter.to_spec(dec(%{method: :rebase})).command |> List.last() == "--squash"
     assert BatonEmitter.to_spec(dec(%{method: :merge_commit})).command |> List.last() == "--merge"
     assert BatonEmitter.to_spec(dec(%{pool: :p3})).risk == :high
     assert BatonEmitter.to_spec(dec(%{pool: :mass_squash})).risk == :high
