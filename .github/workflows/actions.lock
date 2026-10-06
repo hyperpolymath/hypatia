@@ -14,7 +14,7 @@ workflows:
         - 'actions/setup-node@v7.0.0'
         - 'actions/upload-artifact@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
-        - 'taiki-e/install-action@v2.87.18'
+        - 'taiki-e/install-action@v2.87.22'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/ci.yml':
@@ -24,15 +24,14 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'haskell-actions/hlint-run@v2.4.10'
         - 'haskell-actions/hlint-setup@v2.4.10'
-        - 'haskell-actions/setup@v2.12.0'
+        - 'haskell-actions/setup@v2.12.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.87.18'
+        - 'taiki-e/install-action@v2.87.22'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
-        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
@@ -71,7 +70,7 @@ workflows:
         - 'actions/upload-pages-artifact@v5.0.0'
         - 'dtolnay/rust-toolchain@v1'
         - 'editorconfig-checker/action-editorconfig-checker@v3.0.0'
-        - 'ruby/setup-ruby@v1.324.0'
+        - 'ruby/setup-ruby@v1.327.0'
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
@@ -99,10 +98,9 @@ workflows:
         - 'actions/upload-artifact@v7.0.1'
         - 'aquasecurity/trivy-action@v0.36.0'
         - 'dtolnay/rust-toolchain@v1'
-        - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
         - 'gitleaks/gitleaks-action@v3.0.0'
-        - 'taiki-e/install-action@v2.87.18'
-        - 'trufflesecurity/trufflehog@v3.97.6'
+        - 'taiki-e/install-action@v2.87.22'
+        - 'trufflesecurity/trufflehog@v3.97.9'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -113,7 +111,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.87.18'
+        - 'taiki-e/install-action@v2.87.22'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -263,11 +261,6 @@ dependencies:
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
-    'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63':
-        ref: 'b96794f015dfd88f77b49b1c93e0fa7110f94c63'
-        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
-        owner_id: 9919
-        repo_id: 259445878
     'gitleaks/gitleaks-action@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e'
@@ -288,9 +281,9 @@ dependencies:
         commit: 'sha1-fe9cd1cd1af94a23900c06738e73f6ddb092966a'
         owner_id: 75048950
         repo_id: 692590623
-    'haskell-actions/setup@v2.12.0':
-        ref: 'v2.12.0'
-        commit: 'sha1-6037f33647c3f17758a2356c80fc4a53d7e0685d'
+    'haskell-actions/setup@v2.12.1':
+        ref: 'v2.12.1'
+        commit: 'sha1-0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d'
         owner_id: 75048950
         repo_id: 623796603
     'hyperpolymath/deed-ecosystem@main':
@@ -308,9 +301,9 @@ dependencies:
         commit: 'sha1-22e7bdb322c430c1d0dac6b3bb307f4bb139d0be'
         owner_id: 6759885
         repo_id: 1352485172
-    'ruby/setup-ruby@v1.324.0':
-        ref: 'v1.324.0'
-        commit: 'sha1-a0102e0972be65f351c307e2d64b9314a57c8073'
+    'ruby/setup-ruby@v1.327.0':
+        ref: 'v1.327.0'
+        commit: 'sha1-14594264cd68ce8a2345dd349bc3d138a4ef85c8'
         owner_id: 210414
         repo_id: 231208785
     'softprops/action-gh-release@v3.0.3':
@@ -323,13 +316,13 @@ dependencies:
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.87.18':
-        ref: 'v2.87.18'
-        commit: 'sha1-dfae9bf3d6f6c6f20ef4ebb3486c01a51341ff12'
+    'taiki-e/install-action@v2.87.22':
+        ref: 'v2.87.22'
+        commit: 'sha1-83ac0ad63c0167e6f06796fab0fce28db1bf3db0'
         owner_id: 43724913
         repo_id: 442947557
-    'trufflesecurity/trufflehog@v3.97.6':
-        ref: 'v3.97.6'
-        commit: 'sha1-64d939a56362f519781c53ea09b27f8d1dc0140a'
+    'trufflesecurity/trufflehog@v3.97.9':
+        ref: 'v3.97.9'
+        commit: 'sha1-4dd8831c5f12599465d4d45c3c447b4018a34c85'
         owner_id: 79229934
         repo_id: 77726177

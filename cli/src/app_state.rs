@@ -55,7 +55,7 @@ impl RateLimitSlot {
         }
         let prev = self
             .remaining
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |r| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |r| {
                 if r > 0 {
                     Some(r - 1)
                 } else {

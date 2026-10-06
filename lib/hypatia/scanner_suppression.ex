@@ -356,11 +356,12 @@ defmodule Hypatia.ScannerSuppression do
 
   def comment_masked_secret_label?(_label, _line, _line_number), do: false
 
-  # Proof-assistant sources name lemmas and facts with `name: "prop"`
-  # (Isabelle `lemma inj_secret: "…"`, `assumes pw_ok: "…"`), which is exactly
-  # the `secret: "…"` form. Only that declaration shape is dropped, and only
-  # for the three form-ambiguous labels: a plain assignment such as
-  # `password = "…"` in a proof source still fires, as do the
+  # Proof-assistant sources name lemmas and facts with `name:` followed by a
+  # quoted proposition (Isabelle `lemma inj_secret:`, `assumes pw_ok:`, each
+  # then a double-quoted prop), which is exactly the shape of a `secret:`
+  # string assignment. Only that declaration shape is dropped, and only
+  # for the three form-ambiguous labels: a plain `password =` string
+  # assignment in a proof source still fires, as do the
   # structurally-unforgeable shapes (`ghp_…`, `AKIA…`, PEM blocks).
   # absolute-zero OND.thy:62.
   @proof_source_exts ~w(.thy .v .agda .lagda .lean .idr .lidr)
