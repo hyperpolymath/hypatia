@@ -70,11 +70,17 @@ jobs:
             PVT_kwDO*) echo "org project id: $PID" ;;
             *) echo "::error::not an org project id: '$PID' (check PROJECT_NUMBER)"; exit 1 ;;
           esac
-          if ! n=$(gh api "repos/$REPO_OWNER/hypatia/issues?state=open&per_page=1" --jq length); then
-            echo "::error::installation token cannot read public $REPO_OWNER repos; switch to the fine-grained PAT fallback"
+          # Probe a repo the sweep itself would read: the first public repo listed.
+          if ! probe=$(gh api "users/$REPO_OWNER/repos?type=owner&per_page=1" --jq '.[0].name // empty') \
+             || [ -z "$probe" ]; then
+            echo "::error::installation token cannot list public $REPO_OWNER repos; switch to the fine-grained PAT fallback"
             exit 1
           fi
-          echo "cross-owner read ok ($n item)"
+          if ! n=$(gh api "repos/$REPO_OWNER/$probe/issues?state=open&per_page=1" --jq length); then
+            echo "::error::installation token cannot read issues of public repo $REPO_OWNER/$probe; switch to the fine-grained PAT fallback"
+            exit 1
+          fi
+          echo "cross-owner read ok ($REPO_OWNER/$probe, $n item)"
 
       - name: Sweep recent issues/PRs into the roadmap
         env:
@@ -92,9 +98,18 @@ jobs:
 
           # Public, non-fork, non-archived repos owned by REPO_OWNER. The App is
           # not installed there, so only public repos are visible (see header).
-          mapfile -t REPOS < <(gh api --paginate \
+          # Capture the listing's exit status: a process substitution would hide a
+          # failed or partial listing from set -e and let the sweep "succeed".
+          if ! REPO_LIST=$(gh api --paginate \
             "users/$REPO_OWNER/repos?type=owner&per_page=100" \
-            --jq '.[] | select(.fork==false and .archived==false) | .name')
+            --jq '.[] | select(.fork==false and .archived==false) | .name'); then
+            echo "::error::could not list repositories for $REPO_OWNER"
+            exit 1
+          fi
+          REPOS=()
+          if [ -n "$REPO_LIST" ]; then
+            mapfile -t REPOS <<< "$REPO_LIST"
+          fi
           echo "Visible owned repos: ${#REPOS[@]}"
 
           scanned=0; items=0; adds=0; unreadable=0
