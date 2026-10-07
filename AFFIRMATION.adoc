@@ -43,6 +43,15 @@ state and commitments. Companion detail:
 * *Workflow hygiene.* Every runner job declares `timeout-minutes`; the
   `workflow_audit` rule no longer false-positives reusable-workflow
   (`uses:`) jobs.
+* *Roadmap Sync uses no personal access token* (affirmed 2026-10-07 at
+  `1f30497`). `.github/workflows/roadmap-sync.yml` mints a ≤1 h installation
+  token of the GitHub App `hyperpolymath-roadmap-sync` per run
+  (`actions/create-github-app-token`, client id variable
+  `ROADMAP_SYNC_APP_CLIENT_ID`, key secret `ROADMAP_SYNC_APP_PRIVATE_KEY`) and
+  writes to the org project `metadatastician/projects/2`. Every scheduled run
+  has been green since #903 (`fabe659`). The old secret `ADD_TO_PROJECT_PAT` is
+  no longer read by any workflow. It remains stored until the item migration
+  from the user project #35 completes, and is then deleted.
 * *SPDX `MPL-2.0` headers* on source files; SHA-pinned GitHub Actions;
   HTTPS-only; no hardcoded secrets.
 
