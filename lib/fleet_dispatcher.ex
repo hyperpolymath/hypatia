@@ -443,8 +443,14 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
-  # Build the submitProofObligation mutation using the input-object syntax
-  # that ProofObligationInput expects. The prover field is omitted when
+  # Build the submitProofObligation mutation (input-object syntax).
+  #
+  # CONTRACT GAP (2026-10-07): echidnabot's MutationRoot (src/api/graphql.rs)
+  # has no submitProofObligation and no ProofObligationInput; it only offers
+  # triggerCheck(repoId, commitSha, provers) on a registered repo. A live
+  # dispatch of this mutation therefore returns GraphQL `errors`, which
+  # execute_graphql/2 now reports as {:error, _}. Which side changes is an
+  # open owner decision. The prover field is omitted when
   # prover_hint is nil OR the hint names a prover echidnabot's GraphQL
   # schema doesn't know about (VeriSimDB tracks more provers than echidnabot
   # currently exposes). In either case echidnabot uses its own default.
@@ -756,6 +762,14 @@ defmodule Hypatia.FleetDispatcher do
   # Helpers
   # ====================================================================
 
+  # Dispatch a GraphQL document to a bot: append it to the dispatch manifest,
+  # then POST it live when a URL is configured.
+  #
+  # Returns `{:ok, :dispatched}` only when the live call succeeded (2xx and,
+  # on the per-bot path, no GraphQL `errors`), `{:ok, :file_dispatched}` only
+  # when no URL is configured and the manifest write succeeded, and
+  # `{:error, reason}` otherwise. A configured URL that fails is an error even
+  # though the manifest line was written: the caller asked for live dispatch.
   defp execute_graphql(query, bot_name) do
     # Dual dispatch: file-based (immediate) + HTTP (when fleet API available)
     dispatch_record = %{
@@ -766,21 +780,7 @@ defmodule Hypatia.FleetDispatcher do
     }
 
     # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
-    manifest_path =
-      Path.join([
-        Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
-        "dispatch",
-        "pending.jsonl"
-      ])
-
-    case Jason.encode(dispatch_record) do
-      {:ok, json} ->
-        File.mkdir_p!(Path.dirname(manifest_path))
-        File.write(manifest_path, json <> "\n", [:append, :utf8])
-
-      {:error, reason} ->
-        Logger.error("Failed to write dispatch manifest: #{inspect(reason)}")
-    end
+    manifest_result = write_manifest(dispatch_record)
 
     # 2. Attempt HTTP dispatch (graceful degradation if unavailable).
     #
@@ -795,28 +795,79 @@ defmodule Hypatia.FleetDispatcher do
     # deployments that front multiple bots behind one dispatcher.
     {target_url, description, body} = resolve_dispatch_url(bot_name, query)
 
-    if target_url do
-      try do
-        case http_post(target_url, body) do
-          {:ok, _response} ->
+    graphql_envelope? = description != :none and String.starts_with?(description, "via per-bot")
+
+    cond do
+      target_url ->
+        case live_post(target_url, body, graphql_envelope?) do
+          :ok ->
             Logger.info("Live dispatch to #{bot_name} succeeded (#{description})")
             {:ok, :dispatched}
 
           {:error, reason} ->
-            Logger.warning(
-              "Live dispatch to #{bot_name} failed (#{inspect(reason)}), file dispatch used"
-            )
-
-            {:ok, :file_dispatched}
+            Logger.error("Live dispatch to #{bot_name} failed (#{inspect(reason)})")
+            {:error, {:live_dispatch_failed, bot_name, reason}}
         end
-      rescue
-        e ->
-          Logger.warning("HTTP dispatch error: #{inspect(e)}, file dispatch used")
-          {:ok, :file_dispatched}
-      end
+
+      manifest_result == :ok ->
+        Logger.info("Dispatched to #{bot_name} via manifest (no URL configured)")
+        {:ok, :file_dispatched}
+
+      true ->
+        {:error, manifest_result}
+    end
+  end
+
+  # Append one dispatch record to the JSONL manifest that dispatch-runner.sh
+  # reads. Returns `:ok` or `{:manifest_write_failed, reason}`; never raises.
+  defp write_manifest(dispatch_record) do
+    manifest_path =
+      Path.join([
+        Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
+        "dispatch",
+        "pending.jsonl"
+      ])
+
+    with {:ok, json} <- Jason.encode(dispatch_record),
+         :ok <- File.mkdir_p(Path.dirname(manifest_path)),
+         :ok <- File.write(manifest_path, json <> "\n", [:append, :utf8]) do
+      :ok
     else
-      Logger.info("Dispatched to #{bot_name} via manifest (no URL configured)")
-      {:ok, :file_dispatched}
+      {:error, reason} ->
+        Logger.error("Failed to write dispatch manifest #{manifest_path}: #{inspect(reason)}")
+        {:manifest_write_failed, reason}
+    end
+  end
+
+  # POST a dispatch body and judge the response. On the per-bot GraphQL path
+  # a 2xx whose JSON body carries a non-empty `errors` list is a failure, as
+  # GraphQL-over-HTTP reports resolver errors with status 200. Exceptions and
+  # exits (e.g. :inets not started) become `{:error, _}` instead of crashing.
+  defp live_post(url, body, graphql_envelope?) do
+    case http_post(url, body) do
+      {:ok, _status, response_body} when graphql_envelope? ->
+        graphql_errors(response_body)
+
+      {:ok, _status, _response_body} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  rescue
+    e -> {:error, {:exception, Exception.message(e)}}
+  catch
+    :exit, reason -> {:error, {:exit, reason}}
+  end
+
+  # Classify a GraphQL-over-HTTP response body: `:ok` when it decodes and has
+  # no non-empty `errors`, `{:error, _}` when it reports errors or is not JSON.
+  defp graphql_errors(response_body) do
+    case Jason.decode(response_body) do
+      {:ok, %{"errors" => [_ | _] = errors}} -> {:error, {:graphql_errors, errors}}
+      {:ok, %{}} -> :ok
+      {:ok, other} -> {:error, {:unexpected_graphql_body, other}}
+      {:error, _} -> {:error, {:non_json_graphql_body, String.slice(response_body, 0, 200)}}
     end
   end
 
@@ -846,6 +897,8 @@ defmodule Hypatia.FleetDispatcher do
     end
   end
 
+  # POST a JSON body. Returns `{:ok, status, body}` for a 2xx response,
+  # `{:error, {:http_status, status}}` for any other status, or the :httpc error.
   defp http_post(url, body) do
     # Attempt HTTP POST -- works if :httpc is available (OTP built-in)
     case :httpc.request(
@@ -855,8 +908,8 @@ defmodule Hypatia.FleetDispatcher do
            [{:timeout, 10_000}],
            []
          ) do
-      {:ok, {{_, status, _}, _, _response_body}} when status in 200..299 ->
-        {:ok, status}
+      {:ok, {{_, status, _}, _, response_body}} when status in 200..299 ->
+        {:ok, status, IO.iodata_to_binary(response_body)}
 
       {:ok, {{_, status, _}, _, _}} ->
         {:error, {:http_status, status}}
