@@ -30,7 +30,10 @@ defmodule Hypatia.EchidnabotObligation do
   """
 
   # VeriSimDB / ProofStrategySelection prover names (lowercase snake) mapped
-  # to echidnabot's ProverKind enum values. Anything else has no ProverKind.
+  # to echidnabot's ProverKind enum values. HOL Light also accepts
+  # echidnabot's own slug, `hol-light` (`map_prover_kind` in its
+  # `src/api/graphql.rs`), so a hint that came from echidnabot is not dropped.
+  # Anything else has no ProverKind.
   @prover_kinds %{
     "coq" => "COQ",
     "lean" => "LEAN",
@@ -40,6 +43,7 @@ defmodule Hypatia.EchidnabotObligation do
     "cvc5" => "CVC5",
     "metamath" => "METAMATH",
     "hol_light" => "HOL_LIGHT",
+    "hol-light" => "HOL_LIGHT",
     "mizar" => "MIZAR",
     "pvs" => "PVS",
     "acl2" => "ACL2",

@@ -187,6 +187,7 @@ defmodule Hypatia.EchidnabotDispatchTest do
     test "normalise_prover_hint/1 maps ProverKind names and drops everything else" do
       assert EchidnabotObligation.normalise_prover_hint("lean") == "LEAN"
       assert EchidnabotObligation.normalise_prover_hint("hol_light") == "HOL_LIGHT"
+      assert EchidnabotObligation.normalise_prover_hint("hol-light") == "HOL_LIGHT"
       assert EchidnabotObligation.normalise_prover_hint("hol4") == "HOL4"
       assert EchidnabotObligation.normalise_prover_hint("lean4") == nil
       assert EchidnabotObligation.normalise_prover_hint("idris2") == nil
