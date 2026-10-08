@@ -45,9 +45,9 @@ defmodule Hypatia.Rules.StrategyDrift do
 
   require Logger
   alias Hypatia.Rules.ProofStrategySelection
+  alias Hypatia.ServiceUrl
 
   @table :hypatia_strategy_drift
-  @default_base_url "http://localhost:8080"
 
   # ── Public API ─────────────────────────────────────────────────────────
 
@@ -72,14 +72,16 @@ defmodule Hypatia.Rules.StrategyDrift do
       first observation)
     * `{:shift, class, old_top, new_top, failed_attempt_ids}` -- top prover
       changed; failed_attempt_ids are candidates for re-queueing
-    * `{:error, reason}` -- couldn't reach strategy endpoint
+    * `{:error, reason}` -- couldn't reach strategy endpoint, or
+      `{:error, :not_configured}` when neither `:base_url` nor
+      `HYPATIA_VERISIM_URL` holds a URL (no network call is made)
 
   Pass `:hypatia_strategy_drift` or set up the ETS table via `init_table/0`
   before calling.
   """
   def check_shift(class, opts \\ []) when is_binary(class) do
     init_table()
-    base_url = Keyword.get(opts, :base_url, @default_base_url)
+    base_url = Keyword.get(opts, :base_url)
 
     case ProofStrategySelection.recommend_with_novelty(class, base_url: base_url) do
       {:ok, []} ->
@@ -156,10 +158,20 @@ defmodule Hypatia.Rules.StrategyDrift do
 
   # ── Internals ───────────────────────────────────────────────────────────
 
+  # The attempt ids that failed with `prover` on `class`, or [] when
+  # VeriSimDB is unconfigured, unreachable or returns an unexpected shape.
   defp fetch_failed_attempts(class, prover, opts) do
+    case ServiceUrl.verisim(opts) do
+      {:ok, base_url} -> fetch_failed_attempts_from(base_url, class, prover, opts)
+      {:error, :not_configured} -> []
+    end
+  end
+
+  # Query the verisim-api under `base_url` for the failed attempt ids of
+  # (`class`, `prover`).
+  defp fetch_failed_attempts_from(base_url, class, prover, opts) do
     # ClickHouse query: attempt_ids where outcome='failure' for (class, prover).
     # We query verisim-api's raw SQL endpoint -- if it doesn't exist we return [].
-    base_url = Keyword.get(opts, :base_url, @default_base_url)
     timeout_ms = Keyword.get(opts, :timeout, 5_000)
 
     # Use the /certificates endpoint with evidence_limit to pull failed rows.

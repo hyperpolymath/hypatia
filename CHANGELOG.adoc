@@ -120,6 +120,32 @@ extended to thread the four new check functions into its return
 
 === Changed
 
+==== No built-in VeriSimDB / echidnabot URLs (2026-10-08)
+
+hypatia no longer falls back to `http://localhost:8080` (verisim-api) or
+`http://localhost:9001` (echidnabot) when the service URL is unset. The new
+`Hypatia.ServiceUrl` reads `HYPATIA_VERISIM_URL` and `HYPATIA_ECHIDNABOT_URL`.
+A variable that is unset, empty or whitespace-only means the feature is off:
+callers return `{:error, :not_configured}` (or their existing empty value)
+without a network call, and nothing fails at boot.
+
+* `ProofStrategySelection`, `StrategyDrift`, `VCL.ProofResolver`,
+  `ProofObligation` prover hints and `LearningScheduler` re-queues all go
+  through `ServiceUrl`.
+* `Neural.ProverRecommender` used to read `VERISIM_URL` (echidna's variable)
+  at **compile time**. It now reads `HYPATIA_VERISIM_URL` at runtime, like
+  every other caller.
+* `FleetDispatcher` reads `HYPATIA_<BOT>_URL` and `HYPATIA_FLEET_URL`
+  through `ServiceUrl.from_env/1`, so a blank value counts as unset
+  there too. Before, a blank per-bot URL was POSTed to as `"  /graphql"` and
+  the dispatch failed instead of falling back to the fleet coordinator or
+  the manifest.
+* With `HYPATIA_ECHIDNABOT_URL` unset, a strategy shift logs the dropped
+  re-queue candidates at info and returns `:ok`. Before this change the
+  same candidates were lost against the unreachable default.
+
+Covered by `test/service_url_test.exs`.
+
 ==== docs/ second-pass bucketing (2026-05-25, post-#315)
 
 Five flat files at `docs/` root moved into proper subdirs. PR #315

@@ -25,19 +25,18 @@ defmodule Hypatia.Rules.ProofStrategySelection do
                       → fleet_dispatcher routes with prover hint
                       → echidnabot runs recommended prover first
 
-  Graceful degradation: if VeriSimDB is unreachable, `recommend/2`
-  returns `{:error, reason}`. The caller should fall back to the
-  configured default prover rather than failing the dispatch.
+  Graceful degradation: if VeriSimDB is unconfigured or unreachable,
+  `recommend/2` returns `{:error, reason}`. The caller should fall back to
+  the configured default prover rather than failing the dispatch.
 
   Rule IDs: PS001-PS010
   """
 
   require Logger
+  alias Hypatia.ServiceUrl
 
   @default_limit 5
   @default_timeout_ms 5_000
-  @verisim_url_env "HYPATIA_VERISIM_URL"
-  @default_verisim_url "http://localhost:8080"
 
   # Tier-1 provers for novelty gating: when an obligation_class has no
   # historical data, route to a Tier-1 prover from the same family rather
@@ -75,17 +74,26 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   Options:
     - `:limit` (default 5) -- maximum recommendations to return
     - `:timeout` (default 5000ms) -- HTTP request timeout
-    - `:base_url` -- override VeriSimDB URL (else HYPATIA_VERISIM_URL env or default)
+    - `:base_url` -- override VeriSimDB URL (else `HYPATIA_VERISIM_URL`; there
+      is no built-in default, see `Hypatia.ServiceUrl`)
 
-  Returns `{:error, :not_configured}` if VeriSimDB URL is missing,
+  Returns `{:error, :not_configured}`, without a network call, when neither
+  `:base_url` nor `HYPATIA_VERISIM_URL` holds a URL,
   `{:error, {:http_status, code}}` on non-2xx response,
   `{:error, {:transport, reason}}` on network failure,
   `{:error, {:decode, reason}}` on malformed JSON.
   """
   def recommend(obligation_class, opts \\ []) when is_binary(obligation_class) do
+    with {:ok, base_url} <- ServiceUrl.verisim(opts) do
+      fetch_recommendations(obligation_class, base_url, opts)
+    end
+  end
+
+  # GET the strategy endpoint under `base_url` and decode its
+  # recommendations, mapping each failure to the shape `recommend/2` documents.
+  defp fetch_recommendations(obligation_class, base_url, opts) do
     limit = Keyword.get(opts, :limit, @default_limit)
     timeout_ms = Keyword.get(opts, :timeout, @default_timeout_ms)
-    base_url = resolve_base_url(opts)
 
     path =
       "/api/v1/proof_attempts/strategy?class=" <>
@@ -186,8 +194,15 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   defp cert_rank(_), do: 0
 
   defp fetch_certs(obligation_class, opts) do
+    with {:ok, base_url} <- ServiceUrl.verisim(opts) do
+      fetch_certs_from(obligation_class, base_url, opts)
+    end
+  end
+
+  # GET the certificates endpoint under `base_url` and index the PROVEN
+  # rows by prover; any failure becomes `{:error, {:certs_unavailable, _}}`.
+  defp fetch_certs_from(obligation_class, base_url, opts) do
     timeout_ms = Keyword.get(opts, :timeout, @default_timeout_ms)
-    base_url = resolve_base_url(opts)
 
     url =
       base_url <>
@@ -368,13 +383,6 @@ defmodule Hypatia.Rules.ProofStrategySelection do
   end
 
   # ─── internals ──────────────────────────────────────────────────────
-
-  defp resolve_base_url(opts) do
-    case Keyword.get(opts, :base_url) do
-      nil -> System.get_env(@verisim_url_env) || @default_verisim_url
-      url -> url
-    end
-  end
 
   defp http_get(url, timeout_ms) do
     request = {String.to_charlist(url), [{~c"accept", ~c"application/json"}]}
