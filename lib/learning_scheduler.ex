@@ -20,6 +20,7 @@ defmodule Hypatia.LearningScheduler do
   require Logger
 
   alias Hypatia.ConfidenceAnnealing
+  alias Hypatia.EchidnabotObligation
 
   # 5 minutes
   @poll_interval_ms 5 * 60 * 1_000
@@ -392,14 +393,28 @@ defmodule Hypatia.LearningScheduler do
     end
   end
 
-  # Re-queue each candidate attempt_id via echidnabot. We construct a
-  # fresh submitProofObligation mutation with the class and new prover
-  # hint. Failures logged but non-fatal -- the scheduler must keep
-  # running even if echidnabot is unreachable.
-  defp requeue_candidates(_class, _new_top, []), do: :ok
+  @doc """
+  Re-queue failed proof attempts with echidnabot after a strategy shift.
 
-  defp requeue_candidates(class, new_top, candidates) do
-    echidnabot_url = System.get_env("HYPATIA_ECHIDNABOT_URL") || "http://localhost:9001/graphql"
+  Sends one `submitProofObligation` per attempt id (at most 20 per call) with
+  `new_top` as the prover hint, and returns `:ok`. Failures are logged and
+  never raised: the scheduler must keep running when echidnabot is
+  unreachable.
+
+  `HYPATIA_ECHIDNABOT_URL` is echidnabot's base URL, the same meaning
+  `Hypatia.FleetDispatcher` gives it, and `/graphql` is appended. It defaults
+  to `http://localhost:9001`. `new_top` goes through
+  `Hypatia.EchidnabotObligation.normalise_prover_hint/1`, so a name with no
+  echidnabot `ProverKind` (such as `"lean4"`) sends no prover instead of an
+  invalid enum value.
+  """
+  @spec requeue_candidates(String.t(), String.t() | nil, [String.t()]) :: :ok
+  def requeue_candidates(_class, _new_top, []), do: :ok
+
+  def requeue_candidates(class, new_top, candidates) do
+    echidnabot_url =
+      (System.get_env("HYPATIA_ECHIDNABOT_URL") || "http://localhost:9001")
+      |> EchidnabotObligation.graphql_url()
 
     success_count =
       candidates
@@ -418,27 +433,21 @@ defmodule Hypatia.LearningScheduler do
     :ok
   end
 
+  # Send one best-effort submitProofObligation for a failed attempt and
+  # report whether echidnabot accepted it. The document is static; the class,
+  # attempt id and prover travel as GraphQL variables built by
+  # EchidnabotObligation, so no value can change the document.
   defp submit_requeue(url, class, prover, attempt_id) do
-    # Best-effort GraphQL mutation. The prover field is an enum in
-    # echidnabot's schema; we send it unquoted as the enum literal.
-    prover_upper = prover |> String.upcase() |> String.replace("-", "_")
-
-    claim = "requeue-of-#{attempt_id}"
-    context = "strategy-shift class=#{class}"
-
-    mutation = """
-    mutation {
-      submitProofObligation(input: {
-        repo: "hyperpolymath/requeue",
-        claim: "#{claim}",
-        context: "#{context}",
-        prover: #{prover_upper},
+    variables =
+      EchidnabotObligation.variables(
+        "hyperpolymath/requeue",
+        "requeue-of-#{attempt_id}",
+        "strategy-shift class=#{class}",
+        prover,
         inline: true
-      }) { success proofId }
-    }
-    """
+      )
 
-    body = Jason.encode!(%{query: mutation})
+    body = Jason.encode!(%{"query" => EchidnabotObligation.mutation(), "variables" => variables})
 
     case http_post_json(url, body, 5_000) do
       {:ok, response_body} ->

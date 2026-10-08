@@ -13,6 +13,7 @@ defmodule Hypatia.FleetDispatcher do
   alias Hypatia.DirectGitHubPR
   alias Hypatia.Rules.ProofObligation
   alias Hypatia.Rules.DependabotAlerts
+  alias Hypatia.EchidnabotObligation
 
   require Logger
 
@@ -381,6 +382,8 @@ defmodule Hypatia.FleetDispatcher do
     execute_graphql(mutation, "sustainabot")
   end
 
+  # Submit a proof-obligation finding to echidnabot's submitProofObligation,
+  # with the claim, context and prover hint sent as GraphQL variables.
   defp dispatch_to_echidnabot(finding) do
     # Closes the proof learning loop: classify this obligation, ask VeriSimDB
     # which prover has historically worked best on that class, and pass the
@@ -404,19 +407,24 @@ defmodule Hypatia.FleetDispatcher do
 
         override ->
           # Already resolved by ProofObligation.to_recipe/2 -- pass through
-          # the lowercase string; normalise_prover_hint/1 handles the mapping.
+          # the lowercase string; EchidnabotObligation.normalise_prover_hint/1
+          # handles the mapping.
           override
       end
 
-    mutation =
-      build_proof_obligation_mutation(
-        finding_field(finding, :repo),
+    # Claim and context travel as GraphQL variables, never spliced into the
+    # document, so newlines, backslashes and quotes arrive byte for byte. A
+    # hint with no echidnabot ProverKind (e.g. "idris2") omits the prover
+    # field and echidnabot uses its own default.
+    variables =
+      EchidnabotObligation.variables(
+        finding_field(finding, :repo, ""),
         claim,
         context,
         prover_hint
       )
 
-    execute_graphql(mutation, "echidnabot")
+    execute_graphql(EchidnabotObligation.mutation(), "echidnabot", variables)
   end
 
   # Look up the historically-best prover for an obligation class from
@@ -440,62 +448,6 @@ defmodule Hypatia.FleetDispatcher do
         )
 
         nil
-    end
-  end
-
-  # Build the submitProofObligation mutation (input-object syntax).
-  #
-  # CONTRACT GAP (2026-10-07): echidnabot's MutationRoot (src/api/graphql.rs)
-  # has no submitProofObligation and no ProofObligationInput; it only offers
-  # triggerCheck(repoId, commitSha, provers) on a registered repo. A live
-  # dispatch of this mutation therefore returns GraphQL `errors`, which
-  # execute_graphql/2 now reports as {:error, _}. Which side changes is an
-  # open owner decision. The prover field is omitted when
-  # prover_hint is nil OR the hint names a prover echidnabot's GraphQL
-  # schema doesn't know about (VeriSimDB tracks more provers than echidnabot
-  # currently exposes). In either case echidnabot uses its own default.
-  defp build_proof_obligation_mutation(repo, claim, context, prover_hint) do
-    prover_line =
-      case normalise_prover_hint(prover_hint) do
-        nil -> ""
-        enum_value -> "        prover: #{enum_value},\n"
-      end
-
-    """
-    mutation {
-      submitProofObligation(input: {
-        repo: "#{repo}",
-        claim: "#{escape_quotes(claim)}",
-        context: "#{escape_quotes(context)}",
-    #{prover_line}  }) {
-        success
-        proofId
-      }
-    }
-    """
-  end
-
-  # Map a VeriSimDB prover string to echidnabot's GraphQL ProverKind enum
-  # variant name. Returns nil for provers echidnabot doesn't expose (idris2,
-  # fstar, altergo, dafny, why3, tlaps, vampire, eprover, other) -- caller
-  # falls back to echidnabot's own default (Lean).
-  defp normalise_prover_hint(nil), do: nil
-
-  defp normalise_prover_hint(hint) when is_binary(hint) do
-    case hint do
-      "coq" -> "COQ"
-      "lean" -> "LEAN"
-      "agda" -> "AGDA"
-      "isabelle" -> "ISABELLE"
-      "z3" -> "Z3"
-      "cvc5" -> "CVC5"
-      "metamath" -> "METAMATH"
-      "hol_light" -> "HOL_LIGHT"
-      "mizar" -> "MIZAR"
-      "pvs" -> "PVS"
-      "acl2" -> "ACL2"
-      "hol4" -> "HOL4"
-      _ -> nil
     end
   end
 
@@ -770,14 +722,21 @@ defmodule Hypatia.FleetDispatcher do
   # when no URL is configured and the manifest write succeeded, and
   # `{:error, reason}` otherwise. A configured URL that fails is an error even
   # though the manifest line was written: the caller asked for live dispatch.
-  defp execute_graphql(query, bot_name) do
+  #
+  # `variables` (default nil) is the GraphQL variables map for a document
+  # that declares them, as echidnabot's submitProofObligation does. When
+  # given, it is recorded in the manifest line next to `query` and sent in
+  # the request's JSON envelope.
+  defp execute_graphql(query, bot_name, variables \\ nil) do
     # Dual dispatch: file-based (immediate) + HTTP (when fleet API available)
-    dispatch_record = %{
-      "bot" => bot_name,
-      "query" => query,
-      "dispatched_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "status" => "pending"
-    }
+    dispatch_record =
+      %{
+        "bot" => bot_name,
+        "query" => query,
+        "dispatched_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "status" => "pending"
+      }
+      |> maybe_put_variables(variables)
 
     # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
     manifest_result = write_manifest(dispatch_record)
@@ -793,7 +752,7 @@ defmodule Hypatia.FleetDispatcher do
     # GraphQL endpoint instead of routing through a fleet coordinator that may
     # not exist. The fleet-coordinator path is kept as a fallback for
     # deployments that front multiple bots behind one dispatcher.
-    {target_url, description, body} = resolve_dispatch_url(bot_name, query)
+    {target_url, description, body} = resolve_dispatch_url(bot_name, query, variables)
 
     graphql_envelope? = description != :none and String.starts_with?(description, "via per-bot")
 
@@ -874,11 +833,14 @@ defmodule Hypatia.FleetDispatcher do
   # Resolve the HTTP dispatch target for a bot.
   # Returns {url, description, body} on success, {nil, _, _} when no URL configured.
   #
-  # - Per-bot URLs hit the bot's own GraphQL endpoint, so we wrap the query in
-  #   a GraphQL-over-HTTP JSON envelope: {"query": "..."}.
+  # - Per-bot URLs are base URLs. We POST to {url}/graphql, the bot's own
+  #   GraphQL endpoint, with a GraphQL-over-HTTP JSON envelope:
+  #   {"query": "..."}, plus "variables" when the document declares them.
   # - Fleet-coordinator URLs hit /dispatch/{bot_name} with the raw query as
-  #   body, preserving legacy fleet-coordinator semantics.
-  defp resolve_dispatch_url(bot_name, query) do
+  #   body, preserving legacy fleet-coordinator semantics. A raw document
+  #   cannot carry variables, so a dispatch that has them sends the same JSON
+  #   envelope there instead.
+  defp resolve_dispatch_url(bot_name, query, variables) do
     per_bot_env = "HYPATIA_" <> String.upcase(bot_name) <> "_URL"
 
     case System.get_env(per_bot_env) do
@@ -887,15 +849,31 @@ defmodule Hypatia.FleetDispatcher do
           nil ->
             {nil, :none, nil}
 
-          fleet_url ->
+          fleet_url when is_nil(variables) ->
             {fleet_url <> "/dispatch/" <> bot_name, "via fleet coordinator", query}
+
+          fleet_url ->
+            {fleet_url <> "/dispatch/" <> bot_name, "via fleet coordinator",
+             graphql_envelope(query, variables)}
         end
 
       bot_url ->
-        envelope = Jason.encode!(%{"query" => query})
-        {bot_url <> "/graphql", "via per-bot URL #{per_bot_env}", envelope}
+        {bot_url <> "/graphql", "via per-bot URL #{per_bot_env}",
+         graphql_envelope(query, variables)}
     end
   end
+
+  # Encode a GraphQL-over-HTTP request body: {"query": ...}, with
+  # "variables" added when the document has any.
+  defp graphql_envelope(query, variables) do
+    %{"query" => query}
+    |> maybe_put_variables(variables)
+    |> Jason.encode!()
+  end
+
+  # Add a "variables" key to a map when there are variables to carry.
+  defp maybe_put_variables(map, nil), do: map
+  defp maybe_put_variables(map, variables), do: Map.put(map, "variables", variables)
 
   # POST a JSON body. Returns `{:ok, status, body}` for a 2xx response,
   # `{:error, {:http_status, status}}` for any other status, or the :httpc error.
