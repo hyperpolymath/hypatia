@@ -14,6 +14,7 @@ defmodule Hypatia.FleetDispatcher do
   alias Hypatia.Rules.ProofObligation
   alias Hypatia.Rules.DependabotAlerts
   alias Hypatia.EchidnabotObligation
+  alias Hypatia.ServiceUrl
 
   require Logger
 
@@ -840,24 +841,27 @@ defmodule Hypatia.FleetDispatcher do
   #   body, preserving legacy fleet-coordinator semantics. A raw document
   #   cannot carry variables, so a dispatch that has them sends the same JSON
   #   envelope there instead.
+  # - Both variables are read through `Hypatia.ServiceUrl.from_env/1`, so an
+  #   empty or whitespace-only value counts as unset, as it does for every
+  #   other service URL.
   defp resolve_dispatch_url(bot_name, query, variables) do
     per_bot_env = "HYPATIA_" <> String.upcase(bot_name) <> "_URL"
 
-    case System.get_env(per_bot_env) do
-      nil ->
-        case System.get_env("HYPATIA_FLEET_URL") do
-          nil ->
+    case ServiceUrl.from_env(per_bot_env) do
+      {:error, :not_configured} ->
+        case ServiceUrl.from_env("HYPATIA_FLEET_URL") do
+          {:error, :not_configured} ->
             {nil, :none, nil}
 
-          fleet_url when is_nil(variables) ->
+          {:ok, fleet_url} when is_nil(variables) ->
             {fleet_url <> "/dispatch/" <> bot_name, "via fleet coordinator", query}
 
-          fleet_url ->
+          {:ok, fleet_url} ->
             {fleet_url <> "/dispatch/" <> bot_name, "via fleet coordinator",
              graphql_envelope(query, variables)}
         end
 
-      bot_url ->
+      {:ok, bot_url} ->
         {bot_url <> "/graphql", "via per-bot URL #{per_bot_env}",
          graphql_envelope(query, variables)}
     end

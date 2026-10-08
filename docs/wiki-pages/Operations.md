@@ -56,7 +56,8 @@ The supervision tree starts Bandit on port 9090 (9099 under `MIX_ENV=test`):
 |---|---|
 | `HYPATIA_DISPATCH_PAT` | GitHub PAT with `repo` scope for cross-repo dispatch |
 | `HYPATIA_HTTP_PORT` | Override the Bandit listen port (default 9090) |
-| `HYPATIA_VERISIM_URL` | verisim-api endpoint, when deployed |
+| `HYPATIA_VERISIM_URL` | verisim-api base URL. No default: unset or blank turns off prover hints, strategy-shift detection and recommender retraining |
+| `HYPATIA_ECHIDNABOT_URL` | echidnabot base URL (`/graphql` is appended). No default: unset or blank means strategy-shift re-queues are logged and dropped |
 | `HYPATIA_FLEET_PATH` | Path to the gitbot-fleet checkout |
 | `HYPATIA_ALERT_WEBHOOK_URL` | Webhook for watcher alerts |
 | `HYPATIA_ALERT_LOG_FILE` | File sink for watcher alerts |

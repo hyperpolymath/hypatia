@@ -31,8 +31,8 @@ defmodule Hypatia.Neural.ProverRecommender do
 
   require Logger
   alias Hypatia.Neural.RadialNeuralNetwork
+  alias Hypatia.ServiceUrl
 
-  @verisim_base_url System.get_env("VERISIM_URL") || "http://127.0.0.1:8080"
   @default_limit 500
 
   # Persistent-term key for the live model snapshot.
@@ -68,11 +68,22 @@ defmodule Hypatia.Neural.ProverRecommender do
   Train one RBF network per obligation_class from the most recent N
   proof_attempts. Returns a map `%{class => rbf}` indexed by obligation
   class, plus a global fallback model trained on all rows.
+
+  The verisim-api URL is `:base_url`, else `HYPATIA_VERISIM_URL`. With
+  neither set this returns `{:error, :not_configured}` without a network
+  call (see `Hypatia.ServiceUrl`).
   """
   def train_from_verisim(opts \\ []) do
     limit = Keyword.get(opts, :limit, @default_limit)
-    base_url = Keyword.get(opts, :base_url, @verisim_base_url)
 
+    with {:ok, base_url} <- ServiceUrl.verisim(opts) do
+      train_from(base_url, limit)
+    end
+  end
+
+  # Fetch up to `limit` attempts from the verisim-api at `base_url` and
+  # train the global and per-class networks on them.
+  defp train_from(base_url, limit) do
     case fetch_attempts(limit, base_url) do
       {:ok, attempts} ->
         {vectors, targets, classes} = prepare_training_data(attempts)
@@ -123,20 +134,18 @@ defmodule Hypatia.Neural.ProverRecommender do
   # Fetch recent proof attempts from the row-level VeriSim API, falling back
   # to aggregate strategy data when that endpoint is unavailable.
   defp fetch_attempts(limit, base_url) do
-    resolved_url = base_url || @verisim_base_url
-    url = "#{resolved_url}/api/v1/proof_attempts?limit=#{limit}"
+    url = "#{base_url}/api/v1/proof_attempts?limit=#{limit}"
     # verisim-api /proof_attempts GET doesn't exist yet -- fall back to ClickHouse
     # strategy endpoint aggregates when the row-level endpoint is absent.
     case http_get(url) do
       {:ok, body} -> Jason.decode(body)
-      {:error, _} -> fetch_attempts_via_clickhouse(limit, resolved_url)
+      {:error, _} -> fetch_attempts_via_clickhouse(limit, base_url)
     end
   end
 
   # Convert aggregate ClickHouse-backed strategy recommendations into the
   # synthetic attempt rows expected by the recommender's training pipeline.
   defp fetch_attempts_via_clickhouse(limit, base_url) do
-    resolved_url = base_url || @verisim_base_url
     # ClickHouse HTTP: reach it by probing each active class's strategy endpoint
     # and folding the recommendations back into synthetic attempt rows.
     classes = ~w(safety linearity termination equiv correctness confluence
@@ -144,7 +153,7 @@ defmodule Hypatia.Neural.ProverRecommender do
 
     attempts =
       Enum.flat_map(classes, fn class ->
-        url = "#{resolved_url}/api/v1/proof_attempts/strategy?class=#{class}&limit=20"
+        url = "#{base_url}/api/v1/proof_attempts/strategy?class=#{class}&limit=20"
 
         case http_get(url) do
           {:ok, body} ->

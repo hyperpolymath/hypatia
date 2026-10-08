@@ -29,11 +29,15 @@ defmodule Hypatia.VCL.ProofResolver do
       {:sanctified, status, cert_id, proven_provers, combined_attempts}
       {:pending, cert_type, reason}
       {:error, reason}
+
+  The verisim-api URL is `:base_url`, else `HYPATIA_VERISIM_URL`. With
+  neither set, lookups return `{:error, :not_configured}` without a network
+  call (see `Hypatia.ServiceUrl`).
   """
 
   require Logger
+  alias Hypatia.ServiceUrl
 
-  @default_base_url "http://localhost:8080"
   @timeout_ms 5_000
 
   # ── Public API ───────────────────────────────────────────────────────────
@@ -107,12 +111,11 @@ defmodule Hypatia.VCL.ProofResolver do
   # ── Verisim endpoint lookups ─────────────────────────────────────────────
 
   defp lookup_proven(class, prover, opts) do
-    url =
-      base_url(opts) <>
-        "/api/v1/proof_attempts/certificates?class=" <>
+    path =
+      "/api/v1/proof_attempts/certificates?class=" <>
         URI.encode_www_form(class) <> "&prover=" <> URI.encode_www_form(prover)
 
-    case http_get(url, opts) do
+    case verisim_get(path, opts) do
       {:ok, body} ->
         case Jason.decode(body) do
           {:ok, %{"proven" => [row | _]}} ->
@@ -133,11 +136,9 @@ defmodule Hypatia.VCL.ProofResolver do
   end
 
   defp lookup_sanctify(class, opts) do
-    url =
-      base_url(opts) <>
-        "/api/v1/proof_attempts/certificates?class=" <> URI.encode_www_form(class)
+    path = "/api/v1/proof_attempts/certificates?class=" <> URI.encode_www_form(class)
 
-    case http_get(url, opts) do
+    case verisim_get(path, opts) do
       {:ok, body} ->
         case Jason.decode(body) do
           {:ok, %{"sanctify" => [row | _]}} ->
@@ -182,10 +183,9 @@ defmodule Hypatia.VCL.ProofResolver do
     end
   end
 
-  defp base_url(opts) do
-    case Keyword.get(opts, :base_url) do
-      nil -> System.get_env("HYPATIA_VERISIM_URL") || @default_base_url
-      url -> url
-    end
+  # GET `path` from the verisim-api, or return {:error, :not_configured}
+  # without a request when neither :base_url nor HYPATIA_VERISIM_URL is set.
+  defp verisim_get(path, opts) do
+    with {:ok, base_url} <- ServiceUrl.verisim(opts), do: http_get(base_url <> path, opts)
   end
 end

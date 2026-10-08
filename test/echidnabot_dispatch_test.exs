@@ -179,6 +179,16 @@ defmodule Hypatia.EchidnabotDispatchTest do
       assert envelope["query"] == Hypatia.EchidnabotObligation.mutation()
       assert envelope["variables"]["input"]["claim"] == @hostile_claim
     end
+
+    test "a blank HYPATIA_ECHIDNABOT_URL is unset, so the fleet coordinator is used" do
+      System.put_env("HYPATIA_ECHIDNABOT_URL", "   ")
+      System.put_env("HYPATIA_FLEET_URL", capturing_server(200, "{}"))
+
+      assert {:ok, :dispatched} = FleetDispatcher.dispatch_finding(obligation(%{}))
+
+      {request_line, _envelope} = captured!()
+      assert request_line =~ ~r{^POST /dispatch/echidnabot HTTP/1\.[01]$}
+    end
   end
 
   describe "EchidnabotObligation" do

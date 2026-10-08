@@ -296,14 +296,11 @@ defmodule Hypatia.Rules.ProofObligation do
   end
 
   # Look up the historically best prover for an obligation class.
-  # Returns nil if VeriSimDB is unreachable or has no data for this class.
+  # Returns nil if VeriSimDB is unconfigured, unreachable or has no data for
+  # this class. `:verisim_url` overrides HYPATIA_VERISIM_URL; there is no
+  # built-in default (see Hypatia.ServiceUrl).
   defp prover_hint_for(obligation_class, opts) do
-    base_url =
-      Keyword.get(
-        opts,
-        :verisim_url,
-        System.get_env("HYPATIA_VERISIM_URL") || "http://localhost:8080"
-      )
+    base_url = Keyword.get(opts, :verisim_url)
 
     case ProofStrategySelection.recommend(obligation_class, base_url: base_url) do
       {:ok, [%{"prover" => p} | _]} -> p

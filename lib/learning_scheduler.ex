@@ -21,6 +21,7 @@ defmodule Hypatia.LearningScheduler do
 
   alias Hypatia.ConfidenceAnnealing
   alias Hypatia.EchidnabotObligation
+  alias Hypatia.ServiceUrl
 
   # 5 minutes
   @poll_interval_ms 5 * 60 * 1_000
@@ -259,16 +260,15 @@ defmodule Hypatia.LearningScheduler do
 
   # Fetches proof_attempts from VeriSimDB and re-fits ProverRecommender's
   # per-class RBF networks. Returns true if training succeeded, false if
-  # VeriSimDB was unreachable or returned too few samples.
+  # VeriSimDB was unconfigured (HYPATIA_VERISIM_URL unset), unreachable or
+  # returned too few samples.
   #
   # Minimum sample threshold (50) prevents overfitting on early sparse data.
   # The existing in-memory models continue serving recommendations until
   # a successful retrain replaces them.
   defp retrain_prover_recommender do
-    base_url = System.get_env("HYPATIA_VERISIM_URL") || "http://localhost:8080"
-
     try do
-      case Hypatia.Neural.ProverRecommender.train_from_verisim(base_url: base_url) do
+      case Hypatia.Neural.ProverRecommender.train_from_verisim() do
         {:ok, models} ->
           sample_size = Map.get(models, :sample_size, 0)
 
@@ -369,12 +369,11 @@ defmodule Hypatia.LearningScheduler do
   # Runs StrategyDrift.check_all_shifts/1 on each tick. For each shift
   # event, enqueues the candidate failed-attempt IDs via echidnabot's
   # submitProofObligation mutation with the new top prover as hint.
-  # Logs but does not block on re-queueing errors.
+  # Logs but does not block on re-queueing errors. With HYPATIA_VERISIM_URL
+  # unset no class can shift, so this returns [] without a network call.
   defp detect_and_requeue_strategy_shifts do
-    base_url = System.get_env("HYPATIA_VERISIM_URL") || "http://localhost:8080"
-
     try do
-      events = Hypatia.Rules.StrategyDrift.check_all_shifts(base_url: base_url)
+      events = Hypatia.Rules.StrategyDrift.check_all_shifts()
 
       Enum.each(events, fn {:shift, class, old_top, new_top, candidates} ->
         Logger.info(
@@ -402,8 +401,10 @@ defmodule Hypatia.LearningScheduler do
   unreachable.
 
   `HYPATIA_ECHIDNABOT_URL` is echidnabot's base URL, the same meaning
-  `Hypatia.FleetDispatcher` gives it, and `/graphql` is appended. It defaults
-  to `http://localhost:9001`. `new_top` goes through
+  `Hypatia.FleetDispatcher` gives it, and `/graphql` is appended. It has no
+  default: when it is unset or blank, nothing is sent, the dropped candidates
+  are logged, and the call returns `:ok` (see `Hypatia.ServiceUrl`).
+  `new_top` goes through
   `Hypatia.EchidnabotObligation.normalise_prover_hint/1`, so a name with no
   echidnabot `ProverKind` (such as `"lean4"`) sends no prover instead of an
   invalid enum value.
@@ -412,10 +413,23 @@ defmodule Hypatia.LearningScheduler do
   def requeue_candidates(_class, _new_top, []), do: :ok
 
   def requeue_candidates(class, new_top, candidates) do
-    echidnabot_url =
-      (System.get_env("HYPATIA_ECHIDNABOT_URL") || "http://localhost:9001")
-      |> EchidnabotObligation.graphql_url()
+    case ServiceUrl.echidnabot() do
+      {:ok, base_url} ->
+        send_requeues(EchidnabotObligation.graphql_url(base_url), class, new_top, candidates)
 
+      {:error, :not_configured} ->
+        Logger.info(
+          "LearningScheduler: HYPATIA_ECHIDNABOT_URL unset -- not re-queueing " <>
+            "#{length(candidates)} attempts for class=#{class}"
+        )
+
+        :ok
+    end
+  end
+
+  # Send at most 20 re-queues to echidnabot's GraphQL endpoint
+  # `echidnabot_url` and log how many it accepted.
+  defp send_requeues(echidnabot_url, class, new_top, candidates) do
     success_count =
       candidates
       # rate-limit: max 20 re-queues per tick
