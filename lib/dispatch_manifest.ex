@@ -13,9 +13,21 @@ defmodule Hypatia.DispatchManifest do
   - recipe_id, confidence, fix_script (for eliminate)
   - proven_module (for substitute)
   - pattern_id, category, description, repo, severity
+  - facts: the verdict records the step derives from (HYP-01)
+
+  Facts derive workflows, never the reverse (HYP-01). Every step names the
+  fact it was derived from: the pattern it acts on, that pattern's support
+  (`observed` with the fleet occurrence count, or `pattern`) and the level
+  derived from them (`Hypatia.Verdict.level/2`). A step that can name no
+  fact is refused, and so is the whole manifest: `compile/1` returns
+  `{:error, {:factless_steps, steps}}` and `write/2` writes nothing, so
+  dispatch-runner.sh never sees a step that rests on nothing. A step's
+  Bayesian `confidence` is belief and stays in its own field; it is never a
+  fact.
   """
 
   alias Hypatia.TriangleRouter
+  alias Hypatia.Verdict
 
   require Logger
 
@@ -23,11 +35,63 @@ defmodule Hypatia.DispatchManifest do
   @fix_scripts_dir Application.compile_env(:hypatia, :fix_scripts_dir, "scripts/fix-scripts")
 
   @doc """
-  Write a dispatch manifest from a list of routed actions.
-  Returns {:ok, path, stats} on success.
+  Compile routed actions into manifest steps, each naming its facts.
+
+  Returns `{:ok, steps}`, or `{:error, {:factless_steps, steps}}` naming
+  every step (its position, tier and pattern id) that could name no fact.
   """
-  def write(routed_actions) do
-    dispatch_dir = Path.join(@verisimdb_path, "dispatch")
+  @spec compile(list()) :: {:ok, [map()]} | {:error, {:factless_steps, [map()]}}
+  def compile(routed_actions) do
+    lines =
+      Enum.flat_map(routed_actions, fn action ->
+        case action_to_manifest_entry(action) do
+          nil -> []
+          entries when is_list(entries) -> entries
+          entry -> [entry]
+        end
+      end)
+
+    factless =
+      lines
+      |> Enum.with_index()
+      |> Enum.filter(fn {entry, _} -> entry["facts"] == [] end)
+      |> Enum.map(fn {entry, index} ->
+        %{"step" => index, "tier" => entry["tier"], "pattern_id" => entry["pattern_id"]}
+      end)
+
+    case factless do
+      [] -> {:ok, lines}
+      steps -> {:error, {:factless_steps, steps}}
+    end
+  end
+
+  @doc """
+  Write a dispatch manifest from a list of routed actions.
+
+  Returns `{:ok, path, stats}`, or `{:error, {:factless_steps, steps}}`
+  without writing anything when a step names no fact (`compile/1`).
+  `opts[:dispatch_dir]` overrides the directory (default
+  `<verisimdb_data_path>/dispatch`).
+  """
+  def write(routed_actions, opts \\ []) do
+    case compile(routed_actions) do
+      {:ok, lines} ->
+        write_lines(
+          lines,
+          Keyword.get(opts, :dispatch_dir, Path.join(@verisimdb_path, "dispatch"))
+        )
+
+      {:error, {:factless_steps, steps}} = refused ->
+        Logger.error(
+          "Dispatch manifest REFUSED: #{length(steps)} step(s) name no fact " <>
+            "(#{inspect(Enum.take(steps, 5))}); nothing written"
+        )
+
+        refused
+    end
+  end
+
+  defp write_lines(lines, dispatch_dir) do
     File.mkdir_p!(dispatch_dir)
 
     manifest_path = Path.join(dispatch_dir, "pending.jsonl")
@@ -35,16 +99,6 @@ defmodule Hypatia.DispatchManifest do
     # Also write a timestamped archive copy
     archive_name = "dispatch-#{Date.utc_today() |> Date.to_iso8601()}.jsonl"
     archive_path = Path.join(dispatch_dir, archive_name)
-
-    lines =
-      routed_actions
-      |> Enum.flat_map(fn action ->
-        case action_to_manifest_entry(action) do
-          nil -> []
-          entries when is_list(entries) -> entries
-          entry -> [entry]
-        end
-      end)
 
     content =
       Enum.map_join(lines, "\n", fn entry ->
@@ -103,6 +157,7 @@ defmodule Hypatia.DispatchManifest do
       "match" => Map.get(recipe, "match"),
       "replacement" => Map.get(recipe, "replacement"),
       "proven_module" => Map.get(recipe, "proven_module"),
+      "facts" => facts_for(pattern),
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
@@ -126,6 +181,7 @@ defmodule Hypatia.DispatchManifest do
       "proven_module" => Map.get(recipe, "proven_module"),
       "proven_modules" => Map.get(recipe, "proven_modules", []),
       "formally_proven" => Map.get(recipe, "formally_proven", false),
+      "facts" => facts_for(pattern),
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
@@ -145,11 +201,48 @@ defmodule Hypatia.DispatchManifest do
       "recipe_id" => nil,
       "confidence" => 0.0,
       "auto_fixable" => false,
+      "facts" => facts_for(finding),
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
 
   defp action_to_manifest_entry(_), do: nil
+
+  # The verdict a step derives from. A registry pattern is evidence that a
+  # pattern matched, `occurrences` times across the fleet: `observed` support
+  # at level epi. Without a pattern id there is nothing to name, and the step
+  # is factless (compile/1 refuses the manifest).
+  defp facts_for(source) do
+    case Map.get(source, "id") do
+      id when is_binary(id) and id not in ["", "unknown"] ->
+        {support, observations} =
+          case Map.get(source, "occurrences") do
+            n when is_integer(n) and n > 0 -> {%{kind: "observed", observations: n}, n}
+            _ -> {%{kind: "pattern"}, 1}
+          end
+
+        evidence = [
+          %{
+            rule: "pattern_registry/#{id}",
+            rule_version: Verdict.rule_version(),
+            observations: observations
+          }
+        ]
+
+        [
+          %{
+            "pattern_id" => id,
+            "support" => Map.new(support, fn {k, v} -> {Atom.to_string(k), v} end),
+            "evidence" =>
+              Enum.map(evidence, &Map.new(&1, fn {k, v} -> {Atom.to_string(k), v} end)),
+            "level" => Verdict.level(support, evidence)
+          }
+        ]
+
+      _ ->
+        []
+    end
+  end
 
   defp get_repo(pattern_or_finding) do
     Map.get(pattern_or_finding, "routed_repo") ||

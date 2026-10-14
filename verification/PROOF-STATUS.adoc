@@ -215,6 +215,13 @@ untouched-finding negative control and two mutants killed |TESTED
 |Runtime wiring |Elixir |`Quarantine.retract_dependents/1` is called by
 a scan or dispatch path. It is not, like the rest of the safety systems
 (CLAUDE.md Known Gap 2) |OPEN
+
+|Derived workflow steps, lib/dispatch_manifest.ex |Elixir |Every
+dispatch-manifest step names the verdict it derives from, and a factless
+step refuses the whole manifest before anything is written:
+test/dispatch_manifest_test.exs. This is hypatia's own derived workflow;
+the Signalbox criterion has no Signalbox repository to apply to |TESTED
+(Signalbox: OPEN)
 |===
 
 === Properties Proven

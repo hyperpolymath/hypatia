@@ -80,7 +80,7 @@ defmodule Hypatia.PatternAnalyzer do
     Enum.each(routed, &FleetDispatcher.dispatch_routed_action/1)
 
     # Step 6: Write dispatch manifest (JSONL -- executable by dispatch-runner.sh)
-    {:ok, manifest_path, manifest_stats} = DispatchManifest.write(routed)
+    {manifest_path, manifest_stats} = write_manifest(routed)
 
     Logger.info(
       "Manifest: #{manifest_stats.auto_execute} auto, #{manifest_stats.review} review, " <>
@@ -187,7 +187,7 @@ defmodule Hypatia.PatternAnalyzer do
     # Neural enhancement + dispatch
     all_routed = enhance_with_neural(all_routed)
     Enum.each(all_routed, &FleetDispatcher.dispatch_routed_action/1)
-    {:ok, manifest_path, manifest_stats} = DispatchManifest.write(all_routed)
+    {manifest_path, manifest_stats} = write_manifest(all_routed)
 
     summary =
       generate_summary(all_routed, scans)
@@ -391,5 +391,27 @@ defmodule Hypatia.PatternAnalyzer do
     )
 
     patterns
+  end
+
+  # HYP-01: DispatchManifest refuses a manifest with a factless step and
+  # writes nothing. Report that as a manifest that was not written (path nil,
+  # zero counts, the refused steps named) instead of crashing the pipeline on
+  # a match against {:ok, _, _}.
+  defp write_manifest(routed) do
+    case DispatchManifest.write(routed) do
+      {:ok, path, stats} ->
+        {path, stats}
+
+      {:error, {:factless_steps, steps}} ->
+        {nil,
+         %{
+           total: 0,
+           auto_execute: 0,
+           review: 0,
+           report_only: 0,
+           by_tier: %{eliminate: 0, substitute: 0, control: 0},
+           refused: {:factless_steps, steps}
+         }}
+    end
   end
 end
