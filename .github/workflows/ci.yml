@@ -120,7 +120,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.87.24
+        uses: taiki-e/install-action@v2.87.27
         with:
           tool: cargo-llvm-cov
 
@@ -277,7 +277,7 @@ jobs:
 
       - name: Upload k9 artefacts
         if: hashFiles('generated/k9iser/**') != ''
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: k9iser-artefacts
           path: generated/k9iser/
