@@ -58,9 +58,12 @@ extract() {
   awk '
     function emit_row(b,   spans, n, i, span, file, first) {
       if (b ~ /line-through/ || b ~ /RETIRED/) return
+      # split() on the OPENING delimiter leaves exactly one span per piece, so
+      # every piece is visited. Until 2026-10-14 this loop stepped by 2 and
+      # silently checked every second identifier only (7 of 16 on main).
       n = split(b, spans, /`\+/)
       file = ""
-      for (i = 2; i <= n; i += 2) {
+      for (i = 2; i <= n; i++) {
         span = spans[i]
         sub(/\+`.*/, "", span)   # cut at the closing +`
         first = span
@@ -90,7 +93,7 @@ extract() {
       body = s
       sub(/^[^\n]*\n/, "", body)
       n = split(body, spans, /`\+/)
-      for (i = 2; i <= n; i += 2) {
+      for (i = 2; i <= n; i++) {
         span = spans[i]
         sub(/\+`.*/, "", span)   # cut at the closing +`
         first = span
