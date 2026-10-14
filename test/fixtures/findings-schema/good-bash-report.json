@@ -1,0 +1,38 @@
+{
+  "submission_metadata": {
+    "repo": "example",
+    "timestamp": "2026-10-14T00:00:00+00:00",
+    "scanner": "hypatia",
+    "version": "2.0.0",
+    "finding_count": 1
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "unsafe_code",
+      "pattern": "example_rule",
+      "file": "src/example.rs",
+      "line": 3,
+      "code": "x",
+      "cwe": "CWE-0",
+      "fix": "y",
+      "auto_fixable": false,
+      "support": {
+        "kind": "pattern"
+      },
+      "evidence": [
+        {
+          "rule": "code_safety/example_rule",
+          "rule_version": "0.1.0",
+          "span": {
+            "file": "src/example.rs",
+            "start_line": 3,
+            "end_line": 3
+          },
+          "observations": 1
+        }
+      ],
+      "level": "epi"
+    }
+  ]
+}

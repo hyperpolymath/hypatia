@@ -1,12 +1,59 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
-= schema/ — Nickel Schema Files
+= schema/ — Findings schema (canonical)
 
-Nickel configuration schemas for Hypatia data structures.
+`schema/` is the canonical home of the *findings* schema (ruling 2026-10-14,
+HYP-01). `schemas/` holds unrelated contracts — the ruleset JSON Schema, the
+conflow `config.cue`, the Dragonfly cache layout — and no findings schema.
+Merging the two directories is a separate piece of work.
 
 == Files
 
-* `findings.ncl` — Schema for finding records emitted by the rules engine
-* `generate-findings.ncl` — Generator helpers for findings in tests and tooling
+* `findings.ncl` — the Nickel contract for what a scan emits: the escript's
+  JSON array (`Findings`) and the bash fallback's report (`BashReport`).
 
-These schemas are used for configuration validation and test fixture generation.
-The authoritative type definitions are in `src/Hypatia/ABI/Types.idr`.
+== The verdict fields
+
+Every finding carries three fields whose meaning is fixed by
+`src/Hypatia/ABI/Verdict.idr` (normative) and mirrored by
+`lib/hypatia/verdict.ex` and `hypatia-cli-bash.sh`:
+
+[cols="1,4"]
+|===
+|Field |Meaning
+
+|`support`
+|What the evidence supports. `pattern`: a rule matched. `observed`: a fleet
+observation count (the rules.a2ml thresholds, 5 to propose and 10 + 3 fixes to
+auto-approve, are belief-formation rules, not soundness proofs). `mechanical`:
+a prover re-checked the flagged file, with both digests recorded.
+
+|`evidence`
+|The tokens the finding was issued on: rule, rule version, span, observation
+count.
+
+|`level`
+|Derived, never written by a rule. `sound` only for a `mechanical` support
+whose re-check `confirms`; `epi` for any other support with evidence;
+`belief` with no evidence at all. The `LevelDerived` contract re-derives it
+and refuses a finding whose stored level disagrees.
+|===
+
+Today every rule-module finding is `pattern` / `epi`: Elixir rules carry the
+support tag, not a proof. `sound` is reachable only through
+`Hypatia.Verdict.attach_recheck/3`, and no scan path attaches a re-check yet.
+
+All records are open, so the fields are additive: consumers that read
+findings by key (the gitbot-fleet scripts, `.hypatia-baseline.json`
+matching) are unaffected.
+
+== Checking
+
+[source,bash]
+----
+scripts/check-findings-schema.sh --self-test         # fixtures in test/fixtures/findings-schema/
+scripts/check-findings-schema.sh findings.json       # escript output
+scripts/check-findings-schema.sh --bash report.json  # bash fallback output
+----
+
+CI runs the self-test and then validates the repository's own
+consumer-shaped scan (`escript-soundness.yml`, Nickel 1.11.0, SHA-256 pinned).
