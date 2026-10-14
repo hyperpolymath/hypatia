@@ -13,7 +13,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ## Architecture
 
 ```
-Hypatia                       # 133 Elixir modules total
+Hypatia                       # 140 Elixir modules total (`shopt -s globstar; ls lib/**/*.ex | wc -l`)
 ├── Elixir pipeline          # core: pattern analysis, dispatch, learning
 ├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
 ├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
@@ -122,6 +122,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `scorecard_ingestor.ex` | Ingests 20 OpenSSF Scorecard checks as local scan patterns |
 | `learning_scheduler.ex` | GenServer: polls outcomes every 5 min, drives feedback loop |
 | `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
+| `hypatia/verdict.ex` | HYP-01: every finding names its `support`, `evidence` and a derived `level` (mirror of `Verdict.idr`; contract `schema/findings.ncl`) |
 | `application.ex` | OTP Application supervisor for all GenServers |
 
 ### VCL Query Layer (lib/vcl/)

@@ -85,7 +85,7 @@ jobs:
       - name: Install jq
         run: |
           apt-get update -qq
-          apt-get install -y -qq jq git
+          apt-get install -y -qq jq git curl
 
       - name: Fetch source at the exact commit under test
         run: |
@@ -162,3 +162,26 @@ jobs:
             exit 1
           fi
           echo "Consumer-shaped invocation produced $(jq 'length' consumer.json) findings."
+
+      # HYP-01: every finding in CI output names its support. The schema's
+      # self-test runs first, so a schema that accepts everything cannot
+      # pass: it must refuse a pattern finding that claims "sound" (and six
+      # other bad shapes in test/fixtures/findings-schema/). Then the real
+      # consumer-shaped output above must satisfy schema/findings.ncl, whose
+      # LevelDerived contract re-derives every finding's level.
+      - name: Findings carry support, evidence and a derived level
+        working-directory: source
+        env:
+          NICKEL_VERSION: 1.11.0
+          NICKEL_SHA256: d40cd32b8374636fda8939a8e479616c7a1db57acb5ef5a9621e242ed8f5a361
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/nickel" \
+            "https://github.com/tweag/nickel/releases/download/${NICKEL_VERSION}/nickel-x86_64-linux"
+          echo "${NICKEL_SHA256}  $HOME/.local/bin/nickel" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/nickel"
+          export NICKEL="$HOME/.local/bin/nickel"
+          "$NICKEL" --version
+          bash scripts/check-findings-schema.sh --self-test
+          bash scripts/check-findings-schema.sh consumer.json

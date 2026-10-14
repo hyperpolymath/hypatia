@@ -1,0 +1,24 @@
+[
+  {
+    "rule_module": "code_safety",
+    "type": "example_rule",
+    "severity": "high",
+    "file": "src/example.rs",
+    "line": 3,
+    "reason": "example",
+    "action": "flag",
+    "evidence": [
+      {
+        "rule": "code_safety/example_rule",
+        "rule_version": "0.1.0",
+        "span": {
+          "file": "src/example.rs",
+          "start_line": 3,
+          "end_line": 3
+        },
+        "observations": 1
+      }
+    ],
+    "level": "epi"
+  }
+]

@@ -77,6 +77,14 @@ FINDINGS_FILE=""
 FINDING_COUNT=0
 FIRST_FINDING=true
 
+# The level a finding is reported at, derived from its support and evidence
+# (Hypatia.Verdict.level/2; schema/findings.ncl derive_level): sound only for a
+# mechanical re-check that confirms, epi with evidence, belief without.
+VERDICT_LEVEL_JQ='def verdict_level:
+  if .support.kind == "mechanical" and .support.result == "confirms" then "sound"
+  elif (.evidence | length) > 0 then "epi"
+  else "belief" end;'
+
 init_findings() {
     FINDINGS_FILE=$(mktemp /tmp/hypatia-findings-XXXXXX.json)
     echo "[" > "$FINDINGS_FILE"
@@ -94,12 +102,22 @@ emit_finding() {
     [[ "$FIRST_FINDING" == "false" ]] && echo "," >> "$FINDINGS_FILE"
     FIRST_FINDING=false
 
+    # HYP-01: every finding names its support (schema/findings.ncl). A regex
+    # match is `pattern` support with one evidence token; `level` is derived
+    # by the same rule as Hypatia.Verdict.level/2, never written by hand.
     jq -n \
         --arg sev "$sev" --arg type "$type" --arg pattern "$pattern" \
         --arg file "$file" --argjson line "$line" --arg code "$code" \
         --arg cwe "$cwe" --arg fix "$fix" --argjson auto "$([ "$auto_fixable" = "true" ] && echo true || echo false)" \
-        '{severity:$sev, type:$type, pattern:$pattern, file:$file,
-          line:$line, code:$code, cwe:$cwe, fix:$fix, auto_fixable:$auto}' \
+        --arg version "$VERSION" \
+        "${VERDICT_LEVEL_JQ}"'
+        {severity:$sev, type:$type, pattern:$pattern, file:$file,
+          line:$line, code:$code, cwe:$cwe, fix:$fix, auto_fixable:$auto,
+          support:{kind:"pattern"},
+          evidence:[{rule:("bash/" + $pattern), rule_version:$version,
+                     span:{file:$file, start_line:$line, end_line:$line},
+                     observations:1}]}
+        | . + {level: verdict_level}' \
         >> "$FINDINGS_FILE"
 
     ((FINDING_COUNT++)) || true
@@ -923,7 +941,7 @@ scan_directory() {
               findings: $findings}'
     elif [[ "$format" == "github" ]]; then
         jq -r '.[] | select(. != {}) |
-            "::\(.severity) file=\(.file),line=\(.line)::\(.pattern) - \(.fix)"' \
+            "::\(.severity) file=\(.file),line=\(.line)::\(.pattern) - \(.fix) [\(.level): \(.support.kind)]"' \
             "$FINDINGS_FILE"
     else
         # Summary header
@@ -946,7 +964,7 @@ scan_directory() {
 
         # Group by type for readability
         jq -r '.[] | select(. != {}) |
-            "[\(.severity | ascii_upcase)] \(.file):\(.line)  (\(.pattern))\n  \(.fix)\n"' \
+            "[\(.severity | ascii_upcase)] \(.file):\(.line)  (\(.pattern); \(.level): \(.support.kind))\n  \(.fix)\n"' \
             "$FINDINGS_FILE"
     fi
 
@@ -989,7 +1007,7 @@ scan_file() {
         echo "$filtered"
     else
         echo "$filtered" | jq -r '.[] |
-            "[\(.severity | ascii_upcase)] \(.file):\(.line)  (\(.pattern))\n  \(.fix)\n"'
+            "[\(.severity | ascii_upcase)] \(.file):\(.line)  (\(.pattern); \(.level): \(.support.kind))\n  \(.fix)\n"'
     fi
 
     rm -f "$FINDINGS_FILE"
@@ -1064,7 +1082,7 @@ check_staged_files() {
 
     if [[ "$critical" -gt 0 ]]; then
         echo "$filtered" | jq -r '.[] | select(.severity == "critical") |
-            "[\(.severity | ascii_upcase)] \(.file):\(.line)  (\(.pattern))\n  \(.fix)\n"'
+            "[\(.severity | ascii_upcase)] \(.file):\(.line)  (\(.pattern); \(.level): \(.support.kind))\n  \(.fix)\n"'
         log_error "Pre-commit BLOCKED: $critical critical issues in staged files"
         return 1
     elif [[ "$count" -gt 0 ]]; then

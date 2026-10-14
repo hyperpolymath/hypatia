@@ -1,0 +1,33 @@
+[
+  {
+    "rule_module": "code_safety",
+    "type": "example_rule",
+    "severity": "high",
+    "file": "src/example.rs",
+    "line": 3,
+    "reason": "example",
+    "action": "flag",
+    "support": {
+      "kind": "mechanical",
+      "prover": "lean4",
+      "prover_version": "4.30.0",
+      "target": "src/example.lean",
+      "target_sha256": "5465a2710136d470469e3bc4351c27dd0a6d8a14f520fd7009f5f196351c72e7",
+      "artefact_sha256": "f5d4cf9e8b96dd98cbf47d432fb83411dad3aa92dd37de1f21d30bebf1f03a31",
+      "result": "refutes"
+    },
+    "evidence": [
+      {
+        "rule": "code_safety/example_rule",
+        "rule_version": "0.1.0",
+        "span": {
+          "file": "src/example.rs",
+          "start_line": 3,
+          "end_line": 3
+        },
+        "observations": 1
+      }
+    ],
+    "level": "sound"
+  }
+]

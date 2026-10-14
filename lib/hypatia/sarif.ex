@@ -130,6 +130,23 @@ defmodule Hypatia.SARIF do
         "partialFingerprints" => %{"hypatiaFindingHash/v1" => fingerprint}
       }
 
+      # HYP-01 verdict fields ride in the SARIF property bag (SARIF 2.1.0
+      # §3.8), outside the fingerprint, so annotating a finding never
+      # re-opens an alert code scanning has already triaged.
+      result =
+        case Map.get(finding, :level) || Map.get(finding, "level") do
+          nil ->
+            result
+
+          verdict_level ->
+            support = Map.get(finding, :support) || Map.get(finding, "support") || %{}
+
+            Map.put(result, "properties", %{
+              "hypatia.level" => verdict_level,
+              "hypatia.support" => Map.get(support, :kind) || Map.get(support, "kind")
+            })
+        end
+
       rules =
         Map.put_new(rules, rule_id, %{
           "id" => rule_id,

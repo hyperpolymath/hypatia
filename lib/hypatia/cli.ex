@@ -293,6 +293,17 @@ defmodule Hypatia.CLI do
         "(#{breakdown}); exit #{exit_code}" <>
         if(config.exit_zero and total > 0, do: " (--exit-zero suppressed exit 1)", else: "")
     )
+
+    # A separate line, so the summary above keeps its shape for any caller
+    # that pattern-matches it. Levels are derived (Hypatia.Verdict), never
+    # stored by a rule.
+    levels = Hypatia.Verdict.level_counts(filtered)
+
+    IO.puts(
+      :stderr,
+      "[hypatia] verdict levels: sound=#{levels["sound"]}, epi=#{levels["epi"]}, " <>
+        "belief=#{levels["belief"]}"
+    )
   end
 
   defp env_flag?(name) do
@@ -311,7 +322,9 @@ defmodule Hypatia.CLI do
   @doc """
   Runs the selected rule modules against `repo_path` and returns normalized
   finding maps. Each map includes `rule_module`, `type`, `severity`, `file`,
-  `reason`, and `action`; line-aware findings may also include `line`.
+  `reason`, and `action`; line-aware findings may also include `line`. Every
+  map also carries the HYP-01 verdict fields `support`, `evidence` and the
+  derived `level` (`Hypatia.Verdict`, `schema/findings.ncl`).
   Findings covered by configured suppressions are excluded.
 
   ## Parameters
@@ -983,6 +996,10 @@ defmodule Hypatia.CLI do
         repo_path: repo_path
       )
     end)
+    # HYP-01: every finding names its support. Same funnel, exactly once, so
+    # no rule module can emit a finding without `support`, `evidence` and a
+    # derived `level` (schema/findings.ncl; Hypatia.Verdict).
+    |> Enum.map(&Hypatia.Verdict.annotate/1)
   end
 
   # ─── Code safety scanning ────────────────────────────────────────────
@@ -1223,7 +1240,7 @@ defmodule Hypatia.CLI do
   defp output(findings, "github") do
     # GitHub Actions annotation format
     Enum.each(findings, fn f ->
-      level =
+      annotation =
         case f.severity do
           "critical" -> "error"
           "high" -> "error"
@@ -1234,7 +1251,7 @@ defmodule Hypatia.CLI do
 
       file = Map.get(f, :file, "")
       reason = Map.get(f, :reason, "")
-      IO.puts("::#{level} file=#{file}::#{reason}")
+      IO.puts("::#{annotation} file=#{file}::#{reason} [#{Hypatia.Verdict.describe(f)}]")
     end)
   end
 
@@ -1251,7 +1268,7 @@ defmodule Hypatia.CLI do
         IO.puts(:stderr, "  [#{String.upcase(severity)}] (#{length(group)} findings)")
 
         Enum.each(group, fn f ->
-          IO.puts(:stderr, "    #{f.file}: #{f.reason}")
+          IO.puts(:stderr, "    #{f.file}: #{f.reason} [#{Hypatia.Verdict.describe(f)}]")
         end)
 
         IO.puts(:stderr, "")
