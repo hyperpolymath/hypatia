@@ -127,6 +127,62 @@ downgraded to a runtime assertion in
 JSONL for violations. See commit history.
 |===
 
+==== Verdict support (2026-10-14, HYP-01)
+
+A gate verdict names its support: a pattern match, an observation count, or
+a prover re-check. Only the last can be sound. The statuses here use the
+estate vocabulary (PROVEN / TESTED / ASSUMED / OPEN), and every row names
+the artefact that justifies it. `+scripts/check-verdicts.sh+` (CI: `+idris2
+--check+` job) and `+scripts/recheck-lean-hole.sh+` (CI: `+lake build+` job)
+are the gates.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Claim |Status
+|`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |`+Sound+` has one
+constructor, indexed by `+Mechanical+`, demanding a re-check that
+`+Confirms+`: `+patternNotSound+`, `+observedNotSound+`,
+`+refutedNotSound+`; soundness is decidable (`+decSound+`); the derived
+level is "sound" only with a witness (`+soundLevelHasWitness+`,
+`+patternNeverSoundLevel+`, `+observedNeverSoundLevel+`) and a
+`+SoundVerdict+` always derives it (`+soundVerdictLevel+`); a `+Sha256+`
+literal of the wrong shape does not typecheck |PROVEN
+
+|`+tests/reject/PatternIsNotSound.idr+` |Idris2 |Expected rejection: a
+`+Sound+` witness for a `+Pattern+` support is refused at `+invalid+`
+|TESTED
+
+|`+tests/reject/ObservedIsNotSound.idr+` |Idris2 |Expected rejection:
+`+Observed+` 5 (the rules.a2ml proposal threshold) is refused as sound at
+`+invalid+` |TESTED
+
+|`+tests/reject/RefutedRecheckIsNotSound.idr+` |Idris2 |Expected
+rejection: a re-check that `+Refutes+` is refused as sound at `+invalid+`
+|TESTED
+
+|`+tests/reject/MalformedDigest.idr+` |Idris2 |Expected rejection: a
+digest that is not 64 lower-case hex digits is refused at `+invalid+`
+|TESTED
+
+|`+tests/accept/LeanHoleRecheckSound.idr+` |Idris2 + Lean 4 |Positive
+control: `+soundControl+`, a `+SoundVerdict+` for the code_safety Lean
+proof-hole detector, is accepted and derives "sound" by evaluation
+(`+controlIsSound+`); its `+targetHash+` and `+artefactHash+` are
+re-derived from a fresh Lean 4.30.0 run of the fixture, with two negative
+controls (a hole-free module prints no diagnostic; another run yields
+another digest) |TESTED
+
+|`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |Correspondence of
+`+Verdict+` / `+SoundVerdict+` to Epi / SoundWarrant in
+hyperpolymath/epistemic-types @ 6a68de3 (Warrant.agda). The pin and the
+cited names are checked (`+sibling-citations+` CI job); the
+correspondence is a transcription, not a checked proof |ASSUMED
+
+|`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |Elixir rules carry a proof of
+their support tag. They carry the tag only (HYP-01, PR B); no Elixir rule
+is proved sound |OPEN
+|===
+
 === Properties Proven
 
 ==== 1. Confidence Bounds (`+ConfidenceBounds.idr+`)

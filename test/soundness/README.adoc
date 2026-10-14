@@ -61,6 +61,16 @@ another rule. The commit message MUST justify the removal — the default
 assumption is the entry stays. A bare manifest entry deletion in a PR
 that doesn't also remove the rule should fail review.
 
+== The Lean proof-hole fixture is digest-pinned
+
+`fixtures/code_safety/sorry.lean` is also the target of HYP-01's positive
+control, `tests/accept/LeanHoleRecheckSound.idr`: a sound verdict built
+from a Lean 4 re-check of this file. The control records the file's SHA-256
+and the SHA-256 of Lean's output, and `scripts/recheck-lean-hole.sh`
+(CI: the `lake build` job in `verify-proofs.yml`) re-runs Lean and compares
+them. Any edit to the fixture, a comment included, turns that check red
+until the two digests in the control are re-measured from a fresh run.
+
 == Running
 
   mix test --only soundness            # just the soundness suite

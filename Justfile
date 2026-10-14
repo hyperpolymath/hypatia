@@ -75,6 +75,19 @@ abi-gen:
 compile-verify:
     cd verify && idris2 --build hypatia-verify.ipkg
 
+# HYP-01 verdict gate: ABI builds, tests/accept accepted, tests/reject refused for the stated reason
+check-verdicts:
+    bash scripts/check-verdicts.sh
+
+# Re-run Lean on the proof-hole fixture; digests must match the HYP-01 positive control
+recheck-lean-hole:
+    bash scripts/recheck-lean-hole.sh
+
+# Fetch pinned sibling proof repos, then check every citation resolves at its pin
+check-siblings:
+    bash scripts/fetch-siblings.sh
+    bash scripts/check-sibling-citations.sh
+
 # Model-check TLA+ specifications (e.g. H8 Kin-gate atomicity)
 verify-tlaplus:
     #!/usr/bin/env bash

@@ -43,7 +43,7 @@ Hypatia                       # 133 Elixir modules total
 
 ## Key Commands
 
-`just` is the primary entry point (39 recipes; `CONTRIBUTING.md` treats it as canonical):
+`just` is the primary entry point (43 recipes, `just --summary | wc -w`; `CONTRIBUTING.md` treats it as canonical):
 
 ```bash
 just --list           # every recipe
@@ -172,6 +172,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `REST.idr` | REST endpoint definitions (18 endpoints, 6 groups) |
 | `FFI.idr` | GADT constructors for all C ABI functions + ffiReturnsApiResponse proof |
 | `RuleEngine.idr` | Rule-evaluation types |
+| `Verdict.idr` | Verdict records (HYP-01): support = Pattern / Observed n / Mechanical re-check; `Sound` only from a confirming re-check. Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
 
 **Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
 The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** — that is the
