@@ -34,6 +34,7 @@ been undetectable, so the dead copy was deleted (issue #815, DEBT-REGISTER C-4).
 |`src/Hypatia/ABI/REST.idr` |REST endpoint definitions (18 endpoints, 6 groups)
 |`src/Hypatia/ABI/FFI.idr` |GADT constructors for all 7 C ABI functions + `ffiReturnsApiResponse` proof
 |`src/Hypatia/ABI/RuleEngine.idr` |Rule engine type definitions and proof obligations
+|`src/Hypatia/ABI/Verdict.idr` |Verdict records (HYP-01): every verdict names its support; `Sound` only from a confirming prover re-check. Gate: `just check-verdicts`
 |`src/Hypatia/ABI/Gen.idr` |The generator: evaluates the ABI and emits the generated mirrors
 |===
 

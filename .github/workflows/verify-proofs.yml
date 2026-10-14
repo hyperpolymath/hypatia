@@ -22,6 +22,12 @@ on:
     - src/abi/**
     - src/Hypatia/ABI/**
     - verify/**
+    - tests/accept/**
+    - tests/reject/**
+    - scripts/check-verdicts.sh
+    - scripts/recheck-lean-hole.sh
+    - scripts/fetch-siblings.sh
+    - scripts/check-sibling-citations.sh
     branches:
     - main
   pull_request:
@@ -40,6 +46,12 @@ on:
     - src/abi/**
     - src/Hypatia/ABI/**
     - verify/**
+    - tests/accept/**
+    - tests/reject/**
+    - scripts/check-verdicts.sh
+    - scripts/recheck-lean-hole.sh
+    - scripts/fetch-siblings.sh
+    - scripts/check-sibling-citations.sh
     branches:
     - main
   schedule:
@@ -168,6 +180,13 @@ jobs:
       - name: Build the verify package (PipelineState, Verify.Fuel)
         run: idris2 --build verify/hypatia-verify.ipkg
 
+      # HYP-01: Verdict.idr claims a `Sound` verdict is constructible only
+      # from a confirming prover re-check. The typechecker is the falsifier:
+      # tests/accept/ must be accepted, and every tests/reject/ module must be
+      # refused at `invalid` with the diagnostic its `-- EXPECT:` line names.
+      - name: Verdict accept/reject fixtures (HYP-01)
+        run: bash scripts/check-verdicts.sh
+
       - name: Summary
         if: always()
         run: |
@@ -227,6 +246,13 @@ jobs:
           lean --version
           lake --version
           lake build
+
+      # HYP-01 positive control: the SoundVerdict in
+      # tests/accept/LeanHoleRecheckSound.idr records digests of a Lean run.
+      # Re-run Lean on the fixture from the repository root (where the
+      # control's paths are relative to) and require both digests to match.
+      - name: Re-check the Lean proof-hole fixture against the HYP-01 control
+        run: bash scripts/recheck-lean-hole.sh
 
       - name: Summary
         if: always()
@@ -331,3 +357,23 @@ jobs:
 
       - name: No un-annotated trusted-base markers
         run: bash scripts/check-trusted-base.sh
+
+  # Sibling proof repos are consumed by pinned commit, never re-declared. The
+  # Idris2 records that follow them are transcriptions (correspondence
+  # ASSUMED); this job keeps the citation itself honest: the pin fetches,
+  # the cited definitions exist at it, and the citing header names it.
+  sibling-citations:
+    name: sibling citations at pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Fetch pinned siblings
+        run: bash scripts/fetch-siblings.sh
+
+      - name: Every citation resolves at its pin
+        run: bash scripts/check-sibling-citations.sh
