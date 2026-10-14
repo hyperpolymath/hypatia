@@ -130,4 +130,48 @@ defmodule Hypatia.DispatchManifestTest do
       refute File.exists?(Path.join(dir, "pending.jsonl"))
     end
   end
+
+  # The fleet must never receive a step the manifest refuses (HYP-01).
+  describe "PatternAnalyzer.dispatch_and_write/2" do
+    setup do
+      dir = Path.join(System.tmp_dir!(), "hypatia-dispatch-#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf(dir) end)
+      test_pid = self()
+      {:ok, dir: dir, dispatch: fn action -> send(test_pid, {:dispatched, action}) end}
+    end
+
+    test "a factless step dispatches nothing and writes nothing", %{dir: dir, dispatch: dispatch} do
+      routed = [
+        {:control, %{"id" => "PA006-z", "severity" => "High"}},
+        {:control, %{"severity" => "High"}}
+      ]
+
+      assert {nil, %{total: 0, refused: {:factless_steps, [%{"step" => 1}]}}} =
+               Hypatia.PatternAnalyzer.dispatch_and_write(routed,
+                 dispatch: dispatch,
+                 dispatch_dir: dir
+               )
+
+      refute_received {:dispatched, _}
+      refute File.exists?(Path.join(dir, "pending.jsonl"))
+    end
+
+    test "negative control: when every step names its fact, every action is dispatched",
+         %{dir: dir, dispatch: dispatch} do
+      routed = [
+        {:control, %{"id" => "PA006-z", "severity" => "High"}},
+        {:control, %{"id" => "PA007-w", "severity" => "High"}}
+      ]
+
+      assert {path, %{total: 2}} =
+               Hypatia.PatternAnalyzer.dispatch_and_write(routed,
+                 dispatch: dispatch,
+                 dispatch_dir: dir
+               )
+
+      assert File.exists?(path)
+      assert_received {:dispatched, {:control, %{"id" => "PA006-z"}}}
+      assert_received {:dispatched, {:control, %{"id" => "PA007-w"}}}
+    end
+  end
 end

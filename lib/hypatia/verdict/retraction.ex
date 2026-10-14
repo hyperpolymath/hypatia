@@ -116,7 +116,10 @@ defmodule Hypatia.Verdict.Retraction do
   defp confirming_recheck?(%{kind: "mechanical", result: "confirms"}), do: true
   defp confirming_recheck?(_support), do: false
 
-  defp recheck_retracted?(%{kind: "mechanical", prover: prover}, retracted),
+  # Only a confirming re-check supports the finding, so only its prover can
+  # be retracted support; a refuting re-check never rested the finding on
+  # anything, and naming its prover in :retracted_by would be false.
+  defp recheck_retracted?(%{kind: "mechanical", result: "confirms", prover: prover}, retracted),
     do: MapSet.member?(retracted, {:prover, prover})
 
   defp recheck_retracted?(_support, _retracted), do: false

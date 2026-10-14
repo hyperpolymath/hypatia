@@ -29,6 +29,9 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 2
 deps=_build/dependencies
 
 # citing module | sibling | file in sibling | definition
+# A row means "the citing module names this definition at the pin", whether
+# it transcribes it or says why it does not; the header is the authority on
+# which.
 citations=(
   "src/Hypatia/ABI/Verdict.idr|epistemic-types|src/EpistemicTypes/Warrant.agda|Warrant"
   "src/Hypatia/ABI/Verdict.idr|epistemic-types|src/EpistemicTypes/Warrant.agda|Epi"
@@ -43,6 +46,9 @@ citations=(
   "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|retract-⊆"
   "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|Dependent"
   "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|survives-dependent"
+  # Named in Retraction.idr's header as deliberately NOT transcribed (it
+  # gives back Holds, which the Idris record drops); the row checks only that
+  # the name the header cites exists at the pin.
   "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|dependent-holds"
 )
 

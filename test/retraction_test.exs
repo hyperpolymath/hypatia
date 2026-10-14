@@ -109,6 +109,32 @@ defmodule Hypatia.RetractionTest do
       assert epi.retracted_support.kind == "mechanical"
     end
 
+    test "a refuting re-check never supported the finding, so its prover is never named" do
+      refuted =
+        finding(["code_safety/sorry"])
+        |> Map.put(:support, %{
+          kind: "mechanical",
+          prover: "lean4",
+          prover_version: "4.30.0",
+          target: "t.lean",
+          target_sha256: String.duplicate("a", 64),
+          artefact_sha256: String.duplicate("b", 64),
+          result: "refutes"
+        })
+        |> Verdict.annotate()
+
+      assert refuted.level == "epi"
+
+      # Rule and prover both retracted: the finding rested only on the rule.
+      assert {[], [gone]} =
+               Retraction.retract([refuted], [{:rule, "code_safety/sorry"}, {:prover, "lean4"}])
+
+      assert gone.retracted_by == ["rule:code_safety/sorry"]
+
+      # Only the prover retracted: nothing the finding rested on is gone.
+      assert {[^refuted], []} = Retraction.retract([refuted], [{:prover, "lean4"}])
+    end
+
     test "retracted_by is JSON-encodable" do
       assert {[], [gone]} =
                Retraction.retract([finding(["code_safety/rule_a"])], [
