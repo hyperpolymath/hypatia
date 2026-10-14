@@ -33,3 +33,5 @@ fetch() {
 mkdir -p "$deps"
 # HYP-01 verdict record (src/Hypatia/ABI/Verdict.idr): Warrant / Epi / SoundWarrant.
 fetch epistemic-types hyperpolymath/epistemic-types 6a68de3141a981d766fd006b312f0919ade334bf
+# HYP-01 quarantine as retraction (src/Hypatia/ABI/Retraction.idr): Revision.agda.
+fetch residual-evidence-types hyperpolymath/residual-evidence-types 97244f5cb63bd6697caff261b187b62e9788b692
