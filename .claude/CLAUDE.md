@@ -13,7 +13,7 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 ## Architecture
 
 ```
-Hypatia                       # 140 Elixir modules total (`shopt -s globstar; ls lib/**/*.ex | wc -l`)
+Hypatia                       # 141 Elixir modules total (`shopt -s globstar; ls lib/**/*.ex | wc -l`)
 ├── Elixir pipeline          # core: pattern analysis, dispatch, learning
 ├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
 ├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
@@ -123,6 +123,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `learning_scheduler.ex` | GenServer: polls outcomes every 5 min, drives feedback loop |
 | `self_diagnostics.ex` | Health monitoring, circuit breaker, auto-recovery |
 | `hypatia/verdict.ex` | HYP-01: every finding names its `support`, `evidence` and a derived `level` (mirror of `Verdict.idr`; contract `schema/findings.ncl`) |
+| `hypatia/verdict/retraction.ex` | HYP-01: quarantine retracts the findings resting only on a quarantined rule/bot/prover (`Quarantine.retract_dependents/1`; mirror of `Retraction.idr`) |
 | `application.ex` | OTP Application supervisor for all GenServers |
 
 ### VCL Query Layer (lib/vcl/)
@@ -174,6 +175,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `FFI.idr` | GADT constructors for all C ABI functions + ffiReturnsApiResponse proof |
 | `RuleEngine.idr` | Rule-evaluation types |
 | `Verdict.idr` | Verdict records (HYP-01): support = Pattern / Observed n / Mechanical re-check; `Sound` only from a confirming re-check. Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
+| `Retraction.idr` | Quarantine as retraction (HYP-01): a token survives iff its support thins into what remains; a finding survives through one of its tokens. Transcribed from residual-evidence-types `Revision.agda` @ 97244f5 |
 
 **Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
 The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** — that is the
@@ -277,6 +279,8 @@ into redoing finished work.
    are fully-built GenServers that **no dispatch path actually calls**. Treat the "3 safety
    systems" line in any older doc as describing capability, not enforcement. This is the most
    dangerous stale claim the docs used to make.
+   `Quarantine.retract_dependents/1` (HYP-01) is in the same position: implemented and tested,
+   called by no scan or dispatch path.
 3. **242 tests are dark and red.** The `:verisim_data` tag is excluded unconditionally in
    `test/test_helper.exs`, never included by any workflow, and `mix test --only verisim_data`
    yields **129 failures**. "The suite passes" is therefore scoped to 83% of it.

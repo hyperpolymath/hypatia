@@ -35,6 +35,15 @@ citations=(
   "src/Hypatia/ABI/Verdict.idr|epistemic-types|src/EpistemicTypes/Warrant.agda|SoundWarrant"
   "src/Hypatia/ABI/Verdict.idr|epistemic-types|src/EpistemicTypes/Warrant.agda|sound-epi"
   "src/Hypatia/ABI/Verdict.idr|epistemic-types|src/EpistemicTypes/Applications/RapidNJSkip.agda|no-receipt-reflection"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Context.agda|_⊆_"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Context.agda|⊆-refl"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Context.agda|⊆-trans"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Context.agda|no-thinning-into-empty"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|Retraction"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|retract-⊆"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|Dependent"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|survives-dependent"
+  "src/Hypatia/ABI/Retraction.idr|residual-evidence-types|src/ResidualEvidence/Revision.agda|dependent-holds"
 )
 
 failures=0
