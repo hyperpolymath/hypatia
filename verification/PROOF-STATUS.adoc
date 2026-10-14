@@ -181,6 +181,47 @@ correspondence is a transcription, not a checked proof |ASSUMED
 |`+src/Hypatia/ABI/Verdict.idr+` |Idris2 |Elixir rules carry a proof of
 their support tag. They carry the tag only (HYP-01, PR B); no Elixir rule
 is proved sound |OPEN
+
+|`+src/Hypatia/ABI/Retraction.idr+` |Idris2 |Quarantine as retraction:
+a retraction is a thinning (`+retractThin+`); a token whose support thins
+into the retracted context survives on the same support
+(`+survivesDependent+`); a support naming an assumption that no longer
+occurs does not (`+thinElem+`, `+retractedSupportDies+`); a finding
+survives exactly through one of its tokens (`+survivor+`,
+`+noTokensNoSurvival+`) |PROVEN
+
+|`+tests/reject/RetractedSupportSurvives.idr+` |Idris2 |Expected
+rejection: a token resting on the very rule a quarantine retracts is
+refused as surviving, at `+invalid+` |TESTED
+
+|`+tests/accept/IndependentTokenSurvives.idr+` |Idris2 |Positive
+control: a finding corroborated by two rules survives the quarantine of
+one through the other (`+findingSurvives+`, `+survivesByB+`), and the
+token that rested on the quarantined rule does not (`+tokenADies+`)
+|TESTED
+
+|`+src/Hypatia/ABI/Retraction.idr+` |Idris2 |Correspondence of
+`+Retraction+`, `+Dependent+`, `+survivesDependent+` to Revision.agda in
+hyperpolymath/residual-evidence-types @ 97244f5. Pin and names checked
+(`+sibling-citations+` CI job); transcription, not a checked proof
+|ASSUMED
+
+|Runtime mirror, lib/hypatia/verdict/retraction.ex |Elixir |Quarantine
+retracts the findings that rested only on a quarantined rule, bot or
+prover, keeps corroborated findings on their surviving tokens, and
+restores them on release: test/retraction_test.exs, with the
+untouched-finding negative control and two mutants killed |TESTED
+
+|Runtime wiring |Elixir |`Quarantine.retract_dependents/1` is called by
+a scan or dispatch path. It is not, like the rest of the safety systems
+(CLAUDE.md Known Gap 2) |OPEN
+
+|Derived workflow steps, lib/dispatch_manifest.ex |Elixir |Every
+dispatch-manifest step names the verdict it derives from, and a factless
+step refuses the whole manifest before anything is written:
+test/dispatch_manifest_test.exs. This is hypatia's own derived workflow;
+the Signalbox criterion has no Signalbox repository to apply to |TESTED
+(Signalbox: OPEN)
 |===
 
 === Properties Proven

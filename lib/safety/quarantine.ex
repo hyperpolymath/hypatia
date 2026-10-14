@@ -22,6 +22,15 @@ defmodule Hypatia.Safety.Quarantine do
   - :soft quarantine expires after 24 hours
   - :hard quarantine expires after 72 hours
   - :permanent never expires automatically
+
+  Quarantine is retraction (HYP-01). Every quarantined key, at any level,
+  retracts an assumption: a bot name retracts that bot, `"rule:<module>/<id>"`
+  a rule, `"prover:<name>"` a prover. `retract_dependents/1` applies the
+  retraction to findings: those whose every evidence token rested on a
+  retracted assumption are retracted, and the rest keep only their surviving
+  tokens (`Hypatia.Verdict.Retraction`). A soft quarantine retracts too: it is
+  triggered by a high false-positive rate, which is exactly a reason to stop
+  trusting the findings, whatever the bot may still be dispatched.
   """
 
   use GenServer
@@ -82,6 +91,24 @@ defmodule Hypatia.Safety.Quarantine do
   @doc "Get all quarantined bots"
   def list_quarantined do
     GenServer.call(__MODULE__, :list)
+  end
+
+  @doc """
+  The assumptions the current quarantine table retracts
+  (`Hypatia.Verdict.Retraction.parse/1` of every quarantined key).
+  """
+  def retracted_assumptions do
+    list_quarantined()
+    |> Map.keys()
+    |> MapSet.new(&Hypatia.Verdict.Retraction.parse/1)
+  end
+
+  @doc """
+  Retract the findings that rest only on quarantined bots, rules or provers.
+  Returns `{kept, retracted}`; see `Hypatia.Verdict.Retraction.retract/2`.
+  """
+  def retract_dependents(findings) do
+    Hypatia.Verdict.Retraction.retract(findings, retracted_assumptions())
   end
 
   @doc "Get reroute target for a quarantined bot"

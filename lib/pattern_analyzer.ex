@@ -76,11 +76,11 @@ defmodule Hypatia.PatternAnalyzer do
     # and aggregated confidence from all 5 neural networks.
     routed = enhance_with_neural(routed)
 
-    # Step 5: Dispatch routed actions to fleet
-    Enum.each(routed, &FleetDispatcher.dispatch_routed_action/1)
-
-    # Step 6: Write dispatch manifest (JSONL -- executable by dispatch-runner.sh)
-    {:ok, manifest_path, manifest_stats} = DispatchManifest.write(routed)
+    # Steps 5-6: Dispatch routed actions to the fleet and write the dispatch
+    # manifest (JSONL -- executable by dispatch-runner.sh). Both happen only
+    # when every step names its fact (HYP-01): a refused manifest dispatches
+    # nothing.
+    {manifest_path, manifest_stats} = dispatch_and_write(routed)
 
     Logger.info(
       "Manifest: #{manifest_stats.auto_execute} auto, #{manifest_stats.review} review, " <>
@@ -186,8 +186,7 @@ defmodule Hypatia.PatternAnalyzer do
 
     # Neural enhancement + dispatch
     all_routed = enhance_with_neural(all_routed)
-    Enum.each(all_routed, &FleetDispatcher.dispatch_routed_action/1)
-    {:ok, manifest_path, manifest_stats} = DispatchManifest.write(all_routed)
+    {manifest_path, manifest_stats} = dispatch_and_write(all_routed)
 
     summary =
       generate_summary(all_routed, scans)
@@ -391,5 +390,41 @@ defmodule Hypatia.PatternAnalyzer do
     )
 
     patterns
+  end
+
+  @doc false
+  # HYP-01: facts derive workflows. The manifest is compiled first, and the
+  # routed actions reach the fleet (and the manifest is written) only when
+  # every step names its fact. A refused manifest dispatches nothing and
+  # writes nothing; it is reported as a manifest that was not written (path
+  # nil, zero counts, the refused steps named) instead of crashing the
+  # pipeline on a match against {:ok, _, _}. `opts[:dispatch]` (default
+  # FleetDispatcher.dispatch_routed_action/1) and `opts[:dispatch_dir]` exist
+  # for the tests.
+  def dispatch_and_write(routed, opts \\ []) do
+    dispatch = Keyword.get(opts, :dispatch, &FleetDispatcher.dispatch_routed_action/1)
+    write_opts = Keyword.take(opts, [:dispatch_dir])
+
+    with {:ok, _steps} <- DispatchManifest.compile(routed),
+         :ok <- Enum.each(routed, dispatch),
+         {:ok, path, stats} <- DispatchManifest.write(routed, write_opts) do
+      {path, stats}
+    else
+      {:error, {:factless_steps, steps}} ->
+        Logger.error(
+          "Fleet dispatch skipped: #{length(steps)} routed action(s) name no fact; " <>
+            "nothing dispatched, no manifest written"
+        )
+
+        {nil,
+         %{
+           total: 0,
+           auto_execute: 0,
+           review: 0,
+           report_only: 0,
+           by_tier: %{eliminate: 0, substitute: 0, control: 0},
+           refused: {:factless_steps, steps}
+         }}
+    end
   end
 end

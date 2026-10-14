@@ -23,6 +23,7 @@ modules = Hypatia.ABI.Types
         , Hypatia.ABI.FFI
         , Hypatia.ABI.RuleEngine
         , Hypatia.ABI.Verdict
+        , Hypatia.ABI.Retraction
 
 builddir = "../../build/abi"
 

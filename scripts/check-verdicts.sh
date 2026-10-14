@@ -10,7 +10,7 @@
 #
 #   1. the ABI package builds (the positive set, first: a broken toolchain or
 #      a missing import must never turn into a "successful" rejection);
-#   2. src/Hypatia/ABI/Verdict.idr contains no escape-hatch marker at all;
+#   2. Verdict.idr and Retraction.idr contain no escape-hatch marker at all;
 #   3. every module under tests/accept/ is ACCEPTED (positive controls);
 #   4. every module under tests/reject/ is REFUSED, and refused only at its
 #      declaration `invalid`, with the diagnostic its `-- EXPECT:` line
@@ -39,13 +39,15 @@ mkdir -p "$logs"
 "$idris2" --build src/abi/hypatia-abi.ipkg
 export IDRIS2_PATH="$PWD/build/abi/ttc${IDRIS2_PATH:+:$IDRIS2_PATH}"
 
-# 2. No escape hatch in the module the rejections are about.
-if grep -nE 'believe_me|assert_total|assert_smaller|idris_crash|postulate|sorry|admit|native_decide|Admitted|unsafeCoerce|Obj\.magic' \
-     src/Hypatia/ABI/Verdict.idr; then
-  echo "ERROR: escape-hatch marker in src/Hypatia/ABI/Verdict.idr" >&2
-  exit 1
-fi
-echo "PASS: no escape-hatch marker in src/Hypatia/ABI/Verdict.idr"
+# 2. No escape hatch in the modules the rejections are about.
+for module in src/Hypatia/ABI/Verdict.idr src/Hypatia/ABI/Retraction.idr; do
+  if grep -nE 'believe_me|assert_total|assert_smaller|idris_crash|postulate|sorry|admit|native_decide|Admitted|unsafeCoerce|Obj\.magic' \
+       "$module"; then
+    echo "ERROR: escape-hatch marker in $module" >&2
+    exit 1
+  fi
+  echo "PASS: no escape-hatch marker in $module"
+done
 
 shopt -s nullglob
 accepts=(tests/accept/*.idr)

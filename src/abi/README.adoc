@@ -35,6 +35,7 @@ been undetectable, so the dead copy was deleted (issue #815, DEBT-REGISTER C-4).
 |`src/Hypatia/ABI/FFI.idr` |GADT constructors for all 7 C ABI functions + `ffiReturnsApiResponse` proof
 |`src/Hypatia/ABI/RuleEngine.idr` |Rule engine type definitions and proof obligations
 |`src/Hypatia/ABI/Verdict.idr` |Verdict records (HYP-01): every verdict names its support; `Sound` only from a confirming prover re-check. Gate: `just check-verdicts`
+|`src/Hypatia/ABI/Retraction.idr` |Quarantine as retraction (HYP-01): a finding survives a quarantine only through a token whose support is kept. Gate: `just check-verdicts`
 |`src/Hypatia/ABI/Gen.idr` |The generator: evaluates the ABI and emits the generated mirrors
 |===
 
