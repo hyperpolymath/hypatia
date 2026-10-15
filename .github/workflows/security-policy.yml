@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload audit results
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: rust-audit-report
           path: rust-audit-report.json
@@ -140,7 +140,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.87.24
+        uses: taiki-e/install-action@v2.87.28
         with:
           tool: cargo-deny
 
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload deny results
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: cargo-deny-report
           path: cargo-deny-report.txt
@@ -472,7 +472,7 @@ jobs:
       # ======================================================================
 
       - name: Gate A — verified credentials fail the gate
-        uses: trufflesecurity/trufflehog@v3.97.9
+        uses: trufflesecurity/trufflehog@v3.99.2
         with:
           path: ./
           base: ${{ steps.th.outputs.base }}
@@ -481,7 +481,7 @@ jobs:
           extra_args: --results=verified
 
       - name: Gate B — private keys fail the gate even when unverified
-        uses: trufflesecurity/trufflehog@v3.97.9
+        uses: trufflesecurity/trufflehog@v3.99.2
         with:
           path: ./
           base: ${{ steps.th.outputs.base }}
@@ -690,7 +690,7 @@ jobs:
           fi
 
       - name: Upload license report
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: license-compliance-report
           path: license-report.md
@@ -725,7 +725,7 @@ jobs:
           find . -name 'rust-sbom.cdx.*' -print
 
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: sbom
           path: |
