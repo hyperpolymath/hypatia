@@ -136,11 +136,13 @@ run_pattern() {
     local sev="$4" type="$5" pattern="$6" cwe="$7" fix="$8"
     local auto_fixable="${9:-false}"
     local extra_rg_args="${10:-}"
+    local excluded_dir="${11:-}"
 
     local rg_cmd=(rg -n --no-heading --hidden --glob '!.git/' --glob "$glob" $extra_rg_args "$regex" "$dir")
 
     while IFS=: read -r file linenum rest; do
         [[ -z "$linenum" || ! "$linenum" =~ ^[0-9]+$ ]] && continue
+        [[ -n "$excluded_dir" && "$file" == "${excluded_dir%/}/"* ]] && continue
         # Truncate code to 200 chars to avoid jq issues
         local code="${rest:0:200}"
         emit_finding "$sev" "$type" "$pattern" "$file" "$linenum" "$code" "$cwe" "$fix" "$auto_fixable"
@@ -508,8 +510,13 @@ scan_code_patterns() {
 
     # ── 9. WORKFLOW / CI SECURITY ──────────────────────────────────
 
-    # Unpinned GitHub Actions/reusable workflows (version tag or mutable branch)
-    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@(v[0-9][a-zA-Z0-9._-]*|main|master)' \
+    # Version tags outside root workflows (handled by scan_workflows)
+    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@v[0-9][a-zA-Z0-9._-]*' \
+        "high" "supply_chain" "unpinned_action" "CWE-829" \
+        "Pin GitHub Actions/reusable workflows to full commit SHA" "true" "" "${dir%/}/.github/workflows"
+
+    # Mutable branches in all YAML, including root workflows
+    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@(main|master)' \
         "high" "supply_chain" "unpinned_action" "CWE-829" \
         "Pin GitHub Actions/reusable workflows to full commit SHA" "true"
 
@@ -688,6 +695,12 @@ scan_repo_structure() {
 
 # ─────────────────────────────────────────────────────────────────────
 # Workflow-specific deep checks
+# Scan $1/.github/workflows/*.yml and *.yaml for checkout with
+# pull_request_target, version refs (HYP-S011), and workflow hygiene issues.
+# HYP-S011 matches @v followed by a digit; comment-only lines and lines
+# containing NOSONAR are exempt from that check. Other unpinned refs are
+# not detected by HYP-S011. A missing workflows directory returns success.
+# Append severity-filtered findings to the initialised findings accumulator.
 # ─────────────────────────────────────────────────────────────────────
 scan_workflows() {
     local dir="$1"
@@ -702,10 +715,92 @@ scan_workflows() {
                 "$wf" 0 "pull_request_target + checkout = code execution from untrusted PRs" "CWE-829" \
                 "Do not checkout PR code in pull_request_target; use pull_request instead"
         fi
+
+        # HYP-S011: a uses: ref that is a version tag, not a full commit SHA.
+        # A SHA ref with the tag kept as a trailing comment does NOT match
+        # (the @ is followed by hex, and backtracking cannot reach @v).
+        # Comment lines (documentation examples) and NOSONAR-suppressed lines
+        # (the estate's pin-authority convention, e.g. the actions.lock) are
+        # exempt.
+        while IFS=: read -r line_no rest; do
+            [[ -z "$line_no" ]] && continue
+            [[ "$rest" =~ ^[[:space:]]*# ]] && continue
+            [[ "$rest" == *NOSONAR* ]] && continue
+            if [[ "$rest" =~ uses:[[:space:]]*[^[:space:]]+@v[0-9] ]]; then
+                emit_finding "medium" "ci_resilience" "uses_ref_not_sha" \
+                    "$wf" "$line_no" "workflow uses: ref is a version tag, not a full commit SHA (HYP-S011)" "CWE-1357" \
+                    "Resolve the tag to its commit SHA (the actions.lock carries it) and pin: uses: owner/action@<40-hex>  # vX.Y.Z"
+            fi
+        done < <(grep -n 'uses:' "$wf" 2>/dev/null || true)
     done
 
     # ── WORKFLOW HYGIENE — detect irrelevant workflows per repo ────────
     scan_workflow_hygiene "$dir"
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# HYP-S010: CLADE identity coherence.
+# Check $1/.machine_readable/descriptiles/CLADE.a2ml for template residue,
+# a UUIDv8 profile-C mismatch, and a recorded preimage that differs from
+# the declared owner/name (compared without case). Template residue is
+# exempt when the directory path or origin URL contains rsr-template-repo.
+# UUID minting lowercases the owner but preserves the repository name;
+# skip this check if python3 is unavailable or minting fails.
+# Append severity-filtered findings to the initialised findings accumulator.
+# A missing file returns success. Field extraction failures can terminate
+# the scan under errexit/pipefail; origin lookup failures are tolerated.
+# ─────────────────────────────────────────────────────────────────────
+scan_clade_identity() {
+    local dir="$1"
+    local clade="$dir/.machine_readable/descriptiles/CLADE.a2ml"
+    [[ -f "$clade" ]] || return 0
+
+    local owner name uuid preimage
+    owner=$(grep -oP '^primary-owner = "\K[^"]+' "$clade" 2>/dev/null | head -1)
+    name=$(grep -oP '^canonical-name = "\K[^"]+' "$clade" 2>/dev/null | head -1)
+    uuid=$(grep -oP '^uuid = "\K[^"]+' "$clade" 2>/dev/null | head -1)
+    preimage=$(grep -oP 'gv-clade-index:github\.com/\K[a-zA-Z0-9._/-]+' "$clade" 2>/dev/null | head -1)
+
+    # Template residue: the identity block declares the template.
+    if [[ "$name" == "rsr-template-repo" ]]; then
+        local origin_url=""
+        origin_url=$(git -C "$dir" remote get-url origin 2>/dev/null || true)
+        if [[ "$origin_url" != *rsr-template-repo* && "$dir" != *rsr-template-repo* ]]; then
+            emit_finding "high" "identity_integrity" "clade_template_residue" \
+                "$clade" 0 "CLADE identity block declares rsr-template-repo but this repository is not the template (HYP-S010)" "CWE-1057" \
+                "Declare THIS repository: primary-owner, canonical-name, prefixed-name, forges, born — then re-mint the uuid from that declaration (the fix direction is the owner's ruling, not the reviewer bot's)"
+        fi
+    fi
+
+    # uuid must be recomputable from the declared owner/name (profile C).
+    if command -v python3 >/dev/null 2>&1 && [[ -n "$owner" && -n "$name" && -n "$uuid" ]]; then
+        local expected
+        expected=$(python3 -c '
+import hashlib, sys
+pre = ("gv-clade-index:github.com/%s/%s" % (sys.argv[1].lower(), sys.argv[2])).encode()
+b = bytearray(hashlib.sha256(pre).digest()[:16])
+b[6] = (b[6] & 0x0F) | 0x80
+b[8] = (b[8] & 0x3F) | 0x80
+h = b.hex()
+print(f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}")' "$owner" "$name" 2>/dev/null || true)
+        if [[ -n "$expected" && "$expected" != "$uuid" ]]; then
+            emit_finding "high" "identity_integrity" "clade_uuid_not_recomputable" \
+                "$clade" 0 "CLADE uuid $uuid is not the profile-C mint for the declared $owner/$name (expected $expected) (HYP-S010)" "CWE-1057" \
+                "Either the declaration or the uuid is stale: re-mint from the registered gv-clade-index domain over the preimage the declaration names, and sync CLAUDE.md"
+        fi
+    fi
+
+    # The recorded preimage must identify the declared repository.
+    if [[ -n "$preimage" && -n "$owner" && -n "$name" ]]; then
+        local declared_lc repo_lc
+        declared_lc=$(printf '%s/%s' "$owner" "$name" | tr '[:upper:]' '[:lower:]')
+        repo_lc=$(printf '%s' "$preimage" | tr '[:upper:]' '[:lower:]')
+        if [[ "$declared_lc" != "$repo_lc" ]]; then
+            emit_finding "high" "identity_integrity" "clade_preimage_mismatch" \
+                "$clade" 0 "CLADE preimage identifies $repo_lc but the identity block declares $declared_lc (HYP-S010)" "CWE-1057" \
+                "Two true facts pointing at different repositories: the declaration is THIS repository's — re-mint the uuid from it, or correct the declaration by owner ruling"
+        fi
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -896,6 +991,13 @@ scan_workflow_hygiene() {
 
 # ─────────────────────────────────────────────────────────────────────
 # Main scan orchestrator
+# Scan repository directory $1 for code, structure, workflow and CLADE
+# identity findings, filtered by HYPATIA_SEVERITY (default: medium).
+# Write the report to stdout in HYPATIA_FORMAT: json includes metadata,
+# github emits annotations, and any other value produces a text report.
+# Reset the global findings accumulator; remove its temporary file after
+# reporting. Return 0 for no reported findings, 1 otherwise. Uncaught
+# command failures can terminate the scan before reporting or cleanup.
 # ─────────────────────────────────────────────────────────────────────
 scan_directory() {
     local dir="$1"
@@ -924,6 +1026,7 @@ scan_directory() {
     scan_code_patterns "$dir"
     scan_repo_structure "$dir"
     scan_workflows "$dir"
+    scan_clade_identity "$dir"
 
     close_findings
 
