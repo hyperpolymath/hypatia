@@ -688,6 +688,12 @@ scan_repo_structure() {
 
 # ─────────────────────────────────────────────────────────────────────
 # Workflow-specific deep checks
+# Scan $1/.github/workflows/*.yml and *.yaml for checkout with
+# pull_request_target, version refs (HYP-S011), and workflow hygiene issues.
+# HYP-S011 matches @v followed by a digit; comment-only lines and lines
+# containing NOSONAR are exempt from that check. Other unpinned refs are
+# not detected by HYP-S011. A missing workflows directory returns success.
+# Append severity-filtered findings to the initialised findings accumulator.
 # ─────────────────────────────────────────────────────────────────────
 scan_workflows() {
     local dir="$1"
@@ -727,10 +733,15 @@ scan_workflows() {
 
 # ─────────────────────────────────────────────────────────────────────
 # HYP-S010: CLADE identity coherence.
-# A CLADE.a2ml must declare THIS repository and carry the recomputable
-# UUIDv8 profile-C mint for that declaration. Catches the template-
-# residue class (a repo declaring rsr-template-repo's identity verbatim)
-# and the comment/uuid divergence class, both seen 2026-10-15.
+# Check $1/.machine_readable/descriptiles/CLADE.a2ml for template residue,
+# a UUIDv8 profile-C mismatch, and a recorded preimage that differs from
+# the declared owner/name (compared without case). Template residue is
+# exempt when the directory path or origin URL contains rsr-template-repo.
+# UUID minting lowercases the owner but preserves the repository name;
+# skip this check if python3 is unavailable or minting fails.
+# Append severity-filtered findings to the initialised findings accumulator.
+# A missing file returns success. Field extraction failures can terminate
+# the scan under errexit/pipefail; origin lookup failures are tolerated.
 # ─────────────────────────────────────────────────────────────────────
 scan_clade_identity() {
     local dir="$1"
@@ -973,6 +984,13 @@ scan_workflow_hygiene() {
 
 # ─────────────────────────────────────────────────────────────────────
 # Main scan orchestrator
+# Scan repository directory $1 for code, structure, workflow and CLADE
+# identity findings, filtered by HYPATIA_SEVERITY (default: medium).
+# Write the report to stdout in HYPATIA_FORMAT: json includes metadata,
+# github emits annotations, and any other value produces a text report.
+# Reset the global findings accumulator; remove its temporary file after
+# reporting. Return 0 for no reported findings, 1 otherwise. Uncaught
+# command failures can terminate the scan before reporting or cleanup.
 # ─────────────────────────────────────────────────────────────────────
 scan_directory() {
     local dir="$1"
