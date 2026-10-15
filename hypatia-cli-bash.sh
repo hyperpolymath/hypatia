@@ -702,10 +702,87 @@ scan_workflows() {
                 "$wf" 0 "pull_request_target + checkout = code execution from untrusted PRs" "CWE-829" \
                 "Do not checkout PR code in pull_request_target; use pull_request instead"
         fi
+
+        # HYP-S011: a uses: ref that is a version tag, not a full commit SHA.
+        # A SHA ref with the tag kept as a trailing comment does NOT match
+        # (the @ is followed by hex, and backtracking cannot reach @v).
+        # Comment lines (documentation examples) and NOSONAR-suppressed lines
+        # (the estate's pin-authority convention, e.g. the actions.lock) are
+        # exempt.
+        while IFS=: read -r line_no rest; do
+            [[ -z "$line_no" ]] && continue
+            [[ "$rest" =~ ^[[:space:]]*# ]] && continue
+            [[ "$rest" == *NOSONAR* ]] && continue
+            if [[ "$rest" =~ uses:[[:space:]]*[^[:space:]]+@v[0-9] ]]; then
+                emit_finding "medium" "ci_resilience" "uses_ref_not_sha" \
+                    "$wf" "$line_no" "workflow uses: ref is a version tag, not a full commit SHA (HYP-S011)" "CWE-1357" \
+                    "Resolve the tag to its commit SHA (the actions.lock carries it) and pin: uses: owner/action@<40-hex>  # vX.Y.Z"
+            fi
+        done < <(grep -n 'uses:' "$wf" 2>/dev/null || true)
     done
 
     # ── WORKFLOW HYGIENE — detect irrelevant workflows per repo ────────
     scan_workflow_hygiene "$dir"
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# HYP-S010: CLADE identity coherence.
+# A CLADE.a2ml must declare THIS repository and carry the recomputable
+# UUIDv8 profile-C mint for that declaration. Catches the template-
+# residue class (a repo declaring rsr-template-repo's identity verbatim)
+# and the comment/uuid divergence class, both seen 2026-10-15.
+# ─────────────────────────────────────────────────────────────────────
+scan_clade_identity() {
+    local dir="$1"
+    local clade="$dir/.machine_readable/descriptiles/CLADE.a2ml"
+    [[ -f "$clade" ]] || return 0
+
+    local owner name uuid preimage
+    owner=$(grep -oP '^primary-owner = "\K[^"]+' "$clade" 2>/dev/null | head -1)
+    name=$(grep -oP '^canonical-name = "\K[^"]+' "$clade" 2>/dev/null | head -1)
+    uuid=$(grep -oP '^uuid = "\K[^"]+' "$clade" 2>/dev/null | head -1)
+    preimage=$(grep -oP 'gv-clade-index:github\.com/\K[a-zA-Z0-9._/-]+' "$clade" 2>/dev/null | head -1)
+
+    # Template residue: the identity block declares the template.
+    if [[ "$name" == "rsr-template-repo" ]]; then
+        local origin_url=""
+        origin_url=$(git -C "$dir" remote get-url origin 2>/dev/null || true)
+        if [[ "$origin_url" != *rsr-template-repo* && "$dir" != *rsr-template-repo* ]]; then
+            emit_finding "high" "identity_integrity" "clade_template_residue" \
+                "$clade" 0 "CLADE identity block declares rsr-template-repo but this repository is not the template (HYP-S010)" "CWE-1057" \
+                "Declare THIS repository: primary-owner, canonical-name, prefixed-name, forges, born — then re-mint the uuid from that declaration (the fix direction is the owner's ruling, not the reviewer bot's)"
+        fi
+    fi
+
+    # uuid must be recomputable from the declared owner/name (profile C).
+    if command -v python3 >/dev/null 2>&1 && [[ -n "$owner" && -n "$name" && -n "$uuid" ]]; then
+        local expected
+        expected=$(python3 -c '
+import hashlib, sys
+pre = ("gv-clade-index:github.com/%s/%s" % (sys.argv[1].lower(), sys.argv[2])).encode()
+b = bytearray(hashlib.sha256(pre).digest()[:16])
+b[6] = (b[6] & 0x0F) | 0x80
+b[8] = (b[8] & 0x3F) | 0x80
+h = b.hex()
+print(f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}")' "$owner" "$name" 2>/dev/null || true)
+        if [[ -n "$expected" && "$expected" != "$uuid" ]]; then
+            emit_finding "high" "identity_integrity" "clade_uuid_not_recomputable" \
+                "$clade" 0 "CLADE uuid $uuid is not the profile-C mint for the declared $owner/$name (expected $expected) (HYP-S010)" "CWE-1057" \
+                "Either the declaration or the uuid is stale: re-mint from the registered gv-clade-index domain over the preimage the declaration names, and sync CLAUDE.md"
+        fi
+    fi
+
+    # The recorded preimage must identify the declared repository.
+    if [[ -n "$preimage" && -n "$owner" && -n "$name" ]]; then
+        local declared_lc repo_lc
+        declared_lc=$(printf '%s/%s' "$owner" "$name" | tr '[:upper:]' '[:lower:]')
+        repo_lc=$(printf '%s' "$preimage" | tr '[:upper:]' '[:lower:]')
+        if [[ "$declared_lc" != "$repo_lc" ]]; then
+            emit_finding "high" "identity_integrity" "clade_preimage_mismatch" \
+                "$clade" 0 "CLADE preimage identifies $repo_lc but the identity block declares $declared_lc (HYP-S010)" "CWE-1057" \
+                "Two true facts pointing at different repositories: the declaration is THIS repository's — re-mint the uuid from it, or correct the declaration by owner ruling"
+        fi
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -924,6 +1001,7 @@ scan_directory() {
     scan_code_patterns "$dir"
     scan_repo_structure "$dir"
     scan_workflows "$dir"
+    scan_clade_identity "$dir"
 
     close_findings
 
