@@ -1,0 +1,10 @@
+{
+  "accuracy": {
+    "mse": null,
+    "samples": 0,
+    "mae": null
+  },
+  "drift": "insufficient_data",
+  "predictions_count": 0,
+  "trained": true
+}
