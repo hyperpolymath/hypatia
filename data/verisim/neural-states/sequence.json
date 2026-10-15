@@ -1,0 +1,7 @@
+{
+  "hidden_dim": 32,
+  "max_sequence": 50,
+  "sequence_buffer": [],
+  "trained": false,
+  "weights": null
+}

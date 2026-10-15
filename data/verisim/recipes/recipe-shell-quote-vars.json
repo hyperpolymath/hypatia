@@ -1,8 +1,19 @@
 {
+  "annealing": {
+    "last_reheat": null,
+    "outcome_count": 18640,
+    "stage": "veteran",
+    "temperature": 0.01,
+    "recent_success_rate": 1.0,
+    "drift_detected": false,
+    "max_tier": "auto_execute"
+  },
   "auto_fixable": true,
-  "confidence": 0.99,
+  "confidence": 0.9895,
+  "confidence_raw": 0.99,
   "description": "Quote all shell variable expansions",
-  "failed_fixes": 0,
+  "failed_fixes": 2,
+  "false_positives": 0,
   "fix_script": "fix-shell-quoting.sh",
   "id": "recipe-shell-quote-vars",
   "languages": [
@@ -11,7 +22,7 @@
   "pattern_ids": [
     "PA-CommandInjection-shell_unquoted_var"
   ],
-  "successful_fixes": 166,
-  "total_attempts": 166,
+  "successful_fixes": 3705,
+  "total_attempts": 3707,
   "triangle_tier": "eliminate"
 }

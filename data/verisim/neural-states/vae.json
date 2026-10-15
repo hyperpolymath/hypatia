@@ -1,0 +1,8 @@
+{
+  "cluster_labels": {},
+  "clusters": [],
+  "decoder_weights": null,
+  "encoder_weights": null,
+  "latent_dim": 8,
+  "trained": false
+}

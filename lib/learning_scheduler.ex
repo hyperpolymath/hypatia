@@ -69,6 +69,14 @@ defmodule Hypatia.LearningScheduler do
       total_outcomes_processed: 0,
       total_confidence_updates: 0,
       total_annealing_reheats: 0,
+      # Both keys must exist here before the cycle's map-update touches them:
+      # `%{state | total_strategy_shifts: …}` raises KeyError on a missing key
+      # even when the value expression uses Map.get/3 — the update itself is
+      # the guard. Their absence crashed every learning cycle at line 188
+      # (observed 2026-10-15: the scheduler died on each :poll and restarted,
+      # so confidence updates never landed and the neural organs never trained).
+      total_strategy_shifts: 0,
+      proof_model_retrain_count: 0,
       started_at: DateTime.utc_now(),
       errors: []
     }
