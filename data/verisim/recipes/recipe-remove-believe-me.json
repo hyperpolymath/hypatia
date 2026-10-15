@@ -1,8 +1,19 @@
 {
+  "annealing": {
+    "last_reheat": null,
+    "outcome_count": 5910,
+    "stage": "veteran",
+    "temperature": 0.01,
+    "recent_success_rate": 1.0,
+    "drift_detected": false,
+    "max_tier": "auto_execute"
+  },
   "auto_fixable": false,
-  "confidence": 0.99,
+  "confidence": 0.9895,
+  "confidence_raw": 0.99,
   "description": "Remove believe_me calls from Idris2 code",
-  "failed_fixes": 0,
+  "failed_fixes": 1,
+  "false_positives": 0,
   "fix_script": "fix-believe-me.sh",
   "id": "recipe-remove-believe-me",
   "languages": [
@@ -11,7 +22,7 @@
   "pattern_ids": [
     "PA-unsafe_code-believe_me_usage"
   ],
-  "successful_fixes": 56,
-  "total_attempts": 56,
+  "successful_fixes": 1236,
+  "total_attempts": 1237,
   "triangle_tier": "eliminate"
 }

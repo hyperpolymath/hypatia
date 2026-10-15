@@ -1,0 +1,156 @@
+{
+  "expert_stats": [
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "documentation",
+      "total": 0
+    },
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "accessibility",
+      "total": 0
+    },
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "infrastructure",
+      "total": 0
+    },
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "performance",
+      "total": 0
+    },
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "quality",
+      "total": 0
+    },
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "security",
+      "total": 0
+    },
+    {
+      "activations": 0,
+      "correct": 0,
+      "domain": "sustainability",
+      "total": 0
+    }
+  ],
+  "expert_weights": [
+    {
+      "bias": 0.5,
+      "domain": "documentation",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    },
+    {
+      "bias": 0.5,
+      "domain": "accessibility",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    },
+    {
+      "bias": 0.5,
+      "domain": "infrastructure",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    },
+    {
+      "bias": 0.5,
+      "domain": "performance",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    },
+    {
+      "bias": 0.5,
+      "domain": "quality",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    },
+    {
+      "bias": 0.5,
+      "domain": "security",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    },
+    {
+      "bias": 0.5,
+      "domain": "sustainability",
+      "weights": {
+        "severity": 0.3,
+        "complexity": 0.2,
+        "fix_rate": 0.15,
+        "frequency": 0.2,
+        "recency": 0.15
+      }
+    }
+  ],
+  "gating_weights": [
+    {
+      "domain": "documentation",
+      "weight": 0.14285714285714285
+    },
+    {
+      "domain": "accessibility",
+      "weight": 0.14285714285714285
+    },
+    {
+      "domain": "infrastructure",
+      "weight": 0.14285714285714285
+    },
+    {
+      "domain": "performance",
+      "weight": 0.14285714285714285
+    },
+    {
+      "domain": "quality",
+      "weight": 0.14285714285714285
+    },
+    {
+      "domain": "security",
+      "weight": 0.14285714285714285
+    },
+    {
+      "domain": "sustainability",
+      "weight": 0.14285714285714285
+    }
+  ],
+  "last_trained": null
+}

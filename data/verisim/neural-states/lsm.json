@@ -1,0 +1,11 @@
+{
+  "anomaly_count": 0,
+  "history_length": 0,
+  "summary": {
+    "anomaly_count": 0,
+    "current_activation": 0.0,
+    "history_length": 0,
+    "recent_trend": "stable"
+  },
+  "trained": false
+}

@@ -1,0 +1,8 @@
+{
+  "clusters": {},
+  "edge_weights": [],
+  "embedding_dim": 16,
+  "layer_count": 3,
+  "node_embeddings": {},
+  "trained": false
+}
