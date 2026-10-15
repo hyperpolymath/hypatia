@@ -136,11 +136,13 @@ run_pattern() {
     local sev="$4" type="$5" pattern="$6" cwe="$7" fix="$8"
     local auto_fixable="${9:-false}"
     local extra_rg_args="${10:-}"
+    local excluded_dir="${11:-}"
 
     local rg_cmd=(rg -n --no-heading --hidden --glob '!.git/' --glob "$glob" $extra_rg_args "$regex" "$dir")
 
     while IFS=: read -r file linenum rest; do
         [[ -z "$linenum" || ! "$linenum" =~ ^[0-9]+$ ]] && continue
+        [[ -n "$excluded_dir" && "$file" == "${excluded_dir%/}/"* ]] && continue
         # Truncate code to 200 chars to avoid jq issues
         local code="${rest:0:200}"
         emit_finding "$sev" "$type" "$pattern" "$file" "$linenum" "$code" "$cwe" "$fix" "$auto_fixable"
@@ -508,8 +510,13 @@ scan_code_patterns() {
 
     # ── 9. WORKFLOW / CI SECURITY ──────────────────────────────────
 
-    # Unpinned GitHub Actions/reusable workflows (version tag or mutable branch)
-    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@(v[0-9][a-zA-Z0-9._-]*|main|master)' \
+    # Version tags outside root workflows (handled by scan_workflows)
+    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@v[0-9][a-zA-Z0-9._-]*' \
+        "high" "supply_chain" "unpinned_action" "CWE-829" \
+        "Pin GitHub Actions/reusable workflows to full commit SHA" "true" "" "${dir%/}/.github/workflows"
+
+    # Mutable branches in all YAML, including root workflows
+    run_pattern "$dir" "*.{yml,yaml}" 'uses:\s+[a-zA-Z0-9_.-]+/[a-zA-Z0-9_./-]+@(main|master)' \
         "high" "supply_chain" "unpinned_action" "CWE-829" \
         "Pin GitHub Actions/reusable workflows to full commit SHA" "true"
 
