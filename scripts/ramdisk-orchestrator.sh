@@ -165,6 +165,13 @@ check_resources() {
 # ─────────────────────────────────────────────────────────────────────
 # Mount / unmount
 # ─────────────────────────────────────────────────────────────────────
+# Prepare MOUNT_POINT with repos, findings, fixes and logs subdirectories,
+# using tmpfs when USE_TMPFS is true and RAMDISK_SIZE as its size limit.
+# Reuse writable mounts; attempt to unmount and replace unwritable mounts.
+# Without passwordless sudo, set USE_TMPFS=false and change MOUNT_POINT to
+# WORKSPACE_BASE/hypatia-workspace-$$ for a disk workspace.
+# Dry runs only create MOUNT_POINT. Failed mounts or directory creation
+# terminate the script under set -e.
 mount_workspace() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log "[DRY-RUN] Would mount tmpfs (${RAMDISK_SIZE}) at $MOUNT_POINT"
