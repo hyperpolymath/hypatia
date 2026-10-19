@@ -1112,7 +1112,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # ─── WF026: SHA-pinned dtolnay/rust-toolchain with no toolchain: input ──
 
-  @toolchain_sha_pin ~r/^\s*(?:-\s+)?uses:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
+  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
 
   @doc """
   WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
@@ -1131,11 +1131,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   Sensitivity / specificity:
     * Fires only on `uses: dtolnay/rust-toolchain@<40-hex>` whose step —
-      the whole list item, from its opening `- ` line, so a `with:` written
-      above `uses:` counts (YAML mapping keys carry no order) — has no
-      `with:` mapping naming `toolchain:`, in block form (a direct child of
-      `with:`) or flow form (`with: { toolchain: stable }`). A tag-pinned
-      step carries its channel in the ref and never fires.
+      the whole list item, from its opening `- ` line (a bare `-` on its own
+      line opens a step too), so a `with:` written above `uses:` counts
+      (YAML mapping keys carry no order) — has no `with:` mapping naming
+      `toolchain:`, in block form (a direct child of `with:`) or flow form
+      (`with: { toolchain: stable }`). A tag-pinned step carries its channel
+      in the ref and never fires. Keys may be quoted (`"uses":`): the same
+      key to GitHub, the same key here.
+    * Only a `uses:` that is a KEY OF THE STEP MAPPING is the step's action.
+      The same text nested under `env:`, inside a `run: |` script that
+      writes a fixture, or under any other key is data: no finding, so the
+      fleet is never sent to rewrite script text.
     * Only `with:` decides: `toolchain:` under `env:` or any other key is
       not an action input and does not rescue the step.
     * The step is bounded by indentation, so a later step's `toolchain:`
@@ -1155,28 +1161,37 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> Enum.flat_map(fn {line, number} ->
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
-            if wf026_with_names_toolchain?(wf026_step(lines, number)) do
-              []
-            else
-              [
-                %{
-                  rule: "WF026",
-                  type: :sha_pinned_toolchain_without_input,
-                  file: filename,
-                  line: number,
-                  current_sha: sha,
-                  severity: :medium,
-                  auto_fixable: true,
-                  fix_script: "fix-rust-toolchain-input.sh",
-                  reason:
-                    "`dtolnay/rust-toolchain` is pinned at `@#{sha}` with no `toolchain:` " <>
-                      "input. The action reads the channel from its `@`-ref; a commit SHA " <>
-                      "carries none, so the step exits 1 with \"'toolchain' is a required " <>
-                      "input\" before any cargo command runs and the red reads as a code " <>
-                      "failure. Add `with: toolchain: stable` (or the channel you mean).",
-                  action: :add_toolchain_input
-                }
-              ]
+            {step, key_indent} = wf026_step(lines, number)
+
+            cond do
+              # `uses:` nested under `env:`, inside a `run: |` script or under
+              # any other key is data, not the step's action.
+              wf026_key_indent(line) != key_indent ->
+                []
+
+              wf026_with_names_toolchain?(step, key_indent) ->
+                []
+
+              true ->
+                [
+                  %{
+                    rule: "WF026",
+                    type: :sha_pinned_toolchain_without_input,
+                    file: filename,
+                    line: number,
+                    current_sha: sha,
+                    severity: :medium,
+                    auto_fixable: true,
+                    fix_script: "fix-rust-toolchain-input.sh",
+                    reason:
+                      "`dtolnay/rust-toolchain` is pinned at `@#{sha}` with no `toolchain:` " <>
+                        "input. The action reads the channel from its `@`-ref; a commit SHA " <>
+                        "carries none, so the step exits 1 with \"'toolchain' is a required " <>
+                        "input\" before any cargo command runs and the red reads as a code " <>
+                        "failure. Add `with: toolchain: stable` (or the channel you mean).",
+                    action: :add_toolchain_input
+                  }
+                ]
             end
 
           _ ->
@@ -1198,22 +1213,29 @@ defmodule Hypatia.Rules.WorkflowAudit do
     cond do
       trimmed == "" -> true
       String.starts_with?(trimmed, "#") -> true
-      Regex.match?(~r/^\s*-\s/, line) and wf026_indent(line) <= step_indent -> false
+      Regex.match?(~r/^\s*-(?:\s|$)/, line) and wf026_indent(line) <= step_indent -> false
       wf026_indent(line) < step_indent -> false
       true -> true
     end
   end
 
+  defp wf026_plain?(line) do
+    trimmed = String.trim(line)
+    trimmed != "" and not String.starts_with?(trimmed, "#")
+  end
+
   # The whole list item the `uses:` line at `number` (1-based) belongs to:
   # from its opening `- ` line — which may sit above `uses:`, since YAML
-  # mapping keys carry no order — to the next list item at that indentation
-  # or shallower, or a shallower key.
+  # mapping keys carry no order, and may be a bare `-` on its own line — to
+  # the next list item at that indentation or shallower, or a shallower key.
+  # Returns the step's lines and the column of its keys, so a caller can tell
+  # a key of the step mapping from the same text nested under another key.
   defp wf026_step(lines, number) do
     uses_line = Enum.at(lines, number - 1)
     uses_indent = wf026_indent(uses_line)
 
     {opener, step_indent} =
-      if Regex.match?(~r/^\s*-\s/, uses_line) do
+      if Regex.match?(~r/^\s*-(?:\s|$)/, uses_line) do
         {number, uses_indent}
       else
         lines
@@ -1221,7 +1243,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         |> Enum.with_index(1)
         |> Enum.reverse()
         |> Enum.find(fn {l, _} ->
-          Regex.match?(~r/^\s*-\s/, l) and wf026_indent(l) < uses_indent
+          Regex.match?(~r/^\s*-(?:\s|$)/, l) and wf026_indent(l) < uses_indent
         end)
         |> case do
           {l, i} -> {i, wf026_indent(l)}
@@ -1234,28 +1256,50 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> Enum.drop(opener)
       |> Enum.take_while(&wf026_step_line?(&1, step_indent))
 
-    [Enum.at(lines, opener - 1) | rest]
+    step = [Enum.at(lines, opener - 1) | rest]
+    {step, wf026_step_key_indent(step)}
+  end
+
+  # The column of the step's keys: the opener's key (`- uses:` -> the column
+  # of `uses`), or for a bare `-` the indentation of the first plain line
+  # under it.
+  defp wf026_step_key_indent([opener | rest]) do
+    cond do
+      Regex.match?(~r/^\s*-\s+\S/, opener) ->
+        wf026_key_indent(opener)
+
+      Regex.match?(~r/^\s*-\s*$/, opener) ->
+        case Enum.find(rest, &wf026_plain?/1) do
+          nil -> wf026_indent(opener) + 2
+          l -> wf026_indent(l)
+        end
+
+      true ->
+        wf026_indent(opener)
+    end
   end
 
   # True when the step's `with:` mapping names `toolchain:` — block form (a
   # direct child of `with:`) or flow form (`with: { toolchain: stable }`).
-  # `toolchain:` under `env:` or any other key is not an action input.
-  defp wf026_with_names_toolchain?(step) do
+  # Only a `with:` at the step's key column is the step's own; `toolchain:`
+  # under `env:` or any other key is not an action input.
+  defp wf026_with_names_toolchain?(step, key_indent) do
     step
     |> Enum.with_index()
     |> Enum.any?(fn {line, i} ->
       cond do
-        Regex.match?(~r/^\s*(?:-\s+)?with:\s*\{/, line) ->
+        wf026_key_indent(line) != key_indent ->
+          false
+
+        Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*\{/, line) ->
           Regex.match?(~r/[{,]\s*["']?toolchain["']?\s*:\s*[^\s,}]/, line)
 
-        Regex.match?(~r/^\s*(?:-\s+)?with:\s*(?:#.*)?$/, line) ->
-          with_indent = wf026_key_indent(line)
-
+        Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*(?:#.*)?$/, line) ->
           step
           |> Enum.drop(i + 1)
           |> Enum.take_while(fn l ->
             trimmed = String.trim(l)
-            trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > with_indent
+            trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > key_indent
           end)
           |> Enum.any?(&Regex.match?(~r/^\s*["']?toolchain["']?\s*:\s*\S/, &1))
 

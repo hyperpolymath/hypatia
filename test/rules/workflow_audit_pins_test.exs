@@ -165,6 +165,53 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "a quoted \"uses\" key is the same key: it fires like the bare one" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - "uses": "dtolnay/rust-toolchain@#{@toolchain_sha}"
+      """
+
+      assert [%{rule: "WF026", line: 4}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "the same text inside a run: | script or under env: is not the step's action" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - name: write a fixture
+              run: |
+                cat > fixture.yml <<'EOF'
+                uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+                EOF
+            - uses: dtolnay/rust-toolchain@stable
+              env:
+                uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "a bare - opener is a step: with: above uses: rescues it, a bare uses: still fires" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            -
+              with:
+                toolchain: nightly
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+            -
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [%{line: 9}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "the audit carries WF026 findings and a count" do
       wf = "jobs:\n  a:\n    steps:\n      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n"
       result = WorkflowAudit.audit(["rust.yml"], %{"rust.yml" => wf})
