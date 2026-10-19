@@ -287,7 +287,17 @@ defmodule Hypatia.Rules.ActionsLockTest do
     assert {:ok, _} = ActionsLock.parse(with_host.("github.com"))
     assert {:ok, _} = ActionsLock.parse(with_host.("acme.ghe.com"))
 
-    for bad <- ["GitHub.com", "example.com", "acme.ghe.com.evil", "-x.ghe.com"] do
+    long_label = String.duplicate("a", 64) <> ".ghe.com"
+    assert {:ok, _} = ActionsLock.parse(with_host.(String.duplicate("a", 63) <> ".ghe.com"))
+
+    for bad <- [
+          "GitHub.com",
+          "example.com",
+          "acme.ghe.com.evil",
+          "-x.ghe.com",
+          "foo.bar.ghe.com",
+          long_label
+        ] do
       assert {:error, {:line, _, {:malformed_dependency_hostname, ^bad}}} =
                ActionsLock.parse(with_host.(bad))
     end
@@ -310,6 +320,37 @@ defmodule Hypatia.Rules.ActionsLockTest do
       )
 
     assert {:error, {:line, _, :malformed_dependency_hostname}} = ActionsLock.parse(v2_with_host)
+  end
+
+  test "scopes owner and repository identities to their v0.0.3 host" do
+    mixed = """
+    version: 'v0.0.3'
+    workflows:
+        '.github/workflows/ci.yml':
+            - 'acme/foo@v1'
+            - 'acme/bar@v1'
+    dependencies:
+        'acme/bar@v1':
+            hostname: 'github.com'
+            ref: 'v1'
+            commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+            owner_id: 2
+            repo_id: 20
+        'acme/foo@v1':
+            ref: 'v1'
+            commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+            owner_id: 1
+            repo_id: 20
+    """
+
+    assert {:ok, lock} = ActionsLock.parse(mixed)
+    assert lock.dependencies["acme/bar@v1"].hostname == "github.com"
+    assert lock.dependencies["acme/foo@v1"].hostname == nil
+
+    same_host = String.replace(mixed, "        hostname: 'github.com'\n", "")
+
+    assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
+             ActionsLock.parse(same_host)
   end
 
   test "parses the repository's authoritative generated lockfile" do

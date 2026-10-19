@@ -20,7 +20,8 @@ defmodule Hypatia.Rules.ActionsLock do
   # v0.0.3 (gh-actions-lock 0.2.0) adds only an optional per-dependency
   # `hostname`; v0.0.2 locks stay valid.
   @supported_versions ["v0.0.2", "v0.0.3"]
-  @hostname ~r/^(?:github\.com|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.ghe\.com)$/
+  # The v0.0.3 schema pattern: github.com or one 1-63 character tenant label.
+  @hostname ~r/^(?:github\.com|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ghe\.com)$/
   @hostname_line ~r/^        hostname: '([^']+)'$/
   @action_ref ~r/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@[^\s':]+$/
   @dependency_key ~r/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[^\s':]+$/
@@ -33,6 +34,7 @@ defmodule Hypatia.Rules.ActionsLock do
           commit: String.t(),
           owner_id: pos_integer(),
           repo_id: pos_integer(),
+          hostname: String.t() | nil,
           uses: MapSet.t(String.t())
         }
   @type t :: %__MODULE__{
@@ -326,6 +328,8 @@ defmodule Hypatia.Rules.ActionsLock do
   defp finalize_dependency(state) do
     {key, dependency, header_line} = state.current_dependency
     normalized = normalise_ref(key)
+    # nil is the home host; v0.0.3 records owner and repo IDs per host.
+    hostname = Map.get(dependency, :hostname)
 
     with {:ok, ref} <- fetch_dependency_field(dependency, :ref, key, header_line),
          {:ok, commit} <- fetch_dependency_field(dependency, :commit, key, header_line),
@@ -334,7 +338,7 @@ defmodule Hypatia.Rules.ActionsLock do
          :ok <- validate_dependency_consistency(key, ref, commit, header_line),
          :ok <-
            validate_repository_identity(
-             state.dependencies,
+             Map.filter(state.dependencies, fn {_ref, d} -> d.hostname == hostname end),
              normalized,
              owner_id,
              repo_id,
@@ -346,6 +350,7 @@ defmodule Hypatia.Rules.ActionsLock do
         commit: commit,
         owner_id: owner_id,
         repo_id: repo_id,
+        hostname: hostname,
         uses: Map.get(dependency, :uses, MapSet.new())
       }
 
