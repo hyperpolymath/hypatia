@@ -49,6 +49,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y chezscheme
 
+      # The cached ~/.idris2 holds a Chez-compiled idris2.so. A fasl-object
+      # is only loadable by the Chez that wrote it, and `ubuntu-latest` moved
+      # to a newer image (26.04) with a newer Chez, so the old cache restored
+      # an idris2.so the new Chez refuses:
+      #   Exception: incompatible fasl-object version 0.0.0-pre-release.73
+      # The installed chezscheme package version is therefore part of the key,
+      # so an image or package bump rebuilds Idris 2 instead of loading a stale
+      # build. Keep this step and the key in step with abi-codegen-drift.yml /
+      # verify-proofs.yml, which share one cache entry on purpose.
+      - name: Chez Scheme version (Idris 2 cache key)
+        id: chez
+        run: |
+          set -euo pipefail
+          v="$(dpkg-query -W -f='${Version}' chezscheme | tr -c 'A-Za-z0-9.' '-')"
+          [ -n "$v" ]
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
       - name: Cache Idris 2 install
         id: cache-idris
         uses: actions/cache@v6.1.0
@@ -60,7 +77,7 @@ jobs:
           # bootstrap. Keep the suffix in step with it. `-3` = the
           # single-prefix layout (#820); `-2` and earlier entries are the
           # split-prefix caches and must not be restored.
-          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-3
+          key: idris2-${{ env.IDRIS2_VERSION }}-${{ runner.os }}-chez${{ steps.chez.outputs.version }}-3
 
       - name: Build Idris 2 from source
         if: steps.cache-idris.outputs.cache-hit != 'true'
