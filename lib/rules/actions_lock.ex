@@ -18,12 +18,20 @@ defmodule Hypatia.Rules.ActionsLock do
   closed rather than being guessed at.
 
   v0.0.3 is what gh-actions-lock v0.2.0 writes, and the version the estate gate
-  pins (standards#1250). Its line grammar is the v0.0.2 grammar: the same
-  `workflows:` and `dependencies:` sections, the same record fields (`ref`,
-  `commit`, `owner_id`, `repo_id`, `uses`) and the same `'<path>': []` form for a
-  workflow with nothing to lock (measured on rsr-template-repo and this repo's
-  own lock, 2026-10-19). Both versions are therefore parsed by one grammar; any
-  other version string is still refused.
+  pins (standards#1250). For github.com dependencies its line grammar is the
+  v0.0.2 grammar: the same `workflows:` and `dependencies:` sections, the same
+  record fields (`ref`, `commit`, `owner_id`, `repo_id`, `uses`) and the same
+  `'<path>': []` form for a workflow with nothing to lock (measured on
+  rsr-template-repo and this repo's own lock, 2026-10-19). Any other version
+  string is still refused.
+
+  The one v0.0.3 addition is an optional per-dependency `hostname`, which
+  gh-actions-lock writes only for a GHE.com data-residency tenant
+  (`hostname,omitempty`). An explicit `hostname: 'github.com'` is accepted as the
+  default it states. Any other host is refused as
+  `{:unsupported_dependency_hostname, host}`. Repository identity is validated
+  per host, this parser models github.com only, and the estate has no tenant
+  locks.
   """
 
   @supported_versions ["v0.0.2", "v0.0.3"]
@@ -221,6 +229,16 @@ defmodule Hypatia.Rules.ActionsLock do
 
       Regex.match?(~r/^        (?:owner_id|repo_id):/, line) ->
         line_error(line_number, :malformed_dependency_identity)
+
+      # v0.0.3 only: an explicit github.com host is the default spelled out.
+      line == "        hostname: 'github.com'" and state.version == "v0.0.3" ->
+        put_dependency_field(state, :hostname, "github.com", line_number)
+
+      # A GHE.com tenant host is refused by name: owner/repo identity is
+      # validated per host, and this parser models github.com only.
+      match = state.version == "v0.0.3" && Regex.run(~r/^        hostname: '([^']+)'$/, line) ->
+        [_, host] = match
+        line_error(line_number, {:unsupported_dependency_hostname, host})
 
       line == "        uses:" ->
         put_dependency_field(state, :uses, MapSet.new(), line_number)
