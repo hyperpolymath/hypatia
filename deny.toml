@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MPL-2.0
+# cargo-deny configuration for hypatia
+#
+# Checked in so the "Rust License & Ban Check" job stops generating its
+# fallback config. That fallback uses the pre-0.16 schema
+# (`vulnerability`/`unmaintained = "warn"`/`notice`/`unlicensed`/`copyleft`/
+# `default`), which current cargo-deny refuses to deserialize. Under the v2
+# schema vulnerabilities are always denied; `unmaintained`/`yanked` keep the
+# old advisory-only intent.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+unmaintained = "none"
+yanked = "warn"
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
