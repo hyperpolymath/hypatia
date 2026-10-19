@@ -104,8 +104,7 @@ defmodule Hypatia.Rules.ActionsLockTest do
   test "rejects symbolic-ref and SHA-key contradictions" do
     symbolic = String.replace(@valid_lock, "ref: 'v7.0.1'", "ref: 'v6.0.0'")
 
-    assert {:error, {:line, _, {:symbolic_key_ref_mismatch, _, _}}} =
-             ActionsLock.parse(symbolic)
+    assert {:error, {:line, _, {:symbolic_key_ref_mismatch, _, _}}} = ActionsLock.parse(symbolic)
 
     sha_key = """
     version: 'v0.0.2'
@@ -268,10 +267,49 @@ defmodule Hypatia.Rules.ActionsLockTest do
         "    'actions/checkout@refs:heads/main':\n"
       )
 
-    assert {:error, {:line, _, {:malformed_dependency_key, _}}} =
-             ActionsLock.parse(subpath_key)
+    assert {:error, {:line, _, {:malformed_dependency_key, _}}} = ActionsLock.parse(subpath_key)
 
     assert {:error, {:line, _, {:malformed_dependency_key, _}}} = ActionsLock.parse(colon_key)
+  end
+
+  test "accepts v0.0.3 locks and validates the optional hostname" do
+    v3 = String.replace(@valid_lock, "v0.0.2", "v0.0.3")
+    assert {:ok, %ActionsLock{version: "v0.0.3"}} = ActionsLock.parse(v3)
+
+    with_host = fn host ->
+      String.replace(
+        v3,
+        "        repo_id: 197814629\n",
+        "        repo_id: 197814629\n        hostname: '#{host}'\n"
+      )
+    end
+
+    assert {:ok, _} = ActionsLock.parse(with_host.("github.com"))
+    assert {:ok, _} = ActionsLock.parse(with_host.("acme.ghe.com"))
+
+    for bad <- ["GitHub.com", "example.com", "acme.ghe.com.evil", "-x.ghe.com"] do
+      assert {:error, {:line, _, {:malformed_dependency_hostname, ^bad}}} =
+               ActionsLock.parse(with_host.(bad))
+    end
+
+    dup =
+      String.replace(
+        with_host.("github.com"),
+        "hostname: 'github.com'\n",
+        "hostname: 'github.com'\n        hostname: 'github.com'\n"
+      )
+
+    assert {:error, {:line, _, {:duplicate_dependency_field, _, :hostname}}} =
+             ActionsLock.parse(dup)
+
+    v2_with_host =
+      String.replace(
+        @valid_lock,
+        "        repo_id: 197814629\n",
+        "        repo_id: 197814629\n        hostname: 'github.com'\n"
+      )
+
+    assert {:error, {:line, _, :malformed_dependency_hostname}} = ActionsLock.parse(v2_with_host)
   end
 
   test "parses the repository's authoritative generated lockfile" do
