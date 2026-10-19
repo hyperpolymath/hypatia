@@ -145,6 +145,39 @@ defmodule Hypatia.Rules.ActionsLockTest do
       assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == nil
     end
 
+    test "scopes owner/repo identity checks to the dependency's host" do
+      # Same owner name and repo, different numeric IDs: a conflict within one
+      # host, but legitimate across hosts (IDs are numbered per instance).
+      two_pins = """
+      version: 'v0.0.3'
+      workflows:
+          '.github/workflows/ci.yml':
+              - 'actions/checkout@v7.0.1'
+              - 'actions/setup-node@v7.0.0'
+      dependencies:
+          'actions/checkout@v7.0.1':
+              ref: 'v7.0.1'
+              commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+              owner_id: 44036562
+              repo_id: 197814629
+          'actions/setup-node@v7.0.0':
+              HOST
+              ref: 'v7.0.0'
+              commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+              owner_id: 99
+              repo_id: 12345
+      """
+
+      same_host = Regex.replace(~r/^ *HOST\n/m, two_pins, "")
+
+      assert {:error, {:line, _, {:owner_identity_mismatch, "actions", 44_036_562, 99}}} =
+               ActionsLock.parse(same_host)
+
+      cross_host = String.replace(two_pins, "HOST", "hostname: 'octocorp.ghe.com'")
+      assert {:ok, parsed} = ActionsLock.parse(cross_host)
+      assert parsed.dependencies["actions/setup-node@v7.0.0"].hostname == "octocorp.ghe.com"
+    end
+
     test "refuses a malformed, repeated, or v0.0.2 hostname" do
       with_host = fn host ->
         String.replace(

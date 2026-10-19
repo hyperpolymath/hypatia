@@ -23,9 +23,10 @@ defmodule Hypatia.Rules.ActionsLock do
   accepted in v0.0.3 only, and only as `github.com` or a lowercase
   `<tenant>.ghe.com`. Any other new line shape still fails closed.
 
-  Limits: `pinned?/3` and the repository-identity checks key on
-  `owner/repo@ref` and ignore the host, so two pins that differ only by host
-  are not told apart.
+  Owner/repository ID consistency is checked per host (IDs are numbered per
+  GitHub instance). Limit: `pinned?/3` keys on `owner/repo@ref` and ignores the
+  host, and an omitted hostname is a scope of its own, distinct from an
+  explicit `github.com`.
   """
 
   @supported_versions ["v0.0.2", "v0.0.3"]
@@ -350,7 +351,7 @@ defmodule Hypatia.Rules.ActionsLock do
          :ok <- validate_dependency_consistency(key, ref, commit, header_line),
          :ok <-
            validate_repository_identity(
-             state.dependencies,
+             scope_to_host(state.dependencies, Map.get(dependency, :hostname)),
              normalized,
              owner_id,
              repo_id,
@@ -376,6 +377,16 @@ defmodule Hypatia.Rules.ActionsLock do
       true -> line_error(header_line, {:duplicate_dependency, key})
       {:error, _reason} = error -> error
     end
+  end
+
+  # Owner and repository IDs are numbered per GitHub instance (the v0.0.3
+  # schema defines them "on the recorded hostname"), so identity is compared
+  # only among pins recorded on the same host. An omitted hostname is its own
+  # scope (the lock's home host).
+  defp scope_to_host(dependencies, hostname) do
+    dependencies
+    |> Enum.filter(fn {_ref, dependency} -> dependency.hostname == hostname end)
+    |> Map.new()
   end
 
   defp validate_repository_identity(dependencies, normalized, owner_id, repo_id, line_number) do
