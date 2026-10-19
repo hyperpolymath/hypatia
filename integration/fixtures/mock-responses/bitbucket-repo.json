@@ -1,6 +1,6 @@
 {
   "type": "repository",
-  "uuid": "{12345678-1234-1234-1234-123456789abc}",
+  "uuid": "{12345678-1234-8234-8234-123456789abc}",
   "full_name": "hyperpolymath/test-repo",
   "name": "test-repo",
   "slug": "test-repo",
@@ -15,13 +15,13 @@
   "has_wiki": false,
   "owner": {
     "type": "user",
-    "uuid": "{87654321-4321-4321-4321-cba987654321}",
+    "uuid": "{87654321-4321-8321-8321-cba987654321}",
     "username": "hyperpolymath",
     "display_name": "hyperpolymath",
-    "account_id": "123456:abcdef12-3456-7890-abcd-ef1234567890",
+    "account_id": "123456:abcdef12-3456-8890-abcd-ef1234567890",
     "links": {
       "self": {
-        "href": "https://api.bitbucket.org/2.0/users/%7B87654321-4321-4321-4321-cba987654321%7D"
+        "href": "https://api.bitbucket.org/2.0/users/%7B87654321-4321-8321-8321-cba987654321%7D"
       },
       "html": {
         "href": "https://bitbucket.org/hyperpolymath/"
@@ -33,7 +33,7 @@
   },
   "workspace": {
     "type": "workspace",
-    "uuid": "{87654321-4321-4321-4321-cba987654321}",
+    "uuid": "{87654321-4321-8321-8321-cba987654321}",
     "name": "hyperpolymath",
     "slug": "hyperpolymath",
     "links": {
@@ -51,7 +51,7 @@
   "project": {
     "type": "project",
     "key": "TEST",
-    "uuid": "{11111111-1111-1111-1111-111111111111}",
+    "uuid": "{11111111-1111-8111-8111-111111111111}",
     "name": "Test Project",
     "links": {
       "self": {
