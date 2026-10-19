@@ -145,7 +145,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
-    test "env.toolchain is not an input: the step fires whether env: sits below or above uses:" do
+    test "env.toolchain is not an input, below or above uses:" do
       wf = """
       jobs:
         check:
@@ -216,7 +216,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert Enum.all?(row.shas, &Regex.match?(~r/^[0-9a-f]{40}$/, &1))
     end
 
-    test "the reusable's path inside a run: script or a string value is not a pin" do
+    test "the path inside a run: script or a string value is not a pin" do
       wf = """
       jobs:
         note:

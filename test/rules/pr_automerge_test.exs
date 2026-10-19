@@ -162,6 +162,19 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert decision.pool == "P1"
     end
 
+    test "a quoted uses: key and a quoted value are still a pin PA001 sees" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - "uses": "github/codeql-action/init@#{@good}"
+      +      - "uses": "github/codeql-action/init@#{@poison}"
+      """
+
+      decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
+
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
     test "poison alongside a wanted update is excised, then merged" do
       patch = """
       @@ -1,4 +1,4 @@
