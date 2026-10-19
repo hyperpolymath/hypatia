@@ -107,6 +107,64 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "silent when with: is written above uses: (YAML keys carry no order)" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - with:
+                toolchain: stable
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "silent on a flow with: that names a toolchain" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { toolchain: stable, components: clippy }
+      """
+
+      assert [] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "fires on a flow with: without a toolchain" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { components: clippy }
+      """
+
+      assert [%{rule: "WF026", line: 4}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "env.toolchain is not an input: the step fires whether env: sits below or above uses:" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - name: toolchain via env only
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              env:
+                toolchain: stable
+            - env:
+                toolchain: beta
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                components: clippy
+      """
+
+      assert [%{line: 5}, %{line: 10}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "the audit carries WF026 findings and a count" do
       wf = "jobs:\n  a:\n    steps:\n      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n"
       result = WorkflowAudit.audit(["rust.yml"], %{"rust.yml" => wf})
@@ -156,6 +214,30 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert "49ed4715" |> then(&Enum.any?(row.shas, fn s -> String.starts_with?(s, &1) end))
       refute row.replacement in row.shas
       assert Enum.all?(row.shas, &Regex.match?(~r/^[0-9a-f]{40}$/, &1))
+    end
+
+    test "the reusable's path inside a run: script or a string value is not a pin" do
+      wf = """
+      jobs:
+        note:
+          steps:
+            - run: echo "uses: #{@rust_ci}@#{@broken_standards}"
+            - name: "uses: #{@rust_ci}@#{@broken_standards}"
+              run: true
+      """
+
+      assert [] = WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "a quoted uses: key with a quoted value still fires" do
+      wf = """
+      jobs:
+        rust:
+          "uses": "#{@rust_ci}@#{@broken_standards}"
+      """
+
+      assert [%{rule: "WF027", current_sha: @broken_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
     end
 
     test "the audit carries WF027 findings and a count" do
