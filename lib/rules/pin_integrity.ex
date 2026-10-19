@@ -58,7 +58,9 @@ defmodule Hypatia.Rules.PinIntegrity do
   # must open the line — after indentation and an optional `-` or `{` — so a
   # `uses:` inside a `run:` string never counts. The value may be quoted; the
   # quote, trailing comma and closing brace are not part of the ref.
-  @uses_regex ~r/^\s*(?:-\s*|\{\s*)?uses:\s*(?<q>["']?)(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}]+)\k<q>\s*\}?\s*,?\s*(?:#\s*(?<comment>.*?))?\s*$/
+  # The key itself may be quoted too (`"uses": "a/b@ref"`): GitHub reads
+  # the same key, so the scanner and the repair must as well.
+  @uses_regex ~r/^\s*(?:-\s*|\{\s*)?(?<kq>["']?)uses\k<kq>\s*:\s*(?<q>["']?)(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}]+)\k<q>\s*\}?\s*,?\s*(?:#\s*(?<comment>.*?))?\s*$/
 
   @doc """
   Parse every `uses:` pin site in a workflow file.

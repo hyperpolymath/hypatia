@@ -1295,13 +1295,30 @@ defmodule Hypatia.Rules.WorkflowAudit do
           Regex.match?(~r/[{,]\s*["']?toolchain["']?\s*:\s*[^\s,}]/, line)
 
         Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*(?:#.*)?$/, line) ->
-          step
-          |> Enum.drop(i + 1)
-          |> Enum.take_while(fn l ->
-            trimmed = String.trim(l)
-            trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > key_indent
-          end)
-          |> Enum.any?(&Regex.match?(~r/^\s*["']?toolchain["']?\s*:\s*\S/, &1))
+          # Only a DIRECT child of `with:` is an input: the contents of another
+          # input's block scalar (`components: |` carrying `toolchain: stable`)
+          # sit deeper than the first child and are text, not a key.
+          children =
+            step
+            |> Enum.drop(i + 1)
+            |> Enum.take_while(fn l ->
+              trimmed = String.trim(l)
+              trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > key_indent
+            end)
+            |> Enum.filter(&wf026_plain?/1)
+
+          case children do
+            [] ->
+              false
+
+            [first | _] ->
+              child_indent = wf026_indent(first)
+
+              Enum.any?(children, fn l ->
+                wf026_indent(l) == child_indent and
+                  Regex.match?(~r/^\s*["']?toolchain["']?\s*:\s*\S/, l)
+              end)
+          end
 
         true ->
           false

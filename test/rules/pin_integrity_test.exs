@@ -276,6 +276,21 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert PI.pi001_denylisted_pin(new_content, @policy) == []
     end
 
+    test "a quoted \"uses\" key is the same key: caught by PI001 and repaired in place" do
+      content = """
+      jobs:
+        a:
+          steps:
+            - "uses": "github/codeql-action/init@#{@poison}" # v4.38.1
+      """
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ ~s("uses": "github/codeql-action/init@#{@good}" # v4.38.0)
+      assert PI.pi001_denylisted_pin(new_content, @policy) == []
+    end
+
     test "a file with no denylisted site is returned untouched" do
       clean = "- uses: actions/checkout@v7.0.1\n"
 

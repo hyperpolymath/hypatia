@@ -212,6 +212,21 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "toolchain: inside another input's block scalar is text, not an input: still fires" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                components: |
+                  toolchain: stable
+      """
+
+      assert [%{rule: "WF026", line: 4}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "the audit carries WF026 findings and a count" do
       wf = "jobs:\n  a:\n    steps:\n      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n"
       result = WorkflowAudit.audit(["rust.yml"], %{"rust.yml" => wf})
