@@ -1543,9 +1543,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # Does a list of `{key, value}` entries name a toolchain? A `<<: *x` merge
   # key brings the anchored mapping's entries in.
+  # The key present with no value (`toolchain:`, `null`, `~`) is not an input
+  # the action can read; the fleet fixer fills such a key in place.
   defp wf026_entries_verdict(entries, lines, form, seen \\ []) do
     cond do
-      Enum.any?(entries, fn {k, v} -> k == "toolchain" and wf_unquote(v) != "" end) ->
+      Enum.any?(entries, fn {k, v} ->
+        k == "toolchain" and wf_unquote(v) not in ["", "null", "~"]
+      end) ->
         {:toolchain, form}
 
       true ->

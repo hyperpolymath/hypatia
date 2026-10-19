@@ -422,6 +422,28 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert f.reason =~ "no `&nowhere` anchor"
     end
 
+    test "a toolchain: key with no value is no input: null and ~ included" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain:
+                components: clippy
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { components: clippy, toolchain: null }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain: ~ # chosen later
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { toolchain: "1.85.0" }
+      """
+
+      assert [%{line: 4, auto_fixable: true}, %{line: 8, auto_fixable: true}, %{line: 10}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "a plain block-style finding is still the fixer's" do
       wf = """
       jobs:
