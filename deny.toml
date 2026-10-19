@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: MPL-2.0
+# Keep this policy in the repository so CI does not generate a legacy schema.
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Vulnerabilities are denied by default. Keep maintenance checks enabled, with
+# explicit exceptions for the two existing, non-blocking maintenance warnings.
+unmaintained = "all"
+yanked = "warn"
+ignore = [
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 is transitive through tabled_derive; no patched release. Retain the existing maintenance warning policy; cargo audit still reports it." },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is transitive through serde_yaml; no patched release. A YAML parser migration needs separate compatibility testing; cargo audit still reports this maintenance warning." },
+]
+
+[licenses]
+# Unlicensed crates and licenses outside this list are denied by default.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    # Current ICU crates use the successor to Unicode-DFS-2016.
+    "Unicode-3.0",
+]
+# Restrict the additional permissive licenses to their existing consumers.
+exceptions = [
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+    { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
+    { crate = "xxhash-rust", allow = ["BSL-1.0"] },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
