@@ -331,7 +331,7 @@ scan_code_patterns() {
     # the banned-language filter above).
     run_pattern "$dir" "*.{js,jsx,mjs,res}" '\beval\s*\(' \
         "critical" "code_injection" "eval_usage" "CWE-95" \
-        "Replace eval() with JSON.parse, switch, or safe alternatives"
+        "Replace eval() with JSON.parse, switch, or safe alternatives" # hypatia: allow content_patterns/eval_in_shell -- remediation text, not an eval call
 
     # Dynamic Function() constructor
     run_pattern "$dir" "*.{js,jsx,mjs,res}" '\bFunction\s*\(' \

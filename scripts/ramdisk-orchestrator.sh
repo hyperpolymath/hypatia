@@ -19,7 +19,7 @@
 #     --push              Push committed fixes to remotes
 #     --dry-run           Show what would be done without doing it
 #     --keep              Do not unmount RAM disk on completion
-#     --mount PATH        Custom mount point (default: /tmp/hypatia-workspace)
+#     --mount PATH        Custom mount point (default: ${XDG_RUNTIME_DIR:-~/.local/state}/hypatia-workspace)
 #     --max-repos N       Limit number of repos to process
 #     --fallback-disk     Fall back to Eclipse drive if RAM is insufficient
 #     --quiet             Suppress non-essential output
@@ -43,7 +43,8 @@ FARM_DIR="${FARM_DIR:-${HYPATIA_DIR}/../.git-private-farm}"
 ECLIPSE_REPOS="${HYPATIA_REPOS_DIR:-$(dirname "$HYPATIA_DIR")}"
 
 # Defaults
-MOUNT_POINT="/tmp/hypatia-workspace"
+WORKSPACE_BASE="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}}"
+MOUNT_POINT="${WORKSPACE_BASE}/hypatia-workspace"
 RAMDISK_SIZE="2G"
 ORG="hyperpolymath"
 SEVERITY="high"
@@ -176,7 +177,7 @@ mount_workspace() {
         if ! sudo -n true 2>/dev/null; then
             log_warn "No passwordless sudo — falling back to disk workspace"
             USE_TMPFS=false
-            MOUNT_POINT="/tmp/hypatia-workspace-$$"
+            MOUNT_POINT="${WORKSPACE_BASE}/hypatia-workspace-$$"
         fi
     fi
 

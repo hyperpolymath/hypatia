@@ -135,11 +135,10 @@ echo "$ALL_OUTPUT" | sed -n '/SECTION:GATE/,/SECTION:END/p' | grep -E "^\s+(Appr
 # --- 6. Top findings by frequency ---
 header "TOP PATTERNS (by repo count)"
 if [[ -f "$MANIFEST" ]]; then
-    jq -r '.pattern_id' "$MANIFEST" 2>/dev/null | sort | uniq -c | sort -rn | head -10 > /tmp/hypatia-top-patterns.txt || true
-    while read -r count pid; do
-        printf "  %4d repos  %s\n" "$count" "$pid"
-    done < /tmp/hypatia-top-patterns.txt
-    rm -f /tmp/hypatia-top-patterns.txt
+    { jq -r '.pattern_id' "$MANIFEST" 2>/dev/null || true; } | sort | uniq -c | sort -rn | head -10 |
+        while read -r count pid; do
+            printf "  %4d repos  %s\n" "$count" "$pid"
+        done || true
 else
     log "  No dispatch manifest found"
 fi
