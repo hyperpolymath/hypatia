@@ -444,6 +444,20 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "a tag that merely begins with a SHA is a tag: it carries its channel" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}-patched
+            - { uses: dtolnay/rust-toolchain@#{@toolchain_sha}-patched }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha} # pinned
+      """
+
+      assert [%{line: 6}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "a plain block-style finding is still the fixer's" do
       wf = """
       jobs:

@@ -1112,11 +1112,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # ─── WF026: SHA-pinned dtolnay/rust-toolchain with no toolchain: input ──
 
-  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
+  # The 40 hex characters must end the ref: `@<sha>-patched` is a tag that
+  # merely begins with one, and a tag carries its own channel.
+  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})(?=["'\s#,}\]]|$)/
 
   # The same key written inside a flow mapping on the line that opens it:
   # `- { uses: dtolnay/rust-toolchain@<sha> }`, `steps: [ { uses: ... } ]`.
-  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
+  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})(?=["'\s#,}\]]|$)/
 
   @doc """
   WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
