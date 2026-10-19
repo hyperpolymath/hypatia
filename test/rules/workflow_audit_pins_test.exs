@@ -685,6 +685,31 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => nested_under_env})
     end
 
+    test "a KYAML caller is read as written: the quoted job-level uses: fires, fixtures do not" do
+      wf = """
+      {
+        name: "Rust",
+        on: { push: { branches: ["main"] } },
+        jobs: {
+          note: {
+            "runs-on": "ubuntu-latest",
+            env: { FIXTURE: "uses: #{@rust_ci}@#{@broken_standards}" },
+            steps: [{
+              run: "echo uses: #{@rust_ci}@#{@broken_standards}",
+            }],
+          },
+          "rust-ci": {
+            uses: "#{@rust_ci}@#{@broken_standards}",
+            secrets: "inherit",
+          },
+        },
+      }
+      """
+
+      assert [%{rule: "WF027", line: 13, current_sha: @broken_standards, auto_fixable: true}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
     test "the audit carries WF027 findings and a count" do
       wf = "jobs:\n  rust-ci:\n    uses: #{@rust_ci}@#{@broken_standards}\n"
       result = WorkflowAudit.audit(["rust-ci.yml"], %{"rust-ci.yml" => wf})
