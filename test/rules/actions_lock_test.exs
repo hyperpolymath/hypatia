@@ -281,6 +281,21 @@ defmodule Hypatia.Rules.ActionsLockTest do
     assert map_size(parsed.dependencies) > 0
   end
 
+  test "v0.0.3 retains workflow association and fails closed on malformed dependencies" do
+    content = String.replace(@valid_lock, "v0.0.2", "v0.0.3")
+
+    assert {:ok, parsed} = ActionsLock.parse(content)
+    assert parsed.version == "v0.0.3"
+    assert ActionsLock.pinned?(parsed, "ci.yml", "actions/checkout@v7.0.1")
+    refute ActionsLock.pinned?(parsed, "other.yml", "actions/checkout@v7.0.1")
+
+    malformed = String.replace(content, ~r/sha1-[0-9a-f]{40}/, "sha1-short")
+    assert {:error, {:line, _, :malformed_dependency_commit}} = ActionsLock.parse(malformed)
+
+    duplicate = String.replace(content, "workflows:", "version: 'v0.0.3'\nworkflows:")
+    assert {:error, {:line, _, :duplicate_version}} = ActionsLock.parse(duplicate)
+  end
+
   test "legacy Rules workflow scanner delegates to path-aware lock semantics" do
     assert Rules.scan_workflow(@workflow, filename: "ci.yml", actions_lock: @valid_lock) == []
 

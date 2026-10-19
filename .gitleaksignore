@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MPL-2.0
+# Historical false positives, scoped to these exact commit/path/rule/line findings.
+# Prometheus recording-rule identifier for API latency, not a credential.
+269dac03d57835a1dfe3fb336095ffac61567ccf:deploy/terraform/modules/monitoring/main.tf:generic-api-key:421
+# Kubernetes template values all decode to the literal CHANGE_ME_IN_PRODUCTION.
+0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:38
+0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:40
+0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:44
+0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:50

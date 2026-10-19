@@ -164,7 +164,7 @@ if $HAS_ELIXIR; then
         if [ "${_n_fail}" -gt 0 ]; then
             # Everything from the first failure block onward, capped so a
             # pathological run cannot flood the CI log.
-            sed -n '/^[[:space:]]*1) test /,$p' "$_mix_log" | head -500
+            sed -n '/^[[:space:]]*1) test /,$p' "$_mix_log" | sed -n '1,500p'
         else
             echo "(no ExUnit failure block found — the run did not reach the tests)"
             tail -120 "$_mix_log"
