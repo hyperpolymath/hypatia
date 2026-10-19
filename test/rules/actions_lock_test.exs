@@ -96,6 +96,33 @@ defmodule Hypatia.Rules.ActionsLockTest do
     assert {:error, {:line, _, :malformed_dependency_commit}} = ActionsLock.parse(malformed)
   end
 
+  test "v0.0.3 hostname: github.com is the default, a GHE.com tenant host is refused" do
+    v003 = String.replace(@valid_lock, "version: 'v0.0.2'", "version: 'v0.0.3'")
+
+    with_host = fn lock, host ->
+      String.replace(
+        lock,
+        "        repo_id: 197814629",
+        "        repo_id: 197814629\n        hostname: '#{host}'"
+      )
+    end
+
+    assert {:ok, lock} = ActionsLock.parse(with_host.(v003, "github.com"))
+    assert ActionsLock.pinned?(lock, "ci.yml", "actions/checkout@v7.0.1")
+
+    assert {:error, {:line, 13, {:unsupported_dependency_hostname, "acme.ghe.com"}}} =
+             ActionsLock.parse(with_host.(v003, "acme.ghe.com"))
+
+    # The field is new in v0.0.3; a v0.0.2 lock carrying it is still malformed.
+    assert {:error, {:line, 13, :malformed_dependency_entry}} =
+             ActionsLock.parse(with_host.(@valid_lock, "github.com"))
+
+    duplicate = with_host.(with_host.(v003, "github.com"), "github.com")
+
+    assert {:error, {:line, _, {:duplicate_dependency_field, _, :hostname}}} =
+             ActionsLock.parse(duplicate)
+  end
+
   test "rejects every version outside the supported set, and a second version line" do
     for version <- ["v0.0.1", "v0.0.4", "v0.1.0", "0.0.3"] do
       assert {:error, {:line, 2, {:unsupported_version, ^version}}} =
