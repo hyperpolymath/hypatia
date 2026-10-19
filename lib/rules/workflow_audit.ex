@@ -1113,12 +1113,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # ─── WF026: SHA-pinned dtolnay/rust-toolchain with no toolchain: input ──
 
   # The 40 hex characters must end the ref: `@<sha>-patched` is a tag that
-  # merely begins with one, and a tag carries its own channel.
-  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})(?=["'\s#,}\]]|$)/
+  # merely begins with one, and a tag carries its own channel. Git resolves
+  # a commit ID in either case, so upper-case hex is the same pin.
+  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
   # The same key written inside a flow mapping on the line that opens it:
   # `- { uses: dtolnay/rust-toolchain@<sha> }`, `steps: [ { uses: ... } ]`.
-  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})(?=["'\s#,}\]]|$)/
+  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
   @doc """
   WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
@@ -1191,14 +1192,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
             wf026_block_step_finding(filename, lines, line, number, sha, kyaml?)
 
           _ ->
-            case Regex.run(@toolchain_sha_pin_inline, line, return: :index) do
-              [{_, _}, {sha_at, 40}] ->
-                sha = binary_part(line, sha_at, 40)
-                wf026_inline_step_finding(filename, lines, line, number, sha, kyaml?)
-
-              _ ->
-                []
-            end
+            # Several flow-style steps may share one physical line
+            # (`steps: [ { uses: ... }, { uses: ... } ]`): each is judged.
+            @toolchain_sha_pin_inline
+            |> Regex.scan(line, return: :index)
+            |> Enum.flat_map(fn [{at, _}, {sha_at, 40}] ->
+              sha = binary_part(line, sha_at, 40)
+              wf026_inline_step_finding(filename, lines, line, number, at + 1, sha, kyaml?)
+            end)
         end
       end)
     end)
@@ -1235,15 +1236,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The inline path: `uses:` sits inside a flow mapping on the line that
   # opens it. The mapping is read through its braces (quote-aware, across
   # lines) and its `with` entry decides.
-  defp wf026_inline_step_finding(filename, lines, line, number, sha, kyaml?) do
-    uses_at =
-      case Regex.run(@toolchain_sha_pin_inline, line, return: :index) do
-        [{at, _} | _] -> at + 1
-        _ -> nil
-      end
-
-    with true <- is_integer(uses_at),
-         {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
+  defp wf026_inline_step_finding(filename, lines, line, number, uses_at, sha, kyaml?) do
+    with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
          true <- wf026_inline_item?(line, open_col),
          true <- wf026_inline_under_steps?(lines, line, number, open_col),
          {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
@@ -1259,9 +1253,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The text before the mapping's `{` must be a sequence position: a list
   # dash, the `steps:` key opening its sequence, a `[`, a comma, or nothing.
   # Anything else (`run: "echo { uses: ... }"`) is a scalar carrying braces.
+  # An earlier sibling on the same line (`[ { uses: a }, { uses: b } ]`) is
+  # a closed mapping before this one; it is removed before the test.
   defp wf026_inline_item?(line, open_col) do
-    prefix = binary_part(line, 0, open_col)
+    prefix = line |> binary_part(0, open_col) |> wf_drop_closed_mappings()
     Regex.match?(~r/^\s*(?:-\s*)?(?:["']?steps["']?\s*:\s*)?[\[,\s]*$/, prefix)
+  end
+
+  defp wf_drop_closed_mappings(text) do
+    case Regex.replace(~r/\{[^{}]*\}/, text, "") do
+      ^text -> text
+      shorter -> wf_drop_closed_mappings(shorter)
+    end
   end
 
   defp wf026_inline_under_steps?(lines, line, number, open_col) do
@@ -1544,15 +1547,20 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # Does a list of `{key, value}` entries name a toolchain? A `<<: *x` merge
-  # key brings the anchored mapping's entries in.
+  # key brings the anchored mapping's entries in, but an explicit key wins
+  # over a merged one (YAML merge semantics): `toolchain:` written empty
+  # beside `<<: *inputs` is the empty value, whatever the anchor names.
   # The key present with no value (`toolchain:`, `null`, `~`) is not an input
   # the action can read; the fleet fixer fills such a key in place.
   defp wf026_entries_verdict(entries, lines, form, seen \\ []) do
+    explicit = Enum.find(entries, fn {k, _} -> k == "toolchain" end)
+
     cond do
-      Enum.any?(entries, fn {k, v} ->
-        k == "toolchain" and wf_unquote(v) not in ["", "null", "~"]
-      end) ->
+      match?({_, v} when is_binary(v), explicit) and not wf026_null_value?(elem(explicit, 1)) ->
         {:toolchain, form}
+
+      explicit != nil ->
+        {:missing, form}
 
       true ->
         entries
@@ -1567,6 +1575,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
             verdict -> verdict
           end
         end)
+    end
+  end
+
+  # YAML's null: nothing, `~`, or `null` in the three spellings the core
+  # schema admits, unquoted. `"null"` is the string null, an input the
+  # action receives; `""` and `''` are the empty string, which it does not.
+  defp wf026_null_value?(value) do
+    case String.trim(value) do
+      "" -> true
+      "~" -> true
+      ~s("") -> true
+      "''" -> true
+      bare -> bare in ["null", "Null", "NULL"]
     end
   end
 
@@ -1970,44 +1991,94 @@ defmodule Hypatia.Rules.WorkflowAudit do
       Enum.flat_map(@broken_reusable_revisions, fn rev ->
         # Anchored to a `uses:` key at the start of a line (quoted or not) that
         # is a key of a job under `jobs:` — the only place a reusable is
-        # called. The reusable's path inside a `run: |` script, under `env:`,
-        # in a string value or in a comment is not a call, so the fleet is
-        # never sent to rewrite script data.
+        # called — or to the same key inside the flow mapping a job opens on
+        # its own line (`rust: { uses: ... }`). The reusable's path inside a
+        # `run: |` script, under `env:`, in a string value or in a comment is
+        # not a call, so the fleet is never sent to rewrite script data.
+        # The 40 hex characters end the ref (`@<sha>-patched` is a tag), in
+        # either case: git resolves the commit ID case-insensitively.
+        reusable = Regex.escape(rev.reusable)
+
         ref_re =
-          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{Regex.escape(rev.reusable)}@([0-9a-f]{40})/
+          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+
+        inline_re =
+          ~r/[{,]\s*["']?uses["']?\s*:\s*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
         lines
         |> Enum.with_index(1)
         |> Enum.flat_map(fn {line, number} ->
-          with [_full, sha] <- Regex.run(ref_re, line),
-               true <- sha in rev.shas,
-               [_job, "jobs" | _] <- wf_ancestor_keys(lines, number) do
-            [
-              %{
-                rule: "WF027",
-                type: :known_broken_reusable_revision,
-                file: filename,
-                line: number,
-                reusable: rev.reusable,
-                current_sha: sha,
-                replacement_sha: rev.replacement,
-                severity: :medium,
-                auto_fixable: true,
-                fix_script: "fix-stale-reusable-pin.sh",
-                reason:
-                  "`#{rev.reusable}` is pinned at `@#{sha}`, inside #{rev.window}: " <>
-                    rev.reason <>
-                    " Fixed by #{rev.fixed_by}; move the pin to " <>
-                    "`@#{rev.replacement}`.",
-                action: :rewrite_stale_reusable_pin
-              }
-            ]
-          else
-            _ -> []
-          end
+          shas =
+            case Regex.run(ref_re, line) do
+              [_full, sha] ->
+                if match?([_job, "jobs" | _], wf_ancestor_keys(lines, number)),
+                  do: [sha],
+                  else: []
+
+              nil ->
+                inline_re
+                |> Regex.scan(line, return: :index)
+                |> Enum.filter(fn [{at, _} | _] ->
+                  wf027_inline_job?(lines, line, number, at + 1)
+                end)
+                |> Enum.map(fn [_, {sha_at, 40}] -> binary_part(line, sha_at, 40) end)
+            end
+
+          Enum.flat_map(shas, fn sha ->
+            if String.downcase(sha) in rev.shas do
+              [wf027_finding(filename, number, sha, rev)]
+            else
+              []
+            end
+          end)
         end)
       end)
     end)
+  end
+
+  # Is the `uses` at `uses_at` the entry of a flow mapping a job key opens?
+  # Either the job's own line under `jobs:` (`rust: { uses: ... }`) or the
+  # whole `jobs:` mapping written on one line (`jobs: { rust: { uses: ... } }`).
+  # Earlier siblings on the line (`a: { ... }, `) are closed entries before
+  # this one; they are removed before the key opening this mapping is read.
+  defp wf027_inline_job?(lines, line, number, uses_at) do
+    with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
+         prefix = line |> binary_part(0, open_col) |> wf_drop_closed_mappings(),
+         prefix = Regex.replace(~r/["']?[\w.-]+["']?\s*:\s*[^,{}]*,\s*/, prefix, ""),
+         [_, lead, _job] <-
+           Regex.run(
+             ~r/^(\s*(?:["']?jobs["']?\s*:\s*\{\s*,?\s*)?)["']?([\w.-]+)["']?\s*:\s*$/,
+             prefix
+           ) do
+      if String.contains?(lead, "jobs") do
+        wf_ancestor_keys(lines, number) == []
+      else
+        match?(["jobs" | _], wf_ancestor_keys(lines, number))
+      end
+    else
+      _ -> false
+    end
+  end
+
+  defp wf027_finding(filename, number, sha, rev) do
+    %{
+      rule: "WF027",
+      type: :known_broken_reusable_revision,
+      file: filename,
+      line: number,
+      reusable: rev.reusable,
+      current_sha: sha,
+      replacement_sha: rev.replacement,
+      severity: :medium,
+      auto_fixable: true,
+      fix_script: "fix-stale-reusable-pin.sh",
+      reason:
+        "`#{rev.reusable}` is pinned at `@#{sha}`, inside #{rev.window}: " <>
+          rev.reason <>
+          " Fixed by #{rev.fixed_by}; move the pin to " <>
+          "`@#{rev.replacement}`.",
+      action: :rewrite_stale_reusable_pin
+    }
   end
 
   # ─── WF017: Secret-consuming action without secret-presence gate ──────

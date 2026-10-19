@@ -444,6 +444,80 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "YAML null is unquoted: \"null\" is a string, Null/NULL/\"\"/'' are not inputs" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { toolchain: "null" }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { toolchain: Null }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain: NULL
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain: ""
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { toolchain: '' }
+      """
+
+      assert [%{line: 6}, %{line: 8}, %{line: 11}, %{line: 14}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "an explicit toolchain: key wins over a merged anchor, empty or not" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: &inputs { toolchain: stable, components: clippy }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: *inputs
+                toolchain:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { <<: *inputs, toolchain: null }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { <<: *inputs, toolchain: nightly }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { <<: *inputs }
+      """
+
+      assert [%{line: 6, auto_fixable: true}, %{line: 10, auto_fixable: true}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "every flow-style step sharing a line is judged, not only the first" do
+      wf = """
+      jobs:
+        check:
+          steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: { toolchain: stable } }, { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ]
+        other:
+          steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} }, { uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: { components: clippy } } ]
+      """
+
+      assert [%{line: 3, auto_fixable: false}, %{line: 5}, %{line: 5}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "upper-case hex is the same commit: it fires like lower-case" do
+      sha = String.upcase(@toolchain_sha)
+
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{sha}
+            - { uses: dtolnay/rust-toolchain@#{sha} }
+      """
+
+      assert [%{line: 4, current_sha: ^sha}, %{line: 5}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "a tag that merely begins with a SHA is a tag: it carries its channel" do
       wf = """
       jobs:
@@ -563,6 +637,52 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{rule: "WF027", line: 11}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "a tag that merely begins with a broken SHA is a tag, not the pin" do
+      wf = """
+      jobs:
+        rust-ci:
+          uses: #{@rust_ci}@#{@broken_standards}-patched
+        other:
+          uses: #{@rust_ci}@#{@broken_standards}
+      """
+
+      assert [%{rule: "WF027", line: 5}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "upper-case hex is the same revision: it fires, reported as written" do
+      sha = String.upcase(@broken_standards)
+      wf = "jobs:\n  rust-ci:\n    uses: #{@rust_ci}@#{sha}\n"
+
+      assert [%{rule: "WF027", current_sha: ^sha, replacement_sha: @good_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "a job written as a flow mapping is a call: on its own line or inside jobs: { }" do
+      wf = """
+      jobs:
+        rust-ci: { uses: #{@rust_ci}@#{@broken_standards}, secrets: inherit }
+        note:
+          steps:
+            - run: echo "{ uses: #{@rust_ci}@#{@broken_standards} }"
+      """
+
+      assert [%{rule: "WF027", line: 2, current_sha: @broken_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+
+      one_line =
+        "jobs: { a: { uses: #{@rust_ci}@#{@good_standards} }, b: { uses: #{@rust_ci}@#{@broken_standards} } }\n"
+
+      assert [%{rule: "WF027", line: 1, current_sha: @broken_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => one_line})
+
+      nested_under_env =
+        "jobs:\n  fixture:\n    env: { uses: #{@rust_ci}@#{@broken_standards} }\n"
+
+      assert [] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => nested_under_env})
     end
 
     test "the audit carries WF027 findings and a count" do
