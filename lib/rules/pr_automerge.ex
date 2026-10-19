@@ -184,9 +184,11 @@ defmodule Hypatia.Rules.PrAutomerge do
   """
   @spec pin_lines_only?(map()) :: boolean()
   def pin_lines_only?(file) do
-    lines = content_lines(patch_of(file))
+    lines = changed_lines(file)
 
-    lines != [] and Enum.all?(lines, fn line -> pin_line?(line) end)
+    # A changed line inside a block scalar (`run: |`) is script text, never a
+    # pin line, so a script edit is not a pin-only change.
+    lines != [] and Enum.all?(lines, fn {line, scalar?} -> not scalar? and pin_line?(line) end)
   end
 
   # ─── PA002/PA003/PA004 · version deltas ───────────────────────────────
@@ -213,12 +215,12 @@ defmodule Hypatia.Rules.PrAutomerge do
   def pin_deltas(files, resolution, claims) do
     files
     |> Enum.flat_map(fn file ->
-      # Every site of every pin line: a flow sequence carries several steps
-      # on one line, and each of them is a delta of its own.
-      removed =
-        file |> removed_lines() |> Enum.filter(&pin_line?/1) |> Enum.flat_map(&parse_pins/1)
-
-      added = file |> added_lines() |> Enum.filter(&pin_line?/1) |> Enum.flat_map(&parse_pins/1)
+      # Every structural site of every changed line: a flow sequence carries
+      # several steps on one line (`steps: [ { uses: a@x }, { uses: b@y } ]`),
+      # and each of them is a delta of its own — including a major bump on a
+      # line that does not start with `uses:`.
+      removed = file |> removed_lines() |> Enum.flat_map(&parse_pins/1)
+      added = file |> added_lines() |> Enum.flat_map(&parse_pins/1)
 
       removed
       |> Enum.flat_map(fn old ->
@@ -490,18 +492,81 @@ defmodule Hypatia.Rules.PrAutomerge do
   @pin_site_re ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
 
   @doc """
-  Every `uses:` site on a line, in order, as `%{action, base, ref}`.
+  Every structural `uses:` site on a line, in order, as `%{action, base, ref}`.
 
   A flow sequence may put several steps on one line
   (`+  { uses: a/b@x }, { uses: c/d@y },`); `parse_pin/1` reads only the
-  first. Text that merely mentions a pin — inside a quoted `name:` or
-  `run:` scalar, or after `#` — is not a site.
+  first. Only a site the YAML structure makes a pin counts:
+
+    * the line's own leading `uses:` key (`uses:`, `- uses:`, `- { uses:`);
+    * an entry of a flow mapping that is a step or a job — an anonymous
+      `{ ... }` at the line's level or in a `[` that `steps:` (or nothing on
+      the line) opens, or a mapping a job key opens inside `jobs: { ... }`.
+
+  Text is not a site: a pin inside a quoted `name:` or `run:` scalar, after
+  `#`, inside an input's mapping (`with: { uses: ... }`), or after free text
+  (`echo { uses: ... }` in a script).
   """
   @spec parse_pins(String.t()) :: [map()]
   def parse_pins(line) do
+    masked = line |> String.replace(~r/^[-+]/, "") |> mask_scalars()
+
     @pin_site_re
-    |> Regex.scan(mask_scalars(line), capture: :all_names)
-    |> Enum.map(fn [action, ref] -> %{action: action, base: action_base(action), ref: ref} end)
+    |> Regex.scan(masked, return: :index, capture: :all)
+    |> Enum.filter(fn [_full, {action_at, _} | _] ->
+      structural_site?(binary_part(masked, 0, action_at))
+    end)
+    |> Enum.map(fn [_full, {a_at, a_len}, {r_at, r_len}] ->
+      action = binary_part(masked, a_at, a_len)
+      %{action: action, base: action_base(action), ref: binary_part(masked, r_at, r_len)}
+    end)
+  end
+
+  # `prefix` is the masked line up to the site's action.
+  defp structural_site?(prefix) do
+    cond do
+      Regex.match?(~r/^\s*(?:-\s+)?(?:\{\s*)?["']?uses["']?\s*:\s*["']?$/, prefix) ->
+        true
+
+      Regex.match?(~r/[{,]\s*["']?uses["']?\s*:\s*["']?$/, prefix) ->
+        prefix |> flow_stack() |> structural_flow_stack?()
+
+      true ->
+        false
+    end
+  end
+
+  # The brackets still open in `text`, innermost first, each with what opens
+  # it: the key before it (`steps: [`), :none (nothing but indentation or a
+  # list dash), or :text (anything else — `echo {` is a script, not YAML).
+  defp flow_stack(text) do
+    text
+    |> String.graphemes()
+    |> Enum.reduce({[], ""}, fn
+      c, {stack, seg} when c in ["{", "["] -> {[{c, opener_key(seg)} | stack], ""}
+      c, {stack, _seg} when c in ["}", "]"] -> {Enum.drop(stack, 1), ""}
+      ",", {stack, _seg} -> {stack, ""}
+      c, {stack, seg} -> {stack, seg <> c}
+    end)
+    |> elem(0)
+  end
+
+  defp opener_key(seg) do
+    cond do
+      Regex.match?(~r/^\s*(?:-\s*)?$/, seg) -> :none
+      m = Regex.run(~r/^\s*(?:-\s+)?["']?([\w.-]+)["']?\s*:\s*$/, seg) -> Enum.at(m, 1)
+      true -> :text
+    end
+  end
+
+  defp structural_flow_stack?(stack) do
+    Enum.all?(stack, fn {_, key} -> key != :text end) and
+      case stack do
+        [{"{", :none}] -> true
+        [{"{", :none}, {"[", key} | _] when key in ["steps", :none] -> true
+        [{"{", job}, {"{", "jobs"} | _] when is_binary(job) -> true
+        _ -> false
+      end
   end
 
   # The line with its comment dropped and every quoted scalar that is
@@ -549,18 +614,68 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   defp take_quoted(<<c, rest::binary>>, q, acc), do: take_quoted(rest, q, acc <> <<c>>)
 
-  defp content_lines(patch) do
-    patch
+  # Every changed line of a patch, paired with whether it sits inside a
+  # block scalar (`run: |`, `script: >-`) on its own side of the diff, as far
+  # as the hunk shows: the context and changed lines of each side are read in
+  # order, and a `key: |` line opens a scalar that runs while lines are
+  # indented deeper than its key. A pin written inside a script is text.
+  defp changed_lines(file) do
+    file
+    |> patch_of()
     |> String.split("\n")
-    |> Enum.filter(&Regex.match?(~r/^[-+]/, &1))
-    |> Enum.reject(&Regex.match?(~r/^[-+]{3}/, &1))
+    |> Enum.reduce({[], nil, nil}, fn line, {acc, old, new} ->
+      cond do
+        String.starts_with?(line, "@@") ->
+          {acc, nil, nil}
+
+        Regex.match?(~r/^[-+]{3}/, line) ->
+          {acc, old, new}
+
+        String.starts_with?(line, "+") ->
+          {inside?, new} = scalar_step(new, String.slice(line, 1..-1//1))
+          {[{line, inside?} | acc], old, new}
+
+        String.starts_with?(line, "-") ->
+          {inside?, old} = scalar_step(old, String.slice(line, 1..-1//1))
+          {[{line, inside?} | acc], old, new}
+
+        String.starts_with?(line, " ") or line == "" ->
+          text = String.slice(line, 1..-1//1)
+          {_, old} = scalar_step(old, text)
+          {_, new} = scalar_step(new, text)
+          {acc, old, new}
+
+        true ->
+          {acc, old, new}
+      end
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
+
+  # One line of one side: is it inside the open block scalar (`state` is the
+  # column of the key that opened it, or nil), and what is open after it?
+  defp scalar_step(state, text) do
+    indent = String.length(text) - String.length(String.trim_leading(text, " "))
+    inside? = state != nil and (String.trim(text) == "" or indent > state)
+
+    cond do
+      inside? ->
+        {true, state}
+
+      Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, mask_scalars(text)) ->
+        {false, text |> String.replace(~r/[^\s-].*$/, "") |> String.length()}
+
+      true ->
+        {false, nil}
+    end
   end
 
   defp added_lines(file),
-    do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "+"))
+    do: for({line, false} <- changed_lines(file), String.starts_with?(line, "+"), do: line)
 
   defp removed_lines(file),
-    do: file |> patch_of() |> content_lines() |> Enum.filter(&String.starts_with?(&1, "-"))
+    do: for({line, false} <- changed_lines(file), String.starts_with?(line, "-"), do: line)
 
   defp patch_of(file), do: Map.get(file, :patch) || Map.get(file, "patch") || ""
 

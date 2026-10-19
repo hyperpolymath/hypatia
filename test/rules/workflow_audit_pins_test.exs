@@ -348,6 +348,20 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "the action is matched in either case; a spelling the fixer cannot match routes to review" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: Dtolnay/Rust-Toolchain@#{@toolchain_sha}
+      """
+
+      assert [%{rule: "WF026", line: 4, auto_fixable: false, fix_script: nil, reason: reason}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert reason =~ "not spelled"
+    end
+
     test "a workflow written in flow style on one line is read through its keys" do
       sha2 = String.duplicate("a", 40)
 
@@ -741,6 +755,15 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{rule: "WF027", line: 2}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => own_line})
+    end
+
+    test "a root-braced one-line workflow is read through its keys" do
+      root =
+        "{ on: push, jobs: { rust: { uses: #{@rust_ci}@#{@broken_standards} }, " <>
+          "build: { steps: [ { uses: #{@rust_ci}@#{@broken_standards} } ] } } }\n"
+
+      assert [%{rule: "WF027", line: 1, current_sha: @broken_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => root})
     end
 
     test "a KYAML caller is read as written: the quoted job-level uses: fires, fixtures do not" do

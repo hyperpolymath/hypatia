@@ -1115,11 +1115,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The 40 hex characters must end the ref: `@<sha>-patched` is a tag that
   # merely begins with one, and a tag carries its own channel. Git resolves
   # a commit ID in either case, so upper-case hex is the same pin.
-  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+  # The owner/repository is matched in either case — GitHub resolves
+  # `Dtolnay/Rust-Toolchain` to the same action — and the SHA as written.
+  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?(?i:dtolnay\/rust-toolchain)@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
   # The same key written inside a flow mapping on the line that opens it:
   # `- { uses: dtolnay/rust-toolchain@<sha> }`, `steps: [ { uses: ... } ]`.
-  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?(?i:dtolnay\/rust-toolchain)@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
   @doc """
   WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
@@ -1193,7 +1195,16 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> Enum.flat_map(fn {line, number} ->
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
-            wf026_block_step_finding(filename, lines, line, number, sha, kyaml?)
+            # The fleet fixer matches the identity in lower case only; any
+            # other spelling is reported for review rather than handed to it.
+            review =
+              cond do
+                kyaml? -> :kyaml
+                not String.contains?(line, "dtolnay/rust-toolchain@") -> :spelling
+                true -> nil
+              end
+
+            wf026_block_step_finding(filename, lines, line, number, sha, review)
 
           _ ->
             # Several flow-style steps may share one physical line
@@ -1202,7 +1213,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
             |> Regex.scan(line, return: :index)
             |> Enum.flat_map(fn [{at, _}, {sha_at, 40}] ->
               sha = binary_part(line, sha_at, 40)
-              wf026_inline_step_finding(filename, lines, line, number, at + 1, sha, kyaml?)
+              review = if kyaml?, do: :kyaml
+              wf026_inline_step_finding(filename, lines, line, number, at + 1, sha, review)
             end)
         end
       end)
@@ -1210,7 +1222,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # The block-style path: `uses:` is a key on its own line.
-  defp wf026_block_step_finding(filename, lines, line, number, sha, kyaml?) do
+  defp wf026_block_step_finding(filename, lines, line, number, sha, review) do
     {step, key_indent, opener} = wf026_step(lines, number)
     flow_item? = Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
 
@@ -1232,7 +1244,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
           verdict ->
             form = if flow_item?, do: :flow_step, else: elem(verdict, 1)
-            [wf026_finding(filename, number, sha, verdict, form, kyaml?)]
+            [wf026_finding(filename, number, sha, verdict, form, review)]
         end
     end
   end
@@ -1240,13 +1252,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The inline path: `uses:` sits inside a flow mapping on the line that
   # opens it. The mapping is read through its braces (quote-aware, across
   # lines) and its `with` entry decides.
-  defp wf026_inline_step_finding(filename, lines, line, number, uses_at, sha, kyaml?) do
+  defp wf026_inline_step_finding(filename, lines, line, number, uses_at, sha, review) do
     with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
          true <- wf026_inline_step_at?(lines, line, number, open_col),
          {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
       case wf026_with_entry(wf_flow_entries(interior), lines) do
         {:toolchain, _} -> []
-        verdict -> [wf026_finding(filename, number, sha, verdict, :flow_step, kyaml?)]
+        verdict -> [wf026_finding(filename, number, sha, verdict, :flow_step, review)]
       end
     else
       _ -> []
@@ -1325,8 +1337,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The finding. Only a plain block-style step is handed to the fixer:
   # the fleet script refuses flow-style steps, anchors and aliases (exit
   # 2, file untouched), and a KYAML document is a flow-style document.
-  defp wf026_finding(filename, number, sha, verdict, form, kyaml?) do
-    repairable? = not kyaml? and form in [:none, :block, :flow]
+  # `review` says why a finding must route to review whatever its form:
+  # :kyaml (a flow-style document) or :spelling (the action named in a case
+  # the fixer does not match); nil when only the form decides.
+  defp wf026_finding(filename, number, sha, verdict, form, review) do
+    repairable? = review == nil and form in [:none, :block, :flow]
 
     shape =
       case {verdict, form} do
@@ -1342,9 +1357,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
           " Its `with:` goes through a YAML anchor or alias; the repair script does not " <>
             "rewrite anchored mappings, so this one routes to review."
 
-        _ when kyaml? ->
+        _ when review == :kyaml ->
           " The workflow is KYAML; the repair script rewrites block-style steps only, " <>
             "so this one routes to review."
+
+        _ when review == :spelling ->
+          " The action is not spelled `dtolnay/rust-toolchain`; GitHub resolves the name in " <>
+            "either case, but the repair script matches it as written in lower case, so this " <>
+            "one routes to review."
 
         _ ->
           ""
@@ -2114,22 +2134,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # Is the `uses` at `uses_at` the entry of a flow mapping a job key opens?
-  # Either the job's own line under `jobs:` (`rust: { uses: ... }`) or the
-  # whole `jobs:` mapping written on one line (`jobs: { rust: { uses: ... } }`).
-  # The openers still unclosed before `uses` say which: one, opened by a key
-  # on a line under `jobs:`; two, the outer one opened by `jobs:` at the top
-  # of the document. The opening key is the last entry before its brace,
-  # split quote-aware, so a sibling's `name: "CI, build"` separates nothing.
+  # The job's own line under `jobs:` (`rust: { uses: ... }`), the whole
+  # `jobs:` mapping written on one line (`jobs: { rust: { uses: ... } }`), or
+  # the same inside a root `{ ... }`: the keys that open the brackets still
+  # unclosed before `uses` (nearest first), then the line's block ancestors,
+  # must read a job key, then `jobs`. Each key is the last entry before its
+  # brace, split quote-aware, so a sibling's `name: "CI, build"` separates
+  # nothing.
   defp wf027_inline_job?(lines, line, number, uses_at) do
     case wf_flow_opener_stack(line, uses_at) do
-      {:ok, [open]} when is_integer(open) ->
-        wf027_key_before(line, 0, open) != nil and
-          match?(["jobs" | _], wf_ancestor_keys(lines, number))
-
-      {:ok, [open, outer]} when is_integer(open) and is_integer(outer) ->
-        wf027_key_before(line, 0, outer) == "jobs" and
-          wf027_key_before(line, outer + 1, open) != nil and
-          wf_ancestor_keys(lines, number) == []
+      {:ok, [open | _] = stack} when is_integer(open) ->
+        keys = wf_flow_opener_keys(line, stack) ++ (wf_ancestor_keys(lines, number) || [])
+        match?([job, "jobs" | _] when is_binary(job), keys)
 
       _ ->
         false

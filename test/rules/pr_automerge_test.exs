@@ -386,6 +386,56 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert site.denylist_id == "PIN-001"
     end
 
+    test "a one-line flow sequence with a major bump and a poison pin closes both reasons" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -    steps: [ { uses: actions/checkout@v4.1.7 }, { uses: github/codeql-action/init@#{@good} } ]
+      +    steps: [ { uses: actions/checkout@v7.0.1 }, { uses: github/codeql-action/init@#{@poison} } ]
+      """
+
+      resolution = %{
+        {"actions/checkout", "v4.1.7"} => "4.1.7",
+        {"actions/checkout", "v7.0.1"} => "7.0.1"
+      }
+
+      decision =
+        PA.classify(
+          pr([file(".github/workflows/ci.yml", patch)], resolution: resolution),
+          @policy
+        )
+
+      assert decision.major_delta
+      assert decision.disposition == :close_poison_and_majors
+    end
+
+    test "a pin written inside a run: | script is text, not a site" do
+      in_hunk = """
+      @@ -1,4 +1,4 @@
+             - run: |
+                 cat > fixture.yml <<'EOF'
+      -          - uses: github/codeql-action/init@#{@good}
+      +          - uses: github/codeql-action/init@#{@poison}
+                 EOF
+      """
+
+      f = file(".github/workflows/ci.yml", in_hunk)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+
+      free_text = """
+      @@ -9,1 +9,1 @@
+      -          echo done
+      +          echo { uses: github/codeql-action/init@#{@poison} }
+      """
+
+      assert PA.poison_sites([file(".github/workflows/ci.yml", free_text)], @policy) == []
+    end
+
+    test "a pin inside an input's mapping is data, not a site" do
+      line = "+        with: { uses: github/codeql-action/init@#{@poison} }"
+      assert PA.parse_pins(line) == []
+    end
+
     test "a pin quoted inside another scalar or a comment is not a site" do
       line =
         ~s(+      - { name: "see uses: github/codeql-action/init@#{@poison}", uses: actions/checkout@v4.1.7 } # uses: x/y@#{@poison})

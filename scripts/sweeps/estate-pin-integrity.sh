@@ -485,7 +485,12 @@ while IFS=$'\t' read -r org repo path; do
     if line_has_denied_sha "$out" && { [ "$site_seen" -eq 0 ] || ! line_has_denied_sha "$mout"; }; then
       outside_uses=$((outside_uses + 1)); fixable=0
     fi
-    if [ "$replaced" -eq 1 ] && [ -n "$good_version" ] && [ "$good_version" != "null" ]; then
+    # The comment is relabelled only when the line has ONE `uses:` site: on a
+    # flow line with several, the trailing comment cannot be tied to the
+    # replaced one (`{ uses: <blocked> }, { uses: actions/checkout@<sha> } # v7`
+    # annotates checkout), so it is kept as written.
+    nsites=$(printf '%s\n' "$mline" | grep -oiE "(^|[-{,[:space:]])${USES_KEY}[^@\"'[:space:],}]+@" | wc -l || true)
+    if [ "$replaced" -eq 1 ] && [ "$nsites" -eq 1 ] && [ -n "$good_version" ] && [ "$good_version" != "null" ]; then
       at=$(comment_column "$out")
       if [ "$at" -gt 0 ]; then
         out="${out:0:$((at - 1))}$(relabel_comment "${out:$((at - 1))}" "$good_version")"
