@@ -28,7 +28,10 @@
 #   * `--via clone` is the authoritative mode (reads the files themselves);
 #     `--via search` is the fast reconnaissance mode and can lag the index.
 #
-# EXIT CODES: 0 clean, 1 error, 2 findings present, 3 nothing to do
+# EXIT CODES: 0 clean, 1 error, 2 findings present (or the sweep could not
+#             see everything: a search that failed or overflowed, a
+#             candidate that could not be read — never reported clean),
+#             3 nothing to do
 #
 # usage: estate-pin-integrity.sh [--org ORG]... [--policy FILE] [--out DIR]
 #                                [--via search|clone] [--rewrite]
@@ -155,15 +158,23 @@ mapfile -t SEARCH_TOKENS < <(jq -r '
 # of 100), whatever the true count. A broad query that overflows the cap
 # leaves candidates phase 2 never sees, so the sweep says so and refuses a
 # clean verdict: a search that could not see everything is INCOMPLETE, and
-# only `--via clone` can clear the org.
+# only `--via clone` can clear the org. A query that FAILS (expired auth,
+# rate limit, outage: `gh api` exits non-zero) is the same case, not an
+# empty page — zero results from a request that never answered is not a
+# clean org.
 incomplete=0
+failed=0
 if [ "$VIA" = "search" ]; then
   for org in "${ORGS[@]}"; do
     for token in "${SEARCH_TOKENS[@]}"; do
       page=1
       while :; do
-        gh api "search/code?q=${token}+org:${org}&per_page=100&page=${page}" \
-          > "$OUT_DIR/.search.json" 2>/dev/null || : > "$OUT_DIR/.search.json"
+        if ! gh api "search/code?q=${token}+org:${org}&per_page=100&page=${page}" \
+             > "$OUT_DIR/.search.json" 2> "$OUT_DIR/.search.err"; then
+          log "  ! ${org}: search for '${token}' (page ${page}) failed: $(head -c 200 "$OUT_DIR/.search.err" | tr '\n' ' ') — phase 1 is INCOMPLETE for this org, use --via clone"
+          failed=$((failed + 1))
+          break
+        fi
         n=$(jq -r '.items[]? | "'"${org}"'\t\(.repository.name)\t\(.path)"' "$OUT_DIR/.search.json" 2>/dev/null \
               | tee -a "$HITS" | wc -l)
         if [ "$page" -eq 1 ]; then
@@ -204,9 +215,20 @@ fi
 total_hits=$(wc -l < "$HITS")
 log "phase 1: ${total_hits} candidate file(s)"
 
+# What phase 1 could not see. A sweep that saw everything and found nothing
+# is clean; one that could not see everything never is.
+unseen() {
+  local parts=()
+  [ "$incomplete" -gt 0 ] && parts+=("${incomplete} search(es) overflowed GitHub's 1,000-result cap")
+  [ "$failed" -gt 0 ] && parts+=("${failed} search(es) failed")
+  [ "${unread:-0}" -gt 0 ] && parts+=("${unread} candidate file(s) could not be read")
+  local IFS=';'
+  printf '%s' "${parts[*]}"
+}
+
 if [ "$total_hits" -eq 0 ]; then
-  if [ "$incomplete" -gt 0 ]; then
-    echo "INCOMPLETE: no denylisted pin tokens in the visible search results for ${ORGS[*]}, but ${incomplete} search(es) overflowed GitHub's 1,000-result cap; a clean verdict needs --via clone"
+  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ]; then
+    echo "INCOMPLETE: no denylisted pin tokens in the visible search results for ${ORGS[*]}, but $(unseen); a clean verdict needs --via clone"
     exit 2
   fi
   echo "clean: no denylisted pin tokens found in ${ORGS[*]}"
@@ -214,8 +236,14 @@ if [ "$total_hits" -eq 0 ]; then
 fi
 
 # ─── Phase 2: confirm, classify, and build the repaired tree ─────────────
+# A phase-1 candidate is a file the search (or grep) associated with a
+# token; for a broad action-path query that includes every healthy caller.
+# Only a file in which a denylisted token is CONFIRMED is a finding, and
+# only confirmed findings decide the exit code.
 repairable=0
 flagged=0
+confirmed=0
+unread=0
 
 while IFS=$'\t' read -r org repo path; do
   [ -n "${path:-}" ] || continue
@@ -223,6 +251,7 @@ while IFS=$'\t' read -r org repo path; do
   content=$(gh api "repos/${org}/${repo}/contents/${path}?ref=HEAD" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null || true)
   if [ -z "$content" ]; then
     log "  ! cannot read ${org}/${repo}/${path} (binary, missing, or no permission)"
+    unread=$((unread + 1))
     continue
   fi
 
@@ -231,6 +260,7 @@ while IFS=$'\t' read -r org repo path; do
   sites_before=$(grep -cE '^[[:space:]]*-?[[:space:]]*uses:' "$OUT_DIR/.current" || true)
   denied_before=$(grep -cE "@(${REF_ALTERNATION})([[:space:]#]|$)" "$OUT_DIR/.current" || true)
   [ "$denied_before" -eq 0 ] && continue
+  confirmed=$((confirmed + 1))
 
   # Scope guard: a repair is only meaningful where a pin is *live*. A
   # documentation code block quoting the poisoned SHA is a finding, not a
@@ -310,6 +340,15 @@ while IFS=$'\t' read -r org repo path; do
   fi
 done < "$HITS"
 
+if [ "$confirmed" -eq 0 ]; then
+  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ]; then
+    echo "INCOMPLETE: none of the ${total_hits} candidate file(s) carries a denylisted pin, but $(unseen); a clean verdict needs --via clone"
+    exit 2
+  fi
+  echo "clean: ${total_hits} candidate file(s) read, none carries a denylisted pin in ${ORGS[*]}"
+  exit 0
+fi
+
 # One repair PR per repository.
 if [ "$repairable" -gt 0 ]; then
   jq -src '
@@ -331,6 +370,7 @@ fi
 log ""
 log "─── pin-integrity sweep ────────────────────────────────────────────"
 log "  candidate files            : ${total_hits}"
+log "  confirmed denylisted       : ${confirmed}"
 log "  mechanically repairable    : ${repairable}"
 log "  needs owner review         : ${flagged}"
 log "  repos with a repair ready  : $(grep -c . "$PLAN" 2>/dev/null || echo 0)"
@@ -339,6 +379,8 @@ log "  repair plan                : ${PLAN}"
 [ "$REWRITE" -eq 1 ] && log "  repaired trees             : ${OUT_DIR}/patched"
 log "  NOTE: this sweep never writes to a remote. Branch + PR creation is"
 log "        the token-bearing actuator's job — docs/operations/estate-automerge.adoc"
-[ "$incomplete" -gt 0 ] && log "  INCOMPLETE: ${incomplete} search(es) overflowed GitHub's 1,000-result cap; candidates beyond it were not seen — rerun with --via clone"
+if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ]; then
+  log "  INCOMPLETE: $(unseen); what they hid was not seen — rerun with --via clone"
+fi
 
 exit 2

@@ -1114,6 +1114,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
 
+  # The same key written inside a flow mapping on the line that opens it:
+  # `- { uses: dtolnay/rust-toolchain@<sha> }`, `steps: [ { uses: ... } ]`.
+  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
+
   @doc """
   WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
   `toolchain:` input.
@@ -1148,62 +1152,172 @@ defmodule Hypatia.Rules.WorkflowAudit do
       cannot rescue an earlier step.
     * Severity is medium: the rule reports and routes to the fleet; it is
       never a blocking gate (AGENTIC `must-not-promote-to-blocking`).
+    * A KYAML workflow (standards YAML-POLICY Y-3, the output of
+      `yq -o kyaml`) is judged as its block equivalent, line for line
+      (`ResearchExtensions.flow_to_block/1`), so a quoted, braced step is
+      the same step. A flow-style step written inline in a block document
+      (`- { uses: ..., with: { toolchain: stable } }`,
+      `steps: [ { uses: ... } ]`, or a `- {` item spread over lines) is read
+      through its braces: its `with` entry decides, quotes and nested
+      braces respected, and a `uses:` inside a quoted string is text.
+    * `with:` may be an anchor (`with: &inputs`, block or flow), an alias
+      (`with: *inputs`) or carry a merge key (`<<: *inputs`): the anchored
+      mapping is resolved from the document and its direct entries decide.
+      An alias with no anchor in the file cannot be read; the step is
+      reported so, not passed silently.
 
   Auto-fixable: gitbot-fleet `scripts/fix-rust-toolchain-input.sh` inserts
-  `toolchain: stable` (the channel the estate's reusables pass).
+  `toolchain: stable` (the channel the estate's reusables pass) into a
+  block-style step whose `with:` is absent, a block mapping or a flow
+  mapping. The fixer refuses every other shape rather than guess (exit 2,
+  file untouched), so a finding on a KYAML document, a flow-style step, or
+  a `with:` that goes through an anchor or alias carries
+  `auto_fixable: false` and routes to review instead of to the fixer.
   """
   def check_sha_pinned_toolchain_without_input(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      lines = String.split(content, "\n")
+      # KYAML is read as the block layout it denotes; line numbers survive.
+      normalised = Hypatia.Rules.ResearchExtensions.flow_to_block(content)
+      kyaml? = normalised != content
+      lines = String.split(normalised, "\n")
 
       lines
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {line, number} ->
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
-            {step, key_indent, opener} = wf026_step(lines, number)
-
-            cond do
-              # `uses:` nested under `env:`, inside a `run: |` script or under
-              # any other key is data, not the step's action.
-              wf026_key_indent(line) != key_indent ->
-                []
-
-              # A list item is a step only under `steps:`: one inside a block
-              # scalar (a fixture kept in `env:`, a `run: |` script) is text.
-              not wf026_under_steps?(lines, opener) ->
-                []
-
-              wf026_with_names_toolchain?(step, key_indent) ->
-                []
-
-              true ->
-                [
-                  %{
-                    rule: "WF026",
-                    type: :sha_pinned_toolchain_without_input,
-                    file: filename,
-                    line: number,
-                    current_sha: sha,
-                    severity: :medium,
-                    auto_fixable: true,
-                    fix_script: "fix-rust-toolchain-input.sh",
-                    reason:
-                      "`dtolnay/rust-toolchain` is pinned at `@#{sha}` with no `toolchain:` " <>
-                        "input. The action reads the channel from its `@`-ref; a commit SHA " <>
-                        "carries none, so the step exits 1 with \"'toolchain' is a required " <>
-                        "input\" before any cargo command runs and the red reads as a code " <>
-                        "failure. Add `with: toolchain: stable` (or the channel you mean).",
-                    action: :add_toolchain_input
-                  }
-                ]
-            end
+            wf026_block_step_finding(filename, lines, line, number, sha, kyaml?)
 
           _ ->
-            []
+            case Regex.run(@toolchain_sha_pin_inline, line, return: :index) do
+              [{_, _}, {sha_at, 40}] ->
+                sha = binary_part(line, sha_at, 40)
+                wf026_inline_step_finding(filename, lines, line, number, sha, kyaml?)
+
+              _ ->
+                []
+            end
         end
       end)
     end)
+  end
+
+  # The block-style path: `uses:` is a key on its own line.
+  defp wf026_block_step_finding(filename, lines, line, number, sha, kyaml?) do
+    {step, key_indent, opener} = wf026_step(lines, number)
+    flow_item? = Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
+
+    cond do
+      # `uses:` nested under `env:`, inside a `run: |` script or under
+      # any other key is data, not the step's action.
+      wf026_key_indent(line) != key_indent ->
+        []
+
+      # A list item is a step only under `steps:`: one inside a block
+      # scalar (a fixture kept in `env:`, a `run: |` script) is text.
+      not wf026_under_steps?(lines, opener) ->
+        []
+
+      true ->
+        case wf026_with(step, key_indent, lines) do
+          {:toolchain, _form} ->
+            []
+
+          verdict ->
+            form = if flow_item?, do: :flow_step, else: elem(verdict, 1)
+            [wf026_finding(filename, number, sha, verdict, form, kyaml?)]
+        end
+    end
+  end
+
+  # The inline path: `uses:` sits inside a flow mapping on the line that
+  # opens it. The mapping is read through its braces (quote-aware, across
+  # lines) and its `with` entry decides.
+  defp wf026_inline_step_finding(filename, lines, line, number, sha, kyaml?) do
+    uses_at =
+      case Regex.run(@toolchain_sha_pin_inline, line, return: :index) do
+        [{at, _} | _] -> at + 1
+        _ -> nil
+      end
+
+    with true <- is_integer(uses_at),
+         {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
+         true <- wf026_inline_item?(line, open_col),
+         true <- wf026_inline_under_steps?(lines, line, number, open_col),
+         {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
+      case wf026_with_entry(wf_flow_entries(interior), lines) do
+        {:toolchain, _} -> []
+        verdict -> [wf026_finding(filename, number, sha, verdict, :flow_step, kyaml?)]
+      end
+    else
+      _ -> []
+    end
+  end
+
+  # The text before the mapping's `{` must be a sequence position: a list
+  # dash, the `steps:` key opening its sequence, a `[`, a comma, or nothing.
+  # Anything else (`run: "echo { uses: ... }"`) is a scalar carrying braces.
+  defp wf026_inline_item?(line, open_col) do
+    prefix = binary_part(line, 0, open_col)
+    Regex.match?(~r/^\s*(?:-\s*)?(?:["']?steps["']?\s*:\s*)?[\[,\s]*$/, prefix)
+  end
+
+  defp wf026_inline_under_steps?(lines, line, number, open_col) do
+    prefix = binary_part(line, 0, open_col)
+
+    if Regex.match?(~r/["']?steps["']?\s*:/, prefix) do
+      # The line is the `steps:` key itself; it belongs to a job.
+      match?([_job, "jobs" | _], wf_ancestor_keys(lines, number) || [])
+    else
+      wf026_under_steps?(lines, number)
+    end
+  end
+
+  # The finding. Only a plain block-style step is handed to the fixer:
+  # the fleet script refuses flow-style steps, anchors and aliases (exit
+  # 2, file untouched), and a KYAML document is a flow-style document.
+  defp wf026_finding(filename, number, sha, verdict, form, kyaml?) do
+    repairable? = not kyaml? and form in [:none, :block, :flow]
+
+    shape =
+      case {verdict, form} do
+        {{:unreadable, :alias, name}, _} ->
+          " Its `with:` is the alias `*#{name}` and no `&#{name}` anchor is defined in " <>
+            "the file, so the inputs cannot be read; the alias must be resolved by hand."
+
+        {_, :flow_step} ->
+          " The step is written in flow style; the repair script rewrites block-style " <>
+            "steps only, so this one routes to review."
+
+        {_, f} when f in [:anchor, :alias, :merge] ->
+          " Its `with:` goes through a YAML anchor or alias; the repair script does not " <>
+            "rewrite anchored mappings, so this one routes to review."
+
+        _ when kyaml? ->
+          " The workflow is KYAML; the repair script rewrites block-style steps only, " <>
+            "so this one routes to review."
+
+        _ ->
+          ""
+      end
+
+    %{
+      rule: "WF026",
+      type: :sha_pinned_toolchain_without_input,
+      file: filename,
+      line: number,
+      current_sha: sha,
+      severity: :medium,
+      auto_fixable: repairable?,
+      fix_script: if(repairable?, do: "fix-rust-toolchain-input.sh", else: nil),
+      reason:
+        "`dtolnay/rust-toolchain` is pinned at `@#{sha}` with no `toolchain:` " <>
+          "input. The action reads the channel from its `@`-ref; a commit SHA " <>
+          "carries none, so the step exits 1 with \"'toolchain' is a required " <>
+          "input\" before any cargo command runs and the red reads as a code " <>
+          "failure. Add `with: toolchain: stable` (or the channel you mean)." <> shape,
+      action: :add_toolchain_input
+    }
   end
 
   # Indentation width of a line (spaces only; workflow YAML never uses tabs).
@@ -1304,19 +1418,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
       list_item? and sibling_ok? and indent == limit ->
         wf_walk_up(rest, limit, sibling_ok?, keys)
 
+      # A flow closer (`}`, `],`) on its own line ends a collection some
+      # earlier line opened; it names nothing and bounds nothing.
+      Regex.match?(~r/^\s*[}\]]/, line) ->
+        wf_walk_up(rest, limit, sibling_ok?, keys)
+
       Regex.match?(~r/:\s*[|>][-+0-9]*\s*(?:#.*)?$/, line) ->
         nil
 
-      list_item? ->
+      # A list item, or a `{`/`[` opening a flow item on its own line, is a
+      # node, not a key.
+      list_item? or Regex.match?(~r/^\s*[{\[]/, line) ->
         wf_walk_up(rest, indent - 1, false, keys)
 
       true ->
         wf_walk_up(rest, indent - 1, false, [wf_key_name(line) | keys])
     end
-  end
-
-  defp wf_brace_delta(line) do
-    length(String.split(line, "{")) - length(String.split(line, "}"))
   end
 
   defp wf_key_name(line) do
@@ -1328,14 +1445,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # The column of the step's keys: the opener's key (`- uses:` -> the column
-  # of `uses`), or for a bare `-` the indentation of the first plain line
-  # under it.
+  # of `uses`), or for a bare `-` — or a `- {` opening a flow-style item — the
+  # indentation of the first plain line under it.
   defp wf026_step_key_indent([opener | rest]) do
     cond do
-      Regex.match?(~r/^\s*-\s+\S/, opener) ->
+      Regex.match?(~r/^\s*-\s+\S/, opener) and not Regex.match?(~r/^\s*-\s+\{\s*$/, opener) ->
         wf026_key_indent(opener)
 
-      Regex.match?(~r/^\s*-\s*$/, opener) ->
+      Regex.match?(~r/^\s*-\s*(?:\{\s*)?$/, opener) ->
         case Enum.find(rest, &wf026_plain?/1) do
           nil -> wf026_indent(opener) + 2
           l -> wf026_indent(l)
@@ -1346,70 +1463,360 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
-  # True when the step's `with:` mapping names `toolchain:` — block form (a
-  # direct child of `with:`) or flow form (`with: { toolchain: stable }`).
-  # Only a `with:` at the step's key column is the step's own; `toolchain:`
-  # under `env:` or any other key is not an action input.
-  defp wf026_with_names_toolchain?(step, key_indent) do
+  # What the step's `with:` says about `toolchain:`, as a verdict:
+  # `{:toolchain, form}`, `{:missing, form}` or `{:unreadable, :alias, name}`,
+  # where form is :none (no `with:`), :block, :flow, :anchor (`with: &x`),
+  # :alias (`with: *x`) or :merge (a `<<: *x` child). Only a `with:` at the
+  # step's key column is the step's own; `toolchain:` under `env:` or any
+  # other key is not an action input.
+  defp wf026_with(step, key_indent, lines) do
     step
     |> Enum.with_index()
-    |> Enum.any?(fn {line, i} ->
-      cond do
-        wf026_key_indent(line) != key_indent ->
-          false
+    |> Enum.find_value({:missing, :none}, fn {line, i} ->
+      if wf026_key_indent(line) == key_indent do
+        case Regex.run(~r/^\s*(?:-\s+)?["']?with["']?\s*:(.*)$/, line) do
+          [_, value] ->
+            value = value |> wf_strip_comment() |> String.trim()
+            wf026_with_value(value, line, Enum.drop(step, i + 1), key_indent, lines)
 
-        Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*\{/, line) ->
-          # A flow `with: {` on one line, or spread over several up to the
-          # brace that closes it — an expression `${{ matrix.x }}` inside it
-          # opens and closes its own braces, so the mapping ends when the net
-          # depth returns to zero: every entry in it is an input.
-          flow =
-            case wf_brace_delta(line) do
-              depth when depth <= 0 ->
-                [line]
-
-              depth ->
-                step
-                |> Enum.drop(i + 1)
-                |> Enum.reduce_while({depth, [line]}, fn l, {d, acc} ->
-                  d = d + wf_brace_delta(l)
-                  if d <= 0, do: {:halt, {d, [l | acc]}}, else: {:cont, {d, [l | acc]}}
-                end)
-                |> elem(1)
-            end
-
-          Enum.any?(flow, &Regex.match?(~r/(?:^|[{,])\s*["']?toolchain["']?\s*:\s*[^\s,}]/, &1))
-
-        Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*(?:#.*)?$/, line) ->
-          # Only a DIRECT child of `with:` is an input: the contents of another
-          # input's block scalar (`components: |` carrying `toolchain: stable`)
-          # sit deeper than the first child and are text, not a key.
-          children =
-            step
-            |> Enum.drop(i + 1)
-            |> Enum.take_while(fn l ->
-              trimmed = String.trim(l)
-              trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > key_indent
-            end)
-            |> Enum.filter(&wf026_plain?/1)
-
-          case children do
-            [] ->
-              false
-
-            [first | _] ->
-              child_indent = wf026_indent(first)
-
-              Enum.any?(children, fn l ->
-                wf026_indent(l) == child_indent and
-                  Regex.match?(~r/^\s*["']?toolchain["']?\s*:\s*\S/, l)
-              end)
-          end
-
-        true ->
-          false
+          nil ->
+            nil
+        end
       end
     end)
+  end
+
+  defp wf026_with_value(value, line, rest, key_indent, lines) do
+    cond do
+      # `with: *inputs` — the anchored mapping, wherever it is defined.
+      match?([_ | _], Regex.run(~r/^\*([\w.-]+)$/, value)) ->
+        [_, name] = Regex.run(~r/^\*([\w.-]+)$/, value)
+        wf026_alias_verdict(name, lines, :alias)
+
+      # `with: {` / `with: &inputs {` — a flow mapping, read to its brace.
+      String.contains?(value, "{") ->
+        form = if String.starts_with?(value, "&"), do: :anchor, else: :flow
+        [{at, _}] = Regex.run(~r/\{/, line, return: :index)
+
+        case wf_flow_interior([line | rest], 1, at) do
+          {:ok, interior, _} -> wf026_entries_verdict(wf_flow_entries(interior), lines, form)
+          :error -> {:missing, form}
+        end
+
+      # `with:` / `with: &inputs` — a block mapping: only a DIRECT child is
+      # an input; the contents of another input's block scalar
+      # (`components: |` carrying `toolchain: stable`) sit deeper and are text.
+      true ->
+        form = if String.starts_with?(value, "&"), do: :anchor, else: :block
+        wf026_entries_verdict(wf_block_children(rest, key_indent), lines, form)
+    end
+  end
+
+  # The `with` entry of a flow-style step's own entries.
+  defp wf026_with_entry(entries, lines) do
+    case List.keyfind(entries, "with", 0) do
+      nil ->
+        {:missing, :none}
+
+      {_, value} ->
+        value = String.trim(value)
+
+        cond do
+          match?([_ | _], Regex.run(~r/^\*([\w.-]+)$/, value)) ->
+            [_, name] = Regex.run(~r/^\*([\w.-]+)$/, value)
+            wf026_alias_verdict(name, lines, :alias)
+
+          String.contains?(value, "{") ->
+            form = if String.starts_with?(value, "&"), do: :anchor, else: :flow
+            [{at, _}] = Regex.run(~r/\{/, value, return: :index)
+
+            case wf_flow_interior([value], 1, at) do
+              {:ok, interior, _} -> wf026_entries_verdict(wf_flow_entries(interior), lines, form)
+              :error -> {:missing, form}
+            end
+
+          true ->
+            {:missing, :flow}
+        end
+    end
+  end
+
+  # Does a list of `{key, value}` entries name a toolchain? A `<<: *x` merge
+  # key brings the anchored mapping's entries in.
+  defp wf026_entries_verdict(entries, lines, form, seen \\ []) do
+    cond do
+      Enum.any?(entries, fn {k, v} -> k == "toolchain" and wf_unquote(v) != "" end) ->
+        {:toolchain, form}
+
+      true ->
+        entries
+        |> Enum.filter(fn {k, v} ->
+          k == "<<" and Regex.match?(~r/^\*[\w.-]+$/, String.trim(v))
+        end)
+        |> Enum.find_value({:missing, form}, fn {_, v} ->
+          name = v |> String.trim() |> String.trim_leading("*")
+
+          case wf026_alias_verdict(name, lines, :merge, seen) do
+            {:missing, _} -> nil
+            verdict -> verdict
+          end
+        end)
+    end
+  end
+
+  # An alias that reaches itself (`&x` whose mapping merges `*x`) is as
+  # unreadable as one with no anchor.
+  defp wf026_alias_verdict(name, lines, form, seen \\ []) do
+    if name in seen do
+      {:unreadable, :alias, name}
+    else
+      case wf_anchor_entries(lines, name) do
+        {:ok, entries} -> wf026_entries_verdict(entries, lines, form, [name | seen])
+        :error -> {:unreadable, :alias, name}
+      end
+    end
+  end
+
+  # The entries of the mapping anchored `&name`: the first `&name` in the
+  # document, read as a flow mapping when a `{` follows it, else as the
+  # block mapping under its line.
+  defp wf_anchor_entries(lines, name) do
+    re = ~r/&#{Regex.escape(name)}(?=[\s,{}\[\]]|$)/
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.find(fn {l, _} -> wf026_plain?(l) and Regex.match?(re, wf_strip_comment(l)) end)
+    |> case do
+      nil ->
+        :error
+
+      {line, number} ->
+        [{at, len}] = Regex.run(re, line, return: :index)
+
+        after_anchor =
+          line |> binary_part(at + len, byte_size(line) - at - len) |> wf_strip_comment()
+
+        case Regex.run(~r/\{/, after_anchor, return: :index) do
+          [{brace, _}] ->
+            case wf_flow_interior(lines, number, at + len + brace) do
+              {:ok, interior, _} -> {:ok, wf_flow_entries(interior)}
+              :error -> :error
+            end
+
+          nil ->
+            {:ok, wf_block_children(Enum.drop(lines, number), wf026_key_indent(line))}
+        end
+    end
+  end
+
+  # The direct children of a block mapping whose key sits at `key_indent`,
+  # as `{key, value}` entries: the plain lines deeper than the key, at the
+  # first child's indentation. Deeper lines are nested mappings or scalar
+  # text, not entries.
+  defp wf_block_children(rest, key_indent) do
+    children =
+      rest
+      |> Enum.take_while(fn l ->
+        trimmed = String.trim(l)
+        trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > key_indent
+      end)
+      |> Enum.filter(&wf026_plain?/1)
+
+    case children do
+      [] ->
+        []
+
+      [first | _] ->
+        child_indent = wf026_indent(first)
+
+        children
+        |> Enum.filter(&(wf026_indent(&1) == child_indent))
+        |> Enum.flat_map(fn l ->
+          case Regex.run(~r/^\s*(?:-\s+)?["']?([^"':\s]+)["']?\s*:(.*)$/, l) do
+            [_, k, v] -> [{k, v |> wf_strip_comment() |> String.trim()}]
+            nil -> []
+          end
+        end)
+    end
+  end
+
+  # ─── flow-mapping reading (quote- and depth-aware) ──────────────────
+
+  # Byte column of the innermost `{` still open at byte `at` of `line`, read
+  # from the start with quotes and comments respected; :error when `at` is
+  # not inside a flow mapping opened on this line (it is inside a quoted
+  # scalar, or no brace precedes it).
+  defp wf_flow_opener_before(line, at) do
+    line
+    |> binary_part(0, at)
+    |> :binary.bin_to_list()
+    |> wf_flow_prefix(0, nil, [], ?\s)
+  end
+
+  # State: nil (plain text), ?" or ?' (inside that quote), :comment. The
+  # stack holds the byte column of each open `{` (`:seq` for a `[`); the
+  # innermost must be a mapping for `at` to be a key position.
+  defp wf_flow_prefix([], _pos, nil, [col | _], _prev) when is_integer(col), do: {:ok, col}
+  defp wf_flow_prefix([], _pos, _state, _stack, _prev), do: :error
+
+  defp wf_flow_prefix([c | rest], pos, nil, stack, prev) do
+    cond do
+      c == ?# and prev in [?\s, ?\t] -> wf_flow_prefix(rest, pos + 1, :comment, stack, c)
+      c in [?", ?'] -> wf_flow_prefix(rest, pos + 1, c, stack, c)
+      c == ?{ -> wf_flow_prefix(rest, pos + 1, nil, [pos | stack], c)
+      c == ?[ -> wf_flow_prefix(rest, pos + 1, nil, [:seq | stack], c)
+      c in [?}, ?]] -> wf_flow_prefix(rest, pos + 1, nil, Enum.drop(stack, 1), c)
+      true -> wf_flow_prefix(rest, pos + 1, nil, stack, c)
+    end
+  end
+
+  defp wf_flow_prefix([?\\, c | rest], pos, ?", stack, _prev),
+    do: wf_flow_prefix(rest, pos + 2, ?", stack, c)
+
+  defp wf_flow_prefix([q | rest], pos, q, stack, _prev),
+    do: wf_flow_prefix(rest, pos + 1, nil, stack, q)
+
+  defp wf_flow_prefix([c | rest], pos, state, stack, _prev),
+    do: wf_flow_prefix(rest, pos + 1, state, stack, c)
+
+  # The interior of the flow collection whose opener sits at byte `open_col`
+  # of line `number` (1-based): the text between that brace and the one
+  # closing it, which may be lines later. Quoted scalars and comments are
+  # skipped for depth, comments are dropped from the text. :error when the
+  # document ends first.
+  defp wf_flow_interior(lines, number, open_col) do
+    first = Enum.at(lines, number - 1)
+    head = binary_part(first, open_col + 1, byte_size(first) - open_col - 1)
+
+    text =
+      [head | Enum.drop(lines, number)]
+      |> Enum.join("\n")
+      |> :binary.bin_to_list()
+
+    wf_flow_take(text, 1, nil, [], 0)
+  end
+
+  defp wf_flow_take([], _depth, _state, _acc, _nl), do: :error
+
+  defp wf_flow_take([c | rest], depth, nil, acc, nl) do
+    cond do
+      c == ?# and (acc == [] or hd(acc) in [?\s, ?\t, ?\n]) ->
+        wf_flow_take(rest, depth, :comment, acc, nl)
+
+      c in [?", ?'] ->
+        wf_flow_take(rest, depth, c, [c | acc], nl)
+
+      c in [?{, ?[] ->
+        wf_flow_take(rest, depth + 1, nil, [c | acc], nl)
+
+      c in [?}, ?]] and depth == 1 ->
+        {:ok, acc |> Enum.reverse() |> List.to_string(), nl}
+
+      c in [?}, ?]] ->
+        wf_flow_take(rest, depth - 1, nil, [c | acc], nl)
+
+      c == ?\n ->
+        wf_flow_take(rest, depth, nil, [c | acc], nl + 1)
+
+      true ->
+        wf_flow_take(rest, depth, nil, [c | acc], nl)
+    end
+  end
+
+  defp wf_flow_take([?\\, c | rest], depth, ?", acc, nl),
+    do: wf_flow_take(rest, depth, ?", [c, ?\\ | acc], nl)
+
+  defp wf_flow_take([?\n | rest], depth, :comment, acc, nl),
+    do: wf_flow_take(rest, depth, nil, [?\n | acc], nl + 1)
+
+  defp wf_flow_take([_ | rest], depth, :comment, acc, nl),
+    do: wf_flow_take(rest, depth, :comment, acc, nl)
+
+  defp wf_flow_take([q | rest], depth, q, acc, nl),
+    do: wf_flow_take(rest, depth, nil, [q | acc], nl)
+
+  defp wf_flow_take([c | rest], depth, q, acc, nl),
+    do: wf_flow_take(rest, depth, q, [c | acc], nl)
+
+  # The top-level `{key, value}` entries of a flow mapping's interior:
+  # commas inside nested `{}`/`[]` or quoted scalars do not split, and the
+  # key ends at the first top-level colon.
+  defp wf_flow_entries(interior) do
+    interior
+    |> wf_flow_split(?,)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.map(fn entry ->
+      case wf_flow_split(entry, ?:) do
+        [key] -> {wf_unquote(key), ""}
+        [key | value] -> {wf_unquote(key), value |> Enum.join(":") |> String.trim()}
+      end
+    end)
+  end
+
+  # Split at `sep` where it sits at depth 0 and outside quotes.
+  defp wf_flow_split(text, sep) do
+    text
+    |> :binary.bin_to_list()
+    |> wf_flow_split(sep, 0, nil, [], [])
+  end
+
+  defp wf_flow_split([], _sep, _depth, _q, cur, out),
+    do: Enum.reverse([cur |> Enum.reverse() |> List.to_string() | out])
+
+  defp wf_flow_split([c | rest], sep, depth, nil, cur, out) do
+    cond do
+      c == sep and depth == 0 ->
+        wf_flow_split(rest, sep, depth, nil, [], [cur |> Enum.reverse() |> List.to_string() | out])
+
+      c in [?", ?'] ->
+        wf_flow_split(rest, sep, depth, c, [c | cur], out)
+
+      c in [?{, ?[] ->
+        wf_flow_split(rest, sep, depth + 1, nil, [c | cur], out)
+
+      c in [?}, ?]] ->
+        wf_flow_split(rest, sep, max(depth - 1, 0), nil, [c | cur], out)
+
+      true ->
+        wf_flow_split(rest, sep, depth, nil, [c | cur], out)
+    end
+  end
+
+  defp wf_flow_split([?\\, c | rest], sep, depth, ?", cur, out),
+    do: wf_flow_split(rest, sep, depth, ?", [c, ?\\ | cur], out)
+
+  defp wf_flow_split([q | rest], sep, depth, q, cur, out),
+    do: wf_flow_split(rest, sep, depth, nil, [q | cur], out)
+
+  defp wf_flow_split([c | rest], sep, depth, q, cur, out),
+    do: wf_flow_split(rest, sep, depth, q, [c | cur], out)
+
+  # Drop a trailing ` # comment` that sits outside quotes.
+  defp wf_strip_comment(text) do
+    text
+    |> :binary.bin_to_list()
+    |> wf_strip_comment(nil, [])
+  end
+
+  defp wf_strip_comment([], _q, acc), do: acc |> Enum.reverse() |> List.to_string()
+
+  defp wf_strip_comment([?# | _], nil, acc) when acc == [] or hd(acc) in [?\s, ?\t],
+    do: acc |> Enum.reverse() |> List.to_string()
+
+  defp wf_strip_comment([c | rest], nil, acc) when c in [?", ?'],
+    do: wf_strip_comment(rest, c, [c | acc])
+
+  defp wf_strip_comment([?\\, c | rest], ?", acc), do: wf_strip_comment(rest, ?", [c, ?\\ | acc])
+  defp wf_strip_comment([q | rest], q, acc), do: wf_strip_comment(rest, nil, [q | acc])
+  defp wf_strip_comment([c | rest], q, acc), do: wf_strip_comment(rest, q, [c | acc])
+
+  defp wf_unquote(text) do
+    text
+    |> String.trim()
+    |> String.replace(~r/^"(.*)"$/s, "\\1")
+    |> String.replace(~r/^'(.*)'$/s, "\\1")
+    |> String.trim()
   end
 
   # Column of a key, with a list dash counted as indentation (`- with:` is

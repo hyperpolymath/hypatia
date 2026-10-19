@@ -281,6 +281,160 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "a KYAML workflow is judged as its block equivalent, line for line" do
+      # The literal shape of `yq -o kyaml` (standards YAML-POLICY Y-3): every
+      # value quoted, every mapping braced, step items opening with `{`.
+      wf = """
+      {
+        jobs: {
+          check: {
+            runs-on: "ubuntu-latest",
+            steps: [
+              {
+                uses: "dtolnay/rust-toolchain@#{@toolchain_sha}",
+                with: {
+                  toolchain: "stable",
+                },
+              },
+              {
+                uses: "dtolnay/rust-toolchain@#{@toolchain_sha}",
+              },
+              { uses: "dtolnay/rust-toolchain@#{@toolchain_sha}" },
+            ],
+          },
+        },
+      }
+      """
+
+      assert [%{line: 13} = a, %{line: 15} = b] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      # The repair script rewrites block-style steps only: a KYAML finding is
+      # real but routes to review, never to the fixer.
+      refute a.auto_fixable
+      assert a.fix_script == nil
+      assert a.reason =~ "KYAML"
+      refute b.auto_fixable
+    end
+
+    test "a flow-style step inline in a block document is read through its braces" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - { uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: { toolchain: stable } }
+            - { name: "rust", uses: "dtolnay/rust-toolchain@#{@toolchain_sha}" }
+            - { with: { components: "clippy, rustfmt" }, uses: dtolnay/rust-toolchain@#{@toolchain_sha} }
+            - run: echo "{ uses: dtolnay/rust-toolchain@#{@toolchain_sha} }"
+      """
+
+      assert [%{line: 5} = a, %{line: 6}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      refute a.auto_fixable
+      assert a.reason =~ "flow style"
+    end
+
+    test "steps: [ { uses: ... } ] on one line is a step; a flow list in env: is not" do
+      wf = """
+      jobs:
+        check:
+          env:
+            fixture: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ]
+          steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ]
+      """
+
+      assert [%{line: 5, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "a - { item spread over lines: its with entry decides, nested braces respected" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - {
+                uses: dtolnay/rust-toolchain@#{@toolchain_sha},
+                with: { components: "${{ matrix.component }}", toolchain: nightly },
+              }
+            - {
+                uses: dtolnay/rust-toolchain@#{@toolchain_sha},
+                with: { components: "${{ matrix.component }}" },
+              }
+            - {
+                env: { uses: dtolnay/rust-toolchain@#{@toolchain_sha} },
+                uses: dtolnay/rust-toolchain@#{@toolchain_sha},
+              }
+      """
+
+      assert [%{line: 9, auto_fixable: false}, %{line: 14, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "with: through an anchor or alias is resolved; the finding is not auto-fixable" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: &rust-inputs
+                toolchain: stable
+                components: clippy
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *rust-inputs
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: &bare-inputs { components: clippy }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *bare-inputs
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: *rust-inputs
+                components: rustfmt
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: *bare-inputs
+      """
+
+      assert [%{line: 10} = a, %{line: 12} = b, %{line: 18} = c] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      refute a.auto_fixable
+      assert a.reason =~ "anchor or alias"
+      refute b.auto_fixable
+      # A block `with:` whose merged mapping lacks the input is still the
+      # fixer's: an explicit `toolchain:` child overrides a merge key, so
+      # inserting one is a sound repair.
+      assert c.auto_fixable
+    end
+
+    test "an alias with no anchor cannot be read: reported, never passed silently" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *nowhere
+      """
+
+      assert [%{line: 4, auto_fixable: false} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert f.reason =~ "no `&nowhere` anchor"
+    end
+
+    test "a plain block-style finding is still the fixer's" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { components: clippy } # a flow mapping the fixer extends
+      """
+
+      assert [%{line: 4, auto_fixable: true, fix_script: "fix-rust-toolchain-input.sh"}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "the audit carries WF026 findings and a count" do
       wf = "jobs:\n  a:\n    steps:\n      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n"
       result = WorkflowAudit.audit(["rust.yml"], %{"rust.yml" => wf})

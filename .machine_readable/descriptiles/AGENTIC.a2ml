@@ -46,6 +46,8 @@ completion-claim-requires-behavioural-tests = true
 # Every rule here has a fleet fix script that carries the SAME facts, so a
 # detection without a repair, or a repair without a detection, is a drift:
 #   WF026  workflow_audit.ex  SHA-pinned dtolnay/rust-toolchain with no toolchain: input   -> fleet fix-rust-toolchain-input.sh
+#          (detected in block YAML and KYAML/flow style alike, Y-3; repaired in block style only —
+#          a KYAML, flow-step, anchored or aliased finding carries auto_fixable: false and routes to review)
 #   WF027  workflow_audit.ex  caller pinned at a reusable revision MEASURED dead (table)     -> fleet fix-stale-reusable-pin.sh (Window A)
 #   PIN-003 pr-automerge-policy.json  standards revisions whose own actions.lock GitHub
 #          rejects at job setup (545 commits, 2026-08-19..2026-10-19; PI001/PA001 fire)    -> fleet fix-stale-reusable-pin.sh (Window B)
