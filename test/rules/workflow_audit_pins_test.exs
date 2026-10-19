@@ -25,7 +25,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       [f] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
       assert f.rule == "WF026"
-      assert f.severity == :high
+      assert f.severity == :medium
       assert f.file == "rust.yml"
       assert f.line == 5
       assert f.current_sha == @toolchain_sha
@@ -120,7 +120,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       wf = "jobs:\n  rust-ci:\n    uses: #{@rust_ci}@#{@broken_standards}\n"
       [f] = WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
       assert f.rule == "WF027"
-      assert f.severity == :critical
+      assert f.severity == :medium
       assert f.reusable == @rust_ci
       assert f.current_sha == @broken_standards
       assert f.replacement_sha == @good_standards

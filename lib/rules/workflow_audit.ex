@@ -1130,12 +1130,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
   itself, wherever it is written — a reusable, a plain workflow, a fork.
 
   Sensitivity / specificity:
-    * Fires only on `uses: dtolnay/rust-toolchain@<40-hex>` whose step
-      body (the lines below `uses:` up to the next list item at the same
-      or shallower indentation) names no `toolchain:` key. A tag-pinned
+    * Fires only on `uses: dtolnay/rust-toolchain@<40-hex>` whose step —
+      the whole list item, from its opening `- ` line, so a `with:` written
+      above `uses:` counts (YAML mapping keys carry no order) — has no
+      `with:` mapping naming `toolchain:`, in block form (a direct child of
+      `with:`) or flow form (`with: { toolchain: stable }`). A tag-pinned
       step carries its channel in the ref and never fires.
-    * The step body is bounded by indentation, so a later step's
-      `toolchain:` cannot rescue an earlier step.
+    * Only `with:` decides: `toolchain:` under `env:` or any other key is
+      not an action input and does not rescue the step.
+    * The step is bounded by indentation, so a later step's `toolchain:`
+      cannot rescue an earlier step.
+    * Severity is medium: the rule reports and routes to the fleet; it is
+      never a blocking gate (AGENTIC `must-not-promote-to-blocking`).
 
   Auto-fixable: gitbot-fleet `scripts/fix-rust-toolchain-input.sh` inserts
   `toolchain: stable` (the channel the estate's reusables pass).
@@ -1149,14 +1155,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> Enum.flat_map(fn {line, number} ->
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
-            step_indent = wf026_indent(line)
-
-            body =
-              lines
-              |> Enum.drop(number)
-              |> Enum.take_while(&wf026_step_line?(&1, step_indent))
-
-            if Enum.any?(body, &Regex.match?(~r/^\s*toolchain:\s*\S/, &1)) do
+            if wf026_with_names_toolchain?(wf026_step(lines, number)) do
               []
             else
               [
@@ -1166,7 +1165,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
                   file: filename,
                   line: number,
                   current_sha: sha,
-                  severity: :high,
+                  severity: :medium,
                   auto_fixable: true,
                   fix_script: "fix-rust-toolchain-input.sh",
                   reason:
@@ -1203,6 +1202,75 @@ defmodule Hypatia.Rules.WorkflowAudit do
       wf026_indent(line) < step_indent -> false
       true -> true
     end
+  end
+
+  # The whole list item the `uses:` line at `number` (1-based) belongs to:
+  # from its opening `- ` line — which may sit above `uses:`, since YAML
+  # mapping keys carry no order — to the next list item at that indentation
+  # or shallower, or a shallower key.
+  defp wf026_step(lines, number) do
+    uses_line = Enum.at(lines, number - 1)
+    uses_indent = wf026_indent(uses_line)
+
+    {opener, step_indent} =
+      if Regex.match?(~r/^\s*-\s/, uses_line) do
+        {number, uses_indent}
+      else
+        lines
+        |> Enum.take(number - 1)
+        |> Enum.with_index(1)
+        |> Enum.reverse()
+        |> Enum.find(fn {l, _} ->
+          Regex.match?(~r/^\s*-\s/, l) and wf026_indent(l) < uses_indent
+        end)
+        |> case do
+          {l, i} -> {i, wf026_indent(l)}
+          nil -> {number, uses_indent}
+        end
+      end
+
+    rest =
+      lines
+      |> Enum.drop(opener)
+      |> Enum.take_while(&wf026_step_line?(&1, step_indent))
+
+    [Enum.at(lines, opener - 1) | rest]
+  end
+
+  # True when the step's `with:` mapping names `toolchain:` — block form (a
+  # direct child of `with:`) or flow form (`with: { toolchain: stable }`).
+  # `toolchain:` under `env:` or any other key is not an action input.
+  defp wf026_with_names_toolchain?(step) do
+    step
+    |> Enum.with_index()
+    |> Enum.any?(fn {line, i} ->
+      cond do
+        Regex.match?(~r/^\s*(?:-\s+)?with:\s*\{/, line) ->
+          Regex.match?(~r/[{,]\s*["']?toolchain["']?\s*:\s*[^\s,}]/, line)
+
+        Regex.match?(~r/^\s*(?:-\s+)?with:\s*(?:#.*)?$/, line) ->
+          with_indent = wf026_key_indent(line)
+
+          step
+          |> Enum.drop(i + 1)
+          |> Enum.take_while(fn l ->
+            trimmed = String.trim(l)
+            trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > with_indent
+          end)
+          |> Enum.any?(&Regex.match?(~r/^\s*["']?toolchain["']?\s*:\s*\S/, &1))
+
+        true ->
+          false
+      end
+    end)
+  end
+
+  # Column of a key, with a list dash counted as indentation (`- with:` is
+  # the column of `with`).
+  defp wf026_key_indent(line) do
+    line
+    |> String.replace(~r/^(\s*)-\s/, "\\1  ")
+    |> wf026_indent()
   end
 
   # ─── WF027: caller pinned at a reusable revision the estate has measured dead ──
@@ -1331,13 +1399,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   Auto-fixable: gitbot-fleet `scripts/fix-stale-reusable-pin.sh` rewrites
   the pin to the replacement the table names, never to "newest".
+
+  Severity is medium: like WF026 the rule reports and routes to the fleet;
+  it is never a blocking gate (AGENTIC `must-not-promote-to-blocking`).
   """
   def check_known_broken_reusable_revision(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       stripped = strip_comments(content)
 
       Enum.flat_map(@broken_reusable_revisions, fn rev ->
-        ref_re = ~r/uses:\s*["']?#{Regex.escape(rev.reusable)}@([0-9a-f]{40})/
+        # Anchored to a `uses:` key at the start of a line (quoted or not):
+        # the reusable's path inside a string value or a comment is not a pin.
+        ref_re =
+          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{Regex.escape(rev.reusable)}@([0-9a-f]{40})/m
 
         Regex.scan(ref_re, stripped)
         |> Enum.flat_map(fn [_full, sha] ->
@@ -1350,7 +1424,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 reusable: rev.reusable,
                 current_sha: sha,
                 replacement_sha: rev.replacement,
-                severity: :critical,
+                severity: :medium,
                 auto_fixable: true,
                 fix_script: "fix-stale-reusable-pin.sh",
                 reason:

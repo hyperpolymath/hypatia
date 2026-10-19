@@ -431,7 +431,7 @@ defmodule Hypatia.Rules.PinIntegrityTest do
     @accepted "75bd5994470661a099df562d6d5ad2fe744dbd66"
     @governance "hyperpolymath/standards/.github/workflows/governance-reusable.yml"
 
-    defp committed_policy, do: :json.decode(File.read!(@policy_path))
+    defp committed_policy, do: Jason.decode!(File.read!(@policy_path))
 
     test "the entry exists, is keyed on SHA only, and names the known-good revision" do
       policy = committed_policy()

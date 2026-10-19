@@ -140,9 +140,20 @@ log "policy $(jq -r '.version' "$POLICY") · blocked SHAs ${#DENY_SHAS[@]} · bl
 HITS="$OUT_DIR/hits.tsv"
 : > "$HITS"
 
+# Search mode is reconnaissance: one code-search query per token, two seconds
+# apart. An entry that blocks a window of commits (PIN-003 names 545) would
+# cost one query per SHA — ~18 minutes of sleeps for one action — so such an
+# entry is searched by its action path instead (one query), and phase 2
+# confirms each hit against the full token alternation. Small denylists keep
+# the exact per-SHA search.
+mapfile -t SEARCH_TOKENS < <(jq -r '
+  .pin_denylist[]
+  | (if ((.blocked_shas // []) | length) > 8 then [.action] else (.blocked_shas // []) end)[],
+    (.blocked_versions // [])[]' "$POLICY" | sort -u)
+
 if [ "$VIA" = "search" ]; then
   for org in "${ORGS[@]}"; do
-    for token in "${DENY_SHAS[@]}" "${DENY_VERSIONS[@]}"; do
+    for token in "${SEARCH_TOKENS[@]}"; do
       page=1
       while :; do
         n=$(gh api "search/code?q=${token}+org:${org}&per_page=100&page=${page}" \
