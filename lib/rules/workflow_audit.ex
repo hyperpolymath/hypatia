@@ -1161,12 +1161,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> Enum.flat_map(fn {line, number} ->
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
-            {step, key_indent} = wf026_step(lines, number)
+            {step, key_indent, opener} = wf026_step(lines, number)
 
             cond do
               # `uses:` nested under `env:`, inside a `run: |` script or under
               # any other key is data, not the step's action.
               wf026_key_indent(line) != key_indent ->
+                []
+
+              # A list item is a step only under `steps:`: one inside a block
+              # scalar (a fixture kept in `env:`, a `run: |` script) is text.
+              not wf026_under_steps?(lines, opener) ->
                 []
 
               wf026_with_names_toolchain?(step, key_indent) ->
@@ -1257,7 +1262,53 @@ defmodule Hypatia.Rules.WorkflowAudit do
       |> Enum.take_while(&wf026_step_line?(&1, step_indent))
 
     step = [Enum.at(lines, opener - 1) | rest]
-    {step, wf026_step_key_indent(step)}
+    {step, wf026_step_key_indent(step), opener}
+  end
+
+  # A list item is a step only when its parent key is `steps:`. Walk up the
+  # ancestors — each the nearest preceding plain, non-list line shallower
+  # than the last; the parent may sit at the item's own indentation, YAML's
+  # `steps:\n- uses:` shape — and refuse any ancestor that opens a block
+  # scalar: an item inside `run: |`, or inside a fixture kept in `env:`, is
+  # text however much it looks like a step, and must never send the fleet to
+  # rewrite scalar data.
+  defp wf026_under_steps?(lines, opener) do
+    opener_indent = wf026_indent(Enum.at(lines, opener - 1))
+
+    lines
+    |> Enum.take(opener - 1)
+    |> Enum.reverse()
+    |> Enum.filter(&wf026_plain?/1)
+    |> wf026_walk_up(opener_indent, nil)
+  end
+
+  defp wf026_walk_up([], _limit, parent), do: parent == :steps
+
+  defp wf026_walk_up([line | rest], limit, parent) do
+    indent = wf026_indent(line)
+    list_item? = Regex.match?(~r/^\s*-(?:\s|$)/, line)
+
+    cond do
+      indent > limit ->
+        wf026_walk_up(rest, limit, parent)
+
+      # A sibling item of the one being placed.
+      list_item? and parent == nil and indent == limit ->
+        wf026_walk_up(rest, limit, parent)
+
+      Regex.match?(~r/:\s*[|>][-+0-9]*\s*(?:#.*)?$/, line) ->
+        false
+
+      list_item? ->
+        wf026_walk_up(rest, indent - 1, parent)
+
+      parent == nil ->
+        found = if Regex.match?(~r/^\s*["']?steps["']?\s*:/, line), do: :steps, else: :other
+        wf026_walk_up(rest, indent - 1, found)
+
+      true ->
+        wf026_walk_up(rest, indent - 1, parent)
+    end
   end
 
   # The column of the step's keys: the opener's key (`- uses:` -> the column
@@ -1292,7 +1343,21 @@ defmodule Hypatia.Rules.WorkflowAudit do
           false
 
         Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*\{/, line) ->
-          Regex.match?(~r/[{,]\s*["']?toolchain["']?\s*:\s*[^\s,}]/, line)
+          # A flow `with: {` on one line, or spread over several up to its
+          # closing brace: every entry in it is an input.
+          {inside, rest} =
+            step
+            |> Enum.drop(i + 1)
+            |> Enum.split_while(&(not String.contains?(&1, "}")))
+
+          flow =
+            if String.contains?(line, "}") do
+              [line]
+            else
+              [line | inside ++ Enum.take(rest, 1)]
+            end
+
+          Enum.any?(flow, &Regex.match?(~r/(?:^|[{,])\s*["']?toolchain["']?\s*:\s*[^\s,}]/, &1))
 
         Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*(?:#.*)?$/, line) ->
           # Only a DIRECT child of `with:` is an input: the contents of another

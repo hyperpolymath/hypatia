@@ -227,6 +227,45 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "a flow with: spread over several lines is read to its closing brace" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: {
+                toolchain: nightly,
+              }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: {
+                components: clippy,
+              }
+      """
+
+      assert [%{line: 8}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "a list item is a step only under steps: — fixtures in env: and run: | are text" do
+      wf = """
+      jobs:
+        check:
+          env:
+            FIXTURE: |
+              jobs:
+                a:
+                  steps:
+                    - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+          steps:
+            - run: |
+                - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [%{line: 12}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "the audit carries WF026 findings and a count" do
       wf = "jobs:\n  a:\n    steps:\n      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n"
       result = WorkflowAudit.audit(["rust.yml"], %{"rust.yml" => wf})
