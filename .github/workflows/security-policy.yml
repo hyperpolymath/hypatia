@@ -755,6 +755,17 @@ jobs:
       - sbom
     if: always()
     steps:
+      # The self-check below parses this very file, so the file has to be on
+      # disk. Without this step it reads nothing, exits 2, and the verdict
+      # step never runs. Only the one file: this job builds nothing.
+      - name: Checkout this workflow file
+        uses: actions/checkout@v7.0.1
+        with:
+          sparse-checkout: |
+            .github/workflows/security-policy.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       # #850 AC4: every job in this workflow except the aggregators must be
       # named in some aggregator's `needs:`. Parse the job keys out of this
       # very file and compare; a future orphan job fails HERE rather than
