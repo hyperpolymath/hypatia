@@ -101,6 +101,44 @@ defmodule Hypatia.Rules.ActionsLockTest do
              ActionsLock.parse(missing_dependency)
   end
 
+  # #926: `gh actions-lock` began writing v0.0.3 with v0.0.2's line grammar.
+  describe "format v0.0.3" do
+    @v3_lock String.replace(@valid_lock, "version: 'v0.0.2'", "version: 'v0.0.3'")
+
+    test "is accepted, and records the version it was read as" do
+      assert {:ok, lock} = ActionsLock.parse(@v3_lock)
+      assert lock.version == "v0.0.3"
+      assert ActionsLock.pinned?(lock, "ci.yml", "actions/checkout@v7.0.1")
+      refute ActionsLock.pinned?(lock, "other.yml", "actions/checkout@v7.0.1")
+
+      assert {:ok, %{version: "v0.0.2"}} = ActionsLock.parse(@valid_lock)
+    end
+
+    test "is held to the same grammar: a malformed line still fails closed" do
+      short = String.replace(@v3_lock, ~r/sha1-[0-9a-f]{40}/, "sha1-1234")
+      assert {:error, {:line, _, :malformed_dependency_commit}} = ActionsLock.parse(short)
+
+      unknown =
+        String.replace(@v3_lock, "        repo_id:", "        integrity: 'x'\n        repo_id:")
+
+      assert {:error, {:line, _, :malformed_dependency_entry}} = ActionsLock.parse(unknown)
+    end
+
+    test "negative control: a version past v0.0.3 is still refused" do
+      assert {:error, {:line, 2, {:unsupported_version, "v0.0.4"}}} =
+               @valid_lock
+               |> String.replace("v0.0.2", "v0.0.4")
+               |> ActionsLock.parse()
+    end
+
+    test "a second version line is refused, even when both are supported" do
+      twice =
+        String.replace(@v3_lock, "version: 'v0.0.3'\n", "version: 'v0.0.3'\nversion: 'v0.0.2'\n")
+
+      assert {:error, {:line, 3, :duplicate_version}} = ActionsLock.parse(twice)
+    end
+  end
+
   test "rejects symbolic-ref and SHA-key contradictions" do
     symbolic = String.replace(@valid_lock, "ref: 'v7.0.1'", "ref: 'v6.0.0'")
 
