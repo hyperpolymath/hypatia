@@ -93,6 +93,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
     heading_regex_issues = check_unanchored_heading_regex(workflow_contents)
     d_burn_issues = check_d_burn_double_trigger(workflow_contents)
     secret_history = check_secret_history_coverage(workflow_contents)
+    toolchain_input_missing = check_sha_pinned_toolchain_without_input(workflow_contents)
+    broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -129,7 +131,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
           heading_regex_issues ++
           d_burn_issues ++
           flawed_regexes ++
-          secret_history,
+          secret_history ++
+          toolchain_input_missing ++
+          broken_reusable_revisions,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -153,6 +157,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
       concurrency_missing_count: length(concurrency_missing),
       heading_regex_issues_count: length(heading_regex_issues),
       d_burn_issues_count: length(d_burn_issues),
+      toolchain_input_missing_count: length(toolchain_input_missing),
+      broken_reusable_revision_count: length(broken_reusable_revisions),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -1094,6 +1100,265 @@ defmodule Hypatia.Rules.WorkflowAudit do
                     "with zero jobs created. Re-pin to the canonical merge-commit " <>
                     "SHA from the standards audit.",
                 action: :rewrite_orphan_reusable_pin
+              }
+            ]
+          else
+            []
+          end
+        end)
+      end)
+    end)
+  end
+
+  # ─── WF026: SHA-pinned dtolnay/rust-toolchain with no toolchain: input ──
+
+  @toolchain_sha_pin ~r/^\s*(?:-\s+)?uses:\s*["']?dtolnay\/rust-toolchain@([0-9a-f]{40})/
+
+  @doc """
+  WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
+  `toolchain:` input.
+
+  The action reads the toolchain from its `@`-ref (`@stable`, `@1.85.0`).
+  A full-SHA ref carries no channel, so a SHA-pinned step with no
+  `with: toolchain:` dies in its first step with
+  `'toolchain' is a required input` — before any cargo command runs — and
+  the red reads as a code failure. plasma-parser-writer's
+  `rust-ci / Cargo check + clippy + fmt` was red this way from 2026-09-29
+  to 2026-10-14 (plasma-parser-writer#105); standards' rust-ci-reusable.yml
+  carried the defect from d73c93e0 to 49ed4715 (standards#439 fixed it).
+  WF027 covers the CALLER side of that window; this rule is the defect
+  itself, wherever it is written — a reusable, a plain workflow, a fork.
+
+  Sensitivity / specificity:
+    * Fires only on `uses: dtolnay/rust-toolchain@<40-hex>` whose step
+      body (the lines below `uses:` up to the next list item at the same
+      or shallower indentation) names no `toolchain:` key. A tag-pinned
+      step carries its channel in the ref and never fires.
+    * The step body is bounded by indentation, so a later step's
+      `toolchain:` cannot rescue an earlier step.
+
+  Auto-fixable: gitbot-fleet `scripts/fix-rust-toolchain-input.sh` inserts
+  `toolchain: stable` (the channel the estate's reusables pass).
+  """
+  def check_sha_pinned_toolchain_without_input(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      lines = String.split(content, "\n")
+
+      lines
+      |> Enum.with_index(1)
+      |> Enum.flat_map(fn {line, number} ->
+        case Regex.run(@toolchain_sha_pin, line) do
+          [_full, sha] ->
+            step_indent = wf026_indent(line)
+
+            body =
+              lines
+              |> Enum.drop(number)
+              |> Enum.take_while(&wf026_step_line?(&1, step_indent))
+
+            if Enum.any?(body, &Regex.match?(~r/^\s*toolchain:\s*\S/, &1)) do
+              []
+            else
+              [
+                %{
+                  rule: "WF026",
+                  type: :sha_pinned_toolchain_without_input,
+                  file: filename,
+                  line: number,
+                  current_sha: sha,
+                  severity: :high,
+                  auto_fixable: true,
+                  fix_script: "fix-rust-toolchain-input.sh",
+                  reason:
+                    "`dtolnay/rust-toolchain` is pinned at `@#{sha}` with no `toolchain:` " <>
+                      "input. The action reads the channel from its `@`-ref; a commit SHA " <>
+                      "carries none, so the step exits 1 with \"'toolchain' is a required " <>
+                      "input\" before any cargo command runs and the red reads as a code " <>
+                      "failure. Add `with: toolchain: stable` (or the channel you mean).",
+                  action: :add_toolchain_input
+                }
+              ]
+            end
+
+          _ ->
+            []
+        end
+      end)
+    end)
+  end
+
+  # Indentation width of a line (spaces only; workflow YAML never uses tabs).
+  defp wf026_indent(line), do: String.length(line) - String.length(String.trim_leading(line, " "))
+
+  # A line belongs to the step opened at `step_indent` until the next list item
+  # at that indentation or shallower, or a shallower key. Blank lines and
+  # comment lines belong to whatever step they sit in.
+  defp wf026_step_line?(line, step_indent) do
+    trimmed = String.trim(line)
+
+    cond do
+      trimmed == "" -> true
+      String.starts_with?(trimmed, "#") -> true
+      Regex.match?(~r/^\s*-\s/, line) and wf026_indent(line) <= step_indent -> false
+      wf026_indent(line) < step_indent -> false
+      true -> true
+    end
+  end
+
+  # ─── WF027: caller pinned at a reusable revision the estate has measured dead ──
+
+  # One entry per (reusable, window). The SHAs are the commits of
+  # hyperpolymath/standards main whose rust-ci-reusable.yml pins
+  # dtolnay/rust-toolchain by SHA and passes no `toolchain:` input — a walk of
+  # every first-parent commit from d73c93e0 (2026-06-01) to 49ed4715
+  # (2026-06-24), each one's file content checked, not the dates. The
+  # replacement is the current standards main whose own actions.lock GitHub
+  # accepts (see pr-automerge-policy.json PIN-003 for the lock-side window,
+  # which kills EVERY standards reusable and so lives in the pin denylist
+  # rather than here). gitbot-fleet scripts/lib/stale-reusable-pins.tsv carries
+  # the same rows (Window A) for the repair; regenerate both together.
+  @broken_reusable_revisions [
+    %{
+      reusable: "hyperpolymath/standards/.github/workflows/rust-ci-reusable.yml",
+      window: "standards main 2026-06-01..2026-06-24 (d73c93e0..49ed4715)",
+      fixed_by: "standards#439 (9fe0d8ffa33a6fa0c6ba64117bef9981dacd3020)",
+      replacement: "75bd5994470661a099df562d6d5ad2fe744dbd66",
+      reason:
+        "rust-ci-reusable.yml at this revision pins dtolnay/rust-toolchain by SHA and " <>
+          "passes no toolchain: input, so every caller fails in its first step with " <>
+          "\"'toolchain' is a required input\" before any cargo command runs.",
+      shas: [
+        "bf32531befa4bb7f692a5f7ecac1eab71af20506",
+        "583a9346ebf28e0fd8114f22aef140eaa1be4ac0",
+        "d7c22711e830e1f383846472f6e9b99debdb201e",
+        "747b2f0f690505b24c90991a030a01e564ff59c6",
+        "509142da4ec04d74dccfc9e52813aeabc2c6fa02",
+        "e2ef79eecdd623ff631fcbf3fe0268ba4f4ce166",
+        "0597948e81c0be7570f805d7ec49f64fa0eeefd6",
+        "da1ee5ebaec4de70e7530a9fcb4b2c693434bcc1",
+        "0f49246bc5055f7159c92d649c4d3fb97b75cf66",
+        "f15ced3f44146de9931bcb70157e1825d07b83ed",
+        "5e29ef7923aff017419bdce9354e9df4c3823cb5",
+        "ad8c45387878f2b00217330b0e1260edc6f878b5",
+        "3ce22c244bd4b31ed99397a585cd458735a79819",
+        "8c785d41adbbee534b158747a5c6796402e450f0",
+        "c1070339c80c4f1af71bb35cacc58c19f611f3a2",
+        "49ed471515bdf587aeb9931af2d1314cd6aa5de2",
+        "7282b1ac828d89eaecd3403b59591975746ec3ff",
+        "d135b05bfc647d0c0fbfedc7e80f37ea50f49236",
+        "4762ba66441de05bccb36e074ba3d2202219126a",
+        "59429dc666d347d030114cd6ef6f4ff7b7f6a6b4",
+        "e8fe153b568af5e3534a261eee0258fa84fa6c5e",
+        "280cb7e3f2db8b0e5f26c42877ea5fa80243b06f",
+        "c6c095b38f7e729d3d355629b80e771dfe1a351b",
+        "09e7023d24682621bea4e11965a1ef5e87d86c3b",
+        "42455b19727fa0ccf73a9b914f0e9781d4c34577",
+        "4ddc926b4b86451c2711a16bf927ed16ad2db45e",
+        "0809b8e3630d38229b6c3629956e0dff4b937c33",
+        "d72fe5a14e841ac6d78514b53624b6173038ee20",
+        "5a93d9d57cc04de4002d6d0ecd336fc7a8698910",
+        "3e57141d38672438a7a9110bd10ea0f76e6099a7",
+        "78b29005efe954822c86c553b40523b9fdae78d4",
+        "f290d4a696b8af78f9141daeced486b7b8a85d11",
+        "a8c69ecfcd87d5418dd4559019ac860fff20e834",
+        "a04c1d9f32e3c6cb5e91b7ba220080475449a4d2",
+        "c43aafaa2d707f3f195cad9742d3ccc8d068e3db",
+        "a955527810b82dbf7a9bc541502c5235f119499d",
+        "2ff85f8f84212ae2cbedb1ea232c6f5a470acef3",
+        "8e6ba7d4a0890d25425855a77404d4690d0ab4b5",
+        "426368b72949d8235c8cf47f8bdc5e0e5cd5b54f",
+        "025bba3f35f5040bf76d4954f02c744d61f68e8f",
+        "8466cee8adbb814a2507a9a33e36ba415c5d7eba",
+        "f5f0506a6ec88e574753eee701a268e0d4b3a7f2",
+        "ae5b6731e0c1ce192edc14737a226d6b201341aa",
+        "742424ec9cffeb414174276d9321325859e3aa64",
+        "19995ace5f1179e9e2d4783fe1d36df0f343492d",
+        "524523c1a6057942aadaef5999912fbf13a355c5",
+        "e4c7d968fa9aad6fcecab23bd60d1025679d1ad9",
+        "e96096c6614469e29e02edcc923fdacc0e611b34",
+        "ca29b1950ac493e4a29db3b61b6991fbdc8a57b2",
+        "e59affd85741ac786867a667bc1526ade31b1dd4",
+        "7694d58cd4c82d6d706ef9653bcf545e28126794",
+        "33a82ee5e3635bd137b2bc8ef2b1d71367195546",
+        "52db79bee40380820e01c454efe6e85ae6115b2c",
+        "6022e498a06552d71e51662283b9453855185b94",
+        "c97b2bdd12aeaff4624efcaec874ea7665dadae6",
+        "9726a3814c895bf531f22c2b82cc15a3b1efa1f3",
+        "bec61613c821fdb1035f18b88e6e5d19d23328f7",
+        "4236493691a06a6393b5ec4480f38e5d804f5b69",
+        "6cd3772824e59c8c9affeab66061e25383544242",
+        "e763d82b93f46e7201d95e6d817ac61d739a8cc1",
+        "aa665acc04fff66632ede8368dbc9c2b5a630d3c",
+        "3a5c23cb5888eca79df090fde6d52a8dc4820285",
+        "0b96f61a3f043bd5409b913e526b29f3fd38a217",
+        "ae6619ecddd0eff0f957c73280efc36bb9302d75",
+        "3b3549e293f87be99d7dbb939d380c8128842c8e",
+        "2b88f34c97a9478b7a96b07425bb37ee5822bb8e",
+        "9bdaff9479d53328ed907bdd5ba885398800fb00",
+        "142dd7a0b9cd6101de8c4279c55b7051c537f76b",
+        "ac6b3252e7170d9459779c03bf31ae04c3629a61",
+        "f2b9d5eb5fb68a60b30468b8289a0f8cefbdd558",
+        "e401e47106ce0b0e32e3d0e2b7d910410e5b165e",
+        "e3ad4ca266e4dc93b7cebce5e3b3b48c6d523e45",
+        "74748546395bf3dcedd5b660f58feb36be9d53d6",
+        "fc7abf589b93f9a33b8af74dbfe98ba22707156f",
+        "7814dc67a489afc39f0289af5d3b6c3e23645156",
+        "c98915a225c98f2b90980cf045a00eb603e6af0f",
+        "18dd92c19d5b9e50740826a4be8301afbab91bae",
+        "82a8ac8e2fd446b710139a759bf22f175dc5e299",
+        "55da6b331922f0ff7389c783d363ae12d8c61068",
+        "1376eb6251fa9beeaea75241739b1d00dd6b4028",
+        "28946811fb7fe2d05e9ac11c9ebee7295e966d40",
+        "d7c3b8f75d70ab640e6f37a4c8f9e6e8f2b6df56",
+        "d73c93e0e7d38f673b68e616d51a62f5860081fd"
+      ]
+    }
+  ]
+
+  @doc "The (reusable, window) table WF027 fires on."
+  def broken_reusable_revisions, do: @broken_reusable_revisions
+
+  @doc """
+  WF027: a caller pins an estate reusable workflow at a revision the estate
+  has MEASURED dead for that reusable.
+
+  Unlike WF016 (a SHA no branch reaches any more), these commits are
+  reachable and resolve: the run starts, the reusable's first step fails,
+  and the failure names something the caller never wrote. The table is
+  data, keyed by reusable path, so a newly measured window is a row, not a
+  rule. Full 40-hex pins only — that is the only form sha_pinning_required
+  lets a caller write.
+
+  Auto-fixable: gitbot-fleet `scripts/fix-stale-reusable-pin.sh` rewrites
+  the pin to the replacement the table names, never to "newest".
+  """
+  def check_known_broken_reusable_revision(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      stripped = strip_comments(content)
+
+      Enum.flat_map(@broken_reusable_revisions, fn rev ->
+        ref_re = ~r/uses:\s*["']?#{Regex.escape(rev.reusable)}@([0-9a-f]{40})/
+
+        Regex.scan(ref_re, stripped)
+        |> Enum.flat_map(fn [_full, sha] ->
+          if sha in rev.shas do
+            [
+              %{
+                rule: "WF027",
+                type: :known_broken_reusable_revision,
+                file: filename,
+                reusable: rev.reusable,
+                current_sha: sha,
+                replacement_sha: rev.replacement,
+                severity: :critical,
+                auto_fixable: true,
+                fix_script: "fix-stale-reusable-pin.sh",
+                reason:
+                  "`#{rev.reusable}` is pinned at `@#{sha}`, inside #{rev.window}: " <>
+                    rev.reason <>
+                    " Fixed by #{rev.fixed_by}; move the pin to " <>
+                    "`@#{rev.replacement}`.",
+                action: :rewrite_stale_reusable_pin
               }
             ]
           else

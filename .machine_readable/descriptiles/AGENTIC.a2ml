@@ -40,6 +40,21 @@ require-rerun-after-fix = true
 release-claim-requires-hard-pass = true
 completion-claim-requires-behavioural-tests = true
 
+[workflow-pin-detection]
+# Hypatia's half of the pin-propagation architecture
+#   hypatia (this: detection) -> gitbot-fleet (actuation) -> .git-private-farm (propagation)
+# Every rule here has a fleet fix script that carries the SAME facts, so a
+# detection without a repair, or a repair without a detection, is a drift:
+#   WF026  workflow_audit.ex  SHA-pinned dtolnay/rust-toolchain with no toolchain: input   -> fleet fix-rust-toolchain-input.sh
+#   WF027  workflow_audit.ex  caller pinned at a reusable revision MEASURED dead (table)     -> fleet fix-stale-reusable-pin.sh (Window A)
+#   PIN-003 pr-automerge-policy.json  standards revisions whose own actions.lock GitHub
+#          rejects at job setup (545 commits, 2026-08-19..2026-10-19; PI001/PA001 fire)    -> fleet fix-stale-reusable-pin.sh (Window B)
+#   known_reusables (sha_bump_propagation.ex) now include hyperpolymath/cicd-suite's gates
+may-extend-dead-revision-tables = true     # only from a MEASURED walk (file content or lock record checked per commit), never from dates
+may-name-a-replacement-revision = false    # a human chooses it against standards/scripts/lock-selfcheck.sh; agents carry the choice into the table
+must-mirror-fleet-tables = true            # WF027's list == fleet stale-reusable-pins.tsv Window A; PIN-003 == Window B; regenerate together
+must-not-promote-to-blocking = true        # these rules report and route to the fleet; a gate that blocks on them is an owner decision
+
 [automation-hooks]
 on-enter = [
   "Read 0-AI-MANIFEST.a2ml or AI.a2ml first",

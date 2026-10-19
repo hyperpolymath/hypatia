@@ -421,4 +421,40 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert PI.pi005_stale_pin(content, %{}) == []
     end
   end
+
+  describe "PIN-003 in the committed policy (standards revisions whose lock GitHub rejects)" do
+    @policy_path Path.expand(
+                   "../../.machine_readable/merge-orchestration/pr-automerge-policy.json",
+                   __DIR__
+                 )
+    @rejected "8f2ee50841e216cd8c192eeb68953118190f105c"
+    @accepted "75bd5994470661a099df562d6d5ad2fe744dbd66"
+    @governance "hyperpolymath/standards/.github/workflows/governance-reusable.yml"
+
+    defp committed_policy, do: :json.decode(File.read!(@policy_path))
+
+    test "the entry exists, is keyed on SHA only, and names the known-good revision" do
+      policy = committed_policy()
+      entry = Enum.find(policy["pin_denylist"], &(&1["id"] == "PIN-003"))
+      assert entry["action"] == "hyperpolymath/standards"
+      assert entry["severity"] == "critical"
+      assert entry["blocked_versions"] == []
+      assert entry["blocked_refs"] == []
+      assert entry["known_good_sha"] == @accepted
+      assert entry["replacement"] == "pin_to_known_good"
+      assert length(entry["blocked_shas"]) > 500
+      assert Enum.all?(entry["blocked_shas"], &Regex.match?(~r/^[0-9a-f]{40}$/, &1))
+      refute @accepted in entry["blocked_shas"]
+    end
+
+    test "a caller pinned inside the window is denylisted through the reusable path; the replacement is not" do
+      policy = committed_policy()
+      assert %{"id" => "PIN-003"} = PI.denylisted?(policy, @governance, @rejected)
+      assert PI.denylisted?(policy, @governance, @accepted) == nil
+      # The June toolchain window is WF027's, not this entry's: a June revision
+      # has no lock and must not be denylisted here.
+      assert PI.denylisted?(policy, @governance, "d135b05bfc647d0c0fbfedc7e80f37ea50f49236") ==
+               nil
+    end
+  end
 end
