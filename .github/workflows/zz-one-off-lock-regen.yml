@@ -32,15 +32,17 @@ jobs:
           sudo apt-get install -y -qq gawk >/dev/null
           gh extension install github/gh-actions-lock --pin v0.2.0
           gh actions-lock --version
-          export GH_BIN=gh REGEN_TOOLS="$PWD/std-regen/scripts"
-          source std-regen/scripts/regen-dependabot-locks.sh
-          outcome="$(regen_lock "$PWD/pb")"
-          echo "OUTCOME=$outcome"
+          # The repair chain without a gh actions-lock fix-mode pass (it drops
+          # records it cannot re-resolve).
+          export GH_BIN=gh
+          for s in relock-sha-keys complete-job-refs close-lock prune-stale check-lock-sync; do
+            (cd pb && bash ../std-regen/scripts/$s.sh .github/workflows; echo "$s RC=$?")
+          done
           git -C pb status --porcelain
           echo "== the governance gate, as pinned by the repair branch ($STANDARDS_GATE_SHA)"
           (cd pb && ACTIONS_LOCK_VERIFIER="$PWD/../std-gate/scripts/update-actions-lock.sh" \
             bash ../std-gate/scripts/check-actions-lock-gate.sh .github/workflows); echo "GATE_RC=$?"
           echo "LOCK-SHA256 $(sha256sum < pb/.github/workflows/actions.lock | cut -d' ' -f1)"
-          echo "LOCK-BEGIN"
-          base64 -w0 pb/.github/workflows/actions.lock; echo
-          echo "LOCK-END"
+          echo "DIFF-BEGIN"
+          git -C pb diff -- .github/workflows/actions.lock
+          echo "DIFF-END"
