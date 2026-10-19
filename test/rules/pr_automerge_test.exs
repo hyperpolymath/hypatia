@@ -162,6 +162,19 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert decision.pool == "P1"
     end
 
+    test "an upper-case spelling of a denylisted SHA is the same poison" do
+      decision =
+        Hypatia.Rules.PrAutomerge.classify(
+          pr([
+            file(".github/workflows/codeql.yml", codeql_patch(@good, String.upcase(@poison)))
+          ]),
+          @policy
+        )
+
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
     test "a quoted uses: key and a quoted value are still a pin PA001 sees" do
       patch = """
       @@ -1,1 +1,1 @@

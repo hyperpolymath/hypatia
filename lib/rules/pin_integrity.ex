@@ -140,13 +140,12 @@ defmodule Hypatia.Rules.PinIntegrity do
   defp normalise_all(list), do: Enum.map(list, &normalise_ref/1)
 
   defp normalise_ref(ref) do
-    ref
-    |> String.trim()
-    |> String.trim_leading("v")
-    |> case do
-      # `v4.38.1` and `4.38.1` are the same claim about the same artefact.
-      other -> other
-    end
+    trimmed = ref |> String.trim() |> String.trim_leading("v")
+
+    # `v4.38.1` and `4.38.1` are the same claim about the same artefact; a
+    # commit ID in upper-case hex is the same object as the lower-case one
+    # the table carries, so both sides compare in lower case.
+    if Regex.match?(~r/^[0-9a-fA-F]{40}$/, trimmed), do: String.downcase(trimmed), else: trimmed
   end
 
   @doc """

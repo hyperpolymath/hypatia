@@ -685,6 +685,25 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => nested_under_env})
     end
 
+    test "a quoted comma or brace in a sibling entry does not hide a flow-style job" do
+      one_line =
+        "jobs: { a: { name: \"x, y }\", uses: #{@rust_ci}@#{@good_standards} }, " <>
+          "b: { uses: #{@rust_ci}@#{@broken_standards} } }\n"
+
+      assert [%{rule: "WF027", line: 1, current_sha: @broken_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => one_line})
+
+      own_line = """
+      jobs:
+        rust-ci: { name: "CI, build", uses: #{@rust_ci}@#{@broken_standards} }
+        note:
+          env: { name: "x, y", uses: #{@rust_ci}@#{@broken_standards} }
+      """
+
+      assert [%{rule: "WF027", line: 2}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => own_line})
+    end
+
     test "a KYAML caller is read as written: the quoted job-level uses: fires, fixtures do not" do
       wf = """
       {

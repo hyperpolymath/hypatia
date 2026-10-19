@@ -166,7 +166,10 @@ defmodule Hypatia.Rules.PrAutomerge do
   end
 
   defp normalise_ref(ref) when is_binary(ref) do
-    ref |> String.trim() |> String.replace_prefix("v", "")
+    trimmed = ref |> String.trim() |> String.replace_prefix("v", "")
+    # A commit ID in upper-case hex is the same object the table carries in
+    # lower case; git resolves either spelling.
+    if Regex.match?(~r/^[0-9a-fA-F]{40}$/, trimmed), do: String.downcase(trimmed), else: trimmed
   end
 
   defp normalise_ref(_), do: ""

@@ -101,6 +101,14 @@ REF_ALTERNATION=$(
   } | sed 's/\./\\./g' | paste -sd'|' -
 )
 
+# What may follow a ref token: a closing quote (`uses: "…@sha"`), a flow
+# delimiter (`{ uses: …@sha }`, `…@sha,`), whitespace, a comment, or the end
+# of the line. A pin written in any of these forms is the same pin.
+REF_END='([]"'"'"'[:space:]#,}]|$)'
+# The `uses` key, quoted or bare, with the quote a quoted value opens with:
+# `uses: x@…`, `"uses": "x@…"`, `{ uses: x@… }` all name an action.
+USES_KEY='["'"'"']?uses["'"'"']?[[:space:]]*:[[:space:]]*["'"'"']?'
+
 known_good_sha_for() {
   jq -r --arg a "$1" '.pin_denylist[] | select(.action == $a) | .known_good_sha' "$POLICY" | head -n1
 }
@@ -177,6 +185,12 @@ if [ "$VIA" = "search" ]; then
         fi
         n=$(jq -r '.items[]? | "'"${org}"'\t\(.repository.name)\t\(.path)"' "$OUT_DIR/.search.json" 2>/dev/null \
               | tee -a "$HITS" | wc -l)
+        # GitHub answers a timed-out search with HTTP 200, the matches found
+        # so far and `incomplete_results: true` — a partial page, on any page.
+        if [ "$(jq -r '.incomplete_results // false' "$OUT_DIR/.search.json" 2>/dev/null)" = "true" ]; then
+          log "  ! ${org}: '${token}' (page ${page}) is marked incomplete_results: GitHub timed the search out and answered with a partial page — phase 1 is INCOMPLETE for this org, use --via clone"
+          incomplete=$((incomplete + 1))
+        fi
         if [ "$page" -eq 1 ]; then
           total=$(jq -r '.total_count // 0' "$OUT_DIR/.search.json" 2>/dev/null || echo 0)
           if [ "${total:-0}" -gt 1000 ] 2>/dev/null; then
@@ -219,7 +233,7 @@ log "phase 1: ${total_hits} candidate file(s)"
 # is clean; one that could not see everything never is.
 unseen() {
   local parts=()
-  [ "$incomplete" -gt 0 ] && parts+=("${incomplete} search(es) overflowed GitHub's 1,000-result cap")
+  [ "$incomplete" -gt 0 ] && parts+=("${incomplete} search page(s) overflowed GitHub's 1,000-result cap or came back marked incomplete")
   [ "$failed" -gt 0 ] && parts+=("${failed} search(es) failed")
   [ "${unread:-0}" -gt 0 ] && parts+=("${unread} candidate file(s) could not be read")
   local IFS=';'
@@ -257,8 +271,8 @@ while IFS=$'\t' read -r org repo path; do
 
   printf '%s\n' "$content" > "$OUT_DIR/.current"
 
-  sites_before=$(grep -cE '^[[:space:]]*-?[[:space:]]*uses:' "$OUT_DIR/.current" || true)
-  denied_before=$(grep -cE "@(${REF_ALTERNATION})([[:space:]#]|$)" "$OUT_DIR/.current" || true)
+  sites_before=$(grep -cE "(^|[{,[:space:]])${USES_KEY}" "$OUT_DIR/.current" || true)
+  denied_before=$(grep -cE "@(${REF_ALTERNATION})(${REF_END})" "$OUT_DIR/.current" || true)
   [ "$denied_before" -eq 0 ] && continue
   confirmed=$((confirmed + 1))
 
@@ -279,8 +293,11 @@ while IFS=$'\t' read -r org repo path; do
   [ "$in_scope" -eq 0 ] && fixable=0
   : > "$OUT_DIR/.rewritten"
   while IFS= read -r line || [ -n "$line" ]; do
-    if printf '%s\n' "$line" | grep -qE "@(${REF_ALTERNATION})([[:space:]#]|$)"; then
-      action=$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*([^@]+)@.*/\1/')
+    if printf '%s\n' "$line" | grep -qE "@(${REF_ALTERNATION})(${REF_END})"; then
+      # The action named before the `@`, whatever quotes or flow braces
+      # surround the key and the value.
+      action=$(printf '%s\n' "$line" | grep -oE "${USES_KEY}[^@\"'[:space:]]+@" | head -n1 \
+                 | sed -E "s/^${USES_KEY}//; s/@\$//")
       base=$(printf '%s\n' "$action" | awk -F/ '{print $1"/"$2}')
       good=$(known_good_sha_for "$base")
       actions="${actions}${base} "
@@ -289,7 +306,7 @@ while IFS=$'\t' read -r org repo path; do
         printf '%s\n' "$line" >> "$OUT_DIR/.rewritten"
       else
         good_version=$(known_good_version_for "$base")
-        swapped=$(printf '%s\n' "$line" | sed -E "s%@(${REF_ALTERNATION})([[:space:]#]|$)%@${good}\2%g")
+        swapped=$(printf '%s\n' "$line" | sed -E "s%@(${REF_ALTERNATION})(${REF_END})%@${good}\2%g")
         head="${swapped%%#*}"
         if [ "$head" != "$swapped" ]; then
           tail_comment="#${swapped#*#}"
@@ -303,8 +320,8 @@ while IFS=$'\t' read -r org repo path; do
     fi
   done < "$OUT_DIR/.current"
 
-  sites_after=$(grep -cE '^[[:space:]]*-?[[:space:]]*uses:' "$OUT_DIR/.rewritten" || true)
-  denied_after=$(grep -cE "@(${REF_ALTERNATION})([[:space:]#]|$)" "$OUT_DIR/.rewritten" || true)
+  sites_after=$(grep -cE "(^|[{,[:space:]])${USES_KEY}" "$OUT_DIR/.rewritten" || true)
+  denied_after=$(grep -cE "@(${REF_ALTERNATION})(${REF_END})" "$OUT_DIR/.rewritten" || true)
 
   status="flag"
   reason="owner_review"
@@ -322,7 +339,7 @@ while IFS=$'\t' read -r org repo path; do
 
   jq -cn \
     --arg repo "${org}/${repo}" --arg path "$path" --arg status "$status" \
-    --arg reason "$reason" --arg actions "$(printf '%s' "$actions" | xargs || true)" \
+    --arg reason "$reason" --arg actions "$(printf '%s' "$actions" | tr -s '[:space:]' ' ' | sed -E 's/^ //; s/ $//')" \
     --argjson denied "$denied_before" --argjson sites "$sites_before" \
     '{repo:$repo, path:$path, rule:"PI001", status:$status, repair:$reason,
       actions:($actions|split(" ")|map(select(.!=""))),

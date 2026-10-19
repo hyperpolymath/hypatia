@@ -1683,6 +1683,39 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # State: nil (plain text), ?" or ?' (inside that quote), :comment. The
   # stack holds the byte column of each open `{` (`:seq` for a `[`); the
   # innermost must be a mapping for `at` to be a key position.
+  # Every `{`/`[` still open before byte `at` of `line`, innermost first:
+  # the column of each `{`, `:seq` for a `[`. Quoted scalars and comments
+  # are skipped, as in wf_flow_opener_before/2; :error inside one.
+  defp wf_flow_opener_stack(line, at) do
+    line
+    |> binary_part(0, at)
+    |> :binary.bin_to_list()
+    |> wf_flow_stack(0, nil, [], ?\s)
+  end
+
+  defp wf_flow_stack([], _pos, nil, stack, _prev), do: {:ok, stack}
+  defp wf_flow_stack([], _pos, _state, _stack, _prev), do: :error
+
+  defp wf_flow_stack([c | rest], pos, nil, stack, prev) do
+    cond do
+      c == ?# and prev in [?\s, ?\t] -> wf_flow_stack(rest, pos + 1, :comment, stack, c)
+      c in [?", ?'] -> wf_flow_stack(rest, pos + 1, c, stack, c)
+      c == ?{ -> wf_flow_stack(rest, pos + 1, nil, [pos | stack], c)
+      c == ?[ -> wf_flow_stack(rest, pos + 1, nil, [:seq | stack], c)
+      c in [?}, ?]] -> wf_flow_stack(rest, pos + 1, nil, Enum.drop(stack, 1), c)
+      true -> wf_flow_stack(rest, pos + 1, nil, stack, c)
+    end
+  end
+
+  defp wf_flow_stack([?\\, c | rest], pos, ?", stack, _prev),
+    do: wf_flow_stack(rest, pos + 2, ?", stack, c)
+
+  defp wf_flow_stack([q | rest], pos, q, stack, _prev),
+    do: wf_flow_stack(rest, pos + 1, nil, stack, q)
+
+  defp wf_flow_stack([c | rest], pos, state, stack, _prev),
+    do: wf_flow_stack(rest, pos + 1, state, stack, c)
+
   defp wf_flow_prefix([], _pos, nil, [col | _], _prev) when is_integer(col), do: {:ok, col}
   defp wf_flow_prefix([], _pos, _state, _stack, _prev), do: :error
 
@@ -2039,24 +2072,39 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # Is the `uses` at `uses_at` the entry of a flow mapping a job key opens?
   # Either the job's own line under `jobs:` (`rust: { uses: ... }`) or the
   # whole `jobs:` mapping written on one line (`jobs: { rust: { uses: ... } }`).
-  # Earlier siblings on the line (`a: { ... }, `) are closed entries before
-  # this one; they are removed before the key opening this mapping is read.
+  # The openers still unclosed before `uses` say which: one, opened by a key
+  # on a line under `jobs:`; two, the outer one opened by `jobs:` at the top
+  # of the document. The opening key is the last entry before its brace,
+  # split quote-aware, so a sibling's `name: "CI, build"` separates nothing.
   defp wf027_inline_job?(lines, line, number, uses_at) do
-    with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
-         prefix = line |> binary_part(0, open_col) |> wf_drop_closed_mappings(),
-         prefix = Regex.replace(~r/["']?[\w.-]+["']?\s*:\s*[^,{}]*,\s*/, prefix, ""),
-         [_, lead, _job] <-
-           Regex.run(
-             ~r/^(\s*(?:["']?jobs["']?\s*:\s*\{\s*,?\s*)?)["']?([\w.-]+)["']?\s*:\s*$/,
-             prefix
-           ) do
-      if String.contains?(lead, "jobs") do
-        wf_ancestor_keys(lines, number) == []
-      else
-        match?(["jobs" | _], wf_ancestor_keys(lines, number))
-      end
-    else
-      _ -> false
+    case wf_flow_opener_stack(line, uses_at) do
+      {:ok, [open]} when is_integer(open) ->
+        wf027_key_before(line, 0, open) != nil and
+          match?(["jobs" | _], wf_ancestor_keys(lines, number))
+
+      {:ok, [open, outer]} when is_integer(open) and is_integer(outer) ->
+        wf027_key_before(line, 0, outer) == "jobs" and
+          wf027_key_before(line, outer + 1, open) != nil and
+          wf_ancestor_keys(lines, number) == []
+
+      _ ->
+        false
+    end
+  end
+
+  # The key whose value is the flow mapping opening at byte `open`: the last
+  # top-level entry of `line[from, open)` must read `key:` and nothing else.
+  defp wf027_key_before(line, from, open) do
+    entry =
+      line
+      |> binary_part(from, open - from)
+      |> wf_flow_split(?,)
+      |> List.last("")
+      |> String.trim()
+
+    case Regex.run(~r/^["']?([\w.-]+)["']?\s*:$/, entry) do
+      [_, key] -> key
+      _ -> nil
     end
   end
 

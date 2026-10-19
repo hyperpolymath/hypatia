@@ -96,6 +96,10 @@ defmodule Hypatia.Rules.PinIntegrityTest do
                PI.denylisted?(@policy, "github/codeql-action/analyze", "v4.38.1")
 
       assert %{"id" => "PIN-001"} = PI.denylisted?(@policy, "github/codeql-action/init", "4.38.1")
+
+      # Upper-case hex is the same commit; the table is written in lower case.
+      assert %{"id" => "PIN-001"} =
+               PI.denylisted?(@policy, "github/codeql-action/init", String.upcase(@poison))
     end
 
     test "does not match a good ref, another action, or another repo's entry" do
