@@ -16,19 +16,23 @@ defmodule Hypatia.Rules.ActionsLock do
   YAML dependency merely to consume that format. Unknown or malformed lines
   fail closed rather than being guessed at.
 
-  Format v0.0.3 is accepted under the v0.0.2 line grammar, unchanged. Measured
-  2026-10-19 on the first v0.0.3 lock `gh actions-lock` generated for this
-  repository (#926): every line has a v0.0.2 shape; only the version line and
-  the pins differ. Accepting the version therefore admits no new syntax: if a
-  v0.0.3 file ever carries a line shape v0.0.2 lacks, it still fails closed
-  here, and the grammar must be extended deliberately, with a fixture, before
-  it is trusted.
+  Format v0.0.3 is the v0.0.2 line grammar plus one optional dependency field,
+  `hostname` (schema: github/actions-lockfile `schema/lockfile-v0.0.3.json`).
+  It names the GitHub instance that owns a pin and is written only for pins
+  that are not on the lock's home host (GHE.com data residency). It is
+  accepted in v0.0.3 only, and only as `github.com` or a lowercase
+  `<tenant>.ghe.com`. Any other new line shape still fails closed.
+
+  Limits: `pinned?/3` and the repository-identity checks key on
+  `owner/repo@ref` and ignore the host, so two pins that differ only by host
+  are not told apart.
   """
 
   @supported_versions ["v0.0.2", "v0.0.3"]
   @action_ref ~r/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@[^\s':]+$/
   @dependency_key ~r/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[^\s':]+$/
   @sha_ref ~r/^[0-9A-Fa-f]{40}$/
+  @hostname ~r/^(github\.com|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.ghe\.com)$/
 
   defstruct version: nil, workflows: %{}, dependencies: %{}
 
@@ -37,6 +41,7 @@ defmodule Hypatia.Rules.ActionsLock do
           commit: String.t(),
           owner_id: pos_integer(),
           repo_id: pos_integer(),
+          hostname: String.t() | nil,
           uses: MapSet.t(String.t())
         }
   @type t :: %__MODULE__{
@@ -223,6 +228,23 @@ defmodule Hypatia.Rules.ActionsLock do
       Regex.match?(~r/^        (?:owner_id|repo_id):/, line) ->
         line_error(line_number, :malformed_dependency_identity)
 
+      match = Regex.run(~r/^        hostname: '([^']*)'$/, line) ->
+        [_, hostname] = match
+
+        cond do
+          state.version != "v0.0.3" ->
+            line_error(line_number, {:hostname_requires_v0_0_3, state.version})
+
+          Regex.match?(@hostname, hostname) ->
+            put_dependency_field(state, :hostname, hostname, line_number)
+
+          true ->
+            line_error(line_number, {:malformed_dependency_hostname, hostname})
+        end
+
+      Regex.match?(~r/^        hostname:/, line) ->
+        line_error(line_number, :malformed_dependency_hostname)
+
       line == "        uses:" ->
         put_dependency_field(state, :uses, MapSet.new(), line_number)
 
@@ -340,6 +362,7 @@ defmodule Hypatia.Rules.ActionsLock do
         commit: commit,
         owner_id: owner_id,
         repo_id: repo_id,
+        hostname: Map.get(dependency, :hostname),
         uses: Map.get(dependency, :uses, MapSet.new())
       }
 

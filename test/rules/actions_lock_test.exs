@@ -101,7 +101,8 @@ defmodule Hypatia.Rules.ActionsLockTest do
              ActionsLock.parse(missing_dependency)
   end
 
-  # #926: `gh actions-lock` began writing v0.0.3 with v0.0.2's line grammar.
+  # #926: `gh actions-lock` began writing v0.0.3: the v0.0.2 line grammar plus
+  # an optional dependency `hostname` (github/actions-lockfile lockfile-v0.0.3.json).
   describe "format v0.0.3" do
     @v3_lock String.replace(@valid_lock, "version: 'v0.0.2'", "version: 'v0.0.3'")
 
@@ -122,6 +123,61 @@ defmodule Hypatia.Rules.ActionsLockTest do
         String.replace(@v3_lock, "        repo_id:", "        integrity: 'x'\n        repo_id:")
 
       assert {:error, {:line, _, :malformed_dependency_entry}} = ActionsLock.parse(unknown)
+    end
+
+    test "accepts and records the optional dependency hostname (GHE.com pins)" do
+      lock =
+        String.replace(
+          @v3_lock,
+          "        owner_id:",
+          "        hostname: 'github.com'\n        owner_id:"
+        )
+
+      assert {:ok, parsed} = ActionsLock.parse(lock)
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "github.com"
+      assert ActionsLock.pinned?(parsed, "ci.yml", "actions/checkout@v7.0.1")
+
+      tenant = String.replace(lock, "github.com", "octocorp.ghe.com")
+      assert {:ok, parsed} = ActionsLock.parse(tenant)
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "octocorp.ghe.com"
+
+      assert {:ok, parsed} = ActionsLock.parse(@v3_lock)
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == nil
+    end
+
+    test "refuses a malformed, repeated, or v0.0.2 hostname" do
+      with_host = fn host ->
+        String.replace(
+          @v3_lock,
+          "        owner_id:",
+          "        hostname: '#{host}'\n        owner_id:"
+        )
+      end
+
+      for bad <- [
+            "Octocorp.ghe.com",
+            "https://github.com",
+            "github.com:443",
+            "evil.example.com",
+            "",
+            "a.ghe.com/x"
+          ] do
+        assert {:error, {:line, _, reason}} = ActionsLock.parse(with_host.(bad))
+        assert reason in [:malformed_dependency_hostname, {:malformed_dependency_hostname, bad}]
+      end
+
+      twice =
+        String.replace(
+          with_host.("github.com"),
+          "        owner_id:",
+          "        hostname: 'github.com'\n        owner_id:"
+        )
+
+      assert {:error, {:line, _, {:duplicate_dependency_field, _, :hostname}}} =
+               ActionsLock.parse(twice)
+
+      v2 = String.replace(with_host.("github.com"), "v0.0.3", "v0.0.2")
+      assert {:error, {:line, _, {:hostname_requires_v0_0_3, "v0.0.2"}}} = ActionsLock.parse(v2)
     end
 
     test "negative control: a version past v0.0.3 is still refused" do
