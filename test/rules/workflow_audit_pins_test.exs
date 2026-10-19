@@ -246,6 +246,21 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "an expression's braces inside a multi-line flow with: do not close it early" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: {
+                components: ${{ matrix.component }},
+                toolchain: nightly,
+              }
+      """
+
+      assert [] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "a list item is a step only under steps: — fixtures in env: and run: | are text" do
       wf = """
       jobs:

@@ -1315,6 +1315,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
+  defp wf_brace_delta(line) do
+    length(String.split(line, "{")) - length(String.split(line, "}"))
+  end
+
   defp wf_key_name(line) do
     line
     |> String.replace(~r/^\s*(?:-\s+)?/, "")
@@ -1355,18 +1359,23 @@ defmodule Hypatia.Rules.WorkflowAudit do
           false
 
         Regex.match?(~r/^\s*(?:-\s+)?["']?with["']?\s*:\s*\{/, line) ->
-          # A flow `with: {` on one line, or spread over several up to its
-          # closing brace: every entry in it is an input.
-          {inside, rest} =
-            step
-            |> Enum.drop(i + 1)
-            |> Enum.split_while(&(not String.contains?(&1, "}")))
-
+          # A flow `with: {` on one line, or spread over several up to the
+          # brace that closes it — an expression `${{ matrix.x }}` inside it
+          # opens and closes its own braces, so the mapping ends when the net
+          # depth returns to zero: every entry in it is an input.
           flow =
-            if String.contains?(line, "}") do
-              [line]
-            else
-              [line | inside ++ Enum.take(rest, 1)]
+            case wf_brace_delta(line) do
+              depth when depth <= 0 ->
+                [line]
+
+              depth ->
+                step
+                |> Enum.drop(i + 1)
+                |> Enum.reduce_while({depth, [line]}, fn l, {d, acc} ->
+                  d = d + wf_brace_delta(l)
+                  if d <= 0, do: {:halt, {d, [l | acc]}}, else: {:cont, {d, [l | acc]}}
+                end)
+                |> elem(1)
             end
 
           Enum.any?(flow, &Regex.match?(~r/(?:^|[{,])\s*["']?toolchain["']?\s*:\s*[^\s,}]/, &1))
