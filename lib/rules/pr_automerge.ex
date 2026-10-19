@@ -127,25 +127,25 @@ defmodule Hypatia.Rules.PrAutomerge do
         file
         |> added_lines()
         |> Enum.flat_map(fn line ->
-          case parse_pin(line) do
-            %{action: action, ref: ref} ->
-              if action_base(action) == Map.get(entry, "action") and
-                   denylisted_ref?(entry, ref) do
-                [
-                  %{
-                    file: filename_of(file),
-                    line: String.trim(line),
-                    denylist_id: Map.get(entry, "id"),
-                    severity: Map.get(entry, "severity", "critical")
-                  }
-                ]
-              else
-                []
-              end
-
-            _ ->
-              []
-          end
+          # Every site on the line: a flow sequence can put several steps on
+          # one changed line, and a pin judged by its first site alone lets a
+          # denylisted second one through to `arm_auto`. The action is
+          # compared case-folded — GitHub resolves `GitHub/CodeQL-Action` and
+          # `github/codeql-action` to one repository.
+          line
+          |> parse_pins()
+          |> Enum.filter(fn %{base: base, ref: ref} ->
+            String.downcase(base) == String.downcase(Map.get(entry, "action", "")) and
+              denylisted_ref?(entry, ref)
+          end)
+          |> Enum.map(fn _pin ->
+            %{
+              file: filename_of(file),
+              line: String.trim(line),
+              denylist_id: Map.get(entry, "id"),
+              severity: Map.get(entry, "severity", "critical")
+            }
+          end)
         end)
       end)
     end)
@@ -213,20 +213,20 @@ defmodule Hypatia.Rules.PrAutomerge do
   def pin_deltas(files, resolution, claims) do
     files
     |> Enum.flat_map(fn file ->
-      removed = file |> removed_lines() |> Enum.filter(&pin_line?/1)
-      added = file |> added_lines() |> Enum.filter(&pin_line?/1)
+      # Every site of every pin line: a flow sequence carries several steps
+      # on one line, and each of them is a delta of its own.
+      removed =
+        file |> removed_lines() |> Enum.filter(&pin_line?/1) |> Enum.flat_map(&parse_pins/1)
+
+      added = file |> added_lines() |> Enum.filter(&pin_line?/1) |> Enum.flat_map(&parse_pins/1)
 
       removed
-      |> Enum.flat_map(fn line ->
-        old = parse_pin(line)
-
-        case Enum.find(added, &(parse_pin(&1).action == old.action)) do
+      |> Enum.flat_map(fn old ->
+        case Enum.find(added, &(String.downcase(&1.action) == String.downcase(old.action))) do
           nil ->
             []
 
-          new_line ->
-            new = parse_pin(new_line)
-
+          new ->
             if new.ref == old.ref do
               []
             else
@@ -484,6 +484,70 @@ defmodule Hypatia.Rules.PrAutomerge do
   end
 
   defp pin_line?(line), do: parse_pin(line) != nil
+
+  # One `uses:` site anywhere on a line, bounded on the left so `reuses:` is
+  # not one. Matched against the MASKED line (see mask_scalars/1).
+  @pin_site_re ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
+
+  @doc """
+  Every `uses:` site on a line, in order, as `%{action, base, ref}`.
+
+  A flow sequence may put several steps on one line
+  (`+  { uses: a/b@x }, { uses: c/d@y },`); `parse_pin/1` reads only the
+  first. Text that merely mentions a pin — inside a quoted `name:` or
+  `run:` scalar, or after `#` — is not a site.
+  """
+  @spec parse_pins(String.t()) :: [map()]
+  def parse_pins(line) do
+    @pin_site_re
+    |> Regex.scan(mask_scalars(line), capture: :all_names)
+    |> Enum.map(fn [action, ref] -> %{action: action, base: action_base(action), ref: ref} end)
+  end
+
+  # The line with its comment dropped and every quoted scalar that is
+  # neither a key nor the value of a `uses` key blanked to `x`. A `uses`
+  # value and a quoted key are kept as written, so the captures read from
+  # the masked line are the pin's own text.
+  @uses_tail_re ~r/(?:^|[-{,\s])["']?uses["']?\s*:\s*$/
+
+  defp mask_scalars(line), do: do_mask(line, "")
+
+  defp do_mask("", out), do: out
+
+  defp do_mask(<<q::utf8, rest::binary>>, out) when q in [?", ?'] do
+    {body, close, tail} = take_quoted(rest, q, "")
+
+    kept =
+      if Regex.match?(~r/^\s*:/, tail) or Regex.match?(@uses_tail_re, out),
+        do: body,
+        else: String.duplicate("x", String.length(body))
+
+    do_mask(tail, out <> <<q::utf8>> <> kept <> close)
+  end
+
+  defp do_mask(<<?#, rest::binary>>, out) do
+    if out == "" or String.ends_with?(out, [" ", "\t"]),
+      do: out,
+      else: do_mask(rest, out <> "#")
+  end
+
+  defp do_mask(<<c::utf8, rest::binary>>, out), do: do_mask(rest, out <> <<c::utf8>>)
+  defp do_mask(<<c, rest::binary>>, out), do: do_mask(rest, out <> <<c>>)
+
+  # The body of a quoted scalar up to its closing quote; a backslash escapes
+  # the next character inside double quotes. An unterminated scalar runs to
+  # the end of the line.
+  defp take_quoted("", _q, acc), do: {acc, "", ""}
+
+  defp take_quoted(<<?\\, c::utf8, rest::binary>>, ?", acc),
+    do: take_quoted(rest, ?", acc <> <<?\\, c::utf8>>)
+
+  defp take_quoted(<<c::utf8, rest::binary>>, q, acc) when c == q, do: {acc, <<c::utf8>>, rest}
+
+  defp take_quoted(<<c::utf8, rest::binary>>, q, acc),
+    do: take_quoted(rest, q, acc <> <<c::utf8>>)
+
+  defp take_quoted(<<c, rest::binary>>, q, acc), do: take_quoted(rest, q, acc <> <<c>>)
 
   defp content_lines(patch) do
     patch

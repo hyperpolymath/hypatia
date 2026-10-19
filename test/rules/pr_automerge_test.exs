@@ -336,6 +336,62 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       assert PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy) == []
     end
+
+    test "every site of a flow-sequence line is inspected, not only the first" do
+      # The first step is an ordinary resolvable bump; the second is the
+      # poison. Judging the line by its first pin armed automerge.
+      patch = """
+      @@ -1,1 +1,1 @@
+      -        { uses: actions/checkout@v4.1.6 }, { uses: github/codeql-action/init@#{@good} },
+      +        { uses: actions/checkout@v4.1.7 }, { uses: github/codeql-action/init@#{@poison} },
+      """
+
+      f = file(".github/workflows/codeql.yml", patch)
+      assert [site] = PA.poison_sites([f], @policy)
+      assert site.denylist_id == "PIN-001"
+
+      decision =
+        PA.classify(
+          pr([f],
+            resolution: %{
+              {"actions/checkout", "v4.1.6"} => "4.1.6",
+              {"actions/checkout", "v4.1.7"} => "4.1.7"
+            }
+          ),
+          @policy
+        )
+
+      assert decision.pin_only
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
+    test "every flow-sequence site is a delta of its own" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - { uses: actions/checkout@v4.1.6 }, { uses: actions/cache@v4.0.0 }
+      +      - { uses: actions/checkout@v4.1.7 }, { uses: actions/cache@v5.0.0 }
+      """
+
+      deltas = PA.pin_deltas([file(".github/workflows/ci.yml", patch)], %{}, [])
+      assert Enum.map(deltas, & &1.action) == ["actions/checkout", "actions/cache"]
+    end
+
+    test "a mixed-case action spelling meets its lower-case denylist entry" do
+      patch =
+        codeql_patch(@good, @poison)
+        |> String.replace("github/codeql-action", "GitHub/CodeQL-Action")
+
+      assert [site] = PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy)
+      assert site.denylist_id == "PIN-001"
+    end
+
+    test "a pin quoted inside another scalar or a comment is not a site" do
+      line =
+        ~s(+      - { name: "see uses: github/codeql-action/init@#{@poison}", uses: actions/checkout@v4.1.7 } # uses: x/y@#{@poison})
+
+      assert [%{action: "actions/checkout", ref: "v4.1.7"}] = PA.parse_pins(line)
+    end
   end
 
   describe "body_claims/1" do

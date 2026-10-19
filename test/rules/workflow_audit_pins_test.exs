@@ -348,6 +348,45 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "a workflow written in flow style on one line is read through its keys" do
+      sha2 = String.duplicate("a", 40)
+
+      docs = %{
+        "jobs.yml" =>
+          "jobs: { build: { steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ] } }\n",
+        "root.yml" =>
+          "{ on: push, jobs: { build: { runs-on: ubuntu-latest, steps: [ " <>
+            "{ uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: { toolchain: stable } }, " <>
+            "{ name: \"CI, build\", uses: dtolnay/rust-toolchain@#{sha2} } ] } } }\n",
+        "jobline.yml" =>
+          "jobs:\n  build: { steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ] }\n"
+      }
+
+      findings = WorkflowAudit.check_sha_pinned_toolchain_without_input(docs)
+
+      assert [%{line: 1, auto_fixable: false}] = Enum.filter(findings, &(&1.file == "jobs.yml"))
+
+      assert [%{line: 1, current_sha: ^sha2, auto_fixable: false}] =
+               Enum.filter(findings, &(&1.file == "root.yml"))
+
+      assert [%{line: 2, auto_fixable: false}] =
+               Enum.filter(findings, &(&1.file == "jobline.yml"))
+    end
+
+    test "a one-line flow path that is not steps in a job in jobs is not a step" do
+      docs = %{
+        "env.yml" =>
+          "env: { build: { steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ] } }\n",
+        "fixture.yml" =>
+          "jobs: { build: { fixture: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ] } }\n",
+        "quoted.yml" =>
+          "jobs: { build: { steps: [ { run: \"jobs: { b: { steps: [ { uses: " <>
+            "dtolnay/rust-toolchain@#{@toolchain_sha} } ] } }\" } ] } }\n"
+      }
+
+      assert WorkflowAudit.check_sha_pinned_toolchain_without_input(docs) == []
+    end
+
     test "a - { item spread over lines: its with entry decides, nested braces respected" do
       wf = """
       jobs:

@@ -121,10 +121,12 @@ lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 # Does the policy deny <owner/repo> at <ref>? A blocked version is blocked
 # for ITS action only (`some/action@v4.38.1` is no finding when only
 # codeql-action's 4.38.1 is denied); a SHA is one object and meets its entry
-# in either spelling.
+# in either spelling. The action is compared case-folded too: GitHub resolves
+# `GitHub/CodeQL-Action` and `github/codeql-action` to one repository, so a
+# mixed-case caller meets the entry its lower-case spelling would.
 denylisted_pair() {
-  jq -e --arg a "$1" --arg r "$(lc "$2")" '
-    [.pin_denylist[] | select(.action == $a)
+  jq -e --arg a "$(lc "$1")" --arg r "$(lc "$2")" '
+    [.pin_denylist[] | select((.action | ascii_downcase) == $a)
      | (.blocked_shas // []), (.blocked_versions // []), ((.blocked_versions // []) | map("v" + .))]
     | add // [] | map(ascii_downcase) | index($r) != null' "$POLICY" >/dev/null 2>&1
 }
@@ -137,13 +139,79 @@ site_parts() {
   site_action="${t%@*}"; site_ref="${t##*@}"
 }
 
+# Everything that is not YAML structure, blanked IN PLACE, one output line
+# per input line: a quoted scalar that is neither a key nor the value of a
+# `uses` key has its text replaced by `x` (its quotes kept), a comment by
+# spaces, and the content lines of a block scalar (`run: |`, `script: >-`)
+# entirely by `x` after their indentation. Lengths are kept, so a site found
+# on a masked line sits at the same column of the real one. A `uses:` written
+# inside `- run: "echo uses: a/b@<sha>"`, a `run: |` script or a comment is
+# therefore no site this sweep rewrites; a denylisted SHA there is still
+# seen by line_has_denied_sha on the raw line, and flagged for the owner.
+# shellcheck disable=SC2016  # an awk program, not a shell expansion
+MASK_AWK='
+function key_col(s,   t) { t = s; sub(/[^[:space:]-].*$/, "", t); return length(t) }
+function xs(n,   t) { t = ""; while (n-- > 0) t = t "x"; return t }
+function mask(s,   out, n, i, c, j, body) {
+  out = ""; n = length(s); i = 1
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:]]/)) { while (i <= n) { out = out " "; i++ }; break }
+    if (c == "\"" || c == sq) {
+      j = i + 1
+      if (c == "\"") { while (j <= n && substr(s, j, 1) != "\"") { if (substr(s, j, 1) == "\\") j++; j++ } }
+      else { while (j <= n && substr(s, j, 1) != sq) j++ }
+      if (j > n) j = n
+      body = substr(s, i + 1, j - i - 1)
+      if (substr(s, j + 1) ~ /^[[:space:]]*:/ || tolower(out) ~ USES_TAIL) out = out substr(s, i, j - i + 1)
+      else out = out c xs(length(body)) (j > i ? substr(s, j, 1) : "")
+      i = j + 1; continue
+    }
+    out = out c; i++
+  }
+  return out
+}
+BEGIN { USES_TAIL = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*$"; in_scalar = 0 }
+{
+  if (in_scalar) {
+    if ($0 ~ /^[[:space:]]*$/ || key_col($0) > scalar_col) { t = $0; sub(/[^[:space:]].*$/, "", t); print t xs(length($0) - length(t)); next }
+    in_scalar = 0
+  }
+  m = mask($0); print m
+  if (m ~ /:[[:space:]]*[|>][-+0-9]*[[:space:]]*$/) { in_scalar = 1; scalar_col = key_col($0) }
+}'
+
+# The masked form of one file, line for line (block scalars tracked).
+mask_file() { awk -v sq="'" "$MASK_AWK" "$1"; }
+
+# The masked form of one line on its own: used after a site on that line has
+# been rewritten, which a line inside a block scalar never is.
+mask_line() { printf '%s\n' "$1" | awk -v sq="'" "$MASK_AWK"; }
+
+# The `uses:` sites of a masked line, as grep -o prints them.
+masked_sites() { printf '%s\n' "$1" | grep -oiE "$SITE_RE" || true; }
+
 # Replace ONE site on a line — the action and ref exactly as written — with
 # the known-good SHA for that action; the other sites on the line keep theirs.
-replace_site() { # <line> <action> <ref> <good>
-  local esc_a esc_r
-  esc_a=$(printf '%s' "$2" | sed -E 's#[][/.^$*+?(){}|\\]#\\&#g')
-  esc_r=$(printf '%s' "$3" | sed -E 's#[][/.^$*+?(){}|\\]#\\&#g')
-  printf '%s\n' "$1" | sed -E "s%(${USES_KEY}${esc_a})@${esc_r}(${REF_END})%\1@${4}\2%"
+# The site is located on the masked line, so the same `action@ref` text
+# inside a quoted scalar or a comment earlier on the line is never the one
+# replaced.
+replace_site() { # <line> <masked-line> <action> <ref> <good>
+  awk -v line="$1" -v masked="$2" -v a="$3" -v r="$4" -v good="$5" -v sq="'" 'BEGIN {
+    tail = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*[\"" sq "]?$"
+    ends = "]\"" sq " \t#,}"
+    lm = tolower(masked); needle = tolower(a "@" r); from = 1
+    while ((p = index(substr(lm, from), needle)) > 0) {
+      p += from - 1
+      nxt = substr(lm, p + length(needle), 1)
+      if ((nxt == "" || index(ends, nxt) > 0) && substr(lm, 1, p - 1) ~ tail) {
+        print substr(line, 1, p + length(a)) good substr(line, p + length(needle))
+        exit
+      }
+      from = p + 1
+    }
+    print line
+  }'
 }
 
 # A denylisted SHA token in any position (a lock record key, a fixture): a
@@ -155,8 +223,10 @@ line_has_denied_sha() {
 # Lines carrying a denied pin: a `uses:` site whose action/ref pair the
 # policy denies, or a denylisted SHA token anywhere else.
 count_denied_lines() {
-  local n=0 line site site_action site_ref
-  while IFS= read -r line || [ -n "$line" ]; do
+  local n=0 line mline site site_action site_ref masked
+  masked=$(mktemp)
+  mask_file "$1" > "$masked"
+  while IFS= read -r line <&3 && IFS= read -r mline <&4; do
     if line_has_denied_sha "$line"; then n=$((n + 1)); continue; fi
     while IFS= read -r site; do
       [ -n "$site" ] || continue
@@ -164,8 +234,9 @@ count_denied_lines() {
       if denylisted_pair "$(printf '%s' "$site_action" | awk -F/ '{print $1"/"$2}')" "$site_ref"; then
         n=$((n + 1)); break
       fi
-    done < <(printf '%s\n' "$line" | grep -oiE "$SITE_RE" || true)
-  done < "$1"
+    done < <(masked_sites "$mline")
+  done 3< "$1" 4< "$masked"
+  rm -f "$masked"
   printf '%s' "$n"
 }
 
@@ -186,11 +257,11 @@ comment_column() {
 }
 
 known_good_sha_for() {
-  jq -r --arg a "$1" '.pin_denylist[] | select(.action == $a) | .known_good_sha' "$POLICY" | head -n1
+  jq -r --arg a "$(lc "$1")" '.pin_denylist[] | select((.action | ascii_downcase) == $a) | .known_good_sha' "$POLICY" | head -n1
 }
 
 known_good_version_for() {
-  jq -r --arg a "$1" '.pin_denylist[] | select(.action == $a) | .known_good_version' "$POLICY" | head -n1
+  jq -r --arg a "$(lc "$1")" '.pin_denylist[] | select((.action | ascii_downcase) == $a) | .known_good_version' "$POLICY" | head -n1
 }
 
 # Relabel a pin's inline comment ONLY when the comment leads with a version
@@ -391,22 +462,27 @@ while IFS=$'\t' read -r org repo path; do
   outside_uses=0
   [ "$in_scope" -eq 0 ] && fixable=0
   : > "$OUT_DIR/.rewritten"
-  while IFS= read -r line || [ -n "$line" ]; do
-    out="$line"; replaced=0; site_seen=0; good_version=""
+  mask_file "$OUT_DIR/.current" > "$OUT_DIR/.masked"
+  while IFS= read -r line <&3 && IFS= read -r mline <&4; do
+    out="$line"; mout="$mline"; replaced=0; site_seen=0; good_version=""
     while IFS= read -r site; do
       [ -n "$site" ] || continue
       site_parts "$site"
-      base=$(printf '%s' "$site_action" | awk -F/ '{print $1"/"$2}')
+      base=$(lc "$(printf '%s' "$site_action" | awk -F/ '{print $1"/"$2}')")
       denylisted_pair "$base" "$site_ref" || continue
       site_seen=1
       actions="${actions}${base} "
       good=$(known_good_sha_for "$base")
       if [ -z "$good" ] || [ "$good" = "null" ]; then fixable=0; continue; fi
-      out=$(replace_site "$out" "$site_action" "$site_ref" "$good")
+      out=$(replace_site "$out" "$mout" "$site_action" "$site_ref" "$good")
+      mout=$(mask_line "$out")
       replaced=$((replaced + 1))
       good_version=$(known_good_version_for "$base")
-    done < <(printf '%s\n' "$line" | grep -oiE "$SITE_RE" || true)
-    if [ "$site_seen" -eq 0 ] && line_has_denied_sha "$line"; then
+    done < <(masked_sites "$mline")
+    # A denylisted SHA left on the line that is not at a `uses:` site — the
+    # line had none, or the SHA sits in a quoted scalar or a comment the
+    # mask blanked — is a finding for the owner, never part of a repair.
+    if line_has_denied_sha "$out" && { [ "$site_seen" -eq 0 ] || ! line_has_denied_sha "$mout"; }; then
       outside_uses=$((outside_uses + 1)); fixable=0
     fi
     if [ "$replaced" -eq 1 ] && [ -n "$good_version" ] && [ "$good_version" != "null" ]; then
@@ -416,7 +492,7 @@ while IFS=$'\t' read -r org repo path; do
       fi
     fi
     printf '%s\n' "$out" >> "$OUT_DIR/.rewritten"
-  done < "$OUT_DIR/.current"
+  done 3< "$OUT_DIR/.current" 4< "$OUT_DIR/.masked"
 
   sites_after=$(grep -cE "(^|[{,[:space:]])${USES_KEY}" "$OUT_DIR/.rewritten" || true)
   denied_after=$(count_denied_lines "$OUT_DIR/.rewritten")

@@ -1162,7 +1162,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       (`- { uses: ..., with: { toolchain: stable } }`,
       `steps: [ { uses: ... } ]`, or a `- {` item spread over lines) is read
       through its braces: its `with` entry decides, quotes and nested
-      braces respected, and a `uses:` inside a quoted string is text.
+      braces respected, and a `uses:` inside a quoted string is text. A
+      workflow written in flow style on one line (`jobs: { build: { steps:
+      [ { uses: ... } ] } }`, with or without a root `{ }`) is read the same
+      way: the keys opening the brackets around the step must be `steps`
+      in a job in `jobs`.
     * `with:` may be an anchor (`with: &inputs`, block or flow), an alias
       (`with: *inputs`) or carry a merge key (`<<: *inputs`): the anchored
       mapping is resolved from the document and its direct entries decide.
@@ -1238,8 +1242,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # lines) and its `with` entry decides.
   defp wf026_inline_step_finding(filename, lines, line, number, uses_at, sha, kyaml?) do
     with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
-         true <- wf026_inline_item?(line, open_col),
-         true <- wf026_inline_under_steps?(lines, line, number, open_col),
+         true <- wf026_inline_step_at?(lines, line, number, open_col),
          {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
       case wf026_with_entry(wf_flow_entries(interior), lines) do
         {:toolchain, _} -> []
@@ -1248,6 +1251,47 @@ defmodule Hypatia.Rules.WorkflowAudit do
     else
       _ -> []
     end
+  end
+
+  # Is the flow mapping opening at `open_col` a step? Either it sits in a
+  # sequence position of a block document (below), or the line itself
+  # writes the path to it in flow style.
+  defp wf026_inline_step_at?(lines, line, number, open_col) do
+    (wf026_inline_item?(line, open_col) and
+       wf026_inline_under_steps?(lines, line, number, open_col)) or
+      wf026_flow_path_step?(lines, line, number, open_col)
+  end
+
+  # A workflow written in flow style on one line — `jobs: { build: { steps:
+  # [ { uses: ... } ] } }`, the same under a root `{ ... }`, or a job line
+  # `build: { steps: [ ... ] }` under a block `jobs:`. The mapping must sit
+  # directly in a `[` that `steps:` opens, in a mapping a job key opens, in
+  # the one `jobs:` opens: the keys that open the brackets still unclosed on
+  # the line, nearest first, then the block ancestors of the line. Each key
+  # is read quote-aware, so a `name: "CI, build"` sibling separates nothing.
+  defp wf026_flow_path_step?(lines, line, number, open_col) do
+    case wf_flow_opener_stack(line, open_col) do
+      {:ok, [{:seq, _} | _] = stack} ->
+        keys = wf_flow_opener_keys(line, stack) ++ (wf_ancestor_keys(lines, number) || [])
+        match?(["steps", job, "jobs" | _] when is_binary(job), keys)
+
+      _ ->
+        false
+    end
+  end
+
+  # The key that opens each bracket of an opener stack (innermost first), or
+  # nil for a bracket no key opens (a root `{`, a `{` item in a sequence).
+  defp wf_flow_opener_keys(line, stack) do
+    cols =
+      Enum.map(stack, fn
+        {:seq, col} -> col
+        col -> col
+      end)
+
+    froms = cols |> Enum.drop(1) |> Enum.map(&(&1 + 1)) |> Kernel.++([0])
+
+    Enum.zip_with(cols, froms, fn col, from -> wf027_key_before(line, from, col) end)
   end
 
   # The text before the mapping's `{` must be a sequence position: a list
@@ -1684,8 +1728,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # stack holds the byte column of each open `{` (`:seq` for a `[`); the
   # innermost must be a mapping for `at` to be a key position.
   # Every `{`/`[` still open before byte `at` of `line`, innermost first:
-  # the column of each `{`, `:seq` for a `[`. Quoted scalars and comments
-  # are skipped, as in wf_flow_opener_before/2; :error inside one.
+  # the column of each `{`, `{:seq, column}` for a `[`. Quoted scalars and
+  # comments are skipped, as in wf_flow_opener_before/2; :error inside one.
   defp wf_flow_opener_stack(line, at) do
     line
     |> binary_part(0, at)
@@ -1701,7 +1745,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       c == ?# and prev in [?\s, ?\t] -> wf_flow_stack(rest, pos + 1, :comment, stack, c)
       c in [?", ?'] -> wf_flow_stack(rest, pos + 1, c, stack, c)
       c == ?{ -> wf_flow_stack(rest, pos + 1, nil, [pos | stack], c)
-      c == ?[ -> wf_flow_stack(rest, pos + 1, nil, [:seq | stack], c)
+      c == ?[ -> wf_flow_stack(rest, pos + 1, nil, [{:seq, pos} | stack], c)
       c in [?}, ?]] -> wf_flow_stack(rest, pos + 1, nil, Enum.drop(stack, 1), c)
       true -> wf_flow_stack(rest, pos + 1, nil, stack, c)
     end
