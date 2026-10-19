@@ -1265,50 +1265,62 @@ defmodule Hypatia.Rules.WorkflowAudit do
     {step, wf026_step_key_indent(step), opener}
   end
 
-  # A list item is a step only when its parent key is `steps:`. Walk up the
-  # ancestors — each the nearest preceding plain, non-list line shallower
-  # than the last; the parent may sit at the item's own indentation, YAML's
-  # `steps:\n- uses:` shape — and refuse any ancestor that opens a block
-  # scalar: an item inside `run: |`, or inside a fixture kept in `env:`, is
-  # text however much it looks like a step, and must never send the fleet to
-  # rewrite scalar data.
+  # A list item is a step only when its parent key is `steps:`; an item
+  # inside `run: |`, or inside a fixture kept in `env:`, is text however much
+  # it looks like a step, and must never send the fleet to rewrite scalar data.
   defp wf026_under_steps?(lines, opener) do
-    opener_indent = wf026_indent(Enum.at(lines, opener - 1))
-
-    lines
-    |> Enum.take(opener - 1)
-    |> Enum.reverse()
-    |> Enum.filter(&wf026_plain?/1)
-    |> wf026_walk_up(opener_indent, nil)
+    match?(["steps" | _], wf_ancestor_keys(lines, opener))
   end
 
-  defp wf026_walk_up([], _limit, parent), do: parent == :steps
+  # The mapping keys enclosing the line at `number`, nearest first — list
+  # items are nodes, not keys, and are skipped — or nil when an ancestor
+  # opens a block scalar: the line is then text, not YAML structure. The
+  # parent of a list item may sit at the item's own indentation (YAML's
+  # `steps:\n- uses:` shape); every further ancestor is strictly shallower.
+  defp wf_ancestor_keys(lines, number) do
+    line = Enum.at(lines, number - 1)
+    indent = wf026_indent(line)
+    list_item? = Regex.match?(~r/^\s*-(?:\s|$)/, line)
+    limit = if list_item?, do: indent, else: indent - 1
 
-  defp wf026_walk_up([line | rest], limit, parent) do
+    lines
+    |> Enum.take(number - 1)
+    |> Enum.reverse()
+    |> Enum.filter(&wf026_plain?/1)
+    |> wf_walk_up(limit, list_item?, [])
+  end
+
+  defp wf_walk_up([], _limit, _sibling_ok?, keys), do: Enum.reverse(keys)
+
+  defp wf_walk_up([line | rest], limit, sibling_ok?, keys) do
     indent = wf026_indent(line)
     list_item? = Regex.match?(~r/^\s*-(?:\s|$)/, line)
 
     cond do
       indent > limit ->
-        wf026_walk_up(rest, limit, parent)
+        wf_walk_up(rest, limit, sibling_ok?, keys)
 
       # A sibling item of the one being placed.
-      list_item? and parent == nil and indent == limit ->
-        wf026_walk_up(rest, limit, parent)
+      list_item? and sibling_ok? and indent == limit ->
+        wf_walk_up(rest, limit, sibling_ok?, keys)
 
       Regex.match?(~r/:\s*[|>][-+0-9]*\s*(?:#.*)?$/, line) ->
-        false
+        nil
 
       list_item? ->
-        wf026_walk_up(rest, indent - 1, parent)
-
-      parent == nil ->
-        found = if Regex.match?(~r/^\s*["']?steps["']?\s*:/, line), do: :steps, else: :other
-        wf026_walk_up(rest, indent - 1, found)
+        wf_walk_up(rest, indent - 1, false, keys)
 
       true ->
-        wf026_walk_up(rest, indent - 1, parent)
+        wf_walk_up(rest, indent - 1, false, [wf_key_name(line) | keys])
     end
+  end
+
+  defp wf_key_name(line) do
+    line
+    |> String.replace(~r/^\s*(?:-\s+)?/, "")
+    |> String.replace(~r/\s*:.*$/, "")
+    |> String.trim("\"")
+    |> String.trim("'")
   end
 
   # The column of the step's keys: the opener's key (`- uses:` -> the column
@@ -1531,22 +1543,29 @@ defmodule Hypatia.Rules.WorkflowAudit do
   """
   def check_known_broken_reusable_revision(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
-      stripped = strip_comments(content)
+      lines = String.split(content, "\n")
 
       Enum.flat_map(@broken_reusable_revisions, fn rev ->
-        # Anchored to a `uses:` key at the start of a line (quoted or not):
-        # the reusable's path inside a string value or a comment is not a pin.
+        # Anchored to a `uses:` key at the start of a line (quoted or not) that
+        # is a key of a job under `jobs:` — the only place a reusable is
+        # called. The reusable's path inside a `run: |` script, under `env:`,
+        # in a string value or in a comment is not a call, so the fleet is
+        # never sent to rewrite script data.
         ref_re =
-          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{Regex.escape(rev.reusable)}@([0-9a-f]{40})/m
+          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{Regex.escape(rev.reusable)}@([0-9a-f]{40})/
 
-        Regex.scan(ref_re, stripped)
-        |> Enum.flat_map(fn [_full, sha] ->
-          if sha in rev.shas do
+        lines
+        |> Enum.with_index(1)
+        |> Enum.flat_map(fn {line, number} ->
+          with [_full, sha] <- Regex.run(ref_re, line),
+               true <- sha in rev.shas,
+               [_job, "jobs" | _] <- wf_ancestor_keys(lines, number) do
             [
               %{
                 rule: "WF027",
                 type: :known_broken_reusable_revision,
                 file: filename,
+                line: number,
                 reusable: rev.reusable,
                 current_sha: sha,
                 replacement_sha: rev.replacement,
@@ -1562,7 +1581,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
               }
             ]
           else
-            []
+            _ -> []
           end
         end)
       end)

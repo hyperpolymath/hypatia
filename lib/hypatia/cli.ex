@@ -486,7 +486,22 @@ defmodule Hypatia.CLI do
               # structural_drift normalizer's `Map.take` above. Before this,
               # 7 `fix_recipe:` and 7 `recipe_id:` declarations in
               # workflow_audit.ex were read by nothing at all.
-              |> Map.merge(Map.take(f, [:fix_recipe, :recipe_id, :job]))
+              # WF026/WF027 anchor to a line and name their repair script and
+              # the SHAs involved; keep those so SARIF points at the line and
+              # the fleet receives the advertised script and replacement.
+              |> Map.merge(
+                Map.take(f, [
+                  :fix_recipe,
+                  :recipe_id,
+                  :job,
+                  :line,
+                  :auto_fixable,
+                  :fix_script,
+                  :current_sha,
+                  :replacement_sha,
+                  :reusable
+                ])
+              )
             end)
 
           results ++ normalized

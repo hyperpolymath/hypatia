@@ -151,14 +151,28 @@ mapfile -t SEARCH_TOKENS < <(jq -r '
   | (if ((.blocked_shas // []) | length) > 8 then [.action] else (.blocked_shas // []) end)[],
     (.blocked_versions // [])[]' "$POLICY" | sort -u)
 
+# GitHub's code search returns at most 1,000 results per query (ten pages
+# of 100), whatever the true count. A broad query that overflows the cap
+# leaves candidates phase 2 never sees, so the sweep says so and refuses a
+# clean verdict: a search that could not see everything is INCOMPLETE, and
+# only `--via clone` can clear the org.
+incomplete=0
 if [ "$VIA" = "search" ]; then
   for org in "${ORGS[@]}"; do
     for token in "${SEARCH_TOKENS[@]}"; do
       page=1
       while :; do
-        n=$(gh api "search/code?q=${token}+org:${org}&per_page=100&page=${page}" \
-              --jq '.items[] | "'"${org}"'\t\(.repository.name)\t\(.path)"' 2>/dev/null \
+        gh api "search/code?q=${token}+org:${org}&per_page=100&page=${page}" \
+          > "$OUT_DIR/.search.json" 2>/dev/null || : > "$OUT_DIR/.search.json"
+        n=$(jq -r '.items[]? | "'"${org}"'\t\(.repository.name)\t\(.path)"' "$OUT_DIR/.search.json" 2>/dev/null \
               | tee -a "$HITS" | wc -l)
+        if [ "$page" -eq 1 ]; then
+          total=$(jq -r '.total_count // 0' "$OUT_DIR/.search.json" 2>/dev/null || echo 0)
+          if [ "${total:-0}" -gt 1000 ] 2>/dev/null; then
+            log "  ! ${org}: '${token}' has ${total} results; GitHub shows only the first 1000 — phase 1 is INCOMPLETE for this org, use --via clone"
+            incomplete=$((incomplete + 1))
+          fi
+        fi
         [ "$n" -lt 100 ] && break
         page=$((page + 1))
         [ "$page" -gt 10 ] && break
@@ -191,6 +205,10 @@ total_hits=$(wc -l < "$HITS")
 log "phase 1: ${total_hits} candidate file(s)"
 
 if [ "$total_hits" -eq 0 ]; then
+  if [ "$incomplete" -gt 0 ]; then
+    echo "INCOMPLETE: no denylisted pin tokens in the visible search results for ${ORGS[*]}, but ${incomplete} search(es) overflowed GitHub's 1,000-result cap; a clean verdict needs --via clone"
+    exit 2
+  fi
   echo "clean: no denylisted pin tokens found in ${ORGS[*]}"
   exit 0
 fi
@@ -321,5 +339,6 @@ log "  repair plan                : ${PLAN}"
 [ "$REWRITE" -eq 1 ] && log "  repaired trees             : ${OUT_DIR}/patched"
 log "  NOTE: this sweep never writes to a remote. Branch + PR creation is"
 log "        the token-bearing actuator's job — docs/operations/estate-automerge.adoc"
+[ "$incomplete" -gt 0 ] && log "  INCOMPLETE: ${incomplete} search(es) overflowed GitHub's 1,000-result cap; candidates beyond it were not seen — rerun with --via clone"
 
 exit 2

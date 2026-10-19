@@ -337,7 +337,26 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
           "uses": "#{@rust_ci}@#{@broken_standards}"
       """
 
-      assert [%{rule: "WF027", current_sha: @broken_standards}] =
+      assert [%{rule: "WF027", current_sha: @broken_standards, line: 3}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "only a key of a job is a call: run: | and env: copies are not" do
+      wf = """
+      jobs:
+        fixture:
+          env:
+            uses: #{@rust_ci}@#{@broken_standards}
+          steps:
+            - run: |
+                cat > caller.yml <<'EOF'
+                uses: #{@rust_ci}@#{@broken_standards}
+                EOF
+        rust-ci:
+          uses: #{@rust_ci}@#{@broken_standards}
+      """
+
+      assert [%{rule: "WF027", line: 11}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
     end
 
