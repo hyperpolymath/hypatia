@@ -175,6 +175,19 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert decision.blocked_by == "introduces_denylisted_pin"
     end
 
+    test "an unquoted flow-style pin ends at its delimiter: PA001 sees the poison" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - { uses: github/codeql-action/init@#{@good}, with: { languages: rust } }
+      +      - { uses: github/codeql-action/init@#{@poison}, with: { languages: rust } }
+      """
+
+      decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
+
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
     test "a quoted uses: key and a quoted value are still a pin PA001 sees" do
       patch = """
       @@ -1,1 +1,1 @@

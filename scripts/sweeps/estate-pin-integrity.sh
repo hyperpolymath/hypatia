@@ -47,6 +47,7 @@ ORGS=()
 VIA="search"
 REWRITE=0
 MAX_REPOS=0
+SAMPLE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -56,6 +57,7 @@ while [ $# -gt 0 ]; do
     --via)        VIA="$2"; shift 2 ;;
     --rewrite)    REWRITE=1; shift ;;
     --max-repos)  MAX_REPOS="$2"; shift 2 ;;
+    --sample)     SAMPLE="$2"; shift 2 ;;
     -h|--help)    sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -108,6 +110,80 @@ REF_END='([]"'"'"'[:space:]#,}]|$)'
 # The `uses` key, quoted or bare, with the quote a quoted value opens with:
 # `uses: x@…`, `"uses": "x@…"`, `{ uses: x@… }` all name an action.
 USES_KEY='["'"'"']?uses["'"'"']?[[:space:]]*:[[:space:]]*["'"'"']?'
+REF_END_CLASS='[]"'"'"'[:space:]#,}]'
+# One `uses:` site: the action and a denylisted token, bounded. Matched in
+# either case (-i): a commit ID in upper-case hex is the same object.
+SITE_RE="${USES_KEY}[^@\"'[:space:],}]+@(${REF_ALTERNATION})(${REF_END})"
+SHA_ALTERNATION=$(printf '%s\n' "${DENY_SHAS[@]}" | paste -sd'|' -)
+
+lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Does the policy deny <owner/repo> at <ref>? A blocked version is blocked
+# for ITS action only (`some/action@v4.38.1` is no finding when only
+# codeql-action's 4.38.1 is denied); a SHA is one object and meets its entry
+# in either spelling.
+denylisted_pair() {
+  jq -e --arg a "$1" --arg r "$(lc "$2")" '
+    [.pin_denylist[] | select(.action == $a)
+     | (.blocked_shas // []), (.blocked_versions // []), ((.blocked_versions // []) | map("v" + .))]
+    | add // [] | map(ascii_downcase) | index($r) != null' "$POLICY" >/dev/null 2>&1
+}
+
+# The action and ref of one site as `grep -o` printed it: the key and the
+# trailing boundary stripped, into site_action and site_ref.
+site_parts() {
+  local t
+  t=$(printf '%s' "$1" | sed -E "s/^${USES_KEY}//; s/${REF_END_CLASS}\$//")
+  site_action="${t%@*}"; site_ref="${t##*@}"
+}
+
+# Replace ONE site on a line — the action and ref exactly as written — with
+# the known-good SHA for that action; the other sites on the line keep theirs.
+replace_site() { # <line> <action> <ref> <good>
+  local esc_a esc_r
+  esc_a=$(printf '%s' "$2" | sed -E 's#[][/.^$*+?(){}|\\]#\\&#g')
+  esc_r=$(printf '%s' "$3" | sed -E 's#[][/.^$*+?(){}|\\]#\\&#g')
+  printf '%s\n' "$1" | sed -E "s%(${USES_KEY}${esc_a})@${esc_r}(${REF_END})%\1@${4}\2%"
+}
+
+# A denylisted SHA token in any position (a lock record key, a fixture): a
+# finding in either spelling, but not a `uses:` site this sweep rewrites.
+line_has_denied_sha() {
+  [ -n "$SHA_ALTERNATION" ] && printf '%s\n' "$1" | grep -qiE "@(${SHA_ALTERNATION})(${REF_END})"
+}
+
+# Lines carrying a denied pin: a `uses:` site whose action/ref pair the
+# policy denies, or a denylisted SHA token anywhere else.
+count_denied_lines() {
+  local n=0 line site site_action site_ref
+  while IFS= read -r line || [ -n "$line" ]; do
+    if line_has_denied_sha "$line"; then n=$((n + 1)); continue; fi
+    while IFS= read -r site; do
+      [ -n "$site" ] || continue
+      site_parts "$site"
+      if denylisted_pair "$(printf '%s' "$site_action" | awk -F/ '{print $1"/"$2}')" "$site_ref"; then
+        n=$((n + 1)); break
+      fi
+    done < <(printf '%s\n' "$line" | grep -oiE "$SITE_RE" || true)
+  done < "$1"
+  printf '%s' "$n"
+}
+
+# The column of a line's comment, found outside quoted scalars: a `#` at
+# column 1 or after whitespace. `name: "C# build"` carries no comment; 0.
+comment_column() {
+  printf '%s\n' "$1" | awk -v sq="'" '{
+    q = ""
+    for (i = 1; i <= length($0); i++) {
+      c = substr($0, i, 1)
+      if (q == "") {
+        if (c == "\"" || c == sq) q = c
+        else if (c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[[:space:]]/)) { print i; exit }
+      } else if (c == q) q = ""
+    }
+    print 0
+  }'
+}
 
 known_good_sha_for() {
   jq -r --arg a "$1" '.pin_denylist[] | select(.action == $a) | .known_good_sha' "$POLICY" | head -n1
@@ -211,16 +287,26 @@ else
   WORK="$OUT_DIR/clones"
   mkdir -p "$WORK"
   for org in "${ORGS[@]}"; do
-    mapfile -t reponames < <(list_repos "$org")
+    # A listing or a clone that fails is a repository the authoritative mode
+    # never inspected: INCOMPLETE, never a clean verdict — as a failed search is.
+    if ! names=$(list_repos "$org"); then
+      log "  ! ${org}: listing repositories failed — phase 1 is INCOMPLETE for this org"
+      failed=$((failed + 1)); continue
+    fi
+    reponames=()
+    [ -n "$names" ] && mapfile -t reponames <<<"$names"
     [ "$MAX_REPOS" -gt 0 ] && reponames=("${reponames[@]:0:$MAX_REPOS}")
     log "  cloning ${#reponames[@]} repo(s) in ${org}"
+    # Clones live under the organisation: two organisations may each own a
+    # repository of the same name, and the second must not reuse the first's.
+    mkdir -p "$WORK/$org"
     for name in "${reponames[@]}"; do
-      d="$WORK/$name"
+      d="$WORK/$org/$name"
       [ -d "$d/.git" ] || git clone --depth 1 --quiet "https://github.com/${org}/${name}.git" "$d" 2>/dev/null || {
-        log "  ! clone failed: ${org}/${name}"; continue; }
+        log "  ! clone failed: ${org}/${name} — phase 1 is INCOMPLETE for this org"; failed=$((failed + 1)); continue; }
       while IFS= read -r f; do
         printf '%s\t%s\t%s\n' "$org" "$name" "${f#"$d"/}" >> "$HITS"
-      done < <(grep -rlE "$REF_ALTERNATION" "$d" --include='*.yml' --include='*.yaml' --include='*.lock' --include='*.toml' 2>/dev/null || true)
+      done < <(grep -rliE "$REF_ALTERNATION" "$d" --include='*.yml' --include='*.yaml' --include='*.lock' --include='*.toml' 2>/dev/null || true)
     done
   done
   sort -u "$HITS" -o "$HITS"
@@ -228,20 +314,28 @@ fi
 
 total_hits=$(wc -l < "$HITS")
 log "phase 1: ${total_hits} candidate file(s)"
+sampled=0
+if [ "$SAMPLE" -gt 0 ] && [ "$total_hits" -gt "$SAMPLE" ]; then
+  # A bounded run reads the first N candidates only: INCOMPLETE by construction.
+  sampled=$((total_hits - SAMPLE))
+  head -n "$SAMPLE" "$HITS" > "$HITS.sample" && mv "$HITS.sample" "$HITS"
+  log "  --sample ${SAMPLE}: ${sampled} candidate file(s) left unread; the sweep cannot report clean"
+fi
 
 # What phase 1 could not see. A sweep that saw everything and found nothing
 # is clean; one that could not see everything never is.
 unseen() {
   local parts=()
   [ "$incomplete" -gt 0 ] && parts+=("${incomplete} search page(s) overflowed GitHub's 1,000-result cap or came back marked incomplete")
-  [ "$failed" -gt 0 ] && parts+=("${failed} search(es) failed")
+  [ "$failed" -gt 0 ] && parts+=("${failed} search(es), listing(s) or clone(s) failed")
   [ "${unread:-0}" -gt 0 ] && parts+=("${unread} candidate file(s) could not be read")
+  [ "${sampled:-0}" -gt 0 ] && parts+=("${sampled} candidate file(s) left unread by --sample")
   local IFS=';'
   printf '%s' "${parts[*]}"
 }
 
 if [ "$total_hits" -eq 0 ]; then
-  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ]; then
+  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$sampled" -gt 0 ]; then
     echo "INCOMPLETE: no denylisted pin tokens in the visible search results for ${ORGS[*]}, but $(unseen); a clean verdict needs --via clone"
     exit 2
   fi
@@ -272,7 +366,7 @@ while IFS=$'\t' read -r org repo path; do
   printf '%s\n' "$content" > "$OUT_DIR/.current"
 
   sites_before=$(grep -cE "(^|[{,[:space:]])${USES_KEY}" "$OUT_DIR/.current" || true)
-  denied_before=$(grep -cE "@(${REF_ALTERNATION})(${REF_END})" "$OUT_DIR/.current" || true)
+  denied_before=$(count_denied_lines "$OUT_DIR/.current")
   [ "$denied_before" -eq 0 ] && continue
   confirmed=$((confirmed + 1))
 
@@ -286,42 +380,46 @@ while IFS=$'\t' read -r org repo path; do
     *)                                        in_scope=0 ;;
   esac
 
-  # Rewrite one line at a time so each pin gets the known-good SHA for ITS
-  # action, and so an action with no known-good pin blocks the whole file.
+  # Rewrite one pin SITE at a time: each `uses:` site gets the known-good
+  # SHA for ITS action (two actions on one flow line get two replacements);
+  # an action with no known-good pin blocks the whole file; a denylisted
+  # token outside a `uses:` key (a lock record, a fixture) is a finding the
+  # owner reviews, never a rewrite. Only the comment after the line's one
+  # replaced pin is relabelled, found outside quoted scalars.
   fixable=1
   actions=""
+  outside_uses=0
   [ "$in_scope" -eq 0 ] && fixable=0
   : > "$OUT_DIR/.rewritten"
   while IFS= read -r line || [ -n "$line" ]; do
-    if printf '%s\n' "$line" | grep -qE "@(${REF_ALTERNATION})(${REF_END})"; then
-      # The action named before the `@`, whatever quotes or flow braces
-      # surround the key and the value.
-      action=$(printf '%s\n' "$line" | grep -oE "${USES_KEY}[^@\"'[:space:]]+@" | head -n1 \
-                 | sed -E "s/^${USES_KEY}//; s/@\$//")
-      base=$(printf '%s\n' "$action" | awk -F/ '{print $1"/"$2}')
-      good=$(known_good_sha_for "$base")
+    out="$line"; replaced=0; site_seen=0; good_version=""
+    while IFS= read -r site; do
+      [ -n "$site" ] || continue
+      site_parts "$site"
+      base=$(printf '%s' "$site_action" | awk -F/ '{print $1"/"$2}')
+      denylisted_pair "$base" "$site_ref" || continue
+      site_seen=1
       actions="${actions}${base} "
-      if [ -z "$good" ] || [ "$good" = "null" ]; then
-        fixable=0
-        printf '%s\n' "$line" >> "$OUT_DIR/.rewritten"
-      else
-        good_version=$(known_good_version_for "$base")
-        swapped=$(printf '%s\n' "$line" | sed -E "s%@(${REF_ALTERNATION})(${REF_END})%@${good}\2%g")
-        head="${swapped%%#*}"
-        if [ "$head" != "$swapped" ]; then
-          tail_comment="#${swapped#*#}"
-          printf '%s%s\n' "$head" "$(relabel_comment "$tail_comment" "$good_version")" >> "$OUT_DIR/.rewritten"
-        else
-          printf '%s\n' "$swapped" >> "$OUT_DIR/.rewritten"
-        fi
-      fi
-    else
-      printf '%s\n' "$line" >> "$OUT_DIR/.rewritten"
+      good=$(known_good_sha_for "$base")
+      if [ -z "$good" ] || [ "$good" = "null" ]; then fixable=0; continue; fi
+      out=$(replace_site "$out" "$site_action" "$site_ref" "$good")
+      replaced=$((replaced + 1))
+      good_version=$(known_good_version_for "$base")
+    done < <(printf '%s\n' "$line" | grep -oiE "$SITE_RE" || true)
+    if [ "$site_seen" -eq 0 ] && line_has_denied_sha "$line"; then
+      outside_uses=$((outside_uses + 1)); fixable=0
     fi
+    if [ "$replaced" -eq 1 ] && [ -n "$good_version" ] && [ "$good_version" != "null" ]; then
+      at=$(comment_column "$out")
+      if [ "$at" -gt 0 ]; then
+        out="${out:0:$((at - 1))}$(relabel_comment "${out:$((at - 1))}" "$good_version")"
+      fi
+    fi
+    printf '%s\n' "$out" >> "$OUT_DIR/.rewritten"
   done < "$OUT_DIR/.current"
 
   sites_after=$(grep -cE "(^|[{,[:space:]])${USES_KEY}" "$OUT_DIR/.rewritten" || true)
-  denied_after=$(grep -cE "@(${REF_ALTERNATION})(${REF_END})" "$OUT_DIR/.rewritten" || true)
+  denied_after=$(count_denied_lines "$OUT_DIR/.rewritten")
 
   status="flag"
   reason="owner_review"
@@ -331,6 +429,8 @@ while IFS=$'\t' read -r org repo path; do
     reason="substitution"
   elif [ "$in_scope" -eq 0 ]; then
     reason="out_of_scope_file"
+  elif [ "$outside_uses" -gt 0 ]; then
+    reason="denylisted_token_outside_uses_key"
   elif [ "$fixable" -eq 0 ]; then
     reason="no_known_good_pin_for_action"
   elif [ "$sites_after" -ne "$sites_before" ]; then
@@ -358,7 +458,7 @@ while IFS=$'\t' read -r org repo path; do
 done < "$HITS"
 
 if [ "$confirmed" -eq 0 ]; then
-  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ]; then
+  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ] || [ "$sampled" -gt 0 ]; then
     echo "INCOMPLETE: none of the ${total_hits} candidate file(s) carries a denylisted pin, but $(unseen); a clean verdict needs --via clone"
     exit 2
   fi
@@ -396,7 +496,7 @@ log "  repair plan                : ${PLAN}"
 [ "$REWRITE" -eq 1 ] && log "  repaired trees             : ${OUT_DIR}/patched"
 log "  NOTE: this sweep never writes to a remote. Branch + PR creation is"
 log "        the token-bearing actuator's job — docs/operations/estate-automerge.adoc"
-if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ]; then
+if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ] || [ "$sampled" -gt 0 ]; then
   log "  INCOMPLETE: $(unseen); what they hid was not seen — rerun with --via clone"
 fi
 

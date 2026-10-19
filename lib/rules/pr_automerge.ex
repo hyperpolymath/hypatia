@@ -459,8 +459,10 @@ defmodule Hypatia.Rules.PrAutomerge do
   #   -      - uses: actions/checkout@v4.1.7
   # so the marker is part of the match. (Without this, every real diff looks
   # like a non-pin change and every PR falls through to `flag`.)
-  # The key and the value may each be quoted (`"uses": "owner/repo@sha"`).
-  @pin_re ~r/^[-+]?\s*-?\s*["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"']+)/
+  # The key and the value may each be quoted (`"uses": "owner/repo@sha"`), the
+  # step may be a flow mapping (`- { uses: owner/repo@sha, with: ... }`), and
+  # the ref ends at a flow delimiter as well as at a quote, space or comment.
+  @pin_re ~r/^[-+]?\s*-?\s*(?:\{\s*)?["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
 
   @doc "Parse a `uses:` line into `%{action, base, ref}`; `nil` when it is not one."
   def parse_pin(line) do
