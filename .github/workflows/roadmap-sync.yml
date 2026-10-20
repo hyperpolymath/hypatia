@@ -46,14 +46,6 @@ jobs:
       EXCLUDE: 'idaptik burble rattlescript vcl-ut'
       WINDOW_MIN: ${{ inputs.window_min || '45' }}   # look-back window (> cron interval for overlap)
     steps:
-      # Egress allowlist (RE001): this job talks only to the GitHub API.
-      - name: Harden runner
-        uses: step-security/harden-runner@v2.22.2
-        with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
       - name: Mint App installation token
         id: app
         uses: actions/create-github-app-token@v3.3.0
