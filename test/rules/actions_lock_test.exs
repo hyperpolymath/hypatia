@@ -155,6 +155,133 @@ defmodule Hypatia.Rules.ActionsLockTest do
              ActionsLock.parse(missing_dependency)
   end
 
+  # #926: `gh actions-lock` began writing v0.0.3: the v0.0.2 line grammar plus
+  # an optional dependency `hostname` (github/actions-lockfile lockfile-v0.0.3.json).
+  describe "format v0.0.3" do
+    @v3_lock String.replace(@valid_lock, "version: 'v0.0.2'", "version: 'v0.0.3'")
+
+    test "is accepted, and records the version it was read as" do
+      assert {:ok, lock} = ActionsLock.parse(@v3_lock)
+      assert lock.version == "v0.0.3"
+      assert ActionsLock.pinned?(lock, "ci.yml", "actions/checkout@v7.0.1")
+      refute ActionsLock.pinned?(lock, "other.yml", "actions/checkout@v7.0.1")
+
+      assert {:ok, %{version: "v0.0.2"}} = ActionsLock.parse(@valid_lock)
+    end
+
+    test "is held to the same grammar: a malformed line still fails closed" do
+      short = String.replace(@v3_lock, ~r/sha1-[0-9a-f]{40}/, "sha1-1234")
+      assert {:error, {:line, _, :malformed_dependency_commit}} = ActionsLock.parse(short)
+
+      unknown =
+        String.replace(@v3_lock, "        repo_id:", "        integrity: 'x'\n        repo_id:")
+
+      assert {:error, {:line, _, :malformed_dependency_entry}} = ActionsLock.parse(unknown)
+    end
+
+    test "accepts and records the optional dependency hostname (GHE.com pins)" do
+      lock =
+        String.replace(
+          @v3_lock,
+          "        owner_id:",
+          "        hostname: 'github.com'\n        owner_id:"
+        )
+
+      assert {:ok, parsed} = ActionsLock.parse(lock)
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "github.com"
+      assert ActionsLock.pinned?(parsed, "ci.yml", "actions/checkout@v7.0.1")
+
+      tenant = String.replace(lock, "github.com", "octocorp.ghe.com")
+      assert {:ok, parsed} = ActionsLock.parse(tenant)
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "octocorp.ghe.com"
+
+      assert {:ok, parsed} = ActionsLock.parse(@v3_lock)
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == nil
+    end
+
+    test "scopes owner/repo identity checks to the dependency's host" do
+      # Same owner name and repo, different numeric IDs: a conflict within one
+      # host, but legitimate across hosts (IDs are numbered per instance).
+      two_pins = """
+      version: 'v0.0.3'
+      workflows:
+          '.github/workflows/ci.yml':
+              - 'actions/checkout@v7.0.1'
+              - 'actions/setup-node@v7.0.0'
+      dependencies:
+          'actions/checkout@v7.0.1':
+              ref: 'v7.0.1'
+              commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+              owner_id: 44036562
+              repo_id: 197814629
+          'actions/setup-node@v7.0.0':
+              HOST
+              ref: 'v7.0.0'
+              commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+              owner_id: 99
+              repo_id: 12345
+      """
+
+      same_host = Regex.replace(~r/^ *HOST\n/m, two_pins, "")
+
+      assert {:error, {:line, _, {:owner_identity_mismatch, "actions", 44_036_562, 99}}} =
+               ActionsLock.parse(same_host)
+
+      cross_host = String.replace(two_pins, "HOST", "hostname: 'octocorp.ghe.com'")
+      assert {:ok, parsed} = ActionsLock.parse(cross_host)
+      assert parsed.dependencies["actions/setup-node@v7.0.0"].hostname == "octocorp.ghe.com"
+    end
+
+    test "refuses a malformed, repeated, or v0.0.2 hostname" do
+      with_host = fn host ->
+        String.replace(
+          @v3_lock,
+          "        owner_id:",
+          "        hostname: '#{host}'\n        owner_id:"
+        )
+      end
+
+      for bad <- [
+            "Octocorp.ghe.com",
+            "https://github.com",
+            "github.com:443",
+            "evil.example.com",
+            "",
+            "a.ghe.com/x"
+          ] do
+        assert {:error, {:line, _, reason}} = ActionsLock.parse(with_host.(bad))
+        assert reason in [:malformed_dependency_hostname, {:malformed_dependency_hostname, bad}]
+      end
+
+      twice =
+        String.replace(
+          with_host.("github.com"),
+          "        owner_id:",
+          "        hostname: 'github.com'\n        owner_id:"
+        )
+
+      assert {:error, {:line, _, {:duplicate_dependency_field, _, :hostname}}} =
+               ActionsLock.parse(twice)
+
+      v2 = String.replace(with_host.("github.com"), "v0.0.3", "v0.0.2")
+      assert {:error, {:line, _, {:hostname_requires_v0_0_3, "v0.0.2"}}} = ActionsLock.parse(v2)
+    end
+
+    test "negative control: a version past v0.0.3 is still refused" do
+      assert {:error, {:line, 2, {:unsupported_version, "v0.0.4"}}} =
+               @valid_lock
+               |> String.replace("v0.0.2", "v0.0.4")
+               |> ActionsLock.parse()
+    end
+
+    test "a second version line is refused, even when both are supported" do
+      twice =
+        String.replace(@v3_lock, "version: 'v0.0.3'\n", "version: 'v0.0.3'\nversion: 'v0.0.2'\n")
+
+      assert {:error, {:line, 3, :duplicate_version}} = ActionsLock.parse(twice)
+    end
+  end
+
   test "rejects symbolic-ref and SHA-key contradictions" do
     symbolic = String.replace(@valid_lock, "ref: 'v7.0.1'", "ref: 'v6.0.0'")
 
