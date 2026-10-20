@@ -44,6 +44,7 @@ defmodule Hypatia.Rules.ActionsLock do
           commit: String.t(),
           owner_id: pos_integer(),
           repo_id: pos_integer(),
+          hostname: String.t() | nil,
           uses: MapSet.t(String.t())
         }
   @type t :: %__MODULE__{
@@ -166,7 +167,10 @@ defmodule Hypatia.Rules.ActionsLock do
           [_, version] when version in @supported_versions ->
             line_error(line_number, :duplicate_version)
 
-          [_, version] ->
+          version in @supported_versions ->
+            {:ok, %{state | version: version}}
+
+          true ->
             line_error(line_number, {:unsupported_version, version})
         end
 
@@ -243,6 +247,23 @@ defmodule Hypatia.Rules.ActionsLock do
 
       Regex.match?(~r/^        (?:owner_id|repo_id):/, line) ->
         line_error(line_number, :malformed_dependency_identity)
+
+      match = Regex.run(~r/^        hostname: '([^']*)'$/, line) ->
+        [_, hostname] = match
+
+        cond do
+          state.version != "v0.0.3" ->
+            line_error(line_number, {:hostname_requires_v0_0_3, state.version})
+
+          Regex.match?(@hostname, hostname) ->
+            put_dependency_field(state, :hostname, hostname, line_number)
+
+          true ->
+            line_error(line_number, {:malformed_dependency_hostname, hostname})
+        end
+
+      Regex.match?(~r/^        hostname:/, line) ->
+        line_error(line_number, :malformed_dependency_hostname)
 
       line == "        uses:" ->
         put_dependency_field(state, :uses, MapSet.new(), line_number)
@@ -365,7 +386,7 @@ defmodule Hypatia.Rules.ActionsLock do
          :ok <- validate_dependency_consistency(key, ref, commit, header_line),
          :ok <-
            validate_repository_identity(
-             state.dependencies,
+             scope_to_host(state.dependencies, Map.get(dependency, :hostname)),
              normalized,
              owner_id,
              repo_id,
@@ -378,6 +399,7 @@ defmodule Hypatia.Rules.ActionsLock do
         commit: commit,
         owner_id: owner_id,
         repo_id: repo_id,
+        hostname: Map.get(dependency, :hostname),
         uses: Map.get(dependency, :uses, MapSet.new())
       }
 
@@ -391,6 +413,16 @@ defmodule Hypatia.Rules.ActionsLock do
       true -> line_error(header_line, {:duplicate_dependency, key})
       {:error, _reason} = error -> error
     end
+  end
+
+  # Owner and repository IDs are numbered per GitHub instance (the v0.0.3
+  # schema defines them "on the recorded hostname"), so identity is compared
+  # only among pins recorded on the same host. An omitted hostname is its own
+  # scope (the lock's home host).
+  defp scope_to_host(dependencies, hostname) do
+    dependencies
+    |> Enum.filter(fn {_ref, dependency} -> dependency.hostname == hostname end)
+    |> Map.new()
   end
 
   defp validate_repository_identity(dependencies, normalized, owner_id, repo_id, line_number) do
