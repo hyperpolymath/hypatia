@@ -89,7 +89,10 @@ Every examined PR gets one line in `pr-decisions.jsonl`:
 | `blocked_by`
 | `awaiting_required_checks`, `introduces_denylisted_pin`,
   `introduces_denylisted_pin_and_major_bumps`,
-  `introduces_denylisted_pin_alongside_wanted_updates`,
+  `introduces_denylisted_pin_alongside_wanted_updates` (armed only when what
+  remains after the excision would arm on its own),
+  `introduces_denylisted_pin_alongside_unmergeable_changes` (it would not;
+  `remainder_blocked_by` names why),
   `denylisted_pin_context_unknown` (the hunk shows the pin among script text;
   brain only — the shell actuator does not yet read hunk context),
   `major_version_delta`,
@@ -136,8 +139,10 @@ substituted file trees ready for a branch and a PR.
   (`hypatia/pin-integrity-known-good`), and only for a repository whose every
   confirmed file is repairable and whose every candidate file was read. A
   repository with a flagged sibling (an `actions.lock` entry, a fixture) or an
-  unread candidate is held for owner review: repairing the workflow alone
-  would arm a merge on a repository that still carries the pin.
+  unread candidate (unreadable, or left out by `--sample`) is held for owner
+  review: repairing the workflow alone would arm a merge on a repository that
+  still carries the pin. A search that failed or came back partial may hide a
+  sibling anywhere, so then every repository is held and no plan is armed.
 * Exit: `0` clean, `1` error, `2` findings or an `INCOMPLETE` run (failed or
   partial searches, listings or clones, unread candidates, or the limits
   `--max-repos` and `--sample` impose), `3` nothing to do.

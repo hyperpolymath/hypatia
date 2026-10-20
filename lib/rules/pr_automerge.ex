@@ -86,28 +86,59 @@ defmodule Hypatia.Rules.PrAutomerge do
     resolution = field(pr, :version_resolution, %{})
 
     claims = body_claims(body)
-    deltas = pin_deltas(files, resolution, claims)
 
-    poison = poison_sites(files, policy)
-    lock_only = files != [] and Enum.all?(files, &lockfile?(filename_of(&1), policy))
-    meta_only = files != [] and Enum.all?(files, &metadata_path?(filename_of(&1)))
-    pin_only = files != [] and Enum.all?(files, &pin_lines_only?/1)
-    manifest_file? = Enum.any?(files, &dependency_manifest?(filename_of(&1)))
-    licence_touch? = Enum.any?(files, &licence_path?(filename_of(&1)))
+    files
+    |> scan_of(pin_deltas(files, resolution, claims), poison_sites(files, policy), policy)
+    |> verdict(pr, policy)
+  end
 
+  defp scan_of(files, deltas, poison, policy) do
     %{
       deltas: deltas,
       poison_sites: poison,
       major_delta: Enum.any?(deltas, &major_delta?/1),
       unresolved: Enum.count(deltas, &(&1.status == :unresolved)),
       conflicts: Enum.count(deltas, &(&1.status == :conflict)),
-      lock_only: lock_only,
-      meta_only: meta_only,
-      pin_only: pin_only,
-      manifest_file: manifest_file?,
-      licence_touch: licence_touch?
+      lock_only: files != [] and Enum.all?(files, &lockfile?(filename_of(&1), policy)),
+      meta_only: files != [] and Enum.all?(files, &metadata_path?(filename_of(&1))),
+      pin_only: files != [] and Enum.all?(files, &pin_lines_only?/1),
+      manifest_file: Enum.any?(files, &dependency_manifest?(filename_of(&1))),
+      licence_touch: Enum.any?(files, &licence_path?(filename_of(&1)))
     }
-    |> verdict(pr, policy)
+  end
+
+  # The PR as it would stand once its poisoned pins are excised: a file whose
+  # every added line carries only denylisted sites drops out, and so does a
+  # delta onto a denylisted ref. Everything else is still there to classify.
+  defp remainder_scan(scan, files, policy) do
+    kept = Enum.reject(files, &poison_only_file?(&1, policy))
+
+    deltas =
+      Enum.reject(
+        scan.deltas,
+        &denylisted_pin?(%{base: action_base(&1.action), ref: &1.to_ref}, policy)
+      )
+
+    scan_of(kept, deltas, [], policy)
+  end
+
+  defp poison_only_file?(file, policy) do
+    added = added_lines(file)
+
+    pin_lines_only?(file) and added != [] and
+      Enum.all?(added, fn line ->
+        pins = parse_pins(line)
+        pins != [] and Enum.all?(pins, &denylisted_pin?(&1, policy))
+      end)
+  end
+
+  defp denylisted_pin?(%{base: base, ref: ref}, policy) do
+    policy
+    |> Map.get("pin_denylist", [])
+    |> Enum.any?(fn entry ->
+      String.downcase(base) == String.downcase(Map.get(entry, "action", "")) and
+        denylisted_ref?(entry, ref)
+    end)
   end
 
   # ─── PA001 · denylisted pin ───────────────────────────────────────────
@@ -185,7 +216,9 @@ defmodule Hypatia.Rules.PrAutomerge do
   This is the proof obligation behind the meta-guard exemption `MGX-001`. A
   workflow edit that is *not* pin-only — a new step, a changed `permissions:`
   block, a moved `if:` — fails this, which is what keeps the reflexivity guard
-  from being talked around by a plausible title.
+  from being talked around by a plausible title. So does a diff of pin lines
+  that adds or swaps an action: the removed and added sites must name the
+  same actions, as many times each.
   """
   @spec pin_lines_only?(map()) :: boolean()
   def pin_lines_only?(file) do
@@ -194,10 +227,18 @@ defmodule Hypatia.Rules.PrAutomerge do
     # A changed line inside a block scalar (`run: |`) is script text, never a
     # pin line, so a script edit is not a pin-only change.
     # A line the hunk shows among script text is not known to be a pin line.
+    # And every pin the file adds replaces a removed pin of the same action:
+    # a new step (`+ { uses: a/b@main },`) or a swapped action is a change to
+    # what the workflow runs, not a re-pin of what it already ran.
     lines != [] and
       Enum.all?(lines, fn {line, scalar?, certain?} ->
         certain? and not scalar? and pin_line?(line)
-      end)
+      end) and
+      action_multiset(removed_lines(file)) == action_multiset(added_lines(file))
+  end
+
+  defp action_multiset(lines) do
+    lines |> Enum.flat_map(&parse_pins/1) |> Enum.map(&String.downcase(&1.action)) |> Enum.sort()
   end
 
   # ─── PA002/PA003/PA004 · version deltas ───────────────────────────────
@@ -280,11 +321,12 @@ defmodule Hypatia.Rules.PrAutomerge do
     end
   end
 
-  defp delta(old, _new, from, to, status, source) do
+  defp delta(old, new, from, to, status, source) do
     %{
       action: old.action,
       from: from,
       to: to,
+      to_ref: new.ref,
       status: status,
       source: source,
       file: nil,
@@ -368,12 +410,23 @@ defmodule Hypatia.Rules.PrAutomerge do
         reject(base, :close_poison_only, "introduces_denylisted_pin", "P1")
 
       scan.poison_sites != [] ->
-        accept(
-          base,
-          :excise_poison_then_merge,
-          "introduces_denylisted_pin_alongside_wanted_updates",
-          "P1"
-        )
+        # Finding the poison must not upgrade a PR that would be flagged
+        # without it: what remains after the excision is classified on its
+        # own, and only a remainder that would arm by itself is merged.
+        rest = verdict(remainder_scan(scan, field(pr, :files, []), policy), pr, policy)
+
+        if rest.safety == "arm_auto" do
+          accept(
+            base,
+            :excise_poison_then_merge,
+            "introduces_denylisted_pin_alongside_wanted_updates",
+            "P1"
+          )
+        else
+          base
+          |> Map.put(:remainder_blocked_by, rest.blocked_by)
+          |> reject(:flag, "introduces_denylisted_pin_alongside_unmergeable_changes", "P1")
+        end
 
       scan.major_delta ->
         reject(base, :flag, "major_version_delta", "P2")

@@ -184,9 +184,12 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
 
-      assert decision.disposition == :excise_poison_then_merge
+      assert [_] = decision.poison_sites
       refute decision.pin_only
-      assert decision.blocked_by == "introduces_denylisted_pin_alongside_wanted_updates"
+      # The `with:` beside the pin makes the line more than a pin line, so
+      # what an excision would leave is not known to be mergeable: flagged.
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
     end
 
     test "a quoted uses: key and a quoted value are still a pin PA001 sees" do
@@ -202,7 +205,10 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert decision.blocked_by == "introduces_denylisted_pin"
     end
 
-    test "poison alongside a wanted update is excised, then merged" do
+    test "poison alongside a change that would be flagged on its own is flagged, not armed" do
+      # A `permissions:` edit is no pin bump (MGX-001): without the poison this
+      # PR is not_unambiguously_classifiable, and finding the poison must not
+      # upgrade it to an armed excise-then-merge.
       patch = """
       @@ -1,4 +1,4 @@
       -      - uses: github/codeql-action/init@#{@good} # v4.38.0
@@ -214,9 +220,51 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
 
-      assert decision.disposition == :excise_poison_then_merge
-      assert decision.blocked_by == "introduces_denylisted_pin_alongside_wanted_updates"
+      assert decision.disposition == :flag
+      assert decision.safety == "flag"
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+      assert decision.remainder_blocked_by == "not_unambiguously_classifiable"
       refute decision.pin_only
+    end
+
+    test "poison alongside a wanted lockfile update is excised, then merged" do
+      # The workflow's only change is the poisoned pin: excised, it drops out,
+      # and what remains is a lockfile-only bump that arms on its own.
+      decision =
+        PA.classify(
+          pr([
+            file(".github/workflows/codeql.yml", codeql_patch(@good, @poison)),
+            file("mix.lock", "@@ -1,1 +1,1 @@\n-  a 1.0.0\n+  a 1.0.1\n")
+          ]),
+          @policy
+        )
+
+      assert decision.disposition == :excise_poison_then_merge
+      assert decision.safety == "arm_auto"
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_wanted_updates"
+    end
+
+    test "an unresolved bump sharing a line with a blocked pin, beside a source edit, is flagged" do
+      # Codex's shape: excision leaves the unresolved ordinary bump and the
+      # source file, neither of which arms on its own.
+      patch = """
+      @@ -1,1 +1,1 @@
+      -    steps: [ { uses: actions/cache@v4.0.0 }, { uses: github/codeql-action/init@#{@good} } ]
+      +    steps: [ { uses: actions/cache@v4.1.0 }, { uses: github/codeql-action/init@#{@poison} } ]
+      """
+
+      decision =
+        PA.classify(
+          pr([
+            file(".github/workflows/ci.yml", patch),
+            file("lib/runtime.ex", "@@ -1,1 +1,1 @@\n-x = 1\n+x = 2\n")
+          ]),
+          @policy
+        )
+
+      assert decision.safety == "flag"
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+      assert decision.remainder_blocked_by == "pin_delta_unresolvable"
     end
 
     test "poison plus a major bump closes both reasons" do
@@ -469,6 +517,32 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       """
 
       assert PA.poison_sites([file(".github/workflows/ci.yml", free_text)], @policy) == []
+    end
+
+    test "a diff of pin lines that adds or swaps an action is not pin-only, and is not armed" do
+      added = """
+      @@ -3,2 +3,3 @@
+             steps: [
+      +        { uses: owner/action@main },
+               { uses: actions/checkout@v7.0.1 },
+      """
+
+      swapped = """
+      @@ -1,1 +1,1 @@
+      -      - uses: actions/checkout@v7.0.1
+      +      - uses: evil/checkout@v7.0.1
+      """
+
+      for patch <- [added, swapped] do
+        f = file(".github/workflows/ci.yml", patch)
+        refute PA.pin_lines_only?(f)
+        assert PA.classify(pr([f]), @policy).safety == "flag"
+      end
+
+      # Control: the same action moved to another ref is a re-pin.
+      assert PA.pin_lines_only?(
+               file(".github/workflows/ci.yml", checkout_patch("v7.0.0", "v7.0.1"))
+             )
     end
 
     test "a pin inside an input's mapping is data, not a site" do

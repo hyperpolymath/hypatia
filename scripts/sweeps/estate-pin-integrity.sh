@@ -124,11 +124,16 @@ lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 # in either spelling. The action is compared case-folded too: GitHub resolves
 # `GitHub/CodeQL-Action` and `github/codeql-action` to one repository, so a
 # mixed-case caller meets the entry its lower-case spelling would.
+# Only a 40-hex commit ID is case-folded: git reads an object ID in either
+# case, but a ref NAME is case-sensitive, so `@V4.38.1` is a different tag
+# from the blocked `v4.38.1` and may point somewhere else.
 denylisted_pair() {
-  jq -e --arg a "$(lc "$1")" --arg r "$(lc "$2")" '
-    [.pin_denylist[] | select((.action | ascii_downcase) == $a)
-     | (.blocked_shas // []), (.blocked_versions // []), ((.blocked_versions // []) | map("v" + .))]
-    | add // [] | map(ascii_downcase) | index($r) != null' "$POLICY" >/dev/null 2>&1
+  jq -e --arg a "$(lc "$1")" --arg r "$2" '
+    def norm: if test("^[0-9a-fA-F]{40}$") then ascii_downcase else . end;
+    ($r | norm) as $r
+    | [.pin_denylist[] | select((.action | ascii_downcase) == $a)
+       | (.blocked_shas // []), (.blocked_versions // []), ((.blocked_versions // []) | map("v" + .))]
+    | add // [] | map(norm) | index($r) != null' "$POLICY" >/dev/null 2>&1
 }
 
 # The action and ref of one site as `grep -o` printed it: the key and the
@@ -203,12 +208,17 @@ replace_site() { # <line> <masked-line> <action> <ref> <good>
     a = ENVIRON["PIN_ACTION"]; r = ENVIRON["PIN_REF"]; good = ENVIRON["PIN_GOOD"]
     tail = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*[\"" sq "]?$"
     ends = "]\"" sq " \t#,}"
-    lm = tolower(masked); needle = tolower(a "@" r); from = 1
-    while ((p = index(substr(lm, from), needle)) > 0) {
+    # The action is found case-folded; the ref only when it is a 40-hex
+    # commit ID (a tag name is case-sensitive: `@V4.38.1` is not `@v4.38.1`).
+    lm = tolower(masked); la = tolower(a "@"); from = 1
+    hex = (length(r) == 40 && r ~ /^[0-9a-fA-F]+$/)
+    while ((p = index(substr(lm, from), la)) > 0) {
       p += from - 1
-      nxt = substr(lm, p + length(needle), 1)
-      if ((nxt == "" || index(ends, nxt) > 0) && substr(lm, 1, p - 1) ~ tail) {
-        print substr(line, 1, p + length(a)) good substr(line, p + length(needle))
+      got = substr(masked, p + length(la), length(r))
+      same = hex ? (tolower(got) == tolower(r)) : (got == r)
+      nxt = substr(lm, p + length(la) + length(r), 1)
+      if (same && (nxt == "" || index(ends, nxt) > 0) && substr(lm, 1, p - 1) ~ tail) {
+        print substr(line, 1, p + length(a)) good substr(line, p + length(la) + length(r))
         exit
       }
       from = p + 1
@@ -392,10 +402,14 @@ fi
 
 total_hits=$(wc -l < "$HITS")
 log "phase 1: ${total_hits} candidate file(s)"
+# Repositories with a candidate file the sweep did not read (left out by
+# --sample, or unreadable in phase 2): no repair is planned for them.
+: > "$OUT_DIR/.unread-repos"
 sampled=0
 if [ "$SAMPLE" -gt 0 ] && [ "$total_hits" -gt "$SAMPLE" ]; then
   # A bounded run reads the first N candidates only: INCOMPLETE by construction.
   sampled=$((total_hits - SAMPLE))
+  tail -n +"$((SAMPLE + 1))" "$HITS" | cut -f1,2 | tr '\t' '/' >> "$OUT_DIR/.unread-repos"
   head -n "$SAMPLE" "$HITS" > "$HITS.sample" && mv "$HITS.sample" "$HITS"
   log "  --sample ${SAMPLE}: ${sampled} candidate file(s) left unread; the sweep cannot report clean"
 fi
@@ -431,7 +445,6 @@ repairable=0
 flagged=0
 confirmed=0
 unread=0
-: > "$OUT_DIR/.unread-repos"
 
 while IFS=$'\t' read -r org repo path; do
   [ -n "${path:-}" ] || continue
@@ -563,14 +576,23 @@ fi
 # same repository keeps the denylisted pin (or an unread file may) is a
 # partial repair, and arming it would merge a repository that is still
 # poisoned. Such a repository is held for owner review with its findings.
+# A search that failed or came back partial may have hidden any sibling in
+# any repository, so then no repository is proved whole and none is armed;
+# a clone, a listing or --max-repos that missed a repository missed all of
+# it, which leaves the repositories that were cloned whole.
 held=0
+search_partial=false
+if [ "$VIA" = "search" ] && { [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ]; }; then
+  search_partial=true
+fi
 if [ "$repairable" -gt 0 ]; then
   unread_repos=$(jq -Rsc 'split("\n") | map(select(. != "")) | unique' "$OUT_DIR/.unread-repos")
-  jq -sr --argjson unread "$unread_repos" '
+  jq -sr --argjson unread "$unread_repos" --argjson partial "$search_partial" '
     group_by(.repo)[]
     | select(any(.status == "repairable"))
     | .[0].repo as $r
-    | if any($unread[]; . == $r) then "\($r)\tunread candidate file"
+    | if $partial then "\($r)\tphase 1 search failed or was partial, so a sibling file may be unseen"
+      elif any($unread[]; . == $r) then "\($r)\tcandidate file not read (unreadable, or left out by --sample)"
       elif all(.status == "repairable") | not then
         "\($r)\tflagged sibling file(s): \([.[] | select(.status != "repairable") | .path] | join(", "))"
       else empty end
@@ -580,9 +602,10 @@ if [ "$repairable" -gt 0 ]; then
     log "  held ${r}: repairable file(s) not planned — ${why}"
   done < "$OUT_DIR/.held"
 
-  jq -src --argjson unread "$unread_repos" '
+  jq -src --argjson unread "$unread_repos" --argjson partial "$search_partial" '
     group_by(.repo)
     | .[]
+    | select($partial | not)
     | select(all(.status == "repairable"))
     | select(.[0].repo as $r | any($unread[]; . == $r) | not)
     | {repo: .[0].repo,
