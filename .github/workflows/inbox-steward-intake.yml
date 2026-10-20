@@ -63,6 +63,7 @@ jobs:
         env:
           EVENT_JSON: ${{ toJson(github.event) }}
           DRY_RUN: ${{ inputs.dry_run }}
+          GH_TOKEN: ${{ secrets.FARM_PAT }}
         run: |
           set -euo pipefail
           
@@ -101,13 +102,14 @@ jobs:
           echo "validated_count=$VALIDATED" >> "$GITHUB_OUTPUT"
           echo "merged_count=$MERGED" >> "$GITHUB_OUTPUT"
           
-          # Commit the report
-          if [ "$DRY_RUN" = "false" ]; then
+          # Publish the report through a PR. `inputs.dry_run` is empty on
+          # repository_dispatch, so only an explicit 'true' is a dry run.
+          if [ "$DRY_RUN" != "true" ]; then
             git config user.name "Inbox Steward Intake"
             git config user.email "inbox-steward-intake@reposystem.dev"
-            git add "$REPORT_PATH"
-            git commit -m "inbox-steward: record from $SOURCE_REPO ($PR_COUNT PRs, $MERGED merged)" 2>/dev/null || true
-            git push origin HEAD 2>/dev/null || echo "::warning::Could not push report"
+            bash scripts/open-data-pr.sh report \
+              "inbox-steward: record from $SOURCE_REPO ($PR_COUNT PRs, $MERGED merged)" \
+              "$REPORT_PATH"
           else
             echo "::notice::Dry run - not committing report"
           fi
@@ -234,12 +236,10 @@ jobs:
         id: update
         env:
           RULE_UPDATES: ${{ needs.analyze-patterns.outputs.rule_updates }}
+          GH_TOKEN: ${{ secrets.FARM_PAT }}
         run: |
           set -euo pipefail
-          
-          # Load existing baseline
-          BASELINE_PATH=".hypatia-baseline.json"
-          
+
           # Create rule update file
           UPDATES_DIR="data/ruleset-updates"
           mkdir -p "$UPDATES_DIR"
@@ -256,39 +256,19 @@ jobs:
           
           echo "Created rule updates: $UPDATE_FILE"
           
-          # Auto-apply critical/high priority updates
-          CRITICAL_UPDATES=$(echo "$RULE_UPDATES" | jq '[.[] | select(.priority == "critical" or .priority == "high")]')
-          
-          if [ "$(echo "$CRITICAL_UPDATES" | jq length)" -gt 0 ]; then
-            echo "Applying critical/high priority updates..."
-            
-            for UPDATE in $(echo "$CRITICAL_UPDATES" | jq -c '.[]'); do
-              UPDATE_TYPE=$(echo "$UPDATE" | jq -r '.type')
-              ACTION=$(echo "$UPDATE" | jq -r '.action')
-              REASON=$(echo "$UPDATE" | jq -r '.reason')
-              SUGGESTION=$(echo "$UPDATE" | jq -r '.suggestion')
-              
-              echo "  - $UPDATE_TYPE: $ACTION ($REASON)"
-              
-              # Apply the update to baseline
-              # For now, append as a comment/todo - full automation needs more logic
-              echo "  :: TODO: Apply rule update: $SUGGESTION" >> "$BASELINE_PATH"
-            done
-            
-            # Commit updates
-            git config user.name "Inbox Steward Intake"
-            git config user.email "inbox-steward-intake@reposystem.dev"
-            git add "$UPDATE_FILE" "$BASELINE_PATH"
-            git commit -m "inbox-steward: apply critical rule updates from steward reports" 2>/dev/null || true
-            git push origin HEAD 2>/dev/null || echo "::warning::Could not push updates"
-          else
-            echo "No critical/high priority updates to apply"
-            git config user.name "Inbox Steward Intake"
-            git config user.email "inbox-steward-intake@reposystem.dev"
-            git add "$UPDATE_FILE"
-            git commit -m "inbox-steward: record rule update suggestions" 2>/dev/null || true
-            git push origin HEAD 2>/dev/null || echo "::warning::Could not push updates"
-          fi
+          # Critical/high suggestions are surfaced, not applied. This step used
+          # to append "  :: TODO: …" text lines to .hypatia-baseline.json,
+          # which corrupts the JSON the Governance baseline gate reads. The
+          # suggestions live only in $UPDATE_FILE (`applied: false`).
+          echo "$RULE_UPDATES" \
+            | jq -r '.[] | select(.priority == "critical" or .priority == "high")
+                     | "::notice title=Rule update suggested (\(.priority))::\(.type): \(.action) (\(.reason)) — \(.suggestion)"'
+
+          git config user.name "Inbox Steward Intake"
+          git config user.email "inbox-steward-intake@reposystem.dev"
+          bash scripts/open-data-pr.sh rule-updates \
+            "inbox-steward: record rule update suggestions" \
+            "$UPDATE_FILE"
 
   # Job 4: Dispatch to .git-private-farm for fleet-wide application
   dispatch-to-farm:
@@ -333,14 +313,12 @@ jobs:
           
           echo "Dispatching to .git-private-farm: $(echo "$PAYLOAD" | jq -c '.')"
           
-          # Send to .git-private-farm
-          if gh api -X POST \
-              "/repos/hyperpolymath/.git-private-farm/dispatches" \
-              --input - <<<"$PAYLOAD" >/dev/null 2>&1; then
-            echo "✅ Successfully dispatched to .git-private-farm"
-          else
-            echo "::warning::Failed to dispatch to .git-private-farm"
-          fi
+          # Send to .git-private-farm. A refused dispatch fails the job; it
+          # used to be swallowed into a warning with stderr discarded.
+          gh api -X POST \
+            "/repos/hyperpolymath/.git-private-farm/dispatches" \
+            --input - <<<"$PAYLOAD" >/dev/null
+          echo "✅ Successfully dispatched to .git-private-farm"
 
   # Job 5: Summary
   summary:
