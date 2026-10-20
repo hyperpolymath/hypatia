@@ -275,6 +275,17 @@ defmodule Hypatia.Rules.PrAutomerge do
   """
   @spec pin_deltas([map()], map(), [map()]) :: [map()]
   def pin_deltas(files, resolution, claims) do
+    # Basenames two different actions of the PR share (`acme/setup`,
+    # `other/setup`): a claim naming only that basename belongs to neither.
+    shared =
+      files
+      |> Enum.flat_map(&removed_pins/1)
+      |> Enum.map(&String.downcase(&1.action))
+      |> Enum.uniq()
+      |> Enum.frequencies_by(&(&1 |> String.split("/") |> List.last()))
+      |> Enum.filter(fn {_, n} -> n > 1 end)
+      |> MapSet.new(&elem(&1, 0))
+
     files
     |> Enum.flat_map(fn file ->
       # Every structural site of every changed line: a flow sequence carries
@@ -295,7 +306,7 @@ defmodule Hypatia.Rules.PrAutomerge do
             {[], pool}
 
           i ->
-            {Enum.at(pool, i) |> pin_delta(old, file, resolution, claims),
+            {Enum.at(pool, i) |> pin_delta(old, file, resolution, claims, shared),
              List.delete_at(pool, i)}
         end
       end)
@@ -303,13 +314,13 @@ defmodule Hypatia.Rules.PrAutomerge do
     end)
   end
 
-  defp pin_delta(new, old, file, resolution, claims) do
+  defp pin_delta(new, old, file, resolution, claims, shared) do
     if new.ref == old.ref do
       []
     else
       from = resolve(resolution, old.action, old.ref)
       to = resolve(resolution, new.action, new.ref)
-      claim = claim_for(claims, old.action)
+      claim = claim_for(claims, old.action, shared)
 
       cond do
         from != nil and to != nil and claim != nil and
@@ -318,6 +329,12 @@ defmodule Hypatia.Rules.PrAutomerge do
 
         from != nil and to != nil ->
           delta(old, new, from, to, :ok, "tags")
+
+        # One endpoint resolved: the claim must agree with it, or the
+        # evidence there is contradicts it (a claimed `2.0.0 -> 2.1.0` from
+        # a ref that resolves to `1.0.0` may hide a major crossing).
+        claim != nil and ((from != nil and claim.from != from) or (to != nil and claim.to != to)) ->
+          delta(old, new, from || claim.from, to || claim.to, :conflict, "tags")
 
         claim != nil ->
           delta(old, new, claim.from, claim.to, :ok, "body-claim")
@@ -796,11 +813,21 @@ defmodule Hypatia.Rules.PrAutomerge do
       Map.get(resolution, ref)
   end
 
-  defp claim_for(claims, action) do
-    short = action |> String.split("/") |> List.last()
+  # The body claim for `action`: one naming the action itself, or its root
+  # repository (`github/codeql-action` for `github/codeql-action/init`), in
+  # either case. A claim naming only a basename (`[setup](...)`) is this
+  # action's only when no other action of the PR shares that basename
+  # (`shared`). A claim for another repository that ends the same way
+  # (`acme/setup` for `other/setup`) is never borrowed: the delta stays
+  # unresolved rather than verified by someone else's version numbers.
+  defp claim_for(claims, action, shared) do
+    full = String.downcase(action)
+    base = String.downcase(action_base(action))
+    short = full |> String.split("/") |> List.last()
 
-    Enum.find(claims, fn c -> c.action == action or c.action == short end) ||
-      Enum.find(claims, fn c -> String.ends_with?(c.action, "/" <> short) end)
+    Enum.find(claims, &(String.downcase(&1.action) == full)) ||
+      Enum.find(claims, &(String.downcase(&1.action) == base)) ||
+      if(short not in shared, do: Enum.find(claims, &(String.downcase(&1.action) == short)))
   end
 
   defp major_of(version) do

@@ -582,6 +582,34 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
     end
 
+    test "a step alias runs a flow mapping anchored over several lines" do
+      content =
+        "jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n" <>
+          "          - step: &step {\n              name: init,\n" <>
+          "              uses: github/codeql-action/init@#{@poison}\n            }\n" <>
+          "    steps:\n      - *step\n"
+
+      assert [%{line: 8}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+    end
+
+    test "a version is matched past one optional v only" do
+      policy = put_in(@policy, ["pin_denylist", Access.at(0), "blocked_versions"], ["4.38.1"])
+
+      assert [_] = PI.pi001_denylisted_pin("- uses: github/codeql-action/init@v4.38.1\n", policy)
+      assert PI.pi001_denylisted_pin("- uses: github/codeql-action/init@vv4.38.1\n", policy) == []
+    end
+
+    test "a substitution that leaves a denylisted pin is refused" do
+      # A `known_good_sha` that is itself blocked repairs nothing.
+      policy = put_in(@policy, ["pin_denylist", Access.at(0), "known_good_sha"], @poison)
+      content = "- uses: github/codeql-action/init@#{@poison}\n"
+
+      assert {:error, reason} = PI.substitute_denylisted_pins(content, policy)
+      assert reason =~ "leaves a denylisted pin"
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>
@@ -1009,6 +1037,41 @@ defmodule Hypatia.Rules.PinIntegrityTest do
                  "- uses: actions/checkout@V4\n",
                  "    - 'actions/checkout@v4'\n"
                )
+    end
+
+    test "with the workflow's path, only that workflow's own lock entry vouches for its pin" do
+      lock = """
+      version: 'v0.0.2'
+      workflows:
+          '.github/workflows/a.yml':
+              - 'actions/checkout@v7.0.1'
+          '.github/workflows/b.yml':
+              - 'actions/checkout@v6.0.0'
+      dependencies:
+          'actions/checkout@v6.0.0':
+              ref: 'v6.0.0'
+              commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+              owner_id: 44036562
+              repo_id: 197814629
+          'actions/checkout@v7.0.1':
+              ref: 'v7.0.1'
+              commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+              owner_id: 44036562
+              repo_id: 197814629
+      """
+
+      workflow = "- uses: actions/checkout@v7.0.1\n"
+
+      # `b.yml` locks v6.0.0: v7.0.1, locked for `a.yml`, does not vouch for it.
+      assert [finding] =
+               PI.pi004_lock_divergence(workflow, lock, path: ".github/workflows/b.yml")
+
+      assert finding.detail.lock_refs == ["v6.0.0"]
+
+      # Controls: `a.yml` agrees with its own entry; with no path the lock's
+      # refs are pooled, as before.
+      assert PI.pi004_lock_divergence(workflow, lock, path: ".github/workflows/a.yml") == []
+      assert PI.pi004_lock_divergence(workflow, lock) == []
     end
   end
 

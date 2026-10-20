@@ -109,6 +109,15 @@ defmodule Hypatia.Rules.ActionsLock do
   def pinned?(_, _, _), do: false
 
   @doc """
+  The refs the lock associates with `workflow_path` (`owner/repo@ref` keys),
+  or nil when its `workflows:` section lists no such workflow. Basenames
+  resolve under `.github/workflows/`, as for `pinned?/3`.
+  """
+  @spec workflow_refs(t(), String.t()) :: MapSet.t(String.t()) | nil
+  def workflow_refs(%__MODULE__{} = lock, workflow_path) when is_binary(workflow_path),
+    do: Map.get(lock.workflows, normalise_workflow_path(workflow_path))
+
+  @doc """
   Return dependency refs from a fully validated lock.
 
   This exists only for compatibility with the former global `locked_refs/1`

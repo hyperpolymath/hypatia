@@ -206,9 +206,10 @@ defmodule Hypatia.Rules.PinIntegrity do
   defp normalise_all(list), do: Enum.map(list, &normalise_ref/1)
 
   defp normalise_ref(ref) do
-    trimmed = ref |> String.trim() |> String.trim_leading("v")
+    trimmed = ref |> String.trim() |> String.replace_prefix("v", "")
 
-    # `v4.38.1` and `4.38.1` are the same claim about the same artefact; a
+    # `v4.38.1` and `4.38.1` are the same claim about the same artefact — one
+    # `v` only: `vv4.38.1` is another tag, not the blocked release; a
     # commit ID in upper-case hex is the same object as the lower-case one
     # the table carries, so both sides compare in lower case.
     if Regex.match?(~r/^[0-9a-fA-F]{40}$/, trimmed), do: String.downcase(trimmed), else: trimmed
@@ -466,6 +467,20 @@ defmodule Hypatia.Rules.PinIntegrity do
     |> Enum.reverse()
   end
 
+  # The refs a parsed lock associates with workflow `path`, in the shape
+  # `locked_refs/1` returns them, or nil when the lock does not parse or
+  # lists no such workflow.
+  defp scoped_locked_refs(lock_content, path) do
+    with {:ok, lock} <- Hypatia.Rules.ActionsLock.parse(lock_content),
+         %MapSet{} = refs <- Hypatia.Rules.ActionsLock.workflow_refs(lock, path) do
+      for key <- refs, [action, ref] <- [String.split(key, "@", parts: 2)] do
+        {ref, {action_base(action), 0}}
+      end
+    else
+      _ -> nil
+    end
+  end
+
   # What a ref names, for comparing two spellings of it: a commit ID is one
   # object in either case (`1C5B…` is `1c5b…`); a symbolic ref (`main`,
   # `v4`) is a name and compares exactly — `v4` and `4` are two refs.
@@ -489,7 +504,14 @@ defmodule Hypatia.Rules.PinIntegrity do
   def pi004_lock_divergence(workflow_content, lock_content, opts \\ []) do
     path = Keyword.get(opts, :path, "<content>")
     repo = Keyword.get(opts, :repo, "<repo>")
-    locked = locked_refs(lock_content)
+
+    # A ref locked for another workflow does not vouch for this one: with the
+    # workflow's path, the comparison is that workflow's own `workflows:`
+    # entry. Without a path, or a lock that does not parse or name the
+    # workflow, every ref the lock holds is the comparison, as before.
+    locked =
+      (Keyword.has_key?(opts, :path) && scoped_locked_refs(lock_content, path)) ||
+        locked_refs(lock_content)
 
     workflow_content
     |> pin_sites()
@@ -581,11 +603,21 @@ defmodule Hypatia.Rules.PinIntegrity do
           end)
 
         new_content = Enum.join(new_lines, "\n")
+        new_sites = pin_sites(new_content)
 
-        if length(pin_sites(new_content)) == length(sites) do
-          {:ok, new_content, excisions}
-        else
-          {:error, "substitution would remove a pin site — refusing"}
+        # The rewrite is proved, not assumed: as many sites as before, and
+        # none of them denylisted — a `known_good_sha` that is itself
+        # blocked (by this entry or another for the same action) repairs
+        # nothing, and is refused rather than logged as an excision.
+        cond do
+          length(new_sites) != length(sites) ->
+            {:error, "substitution would remove a pin site — refusing"}
+
+          Enum.any?(new_sites, &denylisted?(policy, &1.action, &1.ref)) ->
+            {:error, "substitution leaves a denylisted pin — refusing"}
+
+          true ->
+            {:ok, new_content, excisions}
         end
     end
   end

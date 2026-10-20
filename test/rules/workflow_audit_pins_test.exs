@@ -1132,6 +1132,28 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert [%{line: 5, auto_fixable: true}] = wf026(wf)
     end
 
+    test "a step given whole as an alias is judged where its mapping is anchored" do
+      wf = """
+      jobs:
+        check:
+          strategy:
+            matrix:
+              include:
+                - &step
+                  uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+          steps:
+            - *step
+      """
+
+      # The anchored mapping is matrix data until the alias runs it: then it
+      # is a live step with no input, routed to review (not the fixer).
+      assert [%{line: 7, auto_fixable: false} = f] = wf026(wf)
+      assert f.reason =~ "given as an alias"
+
+      # Control: with no alias, the matrix entry is data.
+      assert [] == wf026(String.replace(wf, "      - *step\n", "      - run: echo\n"))
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:

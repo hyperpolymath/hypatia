@@ -112,6 +112,44 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert [delta] = decision.deltas
       assert delta.source == "body-claim"
     end
+
+    test "a claim for one action is never borrowed by another of the same basename" do
+      patch = """
+      @@ -1,2 +1,2 @@
+      -      - uses: acme/setup@v1.0.0
+      -      - uses: other/setup@v3.0.0
+      +      - uses: acme/setup@v1.1.0
+      +      - uses: other/setup@v4.0.0
+      """
+
+      body = "Bumps [acme/setup](https://github.com/acme/setup) from 1.0.0 to 1.1.0.\n"
+      f = file(".github/workflows/ci.yml", patch)
+      deltas = PA.pin_deltas([f], %{}, PA.body_claims(body))
+
+      assert %{status: :ok, source: "body-claim"} =
+               Enum.find(deltas, &(&1.action == "acme/setup"))
+
+      assert %{status: :unresolved} = Enum.find(deltas, &(&1.action == "other/setup"))
+
+      # A claim naming only the basename belongs to neither action.
+      bare = PA.body_claims("Bumps [setup](https://example.com) from 1.0.0 to 1.1.0.\n")
+      assert Enum.all?(PA.pin_deltas([f], %{}, bare), &(&1.status == :unresolved))
+    end
+
+    test "a claim is checked against whichever endpoint resolved" do
+      resolution = %{{"actions/checkout", "v4.1.7"} => "1.0.0"}
+
+      body =
+        "Bumps [actions/checkout](https://github.com/actions/checkout) from 2.0.0 to 2.1.0.\n"
+
+      f = file(".github/workflows/ci.yml", checkout_patch("v4.1.7", "v4.2.0"))
+
+      assert [%{status: :conflict}] = PA.pin_deltas([f], resolution, PA.body_claims(body))
+
+      # Control: a claim that agrees with the resolved endpoint is taken.
+      agreeing = String.replace(body, "from 2.0.0 to 2.1.0", "from 1.0.0 to 1.1.0")
+      assert [%{status: :ok}] = PA.pin_deltas([f], resolution, PA.body_claims(agreeing))
+    end
   end
 
   describe "classify/2 — PA002, majors are never armed" do

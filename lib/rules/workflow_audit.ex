@@ -1201,6 +1201,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # A step inside an open flow collection is a flow-style step even when
       # its `{` stands alone on a line above (`steps: [`, `{`, `uses: ...`).
       flow = wf_flow_lines(normalised)
+      # A step given whole as an alias (`- *step`, `steps: [*step]`) runs the
+      # mapping its anchor holds, wherever that mapping sits (a matrix entry):
+      # its `uses:` line is a live step's, judged as one, and routes to
+      # review — the fixer does not rewrite anchored steps.
+      aliased =
+        for %{anchor_line: n} <- Hypatia.Rules.PinSites.node_alias_sites(normalised),
+            into: MapSet.new(),
+            do: n
 
       lines
       |> Enum.with_index(1)
@@ -1213,6 +1221,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
             :error -> {line, nil}
           end
 
+        live? = number in aliased
+
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
             # The fleet fixer matches the identity in lower case only, and a
@@ -1222,14 +1232,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
               cond do
                 kyaml? -> :kyaml
                 resolved != nil -> resolved
+                live? -> :node_alias
                 wf_node_properties?(line) -> :properties
                 not String.contains?(line, "dtolnay/rust-toolchain@") -> :spelling
                 true -> nil
               end
 
             if wf_in_flow?(flow, number),
-              do: wf026_flow_line_finding(filename, lines, flow, number, sha, review),
-              else: wf026_block_step_finding(filename, lines, line, number, sha, review)
+              do: wf026_flow_line_finding(filename, lines, flow, number, sha, review, 0, live?),
+              else: wf026_block_step_finding(filename, lines, line, number, sha, review, live?)
 
           _ ->
             # Several flow-style steps may share one physical line
@@ -1238,14 +1249,29 @@ defmodule Hypatia.Rules.WorkflowAudit do
             |> Regex.scan(line, return: :index)
             |> Enum.flat_map(fn [{at, _}, {sha_at, 40}] ->
               sha = binary_part(line, sha_at, 40)
-              review = if kyaml?, do: :kyaml
+
+              review =
+                cond do
+                  kyaml? -> :kyaml
+                  live? -> :node_alias
+                  true -> nil
+                end
 
               # On a line inside a flow collection opened above, the step's
               # ancestry is in the brackets, not the line's indentation.
               if wf_in_flow?(flow, number) do
-                wf026_flow_line_finding(filename, lines, flow, number, sha, review, at + 1)
+                wf026_flow_line_finding(filename, lines, flow, number, sha, review, at + 1, live?)
               else
-                wf026_inline_step_finding(filename, lines, line, number, at + 1, sha, review)
+                wf026_inline_step_finding(
+                  filename,
+                  lines,
+                  line,
+                  number,
+                  at + 1,
+                  sha,
+                  review,
+                  live?
+                )
               end
             end)
         end
@@ -1256,7 +1282,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The block-style path: `uses:` is a key on its own line, outside any flow
   # collection (one inside is read by `wf026_flow_line_finding/7`). A step
   # whose opener is `- {` is a flow-style step: the fixer refuses it.
-  defp wf026_block_step_finding(filename, lines, line, number, sha, review) do
+  defp wf026_block_step_finding(filename, lines, line, number, sha, review, live?) do
     {step, key_indent, opener} = wf026_step(lines, number)
     flow_item? = Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
 
@@ -1275,8 +1301,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
         []
 
       # A list item is a step only under `steps:`: one inside a block
-      # scalar (a fixture kept in `env:`, a `run: |` script) is text.
-      not wf026_under_steps?(lines, opener) ->
+      # scalar (a fixture kept in `env:`, a `run: |` script) is text. A
+      # mapping a step alias runs (`live?`) is a step wherever it sits.
+      not live? and not wf026_under_steps?(lines, opener) ->
         []
 
       true ->
@@ -1294,9 +1321,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The inline path: `uses:` sits inside a flow mapping on the line that
   # opens it. The mapping is read through its braces (quote-aware, across
   # lines) and its `with` entry decides.
-  defp wf026_inline_step_finding(filename, lines, line, number, uses_at, sha, review) do
+  defp wf026_inline_step_finding(filename, lines, line, number, uses_at, sha, review, live?) do
     with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
-         true <- wf026_inline_step_at?(lines, line, number, open_col),
+         true <- live? or wf026_inline_step_at?(lines, line, number, open_col),
          {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
       # Where the step's `with` value stands, line and column: an alias
       # there names the latest anchor before it, not one later on its line.
@@ -1322,12 +1349,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # (`wf_flow_context/4`), not its indentation: it is a step's own key when
   # the innermost one is a mapping that is an item of the `[` a `steps:` in
   # a job opens, and the step is read through that mapping's braces.
-  defp wf026_flow_line_finding(filename, lines, flow, number, sha, review, at \\ 0) do
+  defp wf026_flow_line_finding(filename, lines, flow, number, sha, review, at, live?) do
     with {:ok, keys, kinds, {brace_line, brace_col}} <- wf_flow_context(lines, flow, number, at),
-         true <- match?([nil, "steps", job, "jobs" | _] when is_binary(job), keys),
+         true <- live? or match?([nil, "steps", job, "jobs" | _] when is_binary(job), keys),
          # The `{` is an item of the `[` that `steps:` opens, or of the
-         # block sequence under it (`- {` on a line of its own).
-         true <- match?([:map, :seq | _], kinds) or kinds == [:map],
+         # block sequence under it (`- {` on a line of its own); a mapping
+         # a step alias runs is the step wherever it sits.
+         true <-
+           match?([:map, :seq | _], kinds) or kinds == [:map] or
+             (live? and match?([:map | _], kinds)),
          {:ok, interior, _} <- wf_flow_interior(lines, brace_line, brace_col) do
       pos =
         case wf_flow_entry_value_at(interior, "with") do
@@ -1459,6 +1489,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
         _ when review == :continued ->
           " The `uses:` value is continued below its key; the repair script reads a " <>
             "reference on the key's own line only, so this one routes to review."
+
+        _ when review == :node_alias ->
+          " The step is given as an alias (`- *name`) of a mapping anchored elsewhere; " <>
+            "the repair script does not rewrite anchored steps, so this one routes to review."
 
         _ when review == :alias ->
           " The `uses:` value is an alias of an anchored reference; the repair script " <>

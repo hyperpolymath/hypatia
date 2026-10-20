@@ -459,9 +459,9 @@ defmodule Hypatia.Rules.PinSites do
   defp alias_step_stack?(_), do: false
 
   # The `uses:` of the mapping the anchor `d` holds, as `[{line, site}]`: a
-  # flow mapping opening on the anchor's own line, read to its top-level
-  # `uses` entry, or a block mapping on the lines below, read to its `uses:`
-  # key.
+  # flow mapping opening on the anchor's line, read through the lines below
+  # to the brace that closes it, or a block mapping on the lines below, read
+  # to its `uses:` key.
   defp anchored_uses(d, texts, rows) do
     line = elem(texts, d.line - 1)
     rest_at = byte_size(line) - byte_size(d.rest)
@@ -470,9 +470,9 @@ defmodule Hypatia.Rules.PinSites do
       m = Regex.run(~r/^\s*(?:![^\s]*\s+)*\{/, d.rest, return: :index) ->
         [{0, len}] = m
 
-        case top_uses(mask(line), rest_at + len - 1) do
+        case flow_mapping_uses(texts, d.line, rest_at + len - 1) do
           nil -> []
-          site -> [{d.line, site}]
+          found -> [found]
         end
 
       Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, d.rest) ->
@@ -483,25 +483,86 @@ defmodule Hypatia.Rules.PinSites do
     end
   end
 
-  # The site of the top-level `uses` entry of the flow mapping whose `{` is
-  # at byte `open` of masked line `m`, or nil when the line names none: an
-  # entry after that `{` or a `,` with no other bracket open between.
-  defp top_uses(m, open) do
-    ~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)/
-    |> Regex.scan(m, return: :index, offset: open)
-    |> Enum.find_value(fn [{at, _}, {a_at, a_len}, {r_at, r_len}] ->
-      between = binary_part(m, open, at - open + 1)
-      depth = length(Regex.scan(~r/[\[{]/, between)) - length(Regex.scan(~r/[\]}]/, between))
+  # The top-level `uses` entry of the flow mapping whose `{` is at byte
+  # `open` of line `n`, as `{line, site}`, or nil when the mapping closes
+  # without one. The mapping is read through the lines below to the brace
+  # that closes it: an entry starts after its `{` or one of its commas — on
+  # the same line, or as the last thing a line above held — with no other
+  # bracket open between. Lines are read masked (`mask/1`), so brackets and
+  # commas inside quoted text and comments count for nothing.
+  defp flow_mapping_uses(texts, n, open) do
+    n..tuple_size(texts)//1
+    |> Enum.reduce_while({:open, 0, nil}, fn k, {:open, depth, last} ->
+      from = if k == n, do: open, else: 0
 
-      if depth == 1 do
-        %{
-          action: binary_part(m, a_at, a_len),
-          ref: binary_part(m, r_at, r_len),
-          action_at: a_at,
-          ref_at: r_at
-        }
+      case mapping_line_uses(mask(elem(texts, k - 1)), from, depth, last) do
+        {:found, site} -> {:halt, {k, site}}
+        :closed -> {:halt, nil}
+        open_state -> {:cont, open_state}
       end
     end)
+    |> case do
+      {k, %{} = site} -> {k, site}
+      _ -> nil
+    end
+  end
+
+  defp mapping_line_uses(m, from, depth, last) do
+    m
+    |> :binary.bin_to_list()
+    |> Enum.with_index()
+    |> Enum.drop(from)
+    |> Enum.reduce_while({:open, depth, last}, fn {c, i}, {:open, d, l} ->
+      cond do
+        c in [?{, ?[] ->
+          {:cont, {:open, d + 1, c}}
+
+        c in [?}, ?]] and d <= 1 ->
+          {:halt, :closed}
+
+        c in [?}, ?]] ->
+          {:cont, {:open, d - 1, c}}
+
+        c in [?\s, ?\t, ?,] ->
+          {:cont, {:open, d, if(c == ?,, do: c, else: l)}}
+
+        d == 1 and l in [?{, ?,] ->
+          case entry_uses(m, i) do
+            nil -> {:cont, {:open, d, c}}
+            site -> {:halt, site}
+          end
+
+        true ->
+          {:cont, {:open, d, c}}
+      end
+    end)
+    |> case do
+      {:open, _, _} = state -> state
+      %{} = site -> {:found, site}
+      other -> other
+    end
+  end
+
+  # The `uses` entry starting at byte `i` of masked line `m`, as a site.
+  defp entry_uses(m, i) do
+    rest = binary_part(m, i, byte_size(m) - i)
+
+    case Regex.run(
+           ~r/\A["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)/,
+           rest,
+           return: :index
+         ) do
+      [_, {a_at, a_len}, {r_at, r_len}] ->
+        %{
+          action: binary_part(rest, a_at, a_len),
+          ref: binary_part(rest, r_at, r_len),
+          action_at: i + a_at,
+          ref_at: i + r_at
+        }
+
+      _ ->
+        nil
+    end
   end
 
   # A block mapping anchored with nothing after the anchor (`- &step`,
