@@ -172,7 +172,7 @@ site_parts() {
 # the same column of the real one. A `uses:` written inside
 # `- run: "echo uses: a/b@<sha>"`, on a continuation line of a quoted scalar,
 # in a `run: |` script or in a comment is therefore no site this sweep
-# rewrites; a denylisted SHA there is still seen by line_has_denied_sha on
+# rewrites; a denied SHA or version there is still seen by line_has_denied_token on
 # the raw line, and flagged for the owner. A quote never closed before the
 # end of the file keeps its lines masked: whatever they hold is flagged,
 # never repaired.
@@ -308,10 +308,25 @@ replace_site() { # <line> <masked-line> <action> <ref> <good>
   }'
 }
 
-# A denylisted SHA token in any position (a lock record key, a fixture): a
-# finding in either spelling, but not a `uses:` site this sweep rewrites.
-line_has_denied_sha() {
-  [ -n "$SHA_ALTERNATION" ] && printf '%s\n' "$1" | grep -qiE "@(${SHA_ALTERNATION})(${REF_END})"
+# A denied pin token in any position (a lock record key, a fixture, a block
+# scalar), not a `uses:` site this sweep rewrites: a denylisted SHA in either
+# spelling, or a blocked version written after ITS action
+# (`github/codeql-action/init@v4.38.1` in a `run: |` script) — phase 1 found
+# the candidate by that token, so phase 2 must see it too, never call the
+# file clean. A blocked version is blocked for its own action only, as at a
+# site (`denylisted_pair`): `some/action@v4.38.1` is no finding.
+line_has_denied_token() {
+  local tok t
+  if [ -n "$SHA_ALTERNATION" ] && printf '%s\n' "$1" | grep -qiE "@(${SHA_ALTERNATION})(${REF_END})"; then
+    return 0
+  fi
+  [ ${#DENY_VERSIONS[@]} -gt 0 ] || return 1
+  while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    t=$(printf '%s' "$tok" | sed -E "s/${REF_END_CLASS}\$//")
+    denylisted_pair "$(printf '%s' "${t%@*}" | awk -F/ '{print $1"/"$2}')" "${t##*@}" && return 0
+  done < <(printf '%s\n' "$1" | grep -oiE "[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*@(${REF_ALTERNATION})(${REF_END})" || true)
+  return 1
 }
 
 # Lines carrying a denied pin: a `uses:` site whose action/ref pair the
@@ -321,7 +336,7 @@ count_denied_lines() {
   masked=$(mktemp)
   mask_file "$1" > "$masked"
   while IFS= read -r line <&3 && IFS= read -r mline <&4; do
-    if line_has_denied_sha "$line"; then n=$((n + 1)); continue; fi
+    if line_has_denied_token "$line"; then n=$((n + 1)); continue; fi
     while IFS= read -r site; do
       [ -n "$site" ] || continue
       site_parts "$site"
@@ -602,7 +617,7 @@ while IFS=$'\t' read -r org repo path; do
     # A denylisted SHA left on the line that is not at a `uses:` site — the
     # line had none, or the SHA sits in a quoted scalar or a comment the
     # mask blanked — is a finding for the owner, never part of a repair.
-    if line_has_denied_sha "$out" && { [ "$site_seen" -eq 0 ] || ! line_has_denied_sha "$mout"; }; then
+    if line_has_denied_token "$out" && { [ "$site_seen" -eq 0 ] || ! line_has_denied_token "$mout"; }; then
       outside_uses=$((outside_uses + 1)); fixable=0
     fi
     # The comment is relabelled only when the line has ONE `uses:` site: on a

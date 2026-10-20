@@ -746,6 +746,24 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => script})
     end
 
+    test "a uses: value carrying an anchor or tag is the step's pin; routed to review" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: &rust dtolnay/rust-toolchain@#{@toolchain_sha}
+            - uses: !!str dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [
+               %{line: 4, auto_fixable: false, fix_script: nil} = a,
+               %{line: 5, auto_fixable: false} = b
+             ] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert a.reason =~ "anchor or tag"
+      assert b.reason =~ "anchor or tag"
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:
@@ -912,6 +930,30 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       # Control: under `env:` the same layout is data, not a call.
       env = "env:\n  CALL:\n    #{@rust_ci}@#{@broken_standards}\n"
       assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => env}) == []
+    end
+
+    test "a job's uses: with an anchor or tag, or a flow-style job, is the call; routed to review" do
+      # The fleet fixer refuses all three (exit 2), so none is handed to it.
+      wf =
+        "jobs:\n  a:\n    uses: !!str #{@rust_ci}@#{@broken_standards}\n" <>
+          "  b:\n    uses: &call #{@rust_ci}@#{@broken_standards}\n" <>
+          "  c: { uses: #{@rust_ci}@#{@broken_standards} }\n"
+
+      assert [
+               %{line: 3, auto_fixable: false, fix_script: nil} = a,
+               %{line: 5, auto_fixable: false} = b,
+               %{line: 6, auto_fixable: false} = c
+             ] = WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+
+      assert a.reason =~ "anchor or tag"
+      assert b.reason =~ "anchor or tag"
+      assert c.reason =~ "flow mapping"
+
+      # Control: the plain block call is still handed to the fixer.
+      plain = "jobs:\n  a:\n    uses: #{@rust_ci}@#{@broken_standards}\n"
+
+      assert [%{auto_fixable: true, fix_script: "fix-stale-reusable-pin.sh"}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => plain})
     end
 
     test "silent for another reusable at the same revision: the window is per reusable" do

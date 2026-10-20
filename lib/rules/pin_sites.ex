@@ -26,10 +26,12 @@ defmodule Hypatia.Rules.PinSites do
   """
 
   # One `uses:` site anywhere on a line, bounded on the left so `reuses:` is
-  # not one. Matched against the MASKED line.
-  @site_re ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
+  # not one. Matched against the MASKED line. The value may carry YAML node
+  # properties before it (`uses: &rust a/b@x`, `uses: !!str a/b@x`): the
+  # anchor or tag names the node, the scalar is still the pin.
+  @site_re ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
 
-  @uses_tail_re ~r/(?:^|[-{,\s])["']?uses["']?\s*:\s*$/
+  @uses_tail_re ~r/(?:^|[-{,\s])["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*$/
 
   @doc """
   The structural sites of `line`, in order, as
@@ -131,11 +133,12 @@ defmodule Hypatia.Rules.PinSites do
   """
   @spec continued_site(String.t(), String.t()) :: map() | nil
   def continued_site(key_line, next_line) when is_binary(key_line) and is_binary(next_line) do
-    with [_, col] <- Regex.run(~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:\s*$/, head(key_line)),
+    with [_, col] <-
+           Regex.run(~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, head(key_line)),
          true <- indent_of(next_line) > byte_size(col),
          [_, {a_at, a_len}, {r_at, r_len}] <-
            Regex.run(
-             ~r/^\s*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
+             ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
              next_line,
              return: :index
            ) do
@@ -347,10 +350,10 @@ defmodule Hypatia.Rules.PinSites do
   # `prefix` is the masked line up to the site's action.
   defp structural?(prefix) do
     cond do
-      Regex.match?(~r/^\s*(?:-\s+)?(?:\{\s*)?["']?uses["']?\s*:\s*["']?$/, prefix) ->
+      Regex.match?(~r/^\s*(?:-\s+)?(?:\{\s*)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?$/, prefix) ->
         true
 
-      Regex.match?(~r/[{,]\s*["']?uses["']?\s*:\s*["']?$/, prefix) ->
+      Regex.match?(~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?$/, prefix) ->
         prefix |> flow_stack() |> structural_flow_stack?()
 
       true ->

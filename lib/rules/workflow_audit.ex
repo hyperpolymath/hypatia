@@ -1117,11 +1117,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # a commit ID in either case, so upper-case hex is the same pin.
   # The owner/repository is matched in either case — GitHub resolves
   # `Dtolnay/Rust-Toolchain` to the same action — and the SHA as written.
-  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?(?i:dtolnay\/rust-toolchain)@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+  @toolchain_sha_pin ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?(?i:dtolnay\/rust-toolchain)@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
   # The same key written inside a flow mapping on the line that opens it:
   # `- { uses: dtolnay/rust-toolchain@<sha> }`, `steps: [ { uses: ... } ]`.
-  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*["']?(?i:dtolnay\/rust-toolchain)@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+  @toolchain_sha_pin_inline ~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?(?i:dtolnay\/rust-toolchain)@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
   @doc """
   WF026: a SHA-pinned `dtolnay/rust-toolchain` step that passes no
@@ -1218,6 +1218,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
               cond do
                 kyaml? -> :kyaml
                 continued? -> :continued
+                wf_node_properties?(line) -> :properties
                 not String.contains?(line, "dtolnay/rust-toolchain@") -> :spelling
                 true -> nil
               end
@@ -1386,6 +1387,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
         _ when review == :kyaml ->
           " The workflow is KYAML; the repair script rewrites block-style steps only, " <>
             "so this one routes to review."
+
+        _ when review == :properties ->
+          " The `uses:` value carries a YAML anchor or tag; the repair script reads a " <>
+            "bare reference only, so this one routes to review."
 
         _ when review == :continued ->
           " The `uses:` value is continued below its key; the repair script reads a " <>
@@ -2064,6 +2069,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
     do: wf_flow_split(rest, sep, depth, q, [c | cur], out)
 
   # Drop a trailing ` # comment` that sits outside quotes.
+  # Does the line's own `uses:` value carry YAML node properties — an anchor
+  # or tag before the reference (`uses: &rust a/b@x`, `uses: !!str a/b@x`)?
+  defp wf_node_properties?(line),
+    do: Regex.match?(~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*[&!]/, line)
+
   # The `uses:` keys whose reference YAML continues below them (`- uses:`,
   # then — past any blank or comment-only lines — the reference on a deeper
   # line), as `%{key_line => joined}`: the key's line with the reference
@@ -2389,10 +2399,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
         reusable = wf027_reusable_re(rev.reusable)
 
         ref_re =
-          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+          ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
         inline_re =
-          ~r/[{,]\s*["']?uses["']?\s*:\s*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
+          ~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
 
         lines
         |> Enum.with_index(1)
@@ -2404,12 +2414,21 @@ defmodule Hypatia.Rules.WorkflowAudit do
               :error -> {line, false}
             end
 
+          # Each call with the layout the fleet fixer would meet: it rewrites
+          # a bare reference on a block key's own line, nothing else.
           shas =
             case Regex.run(ref_re, line) do
               [_full, sha] ->
+                review =
+                  cond do
+                    continued? -> :continued
+                    wf_node_properties?(line) -> :properties
+                    true -> nil
+                  end
+
                 if match?([_job, "jobs" | _], wf_ancestor_keys(lines, number)) and
                      not wf_in_open_quote?(lines, wf_parent_line(lines, number), number),
-                   do: [sha],
+                   do: [{sha, review}],
                    else: []
 
               nil ->
@@ -2418,12 +2437,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 |> Enum.filter(fn [{at, _} | _] ->
                   wf027_inline_job?(lines, line, number, at + 1)
                 end)
-                |> Enum.map(fn [_, {sha_at, 40}] -> binary_part(line, sha_at, 40) end)
+                |> Enum.map(fn [_, {sha_at, 40}] -> {binary_part(line, sha_at, 40), :flow} end)
             end
 
-          Enum.flat_map(shas, fn sha ->
+          Enum.flat_map(shas, fn {sha, review} ->
             if String.downcase(sha) in rev.shas do
-              [wf027_finding(filename, number, sha, rev, continued?)]
+              [wf027_finding(filename, number, sha, rev, review)]
             else
               []
             end
@@ -2480,9 +2499,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
-  # A value continued below its key is one the fleet fixer refuses (exit 2,
-  # file untouched): such a finding routes to review.
-  defp wf027_finding(filename, number, sha, rev, continued?) do
+  # The fleet fixer refuses (exit 2, file untouched) a value continued below
+  # its key, one carrying an anchor or tag, and a flow-style job mapping: a
+  # finding on any of them (`review`) routes to review.
+  defp wf027_finding(filename, number, sha, rev, review) do
     %{
       rule: "WF027",
       type: :known_broken_reusable_revision,
@@ -2494,22 +2514,33 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Advisory, as WF026: reported and routed, never a blocking finding.
       severity: :low,
       advisory: true,
-      auto_fixable: not continued?,
-      fix_script: if(continued?, do: nil, else: "fix-stale-reusable-pin.sh"),
+      auto_fixable: review == nil,
+      fix_script: if(review == nil, do: "fix-stale-reusable-pin.sh", else: nil),
       reason:
         "`#{rev.reusable}` is pinned at `@#{sha}`, inside #{rev.window}: " <>
           rev.reason <>
           " Fixed by #{rev.fixed_by}; move the pin to " <>
-          "`@#{rev.replacement}`." <>
-          if(continued?,
-            do:
-              " The `uses:` value is continued below its key; the repair script rewrites " <>
-                "a reference on the key's own line only, so this one routes to review.",
-            else: ""
-          ),
+          "`@#{rev.replacement}`." <> wf027_review_note(review),
       action: :rewrite_stale_reusable_pin
     }
   end
+
+  defp wf027_review_note(nil), do: ""
+
+  defp wf027_review_note(:continued),
+    do:
+      " The `uses:` value is continued below its key; the repair script rewrites " <>
+        "a reference on the key's own line only, so this one routes to review."
+
+  defp wf027_review_note(:properties),
+    do:
+      " The `uses:` value carries a YAML anchor or tag; the repair script rewrites " <>
+        "a bare reference only, so this one routes to review."
+
+  defp wf027_review_note(:flow),
+    do:
+      " The job is written as a flow mapping; the repair script rewrites block-style " <>
+        "jobs only, so this one routes to review."
 
   # ─── WF017: Secret-consuming action without secret-presence gate ──────
 

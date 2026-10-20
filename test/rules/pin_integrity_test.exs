@@ -246,6 +246,30 @@ defmodule Hypatia.Rules.PinIntegrityTest do
              ) == []
     end
 
+    test "a uses: value carrying an anchor or tag is the pin all the same" do
+      # YAML node properties name the node; the scalar after them is the
+      # action reference, so it is a site — reported and repaired.
+      content =
+        "      - uses: &init github/codeql-action/init@#{@poison}\n" <>
+          "      - uses: !!str \"github/codeql-action/analyze@#{@poison}\"\n" <>
+          "      - { name: x, uses: !!str github/codeql-action/upload-sarif@#{@poison} }\n" <>
+          "      - uses: !!str\n          github/codeql-action/autobuild@#{@poison}\n"
+
+      assert [%{line: 1}, %{line: 2}, %{line: 3}, %{line: 5}] =
+               PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_, _, _, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute new_content =~ @poison
+      assert new_content =~ "      - uses: &init github/codeql-action/init@#{@good}\n"
+      assert new_content =~ "      - uses: !!str \"github/codeql-action/analyze@#{@good}\"\n"
+
+      # Control: `&` or `!` inside a quoted name is text, not a property.
+      assert PI.pi001_denylisted_pin(
+               "      - name: \"uses: !!str github/codeql-action/init@#{@poison}\"\n",
+               @policy
+             ) == []
+    end
+
     test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
       states =
         Hypatia.Rules.PinSites.line_states(
