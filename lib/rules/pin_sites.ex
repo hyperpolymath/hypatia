@@ -33,6 +33,14 @@ defmodule Hypatia.Rules.PinSites do
 
   @uses_tail_re ~r/(?:^|[-{,\s])["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*$/
 
+  # A block scalar's content line that is a whole reference: no quotes (they
+  # would be part of the value) and nothing after it.
+  @block_ref_re ~r/^\s*([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)\s*$/
+
+  # Root keys a workflow or an action defines whose values are data: no step
+  # or job sits under any of them (`block_rows/1`).
+  @data_root_keys ~w(name run-name on permissions env defaults concurrency description author inputs outputs branding)
+
   @doc """
   The structural sites of `line`, in order, as
   `%{action: a, ref: r, action_at: byte, ref_at: byte}`.
@@ -177,7 +185,10 @@ defmodule Hypatia.Rules.PinSites do
   than the key and holds nothing but the reference, quoted or plain, and a
   comment; a flow entry's value is the reference up to the delimiter that
   ends it (`,`, `}` or `]`), wherever the line is indented — inside a flow
-  collection the scalar continues on any line.
+  collection the scalar continues on any line. A block key may also hold a
+  block scalar (`- uses: >-`): its one content line, a whole reference
+  (`line_states/1`, `:value`), is the value; in masked lines any other
+  content is blanked, so a scalar that folds more lines names no site.
   """
   @spec continued_site(String.t(), String.t()) :: map() | nil
   def continued_site(key_line, next_line) when is_binary(key_line) and is_binary(next_line) do
@@ -189,6 +200,13 @@ defmodule Hypatia.Rules.PinSites do
           if indent_of(next_line) > byte_size(Enum.at(m, 1)),
             do:
               ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/
+
+        m =
+            Regex.run(
+              ~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:(?:\s+[&!]\S*)*\s+[|>][-+0-9]*\s*$/,
+              key
+            ) ->
+          if indent_of(next_line) > byte_size(Enum.at(m, 1)), do: @block_ref_re
 
         Regex.match?(~r/[{,]\s*["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, key) and
             structural?(String.trim_trailing(key) <> " ") ->
@@ -230,16 +248,30 @@ defmodule Hypatia.Rules.PinSites do
     prefixes = flow_prefixes ++ List.duplicate("", max(length(lines) - length(flow_prefixes), 0))
     numbered = lines |> Enum.zip(prefixes) |> Enum.with_index(1)
 
-    defs =
-      for {{line, prefix}, n} <- numbered, d <- anchor_defs(line, prefix) do
-        below = for {{l, _}, m} <- Enum.drop(numbered, n), do: {l, m}
-        d |> Map.put(:line, n) |> continued_anchor(line, below)
-      end
+    defs = resolved_defs(numbered)
 
     for {{line, prefix}, n} <- numbered,
         {name, at, len} <- uses_aliases(line, prefix),
         %{site: %{} = site} = d <- [latest_anchor(defs, name, n, at)] do
       %{line: n, at: at, len: len, anchor_line: Map.get(d, :site_line, d.line), site: site}
+    end
+  end
+
+  # Every anchor the numbered lines define, each with the site its value is
+  # (`anchor_defs/2`, `continued_anchor/3`) and its `:line`.
+  defp resolved_defs(numbered) do
+    for {{line, prefix}, n} <- numbered, d <- anchor_defs(line, prefix) do
+      below = for {{l, _}, m} <- Enum.drop(numbered, n), do: {l, m}
+      d |> Map.put(:line, n) |> continued_anchor(line, below)
+    end
+  end
+
+  # The site the alias `*name` at byte `at` of line `n` runs, as
+  # `[{line, site}]` (the line its reference stands on), or `[]`.
+  defp alias_value(defs, name, n, at) do
+    case latest_anchor(defs, name, n, at) do
+      %{site: %{} = site} = d -> [{Map.get(d, :site_line, d.line), site}]
+      _ -> []
     end
   end
 
@@ -249,16 +281,24 @@ defmodule Hypatia.Rules.PinSites do
   # `:site_line` that line. In block context the scalar must sit deeper than
   # the key, and is all the line holds; inside a flow collection it may
   # stand at any indentation, even column 0, up to the `,`, `}` or `]` that
-  # ends it.
+  # ends it. An anchored block scalar (`BAD: &bad >-`) names the reference
+  # its one content line holds (`line_states/1`, `:value`).
   defp continued_anchor(%{site: nil, rest: rest} = d, line, below) do
-    value_re =
-      if d.flow,
-        do:
-          ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:[,}\]]|#|$)/,
-        else:
-          ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/
+    block? = not d.flow and Regex.match?(~r/^\s*(?:![^\s]*\s+)*[|>][-+0-9]*\s*(?:#.*)?$/, rest)
 
-    with true <- Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, rest),
+    value_re =
+      cond do
+        block? ->
+          @block_ref_re
+
+        d.flow ->
+          ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:[,}\]]|#|$)/
+
+        true ->
+          ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/
+      end
+
+    with true <- block? or Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, rest),
          {next, n} <- Enum.find(below, fn {l, _} -> String.trim(head(l)) != "" end),
          true <- d.flow or indent_of(next) > indent_of(line),
          [_, {a_at, a_len}, {r_at, r_len}] <- Regex.run(value_re, next, return: :index) do
@@ -367,8 +407,12 @@ defmodule Hypatia.Rules.PinSites do
   Every step or job given whole as an alias — `- *step` in a job's
   `steps:`, `*step` as an entry of a `steps: [ ... ]`, `rust: *job` under
   `jobs:` — resolved to the `uses:` of the mapping its anchor holds:
-  `%{line, anchor_line, site}`, the alias' line, the line of that `uses:`
-  key, and its site as `sites/1` returns one (offsets into that line).
+  `%{line, key_line, anchor_line, site}`, the alias' line, the line of that
+  `uses:` key, the line its reference stands on, and its site as `sites/1`
+  returns one (offsets into that line). The reference is the key's value as
+  YAML resolves it: written on the key's line, continued below it
+  (`continued_site/2`, a block scalar included), or an alias (`uses: *bad`,
+  on the line of `&bad`'s value).
   YAML resolves the alias to that very node, so its `uses:` is the step's
   or the job's action even where the anchor sits in data (`include: -
   &step { uses: ... }` in a matrix). The anchored mapping is read as a flow
@@ -383,22 +427,15 @@ defmodule Hypatia.Rules.PinSites do
     numbered = lines |> Enum.zip(flow_prefixes(content)) |> Enum.with_index(1)
     texts = List.to_tuple(lines)
 
-    rows =
-      content
-      |> line_states()
-      |> Enum.zip_with(line_depths(content), &block_row/2)
-      |> List.to_tuple()
+    rows = block_rows(content)
 
-    defs =
-      for {{line, prefix}, n} <- numbered,
-          d <- anchor_defs(line, prefix),
-          do: Map.put(d, :line, n)
+    defs = resolved_defs(numbered)
 
     for {{line, prefix}, n} <- numbered,
         {name, at} <- node_aliases(line, prefix, rows, n - 1),
         %{} = d <- [latest_anchor(defs, name, n, at)],
-        {uses_line, site} <- anchored_uses(d, texts, rows) do
-      %{line: n, anchor_line: uses_line, site: site}
+        {key_line, site_line, site} <- anchored_uses(d, texts, rows, defs) do
+      %{line: n, key_line: key_line, anchor_line: site_line, site: site}
     end
   end
 
@@ -458,25 +495,21 @@ defmodule Hypatia.Rules.PinSites do
 
   defp alias_step_stack?(_), do: false
 
-  # The `uses:` of the mapping the anchor `d` holds, as `[{line, site}]`: a
-  # flow mapping opening on the anchor's line, read through the lines below
-  # to the brace that closes it, or a block mapping on the lines below, read
-  # to its `uses:` key.
-  defp anchored_uses(d, texts, rows) do
+  # The `uses:` of the mapping the anchor `d` holds, as `[{key_line,
+  # site_line, site}]`: a flow mapping opening on the anchor's line, read
+  # through the lines below to the brace that closes it, or a block mapping
+  # on the lines below, read to its `uses:` key.
+  defp anchored_uses(d, texts, rows, defs) do
     line = elem(texts, d.line - 1)
     rest_at = byte_size(line) - byte_size(d.rest)
 
     cond do
       m = Regex.run(~r/^\s*(?:![^\s]*\s+)*\{/, d.rest, return: :index) ->
         [{0, len}] = m
-
-        case flow_mapping_uses(texts, d.line, rest_at + len - 1) do
-          nil -> []
-          found -> [found]
-        end
+        flow_mapping_uses(texts, d.line, rest_at + len - 1, defs)
 
       Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, d.rest) ->
-        block_uses(d.line, texts, rows)
+        block_uses(d.line, texts, rows, defs)
 
       true ->
         []
@@ -484,26 +517,35 @@ defmodule Hypatia.Rules.PinSites do
   end
 
   # The top-level `uses` entry of the flow mapping whose `{` is at byte
-  # `open` of line `n`, as `{line, site}`, or nil when the mapping closes
-  # without one. The mapping is read through the lines below to the brace
-  # that closes it: an entry starts after its `{` or one of its commas — on
-  # the same line, or as the last thing a line above held — with no other
-  # bracket open between. Lines are read masked (`mask/1`), so brackets and
+  # `open` of line `n`, as `[{key_line, site_line, site}]` (an alias value
+  # resolved to its anchor's), or `[]` when the mapping closes without one.
+  # The mapping is read through the lines below to the brace that closes
+  # it: an entry starts after its `{` or one of its commas — on the same
+  # line, or as the last thing a line above held — with no other bracket
+  # open between. Lines are read masked (`mask/1`), so brackets and
   # commas inside quoted text and comments count for nothing.
-  defp flow_mapping_uses(texts, n, open) do
+  defp flow_mapping_uses(texts, n, open, defs) do
     n..tuple_size(texts)//1
     |> Enum.reduce_while({:open, 0, nil}, fn k, {:open, depth, last} ->
       from = if k == n, do: open, else: 0
 
       case mapping_line_uses(mask(elem(texts, k - 1)), from, depth, last) do
-        {:found, site} -> {:halt, {k, site}}
-        :closed -> {:halt, nil}
-        open_state -> {:cont, open_state}
+        {:found, {:site, site}} ->
+          {:halt, [{k, k, site}]}
+
+        {:found, {:alias, name, at}} ->
+          {:halt, for({line, site} <- alias_value(defs, name, k, at), do: {k, line, site})}
+
+        :closed ->
+          {:halt, []}
+
+        open_state ->
+          {:cont, open_state}
       end
     end)
     |> case do
-      {k, %{} = site} -> {k, site}
-      _ -> nil
+      found when is_list(found) -> found
+      _ -> []
     end
   end
 
@@ -538,27 +580,33 @@ defmodule Hypatia.Rules.PinSites do
     end)
     |> case do
       {:open, _, _} = state -> state
-      %{} = site -> {:found, site}
-      other -> other
+      :closed -> :closed
+      found -> {:found, found}
     end
   end
 
-  # The `uses` entry starting at byte `i` of masked line `m`, as a site.
+  # The `uses` entry starting at byte `i` of masked line `m`: `{:site,
+  # site}` for a reference written there, `{:alias, name, offset of the
+  # "*"}` for an alias, or nil.
   defp entry_uses(m, i) do
     rest = binary_part(m, i, byte_size(m) - i)
 
     case Regex.run(
-           ~r/\A["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)/,
+           ~r/\A["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*(?:["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)|\*([^\s,\[\]{}]+))/,
            rest,
            return: :index
          ) do
-      [_, {a_at, a_len}, {r_at, r_len}] ->
-        %{
-          action: binary_part(rest, a_at, a_len),
-          ref: binary_part(rest, r_at, r_len),
-          action_at: i + a_at,
-          ref_at: i + r_at
-        }
+      [_, {a_at, a_len}, {r_at, r_len}] when a_at >= 0 ->
+        {:site,
+         %{
+           action: binary_part(rest, a_at, a_len),
+           ref: binary_part(rest, r_at, r_len),
+           action_at: i + a_at,
+           ref_at: i + r_at
+         }}
+
+      [_, _, _, {n_at, n_len}] ->
+        {:alias, binary_part(rest, n_at, n_len), i + n_at - 1}
 
       _ ->
         nil
@@ -568,8 +616,8 @@ defmodule Hypatia.Rules.PinSites do
   # A block mapping anchored with nothing after the anchor (`- &step`,
   # `step: &step`) on row `n`: its keys are the rows below deeper than the
   # dash or the key, the first of them setting their column; the one named
-  # `uses` holds the site(s).
-  defp block_uses(n, texts, rows) do
+  # `uses` holds the site(s) (`key_value/3`).
+  defp block_uses(n, texts, rows, defs) do
     case elem(rows, n - 1) do
       %{} = row ->
         parent = if row.key == nil, do: row.dash || row.indent, else: row.key_col
@@ -587,8 +635,8 @@ defmodule Hypatia.Rules.PinSites do
           [{_, first} | _] ->
             for {j, %{indent: ind, dash: nil, key: "uses"}} <- children,
                 ind == first.indent,
-                site <- sites(elem(texts, j)),
-                do: {j + 1, site}
+                {line, site} <- key_value(texts, j + 1, defs),
+                do: {j + 1, line, site}
         end
 
       _ ->
@@ -596,28 +644,81 @@ defmodule Hypatia.Rules.PinSites do
     end
   end
 
+  # The site(s) the block `uses:` key on line `k` holds, as `[{line, site}]`:
+  # written on its line, an alias (`uses: *bad`) resolved to the anchor's
+  # value, or a reference continued below it (`continued_site/2`: the next
+  # line with content, a block scalar's included).
+  defp key_value(texts, k, defs) do
+    text = elem(texts, k - 1)
+    masked = mask(text)
+
+    alias_re = ~r/^\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*\*([^\s,\[\]{}]+)\s*$/
+
+    case {sites(text), Regex.run(alias_re, masked, return: :index)} do
+      {[_ | _] = found, _} ->
+        for site <- found, do: {k, site}
+
+      {[], [_, {n_at, n_len}]} ->
+        alias_value(defs, binary_part(masked, n_at, n_len), k, n_at - 1)
+
+      {[], nil} ->
+        with v when is_integer(v) <-
+               Enum.find(
+                 (k + 1)..tuple_size(texts)//1,
+                 &(String.trim(head(elem(texts, &1 - 1))) != "")
+               ),
+             %{} = site <- continued_site(text, elem(texts, v - 1)) do
+          [{v, site}]
+        else
+          _ -> []
+        end
+    end
+  end
+
   @doc """
   The one-based numbers of the lines of `content` whose leading block `uses:`
   key the indentation above it proves is neither a step's nor a job's own:
   an input of that name (`with:` then `uses: a/b@x`), an entry of a sequence
-  some key other than `steps:` holds, or a key of a `steps:` that is no
-  job's. Such a key holds data, not a pin. A line whose ancestry the lines
-  above do not show far enough — a diff hunk cut short, a fragment with no
-  `jobs:` — is not listed: it is judged on its own line, as before.
+  some key other than `steps:` holds, a key of a `steps:` that is no
+  job's, or one under a root key that holds no job (`env:` then `uses:
+  a/b@x` in a workflow). Such a key holds data, not a pin. A line whose
+  ancestry the lines above do not show far enough — a diff hunk cut short,
+  a fragment with no `jobs:` — is not listed: it is judged on its own line,
+  as before.
   """
   @spec data_uses_lines(String.t()) :: MapSet.t(pos_integer())
   def data_uses_lines(content) when is_binary(content) do
-    rows =
-      content
-      |> line_states()
-      |> Enum.zip_with(line_depths(content), &block_row/2)
-      |> List.to_tuple()
+    rows = block_rows(content)
 
     for i <- 0..(tuple_size(rows) - 1)//1,
         match?(%{key: "uses"}, elem(rows, i)),
         uses_owner(rows, i) == :data,
         into: MapSet.new(),
         do: i + 1
+  end
+
+  # The lines of `content` as block structure (`block_row/2`), a tuple. A key
+  # at column 0 is a root key; a root key that is neither `jobs:` nor
+  # `runs:` (`env:`, `on:`, `inputs:`) holds no step or job, so it is marked
+  # `data_root?` — when the text shows the root (a `jobs:` or `runs:` at
+  # column 0), or the key is one a workflow or an action defines for data,
+  # so a hunk that shows `env:` at column 0 reads it the same. A fragment
+  # with neither (`build:` then `uses: ...`) is judged as before.
+  defp block_rows(content) do
+    rows = content |> line_states() |> Enum.zip_with(line_depths(content), &block_row/2)
+
+    shown? =
+      Enum.any?(rows, &match?(%{indent: 0, dash: nil, key: k} when k in ["jobs", "runs"], &1))
+
+    rows
+    |> Enum.map(fn
+      %{indent: 0, dash: nil, key: k} = row when is_binary(k) and k not in ["jobs", "runs"] ->
+        Map.put(row, :data_root?, shown? or k in @data_root_keys)
+
+      row ->
+        row
+    end)
+    |> List.to_tuple()
   end
 
   # One line as block structure: its indentation, the column of its last
@@ -669,9 +770,15 @@ defmodule Hypatia.Rules.PinSites do
     case mapping_of(rows, i) do
       {:item, j, d} -> sequence_owner(rows, seq_owner(rows, j, d))
       {:value, j, _key} -> job_key(rows, j)
+      :root -> root_owner(rows, i)
       _ -> :unknown
     end
   end
+
+  # A key of the root mapping (`block_rows/1`): :data when it is a data root,
+  # else :unknown — the text shows no more of where it sits.
+  defp root_owner(rows, j),
+    do: if(match?(%{data_root?: true}, elem(rows, j)), do: :data, else: :unknown)
 
   defp sequence_owner(rows, {:value, s, "steps"}), do: steps_owner(rows, s)
   defp sequence_owner(_rows, {:value, _, _}), do: :data
@@ -684,6 +791,7 @@ defmodule Hypatia.Rules.PinSites do
       {:value, _p, "runs"} -> :site
       {:value, p, _job} -> job_key(rows, p)
       {:item, _, _} -> :data
+      :root -> root_owner(rows, s)
       _ -> :unknown
     end
   end
@@ -695,6 +803,7 @@ defmodule Hypatia.Rules.PinSites do
       {:value, _, "jobs"} -> :site
       {:value, _, _} -> :data
       {:item, _, _} -> :data
+      :root -> root_owner(rows, j)
       _ -> :unknown
     end
   end
@@ -762,10 +871,11 @@ defmodule Hypatia.Rules.PinSites do
   """
   @spec line_depths(String.t()) :: [non_neg_integer()]
   def line_depths(content) when is_binary(content) do
-    content
-    |> String.split("\n")
+    lines = String.split(content, "\n")
+
+    lines
     |> Enum.with_index()
-    |> Enum.map_reduce(%{q: nil, opened: nil, block: nil, depth: 0, pending: false}, fn
+    |> Enum.map_reduce(initial_state(lines), fn
       {line, n}, st ->
         {_, next} = mask_file_line(line, n, st)
         {st.depth, next}
@@ -801,8 +911,9 @@ defmodule Hypatia.Rules.PinSites do
   @doc """
   The lines of a whole file, each with the bytes that belong to a scalar
   opened on an earlier line blanked to `x`, byte for byte: every content
-  line of a block scalar (`run: |`), and a multi-line quoted scalar's
-  continuation up to and including its closing quote. A line read through
+  line of a block scalar (`run: |`) — but the reference one a `uses:` key or
+  an anchor holds is whole (`:value`, `line_states/1`) — and a multi-line
+  quoted scalar's continuation up to and including its closing quote. A line read through
   `sites/1` one at a time cannot see either, so a `uses:` written in a
   `run: |` script reads as a key; read from these lines it does not.
 
@@ -822,20 +933,23 @@ defmodule Hypatia.Rules.PinSites do
   The lines of `mask_lines/1`, each with what the reader made of it:
   `:yaml` (structure, as written), `:text` (inside a scalar an earlier line
   opened: a block scalar's content, or a quoted scalar's continuation — at
-  least up to its closing quote) or `:open` (after the opening quote of a
-  quoted scalar the text never closes, returned as written: what it is
-  cannot be said from these lines alone). A diff hunk, which shows a few
-  lines of a file, is read this way too: a hunk that cuts a quoted scalar
-  off leaves its lines `:open`.
+  least up to its closing quote), `:value` (the one content line of a block
+  scalar a `uses:` key or an anchor holds, when that line is a whole
+  reference — `- uses: >-` then `    a/b@<sha>`: the scalar's value, kept as
+  written so the key's site can be read there) or `:open` (after the
+  opening quote of a quoted scalar the text never closes, returned as
+  written: what it is cannot be said from these lines alone). A diff hunk,
+  which shows a few lines of a file, is read this way too: a hunk that cuts
+  a quoted scalar off leaves its lines `:open`.
   """
-  @spec line_states(String.t()) :: [{String.t(), :yaml | :text | :open}]
+  @spec line_states(String.t()) :: [{String.t(), :yaml | :text | :value | :open}]
   def line_states(content) when is_binary(content) do
     lines = String.split(content, "\n")
 
     {masked, st} =
       lines
       |> Enum.with_index()
-      |> Enum.map_reduce(%{q: nil, opened: nil, block: nil, depth: 0, pending: false}, fn
+      |> Enum.map_reduce(initial_state(lines), fn
         {line, n}, st -> mask_file_line(line, n, st)
       end)
 
@@ -847,12 +961,31 @@ defmodule Hypatia.Rules.PinSites do
     end
   end
 
+  defp initial_state(lines),
+    do: %{
+      q: nil,
+      opened: nil,
+      block: nil,
+      depth: 0,
+      pending: false,
+      keep: nil,
+      lines: List.to_tuple(lines)
+    }
+
   # Inside a block scalar: a blank line or one deeper than the key is its
-  # content; anything else ends it.
+  # content; anything else ends it. The one line that is a `uses:` key's or
+  # an anchor's whole reference (`keep`, `block_value/4`) is kept as written.
   defp mask_file_line(line, n, %{block: col} = st) when is_integer(col) do
-    if String.trim(line) == "" or indent_of(line) > col,
-      do: {{String.duplicate("x", byte_size(line)), :text}, st},
-      else: mask_file_line(line, n, %{st | block: nil})
+    cond do
+      n == st.keep ->
+        {{line, :value}, st}
+
+      String.trim(line) == "" or indent_of(line) > col ->
+        {{String.duplicate("x", byte_size(line)), :text}, st}
+
+      true ->
+        mask_file_line(line, n, %{st | block: nil, keep: nil})
+    end
   end
 
   defp mask_file_line(line, n, st) do
@@ -892,7 +1025,7 @@ defmodule Hypatia.Rules.PinSites do
   # One line outside any scalar, `seen` being what precedes `rest` on it
   # (quote bodies as `x`). Tracks flow depth, opens a quote that does not
   # close on the line, and at its end a block scalar or a pending value.
-  defp walk(<<>>, seen, _n, st) do
+  defp walk(<<>>, seen, n, st) do
     trimmed = String.trim_trailing(seen)
 
     cond do
@@ -901,7 +1034,8 @@ defmodule Hypatia.Rules.PinSites do
 
       st.depth == 0 and
           Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:[&!]\S*\s+)*[|>][-+0-9]*$/, trimmed) ->
-        %{st | block: block_parent(seen), pending: false}
+        col = block_parent(seen)
+        %{st | block: col, pending: false, keep: block_value(st.lines, n, col, trimmed)}
 
       true ->
         # A key or dash followed only by node properties (`- run: &cmd`,
@@ -965,6 +1099,35 @@ defmodule Hypatia.Rules.PinSites do
     if Regex.match?(~r/^\s*-\s+(?:[&!]\S*\s+)*[|>]/, seen),
       do: indent_of(seen),
       else: byte_size(hd(Regex.run(~r/^\s*(?:-\s+)*/, seen)))
+  end
+
+  # A block scalar a `uses:` key holds (`- uses: >-`), or one an anchor names
+  # (`BAD: &bad |`), whose content is a single line holding nothing but a
+  # reference (`    github/codeql-action/init@<sha>`): YAML resolves the
+  # scalar to that reference, so that line is the value. Its index in
+  # `lines`, or nil — for any other block scalar, and for one whose content
+  # runs over more lines (`>-` folds them into one value, no reference).
+  # Inside a block scalar `#` is text, so a reference with a comment after
+  # it is no reference either.
+  defp block_value(lines, n, col, header) do
+    anchored? =
+      case Regex.run(~r/(?:^\s*(?:-\s+)*|:\s+)((?:[&!]\S*\s+)*)[|>][-+0-9]*$/, header) do
+        [_, props] -> String.contains?(props, "&")
+        _ -> false
+      end
+
+    if anchored? or
+         Regex.match?(~r/^\s*(?:-\s+)*["']?uses["']?\s*:\s+(?:[&!]\S*\s+)*[|>][-+0-9]*$/, header) do
+      (n + 1)..(tuple_size(lines) - 1)//1
+      |> Stream.map(&{&1, elem(lines, &1)})
+      |> Stream.reject(fn {_, l} -> String.trim(l) == "" end)
+      |> Stream.take_while(fn {_, l} -> indent_of(l) > col end)
+      |> Enum.take(2)
+      |> case do
+        [{v, l}] -> if Regex.match?(@block_ref_re, l), do: v
+        _ -> nil
+      end
+    end
   end
 
   defp indent_of(line), do: byte_size(line) - byte_size(String.trim_leading(line, " "))

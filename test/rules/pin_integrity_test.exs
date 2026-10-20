@@ -610,6 +610,71 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert reason =~ "leaves a denylisted pin"
     end
 
+    test "a uses: key under a root key that holds no job is data in a whole workflow" do
+      for root <- ["env", "x-template"] do
+        content =
+          "#{root}:\n  uses: github/codeql-action/init@#{@poison}\n" <>
+            "jobs:\n  a:\n    steps:\n      - run: echo\n"
+
+        assert PI.pi001_denylisted_pin(content, @policy) == [], root
+        assert {:ok, ^content, []} = PI.substitute_denylisted_pins(content, @policy)
+      end
+
+      # Control: a fragment that shows no root (no `jobs:`) is judged on its
+      # own line, as before: a job's `uses:` for all it shows.
+      assert [%{line: 2}] =
+               PI.pi001_denylisted_pin(
+                 "build:\n  uses: github/codeql-action/init@#{@poison}\n",
+                 @policy
+               )
+    end
+
+    test "a step alias whose mapping names its action by alias runs the anchored reference" do
+      content =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n" <>
+          "          - &step\n            uses: *bad\n" <>
+          "    steps:\n      - *step\n"
+
+      # The site is the anchor's value, where the repair rewrites it.
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+
+      # Control: with no step alias the matrix entry, alias and all, is data.
+      data = String.replace(content, "      - *step\n", "      - run: echo\n")
+      assert PI.pi001_denylisted_pin(data, @policy) == []
+    end
+
+    test "a uses: block scalar whose one line is a reference is a site on that line" do
+      content =
+        "jobs:\n  a:\n    steps:\n" <>
+          "      - uses: >-\n          github/codeql-action/init@#{@poison}\n" <>
+          "      - uses: |\n          github/codeql-action/init@#{@poison}\n"
+
+      assert [%{line: 5}, %{line: 7}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+      assert fixed =~ "      - uses: >-\n          github/codeql-action/init@#{@good}\n"
+
+      # An anchored block scalar names the same reference to a `uses: *bad`.
+      anchored =
+        "env:\n  BAD: &bad >-\n    github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(anchored, @policy)
+
+      # Controls: a block scalar that folds more lines into its value holds
+      # no reference; under `run:` or an input it is text or data.
+      for other <- [
+            "      - uses: >-\n          github/codeql-action/init@#{@poison}\n          extra\n",
+            "      - run: |\n          github/codeql-action/init@#{@poison}\n",
+            "      - uses: a/b@v1\n        with:\n          uses: >-\n            github/codeql-action/init@#{@poison}\n"
+          ] do
+        assert PI.pi001_denylisted_pin("jobs:\n  a:\n    steps:\n" <> other, @policy) == [], other
+      end
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

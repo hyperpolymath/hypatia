@@ -741,6 +741,74 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       end
     end
 
+    test "a uses: key under a root data key at column 0 is data: no poison site, no pin-only change" do
+      patch = """
+      @@ -1,3 +1,3 @@
+       env:
+      -  uses: github/codeql-action/init@#{@good}
+      +  uses: github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+
+      # Control: a job's own key is the pin it was.
+      job = """
+      @@ -1,4 +1,4 @@
+       jobs:
+         a:
+      -    uses: github/codeql-action/init@#{@good}
+      +    uses: github/codeql-action/init@#{@poison}
+      """
+
+      assert [%{denylist_id: "PIN-001"}] =
+               PA.poison_sites([file(".github/workflows/ci.yml", job)], @policy)
+    end
+
+    test "a re-pinned block scalar a uses: key holds is the site it resolves to" do
+      patch = """
+      @@ -1,3 +1,3 @@
+             - uses: >-
+      -          github/codeql-action/init@#{@good}
+      +          github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/codeql.yml", patch)
+      assert [%{denylist_id: "PIN-001"}] = PA.poison_sites([f], @policy)
+      assert PA.pin_lines_only?(f)
+
+      # Control: the same block scalar under `run:` is script text.
+      run = String.replace(patch, "- uses: >-", "- run: >-")
+      assert PA.poison_sites([file(".github/workflows/codeql.yml", run)], @policy) == []
+      refute PA.pin_lines_only?(file(".github/workflows/codeql.yml", run))
+    end
+
+    test "a step alias whose mapping names its action by alias makes the anchor's re-pin a poison site" do
+      patch = """
+      @@ -1,11 +1,11 @@
+       env:
+      -  BAD: &bad github/codeql-action/init@#{@good}
+      +  BAD: &bad github/codeql-action/init@#{@poison}
+       jobs:
+         a:
+           strategy:
+             matrix:
+               include:
+                 - &step
+                   uses: *bad
+           steps:
+             - *step
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{certain: true}] = PA.poison_sites([f], @policy)
+
+      # Control: with no step alias the matrix entry, alias and all, is data.
+      data = String.replace(patch, "       - *step", "       - run: echo")
+      assert PA.poison_sites([file(".github/workflows/ci.yml", data)], @policy) == []
+    end
+
     test "a pin inside a multi-line quoted run: is text; one the hunk never closes is uncertain" do
       # The quote opens on a context line and closes inside the hunk: every
       # line between is string text, never a site.

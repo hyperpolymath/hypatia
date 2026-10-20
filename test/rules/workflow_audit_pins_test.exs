@@ -1154,6 +1154,41 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert [] == wf026(String.replace(wf, "      - *step\n", "      - run: echo\n"))
     end
 
+    test "a step alias whose mapping names the action by alias is judged at its uses: key" do
+      wf = """
+      env:
+        TC: &tc dtolnay/rust-toolchain@#{@toolchain_sha}
+      jobs:
+        check:
+          strategy:
+            matrix:
+              include:
+                - &step
+                  uses: *tc
+          steps:
+            - *step
+      """
+
+      assert [%{line: 9, auto_fixable: false}] = wf026(wf)
+      assert [] == wf026(String.replace(wf, "      - *step\n", "      - run: echo\n"))
+    end
+
+    test "a uses: block scalar whose one line is the reference is the step's key; routed to review" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: >-
+                dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [%{line: 4, auto_fixable: false} = f] = wf026(wf)
+      assert f.reason =~ "continued below its key"
+
+      # Control: with the input given, the block-scalar step is silent.
+      assert [] == wf026(wf <> "        with:\n          toolchain: stable\n")
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:
@@ -1360,6 +1395,40 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       # Control: an alias of the replacement revision is silent.
       good = String.replace(wf, @broken_standards, @good_standards)
       assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => good}) == []
+    end
+
+    test "a job given whole as an alias calls the reusable its anchored mapping names; routed to review" do
+      for template <- [
+            "template: &job\n  uses: #{@rust_ci}@#{@broken_standards}\n",
+            "template: &job { uses: #{@rust_ci}@#{@broken_standards} }\n"
+          ] do
+        wf = template <> "jobs:\n  rust: *job\n"
+
+        assert [%{auto_fixable: false, fix_script: nil} = f] =
+                 WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+
+        assert f.reason =~ "given as an alias"
+
+        # Control: with no job alias the anchored mapping is data.
+        plain = template <> "jobs:\n  rust:\n    uses: #{@rust_ci}@#{@good_standards}\n"
+        assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => plain}) == []
+      end
+
+      # A job anchored under `jobs:` and aliased is still the fixer's: the
+      # anchored job's own key is the one it rewrites.
+      own = "jobs:\n  base: &job\n    uses: #{@rust_ci}@#{@broken_standards}\n  rust: *job\n"
+
+      assert [%{line: 3, auto_fixable: true}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => own})
+    end
+
+    test "a job's uses: block scalar whose one line is the call is the call; routed to review" do
+      wf = "jobs:\n  rust-ci:\n    uses: >-\n      #{@rust_ci}@#{@broken_standards}\n"
+
+      assert [%{line: 3, auto_fixable: false} = f] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+
+      assert f.reason =~ "continued below its key"
     end
 
     test "a flow-style job written without indentation is still a job; routed to review" do

@@ -1206,7 +1206,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # its `uses:` line is a live step's, judged as one, and routes to
       # review — the fixer does not rewrite anchored steps.
       aliased =
-        for %{anchor_line: n} <- Hypatia.Rules.PinSites.node_alias_sites(normalised),
+        for %{key_line: n} <- Hypatia.Rules.PinSites.node_alias_sites(normalised),
             into: MapSet.new(),
             do: n
 
@@ -2086,7 +2086,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> Enum.with_index(1)
     |> Enum.take(pos_line)
     |> Enum.flat_map(fn {{l, {{_, state}, depth}}, number} ->
-      if state != :text and wf026_plain?(l) do
+      if state not in [:text, :value] and wf026_plain?(l) do
         masked = wf_mask_quoted(l)
 
         re
@@ -2456,7 +2456,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `%{key_line => {joined, how}}`: the key's line with the reference in
   # place, which the rules read as they read a one-line key. `how` is
   # :continued for a reference YAML continues below the key (`- uses:`, then
-  # — past any blank or comment-only lines — the reference on a deeper line)
+  # — past any blank or comment-only lines — the reference on a deeper line;
+  # or a block scalar, `- uses: >-`, whose one content line is the reference)
   # and :alias for `uses: *name`, the reference the latest `&name` before it
   # anchors (`PinSites.alias_sites/1`). Found on the masked lines
   # (`PinSites.mask_lines/1`), so a `uses:` in a `run: |` script or a quoted
@@ -2468,11 +2469,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
     continued =
       for {key, _value, site} <- Hypatia.Rules.PinSites.continuations(masked), into: %{} do
-        line = Enum.at(lines, key - 1)
+        # A block scalar's indicator (`>-`, `|`) is no part of the value.
+        head =
+          lines
+          |> Enum.at(key - 1)
+          |> Hypatia.Rules.PinSites.head()
+          |> String.trim_trailing()
+          |> String.replace(~r/\s+[|>][-+0-9]*$/, "")
 
-        {key,
-         {String.trim_trailing(Hypatia.Rules.PinSites.head(line)) <>
-            " " <> site.action <> "@" <> site.ref, :continued}}
+        {key, {head <> " " <> site.action <> "@" <> site.ref, :continued}}
       end
 
     for %{line: n, at: at, len: len, site: site} <-
@@ -2764,12 +2769,16 @@ defmodule Hypatia.Rules.WorkflowAudit do
   lets a caller write.
 
   A job's `uses:` whose value YAML continues below its key (past any blank
-  or comment-only lines) is the call all the same.
+  or comment-only lines, or as a block scalar) is the call all the same. So
+  is the `uses:` of a mapping a job is given whole as an alias (`rust:
+  *job`), wherever that mapping is anchored (`PinSites.node_alias_sites/1`).
 
   Auto-fixable: gitbot-fleet `scripts/fix-stale-reusable-pin.sh` rewrites
   the pin to the replacement the table names, never to "newest". It refuses
   a value continued below its key (exit 2, file untouched), so that finding
-  carries `auto_fixable: false` and routes to review.
+  carries `auto_fixable: false` and routes to review, as does a call made
+  through a job alias whose mapping is no job's own: the fixer rewrites the
+  keys of `jobs:` only.
 
   Severity is low and the finding is `advisory: true`: like WF026 the rule
   reports and routes to the fleet; it is never a blocking gate (AGENTIC
@@ -2780,6 +2789,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
       lines = String.split(content, "\n")
       continued = wf_continued_uses(lines)
       flow = wf_flow_lines(content)
+      # A job given whole as an alias (`rust: *job`) runs the mapping its
+      # anchor holds: that mapping's `uses:` line is a call wherever it sits.
+      aliased =
+        for %{key_line: n} <- Hypatia.Rules.PinSites.node_alias_sites(content),
+            into: MapSet.new(),
+            do: n
 
       Enum.flat_map(@broken_reusable_revisions, fn rev ->
         # Anchored to a `uses:` key at the start of a line (quoted or not) that
@@ -2809,8 +2824,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
               :error -> {line, nil}
             end
 
+          live? = number in aliased
+
           # Each call with the layout the fleet fixer would meet: it rewrites
-          # a bare reference on a block key's own line, nothing else.
+          # a bare reference on a block key's own line, nothing else. A call
+          # only a job alias makes (its mapping anchored outside `jobs:`) is
+          # no key the fixer places.
           shas =
             case Regex.run(ref_re, line) do
               [_full, sha] ->
@@ -2824,16 +2843,21 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 case wf027_job_key(lines, flow, number) do
                   :block -> [{sha, review}]
                   :flow -> [{sha, review || :flow}]
+                  nil when live? -> [{sha, review || :node_alias}]
                   nil -> []
                 end
 
               nil ->
                 inline_re
                 |> Regex.scan(line, return: :index)
-                |> Enum.filter(fn [{at, _} | _] ->
-                  wf027_inline_job?(lines, flow, line, number, at + 1)
+                |> Enum.flat_map(fn [{at, _}, {sha_at, 40}] ->
+                  cond do
+                    wf027_inline_job?(lines, flow, line, number, at + 1) -> [:flow]
+                    live? -> [:node_alias]
+                    true -> []
+                  end
+                  |> Enum.map(&{binary_part(line, sha_at, 40), &1})
                 end)
-                |> Enum.map(fn [_, {sha_at, 40}] -> {binary_part(line, sha_at, 40), :flow} end)
             end
 
           Enum.flat_map(shas, fn {sha, review} ->
@@ -2982,6 +3006,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
     do:
       " The job is written as a flow mapping; the repair script rewrites block-style " <>
         "jobs only, so this one routes to review."
+
+  defp wf027_review_note(:node_alias),
+    do:
+      " The call is made by a job given as an alias of a mapping anchored outside " <>
+        "`jobs:`; the repair script rewrites the keys of `jobs:` only, so this one " <>
+        "routes to review."
 
   # ─── WF017: Secret-consuming action without secret-presence gate ──────
 

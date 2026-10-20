@@ -696,8 +696,9 @@ defmodule Hypatia.Rules.PrAutomerge do
   # `%{hunk_index => [pin]}` on the anchor's line: `- uses: *bad` in context
   # with `BAD: &bad <action>@<ref>` changed (`PinSites.alias_sites/2`), or a
   # step given whole as an alias whose anchored mapping's `uses:` changed
-  # (`PinSites.node_alias_sites/1`). The re-pinned anchor is the site. One
-  # that is already a site on its own line is counted there, not twice.
+  # (`PinSites.node_alias_sites/1`). The re-pinned anchor is the site, once
+  # however many readers reach it; one that is already a site on its own
+  # line is counted there, not twice.
   defp side_aliases(view) do
     texts = for {_, text, state} <- view, do: if(state == :text, do: "", else: text)
     side = Enum.join(texts, "\n")
@@ -705,6 +706,7 @@ defmodule Hypatia.Rules.PrAutomerge do
     masked = PinSites.mask_lines(side)
 
     (PinSites.alias_sites(masked, PinSites.flow_prefixes(side)) ++ PinSites.node_alias_sites(side))
+    |> Enum.uniq_by(&{&1.anchor_line, &1.site.ref_at})
     |> Enum.reject(fn %{anchor_line: n, site: site} ->
       texts |> Enum.at(n - 1) |> PinSites.sites() |> Enum.any?(&(&1.ref_at == site.ref_at))
     end)
@@ -716,7 +718,8 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   # One side of a hunk (context lines plus the changed lines of `mark`), in
   # order, as `{hunk_index, text, state}` — `state` as
-  # `PinSites.line_states/1` reads the side: `:yaml`, `:text` or `:open`; a
+  # `PinSites.line_states/1` reads the side: `:yaml`, `:text`, `:value` (a
+  # `uses:` block scalar's one reference line) or `:open`; a
   # block `uses:` key the side shows under no step or job
   # (`PinSites.data_uses_lines/1`) is `:text` too.
   defp side_view(hunk, mark) do
@@ -732,7 +735,7 @@ defmodule Hypatia.Rules.PrAutomerge do
     states = PinSites.line_states(side)
     # Unless a step or job given whole as an alias runs the mapping it sits
     # in (`- *step`, the mapping anchored in a matrix entry).
-    run = for %{anchor_line: n} <- PinSites.node_alias_sites(side), into: MapSet.new(), do: n
+    run = for %{key_line: n} <- PinSites.node_alias_sites(side), into: MapSet.new(), do: n
     data = MapSet.difference(PinSites.data_uses_lines(side), run)
 
     entries
@@ -750,7 +753,7 @@ defmodule Hypatia.Rules.PrAutomerge do
     certain? =
       state != :open and
         (before ++ rest)
-        |> Enum.reject(fn {_, t, s} -> s == :text or String.trim(t) == "" end)
+        |> Enum.reject(fn {_, t, s} -> s in [:text, :value] or String.trim(t) == "" end)
         |> Enum.filter(fn {_, t, _} -> indent_of(t) <= indent end)
         |> Enum.all?(fn {_, t, _} -> yaml_like?(t) end)
 
