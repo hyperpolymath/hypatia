@@ -19,7 +19,7 @@
 #     --push              Push committed fixes to remotes
 #     --dry-run           Show what would be done without doing it
 #     --keep              Do not unmount RAM disk on completion
-#     --mount PATH        Custom mount point (default: hypatia-workspace under
+#     --mount PATH        Custom mount point (default: hypatia/workspace under
 #                         $XDG_RUNTIME_DIR, else $XDG_STATE_HOME, else
 #                         ~/.local/state)
 #     --max-repos N       Limit number of repos to process
@@ -107,7 +107,9 @@ parse_args() {
 }
 
 # The tmpfs mount point is re-found by later runs (stale-mount reuse), so it
-# lives in a per-user directory, not a mktemp one.
+# lives in a per-user directory, not a mktemp one. With no XDG directory and
+# no HOME there is nowhere to put it: say so and stop, rather than let
+# `set -u` die on an unbound HOME before --help can run.
 resolve_mount_point() {
     [[ -n "$MOUNT_POINT" ]] && return 0
     local base="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-}}"
@@ -118,7 +120,7 @@ resolve_mount_point() {
         log_err "No XDG_RUNTIME_DIR, XDG_STATE_HOME or HOME; pass --mount PATH"
         exit 1
     fi
-    MOUNT_POINT="$base/hypatia-workspace"
+    MOUNT_POINT="$base/hypatia/workspace"
 }
 
 # ─────────────────────────────────────────────────────────────────────

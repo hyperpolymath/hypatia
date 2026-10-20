@@ -1,44 +1,40 @@
 # SPDX-License-Identifier: MPL-2.0
-# cargo-deny configuration for hypatia.
-#
-# Checked in so security-policy.yml's "Create deny.toml if missing" fallback is
-# not used: that template predates the cargo-deny 0.18 schema (`vulnerability`,
-# `unmaintained = "warn"`, `notice`, `unlicensed`, `copyleft`, `default` are now
-# hard errors) and fails to deserialize.
+# Keep this checked in: the CI fallback uses a retired cargo-deny schema.
 
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# Vulnerability advisories always fail. Unmaintained advisories fail only for
-# crates the workspace depends on directly; transitive ones (unsafe-libyaml via
-# serde_yaml, proc-macro-error2 via tabled_derive) are tracked upstream.
+# Current cargo-deny always rejects vulnerabilities. Reject unmaintained direct
+# dependencies; cargo-audit also reports maintenance warnings for transitives.
 unmaintained = "workspace"
 yanked = "warn"
 
 [licenses]
-# Every licence that appears in Cargo.lock's dependency graph (measured
-# 2026-10-19 against crates.io metadata for all 479 registry packages).
 allow = [
     "MIT",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
-    "BSL-1.0",
-    "CC0-1.0",
-    "CDLA-Permissive-2.0",
     "ISC",
-    "MPL-2.0",
-    "Unicode-3.0",
     "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+]
+exceptions = [
+    # Mozilla CA data uses the permissive Community Data License Agreement.
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+    { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
+    # Redis's xxHash implementation uses the permissive Boost license.
+    { crate = "xxhash-rust", allow = ["BSL-1.0"] },
 ]
 
 [bans]
 multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
-skip = []
-skip-tree = []
 
 [sources]
 unknown-registry = "deny"

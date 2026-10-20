@@ -415,6 +415,72 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "ignores || true inside a trap handler (cleanup, not the step's status)" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - name: Test suite under stress
+                run: |
+                  set -euo pipefail
+                  stress-ng --cpu 4 &
+                  STRESS_PID=$!
+                  trap 'kill "$STRESS_PID" 2>/dev/null || true' EXIT
+                  cargo test
+        """)
+
+      assert ResearchExtensions.re005_test_swallows_exit(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a trap does not hide a real swallow elsewhere in the step" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - name: Test suite under stress
+                run: |
+                  trap 'kill "$PID" 2>/dev/null || true' EXIT
+                  cargo test || true
+        """)
+
+      assert [%{rule: "RE005"}] = ResearchExtensions.re005_test_swallows_exit(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a double-quoted trap handler with escaped quotes is still skipped" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          x:
+            steps:
+              - name: run tests
+                run: |
+                  trap "kill \"$PID\" 2>/dev/null || true" EXIT
+                  cargo test
+        """)
+
+      assert ResearchExtensions.re005_test_swallows_exit(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a swallow after a trap on the same line is still reported" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - name: run tests
+                run: |
+                  trap 'kill "$PID" 2>/dev/null || true' EXIT; cargo test || true
+        """)
+
+      assert [%{rule: "RE005"}] = ResearchExtensions.re005_test_swallows_exit(repo)
+      File.rm_rf!(repo)
+    end
+
     test "ignores non-test steps with continue-on-error" do
       repo =
         create_repo_with_workflow("""

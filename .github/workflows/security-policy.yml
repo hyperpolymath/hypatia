@@ -140,7 +140,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2.87.28
+        uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-deny
 
@@ -755,14 +755,13 @@ jobs:
       - sbom
     if: always()
     steps:
-      # The self-check below parses this very file, so the file has to be on
-      # disk. Without this step it reads nothing, exits 2, and the verdict
-      # step never runs. Only the one file: this job builds nothing.
-      - name: Checkout this workflow file
+      # The self-check below reads this workflow file, so it must be on disk.
+      # Without a checkout awk exits 2 ("cannot open file") and the
+      # aggregator goes red regardless of the scan results.
+      - name: Checkout workflow file
         uses: actions/checkout@v7.0.1
         with:
-          sparse-checkout: |
-            .github/workflows/security-policy.yml
+          sparse-checkout: .github/workflows/security-policy.yml
           sparse-checkout-cone-mode: false
           persist-credentials: false
 

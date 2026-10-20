@@ -1075,6 +1075,20 @@ defmodule Hypatia.Rules.WorkflowHardening do
     1. is there a workflow-level `contents: write`;
     2. does the file actually perform a write;
     3. does a job carry its own `permissions:` (and so possibly its own grant).
+
+  ## Writes that do not ride on `GITHUB_TOKEN`
+
+  `contents: write` governs the job's `GITHUB_TOKEN` only. A job that brings
+  its own credential (a PAT or app token as `actions/checkout`'s `token:`, or
+  as the `GH_TOKEN`/`GITHUB_TOKEN` env of its steps) writes with THAT
+  credential, so writes are judged per job and a credentialed job is never
+  "starved" by a read-only grant. This repository's `estate-rescan.yml` (a
+  PAT clone of another repository) and `inbox-steward-intake.yml` (checkout
+  with `FARM_PAT`) were both reported as starved for this reason.
+
+  Masking stays a defect there: `git push … 2>/dev/null || echo` cannot turn
+  the job red when the credential expires or loses scope. That shape is
+  reported at `:warn` with its own fix recipe, because no grant is missing.
   """
   def wh013_permission_starved_write(repo_path) do
     repo_path
@@ -1083,62 +1097,149 @@ defmodule Hypatia.Rules.WorkflowHardening do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      cond do
-        not performs_contents_write?(content) ->
-          []
+      {credentialed, token_writes} =
+        content
+        |> writing_job_bodies()
+        |> Enum.split_with(fn {_body, credentialed?} -> credentialed? end)
 
-        # A grant exists at either level. This rule deliberately does not try
-        # to prove the grant is on the RIGHT job — that needs a real YAML
-        # parse, and a false "you are broken" is worse than a missed one.
-        grants_contents_write_anywhere?(content) ->
-          []
+      credentialed = Enum.map(credentialed, &elem(&1, 0))
+      token_writes = Enum.map(token_writes, &elem(&1, 0))
 
-        # No grant anywhere, and the write is masked so it can never go red.
-        masked_write?(content) ->
-          [
-            %{
-              rule: "WH013",
-              file: rel,
-              severity: :high,
-              reason:
-                "workflow #{rel} performs a write (push/commit/release/PR) with NO " <>
-                  "`contents: write` at the workflow level or any job level, AND the " <>
-                  "write is masked (`2>/dev/null`, `|| true`, or `|| echo`). The push " <>
-                  "is denied, the error is swallowed, and the workflow stays GREEN " <>
-                  "while recording nothing.",
-              action: :report,
-              fix_recipe: "grant-contents-write-to-writing-job-and-unmask",
-              detail: %{
-                fix:
-                  "Add `permissions: {contents: write}` to the job that performs the " <>
-                    "write, and remove the `2>/dev/null` / `|| echo` mask so a denied " <>
-                    "push fails the job instead of warning."
-              }
-            }
-          ]
+      masked_credentialed =
+        if Enum.any?(credentialed, &masked_write?/1),
+          do: [wh013_masked_credentialed_finding(rel)],
+          else: []
 
-        true ->
-          [
-            %{
-              rule: "WH013",
-              file: rel,
-              severity: :high,
-              reason:
-                "workflow #{rel} performs a write (push/commit/release/PR) but grants " <>
-                  "no `contents: write` at the workflow level or any job level — the " <>
-                  "write will be denied at run time.",
-              action: :report,
-              fix_recipe: "grant-contents-write-to-writing-job",
-              detail: %{
-                fix:
-                  "Add `permissions: {contents: write}` to the job that performs the " <>
-                    "write. Do not widen the workflow level if other jobs are correctly " <>
-                    "scoped — a job-level block replaces the workflow-level one."
-              }
-            }
-          ]
-      end
+      wh013_starved_findings(rel, content, token_writes) ++ masked_credentialed
     end)
+  end
+
+  # `{body, credentialed?}` for each job that performs a write. A job is
+  # credentialed by its own body or by a workflow-level `env:` it inherits.
+  # A file whose jobs the extractor cannot split is judged as one body and is
+  # never credentialed: one job's PAT must not excuse another job's write.
+  defp writing_job_bodies(content) do
+    case extract_job_blocks(content) do
+      [] ->
+        if performs_contents_write?(content), do: [{content, false}], else: []
+
+      jobs ->
+        inherited? = own_credential_job?(workflow_preamble(content))
+
+        for {_id, _no, body} <- jobs, performs_contents_write?(body) do
+          {body, inherited? or own_credential_job?(body)}
+        end
+    end
+  end
+
+  # Everything above the top-level `jobs:` key (name, on, permissions, env).
+  defp workflow_preamble(content) do
+    content |> String.split(~r/^jobs:/m, parts: 2) |> hd()
+  end
+
+  # `token:` / `GH_TOKEN:` / `GITHUB_TOKEN:` set to a secret other than
+  # `secrets.GITHUB_TOKEN` (dot or index form), or to a step-minted token.
+  @own_credential ~r/^[ \t]*(?:-[ \t]+)?(?:token|GH_TOKEN|GITHUB_TOKEN):[ \t]*["']?\$\{\{\s*(?:secrets\.(?!GITHUB_TOKEN\b)[A-Za-z_][A-Za-z0-9_]*|secrets\[\s*['"](?!GITHUB_TOKEN['"])[A-Za-z_][A-Za-z0-9_]*['"]\s*\]|steps\.[A-Za-z0-9_-]+\.outputs\.token)\s*\}\}/m
+
+  @doc """
+  Return true when a job body supplies its own write credential instead of
+  relying on `GITHUB_TOKEN`: `token:` (e.g. on `actions/checkout`), `GH_TOKEN:`
+  or `GITHUB_TOKEN:` set to a secret other than `secrets.GITHUB_TOKEN` (as
+  `secrets.NAME` or `secrets['NAME']`), or to a step-minted
+  `steps.<id>.outputs.token`.
+
+  Approximate in the safe direction for WH013: a job that sets a PAT and then
+  writes with `GITHUB_TOKEN` anyway is not reported as starved.
+  """
+  def own_credential_job?(body) when is_binary(body) do
+    Regex.match?(@own_credential, body)
+  end
+
+  defp wh013_masked_credentialed_finding(rel) do
+    %{
+      rule: "WH013",
+      file: rel,
+      severity: :warn,
+      reason:
+        "workflow #{rel} performs a write with its own credential (PAT or app " <>
+          "token), and the write is masked (`2>/dev/null`, `|| true`, `|| echo`, or the " <>
+          "step's `continue-on-error: true`). " <>
+          "If the credential expires or loses scope, the write fails and the " <>
+          "workflow stays green.",
+      action: :report,
+      fix_recipe: "unmask-credentialed-write",
+      detail: %{
+        fix:
+          "Remove the `2>/dev/null` / `|| true` / `|| echo` mask, or the step's " <>
+            "`continue-on-error: true`, so a failed write " <>
+            "fails the job. Skip an empty commit with `git diff --cached --quiet` " <>
+            "rather than swallowing `git commit`'s exit."
+      }
+    }
+  end
+
+  # The grant is judged file-wide (`content`); starvation and masking only
+  # over the jobs whose writes ride on GITHUB_TOKEN (`token_writes`).
+  defp wh013_starved_findings(rel, content, token_writes) do
+    token_text = Enum.join(token_writes, "\n")
+
+    cond do
+      token_writes == [] ->
+        []
+
+      # A grant exists at either level. This rule deliberately does not try
+      # to prove the grant is on the RIGHT job — that needs a real YAML
+      # parse, and a false "you are broken" is worse than a missed one.
+      grants_contents_write_anywhere?(content) ->
+        []
+
+      # No grant anywhere, and the write is masked so it can never go red.
+      masked_write?(token_text) ->
+        [
+          %{
+            rule: "WH013",
+            file: rel,
+            severity: :high,
+            reason:
+              "workflow #{rel} performs a write (push/commit/release/PR) with NO " <>
+                "`contents: write` at the workflow level or any job level, AND the " <>
+                "write is masked (`2>/dev/null`, `|| true`, `|| echo`, or the step's " <>
+                "`continue-on-error: true`). The push " <>
+                "is denied, the error is swallowed, and the workflow stays GREEN " <>
+                "while recording nothing.",
+            action: :report,
+            fix_recipe: "grant-contents-write-to-writing-job-and-unmask",
+            detail: %{
+              fix:
+                "Add `permissions: {contents: write}` to the job that performs the " <>
+                  "write, and remove the `2>/dev/null` / `|| echo` mask (or the step's " <>
+                  "`continue-on-error: true`) so a denied " <>
+                  "push fails the job instead of warning."
+            }
+          }
+        ]
+
+      true ->
+        [
+          %{
+            rule: "WH013",
+            file: rel,
+            severity: :high,
+            reason:
+              "workflow #{rel} performs a write (push/commit/release/PR) but grants " <>
+                "no `contents: write` at the workflow level or any job level — the " <>
+                "write will be denied at run time.",
+            action: :report,
+            fix_recipe: "grant-contents-write-to-writing-job",
+            detail: %{
+              fix:
+                "Add `permissions: {contents: write}` to the job that performs the " <>
+                  "write. Do not widen the workflow level if other jobs are correctly " <>
+                  "scoped — a job-level block replaces the workflow-level one."
+            }
+          }
+        ]
+    end
   end
 
   @doc """
@@ -1155,18 +1256,91 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # command `||`-chained into a warning or a no-op. AGENTS.md §5 — never
   # `2>/dev/null` the thing under test.
   @write_masks [
-    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*2>\s*\/dev\/null/,
-    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*\|\|\s*(?:true|:)\s*$/m,
-    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*\|\|\s*echo/
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*2>\s*\/dev\/null/,
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*(?:true|:)\s*$/m,
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*echo/
   ]
+
+  @steps_key ~r/^[ \t]*steps:[ \t]*(?:#.*)?$/
+  @step_continue_on_error ~r/^[ \t]*(?:-[ \t]+)?continue-on-error:[ \t]*true\b/m
 
   @doc """
   Return true when a write operation's failure is masked, so a denied write
-  cannot turn the job red.
+  cannot turn the job red: a shell mask on the write itself, or
+  `continue-on-error: true` on the very step that performs the write. A flag
+  on a sibling step does not mask this write, and a job-level
+  `continue-on-error` is not counted: it is a deliberate, visible job setting
+  (standards' github-backup-mirror-reusable.yml documents and surfaces it).
   """
   def masked_write?(content) when is_binary(content) do
-    Enum.any?(@write_masks, &Regex.match?(&1, content))
+    Enum.any?(@write_masks, &Regex.match?(&1, content)) or
+      content
+      |> step_bodies()
+      |> Enum.any?(&(step_continue_on_error?(&1) and performs_contents_write?(&1)))
   end
+
+  # `continue-on-error: true` as a key of the step itself: on its `- ` line or
+  # at the step's key column. Deeper text (a `run: |` script that writes a
+  # workflow file, a `with:` value) is not the step's flag.
+  defp step_continue_on_error?(step) do
+    [item | rest] = String.split(step, "\n")
+    keys = Enum.reject(rest, &blank_or_comment?/1)
+
+    key_col =
+      case Regex.run(~r/^([ \t]*-[ \t]+)\S/, item) do
+        [_, prefix] -> String.length(prefix)
+        nil -> keys |> List.first("") |> indent_of()
+      end
+
+    Regex.match?(@step_continue_on_error, item) or
+      Enum.any?(keys, &(indent_of(&1) == key_col and Regex.match?(@step_continue_on_error, &1)))
+  end
+
+  defp blank_or_comment?(line) do
+    trimmed = String.trim(line)
+    trimmed == "" or String.starts_with?(trimmed, "#")
+  end
+
+  # The text of each `- ` (or bare `-`) item under every `steps:` key. An item
+  # runs until the next item at the same indent or a line back at (or above)
+  # the `steps:` indent; blank and comment lines never end one.
+  defp step_bodies(content) do
+    {acc, current, _state} =
+      content
+      |> String.split("\n")
+      |> Enum.reduce({[], nil, nil}, fn line, {acc, current, state} ->
+        trimmed = String.trim_leading(line)
+
+        cond do
+          Regex.match?(@steps_key, line) ->
+            {flush_step(acc, current), nil, {indent_of(line), nil}}
+
+          is_nil(state) ->
+            {acc, nil, nil}
+
+          trimmed == "" or String.starts_with?(trimmed, "#") ->
+            {acc, append_step(current, line), state}
+
+          indent_of(line) <= elem(state, 0) ->
+            {flush_step(acc, current), nil, nil}
+
+          (String.trim(line) == "-" or String.starts_with?(trimmed, "- ")) and
+              elem(state, 1) in [nil, indent_of(line)] ->
+            {flush_step(acc, current), [line], {elem(state, 0), indent_of(line)}}
+
+          true ->
+            {acc, append_step(current, line), state}
+        end
+      end)
+
+    acc |> flush_step(current) |> Enum.reverse()
+  end
+
+  defp append_step(nil, _line), do: nil
+  defp append_step(lines, line), do: [line | lines]
+
+  defp flush_step(acc, nil), do: acc
+  defp flush_step(acc, lines), do: [lines |> Enum.reverse() |> Enum.join("\n") | acc]
 
   # ─── Internals ──────────────────────────────────────────────────────
 
@@ -1270,7 +1444,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
       Enum.with_index(lines, 1)
       |> Enum.reduce({[], in_jobs?, jobs_indent, nil}, fn
         {line, _no}, {acc, false, _ji, _current} ->
-          if Regex.match?(~r/^jobs:\s*$/, line) do
+          if Regex.match?(~r/^jobs:\s*(?:#.*)?$/, line) do
             {acc, true, nil, nil}
           else
             {acc, false, nil, nil}
@@ -1302,6 +1476,12 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
             _ ->
               cond do
+                # A comment, at any indent, neither ends `jobs:` nor joins a
+                # job body: WH013 reads bodies as raw text, and
+                # `# the publisher used to git push` is not a write.
+                String.starts_with?(String.trim_leading(line), "#") ->
+                  {acc, true, jobs_indent, current}
+
                 line == "" or indent_of(line) >= jobs_indent + 1 ->
                   {acc, true, jobs_indent, append_line(current, line)}
 
