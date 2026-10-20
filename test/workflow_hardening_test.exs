@@ -1090,6 +1090,70 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    test "continue-on-error under a commented `steps:` key is found, and named in the reason" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps: # publication steps
+              - continue-on-error: true
+                env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/*
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write", reason: reason, detail: %{fix: fix}}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      assert reason =~ "continue-on-error"
+      assert fix =~ "continue-on-error"
+      File.rm_rf!(repo)
+    end
+
+    test "continue-on-error on a sibling step does not mask another step's write" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - name: optional lint
+                continue-on-error: true
+                run: make lint
+              - env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/*
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a comment between jobs is not read as part of the job above it" do
+      repo =
+        create_repo_with_workflow("""
+        name: CI
+        permissions:
+          contents: read
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix test
+          # The publisher used to git push origin main; it now lives in release.yml.
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
     test "a job-level continue-on-error is a deliberate setting, not a mask" do
       repo =
         create_repo_with_workflow("""

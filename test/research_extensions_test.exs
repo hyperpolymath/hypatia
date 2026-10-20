@@ -450,6 +450,22 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a double-quoted trap handler with escaped quotes is still skipped" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          x:
+            steps:
+              - name: run tests
+                run: |
+                  trap "kill \"$PID\" 2>/dev/null || true" EXIT
+                  cargo test
+        """)
+
+      assert ResearchExtensions.re005_test_swallows_exit(repo) == []
+      File.rm_rf!(repo)
+    end
+
     test "a swallow after a trap on the same line is still reported" do
       repo =
         create_repo_with_workflow("""
