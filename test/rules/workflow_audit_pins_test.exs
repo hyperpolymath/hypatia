@@ -387,6 +387,22 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                Enum.filter(findings, &(&1.file == "jobline.yml"))
     end
 
+    test "a one-line flow workflow inside a run heredoc is not a toolchain step" do
+      for opener <- ["", "{ "], closer = if(opener == "", do: "", else: " }") do
+        wf = """
+        jobs:
+          build:
+            steps:
+              - run: |
+                  cat <<'YAML'
+                  #{opener}jobs: { fixture: { steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ] } }#{closer}
+                  YAML
+        """
+
+        assert WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"x.yml" => wf}) == []
+      end
+    end
+
     test "a one-line flow path that is not steps in a job in jobs is not a step" do
       docs = %{
         "env.yml" =>
@@ -755,6 +771,22 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{rule: "WF027", line: 2}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => own_line})
+    end
+
+    test "a one-line flow workflow inside a run heredoc is not a reusable call" do
+      for opener <- ["", "{ "], closer = if(opener == "", do: "", else: " }") do
+        wf = """
+        jobs:
+          build:
+            steps:
+              - run: |
+                  cat <<'YAML'
+                  #{opener}jobs: { fixture: { uses: #{@rust_ci}@#{@broken_standards} } }#{closer}
+                  YAML
+        """
+
+        assert WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf}) == []
+      end
     end
 
     test "a root-braced one-line workflow is read through its keys" do

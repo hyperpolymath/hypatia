@@ -28,9 +28,9 @@
 #   * `--via clone` is the authoritative mode (reads the files themselves);
 #     `--via search` is the fast reconnaissance mode and can lag the index.
 #
-# EXIT CODES: 0 clean, 1 error, 2 findings present (or the sweep could not
-#             see everything: a search that failed or overflowed, a
-#             candidate that could not be read — never reported clean),
+# EXIT CODES: 0 clean, 1 error, 2 confirmed findings or an INCOMPLETE run
+#             (failed/partial searches, listings or clones, unread candidates,
+#             or limits imposed by --max-repos or --sample),
 #             3 nothing to do
 #
 # usage: estate-pin-integrity.sh [--org ORG]... [--policy FILE] [--out DIR]
@@ -197,7 +197,10 @@ masked_sites() { printf '%s\n' "$1" | grep -oiE "$SITE_RE" || true; }
 # inside a quoted scalar or a comment earlier on the line is never the one
 # replaced.
 replace_site() { # <line> <masked-line> <action> <ref> <good>
-  awk -v line="$1" -v masked="$2" -v a="$3" -v r="$4" -v good="$5" -v sq="'" 'BEGIN {
+  PIN_LINE="$1" PIN_MASKED="$2" PIN_ACTION="$3" PIN_REF="$4" PIN_GOOD="$5" \
+  awk -v sq="'" 'BEGIN {
+    line = ENVIRON["PIN_LINE"]; masked = ENVIRON["PIN_MASKED"]
+    a = ENVIRON["PIN_ACTION"]; r = ENVIRON["PIN_REF"]; good = ENVIRON["PIN_GOOD"]
     tail = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*[\"" sq "]?$"
     ends = "]\"" sq " \t#,}"
     lm = tolower(masked); needle = tolower(a "@" r); from = 1
@@ -319,6 +322,7 @@ mapfile -t SEARCH_TOKENS < <(jq -r '
 # clean org.
 incomplete=0
 failed=0
+skipped_repos=0
 if [ "$VIA" = "search" ]; then
   for org in "${ORGS[@]}"; do
     for token in "${SEARCH_TOKENS[@]}"; do
@@ -366,7 +370,10 @@ else
     fi
     reponames=()
     [ -n "$names" ] && mapfile -t reponames <<<"$names"
-    [ "$MAX_REPOS" -gt 0 ] && reponames=("${reponames[@]:0:$MAX_REPOS}")
+    if [ "$MAX_REPOS" -gt 0 ] && [ "${#reponames[@]}" -gt "$MAX_REPOS" ]; then
+      skipped_repos=$((skipped_repos + ${#reponames[@]} - MAX_REPOS))
+      reponames=("${reponames[@]:0:$MAX_REPOS}")
+    fi
     log "  cloning ${#reponames[@]} repo(s) in ${org}"
     # Clones live under the organisation: two organisations may each own a
     # repository of the same name, and the second must not reuse the first's.
@@ -399,6 +406,7 @@ unseen() {
   local parts=()
   [ "$incomplete" -gt 0 ] && parts+=("${incomplete} search page(s) overflowed GitHub's 1,000-result cap or came back marked incomplete")
   [ "$failed" -gt 0 ] && parts+=("${failed} search(es), listing(s) or clone(s) failed")
+  [ "$skipped_repos" -gt 0 ] && parts+=("${skipped_repos} repo(s) skipped by --max-repos")
   [ "${unread:-0}" -gt 0 ] && parts+=("${unread} candidate file(s) could not be read")
   [ "${sampled:-0}" -gt 0 ] && parts+=("${sampled} candidate file(s) left unread by --sample")
   local IFS=';'
@@ -406,7 +414,7 @@ unseen() {
 }
 
 if [ "$total_hits" -eq 0 ]; then
-  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$sampled" -gt 0 ]; then
+  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$skipped_repos" -gt 0 ] || [ "$sampled" -gt 0 ]; then
     echo "INCOMPLETE: no denylisted pin tokens in the visible search results for ${ORGS[*]}, but $(unseen); a clean verdict needs --via clone"
     exit 2
   fi
@@ -539,7 +547,7 @@ while IFS=$'\t' read -r org repo path; do
 done < "$HITS"
 
 if [ "$confirmed" -eq 0 ]; then
-  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ] || [ "$sampled" -gt 0 ]; then
+  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$skipped_repos" -gt 0 ] || [ "$unread" -gt 0 ] || [ "$sampled" -gt 0 ]; then
     echo "INCOMPLETE: none of the ${total_hits} candidate file(s) carries a denylisted pin, but $(unseen); a clean verdict needs --via clone"
     exit 2
   fi
@@ -577,7 +585,7 @@ log "  repair plan                : ${PLAN}"
 [ "$REWRITE" -eq 1 ] && log "  repaired trees             : ${OUT_DIR}/patched"
 log "  NOTE: this sweep never writes to a remote. Branch + PR creation is"
 log "        the token-bearing actuator's job — docs/operations/estate-automerge.adoc"
-if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$unread" -gt 0 ] || [ "$sampled" -gt 0 ]; then
+if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ] || [ "$skipped_repos" -gt 0 ] || [ "$unread" -gt 0 ] || [ "$sampled" -gt 0 ]; then
   log "  INCOMPLETE: $(unseen); what they hid was not seen — rerun with --via clone"
 fi
 

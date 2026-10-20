@@ -1282,9 +1282,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # the line, nearest first, then the block ancestors of the line. Each key
   # is read quote-aware, so a `name: "CI, build"` sibling separates nothing.
   defp wf026_flow_path_step?(lines, line, number, open_col) do
-    case wf_flow_opener_stack(line, open_col) do
-      {:ok, [{:seq, _} | _] = stack} ->
-        keys = wf_flow_opener_keys(line, stack) ++ (wf_ancestor_keys(lines, number) || [])
+    case {wf_flow_opener_stack(line, open_col), wf_ancestor_keys(lines, number)} do
+      {{:ok, [{:seq, _} | _] = stack}, ancestors} when is_list(ancestors) ->
+        keys = wf_flow_opener_keys(line, stack) ++ ancestors
         match?(["steps", job, "jobs" | _] when is_binary(job), keys)
 
       _ ->
@@ -2142,9 +2142,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # brace, split quote-aware, so a sibling's `name: "CI, build"` separates
   # nothing.
   defp wf027_inline_job?(lines, line, number, uses_at) do
-    case wf_flow_opener_stack(line, uses_at) do
-      {:ok, [open | _] = stack} when is_integer(open) ->
-        keys = wf_flow_opener_keys(line, stack) ++ (wf_ancestor_keys(lines, number) || [])
+    case {wf_flow_opener_stack(line, uses_at), wf_ancestor_keys(lines, number)} do
+      {{:ok, [open | _] = stack}, ancestors} when is_integer(open) and is_list(ancestors) ->
+        keys = wf_flow_opener_keys(line, stack) ++ ancestors
         match?([job, "jobs" | _] when is_binary(job), keys)
 
       _ ->

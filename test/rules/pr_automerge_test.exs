@@ -184,8 +184,9 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
 
-      assert decision.disposition == :close_poison_only
-      assert decision.blocked_by == "introduces_denylisted_pin"
+      assert decision.disposition == :excise_poison_then_merge
+      refute decision.pin_only
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_wanted_updates"
     end
 
     test "a quoted uses: key and a quoted value are still a pin PA001 sees" do
@@ -308,6 +309,45 @@ defmodule Hypatia.Rules.PrAutomergeTest do
   end
 
   describe "poison_sites/2 and pin_lines_only?/1" do
+    test "a flow pin with neighbouring input, condition or environment edits is not pin-only" do
+      for {before, after_edit} <- [
+            {"with: { languages: rust }", "with: { languages: javascript }"},
+            {"if: false", "if: true"},
+            {"env: { MODE: test }", "env: { MODE: deploy }"}
+          ] do
+        patch = """
+        @@ -1,1 +1,1 @@
+        -      - { uses: actions/checkout@v4.1.7, #{before} }
+        +      - { uses: actions/checkout@v4.2.0, #{after_edit} }
+        """
+
+        decision =
+          PA.classify(
+            pr([file(".github/workflows/ci.yml", patch)],
+              resolution: %{
+                {"actions/checkout", "v4.1.7"} => "4.1.7",
+                {"actions/checkout", "v4.2.0"} => "4.2.0"
+              }
+            ),
+            @policy
+          )
+
+        refute decision.pin_only
+        assert decision.disposition == :flag
+      end
+    end
+
+    test "quoted flow pins and their comments are pin-only, punctuation alone is not" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - [{ "uses": "actions/checkout@v4.1.7" }, { 'uses': 'actions/cache@v4' }] # old
+      +      - [{ "uses": "actions/checkout@v4.2.0" }, { 'uses': 'actions/cache@v5' }] # new
+      """
+
+      assert PA.pin_lines_only?(file(".github/workflows/ci.yml", patch))
+      refute PA.pin_lines_only?(file(".github/workflows/ci.yml", "@@ -1 +1 @@\n- []\n+ {}\n"))
+    end
+
     test "the poisoned SHA is found on the added side only" do
       patch = codeql_patch(@good, @poison)
       sites = PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy)

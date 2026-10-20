@@ -485,8 +485,6 @@ defmodule Hypatia.Rules.PrAutomerge do
     end
   end
 
-  defp pin_line?(line), do: parse_pin(line) != nil
-
   # One `uses:` site anywhere on a line, bounded on the left so `reuses:` is
   # not one. Matched against the MASKED line (see mask_scalars/1).
   @pin_site_re ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
@@ -511,15 +509,39 @@ defmodule Hypatia.Rules.PrAutomerge do
   def parse_pins(line) do
     masked = line |> String.replace(~r/^[-+]/, "") |> mask_scalars()
 
+    masked
+    |> pin_sites()
+    |> Enum.map(fn [_full, {a_at, a_len}, {r_at, r_len}] ->
+      action = binary_part(masked, a_at, a_len)
+      %{action: action, base: action_base(action), ref: binary_part(masked, r_at, r_len)}
+    end)
+  end
+
+  defp pin_sites(masked) do
     @pin_site_re
     |> Regex.scan(masked, return: :index, capture: :all)
     |> Enum.filter(fn [_full, {action_at, _} | _] ->
       structural_site?(binary_part(masked, 0, action_at))
     end)
-    |> Enum.map(fn [_full, {a_at, a_len}, {r_at, r_len}] ->
-      action = binary_part(masked, a_at, a_len)
-      %{action: action, base: action_base(action), ref: binary_part(masked, r_at, r_len)}
-    end)
+  end
+
+  defp pin_line?(line) do
+    masked = line |> String.replace(~r/^[-+]/, "") |> mask_scalars()
+    sites = pin_sites(masked)
+
+    remaining =
+      sites
+      |> Enum.reverse()
+      |> Enum.reduce(masked, fn [{at, len}, {action_at, _}, _], rest ->
+        # The site match includes an opening value quote but ends at the ref.
+        # Remove its matching closing quote along with the pin.
+        quote = binary_part(masked, action_at - 1, 1)
+        closing = binary_part(rest, at + len, min(1, byte_size(rest) - at - len))
+        len = if quote in ["\"", "'"] and closing == quote, do: len + 1, else: len
+        binary_part(rest, 0, at) <> binary_part(rest, at + len, byte_size(rest) - at - len)
+      end)
+
+    sites != [] and Regex.match?(~r/^[\s\-\[\]{},]*$/, remaining)
   end
 
   # `prefix` is the masked line up to the site's action.
