@@ -112,6 +112,44 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert [delta] = decision.deltas
       assert delta.source == "body-claim"
     end
+
+    test "a claim for one action is never borrowed by another of the same basename" do
+      patch = """
+      @@ -1,2 +1,2 @@
+      -      - uses: acme/setup@v1.0.0
+      -      - uses: other/setup@v3.0.0
+      +      - uses: acme/setup@v1.1.0
+      +      - uses: other/setup@v4.0.0
+      """
+
+      body = "Bumps [acme/setup](https://github.com/acme/setup) from 1.0.0 to 1.1.0.\n"
+      f = file(".github/workflows/ci.yml", patch)
+      deltas = PA.pin_deltas([f], %{}, PA.body_claims(body))
+
+      assert %{status: :ok, source: "body-claim"} =
+               Enum.find(deltas, &(&1.action == "acme/setup"))
+
+      assert %{status: :unresolved} = Enum.find(deltas, &(&1.action == "other/setup"))
+
+      # A claim naming only the basename belongs to neither action.
+      bare = PA.body_claims("Bumps [setup](https://example.com) from 1.0.0 to 1.1.0.\n")
+      assert Enum.all?(PA.pin_deltas([f], %{}, bare), &(&1.status == :unresolved))
+    end
+
+    test "a claim is checked against whichever endpoint resolved" do
+      resolution = %{{"actions/checkout", "v4.1.7"} => "1.0.0"}
+
+      body =
+        "Bumps [actions/checkout](https://github.com/actions/checkout) from 2.0.0 to 2.1.0.\n"
+
+      f = file(".github/workflows/ci.yml", checkout_patch("v4.1.7", "v4.2.0"))
+
+      assert [%{status: :conflict}] = PA.pin_deltas([f], resolution, PA.body_claims(body))
+
+      # Control: a claim that agrees with the resolved endpoint is taken.
+      agreeing = String.replace(body, "from 2.0.0 to 2.1.0", "from 1.0.0 to 1.1.0")
+      assert [%{status: :ok}] = PA.pin_deltas([f], resolution, PA.body_claims(agreeing))
+    end
   end
 
   describe "classify/2 — PA002, majors are never armed" do
@@ -162,7 +200,53 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert decision.pool == "P1"
     end
 
-    test "poison alongside a wanted update is excised, then merged" do
+    test "an upper-case spelling of a denylisted SHA is the same poison" do
+      decision =
+        Hypatia.Rules.PrAutomerge.classify(
+          pr([
+            file(".github/workflows/codeql.yml", codeql_patch(@good, String.upcase(@poison)))
+          ]),
+          @policy
+        )
+
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
+    test "an unquoted flow-style pin ends at its delimiter: PA001 sees the poison" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - { uses: github/codeql-action/init@#{@good}, with: { languages: rust } }
+      +      - { uses: github/codeql-action/init@#{@poison}, with: { languages: rust } }
+      """
+
+      decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
+
+      assert [_] = decision.poison_sites
+      refute decision.pin_only
+      # The `with:` beside the pin makes the line more than a pin line, so
+      # what an excision would leave is not known to be mergeable: flagged.
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+    end
+
+    test "a quoted uses: key and a quoted value are still a pin PA001 sees" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - "uses": "github/codeql-action/init@#{@good}"
+      +      - "uses": "github/codeql-action/init@#{@poison}"
+      """
+
+      decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
+
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
+    test "poison alongside a change that would be flagged on its own is flagged, not armed" do
+      # A `permissions:` edit is no pin bump (MGX-001): without the poison this
+      # PR is not_unambiguously_classifiable, and finding the poison must not
+      # upgrade it to an armed excise-then-merge.
       patch = """
       @@ -1,4 +1,4 @@
       -      - uses: github/codeql-action/init@#{@good} # v4.38.0
@@ -174,9 +258,51 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       decision = PA.classify(pr([file(".github/workflows/codeql.yml", patch)]), @policy)
 
-      assert decision.disposition == :excise_poison_then_merge
-      assert decision.blocked_by == "introduces_denylisted_pin_alongside_wanted_updates"
+      assert decision.disposition == :flag
+      assert decision.safety == "flag"
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+      assert decision.remainder_blocked_by == "not_unambiguously_classifiable"
       refute decision.pin_only
+    end
+
+    test "poison alongside a wanted lockfile update is excised, then merged" do
+      # The workflow's only change is the poisoned pin: excised, it drops out,
+      # and what remains is a lockfile-only bump that arms on its own.
+      decision =
+        PA.classify(
+          pr([
+            file(".github/workflows/codeql.yml", codeql_patch(@good, @poison)),
+            file("mix.lock", "@@ -1,1 +1,1 @@\n-  a 1.0.0\n+  a 1.0.1\n")
+          ]),
+          @policy
+        )
+
+      assert decision.disposition == :excise_poison_then_merge
+      assert decision.safety == "arm_auto"
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_wanted_updates"
+    end
+
+    test "an unresolved bump sharing a line with a blocked pin, beside a source edit, is flagged" do
+      # Codex's shape: excision leaves the unresolved ordinary bump and the
+      # source file, neither of which arms on its own.
+      patch = """
+      @@ -1,1 +1,1 @@
+      -    steps: [ { uses: actions/cache@v4.0.0 }, { uses: github/codeql-action/init@#{@good} } ]
+      +    steps: [ { uses: actions/cache@v4.1.0 }, { uses: github/codeql-action/init@#{@poison} } ]
+      """
+
+      decision =
+        PA.classify(
+          pr([
+            file(".github/workflows/ci.yml", patch),
+            file("lib/runtime.ex", "@@ -1,1 +1,1 @@\n-x = 1\n+x = 2\n")
+          ]),
+          @policy
+        )
+
+      assert decision.safety == "flag"
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+      assert decision.remainder_blocked_by == "pin_delta_unresolvable"
     end
 
     test "poison plus a major bump closes both reasons" do
@@ -269,6 +395,45 @@ defmodule Hypatia.Rules.PrAutomergeTest do
   end
 
   describe "poison_sites/2 and pin_lines_only?/1" do
+    test "a flow pin with neighbouring input, condition or environment edits is not pin-only" do
+      for {before, after_edit} <- [
+            {"with: { languages: rust }", "with: { languages: javascript }"},
+            {"if: false", "if: true"},
+            {"env: { MODE: test }", "env: { MODE: deploy }"}
+          ] do
+        patch = """
+        @@ -1,1 +1,1 @@
+        -      - { uses: actions/checkout@v4.1.7, #{before} }
+        +      - { uses: actions/checkout@v4.2.0, #{after_edit} }
+        """
+
+        decision =
+          PA.classify(
+            pr([file(".github/workflows/ci.yml", patch)],
+              resolution: %{
+                {"actions/checkout", "v4.1.7"} => "4.1.7",
+                {"actions/checkout", "v4.2.0"} => "4.2.0"
+              }
+            ),
+            @policy
+          )
+
+        refute decision.pin_only
+        assert decision.disposition == :flag
+      end
+    end
+
+    test "quoted flow pins and their comments are pin-only, punctuation alone is not" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - [{ "uses": "actions/checkout@v4.1.7" }, { 'uses': 'actions/cache@v4' }] # old
+      +      - [{ "uses": "actions/checkout@v4.2.0" }, { 'uses': 'actions/cache@v5' }] # new
+      """
+
+      assert PA.pin_lines_only?(file(".github/workflows/ci.yml", patch))
+      refute PA.pin_lines_only?(file(".github/workflows/ci.yml", "@@ -1 +1 @@\n- []\n+ {}\n"))
+    end
+
     test "the poisoned SHA is found on the added side only" do
       patch = codeql_patch(@good, @poison)
       sites = PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy)
@@ -296,6 +461,411 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       patch = codeql_patch(@poison, @good)
 
       assert PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy) == []
+    end
+
+    test "a re-pinned value under an unchanged `uses:` key is the site it continues" do
+      # The key is context; only the reference on the line below it changes.
+      patch = """
+      @@ -1,3 +1,3 @@
+             - uses:
+               # pinned
+      -          github/codeql-action/init@#{@good}
+      +          github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/codeql.yml", patch)
+      assert [%{denylist_id: "PIN-001"}] = PA.poison_sites([f], @policy)
+      assert PA.pin_lines_only?(f)
+
+      # Control: the same value line under a key that is not `uses:` is data.
+      data = String.replace(patch, "       - uses:", "       - run:")
+      assert PA.poison_sites([file(".github/workflows/codeql.yml", data)], @policy) == []
+    end
+
+    test "every site of a flow-sequence line is inspected, not only the first" do
+      # The first step is an ordinary resolvable bump; the second is the
+      # poison. Judging the line by its first pin armed automerge.
+      patch = """
+      @@ -1,1 +1,1 @@
+      -        { uses: actions/checkout@v4.1.6 }, { uses: github/codeql-action/init@#{@good} },
+      +        { uses: actions/checkout@v4.1.7 }, { uses: github/codeql-action/init@#{@poison} },
+      """
+
+      f = file(".github/workflows/codeql.yml", patch)
+      assert [site] = PA.poison_sites([f], @policy)
+      assert site.denylist_id == "PIN-001"
+
+      decision =
+        PA.classify(
+          pr([f],
+            resolution: %{
+              {"actions/checkout", "v4.1.6"} => "4.1.6",
+              {"actions/checkout", "v4.1.7"} => "4.1.7"
+            }
+          ),
+          @policy
+        )
+
+      assert decision.pin_only
+      assert decision.disposition == :close_poison_only
+      assert decision.blocked_by == "introduces_denylisted_pin"
+    end
+
+    test "every flow-sequence site is a delta of its own" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -      - { uses: actions/checkout@v4.1.6 }, { uses: actions/cache@v4.0.0 }
+      +      - { uses: actions/checkout@v4.1.7 }, { uses: actions/cache@v5.0.0 }
+      """
+
+      deltas = PA.pin_deltas([file(".github/workflows/ci.yml", patch)], %{}, [])
+      assert Enum.map(deltas, & &1.action) == ["actions/checkout", "actions/cache"]
+    end
+
+    test "a mixed-case action spelling meets its lower-case denylist entry" do
+      patch =
+        codeql_patch(@good, @poison)
+        |> String.replace("github/codeql-action", "GitHub/CodeQL-Action")
+
+      assert [site] = PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy)
+      assert site.denylist_id == "PIN-001"
+    end
+
+    test "a one-line flow sequence with a major bump and a poison pin closes both reasons" do
+      patch = """
+      @@ -1,1 +1,1 @@
+      -    steps: [ { uses: actions/checkout@v4.1.7 }, { uses: github/codeql-action/init@#{@good} } ]
+      +    steps: [ { uses: actions/checkout@v7.0.1 }, { uses: github/codeql-action/init@#{@poison} } ]
+      """
+
+      resolution = %{
+        {"actions/checkout", "v4.1.7"} => "4.1.7",
+        {"actions/checkout", "v7.0.1"} => "7.0.1"
+      }
+
+      decision =
+        PA.classify(
+          pr([file(".github/workflows/ci.yml", patch)], resolution: resolution),
+          @policy
+        )
+
+      assert decision.major_delta
+      assert decision.disposition == :close_poison_and_majors
+    end
+
+    test "a pin written inside a run: | script is text, not a site" do
+      in_hunk = """
+      @@ -1,4 +1,4 @@
+             - run: |
+                 cat > fixture.yml <<'EOF'
+      -          - uses: github/codeql-action/init@#{@good}
+      +          - uses: github/codeql-action/init@#{@poison}
+                 EOF
+      """
+
+      f = file(".github/workflows/ci.yml", in_hunk)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+
+      free_text = """
+      @@ -9,1 +9,1 @@
+      -          echo done
+      +          echo { uses: github/codeql-action/init@#{@poison} }
+      """
+
+      assert PA.poison_sites([file(".github/workflows/ci.yml", free_text)], @policy) == []
+    end
+
+    test "a diff of pin lines that adds or swaps an action is not pin-only, and is not armed" do
+      added = """
+      @@ -3,2 +3,3 @@
+             steps: [
+      +        { uses: owner/action@main },
+               { uses: actions/checkout@v7.0.1 },
+      """
+
+      swapped = """
+      @@ -1,1 +1,1 @@
+      -      - uses: actions/checkout@v7.0.1
+      +      - uses: evil/checkout@v7.0.1
+      """
+
+      for patch <- [added, swapped] do
+        f = file(".github/workflows/ci.yml", patch)
+        refute PA.pin_lines_only?(f)
+        assert PA.classify(pr([f]), @policy).safety == "flag"
+      end
+
+      # Control: the same action moved to another ref is a re-pin.
+      assert PA.pin_lines_only?(
+               file(".github/workflows/ci.yml", checkout_patch("v7.0.0", "v7.0.1"))
+             )
+    end
+
+    test "a pin inside an input's mapping is data, not a site" do
+      line = "+        with: { uses: github/codeql-action/init@#{@poison} }"
+      assert PA.parse_pins(line) == []
+    end
+
+    test "a pin quoted inside another scalar or a comment is not a site" do
+      line =
+        ~s(+      - { name: "see uses: github/codeql-action/init@#{@poison}", uses: actions/checkout@v4.1.7 } # uses: x/y@#{@poison})
+
+      assert [%{action: "actions/checkout", ref: "v4.1.7"}] = PA.parse_pins(line)
+    end
+
+    test "repeated sites of one action pair one-to-one, so the second site's major bump counts" do
+      # The first checkout stays at v4.1.7 and the second moves to v7.0.1.
+      # Pairing both removals with the first addition (the unchanged one)
+      # hid the major bump and armed an excision instead of a close.
+      patch = """
+      @@ -1,1 +1,1 @@
+      -    steps: [ { uses: actions/checkout@v4.1.7 }, { uses: actions/checkout@v4.1.7 }, { uses: github/codeql-action/init@#{@good} } ]
+      +    steps: [ { uses: actions/checkout@v4.1.7 }, { uses: actions/checkout@v7.0.1 }, { uses: github/codeql-action/init@#{@poison} } ]
+      """
+
+      resolution = %{
+        {"actions/checkout", "v4.1.7"} => "4.1.7",
+        {"actions/checkout", "v7.0.1"} => "7.0.1"
+      }
+
+      f = file(".github/workflows/ci.yml", patch)
+
+      assert [%{action: "actions/checkout", from: "4.1.7", to: "7.0.1", major?: true}] =
+               f
+               |> List.wrap()
+               |> PA.pin_deltas(resolution, [])
+               |> Enum.filter(&(&1.action == "actions/checkout"))
+
+      decision = PA.classify(pr([f], resolution: resolution), @policy)
+      assert decision.disposition == :close_poison_and_majors
+    end
+
+    test "a hunk that opens inside a script, header out of view, flags a poison pin rather than closing" do
+      # More than three lines below `run: |`, the hunk shows no header: the
+      # pin may be fixture text. Its neighbours at its own indentation are
+      # shell, so the context is unknown and the PR goes to an owner.
+      patch = """
+      @@ -40,3 +40,3 @@
+                 cat > fixture.yml <<'EOF'
+      -          - uses: github/codeql-action/init@#{@good}
+      +          - uses: github/codeql-action/init@#{@poison}
+                 EOF
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{certain: false}] = PA.poison_sites([f], @policy)
+      refute PA.pin_lines_only?(f)
+
+      decision = PA.classify(pr([f]), @policy)
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "denylisted_pin_context_unknown"
+
+      # Control: the same change among YAML siblings is a live pin.
+      live = """
+      @@ -12,3 +12,3 @@
+             - name: Init CodeQL
+      -        uses: github/codeql-action/init@#{@good}
+      +        uses: github/codeql-action/init@#{@poison}
+               with:
+      """
+
+      live_decision = PA.classify(pr([file(".github/workflows/ci.yml", live)]), @policy)
+      assert live_decision.disposition == :close_poison_only
+    end
+
+    test "an input named uses under a step is data: no poison site, no pin-only change" do
+      patch = """
+      @@ -12,3 +12,3 @@
+             - uses: some/wrapper@v1
+               with:
+      -          uses: github/codeql-action/init@#{@good}
+      +          uses: github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+      refute PA.classify(pr([f]), @policy).disposition == :close_poison_only
+
+      # Control: the step's own key at the same depth is the pin it was.
+      live = """
+      @@ -12,3 +12,3 @@
+             - name: init
+      -        uses: github/codeql-action/init@#{@good}
+      +        uses: github/codeql-action/init@#{@poison}
+      """
+
+      assert PA.classify(pr([file(".github/workflows/ci.yml", live)]), @policy).disposition ==
+               :close_poison_only
+    end
+
+    test "a re-pinned anchor an unchanged uses: *alias runs is a poison site" do
+      patch = """
+      @@ -1,7 +1,7 @@
+       env:
+      -  BAD: &bad github/codeql-action/init@#{@good}
+      +  BAD: &bad github/codeql-action/init@#{@poison}
+       jobs:
+         a:
+           steps:
+             - uses: *bad
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{certain: true}] = PA.poison_sites([f], @policy)
+
+      decision = PA.classify(pr([f]), @policy)
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+    end
+
+    test "a step given whole as an alias makes its anchored mapping's re-pin a poison site" do
+      # The mapping is anchored in a matrix entry (data); `- *step` in the
+      # job's steps runs it.
+      for {anchor, changed} <- [
+            {"            - &step", "              uses: github/codeql-action/init@"},
+            {nil, "            - step: &step { uses: github/codeql-action/init@"}
+          ] do
+        close = if anchor, do: "", else: " }"
+        head = if anchor, do: " #{anchor}\n", else: ""
+
+        patch =
+          "@@ -1,9 +1,9 @@\n jobs:\n   a:\n     strategy:\n       matrix:\n         include:\n" <>
+            head <>
+            "-#{changed}#{@good}#{close}\n+#{changed}#{@poison}#{close}\n" <>
+            "     steps:\n       - *step\n"
+
+        f = file(".github/workflows/ci.yml", patch)
+        assert [%{certain: true}] = PA.poison_sites([f], @policy), patch
+      end
+    end
+
+    test "a uses: key under a root data key at column 0 is data: no poison site, no pin-only change" do
+      patch = """
+      @@ -1,3 +1,3 @@
+       env:
+      -  uses: github/codeql-action/init@#{@good}
+      +  uses: github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+
+      # Control: a job's own key is the pin it was.
+      job = """
+      @@ -1,4 +1,4 @@
+       jobs:
+         a:
+      -    uses: github/codeql-action/init@#{@good}
+      +    uses: github/codeql-action/init@#{@poison}
+      """
+
+      assert [%{denylist_id: "PIN-001"}] =
+               PA.poison_sites([file(".github/workflows/ci.yml", job)], @policy)
+    end
+
+    test "a re-pinned block scalar a uses: key holds is the site it resolves to" do
+      patch = """
+      @@ -1,3 +1,3 @@
+             - uses: >-
+      -          github/codeql-action/init@#{@good}
+      +          github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/codeql.yml", patch)
+      assert [%{denylist_id: "PIN-001"}] = PA.poison_sites([f], @policy)
+      assert PA.pin_lines_only?(f)
+
+      # Control: the same block scalar under `run:` is script text.
+      run = String.replace(patch, "- uses: >-", "- run: >-")
+      assert PA.poison_sites([file(".github/workflows/codeql.yml", run)], @policy) == []
+      refute PA.pin_lines_only?(file(".github/workflows/codeql.yml", run))
+    end
+
+    test "a step alias whose mapping names its action by alias makes the anchor's re-pin a poison site" do
+      patch = """
+      @@ -1,11 +1,11 @@
+       env:
+      -  BAD: &bad github/codeql-action/init@#{@good}
+      +  BAD: &bad github/codeql-action/init@#{@poison}
+       jobs:
+         a:
+           strategy:
+             matrix:
+               include:
+                 - &step
+                   uses: *bad
+           steps:
+             - *step
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{certain: true}] = PA.poison_sites([f], @policy)
+
+      # Control: with no step alias the matrix entry, alias and all, is data.
+      data = String.replace(patch, "       - *step", "       - run: echo")
+      assert PA.poison_sites([file(".github/workflows/ci.yml", data)], @policy) == []
+    end
+
+    test "a pin written with escapes is the reference it decodes to, and no plain re-pin" do
+      escaped = "\\x31" <> String.slice(@poison, 1..-1//1)
+
+      patch = """
+      @@ -1,3 +1,3 @@
+           steps:
+      -      - uses: "github/codeql-action/init@#{@good}"
+      +      - uses: "github/codeql-action/init@#{escaped}"
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{denylist_id: "PIN-001"}] = PA.poison_sites([f], @policy)
+      refute PA.pin_lines_only?(f)
+
+      # Control: the same re-pin written plainly is the pin-only change it was.
+      plain = String.replace(patch, escaped, @poison)
+      assert PA.pin_lines_only?(file(".github/workflows/ci.yml", plain))
+    end
+
+    test "a pin inside a multi-line quoted run: is text; one the hunk never closes is uncertain" do
+      # The quote opens on a context line and closes inside the hunk: every
+      # line between is string text, never a site.
+      closed = """
+      @@ -1,7 +1,7 @@
+             - run: "cat > fixture.yml <<EOF
+                 jobs:
+                   b:
+                     steps:
+      -                - uses: github/codeql-action/init@#{@good}
+      +                - uses: github/codeql-action/init@#{@poison}
+                 EOF"
+      """
+
+      f = file(".github/workflows/ci.yml", closed)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+
+      # The closing quote is past the hunk and every visible line is
+      # YAML-shaped (a fixture): the line may be text, so it is not known
+      # to be a pin, and the PR goes to an owner instead of closing.
+      cut = """
+      @@ -1,6 +1,6 @@
+             - run: "cat > fixture.yml <<EOF
+                 jobs:
+                   b:
+                     steps:
+      -                - uses: github/codeql-action/init@#{@good}
+      +                - uses: github/codeql-action/init@#{@poison}
+      """
+
+      g = file(".github/workflows/ci.yml", cut)
+      assert [%{certain: false}] = PA.poison_sites([g], @policy)
+      refute PA.pin_lines_only?(g)
+
+      decision = PA.classify(pr([g]), @policy)
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "denylisted_pin_context_unknown"
     end
   end
 

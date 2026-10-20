@@ -89,7 +89,13 @@ Every examined PR gets one line in `pr-decisions.jsonl`:
 | `blocked_by`
 | `awaiting_required_checks`, `introduces_denylisted_pin`,
   `introduces_denylisted_pin_and_major_bumps`,
-  `introduces_denylisted_pin_alongside_wanted_updates`, `major_version_delta`,
+  `introduces_denylisted_pin_alongside_wanted_updates` (armed only when what
+  remains after the excision would arm on its own),
+  `introduces_denylisted_pin_alongside_unmergeable_changes` (it would not;
+  `remainder_blocked_by` names why),
+  `denylisted_pin_context_unknown` (the hunk shows the pin among script text;
+  brain only — the shell actuator does not yet read hunk context),
+  `major_version_delta`,
   `version_claims_conflict`, `pin_delta_unresolvable`,
   `dependency_manifest_not_lockfile`, `touches_licence_requires_owner_review`,
   `repository_is_archived_cannot_merge`, `not_a_dependency_bot`,
@@ -127,11 +133,19 @@ Find every denylisted pin in an estate; with `--rewrite`, produce the
 substituted file trees ready for a branch and a PR.
 
 * Flags: `--org` (repeatable), `--policy`, `--out DIR`, `--via search|clone`,
-  `--rewrite`, `--max-repos N`.
+  `--rewrite`, `--max-repos N`, `--sample N`.
 * Artifacts under `--out`: `pin-findings.jsonl`, `pin-repair-plan.jsonl`,
   `patched/<repo>/<path>` trees; one squash PR is planned per repository
-  (`hypatia/pin-integrity-known-good`).
-* Exit: `0` clean, `1` error, `2` findings, `3` nothing to do.
+  (`hypatia/pin-integrity-known-good`), and only for a repository whose every
+  confirmed file is repairable and whose every candidate file was read. A
+  repository with a flagged sibling (an `actions.lock` entry, a fixture) or an
+  unread candidate (unreadable, or left out by `--sample`) is held for owner
+  review: repairing the workflow alone would arm a merge on a repository that
+  still carries the pin. A search that failed or came back partial may hide a
+  sibling anywhere, so then every repository is held and no plan is armed.
+* Exit: `0` clean, `1` error, `2` findings or an `INCOMPLETE` run (failed or
+  partial searches, listings or clones, unread candidates, or the limits
+  `--max-repos` and `--sample` impose), `3` nothing to do.
 * A repair that cannot be proved is a finding, not an action: the substitution
   refuses when the policy carries no `known_good_sha`, and it refuses when the
   rewrite would drop a `uses:` site.
