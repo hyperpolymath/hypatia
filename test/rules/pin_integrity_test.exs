@@ -180,6 +180,27 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert Enum.at(masked, 4) == String.trim_trailing(@real_step, "\n")
     end
 
+    test "a JSON-style flow value after a bare colon opens its quote too" do
+      content =
+        "      - {\"run\":\"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          echo end\"}\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
+    end
+
+    test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
+      states =
+        Hypatia.Rules.PinSites.line_states(
+          "- run: |\n    uses: a/b@x\n- uses: c/d@y\n- run: \"open\n  uses: e/f@z"
+        )
+
+      assert Enum.map(states, &elem(&1, 1)) == [:yaml, :text, :yaml, :yaml, :open]
+      assert List.last(states) == {"  uses: e/f@z", :open}
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

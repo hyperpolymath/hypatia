@@ -197,13 +197,14 @@ function close_pos(s, j, q,   n, c) {
   return 0
 }
 # Can a scalar start after seen? After `key: ` or a list dash (past any
-# anchor or tag), after `[`, `{` or `,` inside a flow collection, and at the
-# start of a line when the line above left a value pending (`key:`). In a
-# plain scalar (`echo it'"'"'s`) a quote opens nothing.
+# anchor or tag); inside a flow collection after `[`, `{` or `,`, and
+# directly after a `:` (JSON-style `{"run":"echo ...`); and at the start of
+# a line when the line above left a value pending (`key:`). In a plain
+# scalar (`echo it'"'"'s`) a quote opens nothing.
 function scalar_start(seen) {
   if (seen ~ /^[[:space:]]*$/) return PENDING || DEPTH > 0
   if (seen ~ /(^[[:space:]]*(-[[:space:]]+)+|:[[:space:]]+)([&!][^[:space:]]*[[:space:]]+)*$/) return 1
-  if (DEPTH > 0) return seen ~ /[{,[][[:space:]]*$/
+  if (DEPTH > 0) return seen ~ /[:{,[][[:space:]]*$/
   return 0
 }
 # Walk s from position i outside any quote (seen is what precedes it, quote
@@ -327,7 +328,8 @@ comment_column() {
       if (q == "") {
         if (c == "\"" || c == sq) q = c
         else if (c == "#" && (i == 1 || substr($0, i - 1, 1) ~ /[[:space:]]/)) { print i; exit }
-      } else if (c == q) q = ""
+      } else if (q == "\"" && c == "\\") i++
+      else if (c == q) q = ""
     }
     print 0
   }'

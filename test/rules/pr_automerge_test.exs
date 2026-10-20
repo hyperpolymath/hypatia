@@ -616,6 +616,46 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       live_decision = PA.classify(pr([file(".github/workflows/ci.yml", live)]), @policy)
       assert live_decision.disposition == :close_poison_only
     end
+
+    test "a pin inside a multi-line quoted run: is text; one the hunk never closes is uncertain" do
+      # The quote opens on a context line and closes inside the hunk: every
+      # line between is string text, never a site.
+      closed = """
+      @@ -1,7 +1,7 @@
+             - run: "cat > fixture.yml <<EOF
+                 jobs:
+                   b:
+                     steps:
+      -                - uses: github/codeql-action/init@#{@good}
+      +                - uses: github/codeql-action/init@#{@poison}
+                 EOF"
+      """
+
+      f = file(".github/workflows/ci.yml", closed)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+
+      # The closing quote is past the hunk and every visible line is
+      # YAML-shaped (a fixture): the line may be text, so it is not known
+      # to be a pin, and the PR goes to an owner instead of closing.
+      cut = """
+      @@ -1,6 +1,6 @@
+             - run: "cat > fixture.yml <<EOF
+                 jobs:
+                   b:
+                     steps:
+      -                - uses: github/codeql-action/init@#{@good}
+      +                - uses: github/codeql-action/init@#{@poison}
+      """
+
+      g = file(".github/workflows/ci.yml", cut)
+      assert [%{certain: false}] = PA.poison_sites([g], @policy)
+      refute PA.pin_lines_only?(g)
+
+      decision = PA.classify(pr([g]), @policy)
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "denylisted_pin_context_unknown"
+    end
   end
 
   describe "body_claims/1" do

@@ -137,7 +137,21 @@ defmodule Hypatia.Rules.PinSites do
   pin.
   """
   @spec mask_lines(String.t()) :: [String.t()]
-  def mask_lines(content) when is_binary(content) do
+  def mask_lines(content) when is_binary(content),
+    do: content |> line_states() |> Enum.map(&elem(&1, 0))
+
+  @doc """
+  The lines of `mask_lines/1`, each with what the reader made of it:
+  `:yaml` (structure, as written), `:text` (inside a scalar an earlier line
+  opened: a block scalar's content, or a quoted scalar's continuation — at
+  least up to its closing quote) or `:open` (after the opening quote of a
+  quoted scalar the text never closes, returned as written: what it is
+  cannot be said from these lines alone). A diff hunk, which shows a few
+  lines of a file, is read this way too: a hunk that cuts a quoted scalar
+  off leaves its lines `:open`.
+  """
+  @spec line_states(String.t()) :: [{String.t(), :yaml | :text | :open}]
+  def line_states(content) when is_binary(content) do
     lines = String.split(content, "\n")
 
     {masked, st} =
@@ -147,16 +161,19 @@ defmodule Hypatia.Rules.PinSites do
         {line, n}, st -> mask_file_line(line, n, st)
       end)
 
-    if st.q,
-      do: Enum.take(masked, st.opened + 1) ++ Enum.drop(lines, st.opened + 1),
-      else: masked
+    if st.q do
+      Enum.take(masked, st.opened + 1) ++
+        Enum.map(Enum.drop(lines, st.opened + 1), &{&1, :open})
+    else
+      masked
+    end
   end
 
   # Inside a block scalar: a blank line or one deeper than the key is its
   # content; anything else ends it.
   defp mask_file_line(line, n, %{block: col} = st) when is_integer(col) do
     if String.trim(line) == "" or indent_of(line) > col,
-      do: {String.duplicate("x", byte_size(line)), st},
+      do: {{String.duplicate("x", byte_size(line)), :text}, st},
       else: mask_file_line(line, n, %{st | block: nil})
   end
 
@@ -171,7 +188,7 @@ defmodule Hypatia.Rules.PinSites do
     rest = binary_part(line, cont, byte_size(line) - cont)
     view = String.duplicate("x", cont) <> rest
     st = if st.q, do: st, else: walk(rest, String.duplicate("x", cont), n, st)
-    {view, st}
+    {{view, if(cont > 0, do: :text, else: :yaml)}, st}
   end
 
   # The byte offset of the quote that closes a `q` scalar in `line` from
@@ -250,11 +267,13 @@ defmodule Hypatia.Rules.PinSites do
   # tag (`key: &a [`, `- !!str "`).
   defp value_start?(seen), do: Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:[&!]\S*\s+)*$/, seen)
 
+  # Inside a flow collection a scalar also starts after `[`, `{` or `,`, and
+  # directly after a `:`, JSON-style (`{"run":"echo ...`).
   defp scalar_start?(seen, st) do
     cond do
       Regex.match?(~r/^\s*$/, seen) -> st.pending or st.depth > 0
       Regex.match?(~r/(?:^\s*(?:-\s+)+|:\s+)(?:[&!]\S*\s+)*$/, seen) -> true
-      st.depth > 0 -> Regex.match?(~r/[\[{,]\s*$/, seen)
+      st.depth > 0 -> Regex.match?(~r/[\[{,:]\s*$/, seen)
       true -> false
     end
   end

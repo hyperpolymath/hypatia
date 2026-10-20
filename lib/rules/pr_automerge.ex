@@ -587,13 +587,16 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   # Every changed line of a patch as `{line, scalar?, certain?}`.
   #
-  # `scalar?`: the line sits inside a block scalar (`run: |`, `script: >-`)
-  # on its own side of the diff, as far as the hunk shows — the context and
-  # changed lines of each side are read in order, and a `key: |` line opens
-  # a scalar that runs while lines are indented deeper than its key. A pin
+  # `scalar?`: the line sits inside a scalar an earlier line of its own side
+  # opened, as far as the hunk shows — a block scalar (`run: |`,
+  # `script: >-`) or a quoted one continued over lines (`- run: "echo` ...
+  # `done"`). Each side's context and changed lines are read in order by
+  # `PinSites.line_states/1`, the reader PI001 reads a file with. A pin
   # written inside a script is text.
   #
-  # `certain?`: the hunk does not show the line among script text. A hunk
+  # `certain?`: the hunk does not show the line among script text. A line
+  # after an opening quote the hunk never shows closed is not certain: the
+  # scalar may run on past the hunk. A hunk
   # that starts inside a long `run: |` has no header to see, so the line's
   # YAML ancestry is unknown; the context around it says which. Every other
   # line of its side at its indentation or shallower — its siblings and
@@ -634,32 +637,34 @@ defmodule Hypatia.Rules.PrAutomerge do
   end
 
   # One side of a hunk (context lines plus the changed lines of `mark`), in
-  # order, as `{hunk_index, text, scalar?}`.
+  # order, as `{hunk_index, text, state}` — `state` as
+  # `PinSites.line_states/1` reads the side: `:yaml`, `:text` or `:open`.
   defp side_view(hunk, mark) do
-    hunk
-    |> Enum.with_index()
-    |> Enum.filter(fn {line, _} ->
-      String.starts_with?(line, mark) or String.starts_with?(line, " ") or line == ""
-    end)
-    |> Enum.map_reduce(nil, fn {line, i}, state ->
-      text = String.slice(line, 1..-1//1)
-      {inside?, state} = scalar_step(state, text)
-      {{i, text, inside?}, state}
-    end)
-    |> elem(0)
+    entries =
+      hunk
+      |> Enum.with_index()
+      |> Enum.filter(fn {line, _} ->
+        String.starts_with?(line, mark) or String.starts_with?(line, " ") or line == ""
+      end)
+      |> Enum.map(fn {line, i} -> {i, String.slice(line, 1..-1//1)} end)
+
+    states = entries |> Enum.map_join("\n", &elem(&1, 1)) |> PinSites.line_states()
+
+    Enum.zip_with(entries, states, fn {i, text}, {_, state} -> {i, text, state} end)
   end
 
   defp line_status(line, i, view) do
-    {before, [{_, text, scalar?} | rest]} = Enum.split_while(view, fn {j, _, _} -> j != i end)
+    {before, [{_, text, state} | rest]} = Enum.split_while(view, fn {j, _, _} -> j != i end)
     indent = indent_of(text)
 
     certain? =
-      (before ++ rest)
-      |> Enum.reject(fn {_, t, inside?} -> inside? or String.trim(t) == "" end)
-      |> Enum.filter(fn {_, t, _} -> indent_of(t) <= indent end)
-      |> Enum.all?(fn {_, t, _} -> yaml_like?(t) end)
+      state != :open and
+        (before ++ rest)
+        |> Enum.reject(fn {_, t, s} -> s == :text or String.trim(t) == "" end)
+        |> Enum.filter(fn {_, t, _} -> indent_of(t) <= indent end)
+        |> Enum.all?(fn {_, t, _} -> yaml_like?(t) end)
 
-    {line, scalar?, certain?}
+    {line, state == :text, certain?}
   end
 
   defp indent_of(text), do: String.length(text) - String.length(String.trim_leading(text, " "))
@@ -673,27 +678,10 @@ defmodule Hypatia.Rules.PrAutomerge do
       Regex.match?(~r/^-(?:\s|$)/, t) or Regex.match?(~r/^[{}\[\],]/, t)
   end
 
-  # One line of one side: is it inside the open block scalar (`state` is the
-  # column of the key that opened it, or nil), and what is open after it?
-  defp scalar_step(state, text) do
-    indent = indent_of(text)
-    inside? = state != nil and (String.trim(text) == "" or indent > state)
-
-    cond do
-      inside? ->
-        {true, state}
-
-      Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, PinSites.mask(text)) ->
-        {false, text |> String.replace(~r/[^\s-].*$/, "") |> String.length()}
-
-      true ->
-        {false, nil}
-    end
-  end
-
   defp added_lines(file), do: for({line, _} <- added_entries(file), do: line)
 
-  # Added lines outside block scalars, each with its certainty.
+  # Added lines outside block and continued quoted scalars, each with its
+  # certainty.
   defp added_entries(file),
     do:
       for(
