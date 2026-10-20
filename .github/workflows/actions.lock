@@ -14,7 +14,7 @@ workflows:
         - 'actions/setup-node@v7.1.0'
         - 'actions/upload-artifact@v7.0.2'
         - 'dtolnay/rust-toolchain@v1'
-        - 'taiki-e/install-action@v2.87.28'
+        - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/ci.yml':
@@ -26,7 +26,7 @@ workflows:
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.87.28'
+        - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
@@ -106,7 +106,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'github/codeql-action@v4.38.2'
         - 'gitleaks/gitleaks-action@v3.0.0'
-        - 'taiki-e/install-action@v2.87.28'
+        - 'taiki-e/install-action@v2.87.29'
         - 'trufflesecurity/trufflehog@v3.99.2'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
@@ -118,11 +118,11 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.2'
-        - 'taiki-e/install-action@v2.87.28'
+        - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
-        - 'actions/setup-java@v6.0.1'
+        - 'actions/setup-java@v6.1.0'
         - 'actions/upload-artifact@v7.0.2'
     '.github/workflows/zig.yml':
         - 'actions/cache@v6.1.0'
@@ -190,9 +190,9 @@ dependencies:
         commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
         owner_id: 44036562
         repo_id: 192626254
-    'actions/setup-java@v6.0.1':
-        ref: 'v6.0.1'
-        commit: 'sha1-de7274f081f381c8f8158605e0321c36c376e2e6'
+    'actions/setup-java@v6.1.0':
+        ref: 'v6.1.0'
+        commit: 'sha1-b843ebf9b913146b38da2eaa7aeddf76074ae1ad'
         owner_id: 44036562
         repo_id: 196057608
     'actions/setup-node@v7.1.0':
@@ -395,9 +395,9 @@ dependencies:
         commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.87.28':
-        ref: 'v2.87.28'
-        commit: 'sha1-1168f6810a3cb30a3514bf5756a3b7f0422c6df8'
+    'taiki-e/install-action@v2.87.29':
+        ref: 'v2.87.29'
+        commit: 'sha1-8cca0918f8471c33515202b73f56ab27f2bed283'
         owner_id: 43724913
         repo_id: 442947557
     'trufflesecurity/trufflehog@v3.99.2':
