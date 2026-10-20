@@ -1100,7 +1100,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
       {credentialed, token_writes} =
         content
         |> writing_job_bodies()
-        |> Enum.split_with(&own_credential_job?/1)
+        |> Enum.split_with(fn {_body, credentialed?} -> credentialed? end)
+
+      credentialed = Enum.map(credentialed, &elem(&1, 0))
+      token_writes = Enum.map(token_writes, &elem(&1, 0))
 
       masked_credentialed =
         if Enum.any?(credentialed, &masked_write?/1),
@@ -1111,27 +1114,39 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end)
   end
 
-  # Bodies of the jobs that perform a write. A file whose jobs the extractor
-  # cannot split is judged as one body, as it was before the per-job split.
+  # `{body, credentialed?}` for each job that performs a write. A job is
+  # credentialed by its own body or by a workflow-level `env:` it inherits.
+  # A file whose jobs the extractor cannot split is judged as one body and is
+  # never credentialed: one job's PAT must not excuse another job's write.
   defp writing_job_bodies(content) do
-    bodies =
-      case extract_job_blocks(content) do
-        [] -> [content]
-        jobs -> Enum.map(jobs, fn {_id, _no, body} -> body end)
-      end
+    case extract_job_blocks(content) do
+      [] ->
+        if performs_contents_write?(content), do: [{content, false}], else: []
 
-    Enum.filter(bodies, &performs_contents_write?/1)
+      jobs ->
+        inherited? = own_credential_job?(workflow_preamble(content))
+
+        for {_id, _no, body} <- jobs, performs_contents_write?(body) do
+          {body, inherited? or own_credential_job?(body)}
+        end
+    end
+  end
+
+  # Everything above the top-level `jobs:` key (name, on, permissions, env).
+  defp workflow_preamble(content) do
+    content |> String.split(~r/^jobs:/m, parts: 2) |> hd()
   end
 
   # `token:` / `GH_TOKEN:` / `GITHUB_TOKEN:` set to a secret other than
-  # `secrets.GITHUB_TOKEN`, or to a token minted by an earlier step.
-  @own_credential ~r/^[ \t]*(?:-[ \t]+)?(?:token|GH_TOKEN|GITHUB_TOKEN):[ \t]*["']?\$\{\{\s*(?:secrets\.(?!GITHUB_TOKEN\b)[A-Za-z_][A-Za-z0-9_]*|steps\.[A-Za-z0-9_-]+\.outputs\.token)\s*\}\}/m
+  # `secrets.GITHUB_TOKEN` (dot or index form), or to a step-minted token.
+  @own_credential ~r/^[ \t]*(?:-[ \t]+)?(?:token|GH_TOKEN|GITHUB_TOKEN):[ \t]*["']?\$\{\{\s*(?:secrets\.(?!GITHUB_TOKEN\b)[A-Za-z_][A-Za-z0-9_]*|secrets\[\s*['"](?!GITHUB_TOKEN['"])[A-Za-z_][A-Za-z0-9_]*['"]\s*\]|steps\.[A-Za-z0-9_-]+\.outputs\.token)\s*\}\}/m
 
   @doc """
   Return true when a job body supplies its own write credential instead of
   relying on `GITHUB_TOKEN`: `token:` (e.g. on `actions/checkout`), `GH_TOKEN:`
-  or `GITHUB_TOKEN:` set to a secret other than `secrets.GITHUB_TOKEN`, or to a
-  step-minted `steps.<id>.outputs.token`.
+  or `GITHUB_TOKEN:` set to a secret other than `secrets.GITHUB_TOKEN` (as
+  `secrets.NAME` or `secrets['NAME']`), or to a step-minted
+  `steps.<id>.outputs.token`.
 
   Approximate in the safe direction for WH013: a job that sets a PAT and then
   writes with `GITHUB_TOKEN` anyway is not reported as starved.
@@ -1237,9 +1252,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # command `||`-chained into a warning or a no-op. AGENTS.md §5 — never
   # `2>/dev/null` the thing under test.
   @write_masks [
-    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*2>\s*\/dev\/null/,
-    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*\|\|\s*(?:true|:)\s*$/m,
-    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge))[^\n]*\|\|\s*echo/
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*2>\s*\/dev\/null/,
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*(?:true|:)\s*$/m,
+    ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*echo/
   ]
 
   @doc """
@@ -1352,7 +1367,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
       Enum.with_index(lines, 1)
       |> Enum.reduce({[], in_jobs?, jobs_indent, nil}, fn
         {line, _no}, {acc, false, _ji, _current} ->
-          if Regex.match?(~r/^jobs:\s*$/, line) do
+          if Regex.match?(~r/^jobs:\s*(?:#.*)?$/, line) do
             {acc, true, nil, nil}
           else
             {acc, false, nil, nil}
