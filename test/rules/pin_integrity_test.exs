@@ -461,6 +461,59 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert [%{line: 2}] = PI.pi001_denylisted_pin(flow, @policy)
     end
 
+    test "a block uses: key under no step or job is data, not a site" do
+      # An input named `uses` is the step's data, as `with: { uses: ... }`
+      # is: PI001 does not report it and the repair leaves it as is.
+      input =
+        "jobs:\n  b:\n    steps:\n      - uses: some/wrapper@v1\n        with:\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(input, @policy) == []
+      assert {:ok, ^input, []} = PI.substitute_denylisted_pins(input, @policy)
+
+      # Controls: a step's own key, a job's own key, a composite action's
+      # step, and a line whose ancestry the file does not show (judged on
+      # its own, as before).
+      step =
+        "jobs:\n  b:\n    steps:\n      - name: init\n        uses: github/codeql-action/init@#{@poison}\n"
+
+      job = "jobs:\n  b:\n    uses: github/codeql-action/init@#{@poison}\n"
+
+      composite =
+        "runs:\n  using: composite\n  steps:\n  - uses: github/codeql-action/init@#{@poison}\n"
+
+      fragment = "      - uses: github/codeql-action/init@#{@poison}\n"
+
+      for {text, line} <- [{step, 5}, {job, 3}, {composite, 4}, {fragment, 1}] do
+        assert [%{line: ^line}] = PI.pi001_denylisted_pin(text, @policy), text
+      end
+    end
+
+    test "an input named uses holds no site below its key or through its alias" do
+      input =
+        "jobs:\n  b:\n    steps:\n      - uses: some/wrapper@v1\n        with:\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n"
+
+      continued = String.replace(input, "uses: github/", "uses:\n            github/")
+
+      aliased =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison}\n" <>
+          String.replace(input, "uses: github/codeql-action/init@#{@poison}", "uses: *bad")
+
+      assert PI.pi001_denylisted_pin(continued, @policy) == []
+      assert PI.pi001_denylisted_pin(aliased, @policy) == []
+    end
+
+    test "a list item is a step only in a job's steps:" do
+      # A sequence another key holds, and a `steps:` inside a step's input.
+      listed =
+        "jobs:\n  b:\n    steps:\n      - uses: some/runner@v1\n        with:\n" <>
+          "          list:\n            - uses: github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(listed, @policy) == []
+      assert PI.pi001_denylisted_pin(String.replace(listed, "list:", "steps:"), @policy) == []
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

@@ -87,11 +87,15 @@ defmodule Hypatia.Rules.PinIntegrity do
     masked = PinSites.mask_lines(content)
     prefixes = PinSites.flow_prefixes(content)
     numbered = masked |> Enum.zip(prefixes) |> Enum.with_index(1)
+    # A block `uses:` key the indentation above it puts under no step or job
+    # (an input of that name, `with:` then `uses: ...`) holds data: no site
+    # on its line, below it, or through its alias.
+    data = PinSites.data_uses_lines(content)
 
     # A `uses:` whose reference continues below it — past any blank or
     # comment-only lines — is a site on the value's line.
     continued =
-      for {_key, number, site} <- PinSites.continuations(masked) do
+      for {key, number, site} <- PinSites.continuations(masked), key not in data do
         next = Enum.at(masked, number - 1)
         site_entry(site, number, next |> PinSites.comment() |> String.trim())
       end
@@ -99,7 +103,9 @@ defmodule Hypatia.Rules.PinIntegrity do
     # A `uses: *name` runs the reference the anchor holds: its site is the
     # anchor's value, where a repair rewrites it (every alias with it).
     aliased =
-      for %{anchor_line: number, site: site} <- PinSites.alias_sites(masked, prefixes) do
+      for %{line: alias_line, anchor_line: number, site: site} <-
+            PinSites.alias_sites(masked, prefixes),
+          alias_line not in data do
         site_entry(
           site,
           number,
@@ -108,6 +114,7 @@ defmodule Hypatia.Rules.PinIntegrity do
       end
 
     numbered
+    |> Enum.reject(fn {_, number} -> number in data end)
     |> Enum.flat_map(fn {{line, prefix}, number} -> line_sites(line, number, prefix) end)
     |> Kernel.++(continued)
     |> Kernel.++(aliased)

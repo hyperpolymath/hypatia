@@ -609,7 +609,9 @@ defmodule Hypatia.Rules.PrAutomerge do
   # `script: >-`) or a quoted one continued over lines (`- run: "echo` ...
   # `done"`). Each side's context and changed lines are read in order by
   # `PinSites.line_states/1`, the reader PI001 reads a file with. A pin
-  # written inside a script is text.
+  # written inside a script is text. So is a block `uses:` key the side's
+  # indentation shows under no step or job — an input of that name (`with:`
+  # then `uses: ...`, `PinSites.data_uses_lines/1`): data, not a pin line.
   #
   # `certain?`: the hunk does not show the line among script text. A line
   # after an opening quote the hunk never shows closed is not certain: the
@@ -661,7 +663,8 @@ defmodule Hypatia.Rules.PrAutomerge do
   end
 
   # The continued `uses:` values of one side of a hunk, as
-  # `%{hunk_index => [pin]}` on the value's line.
+  # `%{hunk_index => [pin]}` on the value's line. A `:text` line, a key that
+  # holds data among them, continues no pin.
   defp side_continuations(view) do
     texts = for {_, text, state} <- view, do: if(state == :text, do: "", else: text)
     index = view |> Enum.map(&elem(&1, 0)) |> List.to_tuple()
@@ -674,7 +677,9 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   # One side of a hunk (context lines plus the changed lines of `mark`), in
   # order, as `{hunk_index, text, state}` — `state` as
-  # `PinSites.line_states/1` reads the side: `:yaml`, `:text` or `:open`.
+  # `PinSites.line_states/1` reads the side: `:yaml`, `:text` or `:open`; a
+  # block `uses:` key the side shows under no step or job
+  # (`PinSites.data_uses_lines/1`) is `:text` too.
   defp side_view(hunk, mark) do
     entries =
       hunk
@@ -684,9 +689,16 @@ defmodule Hypatia.Rules.PrAutomerge do
       end)
       |> Enum.map(fn {line, i} -> {i, String.slice(line, 1..-1//1)} end)
 
-    states = entries |> Enum.map_join("\n", &elem(&1, 1)) |> PinSites.line_states()
+    side = Enum.map_join(entries, "\n", &elem(&1, 1))
+    states = PinSites.line_states(side)
+    data = PinSites.data_uses_lines(side)
 
-    Enum.zip_with(entries, states, fn {i, text}, {_, state} -> {i, text, state} end)
+    entries
+    |> Enum.zip(states)
+    |> Enum.with_index(1)
+    |> Enum.map(fn {{{i, text}, {_, state}}, n} ->
+      {i, text, if(n in data, do: :text, else: state)}
+    end)
   end
 
   defp line_status(line, i, view, continued) do

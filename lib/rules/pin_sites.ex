@@ -347,6 +347,162 @@ defmodule Hypatia.Rules.PinSites do
   end
 
   @doc """
+  The one-based numbers of the lines of `content` whose leading block `uses:`
+  key the indentation above it proves is neither a step's nor a job's own:
+  an input of that name (`with:` then `uses: a/b@x`), an entry of a sequence
+  some key other than `steps:` holds, or a key of a `steps:` that is no
+  job's. Such a key holds data, not a pin. A line whose ancestry the lines
+  above do not show far enough — a diff hunk cut short, a fragment with no
+  `jobs:` — is not listed: it is judged on its own line, as before.
+  """
+  @spec data_uses_lines(String.t()) :: MapSet.t(pos_integer())
+  def data_uses_lines(content) when is_binary(content) do
+    rows =
+      content
+      |> line_states()
+      |> Enum.zip_with(line_depths(content), &block_row/2)
+      |> List.to_tuple()
+
+    for i <- 0..(tuple_size(rows) - 1)//1,
+        match?(%{key: "uses"}, elem(rows, i)),
+        uses_owner(rows, i) == :data,
+        into: MapSet.new(),
+        do: i + 1
+  end
+
+  # One line as block structure: its indentation, the column of its last
+  # list dash (nil without one), the column and name of the key after the
+  # dashes, whether that key's value is on the lines below (`key:` alone,
+  # past any node properties), and whether the line is a bare dash. Blank,
+  # comment-only and scalar lines, and lines inside a flow collection, are
+  # :skip: nothing there is a block parent.
+  defp block_row({text, :yaml}, 0) do
+    h = head(text)
+
+    if String.trim(h) == "" do
+      :skip
+    else
+      [_, ind, dashes, rest] = Regex.run(~r/^( *)((?:-(?:\s+|$))*)(.*)$/, h)
+
+      {key, open?} =
+        case Regex.run(~r/^["']?([^"':\s][^"':]*?)["']?\s*:(?:\s+(.*))?$/, rest) do
+          [_, k | value] ->
+            {k, Regex.match?(~r/^(?:[&!]\S*\s*)*$/, String.trim(Enum.join(value)))}
+
+          nil ->
+            {nil, false}
+        end
+
+      dash =
+        case :binary.matches(dashes, "-") do
+          [] -> nil
+          found -> byte_size(ind) + elem(List.last(found), 0)
+        end
+
+      %{
+        indent: byte_size(ind),
+        dash: dash,
+        key_col: byte_size(ind) + byte_size(dashes),
+        key: key,
+        open?: open?,
+        bare?: String.trim(rest) == ""
+      }
+    end
+  end
+
+  defp block_row(_, _), do: :skip
+
+  # :site, :data or :unknown for the `uses` key on row i: a step's when its
+  # mapping is an item of a job's `steps:`, a job's when its mapping is the
+  # value of a key of `jobs:`.
+  defp uses_owner(rows, i) do
+    case mapping_of(rows, i) do
+      {:item, j, d} -> sequence_owner(rows, seq_owner(rows, j, d))
+      {:value, j, _key} -> job_key(rows, j)
+      _ -> :unknown
+    end
+  end
+
+  defp sequence_owner(rows, {:value, s, "steps"}), do: steps_owner(rows, s)
+  defp sequence_owner(_rows, {:value, _, _}), do: :data
+  defp sequence_owner(_rows, _), do: :unknown
+
+  # `steps:` is a job's, or a composite action's under `runs:`; inside a
+  # list item or another key's mapping it is data (`with:` then `steps:`).
+  defp steps_owner(rows, s) do
+    case mapping_of(rows, s) do
+      {:value, _p, "runs"} -> :site
+      {:value, p, _job} -> job_key(rows, p)
+      {:item, _, _} -> :data
+      _ -> :unknown
+    end
+  end
+
+  # Is the key on row j a job: its mapping the value of `jobs:`? A key
+  # inside a list item (a step's `with:`) or under any other key is not.
+  defp job_key(rows, j) do
+    case mapping_of(rows, j) do
+      {:value, _, "jobs"} -> :site
+      {:value, _, _} -> :data
+      {:item, _, _} -> :data
+      _ -> :unknown
+    end
+  end
+
+  # The mapping row j's key sits in: the list item its own dash opens, or
+  # the one the rows above give it.
+  defp mapping_of(rows, j) do
+    case elem(rows, j) do
+      %{dash: d} when d != nil -> {:item, j, d}
+      %{key_col: col} -> container(rows, j, col)
+    end
+  end
+
+  # The mapping a key at column `col` of row i belongs to, from the nearest
+  # row above it that sits shallower: a list item whose first key is at
+  # `col` (`- name: x` above `  uses:`) or a bare dash, `{:item, row, dash}`;
+  # a key whose value is below it, `{:value, row, key}`. Rows as deep or
+  # deeper are its siblings and their contents. :root when no row is
+  # shallower; :unknown when the shallower row is neither.
+  defp container(rows, i, col) do
+    Enum.reduce_while((i - 1)..0//-1, :root, fn j, acc ->
+      case elem(rows, j) do
+        :skip -> {:cont, acc}
+        %{indent: ind} when ind >= col -> {:cont, acc}
+        %{dash: d, key_col: ^col} when d != nil -> {:halt, {:item, j, d}}
+        %{dash: d, bare?: true} when d != nil -> {:halt, {:item, j, d}}
+        %{key: k, open?: true, key_col: kc} when k != nil and kc < col -> {:halt, {:value, j, k}}
+        _ -> {:halt, :unknown}
+      end
+    end)
+  end
+
+  # The key that holds the sequence whose item's dash is at column `d` of
+  # row j: the nearest row above that is not a sibling item or deeper —
+  # `steps:` above it, or at its own column (`steps:` then `- uses:`).
+  # :unknown when no row above shows it.
+  defp seq_owner(rows, j, d) do
+    Enum.reduce_while((j - 1)..0//-1, :unknown, fn k, acc ->
+      case elem(rows, k) do
+        :skip ->
+          {:cont, acc}
+
+        %{indent: ind} when ind > d ->
+          {:cont, acc}
+
+        %{indent: ^d, dash: dd} when dd != nil ->
+          {:cont, acc}
+
+        %{key: key, open?: true, key_col: kc} when key != nil and kc <= d ->
+          {:halt, {:value, k, key}}
+
+        _ ->
+          {:halt, :unknown}
+      end
+    end)
+  end
+
+  @doc """
   The flow depth at the start of each line of `content` — how many `[` and
   `{` the lines above left open, as the walk of `line_states/1` counts them
   (outside quoted scalars, comments and block-scalar content). A line at

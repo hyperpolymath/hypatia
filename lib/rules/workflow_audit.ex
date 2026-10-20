@@ -1825,7 +1825,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       {_, v} when is_binary(v) ->
         case Regex.run(~r/^\s*\*([\w.-]+)\s*$/, v) do
           [_, name] -> wf026_scalar_alias(name, lines, wf_entry_pos(pos, "toolchain"))
-          nil -> if wf026_null_value?(v), do: :null, else: {:set, :own}
+          nil -> if wf026_null_input?(v), do: :null, else: {:set, :own}
         end
 
       _ ->
@@ -1899,8 +1899,25 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # input unreadable, and the finding routes to review.
   defp wf026_scalar_alias(name, lines, pos) do
     case wf_anchor_scalar(lines, name, pos) do
-      {:ok, value} -> if wf026_null_value?(value), do: :null, else: {:set, :own}
+      {:ok, value} -> if wf026_null_input?(value), do: :null, else: {:set, :own}
       :error -> {:unreadable, :toolchain_alias, name}
+    end
+  end
+
+  # Is a `toolchain` value, as written, no input the action can read? Its
+  # node properties come off first: an anchor names the node, not its value
+  # (`&channel ""` is the empty string, `&channel null` null), and a tag
+  # says how the scalar resolves — `!!null` always to null, `!!str` to the
+  # string it spells, so `!!str ""` is still empty but `!!str null` is the
+  # string null, an input.
+  defp wf026_null_input?(value) do
+    [_, props, scalar] = Regex.run(~r/^\s*((?:[&!]\S*(?:\s+|$))*)(.*)$/s, value)
+    tags = Regex.scan(~r/!\S*/, props) |> List.flatten()
+
+    cond do
+      "!!null" in tags -> true
+      "!!str" in tags -> String.trim(scalar) in ["", ~s(""), "''"]
+      true -> wf026_null_value?(scalar)
     end
   end
 
@@ -1986,10 +2003,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       cond do
         m =
             Regex.run(
-              ~r/^\s+(?:![^\s]*\s+)*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s,}\]#][^,}\]#]*?)\s*(?:[,}\]]|\s#|$)/,
+              ~r/^\s+((?:![^\s]*\s+)*)("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s,}\]#][^,}\]#]*?)\s*(?:[,}\]]|\s#|$)/,
               rest
             ) ->
-          {:ok, Enum.at(m, 1)}
+          # The scalar with its tag (`&x !!str null` is the string null).
+          {:ok, Enum.at(m, 1) <> Enum.at(m, 2)}
 
         # Nothing after the anchor but a tag or a comment: null, unless a
         # deeper line continues the scalar.
@@ -2111,8 +2129,16 @@ defmodule Hypatia.Rules.WorkflowAudit do
               # A value on the lines below — nothing on the key's line, or a
               # block scalar's indicator (`toolchain: >-`) — is what those
               # lines hold: an empty block scalar is the empty string.
+              # So is one with nothing on the line but node properties
+              # (`toolchain: &channel`), kept in front of what is below.
+              props = Regex.run(~r/^(?:[&!]\S*(?:\s+|$))*/, v) |> hd()
               continued? = v == "" or Regex.match?(~r/^(?:[&!]\S*\s+)*[|>][-+0-9]*$/, v)
-              [{k, if(continued?, do: wf_continued_value(children, i, child_indent), else: v)}]
+
+              cond do
+                continued? -> [{k, wf_continued_value(children, i, child_indent)}]
+                props == v -> [{k, props <> " " <> wf_continued_value(children, i, child_indent)}]
+                true -> [{k, v}]
+              end
 
             nil ->
               []
@@ -2332,22 +2358,37 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  defp wf_flow_entry_starts(interior) do
-    interior
-    |> :binary.bin_to_list()
-    |> Enum.with_index()
-    |> Enum.reduce({[0], 0, nil}, fn
-      {c, _}, {acc, d, nil} when c in [?", ?'] -> {acc, d, c}
-      {c, _}, {acc, d, nil} when c in [?{, ?[] -> {acc, d + 1, nil}
-      {c, _}, {acc, d, nil} when c in [?}, ?]] -> {acc, d - 1, nil}
-      {?,, i}, {acc, 0, nil} -> {[i + 1 | acc], 0, nil}
-      {_, _}, {acc, d, nil} -> {acc, d, nil}
-      {q, _}, {acc, d, q} -> {acc, d, nil}
-      {_, _}, {acc, d, q} -> {acc, d, q}
-    end)
-    |> elem(0)
-    |> Enum.reverse()
-  end
+  # Where each top-level entry of a flow interior starts: byte 0, and past
+  # every comma outside quotes and nested brackets. Inside double quotes a
+  # `\` escapes the byte after it (`"say \"hi\", then"` is one scalar); a
+  # doubled `''` inside single quotes closes and reopens with nothing
+  # between, so it hides no comma either.
+  defp wf_flow_entry_starts(interior),
+    do: interior |> :binary.bin_to_list() |> wf_entry_starts(0, 0, nil, [0]) |> Enum.reverse()
+
+  defp wf_entry_starts([], _i, _d, _q, acc), do: acc
+
+  defp wf_entry_starts([?\\, _ | rest], i, d, ?", acc),
+    do: wf_entry_starts(rest, i + 2, d, ?", acc)
+
+  defp wf_entry_starts([q | rest], i, d, q, acc), do: wf_entry_starts(rest, i + 1, d, nil, acc)
+
+  defp wf_entry_starts([_ | rest], i, d, q, acc) when q != nil,
+    do: wf_entry_starts(rest, i + 1, d, q, acc)
+
+  defp wf_entry_starts([c | rest], i, d, nil, acc) when c in [?", ?'],
+    do: wf_entry_starts(rest, i + 1, d, c, acc)
+
+  defp wf_entry_starts([c | rest], i, d, nil, acc) when c in [?{, ?[],
+    do: wf_entry_starts(rest, i + 1, d + 1, nil, acc)
+
+  defp wf_entry_starts([c | rest], i, d, nil, acc) when c in [?}, ?]],
+    do: wf_entry_starts(rest, i + 1, d - 1, nil, acc)
+
+  defp wf_entry_starts([?, | rest], i, 0, nil, acc),
+    do: wf_entry_starts(rest, i + 1, 0, nil, [i + 1 | acc])
+
+  defp wf_entry_starts([_ | rest], i, d, nil, acc), do: wf_entry_starts(rest, i + 1, d, nil, acc)
 
   # Offset `at` of a flow interior that `wf_flow_interior/3` read from the
   # `{` at `open_col` of line `number`, as `{line, column}` in the file.

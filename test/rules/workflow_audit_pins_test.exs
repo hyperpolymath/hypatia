@@ -1037,6 +1037,65 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => configured})
     end
 
+    test "node properties on a toolchain value are not the value" do
+      # An anchor names the node and `!!str ""` is still the empty string:
+      # none of these is an input. `!!str null` is the string null, one.
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain: &channel ""
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain: !!str ""
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: { toolchain: &channel null }
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain: !!str null
+      """
+
+      assert [%{line: 4}, %{line: 7}, %{line: 10}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "a toolchain value of nothing but an anchor is null, or the value below it" do
+      bare = @rust_step <> "        with:\n          toolchain: &channel\n"
+      assert [%{line: 4}] = wf026(bare)
+
+      # Control: the anchored scalar continued on the line below is the input.
+      assert [] == wf026(bare <> "            nightly\n")
+    end
+
+    test "an anchored toolchain value keeps its tag through an alias" do
+      aliased = fn value ->
+        "x: &e #{value}\n" <> @rust_step <> "        with:\n          toolchain: *e\n"
+      end
+
+      # `!!str null` is the string null, an input; `!!str ""` is still empty.
+      assert [] == wf026(aliased.("!!str null"))
+      assert [%{line: 5}] = wf026(aliased.(~s(!!str "")))
+    end
+
+    test "an escaped quote in a flow step's name hides none of its entries" do
+      # `"a\"b, c"` is one scalar: `with: *inputs` is the step's entry and
+      # names the empty mapping before it, not the configured `&inputs`
+      # defined later on the same line.
+      wf = """
+      x: &inputs {}
+      jobs:
+        check:
+          steps: [ { name: "a\\"b, c", uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: *inputs }, { run: echo, env: &inputs {toolchain: nightly} } ]
+      """
+
+      assert [%{line: 4}] = wf026(wf)
+
+      # Control: with the configured anchor first, the alias names it.
+      assert [] == wf026(String.replace(wf, "x: &inputs {}", "x: &inputs {toolchain: stable}"))
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:

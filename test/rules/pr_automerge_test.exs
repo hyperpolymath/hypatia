@@ -636,6 +636,32 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert live_decision.disposition == :close_poison_only
     end
 
+    test "an input named uses under a step is data: no poison site, no pin-only change" do
+      patch = """
+      @@ -12,3 +12,3 @@
+             - uses: some/wrapper@v1
+               with:
+      -          uses: github/codeql-action/init@#{@good}
+      +          uses: github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert PA.poison_sites([f], @policy) == []
+      refute PA.pin_lines_only?(f)
+      refute PA.classify(pr([f]), @policy).disposition == :close_poison_only
+
+      # Control: the step's own key at the same depth is the pin it was.
+      live = """
+      @@ -12,3 +12,3 @@
+             - name: init
+      -        uses: github/codeql-action/init@#{@good}
+      +        uses: github/codeql-action/init@#{@poison}
+      """
+
+      assert PA.classify(pr([file(".github/workflows/ci.yml", live)]), @policy).disposition ==
+               :close_poison_only
+    end
+
     test "a pin inside a multi-line quoted run: is text; one the hunk never closes is uncertain" do
       # The quote opens on a context line and closes inside the hunk: every
       # line between is string text, never a site.
