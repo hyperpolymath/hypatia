@@ -201,10 +201,20 @@ jobs:
           # legitimately mention these tokens as documentation
           # ("Zero believe_me." in src/Hypatia/ABI/RuleEngine.idr is the canonical
           # example).
-          DANGEROUS=$(find lib src \( -name '*.idr' -o -name '*.v' -o -name '*.lean' -o -name '*.hs' \) \
-            -not -path 'lib/rules/*' \
-            -exec grep -Hn 'believe_me\|assert_total\|\bsorry\b\|\bAdmitted\b\|unsafeCoerce' {} + 2>/dev/null \
-            | grep -v ':[[:space:]]*--' || true)
+          #
+          # grep exits 1 when nothing matches, which is the PASS case, and 2
+          # on a real error. Test the status rather than masking both with
+          # `|| true` (`lib/rules` is the only `rules` directory under lib/src).
+          set -euo pipefail
+          status=0
+          HITS=$(grep -rHn --include='*.idr' --include='*.v' --include='*.lean' --include='*.hs' \
+            --exclude-dir=rules \
+            'believe_me\|assert_total\|\bsorry\b\|\bAdmitted\b\|unsafeCoerce' lib src) || status=$?
+          if [ "$status" -gt 1 ]; then
+            echo "FAIL: grep error (exit $status)"
+            exit "$status"
+          fi
+          DANGEROUS=$(printf '%s' "$HITS" | sed '/:[[:space:]]*--/d')
           if [ -n "$DANGEROUS" ]; then
             echo "FAIL: Dangerous patterns found"
             echo "$DANGEROUS"

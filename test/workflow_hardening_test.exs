@@ -896,6 +896,178 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
     end
   end
 
+  describe "wh013_permission_starved_write/1 — writes with their own credential" do
+    test "a PAT clone of another repo with an unmasked push is not starved (estate-rescan)" do
+      repo =
+        create_repo_with_workflow("""
+        name: Rescan
+        permissions:
+          contents: read
+        jobs:
+          rescan:
+            runs-on: ubuntu-latest
+            steps:
+              - name: Publish
+                env:
+                  GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+                run: |
+                  git clone "https://x-access-token:${GH_TOKEN}@github.com/o/data.git" d
+                  cd d && git commit -m scan && git push origin HEAD:refs/heads/b
+                  gh pr create --repo o/data --head b --title scan --body x
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a PAT checkout with a masked push reports the mask at :warn, not starvation" do
+      repo =
+        create_repo_with_workflow("""
+        name: Steward
+        permissions:
+          contents: read
+        jobs:
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7.0.1
+                with:
+                  token: ${{ secrets.FARM_PAT }}
+              - run: git push origin HEAD 2>/dev/null || echo "::warning::could not push"
+        """)
+
+      [f] = WorkflowHardening.wh013_permission_starved_write(repo)
+      assert f.severity == :warn
+      assert f.fix_recipe == "unmask-credentialed-write"
+      File.rm_rf!(repo)
+    end
+
+    test "secrets.GITHUB_TOKEN is not an own credential — still starved" do
+      repo =
+        create_repo_with_workflow("""
+        name: Steward
+        permissions:
+          contents: read
+        jobs:
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7.0.1
+                with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+              - run: git push origin HEAD
+        """)
+
+      [f] = WorkflowHardening.wh013_permission_starved_write(repo)
+      assert f.severity == :high
+      assert f.fix_recipe == "grant-contents-write-to-writing-job"
+      File.rm_rf!(repo)
+    end
+
+    test "a PAT in one job does not excuse a GITHUB_TOKEN push in another" do
+      repo =
+        create_repo_with_workflow("""
+        name: Mixed
+        permissions:
+          contents: read
+        jobs:
+          dispatch:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.FARM_PAT }}
+                run: gh pr create --repo o/farm --title x --body y
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD 2>/dev/null || true
+        """)
+
+      [f] = WorkflowHardening.wh013_permission_starved_write(repo)
+      assert f.severity == :high
+      assert f.fix_recipe == "grant-contents-write-to-writing-job-and-unmask"
+      File.rm_rf!(repo)
+    end
+
+    test "own_credential_job?/1 accepts PATs and app tokens, nothing else" do
+      assert WorkflowHardening.own_credential_job?("          token: ${{ secrets.FARM_PAT }}")
+      assert WorkflowHardening.own_credential_job?(~s(  GH_TOKEN: "${{ secrets.X_PAT }}"))
+
+      assert WorkflowHardening.own_credential_job?(
+               "  GITHUB_TOKEN: ${{ steps.app.outputs.token }}"
+             )
+
+      refute WorkflowHardening.own_credential_job?("          token: ${{ secrets.GITHUB_TOKEN }}")
+      refute WorkflowHardening.own_credential_job?("  GH_TOKEN: ${{ github.token }}")
+      refute WorkflowHardening.own_credential_job?("  # token: ${{ secrets.FARM_PAT }}")
+      assert WorkflowHardening.own_credential_job?("  GH_TOKEN: ${{ secrets['RELEASE_PAT'] }}")
+      refute WorkflowHardening.own_credential_job?(~s(  GH_TOKEN: ${{ secrets["GITHUB_TOKEN"] }}))
+    end
+
+    test "a commented `jobs:` header still splits jobs, so one PAT cannot excuse another job" do
+      repo =
+        create_repo_with_workflow("""
+        name: Mixed
+        permissions:
+          contents: read
+        jobs: # dispatch and record
+          dispatch:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.FARM_PAT }}
+                run: gh pr create --repo o/farm --title x --body y
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      assert [%{severity: :high}] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a workflow-level env credential covers every job" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: gh release create v1 dist/*
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a masked credentialed gh release is reported" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/* || true
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+  end
+
   # ─── WH014 ──────────────────────────────────────────────────────────
   #
   # Regression floor for the alert-DELETION shape measured 2026-09-14 on
