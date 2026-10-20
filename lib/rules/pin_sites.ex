@@ -120,6 +120,155 @@ defmodule Hypatia.Rules.PinSites do
   @spec head(String.t()) :: String.t()
   def head(line) when is_binary(line), do: binary_part(line, 0, byte_size(mask(line)))
 
+  @doc """
+  The lines of a whole file, each with the bytes that belong to a scalar
+  opened on an earlier line blanked to `x`, byte for byte: every content
+  line of a block scalar (`run: |`), and a multi-line quoted scalar's
+  continuation up to and including its closing quote. A line read through
+  `sites/1` one at a time cannot see either, so a `uses:` written in a
+  `run: |` script reads as a key; read from these lines it does not.
+
+  A quote opens a scalar only where YAML lets one start: after `key: `, a
+  list dash, or, inside a flow collection, `[`, `{` or `,`; at the start of
+  a line only when the line above left a value pending (`key:`). `echo
+  it's` stays a plain scalar. A quoted scalar still open at the end of the
+  file was misread, and the lines after its opening quote are returned as
+  written, each judged on its own as before: a misread quote never hides a
+  pin.
+  """
+  @spec mask_lines(String.t()) :: [String.t()]
+  def mask_lines(content) when is_binary(content) do
+    lines = String.split(content, "\n")
+
+    {masked, st} =
+      lines
+      |> Enum.with_index()
+      |> Enum.map_reduce(%{q: nil, opened: nil, block: nil, depth: 0, pending: false}, fn
+        {line, n}, st -> mask_file_line(line, n, st)
+      end)
+
+    if st.q,
+      do: Enum.take(masked, st.opened + 1) ++ Enum.drop(lines, st.opened + 1),
+      else: masked
+  end
+
+  # Inside a block scalar: a blank line or one deeper than the key is its
+  # content; anything else ends it.
+  defp mask_file_line(line, n, %{block: col} = st) when is_integer(col) do
+    if String.trim(line) == "" or indent_of(line) > col,
+      do: {String.duplicate("x", byte_size(line)), st},
+      else: mask_file_line(line, n, %{st | block: nil})
+  end
+
+  defp mask_file_line(line, n, st) do
+    {cont, st} =
+      case st.q && close_at(line, st.q, 0) do
+        nil -> {0, st}
+        :open -> {byte_size(line), st}
+        at -> {at + 1, %{st | q: nil, opened: nil}}
+      end
+
+    rest = binary_part(line, cont, byte_size(line) - cont)
+    view = String.duplicate("x", cont) <> rest
+    st = if st.q, do: st, else: walk(rest, String.duplicate("x", cont), n, st)
+    {view, st}
+  end
+
+  # The byte offset of the quote that closes a `q` scalar in `line` from
+  # `at`, or :open. `\` escapes inside double quotes; `''` is a literal `'`.
+  defp close_at(line, _q, at) when at >= byte_size(line), do: :open
+
+  defp close_at(line, ?", at) do
+    case :binary.at(line, at) do
+      ?\\ -> close_at(line, ?", at + 2)
+      ?" -> at
+      _ -> close_at(line, ?", at + 1)
+    end
+  end
+
+  defp close_at(line, ?', at) do
+    cond do
+      :binary.at(line, at) != ?' -> close_at(line, ?', at + 1)
+      at + 1 < byte_size(line) and :binary.at(line, at + 1) == ?' -> close_at(line, ?', at + 2)
+      true -> at
+    end
+  end
+
+  # One line outside any scalar, `seen` being what precedes `rest` on it
+  # (quote bodies as `x`). Tracks flow depth, opens a quote that does not
+  # close on the line, and at its end a block scalar or a pending value.
+  defp walk(<<>>, seen, _n, st) do
+    trimmed = String.trim_trailing(seen)
+
+    cond do
+      String.trim(seen) == "" ->
+        st
+
+      st.depth == 0 and
+          Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:[&!]\S*\s+)*[|>][-+0-9]*$/, trimmed) ->
+        %{st | block: block_parent(seen), pending: false}
+
+      true ->
+        pending =
+          Regex.match?(~r/(?::|^\s*-)$/, trimmed) or
+            (st.depth > 0 and Regex.match?(~r/[\[{,]$/, trimmed))
+
+        %{st | pending: pending}
+    end
+  end
+
+  defp walk(<<?#, _::binary>>, seen, n, st)
+       when seen == "" or binary_part(seen, byte_size(seen) - 1, 1) in [" ", "\t"],
+       do: walk(<<>>, seen, n, st)
+
+  defp walk(<<q, tail::binary>>, seen, n, st) when q in [?", ?'] do
+    if scalar_start?(seen, st) do
+      case close_at(tail, q, 0) do
+        :open ->
+          %{st | q: q, opened: n}
+
+        at ->
+          rest = binary_part(tail, at + 1, byte_size(tail) - at - 1)
+          walk(rest, seen <> String.duplicate("x", at + 2), n, st)
+      end
+    else
+      walk(tail, seen <> <<q>>, n, st)
+    end
+  end
+
+  defp walk(<<c, tail::binary>>, seen, n, st) when c in [?[, ?{] do
+    st = if st.depth > 0 or value_start?(seen), do: %{st | depth: st.depth + 1}, else: st
+    walk(tail, seen <> <<c>>, n, st)
+  end
+
+  defp walk(<<c, tail::binary>>, seen, n, %{depth: d} = st) when c in [?], ?}] and d > 0,
+    do: walk(tail, seen <> <<c>>, n, %{st | depth: d - 1})
+
+  defp walk(<<c, tail::binary>>, seen, n, st), do: walk(tail, seen <> <<c>>, n, st)
+
+  # Where a value starts: after `key: ` or a list dash, past any anchor or
+  # tag (`key: &a [`, `- !!str "`).
+  defp value_start?(seen), do: Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:[&!]\S*\s+)*$/, seen)
+
+  defp scalar_start?(seen, st) do
+    cond do
+      Regex.match?(~r/^\s*$/, seen) -> st.pending or st.depth > 0
+      Regex.match?(~r/(?:^\s*(?:-\s+)+|:\s+)(?:[&!]\S*\s+)*$/, seen) -> true
+      st.depth > 0 -> Regex.match?(~r/[\[{,]\s*$/, seen)
+      true -> false
+    end
+  end
+
+  # A block scalar's content is deeper than its key (`run: |`, `- run: |`)
+  # or, for a bare sequence entry (`- |`), deeper than the dash.
+  defp block_parent(seen) do
+    if Regex.match?(~r/^\s*-\s+(?:[&!]\S*\s+)*[|>]/, seen),
+      do: indent_of(seen),
+      else: byte_size(hd(Regex.run(~r/^\s*(?:-\s+)*/, seen)))
+  end
+
+  defp indent_of(line), do: byte_size(line) - byte_size(String.trim_leading(line, " "))
+
   # `prefix` is the masked line up to the site's action.
   defp structural?(prefix) do
     cond do

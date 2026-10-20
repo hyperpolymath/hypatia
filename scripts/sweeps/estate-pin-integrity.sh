@@ -148,11 +148,19 @@ site_parts() {
 # per input line: a quoted scalar that is neither a key nor the value of a
 # `uses` key has its text replaced by `x` (its quotes kept), a comment by
 # spaces, and the content lines of a block scalar (`run: |`, `script: >-`)
-# entirely by `x` after their indentation. Lengths are kept, so a site found
-# on a masked line sits at the same column of the real one. A `uses:` written
-# inside `- run: "echo uses: a/b@<sha>"`, a `run: |` script or a comment is
-# therefore no site this sweep rewrites; a denylisted SHA there is still
-# seen by line_has_denied_sha on the raw line, and flagged for the owner.
+# entirely by `x` after their indentation. A quoted scalar that runs over
+# several lines (`- run: "echo start` ... `echo end"`) is carried from record
+# to record like a block scalar: each continuation is `x` up to and including
+# its closing quote. A quote opens such a scalar only where YAML lets one
+# start (as Hypatia.Rules.PinSites.mask_lines/1 reads it), so `echo it's`
+# opens nothing. Lengths are kept, so a site found on a masked line sits at
+# the same column of the real one. A `uses:` written inside
+# `- run: "echo uses: a/b@<sha>"`, on a continuation line of a quoted scalar,
+# in a `run: |` script or in a comment is therefore no site this sweep
+# rewrites; a denylisted SHA there is still seen by line_has_denied_sha on
+# the raw line, and flagged for the owner. A quote never closed before the
+# end of the file keeps its lines masked: whatever they hold is flagged,
+# never repaired.
 # shellcheck disable=SC2016  # an awk program, not a shell expansion
 MASK_AWK='
 function key_col(s,   t) { t = s; sub(/[^[:space:]-].*$/, "", t); return length(t) }
@@ -176,14 +184,70 @@ function mask(s,   out, n, i, c, j, body) {
   }
   return out
 }
-BEGIN { USES_TAIL = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*$"; in_scalar = 0 }
+# The quote closing a q scalar in s from position j, or 0: `\` escapes inside
+# double quotes, and `'"''"'` is a literal quote inside single ones.
+function close_pos(s, j, q,   n, c) {
+  n = length(s)
+  while (j <= n) {
+    c = substr(s, j, 1)
+    if (q == "\"" && c == "\\") { j += 2; continue }
+    if (c == q) { if (q == sq && substr(s, j + 1, 1) == sq) { j += 2; continue }; return j }
+    j++
+  }
+  return 0
+}
+# Can a scalar start after seen? After `key: ` or a list dash (past any
+# anchor or tag), after `[`, `{` or `,` inside a flow collection, and at the
+# start of a line when the line above left a value pending (`key:`). In a
+# plain scalar (`echo it'"'"'s`) a quote opens nothing.
+function scalar_start(seen) {
+  if (seen ~ /^[[:space:]]*$/) return PENDING || DEPTH > 0
+  if (seen ~ /(^[[:space:]]*(-[[:space:]]+)+|:[[:space:]]+)([&!][^[:space:]]*[[:space:]]+)*$/) return 1
+  if (DEPTH > 0) return seen ~ /[{,[][[:space:]]*$/
+  return 0
+}
+# Walk s from position i outside any quote (seen is what precedes it, quote
+# bodies as x): track the flow depth and whether the line leaves a value
+# pending, and return the quote a scalar opened on this line and left open,
+# or "".
+function walk(s, i, seen,   n, c, j, t) {
+  n = length(s)
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c == "#" && (seen == "" || seen ~ /[[:space:]]$/)) break
+    if ((c == "\"" || c == sq) && scalar_start(seen)) {
+      j = close_pos(s, i + 1, c)
+      if (j == 0) return c
+      seen = seen xs(j - i + 1); i = j + 1; continue
+    }
+    if (c == "[" || c == "{") {
+      if (DEPTH > 0 || seen ~ /(^[[:space:]]*(-[[:space:]]+)*|:[[:space:]]+)([&!][^[:space:]]*[[:space:]]+)*$/) DEPTH++
+    } else if ((c == "]" || c == "}") && DEPTH > 0) DEPTH--
+    seen = seen c; i++
+  }
+  t = seen; sub(/[[:space:]]+$/, "", t)
+  if (t !~ /^[[:space:]]*$/) PENDING = (t ~ /:$/ || t ~ /^[[:space:]]*-$/ || (DEPTH > 0 && t ~ /[{,[]$/))
+  return ""
+}
+BEGIN { USES_TAIL = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*$"; in_scalar = 0; inq = ""; DEPTH = 0; PENDING = 0 }
 {
   if (in_scalar) {
     if ($0 ~ /^[[:space:]]*$/ || key_col($0) > scalar_col) { t = $0; sub(/[^[:space:]].*$/, "", t); print t xs(length($0) - length(t)); next }
     in_scalar = 0
   }
-  m = mask($0); print m
-  if (m ~ /:[[:space:]]*[|>][-+0-9]*[[:space:]]*$/) { in_scalar = 1; scalar_col = key_col($0) }
+  # The continuation of a quoted scalar an earlier line opened is text up to
+  # and including its closing quote; the rest of the line is masked as a line.
+  if (inq != "") {
+    j = close_pos($0, 1, inq)
+    if (j == 0) { print xs(length($0)); next }
+    m = xs(j) mask(substr($0, j + 1))
+    inq = walk($0, j + 1, xs(j))
+  } else {
+    m = mask($0)
+    inq = walk($0, 1, "")
+  }
+  print m
+  if (inq == "" && m ~ /:[[:space:]]*[|>][-+0-9]*[[:space:]]*$/) { in_scalar = 1; scalar_col = key_col($0) }
 }'
 
 # The masked form of one file, line for line (block scalars tracked).

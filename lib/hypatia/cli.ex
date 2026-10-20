@@ -33,11 +33,14 @@ defmodule Hypatia.CLI do
       --format <fmt>    Output format: json (default), text, github, sarif
       --severity <lvl>  Minimum severity to report: critical, high, medium (default), low, info
       --path <dir>      Path to scan (alternative to positional argument)
+      --advisory        Also report advisory findings below the severity threshold
+                        (they never count toward the exit code)
 
   ## Environment Variables
 
       HYPATIA_FORMAT      Override --format
       HYPATIA_SEVERITY    Override --severity
+      HYPATIA_ADVISORY    Truthy: behaves as --advisory
   """
 
   @version "2.0.0"
@@ -90,6 +93,8 @@ defmodule Hypatia.CLI do
     * `0` -- success (no findings at/above the severity threshold), or
       `--exit-zero` / `HYPATIA_EXIT_ZERO` was set and the scan ran cleanly.
     * `1` -- findings exist at/above the threshold (default behaviour).
+      An advisory finding (`advisory: true`) never counts: see
+      `report_sets/2`.
     * `2` -- error (bad arguments, scan failed, etc.).
 
   Findings are always written to stdout in the requested format. A
@@ -107,6 +112,7 @@ defmodule Hypatia.CLI do
           help: :boolean,
           version: :boolean,
           exit_zero: :boolean,
+          advisory: :boolean,
           # pr-eligibility flags
           owner: :string,
           repo: :string,
@@ -126,13 +132,15 @@ defmodule Hypatia.CLI do
     format = opts[:format] || System.get_env("HYPATIA_FORMAT") || "json"
     severity = opts[:severity] || System.get_env("HYPATIA_SEVERITY") || "medium"
     exit_zero = opts[:exit_zero] || env_flag?("HYPATIA_EXIT_ZERO")
+    advisory = opts[:advisory] || env_flag?("HYPATIA_ADVISORY")
 
     config = %{
       format: format,
       severity: severity,
       rules: parse_rules(opts[:rules]),
       path: opts[:path],
-      exit_zero: exit_zero
+      exit_zero: exit_zero,
+      advisory: advisory
     }
 
     case args do
@@ -191,25 +199,51 @@ defmodule Hypatia.CLI do
       severity_floor: config.severity
     )
 
-    # Filter by severity threshold
-    filtered =
-      findings
-      |> Enum.filter(fn f ->
-        sev = Map.get(f, :severity, "medium") |> to_string()
-        rank = Map.get(@severity_order, sev, 5)
-        threshold = Map.get(@severity_order, config.severity, 3)
-        rank <= threshold
-      end)
+    {shown, blocking} = report_sets(findings, config)
 
-    output(filtered, config.format)
-    emit_finding_summary(filtered, config)
+    output(shown, config.format)
+    emit_finding_summary(blocking, config, length(shown) - length(blocking))
 
     cond do
-      length(filtered) == 0 -> :ok
+      blocking == [] -> :ok
       config.exit_zero -> :ok
       true -> System.halt(1)
     end
   end
+
+  @doc """
+  Splits a scan's findings into `{shown, blocking}`.
+
+  `shown` is what is written to stdout: every finding at or above the
+  `config.severity` threshold, plus, when `config.advisory` is set
+  (`--advisory` / `HYPATIA_ADVISORY`), every advisory finding below it.
+  `blocking` decides exit 1: the shown findings at or above the threshold
+  that are not advisory.
+
+  An advisory finding carries `advisory: true`. It names a repair a fleet
+  bot can route (WF026, WF027), and its rule must never fail a gate
+  (AGENTIC `must-not-promote-to-blocking`). Before this split the only way
+  to see one was to lower `--severity` to its level, which also made it, and
+  everything else at that level, fail the scan. Advisory output is opt-in
+  rather than always on because a gate that rejects every unbaselined
+  finding it is shown (standards' governance baseline gate runs at threshold
+  `info` over a default scan) would otherwise start failing on them.
+  """
+  @spec report_sets([map()], map()) :: {[map()], [map()]}
+  def report_sets(findings, config) do
+    threshold = Map.get(@severity_order, config.severity, 3)
+    advisory? = Map.get(config, :advisory, false)
+
+    within? = fn f ->
+      sev = Map.get(f, :severity, "medium") |> to_string()
+      Map.get(@severity_order, sev, 5) <= threshold
+    end
+
+    shown = Enum.filter(findings, &(within?.(&1) or (advisory? and advisory_finding?(&1))))
+    {shown, Enum.filter(shown, &(within?.(&1) and not advisory_finding?(&1)))}
+  end
+
+  defp advisory_finding?(f), do: Map.get(f, :advisory) == true
 
   # ─── Report command ───────────────────────────────────────────────────
 
@@ -222,22 +256,14 @@ defmodule Hypatia.CLI do
     end
 
     findings = collect_findings(abs_path, config.rules)
-
-    filtered =
-      findings
-      |> Enum.filter(fn f ->
-        sev = Map.get(f, :severity, "medium") |> to_string()
-        rank = Map.get(@severity_order, sev, 5)
-        threshold = Map.get(@severity_order, config.severity, 3)
-        rank <= threshold
-      end)
+    {shown, blocking} = report_sets(findings, config)
 
     # Report always uses text format with extra detail
-    output_report(filtered, abs_path)
-    emit_finding_summary(filtered, config)
+    output_report(shown, abs_path)
+    emit_finding_summary(blocking, config, length(shown) - length(blocking))
 
     cond do
-      length(filtered) == 0 -> :ok
+      blocking == [] -> :ok
       config.exit_zero -> :ok
       true -> System.halt(1)
     end
@@ -266,7 +292,7 @@ defmodule Hypatia.CLI do
   # signal that includes severity counts and the exit code about to be
   # returned. See hypatia#213.
 
-  defp emit_finding_summary(filtered, config) do
+  defp emit_finding_summary(filtered, config, advisory_count) do
     counts =
       Enum.reduce(filtered, %{}, fn f, acc ->
         sev = Map.get(f, :severity, "medium") |> to_string()
@@ -293,6 +319,17 @@ defmodule Hypatia.CLI do
         "(#{breakdown}); exit #{exit_code}" <>
         if(config.exit_zero and total > 0, do: " (--exit-zero suppressed exit 1)", else: "")
     )
+
+    # Advisory findings are written to stdout but counted neither above nor
+    # toward the exit code (report_sets/2); their own line keeps that line's
+    # shape.
+    if advisory_count > 0 do
+      IO.puts(
+        :stderr,
+        "[hypatia] advisory: #{advisory_count} finding(s) reported, " <>
+          "not counted toward the exit code"
+      )
+    end
 
     # A separate line, so the summary above keeps its shape for any caller
     # that pattern-matches it. Levels are derived (Hypatia.Verdict), never
@@ -499,7 +536,8 @@ defmodule Hypatia.CLI do
                   :fix_script,
                   :current_sha,
                   :replacement_sha,
-                  :reusable
+                  :reusable,
+                  :advisory
                 ])
               )
             end)
@@ -1559,11 +1597,16 @@ defmodule Hypatia.CLI do
         --exit-zero             Always exit 0 after a successful scan, even when
                                 findings exist. Use in CI when a downstream step
                                 gates on severity counts. (See HYPATIA_EXIT_ZERO.)
+        --advisory              Also report advisory findings (advisory: true,
+                                e.g. WF026/WF027) below the --severity threshold.
+                                They never count toward exit 1.
+                                (See HYPATIA_ADVISORY.)
 
     EXIT CODES:
         0   No findings at or above the configured severity threshold,
             OR --exit-zero / HYPATIA_EXIT_ZERO was set and the scan ran cleanly.
-        1   Findings exist at/above the threshold (default behaviour).
+        1   Non-advisory findings exist at/above the threshold (default
+            behaviour). Advisory findings never cause exit 1.
         2   Error (bad arguments, scan failed, etc.).
 
     ENVIRONMENT:
@@ -1571,12 +1614,14 @@ defmodule Hypatia.CLI do
         HYPATIA_SEVERITY        Override --severity
         HYPATIA_EXIT_ZERO       If set to a truthy value (1, true, anything
                                 non-empty/non-zero), behaves as --exit-zero.
+        HYPATIA_ADVISORY        If set to a truthy value, behaves as --advisory.
 
     EXAMPLES:
         hypatia scan .
         hypatia scan ~/repos/my-project --format text
         hypatia scan . --rules root_hygiene,code_safety --severity high
         hypatia scan . --exit-zero        # CI: emit findings, never fail step
+        hypatia scan . --advisory         # also report routable advisory findings
         hypatia report . > report.txt
         HYPATIA_FORMAT=json hypatia scan .
     """)

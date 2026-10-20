@@ -63,7 +63,10 @@ defmodule Hypatia.Rules.PinIntegrity do
   step of a compact flow sequence or mapping (`steps: [{ uses: a/b@x }]`,
   `- { name: x, uses: a/b@x }`) — so the file scan sees the pins the diff
   rules (PA001-PA004) see. A `uses:` inside a quoted `run:` string, a
-  comment or script text is not one.
+  comment or script text is not one, nor is one on a line of a `run: |`
+  block or of a quoted scalar continued from an earlier line: the file is
+  read through `PinSites.mask_lines/1`, which carries that state from line
+  to line.
 
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
@@ -75,7 +78,7 @@ defmodule Hypatia.Rules.PinIntegrity do
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
     content
-    |> String.split("\n")
+    |> PinSites.mask_lines()
     |> Enum.with_index(1)
     |> Enum.flat_map(fn {line, number} -> line_sites(line, number) end)
   end

@@ -28,6 +28,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       # Advisory: below the CLI's default `--severity medium`, so a scan
       # reports and routes it without failing (AGENTIC must-not-promote-to-blocking).
       assert f.severity == :low
+      assert f.advisory == true
       assert f.file == "rust.yml"
       assert f.line == 5
       assert f.current_sha == @toolchain_sha
@@ -688,6 +689,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       [f] = WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
       assert f.rule == "WF027"
       assert f.severity == :low
+      assert f.advisory == true
       assert f.reusable == @rust_ci
       assert f.current_sha == @broken_standards
       assert f.replacement_sha == @good_standards

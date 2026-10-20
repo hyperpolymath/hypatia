@@ -80,6 +80,115 @@ defmodule Hypatia.Rules.PinIntegrityTest do
     end
   end
 
+  # Read one line at a time, a `uses:` written inside a `run: |` script or a
+  # quoted scalar continued from an earlier line looked like a key: PI001
+  # reported script text and substitute_denylisted_pins/3 rewrote it as an
+  # automatic repair. The file is now read through PinSites.mask_lines/1.
+  describe "pin_sites/1 across lines — block and quoted scalars are text" do
+    @real_step "      - uses: github/codeql-action/init@#{@poison} # v4.38.0\n"
+
+    test "a uses: line inside a run: | script is no site, the step after it is" do
+      content =
+        "jobs:\n  b:\n    steps:\n      - run: |\n" <>
+          "          cat > fixture.yml <<'EOF'\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          - uses: github/codeql-action/analyze@#{@poison} # v4.38.1\n" <>
+          "          EOF\n\n" <>
+          "        shell: bash\n" <> @real_step
+
+      assert [%{line: 11}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
+      assert new_content =~ "analyze@#{@poison} # v4.38.1\n"
+      assert new_content =~ "      - uses: github/codeql-action/init@#{@good} # v4.38.0\n"
+    end
+
+    test "a script that is all text leaves the file untouched" do
+      content =
+        "steps:\n  - name: write\n    run: >-\n      uses: github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(content, @policy) == []
+      assert {:ok, ^content, []} = PI.substitute_denylisted_pins(content, @policy)
+    end
+
+    test "a bare block-scalar sequence entry is text until the dash's level" do
+      content =
+        "      - args:\n          - |\n            uses: github/codeql-action/init@#{@poison}\n" <>
+          @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "the continuation of a multi-line double-quoted run: is text" do
+      content =
+        "      - run: \"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          echo \\\"end\\\"\"\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
+    end
+
+    test "a single-quoted one, with an escaped quote inside, is text too" do
+      content =
+        "      - run: 'echo it''s\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          done'\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a value pending from the line above may open the quote" do
+      content =
+        "      - run:\n          \"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\"\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "an apostrophe in a plain scalar opens nothing" do
+      content = "      - run: echo it's here\n" <> @real_step <> "      - run: echo don't\n"
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a quote inside a run: | script opens nothing after the script" do
+      content = "      - run: |\n          echo \"unterminated\n" <> @real_step
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a quote never closed by the end of the file hides nothing" do
+      content = "      - run: \"echo start\n" <> @real_step
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "the file mask keeps every line's bytes where they were" do
+      content =
+        "      - run: |\n          uses: a/b@#{@poison}\n      - run: \"x\n  y\" # c\n" <>
+          @real_step
+
+      masked = Hypatia.Rules.PinSites.mask_lines(content)
+      lines = String.split(content, "\n")
+
+      assert Enum.map(masked, &byte_size/1) == Enum.map(lines, &byte_size/1)
+      assert Enum.at(masked, 1) == String.duplicate("x", byte_size(Enum.at(lines, 1)))
+      assert Enum.at(masked, 3) == "xxxx # c"
+      assert Enum.at(masked, 4) == String.trim_trailing(@real_step, "\n")
+    end
+
+    test "a KYAML flow step on its own line is still a site" do
+      content =
+        "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>
+          "  { uses: \"github/codeql-action/init@#{@poison}\" },\n]\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+  end
+
   describe "action_base/1" do
     test "keys on the release unit, not the sub-action" do
       assert PI.action_base("github/codeql-action/init") == "github/codeql-action"

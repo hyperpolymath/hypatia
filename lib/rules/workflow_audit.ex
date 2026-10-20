@@ -1155,8 +1155,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       not an action input and does not rescue the step.
     * The step is bounded by indentation, so a later step's `toolchain:`
       cannot rescue an earlier step.
-    * Severity is medium: the rule reports and routes to the fleet; it is
-      never a blocking gate (AGENTIC `must-not-promote-to-blocking`).
+    * Severity is low and the finding is `advisory: true`: the rule reports
+      and routes to the fleet; it is never a blocking gate (AGENTIC
+      `must-not-promote-to-blocking`). The CLI never counts it toward exit 1
+      and reports it below the threshold under `--advisory`
+      (`Hypatia.CLI.report_sets/2`).
     * A KYAML workflow (standards YAML-POLICY Y-3, the output of
       `yq -o kyaml`) is judged as its block equivalent, line for line
       (`ResearchExtensions.flow_to_block/1`), so a quoted, braced step is
@@ -1385,7 +1388,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # `:low` (rank 4) sits below the CLI's default `--severity medium` and
       # the reusable's high/critical threshold, as `flawed_regex` does. The
       # fleet routing reads `fix_script`/`auto_fixable`, not the severity.
+      # `advisory: true` keeps it out of the CLI's exit code at any
+      # threshold and lets `--advisory` report it below one.
       severity: :low,
+      advisory: true,
       auto_fixable: repairable?,
       fix_script: if(repairable?, do: "fix-rust-toolchain-input.sh", else: nil),
       reason:
@@ -2182,8 +2188,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   Auto-fixable: gitbot-fleet `scripts/fix-stale-reusable-pin.sh` rewrites
   the pin to the replacement the table names, never to "newest".
 
-  Severity is medium: like WF026 the rule reports and routes to the fleet;
-  it is never a blocking gate (AGENTIC `must-not-promote-to-blocking`).
+  Severity is low and the finding is `advisory: true`: like WF026 the rule
+  reports and routes to the fleet; it is never a blocking gate (AGENTIC
+  `must-not-promote-to-blocking`).
   """
   def check_known_broken_reusable_revision(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
@@ -2296,6 +2303,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       replacement_sha: rev.replacement,
       # Advisory, as WF026: reported and routed, never a blocking finding.
       severity: :low,
+      advisory: true,
       auto_fixable: true,
       fix_script: "fix-stale-reusable-pin.sh",
       reason:
