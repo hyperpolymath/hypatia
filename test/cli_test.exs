@@ -40,6 +40,80 @@ defmodule Hypatia.CLITest do
       assert help =~ "HYPATIA_EXIT_ZERO"
       assert help =~ "EXIT CODES"
     end
+
+    test "documents --advisory and HYPATIA_ADVISORY" do
+      help = capture_io(fn -> Hypatia.CLI.main(["help"]) end)
+
+      assert help =~ "--advisory"
+      assert help =~ "HYPATIA_ADVISORY"
+    end
+  end
+
+  # WF026/WF027 name a repair the fleet can route and must never fail a gate
+  # (AGENTIC must-not-promote-to-blocking). At `:low` the default threshold
+  # hid them from every consumer; lowering `--severity` to see them made them,
+  # and every other low finding, fail the scan. `report_sets/2` separates
+  # what is shown from what decides exit 1.
+  describe "report_sets/2 -- advisory findings are shown on request, never blocking" do
+    @advisory %{rule: "WF027", severity: "low", advisory: true, fix_script: "x.sh"}
+    @plain_low %{rule: "flawed_regex", severity: "low"}
+    @medium %{rule: "unpinned_action", severity: "medium"}
+    @base %{severity: "medium", exit_zero: false, advisory: false}
+
+    test "default threshold: an advisory low finding is neither shown nor blocking" do
+      assert {[@medium], [@medium]} =
+               Hypatia.CLI.report_sets([@advisory, @plain_low, @medium], @base)
+    end
+
+    test "--advisory shows it below the threshold, in order, without blocking" do
+      config = %{@base | advisory: true}
+
+      assert {[@advisory, @medium], [@medium]} =
+               Hypatia.CLI.report_sets([@advisory, @plain_low, @medium], config)
+    end
+
+    test "an advisory finding alone never decides exit 1" do
+      assert {[@advisory], []} =
+               Hypatia.CLI.report_sets([@advisory], %{@base | advisory: true})
+    end
+
+    test "at --severity low it is shown, a plain low finding blocks, it does not" do
+      config = %{@base | severity: "low"}
+
+      assert {[@advisory, @plain_low, @medium], [@plain_low, @medium]} =
+               Hypatia.CLI.report_sets([@advisory, @plain_low, @medium], config)
+    end
+
+    test "a config without the :advisory key behaves as before" do
+      assert {[@medium], [@medium]} =
+               Hypatia.CLI.report_sets([@advisory, @medium], %{severity: "medium"})
+    end
+
+    test "advisory survives the workflow_audit normalizer" do
+      dir = Path.join(System.tmp_dir!(), "hyp-advisory-#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".github/workflows"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      File.write!(Path.join(dir, ".github/workflows/rust-ci.yml"), """
+      name: rust-ci
+      on: push
+      permissions: {}
+      jobs:
+        rust-ci:
+          uses: hyperpolymath/standards/.github/workflows/rust-ci-reusable.yml@d135b05bfc647d0c0fbfedc7e80f37ea50f49236
+      """)
+
+      wf027 =
+        dir
+        |> Hypatia.CLI.collect_findings([:workflow_audit])
+        |> Enum.filter(&(&1.type == "known_broken_reusable_revision"))
+
+      assert [%{advisory: true, severity: "low", fix_script: "fix-stale-reusable-pin.sh"}] =
+               wf027
+
+      assert {[], []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: false})
+      assert {^wf027, []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: true})
+    end
   end
 
   # Regression coverage for the placeholder-message defect.
