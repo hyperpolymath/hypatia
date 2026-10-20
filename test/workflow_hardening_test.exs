@@ -1154,6 +1154,70 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    test "an indented comment after the last job is not read as part of it" do
+      repo =
+        create_repo_with_workflow("""
+        name: CI
+        permissions:
+          contents: read
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix test
+              # The publisher used to git push origin main; it now lives in release.yml.
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "continue-on-error inside a step's run script is not the step's flag" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: |
+                  cat > generated.yml <<'YML'
+                  continue-on-error: true
+                  YML
+                  gh release create v1 generated.yml
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "continue-on-error on a step opened by a bare `-` counts as masked" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              -
+                continue-on-error: true
+                env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/*
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+
     test "a job-level continue-on-error is a deliberate setting, not a mask" do
       repo =
         create_repo_with_workflow("""

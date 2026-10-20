@@ -1276,10 +1276,32 @@ defmodule Hypatia.Rules.WorkflowHardening do
     Enum.any?(@write_masks, &Regex.match?(&1, content)) or
       content
       |> step_bodies()
-      |> Enum.any?(&(Regex.match?(@step_continue_on_error, &1) and performs_contents_write?(&1)))
+      |> Enum.any?(&(step_continue_on_error?(&1) and performs_contents_write?(&1)))
   end
 
-  # The text of each `- ` item under every `steps:` key in `content`. An item
+  # `continue-on-error: true` as a key of the step itself: on its `- ` line or
+  # at the step's key column. Deeper text (a `run: |` script that writes a
+  # workflow file, a `with:` value) is not the step's flag.
+  defp step_continue_on_error?(step) do
+    [item | rest] = String.split(step, "\n")
+    keys = Enum.reject(rest, &blank_or_comment?/1)
+
+    key_col =
+      case Regex.run(~r/^([ \t]*-[ \t]+)\S/, item) do
+        [_, prefix] -> String.length(prefix)
+        nil -> keys |> List.first("") |> indent_of()
+      end
+
+    Regex.match?(@step_continue_on_error, item) or
+      Enum.any?(keys, &(indent_of(&1) == key_col and Regex.match?(@step_continue_on_error, &1)))
+  end
+
+  defp blank_or_comment?(line) do
+    trimmed = String.trim(line)
+    trimmed == "" or String.starts_with?(trimmed, "#")
+  end
+
+  # The text of each `- ` (or bare `-`) item under every `steps:` key. An item
   # runs until the next item at the same indent or a line back at (or above)
   # the `steps:` indent; blank and comment lines never end one.
   defp step_bodies(content) do
@@ -1302,7 +1324,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
           indent_of(line) <= elem(state, 0) ->
             {flush_step(acc, current), nil, nil}
 
-          String.starts_with?(trimmed, "- ") and elem(state, 1) in [nil, indent_of(line)] ->
+          (String.trim(line) == "-" or String.starts_with?(trimmed, "- ")) and
+              elem(state, 1) in [nil, indent_of(line)] ->
             {flush_step(acc, current), [line], {elem(state, 0), indent_of(line)}}
 
           true ->
@@ -1453,14 +1476,14 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
             _ ->
               cond do
-                line == "" or indent_of(line) >= jobs_indent + 1 ->
-                  {acc, true, jobs_indent, append_line(current, line)}
-
-                # A comment between jobs (`  # Publish`) neither ends `jobs:`
-                # nor joins the job above it: WH013 reads bodies as raw text,
-                # and `# the publisher used to git push` is not a write.
+                # A comment, at any indent, neither ends `jobs:` nor joins a
+                # job body: WH013 reads bodies as raw text, and
+                # `# the publisher used to git push` is not a write.
                 String.starts_with?(String.trim_leading(line), "#") ->
                   {acc, true, jobs_indent, current}
+
+                line == "" or indent_of(line) >= jobs_indent + 1 ->
+                  {acc, true, jobs_indent, append_line(current, line)}
 
                 true ->
                   acc2 = flush(acc, current)
