@@ -1046,6 +1046,70 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    test "a comment between jobs does not hide the later jobs" do
+      repo =
+        create_repo_with_workflow("""
+        name: CI
+        permissions:
+          contents: read
+        jobs:
+          test:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix test
+          # Publish
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      assert [%{severity: :high}] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "continue-on-error on a credentialed write counts as masked" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - continue-on-error: true
+                env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/*
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "a job-level continue-on-error is a deliberate setting, not a mask" do
+      repo =
+        create_repo_with_workflow("""
+        name: Backup
+        permissions:
+          contents: read
+        jobs:
+          mirror:
+            runs-on: ubuntu-latest
+            continue-on-error: true
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.BACKUP_PAT }}
+                run: git push backup HEAD:refs/heads/main && gh pr create --repo o/b --title x --body y
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
     test "a masked credentialed gh release is reported" do
       repo =
         create_repo_with_workflow("""
