@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# Closure corpus fixture: closed: owner/repo spelled in another case than its record (GitHub canonicalises owner/repo). Contract: expected.tsv in this directory.
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/rust.yml':
+        - 'Example/Rust-Cache@5555555555555555555555555555555555555555'
+dependencies:
+    'example/rust-cache@5555555555555555555555555555555555555555':
+        ref: 'v2.9.2'
+        commit: 'sha1-5555555555555555555555555555555555555555'
+        owner_id: 101
+        repo_id: 205
