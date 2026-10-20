@@ -10,6 +10,11 @@ members = [
     "integration",
     "tools/cii-registrar",
 ]
+# standards' governance "JS runtimes" job checks its js-runtimes crate out at
+# .standards-js/ inside this checkout and `cargo install`s it from there.
+# Without this, cargo treats that crate as an undeclared member of this
+# workspace and refuses to build it.
+exclude = [".standards-js"]
 
 [workspace.package]
 version = "0.1.0"

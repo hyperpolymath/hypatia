@@ -1,8 +1,8 @@
 [tools]
 # Language runtimes
 node = "latest"
-rust = "latest"
-go = "latest"
+rust = "latest"   # provides cargo, rustfmt and clippy
+go = "latest"     # provides gofmt
 zig = "0.16.0"   # pinned; .github/workflows/zig.yml asserts this equals ZIG_VERSION
 java = "latest"
 bun = "latest"
@@ -11,11 +11,8 @@ bun = "latest"
 npm = "latest"
 yarn = "latest"
 pnpm = "latest"
-cargo = "latest"
-go-task = "latest"
 
 # Formatting & Linting
-gofmt = "latest"
 prettier = "latest"
 shfmt = "latest"
 stylua = "latest"
@@ -25,24 +22,11 @@ cmake = "latest"
 make = "latest"
 ninja = "latest"
 
-# Shell tools
-git = "latest"
-gnu-sed = "latest"
-gnu-tar = "latest"
-gnu-grep = "latest"
-
-# Testing
-vitest = "latest"
-jest = "latest"
+# Not listed on purpose: git, GNU sed/tar/grep (system tools), go-task, vitest
+# and jest. None resolves in the mise registry, so listing them made mise warn
+# on every `cd` into the repo. The command shortcuts that used to sit under
+# [alias] were never tool aliases; `just --list` is the task entry point.
 
 [env]
 # Common environment variables
 NODE_ENV = "development"
-
-# Task runner alias
-[alias]
-task = "go-task"
-build = "cargo build --release || npm run build || go build"
-test = "cargo test || npm test || go test ./..."
-lint = "prettier --check ."
-fmt = "prettier --write ."

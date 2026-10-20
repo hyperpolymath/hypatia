@@ -895,6 +895,27 @@ defmodule Hypatia.Rules.WorkflowAuditTest do
 
       assert [%{type: :invalid_actions_lock, action: :regenerate}] = findings
     end
+
+    test "a generated v0.0.3 lock with hostname fields is valid and keeps association" do
+      standards = File.read!("test/fixtures/actions_lock/standards-b3ce78e-v0.0.3.lock")
+
+      refute Enum.any?(
+               WorkflowAudit.check_unpinned_actions(@wf, actions_lock: standards),
+               &(&1.type == :invalid_actions_lock)
+             )
+
+      v003 =
+        @lock
+        |> String.replace("version: 'v0.0.2'", "version: 'v0.0.3'")
+        |> String.replace("        ref: '", "        hostname: 'github.com'\n        ref: '")
+
+      assert WorkflowAudit.check_unpinned_actions(@wf, actions_lock: v003) == []
+
+      tenant = String.replace(v003, "'github.com'", "'octocorp.ghe.com'", global: false)
+
+      assert [%{type: :invalid_actions_lock, action: :regenerate}] =
+               WorkflowAudit.check_unpinned_actions(@wf, actions_lock: tenant)
+    end
   end
 
   # ── The job-level blind spot ──────────────────────────────────────────────
