@@ -217,7 +217,9 @@ jobs:
           if [ -z "$cli" ]; then
             echo "::error::No ephapax CLI binary produced by 'cargo build --release --workspace'."
             echo "Contents of $release_dir:"
-            ls -la "$release_dir" 2>/dev/null || true
+            # No mask: this branch fails either way, and a failing `ls`
+            # (missing dir) is itself the diagnosis, so let its error show.
+            ls -la "$release_dir"
             exit 1
           fi
 

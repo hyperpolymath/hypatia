@@ -587,6 +587,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
   suite goes green while real failures pile up. Provenance: Datadog
   CI Visibility flake-masking patterns.
 
+  `|| true` on a `trap …` line is not counted: the handler runs after the
+  step's status is decided and cannot mask it.
+
   Severity: `:warn`. Action: `:report`.
   """
   def re005_test_swallows_exit(repo_path) do
@@ -619,7 +622,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
         has_continue_on_error? = Regex.match?(~r/continue-on-error:\s*true\b/, stripped_body)
 
-        has_or_true? = Regex.match?(~r/\|\|\s*true\b/, stripped_body)
+        # A `trap` handler's `|| true` is not a swallow. The step's exit status
+        # is decided before the EXIT trap runs, and a failing handler command
+        # under `set -e` (e.g. `kill` of an already-exited PID) would itself
+        # turn a PASSING step red, so the `|| true` is what keeps it honest.
+        has_or_true? =
+          stripped_body
+          |> String.replace(~r/^[ \t]*trap[ \t].*$/m, "")
+          |> then(&Regex.match?(~r/\|\|\s*true\b/, &1))
 
         # A step carrying `hypatia:ignore RE005 -- <reason>` (or the
         # `hypatia: allow research_extensions/RE005` spelling) is reviewed —
