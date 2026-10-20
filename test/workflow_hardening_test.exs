@@ -1000,6 +1000,71 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       refute WorkflowHardening.own_credential_job?("          token: ${{ secrets.GITHUB_TOKEN }}")
       refute WorkflowHardening.own_credential_job?("  GH_TOKEN: ${{ github.token }}")
       refute WorkflowHardening.own_credential_job?("  # token: ${{ secrets.FARM_PAT }}")
+      assert WorkflowHardening.own_credential_job?("  GH_TOKEN: ${{ secrets['RELEASE_PAT'] }}")
+      refute WorkflowHardening.own_credential_job?(~s(  GH_TOKEN: ${{ secrets["GITHUB_TOKEN"] }}))
+    end
+
+    test "a commented `jobs:` header still splits jobs, so one PAT cannot excuse another job" do
+      repo =
+        create_repo_with_workflow("""
+        name: Mixed
+        permissions:
+          contents: read
+        jobs: # dispatch and record
+          dispatch:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.FARM_PAT }}
+                run: gh pr create --repo o/farm --title x --body y
+          record:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git push origin HEAD
+        """)
+
+      assert [%{severity: :high}] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a workflow-level env credential covers every job" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: gh release create v1 dist/*
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a masked credentialed gh release is reported" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/* || true
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
     end
   end
 
