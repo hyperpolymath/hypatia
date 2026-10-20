@@ -479,6 +479,54 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert c.auto_fixable
     end
 
+    test "a merge sequence is resolved alias by alias; a merge it cannot read routes to review" do
+      wf = """
+      x-base: &base { components: clippy }
+      x-rust: &rust { toolchain: nightly }
+      x-wasm: &wasm { targets: wasm32-unknown-unknown }
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: [*base, *rust]
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: [*base, *wasm]
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: { toolchain: nightly }
+      """
+
+      # The first step's channel comes from `*rust`: no finding, and nothing
+      # for the fixer to override with `stable`.
+      assert [%{line: 10} = none, %{line: 13} = inline] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert none.auto_fixable
+      refute inline.auto_fixable
+    end
+
+    test "an anchor written after a tag (`with: !!map &inputs`) is still an anchored mapping" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: !!map &inputs
+                components: clippy
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: &inputs2 !!map
+                components: clippy
+      """
+
+      assert [%{line: 4} = a, %{line: 7} = b] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      refute a.auto_fixable
+      refute b.auto_fixable
+    end
+
     test "a uses: line inside a quoted scalar spread over lines is string text" do
       # The `run:` value opens a double-quoted scalar that runs to `echo end"`;
       # the `uses:` line between is part of the string, not the step's key.
@@ -501,7 +549,11 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
             "jobs:\n  check:\n    steps: [{\"run\": &cmd \"echo start\n" <>
               "      uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n      echo end\"}]\n",
             "jobs:\n  check:\n    steps:\n      - run: &cmd \"echo start\n" <>
-              "        uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n        echo end\"\n"
+              "        uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n        echo end\"\n",
+            # The flow collections open on earlier lines (`steps: [`, `{`).
+            "jobs:\n  check:\n    steps: [\n      {\n        \"run\":\"echo start\n" <>
+              "        uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n        echo end\"\n" <>
+              "      }\n    ]\n"
           ] do
         assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"q.yml" => text})
       end

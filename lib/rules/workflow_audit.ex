@@ -1582,7 +1582,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       # `with: {` / `with: &inputs {` — a flow mapping, read to its brace.
       String.contains?(value, "{") ->
-        form = if String.starts_with?(value, "&"), do: :anchor, else: :flow
+        form = if wf026_anchored?(value), do: :anchor, else: :flow
         [{at, _}] = Regex.run(~r/\{/, line, return: :index)
 
         case wf_flow_interior([line | rest], 1, at) do
@@ -1594,10 +1594,14 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # an input; the contents of another input's block scalar
       # (`components: |` carrying `toolchain: stable`) sit deeper and are text.
       true ->
-        form = if String.starts_with?(value, "&"), do: :anchor, else: :block
+        form = if wf026_anchored?(value), do: :anchor, else: :block
         wf026_entries_verdict(wf_block_children(rest, key_indent), lines, form)
     end
   end
+
+  # Does a `with:` value carry an anchor? Node properties come in either
+  # order: `&inputs`, `&inputs !!map`, `!!map &inputs`.
+  defp wf026_anchored?(value), do: Regex.match?(~r/^(?:!\S*\s+)*&/, value)
 
   # The `with` entry of a flow-style step's own entries.
   defp wf026_with_entry(entries, lines) do
@@ -1614,7 +1618,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
             wf026_alias_verdict(name, lines, :alias)
 
           String.contains?(value, "{") ->
-            form = if String.starts_with?(value, "&"), do: :anchor, else: :flow
+            form = if wf026_anchored?(value), do: :anchor, else: :flow
             [{at, _}] = Regex.run(~r/\{/, value, return: :index)
 
             case wf_flow_interior([value], 1, at) do
@@ -1629,9 +1633,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # Does a list of `{key, value}` entries name a toolchain? A `<<: *x` merge
-  # key brings the anchored mapping's entries in, but an explicit key wins
-  # over a merged one (YAML merge semantics): `toolchain:` written empty
-  # beside `<<: *inputs` is the empty value, whatever the anchor names.
+  # key brings the anchored mapping's entries in, as does each alias of a
+  # `<<: [*base, *rust]` sequence, but an explicit key wins over a merged one
+  # (YAML merge semantics): `toolchain:` written empty beside `<<: *inputs`
+  # is the empty value, whatever the anchor names. A merge this reader does
+  # not resolve (`<<: { ... }`, a block sequence) leaves the inputs unknown:
+  # the finding routes to review (`:merge`), never to the fixer.
   # The key present with no value (`toolchain:`, `null`, `~`) is not an input
   # the action can read; the fleet fixer fills such a key in place.
   defp wf026_entries_verdict(entries, lines, form, seen \\ []) do
@@ -1646,17 +1653,44 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       true ->
         entries
-        |> Enum.filter(fn {k, v} ->
-          k == "<<" and Regex.match?(~r/^\*[\w.-]+$/, String.trim(v))
-        end)
+        |> Enum.filter(fn {k, _} -> k == "<<" end)
         |> Enum.find_value({:missing, form}, fn {_, v} ->
-          name = v |> String.trim() |> String.trim_leading("*")
+          case wf026_merge_aliases(v) do
+            {:ok, names} ->
+              Enum.find_value(names, fn name ->
+                case wf026_alias_verdict(name, lines, :merge, seen) do
+                  {:missing, _} -> nil
+                  verdict -> verdict
+                end
+              end)
 
-          case wf026_alias_verdict(name, lines, :merge, seen) do
-            {:missing, _} -> nil
-            verdict -> verdict
+            :error ->
+              {:missing, :merge}
           end
         end)
+    end
+  end
+
+  # The aliases a merge key's value names: `*x`, or a flow sequence of
+  # aliases `[*a, *b]`, in order; :error for anything else.
+  defp wf026_merge_aliases(value) do
+    v = String.trim(value)
+
+    cond do
+      m = Regex.run(~r/^\*([\w.-]+)$/, v) ->
+        {:ok, [Enum.at(m, 1)]}
+
+      m = Regex.run(~r/^\[\s*(\*[\w.-]+(?:\s*,\s*\*[\w.-]+)*)\s*,?\s*\]$/, v) ->
+        names =
+          m
+          |> Enum.at(1)
+          |> String.split(",")
+          |> Enum.map(&(&1 |> String.trim() |> String.trim_leading("*")))
+
+        {:ok, names}
+
+      true ->
+        :error
     end
   end
 
@@ -1963,69 +1997,81 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp wf_in_open_quote?(lines, from, number) when from < number do
     lines
     |> Enum.slice((from - 1)..(number - 2)//1)
-    |> Enum.reduce({nil, nil}, &wf_quote_line/2)
+    |> Enum.reduce({nil, nil, 0}, &wf_quote_line/2)
     |> elem(0)
     |> Kernel.!=(nil)
   end
 
   defp wf_in_open_quote?(_lines, _from, _number), do: false
 
-  # One line of that scan: `{open_quote | nil, block_scalar_key_indent | nil}`.
-  defp wf_quote_line(line, {nil, block}) when is_integer(block) do
+  # One line of that scan: `{open_quote | nil, block_scalar_key_indent | nil,
+  # flow_depth}`. The depth of the flow collections still open is carried from
+  # line to line, as the shared pin reader carries it: a `{"run":"echo` whose
+  # `{` (or `steps: [`) opened on an earlier line is still inside one.
+  defp wf_quote_line(line, {nil, block, depth}) when is_integer(block) do
     if String.trim(line) == "" or wf026_indent(line) > block,
-      do: {nil, block},
-      else: wf_quote_line(line, {nil, nil})
+      do: {nil, block, depth},
+      else: wf_quote_line(line, {nil, nil, depth})
   end
 
-  defp wf_quote_line(line, {q, _}) do
-    case wf_quote_scan(line, q, "") do
+  defp wf_quote_line(line, {q, _, depth}) do
+    case wf_quote_scan(line, q, "", depth) do
       {nil, outside} ->
-        if Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, outside),
-          do: {nil, wf026_key_indent(line)},
-          else: {nil, nil}
+        depth = max(depth + wf_bracket_delta(outside), 0)
 
-      {open, _} ->
-        {open, nil}
+        if Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, outside),
+          do: {nil, wf026_key_indent(line), depth},
+          else: {nil, nil, depth}
+
+      {open, outside} ->
+        {open, nil, max(depth + wf_bracket_delta(outside), 0)}
     end
   end
 
   # Walk one line from quote state `q` (nil outside a quoted scalar), keeping
-  # the text outside quotes. A quote opens a scalar only where a scalar can
-  # start (wf_scalar_start?/1); `echo it's` is a plain scalar. A comment
-  # ends the line.
-  defp wf_quote_scan(<<>>, q, out), do: {q, out}
-  defp wf_quote_scan(<<?\\, _, rest::binary>>, ?", out), do: wf_quote_scan(rest, ?", out)
-  defp wf_quote_scan(<<?', ?', rest::binary>>, ?', out), do: wf_quote_scan(rest, ?', out)
+  # the text outside quotes; `depth` is the flow depth the line starts at. A
+  # quote opens a scalar only where a scalar can start (wf_scalar_start?/2);
+  # `echo it's` is a plain scalar. A comment ends the line.
+  defp wf_quote_scan(<<>>, q, out, _depth), do: {q, out}
 
-  defp wf_quote_scan(<<c, rest::binary>>, q, out) when c == q,
-    do: wf_quote_scan(rest, nil, out <> "x")
+  defp wf_quote_scan(<<?\\, _, rest::binary>>, ?", out, depth),
+    do: wf_quote_scan(rest, ?", out, depth)
 
-  defp wf_quote_scan(<<_, rest::binary>>, q, out) when q != nil, do: wf_quote_scan(rest, q, out)
+  defp wf_quote_scan(<<?', ?', rest::binary>>, ?', out, depth),
+    do: wf_quote_scan(rest, ?', out, depth)
 
-  defp wf_quote_scan(<<?#, _::binary>>, nil, out)
+  defp wf_quote_scan(<<c, rest::binary>>, q, out, depth) when c == q,
+    do: wf_quote_scan(rest, nil, out <> "x", depth)
+
+  defp wf_quote_scan(<<_, rest::binary>>, q, out, depth) when q != nil,
+    do: wf_quote_scan(rest, q, out, depth)
+
+  defp wf_quote_scan(<<?#, _::binary>>, nil, out, _depth)
        when out == "" or binary_part(out, byte_size(out) - 1, 1) in [" ", "\t"],
        do: {nil, out}
 
-  defp wf_quote_scan(<<c, rest::binary>>, nil, out) when c in [?", ?'] do
-    if wf_scalar_start?(out),
-      do: wf_quote_scan(rest, c, out <> "x"),
-      else: wf_quote_scan(rest, nil, out <> <<c>>)
+  defp wf_quote_scan(<<c, rest::binary>>, nil, out, depth) when c in [?", ?'] do
+    if wf_scalar_start?(out, depth),
+      do: wf_quote_scan(rest, c, out <> "x", depth),
+      else: wf_quote_scan(rest, nil, out <> <<c>>, depth)
   end
 
-  defp wf_quote_scan(<<c, rest::binary>>, nil, out), do: wf_quote_scan(rest, nil, out <> <<c>>)
+  defp wf_quote_scan(<<c, rest::binary>>, nil, out, depth),
+    do: wf_quote_scan(rest, nil, out <> <<c>>, depth)
 
   # Can a scalar start after `out` (the line so far, quote bodies dropped)?
   # After `: `, a list dash, `[`, `{` or `,`, or at the line's start; inside
-  # a flow collection this line opens, also directly after `:` (JSON-style
-  # `{"run":"echo`); in each case past any anchor or tag (`run: &cmd "echo`),
-  # as Hypatia.Rules.PinSites reads a file.
-  defp wf_scalar_start?(out) do
+  # a flow collection, opened on this line or one before it (`depth`), also
+  # directly after `:` (JSON-style `{"run":"echo`); in each case past any
+  # anchor or tag (`run: &cmd "echo`), as Hypatia.Rules.PinSites reads a file.
+  defp wf_scalar_start?(out, depth) do
     Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)(?:[&!]\S*\s+)*$/, out) or
-      (wf_flow_open?(out) and Regex.match?(~r/:\s*(?:[&!]\S*\s+)*$/, out))
+      (depth + wf_bracket_delta(out) > 0 and Regex.match?(~r/:\s*(?:[&!]\S*\s+)*$/, out))
   end
 
-  defp wf_flow_open?(out),
-    do: length(Regex.scan(~r/[\[{]/, out)) > length(Regex.scan(~r/[\]}]/, out))
+  # Flow brackets opened minus closed in text with its quote bodies dropped.
+  defp wf_bracket_delta(out),
+    do: length(Regex.scan(~r/[\[{]/, out)) - length(Regex.scan(~r/[\]}]/, out))
 
   # The nearest line above `number` that is shallower than it: the key whose
   # value holds it (a job's key line for a job-level `uses:`).
