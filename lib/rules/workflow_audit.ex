@@ -1205,11 +1205,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
       lines
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {line, number} ->
-        # `- uses:` with the reference below it is read as the one-line key.
-        {line, continued?} =
+        # `- uses:` with the reference below it, or `- uses: *name` naming an
+        # anchored one, is read as the one-line key it stands for.
+        {line, resolved} =
           case Map.fetch(continued, number) do
-            {:ok, joined} -> {joined, true}
-            :error -> {line, false}
+            {:ok, {joined, how}} -> {joined, how}
+            :error -> {line, nil}
           end
 
         case Regex.run(@toolchain_sha_pin, line) do
@@ -1220,14 +1221,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
             review =
               cond do
                 kyaml? -> :kyaml
-                continued? -> :continued
+                resolved != nil -> resolved
                 wf_node_properties?(line) -> :properties
                 not String.contains?(line, "dtolnay/rust-toolchain@") -> :spelling
                 true -> nil
               end
 
-            in_flow? = Enum.at(depths, number - 1, 0) > 0
-            wf026_block_step_finding(filename, lines, line, number, sha, review, in_flow?)
+            if Enum.at(depths, number - 1, 0) > 0,
+              do: wf026_flow_line_finding(filename, lines, depths, number, sha, review),
+              else: wf026_block_step_finding(filename, lines, line, number, sha, review)
 
           _ ->
             # Several flow-style steps may share one physical line
@@ -1237,19 +1239,27 @@ defmodule Hypatia.Rules.WorkflowAudit do
             |> Enum.flat_map(fn [{at, _}, {sha_at, 40}] ->
               sha = binary_part(line, sha_at, 40)
               review = if kyaml?, do: :kyaml
-              wf026_inline_step_finding(filename, lines, line, number, at + 1, sha, review)
+
+              # On a line inside a flow collection opened above, the step's
+              # ancestry is in the brackets, not the line's indentation.
+              if Enum.at(depths, number - 1, 0) > 0 do
+                prefix = binary_part(line, 0, at + 1)
+                wf026_flow_line_finding(filename, lines, depths, number, sha, review, prefix)
+              else
+                wf026_inline_step_finding(filename, lines, line, number, at + 1, sha, review)
+              end
             end)
         end
       end)
     end)
   end
 
-  # The block-style path: `uses:` is a key on its own line. A step whose
-  # opener is `- {`, or which sits inside a flow collection opened on an
-  # earlier line (`in_flow?`), is a flow-style step: the fixer refuses it.
-  defp wf026_block_step_finding(filename, lines, line, number, sha, review, in_flow?) do
+  # The block-style path: `uses:` is a key on its own line, outside any flow
+  # collection (one inside is read by `wf026_flow_line_finding/7`). A step
+  # whose opener is `- {` is a flow-style step: the fixer refuses it.
+  defp wf026_block_step_finding(filename, lines, line, number, sha, review) do
     {step, key_indent, opener} = wf026_step(lines, number)
-    flow_item? = in_flow? or Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
+    flow_item? = Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
 
     cond do
       # `uses:` nested under `env:`, inside a `run: |` script or under
@@ -1295,6 +1305,36 @@ defmodule Hypatia.Rules.WorkflowAudit do
         case wf_flow_entry_value_at(interior, "with") do
           nil -> {number, :eol}
           at -> wf_interior_pos(interior, at, number, open_col)
+        end
+
+      case wf026_with_entry(wf_flow_entries(interior), lines, pos) do
+        {:toolchain, _} -> []
+        verdict -> [wf026_finding(filename, number, sha, verdict, :flow_step, review)]
+      end
+    else
+      _ -> []
+    end
+  end
+
+  # A `uses:` key inside a flow collection opened on an earlier line —
+  # KYAML-like layout, indented or not (`steps: [`, `{`, `uses: ...`) — at
+  # the line's start, or after `prefix` on it (`{ uses: ...`, `name: x,
+  # uses: ...`). Its ancestry is the brackets still open before it
+  # (`wf_flow_context/4`), not its indentation: it is a step's own key when
+  # the innermost one is a mapping that is an item of the `[` a `steps:` in
+  # a job opens, and the step is read through that mapping's braces.
+  defp wf026_flow_line_finding(filename, lines, depths, number, sha, review, prefix \\ "") do
+    with {:ok, keys, kinds, {brace_line, brace_col}} <-
+           wf_flow_context(lines, depths, number, prefix),
+         true <- match?([nil, "steps", job, "jobs" | _] when is_binary(job), keys),
+         # The `{` is an item of the `[` that `steps:` opens, or of the
+         # block sequence under it (`- {` on a line of its own).
+         true <- match?([:map, :seq | _], kinds) or kinds == [:map],
+         {:ok, interior, _} <- wf_flow_interior(lines, brace_line, brace_col) do
+      pos =
+        case wf_flow_entry_value_at(interior, "with") do
+          nil -> {brace_line, :eol}
+          at -> wf_interior_pos(interior, at, brace_line, brace_col)
         end
 
       case wf026_with_entry(wf_flow_entries(interior), lines, pos) do
@@ -1409,6 +1449,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
         _ when review == :continued ->
           " The `uses:` value is continued below its key; the repair script reads a " <>
             "reference on the key's own line only, so this one routes to review."
+
+        _ when review == :alias ->
+          " The `uses:` value is an alias of an anchored reference; the repair script " <>
+            "does not rewrite anchored values, so this one routes to review."
 
         _ when review == :spelling ->
           " The action is not spelled `dtolnay/rust-toolchain`; GitHub resolves the name in " <>
@@ -1558,6 +1602,38 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       true ->
         wf_walk_up(rest, indent - 1, false, [wf_key_name(line) | keys])
+    end
+  end
+
+  # For line `number` inside a flow collection — its depth at the start
+  # (`PinSites.line_depths/1`) above 0 — read up to `prefix`, the part of the
+  # line before the position judged: `{:ok, keys, kinds, {line, col}}`, the
+  # keys opening the brackets still open there, innermost first (nil for one
+  # no key opens, a `{` item of a sequence), then the block ancestors of the
+  # line that opened the outermost; each bracket's kind (:map for `{`, :seq
+  # for `[`); and where the innermost one stands. Read from the text since
+  # that line, comments cut, so a collection spread over lines is one however
+  # its lines are indented — column 0 included. nil at depth 0 or when that
+  # text cannot be read.
+  defp wf_flow_context(lines, depths, number, prefix \\ "") do
+    start =
+      if number > 1,
+        do: Enum.find((number - 1)..1//-1, &(Enum.at(depths, &1 - 1, 0) == 0))
+
+    with true <- Enum.at(depths, number - 1, 0) > 0,
+         s when is_integer(s) <- start,
+         text =
+           lines
+           |> Enum.slice(s - 1, number - s)
+           |> Enum.map_join("\n", &Hypatia.Rules.PinSites.head/1)
+           |> Kernel.<>("\n" <> prefix),
+         {:ok, [inner | _] = stack} <- wf_flow_opener_stack(text, byte_size(text)) do
+      keys = wf_flow_opener_keys(text, stack) ++ (wf_ancestor_keys(lines, s) || [])
+      kinds = Enum.map(stack, &if(is_integer(&1), do: :map, else: :seq))
+      at = if is_integer(inner), do: inner, else: elem(inner, 1)
+      {:ok, keys, kinds, wf_interior_pos(text, at, s, -1)}
+    else
+      _ -> nil
     end
   end
 
@@ -2134,21 +2210,33 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp wf_node_properties?(line),
     do: Regex.match?(~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*[&!]/, line)
 
-  # The `uses:` keys whose reference YAML continues below them (`- uses:`,
-  # then — past any blank or comment-only lines — the reference on a deeper
-  # line), as `%{key_line => joined}`: the key's line with the reference
-  # written after it, which the rules read as they read a one-line key.
-  # Found on the masked lines (`PinSites.mask_lines/1`), so a `uses:` in a
-  # `run: |` script or a quoted string continues nothing.
+  # The `uses:` keys whose reference is not written on their own line, as
+  # `%{key_line => {joined, how}}`: the key's line with the reference in
+  # place, which the rules read as they read a one-line key. `how` is
+  # :continued for a reference YAML continues below the key (`- uses:`, then
+  # — past any blank or comment-only lines — the reference on a deeper line)
+  # and :alias for `uses: *name`, the reference the latest `&name` before it
+  # anchors (`PinSites.alias_sites/1`). Found on the masked lines
+  # (`PinSites.mask_lines/1`), so a `uses:` in a `run: |` script or a quoted
+  # string stands for nothing.
   defp wf_continued_uses(lines) do
     masked = lines |> Enum.join("\n") |> Hypatia.Rules.PinSites.mask_lines()
 
-    for {key, _value, site} <- Hypatia.Rules.PinSites.continuations(masked), into: %{} do
-      line = Enum.at(lines, key - 1)
+    continued =
+      for {key, _value, site} <- Hypatia.Rules.PinSites.continuations(masked), into: %{} do
+        line = Enum.at(lines, key - 1)
 
-      {key,
-       String.trim_trailing(Hypatia.Rules.PinSites.head(line)) <>
-         " " <> site.action <> "@" <> site.ref}
+        {key,
+         {String.trim_trailing(Hypatia.Rules.PinSites.head(line)) <>
+            " " <> site.action <> "@" <> site.ref, :continued}}
+      end
+
+    for %{line: n, at: at, len: len, site: site} <- Hypatia.Rules.PinSites.alias_sites(masked),
+        not Map.has_key?(continued, n),
+        into: continued do
+      line = Enum.at(lines, n - 1)
+      tail = binary_part(line, at + len, byte_size(line) - at - len)
+      {n, {binary_part(line, 0, at) <> site.action <> "@" <> site.ref <> tail, :alias}}
     end
   end
 
@@ -2446,6 +2534,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       lines = String.split(content, "\n")
       continued = wf_continued_uses(lines)
+      depths = Hypatia.Rules.PinSites.line_depths(content)
 
       Enum.flat_map(@broken_reusable_revisions, fn rev ->
         # Anchored to a `uses:` key at the start of a line (quoted or not) that
@@ -2467,11 +2556,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
         lines
         |> Enum.with_index(1)
         |> Enum.flat_map(fn {line, number} ->
-          # A job's `uses:` with the reference below it is the one-line key.
-          {line, continued?} =
+          # A job's `uses:` with the reference below it, or naming an anchored
+          # one (`uses: *call`), is the one-line key it stands for.
+          {line, resolved} =
             case Map.fetch(continued, number) do
-              {:ok, joined} -> {joined, true}
-              :error -> {line, false}
+              {:ok, {joined, how}} -> {joined, how}
+              :error -> {line, nil}
             end
 
           # Each call with the layout the fleet fixer would meet: it rewrites
@@ -2481,21 +2571,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
               [_full, sha] ->
                 review =
                   cond do
-                    continued? -> :continued
+                    resolved != nil -> resolved
                     wf_node_properties?(line) -> :properties
                     true -> nil
                   end
 
-                if match?([_job, "jobs" | _], wf_ancestor_keys(lines, number)) and
-                     not wf_in_open_quote?(lines, wf_parent_line(lines, number), number),
-                   do: [{sha, review}],
-                   else: []
+                case wf027_job_key(lines, depths, number) do
+                  :block -> [{sha, review}]
+                  :flow -> [{sha, review || :flow}]
+                  nil -> []
+                end
 
               nil ->
                 inline_re
                 |> Regex.scan(line, return: :index)
                 |> Enum.filter(fn [{at, _} | _] ->
-                  wf027_inline_job?(lines, line, number, at + 1)
+                  wf027_inline_job?(lines, depths, line, number, at + 1)
                 end)
                 |> Enum.map(fn [_, {sha_at, 40}] -> {binary_part(line, sha_at, 40), :flow} end)
             end
@@ -2511,6 +2602,34 @@ defmodule Hypatia.Rules.WorkflowAudit do
       end)
     end)
   end
+
+  # Is the `uses:` that starts line `number` a key of a job under `jobs:`?
+  # :block when its indentation says so, outside any quoted scalar the job
+  # opened above it — the reading the fleet fixer makes. A line inside a flow
+  # collection opened on an earlier line is judged by the brackets still open
+  # before it (`wf_flow_context/4`), however it is indented: the innermost
+  # must be the mapping a job key opens in `jobs`. Such a call is :block too
+  # when its indentation agrees (KYAML-style `rust: {` / `  uses: ...`, which
+  # the fixer rewrites), and :flow when only the brackets say so (`jobs: {`,
+  # `rust: {`, `uses: ...` all in column 0, which the fixer cannot place).
+  # nil when it is no job's key.
+  defp wf027_job_key(lines, depths, number) do
+    block? =
+      match?([_job, "jobs" | _], wf_ancestor_keys(lines, number)) and
+        not wf_in_open_quote?(lines, wf_parent_line(lines, number), number)
+
+    cond do
+      Enum.at(depths, number - 1, 0) == 0 -> if block?, do: :block
+      not wf027_flow_job?(wf_flow_context(lines, depths, number)) -> nil
+      block? -> :block
+      true -> :flow
+    end
+  end
+
+  # Is the innermost bracket of a `wf_flow_context/4` the mapping a job key
+  # opens in `jobs`?
+  defp wf027_flow_job?({:ok, [job, "jobs" | _], [:map | _], _}) when is_binary(job), do: true
+  defp wf027_flow_job?(_), do: false
 
   # The reusable's identity as a regex source. GitHub resolves the owner and
   # the repository name in either case (`Hyperpolymath/Standards` is
@@ -2532,7 +2651,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # must read a job key, then `jobs`. Each key is the last entry before its
   # brace, split quote-aware, so a sibling's `name: "CI, build"` separates
   # nothing.
-  defp wf027_inline_job?(lines, line, number, uses_at) do
+  defp wf027_inline_job?(lines, depths, line, number, uses_at) do
+    # On a line inside a flow collection opened above, the brackets before
+    # `uses` are read from where the collection began.
+    if Enum.at(depths, number - 1, 0) > 0,
+      do: wf027_flow_job?(wf_flow_context(lines, depths, number, binary_part(line, 0, uses_at))),
+      else: wf027_line_job?(lines, line, number, uses_at)
+  end
+
+  defp wf027_line_job?(lines, line, number, uses_at) do
     case {wf_flow_opener_stack(line, uses_at), wf_ancestor_keys(lines, number)} do
       {{:ok, [open | _] = stack}, ancestors} when is_integer(open) and is_list(ancestors) ->
         keys = wf_flow_opener_keys(line, stack) ++ ancestors
@@ -2591,6 +2718,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
     do:
       " The `uses:` value is continued below its key; the repair script rewrites " <>
         "a reference on the key's own line only, so this one routes to review."
+
+  defp wf027_review_note(:alias),
+    do:
+      " The `uses:` value is an alias of an anchored reference; the repair script " <>
+        "does not rewrite anchored values, so this one routes to review."
 
   defp wf027_review_note(:properties),
     do:

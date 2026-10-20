@@ -123,11 +123,11 @@ defmodule Hypatia.Rules.PrAutomerge do
   end
 
   defp poison_only_file?(file, policy) do
-    added = added_lines(file)
+    added = added_entries(file)
 
     pin_lines_only?(file) and added != [] and
-      Enum.all?(added, fn line ->
-        pins = parse_pins(line)
+      Enum.all?(added, fn {line, _certain?, continued} ->
+        pins = parse_pins(line) ++ continued
         pins != [] and Enum.all?(pins, &denylisted_pin?(&1, policy))
       end)
   end
@@ -159,14 +159,17 @@ defmodule Hypatia.Rules.PrAutomerge do
       |> Enum.flat_map(fn file ->
         file
         |> added_entries()
-        |> Enum.flat_map(fn {line, certain?} ->
+        |> Enum.flat_map(fn {line, certain?, continued} ->
           # Every site on the line: a flow sequence can put several steps on
           # one changed line, and a pin judged by its first site alone lets a
-          # denylisted second one through to `arm_auto`. The action is
-          # compared case-folded — GitHub resolves `GitHub/CodeQL-Action` and
-          # `github/codeql-action` to one repository.
+          # denylisted second one through to `arm_auto`. A line that is the
+          # value of a `uses:` key on the line above it (the key unchanged
+          # context, the reference re-pinned) holds that site too. The action
+          # is compared case-folded — GitHub resolves `GitHub/CodeQL-Action`
+          # and `github/codeql-action` to one repository.
           line
           |> parse_pins()
+          |> Kernel.++(continued)
           |> Enum.filter(fn %{base: base, ref: ref} ->
             String.downcase(base) == String.downcase(Map.get(entry, "action", "")) and
               denylisted_ref?(entry, ref)
@@ -231,14 +234,22 @@ defmodule Hypatia.Rules.PrAutomerge do
     # a new step (`+ { uses: a/b@main },`) or a swapped action is a change to
     # what the workflow runs, not a re-pin of what it already ran.
     lines != [] and
-      Enum.all?(lines, fn {line, scalar?, certain?} ->
-        certain? and not scalar? and pin_line?(line)
+      Enum.all?(lines, fn {line, scalar?, certain?, continued} ->
+        certain? and not scalar? and (pin_line?(line) or continued_value_line?(line, continued))
       end) and
-      action_multiset(removed_lines(file)) == action_multiset(added_lines(file))
+      action_multiset(removed_pins(file)) == action_multiset(added_pins(file))
   end
 
-  defp action_multiset(lines) do
-    lines |> Enum.flat_map(&parse_pins/1) |> Enum.map(&String.downcase(&1.action)) |> Enum.sort()
+  # A changed line that is nothing but the reference a `uses:` key above it
+  # holds (`-          a/b@x` -> `+          a/b@y`): a re-pin as much as a
+  # one-line `uses:` is.
+  defp continued_value_line?(line, [_ | _]),
+    do: Regex.match?(~r/^\s*\S+\s*(?:#.*)?$/, String.replace(line, ~r/^[-+]/, ""))
+
+  defp continued_value_line?(_line, []), do: false
+
+  defp action_multiset(pins) do
+    pins |> Enum.map(&String.downcase(&1.action)) |> Enum.sort()
   end
 
   # ─── PA002/PA003/PA004 · version deltas ───────────────────────────────
@@ -270,8 +281,8 @@ defmodule Hypatia.Rules.PrAutomerge do
       # several steps on one line (`steps: [ { uses: a@x }, { uses: b@y } ]`),
       # and each of them is a delta of its own — including a major bump on a
       # line that does not start with `uses:`.
-      removed = file |> removed_lines() |> Enum.flat_map(&parse_pins/1)
-      added = file |> added_lines() |> Enum.flat_map(&parse_pins/1)
+      removed = removed_pins(file)
+      added = added_pins(file)
 
       # Each added site pairs with ONE removed site of the same action, in
       # order: a line that keeps one `actions/checkout` at v4 and moves a
@@ -585,7 +596,13 @@ defmodule Hypatia.Rules.PrAutomerge do
 
   defp pin_line?(line), do: line |> String.replace(~r/^[-+]/, "") |> PinSites.pin_line?()
 
-  # Every changed line of a patch as `{line, scalar?, certain?}`.
+  # Every changed line of a patch as `{line, scalar?, certain?, continued}`.
+  #
+  # `continued`: the pins the line holds as the value of a `uses:` key whose
+  # reference YAML continues below it (`- uses:`, then the reference on the
+  # line under it, past any blank or comment lines) — read, like
+  # `PinSites.continuations/1` reads a file, from the line's own side of the
+  # hunk, so a re-pinned value under an unchanged key is still a pin site.
   #
   # `scalar?`: the line sits inside a scalar an earlier line of its own side
   # opened, as far as the hunk shows — a block scalar (`run: |`,
@@ -624,16 +641,35 @@ defmodule Hypatia.Rules.PrAutomerge do
     hunk = Enum.reject(hunk, &Regex.match?(~r/^[-+]{3}/, &1))
     old = side_view(hunk, "-")
     new = side_view(hunk, "+")
+    old_cont = side_continuations(old)
+    new_cont = side_continuations(new)
 
     hunk
     |> Enum.with_index()
     |> Enum.flat_map(fn {line, i} ->
       cond do
-        String.starts_with?(line, "+") -> [line_status(line, i, new)]
-        String.starts_with?(line, "-") -> [line_status(line, i, old)]
-        true -> []
+        String.starts_with?(line, "+") ->
+          [line_status(line, i, new, Map.get(new_cont, i, []))]
+
+        String.starts_with?(line, "-") ->
+          [line_status(line, i, old, Map.get(old_cont, i, []))]
+
+        true ->
+          []
       end
     end)
+  end
+
+  # The continued `uses:` values of one side of a hunk, as
+  # `%{hunk_index => [pin]}` on the value's line.
+  defp side_continuations(view) do
+    texts = for {_, text, state} <- view, do: if(state == :text, do: "", else: text)
+    index = view |> Enum.map(&elem(&1, 0)) |> List.to_tuple()
+
+    for {_key, value, site} <- PinSites.continuations(texts), into: %{} do
+      {elem(index, value - 1),
+       [%{action: site.action, base: action_base(site.action), ref: site.ref}]}
+    end
   end
 
   # One side of a hunk (context lines plus the changed lines of `mark`), in
@@ -653,7 +689,7 @@ defmodule Hypatia.Rules.PrAutomerge do
     Enum.zip_with(entries, states, fn {i, text}, {_, state} -> {i, text, state} end)
   end
 
-  defp line_status(line, i, view) do
+  defp line_status(line, i, view, continued) do
     {before, [{_, text, state} | rest]} = Enum.split_while(view, fn {j, _, _} -> j != i end)
     indent = indent_of(text)
 
@@ -664,7 +700,7 @@ defmodule Hypatia.Rules.PrAutomerge do
         |> Enum.filter(fn {_, t, _} -> indent_of(t) <= indent end)
         |> Enum.all?(fn {_, t, _} -> yaml_like?(t) end)
 
-    {line, state == :text, certain?}
+    {line, state == :text, certain?, continued}
   end
 
   defp indent_of(text), do: String.length(text) - String.length(String.trim_leading(text, " "))
@@ -678,20 +714,30 @@ defmodule Hypatia.Rules.PrAutomerge do
       Regex.match?(~r/^-(?:\s|$)/, t) or Regex.match?(~r/^[{}\[\],]/, t)
   end
 
-  defp added_lines(file), do: for({line, _} <- added_entries(file), do: line)
+  defp added_pins(file),
+    do:
+      Enum.flat_map(added_entries(file), fn {line, _, continued} ->
+        parse_pins(line) ++ continued
+      end)
+
+  defp removed_pins(file),
+    do:
+      for(
+        {line, false, _, continued} <- changed_lines(file),
+        String.starts_with?(line, "-"),
+        pin <- parse_pins(line) ++ continued,
+        do: pin
+      )
 
   # Added lines outside block and continued quoted scalars, each with its
   # certainty.
   defp added_entries(file),
     do:
       for(
-        {line, false, certain?} <- changed_lines(file),
+        {line, false, certain?, continued} <- changed_lines(file),
         String.starts_with?(line, "+"),
-        do: {line, certain?}
+        do: {line, certain?, continued}
       )
-
-  defp removed_lines(file),
-    do: for({line, false, _} <- changed_lines(file), String.starts_with?(line, "-"), do: line)
 
   defp patch_of(file), do: Map.get(file, :patch) || Map.get(file, "patch") || ""
 

@@ -793,6 +793,120 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
     end
 
+    test "a uses: alias of an anchored toolchain reference is the step's pin; routed to review" do
+      wf = """
+      x: &rust dtolnay/rust-toolchain@#{@toolchain_sha}
+      jobs:
+        check:
+          steps:
+            - uses: *rust
+            - run: cargo test
+      """
+
+      assert [%{line: 5, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert f.current_sha == @toolchain_sha
+      assert f.reason =~ "alias of an anchored reference"
+
+      # Controls: with its input the aliased step is configured; an alias
+      # of another action, or of an anchor defined after it, is not this pin.
+      with_input =
+        String.replace(wf, "      - run:", "        with: { toolchain: stable }\n      - run:")
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => with_input})
+
+      other = String.replace(wf, "dtolnay/rust-toolchain", "actions/checkout")
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => other})
+
+      later = """
+      jobs:
+        check:
+          steps:
+            - uses: *rust
+      x: &rust dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => later})
+    end
+
+    test "a flow step written without indentation, opener by opener, is still a step" do
+      # Flow content may start in column 0 on every line: indentation says
+      # nothing, so the ancestry is the openers the lines above left open.
+      wf = """
+      jobs: {
+      build: {
+      steps: [
+      {
+      uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      }
+      ]
+      }
+      }
+      """
+
+      assert [%{line: 5, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert f.reason =~ "flow style"
+
+      # Controls: the step's own input configures it, and the same layout
+      # under `env:` or a job's non-step key is data, not a step.
+      with_input =
+        String.replace(
+          wf,
+          "rust-toolchain@#{@toolchain_sha}\n",
+          "rust-toolchain@#{@toolchain_sha},\nwith: { toolchain: stable }\n"
+        )
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => with_input})
+
+      env = String.replace(wf, "jobs: {", "env: {")
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => env})
+
+      fixture = String.replace(wf, "steps: [", "fixture: [")
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => fixture})
+
+      # The step's `uses:` after its `{`, or after a sibling entry, on a
+      # column-0 line is the same step.
+      for {step, line} <- [
+            {"{ uses: dtolnay/rust-toolchain@#{@toolchain_sha} }\n", 4},
+            {"{\nname: x, uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n}\n", 5}
+          ] do
+        inline = "jobs: {\nbuild: {\nsteps: [\n" <> step <> "]\n}\n}\n"
+
+        assert [%{line: ^line, auto_fixable: false}] =
+                 WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => inline})
+
+        configured =
+          String.replace(
+            inline,
+            "@#{@toolchain_sha}",
+            "@#{@toolchain_sha}, with: { toolchain: stable }"
+          )
+
+        assert [] ==
+                 WorkflowAudit.check_sha_pinned_toolchain_without_input(%{
+                   "rust.yml" => configured
+                 })
+      end
+
+      shared =
+        "jobs: {\nbuild: {\nsteps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ]\n}\n}\n"
+
+      assert [%{line: 3, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => shared})
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{
+                 "rust.yml" => String.replace(shared, "steps: [", "fixture: [")
+               })
+    end
+
     test "a flow step's alias names the anchor before it, not one later on its line" do
       # `*inputs` is the empty mapping defined first; the configured
       # `&inputs` after it on the same line is not what it names.
@@ -1003,6 +1117,56 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{auto_fixable: true, fix_script: "fix-stale-reusable-pin.sh"}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => plain})
+    end
+
+    test "a job's uses: alias of an anchored reusable reference is the call; routed to review" do
+      wf =
+        "x: &call #{@rust_ci}@#{@broken_standards}\n" <>
+          "jobs:\n  rust-ci:\n    uses: *call\n"
+
+      assert [%{line: 4, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+
+      assert f.current_sha == @broken_standards
+      assert f.reason =~ "alias of an anchored reference"
+
+      # Control: an alias of the replacement revision is silent.
+      good = String.replace(wf, @broken_standards, @good_standards)
+      assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => good}) == []
+    end
+
+    test "a flow-style job written without indentation is still a job; routed to review" do
+      # Every line in column 0: the brackets, not the indentation, say the
+      # `uses:` is a job's key. The fleet fixer places a key by indentation
+      # and cannot place these, so none is handed to it.
+      own_line = "jobs: {\nrust: {\nuses: #{@rust_ci}@#{@broken_standards}\n}\n}\n"
+      inline = "jobs: {\nrust: { uses: #{@rust_ci}@#{@broken_standards} }\n}\n"
+
+      sibling =
+        "jobs: {\na: { runs-on: x }, rust: { uses: #{@rust_ci}@#{@broken_standards} }\n}\n"
+
+      for {wf, line} <- [{own_line, 3}, {inline, 2}, {sibling, 2}] do
+        assert [%{line: ^line, current_sha: @broken_standards, auto_fixable: false} = f] =
+                 WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+
+        assert f.reason =~ "flow mapping"
+      end
+
+      # Controls: indented as its nesting reads, the own-line key is one the
+      # fixer rewrites; under `env:`, or inside a job's `with: { }`, the
+      # same layout is data, not a call.
+      indented = "jobs: {\n  rust: {\n    uses: #{@rust_ci}@#{@broken_standards}\n  }\n}\n"
+
+      assert [%{auto_fixable: true, fix_script: "fix-stale-reusable-pin.sh"}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => indented})
+
+      for wf <- [own_line, inline],
+          data <- [
+            String.replace(wf, "jobs: {", "env: {"),
+            String.replace(wf, "rust: {", "rust: {\nwith: {") <> "}\n"
+          ] do
+        assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => data}) == []
+      end
     end
 
     test "a flow-style job's uses: continued on the next line is the call" do

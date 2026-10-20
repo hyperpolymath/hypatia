@@ -68,7 +68,9 @@ defmodule Hypatia.Rules.PinIntegrity do
   read through `PinSites.mask_lines/1`, which carries that state from line
   to line. A `uses:` whose reference YAML continues below it (`- uses:`
   then `    a/b@x`, blank and comment-only lines allowed between) is a site
-  on the value's line (`PinSites.continuations/1`).
+  on the value's line (`PinSites.continuations/1`), and a `uses: *name` is a
+  site on the line of the anchor it names, where its reference stands
+  (`PinSites.alias_sites/1`).
 
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
@@ -90,9 +92,22 @@ defmodule Hypatia.Rules.PinIntegrity do
         site_entry(site, number, next |> PinSites.comment() |> String.trim())
       end
 
+    # A `uses: *name` runs the reference the anchor holds: its site is the
+    # anchor's value, where a repair rewrites it (every alias with it).
+    aliased =
+      for %{anchor_line: number, site: site} <- PinSites.alias_sites(masked) do
+        site_entry(
+          site,
+          number,
+          masked |> Enum.at(number - 1) |> PinSites.comment() |> String.trim()
+        )
+      end
+
     numbered
     |> Enum.flat_map(fn {line, number} -> line_sites(line, number) end)
     |> Kernel.++(continued)
+    |> Kernel.++(aliased)
+    |> Enum.uniq_by(&{&1.line, &1.ref_at})
     |> Enum.sort_by(&{&1.line, &1.ref_at})
   end
 

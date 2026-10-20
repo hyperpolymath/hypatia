@@ -425,6 +425,25 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert PA.poison_sites([file(".github/workflows/codeql.yml", patch)], @policy) == []
     end
 
+    test "a re-pinned value under an unchanged `uses:` key is the site it continues" do
+      # The key is context; only the reference on the line below it changes.
+      patch = """
+      @@ -1,3 +1,3 @@
+             - uses:
+               # pinned
+      -          github/codeql-action/init@#{@good}
+      +          github/codeql-action/init@#{@poison}
+      """
+
+      f = file(".github/workflows/codeql.yml", patch)
+      assert [%{denylist_id: "PIN-001"}] = PA.poison_sites([f], @policy)
+      assert PA.pin_lines_only?(f)
+
+      # Control: the same value line under a key that is not `uses:` is data.
+      data = String.replace(patch, "       - uses:", "       - run:")
+      assert PA.poison_sites([file(".github/workflows/codeql.yml", data)], @policy) == []
+    end
+
     test "every site of a flow-sequence line is inspected, not only the first" do
       # The first step is an ordinary resolvable bump; the second is the
       # poison. Judging the line by its first pin armed automerge.

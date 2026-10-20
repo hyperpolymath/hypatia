@@ -297,6 +297,41 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert List.last(states) == {"  uses: e/f@z", :open}
     end
 
+    test "a uses: alias runs the reference its anchor holds; the site is the anchor's value" do
+      content =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison} # v4.38.0\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n      - { name: y, uses: *bad }\n"
+
+      # One site however many aliases name it: the anchor's line is where the
+      # reference stands, and where a repair rewrites it.
+      assert [%{line: 2, detail: %{ref: @poison, action: "github/codeql-action/init"}}] =
+               PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "  BAD: &bad github/codeql-action/init@#{@good} # v4.38.0\n"
+      assert new_content =~ "      - uses: *bad\n"
+
+      # Controls: an alias names the latest anchor before it, so a poisoned
+      # `&bad` defined after it is not what runs; an anchor whose value is no
+      # action reference names no site; nor does an alias that is not a
+      # `uses:` value.
+      later =
+        "env:\n  OK: &bad github/codeql-action/init@#{@good}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n" <>
+          "x:\n  BAD: &bad github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(later, @policy) == []
+
+      not_action = "x: &bad stable\njobs:\n  a:\n    steps:\n      - uses: *bad\n"
+      assert PI.pi001_denylisted_pin(not_action, @policy) == []
+
+      not_uses =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison}\n  ALSO: *bad\n" <>
+          "      - name: \"uses: *bad\"\n"
+
+      assert PI.pi001_denylisted_pin(not_uses, @policy) == []
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

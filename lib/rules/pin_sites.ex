@@ -171,6 +171,92 @@ defmodule Hypatia.Rules.PinSites do
   end
 
   @doc """
+  Every `uses:` whose value is an alias (`- uses: *checkout`, a block key or a
+  step/job flow entry as `sites/1` reads one), resolved to the site the
+  anchor it names holds: `%{line, at, len, anchor_line, site}` — the alias'
+  line, its byte offset and length, the anchor's line, and the site as
+  `sites/1` returns one, its offsets into the anchor's line. YAML resolves an
+  alias to the latest `&name` before it, so a later definition does not
+  count and an earlier one is shadowed — by any value, including one that is
+  no `action@ref` scalar, which names no site. Lines as `mask_lines/1`
+  returns them.
+  """
+  @spec alias_sites([String.t()]) :: [map()]
+  def alias_sites(lines) when is_list(lines) do
+    numbered = Enum.with_index(lines, 1)
+    defs = for {line, n} <- numbered, d <- anchor_defs(line), do: Map.put(d, :line, n)
+
+    for {line, n} <- numbered,
+        {name, at, len} <- uses_aliases(line),
+        %{site: %{} = site, line: anchor_line} <- [latest_anchor(defs, name, n, at)] do
+      %{line: n, at: at, len: len, anchor_line: anchor_line, site: site}
+    end
+  end
+
+  # The anchors `line` defines where a node starts (outside quotes and the
+  # comment), each `%{name, at, site}`: the site its scalar value is, or nil.
+  defp anchor_defs(line) do
+    masked = mask(line)
+
+    ~r/&([\w.-]+)/
+    |> Regex.scan(masked, return: :index)
+    |> Enum.filter(fn [{at, _}, _] ->
+      Regex.match?(
+        ~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)(?:![^\s]*\s+)*$/,
+        binary_part(masked, 0, at)
+      )
+    end)
+    |> Enum.map(fn [{at, len}, {n_at, n_len}] ->
+      rest_at = at + len
+      rest = binary_part(line, rest_at, byte_size(line) - rest_at)
+
+      site =
+        case Regex.run(
+               ~r/^\s+(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?(?=[\s,}\]#]|$)/,
+               rest,
+               return: :index
+             ) do
+          [_, {a_at, a_len}, {r_at, r_len}] ->
+            %{
+              action: binary_part(rest, a_at, a_len),
+              ref: binary_part(rest, r_at, r_len),
+              action_at: rest_at + a_at,
+              ref_at: rest_at + r_at
+            }
+
+          _ ->
+            nil
+        end
+
+      %{name: binary_part(masked, n_at, n_len), at: at, site: site}
+    end)
+  end
+
+  # The `uses:` keys of `line` whose value is an alias, at a site position,
+  # as `{name, offset of the "*", length of "*name"}`.
+  defp uses_aliases(line) do
+    masked = mask(line)
+
+    ~r/["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*\*([\w.-]+)/
+    |> Regex.scan(masked, return: :index)
+    |> Enum.flat_map(fn [{at, len}, {n_at, n_len}] ->
+      star = n_at - 1
+      prefix = binary_part(masked, 0, at)
+
+      if structural?(binary_part(masked, 0, star)) and
+           not Regex.match?(~r/[A-Za-z0-9_.\/-]$/, prefix),
+         do: [{binary_part(masked, n_at, n_len), star, at + len - star}],
+         else: []
+    end)
+  end
+
+  defp latest_anchor(defs, name, line, at) do
+    defs
+    |> Enum.filter(&(&1.name == name and (&1.line < line or (&1.line == line and &1.at < at))))
+    |> Enum.max_by(&{&1.line, &1.at}, fn -> nil end)
+  end
+
+  @doc """
   The flow depth at the start of each line of `content` — how many `[` and
   `{` the lines above left open, as the walk of `line_states/1` counts them
   (outside quoted scalars, comments and block-scalar content). A line at
