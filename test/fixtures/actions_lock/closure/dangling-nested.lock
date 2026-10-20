@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# Closure corpus fixture: dangling: a record's nested uses: names a ref with no record (the standards#963 shape). Contract: expected.tsv in this directory.
+version: 'v0.0.2'
+workflows:
+    '.github/workflows/push.yml':
+        - 'example/push-signed@3333333333333333333333333333333333333333'
+dependencies:
+    'example/push-signed@3333333333333333333333333333333333333333':
+        ref: 'v1.3'
+        commit: 'sha1-3333333333333333333333333333333333333333'
+        owner_id: 101
+        repo_id: 203
+        uses:
+            - 'example/setup-python@v2'
