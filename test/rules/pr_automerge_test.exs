@@ -809,6 +809,25 @@ defmodule Hypatia.Rules.PrAutomergeTest do
       assert PA.poison_sites([file(".github/workflows/ci.yml", data)], @policy) == []
     end
 
+    test "a pin written with escapes is the reference it decodes to, and no plain re-pin" do
+      escaped = "\\x31" <> String.slice(@poison, 1..-1//1)
+
+      patch = """
+      @@ -1,3 +1,3 @@
+           steps:
+      -      - uses: "github/codeql-action/init@#{@good}"
+      +      - uses: "github/codeql-action/init@#{escaped}"
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{denylist_id: "PIN-001"}] = PA.poison_sites([f], @policy)
+      refute PA.pin_lines_only?(f)
+
+      # Control: the same re-pin written plainly is the pin-only change it was.
+      plain = String.replace(patch, escaped, @poison)
+      assert PA.pin_lines_only?(file(".github/workflows/ci.yml", plain))
+    end
+
     test "a pin inside a multi-line quoted run: is text; one the hunk never closes is uncertain" do
       # The quote opens on a context line and closes inside the hunk: every
       # line between is string text, never a site.

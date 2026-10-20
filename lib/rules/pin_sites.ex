@@ -21,6 +21,12 @@ defmodule Hypatia.Rules.PinSites do
   `#`, inside an input's mapping (`with: { uses: ... }`), or after free text
   (`echo { uses: ... }` in a script).
 
+  A double-quoted value is read as YAML decodes it — KYAML (YAML-POLICY
+  Y-3) writes every value so, and an escape (`"a/b@\\x31…"`) is the
+  reference GitHub runs, not its spelling (`decode_dq/1`). A composite
+  action's steps are its root `runs:` steps in flow form too (`{ runs: {
+  steps: [ { uses: ... } ] } }`), as they are in block form.
+
   Every position this module returns is a byte offset into the line as
   given: the mask keeps the line's bytes where they were.
   """
@@ -55,9 +61,13 @@ defmodule Hypatia.Rules.PinSites do
   @spec sites(String.t(), String.t()) :: [map()]
   def sites(line, flow_prefix \\ "") when is_binary(line) and is_binary(flow_prefix) do
     masked = mask(line)
+    escaped = escaped_values(masked, flow_prefix)
 
     masked
     |> scan(flow_prefix)
+    |> Enum.reject(fn [_full, {a_at, _} | _] ->
+      Enum.any?(escaped, &(a_at >= &1.from and a_at <= &1.to))
+    end)
     |> Enum.map(fn [_full, {a_at, a_len}, {r_at, r_len}] ->
       %{
         action: binary_part(masked, a_at, a_len),
@@ -66,7 +76,149 @@ defmodule Hypatia.Rules.PinSites do
         ref_at: r_at
       }
     end)
+    |> Kernel.++(for %{site: %{} = site} <- escaped, do: site)
+    |> Enum.sort_by(& &1.action_at)
   end
+
+  # The double-quoted `uses` values of a masked line that hold an escape
+  # (`"github/codeql-action/init@\x31c5b…"`), each as `%{from, to, site}`:
+  # the body's byte span and the site its value decodes to (`decoded_site/2`),
+  # or nil — a value that is no structural site, that the line does not
+  # close (a double-quoted scalar continued over lines is not read here), or
+  # that does not decode to a reference. Such a value is read only through
+  # its decoding: GitHub runs the decoded reference, never the text.
+  defp escaped_values(masked, flow_prefix) do
+    ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*"/
+    |> Regex.scan(masked, return: :index)
+    |> Enum.flat_map(fn [{at, len}] ->
+      from = at + len
+
+      {body, close, _tail} =
+        take_quoted(binary_part(masked, from, byte_size(masked) - from), ?", "")
+
+      prefix = binary_part(masked, 0, from)
+
+      structural? =
+        if flow_prefix == "",
+          do: structural?(prefix),
+          else: structural_in_flow?(flow_prefix <> prefix)
+
+      cond do
+        not String.contains?(body, "\\") ->
+          []
+
+        structural? and close != "" ->
+          [%{from: from, to: from + byte_size(body), site: decoded_site(body, from)}]
+
+        true ->
+          [%{from: from, to: from + byte_size(body), site: nil}]
+      end
+    end)
+  end
+
+  # The site a double-quoted body (starting at byte `from` of its line)
+  # decodes to: the action and ref as YAML reads them, `action_at`/`ref_at`
+  # the source bytes they start at, `ref_len` the source length of the ref
+  # as written (a repair replaces exactly those bytes), `escaped: true`.
+  defp decoded_site(body, from) do
+    with {:ok, decoded, spans} <- decode_dq(body),
+         [_, {a_at, a_len}, {r_at, r_len}] <-
+           Regex.run(~r/\A([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)/, decoded,
+             return: :index
+           ) do
+      spans = List.to_tuple(spans)
+      {action_from, _} = elem(spans, a_at)
+      {ref_from, _} = elem(spans, r_at)
+      {_, ref_to} = elem(spans, r_at + r_len - 1)
+
+      %{
+        action: binary_part(decoded, a_at, a_len),
+        ref: binary_part(decoded, r_at, r_len),
+        action_at: from + action_from,
+        ref_at: from + ref_from,
+        ref_len: ref_to - ref_from,
+        escaped: true
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The body of a YAML double-quoted scalar (the text between its quotes, on
+  one line) as YAML decodes it: `{:ok, decoded, spans}`, `spans` the source
+  byte span `{from, to}` of every decoded byte, or `:error` for an escape
+  YAML does not define. The escapes are YAML 1.2's: `\\0 \\a \\b \\t \\n \\v
+  \\f \\r \\e \\  \\" \\/ \\\\ \\N \\_ \\L \\P`, `\\xXX`, `\\uXXXX`, `\\UXXXXXXXX` — the
+  JSON-style subset is what `yq -o kyaml` writes.
+  """
+  @spec decode_dq(String.t()) ::
+          {:ok, String.t(), [{non_neg_integer(), non_neg_integer()}]} | :error
+  def decode_dq(body) when is_binary(body), do: decode_dq(body, 0, [], [])
+
+  defp decode_dq(<<>>, _at, out, spans),
+    do: {:ok, out |> Enum.reverse() |> IO.iodata_to_binary(), Enum.reverse(spans)}
+
+  defp decode_dq(<<?\\, rest::binary>>, at, out, spans) do
+    case escape(rest) do
+      {:ok, bytes, used} ->
+        span = {at, at + 1 + used}
+        spans = Enum.reduce(1..byte_size(bytes)//1, spans, fn _, acc -> [span | acc] end)
+
+        decode_dq(
+          binary_part(rest, used, byte_size(rest) - used),
+          at + 1 + used,
+          [bytes | out],
+          spans
+        )
+
+      :error ->
+        :error
+    end
+  end
+
+  defp decode_dq(<<c, rest::binary>>, at, out, spans),
+    do: decode_dq(rest, at + 1, [<<c>> | out], [{at, at + 1} | spans])
+
+  @simple_escapes %{
+    ?0 => <<0>>,
+    ?a => <<7>>,
+    ?b => <<8>>,
+    ?t => <<9>>,
+    ?\t => <<9>>,
+    ?n => <<10>>,
+    ?v => <<11>>,
+    ?f => <<12>>,
+    ?r => <<13>>,
+    ?e => <<27>>,
+    ?\s => " ",
+    ?" => "\"",
+    ?/ => "/",
+    ?\\ => "\\",
+    ?N => <<0x85::utf8>>,
+    ?_ => <<0xA0::utf8>>,
+    ?L => <<0x2028::utf8>>,
+    ?P => <<0x2029::utf8>>
+  }
+
+  # The escape after a `\` in `rest`: `{:ok, bytes, bytes of rest used}`.
+  defp escape(<<c, _::binary>>) when is_map_key(@simple_escapes, c),
+    do: {:ok, Map.fetch!(@simple_escapes, c), 1}
+
+  defp escape(<<c, rest::binary>>) when c in [?x, ?u, ?U] do
+    n = %{?x => 2, ?u => 4, ?U => 8}[c]
+
+    with <<hex::binary-size(n), _::binary>> <- rest,
+         true <- Regex.match?(~r/\A[0-9A-Fa-f]+\z/, hex),
+         cp = String.to_integer(hex, 16),
+         true <- cp <= 0x10FFFF and cp not in 0xD800..0xDFFF do
+      {:ok, <<cp::utf8>>, 1 + n}
+    else
+      _ -> :error
+    end
+  end
+
+  defp escape(_), do: :error
 
   @doc """
   The structural site matches of an already masked line, each as
@@ -132,12 +284,14 @@ defmodule Hypatia.Rules.PinSites do
   indentation, list dashes, flow brackets and commas — so `- uses: a/b@x`,
   `{ uses: "a/b@x" },` and `[ { uses: a/b@x }, { uses: c/d@y } ]` are pin
   lines, and `steps: [ { uses: a/b@x } ]`, `- { name: x, uses: a/b@x }`
-  and `uses: a/b@x extra` are not. The comment is never part of it.
+  and `uses: a/b@x extra` are not. The comment is never part of it. Nor
+  is a line whose `uses` value is written with escapes (`"a/b@\\x31…"`): its
+  reference is read decoded (`sites/2`), but it is no plain re-pin.
   """
   @spec pin_line?(String.t()) :: boolean()
   def pin_line?(line) when is_binary(line) do
     masked = mask(line)
-    sites = scan(masked)
+    sites = if escaped_values(masked, "") == [], do: scan(masked), else: []
 
     remaining =
       sites
@@ -194,29 +348,33 @@ defmodule Hypatia.Rules.PinSites do
   def continued_site(key_line, next_line) when is_binary(key_line) and is_binary(next_line) do
     key = head(key_line)
 
-    value_re =
+    # Each form's value: the reference it may be, and what may follow it.
+    form =
       cond do
         m = Regex.run(~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, key) ->
           if indent_of(next_line) > byte_size(Enum.at(m, 1)),
             do:
-              ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/
+              {~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
+               ~r/\A\s*(?:#.*)?\z/}
 
         m =
             Regex.run(
               ~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:(?:\s+[&!]\S*)*\s+[|>][-+0-9]*\s*$/,
               key
             ) ->
-          if indent_of(next_line) > byte_size(Enum.at(m, 1)), do: @block_ref_re
+          if indent_of(next_line) > byte_size(Enum.at(m, 1)), do: {@block_ref_re, nil}
 
         Regex.match?(~r/[{,]\s*["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, key) and
             structural?(String.trim_trailing(key) <> " ") ->
-          ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:[,}\]]|#|$)/
+          {~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:[,}\]]|#|$)/,
+           ~r/\A\s*(?:[,}\]]|#|\z)/}
 
         true ->
           nil
       end
 
-    with %Regex{} <- value_re,
+    with {value_re, tail_re} <- form,
+         :plain <- escaped_value(next_line, tail_re),
          [_, {a_at, a_len}, {r_at, r_len}] <- Regex.run(value_re, next_line, return: :index) do
       %{
         action: binary_part(next_line, a_at, a_len),
@@ -225,7 +383,25 @@ defmodule Hypatia.Rules.PinSites do
         ref_at: r_at
       }
     else
+      {:escaped, site} -> site
       _ -> nil
+    end
+  end
+
+  # A continued value written double-quoted with an escape (`"a/b@\x31…"`)
+  # is read decoded: `{:escaped, site}` — nil when it decodes to no
+  # reference or more than `tail_re` allows follows its closing quote — or
+  # :plain for any other value (a block scalar's, `tail_re` nil, included).
+  defp escaped_value(_line, nil), do: :plain
+
+  defp escaped_value(line, tail_re) do
+    with [{0, from}] <- Regex.run(~r/\A\s*(?:[&!]\S*\s+)*"/, line, return: :index),
+         {body, close, tail} =
+           take_quoted(binary_part(line, from, byte_size(line) - from), ?", ""),
+         true <- String.contains?(body, "\\") do
+      {:escaped, if(close != "" and Regex.match?(tail_re, tail), do: decoded_site(body, from))}
+    else
+      _ -> :plain
     end
   end
 
@@ -1139,7 +1315,7 @@ defmodule Hypatia.Rules.PinSites do
         true
 
       Regex.match?(~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?$/, prefix) ->
-        prefix |> flow_stack() |> structural_flow_stack?()
+        prefix |> flow_stack() |> structural_flow_stack?(prefix)
 
       true ->
         false
@@ -1152,7 +1328,7 @@ defmodule Hypatia.Rules.PinSites do
   # and the brackets still open must make it a step's or a job's own.
   defp structural_in_flow?(text) do
     Regex.match?(~r/(?:[{,]|\n)\s*(?:-\s+)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?$/, text) and
-      text |> flow_stack() |> structural_flow_stack?()
+      text |> flow_stack() |> structural_flow_stack?(text)
   end
 
   # The brackets still open in `text`, innermost first, each with what opens
@@ -1187,14 +1363,34 @@ defmodule Hypatia.Rules.PinSites do
   # line, which this reader cannot see past), or one that goes on through a
   # job key into `jobs` (`jobs: { b: { steps: [ {`). The same `steps:`
   # inside any other mapping (`fixture: { steps: [ {` in a matrix) is data.
-  defp structural_flow_stack?(stack) do
+  # A composite action's steps are those of its root `runs:` (`runs: {
+  # steps: [ {`, KYAML or a flow line at column 0): `runs` must be the
+  # document's own key, its `{` the outermost bracket or one directly inside
+  # a root `{` the text starts with (`text`, from where the collection
+  # opened).
+  defp structural_flow_stack?(stack, text) do
     Enum.all?(stack, fn {_, key} -> key != :text end) and
       case stack do
-        [{"{", :none}] -> true
-        [{"{", :none}, {"[", key}] when key in ["steps", :none] -> true
-        [{"{", :none}, {"[", "steps"}, {"{", job}, {"{", "jobs"} | _] when is_binary(job) -> true
-        [{"{", job}, {"{", "jobs"} | _] when is_binary(job) -> true
-        _ -> false
+        [{"{", :none}] ->
+          true
+
+        [{"{", :none}, {"[", key}] when key in ["steps", :none] ->
+          true
+
+        [{"{", :none}, {"[", "steps"}, {"{", job}, {"{", "jobs"} | _] when is_binary(job) ->
+          true
+
+        [{"{", job}, {"{", "jobs"} | _] when is_binary(job) ->
+          true
+
+        [{"{", :none}, {"[", "steps"}, {"{", "runs"}] ->
+          Regex.match?(~r/\A["']?runs["']?\s*:/, text)
+
+        [{"{", :none}, {"[", "steps"}, {"{", "runs"}, {"{", :none}] ->
+          String.starts_with?(text, "{")
+
+        _ ->
+          false
       end
   end
 

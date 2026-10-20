@@ -675,6 +675,64 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       end
     end
 
+    test "a composite action written as KYAML: its runs: steps are sites" do
+      # `yq -p yaml -o kyaml` of a composite action (YAML-POLICY Y-3).
+      content = """
+      {
+        name: "setup",
+        runs: {
+          using: "composite",
+          steps: [
+            {
+              uses: "github/codeql-action/init@#{@poison}", # v4.38.1
+            },
+          ],
+        },
+      }
+      """
+
+      assert [%{line: 7}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert fixed =~ ~s(uses: "github/codeql-action/init@#{@good}", # v4.38.0)
+
+      # Control: a `runs:` mapping that is an input's value, not the action's
+      # own root key, holds data.
+      data =
+        "runs:\n  using: composite\n  steps:\n    - uses: some/wrapper@v1\n      with:\n" <>
+          "        runs: { steps: [ { uses: github/codeql-action/init@#{@poison} } ] }\n"
+
+      assert PI.pi001_denylisted_pin(data, @policy) == []
+    end
+
+    test "a double-quoted value is the reference YAML decodes it to" do
+      tail = String.slice(@poison, 1..-1//1)
+      escaped = "\\x31" <> tail
+      steps = "jobs:\n  a:\n    steps:\n"
+
+      # An escape in the ref, an escaped `/` in the action, the `\u` form
+      # and a value continued below its key: each is the denylisted
+      # commit GitHub runs, and the repair rewrites exactly the ref's bytes.
+      for {value, repaired} <- [
+            {~s(      - uses: "github/codeql-action/init@#{escaped}"\n),
+             ~s(      - uses: "github/codeql-action/init@#{@good}"\n)},
+            {~s(      - uses: "github\\/codeql-action/init@#{@poison}"\n),
+             ~s(      - uses: "github\\/codeql-action/init@#{@good}"\n)},
+            {~s(      - { uses: "github/codeql-action/init@\\u0031#{tail}" }\n),
+             ~s(      - { uses: "github/codeql-action/init@#{@good}" }\n)},
+            {~s(      - uses:\n          "github/codeql-action/init@#{escaped}"\n),
+             ~s(      - uses:\n          "github/codeql-action/init@#{@good}"\n)}
+          ] do
+        content = steps <> value
+        assert [_] = PI.pi001_denylisted_pin(content, @policy), value
+        assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+        assert fixed == steps <> repaired
+      end
+
+      # Control: an escape YAML does not define decodes to nothing.
+      bad = steps <> ~s(      - uses: "github/codeql-action/init@\\q#{@poison}"\n)
+      assert PI.pi001_denylisted_pin(bad, @policy) == []
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

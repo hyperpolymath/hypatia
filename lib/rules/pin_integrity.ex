@@ -78,7 +78,9 @@ defmodule Hypatia.Rules.PinIntegrity do
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
   two path segments, which is what an allow/deny list keys on), `:ref`,
-  `:ref_at` (the ref's byte offset in its line) and `:comment` — the
+  `:ref_at` (the ref's byte offset in its line), `:ref_len` (its length as
+  written — a value written with escapes, `"a/b@\\x31…"`, is read decoded,
+  so the ref's text is longer than the ref) and `:comment` — the
   line's comment, trimmed, when the site is the line's only one, else `""`:
   `[ { uses: a/b@x }, { uses: c/d@y } ] # v4` labels neither pin.
   """
@@ -151,6 +153,7 @@ defmodule Hypatia.Rules.PinIntegrity do
       action_base: action_base(site.action),
       ref: site.ref,
       ref_at: site.ref_at,
+      ref_len: Map.get(site, :ref_len, byte_size(site.ref)),
       comment: comment
     }
   end
@@ -633,7 +636,7 @@ defmodule Hypatia.Rules.PinIntegrity do
       |> Enum.sort_by(& &1.ref_at, :desc)
       |> Enum.reduce(original, fn site, acc ->
         %{sha: sha} = known_good(policy, site.action)
-        tail_at = site.ref_at + byte_size(site.ref)
+        tail_at = site.ref_at + site.ref_len
 
         binary_part(acc, 0, site.ref_at) <>
           sha <> binary_part(acc, tail_at, byte_size(acc) - tail_at)
