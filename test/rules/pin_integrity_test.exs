@@ -295,6 +295,52 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert PI.pi001_denylisted_pin(new_content, @policy) == []
     end
 
+    test "a compact flow step is a site: caught by PI001 and spliced at its own offset" do
+      # `- { name: ..., uses: ... }` carries the dash, the brace and a sibling
+      # key; the old whole-line pattern allowed only one of the first two and
+      # nothing after the ref, so this pin was invisible to the file scan.
+      content = """
+      jobs:
+        a:
+          steps:
+            - { name: "scan #{@poison}", uses: github/codeql-action/init@#{@poison} } # v4.38.1
+            - uses: actions/checkout@v7.0.1
+      """
+
+      assert [%{line: 4, detail: %{denylist_id: "PIN-001"}}] =
+               PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [excision]} = PI.substitute_denylisted_pins(content, @policy)
+      assert excision.from_ref == @poison
+
+      # Only the site moves: the same 40 hex characters inside `name:` are
+      # text and stay as written, and the one-site line's label is relabelled.
+      assert new_content =~
+               ~s(- { name: "scan #{@poison}", uses: github/codeql-action/init@#{@good} } # v4.38.0)
+
+      assert PI.pi001_denylisted_pin(new_content, @policy) == []
+    end
+
+    test "a multi-site flow line is repaired site by site and its shared label is kept" do
+      content =
+        "    steps: [ { uses: github/codeql-action/init@#{@poison} }, " <>
+          "{ uses: actions/checkout@v7.0.1 } ] # v7.0.1\n"
+
+      assert [_] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "init@#{@good} }, { uses: actions/checkout@v7.0.1 } ] # v7.0.1"
+    end
+
+    test "a mixed-case action spelling meets its lower-case denylist entry" do
+      # GitHub resolves `GitHub/CodeQL-Action` to `github/codeql-action`.
+      content = "      - uses: GitHub/CodeQL-Action/init@#{@poison} # v4.38.1\n"
+
+      assert [%{rule_id: "PI001"}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content == "      - uses: GitHub/CodeQL-Action/init@#{@good} # v4.38.0\n"
+    end
+
     test "a file with no denylisted site is returned untouched" do
       clean = "- uses: actions/checkout@v7.0.1\n"
 

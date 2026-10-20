@@ -1669,23 +1669,23 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # The entries of the mapping anchored `&name`: the first `&name` in the
-  # document, read as a flow mapping when a `{` follows it, else as the
-  # block mapping under its line.
+  # document outside comments and quoted scalars, read as a flow mapping
+  # when a `{` follows it, else as the block mapping under its line. A
+  # `note: "see &name"` before the real anchor is text.
   defp wf_anchor_entries(lines, name) do
     re = ~r/&#{Regex.escape(name)}(?=[\s,{}\[\]]|$)/
 
     lines
     |> Enum.with_index(1)
-    |> Enum.find(fn {l, _} -> wf026_plain?(l) and Regex.match?(re, wf_strip_comment(l)) end)
+    |> Enum.find(fn {l, _} -> wf026_plain?(l) and Regex.match?(re, wf_mask_quoted(l)) end)
     |> case do
       nil ->
         :error
 
       {line, number} ->
-        [{at, len}] = Regex.run(re, line, return: :index)
-
-        after_anchor =
-          line |> binary_part(at + len, byte_size(line) - at - len) |> wf_strip_comment()
+        masked = wf_mask_quoted(line)
+        [{at, len}] = Regex.run(re, masked, return: :index)
+        after_anchor = binary_part(masked, at + len, byte_size(masked) - at - len)
 
         case Regex.run(~r/\{/, after_anchor, return: :index) do
           [{brace, _}] ->
@@ -1935,6 +1935,28 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp wf_strip_comment([q | rest], q, acc), do: wf_strip_comment(rest, nil, [q | acc])
   defp wf_strip_comment([c | rest], q, acc), do: wf_strip_comment(rest, q, [c | acc])
 
+  # The line with its comment dropped and every quoted scalar's body blanked
+  # to `x` byte for byte, so `&name` or `{` written inside a string is not
+  # structure, and an offset into the result is an offset into the line.
+  defp wf_mask_quoted(text), do: wf_mask_quoted(text, nil, "")
+
+  defp wf_mask_quoted(<<>>, _q, out), do: out
+
+  defp wf_mask_quoted(<<?#, _::binary>>, nil, out)
+       when out == "" or binary_part(out, byte_size(out) - 1, 1) in [" ", "\t"],
+       do: out
+
+  defp wf_mask_quoted(<<c, rest::binary>>, nil, out) when c in [?", ?'],
+    do: wf_mask_quoted(rest, c, out <> <<c>>)
+
+  defp wf_mask_quoted(<<c, rest::binary>>, nil, out), do: wf_mask_quoted(rest, nil, out <> <<c>>)
+
+  defp wf_mask_quoted(<<?\\, _, rest::binary>>, ?", out),
+    do: wf_mask_quoted(rest, ?", out <> "xx")
+
+  defp wf_mask_quoted(<<q, rest::binary>>, q, out), do: wf_mask_quoted(rest, nil, out <> <<q>>)
+  defp wf_mask_quoted(<<_, rest::binary>>, q, out), do: wf_mask_quoted(rest, q, out <> "x")
+
   defp wf_unquote(text) do
     text
     |> String.trim()
@@ -2094,7 +2116,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # not a call, so the fleet is never sent to rewrite script data.
         # The 40 hex characters end the ref (`@<sha>-patched` is a tag), in
         # either case: git resolves the commit ID case-insensitively.
-        reusable = Regex.escape(rev.reusable)
+        reusable = wf027_reusable_re(rev.reusable)
 
         ref_re =
           ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?#{reusable}@([0-9a-fA-F]{40})(?=["'\s#,}\]]|$)/
@@ -2131,6 +2153,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
         end)
       end)
     end)
+  end
+
+  # The reusable's identity as a regex source. GitHub resolves the owner and
+  # the repository name in either case (`Hyperpolymath/Standards` is
+  # `hyperpolymath/standards`); the workflow path inside the repository is a
+  # file path and is matched as written. The fleet fixer reads the pin
+  # case-insensitively and rewrites it as the caller spells it.
+  defp wf027_reusable_re(reusable) do
+    case String.split(reusable, "/", parts: 3) do
+      [owner, repo, path] -> "(?i:#{Regex.escape(owner <> "/" <> repo)})/#{Regex.escape(path)}"
+      _ -> Regex.escape(reusable)
+    end
   end
 
   # Is the `uses` at `uses_at` the entry of a flow mapping a job key opens?

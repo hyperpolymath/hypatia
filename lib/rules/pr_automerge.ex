@@ -61,6 +61,8 @@ defmodule Hypatia.Rules.PrAutomerge do
   dependabot to re-raise it.
   """
 
+  alias Hypatia.Rules.PinSites
+
   @doc """
   Classify a PR record against the policy.
 
@@ -125,8 +127,8 @@ defmodule Hypatia.Rules.PrAutomerge do
       files
       |> Enum.flat_map(fn file ->
         file
-        |> added_lines()
-        |> Enum.flat_map(fn line ->
+        |> added_entries()
+        |> Enum.flat_map(fn {line, certain?} ->
           # Every site on the line: a flow sequence can put several steps on
           # one changed line, and a pin judged by its first site alone lets a
           # denylisted second one through to `arm_auto`. The action is
@@ -143,7 +145,10 @@ defmodule Hypatia.Rules.PrAutomerge do
               file: filename_of(file),
               line: String.trim(line),
               denylist_id: Map.get(entry, "id"),
-              severity: Map.get(entry, "severity", "critical")
+              severity: Map.get(entry, "severity", "critical"),
+              # false when the hunk shows the line among script text: it may
+              # be a fixture inside a `run: |` whose header is outside the hunk.
+              certain: certain?
             }
           end)
         end)
@@ -188,7 +193,11 @@ defmodule Hypatia.Rules.PrAutomerge do
 
     # A changed line inside a block scalar (`run: |`) is script text, never a
     # pin line, so a script edit is not a pin-only change.
-    lines != [] and Enum.all?(lines, fn {line, scalar?} -> not scalar? and pin_line?(line) end)
+    # A line the hunk shows among script text is not known to be a pin line.
+    lines != [] and
+      Enum.all?(lines, fn {line, scalar?, certain?} ->
+        certain? and not scalar? and pin_line?(line)
+      end)
   end
 
   # ─── PA002/PA003/PA004 · version deltas ───────────────────────────────
@@ -197,7 +206,8 @@ defmodule Hypatia.Rules.PrAutomerge do
   Version deltas for every action this PR re-pins.
 
   Each removed pin is paired with the first added pin for the same action
-  in the same file. Unpaired pins and unchanged refs are omitted. Returns a
+  in the same file that no earlier removal has claimed. Unpaired pins and
+  unchanged refs are omitted. Returns a
   flat list of maps with `:action`, `:file`, `:from`, `:to`, `:status`,
   `:source` and `:major?`.
 
@@ -222,42 +232,52 @@ defmodule Hypatia.Rules.PrAutomerge do
       removed = file |> removed_lines() |> Enum.flat_map(&parse_pins/1)
       added = file |> added_lines() |> Enum.flat_map(&parse_pins/1)
 
+      # Each added site pairs with ONE removed site of the same action, in
+      # order: a line that keeps one `actions/checkout` at v4 and moves a
+      # second from v4 to v7 carries the major bump, which pairing every
+      # removal with the first addition would hide.
       removed
-      |> Enum.flat_map(fn old ->
-        case Enum.find(added, &(String.downcase(&1.action) == String.downcase(old.action))) do
+      |> Enum.flat_map_reduce(added, fn old, pool ->
+        case Enum.find_index(pool, &(String.downcase(&1.action) == String.downcase(old.action))) do
           nil ->
-            []
+            {[], pool}
 
-          new ->
-            if new.ref == old.ref do
-              []
-            else
-              from = resolve(resolution, old.action, old.ref)
-              to = resolve(resolution, new.action, new.ref)
-              claim = claim_for(claims, old.action)
-
-              cond do
-                from != nil and to != nil and claim != nil and
-                    (claim.from != from or claim.to != to) ->
-                  delta(old, new, from, to, :conflict, "tags")
-
-                from != nil and to != nil ->
-                  delta(old, new, from, to, :ok, "tags")
-
-                claim != nil ->
-                  delta(old, new, claim.from, claim.to, :ok, "body-claim")
-
-                true ->
-                  delta(old, new, nil, nil, :unresolved, "none")
-              end
-              |> Map.put(:file, filename_of(file))
-              # flat_map needs a list: a bare map would be flattened into
-              # its {key, value} pairs.
-              |> List.wrap()
-            end
+          i ->
+            {Enum.at(pool, i) |> pin_delta(old, file, resolution, claims),
+             List.delete_at(pool, i)}
         end
       end)
+      |> elem(0)
     end)
+  end
+
+  defp pin_delta(new, old, file, resolution, claims) do
+    if new.ref == old.ref do
+      []
+    else
+      from = resolve(resolution, old.action, old.ref)
+      to = resolve(resolution, new.action, new.ref)
+      claim = claim_for(claims, old.action)
+
+      cond do
+        from != nil and to != nil and claim != nil and
+            (claim.from != from or claim.to != to) ->
+          delta(old, new, from, to, :conflict, "tags")
+
+        from != nil and to != nil ->
+          delta(old, new, from, to, :ok, "tags")
+
+        claim != nil ->
+          delta(old, new, claim.from, claim.to, :ok, "body-claim")
+
+        true ->
+          delta(old, new, nil, nil, :unresolved, "none")
+      end
+      |> Map.put(:file, filename_of(file))
+      # flat_map_reduce needs a list: a bare map would be flattened into its
+      # {key, value} pairs.
+      |> List.wrap()
+    end
   end
 
   defp delta(old, _new, from, to, status, source) do
@@ -333,6 +353,12 @@ defmodule Hypatia.Rules.PrAutomerge do
 
       not dependency_bot?(author, policy) ->
         reject(base, :flag, "not_a_dependency_bot", "P3")
+
+      Enum.any?(scan.poison_sites, &(not &1.certain)) ->
+        # The hunk shows a denylisted pin among script text: it may be a
+        # fixture inside a `run: |` whose header is outside the hunk. Closing
+        # the PR or excising the line would both act on a guess.
+        reject(base, :flag, "denylisted_pin_context_unknown", "P1")
 
       scan.poison_sites != [] and scan.major_delta ->
         reject(base, :close_poison_and_majors, "introduces_denylisted_pin_and_major_bumps", "P1")
@@ -485,207 +511,126 @@ defmodule Hypatia.Rules.PrAutomerge do
     end
   end
 
-  # One `uses:` site anywhere on a line, bounded on the left so `reuses:` is
-  # not one. Matched against the MASKED line (see mask_scalars/1).
-  @pin_site_re ~r/(?:^|[^A-Za-z0-9_.\/-])["']?uses["']?\s*:\s*["']?(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}\]]+)/
-
   @doc """
-  Every structural `uses:` site on a line, in order, as `%{action, base, ref}`.
+  Every structural `uses:` site on a diff line, in order, as
+  `%{action, base, ref}`.
 
   A flow sequence may put several steps on one line
   (`+  { uses: a/b@x }, { uses: c/d@y },`); `parse_pin/1` reads only the
-  first. Only a site the YAML structure makes a pin counts:
-
-    * the line's own leading `uses:` key (`uses:`, `- uses:`, `- { uses:`);
-    * an entry of a flow mapping that is a step or a job — an anonymous
-      `{ ... }` at the line's level or in a `[` that `steps:` (or nothing on
-      the line) opens, or a mapping a job key opens inside `jobs: { ... }`.
-
-  Text is not a site: a pin inside a quoted `name:` or `run:` scalar, after
-  `#`, inside an input's mapping (`with: { uses: ... }`), or after free text
-  (`echo { uses: ... }` in a script).
+  first. Which sites count is `Hypatia.Rules.PinSites`'s rule, the same one
+  PI001 reads a file with.
   """
   @spec parse_pins(String.t()) :: [map()]
   def parse_pins(line) do
-    masked = line |> String.replace(~r/^[-+]/, "") |> mask_scalars()
-
-    masked
-    |> pin_sites()
-    |> Enum.map(fn [_full, {a_at, a_len}, {r_at, r_len}] ->
-      action = binary_part(masked, a_at, a_len)
-      %{action: action, base: action_base(action), ref: binary_part(masked, r_at, r_len)}
+    line
+    |> String.replace(~r/^[-+]/, "")
+    |> PinSites.sites()
+    |> Enum.map(fn %{action: action, ref: ref} ->
+      %{action: action, base: action_base(action), ref: ref}
     end)
   end
 
-  defp pin_sites(masked) do
-    @pin_site_re
-    |> Regex.scan(masked, return: :index, capture: :all)
-    |> Enum.filter(fn [_full, {action_at, _} | _] ->
-      structural_site?(binary_part(masked, 0, action_at))
-    end)
-  end
+  defp pin_line?(line), do: line |> String.replace(~r/^[-+]/, "") |> PinSites.pin_line?()
 
-  defp pin_line?(line) do
-    masked = line |> String.replace(~r/^[-+]/, "") |> mask_scalars()
-    sites = pin_sites(masked)
-
-    remaining =
-      sites
-      |> Enum.reverse()
-      |> Enum.reduce(masked, fn [{at, len}, {action_at, _}, _], rest ->
-        # The site match includes an opening value quote but ends at the ref.
-        # Remove its matching closing quote along with the pin.
-        quote = binary_part(masked, action_at - 1, 1)
-        closing = binary_part(rest, at + len, min(1, byte_size(rest) - at - len))
-        len = if quote in ["\"", "'"] and closing == quote, do: len + 1, else: len
-        binary_part(rest, 0, at) <> binary_part(rest, at + len, byte_size(rest) - at - len)
-      end)
-
-    sites != [] and Regex.match?(~r/^[\s\-\[\]{},]*$/, remaining)
-  end
-
-  # `prefix` is the masked line up to the site's action.
-  defp structural_site?(prefix) do
-    cond do
-      Regex.match?(~r/^\s*(?:-\s+)?(?:\{\s*)?["']?uses["']?\s*:\s*["']?$/, prefix) ->
-        true
-
-      Regex.match?(~r/[{,]\s*["']?uses["']?\s*:\s*["']?$/, prefix) ->
-        prefix |> flow_stack() |> structural_flow_stack?()
-
-      true ->
-        false
-    end
-  end
-
-  # The brackets still open in `text`, innermost first, each with what opens
-  # it: the key before it (`steps: [`), :none (nothing but indentation or a
-  # list dash), or :text (anything else — `echo {` is a script, not YAML).
-  defp flow_stack(text) do
-    text
-    |> String.graphemes()
-    |> Enum.reduce({[], ""}, fn
-      c, {stack, seg} when c in ["{", "["] -> {[{c, opener_key(seg)} | stack], ""}
-      c, {stack, _seg} when c in ["}", "]"] -> {Enum.drop(stack, 1), ""}
-      ",", {stack, _seg} -> {stack, ""}
-      c, {stack, seg} -> {stack, seg <> c}
-    end)
-    |> elem(0)
-  end
-
-  defp opener_key(seg) do
-    cond do
-      Regex.match?(~r/^\s*(?:-\s*)?$/, seg) -> :none
-      m = Regex.run(~r/^\s*(?:-\s+)?["']?([\w.-]+)["']?\s*:\s*$/, seg) -> Enum.at(m, 1)
-      true -> :text
-    end
-  end
-
-  defp structural_flow_stack?(stack) do
-    Enum.all?(stack, fn {_, key} -> key != :text end) and
-      case stack do
-        [{"{", :none}] -> true
-        [{"{", :none}, {"[", key} | _] when key in ["steps", :none] -> true
-        [{"{", job}, {"{", "jobs"} | _] when is_binary(job) -> true
-        _ -> false
-      end
-  end
-
-  # The line with its comment dropped and every quoted scalar that is
-  # neither a key nor the value of a `uses` key blanked to `x`. A `uses`
-  # value and a quoted key are kept as written, so the captures read from
-  # the masked line are the pin's own text.
-  @uses_tail_re ~r/(?:^|[-{,\s])["']?uses["']?\s*:\s*$/
-
-  defp mask_scalars(line), do: do_mask(line, "")
-
-  defp do_mask("", out), do: out
-
-  defp do_mask(<<q::utf8, rest::binary>>, out) when q in [?", ?'] do
-    {body, close, tail} = take_quoted(rest, q, "")
-
-    kept =
-      if Regex.match?(~r/^\s*:/, tail) or Regex.match?(@uses_tail_re, out),
-        do: body,
-        else: String.duplicate("x", String.length(body))
-
-    do_mask(tail, out <> <<q::utf8>> <> kept <> close)
-  end
-
-  defp do_mask(<<?#, rest::binary>>, out) do
-    if out == "" or String.ends_with?(out, [" ", "\t"]),
-      do: out,
-      else: do_mask(rest, out <> "#")
-  end
-
-  defp do_mask(<<c::utf8, rest::binary>>, out), do: do_mask(rest, out <> <<c::utf8>>)
-  defp do_mask(<<c, rest::binary>>, out), do: do_mask(rest, out <> <<c>>)
-
-  # The body of a quoted scalar up to its closing quote; a backslash escapes
-  # the next character inside double quotes. An unterminated scalar runs to
-  # the end of the line.
-  defp take_quoted("", _q, acc), do: {acc, "", ""}
-
-  defp take_quoted(<<?\\, c::utf8, rest::binary>>, ?", acc),
-    do: take_quoted(rest, ?", acc <> <<?\\, c::utf8>>)
-
-  defp take_quoted(<<c::utf8, rest::binary>>, q, acc) when c == q, do: {acc, <<c::utf8>>, rest}
-
-  defp take_quoted(<<c::utf8, rest::binary>>, q, acc),
-    do: take_quoted(rest, q, acc <> <<c::utf8>>)
-
-  defp take_quoted(<<c, rest::binary>>, q, acc), do: take_quoted(rest, q, acc <> <<c>>)
-
-  # Every changed line of a patch, paired with whether it sits inside a
-  # block scalar (`run: |`, `script: >-`) on its own side of the diff, as far
-  # as the hunk shows: the context and changed lines of each side are read in
-  # order, and a `key: |` line opens a scalar that runs while lines are
-  # indented deeper than its key. A pin written inside a script is text.
+  # Every changed line of a patch as `{line, scalar?, certain?}`.
+  #
+  # `scalar?`: the line sits inside a block scalar (`run: |`, `script: >-`)
+  # on its own side of the diff, as far as the hunk shows — the context and
+  # changed lines of each side are read in order, and a `key: |` line opens
+  # a scalar that runs while lines are indented deeper than its key. A pin
+  # written inside a script is text.
+  #
+  # `certain?`: the hunk does not show the line among script text. A hunk
+  # that starts inside a long `run: |` has no header to see, so the line's
+  # YAML ancestry is unknown; the context around it says which. Every other
+  # line of its side at its indentation or shallower — its siblings and
+  # ancestors as far as the hunk shows — must be YAML (a key, a list item, a
+  # flow bracket, a comment); one that is not (`cat > f <<'EOF'`, `EOF`,
+  # `make test`) leaves it uncertain. A hunk with no such line gives no
+  # evidence and leaves it certain.
   defp changed_lines(file) do
     file
     |> patch_of()
     |> String.split("\n")
-    |> Enum.reduce({[], nil, nil}, fn line, {acc, old, new} ->
+    |> Enum.chunk_while(
+      [],
+      fn line, hunk ->
+        if String.starts_with?(line, "@@"),
+          do: {:cont, Enum.reverse(hunk), []},
+          else: {:cont, [line | hunk]}
+      end,
+      fn hunk -> {:cont, Enum.reverse(hunk), []} end
+    )
+    |> Enum.flat_map(&hunk_lines/1)
+  end
+
+  defp hunk_lines(hunk) do
+    hunk = Enum.reject(hunk, &Regex.match?(~r/^[-+]{3}/, &1))
+    old = side_view(hunk, "-")
+    new = side_view(hunk, "+")
+
+    hunk
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {line, i} ->
       cond do
-        String.starts_with?(line, "@@") ->
-          {acc, nil, nil}
-
-        Regex.match?(~r/^[-+]{3}/, line) ->
-          {acc, old, new}
-
-        String.starts_with?(line, "+") ->
-          {inside?, new} = scalar_step(new, String.slice(line, 1..-1//1))
-          {[{line, inside?} | acc], old, new}
-
-        String.starts_with?(line, "-") ->
-          {inside?, old} = scalar_step(old, String.slice(line, 1..-1//1))
-          {[{line, inside?} | acc], old, new}
-
-        String.starts_with?(line, " ") or line == "" ->
-          text = String.slice(line, 1..-1//1)
-          {_, old} = scalar_step(old, text)
-          {_, new} = scalar_step(new, text)
-          {acc, old, new}
-
-        true ->
-          {acc, old, new}
+        String.starts_with?(line, "+") -> [line_status(line, i, new)]
+        String.starts_with?(line, "-") -> [line_status(line, i, old)]
+        true -> []
       end
     end)
+  end
+
+  # One side of a hunk (context lines plus the changed lines of `mark`), in
+  # order, as `{hunk_index, text, scalar?}`.
+  defp side_view(hunk, mark) do
+    hunk
+    |> Enum.with_index()
+    |> Enum.filter(fn {line, _} ->
+      String.starts_with?(line, mark) or String.starts_with?(line, " ") or line == ""
+    end)
+    |> Enum.map_reduce(nil, fn {line, i}, state ->
+      text = String.slice(line, 1..-1//1)
+      {inside?, state} = scalar_step(state, text)
+      {{i, text, inside?}, state}
+    end)
     |> elem(0)
-    |> Enum.reverse()
+  end
+
+  defp line_status(line, i, view) do
+    {before, [{_, text, scalar?} | rest]} = Enum.split_while(view, fn {j, _, _} -> j != i end)
+    indent = indent_of(text)
+
+    certain? =
+      (before ++ rest)
+      |> Enum.reject(fn {_, t, inside?} -> inside? or String.trim(t) == "" end)
+      |> Enum.filter(fn {_, t, _} -> indent_of(t) <= indent end)
+      |> Enum.all?(fn {_, t, _} -> yaml_like?(t) end)
+
+    {line, scalar?, certain?}
+  end
+
+  defp indent_of(text), do: String.length(text) - String.length(String.trim_leading(text, " "))
+
+  # A line YAML structure could be: a key, a list item, a flow bracket, or
+  # nothing but a comment. Shell, prose and heredoc markers are not.
+  defp yaml_like?(text) do
+    t = text |> PinSites.mask() |> String.trim()
+
+    t == "" or Regex.match?(~r/^(?:-\s+)?["']?[\w.\/-][\w.\/ -]*["']?\s*:(?:\s|$)/, t) or
+      Regex.match?(~r/^-(?:\s|$)/, t) or Regex.match?(~r/^[{}\[\],]/, t)
   end
 
   # One line of one side: is it inside the open block scalar (`state` is the
   # column of the key that opened it, or nil), and what is open after it?
   defp scalar_step(state, text) do
-    indent = String.length(text) - String.length(String.trim_leading(text, " "))
+    indent = indent_of(text)
     inside? = state != nil and (String.trim(text) == "" or indent > state)
 
     cond do
       inside? ->
         {true, state}
 
-      Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, mask_scalars(text)) ->
+      Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, PinSites.mask(text)) ->
         {false, text |> String.replace(~r/[^\s-].*$/, "") |> String.length()}
 
       true ->
@@ -693,11 +638,19 @@ defmodule Hypatia.Rules.PrAutomerge do
     end
   end
 
-  defp added_lines(file),
-    do: for({line, false} <- changed_lines(file), String.starts_with?(line, "+"), do: line)
+  defp added_lines(file), do: for({line, _} <- added_entries(file), do: line)
+
+  # Added lines outside block scalars, each with its certainty.
+  defp added_entries(file),
+    do:
+      for(
+        {line, false, certain?} <- changed_lines(file),
+        String.starts_with?(line, "+"),
+        do: {line, certain?}
+      )
 
   defp removed_lines(file),
-    do: for({line, false} <- changed_lines(file), String.starts_with?(line, "-"), do: line)
+    do: for({line, false, _} <- changed_lines(file), String.starts_with?(line, "-"), do: line)
 
   defp patch_of(file), do: Map.get(file, :patch) || Map.get(file, "patch") || ""
 

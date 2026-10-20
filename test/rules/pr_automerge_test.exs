@@ -482,6 +482,66 @@ defmodule Hypatia.Rules.PrAutomergeTest do
 
       assert [%{action: "actions/checkout", ref: "v4.1.7"}] = PA.parse_pins(line)
     end
+
+    test "repeated sites of one action pair one-to-one, so the second site's major bump counts" do
+      # The first checkout stays at v4.1.7 and the second moves to v7.0.1.
+      # Pairing both removals with the first addition (the unchanged one)
+      # hid the major bump and armed an excision instead of a close.
+      patch = """
+      @@ -1,1 +1,1 @@
+      -    steps: [ { uses: actions/checkout@v4.1.7 }, { uses: actions/checkout@v4.1.7 }, { uses: github/codeql-action/init@#{@good} } ]
+      +    steps: [ { uses: actions/checkout@v4.1.7 }, { uses: actions/checkout@v7.0.1 }, { uses: github/codeql-action/init@#{@poison} } ]
+      """
+
+      resolution = %{
+        {"actions/checkout", "v4.1.7"} => "4.1.7",
+        {"actions/checkout", "v7.0.1"} => "7.0.1"
+      }
+
+      f = file(".github/workflows/ci.yml", patch)
+
+      assert [%{action: "actions/checkout", from: "4.1.7", to: "7.0.1", major?: true}] =
+               f
+               |> List.wrap()
+               |> PA.pin_deltas(resolution, [])
+               |> Enum.filter(&(&1.action == "actions/checkout"))
+
+      decision = PA.classify(pr([f], resolution: resolution), @policy)
+      assert decision.disposition == :close_poison_and_majors
+    end
+
+    test "a hunk that opens inside a script, header out of view, flags a poison pin rather than closing" do
+      # More than three lines below `run: |`, the hunk shows no header: the
+      # pin may be fixture text. Its neighbours at its own indentation are
+      # shell, so the context is unknown and the PR goes to an owner.
+      patch = """
+      @@ -40,3 +40,3 @@
+                 cat > fixture.yml <<'EOF'
+      -          - uses: github/codeql-action/init@#{@good}
+      +          - uses: github/codeql-action/init@#{@poison}
+                 EOF
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{certain: false}] = PA.poison_sites([f], @policy)
+      refute PA.pin_lines_only?(f)
+
+      decision = PA.classify(pr([f]), @policy)
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "denylisted_pin_context_unknown"
+
+      # Control: the same change among YAML siblings is a live pin.
+      live = """
+      @@ -12,3 +12,3 @@
+             - name: Init CodeQL
+      -        uses: github/codeql-action/init@#{@good}
+      +        uses: github/codeql-action/init@#{@poison}
+               with:
+      """
+
+      live_decision = PA.classify(pr([file(".github/workflows/ci.yml", live)]), @policy)
+      assert live_decision.disposition == :close_poison_only
+    end
   end
 
   describe "body_claims/1" do

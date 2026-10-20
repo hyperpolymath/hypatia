@@ -53,48 +53,57 @@ defmodule Hypatia.Rules.PinIntegrity do
   or to the owner as `flag` when the repair is not a substitution.
   """
 
-  # A `uses:` pin site, in block form (`- uses: a/b@ref # v1`) or KYAML form
-  # (`uses: "a/b@ref", # v1` and one-line `{ uses: "a/b@ref" },`). The key
-  # must open the line — after indentation and an optional `-` or `{` — so a
-  # `uses:` inside a `run:` string never counts. The value may be quoted; the
-  # quote, trailing comma and closing brace are not part of the ref.
-  # The key itself may be quoted too (`"uses": "a/b@ref"`): GitHub reads
-  # the same key, so the scanner and the repair must as well.
-  @uses_regex ~r/^\s*(?:-\s*|\{\s*)?(?<kq>["']?)uses\k<kq>\s*:\s*(?<q>["']?)(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}]+)\k<q>\s*\}?\s*,?\s*(?:#\s*(?<comment>.*?))?\s*$/
+  alias Hypatia.Rules.PinSites
 
   @doc """
   Parse every `uses:` pin site in a workflow file.
 
+  A site is what `Hypatia.Rules.PinSites` reads as one — block form
+  (`- uses: a/b@ref # v1`), KYAML form (`uses: "a/b@ref", # v1`), and every
+  step of a compact flow sequence or mapping (`steps: [{ uses: a/b@x }]`,
+  `- { name: x, uses: a/b@x }`) — so the file scan sees the pins the diff
+  rules (PA001-PA004) see. A `uses:` inside a quoted `run:` string, a
+  comment or script text is not one.
+
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
-  two path segments, which is what an allow/deny list keys on),
-  `:ref`, and `:comment`.
+  two path segments, which is what an allow/deny list keys on), `:ref`,
+  `:ref_at` (the ref's byte offset in its line) and `:comment` — the
+  line's comment, trimmed, when the site is the line's only one, else `""`:
+  `[ { uses: a/b@x }, { uses: c/d@y } ] # v4` labels neither pin.
   """
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
     content
     |> String.split("\n")
     |> Enum.with_index(1)
-    |> Enum.flat_map(fn {line, number} ->
-      case Regex.named_captures(@uses_regex, line) do
-        %{"action" => action, "ref" => ref} = caps ->
-          [
-            %{
-              line: number,
-              action: action,
-              action_base: action_base(action),
-              ref: ref,
-              comment: Map.get(caps, "comment", "") || ""
-            }
-          ]
-
-        _ ->
-          []
-      end
-    end)
+    |> Enum.flat_map(fn {line, number} -> line_sites(line, number) end)
   end
 
   def pin_sites(_), do: []
+
+  defp line_sites(line, number) do
+    sites = PinSites.sites(line)
+    comment = if length(sites) == 1, do: line |> PinSites.comment() |> String.trim(), else: ""
+
+    for site <- sites do
+      %{
+        line: number,
+        action: site.action,
+        action_base: action_base(site.action),
+        ref: site.ref,
+        ref_at: site.ref_at,
+        comment: comment
+      }
+    end
+  end
+
+  # GitHub resolves `GitHub/CodeQL-Action` and `github/codeql-action` to one
+  # repository, so a table keyed on one spelling must match the other.
+  defp same_action?(a, b) when is_binary(a) and is_binary(b),
+    do: String.downcase(a) == String.downcase(b)
+
+  defp same_action?(_, _), do: false
 
   @doc """
   The first two segments of an action path.
@@ -127,7 +136,7 @@ defmodule Hypatia.Rules.PinIntegrity do
     policy
     |> Map.get("pin_denylist", [])
     |> Enum.find(fn entry ->
-      Map.get(entry, "action") == base and
+      same_action?(Map.get(entry, "action"), base) and
         (normalised in normalise_all(Map.get(entry, "blocked_shas", [])) or
            normalised in normalise_all(Map.get(entry, "blocked_versions", [])) or
            normalised in normalise_all(Map.get(entry, "blocked_refs", [])))
@@ -155,7 +164,10 @@ defmodule Hypatia.Rules.PinIntegrity do
   def known_good(policy, action) do
     base = action_base(action)
 
-    case Enum.find(Map.get(policy, "pin_denylist", []), &(Map.get(&1, "action") == base)) do
+    case Enum.find(
+           Map.get(policy, "pin_denylist", []),
+           &same_action?(Map.get(&1, "action"), base)
+         ) do
       %{"known_good_sha" => sha} = entry when is_binary(sha) ->
         %{sha: sha, version: Map.get(entry, "known_good_version"), rule: Map.get(entry, "id")}
 
@@ -415,7 +427,7 @@ defmodule Hypatia.Rules.PinIntegrity do
     |> Enum.flat_map(fn site ->
       locked_refs_for_action =
         locked
-        |> Enum.filter(fn {_ref, {action, _line}} -> action == site.action_base end)
+        |> Enum.filter(fn {_ref, {action, _line}} -> same_action?(action, site.action_base) end)
         |> Enum.map(fn {ref, _} -> ref end)
 
       cond do
@@ -487,30 +499,17 @@ defmodule Hypatia.Rules.PinIntegrity do
         {:error, "no known_good_sha for a denylisted action in this file"}
 
       true ->
-        {new_content, excisions} =
-          Enum.reduce(hits, {content, []}, fn site, {acc, log} ->
-            original = Enum.at(lines, site.line - 1) || ""
-            %{sha: sha, version: version} = known_good(policy, site.action)
-
-            rewritten =
-              original
-              |> String.replace("@" <> site.ref, "@" <> sha)
-              |> relabel_line(version)
-
-            excision = %{
-              line: site.line,
-              action: site.action,
-              from_ref: site.ref,
-              to_ref: sha,
-              to_version: version,
-              comment_before: site.comment,
-              comment_after: comment_of(rewritten)
-            }
-
-            # Whole-line replacement, so two identical pin lines are treated
-            # identically and neither is touched twice.
-            {String.replace(acc, original, rewritten), log ++ [excision]}
+        {new_lines, excisions} =
+          lines
+          |> Enum.with_index(1)
+          |> Enum.map_reduce([], fn {original, number}, log ->
+            case Enum.filter(hits, &(&1.line == number)) do
+              [] -> {original, log}
+              line_hits -> rewrite_line(original, line_hits, sites, policy, log)
+            end
           end)
+
+        new_content = Enum.join(new_lines, "\n")
 
         if length(pin_sites(new_content)) == length(sites) do
           {:ok, new_content, excisions}
@@ -520,20 +519,57 @@ defmodule Hypatia.Rules.PinIntegrity do
     end
   end
 
-  defp comment_of(line) do
-    case String.split(line, "#", parts: 2) do
-      [_head, comment] -> comment
-      _ -> ""
-    end
+  # Each denylisted ref is spliced at its own offset, right to left so the
+  # offsets still to come stay valid: a line that carries the same ref twice,
+  # or the ref's text again in a `name:`, changes only at its sites. The
+  # comment is relabelled only on a line whose one site was the hit — on a
+  # multi-site line it labels no pin in particular.
+  defp rewrite_line(original, line_hits, sites, policy, log) do
+    rewritten =
+      line_hits
+      |> Enum.sort_by(& &1.ref_at, :desc)
+      |> Enum.reduce(original, fn site, acc ->
+        %{sha: sha} = known_good(policy, site.action)
+        tail_at = site.ref_at + byte_size(site.ref)
+
+        binary_part(acc, 0, site.ref_at) <>
+          sha <> binary_part(acc, tail_at, byte_size(acc) - tail_at)
+      end)
+
+    rewritten =
+      case {line_hits, Enum.count(sites, &(&1.line == hd(line_hits).line))} do
+        {[site], 1} -> relabel_line(rewritten, known_good(policy, site.action).version)
+        _ -> rewritten
+      end
+
+    excisions =
+      for site <- line_hits do
+        %{sha: sha, version: version} = known_good(policy, site.action)
+
+        %{
+          line: site.line,
+          action: site.action,
+          from_ref: site.ref,
+          to_ref: sha,
+          to_version: version,
+          comment_before: site.comment,
+          comment_after: PinSites.comment(rewritten)
+        }
+      end
+
+    {rewritten, log ++ excisions}
   end
 
+  # The comment is the text after the `#` PinSites finds outside quoted
+  # scalars, so `name: "C# build"` is not cut in two.
   defp relabel_line(line, version) when is_binary(version) do
-    case String.split(line, "#", parts: 2) do
-      # Mirror estate-pin-integrity.sh: the head keeps no `#`, the comment
-      # is handed over WITH it, and relabel/2 returns it with it.
-      [head, comment] -> head <> relabel("#" <> comment, version)
-      _ -> line
-    end
+    head = PinSites.head(line)
+
+    # Mirror estate-pin-integrity.sh: the head keeps no `#`, the comment
+    # is handed over WITH it, and relabel/2 returns it with it.
+    if byte_size(head) < byte_size(line),
+      do: head <> relabel("#" <> PinSites.comment(line), version),
+      else: line
   end
 
   defp relabel_line(line, _version), do: line
@@ -611,8 +647,8 @@ defmodule Hypatia.Rules.PinIntegrity do
   """
   @spec pin_only_edit?([String.t()], [String.t()], map()) :: boolean()
   def pin_only_edit?(removed, added, policy) do
-    removed_sites = lines_to_sites(removed)
-    added_sites = lines_to_sites(added)
+    removed_sites = Enum.flat_map(removed, &line_sites(&1, 0))
+    added_sites = Enum.flat_map(added, &line_sites(&1, 0))
 
     pinned_removed = removed_sites |> Enum.map(& &1.ref) |> Enum.sort()
     pinned_added = added_sites |> Enum.map(& &1.ref) |> Enum.sort()
@@ -621,12 +657,12 @@ defmodule Hypatia.Rules.PinIntegrity do
       removed == [] or added == [] ->
         false
 
-      length(removed_sites) != length(removed) or length(added_sites) != length(added) ->
+      not Enum.all?(removed ++ added, &PinSites.pin_line?/1) ->
         # At least one changed line is not a `uses:` line.
         false
 
-      Enum.sort(Enum.map(removed_sites, & &1.action)) !=
-          Enum.sort(Enum.map(added_sites, & &1.action)) ->
+      Enum.sort(Enum.map(removed_sites, &String.downcase(&1.action))) !=
+          Enum.sort(Enum.map(added_sites, &String.downcase(&1.action))) ->
         # An action was swapped for a different action.
         false
 
@@ -641,25 +677,6 @@ defmodule Hypatia.Rules.PinIntegrity do
       true ->
         true
     end
-  end
-
-  defp lines_to_sites(lines) do
-    lines
-    |> Enum.map(&Regex.named_captures(@uses_regex, &1))
-    |> Enum.flat_map(fn
-      %{"action" => action, "ref" => ref} = caps ->
-        [
-          %{
-            action: action,
-            action_base: action_base(action),
-            ref: ref,
-            comment: Map.get(caps, "comment", "") || ""
-          }
-        ]
-
-      _ ->
-        []
-    end)
   end
 
   # ─── PI005 · stale pin (advisory) ─────────────────────────────────────

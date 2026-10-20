@@ -431,6 +431,7 @@ repairable=0
 flagged=0
 confirmed=0
 unread=0
+: > "$OUT_DIR/.unread-repos"
 
 while IFS=$'\t' read -r org repo path; do
   [ -n "${path:-}" ] || continue
@@ -439,6 +440,7 @@ while IFS=$'\t' read -r org repo path; do
   if [ -z "$content" ]; then
     log "  ! cannot read ${org}/${repo}/${path} (binary, missing, or no permission)"
     unread=$((unread + 1))
+    printf '%s\n' "${org}/${repo}" >> "$OUT_DIR/.unread-repos"
     continue
   fi
 
@@ -555,12 +557,34 @@ if [ "$confirmed" -eq 0 ]; then
   exit 0
 fi
 
-# One repair PR per repository.
+# One repair PR per repository, and only for a repository the sweep has
+# proved whole: every confirmed file repairable and every candidate file
+# read. Repairing one workflow while a flagged lock entry or fixture in the
+# same repository keeps the denylisted pin (or an unread file may) is a
+# partial repair, and arming it would merge a repository that is still
+# poisoned. Such a repository is held for owner review with its findings.
+held=0
 if [ "$repairable" -gt 0 ]; then
-  jq -src '
-    map(select(.status == "repairable"))
-    | group_by(.repo)
+  unread_repos=$(jq -Rsc 'split("\n") | map(select(. != "")) | unique' "$OUT_DIR/.unread-repos")
+  jq -sr --argjson unread "$unread_repos" '
+    group_by(.repo)[]
+    | select(any(.status == "repairable"))
+    | .[0].repo as $r
+    | if any($unread[]; . == $r) then "\($r)\tunread candidate file"
+      elif all(.status == "repairable") | not then
+        "\($r)\tflagged sibling file(s): \([.[] | select(.status != "repairable") | .path] | join(", "))"
+      else empty end
+  ' "$FINDINGS" > "$OUT_DIR/.held"
+  held=$(grep -c . "$OUT_DIR/.held" || true)
+  while IFS=$'\t' read -r r why; do
+    log "  held ${r}: repairable file(s) not planned — ${why}"
+  done < "$OUT_DIR/.held"
+
+  jq -src --argjson unread "$unread_repos" '
+    group_by(.repo)
     | .[]
+    | select(all(.status == "repairable"))
+    | select(.[0].repo as $r | any($unread[]; . == $r) | not)
     | {repo: .[0].repo,
        files: length,
        paths: [.[].path],
@@ -579,7 +603,9 @@ log "  candidate files            : ${total_hits}"
 log "  confirmed denylisted       : ${confirmed}"
 log "  mechanically repairable    : ${repairable}"
 log "  needs owner review         : ${flagged}"
-log "  repos with a repair ready  : $(grep -c . "$PLAN" 2>/dev/null || echo 0)"
+planned=$(grep -c . "$PLAN" 2>/dev/null || true)
+log "  repos with a repair ready  : ${planned:-0}"
+log "  repos held (partial repair): ${held}"
 log "  findings                   : ${FINDINGS}"
 log "  repair plan                : ${PLAN}"
 [ "$REWRITE" -eq 1 ] && log "  repaired trees             : ${OUT_DIR}/patched"

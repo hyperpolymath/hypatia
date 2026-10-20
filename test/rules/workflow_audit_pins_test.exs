@@ -476,6 +476,25 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert c.auto_fixable
     end
 
+    test "anchor text inside a quoted scalar or a comment is not the anchor" do
+      # The quoted `&rust-inputs` comes first; reading children from its line
+      # found none and reported the aliased step as missing `toolchain`.
+      wf = """
+      env:
+        NOTE: "see &rust-inputs below" # and &rust-inputs here
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: &rust-inputs
+                toolchain: stable
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *rust-inputs
+      """
+
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "an alias with no anchor cannot be read: reported, never passed silently" do
       wf = """
       jobs:
@@ -727,6 +746,25 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{rule: "WF027", current_sha: ^sha, replacement_sha: @good_standards}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "the owner and repository match in either case; the workflow path as written" do
+      # GitHub resolves `Hyperpolymath/Standards` to the same repository.
+      mixed = "Hyperpolymath/Standards/.github/workflows/rust-ci-reusable.yml"
+      wf = "jobs:\n  rust-ci:\n    uses: #{mixed}@#{@broken_standards}\n"
+
+      assert [%{rule: "WF027", line: 3, replacement_sha: @good_standards, auto_fixable: true}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+
+      inline = "jobs: { rust: { uses: #{mixed}@#{@broken_standards} } }\n"
+
+      assert [%{rule: "WF027"}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => inline})
+
+      # A file path inside the repository is case-sensitive: another file.
+      other = "hyperpolymath/standards/.github/workflows/Rust-CI-Reusable.yml"
+      wf2 = "jobs:\n  rust-ci:\n    uses: #{other}@#{@broken_standards}\n"
+      assert [] == WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf2})
     end
 
     test "a job written as a flow mapping is a call: on its own line or inside jobs: { }" do
