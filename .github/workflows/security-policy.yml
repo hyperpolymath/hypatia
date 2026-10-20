@@ -755,6 +755,16 @@ jobs:
       - sbom
     if: always()
     steps:
+      # The self-check below reads this workflow file, so it must be on disk.
+      # Without a checkout awk exits 2 ("cannot open file") and the
+      # aggregator goes red regardless of the scan results.
+      - name: Checkout workflow file
+        uses: actions/checkout@v7.0.1
+        with:
+          sparse-checkout: .github/workflows/security-policy.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       # #850 AC4: every job in this workflow except the aggregators must be
       # named in some aggregator's `needs:`. Parse the job keys out of this
       # very file and compare; a future orphan job fails HERE rather than
