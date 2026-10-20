@@ -1162,14 +1162,16 @@ defmodule Hypatia.Rules.WorkflowHardening do
       severity: :warn,
       reason:
         "workflow #{rel} performs a write with its own credential (PAT or app " <>
-          "token), and the write is masked (`2>/dev/null`, `|| true`, or `|| echo`). " <>
+          "token), and the write is masked (`2>/dev/null`, `|| true`, `|| echo`, or the " <>
+          "step's `continue-on-error: true`). " <>
           "If the credential expires or loses scope, the write fails and the " <>
           "workflow stays green.",
       action: :report,
       fix_recipe: "unmask-credentialed-write",
       detail: %{
         fix:
-          "Remove the `2>/dev/null` / `|| true` / `|| echo` mask so a failed write " <>
+          "Remove the `2>/dev/null` / `|| true` / `|| echo` mask, or the step's " <>
+            "`continue-on-error: true`, so a failed write " <>
             "fails the job. Skip an empty commit with `git diff --cached --quiet` " <>
             "rather than swallowing `git commit`'s exit."
       }
@@ -1201,7 +1203,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
             reason:
               "workflow #{rel} performs a write (push/commit/release/PR) with NO " <>
                 "`contents: write` at the workflow level or any job level, AND the " <>
-                "write is masked (`2>/dev/null`, `|| true`, or `|| echo`). The push " <>
+                "write is masked (`2>/dev/null`, `|| true`, `|| echo`, or the step's " <>
+                "`continue-on-error: true`). The push " <>
                 "is denied, the error is swallowed, and the workflow stays GREEN " <>
                 "while recording nothing.",
             action: :report,
@@ -1209,7 +1212,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
             detail: %{
               fix:
                 "Add `permissions: {contents: write}` to the job that performs the " <>
-                  "write, and remove the `2>/dev/null` / `|| echo` mask so a denied " <>
+                  "write, and remove the `2>/dev/null` / `|| echo` mask (or the step's " <>
+                  "`continue-on-error: true`) so a denied " <>
                   "push fails the job instead of warning."
             }
           }
@@ -1257,36 +1261,86 @@ defmodule Hypatia.Rules.WorkflowHardening do
     ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*echo/
   ]
 
+  @steps_key ~r/^[ \t]*steps:[ \t]*(?:#.*)?$/
+  @step_continue_on_error ~r/^[ \t]*(?:-[ \t]+)?continue-on-error:[ \t]*true\b/m
+
   @doc """
   Return true when a write operation's failure is masked, so a denied write
-  cannot turn the job red: a shell mask on the write itself, or a STEP-level
-  `continue-on-error: true` in text that performs a write. The step flag is
-  judged per job body, so it may belong to a sibling step. A job-level
+  cannot turn the job red: a shell mask on the write itself, or
+  `continue-on-error: true` on the very step that performs the write. A flag
+  on a sibling step does not mask this write, and a job-level
   `continue-on-error` is not counted: it is a deliberate, visible job setting
   (standards' github-backup-mirror-reusable.yml documents and surfaces it).
   """
   def masked_write?(content) when is_binary(content) do
     Enum.any?(@write_masks, &Regex.match?(&1, content)) or
-      (step_continue_on_error?(content) and performs_contents_write?(content))
+      content
+      |> step_bodies()
+      |> Enum.any?(&(step_continue_on_error?(&1) and performs_contents_write?(&1)))
   end
 
-  # `continue-on-error: true` indented under a `steps:` key, i.e. on a step.
-  defp step_continue_on_error?(content) do
-    lines = String.split(content, "\n")
+  # `continue-on-error: true` as a key of the step itself: on its `- ` line or
+  # at the step's key column. Deeper text (a `run: |` script that writes a
+  # workflow file, a `with:` value) is not the step's flag.
+  defp step_continue_on_error?(step) do
+    [item | rest] = String.split(step, "\n")
+    keys = Enum.reject(rest, &blank_or_comment?/1)
 
-    case Enum.find(lines, &Regex.match?(~r/^[ \t]*steps:[ \t]*$/, &1)) do
-      nil ->
-        false
+    key_col =
+      case Regex.run(~r/^([ \t]*-[ \t]+)\S/, item) do
+        [_, prefix] -> String.length(prefix)
+        nil -> keys |> List.first("") |> indent_of()
+      end
 
-      steps_line ->
-        steps_indent = indent_of(steps_line)
-
-        Enum.any?(lines, fn line ->
-          Regex.match?(~r/^[ \t]*(?:-[ \t]+)?continue-on-error:[ \t]*true\b/, line) and
-            indent_of(line) > steps_indent
-        end)
-    end
+    Regex.match?(@step_continue_on_error, item) or
+      Enum.any?(keys, &(indent_of(&1) == key_col and Regex.match?(@step_continue_on_error, &1)))
   end
+
+  defp blank_or_comment?(line) do
+    trimmed = String.trim(line)
+    trimmed == "" or String.starts_with?(trimmed, "#")
+  end
+
+  # The text of each `- ` (or bare `-`) item under every `steps:` key. An item
+  # runs until the next item at the same indent or a line back at (or above)
+  # the `steps:` indent; blank and comment lines never end one.
+  defp step_bodies(content) do
+    {acc, current, _state} =
+      content
+      |> String.split("\n")
+      |> Enum.reduce({[], nil, nil}, fn line, {acc, current, state} ->
+        trimmed = String.trim_leading(line)
+
+        cond do
+          Regex.match?(@steps_key, line) ->
+            {flush_step(acc, current), nil, {indent_of(line), nil}}
+
+          is_nil(state) ->
+            {acc, nil, nil}
+
+          trimmed == "" or String.starts_with?(trimmed, "#") ->
+            {acc, append_step(current, line), state}
+
+          indent_of(line) <= elem(state, 0) ->
+            {flush_step(acc, current), nil, nil}
+
+          (String.trim(line) == "-" or String.starts_with?(trimmed, "- ")) and
+              elem(state, 1) in [nil, indent_of(line)] ->
+            {flush_step(acc, current), [line], {elem(state, 0), indent_of(line)}}
+
+          true ->
+            {acc, append_step(current, line), state}
+        end
+      end)
+
+    acc |> flush_step(current) |> Enum.reverse()
+  end
+
+  defp append_step(nil, _line), do: nil
+  defp append_step(lines, line), do: [line | lines]
+
+  defp flush_step(acc, nil), do: acc
+  defp flush_step(acc, lines), do: [lines |> Enum.reverse() |> Enum.join("\n") | acc]
 
   # ─── Internals ──────────────────────────────────────────────────────
 
@@ -1422,9 +1476,13 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
             _ ->
               cond do
-                # A comment between jobs (`  # Publish`) does not end `jobs:`.
-                line == "" or indent_of(line) >= jobs_indent + 1 or
-                    String.starts_with?(String.trim_leading(line), "#") ->
+                # A comment, at any indent, neither ends `jobs:` nor joins a
+                # job body: WH013 reads bodies as raw text, and
+                # `# the publisher used to git push` is not a write.
+                String.starts_with?(String.trim_leading(line), "#") ->
+                  {acc, true, jobs_indent, current}
+
+                line == "" or indent_of(line) >= jobs_indent + 1 ->
                   {acc, true, jobs_indent, append_line(current, line)}
 
                 true ->

@@ -630,7 +630,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         # same line (`trap '…' EXIT; cargo test || true`) is still judged.
         has_or_true? =
           stripped_body
-          |> String.replace(~r/\btrap[ \t]+(?:'[^'\n]*'|"[^"\n]*")/, "trap")
+          |> String.replace(~r/\btrap[ \t]+(?:'[^'\n]*'|"(?:[^"\\\n]|\\.)*")/, "trap")
           |> then(&Regex.match?(~r/\|\|\s*true\b/, &1))
 
         # A step carrying `hypatia:ignore RE005 -- <reason>` (or the
