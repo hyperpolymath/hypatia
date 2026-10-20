@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# Closure corpus fixture: closed, format v0.0.2. Contract: expected.tsv in this directory.
+version: 'v0.0.2'
+workflows:
+    '.github/workflows/ci.yml':
+        - 'example/build@1111111111111111111111111111111111111111'
+    '.github/workflows/empty.yml': []
+dependencies:
+    'example/build@1111111111111111111111111111111111111111':
+        ref: 'v1.0.0'
+        commit: 'sha1-1111111111111111111111111111111111111111'
+        owner_id: 101
+        repo_id: 201
+        uses:
+            - 'example/setup@2222222222222222222222222222222222222222'
+    'example/setup@2222222222222222222222222222222222222222':
+        ref: 'v2.0.0'
+        commit: 'sha1-2222222222222222222222222222222222222222'
+        owner_id: 101
+        repo_id: 202
