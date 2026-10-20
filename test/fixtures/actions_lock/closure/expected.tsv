@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# Closure corpus for actions.lock (standards#963, criterion 5). Each lock is
+# CLOSED when every ref under workflows: and every ref in a record's nested
+# uses: has a top-level dependency record, comparing owner/repo
+# case-insensitively and the ref exactly (GitHub's lockfile parser
+# canonicalises owner/repo case; see #1294 and #1314). Otherwise it is
+# DANGLING, and the third column lists the dangling refs as the lock spells
+# them, space-separated.
+#
+# Two implementations must agree with this table:
+#   * scripts/close-lock.sh --check (scripts/tests/close-lock-test.sh)
+#   * Hypatia.Rules.ActionsLock.parse/1 in hyperpolymath/hypatia, which
+#     vendors a byte-identical copy of this directory.
+# A third, GitHub's runner, is the reason the table exists.
+#
+# file	verdict	dangling
+closed-v0.0.2.lock	closed	-
+closed-v0.0.3.lock	closed	-
+closed-case-variant.lock	closed	-
+dangling-nested.lock	dangling	example/setup-python@v2
+dangling-workflow-ref.lock	dangling	example/generator@4444444444444444444444444444444444444444
