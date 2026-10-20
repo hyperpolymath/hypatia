@@ -1259,10 +1259,33 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   @doc """
   Return true when a write operation's failure is masked, so a denied write
-  cannot turn the job red.
+  cannot turn the job red: a shell mask on the write itself, or a STEP-level
+  `continue-on-error: true` in text that performs a write. The step flag is
+  judged per job body, so it may belong to a sibling step. A job-level
+  `continue-on-error` is not counted: it is a deliberate, visible job setting
+  (standards' github-backup-mirror-reusable.yml documents and surfaces it).
   """
   def masked_write?(content) when is_binary(content) do
-    Enum.any?(@write_masks, &Regex.match?(&1, content))
+    Enum.any?(@write_masks, &Regex.match?(&1, content)) or
+      (step_continue_on_error?(content) and performs_contents_write?(content))
+  end
+
+  # `continue-on-error: true` indented under a `steps:` key, i.e. on a step.
+  defp step_continue_on_error?(content) do
+    lines = String.split(content, "\n")
+
+    case Enum.find(lines, &Regex.match?(~r/^[ \t]*steps:[ \t]*$/, &1)) do
+      nil ->
+        false
+
+      steps_line ->
+        steps_indent = indent_of(steps_line)
+
+        Enum.any?(lines, fn line ->
+          Regex.match?(~r/^[ \t]*(?:-[ \t]+)?continue-on-error:[ \t]*true\b/, line) and
+            indent_of(line) > steps_indent
+        end)
+    end
   end
 
   # ─── Internals ──────────────────────────────────────────────────────
@@ -1399,7 +1422,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
             _ ->
               cond do
-                line == "" or indent_of(line) >= jobs_indent + 1 ->
+                # A comment between jobs (`  # Publish`) does not end `jobs:`.
+                line == "" or indent_of(line) >= jobs_indent + 1 or
+                    String.starts_with?(String.trim_leading(line), "#") ->
                   {acc, true, jobs_indent, append_line(current, line)}
 
                 true ->

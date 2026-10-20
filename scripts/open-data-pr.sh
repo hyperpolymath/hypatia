@@ -4,7 +4,7 @@
 #
 # Usage: open-data-pr.sh <branch-suffix> <title> <path>...
 #
-# Commits <path>... on a new branch `inbox-steward/<run_id>-<suffix>`, pushes
+# Commits <path>... on a new branch `inbox-steward/<run_id>-<attempt>-<suffix>`, pushes
 # it, opens a PR against main and queues a squash auto-merge. Used by
 # inbox-steward-intake.yml instead of `git push origin HEAD` to main, which
 # bypassed review and signing and was masked so a refusal stayed green.
@@ -29,7 +29,9 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-branch="inbox-steward/${GITHUB_RUN_ID}-${suffix}"
+# The attempt number keeps a re-run from colliding with a branch an earlier
+# attempt already pushed (same run id, different history).
+branch="inbox-steward/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}-${suffix}"
 git switch -c "$branch"
 git commit -m "$title"
 git push origin "HEAD:refs/heads/${branch}"

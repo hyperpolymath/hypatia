@@ -626,9 +626,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
         # is decided before the EXIT trap runs, and a failing handler command
         # under `set -e` (e.g. `kill` of an already-exited PID) would itself
         # turn a PASSING step red, so the `|| true` is what keeps it honest.
+        # Only the quoted handler is dropped, so a command after it on the
+        # same line (`trap '…' EXIT; cargo test || true`) is still judged.
         has_or_true? =
           stripped_body
-          |> String.replace(~r/^[ \t]*trap[ \t].*$/m, "")
+          |> String.replace(~r/\btrap[ \t]+(?:'[^'\n]*'|"[^"\n]*")/, "trap")
           |> then(&Regex.match?(~r/\|\|\s*true\b/, &1))
 
         # A step carrying `hypatia:ignore RE005 -- <reason>` (or the
