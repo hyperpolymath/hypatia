@@ -19,7 +19,9 @@
 #     --push              Push committed fixes to remotes
 #     --dry-run           Show what would be done without doing it
 #     --keep              Do not unmount RAM disk on completion
-#     --mount PATH        Custom mount point (default: per-user hypatia/workspace)
+#     --mount PATH        Custom mount point (default: hypatia/workspace under
+#                         $XDG_RUNTIME_DIR, else $XDG_STATE_HOME, else
+#                         ~/.local/state)
 #     --max-repos N       Limit number of repos to process
 #     --fallback-disk     Fall back to Eclipse drive if RAM is insufficient
 #     --quiet             Suppress non-essential output
@@ -43,8 +45,9 @@ FARM_DIR="${FARM_DIR:-${HYPATIA_DIR}/../.git-private-farm}"
 ECLIPSE_REPOS="${HYPATIA_REPOS_DIR:-$(dirname "$HYPATIA_DIR")}"
 
 # Defaults
-WORKSPACE_BASE="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}}/hypatia"
-MOUNT_POINT="${WORKSPACE_BASE}/workspace"
+# Empty until parse_args has run: --help and --mount must work even when
+# neither XDG variable nor HOME is set. See resolve_mount_point.
+MOUNT_POINT=""
 RAMDISK_SIZE="2G"
 ORG="hyperpolymath"
 SEVERITY="high"
@@ -101,6 +104,23 @@ parse_args() {
             *)            REPOS+=("$1"); shift ;;
         esac
     done
+}
+
+# The tmpfs mount point is re-found by later runs (stale-mount reuse), so it
+# lives in a per-user directory, not a mktemp one. With no XDG directory and
+# no HOME there is nowhere to put it: say so and stop, rather than let
+# `set -u` die on an unbound HOME before --help can run.
+resolve_mount_point() {
+    [[ -n "$MOUNT_POINT" ]] && return 0
+    local base="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-}}"
+    if [[ -z "$base" && -n "${HOME:-}" ]]; then
+        base="$HOME/.local/state"
+    fi
+    if [[ -z "$base" ]]; then
+        log_err "No XDG_RUNTIME_DIR, XDG_STATE_HOME or HOME; pass --mount PATH"
+        exit 1
+    fi
+    MOUNT_POINT="$base/hypatia/workspace"
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -177,7 +197,9 @@ mount_workspace() {
         if ! sudo -n true 2>/dev/null; then
             log_warn "No passwordless sudo — falling back to disk workspace"
             USE_TMPFS=false
-            MOUNT_POINT="${WORKSPACE_BASE}/workspace-$$"
+            # Scratch space: XDG_RUNTIME_DIR is itself a small tmpfs, so
+            # use the system temp dir, with an unpredictable name.
+            MOUNT_POINT="$(mktemp -d -t hypatia-workspace.XXXXXXXX)"
         fi
     fi
 
@@ -497,6 +519,7 @@ generate_summary() {
 # ─────────────────────────────────────────────────────────────────────
 main() {
     parse_args "$@"
+    resolve_mount_point
 
     log "${BOLD}Hypatia RAM Disk Orchestrator v${VERSION}${NC}"
 
