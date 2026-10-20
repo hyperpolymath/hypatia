@@ -22,5 +22,8 @@ permissions:
 jobs:
   hypatia:
     uses: hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
+    # Scanner pin: see governance.yml. Drop once `uses:` is re-pinned.
+    with:
+      hypatia-ref: aa34a4cc6ba39d873710ff39763fdb9cde715f9d
     secrets:
       HYPATIA_SCAN_PAT: ${{ secrets.HYPATIA_SCAN_PAT }}
