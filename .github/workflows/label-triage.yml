@@ -49,14 +49,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Egress allowlist (RE001): this job talks only to the GitHub API.
-      - name: Harden runner
-        uses: step-security/harden-runner@v2.22.2
-        with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
       - name: Classify and label
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
