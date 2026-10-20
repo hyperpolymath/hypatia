@@ -191,6 +191,22 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
     end
 
+    test "an anchor or tag before the quote does not hide where the scalar starts" do
+      for opener <- [
+            "      - {\"run\": &cmd \"echo start\n",
+            "      - {\"run\":&cmd \"echo start\n",
+            "      - run: !!str \"echo start\n"
+          ] do
+        content =
+          opener <>
+            "          uses: github/codeql-action/init@#{@poison}\n" <>
+            "          echo end\"#{if String.contains?(opener, "{"), do: "}", else: ""}\n" <>
+            @real_step
+
+        assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      end
+    end
+
     test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
       states =
         Hypatia.Rules.PinSites.line_states(

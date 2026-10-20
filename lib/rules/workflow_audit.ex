@@ -1237,7 +1237,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       # A quoted scalar the step opened above (`- run: "echo start`) and has
       # not closed by this line makes the `uses:` line part of the string.
-      wf_in_open_quote?(lines, opener, number) ->
+      # The scan starts at the step's opener or, where the string opens on
+      # the line that holds the step (`steps: [{"run":"echo start`, no list
+      # item of its own), at the line's YAML parent.
+      wf_in_open_quote?(lines, min(opener, wf_parent_line(lines, number)), number) ->
         []
 
       # A list item is a step only under `steps:`: one inside a block
@@ -1988,8 +1991,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # Walk one line from quote state `q` (nil outside a quoted scalar), keeping
   # the text outside quotes. A quote opens a scalar only where a scalar can
-  # start (after `: `, a list dash, `[`, `{` or `,`, or at the line's start);
-  # `echo it's` is a plain scalar. A comment ends the line.
+  # start (wf_scalar_start?/1); `echo it's` is a plain scalar. A comment
+  # ends the line.
   defp wf_quote_scan(<<>>, q, out), do: {q, out}
   defp wf_quote_scan(<<?\\, _, rest::binary>>, ?", out), do: wf_quote_scan(rest, ?", out)
   defp wf_quote_scan(<<?', ?', rest::binary>>, ?', out), do: wf_quote_scan(rest, ?', out)
@@ -2004,12 +2007,25 @@ defmodule Hypatia.Rules.WorkflowAudit do
        do: {nil, out}
 
   defp wf_quote_scan(<<c, rest::binary>>, nil, out) when c in [?", ?'] do
-    if Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)$/, out),
+    if wf_scalar_start?(out),
       do: wf_quote_scan(rest, c, out <> "x"),
       else: wf_quote_scan(rest, nil, out <> <<c>>)
   end
 
   defp wf_quote_scan(<<c, rest::binary>>, nil, out), do: wf_quote_scan(rest, nil, out <> <<c>>)
+
+  # Can a scalar start after `out` (the line so far, quote bodies dropped)?
+  # After `: `, a list dash, `[`, `{` or `,`, or at the line's start; inside
+  # a flow collection this line opens, also directly after `:` (JSON-style
+  # `{"run":"echo`); in each case past any anchor or tag (`run: &cmd "echo`),
+  # as Hypatia.Rules.PinSites reads a file.
+  defp wf_scalar_start?(out) do
+    Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)(?:[&!]\S*\s+)*$/, out) or
+      (wf_flow_open?(out) and Regex.match?(~r/:\s*(?:[&!]\S*\s+)*$/, out))
+  end
+
+  defp wf_flow_open?(out),
+    do: length(Regex.scan(~r/[\[{]/, out)) > length(Regex.scan(~r/[\]}]/, out))
 
   # The nearest line above `number` that is shallower than it: the key whose
   # value holds it (a job's key line for a job-level `uses:`).

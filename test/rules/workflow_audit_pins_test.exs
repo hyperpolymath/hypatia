@@ -493,6 +493,19 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"q.yml" => quoted})
 
+      # The same string opened JSON-style in a flow step (`{"run":"echo`), or
+      # past an anchor (`run: &cmd "echo`), is a string all the same.
+      for text <- [
+            "jobs:\n  check:\n    steps: [{\"run\":\"echo start\n" <>
+              "      uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n      echo end\"}]\n",
+            "jobs:\n  check:\n    steps: [{\"run\": &cmd \"echo start\n" <>
+              "      uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n      echo end\"}]\n",
+            "jobs:\n  check:\n    steps:\n      - run: &cmd \"echo start\n" <>
+              "        uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n        echo end\"\n"
+          ] do
+        assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"q.yml" => text})
+      end
+
       # Controls: a quote closed on its own line, and a quote inside a
       # `run: |` script, open nothing — the bare step still fires.
       closed = """

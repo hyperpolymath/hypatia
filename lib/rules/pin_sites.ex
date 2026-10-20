@@ -268,12 +268,13 @@ defmodule Hypatia.Rules.PinSites do
   defp value_start?(seen), do: Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:[&!]\S*\s+)*$/, seen)
 
   # Inside a flow collection a scalar also starts after `[`, `{` or `,`, and
-  # directly after a `:`, JSON-style (`{"run":"echo ...`).
+  # directly after a `:`, JSON-style (`{"run":"echo ...`). Every start may
+  # carry an anchor or tag before the quote (`"run": &cmd "echo`).
   defp scalar_start?(seen, st) do
     cond do
-      Regex.match?(~r/^\s*$/, seen) -> st.pending or st.depth > 0
+      Regex.match?(~r/^\s*(?:[&!]\S*\s+)*$/, seen) -> st.pending or st.depth > 0
       Regex.match?(~r/(?:^\s*(?:-\s+)+|:\s+)(?:[&!]\S*\s+)*$/, seen) -> true
-      st.depth > 0 -> Regex.match?(~r/[\[{,:]\s*$/, seen)
+      st.depth > 0 -> Regex.match?(~r/[\[{,:]\s*(?:[&!]\S*\s+)*$/, seen)
       true -> false
     end
   end
