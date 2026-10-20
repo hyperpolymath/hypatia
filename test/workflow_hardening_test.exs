@@ -321,6 +321,42 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    test "a generated v0.0.3 lock is valid, and a GHE.com tenant hostname fails closed" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          x:
+            steps:
+              - uses: actions/checkout@v7.0.1
+        """)
+
+      lock = Path.join([repo, ".github", "workflows", "actions.lock"])
+      File.cp!("test/fixtures/actions_lock/standards-b3ce78e-v0.0.3.lock", lock)
+
+      refute Enum.any?(
+               WorkflowHardening.wh004_unpinned_uses(repo),
+               &(&1.rule == "invalid_actions_lock")
+             )
+
+      write_actions_lock(repo, ".github/workflows/test.yml")
+
+      v003 =
+        lock
+        |> File.read!()
+        |> String.replace("v0.0.2", "v0.0.3")
+        |> String.replace("ref: 'v7.0.1'", "hostname: 'github.com'\n        ref: 'v7.0.1'")
+
+      File.write!(lock, v003)
+      assert WorkflowHardening.wh004_unpinned_uses(repo) == []
+
+      File.write!(lock, String.replace(v003, "'github.com'", "'octocorp.ghe.com'"))
+
+      assert [%{rule: "invalid_actions_lock", severity: :high}] =
+               WorkflowHardening.wh004_unpinned_uses(repo)
+
+      File.rm_rf!(repo)
+    end
+
     test "accepts 40-char SHA-pinned actions" do
       repo =
         create_repo_with_workflow("""
