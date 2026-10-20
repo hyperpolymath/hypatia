@@ -70,7 +70,14 @@ defmodule Hypatia.Rules.ShaBumpPropagation do
     {"hyperpolymath/standards", ".github/workflows/codeql-reusable.yml"},
     {"hyperpolymath/standards", ".github/workflows/hypatia-scan-reusable.yml"},
     {"hyperpolymath/standards", ".github/workflows/mirror-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/changelog-reusable.yml"}
+    {"hyperpolymath/standards", ".github/workflows/changelog-reusable.yml"},
+    # hyperpolymath/cicd-suite (cicd-suite#54): the estate audit and the four
+    # language gates, consumed as thin callers at a full cicd-suite SHA.
+    {"hyperpolymath/cicd-suite", ".github/workflows/main-estate-audit.yml"},
+    {"hyperpolymath/cicd-suite", ".github/workflows/rust-ci.yml"},
+    {"hyperpolymath/cicd-suite", ".github/workflows/creusot-gate.yml"},
+    {"hyperpolymath/cicd-suite", ".github/workflows/spark-gate.yml"},
+    {"hyperpolymath/cicd-suite", ".github/workflows/kanren-gate.yml"}
   ]
 
   # Composite actions (referenced via `uses: <owner>/<repo>@<SHA>`) also flow

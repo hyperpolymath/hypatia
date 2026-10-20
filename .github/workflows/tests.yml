@@ -201,10 +201,20 @@ jobs:
           # legitimately mention these tokens as documentation
           # ("Zero believe_me." in src/Hypatia/ABI/RuleEngine.idr is the canonical
           # example).
-          DANGEROUS=$(find lib src \( -name '*.idr' -o -name '*.v' -o -name '*.lean' -o -name '*.hs' \) \
-            -not -path 'lib/rules/*' \
-            -exec grep -Hn 'believe_me\|assert_total\|\bsorry\b\|\bAdmitted\b\|unsafeCoerce' {} + 2>/dev/null \
-            | grep -v ':[[:space:]]*--' || true)
+          #
+          # grep exits 1 when nothing matches, which is the PASS case, and 2
+          # on a real error. Test the status rather than masking both with
+          # `|| true` (`lib/rules` is the only `rules` directory under lib/src).
+          set -euo pipefail
+          status=0
+          HITS=$(grep -rHn --include='*.idr' --include='*.v' --include='*.lean' --include='*.hs' \
+            --exclude-dir=rules \
+            'believe_me\|assert_total\|\bsorry\b\|\bAdmitted\b\|unsafeCoerce' lib src) || status=$?
+          if [ "$status" -gt 1 ]; then
+            echo "FAIL: grep error (exit $status)"
+            exit "$status"
+          fi
+          DANGEROUS=$(printf '%s' "$HITS" | sed '/:[[:space:]]*--/d')
           if [ -n "$DANGEROUS" ]; then
             echo "FAIL: Dangerous patterns found"
             echo "$DANGEROUS"
@@ -256,7 +266,7 @@ jobs:
     needs: [build-images]
     services:
       arangodb:
-        image: arangodb:3.11
+        image: arangodb:3.11@sha256:e83f37055170f647ebca1a09dd65ec850a578d8d4c9b90904de3359b909c1f16
         env:
           ARANGO_ROOT_PASSWORD: testpassword
           ARANGO_NO_AUTH: "0"
@@ -298,7 +308,7 @@ jobs:
           --health-start-period 40s
 
       dragonfly:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        image: ghcr.io/dragonflydb/dragonfly:v1.40.2@sha256:18afa43e911f1dff18c7d1eb452361876d9702bb1cdff5c5d75c69617a4065c9
         ports:
           - 6379:6379
         options: >-
@@ -498,7 +508,7 @@ jobs:
     needs: [integration-tests]
     services:
       arangodb:
-        image: arangodb:3.11
+        image: arangodb:3.11@sha256:e83f37055170f647ebca1a09dd65ec850a578d8d4c9b90904de3359b909c1f16
         env:
           ARANGO_ROOT_PASSWORD: testpassword
         ports:
@@ -539,7 +549,7 @@ jobs:
           --health-start-period 40s
 
       dragonfly:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        image: ghcr.io/dragonflydb/dragonfly:v1.40.2@sha256:18afa43e911f1dff18c7d1eb452361876d9702bb1cdff5c5d75c69617a4065c9
         ports:
           - 6379:6379
         options: >-
@@ -559,7 +569,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.87.28
+        uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-llvm-cov
 

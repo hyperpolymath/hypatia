@@ -62,6 +62,7 @@ The supervision tree starts Bandit on port 9090 (9099 under `MIX_ENV=test`):
 | `HYPATIA_ALERT_WEBHOOK_URL` | Webhook for watcher alerts |
 | `HYPATIA_ALERT_LOG_FILE` | File sink for watcher alerts |
 | `HYPATIA_EXIT_ZERO` | Make the CLI exit 0 even when findings are present |
+| `HYPATIA_ADVISORY` | Also report advisory findings (WF026, WF027) below the severity threshold; they never set the exit code |
 
 ## CLI
 
@@ -69,7 +70,7 @@ The escript supports exactly five commands — `scan`, `report`, `pr-eligibility
 `help`. Anything else exits with "unknown command".
 
 ```bash
-hypatia scan <path> [--format json|text|github|sarif] [--exit-zero]
+hypatia scan <path> [--format json|text|github|sarif] [--exit-zero] [--advisory]
 hypatia report <path>
 hypatia pr-eligibility --owner <o> --repo <r> --pr <n>
 ```

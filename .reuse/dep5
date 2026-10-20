@@ -19,3 +19,12 @@ Files: integration/fixtures/*
 Copyright: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 License: MPL-2.0
 Comment: Test fixtures.
+
+Files: test/fixtures/actions_lock/*.lock
+Copyright: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+License: MPL-2.0
+Comment: Verbatim `gh actions-lock` output, copied byte-for-byte from the
+ named repository and commit (standards-b3ce78e-*.lock is
+ hyperpolymath/standards .github/workflows/actions.lock at b3ce78e). These
+ are tool-owned files: never hand-edit or reformat them; replace them with a
+ fresh copy instead.

@@ -104,7 +104,7 @@ The escript exposes five commands:
 
 [source,bash]
 ----
-hypatia scan <path> [--format json|text|github|sarif] [--exit-zero]
+hypatia scan <path> [--format json|text|github|sarif] [--exit-zero] [--advisory]
 hypatia report <path>
 hypatia pr-eligibility --owner <owner> --repo <repo> --pr <n>
 hypatia version
