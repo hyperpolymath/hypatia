@@ -62,14 +62,6 @@ jobs:
       pull-requests: write   # needed to approve
 
     steps:
-      # Egress allowlist (RE001): this job talks only to the GitHub API.
-      - name: Harden runner
-        uses: step-security/harden-runner@v2.22.2
-        with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
       - name: Fetch Dependabot metadata
         id: meta
         uses: dependabot/fetch-metadata@v3.1.0
