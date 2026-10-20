@@ -77,6 +77,17 @@ else
 fi
 echo ""
 
+# ─── RAM disk orchestrator mount resolution ────────────────────────
+bold "RAM disk orchestrator mount resolution"
+
+if ramdisk_output="$(bash "${PROJECT_DIR}/tests/ramdisk-orchestrator-test.sh" 2>&1)"; then
+    pass "ramdisk-orchestrator resolves its mount point after parsing and refuses to run without one"
+else
+    fail_test "ramdisk-orchestrator mount resolution"
+    printf '%s\n' "${ramdisk_output}"
+fi
+echo ""
+
 # ─── Create test fixture ────────────────────────────────────────────
 FIXTURE_DIR="$PROJECT_DIR/integration/fixtures/test-repo"
 if [ ! -d "$FIXTURE_DIR" ]; then
@@ -164,7 +175,7 @@ if $HAS_ELIXIR; then
         if [ "${_n_fail}" -gt 0 ]; then
             # Everything from the first failure block onward, capped so a
             # pathological run cannot flood the CI log.
-            sed -n '/^[[:space:]]*1) test /,$p' "$_mix_log" | head -500
+            sed -n '/^[[:space:]]*1) test /,$p' "$_mix_log" | sed -n '1,500p'
         else
             echo "(no ExUnit failure block found — the run did not reach the tests)"
             tail -120 "$_mix_log"
