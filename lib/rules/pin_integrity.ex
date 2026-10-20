@@ -66,7 +66,9 @@ defmodule Hypatia.Rules.PinIntegrity do
   comment or script text is not one, nor is one on a line of a `run: |`
   block or of a quoted scalar continued from an earlier line: the file is
   read through `PinSites.mask_lines/1`, which carries that state from line
-  to line.
+  to line. A `uses:` whose reference YAML continues on the next line
+  (`- uses:` then `    a/b@x`) is a site on that line
+  (`PinSites.continued_site/2`).
 
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
@@ -77,10 +79,23 @@ defmodule Hypatia.Rules.PinIntegrity do
   """
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
-    content
-    |> PinSites.mask_lines()
-    |> Enum.with_index(1)
+    numbered = content |> PinSites.mask_lines() |> Enum.with_index(1)
+
+    # A `uses:` whose reference continues on the next line is a site there.
+    continued =
+      numbered
+      |> Enum.zip(Enum.drop(numbered, 1))
+      |> Enum.flat_map(fn {{key, _}, {next, number}} ->
+        case PinSites.continued_site(key, next) do
+          nil -> []
+          site -> [site_entry(site, number, next |> PinSites.comment() |> String.trim())]
+        end
+      end)
+
+    numbered
     |> Enum.flat_map(fn {line, number} -> line_sites(line, number) end)
+    |> Kernel.++(continued)
+    |> Enum.sort_by(&{&1.line, &1.ref_at})
   end
 
   def pin_sites(_), do: []
@@ -89,16 +104,18 @@ defmodule Hypatia.Rules.PinIntegrity do
     sites = PinSites.sites(line)
     comment = if length(sites) == 1, do: line |> PinSites.comment() |> String.trim(), else: ""
 
-    for site <- sites do
-      %{
-        line: number,
-        action: site.action,
-        action_base: action_base(site.action),
-        ref: site.ref,
-        ref_at: site.ref_at,
-        comment: comment
-      }
-    end
+    for site <- sites, do: site_entry(site, number, comment)
+  end
+
+  defp site_entry(site, number, comment) do
+    %{
+      line: number,
+      action: site.action,
+      action_base: action_base(site.action),
+      ref: site.ref,
+      ref_at: site.ref_at,
+      comment: comment
+    }
   end
 
   # GitHub resolves `GitHub/CodeQL-Action` and `github/codeql-action` to one

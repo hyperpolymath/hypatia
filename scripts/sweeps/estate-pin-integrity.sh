@@ -87,6 +87,21 @@ list_repos() {
     --jq '.[] | select(.archived == false and .fork == false and .disabled == false) | .name' 2>/dev/null
 }
 
+# Code search names an owner by its kind: `org:` for an organisation and
+# `user:` for a personal account (the default `hyperpolymath` is one); `org:`
+# on a personal account matches nothing at all, which read as a clean org.
+# The kind is asked of GitHub; an owner whose kind cannot be read is a failed
+# search, never an empty one.
+owner_qualifier() {
+  local kind
+  kind=$(gh api "users/$1" --jq '.type' 2>/dev/null) || return 1
+  case "$kind" in
+    Organization) printf 'org' ;;
+    User) printf 'user' ;;
+    *) return 1 ;;
+  esac
+}
+
 # ─── Policy extraction ───────────────────────────────────────────────────
 mapfile -t DENY_SHAS < <(jq -r '.pin_denylist[] | .blocked_shas[]?' "$POLICY")
 mapfile -t DENY_VERSIONS < <(jq -r '.pin_denylist[] | .blocked_versions[]?' "$POLICY")
@@ -402,10 +417,14 @@ failed=0
 skipped_repos=0
 if [ "$VIA" = "search" ]; then
   for org in "${ORGS[@]}"; do
+    if ! qual=$(owner_qualifier "$org"); then
+      log "  ! ${org}: could not tell whether it is a user or an organisation, so it cannot be searched — phase 1 is INCOMPLETE for this org, use --via clone"
+      failed=$((failed + 1)); continue
+    fi
     for token in "${SEARCH_TOKENS[@]}"; do
       page=1
       while :; do
-        if ! gh api "search/code?q=${token}+org:${org}&per_page=100&page=${page}" \
+        if ! gh api "search/code?q=${token}+${qual}:${org}&per_page=100&page=${page}" \
              > "$OUT_DIR/.search.json" 2> "$OUT_DIR/.search.err"; then
           log "  ! ${org}: search for '${token}' (page ${page}) failed: $(head -c 200 "$OUT_DIR/.search.err" | tr '\n' ' ') — phase 1 is INCOMPLETE for this org, use --via clone"
           failed=$((failed + 1))
@@ -457,8 +476,19 @@ else
     mkdir -p "$WORK/$org"
     for name in "${reponames[@]}"; do
       d="$WORK/$org/$name"
-      [ -d "$d/.git" ] || git clone --depth 1 --quiet "https://github.com/${org}/${name}.git" "$d" 2>/dev/null || {
-        log "  ! clone failed: ${org}/${name} — phase 1 is INCOMPLETE for this org"; failed=$((failed + 1)); continue; }
+      # A clone kept from an earlier run with the same --out is brought to the
+      # default branch's current head before it is read: an old checkout
+      # misses a pin added since, and a candidate never listed is never read.
+      if [ -d "$d/.git" ]; then
+        if ! { git -C "$d" fetch --depth 1 --quiet origin HEAD 2>/dev/null \
+               && git -C "$d" reset --hard --quiet FETCH_HEAD 2>/dev/null \
+               && git -C "$d" clean -fdxq 2>/dev/null; }; then
+          log "  ! refreshing the cached clone of ${org}/${name} failed — phase 1 is INCOMPLETE for this org"
+          failed=$((failed + 1)); continue
+        fi
+      elif ! git clone --depth 1 --quiet "https://github.com/${org}/${name}.git" "$d" 2>/dev/null; then
+        log "  ! clone failed: ${org}/${name} — phase 1 is INCOMPLETE for this org"; failed=$((failed + 1)); continue
+      fi
       while IFS= read -r f; do
         printf '%s\t%s\t%s\n' "$org" "$name" "${f#"$d"/}" >> "$HITS"
       done < <(grep -rliE "$REF_ALTERNATION" "$d" --include='*.yml' --include='*.yaml' --include='*.lock' --include='*.toml' 2>/dev/null || true)

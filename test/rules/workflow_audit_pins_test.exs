@@ -507,6 +507,54 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       refute inline.auto_fixable
     end
 
+    test "in a merge sequence the first mapping that defines toolchain decides, null included" do
+      wf = """
+      x-empty: &empty { toolchain: null }
+      x-rust: &rust { toolchain: nightly }
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                <<: [*empty, *rust]
+      """
+
+      assert [%{line: 6}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "a toolchain value continued on the next line is the value, not null" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with:
+                toolchain:
+                  nightly
+      """
+
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "an anchor written inside a run: | script is text, not the anchor an alias names" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - run: |
+                fake: &inputs
+                  toolchain: nightly
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: &inputs {}
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *inputs
+      """
+
+      assert [%{line: 7}, %{line: 9}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
     test "an anchor written after a tag (`with: !!map &inputs`) is still an anchored mapping" do
       wf = """
       jobs:

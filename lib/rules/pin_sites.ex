@@ -121,6 +121,35 @@ defmodule Hypatia.Rules.PinSites do
   def head(line) when is_binary(line), do: binary_part(line, 0, byte_size(mask(line)))
 
   @doc """
+  The site a `uses:` key with nothing after it on its line holds on the next
+  line, where YAML continues its scalar (`- uses:` then
+  `    github/codeql-action/init@<sha>`), as `sites/1` returns one, its
+  offsets into `next_line`; nil unless `next_line` sits deeper than the key
+  and holds nothing but the reference, quoted or plain, and a comment. Both
+  lines are as `mask_lines/1` returns them.
+  """
+  @spec continued_site(String.t(), String.t()) :: map() | nil
+  def continued_site(key_line, next_line) when is_binary(key_line) and is_binary(next_line) do
+    with [_, col] <- Regex.run(~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:\s*$/, head(key_line)),
+         true <- indent_of(next_line) > byte_size(col),
+         [_, {a_at, a_len}, {r_at, r_len}] <-
+           Regex.run(
+             ~r/^\s*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
+             next_line,
+             return: :index
+           ) do
+      %{
+        action: binary_part(next_line, a_at, a_len),
+        ref: binary_part(next_line, r_at, r_len),
+        action_at: a_at,
+        ref_at: r_at
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
   The lines of a whole file, each with the bytes that belong to a scalar
   opened on an earlier line blanked to `x`, byte for byte: every content
   line of a block scalar (`run: |`), and a multi-line quoted scalar's

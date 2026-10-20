@@ -1642,32 +1642,56 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The key present with no value (`toolchain:`, `null`, `~`) is not an input
   # the action can read; the fleet fixer fills such a key in place.
   defp wf026_entries_verdict(entries, lines, form, seen \\ []) do
-    explicit = Enum.find(entries, fn {k, _} -> k == "toolchain" end)
+    case wf026_toolchain_in(entries, lines, seen) do
+      {:set, :own} -> {:toolchain, form}
+      {:set, :merge} -> {:toolchain, :merge}
+      :null -> {:missing, form}
+      :absent -> {:missing, form}
+      :unknown -> {:missing, :merge}
+      {:unreadable, _, _} = unreadable -> unreadable
+    end
+  end
 
-    cond do
-      match?({_, v} when is_binary(v), explicit) and not wf026_null_value?(elem(explicit, 1)) ->
-        {:toolchain, form}
+  # Where a mapping's `toolchain` comes from, under YAML merge semantics: its
+  # own key first; else each merged mapping in order, the first that defines
+  # the key deciding — an explicit `toolchain: null` in `*empty` of
+  # `<<: [*empty, *rust]` is the input, `*rust`'s value is not. Returns
+  # {:set, :own | :merge}, :null, :absent, :unknown (a merge this reader
+  # does not resolve) or {:unreadable, :alias, name}.
+  defp wf026_toolchain_in(entries, lines, seen) do
+    case Enum.find(entries, fn {k, _} -> k == "toolchain" end) do
+      {_, v} when is_binary(v) ->
+        if wf026_null_value?(v), do: :null, else: {:set, :own}
 
-      explicit != nil ->
-        {:missing, form}
-
-      true ->
+      _ ->
         entries
         |> Enum.filter(fn {k, _} -> k == "<<" end)
-        |> Enum.find_value({:missing, form}, fn {_, v} ->
+        |> Enum.find_value(:absent, fn {_, v} ->
           case wf026_merge_aliases(v) do
             {:ok, names} ->
               Enum.find_value(names, fn name ->
-                case wf026_alias_verdict(name, lines, :merge, seen) do
-                  {:missing, _} -> nil
-                  verdict -> verdict
+                case wf026_alias_lookup(name, lines, seen) do
+                  :absent -> nil
+                  {:set, _} -> {:set, :merge}
+                  other -> other
                 end
               end)
 
             :error ->
-              {:missing, :merge}
+              :unknown
           end
         end)
+    end
+  end
+
+  defp wf026_alias_lookup(name, lines, seen) do
+    if name in seen do
+      {:unreadable, :alias, name}
+    else
+      case wf_anchor_entries(lines, name) do
+        {:ok, entries} -> wf026_toolchain_in(entries, lines, [name | seen])
+        :error -> {:unreadable, :alias, name}
+      end
     end
   end
 
@@ -1721,20 +1745,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
   end
 
   # The entries of the mapping anchored `&name`: the first `&name` in the
-  # document outside comments and quoted scalars, read as a flow mapping
+  # document outside comments, quoted scalars and block-scalar content (a
+  # `run: |` fixture writing `fake: &inputs` is text), read as a flow mapping
   # when a `{` follows it, else as the block mapping under its line. A
   # `note: "see &name"` before the real anchor is text.
   defp wf_anchor_entries(lines, name) do
     re = ~r/&#{Regex.escape(name)}(?=[\s,{}\[\]]|$)/
 
+    states = lines |> Enum.join("\n") |> Hypatia.Rules.PinSites.line_states()
+
     lines
+    |> Enum.zip(states)
     |> Enum.with_index(1)
-    |> Enum.find(fn {l, _} -> wf026_plain?(l) and Regex.match?(re, wf_mask_quoted(l)) end)
+    |> Enum.find(fn {{l, {_, state}}, _} ->
+      state != :text and wf026_plain?(l) and Regex.match?(re, wf_mask_quoted(l))
+    end)
     |> case do
       nil ->
         :error
 
-      {line, number} ->
+      {{line, _}, number} ->
         masked = wf_mask_quoted(line)
         [{at, len}] = Regex.run(re, masked, return: :index)
         after_anchor = binary_part(masked, at + len, byte_size(masked) - at - len)
@@ -1755,7 +1785,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # The direct children of a block mapping whose key sits at `key_indent`,
   # as `{key, value}` entries: the plain lines deeper than the key, at the
   # first child's indentation. Deeper lines are nested mappings or scalar
-  # text, not entries.
+  # text, not entries; under a child with no value on its own line they are
+  # that value (`toolchain:` then `nightly` indented is `toolchain: nightly`).
   defp wf_block_children(rest, key_indent) do
     children =
       rest
@@ -1773,14 +1804,28 @@ defmodule Hypatia.Rules.WorkflowAudit do
         child_indent = wf026_indent(first)
 
         children
-        |> Enum.filter(&(wf026_indent(&1) == child_indent))
-        |> Enum.flat_map(fn l ->
+        |> Enum.with_index()
+        |> Enum.filter(fn {l, _} -> wf026_indent(l) == child_indent end)
+        |> Enum.flat_map(fn {l, i} ->
           case Regex.run(~r/^\s*(?:-\s+)?["']?([^"':\s]+)["']?\s*:(.*)$/, l) do
-            [_, k, v] -> [{k, v |> wf_strip_comment() |> String.trim()}]
-            nil -> []
+            [_, k, v] ->
+              v = v |> wf_strip_comment() |> String.trim()
+              [{k, if(v == "", do: wf_continued_value(children, i, child_indent), else: v)}]
+
+            nil ->
+              []
           end
         end)
     end
+  end
+
+  # The value of the child at `i` continued on the lines below it, deeper
+  # than its key and up to the next child; "" when there are none.
+  defp wf_continued_value(children, i, child_indent) do
+    children
+    |> Enum.drop(i + 1)
+    |> Enum.take_while(&(wf026_indent(&1) > child_indent))
+    |> Enum.map_join(" ", &(&1 |> wf_strip_comment() |> String.trim()))
   end
 
   # ─── flow-mapping reading (quote- and depth-aware) ──────────────────

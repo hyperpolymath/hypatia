@@ -207,6 +207,27 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       end
     end
 
+    test "a uses: whose reference continues on the next line is a site there" do
+      content =
+        "      - uses:\n          github/codeql-action/init@#{@poison} # v4.38.0\n" <>
+          "      - uses:\n          \"github/codeql-action/analyze@#{@poison}\"\n" <> @real_step
+
+      assert [%{line: 2}, %{line: 4}, %{line: 5}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_, _, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute new_content =~ @poison
+      assert new_content =~ "          github/codeql-action/init@#{@good} # v4.38.0\n"
+      assert new_content =~ "          \"github/codeql-action/analyze@#{@good}\"\n"
+
+      # Controls: another key's continued value, and a `uses:` whose next
+      # line is no deeper, hold no site.
+      assert PI.pi001_denylisted_pin(
+               "      - run:\n          github/codeql-action/init@#{@poison}\n" <>
+                 "      - uses:\n      - name: github/codeql-action/init@#{@poison}\n",
+               @policy
+             ) == []
+    end
+
     test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
       states =
         Hypatia.Rules.PinSites.line_states(
