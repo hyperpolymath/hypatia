@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MPL-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# Closure corpus fixture: dangling: a ref under workflows: with no record. Contract: expected.tsv in this directory.
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/release.yml':
+        - 'example/build@1111111111111111111111111111111111111111'
+        - 'example/generator@4444444444444444444444444444444444444444'
+dependencies:
+    'example/build@1111111111111111111111111111111111111111':
+        ref: 'v1.0.0'
+        commit: 'sha1-1111111111111111111111111111111111111111'
+        owner_id: 101
+        repo_id: 201
