@@ -16,7 +16,7 @@ a blank ID column means the module emits atom-keyed findings rather than prefixe
 [cols="34,33,33",options="header"]
 |===
 |Module |Rule IDs |Purpose
-|`+actions_lock+` |— |Strict local validation for machine-generated `gh actions-lock` v0.0.2 files.
+|`+actions_lock+` |— |Strict local validation for machine-generated `gh actions-lock` v0.0.2 and v0.0.3 files.
 |`+admin_merge_eligibility+` |DBA002 |Recognises PR shapes that are safe to admin-merge in bulk when the
 |`+baseline_health+` |BH001 BH002 BH003 BH004 BH005 BH006 BH007 BH008 |Detects degraded `main`-branch baseline conditions that allow silent rot.
 |`+branch_protection+` |BP001 BP002 BP003 BP004 BP005 BP006 BP007 BP008 BP009 |Branch-protection hygiene rules drawn from the CIS GitHub Benchmark,

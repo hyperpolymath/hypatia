@@ -378,6 +378,8 @@ defmodule Hypatia.Rules.ActionsLock do
   defp finalize_dependency(state) do
     {key, dependency, header_line} = state.current_dependency
     normalized = normalise_ref(key)
+    # nil is the home host; v0.0.3 records owner and repo IDs per host.
+    hostname = Map.get(dependency, :hostname)
 
     with {:ok, ref} <- fetch_dependency_field(dependency, :ref, key, header_line),
          {:ok, commit} <- fetch_dependency_field(dependency, :commit, key, header_line),
