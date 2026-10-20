@@ -25,5 +25,6 @@ jobs:
     # Scanner pin: see governance.yml. Drop once `uses:` is re-pinned.
     with:
       hypatia-ref: aa34a4cc6ba39d873710ff39763fdb9cde715f9d
+    # Only the one secret the callee declares (standards#1108 §6b).
     secrets:
       HYPATIA_SCAN_PAT: ${{ secrets.HYPATIA_SCAN_PAT }}

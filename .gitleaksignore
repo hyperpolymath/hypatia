@@ -1,9 +1,21 @@
 # SPDX-License-Identifier: MPL-2.0
-# Historical false positives, scoped to these exact commit/path/rule/line findings.
-# Prometheus recording-rule identifier for API latency, not a credential.
-269dac03d57835a1dfe3fb336095ffac61567ccf:deploy/terraform/modules/monitoring/main.tf:generic-api-key:421
-# Kubernetes template values all decode to the literal CHANGE_ME_IN_PRODUCTION.
+#
+# Exact historical fingerprints only (commit:file:rule:line). The full-history
+# gitleaks pass in hyperpolymath/standards secret-scanner-reusable.yml scans
+# every commit; these five matches sit in two files that f2fe2df removed from
+# the tree. Each entry names what the matched value is. None of them suppresses
+# a rule in any new commit or location.
+#
+# deploy/k8s/secrets.yaml at 0d310fa is a Secret TEMPLATE. Each of the four
+# values is base64 of the placeholder CHANGE_ME_IN_PRODUCTION, as the comment
+# above each line says. Checked 2026-10-19 by comparing every value against
+# the encoded placeholder.
 0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:38
 0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:40
 0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:44
 0d310faa0d74da36faa8f5cfb5b6786ebe912c1b:deploy/k8s/secrets.yaml:generic-api-key:50
+#
+# deploy/terraform/modules/monitoring/main.tf at 269dac0, line 421, is a
+# Prometheus recording-rule name (record = "cicd_hyper_a:api:<name>"). It is
+# a metric identifier, not a credential.
+269dac03d57835a1dfe3fb336095ffac61567ccf:deploy/terraform/modules/monitoring/main.tf:generic-api-key:421

@@ -27,6 +27,33 @@ defmodule Hypatia.Rules.ShaBumpPropagationTest do
     )
   end
 
+  describe "check/1 — cicd-suite reusables (cicd-suite#54)" do
+    test "a change to a cicd-suite gate fires, with the gate's path" do
+      [finding] =
+        ShaBumpPropagation.check(
+          event(%{
+            source_repo: "hyperpolymath/cicd-suite",
+            files_changed: [".github/workflows/rust-ci.yml", "actions/rust-ci-check/check.sh"],
+            pr_title: "feat(gates): strict Rust CI"
+          })
+        )
+
+      assert finding.source_repo == "hyperpolymath/cicd-suite"
+      assert finding.source_workflow == ".github/workflows/rust-ci.yml"
+    end
+
+    test "every cicd-suite gate and the estate audit are registered" do
+      paths =
+        ShaBumpPropagation.known_reusables()
+        |> Enum.filter(fn {repo, _} -> repo == "hyperpolymath/cicd-suite" end)
+        |> Enum.map(fn {_, path} -> path end)
+
+      for gate <- ~w(main-estate-audit rust-ci creusot-gate spark-gate kanren-gate) do
+        assert ".github/workflows/#{gate}.yml" in paths
+      end
+    end
+  end
+
   describe "check/1 — sensitivity" do
     test "fires on a known reusable workflow change" do
       [finding] = ShaBumpPropagation.check(event(%{}))

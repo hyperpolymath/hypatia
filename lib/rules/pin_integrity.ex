@@ -53,46 +53,117 @@ defmodule Hypatia.Rules.PinIntegrity do
   or to the owner as `flag` when the repair is not a substitution.
   """
 
-  # A `uses:` pin site, in block form (`- uses: a/b@ref # v1`) or KYAML form
-  # (`uses: "a/b@ref", # v1` and one-line `{ uses: "a/b@ref" },`). The key
-  # must open the line — after indentation and an optional `-` or `{` — so a
-  # `uses:` inside a `run:` string never counts. The value may be quoted; the
-  # quote, trailing comma and closing brace are not part of the ref.
-  @uses_regex ~r/^\s*(?:-\s*|\{\s*)?uses:\s*(?<q>["']?)(?<action>[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@(?<ref>[^\s#"',}]+)\k<q>\s*\}?\s*,?\s*(?:#\s*(?<comment>.*?))?\s*$/
+  alias Hypatia.Rules.PinSites
 
   @doc """
   Parse every `uses:` pin site in a workflow file.
 
+  A site is what `Hypatia.Rules.PinSites` reads as one — block form
+  (`- uses: a/b@ref # v1`), KYAML form (`uses: "a/b@ref", # v1`), and every
+  step of a compact flow sequence or mapping (`steps: [{ uses: a/b@x }]`,
+  `- { name: x, uses: a/b@x }`) — so the file scan sees the pins the diff
+  rules (PA001-PA004) see. A `uses:` inside a quoted `run:` string, a
+  comment or script text is not one, nor is one on a line of a `run: |`
+  block or of a quoted scalar continued from an earlier line: the file is
+  read through `PinSites.mask_lines/1`, which carries that state from line
+  to line. A line inside a flow collection opened on an earlier line is
+  judged against the brackets still open (`PinSites.flow_prefixes/1`), so a
+  step's `uses:` after a sibling (`name: "hello` then `world", uses: a/b@x
+  }]`) is a site and one in an input's mapping is not. A `uses:` whose reference YAML continues below it (`- uses:`
+  then `    a/b@x`, blank and comment-only lines allowed between) is a site
+  on the value's line (`PinSites.continuations/1`), and a `uses: *name` is a
+  site on the line of the anchor it names, where its reference stands
+  (`PinSites.alias_sites/1`).
+
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
-  two path segments, which is what an allow/deny list keys on),
-  `:ref`, and `:comment`.
+  two path segments, which is what an allow/deny list keys on), `:ref`,
+  `:ref_at` (the ref's byte offset in its line), `:ref_len` (its length as
+  written — a value written with escapes, `"a/b@\\x31…"`, is read decoded,
+  so the ref's text is longer than the ref) and `:comment` — the
+  line's comment, trimmed, when the site is the line's only one, else `""`:
+  `[ { uses: a/b@x }, { uses: c/d@y } ] # v4` labels neither pin.
   """
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
-    content
-    |> String.split("\n")
-    |> Enum.with_index(1)
-    |> Enum.flat_map(fn {line, number} ->
-      case Regex.named_captures(@uses_regex, line) do
-        %{"action" => action, "ref" => ref} = caps ->
-          [
-            %{
-              line: number,
-              action: action,
-              action_base: action_base(action),
-              ref: ref,
-              comment: Map.get(caps, "comment", "") || ""
-            }
-          ]
+    masked = PinSites.mask_lines(content)
+    prefixes = PinSites.flow_prefixes(content)
+    numbered = masked |> Enum.zip(prefixes) |> Enum.with_index(1)
+    # A block `uses:` key the indentation above it puts under no step or job
+    # (an input of that name, `with:` then `uses: ...`) holds data: no site
+    # on its line, below it, or through its alias.
+    data = PinSites.data_uses_lines(content)
 
-        _ ->
-          []
+    # A `uses:` whose reference continues below it — past any blank or
+    # comment-only lines — is a site on the value's line.
+    continued =
+      for {key, number, site} <- PinSites.continuations(masked), key not in data do
+        next = Enum.at(masked, number - 1)
+        site_entry(site, number, next |> PinSites.comment() |> String.trim())
       end
-    end)
+
+    # A `uses: *name` runs the reference the anchor holds: its site is the
+    # anchor's value, where a repair rewrites it (every alias with it).
+    aliased =
+      for %{line: alias_line, anchor_line: number, site: site} <-
+            PinSites.alias_sites(masked, prefixes),
+          alias_line not in data do
+        site_entry(
+          site,
+          number,
+          masked |> Enum.at(number - 1) |> PinSites.comment() |> String.trim()
+        )
+      end
+
+    # A step or job given whole as an alias (`- *step`) runs the `uses:` of
+    # the mapping its anchor holds — a site even where that mapping sits in
+    # data (a matrix entry), where a repair rewrites it.
+    node_aliased =
+      for %{anchor_line: number, site: site} <- PinSites.node_alias_sites(content) do
+        site_entry(
+          site,
+          number,
+          masked |> Enum.at(number - 1) |> PinSites.comment() |> String.trim()
+        )
+      end
+
+    numbered
+    |> Enum.reject(fn {_, number} -> number in data end)
+    |> Enum.flat_map(fn {{line, prefix}, number} -> line_sites(line, number, prefix) end)
+    |> Kernel.++(continued)
+    |> Kernel.++(aliased)
+    |> Kernel.++(node_aliased)
+    |> Enum.uniq_by(&{&1.line, &1.ref_at})
+    |> Enum.sort_by(&{&1.line, &1.ref_at})
   end
 
   def pin_sites(_), do: []
+
+  defp line_sites(line, number, flow_prefix) do
+    sites = PinSites.sites(line, flow_prefix)
+    comment = if length(sites) == 1, do: line |> PinSites.comment() |> String.trim(), else: ""
+
+    for site <- sites, do: site_entry(site, number, comment)
+  end
+
+  defp site_entry(site, number, comment) do
+    %{
+      line: number,
+      action: site.action,
+      action_base: action_base(site.action),
+      ref: site.ref,
+      ref_at: site.ref_at,
+      ref_len: Map.get(site, :ref_len, byte_size(site.ref)),
+      comment: comment
+    }
+  end
+
+  # GitHub resolves `GitHub/CodeQL-Action` and `github/codeql-action` to one
+  # repository, so a table keyed on one spelling must match the other.
+  defp same_action?(a, b) when is_binary(a) and is_binary(b),
+    do: String.downcase(a) == String.downcase(b)
+
+  defp same_action?(_, _), do: false
 
   @doc """
   The first two segments of an action path.
@@ -125,7 +196,7 @@ defmodule Hypatia.Rules.PinIntegrity do
     policy
     |> Map.get("pin_denylist", [])
     |> Enum.find(fn entry ->
-      Map.get(entry, "action") == base and
+      same_action?(Map.get(entry, "action"), base) and
         (normalised in normalise_all(Map.get(entry, "blocked_shas", [])) or
            normalised in normalise_all(Map.get(entry, "blocked_versions", [])) or
            normalised in normalise_all(Map.get(entry, "blocked_refs", [])))
@@ -138,13 +209,13 @@ defmodule Hypatia.Rules.PinIntegrity do
   defp normalise_all(list), do: Enum.map(list, &normalise_ref/1)
 
   defp normalise_ref(ref) do
-    ref
-    |> String.trim()
-    |> String.trim_leading("v")
-    |> case do
-      # `v4.38.1` and `4.38.1` are the same claim about the same artefact.
-      other -> other
-    end
+    trimmed = ref |> String.trim() |> String.replace_prefix("v", "")
+
+    # `v4.38.1` and `4.38.1` are the same claim about the same artefact — one
+    # `v` only: `vv4.38.1` is another tag, not the blocked release; a
+    # commit ID in upper-case hex is the same object as the lower-case one
+    # the table carries, so both sides compare in lower case.
+    if Regex.match?(~r/^[0-9a-fA-F]{40}$/, trimmed), do: String.downcase(trimmed), else: trimmed
   end
 
   @doc """
@@ -154,7 +225,10 @@ defmodule Hypatia.Rules.PinIntegrity do
   def known_good(policy, action) do
     base = action_base(action)
 
-    case Enum.find(Map.get(policy, "pin_denylist", []), &(Map.get(&1, "action") == base)) do
+    case Enum.find(
+           Map.get(policy, "pin_denylist", []),
+           &same_action?(Map.get(&1, "action"), base)
+         ) do
       %{"known_good_sha" => sha} = entry when is_binary(sha) ->
         %{sha: sha, version: Map.get(entry, "known_good_version"), rule: Map.get(entry, "id")}
 
@@ -364,15 +438,18 @@ defmodule Hypatia.Rules.PinIntegrity do
   end
 
   @doc """
-  Extract `action@sha` pairs from a `gh actions-lock` file (TOML-ish),
-  keyed by the resolved SHA or ref. Used by PI003 and PI004.
+  Extract `action@sha` pairs from a `gh actions-lock` file (TOML-ish).
+  Used by PI003 and PI004.
 
   Reads the first single-quoted `action@ref` on each line and returns
-  `%{ref => {action_base, line_number}}`, with one-based line numbers and
-  action paths reduced to their first two segments. Later entries replace
-  earlier ones with the same ref; no matches produce an empty map.
+  `[{ref, {action_base, line_number}}]` in file order, with one-based line
+  numbers and action paths reduced to their first two segments. One entry
+  per action and ref: two actions locked at the same ref
+  (`actions/checkout@v4`, `github/codeql-action@v4`) are two entries, and
+  the same pair met again (a workflow's edge and its dependency record)
+  keeps the line of its last mention. No matches produce `[]`.
   """
-  @spec locked_refs(String.t()) :: %{String.t() => {String.t(), integer()}}
+  @spec locked_refs(String.t()) :: [{String.t(), {String.t(), integer()}}]
   def locked_refs(content) do
     content
     |> String.split("\n")
@@ -388,7 +465,30 @@ defmodule Hypatia.Rules.PinIntegrity do
           [{ref, {action_base(action), number}}]
       end
     end)
-    |> Map.new()
+    |> Enum.reverse()
+    |> Enum.uniq_by(fn {ref, {action, _}} -> {String.downcase(action), ref_identity(ref)} end)
+    |> Enum.reverse()
+  end
+
+  # The refs a parsed lock associates with workflow `path`, in the shape
+  # `locked_refs/1` returns them, or nil when the lock does not parse or
+  # lists no such workflow.
+  defp scoped_locked_refs(lock_content, path) do
+    with {:ok, lock} <- Hypatia.Rules.ActionsLock.parse(lock_content),
+         %MapSet{} = refs <- Hypatia.Rules.ActionsLock.workflow_refs(lock, path) do
+      for key <- refs, [action, ref] <- [String.split(key, "@", parts: 2)] do
+        {ref, {action_base(action), 0}}
+      end
+    else
+      _ -> nil
+    end
+  end
+
+  # What a ref names, for comparing two spellings of it: a commit ID is one
+  # object in either case (`1C5B…` is `1c5b…`); a symbolic ref (`main`,
+  # `v4`) is a name and compares exactly — `v4` and `4` are two refs.
+  defp ref_identity(ref) do
+    if Regex.match?(~r/^[0-9a-fA-F]{40}$/, ref), do: String.downcase(ref), else: ref
   end
 
   # ─── PI004 · lock/spec divergence ─────────────────────────────────────
@@ -407,21 +507,30 @@ defmodule Hypatia.Rules.PinIntegrity do
   def pi004_lock_divergence(workflow_content, lock_content, opts \\ []) do
     path = Keyword.get(opts, :path, "<content>")
     repo = Keyword.get(opts, :repo, "<repo>")
-    locked = locked_refs(lock_content)
+
+    # A ref locked for another workflow does not vouch for this one: with the
+    # workflow's path, the comparison is that workflow's own `workflows:`
+    # entry. Without a path, or a lock that does not parse or name the
+    # workflow, every ref the lock holds is the comparison, as before.
+    locked =
+      (Keyword.has_key?(opts, :path) && scoped_locked_refs(lock_content, path)) ||
+        locked_refs(lock_content)
 
     workflow_content
     |> pin_sites()
     |> Enum.flat_map(fn site ->
       locked_refs_for_action =
         locked
-        |> Enum.filter(fn {_ref, {action, _line}} -> action == site.action_base end)
+        |> Enum.filter(fn {_ref, {action, _line}} -> same_action?(action, site.action_base) end)
         |> Enum.map(fn {ref, _} -> ref end)
+        |> Enum.uniq_by(&ref_identity/1)
 
       cond do
         locked_refs_for_action == [] ->
           []
 
-        site.ref in locked_refs_for_action ->
+        # The same commit in another case is agreement, not divergence.
+        ref_identity(site.ref) in Enum.map(locked_refs_for_action, &ref_identity/1) ->
           []
 
         true ->
@@ -486,53 +595,87 @@ defmodule Hypatia.Rules.PinIntegrity do
         {:error, "no known_good_sha for a denylisted action in this file"}
 
       true ->
-        {new_content, excisions} =
-          Enum.reduce(hits, {content, []}, fn site, {acc, log} ->
-            original = Enum.at(lines, site.line - 1) || ""
-            %{sha: sha, version: version} = known_good(policy, site.action)
-
-            rewritten =
-              original
-              |> String.replace("@" <> site.ref, "@" <> sha)
-              |> relabel_line(version)
-
-            excision = %{
-              line: site.line,
-              action: site.action,
-              from_ref: site.ref,
-              to_ref: sha,
-              to_version: version,
-              comment_before: site.comment,
-              comment_after: comment_of(rewritten)
-            }
-
-            # Whole-line replacement, so two identical pin lines are treated
-            # identically and neither is touched twice.
-            {String.replace(acc, original, rewritten), log ++ [excision]}
+        {new_lines, excisions} =
+          lines
+          |> Enum.with_index(1)
+          |> Enum.map_reduce([], fn {original, number}, log ->
+            case Enum.filter(hits, &(&1.line == number)) do
+              [] -> {original, log}
+              line_hits -> rewrite_line(original, line_hits, sites, policy, log)
+            end
           end)
 
-        if length(pin_sites(new_content)) == length(sites) do
-          {:ok, new_content, excisions}
-        else
-          {:error, "substitution would remove a pin site — refusing"}
+        new_content = Enum.join(new_lines, "\n")
+        new_sites = pin_sites(new_content)
+
+        # The rewrite is proved, not assumed: as many sites as before, and
+        # none of them denylisted — a `known_good_sha` that is itself
+        # blocked (by this entry or another for the same action) repairs
+        # nothing, and is refused rather than logged as an excision.
+        cond do
+          length(new_sites) != length(sites) ->
+            {:error, "substitution would remove a pin site — refusing"}
+
+          Enum.any?(new_sites, &denylisted?(policy, &1.action, &1.ref)) ->
+            {:error, "substitution leaves a denylisted pin — refusing"}
+
+          true ->
+            {:ok, new_content, excisions}
         end
     end
   end
 
-  defp comment_of(line) do
-    case String.split(line, "#", parts: 2) do
-      [_head, comment] -> comment
-      _ -> ""
-    end
+  # Each denylisted ref is spliced at its own offset, right to left so the
+  # offsets still to come stay valid: a line that carries the same ref twice,
+  # or the ref's text again in a `name:`, changes only at its sites. The
+  # comment is relabelled only on a line whose one site was the hit — on a
+  # multi-site line it labels no pin in particular.
+  defp rewrite_line(original, line_hits, sites, policy, log) do
+    rewritten =
+      line_hits
+      |> Enum.sort_by(& &1.ref_at, :desc)
+      |> Enum.reduce(original, fn site, acc ->
+        %{sha: sha} = known_good(policy, site.action)
+        tail_at = site.ref_at + site.ref_len
+
+        binary_part(acc, 0, site.ref_at) <>
+          sha <> binary_part(acc, tail_at, byte_size(acc) - tail_at)
+      end)
+
+    rewritten =
+      case {line_hits, Enum.count(sites, &(&1.line == hd(line_hits).line))} do
+        {[site], 1} -> relabel_line(rewritten, known_good(policy, site.action).version)
+        _ -> rewritten
+      end
+
+    excisions =
+      for site <- line_hits do
+        %{sha: sha, version: version} = known_good(policy, site.action)
+
+        %{
+          line: site.line,
+          action: site.action,
+          from_ref: site.ref,
+          to_ref: sha,
+          to_version: version,
+          comment_before: site.comment,
+          comment_after: PinSites.comment(rewritten)
+        }
+      end
+
+    {rewritten, log ++ excisions}
   end
 
+  # The comment is the text after the `#` PinSites finds outside quoted
+  # scalars, so `name: "C# build"` is not cut in two.
   defp relabel_line(line, version) when is_binary(version) do
-    case String.split(line, "#", parts: 2) do
-      # Mirror estate-pin-integrity.sh: the head keeps no `#`, the comment
-      # is handed over WITH it, and relabel/2 returns it with it.
-      [head, comment] -> head <> relabel("#" <> comment, version)
-      _ -> line
-    end
+    head = PinSites.head(line)
+
+    # Mirror estate-pin-integrity.sh: the head keeps no `#`, the comment
+    # is handed over WITH it, and relabel/2 returns it with it.
+    if byte_size(head) < byte_size(line),
+      do: head <> relabel("#" <> PinSites.comment(line), version),
+      else: line
   end
 
   defp relabel_line(line, _version), do: line
@@ -610,8 +753,8 @@ defmodule Hypatia.Rules.PinIntegrity do
   """
   @spec pin_only_edit?([String.t()], [String.t()], map()) :: boolean()
   def pin_only_edit?(removed, added, policy) do
-    removed_sites = lines_to_sites(removed)
-    added_sites = lines_to_sites(added)
+    removed_sites = Enum.flat_map(removed, &line_sites(&1, 0, ""))
+    added_sites = Enum.flat_map(added, &line_sites(&1, 0, ""))
 
     pinned_removed = removed_sites |> Enum.map(& &1.ref) |> Enum.sort()
     pinned_added = added_sites |> Enum.map(& &1.ref) |> Enum.sort()
@@ -620,12 +763,12 @@ defmodule Hypatia.Rules.PinIntegrity do
       removed == [] or added == [] ->
         false
 
-      length(removed_sites) != length(removed) or length(added_sites) != length(added) ->
+      not Enum.all?(removed ++ added, &PinSites.pin_line?/1) ->
         # At least one changed line is not a `uses:` line.
         false
 
-      Enum.sort(Enum.map(removed_sites, & &1.action)) !=
-          Enum.sort(Enum.map(added_sites, & &1.action)) ->
+      Enum.sort(Enum.map(removed_sites, &String.downcase(&1.action))) !=
+          Enum.sort(Enum.map(added_sites, &String.downcase(&1.action))) ->
         # An action was swapped for a different action.
         false
 
@@ -640,25 +783,6 @@ defmodule Hypatia.Rules.PinIntegrity do
       true ->
         true
     end
-  end
-
-  defp lines_to_sites(lines) do
-    lines
-    |> Enum.map(&Regex.named_captures(@uses_regex, &1))
-    |> Enum.flat_map(fn
-      %{"action" => action, "ref" => ref} = caps ->
-        [
-          %{
-            action: action,
-            action_base: action_base(action),
-            ref: ref,
-            comment: Map.get(caps, "comment", "") || ""
-          }
-        ]
-
-      _ ->
-        []
-    end)
   end
 
   # ─── PI005 · stale pin (advisory) ─────────────────────────────────────
