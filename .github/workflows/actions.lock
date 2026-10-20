@@ -42,10 +42,12 @@ workflows:
     '.github/workflows/escript-soundness.yml': []
     '.github/workflows/estate-rescan.yml':
         - 'actions/cache@v6.1.0'
-    '.github/workflows/governance.yml': []
+    '.github/workflows/governance.yml':
+        - 'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/hypatia-remediation-sweep.yml':
         - 'actions/upload-artifact@v7.0.2'
-    '.github/workflows/hypatia-scan.yml': []
+    '.github/workflows/hypatia-scan.yml':
+        - 'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/inbox-steward-intake.yml':
         - 'actions/checkout@v7.0.1'
     '.github/workflows/label-triage.yml': []
@@ -57,7 +59,8 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
         - 'erlef/setup-beam@v1.24.1'
-    '.github/workflows/mirror.yml': []
+    '.github/workflows/mirror.yml':
+        - 'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'
@@ -91,8 +94,10 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
         - 'swatinem/rust-cache@v2.9.2'
-    '.github/workflows/scorecard.yml': []
-    '.github/workflows/secret-scanner.yml': []
+    '.github/workflows/scorecard.yml':
+        - 'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
+    '.github/workflows/secret-scanner.yml':
+        - 'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/security-policy.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -140,6 +145,11 @@ dependencies:
         commit: 'sha1-27d5ce7f107fe9357f9df03efb73ab90386fccae'
         owner_id: 44036562
         repo_id: 215566462
+    'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9':
+        ref: 'v6.1.0'
+        commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        owner_id: 44036562
+        repo_id: 215566462
     'actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb':
         ref: 'v5.0.1'
         commit: 'sha1-9255dc7a253b0ccc959486e2bca901246202afeb'
@@ -150,6 +160,11 @@ dependencies:
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         owner_id: 44036562
         repo_id: 215566462
+    'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1':
+        ref: 'v7.0.1'
+        commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+        owner_id: 44036562
+        repo_id: 197814629
     'actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8':
         ref: 'v6.0.1'
         commit: 'sha1-8e8c483db84b4bee98b60c0593521ed34d9990e8'
@@ -190,6 +205,11 @@ dependencies:
         commit: 'sha1-bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
         owner_id: 44036562
         repo_id: 192625955
+    'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9':
+        ref: 'v7.0.2'
+        commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        owner_id: 44036562
+        repo_id: 192625955
     'actions/upload-artifact@v7.0.2':
         ref: 'v7.0.2'
         commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
@@ -218,6 +238,11 @@ dependencies:
         uses:
             - 'actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae'
             - 'aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514'
+    'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed':
+        ref: 'v2.0.5'
+        commit: 'sha1-22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
+        owner_id: 42048915
+        repo_id: 356423100
     'dependabot/fetch-metadata@v3.1.0':
         ref: 'v3.1.0'
         commit: 'sha1-25dd0e34f4fe68f24cc83900b1fe3fe149efef98'
@@ -248,21 +273,41 @@ dependencies:
         commit: 'sha1-99012661954931238ded8c8b007157a8430204e1'
         owner_id: 5429470
         repo_id: 288487894
+    'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8':
+        ref: 'v1'
+        commit: 'sha1-683b588c487a69d01f6c6ddf40f036ff682cc2c8'
+        owner_id: 1940490
+        repo_id: 260749683
     'dtolnay/rust-toolchain@v1':
         ref: 'v1'
         commit: 'sha1-02cb101ec7c40f2c49e1d9714d64511d8e1b74de'
         owner_id: 1940490
         repo_id: 260749683
+    'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393':
+        ref: 'v3.0.0'
+        commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
+        owner_id: 26415196
+        repo_id: 297874902
     'editorconfig-checker/action-editorconfig-checker@v3.0.0':
         ref: 'v3.0.0'
         commit: 'sha1-51f63319f592f97930c73d9c46184d20bd206393'
         owner_id: 26415196
         repo_id: 297874902
+    'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124':
+        ref: 'v1.24.1'
+        commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
+        owner_id: 47606891
+        repo_id: 331103973
     'erlef/setup-beam@v1.24.1':
         ref: 'v1.24.1'
         commit: 'sha1-54075bcc5e249e4758d363f27d099f55d843f124'
         owner_id: 47606891
         repo_id: 331103973
+    'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63':
+        ref: 'v4.38.0'
+        commit: 'sha1-b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+        owner_id: 9919
+        repo_id: 259445878
     'github/codeql-action@v4.38.2':
         ref: 'v4.38.2'
         commit: 'sha1-2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
@@ -308,6 +353,33 @@ dependencies:
         commit: 'sha1-c1c9fa07992a02c1fd3d67a0dc1b08cccb852aef'
         owner_id: 6759885
         repo_id: 1352485172
+    'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7':
+        ref: '333b06a01db1874ffedb2de1bfabb195640927c7'
+        commit: 'sha1-333b06a01db1874ffedb2de1bfabb195640927c7'
+        owner_id: 6759885
+        repo_id: 1116521501
+        uses:
+            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+            - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+            - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+            - 'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
+            - 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8'
+            - 'editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393'
+            - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
+            - 'github/codeql-action@b96794f015dfd88f77b49b1c93e0fa7110f94c63'
+            - 'ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e'
+            - 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
+            - 'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555'
+    'ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e':
+        ref: 'v2.5.0'
+        commit: 'sha1-fa7117db83c52d787ae5a89f350999701505d78e'
+        owner_id: 67707773
+        repo_id: 421101922
+    'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6':
+        ref: 'v2.2.0'
+        commit: 'sha1-0c5077e51419868618aeaa5fe8019c62421857d6'
+        owner_id: 108928776
+        repo_id: 512644635
     'ruby/setup-ruby@v1.329.0':
         ref: 'v1.329.0'
         commit: 'sha1-651ff0d62c5c79bed6d53ec518387aae20e72c1a'
@@ -333,3 +405,8 @@ dependencies:
         commit: 'sha1-e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9'
         owner_id: 79229934
         repo_id: 77726177
+    'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555':
+        ref: 'v0.10.0'
+        commit: 'sha1-e83874834305fe9a4a2997156cb26c5de65a8555'
+        owner_id: 135788
+        repo_id: 208510314

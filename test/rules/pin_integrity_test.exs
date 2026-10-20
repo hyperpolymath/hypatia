@@ -80,6 +80,668 @@ defmodule Hypatia.Rules.PinIntegrityTest do
     end
   end
 
+  # Read one line at a time, a `uses:` written inside a `run: |` script or a
+  # quoted scalar continued from an earlier line looked like a key: PI001
+  # reported script text and substitute_denylisted_pins/3 rewrote it as an
+  # automatic repair. The file is now read through PinSites.mask_lines/1.
+  describe "pin_sites/1 across lines — block and quoted scalars are text" do
+    @real_step "      - uses: github/codeql-action/init@#{@poison} # v4.38.0\n"
+
+    test "a uses: line inside a run: | script is no site, the step after it is" do
+      content =
+        "jobs:\n  b:\n    steps:\n      - run: |\n" <>
+          "          cat > fixture.yml <<'EOF'\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          - uses: github/codeql-action/analyze@#{@poison} # v4.38.1\n" <>
+          "          EOF\n\n" <>
+          "        shell: bash\n" <> @real_step
+
+      assert [%{line: 11}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
+      assert new_content =~ "analyze@#{@poison} # v4.38.1\n"
+      assert new_content =~ "      - uses: github/codeql-action/init@#{@good} # v4.38.0\n"
+    end
+
+    test "a script that is all text leaves the file untouched" do
+      content =
+        "steps:\n  - name: write\n    run: >-\n      uses: github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(content, @policy) == []
+      assert {:ok, ^content, []} = PI.substitute_denylisted_pins(content, @policy)
+    end
+
+    test "a bare block-scalar sequence entry is text until the dash's level" do
+      content =
+        "      - args:\n          - |\n            uses: github/codeql-action/init@#{@poison}\n" <>
+          @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "the continuation of a multi-line double-quoted run: is text" do
+      content =
+        "      - run: \"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          echo \\\"end\\\"\"\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
+    end
+
+    test "a single-quoted one, with an escaped quote inside, is text too" do
+      content =
+        "      - run: 'echo it''s\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          done'\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a value pending from the line above may open the quote" do
+      content =
+        "      - run:\n          \"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\"\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "an apostrophe in a plain scalar opens nothing" do
+      content = "      - run: echo it's here\n" <> @real_step <> "      - run: echo don't\n"
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a quote inside a run: | script opens nothing after the script" do
+      content = "      - run: |\n          echo \"unterminated\n" <> @real_step
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a quote never closed by the end of the file hides nothing" do
+      content = "      - run: \"echo start\n" <> @real_step
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "the file mask keeps every line's bytes where they were" do
+      content =
+        "      - run: |\n          uses: a/b@#{@poison}\n      - run: \"x\n  y\" # c\n" <>
+          @real_step
+
+      masked = Hypatia.Rules.PinSites.mask_lines(content)
+      lines = String.split(content, "\n")
+
+      assert Enum.map(masked, &byte_size/1) == Enum.map(lines, &byte_size/1)
+      assert Enum.at(masked, 1) == String.duplicate("x", byte_size(Enum.at(lines, 1)))
+      assert Enum.at(masked, 3) == "xxxx # c"
+      assert Enum.at(masked, 4) == String.trim_trailing(@real_step, "\n")
+    end
+
+    test "a JSON-style flow value after a bare colon opens its quote too" do
+      content =
+        "      - {\"run\":\"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n" <>
+          "          echo end\"}\n" <> @real_step
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          uses: github/codeql-action/init@#{@poison}\n"
+    end
+
+    test "an anchor or tag before the quote does not hide where the scalar starts" do
+      for opener <- [
+            "      - {\"run\": &cmd \"echo start\n",
+            "      - {\"run\":&cmd \"echo start\n",
+            "      - run: !!str \"echo start\n"
+          ] do
+        content =
+          opener <>
+            "          uses: github/codeql-action/init@#{@poison}\n" <>
+            "          echo end\"#{if String.contains?(opener, "{"), do: "}", else: ""}\n" <>
+            @real_step
+
+        assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      end
+    end
+
+    test "a uses: whose reference continues on the next line is a site there" do
+      content =
+        "      - uses:\n          github/codeql-action/init@#{@poison} # v4.38.0\n" <>
+          "      - uses:\n          \"github/codeql-action/analyze@#{@poison}\"\n" <> @real_step
+
+      assert [%{line: 2}, %{line: 4}, %{line: 5}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_, _, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute new_content =~ @poison
+      assert new_content =~ "          github/codeql-action/init@#{@good} # v4.38.0\n"
+      assert new_content =~ "          \"github/codeql-action/analyze@#{@good}\"\n"
+
+      # Controls: another key's continued value, and a `uses:` whose next
+      # line is no deeper, hold no site.
+      assert PI.pi001_denylisted_pin(
+               "      - run:\n          github/codeql-action/init@#{@poison}\n" <>
+                 "      - uses:\n      - name: github/codeql-action/init@#{@poison}\n",
+               @policy
+             ) == []
+    end
+
+    test "blank and comment-only lines between a uses: key and its reference are skipped" do
+      # YAML lets them stand between a key and its scalar: the reference is
+      # still the `uses:` value, so it is still a site — reported and repaired.
+      content =
+        "      - uses:\n\n          # pinned for the 4.38 line\n" <>
+          "          github/codeql-action/init@#{@poison}\n" <> @real_step
+
+      assert [%{line: 4}, %{line: 5}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          github/codeql-action/init@#{@good}\n"
+
+      # Control: a comment and then a line no deeper than the key end it.
+      assert PI.pi001_denylisted_pin(
+               "      - uses:\n          # note\n      - name: github/codeql-action/init@#{@poison}\n",
+               @policy
+             ) == []
+    end
+
+    test "a uses: value carrying an anchor or tag is the pin all the same" do
+      # YAML node properties name the node; the scalar after them is the
+      # action reference, so it is a site — reported and repaired.
+      content =
+        "      - uses: &init github/codeql-action/init@#{@poison}\n" <>
+          "      - uses: !!str \"github/codeql-action/analyze@#{@poison}\"\n" <>
+          "      - { name: x, uses: !!str github/codeql-action/upload-sarif@#{@poison} }\n" <>
+          "      - uses: !!str\n          github/codeql-action/autobuild@#{@poison}\n"
+
+      assert [%{line: 1}, %{line: 2}, %{line: 3}, %{line: 5}] =
+               PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_, _, _, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute new_content =~ @poison
+      assert new_content =~ "      - uses: &init github/codeql-action/init@#{@good}\n"
+      assert new_content =~ "      - uses: !!str \"github/codeql-action/analyze@#{@good}\"\n"
+
+      # Control: `&` or `!` inside a quoted name is text, not a property.
+      assert PI.pi001_denylisted_pin(
+               "      - name: \"uses: !!str github/codeql-action/init@#{@poison}\"\n",
+               @policy
+             ) == []
+    end
+
+    test "a uses: entry of a flow step whose reference continues on the next line is a site" do
+      content =
+        "      - { name: x, uses:\n          github/codeql-action/init@#{@poison} }\n" <>
+          "    steps: [ { uses:\n        github/codeql-action/analyze@#{@poison}, name: y } ]\n"
+
+      assert [%{line: 2}, %{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          github/codeql-action/init@#{@good} }\n"
+      assert new_content =~ "        github/codeql-action/analyze@#{@good}, name: y } ]\n"
+
+      # Control: an input's mapping is not a step — `with: { uses:` is data.
+      assert PI.pi001_denylisted_pin(
+               "        with: { uses:\n          github/codeql-action/init@#{@poison} }\n",
+               @policy
+             ) == []
+    end
+
+    test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
+      states =
+        Hypatia.Rules.PinSites.line_states(
+          "- run: |\n    uses: a/b@x\n- uses: c/d@y\n- run: \"open\n  uses: e/f@z"
+        )
+
+      assert Enum.map(states, &elem(&1, 1)) == [:yaml, :text, :yaml, :yaml, :open]
+      assert List.last(states) == {"  uses: e/f@z", :open}
+    end
+
+    test "a uses: alias runs the reference its anchor holds; the site is the anchor's value" do
+      content =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison} # v4.38.0\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n      - { name: y, uses: *bad }\n"
+
+      # One site however many aliases name it: the anchor's line is where the
+      # reference stands, and where a repair rewrites it.
+      assert [%{line: 2, detail: %{ref: @poison, action: "github/codeql-action/init"}}] =
+               PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "  BAD: &bad github/codeql-action/init@#{@good} # v4.38.0\n"
+      assert new_content =~ "      - uses: *bad\n"
+
+      # Controls: an alias names the latest anchor before it, so a poisoned
+      # `&bad` defined after it is not what runs; an anchor whose value is no
+      # action reference names no site; nor does an alias that is not a
+      # `uses:` value.
+      later =
+        "env:\n  OK: &bad github/codeql-action/init@#{@good}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n" <>
+          "x:\n  BAD: &bad github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(later, @policy) == []
+
+      not_action = "x: &bad stable\njobs:\n  a:\n    steps:\n      - uses: *bad\n"
+      assert PI.pi001_denylisted_pin(not_action, @policy) == []
+
+      not_uses =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison}\n  ALSO: *bad\n" <>
+          "      - name: \"uses: *bad\"\n"
+
+      assert PI.pi001_denylisted_pin(not_uses, @policy) == []
+    end
+
+    test "node properties before a step's own mapping leave it a step" do
+      content =
+        "    steps: [ &step { uses: github/codeql-action/init@#{@poison} } ]\n" <>
+          "      - &other { name: x, uses: github/codeql-action/analyze@#{@poison} }\n"
+
+      assert [%{line: 1}, %{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute new_content =~ @poison
+
+      # Control: an anchored input mapping is still data.
+      assert PI.pi001_denylisted_pin(
+               "        with: &w { uses: github/codeql-action/init@#{@poison} }\n",
+               @policy
+             ) == []
+    end
+
+    test "an anchor whose scalar continues on the next line holds that reference" do
+      content =
+        "env:\n  BAD: &bad\n    github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 3, detail: %{ref: @poison}}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "  BAD: &bad\n    github/codeql-action/init@#{@good}\n"
+
+      # Control: a line that is not deeper is no continuation — `&bad` is
+      # null, and the alias names no reference.
+      null =
+        "env:\n  BAD: &bad\n  NEXT: github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert PI.pi001_denylisted_pin(null, @policy) == []
+    end
+
+    test "inside a flow collection opened above, a step's uses: after a sibling is a site" do
+      # The quoted sibling closes on the line the `uses:` stands on; the
+      # brackets the lines above opened still make it the step's own key.
+      quoted =
+        "jobs:\n  a:\n    steps: [{ name: \"hello\n      world\", " <>
+          "uses: github/codeql-action/init@#{@poison} }]\n"
+
+      sibling =
+        "jobs:\n  a:\n    steps: [\n      {\n        name: x, " <>
+          "uses: github/codeql-action/init@#{@poison}\n      }\n    ]\n"
+
+      for {content, line} <- [{quoted, 4}, {sibling, 5}] do
+        assert [%{line: ^line}] = PI.pi001_denylisted_pin(content, @policy)
+        assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+        assert new_content =~ "github/codeql-action/init@#{@good}"
+      end
+
+      # Controls: the same layout inside a step input's mapping is data, and
+      # an own-line `uses:` there is too.
+      for content <- [
+            "jobs:\n  a:\n    steps: [{ with: { note: \"x\n      y\", " <>
+              "uses: github/codeql-action/init@#{@poison} } }]\n",
+            "jobs:\n  a:\n    steps:\n      - with: {\n          " <>
+              "uses: github/codeql-action/init@#{@poison}\n        }\n"
+          ] do
+        assert PI.pi001_denylisted_pin(content, @policy) == []
+      end
+    end
+
+    test "a value pending after node properties opens the quoted scalar below it" do
+      # `run: &cmd` leaves its value pending: the quote on the next line
+      # opens the string, and the `uses:` text inside it is no site.
+      content =
+        "      - run: &cmd\n          \"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n          echo end\"\n"
+
+      assert PI.pi001_denylisted_pin(content, @policy) == []
+      assert {:ok, ^content, []} = PI.substitute_denylisted_pins(content, @policy)
+
+      # Control: a value written on the property's own line pends nothing.
+      live = "      - run: &cmd echo\n      - uses: github/codeql-action/init@#{@poison}\n"
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(live, @policy)
+    end
+
+    test "an aliased uses: inside a flow collection opened above is judged by its brackets" do
+      # `uses: *bad` in a step's `env: {` spread over lines is an env var.
+      anchor = "x: &bad github/codeql-action/init@#{@poison}\n"
+
+      env =
+        anchor <>
+          "jobs:\n  a:\n    steps: [\n      { run: echo, env: {\n        uses: *bad\n      } }\n    ]\n"
+
+      assert PI.pi001_denylisted_pin(env, @policy) == []
+      assert {:ok, ^env, []} = PI.substitute_denylisted_pins(env, @policy)
+
+      # Control: the step's own `uses:` after a sibling is the step's action.
+      step =
+        anchor <> "jobs:\n  a:\n    steps: [\n      { run: echo,\n        uses: *bad }\n    ]\n"
+
+      assert [%{line: 1}] = PI.pi001_denylisted_pin(step, @policy)
+    end
+
+    test "a steps: sequence is a job's only when the brackets say so" do
+      # A matrix value holding `steps: [ { uses: ... } ]` is data.
+      data =
+        "    include: [ { fixture: { steps: [ { uses: github/codeql-action/init@#{@poison} } ] } } ]\n"
+
+      assert PI.pi001_denylisted_pin(data, @policy) == []
+
+      # Controls: through a job key into `jobs`, or the whole stack a block
+      # job's own line shows.
+      for line <- [
+            "jobs: { b: { steps: [ { uses: github/codeql-action/init@#{@poison} } ] } }\n",
+            "    steps: [ { uses: github/codeql-action/init@#{@poison} } ]\n"
+          ] do
+        assert [%{line: 1}] = PI.pi001_denylisted_pin(line, @policy)
+      end
+    end
+
+    test "an anchor is a node property only where a node starts" do
+      # In block context `a, &bad b` is one plain scalar: no anchor.
+      text =
+        "env:\n  NOTE: a, &bad github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert PI.pi001_denylisted_pin(text, @policy) == []
+
+      # Control: after `[` in a flow sequence a node starts.
+      flow =
+        "env:\n  LIST: [ &bad github/codeql-action/init@#{@poison} ]\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(flow, @policy)
+    end
+
+    test "a block uses: key under no step or job is data, not a site" do
+      # An input named `uses` is the step's data, as `with: { uses: ... }`
+      # is: PI001 does not report it and the repair leaves it as is.
+      input =
+        "jobs:\n  b:\n    steps:\n      - uses: some/wrapper@v1\n        with:\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(input, @policy) == []
+      assert {:ok, ^input, []} = PI.substitute_denylisted_pins(input, @policy)
+
+      # Controls: a step's own key, a job's own key, a composite action's
+      # step, and a line whose ancestry the file does not show (judged on
+      # its own, as before).
+      step =
+        "jobs:\n  b:\n    steps:\n      - name: init\n        uses: github/codeql-action/init@#{@poison}\n"
+
+      job = "jobs:\n  b:\n    uses: github/codeql-action/init@#{@poison}\n"
+
+      composite =
+        "runs:\n  using: composite\n  steps:\n  - uses: github/codeql-action/init@#{@poison}\n"
+
+      fragment = "      - uses: github/codeql-action/init@#{@poison}\n"
+
+      for {text, line} <- [{step, 5}, {job, 3}, {composite, 4}, {fragment, 1}] do
+        assert [%{line: ^line}] = PI.pi001_denylisted_pin(text, @policy), text
+      end
+    end
+
+    test "an input named uses holds no site below its key or through its alias" do
+      input =
+        "jobs:\n  b:\n    steps:\n      - uses: some/wrapper@v1\n        with:\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n"
+
+      continued = String.replace(input, "uses: github/", "uses:\n            github/")
+
+      aliased =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison}\n" <>
+          String.replace(input, "uses: github/codeql-action/init@#{@poison}", "uses: *bad")
+
+      assert PI.pi001_denylisted_pin(continued, @policy) == []
+      assert PI.pi001_denylisted_pin(aliased, @policy) == []
+    end
+
+    test "a list item is a step only in a job's steps:" do
+      # A sequence another key holds, and a `steps:` inside a step's input.
+      listed =
+        "jobs:\n  b:\n    steps:\n      - uses: some/runner@v1\n        with:\n" <>
+          "          list:\n            - uses: github/codeql-action/init@#{@poison}\n"
+
+      assert PI.pi001_denylisted_pin(listed, @policy) == []
+      assert PI.pi001_denylisted_pin(String.replace(listed, "list:", "steps:"), @policy) == []
+    end
+
+    test "an anchor directly after a quoted key's colon in a flow mapping is the anchor" do
+      # JSON-style `{"BAD":&bad ...}`: the value starts right after the colon.
+      content =
+        "env: {\"BAD\":&bad \"github/codeql-action/init@#{@poison}\"}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 1}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+    end
+
+    test "an anchored scalar continued inside a flow mapping may start at column 0" do
+      content =
+        "env: {\n  BAD: &bad\ngithub/codeql-action/init@#{@poison}\n}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+    end
+
+    test "a step given whole as an alias of a flow mapping runs that mapping's uses:" do
+      # The anchored mapping sits in a matrix entry, which is data: the
+      # alias in `steps:` makes it the step.
+      matrix =
+        "jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n" <>
+          "          - step: &step { uses: github/codeql-action/init@#{@poison} }\n" <>
+          "    steps:\n      - *step\n"
+
+      assert [%{line: 6}] = PI.pi001_denylisted_pin(matrix, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(matrix, @policy)
+      refute fixed =~ @poison
+
+      flow_seq =
+        "x: &step { uses: github/codeql-action/init@#{@poison} }\n" <>
+          "jobs:\n  a:\n    steps: [*step]\n"
+
+      assert [%{line: 1}] = PI.pi001_denylisted_pin(flow_seq, @policy)
+
+      # Control: with no alias in a step position, the matrix entry is data.
+      unused = String.replace(matrix, "      - *step\n", "      - run: echo\n")
+      assert PI.pi001_denylisted_pin(unused, @policy) == []
+    end
+
+    test "a step or job given whole as an alias of a block mapping runs its uses:" do
+      step =
+        "x:\n  - &step\n    uses: github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - *step\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(step, @policy)
+
+      # The job's mapping anchored in a matrix entry, data until aliased.
+      job =
+        "jobs:\n  b:\n    strategy:\n      matrix:\n        include:\n          - job: &job\n" <>
+          "              uses: github/codeql-action/init@#{@poison}\n  a: *job\n"
+
+      assert [%{line: 7}] = PI.pi001_denylisted_pin(job, @policy)
+      assert PI.pi001_denylisted_pin(String.replace(job, "  a: *job\n", ""), @policy) == []
+    end
+
+    test "an anchor name runs to whitespace or a flow indicator" do
+      content =
+        "env:\n  BAD: &bad/x github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad/x\n"
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
+    test "a step alias runs a flow mapping anchored over several lines" do
+      content =
+        "jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n" <>
+          "          - step: &step {\n              name: init,\n" <>
+          "              uses: github/codeql-action/init@#{@poison}\n            }\n" <>
+          "    steps:\n      - *step\n"
+
+      assert [%{line: 8}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+    end
+
+    test "a version is matched past one optional v only" do
+      policy = put_in(@policy, ["pin_denylist", Access.at(0), "blocked_versions"], ["4.38.1"])
+
+      assert [_] = PI.pi001_denylisted_pin("- uses: github/codeql-action/init@v4.38.1\n", policy)
+      assert PI.pi001_denylisted_pin("- uses: github/codeql-action/init@vv4.38.1\n", policy) == []
+    end
+
+    test "a substitution that leaves a denylisted pin is refused" do
+      # A `known_good_sha` that is itself blocked repairs nothing.
+      policy = put_in(@policy, ["pin_denylist", Access.at(0), "known_good_sha"], @poison)
+      content = "- uses: github/codeql-action/init@#{@poison}\n"
+
+      assert {:error, reason} = PI.substitute_denylisted_pins(content, policy)
+      assert reason =~ "leaves a denylisted pin"
+    end
+
+    test "a uses: key under a root key that holds no job is data in a whole workflow" do
+      for root <- ["env", "x-template"] do
+        content =
+          "#{root}:\n  uses: github/codeql-action/init@#{@poison}\n" <>
+            "jobs:\n  a:\n    steps:\n      - run: echo\n"
+
+        assert PI.pi001_denylisted_pin(content, @policy) == [], root
+        assert {:ok, ^content, []} = PI.substitute_denylisted_pins(content, @policy)
+      end
+
+      # Control: a fragment that shows no root (no `jobs:`) is judged on its
+      # own line, as before: a job's `uses:` for all it shows.
+      assert [%{line: 2}] =
+               PI.pi001_denylisted_pin(
+                 "build:\n  uses: github/codeql-action/init@#{@poison}\n",
+                 @policy
+               )
+    end
+
+    test "a step alias whose mapping names its action by alias runs the anchored reference" do
+      content =
+        "env:\n  BAD: &bad github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n" <>
+          "          - &step\n            uses: *bad\n" <>
+          "    steps:\n      - *step\n"
+
+      # The site is the anchor's value, where the repair rewrites it.
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+
+      # Control: with no step alias the matrix entry, alias and all, is data.
+      data = String.replace(content, "      - *step\n", "      - run: echo\n")
+      assert PI.pi001_denylisted_pin(data, @policy) == []
+    end
+
+    test "a uses: block scalar whose one line is a reference is a site on that line" do
+      content =
+        "jobs:\n  a:\n    steps:\n" <>
+          "      - uses: >-\n          github/codeql-action/init@#{@poison}\n" <>
+          "      - uses: |\n          github/codeql-action/init@#{@poison}\n"
+
+      assert [%{line: 5}, %{line: 7}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+      assert fixed =~ "      - uses: >-\n          github/codeql-action/init@#{@good}\n"
+
+      # An anchored block scalar names the same reference to a `uses: *bad`.
+      anchored =
+        "env:\n  BAD: &bad >-\n    github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(anchored, @policy)
+
+      # Controls: a block scalar that folds more lines into its value holds
+      # no reference; under `run:` or an input it is text or data.
+      for other <- [
+            "      - uses: >-\n          github/codeql-action/init@#{@poison}\n          extra\n",
+            "      - run: |\n          github/codeql-action/init@#{@poison}\n",
+            "      - uses: a/b@v1\n        with:\n          uses: >-\n            github/codeql-action/init@#{@poison}\n"
+          ] do
+        assert PI.pi001_denylisted_pin("jobs:\n  a:\n    steps:\n" <> other, @policy) == [], other
+      end
+    end
+
+    test "a composite action written as KYAML: its runs: steps are sites" do
+      # `yq -p yaml -o kyaml` of a composite action (YAML-POLICY Y-3).
+      content = """
+      {
+        name: "setup",
+        runs: {
+          using: "composite",
+          steps: [
+            {
+              uses: "github/codeql-action/init@#{@poison}", # v4.38.1
+            },
+          ],
+        },
+      }
+      """
+
+      assert [%{line: 7}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert fixed =~ ~s(uses: "github/codeql-action/init@#{@good}", # v4.38.0)
+
+      # Control: a `runs:` mapping that is an input's value, not the action's
+      # own root key, holds data.
+      data =
+        "runs:\n  using: composite\n  steps:\n    - uses: some/wrapper@v1\n      with:\n" <>
+          "        runs: { steps: [ { uses: github/codeql-action/init@#{@poison} } ] }\n"
+
+      assert PI.pi001_denylisted_pin(data, @policy) == []
+    end
+
+    test "a double-quoted value is the reference YAML decodes it to" do
+      tail = String.slice(@poison, 1..-1//1)
+      escaped = "\\x31" <> tail
+      steps = "jobs:\n  a:\n    steps:\n"
+
+      # An escape in the ref, an escaped `/` in the action, the `\u` form
+      # and a value continued below its key: each is the denylisted
+      # commit GitHub runs, and the repair rewrites exactly the ref's bytes.
+      for {value, repaired} <- [
+            {~s(      - uses: "github/codeql-action/init@#{escaped}"\n),
+             ~s(      - uses: "github/codeql-action/init@#{@good}"\n)},
+            {~s(      - uses: "github\\/codeql-action/init@#{@poison}"\n),
+             ~s(      - uses: "github\\/codeql-action/init@#{@good}"\n)},
+            {~s(      - { uses: "github/codeql-action/init@\\u0031#{tail}" }\n),
+             ~s(      - { uses: "github/codeql-action/init@#{@good}" }\n)},
+            {~s(      - uses:\n          "github/codeql-action/init@#{escaped}"\n),
+             ~s(      - uses:\n          "github/codeql-action/init@#{@good}"\n)}
+          ] do
+        content = steps <> value
+        assert [_] = PI.pi001_denylisted_pin(content, @policy), value
+        assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+        assert fixed == steps <> repaired
+      end
+
+      # Control: an escape YAML does not define decodes to nothing.
+      bad = steps <> ~s(      - uses: "github/codeql-action/init@\\q#{@poison}"\n)
+      assert PI.pi001_denylisted_pin(bad, @policy) == []
+    end
+
+    test "a KYAML flow step on its own line is still a site" do
+      content =
+        "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>
+          "  { uses: \"github/codeql-action/init@#{@poison}\" },\n]\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+  end
+
   describe "action_base/1" do
     test "keys on the release unit, not the sub-action" do
       assert PI.action_base("github/codeql-action/init") == "github/codeql-action"
@@ -96,6 +758,10 @@ defmodule Hypatia.Rules.PinIntegrityTest do
                PI.denylisted?(@policy, "github/codeql-action/analyze", "v4.38.1")
 
       assert %{"id" => "PIN-001"} = PI.denylisted?(@policy, "github/codeql-action/init", "4.38.1")
+
+      # Upper-case hex is the same commit; the table is written in lower case.
+      assert %{"id" => "PIN-001"} =
+               PI.denylisted?(@policy, "github/codeql-action/init", String.upcase(@poison))
     end
 
     test "does not match a good ref, another action, or another repo's entry" do
@@ -276,6 +942,67 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert PI.pi001_denylisted_pin(new_content, @policy) == []
     end
 
+    test "a quoted \"uses\" key is the same key: caught by PI001 and repaired in place" do
+      content = """
+      jobs:
+        a:
+          steps:
+            - "uses": "github/codeql-action/init@#{@poison}" # v4.38.1
+      """
+
+      assert [%{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ ~s("uses": "github/codeql-action/init@#{@good}" # v4.38.0)
+      assert PI.pi001_denylisted_pin(new_content, @policy) == []
+    end
+
+    test "a compact flow step is a site: caught by PI001 and spliced at its own offset" do
+      # `- { name: ..., uses: ... }` carries the dash, the brace and a sibling
+      # key; the old whole-line pattern allowed only one of the first two and
+      # nothing after the ref, so this pin was invisible to the file scan.
+      content = """
+      jobs:
+        a:
+          steps:
+            - { name: "scan #{@poison}", uses: github/codeql-action/init@#{@poison} } # v4.38.1
+            - uses: actions/checkout@v7.0.1
+      """
+
+      assert [%{line: 4, detail: %{denylist_id: "PIN-001"}}] =
+               PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [excision]} = PI.substitute_denylisted_pins(content, @policy)
+      assert excision.from_ref == @poison
+
+      # Only the site moves: the same 40 hex characters inside `name:` are
+      # text and stay as written, and the one-site line's label is relabelled.
+      assert new_content =~
+               ~s(- { name: "scan #{@poison}", uses: github/codeql-action/init@#{@good} } # v4.38.0)
+
+      assert PI.pi001_denylisted_pin(new_content, @policy) == []
+    end
+
+    test "a multi-site flow line is repaired site by site and its shared label is kept" do
+      content =
+        "    steps: [ { uses: github/codeql-action/init@#{@poison} }, " <>
+          "{ uses: actions/checkout@v7.0.1 } ] # v7.0.1\n"
+
+      assert [_] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "init@#{@good} }, { uses: actions/checkout@v7.0.1 } ] # v7.0.1"
+    end
+
+    test "a mixed-case action spelling meets its lower-case denylist entry" do
+      # GitHub resolves `GitHub/CodeQL-Action` to `github/codeql-action`.
+      content = "      - uses: GitHub/CodeQL-Action/init@#{@poison} # v4.38.1\n"
+
+      assert [%{rule_id: "PI001"}] = PI.pi001_denylisted_pin(content, @policy)
+
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content == "      - uses: GitHub/CodeQL-Action/init@#{@good} # v4.38.0\n"
+    end
+
     test "a file with no denylisted site is returned untouched" do
       clean = "- uses: actions/checkout@v7.0.1\n"
 
@@ -364,6 +1091,20 @@ defmodule Hypatia.Rules.PinIntegrityTest do
 
       assert PI.pi003_locked_moving_ref(lock, @policy) == []
     end
+
+    test "two actions locked at one moving ref are two findings, each pair once" do
+      lock = """
+      '.github/workflows/ci.yml':
+          - 'dtolnay/rust-toolchain@stable'
+          - 'some/other-action@stable'
+      dependencies:
+          'dtolnay/rust-toolchain@stable':
+      """
+
+      assert [a, b] = PI.pi003_locked_moving_ref(lock, @policy)
+      assert {a.detail.action, a.line} == {"some/other-action", 3}
+      assert {b.detail.action, b.line} == {"dtolnay/rust-toolchain", 5}
+    end
   end
 
   describe "pi004_lock_divergence/3" do
@@ -396,6 +1137,65 @@ defmodule Hypatia.Rules.PinIntegrityTest do
 
       assert PI.pi004_lock_divergence(workflow, lock) == []
     end
+
+    test "an action sharing its locked ref with another action is still compared" do
+      # Keyed by ref alone, `github/codeql-action@v4` replaced the checkout
+      # entry and the divergence below went unreported.
+      workflow = "- uses: actions/checkout@v3\n"
+      lock = "    - 'actions/checkout@v4'\n    - 'github/codeql-action@v4'\n"
+
+      assert [finding] = PI.pi004_lock_divergence(workflow, lock)
+      assert finding.detail.lock_refs == ["v4"]
+    end
+
+    test "a commit ID in upper case agrees with the same commit locked in lower case" do
+      workflow = "- uses: github/codeql-action/init@#{String.upcase(@good)}\n"
+      lock = "    - 'github/codeql-action@#{@good}'\n"
+
+      assert PI.pi004_lock_divergence(workflow, lock) == []
+
+      # Control: a symbolic ref is a name — `V4` is not the tag `v4`.
+      assert [_] =
+               PI.pi004_lock_divergence(
+                 "- uses: actions/checkout@V4\n",
+                 "    - 'actions/checkout@v4'\n"
+               )
+    end
+
+    test "with the workflow's path, only that workflow's own lock entry vouches for its pin" do
+      lock = """
+      version: 'v0.0.2'
+      workflows:
+          '.github/workflows/a.yml':
+              - 'actions/checkout@v7.0.1'
+          '.github/workflows/b.yml':
+              - 'actions/checkout@v6.0.0'
+      dependencies:
+          'actions/checkout@v6.0.0':
+              ref: 'v6.0.0'
+              commit: 'sha1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+              owner_id: 44036562
+              repo_id: 197814629
+          'actions/checkout@v7.0.1':
+              ref: 'v7.0.1'
+              commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
+              owner_id: 44036562
+              repo_id: 197814629
+      """
+
+      workflow = "- uses: actions/checkout@v7.0.1\n"
+
+      # `b.yml` locks v6.0.0: v7.0.1, locked for `a.yml`, does not vouch for it.
+      assert [finding] =
+               PI.pi004_lock_divergence(workflow, lock, path: ".github/workflows/b.yml")
+
+      assert finding.detail.lock_refs == ["v6.0.0"]
+
+      # Controls: `a.yml` agrees with its own entry; with no path the lock's
+      # refs are pooled, as before.
+      assert PI.pi004_lock_divergence(workflow, lock, path: ".github/workflows/a.yml") == []
+      assert PI.pi004_lock_divergence(workflow, lock) == []
+    end
   end
 
   describe "pi005_stale_pin/2 — advisory, never an action" do
@@ -419,6 +1219,42 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       content = "- uses: actions/checkout@v4.1.7 # v4.1.7\n"
 
       assert PI.pi005_stale_pin(content, %{}) == []
+    end
+  end
+
+  describe "PIN-003 in the committed policy (standards revisions whose lock GitHub rejects)" do
+    @policy_path Path.expand(
+                   "../../.machine_readable/merge-orchestration/pr-automerge-policy.json",
+                   __DIR__
+                 )
+    @rejected "8f2ee50841e216cd8c192eeb68953118190f105c"
+    @accepted "75bd5994470661a099df562d6d5ad2fe744dbd66"
+    @governance "hyperpolymath/standards/.github/workflows/governance-reusable.yml"
+
+    defp committed_policy, do: Jason.decode!(File.read!(@policy_path))
+
+    test "the entry exists, is keyed on SHA only, and names the known-good revision" do
+      policy = committed_policy()
+      entry = Enum.find(policy["pin_denylist"], &(&1["id"] == "PIN-003"))
+      assert entry["action"] == "hyperpolymath/standards"
+      assert entry["severity"] == "critical"
+      assert entry["blocked_versions"] == []
+      assert entry["blocked_refs"] == []
+      assert entry["known_good_sha"] == @accepted
+      assert entry["replacement"] == "pin_to_known_good"
+      assert length(entry["blocked_shas"]) > 500
+      assert Enum.all?(entry["blocked_shas"], &Regex.match?(~r/^[0-9a-f]{40}$/, &1))
+      refute @accepted in entry["blocked_shas"]
+    end
+
+    test "a caller pinned inside the window is denylisted through the reusable path; the replacement is not" do
+      policy = committed_policy()
+      assert %{"id" => "PIN-003"} = PI.denylisted?(policy, @governance, @rejected)
+      assert PI.denylisted?(policy, @governance, @accepted) == nil
+      # The June toolchain window is WF027's, not this entry's: a June revision
+      # has no lock and must not be denylisted here.
+      assert PI.denylisted?(policy, @governance, "d135b05bfc647d0c0fbfedc7e80f37ea50f49236") ==
+               nil
     end
   end
 end
