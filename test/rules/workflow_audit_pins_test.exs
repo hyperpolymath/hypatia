@@ -665,6 +665,87 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert f.reason =~ "no `&nowhere` anchor"
     end
 
+    test "an alias names the latest anchor before it, not the first in the file" do
+      # YAML lets a document define `&inputs` again; `*inputs` is the
+      # empty mapping here, so the step passes no toolchain.
+      wf = """
+      defaults: &inputs {toolchain: nightly}
+      other: &inputs {}
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *inputs
+      """
+
+      assert [%{line: 6, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      # Controls: the other order is configured, and an anchor defined only
+      # after the alias defines nothing for it.
+      configured = String.replace(wf, "&inputs {toolchain: nightly}", "&inputs {}", global: false)
+
+      configured =
+        String.replace(configured, "other: &inputs {}", "other: &inputs {toolchain: nightly}")
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => configured})
+
+      later = """
+      jobs:
+        check:
+          steps:
+            - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              with: *inputs
+      defaults: &inputs {toolchain: nightly}
+      """
+
+      assert [%{line: 4} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => later})
+
+      assert f.reason =~ "no `&inputs` anchor is defined before it"
+    end
+
+    test "a uses: value continued below its key, past a comment, is the step's pin" do
+      wf = """
+      jobs:
+        check:
+          steps:
+            - uses:
+                # pinned
+                dtolnay/rust-toolchain@#{@toolchain_sha}
+            - run: cargo test
+      """
+
+      assert [%{line: 4, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert f.reason =~ "continued below its key"
+
+      # Controls: the same step with its input is configured, and the
+      # reference inside a `run: |` script continues nothing.
+      with_input =
+        String.replace(
+          wf,
+          "    - run: cargo test",
+          "      with: { toolchain: stable }\n    - run: cargo test"
+        )
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => with_input})
+
+      script = """
+      jobs:
+        check:
+          steps:
+            - run: |
+                uses:
+                  dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => script})
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:
@@ -814,6 +895,23 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
     test "silent at the replacement revision" do
       wf = "jobs:\n  rust-ci:\n    uses: #{@rust_ci}@#{@good_standards}\n"
       assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf}) == []
+    end
+
+    test "a job's uses: value continued below its key is the call; routed to review" do
+      # The fleet fixer refuses a continued value (exit 2), so the finding
+      # is not handed to it.
+      wf =
+        "jobs:\n  rust-ci:\n    uses:\n\n      # dead window\n      #{@rust_ci}@#{@broken_standards}\n"
+
+      assert [%{line: 3, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+
+      assert f.current_sha == @broken_standards
+      assert f.reason =~ "continued below its key"
+
+      # Control: under `env:` the same layout is data, not a call.
+      env = "env:\n  CALL:\n    #{@rust_ci}@#{@broken_standards}\n"
+      assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => env}) == []
     end
 
     test "silent for another reusable at the same revision: the window is per reusable" do

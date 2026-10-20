@@ -66,9 +66,9 @@ defmodule Hypatia.Rules.PinIntegrity do
   comment or script text is not one, nor is one on a line of a `run: |`
   block or of a quoted scalar continued from an earlier line: the file is
   read through `PinSites.mask_lines/1`, which carries that state from line
-  to line. A `uses:` whose reference YAML continues on the next line
-  (`- uses:` then `    a/b@x`) is a site on that line
-  (`PinSites.continued_site/2`).
+  to line. A `uses:` whose reference YAML continues below it (`- uses:`
+  then `    a/b@x`, blank and comment-only lines allowed between) is a site
+  on the value's line (`PinSites.continuations/1`).
 
   Returns a list of maps with `:line`, `:action` (the bare action path as
   written, e.g. `github/codeql-action/init`), `:action_base` (the first
@@ -79,18 +79,16 @@ defmodule Hypatia.Rules.PinIntegrity do
   """
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
-    numbered = content |> PinSites.mask_lines() |> Enum.with_index(1)
+    masked = PinSites.mask_lines(content)
+    numbered = Enum.with_index(masked, 1)
 
-    # A `uses:` whose reference continues on the next line is a site there.
+    # A `uses:` whose reference continues below it — past any blank or
+    # comment-only lines — is a site on the value's line.
     continued =
-      numbered
-      |> Enum.zip(Enum.drop(numbered, 1))
-      |> Enum.flat_map(fn {{key, _}, {next, number}} ->
-        case PinSites.continued_site(key, next) do
-          nil -> []
-          site -> [site_entry(site, number, next |> PinSites.comment() |> String.trim())]
-        end
-      end)
+      for {_key, number, site} <- PinSites.continuations(masked) do
+        next = Enum.at(masked, number - 1)
+        site_entry(site, number, next |> PinSites.comment() |> String.trim())
+      end
 
     numbered
     |> Enum.flat_map(fn {line, number} -> line_sites(line, number) end)
@@ -397,15 +395,18 @@ defmodule Hypatia.Rules.PinIntegrity do
   end
 
   @doc """
-  Extract `action@sha` pairs from a `gh actions-lock` file (TOML-ish),
-  keyed by the resolved SHA or ref. Used by PI003 and PI004.
+  Extract `action@sha` pairs from a `gh actions-lock` file (TOML-ish).
+  Used by PI003 and PI004.
 
   Reads the first single-quoted `action@ref` on each line and returns
-  `%{ref => {action_base, line_number}}`, with one-based line numbers and
-  action paths reduced to their first two segments. Later entries replace
-  earlier ones with the same ref; no matches produce an empty map.
+  `[{ref, {action_base, line_number}}]` in file order, with one-based line
+  numbers and action paths reduced to their first two segments. One entry
+  per action and ref: two actions locked at the same ref
+  (`actions/checkout@v4`, `github/codeql-action@v4`) are two entries, and
+  the same pair met again (a workflow's edge and its dependency record)
+  keeps the line of its last mention. No matches produce `[]`.
   """
-  @spec locked_refs(String.t()) :: %{String.t() => {String.t(), integer()}}
+  @spec locked_refs(String.t()) :: [{String.t(), {String.t(), integer()}}]
   def locked_refs(content) do
     content
     |> String.split("\n")
@@ -421,7 +422,16 @@ defmodule Hypatia.Rules.PinIntegrity do
           [{ref, {action_base(action), number}}]
       end
     end)
-    |> Map.new()
+    |> Enum.reverse()
+    |> Enum.uniq_by(fn {ref, {action, _}} -> {String.downcase(action), ref_identity(ref)} end)
+    |> Enum.reverse()
+  end
+
+  # What a ref names, for comparing two spellings of it: a commit ID is one
+  # object in either case (`1C5B…` is `1c5b…`); a symbolic ref (`main`,
+  # `v4`) is a name and compares exactly — `v4` and `4` are two refs.
+  defp ref_identity(ref) do
+    if Regex.match?(~r/^[0-9a-fA-F]{40}$/, ref), do: String.downcase(ref), else: ref
   end
 
   # ─── PI004 · lock/spec divergence ─────────────────────────────────────
@@ -449,12 +459,14 @@ defmodule Hypatia.Rules.PinIntegrity do
         locked
         |> Enum.filter(fn {_ref, {action, _line}} -> same_action?(action, site.action_base) end)
         |> Enum.map(fn {ref, _} -> ref end)
+        |> Enum.uniq_by(&ref_identity/1)
 
       cond do
         locked_refs_for_action == [] ->
           []
 
-        site.ref in locked_refs_for_action ->
+        # The same commit in another case is agreement, not divergence.
+        ref_identity(site.ref) in Enum.map(locked_refs_for_action, &ref_identity/1) ->
           []
 
         true ->

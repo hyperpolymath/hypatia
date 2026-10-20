@@ -1174,17 +1174,22 @@ defmodule Hypatia.Rules.WorkflowAudit do
       in a job in `jobs`.
     * `with:` may be an anchor (`with: &inputs`, block or flow), an alias
       (`with: *inputs`) or carry a merge key (`<<: *inputs`): the anchored
-      mapping is resolved from the document and its direct entries decide.
-      An alias with no anchor in the file cannot be read; the step is
+      mapping is resolved from the document — as YAML resolves an alias, to
+      the latest `&inputs` before it — and its direct entries decide. An
+      alias with no anchor before it in the file cannot be read; the step is
       reported so, not passed silently.
+    * A `uses:` whose value YAML continues below its key (`- uses:`, then —
+      past any blank or comment-only lines — the reference on a deeper line)
+      is the step's key all the same.
 
   Auto-fixable: gitbot-fleet `scripts/fix-rust-toolchain-input.sh` inserts
   `toolchain: stable` (the channel the estate's reusables pass) into a
   block-style step whose `with:` is absent, a block mapping or a flow
   mapping. The fixer refuses every other shape rather than guess (exit 2,
-  file untouched), so a finding on a KYAML document, a flow-style step, or
-  a `with:` that goes through an anchor or alias carries
-  `auto_fixable: false` and routes to review instead of to the fixer.
+  file untouched), so a finding on a KYAML document, a flow-style step, a
+  `uses:` value continued below its key, or a `with:` that goes through an
+  anchor or alias carries `auto_fixable: false` and routes to review instead
+  of to the fixer.
   """
   def check_sha_pinned_toolchain_without_input(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
@@ -1192,17 +1197,27 @@ defmodule Hypatia.Rules.WorkflowAudit do
       normalised = Hypatia.Rules.ResearchExtensions.flow_to_block(content)
       kyaml? = normalised != content
       lines = String.split(normalised, "\n")
+      continued = wf_continued_uses(lines)
 
       lines
       |> Enum.with_index(1)
       |> Enum.flat_map(fn {line, number} ->
+        # `- uses:` with the reference below it is read as the one-line key.
+        {line, continued?} =
+          case Map.fetch(continued, number) do
+            {:ok, joined} -> {joined, true}
+            :error -> {line, false}
+          end
+
         case Regex.run(@toolchain_sha_pin, line) do
           [_full, sha] ->
-            # The fleet fixer matches the identity in lower case only; any
-            # other spelling is reported for review rather than handed to it.
+            # The fleet fixer matches the identity in lower case only, and a
+            # value on its key's line only; any other spelling or layout is
+            # reported for review rather than handed to it.
             review =
               cond do
                 kyaml? -> :kyaml
+                continued? -> :continued
                 not String.contains?(line, "dtolnay/rust-toolchain@") -> :spelling
                 true -> nil
               end
@@ -1249,7 +1264,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         []
 
       true ->
-        case wf026_with(step, key_indent, lines) do
+        case wf026_with(step, key_indent, lines, opener) do
           {:toolchain, _form} ->
             []
 
@@ -1267,7 +1282,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
          true <- wf026_inline_step_at?(lines, line, number, open_col),
          {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
-      case wf026_with_entry(wf_flow_entries(interior), lines) do
+      case wf026_with_entry(wf_flow_entries(interior), lines, {number, :eol}) do
         {:toolchain, _} -> []
         verdict -> [wf026_finding(filename, number, sha, verdict, :flow_step, review)]
       end
@@ -1357,8 +1372,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
     shape =
       case {verdict, form} do
         {{:unreadable, :alias, name}, _} ->
-          " Its `with:` is the alias `*#{name}` and no `&#{name}` anchor is defined in " <>
-            "the file, so the inputs cannot be read; the alias must be resolved by hand."
+          " Its `with:` is the alias `*#{name}` and no `&#{name}` anchor is defined before " <>
+            "it in the file, so the inputs cannot be read; the alias must be resolved by hand."
 
         {_, :flow_step} ->
           " The step is written in flow style; the repair script rewrites block-style " <>
@@ -1371,6 +1386,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
         _ when review == :kyaml ->
           " The workflow is KYAML; the repair script rewrites block-style steps only, " <>
             "so this one routes to review."
+
+        _ when review == :continued ->
+          " The `uses:` value is continued below its key; the repair script reads a " <>
+            "reference on the key's own line only, so this one routes to review."
 
         _ when review == :spelling ->
           " The action is not spelled `dtolnay/rust-toolchain`; GitHub resolves the name in " <>
@@ -1556,7 +1575,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # :alias (`with: *x`) or :merge (a `<<: *x` child). Only a `with:` at the
   # step's key column is the step's own; `toolchain:` under `env:` or any
   # other key is not an action input.
-  defp wf026_with(step, key_indent, lines) do
+  # `step` starts at line `opener`, so its line i is line `opener + i`: where
+  # an alias in `with:` stands, which decides the anchor it names.
+  defp wf026_with(step, key_indent, lines, opener) do
     step
     |> Enum.with_index()
     |> Enum.find_value({:missing, :none}, fn {line, i} ->
@@ -1564,7 +1585,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
         case Regex.run(~r/^\s*(?:-\s+)?["']?with["']?\s*:(.*)$/, line) do
           [_, value] ->
             value = value |> wf_strip_comment() |> String.trim()
-            wf026_with_value(value, line, Enum.drop(step, i + 1), key_indent, lines)
+            wf026_with_value(value, line, Enum.drop(step, i + 1), key_indent, lines, opener + i)
 
           nil ->
             nil
@@ -1573,12 +1594,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  defp wf026_with_value(value, line, rest, key_indent, lines) do
+  defp wf026_with_value(value, line, rest, key_indent, lines, number) do
     cond do
-      # `with: *inputs` — the anchored mapping, wherever it is defined.
+      # `with: *inputs` — the mapping the latest `&inputs` before it anchors.
       match?([_ | _], Regex.run(~r/^\*([\w.-]+)$/, value)) ->
         [_, name] = Regex.run(~r/^\*([\w.-]+)$/, value)
-        wf026_alias_verdict(name, lines, :alias)
+        [{col, _}] = Regex.run(~r/\*/, line, return: :index)
+        wf026_alias_verdict(name, lines, :alias, {number, col})
 
       # `with: {` / `with: &inputs {` — a flow mapping, read to its brace.
       String.contains?(value, "{") ->
@@ -1586,8 +1608,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
         [{at, _}] = Regex.run(~r/\{/, line, return: :index)
 
         case wf_flow_interior([line | rest], 1, at) do
-          {:ok, interior, _} -> wf026_entries_verdict(wf_flow_entries(interior), lines, form)
-          :error -> {:missing, form}
+          {:ok, interior, _} ->
+            wf026_entries_verdict(wf_flow_entries(interior), lines, form, {number, :eol})
+
+          :error ->
+            {:missing, form}
         end
 
       # `with:` / `with: &inputs` — a block mapping: only a DIRECT child is
@@ -1595,7 +1620,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # (`components: |` carrying `toolchain: stable`) sit deeper and are text.
       true ->
         form = if wf026_anchored?(value), do: :anchor, else: :block
-        wf026_entries_verdict(wf_block_children(rest, key_indent), lines, form)
+        wf026_entries_verdict(wf_block_children(rest, key_indent), lines, form, {number, :eol})
     end
   end
 
@@ -1603,8 +1628,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # order: `&inputs`, `&inputs !!map`, `!!map &inputs`.
   defp wf026_anchored?(value), do: Regex.match?(~r/^(?:!\S*\s+)*&/, value)
 
-  # The `with` entry of a flow-style step's own entries.
-  defp wf026_with_entry(entries, lines) do
+  # The `with` entry of a flow-style step's own entries; `pos` is the step's
+  # line, where an alias among them stands.
+  defp wf026_with_entry(entries, lines, pos) do
     case List.keyfind(entries, "with", 0) do
       nil ->
         {:missing, :none}
@@ -1615,15 +1641,18 @@ defmodule Hypatia.Rules.WorkflowAudit do
         cond do
           match?([_ | _], Regex.run(~r/^\*([\w.-]+)$/, value)) ->
             [_, name] = Regex.run(~r/^\*([\w.-]+)$/, value)
-            wf026_alias_verdict(name, lines, :alias)
+            wf026_alias_verdict(name, lines, :alias, pos)
 
           String.contains?(value, "{") ->
             form = if wf026_anchored?(value), do: :anchor, else: :flow
             [{at, _}] = Regex.run(~r/\{/, value, return: :index)
 
             case wf_flow_interior([value], 1, at) do
-              {:ok, interior, _} -> wf026_entries_verdict(wf_flow_entries(interior), lines, form)
-              :error -> {:missing, form}
+              {:ok, interior, _} ->
+                wf026_entries_verdict(wf_flow_entries(interior), lines, form, pos)
+
+              :error ->
+                {:missing, form}
             end
 
           true ->
@@ -1640,9 +1669,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # not resolve (`<<: { ... }`, a block sequence) leaves the inputs unknown:
   # the finding routes to review (`:merge`), never to the fixer.
   # The key present with no value (`toolchain:`, `null`, `~`) is not an input
-  # the action can read; the fleet fixer fills such a key in place.
-  defp wf026_entries_verdict(entries, lines, form, seen \\ []) do
-    case wf026_toolchain_in(entries, lines, seen) do
+  # the action can read; the fleet fixer fills such a key in place. `pos`
+  # (`{line, column}`, column `:eol` for the whole line) is where the
+  # mapping stands: an alias in it names the latest anchor before it.
+  defp wf026_entries_verdict(entries, lines, form, pos, seen \\ []) do
+    case wf026_toolchain_in(entries, lines, seen, pos) do
       {:set, :own} -> {:toolchain, form}
       {:set, :merge} -> {:toolchain, :merge}
       :null -> {:missing, form}
@@ -1658,7 +1689,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # `<<: [*empty, *rust]` is the input, `*rust`'s value is not. Returns
   # {:set, :own | :merge}, :null, :absent, :unknown (a merge this reader
   # does not resolve) or {:unreadable, :alias, name}.
-  defp wf026_toolchain_in(entries, lines, seen) do
+  defp wf026_toolchain_in(entries, lines, seen, pos) do
     case Enum.find(entries, fn {k, _} -> k == "toolchain" end) do
       {_, v} when is_binary(v) ->
         if wf026_null_value?(v), do: :null, else: {:set, :own}
@@ -1670,7 +1701,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           case wf026_merge_aliases(v) do
             {:ok, names} ->
               Enum.find_value(names, fn name ->
-                case wf026_alias_lookup(name, lines, seen) do
+                case wf026_alias_lookup(name, lines, seen, pos) do
                   :absent -> nil
                   {:set, _} -> {:set, :merge}
                   other -> other
@@ -1684,12 +1715,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
-  defp wf026_alias_lookup(name, lines, seen) do
+  defp wf026_alias_lookup(name, lines, seen, pos) do
     if name in seen do
       {:unreadable, :alias, name}
     else
-      case wf_anchor_entries(lines, name) do
-        {:ok, entries} -> wf026_toolchain_in(entries, lines, [name | seen])
+      case wf_anchor_entries(lines, name, pos) do
+        {:ok, entries, def_pos} -> wf026_toolchain_in(entries, lines, [name | seen], def_pos)
         :error -> {:unreadable, :alias, name}
       end
     end
@@ -1733,23 +1764,32 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # An alias that reaches itself (`&x` whose mapping merges `*x`) is as
   # unreadable as one with no anchor.
-  defp wf026_alias_verdict(name, lines, form, seen \\ []) do
+  defp wf026_alias_verdict(name, lines, form, pos, seen \\ []) do
     if name in seen do
       {:unreadable, :alias, name}
     else
-      case wf_anchor_entries(lines, name) do
-        {:ok, entries} -> wf026_entries_verdict(entries, lines, form, [name | seen])
-        :error -> {:unreadable, :alias, name}
+      case wf_anchor_entries(lines, name, pos) do
+        {:ok, entries, def_pos} ->
+          wf026_entries_verdict(entries, lines, form, def_pos, [name | seen])
+
+        :error ->
+          {:unreadable, :alias, name}
       end
     end
   end
 
-  # The entries of the mapping anchored `&name`: the first `&name` in the
-  # document outside comments, quoted scalars and block-scalar content (a
-  # `run: |` fixture writing `fake: &inputs` is text), read as a flow mapping
-  # when a `{` follows it, else as the block mapping under its line. A
-  # `note: "see &name"` before the real anchor is text.
-  defp wf_anchor_entries(lines, name) do
+  # The entries of the mapping anchored `&name` that an alias at `pos`
+  # (`{line, column}`, column `:eol` for anywhere on the line) names. YAML
+  # resolves an alias to the latest `&name` before it, and a document may
+  # define one again (`defaults: &inputs {...}`, then `other: &inputs {}`):
+  # the last definition before `pos` decides, and one only after it defines
+  # nothing for it. Definitions are read outside comments, quoted scalars
+  # and block-scalar content (a `run: |` fixture writing `fake: &inputs` is
+  # text; so is a `note: "see &name"`), and the mapping as a flow mapping
+  # when a `{` follows the anchor, else as the block mapping under its line.
+  # Returns `{:ok, entries, pos}` with the definition's own position (where
+  # an alias inside the anchored mapping stands), or :error.
+  defp wf_anchor_entries(lines, name, {pos_line, pos_col}) do
     re = ~r/&#{Regex.escape(name)}(?=[\s,{}\[\]]|$)/
 
     states = lines |> Enum.join("\n") |> Hypatia.Rules.PinSites.line_states()
@@ -1757,27 +1797,37 @@ defmodule Hypatia.Rules.WorkflowAudit do
     lines
     |> Enum.zip(states)
     |> Enum.with_index(1)
-    |> Enum.find(fn {{l, {_, state}}, _} ->
-      state != :text and wf026_plain?(l) and Regex.match?(re, wf_mask_quoted(l))
+    |> Enum.take(pos_line)
+    |> Enum.flat_map(fn {{l, {_, state}}, number} ->
+      if state != :text and wf026_plain?(l) do
+        masked = wf_mask_quoted(l)
+
+        re
+        |> Regex.scan(masked, return: :index)
+        |> Enum.filter(fn [{at, _}] -> number < pos_line or pos_col == :eol or at < pos_col end)
+        |> Enum.map(fn [{at, len}] -> {l, masked, number, at, len} end)
+      else
+        []
+      end
     end)
+    |> List.last()
     |> case do
       nil ->
         :error
 
-      {{line, _}, number} ->
-        masked = wf_mask_quoted(line)
-        [{at, len}] = Regex.run(re, masked, return: :index)
+      {line, masked, number, at, len} ->
         after_anchor = binary_part(masked, at + len, byte_size(masked) - at - len)
 
         case Regex.run(~r/\{/, after_anchor, return: :index) do
           [{brace, _}] ->
             case wf_flow_interior(lines, number, at + len + brace) do
-              {:ok, interior, _} -> {:ok, wf_flow_entries(interior)}
+              {:ok, interior, _} -> {:ok, wf_flow_entries(interior), {number, :eol}}
               :error -> :error
             end
 
           nil ->
-            {:ok, wf_block_children(Enum.drop(lines, number), wf026_key_indent(line))}
+            children = wf_block_children(Enum.drop(lines, number), wf026_key_indent(line))
+            {:ok, children, {number, :eol}}
         end
     end
   end
@@ -2014,6 +2064,24 @@ defmodule Hypatia.Rules.WorkflowAudit do
     do: wf_flow_split(rest, sep, depth, q, [c | cur], out)
 
   # Drop a trailing ` # comment` that sits outside quotes.
+  # The `uses:` keys whose reference YAML continues below them (`- uses:`,
+  # then — past any blank or comment-only lines — the reference on a deeper
+  # line), as `%{key_line => joined}`: the key's line with the reference
+  # written after it, which the rules read as they read a one-line key.
+  # Found on the masked lines (`PinSites.mask_lines/1`), so a `uses:` in a
+  # `run: |` script or a quoted string continues nothing.
+  defp wf_continued_uses(lines) do
+    masked = lines |> Enum.join("\n") |> Hypatia.Rules.PinSites.mask_lines()
+
+    for {key, _value, site} <- Hypatia.Rules.PinSites.continuations(masked), into: %{} do
+      line = Enum.at(lines, key - 1)
+
+      {key,
+       String.trim_trailing(Hypatia.Rules.PinSites.head(line)) <>
+         " " <> site.action <> "@" <> site.ref}
+    end
+  end
+
   defp wf_strip_comment(text) do
     text
     |> :binary.bin_to_list()
@@ -2292,8 +2360,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
   rule. Full 40-hex pins only — that is the only form sha_pinning_required
   lets a caller write.
 
+  A job's `uses:` whose value YAML continues below its key (past any blank
+  or comment-only lines) is the call all the same.
+
   Auto-fixable: gitbot-fleet `scripts/fix-stale-reusable-pin.sh` rewrites
-  the pin to the replacement the table names, never to "newest".
+  the pin to the replacement the table names, never to "newest". It refuses
+  a value continued below its key (exit 2, file untouched), so that finding
+  carries `auto_fixable: false` and routes to review.
 
   Severity is low and the finding is `advisory: true`: like WF026 the rule
   reports and routes to the fleet; it is never a blocking gate (AGENTIC
@@ -2302,6 +2375,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   def check_known_broken_reusable_revision(workflow_contents) do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       lines = String.split(content, "\n")
+      continued = wf_continued_uses(lines)
 
       Enum.flat_map(@broken_reusable_revisions, fn rev ->
         # Anchored to a `uses:` key at the start of a line (quoted or not) that
@@ -2323,6 +2397,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
         lines
         |> Enum.with_index(1)
         |> Enum.flat_map(fn {line, number} ->
+          # A job's `uses:` with the reference below it is the one-line key.
+          {line, continued?} =
+            case Map.fetch(continued, number) do
+              {:ok, joined} -> {joined, true}
+              :error -> {line, false}
+            end
+
           shas =
             case Regex.run(ref_re, line) do
               [_full, sha] ->
@@ -2342,7 +2423,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
           Enum.flat_map(shas, fn sha ->
             if String.downcase(sha) in rev.shas do
-              [wf027_finding(filename, number, sha, rev)]
+              [wf027_finding(filename, number, sha, rev, continued?)]
             else
               []
             end
@@ -2399,7 +2480,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end
   end
 
-  defp wf027_finding(filename, number, sha, rev) do
+  # A value continued below its key is one the fleet fixer refuses (exit 2,
+  # file untouched): such a finding routes to review.
+  defp wf027_finding(filename, number, sha, rev, continued?) do
     %{
       rule: "WF027",
       type: :known_broken_reusable_revision,
@@ -2411,13 +2494,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Advisory, as WF026: reported and routed, never a blocking finding.
       severity: :low,
       advisory: true,
-      auto_fixable: true,
-      fix_script: "fix-stale-reusable-pin.sh",
+      auto_fixable: not continued?,
+      fix_script: if(continued?, do: nil, else: "fix-stale-reusable-pin.sh"),
       reason:
         "`#{rev.reusable}` is pinned at `@#{sha}`, inside #{rev.window}: " <>
           rev.reason <>
           " Fixed by #{rev.fixed_by}; move the pin to " <>
-          "`@#{rev.replacement}`.",
+          "`@#{rev.replacement}`." <>
+          if(continued?,
+            do:
+              " The `uses:` value is continued below its key; the repair script rewrites " <>
+                "a reference on the key's own line only, so this one routes to review.",
+            else: ""
+          ),
       action: :rewrite_stale_reusable_pin
     }
   end

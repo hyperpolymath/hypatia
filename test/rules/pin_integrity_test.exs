@@ -228,6 +228,24 @@ defmodule Hypatia.Rules.PinIntegrityTest do
              ) == []
     end
 
+    test "blank and comment-only lines between a uses: key and its reference are skipped" do
+      # YAML lets them stand between a key and its scalar: the reference is
+      # still the `uses:` value, so it is still a site — reported and repaired.
+      content =
+        "      - uses:\n\n          # pinned for the 4.38 line\n" <>
+          "          github/codeql-action/init@#{@poison}\n" <> @real_step
+
+      assert [%{line: 4}, %{line: 5}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          github/codeql-action/init@#{@good}\n"
+
+      # Control: a comment and then a line no deeper than the key end it.
+      assert PI.pi001_denylisted_pin(
+               "      - uses:\n          # note\n      - name: github/codeql-action/init@#{@poison}\n",
+               @policy
+             ) == []
+    end
+
     test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
       states =
         Hypatia.Rules.PinSites.line_states(
@@ -596,6 +614,20 @@ defmodule Hypatia.Rules.PinIntegrityTest do
 
       assert PI.pi003_locked_moving_ref(lock, @policy) == []
     end
+
+    test "two actions locked at one moving ref are two findings, each pair once" do
+      lock = """
+      '.github/workflows/ci.yml':
+          - 'dtolnay/rust-toolchain@stable'
+          - 'some/other-action@stable'
+      dependencies:
+          'dtolnay/rust-toolchain@stable':
+      """
+
+      assert [a, b] = PI.pi003_locked_moving_ref(lock, @policy)
+      assert {a.detail.action, a.line} == {"some/other-action", 3}
+      assert {b.detail.action, b.line} == {"dtolnay/rust-toolchain", 5}
+    end
   end
 
   describe "pi004_lock_divergence/3" do
@@ -627,6 +659,30 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       lock = "    - 'github/codeql-action@#{@good}'\n"
 
       assert PI.pi004_lock_divergence(workflow, lock) == []
+    end
+
+    test "an action sharing its locked ref with another action is still compared" do
+      # Keyed by ref alone, `github/codeql-action@v4` replaced the checkout
+      # entry and the divergence below went unreported.
+      workflow = "- uses: actions/checkout@v3\n"
+      lock = "    - 'actions/checkout@v4'\n    - 'github/codeql-action@v4'\n"
+
+      assert [finding] = PI.pi004_lock_divergence(workflow, lock)
+      assert finding.detail.lock_refs == ["v4"]
+    end
+
+    test "a commit ID in upper case agrees with the same commit locked in lower case" do
+      workflow = "- uses: github/codeql-action/init@#{String.upcase(@good)}\n"
+      lock = "    - 'github/codeql-action@#{@good}'\n"
+
+      assert PI.pi004_lock_divergence(workflow, lock) == []
+
+      # Control: a symbolic ref is a name — `V4` is not the tag `v4`.
+      assert [_] =
+               PI.pi004_lock_divergence(
+                 "- uses: actions/checkout@V4\n",
+                 "    - 'actions/checkout@v4'\n"
+               )
     end
   end
 

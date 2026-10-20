@@ -122,8 +122,9 @@ defmodule Hypatia.Rules.PinSites do
 
   @doc """
   The site a `uses:` key with nothing after it on its line holds on the next
-  line, where YAML continues its scalar (`- uses:` then
-  `    github/codeql-action/init@<sha>`), as `sites/1` returns one, its
+  line with content, where YAML continues its scalar (`- uses:` then
+  `    github/codeql-action/init@<sha>`; `continuations/1` steps over the
+  blank and comment-only lines between), as `sites/1` returns one, its
   offsets into `next_line`; nil unless `next_line` sits deeper than the key
   and holds nothing but the reference, quoted or plain, and a comment. Both
   lines are as `mask_lines/1` returns them.
@@ -147,6 +148,31 @@ defmodule Hypatia.Rules.PinSites do
     else
       _ -> nil
     end
+  end
+
+  @doc """
+  Every `uses:` key in `lines` (as `mask_lines/1` returns them) whose
+  reference YAML continues below it, as `{key_line, value_line, site}`:
+  one-based line numbers and the `continued_site/2` site on the value line.
+  The value is the next line that holds anything but a comment — YAML lets
+  blank and comment-only lines stand between a key and its scalar
+  (`- uses:`, `  # rationale`, `  github/codeql-action/init@<sha>`).
+  """
+  @spec continuations([String.t()]) :: [{pos_integer(), pos_integer(), map()}]
+  def continuations(lines) when is_list(lines) do
+    content =
+      lines
+      |> Enum.with_index(1)
+      |> Enum.reject(fn {line, _} -> String.trim(head(line)) == "" end)
+
+    content
+    |> Enum.zip(Enum.drop(content, 1))
+    |> Enum.flat_map(fn {{key, k}, {next, v}} ->
+      case continued_site(key, next) do
+        nil -> []
+        site -> [{k, v, site}]
+      end
+    end)
   end
 
   @doc """
