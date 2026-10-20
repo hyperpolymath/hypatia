@@ -75,7 +75,7 @@ jobs:
     needs: startup-probe
     timeout-minutes: 20
     container:
-      image: elixir:1.17-otp-27
+      image: elixir:1.17-otp-27@sha256:c65f0bdd8827df171963e3558a1461b04efc086d0d52ee7c6900fcddb4467e08
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TARGET_REF: ${{ github.sha }}

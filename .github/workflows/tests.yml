@@ -266,7 +266,7 @@ jobs:
     needs: [build-images]
     services:
       arangodb:
-        image: arangodb:3.11
+        image: arangodb:3.11@sha256:e83f37055170f647ebca1a09dd65ec850a578d8d4c9b90904de3359b909c1f16
         env:
           ARANGO_ROOT_PASSWORD: testpassword
           ARANGO_NO_AUTH: "0"
@@ -308,7 +308,7 @@ jobs:
           --health-start-period 40s
 
       dragonfly:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        image: ghcr.io/dragonflydb/dragonfly:v1.40.2@sha256:18afa43e911f1dff18c7d1eb452361876d9702bb1cdff5c5d75c69617a4065c9
         ports:
           - 6379:6379
         options: >-
@@ -508,7 +508,7 @@ jobs:
     needs: [integration-tests]
     services:
       arangodb:
-        image: arangodb:3.11
+        image: arangodb:3.11@sha256:e83f37055170f647ebca1a09dd65ec850a578d8d4c9b90904de3359b909c1f16
         env:
           ARANGO_ROOT_PASSWORD: testpassword
         ports:
@@ -549,7 +549,7 @@ jobs:
           --health-start-period 40s
 
       dragonfly:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+        image: ghcr.io/dragonflydb/dragonfly:v1.40.2@sha256:18afa43e911f1dff18c7d1eb452361876d9702bb1cdff5c5d75c69617a4065c9
         ports:
           - 6379:6379
         options: >-
