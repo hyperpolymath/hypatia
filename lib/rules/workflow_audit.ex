@@ -1750,7 +1750,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # (`components: |` carrying `toolchain: stable`) sit deeper and are text.
       true ->
         form = if wf026_anchored?(value), do: :anchor, else: :block
-        wf026_entries_verdict(wf_block_children(rest, key_indent), lines, form, {number, :eol})
+        pos = {:block, number, wf_block_child_lines(rest, key_indent, number)}
+        wf026_entries_verdict(wf_block_children(rest, key_indent), lines, form, pos)
     end
   end
 
@@ -1823,7 +1824,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     case Enum.find(entries, fn {k, _} -> k == "toolchain" end) do
       {_, v} when is_binary(v) ->
         case Regex.run(~r/^\s*\*([\w.-]+)\s*$/, v) do
-          [_, name] -> wf026_scalar_alias(name, lines, pos)
+          [_, name] -> wf026_scalar_alias(name, lines, wf_entry_pos(pos, "toolchain"))
           nil -> if wf026_null_value?(v), do: :null, else: {:set, :own}
         end
 
@@ -1834,7 +1835,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
           case wf026_merge_aliases(v) do
             {:ok, names} ->
               Enum.find_value(names, fn name ->
-                case wf026_alias_lookup(name, lines, seen, pos) do
+                case wf026_alias_lookup(name, lines, seen, wf_entry_pos(pos, "<<")) do
                   :absent -> nil
                   {:set, _} -> {:set, :merge}
                   other -> other
@@ -1881,6 +1882,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
         :error
     end
   end
+
+  # Where an entry's value stands, for an alias in it: a block mapping's
+  # position (`{:block, line, %{key => line}}`) is each child's own line —
+  # `source: &channel nightly` then `toolchain: *channel` names the anchor
+  # one line above it — any other position is the mapping's.
+  defp wf_entry_pos({:block, number, child_lines}, key),
+    do: {Map.get(child_lines, key, number), :eol}
+
+  defp wf_entry_pos(pos, _key), do: pos
 
   # `toolchain: *name` is the scalar the latest `&name` before it anchors:
   # null or empty there is no input, exactly as if written in place
@@ -1950,8 +1960,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
             end
 
           nil ->
-            children = wf_block_children(Enum.drop(lines, number), wf026_key_indent(line))
-            {:ok, children, {number, :eol}}
+            # A bare sequence item carrying the anchor (`- &inputs`, its keys
+            # on the lines below) holds the mapping under the dash, not under
+            # the column its first key would take.
+            parent =
+              if Regex.match?(~r/^\s*-\s+(?:[&!]\S*\s*)+$/, wf_strip_comment(line)),
+                do: wf026_indent(line),
+                else: wf026_key_indent(line)
+
+            rest = Enum.drop(lines, number)
+            children = wf_block_children(rest, parent)
+            {:ok, children, {:block, number, wf_block_child_lines(rest, parent, number)}}
         end
     end
   end
@@ -1991,28 +2010,73 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
   # The latest definition of `&name` before `pos`, as
   # `{line, masked line, number, offset, length}`, or nil.
+  # An anchor is `&name` where YAML lets a node start: at the line's start or
+  # after its list dashes, after `key: `, or — inside a flow collection (one
+  # the line opens, or the line sits in) — after `[`, `{` or `,`, each past
+  # any tag. `NOTE: foo&channel nightly` is one plain scalar, no anchor.
   defp wf_anchor_def(lines, name, {pos_line, pos_col}) do
     re = ~r/&#{Regex.escape(name)}(?=[\s,{}\[\]]|$)/
 
-    states = lines |> Enum.join("\n") |> Hypatia.Rules.PinSites.line_states()
+    content = Enum.join(lines, "\n")
+    states = Hypatia.Rules.PinSites.line_states(content)
+    depths = Hypatia.Rules.PinSites.line_depths(content)
 
     lines
-    |> Enum.zip(states)
+    |> Enum.zip(Enum.zip(states, depths))
     |> Enum.with_index(1)
     |> Enum.take(pos_line)
-    |> Enum.flat_map(fn {{l, {_, state}}, number} ->
+    |> Enum.flat_map(fn {{l, {{_, state}, depth}}, number} ->
       if state != :text and wf026_plain?(l) do
         masked = wf_mask_quoted(l)
 
         re
         |> Regex.scan(masked, return: :index)
         |> Enum.filter(fn [{at, _}] -> number < pos_line or pos_col == :eol or at < pos_col end)
+        |> Enum.filter(fn [{at, _}] -> wf_node_start?(binary_part(masked, 0, at), depth) end)
         |> Enum.map(fn [{at, len}] -> {l, masked, number, at, len} end)
       else
         []
       end
     end)
     |> List.last()
+  end
+
+  defp wf_node_start?(before, depth) do
+    Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:![^\s]*\s+)*$/, before) or
+      ((depth > 0 or String.contains?(before, ["[", "{"])) and
+         Regex.match?(~r/[\[{,]\s*(?:![^\s]*\s+)*$/, before))
+  end
+
+  # The line of each direct child of the block mapping whose key sits at
+  # `key_indent`, `rest` being the lines after the key's line `number`, as
+  # `%{key => line}` — the children `wf_block_children/2` reads, the first
+  # of a key spelled twice.
+  defp wf_block_child_lines(rest, key_indent, number) do
+    block =
+      rest
+      |> Enum.with_index(number + 1)
+      |> Enum.take_while(fn {l, _} ->
+        trimmed = String.trim(l)
+        trimmed == "" or String.starts_with?(trimmed, "#") or wf026_indent(l) > key_indent
+      end)
+      |> Enum.filter(fn {l, _} -> wf026_plain?(l) end)
+
+    case block do
+      [] ->
+        %{}
+
+      [{first, _} | _] ->
+        child_indent = wf026_indent(first)
+
+        block
+        |> Enum.filter(fn {l, _} -> wf026_indent(l) == child_indent end)
+        |> Enum.reduce(%{}, fn {l, n}, acc ->
+          case Regex.run(~r/^\s*(?:-\s+)?["']?([^"':\s]+)["']?\s*:/, l) do
+            [_, k] -> Map.put_new(acc, k, n)
+            nil -> acc
+          end
+        end)
+    end
   end
 
   # The direct children of a block mapping whose key sits at `key_indent`,
@@ -2043,7 +2107,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
           case Regex.run(~r/^\s*(?:-\s+)?["']?([^"':\s]+)["']?\s*:(.*)$/, l) do
             [_, k, v] ->
               v = v |> wf_strip_comment() |> String.trim()
-              [{k, if(v == "", do: wf_continued_value(children, i, child_indent), else: v)}]
+
+              # A value on the lines below — nothing on the key's line, or a
+              # block scalar's indicator (`toolchain: >-`) — is what those
+              # lines hold: an empty block scalar is the empty string.
+              continued? = v == "" or Regex.match?(~r/^(?:[&!]\S*\s+)*[|>][-+0-9]*$/, v)
+              [{k, if(continued?, do: wf_continued_value(children, i, child_indent), else: v)}]
 
             nil ->
               []
@@ -2308,7 +2377,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # (`PinSites.mask_lines/1`), so a `uses:` in a `run: |` script or a quoted
   # string stands for nothing.
   defp wf_continued_uses(lines) do
-    masked = lines |> Enum.join("\n") |> Hypatia.Rules.PinSites.mask_lines()
+    content = Enum.join(lines, "\n")
+    masked = Hypatia.Rules.PinSites.mask_lines(content)
+    prefixes = Hypatia.Rules.PinSites.flow_prefixes(content)
 
     continued =
       for {key, _value, site} <- Hypatia.Rules.PinSites.continuations(masked), into: %{} do
@@ -2319,7 +2390,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
             " " <> site.action <> "@" <> site.ref, :continued}}
       end
 
-    for %{line: n, at: at, len: len, site: site} <- Hypatia.Rules.PinSites.alias_sites(masked),
+    for %{line: n, at: at, len: len, site: site} <-
+          Hypatia.Rules.PinSites.alias_sites(masked, prefixes),
         not Map.has_key?(continued, n),
         into: continued do
       line = Enum.at(lines, n - 1)

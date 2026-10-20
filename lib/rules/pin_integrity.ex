@@ -85,7 +85,8 @@ defmodule Hypatia.Rules.PinIntegrity do
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
     masked = PinSites.mask_lines(content)
-    numbered = masked |> Enum.zip(PinSites.flow_prefixes(content)) |> Enum.with_index(1)
+    prefixes = PinSites.flow_prefixes(content)
+    numbered = masked |> Enum.zip(prefixes) |> Enum.with_index(1)
 
     # A `uses:` whose reference continues below it — past any blank or
     # comment-only lines — is a site on the value's line.
@@ -98,7 +99,7 @@ defmodule Hypatia.Rules.PinIntegrity do
     # A `uses: *name` runs the reference the anchor holds: its site is the
     # anchor's value, where a repair rewrites it (every alias with it).
     aliased =
-      for %{anchor_line: number, site: site} <- PinSites.alias_sites(masked) do
+      for %{anchor_line: number, site: site} <- PinSites.alias_sites(masked, prefixes) do
         site_entry(
           site,
           number,

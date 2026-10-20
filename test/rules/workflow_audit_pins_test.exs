@@ -12,6 +12,11 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
   @good_standards "75bd5994470661a099df562d6d5ad2fe744dbd66"
   @rust_ci "hyperpolymath/standards/.github/workflows/rust-ci-reusable.yml"
 
+  # A SHA-pinned toolchain step with no inputs, for a `with:` to follow.
+  @rust_step "jobs:\n  b:\n    steps:\n      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n"
+
+  defp wf026(wf), do: WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
   describe "check_sha_pinned_toolchain_without_input/1 (WF026)" do
     test "fires on a SHA-pinned step with no with: block at all" do
       wf = """
@@ -936,6 +941,45 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{line: 4, auto_fixable: false}] =
                WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => inline})
+    end
+
+    test "a bare sequence item's anchor holds the mapping under its dash" do
+      item =
+        "x:\n  - &inputs\n    toolchain: nightly\n" <> @rust_step <> "        with: *inputs\n"
+
+      assert [] == wf026(item)
+
+      unconfigured =
+        "x:\n  - &inputs\n    components: clippy\n" <> @rust_step <> "        with: *inputs\n"
+
+      assert [%{line: 7}] = wf026(unconfigured)
+    end
+
+    test "an & inside a plain scalar is text, not the anchor an alias names" do
+      # `*channel` is the empty value anchored before `foo&channel`.
+      text =
+        "x: &channel \"\"\ny: foo&channel nightly\n" <>
+          @rust_step <> "        with:\n          toolchain: *channel\n"
+
+      assert [%{line: 6}] = wf026(text)
+    end
+
+    test "a block input's alias names the anchor on a child line above it" do
+      sibling =
+        @rust_step <>
+          "        with:\n          source: &channel nightly\n          toolchain: *channel\n"
+
+      assert [] == wf026(sibling)
+    end
+
+    test "an empty block scalar toolchain is the empty string; one with content is set" do
+      empty =
+        @rust_step <> "        with:\n          toolchain: >-\n          components: clippy\n"
+
+      assert [%{line: 4}] = wf026(empty)
+
+      folded = @rust_step <> "        with:\n          toolchain: >-\n            stable\n"
+      assert [] == wf026(folded)
     end
 
     test "toolchain: *alias is the scalar its anchor holds" do

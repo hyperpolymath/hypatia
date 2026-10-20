@@ -410,6 +410,57 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert [%{line: 2}] = PI.pi001_denylisted_pin(live, @policy)
     end
 
+    test "an aliased uses: inside a flow collection opened above is judged by its brackets" do
+      # `uses: *bad` in a step's `env: {` spread over lines is an env var.
+      anchor = "x: &bad github/codeql-action/init@#{@poison}\n"
+
+      env =
+        anchor <>
+          "jobs:\n  a:\n    steps: [\n      { run: echo, env: {\n        uses: *bad\n      } }\n    ]\n"
+
+      assert PI.pi001_denylisted_pin(env, @policy) == []
+      assert {:ok, ^env, []} = PI.substitute_denylisted_pins(env, @policy)
+
+      # Control: the step's own `uses:` after a sibling is the step's action.
+      step =
+        anchor <> "jobs:\n  a:\n    steps: [\n      { run: echo,\n        uses: *bad }\n    ]\n"
+
+      assert [%{line: 1}] = PI.pi001_denylisted_pin(step, @policy)
+    end
+
+    test "a steps: sequence is a job's only when the brackets say so" do
+      # A matrix value holding `steps: [ { uses: ... } ]` is data.
+      data =
+        "    include: [ { fixture: { steps: [ { uses: github/codeql-action/init@#{@poison} } ] } } ]\n"
+
+      assert PI.pi001_denylisted_pin(data, @policy) == []
+
+      # Controls: through a job key into `jobs`, or the whole stack a block
+      # job's own line shows.
+      for line <- [
+            "jobs: { b: { steps: [ { uses: github/codeql-action/init@#{@poison} } ] } }\n",
+            "    steps: [ { uses: github/codeql-action/init@#{@poison} } ]\n"
+          ] do
+        assert [%{line: 1}] = PI.pi001_denylisted_pin(line, @policy)
+      end
+    end
+
+    test "an anchor is a node property only where a node starts" do
+      # In block context `a, &bad b` is one plain scalar: no anchor.
+      text =
+        "env:\n  NOTE: a, &bad github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert PI.pi001_denylisted_pin(text, @policy) == []
+
+      # Control: after `[` in a flow sequence a node starts.
+      flow =
+        "env:\n  LIST: [ &bad github/codeql-action/init@#{@poison} ]\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(flow, @policy)
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

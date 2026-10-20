@@ -220,19 +220,24 @@ defmodule Hypatia.Rules.PinSites do
   alias to the latest `&name` before it, so a later definition does not
   count and an earlier one is shadowed — by any value, including one that is
   no `action@ref` scalar, which names no site. Lines as `mask_lines/1`
-  returns them.
+  returns them; `flow_prefixes` (`flow_prefixes/1` of the same file) lets a
+  line inside a multi-line flow collection be judged against the brackets
+  the lines above opened, as `sites/2` judges a literal site: a `uses:
+  *name` in an `env: {` spread over lines is data, not a step's action.
   """
-  @spec alias_sites([String.t()]) :: [map()]
-  def alias_sites(lines) when is_list(lines) do
-    numbered = Enum.with_index(lines, 1)
+  @spec alias_sites([String.t()], [String.t()]) :: [map()]
+  def alias_sites(lines, flow_prefixes \\ []) when is_list(lines) do
+    prefixes = flow_prefixes ++ List.duplicate("", max(length(lines) - length(flow_prefixes), 0))
+    numbered = lines |> Enum.zip(prefixes) |> Enum.with_index(1)
 
     defs =
-      for {line, n} <- numbered, d <- anchor_defs(line) do
-        d |> Map.put(:line, n) |> continued_anchor(line, Enum.drop(numbered, n))
+      for {{line, prefix}, n} <- numbered, d <- anchor_defs(line, prefix) do
+        below = for {{l, _}, m} <- Enum.drop(numbered, n), do: {l, m}
+        d |> Map.put(:line, n) |> continued_anchor(line, below)
       end
 
-    for {line, n} <- numbered,
-        {name, at, len} <- uses_aliases(line),
+    for {{line, prefix}, n} <- numbered,
+        {name, at, len} <- uses_aliases(line, prefix),
         %{site: %{} = site} = d <- [latest_anchor(defs, name, n, at)] do
       %{line: n, at: at, len: len, anchor_line: Map.get(d, :site_line, d.line), site: site}
     end
@@ -269,16 +274,21 @@ defmodule Hypatia.Rules.PinSites do
 
   # The anchors `line` defines where a node starts (outside quotes and the
   # comment), each `%{name, at, site}`: the site its scalar value is, or nil.
-  defp anchor_defs(line) do
+  # A node starts at the line's start or after its list dashes, after
+  # `key: `, and — inside a flow collection only (one the line opens, or
+  # `flow_prefix` says it sits in) — after `[`, `{` or `,`, each past any
+  # tag. `NOTE: a, &x b` in block context is one plain scalar: no anchor.
+  defp anchor_defs(line, flow_prefix) do
     masked = mask(line)
 
     ~r/&([\w.-]+)/
     |> Regex.scan(masked, return: :index)
     |> Enum.filter(fn [{at, _}, _] ->
-      Regex.match?(
-        ~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)(?:![^\s]*\s+)*$/,
-        binary_part(masked, 0, at)
-      )
+      before = binary_part(masked, 0, at)
+
+      Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:![^\s]*\s+)*$/, before) or
+        ((flow_prefix != "" or String.contains?(before, ["[", "{"])) and
+           Regex.match?(~r/[\[{,]\s*(?:![^\s]*\s+)*$/, before))
     end)
     |> Enum.map(fn [{at, len}, {n_at, n_len}] ->
       rest_at = at + len
@@ -308,7 +318,7 @@ defmodule Hypatia.Rules.PinSites do
 
   # The `uses:` keys of `line` whose value is an alias, at a site position,
   # as `{name, offset of the "*", length of "*name"}`.
-  defp uses_aliases(line) do
+  defp uses_aliases(line, flow_prefix) do
     masked = mask(line)
 
     ~r/["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*\*([\w.-]+)/
@@ -316,8 +326,14 @@ defmodule Hypatia.Rules.PinSites do
     |> Enum.flat_map(fn [{at, len}, {n_at, n_len}] ->
       star = n_at - 1
       prefix = binary_part(masked, 0, at)
+      head = binary_part(masked, 0, star)
 
-      if structural?(binary_part(masked, 0, star)) and
+      structural? =
+        if flow_prefix == "",
+          do: structural?(head),
+          else: structural_in_flow?(flow_prefix <> head)
+
+      if structural? and
            not Regex.match?(~r/[A-Za-z0-9_.\/-]$/, prefix),
          do: [{binary_part(masked, n_at, n_len), star, at + len - star}],
          else: []
@@ -597,11 +613,17 @@ defmodule Hypatia.Rules.PinSites do
     end
   end
 
+  # A `{` item of a sequence is a step when that sequence is `steps:` of a
+  # job: the whole stack the text shows (`steps: [ {` on a block job's
+  # line, which this reader cannot see past), or one that goes on through a
+  # job key into `jobs` (`jobs: { b: { steps: [ {`). The same `steps:`
+  # inside any other mapping (`fixture: { steps: [ {` in a matrix) is data.
   defp structural_flow_stack?(stack) do
     Enum.all?(stack, fn {_, key} -> key != :text end) and
       case stack do
         [{"{", :none}] -> true
-        [{"{", :none}, {"[", key} | _] when key in ["steps", :none] -> true
+        [{"{", :none}, {"[", key}] when key in ["steps", :none] -> true
+        [{"{", :none}, {"[", "steps"}, {"{", job}, {"{", "jobs"} | _] when is_binary(job) -> true
         [{"{", job}, {"{", "jobs"} | _] when is_binary(job) -> true
         _ -> false
       end
