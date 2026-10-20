@@ -25,7 +25,9 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       [f] = WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
       assert f.rule == "WF026"
-      assert f.severity == :medium
+      # Advisory: below the CLI's default `--severity medium`, so a scan
+      # reports and routes it without failing (AGENTIC must-not-promote-to-blocking).
+      assert f.severity == :low
       assert f.file == "rust.yml"
       assert f.line == 5
       assert f.current_sha == @toolchain_sha
@@ -476,6 +478,45 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert c.auto_fixable
     end
 
+    test "a uses: line inside a quoted scalar spread over lines is string text" do
+      # The `run:` value opens a double-quoted scalar that runs to `echo end"`;
+      # the `uses:` line between is part of the string, not the step's key.
+      quoted = """
+      jobs:
+        check:
+          steps:
+            - run: "echo start
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+              echo end"
+      """
+
+      assert [] == WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"q.yml" => quoted})
+
+      # Controls: a quote closed on its own line, and a quote inside a
+      # `run: |` script, open nothing — the bare step still fires.
+      closed = """
+      jobs:
+        check:
+          steps:
+            - name: "it's the toolchain"
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      script = """
+      jobs:
+        check:
+          steps:
+            - run: |
+                echo "unterminated
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+      """
+
+      for wf <- [closed, script] do
+        assert [%{rule: "WF026"}] =
+                 WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"c.yml" => wf})
+      end
+    end
+
     test "anchor text inside a quoted scalar or a comment is not the anchor" do
       # The quoted `&rust-inputs` comes first; reading children from its line
       # found none and reported the aliased step as missing `toolchain`.
@@ -646,7 +687,7 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       wf = "jobs:\n  rust-ci:\n    uses: #{@rust_ci}@#{@broken_standards}\n"
       [f] = WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
       assert f.rule == "WF027"
-      assert f.severity == :medium
+      assert f.severity == :low
       assert f.reusable == @rust_ci
       assert f.current_sha == @broken_standards
       assert f.replacement_sha == @good_standards
@@ -746,6 +787,18 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{rule: "WF027", current_sha: ^sha, replacement_sha: @good_standards}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
+    end
+
+    test "a job-level uses: inside a quoted scalar spread over lines is string text" do
+      wf = """
+      jobs:
+        rust-ci:
+          name: "first line
+          uses: #{@rust_ci}@#{@broken_standards}
+          last line"
+      """
+
+      assert [] == WorkflowAudit.check_known_broken_reusable_revision(%{"x.yml" => wf})
     end
 
     test "the owner and repository match in either case; the workflow path as written" do

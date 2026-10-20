@@ -1232,6 +1232,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       wf026_key_indent(line) != key_indent ->
         []
 
+      # A quoted scalar the step opened above (`- run: "echo start`) and has
+      # not closed by this line makes the `uses:` line part of the string.
+      wf_in_open_quote?(lines, opener, number) ->
+        []
+
       # A list item is a step only under `steps:`: one inside a block
       # scalar (a fixture kept in `env:`, a `run: |` script) is text.
       not wf026_under_steps?(lines, opener) ->
@@ -1376,7 +1381,11 @@ defmodule Hypatia.Rules.WorkflowAudit do
       file: filename,
       line: number,
       current_sha: sha,
-      severity: :medium,
+      # Report and route, never block (AGENTIC `must-not-promote-to-blocking`):
+      # `:low` (rank 4) sits below the CLI's default `--severity medium` and
+      # the reusable's high/critical threshold, as `flawed_regex` does. The
+      # fleet routing reads `fix_script`/`auto_fixable`, not the severity.
+      severity: :low,
       auto_fixable: repairable?,
       fix_script: if(repairable?, do: "fix-rust-toolchain-input.sh", else: nil),
       reason:
@@ -1935,6 +1944,79 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp wf_strip_comment([q | rest], q, acc), do: wf_strip_comment(rest, nil, [q | acc])
   defp wf_strip_comment([c | rest], q, acc), do: wf_strip_comment(rest, q, [c | acc])
 
+  # Is line `number` (1-based) inside a quoted scalar that a line from `from`
+  # up to it opened and did not close? A double- or single-quoted value may
+  # run over several physical lines (`- run: "echo start` … `echo end"`), and
+  # a `uses:` written on one of them is string text, not a key. The content
+  # of a block scalar (`run: |`) is skipped: a quote there is script text and
+  # opens nothing. Only the lines of the one step or job are read, so a quote
+  # the scan misreads elsewhere in the file cannot hide a real pin.
+  defp wf_in_open_quote?(lines, from, number) when from < number do
+    lines
+    |> Enum.slice((from - 1)..(number - 2)//1)
+    |> Enum.reduce({nil, nil}, &wf_quote_line/2)
+    |> elem(0)
+    |> Kernel.!=(nil)
+  end
+
+  defp wf_in_open_quote?(_lines, _from, _number), do: false
+
+  # One line of that scan: `{open_quote | nil, block_scalar_key_indent | nil}`.
+  defp wf_quote_line(line, {nil, block}) when is_integer(block) do
+    if String.trim(line) == "" or wf026_indent(line) > block,
+      do: {nil, block},
+      else: wf_quote_line(line, {nil, nil})
+  end
+
+  defp wf_quote_line(line, {q, _}) do
+    case wf_quote_scan(line, q, "") do
+      {nil, outside} ->
+        if Regex.match?(~r/:\s*[|>][-+0-9]*\s*$/, outside),
+          do: {nil, wf026_key_indent(line)},
+          else: {nil, nil}
+
+      {open, _} ->
+        {open, nil}
+    end
+  end
+
+  # Walk one line from quote state `q` (nil outside a quoted scalar), keeping
+  # the text outside quotes. A quote opens a scalar only where a scalar can
+  # start (after `: `, a list dash, `[`, `{` or `,`, or at the line's start);
+  # `echo it's` is a plain scalar. A comment ends the line.
+  defp wf_quote_scan(<<>>, q, out), do: {q, out}
+  defp wf_quote_scan(<<?\\, _, rest::binary>>, ?", out), do: wf_quote_scan(rest, ?", out)
+  defp wf_quote_scan(<<?', ?', rest::binary>>, ?', out), do: wf_quote_scan(rest, ?', out)
+
+  defp wf_quote_scan(<<c, rest::binary>>, q, out) when c == q,
+    do: wf_quote_scan(rest, nil, out <> "x")
+
+  defp wf_quote_scan(<<_, rest::binary>>, q, out) when q != nil, do: wf_quote_scan(rest, q, out)
+
+  defp wf_quote_scan(<<?#, _::binary>>, nil, out)
+       when out == "" or binary_part(out, byte_size(out) - 1, 1) in [" ", "\t"],
+       do: {nil, out}
+
+  defp wf_quote_scan(<<c, rest::binary>>, nil, out) when c in [?", ?'] do
+    if Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)$/, out),
+      do: wf_quote_scan(rest, c, out <> "x"),
+      else: wf_quote_scan(rest, nil, out <> <<c>>)
+  end
+
+  defp wf_quote_scan(<<c, rest::binary>>, nil, out), do: wf_quote_scan(rest, nil, out <> <<c>>)
+
+  # The nearest line above `number` that is shallower than it: the key whose
+  # value holds it (a job's key line for a job-level `uses:`).
+  defp wf_parent_line(lines, number) do
+    indent = wf026_indent(Enum.at(lines, number - 1))
+
+    (number - 1)..1//-1
+    |> Enum.find(number, fn n ->
+      l = Enum.at(lines, n - 1)
+      wf026_plain?(l) and wf026_indent(l) < indent
+    end)
+  end
+
   # The line with its comment dropped and every quoted scalar's body blanked
   # to `x` byte for byte, so `&name` or `{` written inside a string is not
   # structure, and an offset into the result is an offset into the line.
@@ -2130,9 +2212,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
           shas =
             case Regex.run(ref_re, line) do
               [_full, sha] ->
-                if match?([_job, "jobs" | _], wf_ancestor_keys(lines, number)),
-                  do: [sha],
-                  else: []
+                if match?([_job, "jobs" | _], wf_ancestor_keys(lines, number)) and
+                     not wf_in_open_quote?(lines, wf_parent_line(lines, number), number),
+                   do: [sha],
+                   else: []
 
               nil ->
                 inline_re
@@ -2211,7 +2294,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
       reusable: rev.reusable,
       current_sha: sha,
       replacement_sha: rev.replacement,
-      severity: :medium,
+      # Advisory, as WF026: reported and routed, never a blocking finding.
+      severity: :low,
       auto_fixable: true,
       fix_script: "fix-stale-reusable-pin.sh",
       reason:
