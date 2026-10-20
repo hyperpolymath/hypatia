@@ -15,16 +15,31 @@ defmodule Hypatia.Rules.ActionsLock do
   single tool with a versioned stable format, and Hypatia must not add a general
   YAML dependency merely to consume that format. Unknown or malformed lockfile
   lines fail closed rather than being guessed at.
+
+  v0.0.3 differs from v0.0.2 only by the optional per-dependency `hostname`
+  field (github/actions-lockfile `schema/lockfile-v0.0.3.json`). An omitted
+  hostname binds the pin to the home host. Hypatia audits github.com
+  repositories, where the format allows only an omitted hostname or
+  `github.com`. A well-formed `*.ghe.com` tenant hostname is therefore rejected
+  rather than accepted: `owner_id`/`repo_id` are host-scoped, and the
+  `owner/repo@ref` keys used for association carry no host. Every parsed
+  dependency records its hostname, defaulting to `github.com` as v0.0.2 does.
   """
 
   @supported_versions ["v0.0.2", "v0.0.3"]
+  @hostname_versions ["v0.0.3"]
+  @home_hostname "github.com"
   @action_ref ~r/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]+@[^\s':]+$/
   @dependency_key ~r/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[^\s':]+$/
   @sha_ref ~r/^[0-9A-Fa-f]{40}$/
+  # The schema's canonical hostname grammar: github.com or one lowercase DNS
+  # label under ghe.com. No scheme, port, path, or surrounding whitespace.
+  @canonical_hostname ~r/^(?:github\.com|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ghe\.com)$/
 
   defstruct version: nil, workflows: %{}, dependencies: %{}
 
   @type dependency :: %{
+          hostname: String.t(),
           ref: String.t(),
           commit: String.t(),
           owner_id: pos_integer(),
@@ -189,6 +204,13 @@ defmodule Hypatia.Rules.ActionsLock do
           end
         end
 
+      match = Regex.run(~r/^        hostname: '([^']*)'$/, line) ->
+        [_, hostname] = match
+        put_dependency_hostname(state, hostname, line_number)
+
+      Regex.match?(~r/^        hostname:/, line) ->
+        line_error(line_number, :malformed_dependency_hostname)
+
       match = Regex.run(~r/^        ref: '([^']+)'$/, line) ->
         [_, ref] = match
         put_dependency_field(state, :ref, ref, line_number)
@@ -279,6 +301,22 @@ defmodule Hypatia.Rules.ActionsLock do
     end
   end
 
+  defp put_dependency_hostname(state, hostname, line_number) do
+    cond do
+      state.version not in @hostname_versions ->
+        line_error(line_number, {:hostname_not_in_version, state.version})
+
+      not Regex.match?(@canonical_hostname, hostname) ->
+        line_error(line_number, {:malformed_dependency_hostname, hostname})
+
+      hostname != @home_hostname ->
+        line_error(line_number, {:unsupported_dependency_hostname, hostname})
+
+      true ->
+        put_dependency_field(state, :hostname, hostname, line_number)
+    end
+  end
+
   defp identity_field("owner_id"), do: :owner_id
   defp identity_field("repo_id"), do: :repo_id
 
@@ -326,6 +364,7 @@ defmodule Hypatia.Rules.ActionsLock do
            ),
          false <- Map.has_key?(state.dependencies, normalized) do
       stored = %{
+        hostname: Map.get(dependency, :hostname, @home_hostname),
         ref: ref,
         commit: commit,
         owner_id: owner_id,
