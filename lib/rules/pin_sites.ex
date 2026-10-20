@@ -36,13 +36,20 @@ defmodule Hypatia.Rules.PinSites do
   @doc """
   The structural sites of `line`, in order, as
   `%{action: a, ref: r, action_at: byte, ref_at: byte}`.
+
+  `flow_prefix` is, for a line inside a flow collection opened on an earlier
+  line, the structure of the lines since it opened (`flow_prefixes/1`): a
+  `uses:` there is a site when the brackets still open before it make it a
+  step's or a job's own key, however the line itself begins (`name:
+  "hello` then `world", uses: a/b@x }]`). Without it the line is judged on
+  its own.
   """
-  @spec sites(String.t()) :: [map()]
-  def sites(line) when is_binary(line) do
+  @spec sites(String.t(), String.t()) :: [map()]
+  def sites(line, flow_prefix \\ "") when is_binary(line) and is_binary(flow_prefix) do
     masked = mask(line)
 
     masked
-    |> scan()
+    |> scan(flow_prefix)
     |> Enum.map(fn [_full, {a_at, a_len}, {r_at, r_len}] ->
       %{
         action: binary_part(masked, a_at, a_len),
@@ -58,13 +65,47 @@ defmodule Hypatia.Rules.PinSites do
   `[full, action, ref]` `{byte, length}` pairs (`Regex.scan/3` with
   `return: :index`).
   """
-  @spec scan(String.t()) :: [[{non_neg_integer(), non_neg_integer()}]]
-  def scan(masked) when is_binary(masked) do
+  @spec scan(String.t(), String.t()) :: [[{non_neg_integer(), non_neg_integer()}]]
+  def scan(masked, flow_prefix \\ "") when is_binary(masked) do
     @site_re
     |> Regex.scan(masked, return: :index, capture: :all)
     |> Enum.filter(fn [_full, {action_at, _} | _] ->
-      structural?(binary_part(masked, 0, action_at))
+      prefix = binary_part(masked, 0, action_at)
+
+      if flow_prefix == "",
+        do: structural?(prefix),
+        else: structural_in_flow?(flow_prefix <> prefix)
     end)
+  end
+
+  @doc """
+  The lines of a whole file as their structure reads: `mask_lines/1`, each
+  then masked (`mask/1`, so cut at its comment), with a quoted scalar the
+  line leaves open blanked from its opening quote. Joined, they read as one
+  text of keys, brackets and commas whatever scalars span them: a `#` that
+  continues a quoted scalar (`name: "hello` then `# world",`) cuts nothing,
+  and no quote is left open.
+  """
+  @spec structure_lines(String.t()) :: [String.t()]
+  def structure_lines(content) when is_binary(content),
+    do: content |> mask_lines() |> Enum.map(&do_mask(&1, "", true))
+
+  @doc """
+  For each line of `content`, the structure of the lines since the flow
+  collection it sits in was opened (`structure_lines/1`, joined, ending in a
+  newline), or `""` for a line at flow depth 0 (`line_depths/1`): what
+  `sites/2` reads a line inside a multi-line flow collection against.
+  """
+  @spec flow_prefixes(String.t()) :: [String.t()]
+  def flow_prefixes(content) when is_binary(content) do
+    content
+    |> structure_lines()
+    |> Enum.zip(line_depths(content))
+    |> Enum.map_reduce("", fn {text, depth}, carry ->
+      prefix = if depth > 0, do: carry <> "\n", else: ""
+      {prefix, if(depth > 0, do: carry <> "\n" <> text, else: text)}
+    end)
+    |> elem(0)
   end
 
   @doc """
@@ -184,14 +225,47 @@ defmodule Hypatia.Rules.PinSites do
   @spec alias_sites([String.t()]) :: [map()]
   def alias_sites(lines) when is_list(lines) do
     numbered = Enum.with_index(lines, 1)
-    defs = for {line, n} <- numbered, d <- anchor_defs(line), do: Map.put(d, :line, n)
+
+    defs =
+      for {line, n} <- numbered, d <- anchor_defs(line) do
+        d |> Map.put(:line, n) |> continued_anchor(line, Enum.drop(numbered, n))
+      end
 
     for {line, n} <- numbered,
         {name, at, len} <- uses_aliases(line),
-        %{site: %{} = site, line: anchor_line} <- [latest_anchor(defs, name, n, at)] do
-      %{line: n, at: at, len: len, anchor_line: anchor_line, site: site}
+        %{site: %{} = site} = d <- [latest_anchor(defs, name, n, at)] do
+      %{line: n, at: at, len: len, anchor_line: Map.get(d, :site_line, d.line), site: site}
     end
   end
+
+  # An anchor with nothing after it on its line but a tag or a comment
+  # (`BAD: &bad`) names the scalar YAML continues on the next line with
+  # content, deeper than the key (`    github/codeql-action/init@<sha>`): its
+  # site is there, `:site_line` that line.
+  defp continued_anchor(%{site: nil, rest: rest} = d, line, below) do
+    with true <- Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, rest),
+         {next, n} <- Enum.find(below, fn {l, _} -> String.trim(head(l)) != "" end),
+         true <- indent_of(next) > indent_of(line),
+         [_, {a_at, a_len}, {r_at, r_len}] <-
+           Regex.run(
+             ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
+             next,
+             return: :index
+           ) do
+      site = %{
+        action: binary_part(next, a_at, a_len),
+        ref: binary_part(next, r_at, r_len),
+        action_at: a_at,
+        ref_at: r_at
+      }
+
+      %{d | site: site} |> Map.put(:site_line, n)
+    else
+      _ -> d
+    end
+  end
+
+  defp continued_anchor(d, _line, _below), do: d
 
   # The anchors `line` defines where a node starts (outside quotes and the
   # comment), each `%{name, at, site}`: the site its scalar value is, or nil.
@@ -228,7 +302,7 @@ defmodule Hypatia.Rules.PinSites do
             nil
         end
 
-      %{name: binary_part(masked, n_at, n_len), at: at, site: site}
+      %{name: binary_part(masked, n_at, n_len), at: at, site: site, rest: rest}
     end)
   end
 
@@ -408,8 +482,10 @@ defmodule Hypatia.Rules.PinSites do
         %{st | block: block_parent(seen), pending: false}
 
       true ->
+        # A key or dash followed only by node properties (`- run: &cmd`,
+        # `key: !!str`) leaves its value pending as surely as a bare one.
         pending =
-          Regex.match?(~r/(?::|^\s*-)$/, trimmed) or
+          Regex.match?(~r/(?::|^\s*-)(?:\s+[&!]\S*)*$/, trimmed) or
             (st.depth > 0 and Regex.match?(~r/[\[{,]$/, trimmed))
 
         %{st | pending: pending}
@@ -485,6 +561,15 @@ defmodule Hypatia.Rules.PinSites do
     end
   end
 
+  # A `uses:` read against the flow collections the lines above opened
+  # (`text` is their structure and the line up to the action): the key must
+  # stand at an entry position — after `{`, `,` or at the line's start —
+  # and the brackets still open must make it a step's or a job's own.
+  defp structural_in_flow?(text) do
+    Regex.match?(~r/(?:[{,]|\n)\s*(?:-\s+)?["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?$/, text) and
+      text |> flow_stack() |> structural_flow_stack?()
+  end
+
   # The brackets still open in `text`, innermost first, each with what opens
   # it: the key before it (`steps: [`), :none (nothing but indentation or a
   # list dash), or :text (anything else — `echo {` is a script, not YAML).
@@ -500,7 +585,11 @@ defmodule Hypatia.Rules.PinSites do
     |> elem(0)
   end
 
+  # Node properties before a bracket name the collection, not its key:
+  # `steps: [ &step {` opens an anonymous step, `rust: &job {` a job.
   defp opener_key(seg) do
+    seg = Regex.replace(~r/(?:[&!]\S*\s+)+$/, seg, "")
+
     cond do
       Regex.match?(~r/^\s*(?:-\s*)?$/, seg) -> :none
       m = Regex.run(~r/^\s*(?:-\s+)?["']?([\w.-]+)["']?\s*:\s*$/, seg) -> Enum.at(m, 1)
@@ -518,9 +607,13 @@ defmodule Hypatia.Rules.PinSites do
       end
   end
 
-  defp do_mask("", out), do: out
+  # `open?` blanks a quoted scalar the line leaves open, its quote too
+  # (`structure_lines/1`); `mask/1` keeps that quote.
+  defp do_mask(line, out, open? \\ false)
 
-  defp do_mask(<<q::utf8, rest::binary>>, out) when q in [?", ?'] do
+  defp do_mask("", out, _open?), do: out
+
+  defp do_mask(<<q::utf8, rest::binary>>, out, open?) when q in [?", ?'] do
     {body, close, tail} = take_quoted(rest, q, "")
 
     kept =
@@ -528,17 +621,21 @@ defmodule Hypatia.Rules.PinSites do
         do: body,
         else: String.duplicate("x", byte_size(body))
 
-    do_mask(tail, out <> <<q::utf8>> <> kept <> close)
+    if open? and close == "",
+      do: out <> String.duplicate("x", 1 + byte_size(body)),
+      else: do_mask(tail, out <> <<q::utf8>> <> kept <> close, open?)
   end
 
-  defp do_mask(<<?#, rest::binary>>, out) do
+  defp do_mask(<<?#, rest::binary>>, out, open?) do
     if out == "" or String.ends_with?(out, [" ", "\t"]),
       do: out,
-      else: do_mask(rest, out <> "#")
+      else: do_mask(rest, out <> "#", open?)
   end
 
-  defp do_mask(<<c::utf8, rest::binary>>, out), do: do_mask(rest, out <> <<c::utf8>>)
-  defp do_mask(<<c, rest::binary>>, out), do: do_mask(rest, out <> <<c>>)
+  defp do_mask(<<c::utf8, rest::binary>>, out, open?),
+    do: do_mask(rest, out <> <<c::utf8>>, open?)
+
+  defp do_mask(<<c, rest::binary>>, out, open?), do: do_mask(rest, out <> <<c>>, open?)
 
   # The body of a quoted scalar up to its closing quote; a backslash escapes
   # the next character inside double quotes. An unterminated scalar runs to

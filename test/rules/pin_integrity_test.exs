@@ -332,6 +332,84 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert PI.pi001_denylisted_pin(not_uses, @policy) == []
     end
 
+    test "node properties before a step's own mapping leave it a step" do
+      content =
+        "    steps: [ &step { uses: github/codeql-action/init@#{@poison} } ]\n" <>
+          "      - &other { name: x, uses: github/codeql-action/analyze@#{@poison} }\n"
+
+      assert [%{line: 1}, %{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      refute new_content =~ @poison
+
+      # Control: an anchored input mapping is still data.
+      assert PI.pi001_denylisted_pin(
+               "        with: &w { uses: github/codeql-action/init@#{@poison} }\n",
+               @policy
+             ) == []
+    end
+
+    test "an anchor whose scalar continues on the next line holds that reference" do
+      content =
+        "env:\n  BAD: &bad\n    github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 3, detail: %{ref: @poison}}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "  BAD: &bad\n    github/codeql-action/init@#{@good}\n"
+
+      # Control: a line that is not deeper is no continuation — `&bad` is
+      # null, and the alias names no reference.
+      null =
+        "env:\n  BAD: &bad\n  NEXT: github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert PI.pi001_denylisted_pin(null, @policy) == []
+    end
+
+    test "inside a flow collection opened above, a step's uses: after a sibling is a site" do
+      # The quoted sibling closes on the line the `uses:` stands on; the
+      # brackets the lines above opened still make it the step's own key.
+      quoted =
+        "jobs:\n  a:\n    steps: [{ name: \"hello\n      world\", " <>
+          "uses: github/codeql-action/init@#{@poison} }]\n"
+
+      sibling =
+        "jobs:\n  a:\n    steps: [\n      {\n        name: x, " <>
+          "uses: github/codeql-action/init@#{@poison}\n      }\n    ]\n"
+
+      for {content, line} <- [{quoted, 4}, {sibling, 5}] do
+        assert [%{line: ^line}] = PI.pi001_denylisted_pin(content, @policy)
+        assert {:ok, new_content, [_]} = PI.substitute_denylisted_pins(content, @policy)
+        assert new_content =~ "github/codeql-action/init@#{@good}"
+      end
+
+      # Controls: the same layout inside a step input's mapping is data, and
+      # an own-line `uses:` there is too.
+      for content <- [
+            "jobs:\n  a:\n    steps: [{ with: { note: \"x\n      y\", " <>
+              "uses: github/codeql-action/init@#{@poison} } }]\n",
+            "jobs:\n  a:\n    steps:\n      - with: {\n          " <>
+              "uses: github/codeql-action/init@#{@poison}\n        }\n"
+          ] do
+        assert PI.pi001_denylisted_pin(content, @policy) == []
+      end
+    end
+
+    test "a value pending after node properties opens the quoted scalar below it" do
+      # `run: &cmd` leaves its value pending: the quote on the next line
+      # opens the string, and the `uses:` text inside it is no site.
+      content =
+        "      - run: &cmd\n          \"echo start\n" <>
+          "          uses: github/codeql-action/init@#{@poison}\n          echo end\"\n"
+
+      assert PI.pi001_denylisted_pin(content, @policy) == []
+      assert {:ok, ^content, []} = PI.substitute_denylisted_pins(content, @policy)
+
+      # Control: a value written on the property's own line pends nothing.
+      live = "      - run: &cmd echo\n      - uses: github/codeql-action/init@#{@poison}\n"
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(live, @policy)
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

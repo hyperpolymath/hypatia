@@ -907,6 +907,72 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                })
     end
 
+    test "node properties before a step's mapping leave it a flow step" do
+      for {wf, line} <- [
+            {"jobs:\n  b:\n    steps: [ &step { uses: dtolnay/rust-toolchain@#{@toolchain_sha} } ]\n",
+             3},
+            {"jobs:\n  b:\n    steps:\n      - &step { uses: dtolnay/rust-toolchain@#{@toolchain_sha} }\n",
+             4}
+          ] do
+        assert [%{line: ^line, auto_fixable: false}] =
+                 WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+      end
+    end
+
+    test "a quoted sibling continued past a `#` line does not hide the step" do
+      # `# world",` continues the string; it is no comment, and its quote
+      # closes the scalar before the step's own `uses:`.
+      wf =
+        "jobs: {\nb: {\nsteps: [\n{\nname: \"hello\n# world\",\n" <>
+          "uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n}\n]\n}\n}\n"
+
+      assert [%{line: 7, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      # The same quote closing on the `uses:` line's own start.
+      inline =
+        "jobs:\n  b:\n    steps: [{ name: \"hello\n      world\", " <>
+          "uses: dtolnay/rust-toolchain@#{@toolchain_sha} }]\n"
+
+      assert [%{line: 4, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => inline})
+    end
+
+    test "toolchain: *alias is the scalar its anchor holds" do
+      step = fn tc ->
+        "x: &empty \"\"\ny: &chan stable\njobs:\n  b:\n    steps:\n" <>
+          "      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}\n        with:\n" <>
+          "          toolchain: #{tc}\n"
+      end
+
+      # An empty anchored value is no input, as `toolchain: ""` is not.
+      assert [%{line: 6, auto_fixable: true}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{
+                 "rust.yml" => step.("*empty")
+               })
+
+      # An alias of no anchor cannot be read: reported, routed to review.
+      assert [%{line: 6, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{
+                 "rust.yml" => step.("*nope")
+               })
+
+      assert f.reason =~ "`toolchain:` input is the alias `*nope`"
+
+      # Control: an anchored channel is the input.
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{
+                 "rust.yml" => step.("*chan")
+               })
+
+      flow =
+        "x: &empty ~\njobs:\n  b:\n    steps:\n" <>
+          "      - { uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: { toolchain: *empty } }\n"
+
+      assert [%{line: 5}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => flow})
+    end
+
     test "a flow step's alias names the anchor before it, not one later on its line" do
       # `*inputs` is the empty mapping defined first; the configured
       # `&inputs` after it on the same line is not what it names.
@@ -1167,6 +1233,25 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
           ] do
         assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => data}) == []
       end
+    end
+
+    test "a job's mapping carrying node properties, or past a `#` string line, is the call" do
+      anchored = "jobs: { rust: &job { uses: #{@rust_ci}@#{@broken_standards} } }\n"
+
+      assert [%{line: 1, auto_fixable: false}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => anchored})
+
+      quoted =
+        "jobs: {\nrust: {\nname: \"hello\n# world\",\nuses: #{@rust_ci}@#{@broken_standards}\n}\n}\n"
+
+      assert [%{line: 5, auto_fixable: false}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => quoted})
+
+      # Control: a `uses:` line inside that string is text.
+      text =
+        "jobs: {\nrust: {\nname: \"hello\nuses: #{@rust_ci}@#{@broken_standards}\n\",\n}\n}\n"
+
+      assert WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => text}) == []
     end
 
     test "a flow-style job's uses: continued on the next line is the call" do

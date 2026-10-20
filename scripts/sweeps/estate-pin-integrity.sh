@@ -243,7 +243,9 @@ function walk(s, i, seen,   n, c, j, t) {
     seen = seen c; i++
   }
   t = seen; sub(/[[:space:]]+$/, "", t)
-  if (t !~ /^[[:space:]]*$/) PENDING = (t ~ /:$/ || t ~ /^[[:space:]]*-$/ || (DEPTH > 0 && t ~ /[{,[]$/))
+  # A key or dash followed only by node properties (`- run: &cmd`, `key:
+  # !!str`) leaves its value pending as a bare one does.
+  if (t !~ /^[[:space:]]*$/) PENDING = (t ~ /(:|^[[:space:]]*-)([[:space:]]+[&!][^[:space:]]*)*$/ || (DEPTH > 0 && t ~ /[{,[]$/))
   return ""
 }
 BEGIN { USES_TAIL = "(^|[-{,[:space:]])[\"" sq "]?uses[\"" sq "]?[[:space:]]*:[[:space:]]*$"; in_scalar = 0; inq = ""; DEPTH = 0; PENDING = 0 }

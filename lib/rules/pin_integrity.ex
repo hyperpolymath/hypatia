@@ -66,7 +66,10 @@ defmodule Hypatia.Rules.PinIntegrity do
   comment or script text is not one, nor is one on a line of a `run: |`
   block or of a quoted scalar continued from an earlier line: the file is
   read through `PinSites.mask_lines/1`, which carries that state from line
-  to line. A `uses:` whose reference YAML continues below it (`- uses:`
+  to line. A line inside a flow collection opened on an earlier line is
+  judged against the brackets still open (`PinSites.flow_prefixes/1`), so a
+  step's `uses:` after a sibling (`name: "hello` then `world", uses: a/b@x
+  }]`) is a site and one in an input's mapping is not. A `uses:` whose reference YAML continues below it (`- uses:`
   then `    a/b@x`, blank and comment-only lines allowed between) is a site
   on the value's line (`PinSites.continuations/1`), and a `uses: *name` is a
   site on the line of the anchor it names, where its reference stands
@@ -82,7 +85,7 @@ defmodule Hypatia.Rules.PinIntegrity do
   @spec pin_sites(String.t()) :: [map()]
   def pin_sites(content) when is_binary(content) do
     masked = PinSites.mask_lines(content)
-    numbered = Enum.with_index(masked, 1)
+    numbered = masked |> Enum.zip(PinSites.flow_prefixes(content)) |> Enum.with_index(1)
 
     # A `uses:` whose reference continues below it — past any blank or
     # comment-only lines — is a site on the value's line.
@@ -104,7 +107,7 @@ defmodule Hypatia.Rules.PinIntegrity do
       end
 
     numbered
-    |> Enum.flat_map(fn {line, number} -> line_sites(line, number) end)
+    |> Enum.flat_map(fn {{line, prefix}, number} -> line_sites(line, number, prefix) end)
     |> Kernel.++(continued)
     |> Kernel.++(aliased)
     |> Enum.uniq_by(&{&1.line, &1.ref_at})
@@ -113,8 +116,8 @@ defmodule Hypatia.Rules.PinIntegrity do
 
   def pin_sites(_), do: []
 
-  defp line_sites(line, number) do
-    sites = PinSites.sites(line)
+  defp line_sites(line, number, flow_prefix) do
+    sites = PinSites.sites(line, flow_prefix)
     comment = if length(sites) == 1, do: line |> PinSites.comment() |> String.trim(), else: ""
 
     for site <- sites, do: site_entry(site, number, comment)
@@ -694,8 +697,8 @@ defmodule Hypatia.Rules.PinIntegrity do
   """
   @spec pin_only_edit?([String.t()], [String.t()], map()) :: boolean()
   def pin_only_edit?(removed, added, policy) do
-    removed_sites = Enum.flat_map(removed, &line_sites(&1, 0))
-    added_sites = Enum.flat_map(added, &line_sites(&1, 0))
+    removed_sites = Enum.flat_map(removed, &line_sites(&1, 0, ""))
+    added_sites = Enum.flat_map(added, &line_sites(&1, 0, ""))
 
     pinned_removed = removed_sites |> Enum.map(& &1.ref) |> Enum.sort()
     pinned_added = added_sites |> Enum.map(& &1.ref) |> Enum.sort()
