@@ -643,8 +643,8 @@ defmodule Hypatia.Rules.PrAutomerge do
     hunk = Enum.reject(hunk, &Regex.match?(~r/^[-+]{3}/, &1))
     old = side_view(hunk, "-")
     new = side_view(hunk, "+")
-    old_cont = side_continuations(old)
-    new_cont = side_continuations(new)
+    old_cont = Map.merge(side_continuations(old), side_aliases(old), fn _, a, b -> a ++ b end)
+    new_cont = Map.merge(side_continuations(new), side_aliases(new), fn _, a, b -> a ++ b end)
 
     hunk
     |> Enum.with_index()
@@ -675,6 +675,28 @@ defmodule Hypatia.Rules.PrAutomerge do
     end
   end
 
+  # The anchored values one side of a hunk shows an alias running, as
+  # `%{hunk_index => [pin]}` on the anchor's line: `- uses: *bad` in context
+  # with `BAD: &bad <action>@<ref>` changed (`PinSites.alias_sites/2`), or a
+  # step given whole as an alias whose anchored mapping's `uses:` changed
+  # (`PinSites.node_alias_sites/1`). The re-pinned anchor is the site. One
+  # that is already a site on its own line is counted there, not twice.
+  defp side_aliases(view) do
+    texts = for {_, text, state} <- view, do: if(state == :text, do: "", else: text)
+    side = Enum.join(texts, "\n")
+    index = view |> Enum.map(&elem(&1, 0)) |> List.to_tuple()
+    masked = PinSites.mask_lines(side)
+
+    (PinSites.alias_sites(masked, PinSites.flow_prefixes(side)) ++ PinSites.node_alias_sites(side))
+    |> Enum.reject(fn %{anchor_line: n, site: site} ->
+      texts |> Enum.at(n - 1) |> PinSites.sites() |> Enum.any?(&(&1.ref_at == site.ref_at))
+    end)
+    |> Enum.group_by(
+      &elem(index, &1.anchor_line - 1),
+      &%{action: &1.site.action, base: action_base(&1.site.action), ref: &1.site.ref}
+    )
+  end
+
   # One side of a hunk (context lines plus the changed lines of `mark`), in
   # order, as `{hunk_index, text, state}` — `state` as
   # `PinSites.line_states/1` reads the side: `:yaml`, `:text` or `:open`; a
@@ -691,7 +713,10 @@ defmodule Hypatia.Rules.PrAutomerge do
 
     side = Enum.map_join(entries, "\n", &elem(&1, 1))
     states = PinSites.line_states(side)
-    data = PinSites.data_uses_lines(side)
+    # Unless a step or job given whole as an alias runs the mapping it sits
+    # in (`- *step`, the mapping anchored in a matrix entry).
+    run = for %{anchor_line: n} <- PinSites.node_alias_sites(side), into: MapSet.new(), do: n
+    data = MapSet.difference(PinSites.data_uses_lines(side), run)
 
     entries
     |> Enum.zip(states)

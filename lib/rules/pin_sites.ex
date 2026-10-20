@@ -245,18 +245,23 @@ defmodule Hypatia.Rules.PinSites do
 
   # An anchor with nothing after it on its line but a tag or a comment
   # (`BAD: &bad`) names the scalar YAML continues on the next line with
-  # content, deeper than the key (`    github/codeql-action/init@<sha>`): its
-  # site is there, `:site_line` that line.
+  # content (`    github/codeql-action/init@<sha>`): its site is there,
+  # `:site_line` that line. In block context the scalar must sit deeper than
+  # the key, and is all the line holds; inside a flow collection it may
+  # stand at any indentation, even column 0, up to the `,`, `}` or `]` that
+  # ends it.
   defp continued_anchor(%{site: nil, rest: rest} = d, line, below) do
+    value_re =
+      if d.flow,
+        do:
+          ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:[,}\]]|#|$)/,
+        else:
+          ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/
+
     with true <- Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, rest),
          {next, n} <- Enum.find(below, fn {l, _} -> String.trim(head(l)) != "" end),
-         true <- indent_of(next) > indent_of(line),
-         [_, {a_at, a_len}, {r_at, r_len}] <-
-           Regex.run(
-             ~r/^\s*(?:![^\s]*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
-             next,
-             return: :index
-           ) do
+         true <- d.flow or indent_of(next) > indent_of(line),
+         [_, {a_at, a_len}, {r_at, r_len}] <- Regex.run(value_re, next, return: :index) do
       site = %{
         action: binary_part(next, a_at, a_len),
         ref: binary_part(next, r_at, r_len),
@@ -273,22 +278,25 @@ defmodule Hypatia.Rules.PinSites do
   defp continued_anchor(d, _line, _below), do: d
 
   # The anchors `line` defines where a node starts (outside quotes and the
-  # comment), each `%{name, at, site}`: the site its scalar value is, or nil.
-  # A node starts at the line's start or after its list dashes, after
-  # `key: `, and — inside a flow collection only (one the line opens, or
-  # `flow_prefix` says it sits in) — after `[`, `{` or `,`, each past any
-  # tag. `NOTE: a, &x b` in block context is one plain scalar: no anchor.
+  # comment), each `%{name, at, site, rest, flow}`: the site its scalar value
+  # is, or nil; the text after it; whether it sits inside a flow collection.
+  # A name runs to whitespace or a flow indicator (`&rust/tool`). A node
+  # starts at the line's start or after its list dashes, after `key: `, and
+  # — inside a flow collection only (one the line opens, or `flow_prefix`
+  # says it sits in) — after `[`, `{` or `,`, or directly after the colon of
+  # a quoted key (`{"BAD":&bad ...}`, JSON-style), each past any tag.
+  # `NOTE: a, &x b` in block context is one plain scalar: no anchor.
   defp anchor_defs(line, flow_prefix) do
     masked = mask(line)
 
-    ~r/&([\w.-]+)/
+    ~r/&([^\s,\[\]{}]+)/
     |> Regex.scan(masked, return: :index)
     |> Enum.filter(fn [{at, _}, _] ->
       before = binary_part(masked, 0, at)
 
       Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:![^\s]*\s+)*$/, before) or
         ((flow_prefix != "" or String.contains?(before, ["[", "{"])) and
-           Regex.match?(~r/[\[{,]\s*(?:![^\s]*\s+)*$/, before))
+           Regex.match?(~r/(?:[\[{,]|["']:)\s*(?:![^\s]*\s+)*$/, before))
     end)
     |> Enum.map(fn [{at, len}, {n_at, n_len}] ->
       rest_at = at + len
@@ -312,7 +320,16 @@ defmodule Hypatia.Rules.PinSites do
             nil
         end
 
-      %{name: binary_part(masked, n_at, n_len), at: at, site: site, rest: rest}
+      before = binary_part(masked, 0, at)
+      open = length(Regex.scan(~r/[\[{]/, before)) - length(Regex.scan(~r/[\]}]/, before))
+
+      %{
+        name: binary_part(masked, n_at, n_len),
+        at: at,
+        site: site,
+        rest: rest,
+        flow: flow_prefix != "" or open > 0
+      }
     end)
   end
 
@@ -321,7 +338,7 @@ defmodule Hypatia.Rules.PinSites do
   defp uses_aliases(line, flow_prefix) do
     masked = mask(line)
 
-    ~r/["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*\*([\w.-]+)/
+    ~r/["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*\*([^\s,\[\]{}]+)/
     |> Regex.scan(masked, return: :index)
     |> Enum.flat_map(fn [{at, len}, {n_at, n_len}] ->
       star = n_at - 1
@@ -344,6 +361,178 @@ defmodule Hypatia.Rules.PinSites do
     defs
     |> Enum.filter(&(&1.name == name and (&1.line < line or (&1.line == line and &1.at < at))))
     |> Enum.max_by(&{&1.line, &1.at}, fn -> nil end)
+  end
+
+  @doc """
+  Every step or job given whole as an alias — `- *step` in a job's
+  `steps:`, `*step` as an entry of a `steps: [ ... ]`, `rust: *job` under
+  `jobs:` — resolved to the `uses:` of the mapping its anchor holds:
+  `%{line, anchor_line, site}`, the alias' line, the line of that `uses:`
+  key, and its site as `sites/1` returns one (offsets into that line).
+  YAML resolves the alias to that very node, so its `uses:` is the step's
+  or the job's action even where the anchor sits in data (`include: -
+  &step { uses: ... }` in a matrix). The anchored mapping is read as a flow
+  mapping on the anchor's own line (`&step { uses: ... }`) or in block form
+  (`- &step`, `key: &step`, its keys on the deeper lines below); any other
+  shape names no site here. A `- *step` whose list owner the lines above
+  do not show is judged a step, as a lone `- uses:` line is.
+  """
+  @spec node_alias_sites(String.t()) :: [map()]
+  def node_alias_sites(content) when is_binary(content) do
+    lines = mask_lines(content)
+    numbered = lines |> Enum.zip(flow_prefixes(content)) |> Enum.with_index(1)
+    texts = List.to_tuple(lines)
+
+    rows =
+      content
+      |> line_states()
+      |> Enum.zip_with(line_depths(content), &block_row/2)
+      |> List.to_tuple()
+
+    defs =
+      for {{line, prefix}, n} <- numbered,
+          d <- anchor_defs(line, prefix),
+          do: Map.put(d, :line, n)
+
+    for {{line, prefix}, n} <- numbered,
+        {name, at} <- node_aliases(line, prefix, rows, n - 1),
+        %{} = d <- [latest_anchor(defs, name, n, at)],
+        {uses_line, site} <- anchored_uses(d, texts, rows) do
+      %{line: n, anchor_line: uses_line, site: site}
+    end
+  end
+
+  # The aliases on `line` that stand for a whole step or job, as `{name,
+  # offset of the "*"}`: a block list item that is nothing but the alias, in
+  # a sequence `steps:` holds (or one whose owner is not shown); a block key
+  # of `jobs:` whose value is the alias; or a flow entry whose brackets make
+  # it an item of a job's step sequence, or a job's value in `jobs: { ... }`.
+  defp node_aliases(line, prefix, rows, i) do
+    masked = mask(line)
+    row = elem(rows, i)
+
+    item = Regex.run(~r/^(\s*-\s+)\*([^\s,\[\]{}]+)\s*$/, masked)
+    value = Regex.run(~r/^(\s*["']?[^"':\s]+["']?\s*:\s+)\*([^\s,\[\]{}]+)\s*$/, masked)
+
+    block =
+      case {row, item, value} do
+        {%{dash: d}, [_, lead, name], _} when d != nil ->
+          if sequence_owner(rows, seq_owner(rows, i, d)) != :data,
+            do: [{name, byte_size(lead)}],
+            else: []
+
+        {%{dash: nil}, _, [_, lead, name]} ->
+          if match?({:value, _, "jobs"}, mapping_of(rows, i)),
+            do: [{name, byte_size(lead)}],
+            else: []
+
+        _ ->
+          []
+      end
+
+    flow =
+      ~r/([\[{,:])\s*\*([^\s,\[\]{}]+)/
+      |> Regex.scan(masked, return: :index)
+      |> Enum.flat_map(fn [_, {c_at, _}, {n_at, n_len}] ->
+        star = n_at - 1
+        stack = flow_stack(prefix <> binary_part(masked, 0, star))
+
+        node? =
+          if binary_part(masked, c_at, 1) == ":",
+            do: match?([{"{", "jobs"} | _], stack),
+            else: alias_step_stack?(stack)
+
+        if node?, do: [{binary_part(masked, n_at, n_len), star}], else: []
+      end)
+
+    block ++ flow
+  end
+
+  # An entry directly in a `[` that `steps:` opens: the whole stack the text
+  # shows (a block job's `steps: [*step]`), or one that goes on through a
+  # job key into `jobs`.
+  defp alias_step_stack?([{"[", "steps"}]), do: true
+
+  defp alias_step_stack?([{"[", "steps"}, {"{", job}, {"{", "jobs"} | _]) when is_binary(job),
+    do: true
+
+  defp alias_step_stack?(_), do: false
+
+  # The `uses:` of the mapping the anchor `d` holds, as `[{line, site}]`: a
+  # flow mapping opening on the anchor's own line, read to its top-level
+  # `uses` entry, or a block mapping on the lines below, read to its `uses:`
+  # key.
+  defp anchored_uses(d, texts, rows) do
+    line = elem(texts, d.line - 1)
+    rest_at = byte_size(line) - byte_size(d.rest)
+
+    cond do
+      m = Regex.run(~r/^\s*(?:![^\s]*\s+)*\{/, d.rest, return: :index) ->
+        [{0, len}] = m
+
+        case top_uses(mask(line), rest_at + len - 1) do
+          nil -> []
+          site -> [{d.line, site}]
+        end
+
+      Regex.match?(~r/^\s*(?:![^\s]*\s*)*(?:#.*)?$/, d.rest) ->
+        block_uses(d.line, texts, rows)
+
+      true ->
+        []
+    end
+  end
+
+  # The site of the top-level `uses` entry of the flow mapping whose `{` is
+  # at byte `open` of masked line `m`, or nil when the line names none: an
+  # entry after that `{` or a `,` with no other bracket open between.
+  defp top_uses(m, open) do
+    ~r/[{,]\s*["']?uses["']?\s*:\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)/
+    |> Regex.scan(m, return: :index, offset: open)
+    |> Enum.find_value(fn [{at, _}, {a_at, a_len}, {r_at, r_len}] ->
+      between = binary_part(m, open, at - open + 1)
+      depth = length(Regex.scan(~r/[\[{]/, between)) - length(Regex.scan(~r/[\]}]/, between))
+
+      if depth == 1 do
+        %{
+          action: binary_part(m, a_at, a_len),
+          ref: binary_part(m, r_at, r_len),
+          action_at: a_at,
+          ref_at: r_at
+        }
+      end
+    end)
+  end
+
+  # A block mapping anchored with nothing after the anchor (`- &step`,
+  # `step: &step`) on row `n`: its keys are the rows below deeper than the
+  # dash or the key, the first of them setting their column; the one named
+  # `uses` holds the site(s).
+  defp block_uses(n, texts, rows) do
+    case elem(rows, n - 1) do
+      %{} = row ->
+        parent = if row.key == nil, do: row.dash || row.indent, else: row.key_col
+
+        children =
+          n..(tuple_size(rows) - 1)//1
+          |> Enum.map(&{&1, elem(rows, &1)})
+          |> Enum.reject(fn {_, r} -> r == :skip end)
+          |> Enum.take_while(fn {_, r} -> r.indent > parent end)
+
+        case children do
+          [] ->
+            []
+
+          [{_, first} | _] ->
+            for {j, %{indent: ind, dash: nil, key: "uses"}} <- children,
+                ind == first.indent,
+                site <- sites(elem(texts, j)),
+                do: {j + 1, site}
+        end
+
+      _ ->
+        []
+    end
   end
 
   @doc """

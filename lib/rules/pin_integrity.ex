@@ -113,11 +113,24 @@ defmodule Hypatia.Rules.PinIntegrity do
         )
       end
 
+    # A step or job given whole as an alias (`- *step`) runs the `uses:` of
+    # the mapping its anchor holds — a site even where that mapping sits in
+    # data (a matrix entry), where a repair rewrites it.
+    node_aliased =
+      for %{anchor_line: number, site: site} <- PinSites.node_alias_sites(content) do
+        site_entry(
+          site,
+          number,
+          masked |> Enum.at(number - 1) |> PinSites.comment() |> String.trim()
+        )
+      end
+
     numbered
     |> Enum.reject(fn {_, number} -> number in data end)
     |> Enum.flat_map(fn {{line, prefix}, number} -> line_sites(line, number, prefix) end)
     |> Kernel.++(continued)
     |> Kernel.++(aliased)
+    |> Kernel.++(node_aliased)
     |> Enum.uniq_by(&{&1.line, &1.ref_at})
     |> Enum.sort_by(&{&1.line, &1.ref_at})
   end

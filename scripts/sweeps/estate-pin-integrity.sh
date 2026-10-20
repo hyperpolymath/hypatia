@@ -315,11 +315,14 @@ replace_site() { # <line> <masked-line> <action> <ref> <good>
 # spelling, or a blocked version written after ITS action
 # (`github/codeql-action/init@v4.38.1` in a `run: |` script) — phase 1 found
 # the candidate by that token, so phase 2 must see it too, never call the
-# file clean. A blocked version is blocked for its own action only, as at a
-# site (`denylisted_pair`): `some/action@v4.38.1` is no finding.
+# file clean. A SHA is a token wherever it stands, bounded by anything but
+# a letter or digit: after `@` in a reference, but also as a lock record's
+# `ref:` or `commit: 'sha1-<sha>'` under a key that names a tag. A blocked
+# version is blocked for its own action only, as at a site
+# (`denylisted_pair`): `some/action@v4.38.1` is no finding.
 line_has_denied_token() {
   local tok t
-  if [ -n "$SHA_ALTERNATION" ] && printf '%s\n' "$1" | grep -qiE "@(${SHA_ALTERNATION})(${REF_END})"; then
+  if [ -n "$SHA_ALTERNATION" ] && printf '%s\n' "$1" | grep -qiE "(^|[^0-9A-Za-z])(${SHA_ALTERNATION})([^0-9A-Za-z]|\$)"; then
     return 0
   fi
   [ ${#DENY_VERSIONS[@]} -gt 0 ] || return 1

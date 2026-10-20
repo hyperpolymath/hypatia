@@ -662,6 +662,47 @@ defmodule Hypatia.Rules.PrAutomergeTest do
                :close_poison_only
     end
 
+    test "a re-pinned anchor an unchanged uses: *alias runs is a poison site" do
+      patch = """
+      @@ -1,7 +1,7 @@
+       env:
+      -  BAD: &bad github/codeql-action/init@#{@good}
+      +  BAD: &bad github/codeql-action/init@#{@poison}
+       jobs:
+         a:
+           steps:
+             - uses: *bad
+      """
+
+      f = file(".github/workflows/ci.yml", patch)
+      assert [%{certain: true}] = PA.poison_sites([f], @policy)
+
+      decision = PA.classify(pr([f]), @policy)
+      assert decision.disposition == :flag
+      assert decision.blocked_by == "introduces_denylisted_pin_alongside_unmergeable_changes"
+    end
+
+    test "a step given whole as an alias makes its anchored mapping's re-pin a poison site" do
+      # The mapping is anchored in a matrix entry (data); `- *step` in the
+      # job's steps runs it.
+      for {anchor, changed} <- [
+            {"            - &step", "              uses: github/codeql-action/init@"},
+            {nil, "            - step: &step { uses: github/codeql-action/init@"}
+          ] do
+        close = if anchor, do: "", else: " }"
+        head = if anchor, do: " #{anchor}\n", else: ""
+
+        patch =
+          "@@ -1,9 +1,9 @@\n jobs:\n   a:\n     strategy:\n       matrix:\n         include:\n" <>
+            head <>
+            "-#{changed}#{@good}#{close}\n+#{changed}#{@poison}#{close}\n" <>
+            "     steps:\n       - *step\n"
+
+        f = file(".github/workflows/ci.yml", patch)
+        assert [%{certain: true}] = PA.poison_sites([f], @policy), patch
+      end
+    end
+
     test "a pin inside a multi-line quoted run: is text; one the hunk never closes is uncertain" do
       # The quote opens on a context line and closes inside the hunk: every
       # line between is string text, never a site.

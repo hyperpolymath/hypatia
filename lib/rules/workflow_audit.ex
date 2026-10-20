@@ -1558,11 +1558,19 @@ defmodule Hypatia.Rules.WorkflowAudit do
     {step, wf026_step_key_indent(step), opener}
   end
 
-  # A list item is a step only when its parent key is `steps:`; an item
-  # inside `run: |`, or inside a fixture kept in `env:`, is text however much
-  # it looks like a step, and must never send the fleet to rewrite scalar data.
+  # A list item is a step only when its parent key is a job's `steps:`, or
+  # a composite action's under `runs:`. An item inside `run: |`, inside a
+  # fixture kept in `env:`, or of a `steps:` some other mapping holds (a
+  # matrix entry's `fixture: { steps: ... }`) is data however much it looks
+  # like a step, and must never send the fleet to rewrite it. A `steps:`
+  # with nothing above it (a fragment) is still read as a step list.
   defp wf026_under_steps?(lines, opener) do
-    match?(["steps" | _], wf_ancestor_keys(lines, opener))
+    case wf_ancestor_keys(lines, opener) do
+      ["steps"] -> true
+      ["steps", "runs" | _] -> true
+      ["steps", job, "jobs" | _] when is_binary(job) -> true
+      _ -> false
+    end
   end
 
   # The mapping keys enclosing the line at `number`, nearest first — list
@@ -1727,8 +1735,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp wf026_with_value(value, line, rest, key_indent, lines, number) do
     cond do
       # `with: *inputs` — the mapping the latest `&inputs` before it anchors.
-      match?([_ | _], Regex.run(~r/^\*([\w.-]+)$/, value)) ->
-        [_, name] = Regex.run(~r/^\*([\w.-]+)$/, value)
+      match?([_ | _], Regex.run(~r/^\*([^\s,\[\]{}]+)$/, value)) ->
+        [_, name] = Regex.run(~r/^\*([^\s,\[\]{}]+)$/, value)
         [{col, _}] = Regex.run(~r/\*/, line, return: :index)
         wf026_alias_verdict(name, lines, :alias, {number, col})
 
@@ -1770,8 +1778,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
         value = String.trim(value)
 
         cond do
-          match?([_ | _], Regex.run(~r/^\*([\w.-]+)$/, value)) ->
-            [_, name] = Regex.run(~r/^\*([\w.-]+)$/, value)
+          match?([_ | _], Regex.run(~r/^\*([^\s,\[\]{}]+)$/, value)) ->
+            [_, name] = Regex.run(~r/^\*([^\s,\[\]{}]+)$/, value)
             wf026_alias_verdict(name, lines, :alias, pos)
 
           String.contains?(value, "{") ->
@@ -1823,7 +1831,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   defp wf026_toolchain_in(entries, lines, seen, pos) do
     case Enum.find(entries, fn {k, _} -> k == "toolchain" end) do
       {_, v} when is_binary(v) ->
-        case Regex.run(~r/^\s*\*([\w.-]+)\s*$/, v) do
+        case Regex.run(~r/^\s*\*([^\s,\[\]{}]+)\s*$/, v) do
           [_, name] -> wf026_scalar_alias(name, lines, wf_entry_pos(pos, "toolchain"))
           nil -> if wf026_null_input?(v), do: :null, else: {:set, :own}
         end
@@ -1866,10 +1874,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
     v = String.trim(value)
 
     cond do
-      m = Regex.run(~r/^\*([\w.-]+)$/, v) ->
+      m = Regex.run(~r/^\*([^\s,\[\]{}]+)$/, v) ->
         {:ok, [Enum.at(m, 1)]}
 
-      m = Regex.run(~r/^\[\s*(\*[\w.-]+(?:\s*,\s*\*[\w.-]+)*)\s*,?\s*\]$/, v) ->
+      m = Regex.run(~r/^\[\s*(\*[^\s,\[\]{}]+(?:\s*,\s*\*[^\s,\[\]{}]+)*)\s*,?\s*\]$/, v) ->
         names =
           m
           |> Enum.at(1)
@@ -2059,10 +2067,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
     |> List.last()
   end
 
+  # Inside a flow collection a node also starts directly after the colon of
+  # a quoted key, JSON-style (`{"BAD":&bad "a/b@x"}`).
   defp wf_node_start?(before, depth) do
     Regex.match?(~r/(?:^\s*(?:-\s+)*|:\s+)(?:![^\s]*\s+)*$/, before) or
       ((depth > 0 or String.contains?(before, ["[", "{"])) and
-         Regex.match?(~r/[\[{,]\s*(?:![^\s]*\s+)*$/, before))
+         Regex.match?(~r/(?:[\[{,]|["']:)\s*(?:![^\s]*\s+)*$/, before))
   end
 
   # The line of each direct child of the block mapping whose key sits at

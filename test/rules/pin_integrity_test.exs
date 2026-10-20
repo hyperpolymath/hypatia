@@ -514,6 +514,74 @@ defmodule Hypatia.Rules.PinIntegrityTest do
       assert PI.pi001_denylisted_pin(String.replace(listed, "list:", "steps:"), @policy) == []
     end
 
+    test "an anchor directly after a quoted key's colon in a flow mapping is the anchor" do
+      # JSON-style `{"BAD":&bad ...}`: the value starts right after the colon.
+      content =
+        "env: {\"BAD\":&bad \"github/codeql-action/init@#{@poison}\"}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 1}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+    end
+
+    test "an anchored scalar continued inside a flow mapping may start at column 0" do
+      content =
+        "env: {\n  BAD: &bad\ngithub/codeql-action/init@#{@poison}\n}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(content, @policy)
+      refute fixed =~ @poison
+    end
+
+    test "a step given whole as an alias of a flow mapping runs that mapping's uses:" do
+      # The anchored mapping sits in a matrix entry, which is data: the
+      # alias in `steps:` makes it the step.
+      matrix =
+        "jobs:\n  a:\n    strategy:\n      matrix:\n        include:\n" <>
+          "          - step: &step { uses: github/codeql-action/init@#{@poison} }\n" <>
+          "    steps:\n      - *step\n"
+
+      assert [%{line: 6}] = PI.pi001_denylisted_pin(matrix, @policy)
+      assert {:ok, fixed, [_]} = PI.substitute_denylisted_pins(matrix, @policy)
+      refute fixed =~ @poison
+
+      flow_seq =
+        "x: &step { uses: github/codeql-action/init@#{@poison} }\n" <>
+          "jobs:\n  a:\n    steps: [*step]\n"
+
+      assert [%{line: 1}] = PI.pi001_denylisted_pin(flow_seq, @policy)
+
+      # Control: with no alias in a step position, the matrix entry is data.
+      unused = String.replace(matrix, "      - *step\n", "      - run: echo\n")
+      assert PI.pi001_denylisted_pin(unused, @policy) == []
+    end
+
+    test "a step or job given whole as an alias of a block mapping runs its uses:" do
+      step =
+        "x:\n  - &step\n    uses: github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - *step\n"
+
+      assert [%{line: 3}] = PI.pi001_denylisted_pin(step, @policy)
+
+      # The job's mapping anchored in a matrix entry, data until aliased.
+      job =
+        "jobs:\n  b:\n    strategy:\n      matrix:\n        include:\n          - job: &job\n" <>
+          "              uses: github/codeql-action/init@#{@poison}\n  a: *job\n"
+
+      assert [%{line: 7}] = PI.pi001_denylisted_pin(job, @policy)
+      assert PI.pi001_denylisted_pin(String.replace(job, "  a: *job\n", ""), @policy) == []
+    end
+
+    test "an anchor name runs to whitespace or a flow indicator" do
+      content =
+        "env:\n  BAD: &bad/x github/codeql-action/init@#{@poison}\n" <>
+          "jobs:\n  a:\n    steps:\n      - uses: *bad/x\n"
+
+      assert [%{line: 2}] = PI.pi001_denylisted_pin(content, @policy)
+    end
+
     test "a KYAML flow step on its own line is still a site" do
       content =
         "steps: [\n  { name: \"x\", run: \"echo 'a\" },\n" <>

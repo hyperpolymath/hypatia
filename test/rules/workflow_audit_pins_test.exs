@@ -1096,6 +1096,42 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert [] == wf026(String.replace(wf, "x: &inputs {}", "x: &inputs {toolchain: stable}"))
     end
 
+    test "a steps: list some other mapping holds is data, not a job's steps" do
+      wf = """
+      jobs:
+        check:
+          strategy:
+            matrix:
+              include:
+                - fixture:
+                    steps:
+                      - uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+          steps:
+            - run: echo
+      """
+
+      assert [] == wf026(wf)
+
+      # Control: the job's own steps.
+      assert [%{line: 4}] = wf026(@rust_step)
+    end
+
+    test "an alias name runs to whitespace or a flow indicator" do
+      wf =
+        "x: &e/x \"\"\n" <> @rust_step <> "        with:\n          toolchain: *e/x\n"
+
+      assert [%{line: 5, auto_fixable: true}] = wf026(wf)
+    end
+
+    test "an anchor directly after a quoted key's colon in a flow mapping is the anchor" do
+      wf =
+        "x: {\"e\":&e \"\"}\n" <> @rust_step <> "        with:\n          toolchain: *e\n"
+
+      # The anchor is read, so the empty value it holds routes to the fixer
+      # rather than to review as an alias of no anchor.
+      assert [%{line: 5, auto_fixable: true}] = wf026(wf)
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:
