@@ -764,6 +764,55 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert b.reason =~ "anchor or tag"
     end
 
+    test "a flow step whose `{` stands on its own line is a flow step; routed to review" do
+      wf = """
+      jobs:
+        check:
+          steps: [
+            {
+              uses: dtolnay/rust-toolchain@#{@toolchain_sha}
+            }
+          ]
+      """
+
+      assert [%{line: 5, auto_fixable: false, fix_script: nil} = f] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      assert f.reason =~ "flow style"
+    end
+
+    test "a flow step's uses: continued on the next line is the step's pin" do
+      wf = """
+      jobs:
+        check:
+          steps: [ { uses:
+              dtolnay/rust-toolchain@#{@toolchain_sha} } ]
+      """
+
+      assert [%{line: 3, auto_fixable: false}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+    end
+
+    test "a flow step's alias names the anchor before it, not one later on its line" do
+      # `*inputs` is the empty mapping defined first; the configured
+      # `&inputs` after it on the same line is not what it names.
+      wf = """
+      x: &inputs {}
+      jobs:
+        check:
+          steps: [ { uses: dtolnay/rust-toolchain@#{@toolchain_sha}, with: *inputs }, { run: echo, env: &inputs {toolchain: nightly} } ]
+      """
+
+      assert [%{line: 4}] =
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => wf})
+
+      # Control: with the configured anchor first, the alias names it.
+      configured = String.replace(wf, "x: &inputs {}", "x: &inputs {toolchain: stable}")
+
+      assert [] ==
+               WorkflowAudit.check_sha_pinned_toolchain_without_input(%{"rust.yml" => configured})
+    end
+
     test "a toolchain: key with no value is no input: null and ~ included" do
       wf = """
       jobs:
@@ -954,6 +1003,13 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
       assert [%{auto_fixable: true, fix_script: "fix-stale-reusable-pin.sh"}] =
                WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => plain})
+    end
+
+    test "a flow-style job's uses: continued on the next line is the call" do
+      wf = "jobs: { rust: { uses:\n    #{@rust_ci}@#{@broken_standards} } }\n"
+
+      assert [%{line: 1, auto_fixable: false, current_sha: @broken_standards}] =
+               WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
     end
 
     test "silent for another reusable at the same revision: the window is per reusable" do

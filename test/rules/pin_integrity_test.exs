@@ -270,6 +270,23 @@ defmodule Hypatia.Rules.PinIntegrityTest do
              ) == []
     end
 
+    test "a uses: entry of a flow step whose reference continues on the next line is a site" do
+      content =
+        "      - { name: x, uses:\n          github/codeql-action/init@#{@poison} }\n" <>
+          "    steps: [ { uses:\n        github/codeql-action/analyze@#{@poison}, name: y } ]\n"
+
+      assert [%{line: 2}, %{line: 4}] = PI.pi001_denylisted_pin(content, @policy)
+      assert {:ok, new_content, [_, _]} = PI.substitute_denylisted_pins(content, @policy)
+      assert new_content =~ "          github/codeql-action/init@#{@good} }\n"
+      assert new_content =~ "        github/codeql-action/analyze@#{@good}, name: y } ]\n"
+
+      # Control: an input's mapping is not a step — `with: { uses:` is data.
+      assert PI.pi001_denylisted_pin(
+               "        with: { uses:\n          github/codeql-action/init@#{@poison} }\n",
+               @policy
+             ) == []
+    end
+
     test "line_states/1 says which lines are text and which a cut-off quote leaves open" do
       states =
         Hypatia.Rules.PinSites.line_states(

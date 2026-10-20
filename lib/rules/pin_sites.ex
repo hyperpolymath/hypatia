@@ -127,21 +127,38 @@ defmodule Hypatia.Rules.PinSites do
   line with content, where YAML continues its scalar (`- uses:` then
   `    github/codeql-action/init@<sha>`; `continuations/1` steps over the
   blank and comment-only lines between), as `sites/1` returns one, its
-  offsets into `next_line`; nil unless `next_line` sits deeper than the key
-  and holds nothing but the reference, quoted or plain, and a comment. Both
-  lines are as `mask_lines/1` returns them.
+  offsets into `next_line`; nil otherwise. Both lines are as `mask_lines/1`
+  returns them.
+
+  The key is a block key (at the line's start or after its list dash), or an
+  entry of a flow mapping in a step or job position as `sites/1` reads one
+  (`steps: [ { uses:`, `- { name: x, uses:`). A block key's value sits deeper
+  than the key and holds nothing but the reference, quoted or plain, and a
+  comment; a flow entry's value is the reference up to the delimiter that
+  ends it (`,`, `}` or `]`), wherever the line is indented — inside a flow
+  collection the scalar continues on any line.
   """
   @spec continued_site(String.t(), String.t()) :: map() | nil
   def continued_site(key_line, next_line) when is_binary(key_line) and is_binary(next_line) do
-    with [_, col] <-
-           Regex.run(~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, head(key_line)),
-         true <- indent_of(next_line) > byte_size(col),
-         [_, {a_at, a_len}, {r_at, r_len}] <-
-           Regex.run(
-             ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/,
-             next_line,
-             return: :index
-           ) do
+    key = head(key_line)
+
+    value_re =
+      cond do
+        m = Regex.run(~r/^(\s*(?:-\s+)?)["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, key) ->
+          if indent_of(next_line) > byte_size(Enum.at(m, 1)),
+            do:
+              ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:#.*)?$/
+
+        Regex.match?(~r/[{,]\s*["']?uses["']?\s*:(?:\s+[&!]\S*)*\s*$/, key) and
+            structural?(String.trim_trailing(key) <> " ") ->
+          ~r/^\s*(?:[&!]\S*\s+)*["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.\/-]*?)@([^\s#"',}\]]+)["']?\s*(?:[,}\]]|#|$)/
+
+        true ->
+          nil
+      end
+
+    with %Regex{} <- value_re,
+         [_, {a_at, a_len}, {r_at, r_len}] <- Regex.run(value_re, next_line, return: :index) do
       %{
         action: binary_part(next_line, a_at, a_len),
         ref: binary_part(next_line, r_at, r_len),
@@ -151,6 +168,27 @@ defmodule Hypatia.Rules.PinSites do
     else
       _ -> nil
     end
+  end
+
+  @doc """
+  The flow depth at the start of each line of `content` — how many `[` and
+  `{` the lines above left open, as the walk of `line_states/1` counts them
+  (outside quoted scalars, comments and block-scalar content). A line at
+  depth 0 is block structure; one deeper sits inside a flow collection, even
+  when nothing on the line itself shows it (`steps: [`, then `{` alone, then
+  `uses: ...`).
+  """
+  @spec line_depths(String.t()) :: [non_neg_integer()]
+  def line_depths(content) when is_binary(content) do
+    content
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.map_reduce(%{q: nil, opened: nil, block: nil, depth: 0, pending: false}, fn
+      {line, n}, st ->
+        {_, next} = mask_file_line(line, n, st)
+        {st.depth, next}
+    end)
+    |> elem(0)
   end
 
   @doc """

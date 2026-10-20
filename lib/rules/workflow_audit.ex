@@ -1198,6 +1198,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
       kyaml? = normalised != content
       lines = String.split(normalised, "\n")
       continued = wf_continued_uses(lines)
+      # A step inside an open flow collection is a flow-style step even when
+      # its `{` stands alone on a line above (`steps: [`, `{`, `uses: ...`).
+      depths = Hypatia.Rules.PinSites.line_depths(normalised)
 
       lines
       |> Enum.with_index(1)
@@ -1223,7 +1226,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
                 true -> nil
               end
 
-            wf026_block_step_finding(filename, lines, line, number, sha, review)
+            in_flow? = Enum.at(depths, number - 1, 0) > 0
+            wf026_block_step_finding(filename, lines, line, number, sha, review, in_flow?)
 
           _ ->
             # Several flow-style steps may share one physical line
@@ -1240,10 +1244,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
     end)
   end
 
-  # The block-style path: `uses:` is a key on its own line.
-  defp wf026_block_step_finding(filename, lines, line, number, sha, review) do
+  # The block-style path: `uses:` is a key on its own line. A step whose
+  # opener is `- {`, or which sits inside a flow collection opened on an
+  # earlier line (`in_flow?`), is a flow-style step: the fixer refuses it.
+  defp wf026_block_step_finding(filename, lines, line, number, sha, review, in_flow?) do
     {step, key_indent, opener} = wf026_step(lines, number)
-    flow_item? = Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
+    flow_item? = in_flow? or Regex.match?(~r/^\s*-\s+\{/, Enum.at(lines, opener - 1))
 
     cond do
       # `uses:` nested under `env:`, inside a `run: |` script or under
@@ -1283,7 +1289,15 @@ defmodule Hypatia.Rules.WorkflowAudit do
     with {:ok, open_col} <- wf_flow_opener_before(line, uses_at),
          true <- wf026_inline_step_at?(lines, line, number, open_col),
          {:ok, interior, _} <- wf_flow_interior(lines, number, open_col) do
-      case wf026_with_entry(wf_flow_entries(interior), lines, {number, :eol}) do
+      # Where the step's `with` value stands, line and column: an alias
+      # there names the latest anchor before it, not one later on its line.
+      pos =
+        case wf_flow_entry_value_at(interior, "with") do
+          nil -> {number, :eol}
+          at -> wf_interior_pos(interior, at, number, open_col)
+        end
+
+      case wf026_with_entry(wf_flow_entries(interior), lines, pos) do
         {:toolchain, _} -> []
         verdict -> [wf026_finding(filename, number, sha, verdict, :flow_step, review)]
       end
@@ -1633,8 +1647,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # order: `&inputs`, `&inputs !!map`, `!!map &inputs`.
   defp wf026_anchored?(value), do: Regex.match?(~r/^(?:!\S*\s+)*&/, value)
 
-  # The `with` entry of a flow-style step's own entries; `pos` is the step's
-  # line, where an alias among them stands.
+  # The `with` entry of a flow-style step's own entries; `pos` is where its
+  # value stands, which decides the anchor an alias there names.
   defp wf026_with_entry(entries, lines, pos) do
     case List.keyfind(entries, "with", 0) do
       nil ->
@@ -2069,6 +2083,52 @@ defmodule Hypatia.Rules.WorkflowAudit do
     do: wf_flow_split(rest, sep, depth, q, [c | cur], out)
 
   # Drop a trailing ` # comment` that sits outside quotes.
+  # The byte offset in a flow mapping's interior at which the value of its
+  # top-level `key` entry starts, or nil. Entries are split at commas outside
+  # quotes and nested brackets.
+  defp wf_flow_entry_value_at(interior, key) do
+    re = ~r/^\s*["']?#{Regex.escape(key)}["']?\s*:\s*/
+
+    interior
+    |> wf_flow_entry_starts()
+    |> Enum.find_value(fn at ->
+      case Regex.run(re, binary_part(interior, at, byte_size(interior) - at), return: :index) do
+        [{0, len}] -> at + len
+        _ -> nil
+      end
+    end)
+  end
+
+  defp wf_flow_entry_starts(interior) do
+    interior
+    |> :binary.bin_to_list()
+    |> Enum.with_index()
+    |> Enum.reduce({[0], 0, nil}, fn
+      {c, _}, {acc, d, nil} when c in [?", ?'] -> {acc, d, c}
+      {c, _}, {acc, d, nil} when c in [?{, ?[] -> {acc, d + 1, nil}
+      {c, _}, {acc, d, nil} when c in [?}, ?]] -> {acc, d - 1, nil}
+      {?,, i}, {acc, 0, nil} -> {[i + 1 | acc], 0, nil}
+      {_, _}, {acc, d, nil} -> {acc, d, nil}
+      {q, _}, {acc, d, q} -> {acc, d, nil}
+      {_, _}, {acc, d, q} -> {acc, d, q}
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
+
+  # Offset `at` of a flow interior that `wf_flow_interior/3` read from the
+  # `{` at `open_col` of line `number`, as `{line, column}` in the file.
+  defp wf_interior_pos(interior, at, number, open_col) do
+    case :binary.matches(binary_part(interior, 0, at), "\n") do
+      [] ->
+        {number, open_col + 1 + at}
+
+      nls ->
+        {nl, _} = List.last(nls)
+        {number + length(nls), at - nl - 1}
+    end
+  end
+
   # Does the line's own `uses:` value carry YAML node properties — an anchor
   # or tag before the reference (`uses: &rust a/b@x`, `uses: !!str a/b@x`)?
   defp wf_node_properties?(line),
