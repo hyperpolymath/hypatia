@@ -45,7 +45,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -93,7 +93,7 @@ jobs:
           toolchain: stable
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: ". -> target"
           cache-on-failure: true
@@ -125,7 +125,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: ". -> target"
           cache-on-failure: true
