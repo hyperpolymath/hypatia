@@ -472,7 +472,7 @@ jobs:
       # ======================================================================
 
       - name: Gate A — verified credentials fail the gate
-        uses: trufflesecurity/trufflehog@v3.99.2
+        uses: trufflesecurity/trufflehog@v3.99.3
         with:
           path: ./
           base: ${{ steps.th.outputs.base }}
@@ -481,7 +481,7 @@ jobs:
           extra_args: --results=verified
 
       - name: Gate B — private keys fail the gate even when unverified
-        uses: trufflesecurity/trufflehog@v3.99.2
+        uses: trufflesecurity/trufflehog@v3.99.3
         with:
           path: ./
           base: ${{ steps.th.outputs.base }}
