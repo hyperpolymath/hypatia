@@ -560,13 +560,22 @@ defmodule Hypatia.Rules.ActionsLockTest do
     assert lock.dependencies["acme/bar@v1"].hostname == "github.com"
     assert lock.dependencies["acme/foo@v1"].hostname == nil
 
-    # Disagreeing identities are caught in either spelling: foo misnumbered
-    # while bar names the host...
-    assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
-             ActionsLock.parse(String.replace(base, "owner_id: 2\n        repo_id: 21", "owner_id: 1\n        repo_id: 21"))
+    # Disagreeing identities are caught in either spelling. `disagreeing` is
+    # `base` with foo's owner_id misnumbered (bar is finalised first, so it is
+    # the "existing" side of the mismatch).
+    disagreeing =
+      String.replace(base, "owner_id: 2\n        repo_id: 21", "owner_id: 1\n        repo_id: 21")
 
-    # ...and with the hostname omitted entirely from bar as well.
-    both_implicit = String.replace(base, "        hostname: 'github.com'\n", "")
+    assert disagreeing != base
+
+    # ...bar names the host explicitly...
+    assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
+             ActionsLock.parse(disagreeing)
+
+    # ...and bar omits it, which must not change the answer.
+    both_implicit = String.replace(disagreeing, "        hostname: 'github.com'\n", "")
+
+    assert both_implicit != disagreeing
 
     assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
              ActionsLock.parse(both_implicit)
