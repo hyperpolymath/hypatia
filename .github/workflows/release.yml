@@ -129,7 +129,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: ". -> target"
           key: ${{ matrix.target }}
