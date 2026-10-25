@@ -120,7 +120,6 @@ permissions:
 jobs:
   score:
     name: RSR oracle
-    if: ${{ github.event_name != 'pull_request_target' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -128,6 +127,17 @@ jobs:
       score: ${{ steps.oracle.outputs.score }}
       provisional: ${{ steps.oracle.outputs.provisional }}
     steps:
+      # `pull_request_target` runs with the base repository's privileges and its
+      # secrets while the pull request's content is attacker-controlled. The
+      # oracle checks out and compiles code, so it refuses that context outright.
+      # Loudly: a skipped job is a green tick with no scorecard, which is the
+      # "check that cannot fail" shape this repository already knows too well.
+      - name: Refuse privileged pull_request_target context
+        if: ${{ github.event_name == 'pull_request_target' }}
+        run: |
+          echo "::error::the RSR oracle compiles code and must not run under pull_request_target; call it from a pull_request or push workflow instead"
+          exit 1
+
       # 1. The repository being scored (the caller's).
       #
       # Into `repo/`, not the workspace root: the two helper checkouts below
@@ -157,31 +167,39 @@ jobs:
           persist-credentials: false
 
       # 2. The SSOT. Sibling of `repo/`, so it is outside the scored tree.
-      # Validate caller-provided source before checkout: this workflow is reusable
-      # and must not allow arbitrary repository/ref checkout in untrusted contexts.
-      - name: Validate standards source
+      #
+      # Validated before checkout: the canon is the thing being scored against,
+      # so "point it at my own fork" is a way to award yourself any score you
+      # like. The default (empty ref) is the standards default branch, which is
+      # what the generated gate does today; anything else must be immutable.
+      - name: Validate the standards source
         env:
           STANDARDS_REPOSITORY: ${{ inputs.standards-repository }}
           STANDARDS_REF: ${{ inputs.standards-ref }}
         run: |
-          set -eu
-          case "${STANDARDS_REPOSITORY}" in
-            "hyperpolymath/standards")
-              ;;
-            *)
-              echo "Untrusted standards repository: ${STANDARDS_REPOSITORY}" >&2
-              exit 1
-              ;;
-          esac
-
-          case "${STANDARDS_REF}" in
-            refs/tags/*|refs/heads/main)
-              ;;
-            *)
-              echo "Untrusted standards ref: ${STANDARDS_REF}" >&2
-              exit 1
-              ;;
-          esac
+          set -euo pipefail
+          if [ "$STANDARDS_REPOSITORY" != "hyperpolymath/standards" ]; then
+            echo "::error::refusing standards source '${STANDARDS_REPOSITORY}': the canon is hyperpolymath/standards"
+            exit 1
+          fi
+          # Empty = the repository's default branch (documented default).
+          # Otherwise: a full/abbreviated commit SHA or a release tag. A branch
+          # name is refused — the same reason the oracle itself is pinned.
+          if [ -z "$STANDARDS_REF" ]; then
+            echo "standards ref: default branch"
+          else
+            case "$STANDARDS_REF" in
+              refs/tags/*|v[0-9]*) : ;;
+              refs/heads/*|main|master|HEAD|develop)
+                echo "::error::refusing standards ref '${STANDARDS_REF}': pin a commit SHA or a release tag"
+                exit 1 ;;
+              *) printf '%s' "$STANDARDS_REF" | grep -Eq '^[0-9a-f]{7,40}$' || {
+                   echo "::error::refusing standards ref '${STANDARDS_REF}': not a commit SHA or release tag"
+                   exit 1
+                 } ;;
+            esac
+            echo "standards ref: ${STANDARDS_REF}"
+          fi
 
       - name: Checkout standards (SSOT source)
         uses: actions/checkout@v7.0.1

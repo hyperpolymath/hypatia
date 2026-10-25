@@ -89,7 +89,15 @@ must never be scored against a catalogue picked by accident.
 `standards-ref` is optional and empty means "the standards repo's default
 branch", which is what the generated gate does today. Pin it if you want your
 canon frozen as well — a pinned oracle scored against an unpinned canon is only
-half a contract.
+half a contract. When set, it must be an immutable ref (commit SHA or release
+tag): a branch is refused, and the repository must be `hyperpolymath/standards`.
+The canon is what you are scored against; a caller-supplied canon would let a
+repository award itself any score it liked.
+
+The oracle also refuses to run under `pull_request_target`, and fails loudly
+rather than skipping: that trigger runs with the base repository's privileges
+while the pull request's content is attacker-controlled, and the oracle checks
+out and compiles code.
 
 A `target-path` that does not exist in your repository is an error, not a score:
 the engine treats a missing tree as a sparse repository, so a typo would
