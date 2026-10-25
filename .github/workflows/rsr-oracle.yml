@@ -136,12 +136,20 @@ jobs:
           fetch-depth: 0
 
       # 2. The SSOT.
+      #
+      # Both helper checkouts go OUTSIDE the workspace on purpose. Anywhere
+      # inside it they land inside the tree being scored: the oracle walks the
+      # repository recursively, so `_standards` and `_hypatia` would be scored
+      # as if they were the caller's own files — the oracle grading itself, and
+      # the canon inflating the caller's own criteria coverage. The previous
+      # generated gate used `../_standards`, which is why the working-directory
+      # path in the scoring step below is `$RUNNER_TEMP`.
       - name: Checkout standards (SSOT source)
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.standards-repository }}
           ref: ${{ inputs.standards-ref }}
-          path: _standards
+          path: ${{ runner.temp }}/_standards
 
       # 3. The oracle, at the commit the caller pinned. Not a branch. Ever.
       - name: Checkout hypatia (the pinned oracle)
@@ -149,7 +157,7 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: _hypatia
+          path: ${{ runner.temp }}/_hypatia
 
       - name: Setup Elixir/OTP
         uses: erlef/setup-beam@v1.24.1
@@ -162,18 +170,46 @@ jobs:
           echo "oracle: ${{ job.workflow_repository }}@${{ job.workflow_sha }}" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "oracle workflow: ${{ job.workflow_ref }}" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # A pin that cannot be resolved must not fall through to something else.
-      - name: Verify the pin resolved
+      # A pin that cannot be resolved must not fall through to something else —
+      # and a *branch* that resolves is not a pin either.
+      #
+      # `job.workflow_sha` is the resolved commit whatever the caller wrote, so
+      # `@main` passes a bare 40-hex check and then silently follows a moving
+      # branch once a week. The caller's ref is recoverable from
+      # `job.workflow_ref` (`owner/repo/.github/workflows/rsr-oracle.yml@<ref>`),
+      # and that is what gets checked.
+      - name: Verify the pin is a commit, not a branch
+        env:
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
           set -euo pipefail
-          pinned='${{ job.workflow_sha }}'
+          pinned="$WORKFLOW_SHA"
+          ref="${WORKFLOW_REF##*@}"
+          # Accept a full or abbreviated SHA. Tags are immutable once cut and are
+          # allowed, but must be spelled `refs/tags/...` or a plain `vX.Y.Z`, so
+          # a tag can never be confused with a branch of the same name.
+          ok=0
+          case "$ref" in
+            refs/tags/*|v[0-9]*) ok=1 ;;
+            refs/heads/*|main|master|HEAD|develop) ok=0 ;;
+            *) printf '%s' "$ref" | grep -Eq '^[0-9a-f]{7,40}$' && ok=1 ;;
+          esac
+          if [ "$ok" != "1" ]; then
+            echo "::error::the oracle is pinned to '${ref}', which is not an immutable ref. Pin a full commit SHA (or a release tag); '@main' is what let one broken commit break every consumer at once."
+            exit 1
+          fi
           if ! printf '%s' "$pinned" | grep -Eq '^[0-9a-f]{40}$'; then
             echo "::error::could not resolve the pinned oracle SHA (got '${pinned}'); refusing to compile an unpinned oracle"
             exit 1
           fi
+          {
+            echo "pinned ref: \`${ref}\`"
+            echo "resolved commit: \`${pinned}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compile the oracle
-        working-directory: _hypatia
+        working-directory: ${{ runner.temp }}/_hypatia
         run: |
           set -euo pipefail
           mix deps.get
@@ -181,13 +217,29 @@ jobs:
 
       - name: Score this repo against the canon
         id: oracle
-        working-directory: _hypatia
+        working-directory: ${{ runner.temp }}/_hypatia
+        env:
+          # Nothing user-supplied is interpolated into the script body: an input
+          # spliced into `run:` is a shell injection point.
+          TARGET_PATH: ${{ inputs.target-path }}
+          SSOT_INPUT: ${{ inputs.ssot }}
+          WRITE_SCORECARD: ${{ inputs.write }}
+          FAIL_UNDER: ${{ inputs.fail-under }}
         run: |
-          set -euo pipefail
-          target="$GITHUB_WORKSPACE/${{ inputs.target-path }}"
-          ssot='${{ inputs.ssot }}'
+          set -uo pipefail
+          target="$GITHUB_WORKSPACE/${TARGET_PATH}"
+          ssot="${SSOT_INPUT}"
           if [ -z "$ssot" ]; then
-            ssot="$GITHUB_WORKSPACE/_standards/0-canon/rsr/rsr-criteria-v2.a2ml"
+            ssot="${RUNNER_TEMP}/_standards/0-canon/rsr/rsr-criteria-v2.a2ml"
+          fi
+
+          # A missing target must not be scored. The engine treats a missing tree
+          # as a sparse repository rather than an error, so a typo in
+          # `target-path` would publish a confident-looking scorecard for a
+          # directory that does not exist.
+          if [ ! -d "$target" ]; then
+            echo "::error::target path '${TARGET_PATH}' does not exist in the checked-out repository — refusing to score nothing"
+            exit 1
           fi
           if [ ! -f "$ssot" ]; then
             echo "::error::no criteria SSOT at ${ssot} — refusing to score against an unverified catalogue"
@@ -195,20 +247,34 @@ jobs:
           fi
 
           args=(hypatia.rsr_score "$target" --ssot "$ssot")
-          [ '${{ inputs.write }}' = 'true' ] && args+=(--write)
-          if [ -n '${{ inputs.fail-under }}' ]; then
-            args+=(--fail-under '${{ inputs.fail-under }}')
-          fi
+          [ "$WRITE_SCORECARD" = "true" ] && args+=(--write)
+          [ -n "$FAIL_UNDER" ] && args+=(--fail-under "$FAIL_UNDER")
 
+          # Capture the status BEFORE reading the report. The task writes the
+          # scorecard and the report line, then exits non-zero when `--fail-under`
+          # is missed or the scorecard is provisional; with `-e` the step would
+          # die at this line and publish no tier, score or provisional output at
+          # all — precisely when a caller most wants them.
+          set +e
           mix "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/oracle.log"
+          status=${PIPESTATUS[0]}
+          set -e
 
           line=$(grep -m1 'tier=' "$RUNNER_TEMP/oracle.log" || true)
+          if [ -z "$line" ]; then
+            echo "::error::the oracle produced no scorecard line (exit ${status})"
+            exit 1
+          fi
           {
             echo "tier=$(printf '%s' "$line" | sed -n 's/.*tier=\([a-z]*\).*/\1/p')"
             echo "score=$(printf '%s' "$line" | sed -n 's/.*score=\([0-9.]*\)%.*/\1/p')"
             echo "provisional=$(printf '%s' "$line" | sed -n 's/.*provisional=\([a-z]*\).*/\1/p')"
           } >> "$GITHUB_OUTPUT"
           printf '%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+
+          # The caller asked for a gate; the gate still fails the job. The
+          # difference is that the outputs above were published first.
+          exit "$status"
 
       # Deliberately always, and deliberately non-fatal: the point is to publish
       # the honest scorecard even when the oracle itself failed or the tier was

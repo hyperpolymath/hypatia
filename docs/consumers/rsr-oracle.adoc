@@ -44,9 +44,21 @@ safe when something else slips through anyway.
 
 Release tags (`v*`) are cut from tags by `.github/workflows/release.yml`; a tag
 is an acceptable pin for consumers that want a human-readable version, and the
-workflow will still resolve it to the commit it names. A full SHA is the
-strongest pin and the one used by
+workflow resolves it to the commit it names. A full SHA is the strongest pin and
+the one used by
 `hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml`.
+
+The workflow enforces this rather than trusting the comment: it reads the ref
+you wrote (from `job.workflow_ref`) and **fails** on `refs/heads/*`, `main`,
+`master`, `develop` or `HEAD`. Checking only the resolved commit would not be
+enough — `@main` also resolves to a 40-character SHA — so the ref itself is
+what gets tested.
+
+Both helper checkouts (the oracle, and the standards tree) are cloned into
+`$RUNNER_TEMP`, *outside* the workspace. Anywhere inside it they would fall
+inside the tree being scored: the oracle walks the repository recursively, so
+the canon and the oracle itself would be counted as part of your repository —
+the oracle grading itself.
 
 == Rule 2 — the SSOT is always explicit
 
@@ -77,10 +89,16 @@ branch", which is what the generated gate does today. Pin it if you want your
 canon frozen as well — a pinned oracle scored against an unpinned canon is only
 half a contract.
 
+A `target-path` that does not exist in your repository is an error, not a score:
+the engine treats a missing tree as a sparse repository, so a typo would
+otherwise publish a confident-looking scorecard for nothing.
+
 == Rule 3 — gating is opt-in
 
 Omitting `fail-under` publishes the scorecard and exits `0` even when the tier
-is low or the scorecard is provisional. That is deliberate: the scorecard is the
+is low or the scorecard is provisional. When you do set it, the tier/score/
+provisional outputs are published *before* the job fails, so a red run still
+tells you what it scored. That is deliberate: the scorecard is the
 product; the tier gate is a policy each repository adopts when it is ready. A
 *provisional* scorecard (automatable coverage < 100%) never satisfies
 `--fail-under`, whatever tier it reports.
