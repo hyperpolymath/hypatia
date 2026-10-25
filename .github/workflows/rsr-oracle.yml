@@ -140,7 +140,14 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ github.repository }}
-          ref: ${{ inputs.target-ref != '' && inputs.target-ref || github.event.pull_request.head.sha || github.sha }}
+          # `github.sha` is the commit under test (the merge commit for a pull
+          # request). Deliberately NOT `github.event.pull_request.head.sha`:
+          # that expression is how a caller-supplied PR head gets checked out
+          # and then compiled in a workflow it did not define, which is the
+          # `actions/untrusted-checkout` shape. A caller that really wants the
+          # head passes `target-ref` explicitly, which makes the intent explicit
+          # and auditable in its own workflow.
+          ref: ${{ inputs.target-ref != '' && inputs.target-ref || github.sha }}
           path: repo
           fetch-depth: 0
           # The tree being scored is caller (often pull-request) content. Never
