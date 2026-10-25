@@ -128,28 +128,28 @@ jobs:
       provisional: ${{ steps.oracle.outputs.provisional }}
     steps:
       # 1. The repository being scored (the caller's).
+      #
+      # Into `repo/`, not the workspace root: the two helper checkouts below
+      # have to live somewhere, `actions/checkout` refuses paths outside the
+      # workspace, and anything at the workspace root other than the caller's
+      # files would be inside the tree the oracle walks — it would score the
+      # oracle and the canon as if they were the caller's own files. Scoring
+      # `repo/` puts them outside it.
       - name: Checkout repository under test
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ github.repository }}
           ref: ${{ inputs.target-ref != '' && inputs.target-ref || github.event.pull_request.head.sha || github.sha }}
+          path: repo
           fetch-depth: 0
 
-      # 2. The SSOT.
-      #
-      # Both helper checkouts go OUTSIDE the workspace on purpose. Anywhere
-      # inside it they land inside the tree being scored: the oracle walks the
-      # repository recursively, so `_standards` and `_hypatia` would be scored
-      # as if they were the caller's own files — the oracle grading itself, and
-      # the canon inflating the caller's own criteria coverage. The previous
-      # generated gate used `../_standards`, which is why the working-directory
-      # path in the scoring step below is `$RUNNER_TEMP`.
+      # 2. The SSOT. Sibling of `repo/`, so it is outside the scored tree.
       - name: Checkout standards (SSOT source)
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.standards-repository }}
           ref: ${{ inputs.standards-ref }}
-          path: ${{ runner.temp }}/_standards
+          path: _standards
 
       # 3. The oracle, at the commit the caller pinned. Not a branch. Ever.
       - name: Checkout hypatia (the pinned oracle)
@@ -157,7 +157,7 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: ${{ runner.temp }}/_hypatia
+          path: _hypatia
 
       - name: Setup Elixir/OTP
         uses: erlef/setup-beam@v1.24.1
@@ -209,7 +209,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compile the oracle
-        working-directory: ${{ runner.temp }}/_hypatia
+        working-directory: _hypatia
         run: |
           set -euo pipefail
           mix deps.get
@@ -217,7 +217,7 @@ jobs:
 
       - name: Score this repo against the canon
         id: oracle
-        working-directory: ${{ runner.temp }}/_hypatia
+        working-directory: _hypatia
         env:
           # Nothing user-supplied is interpolated into the script body: an input
           # spliced into `run:` is a shell injection point.
@@ -227,10 +227,10 @@ jobs:
           FAIL_UNDER: ${{ inputs.fail-under }}
         run: |
           set -uo pipefail
-          target="$GITHUB_WORKSPACE/${TARGET_PATH}"
+          target="$GITHUB_WORKSPACE/repo/${TARGET_PATH}"
           ssot="${SSOT_INPUT}"
           if [ -z "$ssot" ]; then
-            ssot="${RUNNER_TEMP}/_standards/0-canon/rsr/rsr-criteria-v2.a2ml"
+            ssot="$GITHUB_WORKSPACE/_standards/0-canon/rsr/rsr-criteria-v2.a2ml"
           fi
 
           # A missing target must not be scored. The engine treats a missing tree
@@ -282,7 +282,7 @@ jobs:
       - name: Show the scorecard
         if: always()
         run: |
-          scorecard="$GITHUB_WORKSPACE/${{ inputs.target-path }}/.machine_readable/scorecards/rsr.scorecard.a2ml"
+          scorecard="$GITHUB_WORKSPACE/repo/${{ inputs.target-path }}/.machine_readable/scorecards/rsr.scorecard.a2ml"
           if [ -f "$scorecard" ]; then
             {
               echo '## RSR scorecard'

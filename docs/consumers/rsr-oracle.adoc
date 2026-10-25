@@ -54,11 +54,13 @@ you wrote (from `job.workflow_ref`) and **fails** on `refs/heads/*`, `main`,
 enough — `@main` also resolves to a 40-character SHA — so the ref itself is
 what gets tested.
 
-Both helper checkouts (the oracle, and the standards tree) are cloned into
-`$RUNNER_TEMP`, *outside* the workspace. Anywhere inside it they would fall
-inside the tree being scored: the oracle walks the repository recursively, so
-the canon and the oracle itself would be counted as part of your repository —
-the oracle grading itself.
+Your repository is checked out into `repo/`, with the two helper checkouts
+(oracle, canon) as its siblings. They must be outside the scored tree: the
+oracle walks a repository recursively, so a canon and an oracle sitting inside
+it would be counted as your files — the oracle grading itself. The `path` of
+each is worth knowing if you reference the scorecard in a later step: it is
+written to `repo/<target-path>/.machine_readable/scorecards/rsr.scorecard.a2ml`
+and also printed to the job summary.
 
 == Rule 2 — the SSOT is always explicit
 
