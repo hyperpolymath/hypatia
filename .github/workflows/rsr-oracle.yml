@@ -120,6 +120,7 @@ permissions:
 jobs:
   score:
     name: RSR oracle
+    if: ${{ github.event_name != 'pull_request_target' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
