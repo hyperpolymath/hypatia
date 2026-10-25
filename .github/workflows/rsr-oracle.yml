@@ -210,7 +210,19 @@ jobs:
           persist-credentials: false
 
       # 3. The oracle, at the commit the caller pinned. Not a branch. Ever.
+      - name: Validate oracle checkout pin
+        id: validate_oracle_pin
+        env:
+          ORACLE_SHA: ${{ job.workflow_sha }}
+        run: |
+          if ! [[ "${ORACLE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::workflow_sha must be a full 40-character commit SHA"
+            exit 1
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
       - name: Checkout hypatia (the pinned oracle)
+        if: ${{ steps.validate_oracle_pin.outputs.ok == 'true' }}
         uses: actions/checkout@v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
