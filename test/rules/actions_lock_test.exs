@@ -179,7 +179,7 @@ defmodule Hypatia.Rules.ActionsLockTest do
       assert {:error, {:line, _, :malformed_dependency_entry}} = ActionsLock.parse(unknown)
     end
 
-    test "accepts and records the optional dependency hostname (GHE.com pins)" do
+    test "accepts and records the optional dependency hostname (home host only)" do
       lock =
         String.replace(
           @v3_lock,
@@ -191,9 +191,14 @@ defmodule Hypatia.Rules.ActionsLockTest do
       assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "github.com"
       assert ActionsLock.pinned?(parsed, "ci.yml", "actions/checkout@v7.0.1")
 
+      # A well-formed tenant host is refused by POLICY (see the moduledoc:
+      # owner_id/repo_id are host-scoped and the association keys carry no
+      # host). Asserting that it parses would mean the oracle accepts a pin it
+      # cannot associate with a workflow.
       tenant = String.replace(lock, "github.com", "octocorp.ghe.com")
-      assert {:ok, parsed} = ActionsLock.parse(tenant)
-      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "octocorp.ghe.com"
+
+      assert {:error, {:line, _, {:unsupported_dependency_hostname, "octocorp.ghe.com"}}} =
+               ActionsLock.parse(tenant)
 
       assert {:ok, parsed} = ActionsLock.parse(@v3_lock)
       assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == nil
@@ -227,9 +232,13 @@ defmodule Hypatia.Rules.ActionsLockTest do
       assert {:error, {:line, _, {:owner_identity_mismatch, "actions", 44_036_562, 99}}} =
                ActionsLock.parse(same_host)
 
+      # The cross-host case is unreachable: a tenant hostname is refused before
+      # identity scoping is consulted, precisely because two hosts cannot be
+      # told apart in the `owner/repo@ref` association keys.
       cross_host = String.replace(two_pins, "HOST", "hostname: 'octocorp.ghe.com'")
-      assert {:ok, parsed} = ActionsLock.parse(cross_host)
-      assert parsed.dependencies["actions/setup-node@v7.0.0"].hostname == "octocorp.ghe.com"
+
+      assert {:error, {:line, _, {:unsupported_dependency_hostname, "octocorp.ghe.com"}}} =
+               ActionsLock.parse(cross_host)
     end
 
     test "refuses a malformed, repeated, or v0.0.2 hostname" do
@@ -264,7 +273,9 @@ defmodule Hypatia.Rules.ActionsLockTest do
                ActionsLock.parse(twice)
 
       v2 = String.replace(with_host.("github.com"), "v0.0.3", "v0.0.2")
-      assert {:error, {:line, _, {:hostname_requires_v0_0_3, "v0.0.2"}}} = ActionsLock.parse(v2)
+
+      assert {:error, {:line, _, {:hostname_not_in_version, "v0.0.2"}}} =
+               ActionsLock.parse(v2)
     end
 
     test "negative control: a version past v0.0.3 is still refused" do
@@ -466,10 +477,23 @@ defmodule Hypatia.Rules.ActionsLockTest do
     end
 
     assert {:ok, _} = ActionsLock.parse(with_host.("github.com"))
-    assert {:ok, _} = ActionsLock.parse(with_host.("acme.ghe.com"))
+
+    # Well-formed *.ghe.com tenant hosts are refused by POLICY, not by the
+    # grammar: owner_id/repo_id are host-scoped and the `owner/repo@ref`
+    # association keys carry no host, so accepting a tenant host would let a
+    # tenant pin be associated with a github.com workflow. This module's
+    # moduledoc has said "fail closed" since the reorg; the assertions here
+    # used to accept them, written against an implementation that never
+    # shipped and never compiled.
+    assert {:error, {:line, _, {:unsupported_dependency_hostname, "acme.ghe.com"}}} =
+             ActionsLock.parse(with_host.("acme.ghe.com"))
 
     long_label = String.duplicate("a", 64) <> ".ghe.com"
-    assert {:ok, _} = ActionsLock.parse(with_host.(String.duplicate("a", 63) <> ".ghe.com"))
+
+    # 63 characters is a legal DNS label, so it fails as a policy choice; 64 is
+    # not, so it fails as malformed.
+    assert {:error, {:line, _, {:unsupported_dependency_hostname, _}}} =
+             ActionsLock.parse(with_host.(String.duplicate("a", 63) <> ".ghe.com"))
 
     for bad <- [
           "GitHub.com",
@@ -500,7 +524,8 @@ defmodule Hypatia.Rules.ActionsLockTest do
         "        repo_id: 197814629\n        hostname: 'github.com'\n"
       )
 
-    assert {:error, {:line, _, :malformed_dependency_hostname}} = ActionsLock.parse(v2_with_host)
+    assert {:error, {:line, _, {:hostname_not_in_version, "v0.0.2"}}} =
+             ActionsLock.parse(v2_with_host)
   end
 
   test "scopes owner and repository identities to their v0.0.3 host" do
@@ -584,7 +609,11 @@ defmodule Hypatia.Rules.ActionsLockTest do
       assert parsed.version == "v0.0.3"
       assert map_size(parsed.workflows) == 57
       assert map_size(parsed.dependencies) == 28
-      assert Enum.all?(Map.values(parsed.dependencies), &(&1.hostname == "github.com"))
+      # This fixture predates gh-actions-lock emitting `hostname:`, so every
+      # dependency records nil — which IS the home host (`github.com`); the
+      # field is deliberately not defaulted to the string. See
+      # finalize_dependency/1 and scope_to_host/2.
+      assert Enum.all?(Map.values(parsed.dependencies), &is_nil(&1.hostname))
 
       checkout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
       assert ActionsLock.pinned?(parsed, "actions-lock-gate.yml", checkout)
@@ -598,11 +627,14 @@ defmodule Hypatia.Rules.ActionsLockTest do
              )
     end
 
-    test "an omitted hostname binds the pin to github.com" do
+    test "an omitted hostname binds the pin to github.com (recorded as nil)" do
       omitted = String.replace(@v003_lock, "        hostname: 'github.com'\n", "")
 
       assert {:ok, parsed} = ActionsLock.parse(omitted)
-      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "github.com"
+      # nil IS the home host in the record. Defaulting the stored field to the
+      # string would break scope_to_host/2, which compares it against the raw
+      # value each record carries; see finalize_dependency/1.
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == nil
       assert ActionsLock.pinned?(parsed, "ci.yml", "actions/checkout@v7.0.1")
     end
 
@@ -615,7 +647,7 @@ defmodule Hypatia.Rules.ActionsLockTest do
 
     test "v0.0.2 lockfiles default to github.com and may not carry a hostname" do
       assert {:ok, parsed} = ActionsLock.parse(@valid_lock)
-      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == "github.com"
+      assert parsed.dependencies["actions/checkout@v7.0.1"].hostname == nil
 
       v002 = String.replace(@v003_lock, "v0.0.3", "v0.0.2")
 
