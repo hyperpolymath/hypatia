@@ -284,6 +284,86 @@ jobs:
           retention-days: 14
 
   # ============================================================================
+  # Elixir compile gate — runs the SAME toolchain the estate's dogfood gate uses
+  # ============================================================================
+  #
+  # Why this job exists (2026-10-25, hyperpolymath/secret-types PR #11):
+  #
+  # `lib/rules/actions_lock.ex` did not compile at all. Line 170 was
+  # `version in @supported_versions ->`, a guard expression used as a bare
+  # `case` clause head, which expands to a match against `:erlang.=:=/2`:
+  #
+  #     error: cannot invoke remote function :erlang.=:=/2 inside a match
+  #     └─ lib/rules/actions_lock.ex:170
+  #     ** (CompileError) ... expanding macro: Kernel.in/2
+  #
+  # The break landed on 2026-10-20 in #927 and stayed on `main` for five days.
+  # Every "RSR oracle — dogfood this repo" job in the estate died on
+  # `mix deps.get && mix compile`, so ~400 consumer repositories lost their RSR
+  # scorecard without a single hypatia check going red for the right reason:
+  #
+  #   * this workflow had no Elixir job at all — Rust and Haskell only;
+  #   * tests.yml has `pull_request: null`, so its Elixir jobs never ran on a PR;
+  #   * escript-soundness.yml does compile, but it was already red for unrelated
+  #     reasons, so a hard CompileError was indistinguishable from the noise.
+  #
+  # A tree that cannot compile cannot run a test, so the regression test for
+  # this class of defect is the compile itself, on the versions the consumers
+  # actually use. Do not "fix" a red run here by dropping --warnings-as-errors
+  # or by moving the job behind a condition: that restores the silence.
+  elixir-compile:
+    name: Elixir Compile (dogfood toolchain)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      # Pinned to the exact versions in the estate dogfood gate
+      # (.github/workflows/dogfood-gate.yml in each consumer repo, job
+      # "RSR oracle — dogfood this repo"). Bump both together or the gate
+      # stops testing what consumers run.
+      - name: Setup Elixir/OTP (identical to the dogfood gate)
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '28.3'
+
+      - name: Restore Mix cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            deps
+            _build
+          key: mix-dogfood-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-dogfood-${{ runner.os }}-
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      - name: Compile (warnings are errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Rule module regression tests
+        run: |
+          mix test \
+            test/rules/actions_lock_test.exs \
+            test/rules/actions_lock_closure_corpus_test.exs \
+            test/rules/rsr_conformance_test.exs
+
+      # The consumers' invocation, verbatim: the oracle is called with an
+      # EXPLICIT --ssot. The default SSOT resolution is deliberately not
+      # exercised here — it depends on the layout of the checkout that hosts
+      # hypatia, which is the consumer's business, not this repo's. Passing the
+      # bundled fixture keeps the SSOT explicit, exactly as the gate does.
+      - name: RSR oracle smoke (consumer invocation, explicit SSOT)
+        run: |
+          mix hypatia.rsr_score . \
+            --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
+
+  # ============================================================================
   # Combined Status Check
   # ============================================================================
   ci-status:
@@ -298,6 +378,7 @@ jobs:
       - haskell-build
       - haskell-lint
       - k9iser-validate
+      - elixir-compile
     if: always()
     steps:
       - name: Check all jobs status
@@ -307,7 +388,8 @@ jobs:
              [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
-             [[ "${{ needs.k9iser-validate.result }}" == "failure" ]]; then
+             [[ "${{ needs.k9iser-validate.result }}" == "failure" ]] || \
+             [[ "${{ needs.elixir-compile.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi

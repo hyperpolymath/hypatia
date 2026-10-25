@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# rsr-oracle.yml — the RSR v2.0 conformance oracle as a reusable workflow.
+#
+# Consume it PINNED BY FULL COMMIT SHA, the same way consumers already call
+# hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml:
+#
+#     jobs:
+#       rsr-score:
+#         uses: hyperpolymath/hypatia/.github/workflows/rsr-oracle.yml@<40-char SHA>
+#         with:
+#           standards-ref: <40-char SHA of the standards tree carrying the SSOT>
+#           # fail-under: gold      # optional; omit to publish only
+#
+# WHY THE PIN IS THE INTERFACE (2026-10-25):
+#
+# The generated dogfood gate in each consumer checked out hyperpolymath/hypatia
+# with no `ref:` and then ran `mix deps.get && mix compile`. That made the
+# default branch the de facto release: when `main` stopped compiling (a single
+# invalid `case` clause head in lib/rules/actions_lock.ex, 2026-10-20 → 10-25),
+# every consumer's "RSR oracle — dogfood this repo" job died in the same way,
+# and there was no version to roll back to and no version to hold still while
+# the fix was written. A mutable ref is not a dependency contract.
+#
+# This workflow closes that by making the caller's `@ref` the ONLY input to
+# which code runs: it checks out hypatia at `job.workflow_sha` — the commit of
+# *this* workflow file that the caller pinned — so a consumer that writes
+# `.../rsr-oracle.yml@abc123...` compiles and runs exactly abc123, not whatever
+# `main` happens to be at run time. There is no floating default anywhere in
+# this file, and there must never be one: adding `ref: main` as a fallback
+# would restore the exact defect this workflow exists to remove.
+#
+# (`job.workflow_sha`/`job.workflow_repository` are the reusable-workflow
+# identity context added 2026-04-23. `github.job_workflow_sha` does not exist;
+# don't "simplify" this to it — that silently evaluates to an empty string.)
+#
+# SSOT CONTRACT — UNCHANGED AND EXPLICIT:
+#
+# The oracle is always invoked with an explicit `--ssot`. Callers either pass
+# `ssot:` or get `<standards-path>/0-canon/rsr/rsr-criteria-v2.a2ml`, which is
+# the post-reorg home of the criteria file and the path the estate's dogfood
+# gate passes today. The task's own default resolution is intentionally NOT
+# relied on here: it depends on the layout of the checkout that hosts hypatia
+# (#695), and a consumer must never be scored against a fixture that happens to
+# be reachable from its workspace.
+name: RSR oracle (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      target-ref:
+        description: >-
+          Commit in the calling repository to score. Defaults to the PR head for
+          pull_request events, otherwise the event's commit.
+        type: string
+        required: false
+        default: ''
+      target-path:
+        description: Subdirectory of the calling repository to score ('.' for the repo root).
+        type: string
+        required: false
+        default: '.'
+      standards-repository:
+        description: Repository carrying the RSR criteria SSOT.
+        type: string
+        required: false
+        default: 'hyperpolymath/standards'
+      standards-ref:
+        description: >-
+          Immutable ref (full SHA) of the standards tree. Empty means the
+          standards repository's default branch, which is what the generated
+          dogfood gate does today; pin it when the caller wants its canon fixed.
+        type: string
+        required: false
+        default: ''
+      ssot:
+        description: >-
+          Explicit path to rsr-criteria-v2.a2ml. Defaults to
+          <standards-path>/0-canon/rsr/rsr-criteria-v2.a2ml.
+        type: string
+        required: false
+        default: ''
+      write:
+        description: Write .machine_readable/scorecards/rsr.scorecard.a2ml into the scored repo.
+        type: boolean
+        required: false
+        default: true
+      fail-under:
+        description: >-
+          Optional tier the score must reach (bronze|silver|gold|rhodium). Empty
+          publishes the scorecard without gating on it.
+        type: string
+        required: false
+        default: ''
+      elixir-version:
+        description: Elixir version for the oracle.
+        type: string
+        required: false
+        default: '1.19.4'
+      otp-version:
+        description: Erlang/OTP version for the oracle.
+        type: string
+        required: false
+        default: '28.3'
+    outputs:
+      tier:
+        description: Tier reported by the oracle (none|bronze|silver|gold|rhodium).
+        value: ${{ jobs.score.outputs.tier }}
+      score:
+        description: Score reported by the oracle, as a percentage string.
+        value: ${{ jobs.score.outputs.score }}
+      provisional:
+        description: Whether the scorecard was provisional (coverage < 100%).
+        value: ${{ jobs.score.outputs.provisional }}
+
+permissions:
+  contents: read
+
+jobs:
+  score:
+    name: RSR oracle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tier: ${{ steps.oracle.outputs.tier }}
+      score: ${{ steps.oracle.outputs.score }}
+      provisional: ${{ steps.oracle.outputs.provisional }}
+    steps:
+      # 1. The repository being scored (the caller's).
+      - name: Checkout repository under test
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ inputs.target-ref != '' && inputs.target-ref || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      # 2. The SSOT.
+      - name: Checkout standards (SSOT source)
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.standards-repository }}
+          ref: ${{ inputs.standards-ref }}
+          path: _standards
+
+      # 3. The oracle, at the commit the caller pinned. Not a branch. Ever.
+      - name: Checkout hypatia (the pinned oracle)
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: _hypatia
+
+      - name: Setup Elixir/OTP
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: ${{ inputs.elixir-version }}
+          otp-version: ${{ inputs.otp-version }}
+
+      - name: Record the pin
+        run: |
+          echo "oracle: ${{ job.workflow_repository }}@${{ job.workflow_sha }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "oracle workflow: ${{ job.workflow_ref }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # A pin that cannot be resolved must not fall through to something else.
+      - name: Verify the pin resolved
+        run: |
+          set -euo pipefail
+          pinned='${{ job.workflow_sha }}'
+          if ! printf '%s' "$pinned" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::could not resolve the pinned oracle SHA (got '${pinned}'); refusing to compile an unpinned oracle"
+            exit 1
+          fi
+
+      - name: Compile the oracle
+        working-directory: _hypatia
+        run: |
+          set -euo pipefail
+          mix deps.get
+          mix compile
+
+      - name: Score this repo against the canon
+        id: oracle
+        working-directory: _hypatia
+        run: |
+          set -euo pipefail
+          target="$GITHUB_WORKSPACE/${{ inputs.target-path }}"
+          ssot='${{ inputs.ssot }}'
+          if [ -z "$ssot" ]; then
+            ssot="$GITHUB_WORKSPACE/_standards/0-canon/rsr/rsr-criteria-v2.a2ml"
+          fi
+          if [ ! -f "$ssot" ]; then
+            echo "::error::no criteria SSOT at ${ssot} — refusing to score against an unverified catalogue"
+            exit 1
+          fi
+
+          args=(hypatia.rsr_score "$target" --ssot "$ssot")
+          [ '${{ inputs.write }}' = 'true' ] && args+=(--write)
+          if [ -n '${{ inputs.fail-under }}' ]; then
+            args+=(--fail-under '${{ inputs.fail-under }}')
+          fi
+
+          mix "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/oracle.log"
+
+          line=$(grep -m1 'tier=' "$RUNNER_TEMP/oracle.log" || true)
+          {
+            echo "tier=$(printf '%s' "$line" | sed -n 's/.*tier=\([a-z]*\).*/\1/p')"
+            echo "score=$(printf '%s' "$line" | sed -n 's/.*score=\([0-9.]*\)%.*/\1/p')"
+            echo "provisional=$(printf '%s' "$line" | sed -n 's/.*provisional=\([a-z]*\).*/\1/p')"
+          } >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+
+      # Deliberately always, and deliberately non-fatal: the point is to publish
+      # the honest scorecard even when the oracle itself failed or the tier was
+      # not met. Callers who want the failure still get it from the step above.
+      - name: Show the scorecard
+        if: always()
+        run: |
+          scorecard="$GITHUB_WORKSPACE/${{ inputs.target-path }}/.machine_readable/scorecards/rsr.scorecard.a2ml"
+          if [ -f "$scorecard" ]; then
+            {
+              echo '## RSR scorecard'
+              echo '```'
+              cat "$scorecard"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::no scorecard written — the oracle failed; see the step log"
+          fi

@@ -118,6 +118,25 @@ https://github.com/hyperpolymath/hypatia/wiki/Operations[Operations wiki page].
 Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
 `/metrics` endpoint and a bearer-authenticated `/api/*` on port 9090.
 
+=== Consuming the RSR oracle from another repository
+
+The RSR conformance oracle (`mix hypatia.rsr_score`) is consumed through one
+reusable workflow, **pinned by full commit SHA**:
+
+[source,yaml]
+----
+jobs:
+  rsr-score:
+    uses: hyperpolymath/hypatia/.github/workflows/rsr-oracle.yml@<40-char SHA>
+----
+
+The pin decides which oracle code runs: the workflow checks this repository out
+at `job.workflow_sha`, i.e. the commit you named, so a consumer never tracks
+`main`. The SSOT stays explicit — the workflow always passes `--ssot`, defaulting
+to `<standards>/0-canon/rsr/rsr-criteria-v2.a2ml`. See
+link:docs/consumers/rsr-oracle.adoc[docs/consumers/rsr-oracle.adoc], including
+why an unpinned consumer broke on 2026-10-25.
+
 == Integration with robot-repo-automaton
 
 Hypatia writes JSONL dispatch manifests; `dispatch-runner.sh` in gitbot-fleet consumes them and
@@ -144,6 +163,7 @@ by any dispatch path, and the CI blockage currently stopping the Rust lane.
 * link:docs/rules/catalogue.adoc[Rule catalogue] — every rule module and ID family
 * link:docs/DEBT-REGISTER.adoc[Debt register] — what is broken and what is not gated
 * link:docs/governance/ACTIONS-PINNING.adoc[Actions pinning decision] — how `uses:` refs are pinned here (actions.lock, not inline SHAs)
+* link:docs/consumers/rsr-oracle.adoc[Consuming the RSR oracle] — the SHA-pinned reusable workflow and the explicit-SSOT contract
 * https://github.com/hyperpolymath/hypatia/wiki[Wiki] — getting started, architecture, operations, FAQ
 * https://github.com/hyperpolymath/standards/blob/main/PALIMPSEST.adoc[Palimpsest Philosophy] — philosophical underpinnings (lives in hyperpolymath/standards)
 

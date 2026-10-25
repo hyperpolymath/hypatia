@@ -1,0 +1,106 @@
+= Consuming the RSR oracle
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+:toc: left
+:toclevels: 3
+
+The RSR v2.0 conformance oracle lives in this repository as
+`mix hypatia.rsr_score`. Consumer repositories (the `rsr-template-repo` tree and
+everything generated from it) reach it through one reusable workflow:
+
+[source,yaml]
+----
+jobs:
+  rsr-score:
+    uses: hyperpolymath/hypatia/.github/workflows/rsr-oracle.yml@<40-char SHA>
+    with:
+      standards-ref: <40-char SHA of hyperpolymath/standards>
+      # fail-under: gold      # optional; omit to publish only
+----
+
+== Rule 1 — pin a commit, never a branch
+
+The `@ref` you write after `rsr-oracle.yml` is the *only* thing that decides
+which oracle runs. The workflow checks hypatia out at `${{ job.workflow_sha }}`,
+the commit of the workflow file you pinned, so `@abc123…` compiles and runs
+exactly `abc123` — not whatever `main` happens to be at run time.
+
+Do not use `@main`. It is not a version; it is a moving pointer, and the estate
+paid for that on 2026-10-25:
+
+* 2026-10-20 — #927 added `version in @supported_versions ->` as a bare `case`
+  clause head in `lib/rules/actions_lock.ex`. That is a guard expression used as
+  a pattern, so the module did not compile at all.
+* Every consumer's generated dogfood gate checked out `hyperpolymath/hypatia`
+  with no `ref:` and ran `mix deps.get && mix compile`. All of them died in the
+  same step, in the same way, for five days.
+* There was no version to roll back to and no version to hold still while the
+  fix was written, because the ref in use was `main`.
+
+The fix (this repository's `elixir-compile` job) now compiles the tree on every
+PR using the exact toolchain the gate uses — Elixir `1.19.4` / OTP `28.3` — so
+the same defect cannot reach `main` again. The pin is what keeps a *consumer*
+safe when something else slips through anyway.
+
+Release tags (`v*`) are cut from tags by `.github/workflows/release.yml`; a tag
+is an acceptable pin for consumers that want a human-readable version, and the
+workflow will still resolve it to the commit it names. A full SHA is the
+strongest pin and the one used by
+`hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml`.
+
+== Rule 2 — the SSOT is always explicit
+
+The oracle is invoked with an explicit `--ssot`, always. Two ways to say which:
+
+[cols="1,2",options="header"]
+|===
+| Input | Behaviour
+
+| `ssot:`
+| Used verbatim. This is the escape hatch, and the exact invocation the
+  generated gate has used since the September 2026 standards reorg.
+
+| omitted
+| `<standards-path>/0-canon/rsr/rsr-criteria-v2.a2ml` — the post-reorg home of
+  the criteria file. The workflow refuses to run if that file is absent rather
+  than falling back to a fixture that happens to be reachable.
+
+|===
+
+The task's own default resolution (`priv/`, then `test/fixtures/`, then the
+built app's `priv/`) is deliberately *not* relied on by the workflow. It
+depends on the layout of the checkout that hosts hypatia (#695), and a consumer
+must never be scored against a catalogue picked by accident.
+
+`standards-ref` is optional and empty means "the standards repo's default
+branch", which is what the generated gate does today. Pin it if you want your
+canon frozen as well — a pinned oracle scored against an unpinned canon is only
+half a contract.
+
+== Rule 3 — gating is opt-in
+
+Omitting `fail-under` publishes the scorecard and exits `0` even when the tier
+is low or the scorecard is provisional. That is deliberate: the scorecard is the
+product; the tier gate is a policy each repository adopts when it is ready. A
+*provisional* scorecard (automatable coverage < 100%) never satisfies
+`--fail-under`, whatever tier it reports.
+
+== Local use
+
+The oracle is a mix task; there is nothing to install beyond Elixir 1.19.4 /
+OTP 28.3:
+
+[source,bash]
+----
+git clone https://github.com/hyperpolymath/hypatia
+git -C hypatia checkout <40-char SHA>     # the same pin the workflow uses
+cd hypatia
+mix deps.get && mix compile
+
+mix hypatia.rsr_score /path/to/repo \
+  --ssot /path/to/standards/0-canon/rsr/rsr-criteria-v2.a2ml \
+  --write
+----
+
+Options: `--ssot PATH`, `--standards PATH` (root of a standards checkout),
+`--write`, `--fail-under bronze|silver|gold|rhodium`.
