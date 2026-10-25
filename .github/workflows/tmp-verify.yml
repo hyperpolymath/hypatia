@@ -34,31 +34,23 @@ jobs:
     needs: [pinned-score, bad-target, gate-fail]
     if: always()
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Report caller-visible results
+      - name: Assert caller-visible results
         run: |
-          set -euo pipefail
-          body=$(cat <<'EOF'
-          ### Reusable workflow, caller-visible results
+          set -uo pipefail
+          fail=0
+          report() { printf '::notice title=%s::result=%s tier=%s score=%s provisional=%s\n' "$1" "$2" "$3" "$4" "$5"; }
+          report pinned     '${{ needs.pinned-score.result }}' '${{ needs.pinned-score.outputs.tier }}' '${{ needs.pinned-score.outputs.score }}' '${{ needs.pinned-score.outputs.provisional }}'
+          report bad-target '${{ needs.bad-target.result }}'   '${{ needs.bad-target.outputs.tier }}'   '${{ needs.bad-target.outputs.score }}'   '${{ needs.bad-target.outputs.provisional }}'
+          report gate-fail  '${{ needs.gate-fail.result }}'    '${{ needs.gate-fail.outputs.tier }}'    '${{ needs.gate-fail.outputs.score }}'    '${{ needs.gate-fail.outputs.provisional }}'
 
-          | job | result | tier | score | provisional |
-          |---|---|---|---|---|
-          | pinned SHA, real target | `${{ needs.pinned-score.result }}` | `${{ needs.pinned-score.outputs.tier }}` | `${{ needs.pinned-score.outputs.score }}` | `${{ needs.pinned-score.outputs.provisional }}` |
-          | bogus target-path | `${{ needs.bad-target.result }}` | `${{ needs.bad-target.outputs.tier }}` | `${{ needs.bad-target.outputs.score }}` | `${{ needs.bad-target.outputs.provisional }}` |
-          | fail-under rhodium | `${{ needs.gate-fail.result }}` | `${{ needs.gate-fail.outputs.tier }}` | `${{ needs.gate-fail.outputs.score }}` | `${{ needs.gate-fail.outputs.provisional }}` |
-
-          Expected: pinned = success with a tier; bogus = failure with NO score
-          (it refuses to score a missing tree); fail-under = failure BUT with a
-          tier/score published before the failure.
-          EOF
-          )
-          python3 -c 'import json,sys; print(json.dumps({"body": sys.argv[1]}))' "$body" > /tmp/b.json
-          curl -sS -X POST -H "Authorization: token ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/956/comments" \
-            -d @/tmp/b.json -o /dev/null -w 'comment=%{http_code}\n'
+          [ '${{ needs.pinned-score.result }}' = 'success' ] || { echo "::error::pinned run did not succeed"; fail=1; }
+          [ -n '${{ needs.pinned-score.outputs.tier }}' ]   || { echo "::error::pinned run published no tier"; fail=1; }
+          [ '${{ needs.bad-target.result }}' = 'failure' ]  || { echo "::error::missing target did not fail"; fail=1; }
+          [ -z '${{ needs.bad-target.outputs.tier }}' ]     || { echo "::error::missing target still published a tier"; fail=1; }
+          [ '${{ needs.gate-fail.result }}' = 'failure' ]   || { echo "::error::fail-under gate did not fail"; fail=1; }
+          [ -n '${{ needs.gate-fail.outputs.tier }}' ]      || { echo "::error::gate failure published no tier (outputs lost)"; fail=1; }
+          exit "$fail"
 
   # The cross-repository branch-pin guard cannot be exercised from a PR: this
   # org blocks a newly added cross-repo `uses:` at startup. Test the decision
@@ -70,37 +62,33 @@ jobs:
       - name: Check the accept/reject table
         run: |
           set -euo pipefail
-          decide() { # ref, same-repo -> 0 accept / 1 reject
+          try_decide() { # ref, same-repo -> 0 accept / 1 reject
             local ref="$1" self="$2" ok=0
             case "$ref" in
               refs/tags/*|v[0-9]*) ok=1 ;;
               refs/heads/*|main|master|HEAD|develop) ok=0 ;;
-              *) printf '%s' "$ref" | grep -Eq '^[0-9a-f]{7,40}$' && ok=1 ;;
+              *) if printf '%s' "$ref" | grep -Eq '^[0-9a-f]{7,40}$'; then ok=1; fi ;;
             esac
-            [ "$self" = "1" ] && ok=1
-            [ "$ok" = "1" ] && return 0
-            return 1
+            if [ "$self" = "1" ]; then ok=1; fi
+            [ "$ok" = "1" ]
           }
           fail=0
-          check() { # expect(ref,self) desc
-            if "$@" >/dev/null 2>&1; then echo "  accept"; else echo "  reject"; fi
-          }
-          expect_accept() { decide "$1" "$2" || { echo "FAIL: expected accept: ref=$1 self=$2"; fail=1; }; }
-          expect_reject() { if decide "$1" "$2"; then echo "FAIL: expected reject: ref=$1 self=$2"; fail=1; fi; }
+          expect_accept() { if ! try_decide "$1" "$2"; then echo "FAIL: expected accept: ref=$1 self=$2"; fail=1; fi; }
+          expect_reject() { if try_decide "$1" "$2"; then echo "FAIL: expected reject: ref=$1 self=$2"; fail=1; fi; }
 
           expect_accept "9f1e2d3c4b5a69788796a5b4c3d2e1f0a1b2c3d4" 0
           expect_accept "9f1e2d3" 0
           expect_accept "refs/tags/v0.1.2" 0
           expect_accept "v0.1.2" 0
-          expect_accept "refs/heads/main" 0      # same repo only
           expect_accept "refs/heads/main" 1
           expect_accept "refs/pull/956/merge" 1
           expect_reject "main" 0
           expect_reject "master" 0
           expect_reject "develop" 0
           expect_reject "HEAD" 0
+          expect_reject "refs/heads/main" 0
           expect_reject "refs/heads/arena/0cc4e3dd-hypatia" 0
           expect_reject "not-a-sha" 0
 
           if [ "$fail" != "0" ]; then echo "::error::pin logic table failed"; exit 1; fi
-          echo "pin logic table: all cases pass"
+          echo "::notice title=pin-logic::all 13 cases pass"
