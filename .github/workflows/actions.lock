@@ -25,7 +25,7 @@ workflows:
         - 'haskell-actions/hlint-run@v2.4.10'
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.1'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
@@ -74,7 +74,7 @@ workflows:
         - 'actions/upload-pages-artifact@v5.0.0'
         - 'dtolnay/rust-toolchain@v1'
         - 'editorconfig-checker/action-editorconfig-checker@v3.0.0'
-        - 'ruby/setup-ruby@v1.329.0'
+        - 'ruby/setup-ruby@v1.331.0'
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
@@ -87,13 +87,13 @@ workflows:
         - 'docker/setup-qemu-action@v4.4.0'
         - 'dtolnay/rust-toolchain@v1'
         - 'softprops/action-gh-release@v3.0.3'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/roadmap-sync.yml':
         - 'actions/create-github-app-token@v3.3.0'
     '.github/workflows/rust.yml':
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/scorecard.yml':
         - 'hyperpolymath/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/secret-scanner.yml':
@@ -107,7 +107,7 @@ workflows:
         - 'github/codeql-action@v4.38.2'
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'taiki-e/install-action@v2.87.29'
-        - 'trufflesecurity/trufflehog@v3.99.2'
+        - 'trufflesecurity/trufflehog@v3.99.3'
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -117,7 +117,7 @@ workflows:
         - 'docker/setup-buildx-action@v4.4.1'
         - 'dtolnay/rust-toolchain@v1'
         - 'erlef/setup-beam@v1.24.1'
-        - 'swatinem/rust-cache@v2.9.2'
+        - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
@@ -380,9 +380,9 @@ dependencies:
         commit: 'sha1-0c5077e51419868618aeaa5fe8019c62421857d6'
         owner_id: 108928776
         repo_id: 512644635
-    'ruby/setup-ruby@v1.329.0':
-        ref: 'v1.329.0'
-        commit: 'sha1-651ff0d62c5c79bed6d53ec518387aae20e72c1a'
+    'ruby/setup-ruby@v1.331.0':
+        ref: 'v1.331.0'
+        commit: 'sha1-824c0e29fdfc7d689c191c27acc969d2d04b7dd8'
         owner_id: 210414
         repo_id: 231208785
     'softprops/action-gh-release@v3.0.3':
@@ -390,9 +390,9 @@ dependencies:
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
-    'swatinem/rust-cache@v2.9.2':
-        ref: 'v2.9.2'
-        commit: 'sha1-6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
+    'swatinem/rust-cache@v2.9.3':
+        ref: 'v2.9.3'
+        commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
         owner_id: 580492
         repo_id: 298565987
     'taiki-e/install-action@v2.87.29':
@@ -400,9 +400,9 @@ dependencies:
         commit: 'sha1-8cca0918f8471c33515202b73f56ab27f2bed283'
         owner_id: 43724913
         repo_id: 442947557
-    'trufflesecurity/trufflehog@v3.99.2':
-        ref: 'v3.99.2'
-        commit: 'sha1-e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9'
+    'trufflesecurity/trufflehog@v3.99.3':
+        ref: 'v3.99.3'
+        commit: 'sha1-e63326d6545de8f425d93ce24078c6e68d83f70e'
         owner_id: 79229934
         repo_id: 77726177
     'webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555':
