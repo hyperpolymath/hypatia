@@ -149,6 +149,32 @@ jobs:
           persist-credentials: false
 
       # 2. The SSOT. Sibling of `repo/`, so it is outside the scored tree.
+      # Validate caller-provided source before checkout: this workflow is reusable
+      # and must not allow arbitrary repository/ref checkout in untrusted contexts.
+      - name: Validate standards source
+        env:
+          STANDARDS_REPOSITORY: ${{ inputs.standards-repository }}
+          STANDARDS_REF: ${{ inputs.standards-ref }}
+        run: |
+          set -eu
+          case "${STANDARDS_REPOSITORY}" in
+            "hyperpolymath/standards")
+              ;;
+            *)
+              echo "Untrusted standards repository: ${STANDARDS_REPOSITORY}" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${STANDARDS_REF}" in
+            refs/tags/*|refs/heads/main)
+              ;;
+            *)
+              echo "Untrusted standards ref: ${STANDARDS_REF}" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Checkout standards (SSOT source)
         uses: actions/checkout@v7.0.1
         with:
