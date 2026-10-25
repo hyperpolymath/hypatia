@@ -434,13 +434,29 @@ defmodule Hypatia.Rules.ActionsLock do
 
   # Owner and repository IDs are numbered per GitHub instance (the v0.0.3
   # schema defines them "on the recorded hostname"), so identity is compared
-  # only among pins recorded on the same host. An omitted hostname is its own
-  # scope (the lock's home host).
+  # only among pins recorded on the same host.
+  #
+  # An OMITTED hostname and an EXPLICIT `github.com` are the same host, so both
+  # sides are normalized to the home host before comparing. Comparing the raw
+  # values instead made them two scopes, which let a lockfile split one
+  # repository's identity across the implicit and explicit spelling and skip
+  # the `owner_id`/`repo_id` consistency check entirely — the check exists to
+  # catch a pin whose identity does not match the recorded repository, so a
+  # spelling that evades it is a defect, not a distinction.
   defp scope_to_host(dependencies, hostname) do
+    scope = normalise_hostname(hostname)
+
     dependencies
-    |> Enum.filter(fn {_ref, dependency} -> dependency.hostname == hostname end)
+    |> Enum.filter(fn {_ref, dependency} ->
+      normalise_hostname(dependency.hostname) == scope
+    end)
     |> Map.new()
   end
+
+  # `nil` is how every record spells "no host named", which binds to the home
+  # host; v0.0.2 has no hostname field at all and is the same case.
+  defp normalise_hostname(nil), do: @home_hostname
+  defp normalise_hostname(hostname), do: hostname
 
   defp validate_repository_identity(dependencies, normalized, owner_id, repo_id, line_number) do
     [repository, _ref] = String.split(normalized, "@", parts: 2)
