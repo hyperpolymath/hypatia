@@ -10,6 +10,78 @@ https://semver.org/[Semantic Versioning].
 
 == [Unreleased]
 
+=== Fixed
+
+==== `mix compile` was impossible: invalid guard-as-pattern in `ActionsLock` (2026-10-25)
+
+`lib/rules/actions_lock.ex:170` read
+
+[source,elixir]
+----
+version in @supported_versions ->
+----
+
+as a bare `case` clause head. `in/2` is a guard expression, not a pattern; as a
+clause head it expands to a match against `:erlang.=:=/2`, and the whole module
+failed to compile:
+
+----
+error: cannot invoke remote function :erlang.=:=/2 inside a match
+170 │           version in @supported_versions ->
+    └─ lib/rules/actions_lock.ex:170: Hypatia.Rules.ActionsLock.consume_line/3
+
+== Compilation error in file lib/rules/actions_lock.ex ==
+** (CompileError) ... expanding macro: Kernel.in/2
+----
+
+The clause was introduced by #927 (2026-10-20) while teaching the parser to
+accept `gh actions-lock` v0.0.3. It (and the `true ->` fallback beside it) was
+dead code: `Regex.run/2` with one capture group always returns `[_full,
+version]`, so the two `[_, version]` clauses above it already covered every
+outcome — and the fallback referenced `version`, which the pattern had not
+bound. The dead clauses are gone; the version is now bound by the pattern and
+membership is tested in the guards, which is the only form that compiles.
+
+Two more defects were sitting behind it in the same module, equally invisible
+while it did not compile, and both are fixed here as well:
+
+* **`@hostname` was never defined** — an unreachable second copy of the
+  `hostname:` parser (the first matching `cond` arm always won) called
+  `Regex.match?(@hostname, hostname)`. That attribute expands to `nil`, so the
+  branch would have raised `ArgumentError` had it ever run, and it produced an
+  "undefined module attribute" warning plus a typing violation that made
+  `mix compile --warnings-as-errors` impossible. The dead copy is deleted; the
+  surviving parser is `put_dependency_hostname/3`.
+* **`finalize_dependency/1` built a map with two `hostname:` keys.** The second
+  (raw `nil`) won, so *every* parsed dependency recorded `hostname: nil` and the
+  seven "v0.0.3 hostname field" assertions in
+  `test/rules/actions_lock_test.exs` failed. An omitted `hostname:` records
+  `nil`, preserving the lockfile's recorded value; the identity check treats
+  `nil` as the home host `github.com`.
+
+Why it survived five days on `main`: nothing that gates a merge compiled the
+Elixir tree. `ci.yml` had no Elixir job, `tests.yml` has `pull_request: null`,
+and `escript-soundness.yml` was already red for unrelated reasons. Every
+consumer's "RSR oracle — dogfood this repo" job (secret-types #11 and the rest
+of the estate) died on `mix deps.get && mix compile` with this exact error and
+no way to see why.
+
+Fixed, plus the two things that let it through:
+
+* `ci.yml` gains an **`elixir-compile` job** on the exact versions the dogfood
+  gate uses (Elixir `1.19.4` / OTP `28.3`): `mix deps.get`,
+  `mix compile --warnings-as-errors`, the `ActionsLock` + `RsrConformance`
+  regression tests, and the consumers' oracle invocation with an explicit
+  `--ssot`. It is part of `ci-status`, so it gates.
+* The oracle gains a **reusable workflow**,
+  `.github/workflows/rsr-oracle.yml`, which consumers pin by full commit SHA
+  (`uses: hyperpolymath/hypatia/.github/workflows/rsr-oracle.yml@<sha>`) and
+  which checks hypatia out at `job.workflow_sha` — the commit the caller
+  pinned — so `main` is no longer the de facto release. See
+  `docs/consumers/rsr-oracle.adoc`. The explicit `--ssot` contract is
+  unchanged: the workflow always passes `--ssot`, defaulting to
+  `<standards>/0-canon/rsr/rsr-criteria-v2.a2ml`.
+
 === Added
 
 ==== Group-B detectors — SD021 / WF023 / stale-issue-refs (2026-05-31, #363/#364/#366)

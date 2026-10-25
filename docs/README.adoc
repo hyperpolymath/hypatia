@@ -60,6 +60,10 @@ acceptance criteria for closing the underlying roadmap item.
 * link:operations/nx-exla-neural-backend.adoc[`nx-exla-neural-backend.adoc`] — conditional migration plan.
 * link:operations/containerfiles-chainguard-gap.adoc[`containerfiles-chainguard-gap.adoc`] — estate Chainguard base-image audit.
 
+== Consuming hypatia
+
+* link:consumers/rsr-oracle.adoc[`consumers/rsr-oracle.adoc`] — the RSR oracle as a SHA-pinned reusable workflow: the pin rule, the explicit-SSOT contract, and why `@main` is not a version.
+
 == Integration
 
 * link:integration/a2ml.adoc[`a2ml.adoc`] — A2ML machine-readable metadata integration.

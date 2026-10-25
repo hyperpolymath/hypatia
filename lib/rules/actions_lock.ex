@@ -23,7 +23,11 @@ defmodule Hypatia.Rules.ActionsLock do
   `github.com`. A well-formed `*.ghe.com` tenant hostname is therefore rejected
   rather than accepted: `owner_id`/`repo_id` are host-scoped, and the
   `owner/repo@ref` keys used for association carry no host. Every parsed
-  dependency records its hostname, defaulting to `github.com` as v0.0.2 does.
+  dependency records the hostname the lock named; `nil` means the lock named
+  none, which binds the pin to the home host `github.com` (v0.0.2 records no
+  hostname at all). `finalize_dependency/1` preserves that recorded value;
+  `scope_to_host/2` normalises both hostnames before comparison, so an omitted
+  hostname and explicit `github.com` share the same identity scope.
   """
 
   @supported_versions ["v0.0.2", "v0.0.3"]
@@ -160,6 +164,17 @@ defmodule Hypatia.Rules.ActionsLock do
   defp consume_line(line, line_number, %{section: :preamble} = state) do
     cond do
       match = Regex.run(~r/^version: '([^']+)'$/, line) ->
+        # Every clause here must be a *pattern* plus, optionally, a guard.
+        # `version in @supported_versions` is a guard expression, not a
+        # pattern: as a bare case clause head it expands to a match against
+        # `:erlang.=:=/2` and the file does not compile at all
+        # ("cannot invoke remote function :erlang.=:=/2 inside a match").
+        # The two dead clauses that carried it are folded into the clauses
+        # below: the regex always yields `[_full, version]`, so binding the
+        # version in the pattern and testing membership in the guard is both
+        # narrower and the only form the compiler accepts. `version` must be
+        # bound by the pattern, never by the discarded `true ->` fallback,
+        # which referenced an unbound variable.
         case match do
           [_, version] when version in @supported_versions and is_nil(state.version) ->
             {:ok, %{state | version: version}}
@@ -167,10 +182,7 @@ defmodule Hypatia.Rules.ActionsLock do
           [_, version] when version in @supported_versions ->
             line_error(line_number, :duplicate_version)
 
-          version in @supported_versions ->
-            {:ok, %{state | version: version}}
-
-          true ->
+          [_, version] ->
             line_error(line_number, {:unsupported_version, version})
         end
 
@@ -248,20 +260,12 @@ defmodule Hypatia.Rules.ActionsLock do
       Regex.match?(~r/^        (?:owner_id|repo_id):/, line) ->
         line_error(line_number, :malformed_dependency_identity)
 
-      match = Regex.run(~r/^        hostname: '([^']*)'$/, line) ->
-        [_, hostname] = match
-
-        cond do
-          state.version != "v0.0.3" ->
-            line_error(line_number, {:hostname_requires_v0_0_3, state.version})
-
-          Regex.match?(@hostname, hostname) ->
-            put_dependency_field(state, :hostname, hostname, line_number)
-
-          true ->
-            line_error(line_number, {:malformed_dependency_hostname, hostname})
-        end
-
+      # The `hostname:` line is handled by `put_dependency_hostname/3` in the
+      # clause above (the first matching `cond` arm wins), so there is exactly
+      # one hostname parser. A second, unreachable copy used to live here; it
+      # referenced `@hostname`, a module attribute that was never defined, and
+      # reported `:hostname_requires_v0_0_3` — errors no caller could receive
+      # and a warning that made `mix compile --warnings-as-errors` unusable.
       Regex.match?(~r/^        hostname:/, line) ->
         line_error(line_number, :malformed_dependency_hostname)
 
@@ -395,13 +399,21 @@ defmodule Hypatia.Rules.ActionsLock do
              header_line
            ),
          false <- Map.has_key?(state.dependencies, normalized) do
+      # ONE hostname key. This map previously carried two: the first defaulted
+      # to the home host, the second wrote the raw `nil` — and the second wins
+      # in a map literal, so every parsed dependency recorded `hostname: nil`
+      # and every hostname assertion in test/rules/actions_lock_test.exs failed.
+      # It was invisible while the module did not compile.
       stored = %{
-        hostname: Map.get(dependency, :hostname, @home_hostname),
         ref: ref,
         commit: commit,
         owner_id: owner_id,
         repo_id: repo_id,
-        hostname: Map.get(dependency, :hostname),
+        # Preserve the lockfile's recorded value: `nil` means no host was
+        # named (v0.0.2 has no hostname field). scope_to_host/2 normalises
+        # both hostnames before comparison, so `nil` and explicit "github.com"
+        # still share the home host's identity checks.
+        hostname: hostname,
         uses: Map.get(dependency, :uses, MapSet.new())
       }
 
@@ -419,13 +431,29 @@ defmodule Hypatia.Rules.ActionsLock do
 
   # Owner and repository IDs are numbered per GitHub instance (the v0.0.3
   # schema defines them "on the recorded hostname"), so identity is compared
-  # only among pins recorded on the same host. An omitted hostname is its own
-  # scope (the lock's home host).
+  # only among pins recorded on the same host.
+  #
+  # An OMITTED hostname and an EXPLICIT `github.com` are the same host, so both
+  # sides are normalized to the home host before comparing. Comparing the raw
+  # values instead made them two scopes, which let a lockfile split one
+  # repository's identity across the implicit and explicit spelling and skip
+  # the `owner_id`/`repo_id` consistency check entirely — the check exists to
+  # catch a pin whose identity does not match the recorded repository, so a
+  # spelling that evades it is a defect, not a distinction.
   defp scope_to_host(dependencies, hostname) do
+    scope = normalise_hostname(hostname)
+
     dependencies
-    |> Enum.filter(fn {_ref, dependency} -> dependency.hostname == hostname end)
+    |> Enum.filter(fn {_ref, dependency} ->
+      normalise_hostname(dependency.hostname) == scope
+    end)
     |> Map.new()
   end
+
+  # `nil` is how every record spells "no host named", which binds to the home
+  # host; v0.0.2 has no hostname field at all and is the same case.
+  defp normalise_hostname(nil), do: @home_hostname
+  defp normalise_hostname(hostname), do: hostname
 
   defp validate_repository_identity(dependencies, normalized, owner_id, repo_id, line_number) do
     [repository, _ref] = String.split(normalized, "@", parts: 2)

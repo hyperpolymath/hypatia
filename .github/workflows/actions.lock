@@ -22,6 +22,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
         - 'dtolnay/rust-toolchain@v1'
+        - 'erlef/setup-beam@v1.24.1'
         - 'haskell-actions/hlint-run@v2.4.10'
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.1'
@@ -90,6 +91,9 @@ workflows:
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/roadmap-sync.yml':
         - 'actions/create-github-app-token@v3.3.0'
+    '.github/workflows/rsr-oracle.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/rust.yml':
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@v1'
