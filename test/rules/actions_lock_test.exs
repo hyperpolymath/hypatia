@@ -528,13 +528,18 @@ defmodule Hypatia.Rules.ActionsLockTest do
              ActionsLock.parse(v2_with_host)
   end
 
-  test "scopes owner and repository identities to their v0.0.3 host" do
-    mixed = """
+  test "scopes owner and repository identities to one host, implicit or explicit" do
+    # `acme/bar` names the home host explicitly, `acme/foo` omits it. Both bind
+    # to github.com, so they are ONE identity scope: owner_id/repo_id are
+    # numbered per instance, and the hostname spelling is not a distinction
+    # (normalising it away is what stops a lockfile evading the check by
+    # spelling one of the two implicitly).
+    base = """
     version: 'v0.0.3'
     workflows:
         '.github/workflows/ci.yml':
-            - 'acme/foo@v1'
             - 'acme/bar@v1'
+            - 'acme/foo@v1'
     dependencies:
         'acme/bar@v1':
             hostname: 'github.com'
@@ -545,59 +550,26 @@ defmodule Hypatia.Rules.ActionsLockTest do
         'acme/foo@v1':
             ref: 'v1'
             commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
-            owner_id: 1
-            repo_id: 20
+            owner_id: 2
+            repo_id: 21
     """
 
-    assert {:ok, lock} = ActionsLock.parse(mixed)
+    # Agreeing identities across the two spellings parse, and each record keeps
+    # the value the lock actually wrote (explicit string vs nil = home host).
+    assert {:ok, lock} = ActionsLock.parse(base)
     assert lock.dependencies["acme/bar@v1"].hostname == "github.com"
     assert lock.dependencies["acme/foo@v1"].hostname == nil
 
-    same_host = String.replace(mixed, "        hostname: 'github.com'\n", "")
+    # Disagreeing identities are caught in either spelling: foo misnumbered
+    # while bar names the host...
+    assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
+             ActionsLock.parse(String.replace(base, "owner_id: 2\n        repo_id: 21", "owner_id: 1\n        repo_id: 21"))
+
+    # ...and with the hostname omitted entirely from bar as well.
+    both_implicit = String.replace(base, "        hostname: 'github.com'\n", "")
 
     assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
-             ActionsLock.parse(same_host)
-  end
-
-  test "an omitted hostname and an explicit github.com are one identity scope" do
-    # Same conflict as above, but spelled two ways: `acme/bar` names the home
-    # host explicitly, `acme/foo` omits it. Both bind to github.com, so the
-    # owner-id disagreement must still be caught. Comparing raw values made
-    # these two scopes and silently skipped the check (Codex review, P1).
-    split = """
-    version: 'v0.0.3'
-    workflows:
-        '.github/workflows/ci.yml':
-            - 'acme/bar@v1'
-            - 'acme/foo@v1'
-    dependencies:
-        'acme/bar@v1':
-            hostname: 'github.com'
-            ref: 'v1'
-            commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
-            owner_id: 2
-            repo_id: 20
-        'acme/foo@v1':
-            ref: 'v1'
-            commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
-            owner_id: 1
-            repo_id: 20
-    """
-
-    assert {:error, {:line, _, {:owner_identity_mismatch, "acme", 2, 1}}} =
-             ActionsLock.parse(split)
-
-    # ... and agreeing identities across the two spellings stay legal. (repo_id
-    # must differ too: the same repo_id on two different repositories is its
-    # own defect, `:repository_id_reused`.)
-    agreeing =
-      String.replace(
-        split,
-        "            owner_id: 1\n            repo_id: 20",
-        "            owner_id: 2\n            repo_id: 21"
-      )
-
-    assert {:ok, _} = ActionsLock.parse(agreeing)
+             ActionsLock.parse(both_implicit)
   end
 
   test "parses the repository's authoritative generated lockfile" do
