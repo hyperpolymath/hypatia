@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+# TEMPORARY verification (removed before merge): a branch pin must be refused.
+name: tmp-branch-pin
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  oracle:
+    uses: hyperpolymath/hypatia/.github/workflows/rsr-oracle.yml@main
+    with:
+      target-path: '.'

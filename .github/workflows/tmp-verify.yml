@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: MPL-2.0
+# TEMPORARY verification (removed before merge): pins the oracle by SHA, and
+# proves the three guarded behaviours.
+name: tmp-verify
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-score:
+    name: pinned SHA, real target
+    uses: ./.github/workflows/rsr-oracle.yml
+    with:
+      target-path: '.'
+
+  bad-target:
+    name: bogus target-path must fail
+    uses: ./.github/workflows/rsr-oracle.yml
+    with:
+      target-path: 'does/not/exist'
+
+  gate-fail:
+    name: fail-under rhodium must fail but publish outputs
+    uses: ./.github/workflows/rsr-oracle.yml
+    with:
+      fail-under: 'rhodium'
