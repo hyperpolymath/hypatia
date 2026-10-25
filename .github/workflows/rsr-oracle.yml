@@ -182,10 +182,20 @@ jobs:
         env:
           WORKFLOW_REF: ${{ job.workflow_ref }}
           WORKFLOW_SHA: ${{ job.workflow_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          THIS_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           pinned="$WORKFLOW_SHA"
           ref="${WORKFLOW_REF##*@}"
+
+          # A same-repository call (`uses: ./.github/workflows/rsr-oracle.yml`, or
+          # `owner/this-repo/...`) runs the oracle from the caller's own commit,
+          # so whatever ref named it is no more volatile than the caller itself.
+          # Only a CROSS-repository call can float on someone else's branch.
+          repo_is_self=0
+          [ "$WORKFLOW_REPOSITORY" = "$THIS_REPOSITORY" ] && repo_is_self=1
+
           # Accept a full or abbreviated SHA. Tags are immutable once cut and are
           # allowed, but must be spelled `refs/tags/...` or a plain `vX.Y.Z`, so
           # a tag can never be confused with a branch of the same name.
@@ -195,8 +205,11 @@ jobs:
             refs/heads/*|main|master|HEAD|develop) ok=0 ;;
             *) printf '%s' "$ref" | grep -Eq '^[0-9a-f]{7,40}$' && ok=1 ;;
           esac
-          if [ "$ok" != "1" ]; then
-            echo "::error::the oracle is pinned to '${ref}', which is not an immutable ref. Pin a full commit SHA (or a release tag); '@main' is what let one broken commit break every consumer at once."
+          if [ "$repo_is_self" = "1" ]; then
+            ok=1
+            echo "oracle: same-repository call, resolved at the caller's own commit (${ref})"
+          elif [ "$ok" != "1" ]; then
+            echo "::error::the oracle is pinned to '${ref}' in ${WORKFLOW_REPOSITORY}, which is not an immutable ref. Pin a full commit SHA (or a release tag); '@main' is what let one broken commit break every consumer at once."
             exit 1
           fi
           if ! printf '%s' "$pinned" | grep -Eq '^[0-9a-f]{40}$'; then
