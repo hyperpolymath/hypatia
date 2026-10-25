@@ -55,8 +55,9 @@ while it did not compile, and both are fixed here as well:
 * **`finalize_dependency/1` built a map with two `hostname:` keys.** The second
   (raw `nil`) won, so *every* parsed dependency recorded `hostname: nil` and the
   seven "v0.0.3 hostname field" assertions in
-  `test/rules/actions_lock_test.exs` failed. An omitted `hostname:` now records
-  `github.com`, as the module's own docstring says it should.
+  `test/rules/actions_lock_test.exs` failed. An omitted `hostname:` records
+  `nil`, preserving the lockfile's recorded value; the identity check treats
+  `nil` as the home host `github.com`.
 
 Why it survived five days on `main`: nothing that gates a merge compiled the
 Elixir tree. `ci.yml` had no Elixir job, `tests.yml` has `pull_request: null`,

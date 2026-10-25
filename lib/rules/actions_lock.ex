@@ -25,9 +25,9 @@ defmodule Hypatia.Rules.ActionsLock do
   `owner/repo@ref` keys used for association carry no host. Every parsed
   dependency records the hostname the lock named; `nil` means the lock named
   none, which binds the pin to the home host `github.com` (v0.0.2 records no
-  hostname at all). The field stays `nil` rather than being defaulted to
-  `"github.com"` because `scope_to_host/2` compares it against the raw value
-  read from each record — see `finalize_dependency/1`.
+  hostname at all). `finalize_dependency/1` preserves that recorded value;
+  `scope_to_host/2` normalises both hostnames before comparison, so an omitted
+  hostname and explicit `github.com` share the same identity scope.
   """
 
   @supported_versions ["v0.0.2", "v0.0.3"]
@@ -409,13 +409,10 @@ defmodule Hypatia.Rules.ActionsLock do
         commit: commit,
         owner_id: owner_id,
         repo_id: repo_id,
-        # The raw value, NOT a "github.com" default. `nil` means "the lock
-        # named no host", i.e. the home host; scope_to_host/2 above compares
-        # this field against the incoming raw value, so defaulting it to the
-        # string here would silently stop an omitted-hostname pin from being
-        # identity-checked against an explicitly-github.com pin on the same
-        # host. v0.0.2 has no such field at all and records nil for the same
-        # reason.
+        # Preserve the lockfile's recorded value: `nil` means no host was
+        # named (v0.0.2 has no hostname field). scope_to_host/2 normalises
+        # both hostnames before comparison, so `nil` and explicit "github.com"
+        # still share the home host's identity checks.
         hostname: hostname,
         uses: Map.get(dependency, :uses, MapSet.new())
       }

@@ -319,6 +319,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       # Pinned to the exact versions in the estate dogfood gate
       # (.github/workflows/dogfood-gate.yml in each consumer repo, job
