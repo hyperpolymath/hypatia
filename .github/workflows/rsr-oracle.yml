@@ -142,6 +142,11 @@ jobs:
           ref: ${{ inputs.target-ref != '' && inputs.target-ref || github.event.pull_request.head.sha || github.sha }}
           path: repo
           fetch-depth: 0
+          # The tree being scored is caller (often pull-request) content. Never
+          # leave the job token in its .git/config: `mix` compiles and runs the
+          # oracle against that tree, and any `run:` step in a consumer repo
+          # could read it back out.
+          persist-credentials: false
 
       # 2. The SSOT. Sibling of `repo/`, so it is outside the scored tree.
       - name: Checkout standards (SSOT source)
@@ -150,6 +155,7 @@ jobs:
           repository: ${{ inputs.standards-repository }}
           ref: ${{ inputs.standards-ref }}
           path: _standards
+          persist-credentials: false
 
       # 3. The oracle, at the commit the caller pinned. Not a branch. Ever.
       - name: Checkout hypatia (the pinned oracle)
@@ -158,6 +164,7 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: _hypatia
+          persist-credentials: false
 
       - name: Setup Elixir/OTP
         uses: erlef/setup-beam@v1.24.1
@@ -166,9 +173,18 @@ jobs:
           otp-version: ${{ inputs.otp-version }}
 
       - name: Record the pin
+        env:
+          # Via env, never spliced into the script text: a value interpolated
+          # into `run:` is a shell injection point, and the compiler of a
+          # security tool being injectable by its caller is the wrong joke.
+          ORACLE_REPOSITORY: ${{ job.workflow_repository }}
+          ORACLE_SHA: ${{ job.workflow_sha }}
+          ORACLE_REF: ${{ job.workflow_ref }}
         run: |
-          echo "oracle: ${{ job.workflow_repository }}@${{ job.workflow_sha }}" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "oracle workflow: ${{ job.workflow_ref }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "oracle: ${ORACLE_REPOSITORY}@${ORACLE_SHA}"
+            echo "oracle workflow: ${ORACLE_REF}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # A pin that cannot be resolved must not fall through to something else —
       # and a *branch* that resolves is not a pin either.
@@ -294,8 +310,10 @@ jobs:
       # not met. Callers who want the failure still get it from the step above.
       - name: Show the scorecard
         if: always()
+        env:
+          TARGET_PATH: ${{ inputs.target-path }}
         run: |
-          scorecard="$GITHUB_WORKSPACE/repo/${{ inputs.target-path }}/.machine_readable/scorecards/rsr.scorecard.a2ml"
+          scorecard="$GITHUB_WORKSPACE/repo/${TARGET_PATH}/.machine_readable/scorecards/rsr.scorecard.a2ml"
           if [ -f "$scorecard" ]; then
             {
               echo '## RSR scorecard'
