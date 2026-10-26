@@ -9,7 +9,9 @@
 # tool-owned, so this job regenerates it with gh actions-lock v0.2.0 and the
 # estate repair chain (regen_lock in standards scripts/regen-dependabot-locks.sh,
 # lock-only, workflow YAML restored), checks it with the governance gate's
-# own verifier, and commits ONLY the lock back to this branch.
+# own verifier, and prints ONLY the lock (base64 + sha256). GITHUB_TOKEN
+# cannot push under .github/workflows/ (no `workflows` permission exists for
+# it), so the PR commits these exact bytes and checks the sha256 matches.
 #
 # It has no `uses:` steps, so it needs no lock entry to start, and it is
 # removed from the tree before the tool runs so the lock never records it.
@@ -26,8 +28,6 @@ jobs:
   regen:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write # commits the regenerated lock back to this branch
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -35,11 +35,10 @@ jobs:
       STANDARDS_SHA: 333b06a01db1874ffedb2de1bfabb195640927c7
       LOCK_PATH: .github/workflows/actions.lock
     steps:
-      - name: Regenerate actions.lock, verify it, and push it to this branch
+      - name: Regenerate actions.lock, verify it, and print it
         run: |
           set -euo pipefail
-          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git -c "http.https://github.com/.extraheader=$auth" clone --quiet --branch "$BRANCH" "https://github.com/$REPO.git" r
+          git clone --quiet --branch "$BRANCH" "https://github.com/$REPO.git" r
           git clone --quiet https://github.com/metadatastician/standards.git std
           git -C std checkout --quiet --detach "$STANDARDS_SHA"
           sudo apt-get install -y -qq gawk >/dev/null
@@ -62,14 +61,11 @@ jobs:
           ACTIONS_LOCK_VERIFIER="$tools/update-actions-lock.sh" bash "$tools/check-actions-lock-gate.sh" .github/workflows
           git diff --stat -- "$LOCK_PATH"
           if git diff --quiet -- "$LOCK_PATH"; then
-            echo "::error::the lock did not change; nothing to commit"
+            echo "::error::the lock did not change"
             exit 1
           fi
-          # Commit the lock alone; the staged removal of this file stays out of
-          # the commit (the PR deletes it in its own reviewed commit).
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit --quiet -m "chore(lock): regenerate actions.lock for the metadatastician/standards move" \
-            -m "Written by gh actions-lock v0.2.0 and the estate repair chain at standards $STANDARDS_SHA (run $GITHUB_RUN_ID)." \
-            -- "$LOCK_PATH"
-          git -c "http.https://github.com/.extraheader=$auth" push --quiet origin "HEAD:$BRANCH"
+          git diff -- "$LOCK_PATH"
           echo "LOCK-SHA256 $(sha256sum < "$LOCK_PATH" | cut -d' ' -f1)"
+          echo "LOCK-BASE64-BEGIN"
+          base64 -w0 < "$LOCK_PATH"; echo
+          echo "LOCK-BASE64-END"
