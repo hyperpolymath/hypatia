@@ -336,6 +336,12 @@ defmodule Hypatia.Rules.SecurityErrors do
   # rationale to dismiss the Scorecard alert. Keyed by action-name prefix so
   # every version and the `/.github/workflows/...` path form is covered.
   # Refs hyperpolymath/hypatia#262.
+  @own_org_wrapper_reason "Own-org reusable workflow referenced at @main is the canonical " <>
+                            "wrapper pattern (project_admin_merge_wrappers_2026_05_26). " <>
+                            "SHA-pinning each wrapper would force a fan-out SHA-bump PR " <>
+                            "per consumer repo per reusable change — defeating the wrapper's " <>
+                            "whole purpose. Trust boundary: own-org commit rights."
+
   @pin_exempt %{
     "slsa-framework/slsa-github-generator" =>
       "SLSA generator self-verifies its own github.ref to mint verifiable " <>
@@ -352,12 +358,9 @@ defmodule Hypatia.Rules.SecurityErrors do
     # dependency you have commit rights on. Observed flagging 2026-05-27
     # across affinescript#357 / panll#54 / claude-integrations#43 /
     # idaptik#98 / tma-mark2#41 / maa-framework#78 (6/6 PRs flagged).
-    "hyperpolymath/standards/.github/workflows/" =>
-      "Own-org reusable workflow referenced at @main is the canonical " <>
-        "wrapper pattern (project_admin_merge_wrappers_2026_05_26). " <>
-        "SHA-pinning each wrapper would force a fan-out SHA-bump PR " <>
-        "per consumer repo per reusable change — defeating the wrapper's " <>
-        "whole purpose. Trust boundary: own-org commit rights."
+    "hyperpolymath/standards/.github/workflows/" => @own_org_wrapper_reason,
+    # The same repository under its current name (Hypatia.Rules.StandardsRepo).
+    "metadatastician/standards/.github/workflows/" => @own_org_wrapper_reason
   }
 
   def pin_exempt, do: @pin_exempt

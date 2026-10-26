@@ -65,6 +65,12 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
              })
   end
 
+  test "standards contractiles stay meta under the repository's current name" do
+    for repo <- ["metadatastician/standards", "Metadatastician/Standards"] do
+      assert {_, :meta, _} = Sensor.classify(%{"repo" => repo, "files" => ["rulesets/main.json"]})
+    end
+  end
+
   test "ordinary library code is object-level" do
     assert {_, :object, _} = Sensor.classify(obs(%{"files" => ["lib/x.ex", "lib/y.ex"]}))
   end

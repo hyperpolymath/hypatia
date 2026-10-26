@@ -128,7 +128,7 @@ defmodule Hypatia.MergeOrchestration.Sensor do
       String.contains?(p, "lib/rules/") or
       String.contains?(p, "merge-orchestration/schemas") or
       String.contains?(p, "merge-orchestration/ci-templates") or
-      (repo == "hyperpolymath/standards" and
+      (Hypatia.Rules.StandardsRepo.name?(repo) and
          (String.contains?(p, "contractiles/") or String.contains?(p, "rulesets/")))
   end
 
