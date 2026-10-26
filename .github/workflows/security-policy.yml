@@ -281,7 +281,7 @@ jobs:
       - name: Fetch estate gitleaks baseline
         uses: actions/checkout@v7.0.1
         with:
-          repository: hyperpolymath/standards
+          repository: metadatastician/standards
           ref: 571cc734cd69fb846032ec77a662aa8ee4fc32cd
           path: .standards-gitleaks
           sparse-checkout: |
