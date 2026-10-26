@@ -43,6 +43,44 @@ defmodule Hypatia.NeuralTest do
       assert result.trained == false
     end
 
+    test "reservoir's largest absolute row sum is 0.95 for any size and seed" do
+      for size <- [10, 20, 80], seed <- 1..5 do
+        esn = EchoStateNetwork.init(reservoir_size: size, seed: seed)
+
+        max_row_sum =
+          esn.reservoir
+          |> Enum.map(fn row -> row |> Enum.map(&abs/1) |> Enum.sum() end)
+          |> Enum.max()
+
+        assert_in_delta max_row_sum, 0.95, 1.0e-9, "size=#{size} seed=#{seed}"
+      end
+    end
+
+    # Echo state property: with an infinity-norm of 0.95 and leak 0.2, each step
+    # shrinks the gap between two states by at least 1 - 0.2 + 0.2 * 0.95 = 0.99.
+    # Under the old max-entry scaling the gap stayed above 0.5 after 300 steps.
+    test "two different initial states converge under the same inputs" do
+      for seed <- 1..3 do
+        esn = EchoStateNetwork.init(seed: seed)
+        a = %{esn | state: Enum.map(esn.state, fn _ -> 0.9 end)}
+        b = %{esn | state: Enum.map(esn.state, fn _ -> -0.9 end)}
+        steps = 300
+        inputs = for t <- 1..steps, do: 0.5 + 0.3 * :math.sin(t / 7)
+
+        {a, b} =
+          Enum.reduce(inputs, {a, b}, fn u, {a, b} ->
+            {elem(EchoStateNetwork.step(a, u), 1), elem(EchoStateNetwork.step(b, u), 1)}
+          end)
+
+        gap =
+          Enum.zip(a.state, b.state)
+          |> Enum.map(fn {x, y} -> abs(x - y) end)
+          |> Enum.max()
+
+        assert gap <= 1.8 * :math.pow(0.99, steps), "seed=#{seed} gap=#{gap}"
+      end
+    end
+
     test "detect_drift/1 with insufficient data returns :insufficient_data" do
       esn = EchoStateNetwork.init()
       assert EchoStateNetwork.detect_drift(esn) == :insufficient_data

@@ -111,18 +111,28 @@ in v4.30.0.)
 
 * New file `+ESNStability.lean+`. Models
 `+lib/neural/echo_state_network.ex+`.
-* *⚠️ Frame as operator-norm contraction (`+‖W‖ < 1+`), NOT spectral
-radius `+ρ(W) < 1+`.* The runtime scales by the *max-abs entry* (bounds
-an operator/elementwise norm); it does *not* compute the spectral
-radius. The operator-norm statement is code-faithful and far more
-tractable in Mathlib.
-* *Statement:* if `+‖W‖ < 1+`, the reservoir map `+x ↦ W·x + u+` is a
-contraction ⇒ unique bounded trajectory for any bounded input +
-exponential forgetting of the initial state.
-* *Mathlib:* same `+ContractingWith+` machinery; `+LipschitzWith+`,
-`+ContinuousLinearMap+` operator norm;
-`+ContractingWith.dist_fixedPoint_fixedPoint+`-style bounds for the
-forgetting rate.
+* *Frame it in the sup norm, as an ℓ∞ operator-norm contraction
+(`+‖W‖∞ < 1+`), NOT as spectral radius `+ρ(W) < 1+`.* Since 2026-10 the
+runtime scales the reservoir so its induced ∞-norm (largest absolute row
+sum) is `+@reservoir_norm+` = 0.95; it does not compute the spectral
+radius. (Before that it scaled the largest single _entry_, which bounds
+neither norm: the 80-node reservoir had ρ ≈ 2 and two runs from different
+initial states never converged. A proof of the old code would have been a
+proof of a false claim.) `+test/neural_test.exs+` now checks both the
+row-sum bound and the convergence of two initial states.
+* *Statement:* for leak rate `+0 < a ≤ 1+` and `+‖W‖∞ < 1+`, the update
+`+F_u(x) = (1 - a)·x + a·tanh(W·x + w·u)+` (tanh applied componentwise,
+1-Lipschitz) satisfies
+`+‖F_u(x) - F_u(y)‖∞ ≤ (1 - a + a·‖W‖∞)·‖x - y‖∞+` for every input `+u+`.
+Corollaries: the modulus is < 1, so two trajectories under the same input
+sequence approach each other geometrically (exponential forgetting of the
+initial state), and a state that starts in `+[-1, 1]ⁿ+` stays there for any input.
+* *Mathlib:* on `+Fin n → ℝ+` the default norm is already the sup norm,
+and Mathlib has the ℓ∞ operator norm of a matrix as the max row sum
+(`+Matrix.linfty_opNorm+` and friends; confirm names in v4.30.0).
+`+LipschitzWith+` for the componentwise tanh (`+Real.tanh+` derivative ≤ 1),
+then compose. `+ContractingWith+` is only needed for a fixed-input fixed
+point; the forgetting statement is a direct induction on the step bound.
 
 === Hard constraints
 
