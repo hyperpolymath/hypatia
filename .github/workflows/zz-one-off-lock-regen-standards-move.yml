@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: MPL-2.0
+# ONE-OFF, this PR's branch only; deleted before the PR merges.
+#
+# hyperpolymath/standards now redirects to metadatastician/standards, and
+# GitHub Actions does not follow a repository redirect for a reusable
+# workflow (`workflow was not found`), so every caller pinned at
+# hyperpolymath/standards@333b06a fails at startup. This PR re-points the
+# callers to metadatastician/standards at the same SHA. actions.lock is
+# tool-owned, so this job regenerates it with gh actions-lock v0.2.0 and the
+# estate repair chain (regen_lock in standards scripts/regen-dependabot-locks.sh,
+# lock-only, workflow YAML restored), checks it with the governance gate's
+# own verifier, and commits ONLY the lock back to this branch.
+#
+# It has no `uses:` steps, so it needs no lock entry to start, and it is
+# removed from the tree before the tool runs so the lock never records it.
+name: one-off actions.lock regeneration (standards move)
+on:
+  push:
+    branches: [claude/eager-wright-zwwbe2-standards-move]
+permissions:
+  contents: read
+concurrency:
+  group: lock-regen-standards-move
+  cancel-in-progress: false
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # commits the regenerated lock back to this branch
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      STANDARDS_SHA: 333b06a01db1874ffedb2de1bfabb195640927c7
+      LOCK_PATH: .github/workflows/actions.lock
+    steps:
+      - name: Regenerate actions.lock, verify it, and push it to this branch
+        run: |
+          set -euo pipefail
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$auth" clone --quiet --branch "$BRANCH" "https://github.com/$REPO.git" r
+          git clone --quiet https://github.com/metadatastician/standards.git std
+          git -C std checkout --quiet --detach "$STANDARDS_SHA"
+          sudo apt-get install -y -qq gawk >/dev/null
+          gh extension install github/gh-actions-lock --pin v0.2.0
+          gh actions-lock --version
+          tools="$PWD/std/scripts"
+          cd r
+          git rm --quiet --cached .github/workflows/zz-one-off-lock-regen-standards-move.yml
+          rm .github/workflows/zz-one-off-lock-regen-standards-move.yml
+          # The tool may exit non-zero yet rewrite the lock; the verifier decides.
+          gh actions-lock || echo "gh actions-lock exited $?; the verifier decides"
+          git checkout --quiet -- . ":(exclude)$LOCK_PATH"
+          git clean -fdq
+          for s in relock-sha-keys complete-job-refs close-lock prune-stale; do
+            GH_BIN=gh bash "$tools/$s.sh"
+          done
+          if grep -Fq '$/' "$LOCK_PATH"; then echo "::error::lock carries an invalid \$/ path"; exit 1; fi
+          GH_BIN=gh bash "$tools/update-actions-lock.sh" --verify-local
+          bash "$tools/check-lock-sync.sh"
+          ACTIONS_LOCK_VERIFIER="$tools/update-actions-lock.sh" bash "$tools/check-actions-lock-gate.sh" .github/workflows
+          git diff --stat -- "$LOCK_PATH"
+          if git diff --quiet -- "$LOCK_PATH"; then
+            echo "::error::the lock did not change; nothing to commit"
+            exit 1
+          fi
+          # Commit the lock alone; the staged removal of this file stays out of
+          # the commit (the PR deletes it in its own reviewed commit).
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "chore(lock): regenerate actions.lock for the metadatastician/standards move" \
+            -m "Written by gh actions-lock v0.2.0 and the estate repair chain at standards $STANDARDS_SHA (run $GITHUB_RUN_ID)." \
+            -- "$LOCK_PATH"
+          git -c "http.https://github.com/.extraheader=$auth" push --quiet origin "HEAD:$BRANCH"
+          echo "LOCK-SHA256 $(sha256sum < "$LOCK_PATH" | cut -d' ' -f1)"
