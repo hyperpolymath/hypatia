@@ -211,9 +211,47 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert findings == []
     end
 
-    test "still flags a repo with neither manifest spelling" do
+    test "accepts the repo deed `<repo>_chora.deed` as the manifest" do
+      findings =
+        RootHygiene.scan_required_missing([
+          "LICENSE",
+          ".editorconfig",
+          "rsr-template-repo_chora.deed"
+        ])
+
+      assert findings == []
+    end
+
+    test "still accepts the legacy 0-AI-MANIFEST.a2ml" do
+      findings =
+        RootHygiene.scan_required_missing(["LICENSE", ".editorconfig", "0-AI-MANIFEST.a2ml"])
+
+      assert findings == []
+    end
+
+    test "a non-deed `*_chora.*` file is not the manifest" do
+      findings =
+        RootHygiene.scan_required_missing(["LICENSE", ".editorconfig", "x_chora.deed.bak"])
+
+      assert [%{type: :missing}] = findings
+    end
+
+    test "flags a repo with no manifest, naming the deed it now needs" do
       findings = RootHygiene.scan_required_missing(["LICENSE", ".editorconfig"])
-      assert [%{file: "0-AI-MANIFEST.a2ml", type: :missing}] = findings
+      assert [%{file: "repo_chora.deed", type: :missing, severity: :high}] = findings
+    end
+
+    test "scan/2 names the missing deed after the repository directory" do
+      dir = Path.join(System.tmp_dir!(), "echo-types-#{System.unique_integer([:positive])}")
+      repo = Path.join(dir, "echo-types")
+      File.mkdir_p!(repo)
+
+      try do
+        result = RootHygiene.scan(["LICENSE", ".editorconfig"], repo)
+        assert [%{file: "echo-types_chora.deed", type: :missing}] = result.findings
+      after
+        File.rm_rf!(dir)
+      end
     end
   end
 
