@@ -205,10 +205,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
               [_, name] = Regex.run(~r/^  ([A-Za-z0-9_-]+):/, line)
               {MapSet.put(seen, name), with_to, reusable, in_j, name}
 
-            (in_j and curj) && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
+            in_j and curj && String.match?(line, ~r/^    timeout-minutes:\s*\d+/) ->
               {seen, MapSet.put(with_to, curj), reusable, in_j, curj}
 
-            (in_j and curj) && String.match?(line, ~r/^    uses:\s*\S/) ->
+            in_j and curj && String.match?(line, ~r/^    uses:\s*\S/) ->
               {seen, with_to, MapSet.put(reusable, curj), in_j, curj}
 
             String.match?(line, ~r/^[A-Za-z]/) ->
@@ -877,11 +877,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       stripped = strip_comments(content)
 
-      uses_scorecard? =
-        Regex.match?(~r/uses:\s*ossf\/scorecard-action@/, stripped)
+      uses_scorecard? = Regex.match?(~r/uses:\s*ossf\/scorecard-action@/, stripped)
 
-      publish_true? =
-        Regex.match?(~r/publish_results:\s*true/, stripped)
+      publish_true? = Regex.match?(~r/publish_results:\s*true/, stripped)
 
       # Only emit if the job that runs `ossf/scorecard-action` with `publish_results: true`
       # itself contains a `run:` step. We need to check per-job, not per-file.
@@ -981,8 +979,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       uses_checkout? = Regex.match?(~r/uses:\s*actions\/checkout@/, stripped)
 
-      has_user_root? =
-        Regex.match?(~r/options:\s*[^\n]*--user\s+(?:root|0)\b/, stripped)
+      has_user_root? = Regex.match?(~r/options:\s*[^\n]*--user\s+(?:root|0)\b/, stripped)
 
       if uses_checkout? and not has_user_root? do
         Enum.flat_map(@nonroot_container_images, fn img ->
@@ -1079,7 +1076,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       Enum.flat_map(@orphan_reusable_shas, fn {reusable_path, orphan_shas} ->
         # Match: `uses: owner/repo/.github/workflows/x-reusable.yml@SHA`
-        ref_re = ~r/uses:\s*#{Regex.escape(reusable_path)}@([0-9a-f]{8,40})/
+        # Under either name of the standards repository (StandardsRepo).
+        ref_re =
+          ~r/uses:\s*#{Hypatia.Rules.StandardsRepo.path_regex_source(reusable_path)}@([0-9a-f]{8,40})/
 
         Regex.scan(ref_re, stripped)
         |> Enum.flat_map(fn [_full, sha] ->
@@ -2907,8 +2906,17 @@ defmodule Hypatia.Rules.WorkflowAudit do
   # case-insensitively and rewrites it as the caller spells it.
   defp wf027_reusable_re(reusable) do
     case String.split(reusable, "/", parts: 3) do
-      [owner, repo, path] -> "(?i:#{Regex.escape(owner <> "/" <> repo)})/#{Regex.escape(path)}"
-      _ -> Regex.escape(reusable)
+      [owner, repo, path] ->
+        if Hypatia.Rules.StandardsRepo.name?(owner <> "/" <> repo) do
+          # A standards reusable is the same call under either name of the
+          # repository (Hypatia.Rules.StandardsRepo).
+          Hypatia.Rules.StandardsRepo.path_regex_source(reusable)
+        else
+          "(?i:#{Regex.escape(owner <> "/" <> repo)})/#{Regex.escape(path)}"
+        end
+
+      _ ->
+        Regex.escape(reusable)
     end
   end
 
@@ -3291,11 +3299,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
             []
 
           true ->
-            uses_workflow_sha? =
-              Regex.match?(~r/\$\{\{\s*github\.workflow_sha\s*\}\}/, ref_value)
+            uses_workflow_sha? = Regex.match?(~r/\$\{\{\s*github\.workflow_sha\s*\}\}/, ref_value)
 
-            caller_repo? =
-              Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
+            caller_repo? = Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
 
             if uses_workflow_sha? and not caller_repo? do
               [
@@ -3350,8 +3356,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
   variable.
   """
   def check_reusable_caller_context_self_checkout(workflow_contents) do
-    caller_ref_re =
-      ~r/\$\{\{\s*github\.(?:ref|head_ref|sha|workflow_sha)\s*\}\}/
+    caller_ref_re = ~r/\$\{\{\s*github\.(?:ref|head_ref|sha|workflow_sha)\s*\}\}/
 
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       stripped = strip_comments(content)
@@ -3369,8 +3374,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
               []
 
             true ->
-              caller_repo_var? =
-                Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
+              caller_repo_var? = Regex.match?(~r/\$\{\{\s*github\.repository\s*\}\}/, repo_value)
 
               foreign_literal_self? =
                 not caller_repo_var? and
@@ -4203,8 +4207,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     Enum.flat_map(workflow_contents, fn {filename, content} ->
       stripped = strip_comments(content)
 
-      chapel? =
-        Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped))
+      chapel? = Enum.any?(@chapel_marker_patterns, &Regex.match?(&1, stripped))
 
       if chapel? do
         runs_on_vals =

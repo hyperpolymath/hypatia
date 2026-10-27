@@ -32,7 +32,7 @@ read -r isfork isarch <<<"$meta"
 case "$CLASS" in
   B-ALLOWLIST)
     # Build body: hyperpolymath/* + each superset action as owner/repo@*
-    body=$(jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | ["hyperpolymath/*"] + . as $pats | {"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":$pats}' "$HERE/action-superset.txt")
+    body=$(jq -R -s -c 'split("\n") | map(select(length > 0) | . + "@*") | (["hyperpolymath/*"] + .) as $pats | {"github_owned_allowed":true,"verified_allowed":true,"patterns_allowed":$pats}' "$HERE/action-superset.txt")
     if [ "$DRY" = "true" ]; then echo "DRYRUN $R/B-ALLOWLIST would PUT $(printf '%s' "$body" | jq '.patterns_allowed | length') patterns"; exit 0; fi
     printf '%s' "$body" | gh api -X PUT "repos/$O/$R/actions/permissions/selected-actions" --input - >/dev/null
     expected=$(printf '%s' "$body" | jq -c '.patterns_allowed | sort')
