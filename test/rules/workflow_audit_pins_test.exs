@@ -1766,6 +1766,24 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert f.replacement == "metadatastician/standards/#{@gov}@release,one]"
     end
 
+    test "reads a quoted flow value through its closing quote" do
+      wf = "jobs: { g: { uses: \"hyperpolymath/standards/#{@gov}@release,one\" } }\n"
+      [f] = wf028(wf)
+      assert f.current_sha == "release,one"
+      assert f.replacement == "metadatastician/standards/#{@gov}@release,one"
+    end
+
+    test "judges each alias where it stands, not by its line" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+
+      wf =
+        "x-job: &job\n  uses: metadatastician/standards/#{@gov}@#{@pin}\n" <>
+          "x-step: &step\n  uses: #{ref}\n" <>
+          "jobs: { a: *job, b: { runs-on: ubuntu-latest, steps: [*step] } }\n"
+
+      assert [] == wf028(wf)
+    end
+
     test "reports a flow sibling on the line a leading uses: opens" do
       ref = "hyperpolymath/standards/#{@gov}"
       wf = "jobs: {\n  a: {\n    uses: #{ref}@x }, b: { uses: #{ref}@y\n  }\n}\n"

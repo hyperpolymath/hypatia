@@ -3073,24 +3073,28 @@ defmodule Hypatia.Rules.WorkflowAudit do
 
       # Only an alias given as a job's value (`rust: *job`, `jobs: { a: *j }`)
       # makes a reusable call; `- *step` and `steps: [ *step ]` are steps.
+      # PinSites classifies each alias where it stands, not by its line.
       aliased =
-        for %{key_line: n, line: at} <- Hypatia.Rules.PinSites.node_alias_sites(content),
-            wf028_job_alias_line?(Enum.at(lines, at - 1, "")),
+        for %{key_line: n, kind: :job} <- Hypatia.Rules.PinSites.node_alias_sites(content),
             into: MapSet.new(),
             do: n
 
       Enum.flat_map(@moved_repositories, fn move ->
-        former = "(?i:#{Regex.escape(move.former)})"
-        key = "[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*[\"']?"
-        # A block scalar ends at whitespace or its closing quote; a branch or
-        # tag may hold `,`, `}`, `]` or `#`. Inside a flow collection those
-        # end the entry.
-        block_repo = former <> "/(\\.github/workflows/[^@\\s\"']+)@([^\\s\"']+)"
-        flow_repo = former <> "/(\\.github/workflows/[^@\\s\"'#,}\\]]+)@([^\\s\"'#,}\\]]+)"
+        # The value of a `uses:` key, as YAML reads the scalar: a quoted one
+        # runs to its closing quote, whatever it holds; an unquoted one ends
+        # at whitespace in block style (a branch or tag may hold `,` `}` `]`
+        # `#`) and, inside a flow collection, at the delimiters too.
+        key = "[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*"
+        quoted = "\"([^\"]*)\"|'([^']*)'"
+        block_value = "(?:" <> quoted <> "|([^\\s\"']+))"
+        flow_value = "(?:" <> quoted <> "|([^\\s\"'#,}\\]]+))"
 
-        block_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> block_repo)
-        leading_flow_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> flow_repo)
-        inline_re = Regex.compile!("[{,]\\s*" <> key <> flow_repo)
+        block_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> block_value)
+        leading_flow_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> flow_value)
+        inline_re = Regex.compile!("[{,]\\s*" <> key <> flow_value)
+
+        call_re =
+          Regex.compile!("^(?i:#{Regex.escape(move.former)})/(\\.github/workflows/[^@]+)@(.+)$")
 
         lines
         |> Enum.with_index(1)
@@ -3107,10 +3111,10 @@ defmodule Hypatia.Rules.WorkflowAudit do
           # The `uses:` the line opens with, and every one a later flow entry
           # on the same line opens (`uses: a@x }, b: { uses: a@y`).
           leading =
-            case Regex.run(leading_re, line) do
-              [_full, path, ref] ->
+            case Regex.run(leading_re, line, return: :index) do
+              [_full | groups] ->
                 if wf027_job_key(lines, flow, number) != nil or live?,
-                  do: [{path, ref}],
+                  do: [wf028_scalar(line, groups)],
                   else: []
 
               nil ->
@@ -3120,23 +3124,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
           inline =
             inline_re
             |> Regex.scan(line, return: :index)
-            |> Enum.flat_map(fn [{at, _}, {p_at, p_len}, {r_at, r_len}] ->
+            |> Enum.flat_map(fn [{at, _} | groups] ->
               if wf027_inline_job?(lines, flow, line, number, at + 1) or live?,
-                do: [{binary_part(line, p_at, p_len), binary_part(line, r_at, r_len)}],
+                do: [wf028_scalar(line, groups)],
                 else: []
             end)
 
-          Enum.map(leading ++ inline, fn {path, ref} ->
+          for value <- leading ++ inline,
+              [_, path, ref] <- [Regex.run(call_re, value)] do
             wf028_finding(filename, number, path, ref, move)
-          end)
+          end
         end)
       end)
     end)
   end
 
-  defp wf028_job_alias_line?(line) do
-    Regex.match?(~r/["']?[\w.-]+["']?\s*:\s+\*[^\s,\[\]{}]+/, line) and
-      not Regex.match?(~r/^\s*-\s+\*/, line)
+  # The scalar a value match captured: whichever of the double-quoted,
+  # single-quoted and plain groups took part.
+  defp wf028_scalar(line, groups) do
+    {at, len} = Enum.find(groups, {0, 0}, fn {at, _} -> at >= 0 end)
+    binary_part(line, at, len)
   end
 
   defp wf028_finding(filename, number, path, ref, move) do
