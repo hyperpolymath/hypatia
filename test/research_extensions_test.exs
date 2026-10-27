@@ -388,6 +388,55 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
       File.rm_rf!(repo)
     end
+
+    test "references match the uppercase declaration, and github_token is the job token" do
+      # GitHub matches secret names without regard to case and stores them
+      # uppercase, so secrets.smtp_pass is SMTP_PASS and secrets.github_token
+      # is the job token.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: send --pass=${{ secrets.smtp_pass }} --gh=${{ secrets.github_token }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a lowercase job-token reference alone does not count" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          labels:
+            runs-on: ubuntu-latest
+            steps:
+              - run: gh label list --token=${{ secrets.github_token }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "an egress clause nested in another clause declares nothing and says so" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "(meta (egress #{smtp_job(~s|"SMTP_HOST" "SMTP_PASS"|)}))")
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "(egress …) nested inside another clause"
+      File.rm_rf!(repo)
+    end
   end
 
   # ─── RE002 ──────────────────────────────────────────────────────────

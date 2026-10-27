@@ -277,7 +277,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
       refs =
         for {line, n} <- job_lines,
-            [_, name] <- Regex.scan(~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/, line),
+            [_, ref] <- Regex.scan(~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/, line),
+            # GitHub matches secret names without regard to case and stores
+            # them uppercase; the deed declares that stored form.
+            name = String.upcase(ref),
             name != "GITHUB_TOKEN",
             do: {name, n}
 

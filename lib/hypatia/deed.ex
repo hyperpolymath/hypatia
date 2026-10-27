@@ -89,19 +89,36 @@ defmodule Hypatia.Deed do
   @required ~w(workflow job secrets endpoints enforcement)
   @allowed MapSet.new(["reason" | @required])
   @enforcement ~w(none harden-runner-audit harden-runner-block)
-  @workflow ~r/\A\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml\z/
+  # Every "." follows a non-empty name segment, as workflow-path in egress.abnf.
+  @workflow ~r/\A\.github\/workflows\/(?:[A-Za-z0-9_-]+\.)+ya?ml\z/
   @job_id ~r/\A[A-Za-z_][A-Za-z0-9_-]*\z/
-  @secret ~r/\A[A-Za-z_][A-Za-z0-9_]*\z/
-  @host_port ~r/\A(\*\.)?[A-Za-z0-9][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)*(?::(?<port>[0-9]{1,5}))?\z/
+  # The stored form: GitHub keeps secret and variable names uppercase and
+  # matches references to them without regard to case.
+  @secret ~r/\A[A-Z_][A-Z0-9_]*\z/
+  # Labels start and end with a letter or digit (RFC 1123 §2.1).
+  @host_port ~r/\A(\*\.)?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*(?::(?<port>[0-9]{1,5}))?\z/
 
   defp egress_jobs(head, items) do
+    # The clause counts only at the top level; one nested deeper would declare
+    # nothing without saying so, so it is refused.
+    nested? =
+      Enum.any?(items, fn item ->
+        not match?({:clause, "egress", _}, item) and egress_below?(item)
+      end)
+
     case for({:clause, "egress", members} <- items, do: members) do
+      _ when nested? -> {:error, "(egress …) nested inside another clause"}
       [] -> {:ok, []}
       [_ | [_ | _]] -> {:error, "more than one (egress …) clause"}
       [_] when head != "repo-deed" -> {:error, "(egress …) outside a repo-deed"}
       [members] -> egress_members(members)
     end
   end
+
+  defp egress_below?({:clause, _, inner}),
+    do: Enum.any?(inner, &(match?({:clause, "egress", _}, &1) or egress_below?(&1)))
+
+  defp egress_below?(_), do: false
 
   defp egress_members(members) do
     members
