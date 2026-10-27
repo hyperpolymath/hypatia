@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: MPL-2.0
+# ONE-OFF, this PR's branch only; deleted before the PR merges.
+#
+# The estate-rescan split adds harden-runner, upload-artifact and
+# download-artifact to estate-rescan.yml, which actions.lock does not yet
+# record for that workflow, so GitHub would refuse to start it. actions.lock
+# is tool-owned, so this job regenerates it with gh actions-lock v0.2.0 and
+# the estate repair chain (regen_lock in standards
+# scripts/regen-dependabot-locks.sh, lock-only, workflow YAML restored),
+# checks it with the governance gate's own verifier, and prints ONLY the lock
+# (base64 + sha256). GITHUB_TOKEN cannot push under .github/workflows/, so
+# the PR commits these exact bytes and checks the sha256 matches. Same
+# mechanism as #958.
+#
+# It has no `uses:` steps, so it needs no lock entry to start, and it is
+# removed from the tree before the tool runs so the lock never records it.
+name: one-off actions.lock regeneration (estate-rescan split)
+on:
+  push:
+    branches: [claude/estate-rescan-split]
+permissions:
+  contents: read
+concurrency:
+  group: lock-regen-estate-rescan
+  cancel-in-progress: false
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      STANDARDS_SHA: 333b06a01db1874ffedb2de1bfabb195640927c7
+      LOCK_PATH: .github/workflows/actions.lock
+    steps:
+      - name: Regenerate actions.lock, verify it, and print it
+        run: |
+          set -euo pipefail
+          git clone --quiet --branch "$BRANCH" "https://github.com/$REPO.git" r
+          git clone --quiet https://github.com/metadatastician/standards.git std
+          git -C std checkout --quiet --detach "$STANDARDS_SHA"
+          sudo apt-get install -y -qq gawk >/dev/null
+          gh extension install github/gh-actions-lock --pin v0.2.0
+          gh actions-lock --version
+          tools="$PWD/std/scripts"
+          cd r
+          git rm --quiet --cached .github/workflows/zz-one-off-lock-regen-estate-rescan.yml
+          rm .github/workflows/zz-one-off-lock-regen-estate-rescan.yml
+          # The tool may exit non-zero yet rewrite the lock; the verifier decides.
+          gh actions-lock || echo "gh actions-lock exited $?; the verifier decides"
+          git checkout --quiet -- . ":(exclude)$LOCK_PATH"
+          git clean -fdq
+          for s in relock-sha-keys complete-job-refs close-lock prune-stale; do
+            GH_BIN=gh bash "$tools/$s.sh"
+          done
+          if grep -Fq '$/' "$LOCK_PATH"; then echo "::error::lock carries an invalid \$/ path"; exit 1; fi
+          GH_BIN=gh bash "$tools/update-actions-lock.sh" --verify-local
+          bash "$tools/check-lock-sync.sh"
+          ACTIONS_LOCK_VERIFIER="$tools/update-actions-lock.sh" bash "$tools/check-actions-lock-gate.sh" .github/workflows
+          git diff --stat -- "$LOCK_PATH"
+          if git diff --quiet -- "$LOCK_PATH"; then
+            echo "::error::the lock did not change"
+            exit 1
+          fi
+          git diff -- "$LOCK_PATH"
+          echo "LOCK-SHA256 $(sha256sum < "$LOCK_PATH" | cut -d' ' -f1)"
+          echo "LOCK-BASE64-BEGIN"
+          base64 -w0 < "$LOCK_PATH"; echo
+          echo "LOCK-BASE64-END"
