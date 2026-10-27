@@ -1162,6 +1162,48 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "drift keeps the job's :high when the credential shares a step with fetched code" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: npm ci && deploy ${{ secrets.VISIBLE }} ${{ secrets.HIDDEN }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :high
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN"|
+      assert finding.reason =~ "in the same step"
+      assert finding.detail.exposures != []
+      File.rm_rf!(repo)
+    end
+
+    test "harden-runner's owner/repo matches without regard to case" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          deploy:
+            runs-on: ubuntu-24.04
+            steps:
+              - uses: Step-Security/Harden-Runner@0000000000000000000000000000000000000000
+              - run: deploy ${{ secrets.KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
     test "the secrets context matches without regard to case" do
       repo =
         create_repo_with_workflow(

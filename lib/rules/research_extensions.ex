@@ -505,10 +505,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
     unlisted = MapSet.difference(job.secrets, declared)
     unused = MapSet.difference(declared, job.secrets)
 
+    # An incomplete declaration must not lower the finding the job would
+    # draw undeclared: drift keeps the job's own severity.
     %{
       rule: "RE001",
       file: job.workflow,
-      severity: :warn,
+      severity: re001_severity(job),
       line: job.line,
       reason:
         "job `#{job.id}` in #{job.workflow} no longer matches its egress declaration in " <>
@@ -522,9 +524,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
               &is_nil/1
             ),
             "; "
-          ),
+          ) <> exposure_note(job),
       action: :report,
       detail: %{
+        exposures: job.exposures,
         fix:
           "Make :secrets of (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in " <>
             "#{deed_file} equal the secrets the job reads: (#{quoted_list(job.secrets)}), " <>
@@ -889,8 +892,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> Enum.min(fn -> nil end)
   end
 
+  # GitHub resolves an action's owner/repo without regard to case
+  # (Step-Security/Harden-Runner@v2 installs the same action); the `uses:`
+  # key itself is case-sensitive YAML.
   defp harden_runner_uses?(line) do
-    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?step-security\/harden-runner@/, line)
+    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?(?i:step-security\/harden-runner)@/, line)
   end
 
   defp block_scalar?(line), do: Regex.match?(~r/:\s*[>|][0-9+-]*\s*(?:#.*)?$/, line)
