@@ -1766,6 +1766,15 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert f.replacement == "metadatastician/standards/#{@gov}@release,one]"
     end
 
+    test "splits path from ref at the workflow's extension" do
+      wf =
+        "jobs:\n  g:\n    uses: hyperpolymath/standards/.github/workflows/build@nightly.yml@release\n"
+
+      [f] = wf028(wf)
+      assert f.reusable == "hyperpolymath/standards/.github/workflows/build@nightly.yml"
+      assert f.current_sha == "release"
+    end
+
     test "reads a quoted flow value through its closing quote" do
       wf = "jobs: { g: { uses: \"hyperpolymath/standards/#{@gov}@release,one\" } }\n"
       [f] = wf028(wf)

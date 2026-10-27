@@ -3093,8 +3093,12 @@ defmodule Hypatia.Rules.WorkflowAudit do
         leading_flow_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> flow_value)
         inline_re = Regex.compile!("[{,]\\s*" <> key <> flow_value)
 
+        # The path ends at the workflow's extension: a file name may hold
+        # `@` (`build@nightly.yml@release`), and so may a branch.
         call_re =
-          Regex.compile!("^(?i:#{Regex.escape(move.former)})/(\\.github/workflows/[^@]+)@(.+)$")
+          Regex.compile!(
+            "^(?i:#{Regex.escape(move.former)})/(\\.github/workflows/.+?\\.ya?ml)@(.+)$"
+          )
 
         lines
         |> Enum.with_index(1)
