@@ -199,6 +199,21 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
       assert {:error, "more than 5000 alerts" <> _} =
                SecretScanningAlerts.collect_pages(@base, request, [], 51)
     end
+
+    test "stops after exactly 50 requests when every page has a next link" do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+      next = "https://api.github.com/repositories/1/secret-scanning/alerts?page=n"
+
+      request = fn _url ->
+        Agent.update(counter, &(&1 + 1))
+        {:ok, page("[]", next)}
+      end
+
+      assert {:error, "more than 5000 alerts" <> _} =
+               SecretScanningAlerts.collect_pages(@base, request)
+
+      assert Agent.get(counter, & &1) == 50
+    end
   end
 
   describe "findings_from_alerts/3" do

@@ -35,6 +35,18 @@ defmodule Hypatia.ScorecardIngestorLicenseTest do
     assert [] = license_findings(dir)
   end
 
+  test "a LicenseRef- custom licence text satisfies the check", %{dir: dir} do
+    File.mkdir_p!(Path.join(dir, "LICENSES"))
+    File.write!(Path.join([dir, "LICENSES", "LicenseRef-Estate-1.0.txt"]), "licence text")
+    assert [] = license_findings(dir)
+  end
+
+  test "a LICENSES/ file whose name is not an SPDX identifier does not", %{dir: dir} do
+    File.mkdir_p!(Path.join(dir, "LICENSES"))
+    File.write!(Path.join([dir, "LICENSES", "notes.txt"]), "build notes")
+    assert [_] = license_findings(dir)
+  end
+
   test "a LICENSES/ holding only a placeholder does not", %{dir: dir} do
     File.mkdir_p!(Path.join(dir, "LICENSES"))
     File.write!(Path.join([dir, "LICENSES", ".gitkeep"]), "")

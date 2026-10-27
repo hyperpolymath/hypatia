@@ -246,6 +246,8 @@ defmodule Hypatia.Rules.RootHygieneTest do
         File.write!(Path.join(licenses, "README.md"), "see the licence texts")
         File.write!(Path.join(licenses, "MPL-2.0.txt"), "")
         File.write!(Path.join(licenses, "NOTES"), "no extension")
+        # Named like a licence file, but `notes` is no SPDX identifier.
+        File.write!(Path.join(licenses, "notes.txt"), "build notes")
 
         result = RootHygiene.scan([".editorconfig", "demo_chora.deed"], repo)
         assert [%{file: "LICENSE", severity: :critical}] = result.findings
