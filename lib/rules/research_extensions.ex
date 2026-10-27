@@ -22,13 +22,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
   Each rule cites its upstream source (tool name and/or paper).
 
   - **RE001** — A job holds a real credential (any `secrets.*` other
-    than the ambient `GITHUB_TOKEN`) alongside code it cannot vouch for
-    (an untrusted-input trigger, a PR-head checkout, `curl | sh`, or a
-    dependency install/build), and does not install
-    `step-security/harden-runner`. StepSecurity's Harden-Runner
-    provides outbound-egress monitoring/blocking; without it, nothing
-    watches the path by which that code would exfiltrate the
-    credential. From StepSecurity Harden-Runner deployment guide.
+    than the ambient `GITHUB_TOKEN`) but neither installs
+    `step-security/harden-runner` nor declares its egress in the repo
+    deed (standards ADR-009). It is `:high` when the credential shares
+    a step with code the job cannot vouch for (an untrusted-input
+    trigger, a PR-head checkout, `curl | sh`, or a dependency
+    install/build). StepSecurity's Harden-Runner provides outbound-egress
+    monitoring/blocking; the declaration records the boundary for it.
+    From StepSecurity Harden-Runner deployment guide.
   - **RE002** — Harden-Runner is installed but configured with
     `egress-policy: audit` (telemetry-only, never blocks). On a
     protected-branch workflow this provides no actual containment.
@@ -158,7 +159,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  # ─── RE001: credential exposed to unvetted code, no Harden-Runner ─────
+  # ─── RE001: secret-bearing job neither hardened nor declared ─────────
 
   # Events whose payload carries text or code authored by people without
   # write access to the repository.
@@ -190,39 +191,55 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @re001_fetched_code ~r/(?:curl|wget)\b[^|;&]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b|\b(?:npm|pnpm|yarn)\s+(?:i|install|ci)\b|\bnpx\s|\bpip3?\s+install\b|\b(?:pipx|uvx)\s|\bcargo\s+(?:install|build|test|run)\b|\bgo\s+(?:install|build|test|run)\b|\bgem\s+install\b|\bbundle\s+install\b|\bmix\s+(?:deps\.get|compile|test)\b|\bdeno\s+(?:run|install)\b|\bbun\s+(?:i|install|run)\b|\bopam\s+install\b|\bcabal\s+(?:install|build|test)\b|\bstack\s+(?:build|test)\b/
 
   @doc """
-  RE001: Reports each locally executed workflow job that holds a real
-  credential next to code it cannot vouch for, without a
-  `step-security/harden-runner@...` step in the same job.
+  RE001: every locally executed workflow job that reads a real secret either
+  installs `step-security/harden-runner@...` or declares its egress in the
+  repo deed (standards ADR-009). Each other such job is reported, more
+  severely when the credential sits next to code the job cannot vouch for.
 
-  A job is reported when all of these hold:
+  A job is in scope when it references a secret other than `GITHUB_TOKEN`
+  (the ambient `github.token` every job holds anyway). It is satisfied by:
 
-    * it references `${{ secrets.X }}` for some `X` other than
-      `GITHUB_TOKEN`. That one is the ambient `github.token` every job holds
-      anyway, so a job naming only it exposes nothing new;
-    * it has at least one **exposure**: the workflow runs on an
-      untrusted-input event (`pull_request_target`, `issue_comment`,
-      `issues`, `workflow_run`, …), the job checks out or fetches the head of
-      a pull request or triggering run (a `ref:`/`repository:` or a git
-      checkout/fetch/switch naming it; merely naming the head SHA in `env:`
-      or `if:` is not an exposure), or a step pipes a download into a
-      shell or installs or builds dependencies (`npm ci`, `cargo build`,
-      `mix deps.get`, …);
-    * it does not install harden-runner.
+    * a harden-runner step in the job, or
+    * an entry in the `(egress …)` clause of the repo deed
+      (`<repo>_chora.deed`, profile
+      `metadatastician/standards/1-formats/deed/spec/abnf/clauses/egress.abnf`)
+      whose `(:workflow, :job)` names the job and whose `:secrets` equal the
+      secrets it references.
 
-  Severity is `:high` when the credential and a code exposure share one
-  step. That code has the credential in its own environment, so nothing
-  has to be smuggled across steps. Otherwise it is `:warn`: code in one step
-  can still poison the workspace or tools a later credentialed step uses.
+  An undeclared job is reported. Its **exposures** are the evidence:
 
-  A credential in a job that runs only pinned actions and its own scripts
-  is not reported. Pinning is `actions.lock`'s job, and harden-runner adds
-  little there. Known gap: code fetched by other means, such as `git clone`
-  followed by running the clone, is not recognised.
+    * the workflow runs on an untrusted-input event (`pull_request_target`,
+      `issue_comment`, `issues`, `workflow_run`, …), narrowed by a job `if:`
+      that admits only listed events;
+    * the job checks out or fetches the head of a pull request or triggering
+      run (a checkout's `ref:`/`repository:`, or a git checkout/fetch/switch
+      naming it; merely naming the head SHA in `env:` or `if:` is not one);
+    * a step pipes a download into a shell or installs or builds dependencies
+      (`npm ci`, `cargo build`, `mix deps.get`, …).
+
+  Severity is `:high` when the credential and such code share one step (the
+  code has the credential in its own environment), otherwise `:warn`, with
+  or without exposures: ADR-009 asks every secret-bearing job to declare.
+
+  Secrets are read the way GitHub reads them: across each `${{ … }}` in the
+  job, even one a folded scalar splits over lines; `secrets.NAME` and
+  `secrets['NAME']`, the context matched without regard to case; string
+  literals skipped; only the top-level context counted. A read by a key
+  computed at run time (`secrets[env.X]`, `toJSON(secrets)`, `secrets.*`)
+  cannot be listed, so no declaration covers that job.
+
+  The deed is trusted only as far as it is still true:
+
+    * a listed job whose `:secrets` differ from its references (drift);
+    * a listed job that no longer exists, runs elsewhere, or reads no real
+      secret (stale), reported against the deed.
+
+  An unreadable deed or clause declares nothing, and the finding says why.
+  `:endpoints` are not compared with the workflow: that needs run-time
+  observation or a model of what each action reaches.
 
   Full-line comments and reusable-workflow jobs without a direct `runs-on`
-  field are ignored. Each finding points to the credential reference: the
-  one in the exposed step when there is one, else the first in the job.
-  Provenance: StepSecurity Harden-Runner deployment guide.
+  field are ignored. Provenance: StepSecurity Harden-Runner deployment guide.
 
   ## Why this is structural, not a regex
 
@@ -250,101 +267,354 @@ defmodule Hypatia.Rules.ResearchExtensions do
   Severity: `:high` or `:warn`, as above. Action: `:report`.
   """
   def re001_missing_harden_runner(repo_path) do
-    repo_path
-    |> workflow_files()
-    |> Enum.flat_map(fn path ->
-      content = read_workflow(path)
-      rel = Path.relative_to(path, repo_path)
+    {deed_file, declared, deed_note} =
+      case Hypatia.Deed.egress_declarations(repo_path) do
+        {:ok, file, jobs} -> {file, Map.new(jobs, &{{&1.workflow, &1.job}, &1}), nil}
+        :none -> {nil, %{}, nil}
+        {:error, file, reason} -> {file, %{}, "the repo deed declares nothing (#{reason})"}
+      end
 
-      # Comments are not runner configuration. Preserve physical line numbers
-      # so existing findings are not reported against a newly added line-1 header.
-      active_lines =
-        content
-        |> String.split("\n")
-        |> Enum.with_index(1)
-        |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+    jobs =
+      repo_path
+      |> workflow_files()
+      |> Enum.flat_map(fn path -> re001_jobs(path, Path.relative_to(path, repo_path)) end)
 
-      untrusted_events =
-        active_lines
-        |> workflow_events()
-        |> Enum.filter(&(&1 in @re001_untrusted_events))
+    job_findings =
+      Enum.flat_map(jobs, fn job ->
+        case Map.fetch(declared, {job.workflow, job.id}) do
+          :error ->
+            cond do
+              job.hardened? -> []
+              # A key computed at run time cannot be listed, so no declaration covers it.
+              job.dynamic_line -> [re001_dynamic(job, deed_file, false)]
+              true -> [re001_undeclared(job, deed_file, deed_note)]
+            end
 
+          # A declaration is an attestation, checked even when harden-runner
+          # already satisfies the rule: what it lists, and the enforcement it
+          # claims, must still be true.
+          {:ok, decl} ->
+            dynamic =
+              if job.dynamic_line && not job.hardened?,
+                do: [re001_dynamic(job, deed_file, true)],
+                else: []
+
+            drift =
+              if job.dynamic_line == nil and decl.secrets != job.secrets,
+                do: [re001_drift(job, deed_file, decl.secrets)],
+                else: []
+
+            enforcement =
+              cond do
+                decl.enforcement != "none" and not job.hardened? ->
+                  [re001_enforcement(job, deed_file, decl.enforcement)]
+
+                # Claiming block while the hardener only audits is a false attestation too.
+                decl.enforcement == "harden-runner-block" and job.harden_policy != "block" ->
+                  [re001_enforcement(job, deed_file, decl.enforcement)]
+
+                true ->
+                  []
+              end
+
+            dynamic ++ drift ++ enforcement
+        end
+      end)
+
+    # Every declaration must still describe a local job that reads a real secret.
+    live = MapSet.new(jobs, &{&1.workflow, &1.id})
+
+    stale_findings =
+      declared
+      |> Map.keys()
+      |> Enum.reject(&MapSet.member?(live, &1))
+      |> Enum.sort()
+      |> Enum.map(&re001_stale(&1, deed_file))
+
+    job_findings ++ stale_findings
+  end
+
+  # The locally executed jobs of one workflow that read a real secret, with
+  # what each holds and what it runs next to the credential.
+  defp re001_jobs(path, rel) do
+    # Comments are not runner configuration. Preserve physical line numbers
+    # so existing findings are not reported against a newly added line-1 header.
+    active_lines =
+      path
+      |> read_workflow()
+      |> String.split("\n")
+      |> Enum.with_index(1)
+      |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+
+    untrusted_events =
       active_lines
-      |> workflow_job_lines()
-      |> Enum.flat_map(fn job_lines ->
-        credential_lines = Enum.filter(job_lines, &credential_line?/1)
+      |> workflow_events()
+      |> Enum.filter(&(&1 in @re001_untrusted_events))
 
-        # Reusable jobs delegate their runtime to the source workflow. A sibling's
-        # runner or hardener cannot establish this job's execution policy.
-        local_runner? = direct_job_field?(job_lines, "runs-on")
-        steps = job_steps(job_lines)
-        # A credential in the job's own `env:` is in every step's environment.
-        job_env_credentials = job_env_lines(job_lines) |> Enum.filter(&credential_line?/1)
+    # Secrets in the workflow's top-level `env:` are inherited by every job,
+    # so each job reads them too, and a declaration must list them.
+    workflow_env = workflow_env_lines(active_lines)
+    workflow_refs = secret_refs(workflow_env)
 
-        job_untrusted_events =
-          case job_event_gate(job_lines) do
-            nil -> untrusted_events
-            gated -> Enum.filter(untrusted_events, &(&1 in gated))
-          end
+    active_lines
+    |> workflow_job_lines()
+    # Reusable jobs delegate their runtime to the source workflow. A sibling's
+    # runner or hardener cannot establish this job's execution policy.
+    |> Enum.filter(&direct_job_field?(&1, "runs-on"))
+    |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
+      refs =
+        for {name, n} <- secret_refs(job_lines) ++ workflow_refs,
+            name not in @re001_ambient_secrets,
+            do: {name, n}
 
-        with [first_credential | _] <- credential_lines,
-             true <- local_runner?,
-             exposures when exposures != [] <- re001_exposures(steps, job_untrusted_events),
-             false <- harden_runner_step?(job_lines) do
+      case refs do
+        [] ->
+          []
+
+        [{_, first_line} | _] ->
+          # A line that reads a real secret, by name or by a computed key.
+          credential_lines = MapSet.new(refs, &elem(&1, 1))
+          credential? = fn {_, n} -> MapSet.member?(credential_lines, n) end
+          steps = job_steps(job_lines)
+          # A credential in the job's or the workflow's `env:` is in every step's
+          # environment.
+          job_env_credentials = Enum.filter(job_env_lines(job_lines) ++ workflow_env, credential?)
+
+          job_untrusted_events =
+            case job_event_gate(job_lines) do
+              nil -> untrusted_events
+              gated -> Enum.filter(untrusted_events, &(&1 in gated))
+            end
+
           # A step that both holds the credential and runs fetched or head code
           # hands the credential straight to that code.
-          shared =
+          shared_line =
             Enum.find_value(steps, fn step ->
               credential =
-                Enum.find(step, &credential_line?/1) ||
+                Enum.find(step, credential?) ||
                   Enum.find(job_env_credentials, &(not overrides_env?(step, &1)))
 
-              credential && step_code_exposures(step) != [] && credential
+              credential && step_code_exposures(step) != [] && elem(credential, 1)
             end)
-
-          {severity, {_source, line}} =
-            case shared do
-              nil -> {:warn, first_credential}
-              credential -> {:high, credential}
-            end
 
           [
             %{
-              rule: "RE001",
-              file: rel,
-              severity: severity,
-              line: line,
-              reason:
-                "job in #{rel} holds a credential (`secrets.*` other than GITHUB_TOKEN) " <>
-                  "next to #{Enum.join(exposures, ", ")}" <>
-                  if(shared, do: " in the same step", else: "") <>
-                  ", but does not install `step-security/harden-runner` — " <>
-                  "review outbound-egress monitoring",
-              action: :report,
-              detail: %{
-                exposures: exposures,
-                fix:
-                  "Move the credential into a job that runs no fetched or untrusted code " <>
-                    "(pass data between jobs as artifacts), or add harden-runner as the " <>
-                    "first step of this job, with egress-policy: block and an allowlist " <>
-                    "derived from the job's actual required endpoints."
-              }
+              workflow: rel,
+              id: job_id(header),
+              line: shared_line || first_line,
+              secrets: MapSet.new(for {name, _} <- refs, is_binary(name), do: name),
+              dynamic_line: Enum.find_value(refs, fn {name, n} -> name == :dynamic && n end),
+              hardened?: harden_runner_step?(job_lines),
+              harden_policy: harden_runner_policy(steps),
+              exposures: re001_exposures(steps, job_untrusted_events),
+              shared?: shared_line != nil
             }
           ]
-        else
-          _ -> []
-        end
-      end)
+      end
     end)
   end
 
-  # A reference to a secret other than the ambient GITHUB_TOKEN. Secret names
-  # are case-insensitive, so `secrets.github_token` is the ambient one too.
-  defp credential_line?({line, _}) do
-    ~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/
-    |> Regex.scan(line, capture: :all_but_first)
-    |> Enum.any?(fn [name] -> String.upcase(name) not in @re001_ambient_secrets end)
+  # Every secret a job reads inside ${{ … }}, as {NAME, line}: the property
+  # form secrets.NAME and the index form secrets['NAME'] / secrets["NAME"],
+  # anywhere in the expression (${{ vars.X || secrets.Y }} reads Y). GitHub
+  # matches secret names without regard to case and stores them uppercase; the
+  # deed declares that stored form, so names are uppercased here.
+  #
+  # The job is scanned as one text, not line by line: a folded YAML scalar can
+  # split one expression across physical lines, and GitHub evaluates it whole.
+  # A valid workflow has no unclosed ${{, so every match is a real expression.
+  #
+  # Both scans step over string literals ('…', with '' for a quote) whole, so
+  # text inside one is never read: an expression ends at the first }} outside
+  # a literal (format('{{x}}', …) escapes braces that way), and
+  # ${{ 'secrets.X' }} reads nothing. Only the top-level secrets context
+  # counts, not a property named secrets (github.event.x.secrets.Y), and its
+  # name matches without regard to case, as GitHub's does (SECRETS.X reads X).
+  #
+  # Any other use of the context reads secrets whose names are not in the text
+  # (secrets[env.NAME], toJSON(secrets), secrets.*): it is reported as
+  # {:dynamic, line}, which no declaration can cover.
+  @expression ~r/\$\{\{((?:'(?:[^']|'')*'|[^'}]|\}(?!\}))*)\}\}/
+  @secret_ref ~r/(?<![\w.-])(?i:secrets)(?:\.([A-Za-z_][A-Za-z0-9_]*)\b(?![.\[-])|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\]|(?![\w-]))|'(?:[^']|'')*'|"[^"]*"/
+  defp secret_refs(job_lines) do
+    text = Enum.map_join(job_lines, "\n", &elem(&1, 0))
+
+    # {byte offset where each kept line starts, its physical line number}
+    {starts, _} =
+      Enum.map_reduce(job_lines, 0, fn {line, n}, at -> {{at, n}, at + byte_size(line) + 1} end)
+
+    line_of = fn at ->
+      {_, n} = starts |> Enum.take_while(fn {start, _} -> start <= at end) |> List.last()
+      n
+    end
+
+    for [_, {body_at, body_len}] <- Regex.scan(@expression, text, return: :index),
+        [{m_at, _} | groups] <-
+          Regex.scan(@secret_ref, binary_part(text, body_at, body_len), return: :index),
+        # A match that opens with a quote is a string literal, read past.
+        binary_part(text, body_at + m_at, 1) not in ["'", "\""] do
+      case Enum.find(groups, fn {at, _} -> at >= 0 end) do
+        {at, len} -> {String.upcase(binary_part(text, body_at + at, len)), line_of.(body_at + at)}
+        nil -> {:dynamic, line_of.(body_at + m_at)}
+      end
+    end
   end
+
+  defp job_id(header) do
+    [_, id] = Regex.run(~r/^\s+("[^"]+"|'[^']+'|[A-Za-z0-9_-]+):/, header)
+    String.trim(id, "\"") |> String.trim("'")
+  end
+
+  # What the job runs next to its credential, for a finding's reason.
+  defp exposure_note(%{exposures: []}), do: ""
+
+  defp exposure_note(job) do
+    "; it holds the credential next to #{Enum.join(job.exposures, ", ")}" <>
+      if(job.shared?, do: " in the same step", else: "")
+  end
+
+  # Harden-runner contains a job, so a finding about its attestation is :warn.
+  defp re001_severity(job), do: if(job.shared? and not job.hardened?, do: :high, else: :warn)
+
+  defp re001_undeclared(job, deed_file, deed_note) do
+    declare =
+      "or declare the job in the `(egress …)` clause of " <>
+        "#{deed_file || "the repo deed (<repo>_chora.deed)"}: " <>
+        "(job :workflow \"#{job.workflow}\" :job \"#{job.id}\" " <>
+        ":secrets (#{quoted_list(job.secrets)}) :endpoints () :enforcement none), " <>
+        "listing in :endpoints every host outside GitHub the job reaches — standards ADR-009."
+
+    harden =
+      "harden-runner as the first step of this job, with egress-policy: block " <>
+        "and an allowlist derived from the job's actual required endpoints, "
+
+    fix =
+      if job.exposures == [],
+        do: "Add " <> harden <> declare,
+        else:
+          "Move the credential into a job that runs no fetched or untrusted code " <>
+            "(pass data between jobs as artifacts), add " <> harden <> declare
+
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: re001_severity(job),
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} references `secrets.*` but does not install " <>
+          "`step-security/harden-runner` or declare its egress — review outbound-egress monitoring" <>
+          exposure_note(job) <>
+          if(deed_note, do: "; #{deed_note}", else: ""),
+      action: :report,
+      detail: %{exposures: job.exposures, fix: fix}
+    }
+  end
+
+  defp re001_dynamic(job, deed_file, declared?) do
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: re001_severity(job),
+      line: job.dynamic_line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} reads secrets by a key computed at run time " <>
+          "(secrets[…], toJSON(secrets) or similar), which no egress declaration can list" <>
+          exposure_note(job) <>
+          if(declared?, do: "; its entry in #{deed_file} does not cover it", else: ""),
+      action: :report,
+      detail: %{
+        exposures: job.exposures,
+        fix:
+          "Read each secret by its literal name (secrets.NAME) and declare the set, " <>
+            "or add harden-runner as the first step of this job with egress-policy: block — " <>
+            "standards ADR-009."
+      }
+    }
+  end
+
+  defp re001_drift(job, deed_file, declared) do
+    unlisted = MapSet.difference(job.secrets, declared)
+    unused = MapSet.difference(declared, job.secrets)
+
+    # An incomplete declaration must not lower the finding the job would
+    # draw undeclared: drift keeps the job's own severity.
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: re001_severity(job),
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} no longer matches its egress declaration in " <>
+          "#{deed_file}: " <>
+          Enum.join(
+            Enum.reject(
+              [
+                if(MapSet.size(unlisted) > 0, do: "reads undeclared #{quoted_list(unlisted)}"),
+                if(MapSet.size(unused) > 0, do: "declares unread #{quoted_list(unused)}")
+              ],
+              &is_nil/1
+            ),
+            "; "
+          ) <> exposure_note(job),
+      action: :report,
+      detail: %{
+        exposures: job.exposures,
+        fix:
+          "Make :secrets of (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in " <>
+            "#{deed_file} equal the secrets the job reads: (#{quoted_list(job.secrets)}), " <>
+            "and review :endpoints for the change."
+      }
+    }
+  end
+
+  defp re001_enforcement(job, deed_file, enforcement) do
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: re001_severity(job),
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} is declared in #{deed_file} with " <>
+          ":enforcement #{enforcement}, but " <>
+          if(job.hardened?,
+            do: "its harden-runner step runs `egress-policy: #{job.harden_policy}`",
+            else: "does not install `step-security/harden-runner`"
+          ) <> exposure_note(job),
+      action: :report,
+      detail: %{
+        exposures: job.exposures,
+        fix:
+          if job.hardened? do
+            "Set `egress-policy: block` on this job's harden-runner step, or declare " <>
+              ":enforcement harden-runner-audit on (job :workflow \"#{job.workflow}\" " <>
+              ":job \"#{job.id}\") in #{deed_file}."
+          else
+            "Restore harden-runner as the first step of this job, or set :enforcement none " <>
+              "on (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in #{deed_file} " <>
+              "if nothing holds the job to its :endpoints."
+          end
+      }
+    }
+  end
+
+  defp re001_stale({workflow, id}, deed_file) do
+    %{
+      rule: "RE001",
+      file: deed_file,
+      severity: :warn,
+      reason:
+        "#{deed_file} declares egress for job `#{id}` in #{workflow}, but no locally run " <>
+          "job there reads a real secret — the attestation is stale",
+      action: :report,
+      detail: %{
+        fix:
+          "Remove (job :workflow \"#{workflow}\" :job \"#{id}\") from the `(egress …)` clause, " <>
+            "or correct its :workflow / :job."
+      }
+    }
+  end
+
+  defp quoted_list(names), do: names |> Enum.sort() |> Enum.map_join(" ", &"\"#{&1}\"")
 
   defp re001_exposures(steps, untrusted_events) do
     code = Enum.flat_map(steps, &step_code_exposures/1)
@@ -449,6 +719,19 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   # The lines under the job's own `env:` key.
+  # The workflow's top-level `env:` (key at column 0) with its indented body.
+  # Every job, and every step in it, inherits these variables.
+  defp workflow_env_lines(active_lines) do
+    case Enum.drop_while(active_lines, fn {line, _} -> not Regex.match?(~r/^env:/, line) end) do
+      [env_line | rest] ->
+        body = Enum.take_while(rest, fn {line, _} -> line == "" or indent_of(line) > 0 end)
+        [env_line | body]
+
+      [] ->
+        []
+    end
+  end
+
   defp job_env_lines(job_lines) do
     with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
          index when is_integer(index) <-
@@ -683,8 +966,30 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> Enum.min(fn -> nil end)
   end
 
+  # The egress-policy of the job's harden-runner step, block or flow `with:`;
+  # harden-runner defaults to audit when none is set. nil without the step.
+  defp harden_runner_policy(steps) do
+    case Enum.find(steps, fn step ->
+           Enum.any?(step, fn {line, _} -> harden_runner_uses?(line) end)
+         end) do
+      nil ->
+        nil
+
+      step ->
+        Enum.find_value(step, "audit", fn {line, _} ->
+          case Regex.run(~r/(?:^|[\s{,])egress-policy:\s*["']?([A-Za-z-]+)/, line) do
+            [_, policy] -> policy
+            nil -> nil
+          end
+        end)
+    end
+  end
+
+  # GitHub resolves an action's owner/repo without regard to case
+  # (Step-Security/Harden-Runner@v2 installs the same action); the `uses:`
+  # key itself is case-sensitive YAML.
   defp harden_runner_uses?(line) do
-    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?step-security\/harden-runner@/, line)
+    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?(?i:step-security\/harden-runner)@/, line)
   end
 
   defp block_scalar?(line), do: Regex.match?(~r/:\s*[>|][0-9+-]*\s*(?:#.*)?$/, line)

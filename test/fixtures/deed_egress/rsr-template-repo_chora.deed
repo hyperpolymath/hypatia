@@ -1,0 +1,119 @@
+;; SPDX-License-Identifier: MPL-2.0
+(repo-deed
+  :schema-version  "1.0.0"
+  :canonical-name  "rsr-template-repo"
+  :beholding-chora #u5"estate/chora"
+
+  :repo-uuid       #u5"github.com/hyperpolymath/rsr-template-repo"
+
+  (identity :primary-forge github
+            :owner          "hyperpolymath"
+            :prefixed-name  "rm-rsr-template-repo")
+
+  (clade    :primary       rm
+            :primary-name  "Repo Management & Tooling"
+            :secondary     ()
+            :assigned      "2026-03-16"
+            :rationale     "Repo Management & Tooling (`rm`): the core value proposition is scaffolding repositories — CI/CD, AI manifests, ABI/FFI seams, governance — that other projects are instantiated from. `gv` was previously claimed as a secondary and is dropped: the template SHIPS governance files, but shipping them is not being a governance project. That authority lives in `standards` and `metadatastician-governance`. The inherited [\"gv\"] propagated into every repo created from this template, where it was even less meant.")
+
+  (forges   :github    "hyperpolymath/rsr-template-repo"
+            :gitlab    "hyperpolymath/rsr-template-repo"
+            :bitbucket "hyperpolymath/rsr-template-repo")
+
+  (lineage  :type              standalone
+            :parent            ""
+            :born              "2026-03-16"
+            :previous-names    ()
+            :instantiated-from "")
+
+  (status   :phase         active
+            :since         "2026-03-16"
+            :present       #t
+            :aliases       ()
+            :merged-into   ""
+            :superseded-by ""
+            :successors    ()
+            :ended         ""
+            (history
+              (entry :phase active
+                     :since "2026-03-16"
+                     :note  "the estate's canonical repository template; in production use")
+            ))
+
+  (meta
+        :version       "0.1.0"
+        :last-updated  "2026-04-11"
+        :type          library
+        :languages     ()
+        :license       MPL-2.0
+        :author        "Jonathan D.A. Jewell (hyperpolymath)"
+        :build-tool        just
+        :container-runtime podman
+        :ci-platform       github-actions
+        :package-manager   guix
+        :scoping-first   #t
+        :execution-order  "axis-1 > axis-2 > axis-3"
+        :axis-1           "must > intend > like"
+        :axis-2  "corrective > adaptive > perfective"
+        :axis-3  "systems > compliance > effects"
+        (scoping
+          :sources            "README, roadmap, status docs, maintenance checklist, CI/security docs"
+          :marker-scan        "TODO/FIXME/XXX/HACK/STUB/PARTIAL"
+          :idris-unsound-scan "believe_me/assert_total")
+        :corrective-first  #t
+        :adaptive-second   #t
+        :adaptive-focus    "scope-change reconciliation, stale-reference removal, obsolete-work culling"
+        :perfective-third  #t
+        :perfective-source "axis-1 honest state after corrective/adaptive updates"
+        (axis-3
+          :audit-focus        "systems in place, documentation explains actual state, safety/security accounted for, observed effects reviewed"
+          :compliance-focus   "seams/compromises/exception register, bounded exceptions, anti-drift checks"
+          :drift-risk-example "single exception broadening into policy violation (e.g. ->TypeScript spread)"
+          :effects-evidence   "benchmark execution/results and maintainer status dialogue/review"))
+
+  (ecosystem
+             :project           "rsr-template-repo"
+             :ecosystem         "hyperpolymath"
+             :position-type     "repository-template"
+             :purpose           "Canonical RSR-compliant repository template: scaffolding (CI/CD, AI manifests, ABI/FFI standards, container ecosystem, governance) that new hyperpolymath projects are instantiated from."
+             :not               ("a project in its own right" "Scaffoldia (the full-featured repo designer)" "standards (the canon source this template operationalises)")
+             :pipeline-position "foundation"
+             :chain             "standards → rsr-template-repo → (every estate repo)"
+             :pipeline-notes    "rsr-template-repo turns the RSR standard into runnable scaffolding. New repos are created from it via `just repo-init`, which substitutes the {{PLACEHOLDER}} tokens."
+             :coordination      standards
+             (related :name "standards" :relationship standard-source :notes "Defines the RSR standard, contractile canon, and policies that this template operationalises.")
+             (related :name "stapeln" :relationship build-tooling :notes "Layer-based container build system; the template ships stapeln.toml scaffolding.")
+             (related :name "selur-compose" :relationship build-tooling :notes "Service composition; the template ships selur-compose.toml scaffolding.")
+             (related :name "k9-svc" :relationship validation-tooling :notes "Runs the self-validating k9.ncl checks (.machine_readable/self-validating/).")
+             (related :name "cerro-torre" :relationship signing-tooling :notes "Container/image signing provider referenced by the container scaffolding.")
+             (related :name "svalinn" :relationship verification-tooling :notes "Supply-chain verification referenced by the container scaffolding.")
+             (related :name "vordr" :relationship verification-tooling :notes "Build/artifact verification referenced by the container scaffolding."))
+
+  (agentic
+            :version "0.1.0" :last-updated "2026-04-11"
+            (permissions  :source         #t
+                          :tests          #t
+                          :docs           #t
+                          :config         #t
+                          :create-files   #t)
+            (integrity    :fail-closed                     #t
+                          :require-evidence-per-step       #t
+                          :allow-silent-skip               #f
+                          :require-rerun-after-fix         #t
+                          :release-claim-requires-hard-pass #t)
+            (methodology :instructions-dir ".machine_readable/bot_directives/" :default-mode hybrid))
+
+  (neurosym
+             :version "0.1.0" :last-updated "2026-04-11"
+             (hypatia :scan-enabled  #t
+                      :scan-depth    standard
+                      :report-format "logtalk"))
+
+  (playbook
+            :version "0.1.0" :last-updated "2026-04-11"
+            (skeleton :version              "1.0"
+                      :last-updated         "2026-04-30"
+                      :authority-allowlist  ".machine_readable/root-allow.txt"
+                      :enforcement-workflow ".github/workflows/estate-rules.yml")
+            (deployment) (incident-response) (release-process) (docs-format) (maintenance-operations))
+)

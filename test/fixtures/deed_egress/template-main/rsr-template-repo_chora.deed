@@ -1,0 +1,1114 @@
+;; SPDX-License-Identifier: MPL-2.0
+;
+; The repo deed of rsr-template-repo: one-deed-per-repo doctrine (standards#837,
+; owner ruling 2026-09-19, Option A). Folds the former ply manifest tree
+; (82 per-directory manifests) and the family-7 AI allocation manifest
+; into deed clauses.
+; The ply, manifest and canon clauses come from the #837 pilot emitter. The
+; identity, clade, forges, lineage, status, maturity, ecosystem, meta and
+; agentic clauses carry the former CLADE, META, ECOSYSTEM, AGENTIC and STATE
+; records (#209), translated field for field under the standards mapping
+; specs (1-formats/deed/mappings/). STATE's journal is docs/status/ROADMAP.adoc.
+; The anchor, neurosym, playbook, ensaid, bot-directives, integrations,
+; policies and rsr-profile clauses at the end carry every other record this
+; repo used to keep under .machine_readable/: the deed is the one
+; machine-readable description of the repo. scripts/deed-field.sh reads any
+; field; scripts/deed-clause.sh is the one writer.
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "rsr-template-repo"
+  :beholding-chora #u5"estate/chora"
+  :repo-uuid #u5"github.com/hyperpolymath/rsr-template-repo"
+  ; The canon pin: which release of hyperpolymath/standards canon.lock this
+  ; repo implements. It is the ONLY canon pin in this deed (deed_canon
+  ; refuses zero or two); the (rsr-profile) clause below declares
+  ; capabilities and carries no pin. It moved here so the pin could follow a
+  ; canon release (#215).
+  ; Read by: dogfood-gate.yml `Canon lockstep` (reverse direction),
+  ; standards scripts/check-canon-lockstep.sh assertion 3 (forward), and
+  ; build/just/repo-init.just (writes the child's (provenance) clause at mint). Every hash MUST
+  ; equal canon.lock [canon.artifacts]; canon.lock [canon.lockstep].order is
+  ; spine-adopts-then-canon-releases, so this clause moves FIRST.
+  (canon
+    :version "2.1.3"
+    :criteria-sha256 "6a5aa8857bd0d0d58ef48827938ca17c251b6b854dacf59d306388d61694d82a"
+    :gates-sha256 "2f31f46d4753432e0aa8c9c28f339e18e062c98dc6e6ef4ecbb76993cf37638b"
+    :lockstep-since "2026-09-17"
+    ; A canon change this repo cannot satisfy is a change made in the WRONG
+    ; ORDER, not a rejected change: land the spine's adoption first, then the
+    ; canon change is a one-line bump.
+    :order "spine-adopts-then-canon-releases")
+  ; >>> repo-identity (repo-init replaces this block at mint)
+  ; The template's OWN identity. `just repo-init` swaps everything between
+  ; these two markers for build/templates/identity.deed.in, filled for the
+  ; new repo. Before that swap existed every minted repo inherited this
+  ; block's uuid and canonical-name and told arriving agents it WAS the
+  ; template (corrected in chronicles-of-slavia and scaffoldia 2026-07-16).
+  ; The uuid is not stored: it is uuid5(URL namespace, the header
+  ; :repo-uuid name). Only that typed name is written down; a hex form here
+  ; fails ADR-008's strict v8 gate.
+  ; Identity, clade, forges, lineage, status: mapping clade-to-repo-deed.
+  (identity
+    :primary-forge github
+    :owner "hyperpolymath"
+    :prefixed-name "rm-rsr-template-repo")
+  (clade
+    :primary rm
+    :primary-name "Repo Management & Tooling"
+    :secondary ()
+    :assigned "2026-03-16"
+    :rationale "Repo Management & Tooling (`rm`): the core value proposition is scaffolding repositories — CI/CD, AI manifests, ABI/FFI seams, governance — that other projects are instantiated from. `gv` was previously claimed as a secondary and is dropped: the template SHIPS governance files, but shipping them is not being a governance project. That authority lives in `standards` and `metadatastician-governance`. The inherited [\"gv\"] propagated into every repo created from this template, where it was even less meant.")
+  (forges
+    :github "hyperpolymath/rsr-template-repo"
+    :gitlab "hyperpolymath/rsr-template-repo"
+    :bitbucket "hyperpolymath/rsr-template-repo")
+  (lineage
+    :type standalone
+    :parent ""
+    :born "2026-03-16"
+    :previous-names ())
+  (status
+    :phase active
+    :since "2026-03-16"
+    :present #t
+    :aliases ()
+    :merged-into ""
+    :superseded-by ""
+    :successors ()
+    :ended ""
+    (history
+      (entry :phase active :since "2026-03-16" :note "the estate's canonical repository template; in production use")))
+  ; Maturity has its own clause (owner decision 2026-10-02; standards
+  ; 1-formats/deed/vocabulary/maturity.adoc). No :since: the date the
+  ; template reached production was never recorded. Milestones, next actions
+  ; and blockers live in docs/status/ROADMAP.adoc.
+  (maturity
+    :level production)
+  ; Ecosystem: mapping meta-ecosystem-to-repo-deed.
+  (ecosystem
+    :project "rsr-template-repo"
+    :ecosystem "hyperpolymath"
+    :position-type "repository-template"
+    :purpose "Canonical RSR-compliant repository template: scaffolding (CI/CD, AI manifests, ABI/FFI standards, container ecosystem, governance) that new hyperpolymath projects are instantiated from."
+    :not ("a project in its own right"
+          "Scaffoldia (the full-featured repo designer)"
+          "standards (the canon source this template operationalises)")
+    :pipeline-position "foundation"
+    :chain "standards → rsr-template-repo → (every estate repo)"
+    :pipeline-notes "rsr-template-repo turns the RSR standard into runnable scaffolding. New repos are created from it via `just repo-init`, which substitutes the {{PLACEHOLDER}} tokens."
+    :coordination standards
+    (related :name "standards" :relationship standard-source :notes "Defines the RSR standard, contractile canon, and policies that this template operationalises.")
+    (related :name "stapeln" :relationship build-tooling :notes "Layer-based container build system; the template ships stapeln.toml scaffolding.")
+    (related :name "selur-compose" :relationship build-tooling :notes "Service composition; the template ships selur-compose.toml scaffolding.")
+    (related :name "k9-svc" :relationship validation-tooling :notes "Runs the self-validating k9.ncl checks (.machine_readable/self-validating/).")
+    (related :name "cerro-torre" :relationship signing-tooling :notes "Container/image signing provider referenced by the container scaffolding.")
+    (related :name "svalinn" :relationship verification-tooling :notes "Supply-chain verification referenced by the container scaffolding.")
+    (related :name "vordr" :relationship verification-tooling :notes "Build/artifact verification referenced by the container scaffolding."))
+  ; <<< repo-identity
+  ; Meta: mapping meta-ecosystem-to-repo-deed. A minted repo keeps this
+  ; clause (self-name pass applied) and edits it as its own.
+  (meta
+    :version "0.1.0"
+    :last-updated "2026-04-11"
+    :type library
+    :languages ()
+    :license MPL-2.0
+    :author "Jonathan D.A. Jewell (hyperpolymath)"
+    :build-tool just
+    :container-runtime podman
+    :ci-platform github-actions
+    :package-manager guix
+    :scoping-first #t
+    :execution-order "axis-1 > axis-2 > axis-3"
+    :axis-1 "must > intend > like"
+    :axis-2 "corrective > adaptive > perfective"
+    :axis-3 "systems > compliance > effects"
+    (scoping
+      :sources "README, roadmap, status docs, maintenance checklist, CI/security docs"
+      :marker-scan "TODO/FIXME/XXX/HACK/STUB/PARTIAL"
+      :idris-unsound-scan "believe_me/assert_total")
+    :corrective-first #t
+    :adaptive-second #t
+    :adaptive-focus "scope-change reconciliation, stale-reference removal, obsolete-work culling"
+    :perfective-third #t
+    :perfective-source "axis-1 honest state after corrective/adaptive updates"
+    (axis-3
+      :audit-focus "systems in place, documentation explains actual state, safety/security accounted for, observed effects reviewed"
+      :compliance-focus "seams/compromises/exception register, bounded exceptions, anti-drift checks"
+      :drift-risk-example "single exception broadening into policy violation (e.g. ->TypeScript spread)"
+      :effects-evidence "benchmark execution/results and maintainer status dialogue/review"))
+  ; Agent permissions and integrity: mapping agentic-neurosym-playbook-to-repo-deed.
+  ; What agents must NOT do:
+  ; - Never use banned language patterns (believe_me, unsafeCoerce, etc.)
+  ; - Never commit secrets or credentials
+  ; - Never use banned languages (TypeScript, Python, Go, etc.)
+  ; - Never place state files in repository root (must be in .machine_readable/)
+  ; - Never relicense an existing file, and never run an automated licence
+  ;   sweep (LICENCE-POLICY.adoc A2). New files get correct SPDX from birth.
+  ; - Never assume a licence. Read standards/3-practice/LICENCE-POLICY.adoc: Rule 1
+  ;   defaults to MPL-2.0 (code) / CC-BY-SA-4.0 (prose), but Rule 3
+  ;   (co-developed), Rule 4 (network-deployed services) and Rule 5
+  ;   (games) are AGPL-3.0-or-later, and Rule 2 names the PMPL register.
+  ; This clause declares WHAT agents may do; the (bot-directives) clause of
+  ; this deed declares HOW they work (methodology, coverage, debt, rra).
+  ; Hooks: on enter, read this deed, then docs/status/ROADMAP.adoc; on exit,
+  ; update ROADMAP.adoc and the (bot-directives (coverage)) and
+  ; (bot-directives (debt)) clauses with scripts/deed-clause.sh; on commit,
+  ; run `just validate-rsr`.
+  (agentic
+    :version "0.1.0"
+    :last-updated "2026-04-11"
+    (permissions :source #t :tests #t :docs #t :config #t :create-files #t)
+    (integrity
+      :fail-closed #t
+      :require-evidence-per-step #t
+      :allow-silent-skip #f
+      :require-rerun-after-fix #t
+      :release-claim-requires-hard-pass #t)
+    (methodology :instructions-clause "bot-directives" :default-mode hybrid))
+  (manifest
+    :version "0.1.0"
+    :last-updated "{{CURRENT_DATE}}"
+    :project "[YOUR-REPO-NAME]"
+    :purpose "Canonical RSR (Rhodium Standard Repository) template — governance, CI/CD, machine-readable metadata, ABI/FFI seam and formal-verification scaffolding that hyperpolymath projects are instantiated from."
+    (agent :name CLAUDE :role "proofs, compilers, repo-local implementation, CI/CD, formal verification, Rust/Idris2/Zig")
+    (agent :name CHATGPT :role "prose, papers, publication review, standards docs, outreach drafts, letters")
+    (agent :name GEMINI :role "estate audits, cross-repo sweeps, long-context triage, pattern detection")
+    (agent :name VIBE :role "UI/frontend, PanLL panels,  components, theming, rapid prototyping")
+    (policy :rules ("Do not duplicate tasks across sections. If a task needs multiple LLMs, note the handoff." "Update THIS file during sessions. Do NOT recreate per-repo TODO files."))
+    (work :agent CLAUDE :task "proofs, compilers, repo-local implementation, CI/CD, formal verification, Rust/Idris2/Zig")
+    (work :agent CHATGPT :task "prose, papers, publication review, standards docs, outreach drafts, letters")
+    (work :agent GEMINI :task "estate audits, cross-repo sweeps, long-context triage, pattern detection")
+    (work :agent VIBE :task "UI/frontend, PanLL panels,  components, theming, rapid prototyping")
+    )
+  (ply
+    (directory :ply 1 :path ".github")
+    (directory :id "machine-readable-pillar" :ply 1 :path ".machine_readable" :description "Registry for all machine-readable metadata, policies, and internal\nautomation scripts."
+      (canonical-locations :ai_configs "ai/" :anchor "rsr-template-repo_chora.deed (anchor)" :compliance "compliance/" :neurosym "rsr-template-repo_chora.deed (neurosym)" :playbook "rsr-template-repo_chora.deed (playbook)" :policies "rsr-template-repo_chora.deed (policies)" :scripts "scripts/")
+      :invariants ("Repo metadata MUST live in the repo deed (rsr-template-repo_chora.deed) and follow the DEED grammar" "Internal automation MUST live in scripts/ subfolder")
+      (directory :id "ai-registry" :ply 2 :path ".machine_readable/ai" :description "Sub-registry for ai metadata.")
+      (directory :id "configs-registry" :ply 2 :path ".machine_readable/configs" :description "Sub-registry for configs metadata.")
+      (directory :ply 0 :path ".machine_readable/descriptiles" :description "This manifest declares the AI-assistant context for the descriptiles machine-readable metadata directory."
+        :invariants ("No duplicate files in root directory" "Single source of truth: this directory is authoritative" "No stale metadata"))
+      (directory :id "policies-registry" :ply 2 :path ".machine_readable/policies" :description "Sub-registry for policies metadata.")
+      (directory :id "automation-scripts-unit" :ply 2 :path ".machine_readable/scripts" :description "Internal automation logic for the project lifecycle, forge sync,\nverification triggers, and maintenance."
+        (canonical-locations :forge "forge/" :lifecycle "lifecycle/" :maintenance "maintenance/" :verification "verification/")
+        (directory :id "automation-unit-forge" :ply 3 :path ".machine_readable/scripts/forge" :description "Internal automation logic for project forge.")
+        (directory :id "automation-unit-lifecycle" :ply 3 :path ".machine_readable/scripts/lifecycle" :description "Internal automation logic for project lifecycle.")
+        (directory :id "automation-unit-verification" :ply 3 :path ".machine_readable/scripts/verification" :description "Internal automation logic for project verification.")))
+    (directory :id "container-templates" :ply 1 :path "build/container" :version "1.0.0" :description "Container templates for the stapeln container ecosystem. This directory\nprovides Podman-Chainguard-stapeln templates that are customised via\n`just container-init` or `just repo-init` during project bootstrap.\n\nAll files use {{PLACEHOLDER}} tokens that are substituted with project-\nspecific values during initialisation." :purpose "Provide a complete, security-first container deployment story for any\nRSR-compliant repository. The templates cover the full lifecycle:\nbuild, sign, verify, deploy, monitor, and govern." :overview "The stapeln container ecosystem comprises six tools:\n\nselur       — Container orchestration with zero-copy IPC. Reads compose.toml.\ncerro-torre — Verified container packaging (.ctp bundles), Ed25519 signing.\nsvalinn     — Policy-driven edge gateway (auth, rate limits, CORS, trust).\nvordr       — Runtime monitoring (health, crashes, resources, logs).\nrokur       — Secrets management (runtime injection, no baked secrets).\nk9-svc      — Nickel deployment components (Kennel/Yard/Hunt trust levels)."
+      :context ("https://stapeln.dev/ns/v1")
+      (canonical-locations :build_pipeline "build/container/stapeln/ct-build.sh" :compose "build/container/stapeln/compose.toml" :compose_example "build/container/stapeln/compose.example.toml" :compose_portable "build/container/compose.yaml" :compose_portable_example "build/container/compose.example.yaml" :containerfile "build/container/Containerfile" :containerignore "build/container/.containerignore" :deployment "build/container/stapeln/deploy.k9.ncl" :entrypoint "build/container/entrypoint.sh" :gatekeeper "build/container/stapeln/.gatekeeper.yaml" :just_module "build/just/container.just" :manifest "build/container/stapeln/manifest.toml" :monitoring "build/container/stapeln/vordr.toml" :secrets_gate "build/container/stapeln/rokur.toml")
+      :invariants ("Base images MUST be cgr.dev/chainguard/wolfi-base or cgr.dev/chainguard/static" "Container runtime is Podman — never Docker" "Containerfile — never Dockerfile" "All images run as non-root (appuser or project-specific user)" ".ctp bundles are signed with Ed25519 via cerro-torre" "Health endpoints (/health, /ready) must always be public (no auth)")
+      (file-relationships
+        (file :name "compose.toml" :role "Orchestration" :description "selur-compose stack definition. Declares services, volumes, networks,\nand health checks. References the Containerfile for image builds and\n.gatekeeper.yaml for svalinn policy." :depends-on ("Containerfile" ".gatekeeper.yaml"))
+        (file :name "Containerfile" :role "Image Build (Tier A)" :description "Multi-stage OCI container build. Stage 1 compiles the application on\nwolfi-base; Stage 2 copies the binary into a minimal runtime image and\ncopies entrypoint.sh. Engine-agnostic (podman/nerdctl/docker). The\nstapeln files (.gatekeeper.yaml, manifest.toml) are referenced only as\nOCI labels and copied in only if you uncomment those COPY lines, so the\nimage has no hard dependency on tier C." :depends-on ("entrypoint.sh"))
+        (file :name "manifest.toml" :role "Bundle Metadata" :description "Cerro-torre .ctp bundle manifest. Describes provenance, dependencies,\nattestations, and runtime security profile. Used by `ct pack` and\n`ct verify`." :depends-on ())
+        (file :name ".gatekeeper.yaml" :role "Gateway Policy" :description "Svalinn edge gateway policy. Controls authentication, rate limiting,\ncontainer trust, request validation, CORS, and audit logging." :depends-on ())
+        (file :name "ct-build.sh" :role "Build Pipeline" :description "Shell script implementing the 5-stage pipeline: build (Podman),\npack (cerro-torre .ctp), sign (Ed25519), verify, push (optional).\nDegrades gracefully when cerro-torre tools are not installed." :depends-on ("Containerfile" "manifest.toml"))
+        (file :name "entrypoint.sh" :role "Container Entrypoint" :description "Startup script with signal handling (SIGTERM, SIGINT), logging, and\nexec into the main application process." :depends-on ())
+        (file :name "vordr.toml" :role "Runtime Monitoring" :description "Vordr monitoring configuration. Health endpoint probing, crash\ndetection, resource thresholds, and structured log output." :depends-on ())
+        (file :name "deploy.k9.ncl.in" :role "Deployment Component (template)" :description "k9-svc deployment component at the Hunt leash, K9 contract v1.0.0:\npedigree with capability grant, side effects and signature block;\nenvironment configs, container config, rolling deployment strategy,\ndeploy scripts and Just recipes. `just container-init` renders it to\ndeploy.k9.ncl once no placeholder token is left." :depends-on ("compose.toml" "ct-build.sh"))
+        (file :name "compose.example.toml" :role "Example" :description "Fully-commented multi-service example (Rust API + Elixir worker +\nsvalinn gateway). Copy to compose.toml and customise." :depends-on ())
+      ))
+    (directory :id "docs-pillar" :ply 1 :path "docs" :description "Technical documentation hub. The root contains high-level orientation\n(README, Quickstart, State-Visualizer). Specialized tracks live in\nsubdirectories."
+      (canonical-locations :architecture "architecture/" :attribution "attribution/" :decisions "decisions/" :developer "developer/" :governance "governance/" :legal "legal/" :practice "practice/" :quickstart "QUICKSTART.adoc" :reports "reports/" :standards "standards/" :state_visualizer "STATE-VISUALIZER.adoc" :theory "theory/" :whitepapers "whitepapers/" :wikis "wikis/")
+      :invariants ("Primary documentation format MUST be AsciiDoc (.adoc)" "Root docs/ MUST only contain pillar entry points")
+      (directory :id "architecture-track" :ply 2 :path "docs/architecture" :description "Documentation track for system architecture and threat models."
+        (canonical-locations :threat_model "THREAT-MODEL.adoc")
+        :invariants ("Visual diagrams MUST include ASCII or Mermaid representations"))
+      (directory :id "attribution-unit" :ply 2 :path "docs/attribution" :description "Sub-unit of the docs pillar focusing on attribution.")
+      (directory :id "decisions-unit" :ply 2 :path "docs/decisions" :description "Sub-unit of the docs pillar focusing on decisions.")
+      (directory :id "developer-unit" :ply 2 :path "docs/developer" :description "Sub-unit of the docs pillar focusing on developer.")
+      (directory :id "governance-pillar" :ply 1 :path "docs/governance" :description "Primary governance pillar implementing the Triaxial Software Development\nMethodology (TSDM). Contains planning, maintenance, and audit tracks."
+        (canonical-locations :approach "SOFTWARE-DEVELOPMENT-APPROACH.adoc" :audit "audit/" :checklist "MAINTENANCE-CHECKLIST.adoc" :crg "CRG-CRITERIA.adoc" :maintenance "maintenance/" :planning "planning/" :tsdm_spec "TSDM.adoc")
+        (directory :id "governance-axis-audit" :ply 2 :path "docs/governance/audit" :description "TSDM Audit track."
+          (directory :id "governance-unit-compliance" :ply 3 :path "docs/governance/audit/compliance" :description "TSDM compliance unit within the Audit axis.")
+          (directory :id "governance-unit-effects" :ply 3 :path "docs/governance/audit/effects" :description "TSDM effects unit within the Audit axis.")
+          (directory :id "governance-unit-systems" :ply 3 :path "docs/governance/audit/systems" :description "TSDM systems unit within the Audit axis."))
+        (directory :id "governance-axis-maintenance" :ply 2 :path "docs/governance/maintenance" :description "TSDM Maintenance track."
+          (directory :id "governance-unit-adaptive" :ply 3 :path "docs/governance/maintenance/adaptive" :description "TSDM adaptive unit within the Maintenance axis.")
+          (directory :id "governance-unit-corrective" :ply 3 :path "docs/governance/maintenance/corrective" :description "TSDM corrective unit within the Maintenance axis.")
+          (directory :id "governance-unit-perfective" :ply 3 :path "docs/governance/maintenance/perfective" :description "TSDM perfective unit within the Maintenance axis."))
+        (directory :id "governance-axis-planning" :ply 2 :path "docs/governance/planning" :description "TSDM Planning track."
+          (directory :id "governance-unit-could" :ply 3 :path "docs/governance/planning/could" :description "TSDM could unit within the Planning axis.")
+          (directory :id "governance-unit-must" :ply 3 :path "docs/governance/planning/must" :description "TSDM must unit within the Planning axis.")
+          (directory :id "governance-unit-should" :ply 3 :path "docs/governance/planning/should" :description "TSDM should unit within the Planning axis.")))
+      (directory :id "legal-track" :ply 2 :path "docs/legal" :description "Sub-unit for legal and licensing documentation. Contains framework\nexhibits and archival license texts."
+        (canonical-locations :exhibits "exhibits/" :texts "texts/"))
+      (directory :id "practice-unit" :ply 2 :path "docs/practice" :description "Sub-unit of the docs pillar focusing on practice.")
+      (directory :id "reports-unit" :ply 2 :path "docs/reports" :description "Documentation unit for all automated and manual audit reports. Classified\nby domain."
+        (canonical-locations :compliance "compliance/" :maintenance "maintenance/" :performance "performance/" :quality "quality/" :security "security/")
+        (directory :id "report-unit-compliance" :ply 3 :path "docs/reports/compliance" :description "Specialised repository for compliance findings and evidence.")
+        (directory :id "report-unit-maintenance" :ply 3 :path "docs/reports/maintenance" :description "Maintenance reports.")
+        (directory :id "report-unit-performance" :ply 3 :path "docs/reports/performance" :description "Specialised repository for performance findings and evidence.")
+        (directory :id "report-unit-quality" :ply 3 :path "docs/reports/quality" :description "Specialised repository for quality findings and evidence.")
+        (directory :id "report-unit-security" :ply 3 :path "docs/reports/security" :description "Specialised repository for security findings and evidence."))
+      (directory :id "standards-unit" :ply 2 :path "docs/standards" :description "Standards unit for high-rigor verification.")
+      (directory :id "theory-track" :ply 2 :path "docs/theory" :description "Documentation track for domain-specific theory and research foundations.\nCategorised by discipline."
+        (canonical-locations :computing "computing/" :formalisms "formalisms/" :mathematics "mathematics/" :ontologies "ontologies/" :other "other/" :socio_technical "socio-technical/")
+        :invariants ("Theoretical claims MUST reference established academic or technical formalisms")
+        (directory :id "theory-unit-computing" :ply 3 :path "docs/theory/computing" :description "Theoretical foundation for computing.")
+        (directory :id "theory-unit-formalisms" :ply 3 :path "docs/theory/formalisms" :description "Theoretical foundation for formalisms.")
+        (directory :id "theory-unit-mathematics" :ply 3 :path "docs/theory/mathematics" :description "Theoretical foundation for mathematics.")
+        (directory :id "theory-unit-ontologies" :ply 3 :path "docs/theory/ontologies" :description "Theoretical foundation for ontologies.")
+        (directory :id "theory-unit-other" :ply 3 :path "docs/theory/other" :description "Theoretical foundation for other.")
+        (directory :id "theory-unit-socio-technical" :ply 3 :path "docs/theory/socio-technical" :description "Theoretical foundation for socio technical."))
+      (directory :id "whitepapers-track" :ply 2 :path "docs/whitepapers" :description "Unit for strategic publications and whitepapers. Categorised by target\naudience: Academic, Industry, and Outreach."
+        (canonical-locations :academic "academic/" :industry "industry/" :outreach "outreach/")
+        :invariants ("Each sub-track MUST have a clear audience definition in its README")
+        (directory :id "academic-unit" :ply 3 :path "docs/whitepapers/academic" :description "Academic logic at level 3.")
+        (directory :id "industry-unit" :ply 3 :path "docs/whitepapers/industry" :description "Industry logic at level 3.")
+        (directory :id "whitepapers-track-outreach" :ply 3 :path "docs/whitepapers/outreach" :description "Documentation track for outreach, education, and general-audience\nengagement. Focuses on accessibility and high-level conceptual clarity."
+          :invariants ("Language MUST be accessible to non-technical audiences" "Avoid deep technical jargon without providing clear definitions")))
+      (directory :id "wikis-track" :ply 2 :path "docs/wikis" :description "Long-form collaborative documentation and project knowledge base.\nThis directory mirrors the content structure of the project wiki."
+        :invariants ("Primary wiki format MUST be Markdown (.md) — owner ruling 2026-09-19: wikis are the .md home (berrywiki); everything outside wikis stays .adoc")))
+    (directory :ply 1 :path "examples")
+    (directory :id "features-pillar" :ply 1 :path "features" :description "Optional project features and ecosystem integrations. Provides bootstrap\nguides for high-rigor tools (Panic-Attacker, BoJ-Server, SSGs)."
+      (canonical-locations :boj_server "boj-server/" :panic_attacker "panic-attacker/" :ssg "ssg/")
+      (directory :id "feature-unit-boj-server" :ply 2 :path "features/boj-server" :description "Bootstrap and integration logic for the boj-server ecosystem component.")
+      (directory :id "feature-unit-panic-attacker" :ply 2 :path "features/panic-attacker" :description "Bootstrap and integration logic for the panic-attacker ecosystem component.")
+      (directory :id "feature-unit-ssg" :ply 2 :path "features/ssg" :description "Bootstrap and integration logic for the ssg ecosystem component."))
+    (directory :id "source-pillar" :ply 1 :path "src" :description "Primary source code directory. Organized by role and architectural\naspect."
+      (canonical-locations :aspects "aspects/" :bridges "bridges/" :contracts "contracts/" :core "core/" :definitions "definitions/" :errors "errors/" :interface "interface/")
+      :invariants ("Core logic MUST reside in core/" "Verified seams MUST reside in interface/" "Safety constraints MUST reside in contracts/" "Failure dictionaries MUST reside in errors/")
+      (directory :id "source-unit-aspects" :ply 2 :path "src/aspects" :description "Cross-cutting concerns and domain-specific aspects (Security,\nObservability, Integrity)."
+        (canonical-locations :integrity "integrity/" :observability "observability/" :security "security/")
+        (directory :id "aspect-unit-integrity" :ply 3 :path "src/aspects/integrity" :description "Implementation logic for the integrity aspect.")
+        (directory :id "aspect-unit-observability" :ply 3 :path "src/aspects/observability" :description "Implementation logic for the observability aspect.")
+        (directory :id "aspect-unit-security" :ply 3 :path "src/aspects/security" :description "Implementation logic for the security aspect."))
+      (directory :id "source-unit-bridges" :ply 2 :path "src/bridges" :description "Integration logic for external systems (API, Database, RPC, etc.).")
+      (directory :id "source-unit-contracts" :ply 2 :path "src/contracts" :description "Contracts unit for high-rigor source code.")
+      (directory :id "source-unit-core" :ply 2 :path "src/core" :description "Primary application logic and core domain models.")
+      (directory :id "source-unit-definitions" :ply 2 :path "src/definitions" :description "Definitions unit for high-rigor source code.")
+      (directory :id "source-unit-errors" :ply 2 :path "src/errors" :description "Errors unit for high-rigor source code.")
+      (directory :id "interface-seams-unit" :ply 2 :path "src/interface" :description "Consolidated \"Verified Interface Seams\" unit. This directory unifies the\nformal specification (ABI), the bridge implementation (FFI), and the\nresulting artifacts (Generated)."
+        (canonical-locations :abi "abi/" :ffi "ffi/" :generated "generated/")
+        :invariants ("ABI MUST be Idris2 (.idr)" "FFI MUST be Zig (.zig)" "Generated artifacts MUST be C-compatible" "The 'Truth' lives in abi/; the 'Implementation' lives in ffi/")
+        (directory :id "abi-logic" :ply 3 :path "src/interface/Abi" :description "Specialised Level 3 logic for abi.")
+        (directory :id "ffi-logic" :ply 3 :path "src/interface/ffi" :description "Specialised Level 3 logic for ffi."
+          (directory :id "src-unit" :ply 4 :path "src/interface/ffi/src" :description "Src logic at level 4.")
+          (directory :id "test-unit" :ply 4 :path "src/interface/ffi/test" :description "Test logic at level 4."))
+        (directory :id "generated-logic" :ply 3 :path "src/interface/generated" :description "Specialised Level 3 logic for generated."
+          (directory :id "abi-unit" :ply 4 :path "src/interface/generated/abi" :description "Abi logic at level 4."))))
+    (directory :id "verification-pillar" :ply 1 :path "verification" :description "Primary verification pillar. Contains evidence for correctness,\nperformance, formal proofs, randomized testing, and aerospace-grade\nhigh-assurance metrics (MC/DC coverage, traceability, safety cases)."
+      (canonical-locations :benchmarks "benchmarks/" :coverage "coverage/" :fuzzing "fuzzing/" :proofs "proofs/" :safety_case "safety_case/" :simulations "simulations/" :tests "tests/" :traceability "traceability/")
+      :invariants ("Evidence MUST be reproducible and documented" "High-assurance deployments MUST satisfy traceability and safety_case requirements")
+      (directory :id "benches-pillar" :ply 2 :path "verification/benchmarks" :description "Benches pillar.")
+      (directory :id "verification-unit-coverage" :ply 2 :path "verification/coverage" :description "High-assurance verification unit for coverage. \nCritical for safety-of-life and aerospace-grade deployment standards.")
+      (directory :id "fuzzing-unit" :ply 2 :path "verification/fuzzing" :description "Fuzzing unit for high-rigor verification.")
+      (directory :id "verification-unit-proofs" :ply 2 :path "verification/proofs" :description "Sub-unit focusing on proofs.")
+      (directory :id "verification-unit-safety_case" :ply 2 :path "verification/safety_case" :description "High-assurance verification unit for safety case. \nCritical for safety-of-life and aerospace-grade deployment standards.")
+      (directory :id "simulations-unit" :ply 2 :path "verification/simulations" :description "Simulations unit for high-rigor verification.")
+      (directory :ply 2 :path "verification/tests")
+      (directory :id "verification-unit-traceability" :ply 2 :path "verification/traceability" :description "High-assurance verification unit for traceability. \nCritical for safety-of-life and aerospace-grade deployment standards."))
+    )
+  ; ANCHOR — the authoritative anchor: semantic authority, implementation policy
+  ; and the golden path. The CLAUDE.md arrival pack reads anchor/golden-path and hashes this clause (ANCHOR@…).
+  (anchor
+    :schema "hyperpolymath.anchor/1"
+    :repo "{{OWNER}}/{{REPO}}"
+    :authority "upstream-canonical"
+    :purpose (
+      "Define canonical semantics and policy boundaries for this repository."
+      "Declare what downstream/satellite repos can extend but not redefine."
+      "Provide a stable golden path and invariant contract for release readiness."
+      )
+    (metadata
+      :version "1.0.0"
+      :last-updated "{{CURRENT_DATE}}")
+    (identity
+      :project "{{PROJECT_NAME}}"
+      ; language | library | service | tool
+      :kind "{{PROJECT_KIND}}"
+      :one-sentence "{{PROJECT_PURPOSE}}"
+      :domain "{{PROJECT_DOMAIN}}")
+    (semantic-authority
+      :policy "canonical"
+      :owns (
+        "Project semantics and specification"
+        "Invariant definitions and contractiles"
+        "Reference implementation behavior"
+        ))
+    (implementation-policy
+      :allowed ("Rust" "Idris2" "Zig" "Scheme" "Shell" "Just" "AsciiDoc" "Markdown")
+      :forbidden ("Node.js" "npm"))
+    (golden-path
+      :smoke-test-command ("just test" "just quality")
+      :success-criteria (
+        "Core tests pass"
+        "Quality gates pass"
+        "No unresolved critical security findings"
+        ))
+    (satellite-policy
+      :must-pin-upstream #t
+      :must-declare-authority #t
+      :must-have-anchor #t
+      :must-have-golden-path #t)
+    (semantic-authority-files
+      :language-spec "SPECIFICATION.md"
+      :formal-proofs "docs/proofs/PROOFS.adoc"
+      :type-theory "docs/theory/THEORY.adoc"
+      :algorithms "docs/theory/ALGORITHMS.adoc"))
+  ; NEUROSYM — neurosymbolic integration metadata: the meaning of operations.
+  ; Configuration for Hypatia scanning and symbolic reasoning.
+  (neurosym
+    (metadata
+      :version "0.1.0"
+      :last-updated "2026-04-11")
+    (hypatia-config
+      :scan-enabled #t
+      ; quick | standard | deep
+      :scan-depth "standard"
+      :report-format "logtalk")
+    (symbolic-rules
+      ; Custom symbolic rules for this project
+      ; (rule :name "no-unsafe-ffi" :pattern "believe_me|unsafeCoerce" :severity "critical")
+    )
+    (neural-config
+      ; Neural pattern detection settings
+      ; confidence-threshold = 0.85
+      ; model = "hypatia-v2"
+    ))
+  ; PLAYBOOK — operational playbook: how permitted actions run.
+  ; Runbooks, incident response, deployment procedures.
+  (playbook
+    (metadata
+      :version "0.1.0"
+      :last-updated "2026-04-11")
+    (deployment
+      ; :method "gitops"     ; gitops | manual | ci-triggered
+      ; :target "container"  ; container | binary | library | wasm
+    )
+    (incident-response
+      ; 1. Check the repo deed (*_chora.deed) (status) clause and docs/status/ROADMAP.adoc for current status
+      ; 2. Review recent commits and CI results
+      ; 3. Run `just validate` to check compliance
+      ; 4. Run `just security` to audit for vulnerabilities
+    )
+    (release-process
+      ; 1. Update version in the repo deed (meta :version), Justfile
+      ; 2. Run `just release-preflight` (validate + quality + security + maint-hard-pass)
+      ; 3. Optional local permission hardening: `just perms-snapshot && just perms-lock`
+      ; 4. Tag and push
+      ; 5. Restore local permissions if needed: `just perms-restore`
+      ; 6. Run `just container-push` if applicable
+    )
+    (maintenance-operations
+      ; Baseline audit:
+      ;   just maint-audit
+      ; Hard release gate:
+      ;   just maint-hard-pass
+      ; Permission audit:
+      ;   just perms-audit
+    )
+    (rsr-repo-skeleton
+      ; Canonical organisation of any RSR-derived repository.
+      ; Used by tooling, human onboarding, and the scheduled downstream sweep agent.
+      ; The 5-PR cleanup pattern (below) brings a non-conforming repository into
+      ; compliance with this skeleton.
+      ;
+      ; This section is the single source of truth for "what does an RSR repo look
+      ; like?". Other docs (TOPOLOGY, AUDIT, etc.) describe the repo at hand;
+      ; this describes the canonical shape that all RSR repos share.
+      :skeleton-version "1.0"
+      :last-updated "2026-04-30"
+      :authority-allowlist ".machine_readable/root-allow.txt"
+      :enforcement-workflow ".github/workflows/estate-rules.yml"))
+  ; eNSAID environment configuration — per-repo configuration for PanLL and
+  ; eNSAID-compatible tools.
+  ; Spec: https://github.com/hyperpolymath/standards/tree/main/1-formats/sub-specs/ensaid-config
+  (ensaid
+    :version "1.0.0"
+    :tool "panll"
+    ; Workspace mode, protection, and execution policy
+    (workspace
+      ; rhodium | gold | silver | bronze
+      :mode "rhodium"
+      ; open | guarded | locked
+      :protection "open"
+      ; live | dry-run | approval-required
+      :execution "live")
+    ; User/repo-level display and behaviour preferences
+    (preferences
+      ; high | medium | low (drift aura intensity)
+      :humidity "medium"
+      ; workspace arrangement ID
+      :default-arrangement "default-3-panel"
+      ; auto-connect panels to backends on load
+      :auto-connect #t)
+    ; Panel visibility, enablement, and isolation overrides
+    (panels
+      :version "1.0.0"
+      ; By default, all panels are available. Uncomment to restrict:
+      ; (enabled :id "valence-shell" :isolation "native" :auto-connect #t)
+      ; (enabled :id "editor-bridge" :isolation "native" :auto-connect #t)
+      ; Panels to hide for this repo context:
+      ; (disabled :ids ())
+      )
+    ; Automation Router event-driven cross-panel rules
+    (workflows
+      :version "1.0.0"
+      ; Example: rebuild on file save
+      ; (rule :name "build-on-save"
+      ;   (trigger :event "file-changed" :pattern "src/**/*.res")
+      ;   (condition :panel "build-dashboard" :field "watchMode" :equals #t)
+      ;   (action :panel "build-dashboard" :message "TriggerBuild" (args :target "game"))
+      ;   :approval "auto-fire")  ; auto-fire | require-approval | approve-once | dry-run-first
+      )
+    ; Panel clade trait and capability overrides
+    (clades
+      :version "1.0.0"
+      ; Example: add a custom capability to a panel clade
+      ; (override :id "build-dashboard" (traits :has-work-items #t) :capabilities-add ("CustomCheck"))
+      )
+    ; Custom panel bundles for this repo's workflow
+    (portfolios
+      :version "1.0.0"))
+  ; Bot directives — what agents and bots read at session start and update at
+  ; session end. Human guide:
+  ; .machine_readable/bot_directives/README.adoc.
+  (bot-directives
+    ; methodology — AI agent methodology configuration
+    ; Declares how agents should approach work in this repository.
+    ; Read at session start by any AI agent (Claude, Gemini, Copilot, etc.)
+    ;
+    ; Reference: ADR-002 (methodology layer) in hyperpolymath/standards
+    (methodology
+      (metadata
+        :version "1.0.0"
+        :last-updated "{{CURRENT_DATE}}"
+        :spec "https://github.com/hyperpolymath/standards/blob/main/1-formats/a2ml/agentic/docs/ADR-002-methodology-layer.adoc")
+      ; ============================================================================
+      ; MODE SELECTION
+      ; ============================================================================
+      ; convergent: find gaps, fill them, build infrastructure (default for ops/infra)
+      ; divergent: find what's strongest, push it further (for research/creative)
+      ; hybrid: audit 20% of budget, then focus 80% on top MUSTs (default for most)
+      (methodology
+        :default-mode "hybrid"
+        ; Hard ceiling for ring expansion (0-3)
+        :ring-ceiling 2
+        ; Max waves before requiring user "keep going"
+        :wave-cap 2
+        ; Every session must ship code, not just designs
+        :spike-required #t
+        ; ============================================================================
+        ; PRIORITY WEIGHTS
+        ; ============================================================================
+        ; MUST (3x): Blocking the current work → fix immediately
+        ; SHOULD (2x): Degrading quality of current work → fix if in zone
+        ; COULD (1x): Improving quality of adjacent work → add to debt list
+        (priority-weights
+          :must 3
+          :should 2
+          :could 1)
+        ; ============================================================================
+        ; CONVERGENT BUDGET (when mode = convergent or hybrid)
+        ; ============================================================================
+        ; How to allocate effort across work types.
+        ; Prevents over-polishing docs while structural work waits.
+        (convergent-budget
+          ; % for new modules, compilation fixes, wiring, integration
+          :structural 70
+          ; % for bugs found, broken imports, stale references
+          :corrective 20
+          ; % for SPDX headers, doc updates, formatting, style
+          :perfective 10)
+        ; ============================================================================
+        ; UNIQUE STRENGTH (when mode = divergent)
+        ; ============================================================================
+        ; What makes this project special. Agents should DEEPEN this, not broaden it.
+        ; Customise this per project — the template default is generic.
+        (unique-strength
+          :description "{{PROJECT_UNIQUE_STRENGTH}}"
+          :deepen-not-broaden #t)
+        ; ============================================================================
+        ; DIVERGENT INVARIANTS
+        ; ============================================================================
+        ; Constraints that divergent mode must NOT violate.
+        ; These are the riverbanks — diverge within them, not across.
+        ; "Amplify uniqueness" means deepen, not broaden.
+        ;
+        ; Test before any divergent action:
+        ;   "Does this deepen the existing strength, or add a parallel strength?"
+        ;   If parallel → stop. Note as cross-project insight.
+        (divergent-invariants
+          ; Customise per project. Examples:
+          ; "Idris2 only for formal verification — no Lean4, Coq, Agda",
+          ; "believe_me count must remain zero",
+          ; "FFI architecture: Idris2 → RefC → Zig → C ABI (no shortcuts)",
+          :rules ())
+        ; Optional: language invariant for the core strength
+        ; If set, divergent mode will not introduce other languages for this purpose
+        ; language-invariant = "idris2"
+        ; ============================================================================
+        ; CONSTRAINT HINTS
+        ; ============================================================================
+        ; Help Phase 0 find the critical chain faster.
+        ; Updated at session end with newly discovered constraints.
+        (known-constraints
+          ; Customise per project. Examples:
+          ; "End-to-end build has never been verified",
+          ; "libproject.so does not exist yet — all bindings call stubs",
+          :constraints ())
+        ; ============================================================================
+        ; STATE FILE VALIDATION
+        ; ============================================================================
+        ; Phase 0 reads the repo deed (status) clause and docs/status/ROADMAP.adoc first,
+        ; but they may be broken.
+        ; These rules detect corrupt/template/stale state files.
+        (state-validation
+          ; A regex, not a literal list. The list form named the exact strings it was
+          ; meant to catch ("{{PROJECT}}"), so `just repo-init` substituted the detector along
+          ; with everything else and shipped reject-if-contains = ["MY_PROJECT", ...] —
+          ; a guard against unfilled tokens that had been eaten by the filling. The
+          ; escaped pattern below contains no token for init to match, and covers every
+          ; upper-snake token rather than the three anyone remembered to enumerate.
+          ; Enforced by scripts/check-no-placeholders.sh.
+          :reject-if-matches ("\\{\\{[A-Z][A-Z0-9_]*\\}\\}")
+          :reject-if-contains ("rsr-template-repo")
+          :reject-if-project-name-mismatch #t
+          :staleness-threshold-days 90
+          :fallback-files ("TODO.md" "TODO.adoc" "ROADMAP.adoc" "README.adoc"))))
+    ; coverage — session coverage tracking
+    ; Updated at the end of each AI agent session.
+    ; Persists what was visited, what was skipped, and what has MUSTs.
+    ;
+    ; Reference: ADR-002 (methodology layer) in hyperpolymath/standards
+    (coverage
+      (metadata
+        :version "1.0.0"
+        :last-updated "{{CURRENT_DATE}}")
+      ; ============================================================================
+      ; COVERAGE STATE
+      ; ============================================================================
+      ; Updated by agents at session end. Tracks which components have been
+      ; visited and which have known MUSTs that were skipped.
+      (coverage
+        :total-components 0
+        :visited-components 0
+        :coverage-percent 0))
+    ; debt — Meander debt list
+    ; Things found but not fixed. Carried between sessions.
+    ; Becomes the next session's Phase 0 input.
+    ;
+    ; Reference: ADR-002 (methodology layer) in hyperpolymath/standards
+    (debt
+      (metadata
+        :version "1.0.0"
+        :last-updated "{{CURRENT_DATE}}"))
+    ; rra — directives for Robot Repo Automaton (RRA) enforcing the Platonic Ideal root.
+    (rra
+      :target "robot-repo-automaton"
+      (module
+        :name "root-cleaner"
+        ; mode can be "enforce" (auto-commit) or "putative" (write to /.auto-rr/ for human review)
+        (policy
+          :mode "putative"
+          :strictness "high")
+        ; Files that are strictly allowed to exist at the root. CLAUDE.md is the
+        ; generated arrival pack; git/Claude/pre-commit all read it from the ROOT.
+        ; The pattern ".*" allows hidden dotfiles implicitly; RRA checks specific
+        ; dotfile rules below.
+        (allow-list
+          :files ("README.adoc" "CHANGELOG.adoc" "Justfile" "LICENSE" "rsr-template-repo_chora.deed" "CITATION.cff" "CLAUDE.md")
+          :patterns (".*"))
+        ; Relocation rules: move heavy prose out of the root
+        (relocations
+          (move :pattern "*.adoc" :dest "docs/" :except ("README.adoc" "CHANGELOG.adoc"))
+          (move :pattern "GOVERNANCE.*" :dest "docs/")
+          (move :pattern "ARCHITECTURE.*" :dest "docs/")
+          (move :file "MAINTAINERS.adoc" :dest "docs/"))
+        ; Consolidation rules: reduce the dotfile "wall of noise"
+        (consolidations
+          ; Merge legacy environment trackers into mise
+          (merge :sources (".envrc" ".tool-versions") :engine "mise-translator" :dest ".config/mise.toml")
+          ; Ensure standard git attributes are consolidated
+          (merge :sources (".gitattributes-legacy" ".gitattributes-os") :dest ".gitattributes"))
+        ; Explicitly ignore certain paths from being cleaned
+        (ignores
+          :dirs ("src/" "tests/" ".git/" "docs/" ".machine_readable/")))))
+  ; Optional ecosystem integrations.
+  ; Each clause is opt-in; delete the ones your project does not use.
+  (integrations
+    ; OPTIONAL: Feedback-o-Tron Integration — Autonomous Bug Reporting
+    ; Delete this clause if your project does not use feedback-o-tron.
+    (feedback-o-tron
+      (integration
+        :name "feedback-o-tron"
+        :type "bug-reporter"
+        :repository "https://github.com/hyperpolymath/feedback-o-tron")
+      (reporting-config
+        :platforms ("github" "gitlab" "bugzilla")
+        :deduplication #t
+        :audit-logging #t
+        :auto-file-upstream "on-external-dependency-failure"))
+    ; OPTIONAL: Proven Integration — Formally Verified Safety Library
+    ; Delete this clause if your project does not use the proven library.
+    ; See https://github.com/hyperpolymath/proven for details.
+    (proven
+      (integration
+        :name "proven"
+        :type "safety-library"
+        :repository "https://github.com/hyperpolymath/proven"
+        :version "1.2.0")
+      (binding-policy
+        :approach "thin-ffi-wrapper"
+        :unsafe-patterns "replace-with-proven-equivalent"
+        :modules-available (
+          "SafeMath"
+          "SafeString"
+          "SafeJSON"
+          "SafeURL"
+          "SafeRegex"
+          "SafeSQL"
+          "SafeFile"
+          "SafeTemplate"
+          "SafeCrypto"
+          ))
+      (adoption-guidance
+        :priority "high"
+        :scope "all-string-json-url-crypto-operations"
+        :migration "incremental — replace unsafe patterns as encountered"))
+    ; OPTIONAL: VeriSimDB Feed — Cross-Repo Analytics Data Store
+    ; Delete this clause if your project does not feed data to VeriSimDB.
+    ; See https://github.com/hyperpolymath/nextgen-databases for details.
+    (verisimdb
+      (integration
+        :name "verisimdb"
+        :type "data-feed"
+        :repository "https://github.com/hyperpolymath/nextgen-databases"
+        :data-store "verisimdb-data")
+      (feed-config
+        :emit-scan-results #t
+        :emit-build-metrics #t
+        :emit-dependency-graph #t
+        :format "hexad"
+        :destination "verisimdb-data/feeds/"))
+    ; OPTIONAL: Vexometer Integration — Irritation Surface Analysis
+    ; Delete this clause if your project does not use vexometer.
+    (vexometer
+      (integration
+        :name "vexometer"
+        :type "friction-measurement"
+        :repository "https://github.com/hyperpolymath/vexometer")
+      (measurement-config
+        :dimensions 10
+        :emit-isa-reports #t
+        :lazy-eliminator #t
+        :satellite-interventions #t)
+      (hooks
+        :cli-tools "measure-on-error"
+        :ui-panels "measure-on-interaction"
+        :build-failures "measure-on-failure"))
+    ; groove — Groove Protocol manifest: the API surfaces this project exposes
+    ; Consumed by the Groove bridge /
+    ; zig-unified-api-adapter for snap-on/snap-off service discovery. Edit it to
+    ; match your project's actual APIs; `just groove-setup` writes :port and the
+    ; :enabled flags through scripts/deed-clause.sh.
+    ; See: https://github.com/hyperpolymath/standards/tree/main/groove-protocol
+    (groove
+      :version "1.0"
+      ; Service identity — replace {{REPO}} with your project name
+      :service "{{REPO}}"
+      :service-version "0.1.0"
+      ; Primary port — MUST be unique across the ecosystem. Check PORT-REGISTRY.md
+      ; in the standards repo before assigning:
+      ; https://github.com/hyperpolymath/standards/blob/main/PORT-REGISTRY.md
+      ; 0 = not assigned yet — run `just groove-setup` to assign
+      :port 0
+      ; Health endpoint — used by Groove discovery
+      :health "/health"
+      ; Capabilities — what this service can do for others
+      :capabilities ()
+      ; Dependencies — what this service needs from others
+      :dependencies ()
+      ; API surfaces this project exposes (dodeca-API). Remove the ones you don't use.
+      (api-surfaces
+        (rest :enabled #t :path "/api/v1")
+        (grpc :enabled #f :port-offset 1)
+        (graphql :enabled #f :path "/graphql")
+        (websocket :enabled #f :path "/ws")
+        (sse :enabled #f :path "/events")
+        (groove :enabled #t :path "/.well-known/groove"))))
+  ; Maintenance and development policies, machine-readable canonical.
+  ; Human companions live in
+  ; docs/governance/.
+  (policies
+    ; Canonical maintenance governance model
+    (maintenance-axes
+      (metadata
+        :version "1.0.0"
+        :last-updated "{{CURRENT_DATE}}"
+        :scope "repo")
+      (discovery
+        :human-entrypoints (
+          "README.adoc"
+          "docs/governance/MAINTENANCE-CHECKLIST.adoc"
+          "docs/governance/SOFTWARE-DEVELOPMENT-APPROACH.adoc"
+          )
+        :machine-entrypoints (
+          "*_chora.deed (policies (maintenance-axes))"
+          "*_chora.deed (policies (maintenance-checklist))"
+          "*_chora.deed (policies (software-development-approach))"
+          "*_chora.deed"
+          ".machine_readable/ai/README.adoc"
+          "*_chora.deed (bot-directives)"
+          )
+        :bots ("hypatia" "gitbot-fleet" "repo visitors"))
+      (axes
+        :axis-1 "must > intend > like"
+        :axis-2 "corrective > adaptive > perfective"
+        :axis-3 "systems > compliance > effects"
+        :execution-order "axis-1 > axis-2 > axis-3")
+      (axis-1-scoping
+        :required #t
+        :sources "README, roadmap, status docs, maintenance checklist, CI/security docs"
+        :markers "TODO/FIXME/XXX/HACK/STUB/PARTIAL"
+        :idris-unsound-markers "believe_me/assert_total"
+        :output "scoped work assembly in must/intend/like buckets")
+      (axis-2-maintenance
+        :corrective-first #t
+        :adaptive-second #t
+        :adaptive-focus "scope changes, stale references, obsolete work culling"
+        :perfective-third #t
+        :perfective-source "honest state from axis-1 after corrective/adaptive updates")
+      (axis-3-audit
+        :systems-check #t
+        :compliance-check #t
+        :effects-check #t
+        :compliance-focus "seams/compromises/exception register and anti-drift"
+        :compliance-tooling "panic-attack"
+        :effects-tooling "ecological checking with sustainabot guidance"
+        :effects-evidence "benchmark evidence and maintainer dialogue/status review"))
+    ; Cross-repo maintenance baseline (machine-readable canonical)
+    (maintenance-checklist
+      (metadata
+        :version "1.1.0"
+        :last-updated "2026-02-24"
+        :scope "cross-repo"
+        :source-human "docs/governance/MAINTENANCE-CHECKLIST.adoc"
+        :companion-human "docs/governance/SOFTWARE-DEVELOPMENT-APPROACH.adoc"
+        :companion-machine "*_chora.deed (policies (software-development-approach))")
+      (policy
+        :single-source #t
+        :notes "Use this clause as canonical machine policy and keep the AsciiDoc synchronized.")
+      (maintenance-axes
+        :scoping-first #t
+        :execution-order ("scoping" "axis-1" "axis-2" "axis-3")
+        :axis-1 "must > intend > like"
+        :axis-2 "corrective > adaptive > perfective"
+        :axis-3 "systems > compliance > effects")
+      (scoping
+        :inputs_required (
+          "README"
+          "roadmap"
+          "status-docs"
+          "maintenance-checklist"
+          "ci-and-security-docs"
+          )
+        :marker_scan_required ("TODO" "FIXME" "XXX" "HACK" "STUB" "PARTIAL")
+        :idris_unsound_scan_required ("believe_me" "assert_total")
+        :scope_assembly_buckets ("must" "intend" "like"))
+      (axis-2-maintenance-rules
+        :corrective-first #t
+        :adaptive-second #t
+        :adaptive_examples (
+          "scope-change reconciliation"
+          "stale-reference removal"
+          "obsolete-work culling"
+          )
+        :perfective-third #t
+        :perfective_source "axis-1 honest state after corrective/adaptive updates")
+      (axis-3-audit-rules
+        :systems-check #t
+        :documentation-honesty-check #t
+        :safety-security-accounted-check #t
+        :effects-review-check #t
+        :benchmark-evidence-required #t
+        :maintainer-dialogue-review-required #t
+        :compliance-seams-check #t
+        :exception-register-required #t
+        :exception-bounded-scope-required #t
+        :policy-drift-contamination-check #t
+        :example-drift-risk "single TypeScript exception causing broad ->TypeScript migration"
+        :compliance-tooling "panic-attack"
+        :effects-tooling "ecological checking with sustainabot guidance")
+      (generic-cleanup-finish-off
+        :root-cleanup-required #t
+        :stale-work-cull-required #t
+        :docs-parity-required #t
+        :machine-human-sync-required #t
+        :compliance-finish-off-required #t
+        :effects-finish-off-required #t
+        :release-prep-summary-required #t
+        :next-actions-required ("corrective" "adaptive" "perfective"))
+      (must
+        :root_control_files (
+          ".gitignore"
+          ".gitattributes"
+          ".editorconfig"
+          ".tool-versions"
+          "Containerfile"
+          "Justfile"
+          )
+        :root_hosting_files ("CNAME" ".nojekyll")
+        :ownership_files ("MAINTAINER" ".github/CODEOWNERS")
+        :machine_readable_required (
+          "*_chora.deed (anchor)"
+          ".machine_readable/contractiles/"
+          ".machine_readable/ai/"
+          ".machine_readable/bot_directives/"
+          )
+        :contractiles_required (
+          ".machine_readable/contractiles/must/"
+          ".machine_readable/contractiles/trust/"
+          ".machine_readable/contractiles/intend/"
+          )
+        :security_required ("www/.well-known/security.txt" "ci-security-scan")
+        :quality_gate_required (
+          "format"
+          "lint"
+          "unit-tests"
+          "integration-tests"
+          "p2p-tests"
+          "e2e-tests"
+          "bench-smoke"
+          "docs-check"
+          "security-scan"
+          )
+        :abi_ffi_policy ("ABI Idris2 in src/interface/abi/*.idr" "FFI Zig in ffi/**/*.zig"))
+      (should
+        :docs_primary_format "adoc"
+        :docs_structure (
+          "docs/theory"
+          "docs/practice"
+          "docs/whitepapers/academic"
+          "docs/whitepapers/industry"
+          "docs/proofs"
+          "docs/reports"
+          )
+        :root_minimization #t
+        :well_known_metadata #t
+        :roadmap_honesty_with_dates #t
+        :ci_doc_format_policy #t)
+      (could
+        :generate_human_from_machine #t
+        :mode_aware_bots ("corrective" "adaptive" "perfective" "audit")
+        :topology_dashboard #t
+        :exception_registry #t))
+    ; General software development approach (machine-readable)
+    (software-development-approach
+      (metadata
+        :version "1.0.0"
+        :last-updated "2026-02-24"
+        :scope "cross-repo"
+        :source-human "docs/governance/SOFTWARE-DEVELOPMENT-APPROACH.adoc")
+      (execution
+        :order ("axis-1" "axis-2" "axis-3"))
+      (axis-1
+        :name "scope"
+        :priority "must > intend > like"
+        :inputs ("README" "roadmap" "status-docs" "ci-and-security-docs")
+        :marker-scan ("TODO" "FIXME" "XXX" "HACK" "STUB" "PARTIAL")
+        :idris-unsound-scan ("believe_me" "assert_total")
+        :output "scoped-work-assembly")
+      (axis-2
+        :name "maintenance"
+        :priority "corrective > adaptive > perfective"
+        :corrective "defect/regression/safety/security fixes"
+        :adaptive "scope reconciliation, stale-reference removal, obsolete-work culling"
+        :perfective "quality improvements derived from axis-1 honest state")
+      (axis-3
+        :name "audit"
+        :priority "systems > compliance > effects"
+        :systems "required systems present and operating"
+        :compliance "exceptions explicit, bounded, and drift-resistant"
+        :effects "benchmark/operational impact evidence captured and reviewed"
+        :compliance-tooling "panic-attack"
+        :effects-tooling "ecological checking with sustainabot guidance")
+      (cleanup-finish-off
+        :root-cleanup #t
+        :stale-work-cull #t
+        :docs-sync-human-machine #t
+        :compliance-audit #t
+        :effects-audit #t
+        :release-summary ("must" "should" "could")
+        :next-actions ("corrective" "adaptive" "perfective"))
+      (collaboration
+        :maintainer-dialogue-required #t
+        :dialogue-topics ("what changed" "why" "remaining risks")))
+    ; Component Readiness Grades (CRG v1.0) — the machine-readable grade
+    ; standard; the human companion is docs/governance/CRG-CRITERIA.adoc.
+    (crg-criteria
+      (standard
+        :name "Component Readiness Grades"
+        :abbreviation "CRG"
+        :version "1.0"
+        :date "2026-02-28"
+        :author "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
+        :license "MPL-2.0"
+        :family "RSR")
+      (grades
+        (grade :code "X" :name "Untested" :release-stage #f :ordinal 0
+          :description "No testing has been performed. Status unknown."
+          :evidence-required "none"
+          :minimum-for #f)
+        (grade :code "F" :name "Harmful / Wasteful" :release-stage #f :ordinal 1
+          :description "Actively harmful, wasteful, or better handled externally. Reject, deprecate, or delegate."
+          :evidence-required "documented test results showing harm, waste, or redundancy; comparison with alternatives"
+          :minimum-for #f)
+        (grade :code "E" :name "Minimal / Salvageable" :release-stage "pre-alpha" :ordinal 2
+          :description "Does something slight. Barely functional. Needs redesign or major work."
+          :evidence-required "at least one successful test case; documented failures and limitations"
+          :minimum-for #f)
+        (grade :code "D" :name "Partial / Inconsistent" :release-stage "alpha" :ordinal 3
+          :description "Works on some things but not systematically."
+          :evidence-required "matrix of tested scenarios; documented scope vs actual capabilities"
+          :minimum-for "alpha")
+        (grade :code "C" :name "Self-Validated" :release-stage "beta" :ordinal 4
+          :description "Tested on the tool/project itself (dogfooding). Reliable in home context."
+          :evidence-required "active dogfooding; CI integration or equivalent; no known failures in home context"
+          :minimum-for "beta")
+        (grade :code "B" :name "Broadly Validated" :release-stage "release-candidate" :ordinal 5
+          :description "Tested on at least 6 disparate, unrelated targets."
+          :evidence-required "list of 6+ diverse targets with test results; evidence of feedback incorporation"
+          :minimum-for "release-candidate")
+        (grade :code "A" :name "Field-Proven" :release-stage "stable" :ordinal 6
+          :description "Real-world external feedback confirms value. Does no harm in the wild."
+          :evidence-required "real-world usage data; feedback incorporation evidence; no unresolved harm reports"
+          :minimum-for "stable"))
+      (transitions
+        (promotion :from "X" :to "E" :requirement "Run at least one test. Document results.")
+        (promotion :from "X" :to "F" :requirement "Evaluate and determine harmful or wasteful.")
+        (promotion :from "E" :to "D" :requirement "Fix critical failures. Document scope.")
+        (promotion :from "D" :to "C" :requirement "Dogfood on own project. Fix what breaks.")
+        (promotion :from "C" :to "B" :requirement "Test on 6+ diverse external targets. Fix what breaks.")
+        (promotion :from "B" :to "A" :requirement "Ship. Collect external feedback. Demonstrate no harm.")
+        (demotion :from "A" :to "B" :trigger "External feedback dries up or reveals no longer useful.")
+        (demotion :from "A" :to "F" :trigger "External feedback reveals component causes harm.")
+        (demotion :from "B" :to "C" :trigger "Broad validation reveals unfixed failures.")
+        (demotion :from "C" :to "D" :trigger "Home context changes and component no longer reliable.")
+        (demotion :from "C" :to "F" :trigger "Dogfooding reveals net negative.")
+        (demotion :from "D" :to "E" :trigger "Scope narrows to barely functional.")
+        (demotion :from "any" :to "F" :trigger "Better external alternative makes this pure opportunity cost."))
+      (conformance
+        :rules (
+          "Each assessable component MUST have a grade from {X, F, E, D, C, B, A}."
+          "Each grade above X MUST be supported by evidence per section 4."
+          "Assessments MUST be recorded in a version-controlled location."
+          "Assessments MUST be reviewed at least once per release cycle."
+          "Release stages MUST respect minimum grade thresholds.")))
+    ; Triaxial Software Development Methodology — the machine-readable axes;
+    ; the human companion is docs/governance/TSDM.adoc.
+    (tsdm
+      :id "tsdm-standard"
+      :version "1.0.0"
+      (axes
+        (axis :ordinal 1 :name "Planning" :levels ("must" "should" "could"))
+        (axis :ordinal 2 :name "Maintenance" :levels ("corrective" "adaptive" "perfective"))
+        (axis :ordinal 3 :name "Audit" :levels ("systems" "compliance" "effects")))
+      :invariants (
+        "Every task MUST map to at least one TSDM coordinate"
+        "Axis 1 priority governs resource allocation"
+        "Axis 2 type governs commit categorisation"
+        "Axis 3 focus governs audit depth")))
+  ; rsr-profile — this repo's declared RSR v2.0 capabilities.
+  ; It carries no canon pin: the (canon) clause above is the pin, exactly once.
+  ;
+  ; It declares which capabilities this repo has,
+  ; per 0-canon/TEMPLATE-APPLICABILITY-POLICY.adoc; the RSR v2.0 conformance oracle
+  ; (hypatia Hypatia.Rules.RsrConformance) uses `capabilities` to compute the
+  ; APPLICABLE criteria set — a gated criterion is scored only when its gating
+  ; capability appears below; everything else is `na` and excluded from the
+  ; denominator.
+  ;
+  ; rsr-template-repo is deliberately MAXIMAL: it ships scaffolding for FFI/ABI
+  ; seams, in-tree formal proofs, a container, a reproducible build, benchmarks,
+  ; a docs site, and the full governance trio — so a repo scaffolded FROM it can
+  ; adopt any of them. Its declared set is therefore near-total, which is exactly
+  ; what makes it the dogfood target (the gate requires Gold on the applicable
+  ; set). Every capability below is grounded in a file/dir that actually exists
+  ; in this tree; capabilities it does NOT have (rust, affinescript, mobile,
+  ; web-ui, api-service, published-package) are omitted so the oracle does not
+  ; score this repo against modules it does not carry.
+  (rsr-profile
+    :version "1.0.0"
+    :spec "rsr-criteria-v2"
+    :declares-against "2.1.1-draft"
+    ; Role in the estate pipeline: standards (canon) -> THIS (spine) -> scaffoldia
+    ; (composer) -> minted repos. A spine may carry capability-gated modules it
+    ; does not declare, for the repos minted from it; see [carrier] in the canon
+    ; gates table. A minted repo doing the same is still drift.
+    :role "spine"
+    ; Effective capability set (direct declaration; no preset shorthand used).
+    :capabilities (
+      ; src/interface/ffi/build.zig + Zig FFI layer
+      "zig"
+      ; src/interface/abi.ipkg + src/interface/Abi/ (dependent-typed ABI)
+      "idris2"
+      ; scripts/*.sh automation
+      "bash"
+      ; src/ command-line entry scaffolding
+      "cli"
+      ; consumed/published as a library surface
+      "library"
+      ; C-ABI FFI seam (Zig), src/interface/ffi/
+      "ffi"
+      ; formally specified ABI: src/interface/abi.ipkg + src/interface/Abi/ proofs
+      "abi"
+      ; verification/proofs/ (in-tree mechanised proofs)
+      "formal-proofs"
+      ; .github/workflows/pages.yml (casket/Pages)
+      "docs-site"
+      ; build/container/ + .devcontainer/Containerfile
+      "container"
+      ; build/guix.scm
+      "reproducible-build"
+      ; benches/
+      "benchmarks"
+      ; full AUDIT/AFFIRMATION/GOVERNANCE/MAINTAINERS trio
+      "governance-tier"
+      )
+  (notes
+    ; Capabilities intentionally NOT declared (no corresponding code in tree):
+    ;   rust           — no *.rs / Cargo.toml (the FFI/ABI layer is Zig + Idris2)
+    ;   affinescript   — no *.affine
+    ;   mobile         — no Tauri/Dioxus app
+    ;   web-ui         — no browser UI
+    ;   api-service    — not a network daemon
+    ;   published-package — a scaffold template, not itself a registry artifact
+    :omitted-rationale "Declaring a capability this repo lacks would make the oracle score it against a module it does not carry — the over-scaffolding failure v2.0 fixes. See 0-canon/TEMPLATE-APPLICABILITY-POLICY.adoc."))
+  ; Egress attestation (standards ADR-009; grammar
+  ; 1-formats/deed/spec/abnf/clauses/egress.abnf). Every job that reads a real
+  ; secret (anything but GITHUB_TOKEN) is listed with exactly the secrets it
+  ; reads, the endpoints outside GitHub it reaches, and what holds it to them.
+  ; Hypatia RE001 accepts an entry here in place of step-security/harden-runner
+  ; and reports drift between an entry and its workflow. A minted repo inherits
+  ; these entries with the workflows; when you add secrets.* to a job, or
+  ; delete a workflow listed here, change this clause in the same commit.
+  (egress
+    :policy "standards ADR-009"
+    (job
+      :workflow ".github/workflows/push-email-notify.yml"
+      :job "notify"
+      :secrets ("SMTP_HOST" "SMTP_PORT" "SMTP_USER" "SMTP_PASS")
+      :endpoints ("secret:SMTP_HOST")
+      :enforcement none
+      :reason "Sends the push notification by SMTP submission to the org mail host, whose name is itself a secret.")
+    (job
+      :workflow ".github/workflows/sonarqube.yml"
+      :job "sonarqube"
+      :secrets ("SONAR_TOKEN")
+      :endpoints ("sonarcloud.io" "*.sonarcloud.io" "binaries.sonarsource.com" "keyserver.ubuntu.com" "keys.openpgp.org")
+      :enforcement none
+      :reason "Uploads the CI-based analysis to SonarQube Cloud. Skipped when SONAR_TOKEN is unset. SonarSource/sonarqube-scan-action v8.3.0 downloads the scanner from binaries.sonarsource.com and, with signature verification on (its default), fetches the signing key from keyserver.ubuntu.com, falling back to keys.openpgp.org.")
+    (job
+      :workflow ".github/workflows/build-notification.yml"
+      :job "trigger-boj"
+      :secrets ("BOJ_SERVER_URL")
+      :endpoints ("secret:BOJ_SERVER_URL" "var:BOJ_SERVER_URL")
+      :enforcement none
+      :reason "Notifies the BoJ server of a push. The URL is the secret when set, else the variable that also gates the job."))
+)
