@@ -19,6 +19,9 @@ defmodule Hypatia.Rules.StandardsRepo do
   @doc "The repository's current name."
   def current, do: @current
 
+  @doc "The names the repository was known by before, most recent first."
+  def former, do: @former
+
   @doc "Every name the repository is known by, current first."
   def names, do: [@current | @former]
 

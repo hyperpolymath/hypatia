@@ -583,9 +583,11 @@ defmodule Hypatia.Rules.PinSites do
   Every step or job given whole as an alias — `- *step` in a job's
   `steps:`, `*step` as an entry of a `steps: [ ... ]`, `rust: *job` under
   `jobs:` — resolved to the `uses:` of the mapping its anchor holds:
-  `%{line, key_line, anchor_line, site}`, the alias' line, the line of that
-  `uses:` key, the line its reference stands on, and its site as `sites/1`
-  returns one (offsets into that line). The reference is the key's value as
+  `%{line, key_line, anchor_line, site, kind}`, the alias' line, the line of
+  that `uses:` key, the line its reference stands on, its site as `sites/1`
+  returns one (offsets into that line), and `kind` — `:job` where the alias
+  is a job's value under `jobs:`, `:step` where it is an item of a step
+  sequence (or of one whose owner is not shown). The reference is the key's value as
   YAML resolves it: written on the key's line, continued below it
   (`continued_site/2`, a block scalar included), or an alias (`uses: *bad`,
   on the line of `&bad`'s value).
@@ -608,15 +610,15 @@ defmodule Hypatia.Rules.PinSites do
     defs = resolved_defs(numbered)
 
     for {{line, prefix}, n} <- numbered,
-        {name, at} <- node_aliases(line, prefix, rows, n - 1),
+        {name, at, kind} <- node_aliases(line, prefix, rows, n - 1),
         %{} = d <- [latest_anchor(defs, name, n, at)],
         {key_line, site_line, site} <- anchored_uses(d, texts, rows, defs) do
-      %{line: n, key_line: key_line, anchor_line: site_line, site: site}
+      %{line: n, key_line: key_line, anchor_line: site_line, site: site, kind: kind}
     end
   end
 
   # The aliases on `line` that stand for a whole step or job, as `{name,
-  # offset of the "*"}`: a block list item that is nothing but the alias, in
+  # offset of the "*", :step | :job}`: a block list item that is nothing but the alias, in
   # a sequence `steps:` holds (or one whose owner is not shown); a block key
   # of `jobs:` whose value is the alias; or a flow entry whose brackets make
   # it an item of a job's step sequence, or a job's value in `jobs: { ... }`.
@@ -631,12 +633,12 @@ defmodule Hypatia.Rules.PinSites do
       case {row, item, value} do
         {%{dash: d}, [_, lead, name], _} when d != nil ->
           if sequence_owner(rows, seq_owner(rows, i, d)) != :data,
-            do: [{name, byte_size(lead)}],
+            do: [{name, byte_size(lead), :step}],
             else: []
 
         {%{dash: nil}, _, [_, lead, name]} ->
           if match?({:value, _, "jobs"}, mapping_of(rows, i)),
-            do: [{name, byte_size(lead)}],
+            do: [{name, byte_size(lead), :job}],
             else: []
 
         _ ->
@@ -650,12 +652,19 @@ defmodule Hypatia.Rules.PinSites do
         star = n_at - 1
         stack = flow_stack(prefix <> binary_part(masked, 0, star))
 
-        node? =
-          if binary_part(masked, c_at, 1) == ":",
-            do: match?([{"{", "jobs"} | _], stack),
-            else: alias_step_stack?(stack)
+        kind =
+          cond do
+            binary_part(masked, c_at, 1) == ":" ->
+              if match?([{"{", "jobs"} | _], stack), do: :job
 
-        if node?, do: [{binary_part(masked, n_at, n_len), star}], else: []
+            alias_step_stack?(stack) ->
+              :step
+
+            true ->
+              nil
+          end
+
+        if kind, do: [{binary_part(masked, n_at, n_len), star, kind}], else: []
       end)
 
     block ++ flow
