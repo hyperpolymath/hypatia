@@ -523,6 +523,98 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a step that overrides the job-level secret variable does not hold it" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            env:
+              NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+            steps:
+              - run: npm ci
+                env:
+                  NPM_TOKEN: ""
+              - run: ./publish.sh
+        """)
+
+      # The job still holds the credential next to the install, but not in
+      # the install's own environment.
+      assert [%{severity: :warn, line: 6}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: a head repository passed to a non-checkout action is not a checkout" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          report:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: some-org/pr-reporter@v1
+                with:
+                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  token: ${{ secrets.REPORT_PAT }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a folded git fetch of the head is matched across its lines" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          report:
+            runs-on: ubuntu-latest
+            steps:
+              - run: >-
+                  git fetch origin
+                  ${{ github.head_ref }}
+              - run: ./upload.sh ${{ secrets.REPORT_PAT }}
+        """)
+
+      assert [%{severity: :warn}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: a git fetch and a head reference in different commands are not a head fetch" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          report:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git fetch origin main && echo ${{ github.head_ref }}
+              - run: ./upload.sh ${{ secrets.REPORT_PAT }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "an anchored block of triggers is read as a block" do
+      repo =
+        create_repo_with_workflow("""
+        on: &events
+          issue_comment:
+            types: [created]
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "untrusted-input trigger (issue_comment)"
+      File.rm_rf!(repo)
+    end
+
     test "a piped installer is an exposure" do
       repo =
         create_repo_with_workflow("""

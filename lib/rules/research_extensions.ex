@@ -179,7 +179,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # `repository:`, or a git checkout/fetch/switch in a `run:` script. A head
   # SHA in `env:`, an `if:` or a `concurrency:` group only names it.
   @re001_checkout_key ~r/^\s*(?:-\s+)?(?:ref|repository):/
-  @re001_git_fetch ~r/\bgit\s+(?:checkout|fetch|switch)\b/
+  @re001_checkout_action ~r/^\s*(?:-\s+)?uses:\s*["']?actions\/checkout@/
+  # One git command naming the head: no `;`, `&` or `|` between them. `\s`
+  # spans the line break of a folded `run: >-`.
+  @re001_git_head_fetch ~r/\bgit\s+(?:checkout|fetch|switch)\b[^;&|]*?(?:github\.event\.pull_request\.head\.|github\.event\.workflow_run\.head(?:\.|_(?:sha|branch|repository)\b)|github\.head_ref)/
 
   # Code fetched at run time: piped installers, package installs, and builds
   # or test runs that execute dependencies' build scripts.
@@ -291,7 +294,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
           # hands the credential straight to that code.
           shared =
             Enum.find_value(steps, fn step ->
-              credential = Enum.find(step, &credential_line?/1) || job_env_credential
+              credential =
+                Enum.find(step, &credential_line?/1) ||
+                  (job_env_credential && not overrides_env?(step, job_env_credential) &&
+                     job_env_credential)
+
               credential && step_code_exposures(step) != [] && credential
             end)
 
@@ -362,13 +369,15 @@ defmodule Hypatia.Rules.ResearchExtensions do
     # still matches: the patterns' `\s+` spans the line break.
     run = Enum.join(run_lines, "\n")
 
+    # A `ref:`/`repository:` input fetches the head only on a checkout; the
+    # same input on a reporting action merely names it.
+    checkout? = Enum.any?(step, fn {line, _} -> Regex.match?(@re001_checkout_action, line) end)
+
     head? =
-      Enum.any?(step, fn {line, _} ->
-        Regex.match?(@re001_checkout_key, line) and Regex.match?(@re001_head_ref, line)
-      end) or
-        Enum.any?(run_lines, fn line ->
-          Regex.match?(@re001_git_fetch, line) and Regex.match?(@re001_head_ref, line)
-        end)
+      (checkout? and
+         Enum.any?(step, fn {line, _} ->
+           Regex.match?(@re001_checkout_key, line) and Regex.match?(@re001_head_ref, line)
+         end)) or Regex.match?(@re001_git_head_fetch, run)
 
     [head? && :head, Regex.match?(@re001_fetched_code, run) && :fetched]
     |> Enum.filter(& &1)
@@ -401,6 +410,18 @@ defmodule Hypatia.Rules.ResearchExtensions do
           end
 
         Enum.map(body, &String.replace(&1, ~r/(?:^|\s)#.*$/, ""))
+    end
+  end
+
+  # True when the step sets the same variable as the job-level `env:` line,
+  # so the step-level value replaces the inherited credential.
+  defp overrides_env?(step, {job_line, _}) do
+    case Regex.run(~r/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/, job_line) do
+      [_, key] ->
+        Enum.any?(step, fn {line, _} -> Regex.match?(~r/^\s*#{key}\s*:/, line) end)
+
+      _ ->
+        false
     end
   end
 
@@ -486,6 +507,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
           |> String.split(":", parts: 2)
           |> List.last()
           |> String.replace(~r/\s+#.*$/, "")
+          # `on: &events` anchors the block mapping that follows.
+          |> String.replace(~r/^\s*&[A-Za-z0-9_-]+/, "")
           |> String.trim()
 
         if inline != "" do
