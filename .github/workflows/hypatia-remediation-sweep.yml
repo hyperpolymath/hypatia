@@ -62,6 +62,17 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # gh against the GitHub API, plus the artifact service and its blob
+          # storage for the target-list upload.
+          allowed-endpoints: >
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
       - name: Resolve inputs
         id: cfg
         run: |

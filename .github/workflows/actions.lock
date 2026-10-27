@@ -17,6 +17,7 @@ workflows:
         - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
+        - 'step-security/harden-runner@v2.22.2'
     '.github/workflows/ci.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -50,10 +51,12 @@ workflows:
         - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/hypatia-remediation-sweep.yml':
         - 'actions/upload-artifact@v7.0.2'
+        - 'step-security/harden-runner@v2.22.2'
     '.github/workflows/hypatia-scan.yml':
         - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/inbox-steward-intake.yml':
         - 'actions/checkout@v7.0.1'
+        - 'step-security/harden-runner@v2.22.2'
     '.github/workflows/label-triage.yml': []
     '.github/workflows/labels.yml': []
     '.github/workflows/language-blockers.yml':
@@ -71,6 +74,7 @@ workflows:
         - 'actions/upload-pages-artifact@v5.0.0'
     '.github/workflows/push-email-notify.yml':
         - 'hyperpolymath/smtp-notify-action@v0.5.0'
+        - 'step-security/harden-runner@v2.22.2'
     '.github/workflows/quality.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'
@@ -94,6 +98,7 @@ workflows:
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/roadmap-sync.yml':
         - 'actions/create-github-app-token@v3.3.0'
+        - 'step-security/harden-runner@v2.22.2'
     '.github/workflows/rsr-oracle.yml':
         - 'actions/checkout@v7.0.1'
         - 'erlef/setup-beam@v1.24.1'
