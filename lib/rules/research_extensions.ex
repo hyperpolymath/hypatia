@@ -171,7 +171,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @re001_ambient_secrets ["GITHUB_TOKEN"]
 
   # The head of a pull request or of the run that triggered this one.
-  @re001_head_ref ~r/github\.event\.(?:pull_request|workflow_run)\.head\.|github\.head_ref/
+  # (`workflow_run` names its head fields `head_sha`, `head_branch`,
+  # `head_repository`; a pull request nests them under `head.`.)
+  @re001_head_ref ~r/github\.event\.pull_request\.head\.|github\.event\.workflow_run\.head(?:\.|_(?:sha|branch|repository)\b)|github\.head_ref/
 
   # Where naming that head means fetching its code: a checkout's `ref:` or
   # `repository:`, or a git checkout/fetch/switch in a `run:` script. A head
@@ -272,22 +274,31 @@ defmodule Hypatia.Rules.ResearchExtensions do
         # runner or hardener cannot establish this job's execution policy.
         local_runner? = direct_job_field?(job_lines, "runs-on")
         steps = job_steps(job_lines)
+        # A credential in the job's own `env:` is in every step's environment.
+        job_env_credential = job_env_lines(job_lines) |> Enum.find(&credential_line?/1)
+
+        job_untrusted_events =
+          case job_event_gate(job_lines) do
+            nil -> untrusted_events
+            gated -> Enum.filter(untrusted_events, &(&1 in gated))
+          end
 
         with [first_credential | _] <- credential_lines,
              true <- local_runner?,
-             exposures when exposures != [] <- re001_exposures(steps, untrusted_events),
+             exposures when exposures != [] <- re001_exposures(steps, job_untrusted_events),
              false <- harden_runner_step?(job_lines) do
           # A step that both holds the credential and runs fetched or head code
           # hands the credential straight to that code.
-          shared_step =
-            Enum.find(steps, fn step ->
-              Enum.any?(step, &credential_line?/1) and step_code_exposures(step) != []
+          shared =
+            Enum.find_value(steps, fn step ->
+              credential = Enum.find(step, &credential_line?/1) || job_env_credential
+              credential && step_code_exposures(step) != [] && credential
             end)
 
           {severity, {_source, line}} =
-            case shared_step do
+            case shared do
               nil -> {:warn, first_credential}
-              step -> {:high, Enum.find(step, &credential_line?/1)}
+              credential -> {:high, credential}
             end
 
           [
@@ -299,7 +310,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
               reason:
                 "job in #{rel} holds a credential (`secrets.*` other than GITHUB_TOKEN) " <>
                   "next to #{Enum.join(exposures, ", ")}" <>
-                  if(shared_step, do: " in the same step", else: "") <>
+                  if(shared, do: " in the same step", else: "") <>
                   ", but does not install `step-security/harden-runner` — " <>
                   "review outbound-egress monitoring",
               action: :report,
@@ -390,6 +401,47 @@ defmodule Hypatia.Rules.ResearchExtensions do
           end
 
         Enum.map(body, &String.replace(&1, ~r/(?:^|\s)#.*$/, ""))
+    end
+  end
+
+  # The lines under the job's own `env:` key.
+  defp job_env_lines(job_lines) do
+    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
+         index when is_integer(index) <-
+           Enum.find_index(job_lines, fn {line, _} ->
+             indent_of(line) == field_indent and
+               String.starts_with?(String.trim_leading(line), "env:")
+           end) do
+      job_lines
+      |> Enum.drop(index)
+      |> then(fn [env_line | rest] ->
+        [env_line | Enum.take_while(rest, fn {line, _} -> indent_of(line) > field_indent end)]
+      end)
+    else
+      _ -> []
+    end
+  end
+
+  # The events a job-level `if:` restricts the job to, when the condition is
+  # nothing but `github.event_name == '<event>'` tests joined by `||`.
+  # Anything more complex is not interpreted, and the job is judged on all the
+  # workflow's events.
+  defp job_event_gate(job_lines) do
+    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
+         {line, _} <-
+           Enum.find(job_lines, fn {line, _} ->
+             indent_of(line) == field_indent and
+               String.starts_with?(String.trim_leading(line), "if:")
+           end),
+         [_, condition] <- Regex.run(~r/^\s*if:\s*(.*?)\s*$/, line),
+         condition = condition |> String.replace(~r/^\$\{\{\s*|\s*\}\}$/, ""),
+         test = ~S"github\.event_name\s*==\s*'([a-z_]+)'",
+         true <- Regex.match?(~r/^\s*#{test}(?:\s*\|\|\s*#{test})*\s*$/, condition) do
+      ~r/github\.event_name\s*==\s*'([a-z_]+)'/
+      |> Regex.scan(condition, capture: :all_but_first)
+      |> List.flatten()
+    else
+      _ -> nil
     end
   end
 
@@ -570,7 +622,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp step_indent(step_lines, field_indent) do
     step_lines
     |> Enum.filter(fn {line, _} ->
-      indent_of(line) > field_indent and Regex.match?(~r/^\s*-\s+/, line)
+      indent_of(line) > field_indent and Regex.match?(~r/^\s*-(?:\s|$)/, line)
     end)
     |> Enum.map(fn {line, _} -> indent_of(line) end)
     |> Enum.min(fn -> nil end)

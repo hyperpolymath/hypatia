@@ -438,6 +438,91 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a credential in the job's env is in the same step as that job's build: :high" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            env:
+              NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+            steps:
+              - run: npm ci
+        """)
+
+      assert [%{severity: :high, line: 6}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a job gated to trusted events is not exposed by the workflow's untrusted trigger" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push, issue_comment]
+        jobs:
+          deploy:
+            if: github.event_name == 'push'
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./deploy.sh ${{ secrets.DEPLOY_KEY }}
+          reply:
+            if: ${{ github.event_name == 'push' || github.event_name == 'issue_comment' }}
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+          complex:
+            if: github.event_name == 'push' && github.actor != 'x'
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./other.sh ${{ secrets.OTHER_PAT }}
+        """)
+
+      # `deploy` is gated to push; `reply` admits issue_comment; a condition
+      # that is not a plain event_name test is not interpreted.
+      assert [%{line: 12}, %{line: 17}] =
+               repo |> ResearchExtensions.re001_missing_harden_runner() |> Enum.sort_by(& &1.line)
+
+      File.rm_rf!(repo)
+    end
+
+    test "a workflow_run head checkout is recognised by its head_sha field" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          report:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7.0.1
+                with:
+                  ref: ${{ github.event.workflow_run.head_sha }}
+                  token: ${{ secrets.REPORT_PAT }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :high
+      assert finding.detail.exposures == ["a pull-request or triggering-run head checkout"]
+      File.rm_rf!(repo)
+    end
+
+    test "a step opened by a bare `-` is still a step" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              -
+                run: npm ci
+                env:
+                  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
     test "a piped installer is an exposure" do
       repo =
         create_repo_with_workflow("""
