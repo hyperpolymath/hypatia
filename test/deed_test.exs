@@ -6,20 +6,26 @@ defmodule Hypatia.DeedTest do
 
   alias Hypatia.Deed
 
-  @fixtures Path.expand("fixtures/deed_egress", __DIR__)
-  @tmp_dir System.tmp_dir!()
+  # ExUnit gives each test its own directory under tmp/, emptied as the test starts.
+  @moduletag :tmp_dir
 
-  defp repo_with_deed(name, text) do
-    repo = Path.join(@tmp_dir, "deed_test_#{System.unique_integer([:positive])}")
-    # unique_integer restarts with each VM, so clear what an earlier run left.
-    File.rm_rf!(repo)
+  @fixtures Path.expand("fixtures/deed_egress", __DIR__)
+
+  # A new repo under the test's tmp_dir; a test may make several.
+  defp new_repo(tmp) do
+    repo = Path.join(tmp, "repo_#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
+    repo
+  end
+
+  defp repo_with_deed(tmp, name, text) do
+    repo = new_repo(tmp)
     File.write!(Path.join(repo, name), text)
     repo
   end
 
-  defp repo_with_fixture(sub, name) do
-    repo_with_deed(name, File.read!(Path.join([@fixtures, sub, name])))
+  defp repo_with_fixture(tmp, sub, name) do
+    repo_with_deed(tmp, name, File.read!(Path.join([@fixtures, sub, name])))
   end
 
   describe "parse/1" do
@@ -164,8 +170,8 @@ defmodule Hypatia.DeedTest do
   describe "egress_declarations/1 against the standards fixtures" do
     for name <- File.ls!(Path.expand("fixtures/deed_egress/valid", __DIR__)) do
       @name name
-      test "accepts valid/#{name}" do
-        repo = repo_with_fixture("valid", @name)
+      test "accepts valid/#{name}", %{tmp_dir: tmp} do
+        repo = repo_with_fixture(tmp, "valid", @name)
         assert {:ok, @name, jobs} = Deed.egress_declarations(repo)
         assert is_list(jobs)
       end
@@ -173,24 +179,26 @@ defmodule Hypatia.DeedTest do
 
     for name <- File.ls!(Path.expand("fixtures/deed_egress/invalid", __DIR__)) do
       @name name
-      test "rejects invalid/#{name}" do
-        repo = repo_with_fixture("invalid", @name)
+      test "rejects invalid/#{name}", %{tmp_dir: tmp} do
+        repo = repo_with_fixture(tmp, "invalid", @name)
         assert {:error, @name, reason} = Deed.egress_declarations(repo)
         assert is_binary(reason)
       end
     end
 
-    test "takes :policy at most once, before or after the jobs" do
+    test "takes :policy at most once, before or after the jobs", %{tmp_dir: tmp} do
       hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1.0.0\" "
 
       job =
         ~s|(job :workflow ".github/workflows/a.yml" :job "a" | <>
           ~s|:secrets ("A") :endpoints () :enforcement none)|
 
-      repo = repo_with_deed("x_chora.deed", hdr <> ~s|(egress #{job} :policy "a"))|)
+      repo = repo_with_deed(tmp, "x_chora.deed", hdr <> ~s|(egress #{job} :policy "a"))|)
       assert {:ok, _, [_]} = Deed.egress_declarations(repo)
 
-      repo = repo_with_deed("x_chora.deed", hdr <> ~s|(egress :policy "a" :policy "b" #{job}))|)
+      repo =
+        repo_with_deed(tmp, "x_chora.deed", hdr <> ~s|(egress :policy "a" :policy "b" #{job}))|)
+
       assert {:error, _, "(egress …) repeats :policy"} = Deed.egress_declarations(repo)
     end
 
@@ -202,8 +210,8 @@ defmodule Hypatia.DeedTest do
       assert Enum.map(jobs, & &1.job) == ["notify", "sonarqube", "trigger-boj"]
     end
 
-    test "returns the declared jobs with their secrets" do
-      repo = repo_with_fixture("valid", "template-pair_chora.deed")
+    test "returns the declared jobs with their secrets", %{tmp_dir: tmp} do
+      repo = repo_with_fixture(tmp, "valid", "template-pair_chora.deed")
 
       assert {:ok, _, [notify, sonar]} = Deed.egress_declarations(repo)
 
@@ -219,10 +227,8 @@ defmodule Hypatia.DeedTest do
   end
 
   describe "repo_deed_path/1" do
-    test "no deed, one deed, two deeds" do
-      repo = Path.join(@tmp_dir, "deed_none_#{System.unique_integer([:positive])}")
-      File.rm_rf!(repo)
-      File.mkdir_p!(repo)
+    test "no deed, one deed, two deeds", %{tmp_dir: tmp} do
+      repo = new_repo(tmp)
       assert Deed.repo_deed_path(repo) == :none
       assert Deed.egress_declarations(repo) == :none
 
@@ -236,29 +242,27 @@ defmodule Hypatia.DeedTest do
       assert {:error, _} = Deed.repo_deed_path(repo)
     end
 
-    test "the stem is deed.abnf's: letters, digits, '-', '.', '_', at least one" do
+    test "the stem is deed.abnf's: letters, digits, '-', '.', '_', at least one", %{
+      tmp_dir: tmp
+    } do
       for {name, ok?} <- [
             {"my.project-x_chora.deed", true},
             {"bad name_chora.deed", false},
             {"_chora.deed", false}
           ] do
-        repo = Path.join(@tmp_dir, "deed_stem_#{System.unique_integer([:positive])}")
-        File.rm_rf!(repo)
-        File.mkdir_p!(repo)
-        File.write!(Path.join(repo, name), "")
+        repo = repo_with_deed(tmp, name, "")
 
         if ok?,
           do: assert({:ok, _} = Deed.repo_deed_path(repo), name),
           else:
             assert({:error, "illegal deed filename stem" <> _} = Deed.repo_deed_path(repo), name)
-
-        File.rm_rf!(repo)
       end
     end
 
-    test "a <stem>_chora.deed must be a repo-deed" do
+    test "a <stem>_chora.deed must be a repo-deed", %{tmp_dir: tmp} do
       repo =
         repo_with_deed(
+          tmp,
           "x_chora.deed",
           ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(praxis-deed :schema-version \"1\")\n"
         )

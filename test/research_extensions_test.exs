@@ -1042,6 +1042,380 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       # harden-runner audits when no egress-policy is set.
       assert [%{reason: default}] = check.("")
       assert default =~ "runs `egress-policy: audit`"
+
+      # Quoted inputs and quoted keys are the same input to YAML.
+      assert check.("        \"with\":\n          'egress-policy': \"block\"\n") == []
+
+      assert check.(
+               "        with: {allowed-endpoints: \"a.com:443, b.com:443\", egress-policy: block}\n"
+             ) == []
+
+      # A YAML comment sets no input: these steps run the default, audit.
+      assert [_] = check.("        # with:\n        #   egress-policy: block\n")
+      assert [_] = check.("        with:\n          disable-sudo: true # egress-policy: block\n")
+      assert [_] = check.("        with: {disable-sudo: true} # {egress-policy: block}\n")
+
+      # Text inside another input's value is not the policy input.
+      assert [_] = check.("        with:\n          note: \"x, egress-policy: block\"\n")
+    end
+
+    test "a comment on the uses: line does not set the policy" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - uses: step-security/harden-runner@v2 # egress-policy: block
+                - run: send --pass=${{ secrets.SMTP_PASS }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+      )
+
+      assert [%{reason: reason}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert reason =~ "runs `egress-policy: audit`"
+      File.rm_rf!(repo)
+    end
+
+    test "a hardened job's declaration cannot cover a computed key" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - uses: step-security/harden-runner@v2
+                  with:
+                    egress-policy: block
+                - run: send --pass=${{ secrets.SMTP_PASS }} --x=${{ secrets[env.NAME] }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :warn
+      assert finding.line == 8
+      assert finding.reason =~ "computed at run time"
+      assert finding.reason =~ "does not cover it"
+      assert finding.detail.fix =~ "remove the job's entry from x_chora.deed"
+      File.rm_rf!(repo)
+    end
+
+    test "quoted keys are the same keys: \"env\", 'runs-on', \"steps\", \"jobs\"" do
+      repo =
+        create_repo_with_workflow(
+          """
+          "env":
+            HIDDEN: ${{ secrets.HIDDEN }}
+          "jobs":
+            notify:
+              'runs-on': ubuntu-24.04
+              "steps":
+                - run: send --pass=${{ secrets.SMTP_PASS }}
+          """,
+          "notify.yml"
+        )
+
+      # The job inherits HIDDEN from the quoted top-level env:, so a
+      # declaration of SMTP_PASS alone has drifted.
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "HIDDEN"
+      File.rm_rf!(repo)
+    end
+
+    test "a quoted job-level 'env': holds the job's credentials" do
+      repo =
+        create_repo_with_workflow("""
+        on: pull_request_target
+        jobs:
+          build:
+            runs-on: ubuntu-24.04
+            'env':
+              TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+            steps:
+              - uses: actions/checkout@v4
+                with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+              - run: make
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "quoted step keys still expose the credential: \"uses\", 'ref', \"run\"" do
+      for step <- [
+            ~s|      - "uses": actions/checkout@v4\n        with:\n          'ref': ${{ github.head_ref }}\n      - run: make|,
+            ~s|      - uses: actions/checkout@v4\n      - "run": npm install|
+          ] do
+        repo =
+          create_repo_with_workflow("""
+          on: pull_request_target
+          jobs:
+            build:
+              runs-on: ubuntu-24.04
+              env:
+                TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+              steps:
+          #{step}
+          """)
+
+        assert [%{severity: :high}] = ResearchExtensions.re001_missing_harden_runner(repo), step
+        File.rm_rf!(repo)
+      end
+    end
+
+    test "an alias brings its anchor's secrets into the job" do
+      workflow = fn second_job ->
+        """
+        jobs:
+          build:
+            runs-on: ubuntu-24.04
+            env: &common
+              HIDDEN: ${{ secrets.HIDDEN }}
+            steps:
+              - run: make
+        #{second_job}
+        """
+      end
+
+      deploy_entry =
+        ~s|(job :workflow ".github/workflows/notify.yml" :job "deploy" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none)|
+
+      build_entry =
+        ~s|(job :workflow ".github/workflows/notify.yml" :job "build" | <>
+          ~s|:secrets ("HIDDEN") :endpoints () :enforcement none)|
+
+      check = fn second_job ->
+        repo = create_repo_with_workflow(workflow.(second_job), "notify.yml")
+        write_deed(repo, "(egress #{build_entry} #{deploy_entry})")
+        findings = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        findings
+      end
+
+      # env: *common
+      assert [%{line: 10, reason: plain}] =
+               check.("""
+                 deploy:
+                   runs-on: ubuntu-24.04
+                   env: *common
+                   steps:
+                     - run: send ${{ secrets.VISIBLE }}
+               """)
+
+      assert plain =~ "`deploy`"
+      assert plain =~ "HIDDEN"
+
+      # A merge key, `<<: *common`, inside the job's own env:.
+      assert [%{reason: merged}] =
+               check.("""
+                 deploy:
+                   runs-on: ubuntu-24.04
+                   env:
+                     <<: *common
+                     OTHER: x
+                   steps:
+                     - run: send ${{ secrets.VISIBLE }}
+               """)
+
+      assert merged =~ "HIDDEN"
+
+      # The same declaration, without the alias, is exact.
+      assert check.("""
+               deploy:
+                 runs-on: ubuntu-24.04
+                 steps:
+                   - run: send ${{ secrets.VISIBLE }}
+             """) == []
+    end
+
+    test "a job that is an alias of another job is read as that job" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            build: &job
+              runs-on: ubuntu-24.04
+              steps:
+                - run: send ${{ secrets.SMTP_PASS }}
+            deploy: *job
+            release:
+              <<: *job
+              name: release
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "build" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
+      )
+
+      findings = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert Enum.map(findings, & &1.line) == [6, 8]
+      assert Enum.all?(findings, &(&1.detail.fix =~ ~s|:secrets ("SMTP_PASS")|))
+      assert Enum.any?(findings, &(&1.reason =~ "`deploy`"))
+      assert Enum.any?(findings, &(&1.reason =~ "`release`"))
+      File.rm_rf!(repo)
+    end
+
+    test "a key the job sets itself wins over the same key from a merge" do
+      # The anchor's steps install harden-runner; the job's own steps do not.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            build: &defaults
+              runs-on: ubuntu-24.04
+              env:
+                HIDDEN: ${{ secrets.HIDDEN }}
+              steps:
+                - uses: step-security/harden-runner@v2
+                  with:
+                    egress-policy: block
+                - run: make
+            deploy:
+              <<: *defaults
+              env:
+                OTHER: x
+              steps:
+                - run: send ${{ secrets.VISIBLE }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(repo, "")
+
+      # deploy holds VISIBLE only (its env: replaces the merged one) and has
+      # no hardener (its steps: replace the merged ones).
+      assert [%{line: 16, detail: %{fix: fix}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert fix =~ ~s|:job "deploy" :secrets ("VISIBLE")|
+      File.rm_rf!(repo)
+    end
+
+    test "alias-like text inside a scalar is text, not an alias" do
+      for step <- [
+            ~s|      - run: echo "x *common"|,
+            ~s|      - run: echo x *common|,
+            ~s|      - run: echo a, *common|,
+            ~s|      - run: \|\n          ls *common|
+          ] do
+        repo =
+          create_repo_with_workflow(
+            """
+            jobs:
+              build:
+                runs-on: ubuntu-24.04
+                env: &common
+                  HIDDEN: ${{ secrets.HIDDEN }}
+                steps:
+                  - run: make
+              deploy:
+                runs-on: ubuntu-24.04
+                steps:
+                  - run: send ${{ secrets.VISIBLE }}
+            #{step}
+            """,
+            "notify.yml"
+          )
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "build" | <>
+            ~s|:secrets ("HIDDEN") :endpoints () :enforcement none) | <>
+            ~s|(job :workflow ".github/workflows/notify.yml" :job "deploy" | <>
+            ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+        )
+
+        assert ResearchExtensions.re001_missing_harden_runner(repo) == [], step
+        File.rm_rf!(repo)
+      end
+    end
+
+    test "a block-scalar alias keeps its script, and the script its exposure" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            build:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: &script |
+                    npm install
+                    deploy --token=${{ secrets.TOKEN }}
+            deploy:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: *script
+          """,
+          "notify.yml"
+        )
+
+      write_deed(repo, "")
+
+      # npm install runs in the step that holds TOKEN, in both jobs.
+      assert [%{severity: :high, line: 7}, %{severity: :high, line: 11}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "nested anchors that multiply (the billion-laughs file) are expanded within a budget" do
+      anchors =
+        for i <- 1..9 do
+          prev = if i == 1, do: "${{ secrets.SMTP_PASS }}", else: "*a#{i - 1}"
+          "  a#{i}: &a#{i} [#{Enum.map_join(1..10, ", ", fn _ -> prev end)}]"
+        end
+
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          x:
+          #{Enum.join(anchors, "\n")}
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              env:
+                ALL: *a9
+              steps:
+                - run: make
+          """,
+          "notify.yml"
+        )
+
+      {micros, findings} =
+        :timer.tc(fn -> ResearchExtensions.re001_missing_harden_runner(repo) end)
+
+      assert [%{detail: %{fix: fix}}] = findings
+      assert fix =~ ~s|:secrets ("SMTP_PASS")|
+      assert micros < 10_000_000
+      File.rm_rf!(repo)
     end
 
     test "a quoted job key matches its declaration" do
