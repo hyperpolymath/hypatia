@@ -36,6 +36,10 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
 
   @github_api_base "https://api.github.com"
   @max_alerts_per_repo 100
+  # Pages followed before giving up loudly (100 alerts per page).
+  @max_pages 50
+  # Per-request transfer deadline, so one stalled repo cannot hang a sweep.
+  @request_timeout_seconds 30
 
   # Stale thresholds (days). A revoked secret left in history is still a
   # finding -- but a fresh open alert is much more urgent.
@@ -319,29 +323,109 @@ defmodule Hypatia.Rules.SecretScanningAlerts do
           "#{@github_api_base}/repos/#{owner}/#{repo}/secret-scanning/alerts" <>
             "?per_page=#{@max_alerts_per_repo}"
 
-        # No `-f`: on an HTTP error GitHub's JSON body carries the reason
-        # (for example "Secret scanning is disabled on this repository"),
-        # and `-f` would discard it. The status code is appended instead.
-        case System.cmd(
-               "curl",
-               [
-                 "-s",
-                 "-w",
-                 "\n%{http_code}",
-                 "-H",
-                 "Accept: application/vnd.github+json",
-                 "-H",
-                 "Authorization: Bearer #{token}",
-                 "-H",
-                 "X-GitHub-Api-Version: 2022-11-28",
-                 url
-               ],
-               stderr_to_stdout: true
-             ) do
-          {output, 0} -> parse_response(output)
-          {error, _} -> {:error, "curl failed: #{String.slice(error, 0, 200)}"}
-        end
+        collect_pages(url, &request(&1, token))
     end
+  end
+
+  @doc false
+  # Follow GitHub's `Link: rel="next"` pages until the last one. A list cut
+  # short at one page would report older open alerts as absent, so hitting
+  # the page cap is an error, never a truncated success. Every `next` URL
+  # must stay on the API host: the token goes with each request.
+  def collect_pages(url, request, acc \\ [], page \\ 1)
+
+  def collect_pages(_url, _request, _acc, page) when page > @max_pages do
+    {:error,
+     "more than #{@max_pages * @max_alerts_per_repo} alerts -- " <>
+       "refusing to report a truncated list"}
+  end
+
+  def collect_pages(url, request, acc, page) do
+    with {:ok, output} <- request.(url),
+         {:ok, alerts, next} <- parse_page(output) do
+      cond do
+        next == nil ->
+          {:ok, acc ++ alerts}
+
+        String.starts_with?(next, @github_api_base <> "/") ->
+          collect_pages(next, request, acc ++ alerts, page + 1)
+
+        true ->
+          {:error, "refusing to follow a pagination link off #{@github_api_base}"}
+      end
+    end
+  end
+
+  # No `-f`: on an HTTP error GitHub's JSON body carries the reason (for
+  # example "Secret scanning is disabled on this repository"), and `-f` would
+  # discard it. `-i` keeps the headers for the `Link` pagination header, and
+  # the status code is appended after the body. `--max-time` stops one stalled
+  # repository from hanging an estate-wide sweep.
+  defp request(url, token) do
+    case System.cmd(
+           "curl",
+           [
+             "-s",
+             "-i",
+             "--max-time",
+             Integer.to_string(@request_timeout_seconds),
+             "-w",
+             "\n%{http_code}",
+             "-H",
+             "Accept: application/vnd.github+json",
+             "-H",
+             "Authorization: Bearer #{token}",
+             "-H",
+             "X-GitHub-Api-Version: 2022-11-28",
+             url
+           ],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        {:ok, output}
+
+      {_, 28} ->
+        {:error, "GitHub API request timed out after #{@request_timeout_seconds}s"}
+
+      {error, code} ->
+        {:error, "curl failed (exit #{code}): #{String.slice(error, 0, 200)}"}
+    end
+  end
+
+  @doc false
+  # `output` is curl's `-i` output: one or more header blocks (an HTTPS proxy
+  # adds its own "Connection established" block first), the body, then a
+  # newline and the HTTP status. Returns the alerts and the next page's URL.
+  def parse_page(output) do
+    {headers, rest} = split_headers(output)
+
+    with {:ok, alerts} <- parse_response(rest) do
+      {:ok, alerts, next_link(headers)}
+    end
+  end
+
+  defp split_headers(output, headers \\ "") do
+    if String.starts_with?(output, "HTTP/") do
+      case String.split(output, ~r/\r?\n\r?\n/, parts: 2) do
+        [block, rest] -> split_headers(rest, block)
+        [block] -> {block, ""}
+      end
+    else
+      {headers, output}
+    end
+  end
+
+  defp next_link(headers) do
+    headers
+    |> String.split(~r/\r?\n/)
+    |> Enum.find_value(fn line ->
+      with [_, value] <- Regex.run(~r/\Alink:\s*(.*)\z/i, line),
+           [_, next] <- Regex.run(~r/<([^>]+)>\s*;\s*rel="next"/, value) do
+        next
+      else
+        _ -> nil
+      end
+    end)
   end
 
   @doc false
