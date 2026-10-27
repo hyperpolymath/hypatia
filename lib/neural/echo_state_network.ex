@@ -56,7 +56,13 @@ defmodule Hypatia.Neural.EchoStateNetwork do
 
   # --- Public API ---
 
-  @doc "Initialize a new Echo State Network"
+  @doc """
+  Initialise an untrained network with zero reservoir state and no predictions.
+
+  Options are `:reservoir_size` (default: 80 nodes) and `:seed` (default:
+  current system time in microseconds). Seeds the calling process's random
+  number generator to initialise the weights.
+  """
   def init(opts \\ []) do
     size = Keyword.get(opts, :reservoir_size, @reservoir_size)
     seed = Keyword.get(opts, :seed, :erlang.system_time(:microsecond))
@@ -67,8 +73,8 @@ defmodule Hypatia.Neural.EchoStateNetwork do
       reservoir: generate_reservoir(size),
       input_weights: generate_weights(size, @input_scaling),
       feedback_weights: generate_weights(size, @teacher_scaling),
-      # +1 for bias
-      output_weights: List.duplicate(0.0, size + 1),
+      # Readout over [state..., input, bias]
+      output_weights: List.duplicate(0.0, size + 2),
       state: List.duplicate(0.0, size)
     }
   end
@@ -89,7 +95,18 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     {prediction, %{esn | state: new_state, predictions: updated_preds}}
   end
 
-  @doc "Train ESN on a time series (list of floats)"
+  @doc """
+  Fit the readout to predict the next value in a chronological confidence series.
+
+  Requires more than 60 numeric values and discards the first 50 reservoir
+  states as washout. Fits the reservoir features, current input and an
+  unpenalised bias using ridge regression.
+
+  Returns the network with fitted output weights and `trained: true`, preserving
+  its original reservoir state and prediction history. With 60 or fewer values,
+  returns the network unchanged. Non-numeric values raise `ArithmeticError`
+  when training proceeds.
+  """
   def train(%__MODULE__{} = esn, time_series) when length(time_series) > @washout + 10 do
     _size = length(esn.state)
 
@@ -97,9 +114,7 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     {states, _final_esn} =
       Enum.reduce(time_series, {[], esn}, fn value, {states_acc, current_esn} ->
         new_state = update_state(current_esn, value)
-        # Append input as extra feature
-        extended = new_state ++ [value]
-        {[extended | states_acc], %{current_esn | state: new_state}}
+        {[features(new_state, value) | states_acc], %{current_esn | state: new_state}}
       end)
 
     all_states = Enum.reverse(states)
@@ -250,14 +265,17 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     end
   end
 
+  # The readout is fitted as a linear map (solve_ridge/2), so it is applied as
+  # one. It used to be passed through a sigmoid here, which the fit never saw:
+  # a correct linear estimate of 0.5 came out as 0.62, and every forecast was
+  # squeezed towards the middle. Clamp instead, since the series are
+  # confidences in [0, 1].
   defp compute_output(%__MODULE__{output_weights: ow, trained: true}, state, input) do
-    extended = state ++ [input]
-
     raw =
-      Enum.zip(extended, ow)
+      Enum.zip(features(state, input), ow)
       |> Enum.reduce(0.0, fn {s, w}, acc -> acc + s * w end)
 
-    sigmoid(raw)
+    raw |> max(0.0) |> min(1.0)
   end
 
   defp compute_output(_esn, state, _input) do
@@ -266,23 +284,83 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     sigmoid(mean)
   end
 
+  # Readout features: reservoir state, the current input, and a constant 1.0
+  # for the bias. The input lets the readout fall back to persistence
+  # ("next ≈ current"), which is a strong baseline for smooth confidence series.
+  defp features(state, input), do: state ++ [input, 1.0]
+
+  # Closed-form ridge regression: solve (XᵀX + λI') w = Xᵀy, where I' leaves the
+  # bias unpenalised. This replaces 200 epochs of SGD at lr 5e-4, which stopped
+  # far short of the minimum (the trained ESN forecast no better than the series
+  # mean). The system is (reservoir size + 2) square, so Gaussian elimination is
+  # cheap next to collecting the states.
   defp solve_ridge(states, targets) do
-    # Gradient descent approximation of ridge regression
-    size = length(List.first(states, []))
-    weights = List.duplicate(0.0, size)
-    lr = 0.0005
-    epochs = 200
+    dim = length(List.first(states, []))
+    bias = dim - 1
 
-    Enum.reduce(1..epochs, weights, fn _epoch, w ->
-      Enum.zip(states, targets)
-      |> Enum.reduce(w, fn {state, target}, w_acc ->
-        pred = Enum.zip(state, w_acc) |> Enum.reduce(0.0, fn {s, wi}, acc -> acc + s * wi end)
-        error = target - pred
-
-        Enum.zip(w_acc, state)
-        |> Enum.map(fn {wi, si} -> wi + lr * error * si - lr * @ridge_lambda * wi end)
+    gram =
+      Enum.reduce(states, List.duplicate(List.duplicate(0.0, dim), dim), fn x, acc ->
+        Enum.zip_with(acc, x, fn row, xi ->
+          Enum.zip_with(row, x, fn a, xj -> a + xi * xj end)
+        end)
       end)
+
+    rhs =
+      Enum.zip(states, targets)
+      |> Enum.reduce(List.duplicate(0.0, dim), fn {x, y}, acc ->
+        Enum.zip_with(acc, x, fn a, xi -> a + xi * y end)
+      end)
+
+    gram
+    |> Enum.with_index()
+    |> Enum.map(fn {row, i} ->
+      if i == bias, do: row, else: List.update_at(row, i, &(&1 + @ridge_lambda))
     end)
+    |> gaussian_solve(rhs)
+  end
+
+  # Gaussian elimination with partial pivoting. A pivot below 1e-12 (only
+  # possible with no training rows) contributes a zero weight.
+  defp gaussian_solve(a, b) do
+    rows = Enum.zip_with(a, b, fn row, bi -> row ++ [bi] end)
+    n = length(rows)
+
+    upper =
+      Enum.reduce(0..(n - 1), rows, fn col, m ->
+        {done, rest} = Enum.split(m, col)
+        pivot_row = Enum.max_by(rest, fn r -> abs(Enum.at(r, col)) end)
+        rest = List.delete(rest, pivot_row)
+        p = Enum.at(pivot_row, col)
+
+        if abs(p) < 1.0e-12 do
+          done ++ [pivot_row | rest]
+        else
+          reduced =
+            Enum.map(rest, fn r ->
+              f = Enum.at(r, col) / p
+              Enum.zip_with(r, pivot_row, fn x, y -> x - f * y end)
+            end)
+
+          done ++ [pivot_row | reduced]
+        end
+      end)
+
+    upper
+    |> Enum.with_index()
+    |> Enum.reverse()
+    |> Enum.reduce(%{}, fn {row, i}, solved ->
+      p = Enum.at(row, i)
+
+      if abs(p) < 1.0e-12 do
+        Map.put(solved, i, 0.0)
+      else
+        known =
+          Enum.reduce((i + 1)..(n - 1)//1, 0.0, fn j, acc -> acc + Enum.at(row, j) * solved[j] end)
+
+        Map.put(solved, i, (Enum.at(row, n) - known) / p)
+      end
+    end)
+    |> then(fn solved -> Enum.map(0..(n - 1), &solved[&1]) end)
   end
 
   defp sigmoid(x), do: 1.0 / (1.0 + :math.exp(-max(min(x, 500), -500)))

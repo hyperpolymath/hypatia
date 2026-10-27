@@ -303,7 +303,11 @@ defmodule Hypatia.Rules.RootHygiene do
   def scan(root_files, repo_path) when is_list(root_files) and is_binary(repo_path) do
     banned = scan_banned(root_files)
     stale = scan_stale(root_files, repo_path)
-    missing = scan_required_missing(root_files, repo_path |> Path.expand() |> Path.basename())
+
+    missing =
+      scan_required_missing(root_files, repo_path |> Path.expand() |> Path.basename(),
+        reuse_licenses: reuse_licenses?(repo_path)
+      )
 
     %{
       findings: banned ++ stale ++ missing,
@@ -433,15 +437,28 @@ defmodule Hypatia.Rules.RootHygiene do
 
   `repo_name` names the expected `<repo>_chora.deed` in the finding. The
   filename-only callers pass nothing and get the placeholder `repo`.
+
+  `reuse_licenses: true` says the repo has a non-empty REUSE `LICENSES/`
+  directory, which declares its licences without a root `LICENSE`. Root file
+  lists carry no directories, so only `scan/2` can establish this.
   """
-  def scan_required_missing(root_files, repo_name \\ "repo") do
+  def scan_required_missing(root_files, repo_name \\ "repo", opts \\ []) do
+    reuse_licenses = Keyword.get(opts, :reuse_licenses, false)
+
     # NB: SECURITY.md is intentionally NOT listed here. It is a community-health
     # file that GitHub recognises in root, `.github/`, or `docs/`, and is owned
     # by Hypatia.Rules.CicdRules.check_repo_requirements/1 (which checks all
     # three locations). Listing it here too caused a double-report and a
     # false-positive when it lives under `.github/SECURITY.md`.
     required = [
-      %{file: "LICENSE", alternatives: ["LICENSE.txt"], severity: :critical},
+      # The licence. The estate template ships `LICENSE.adoc` (plus REUSE
+      # `LICENSES/`), so the AsciiDoc and Markdown spellings count too.
+      %{
+        file: "LICENSE",
+        alternatives: ["LICENSE.txt", "LICENSE.md", "LICENSE.adoc"],
+        reuse: true,
+        severity: :critical
+      },
       %{file: ".editorconfig", alternatives: [], severity: :medium},
       # The AI manifest. A2ML is retired (D312): the repo's facts now live in
       # one `<repo>_chora.deed` at the root, and the estate template ships no
@@ -463,7 +480,8 @@ defmodule Hypatia.Rules.RootHygiene do
       pattern = Map.get(req, :pattern)
 
       if Enum.any?(all_options, &(&1 in root_files)) or
-           (pattern != nil and Enum.any?(root_files, &Regex.match?(pattern, &1))) do
+           (pattern != nil and Enum.any?(root_files, &Regex.match?(pattern, &1))) or
+           (reuse_licenses and Map.get(req, :reuse, false)) do
         []
       else
         [
@@ -477,6 +495,28 @@ defmodule Hypatia.Rules.RootHygiene do
         ]
       end
     end)
+  end
+
+  # A REUSE `LICENSES/` directory counts only if it holds a licence text: a
+  # non-empty `<SPDX-ID>.<ext>` file, per the REUSE spec. Dotfiles (such as
+  # `.gitkeep`) and READMEs do not count.
+  defp reuse_licenses?(repo_path) do
+    dir = Path.join(repo_path, "LICENSES")
+
+    case File.ls(dir) do
+      {:ok, entries} -> Enum.any?(entries, &reuse_licence_text?(dir, &1))
+      _ -> false
+    end
+  end
+
+  defp reuse_licence_text?(dir, name) do
+    path = Path.join(dir, name)
+
+    not String.starts_with?(name, ".") and
+      not String.starts_with?(String.downcase(name), "readme") and
+      Path.extname(name) != "" and
+      File.regular?(path) and
+      match?({:ok, %File.Stat{size: size}} when size > 0, File.stat(path))
   end
 
   @doc """
