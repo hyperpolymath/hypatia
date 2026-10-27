@@ -7,3 +7,8 @@ from `fixtures/valid/` there. `test/deed_test.exs`
 asserts that `Hypatia.Deed` accepts and rejects exactly what the standards
 checker `deed_lint.js --egress` does. Re-copy them when that directory changes;
 do not edit them here.
+
+`template-main/rsr-template-repo_chora.deed` is the estate template's live deed,
+copied from `hyperpolymath/rsr-template-repo` main at `ad478ff`, with its
+`(egress …)` clause for three jobs. It is the worked model every repo deed is
+written from, so the reader must keep accepting it.

@@ -275,11 +275,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     # runner or hardener cannot establish this job's execution policy.
     |> Enum.filter(&direct_job_field?(&1, "runs-on"))
     |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
-      refs =
-        for {line, n} <- job_lines,
-            name <- secret_refs(line),
-            name != "GITHUB_TOKEN",
-            do: {name, n}
+      refs = for {name, n} <- secret_refs(job_lines), name != "GITHUB_TOKEN", do: {name, n}
 
       case refs do
         [] ->
@@ -299,11 +295,15 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end)
   end
 
-  # Every secret a line reads inside ${{ … }}: the property form secrets.NAME
-  # and the index form secrets['NAME'] / secrets["NAME"], anywhere in the
-  # expression (${{ vars.X || secrets.Y }} reads Y). GitHub matches secret names
-  # without regard to case and stores them uppercase; the deed declares that
-  # stored form, so names are uppercased here.
+  # Every secret a job reads inside ${{ … }}, as {NAME, line}: the property
+  # form secrets.NAME and the index form secrets['NAME'] / secrets["NAME"],
+  # anywhere in the expression (${{ vars.X || secrets.Y }} reads Y). GitHub
+  # matches secret names without regard to case and stores them uppercase; the
+  # deed declares that stored form, so names are uppercased here.
+  #
+  # The job is scanned as one text, not line by line: a folded YAML scalar can
+  # split one expression across physical lines, and GitHub evaluates it whole.
+  # A valid workflow has no unclosed ${{, so every match is a real expression.
   #
   # Both scans step over string literals ('…', with '' for a quote) whole, so
   # text inside one is never read: an expression ends at the first }} outside
@@ -312,12 +312,22 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # counts, not a property named secrets (github.event.x.secrets.Y).
   @expression ~r/\$\{\{((?:'(?:[^']|'')*'|[^'}]|\}(?!\}))*)\}\}/
   @secret_ref ~r/(?<![\w.-])secrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\])|'(?:[^']|'')*'|"[^"]*"/
-  defp secret_refs(line) do
-    for [_, expr] <- Regex.scan(@expression, line),
-        match <- Regex.scan(@secret_ref, expr),
-        name = match |> Enum.drop(1) |> Enum.find(&(&1 != "")),
-        name != nil,
-        do: String.upcase(name)
+  defp secret_refs(job_lines) do
+    text = Enum.map_join(job_lines, "\n", &elem(&1, 0))
+
+    # {byte offset where each kept line starts, its physical line number}
+    {starts, _} =
+      Enum.map_reduce(job_lines, 0, fn {line, n}, at -> {{at, n}, at + byte_size(line) + 1} end)
+
+    for [_, {body_at, body_len}] <- Regex.scan(@expression, text, return: :index),
+        [_ | groups] <-
+          Regex.scan(@secret_ref, binary_part(text, body_at, body_len), return: :index),
+        {at, len} = Enum.find(groups, {-1, 0}, fn {at, _} -> at >= 0 end),
+        at >= 0 do
+      at = body_at + at
+      {_, n} = starts |> Enum.take_while(fn {start, _} -> start <= at end) |> List.last()
+      {String.upcase(binary_part(text, at, len)), n}
+    end
   end
 
   defp job_id(header) do

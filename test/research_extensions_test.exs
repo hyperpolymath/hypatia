@@ -516,6 +516,56 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "an expression folded across lines is read whole" do
+      # GitHub folds the scalar and evaluates the whole expression.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets.VISIBLE }}
+                - run: >-
+                    echo ${{
+                    secrets.HIDDEN
+                    }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN"|
+      File.rm_rf!(repo)
+    end
+
+    test "a finding points at the line of the first secret it reads" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo start
+                - run: >-
+                    echo ${{
+                    secrets.FIRST }} ${{ secrets.SECOND }}
+          """,
+          "notify.yml"
+        )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 8
+      File.rm_rf!(repo)
+    end
+
     test "a property named secrets is not the secrets context" do
       repo =
         create_repo_with_workflow(

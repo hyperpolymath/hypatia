@@ -16,13 +16,18 @@ defmodule Hypatia.Deed do
       value = {:string, s} | {:symbol, s} | {:integer, n} | {:boolean, b}
             | {:uuid5, s} | {:uuid8, s} | {:quoted, value} | {:list, [value]}
 
-  It rejects anything it cannot read unambiguously instead of guessing, and
-  reports the reason.
+  It accepts a deed only when both the normative grammar and the gate would:
+  `deed.abnf`, plus the gate's semantic checks (one string `:schema-version`,
+  a non-blank SPDX payload, a `#u8` domain). Where the two differ, the
+  stricter reading wins, so a deed the reader refuses only ever declares
+  nothing. It reports the reason. The one departure, a separator before a
+  list's first value, is noted at `list_open/1`.
   """
 
   @doc "Parse deed source text into `{:ok, {head, items}}` or `{:error, reason}`."
   def parse(text) when is_binary(text) do
-    with {:ok, rest} <- header(text),
+    with true <- String.valid?(text) || {:error, "a deed is UTF-8"},
+         {:ok, rest} <- header(text),
          {:ok, {head, items}, rest} <- form(skip(rest)),
          "" <- skip(rest),
          :ok <- schema_version(items) do
@@ -233,34 +238,50 @@ defmodule Hypatia.Deed do
 
   # ─── Lexical layer ──────────────────────────────────────────────────
 
-  # header = 1*spdx-line
-  defp header(text) do
-    case spdx_lines(text, 0) do
-      {0, _} -> {:error, "no ';; SPDX-' header line"}
-      {_, rest} -> {:ok, rest}
+  # text-char = VCHAR / SP / UTF8-2 / UTF8-3 / UTF8-4; line-end = CRLF / LF.
+  # The input is valid UTF-8 (checked in parse/1), so a code point at or above
+  # U+0080 is one of the UTF8-n forms.
+  @text_chars "[\\x{20}-\\x{7E}\\x{80}-\\x{10FFFF}]"
+  @spdx_line Regex.compile!("\\A;; SPDX-(#{@text_chars}+)(?:\\r\\n|\\n)", "u")
+  @comment_tail Regex.compile!("\\A#{@text_chars}*(?:\\r\\n|\\n)", "u")
+
+  # header = 1*spdx-line; spdx-line = ";;" SP "SPDX-" 1*text-char line-end.
+  # The gate also refuses a payload that is only spaces.
+  defp header(text), do: spdx_lines(text, 0)
+
+  defp spdx_lines(text, n) do
+    case Regex.run(@spdx_line, text) do
+      [line, payload] ->
+        if String.trim(payload) == "",
+          do: {:error, "SPDX header line is empty after ';; SPDX-'"},
+          else: spdx_lines(drop(text, line), n + 1)
+
+      nil when n == 0 ->
+        {:error, "no ';; SPDX-' header line"}
+
+      nil ->
+        {:ok, text}
     end
   end
 
-  defp spdx_lines(";; SPDX-" <> _ = text, n) do
-    case String.split(text, "\n", parts: 2) do
-      [_line, rest] -> spdx_lines(rest, n + 1)
-      [_line] -> {n + 1, ""}
-    end
-  end
+  # token-sep = 1*(SP / line-end / comment); comment = ";" *text-char line-end.
+  # A bare CR, a tab, or a comment without its line-end is not a separator;
+  # skip/1 stops there and the caller reports what it cannot read.
+  defp skip(" " <> rest), do: skip(rest)
+  defp skip("\n" <> rest), do: skip(rest)
+  defp skip("\r\n" <> rest), do: skip(rest)
 
-  defp spdx_lines(text, n), do: {n, text}
-
-  # token-sep = 1*(SP / line-end / comment)
-  defp skip(<<c, rest::binary>>) when c in [?\s, ?\n, ?\r], do: skip(rest)
-
-  defp skip(";" <> rest) do
-    case String.split(rest, "\n", parts: 2) do
-      [_, after_comment] -> skip(after_comment)
-      [_] -> ""
+  defp skip(";" <> rest = text) do
+    case Regex.run(@comment_tail, rest) do
+      [tail] -> skip(drop(rest, tail))
+      nil -> text
     end
   end
 
   defp skip(rest), do: rest
+
+  defp drop(text, prefix),
+    do: binary_part(text, byte_size(prefix), byte_size(text) - byte_size(prefix))
 
   defp form("(" <> rest) do
     with {:ok, head, rest} <- symbol(rest),
@@ -313,10 +334,10 @@ defmodule Hypatia.Deed do
 
   defp value("\"" <> rest), do: string(rest, [])
   defp value("#u5\"" <> rest), do: tagged(:uuid5, string(rest, []))
-  defp value("#u8\"" <> rest), do: tagged(:uuid8, string(rest, []))
+  defp value("#u8\"" <> rest), do: uuid8(string(rest, []))
   defp value("#t" <> rest), do: {:ok, {:boolean, true}, rest}
   defp value("#f" <> rest), do: {:ok, {:boolean, false}, rest}
-  defp value("(" <> rest), do: list(skip(rest), [])
+  defp value("(" <> rest), do: list_open(rest)
 
   # quoted = "'" ( symbol / list ): no separator after the quote, and nothing
   # else may be quoted.
@@ -345,9 +366,26 @@ defmodule Hypatia.Deed do
   defp tagged(tag, {:ok, {:string, s}, rest}), do: {:ok, {tag, s}, rest}
   defp tagged(_tag, err), do: err
 
-  # list = "(" [value *(token-sep value)] [token-sep] ")"
-  defp list(")" <> rest, acc), do: {:ok, {:list, Enum.reverse(acc)}, rest}
-  defp list("", _acc), do: {:error, "unbalanced parens in a list"}
+  # uuid8 body: domain ":" name, the domain (before the first ":") non-empty
+  # printable ASCII (ADR-008 profile C), as the gate checks.
+  defp uuid8({:ok, {:string, s}, _} = ok) do
+    if Regex.match?(~r/\A[\x21-\x39\x3B-\x7E]+:/, s),
+      do: tagged(:uuid8, ok),
+      else: {:error, "a #u8 body must be domain:name with a printable ASCII domain"}
+  end
+
+  defp uuid8(err), do: err
+
+  # list = "(" [value *(token-sep value)] [token-sep] ")". One departure from
+  # deed.abnf: a separator may come before the first value, as the gate allows
+  # and the estate's worked-model deed (rsr-template-repo) writes every
+  # multi-line list. It cannot change what a value is.
+  defp list_open(text) do
+    case skip(text) do
+      ")" <> rest -> {:ok, {:list, []}, rest}
+      next -> list(next, [])
+    end
+  end
 
   defp list(text, acc) do
     with {:ok, v, rest} <- value(text) do
@@ -369,7 +407,14 @@ defmodule Hypatia.Deed do
   defp string("\\t" <> rest, acc), do: string(rest, ["\t" | acc])
   defp string("\\" <> _, _acc), do: {:error, "illegal string escape"}
   defp string("", _acc), do: {:error, "unterminated string"}
-  defp string(<<c::utf8, rest::binary>>, acc), do: string(rest, [<<c::utf8>> | acc])
+  # str-char = %x20-21 / %x23-5B / %x5D-7E / UTF8-2 / UTF8-3 / UTF8-4
+  defp string(<<c::utf8, rest::binary>>, acc) when c in 0x20..0x7E or c >= 0x80,
+    do: string(rest, [<<c::utf8>> | acc])
+
+  defp string(<<c::utf8, _::binary>>, _acc),
+    do:
+      {:error, "raw control character U+#{Integer.to_string(c, 16)} in a string (use \\n or \\t)"}
+
   defp string(_, _acc), do: {:error, "invalid UTF-8 in a string"}
 
   @symbol ~r/\A[A-Za-z][A-Za-z0-9.*\/<>=!?+_-]*/

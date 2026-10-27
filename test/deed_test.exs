@@ -84,6 +84,57 @@ defmodule Hypatia.DeedTest do
       assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed :schema-version "1.0.0" :a #tx)|)
     end
 
+    # Each case below is a class the differential run against deed.abnf
+    # (apg-js) found the earlier reader accepting.
+    test "strings hold no raw control characters" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1.0.0\" "
+      assert {:ok, _} = Deed.parse(hdr <> ~s|:a "é © \u0085 \\n \\t")|)
+
+      for c <- ["\n", "\r", "\t", <<1>>, <<0x7F>>] do
+        assert {:error, msg} = Deed.parse(hdr <> ~s|:a "x#{c}y")|)
+        assert msg =~ "raw control character"
+      end
+    end
+
+    test "separators are SP, CRLF, LF and comments that end in a line-end" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n"
+
+      assert {:ok, _} =
+               Deed.parse(hdr <> "(repo-deed\r\n:schema-version \"1\" ; ok\r\n)\n; end\n")
+
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed\r:schema-version \"1\")")
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed\t:schema-version \"1\")")
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed :schema-version \"1\" ;\tx\n)")
+      # A comment must end in a line-end, even the last one.
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed :schema-version \"1\")\n; end")
+    end
+
+    test "SPDX header lines are text-chars with a non-blank payload" do
+      form = "(repo-deed :schema-version \"1\")"
+      assert {:ok, _} = Deed.parse(";; SPDX-FileCopyrightText: © 2026 x\r\n" <> form)
+      assert {:error, _} = Deed.parse(";; SPDX-   \n" <> form)
+      assert {:error, _} = Deed.parse(";; SPDX-a\tb\n" <> form)
+      assert {:error, _} = Deed.parse(";; SPDX-License-Identifier: MPL-2.0" <> form)
+    end
+
+    test "a list may open with a separator, as the gate and the template allow" do
+      # deed.abnf has no separator before a list's first value; deed_lint and
+      # rsr-template-repo_chora.deed (`:purpose (` then a newline) do.
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1\" "
+      assert {:ok, _} = Deed.parse(hdr <> ~s|:a () :b ( ) :c ("x" ) :d ("x"\n"y"))|)
+      assert {:ok, _} = Deed.parse(hdr <> ~s|:secrets (\n  "DEPLOY_KEY"\n  ; c\n  "X"))|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:secrets (\t"DEPLOY_KEY"))|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:secrets ("A""B"))|)
+    end
+
+    test "a #u8 body is domain:name with a printable ASCII domain" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1\" "
+      assert {:ok, _} = Deed.parse(hdr <> ~s|:id #u8"gv-clade-index:github.com/x/y:z")|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:id #u8"no-colon")|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:id #u8":empty-domain")|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:id #u8"dé:x")|)
+    end
+
     test "quotes only a symbol or a list, with nothing between" do
       hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1.0.0\" "
       assert {:ok, _} = Deed.parse(hdr <> ~s|:a 'sym :b '("x" y))|)
@@ -132,6 +183,14 @@ defmodule Hypatia.DeedTest do
 
       repo = repo_with_deed("x_chora.deed", hdr <> ~s|(egress :policy "a" :policy "b" #{job}))|)
       assert {:error, _, "(egress …) repeats :policy"} = Deed.egress_declarations(repo)
+    end
+
+    test "reads the template's live deed and its three declared jobs" do
+      repo = Path.join(@fixtures, "template-main")
+
+      assert {:ok, "rsr-template-repo_chora.deed", jobs} = Deed.egress_declarations(repo)
+
+      assert Enum.map(jobs, & &1.job) == ["notify", "sonarqube", "trigger-boj"]
     end
 
     test "returns the declared jobs with their secrets" do
