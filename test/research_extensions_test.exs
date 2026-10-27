@@ -350,6 +350,94 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "secret names are case-insensitive: secrets.github_token is the ambient token" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          label:
+            runs-on: ubuntu-latest
+            steps:
+              - run: npm ci && gh label create x
+                env:
+                  GH_TOKEN: ${{ secrets.github_token }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: a word inside an inline trigger map's filters is not an event" do
+      repo =
+        create_repo_with_workflow("""
+        on: {push: {paths: [issues/**]}}
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./sync.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "an inline trigger map's top-level keys are events" do
+      repo =
+        create_repo_with_workflow("""
+        on: {push: {branches: [main]}, issue_comment: {types: [created]}}
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "untrusted-input trigger (issue_comment)"
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: install commands in env values and comments run nothing" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./deploy.sh # npm ci happens in the image
+                env:
+                  NOTE: "run npm ci locally first"
+                  TOKEN: ${{ secrets.DEPLOY_KEY }}
+              - run: |
+                  # cargo build is done upstream
+                  ./publish.sh
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a folded run scalar is matched as the command it folds into" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              - run: >-
+                  npm
+                  ci
+                env:
+                  TOKEN: ${{ secrets.NPM_TOKEN }}
+        """)
+
+      assert [%{severity: :high, line: 10}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
     test "a piped installer is an exposure" do
       repo =
         create_repo_with_workflow("""

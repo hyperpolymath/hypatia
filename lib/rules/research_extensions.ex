@@ -174,9 +174,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @re001_head_ref ~r/github\.event\.(?:pull_request|workflow_run)\.head\.|github\.head_ref/
 
   # Where naming that head means fetching its code: a checkout's `ref:` or
-  # `repository:`, or a git checkout/fetch/switch. A head SHA in `env:`, an
-  # `if:` or a `concurrency:` group only names it.
-  @re001_head_fetch ~r/^\s*(?:-\s+)?(?:ref|repository):|\bgit\s+(?:checkout|fetch|switch)\b/
+  # `repository:`, or a git checkout/fetch/switch in a `run:` script. A head
+  # SHA in `env:`, an `if:` or a `concurrency:` group only names it.
+  @re001_checkout_key ~r/^\s*(?:-\s+)?(?:ref|repository):/
+  @re001_git_fetch ~r/\bgit\s+(?:checkout|fetch|switch)\b/
 
   # Code fetched at run time: piped installers, package installs, and builds
   # or test runs that execute dependencies' build scripts.
@@ -270,18 +271,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
         # Reusable jobs delegate their runtime to the source workflow. A sibling's
         # runner or hardener cannot establish this job's execution policy.
         local_runner? = direct_job_field?(job_lines, "runs-on")
+        steps = job_steps(job_lines)
 
         with [first_credential | _] <- credential_lines,
              true <- local_runner?,
-             exposures when exposures != [] <- re001_exposures(job_lines, untrusted_events),
+             exposures when exposures != [] <- re001_exposures(steps, untrusted_events),
              false <- harden_runner_step?(job_lines) do
           # A step that both holds the credential and runs fetched or head code
           # hands the credential straight to that code.
           shared_step =
-            job_lines
-            |> job_steps()
-            |> Enum.find(fn step ->
-              Enum.any?(step, &credential_line?/1) and Enum.any?(step, &code_exposure_line?/1)
+            Enum.find(steps, fn step ->
+              Enum.any?(step, &credential_line?/1) and step_code_exposures(step) != []
             end)
 
           {severity, {_source, line}} =
@@ -320,36 +320,77 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end)
   end
 
-  # A reference to a secret other than the ambient GITHUB_TOKEN.
+  # A reference to a secret other than the ambient GITHUB_TOKEN. Secret names
+  # are case-insensitive, so `secrets.github_token` is the ambient one too.
   defp credential_line?({line, _}) do
     ~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/
     |> Regex.scan(line, capture: :all_but_first)
-    |> Enum.any?(fn [name] -> name not in @re001_ambient_secrets end)
+    |> Enum.any?(fn [name] -> String.upcase(name) not in @re001_ambient_secrets end)
   end
 
-  # A line that checks out or runs head code, or fetches and runs code. Step
-  # names are labels, not commands, so `name: cargo build` is not one.
-  defp code_exposure_line?({line, _}) do
-    not Regex.match?(~r/^\s*(?:-\s+)?name:/, line) and
-      (head_fetch_line?(line) or Regex.match?(@re001_fetched_code, line))
-  end
-
-  defp head_fetch_line?(line) do
-    Regex.match?(@re001_head_ref, line) and Regex.match?(@re001_head_fetch, line)
-  end
-
-  defp re001_exposures(job_lines, untrusted_events) do
-    code_lines = Enum.filter(job_lines, &code_exposure_line?/1)
+  defp re001_exposures(steps, untrusted_events) do
+    code = Enum.flat_map(steps, &step_code_exposures/1)
 
     [
       untrusted_events != [] &&
         "an untrusted-input trigger (#{Enum.join(untrusted_events, ", ")})",
-      Enum.any?(code_lines, fn {line, _} -> head_fetch_line?(line) end) &&
-        "a pull-request or triggering-run head checkout",
-      Enum.any?(code_lines, fn {line, _} -> Regex.match?(@re001_fetched_code, line) end) &&
-        "fetched code (a piped installer or a dependency install/build)"
+      :head in code && "a pull-request or triggering-run head checkout",
+      :fetched in code && "fetched code (a piped installer or a dependency install/build)"
     ]
     |> Enum.filter(&is_binary/1)
+  end
+
+  # What a step executes that the job cannot vouch for: `:head` when it checks
+  # out or fetches the head of a pull request or triggering run, `:fetched`
+  # when its `run:` script pipes a download into a shell or installs or builds
+  # dependencies. Only executable content counts: an `env:` value or a YAML
+  # comment that mentions `npm ci` runs nothing.
+  defp step_code_exposures(step) do
+    run_lines = step_run_lines(step)
+    # Joined with newlines so a folded `run: >-` command split across lines
+    # still matches: the patterns' `\s+` spans the line break.
+    run = Enum.join(run_lines, "\n")
+
+    head? =
+      Enum.any?(step, fn {line, _} ->
+        Regex.match?(@re001_checkout_key, line) and Regex.match?(@re001_head_ref, line)
+      end) or
+        Enum.any?(run_lines, fn line ->
+          Regex.match?(@re001_git_fetch, line) and Regex.match?(@re001_head_ref, line)
+        end)
+
+    [head? && :head, Regex.match?(@re001_fetched_code, run) && :fetched]
+    |> Enum.filter(& &1)
+  end
+
+  # The script of a step's `run:`, inline or as a block scalar, with comments
+  # removed (YAML and shell agree that `#` after whitespace starts one).
+  defp step_run_lines(step) do
+    case Enum.split_while(step, fn {line, _} ->
+           not Regex.match?(~r/^\s*(?:-\s+)?run:/, line)
+         end) do
+      {_, []} ->
+        []
+
+      {_, [{run_line, _} | rest]} ->
+        [prefix, value] =
+          Regex.run(~r/^(\s*(?:-\s+)?)run:\s*(.*)$/, run_line, capture: :all_but_first)
+
+        key_column = String.length(prefix)
+
+        body =
+          if Regex.match?(~r/^[>|][0-9+-]*\s*(?:#.*)?$/, value) do
+            rest
+            |> Enum.take_while(fn {line, _} ->
+              String.trim(line) == "" or indent_of(line) > key_column
+            end)
+            |> Enum.map(&elem(&1, 0))
+          else
+            [value]
+          end
+
+        Enum.map(body, &String.replace(&1, ~r/(?:^|\s)#.*$/, ""))
+    end
   end
 
   # The job's steps, each as its own physical lines.
@@ -396,7 +437,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
           |> String.trim()
 
         if inline != "" do
-          Regex.scan(~r/[A-Za-z_]+/, inline) |> List.flatten()
+          inline_events(inline)
         else
           block =
             Enum.take_while(rest, fn {line, _} ->
@@ -417,6 +458,31 @@ defmodule Hypatia.Rules.ResearchExtensions do
           end)
         end
     end
+  end
+
+  # `on: {push: {paths: [issues/**]}}` names one event, push: only the map's
+  # top-level keys are events. A scalar or list names each of its words.
+  defp inline_events("{" <> _ = map) do
+    ~r/["']?([A-Za-z_]+)["']?\s*:/
+    |> Regex.scan(map, return: :index)
+    |> Enum.flat_map(fn [{start, _}, {from, len}] ->
+      if nesting_at(map, start) == 1, do: [binary_part(map, from, len)], else: []
+    end)
+  end
+
+  defp inline_events(scalar_or_list) do
+    ~r/[A-Za-z_]+/ |> Regex.scan(scalar_or_list) |> List.flatten()
+  end
+
+  defp nesting_at(text, position) do
+    text
+    |> binary_part(0, position)
+    |> String.graphemes()
+    |> Enum.reduce(0, fn
+      c, depth when c in ["{", "["] -> depth + 1
+      c, depth when c in ["}", "]"] -> depth - 1
+      _, depth -> depth
+    end)
   end
 
   defp direct_job_field?(job_lines, field) do
