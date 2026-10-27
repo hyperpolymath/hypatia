@@ -56,7 +56,13 @@ defmodule Hypatia.Neural.EchoStateNetwork do
 
   # --- Public API ---
 
-  @doc "Initialize a new Echo State Network"
+  @doc """
+  Initialise an untrained network with zero reservoir state and no predictions.
+
+  Options are `:reservoir_size` (default: 80 nodes) and `:seed` (default:
+  current system time in microseconds). Seeds the calling process's random
+  number generator to initialise the weights.
+  """
   def init(opts \\ []) do
     size = Keyword.get(opts, :reservoir_size, @reservoir_size)
     seed = Keyword.get(opts, :seed, :erlang.system_time(:microsecond))
@@ -89,7 +95,18 @@ defmodule Hypatia.Neural.EchoStateNetwork do
     {prediction, %{esn | state: new_state, predictions: updated_preds}}
   end
 
-  @doc "Train ESN on a time series (list of floats)"
+  @doc """
+  Fit the readout to predict the next value in a chronological confidence series.
+
+  Requires more than 60 numeric values and discards the first 50 reservoir
+  states as washout. Fits the reservoir features, current input and an
+  unpenalised bias using ridge regression.
+
+  Returns the network with fitted output weights and `trained: true`, preserving
+  its original reservoir state and prediction history. With 60 or fewer values,
+  returns the network unchanged. Non-numeric values raise `ArithmeticError`
+  when training proceeds.
+  """
   def train(%__MODULE__{} = esn, time_series) when length(time_series) > @washout + 10 do
     _size = length(esn.state)
 
