@@ -196,6 +196,44 @@ defmodule Hypatia.Rules.RootHygieneTest do
       assert findings == []
     end
 
+    test "accepts LICENSE.adoc and LICENSE.md as the licence" do
+      for licence <- ["LICENSE.adoc", "LICENSE.md"] do
+        findings =
+          RootHygiene.scan_required_missing([licence, ".editorconfig", "repo_chora.deed"])
+
+        assert findings == [], "#{licence} should satisfy the licence requirement"
+      end
+    end
+
+    test "a licence-like name that is not a licence file does not count" do
+      findings =
+        RootHygiene.scan_required_missing([
+          "LICENSE.adoc.orig",
+          ".editorconfig",
+          "repo_chora.deed"
+        ])
+
+      assert [%{file: "LICENSE", severity: :critical}] = findings
+    end
+
+    test "scan/2 accepts a non-empty REUSE LICENSES/ directory instead of a root LICENSE" do
+      dir = Path.join(System.tmp_dir!(), "reuse-#{System.unique_integer([:positive])}")
+      repo = Path.join(dir, "demo")
+      File.mkdir_p!(Path.join(repo, "LICENSES"))
+
+      try do
+        # An empty LICENSES/ declares nothing.
+        empty = RootHygiene.scan([".editorconfig", "demo_chora.deed"], repo)
+        assert [%{file: "LICENSE", severity: :critical}] = empty.findings
+
+        File.write!(Path.join([repo, "LICENSES", "MPL-2.0.txt"]), "licence text")
+        filled = RootHygiene.scan([".editorconfig", "demo_chora.deed"], repo)
+        assert filled.findings == []
+      after
+        File.rm_rf!(dir)
+      end
+    end
+
     test "does not flag SECURITY.md — owned by CicdRules.check_repo_requirements/1" do
       # SECURITY.md is a community-health file GitHub recognises in root,
       # .github/, or docs/; requiring it here double-reported and
