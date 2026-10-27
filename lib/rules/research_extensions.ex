@@ -419,32 +419,55 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   # YAML anchors and aliases, which GitHub expands in workflows: `*name`
-  # repeats the node anchored `&name`, so `env: *common`, `<<: *defaults` or
-  # `deploy: *build` brings the anchored lines into the job that holds the
-  # alias. Each alias is expanded in place before any job is read: the
-  # anchored lines are copied in after it, re-indented and carrying the
-  # alias's line number, so a finding points at the alias. A `<<:` merge puts
-  # its lines into the mapping that holds the key, at the key's indent; any
-  # other alias's lines go at the column of its `*`, under the node it stands
-  # for. The anchor is the nearest one of that name above the alias.
-  @anchor ~r/(?:^|[\s\[{,])&([A-Za-z0-9_-]+)/
-  @alias ~r/(?:^|[\s\[{,])\*([A-Za-z0-9_-]+)/
-  @merge_key ~r/^\s*(?:-\s+)?(?:<<|"<<"|'<<')\s*:/
+  # stands for the node anchored `&name`, so `env: *common`, `run: *script`,
+  # `<<: *defaults` or `deploy: *build` brings the anchored node into the job
+  # that holds the alias. Each alias is expanded in place before any job is
+  # read, and every line it brings carries the alias's line number, so a
+  # finding points at the alias:
+  #
+  #   * an alias that is a key's whole value, or a list item, is replaced by
+  #     what follows its anchor on the anchor's line (a scalar, a block
+  #     scalar's `|`, a flow collection), and the anchor's indented lines
+  #     follow at the column of the `*`;
+  #   * a `<<:` merge puts the anchored mapping's entries into the mapping
+  #     that holds the key, at the key's column, minus every entry whose key
+  #     that mapping sets itself: YAML gives the explicit key precedence;
+  #   * an alias inside a flow collection is followed by a copy of the
+  #     anchored lines, deeper than the line.
+  #
+  # Anchors and aliases are recognised only where a node starts, outside
+  # quoted scalars and block-scalar text, so `echo "x *common"` and a `run: |`
+  # line `ls *common` stay text. The anchor is the nearest one of that name
+  # above the alias.
+  @anchor ~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)&([A-Za-z0-9_-]+)(?=\s|$)/
+  @alias ~r/(?:^\s*(?:-\s+)*|:\s+|[\[{,]\s*)\*([A-Za-z0-9_-]+)\s*(?=$|[,\]}])/
+  @merge_key ~r/^(\s*(?:-\s+)?)(?:<<|"<<"|'<<')\s*:/
+  @mapping_key ~r/^\s*(?:-\s+)?(?:"([^"]*)"|'([^']*)'|([^\s"'#:][^:]*?))\s*:(?:\s|$)/
+  @block_scalar_start ~r/(?:^\s*|[:-]\s+)(?:&[A-Za-z0-9_-]+\s+)?[>|][0-9+-]*\s*$/
+  @block_scalar_header ~r/^[>|][0-9+-]*$/
   # Nested anchors can multiply copies exponentially (the "billion laughs"
   # file), so expansion stops after this many copied lines per workflow.
   @alias_budget 5_000
   defp expand_aliases(lines) do
+    codes = yaml_codes(lines)
+
     anchors =
-      for {{line, n}, index} <- Enum.with_index(lines),
-          text = strip_yaml_comment(line),
-          [_, {at, len}] <- Regex.scan(@anchor, text, return: :index) do
-        {binary_part(text, at, len), n, anchored_lines(lines, index, text, at + len)}
+      for {{{line, n}, code}, index} <- lines |> Enum.zip(codes) |> Enum.with_index(),
+          code != nil,
+          [_, {at, len}] <- Regex.scan(@anchor, code, return: :index),
+          node_start?(code, at) do
+        {binary_part(code, at, len), n,
+         anchored(lines, index, strip_yaml_comment(line), at + len)}
       end
 
     # Only what jobs read is expanded in place: the jobs and the top-level
     # env:. An anchor kept elsewhere is expanded where a job uses it.
     {expanded, _} =
-      Enum.flat_map_reduce(lines, {nil, @alias_budget}, fn {line, _} = entry, {section, budget} ->
+      lines
+      |> Enum.zip(codes)
+      |> Enum.with_index()
+      |> Enum.flat_map_reduce({nil, @alias_budget}, fn {{{line, _} = entry, code}, index},
+                                                       {section, budget} ->
         section =
           case Regex.run(~r/^["']?([^\s"':]+)["']?\s*:/, line) do
             [_, key] -> key
@@ -452,8 +475,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
           end
 
         if section in ["jobs", "env"] do
-          {copies, budget} = expand_line(entry, anchors, budget)
-          {copies, {section, budget}}
+          {out, budget} = expand_line(entry, code, lines, index, anchors, budget)
+          {out, {section, budget}}
         else
           {[entry], {section, budget}}
         end
@@ -463,54 +486,173 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   defp expand_aliases(lines, anchors, budget) do
-    Enum.flat_map_reduce(lines, budget, &expand_line(&1, anchors, &2))
+    lines
+    |> Enum.zip(yaml_codes(lines))
+    |> Enum.with_index()
+    |> Enum.flat_map_reduce(budget, fn {{entry, code}, index}, budget ->
+      expand_line(entry, code, lines, index, anchors, budget)
+    end)
   end
 
-  # One line followed by copies of the anchors its aliases name.
-  defp expand_line(entry, _anchors, budget) when budget <= 0, do: {[entry], budget}
+  # One line with its aliases expanded. A line of block-scalar text (code nil)
+  # holds no alias.
+  defp expand_line(entry, nil, _lines, _index, _anchors, budget), do: {[entry], budget}
 
-  defp expand_line({line, n} = entry, anchors, budget) do
-    text = strip_yaml_comment(line)
+  defp expand_line(entry, _code, _lines, _index, _anchors, budget) when budget <= 0,
+    do: {[entry], budget}
 
-    {copies, budget} =
-      for [_, {at, len}] <- Regex.scan(@alias, text, return: :index),
-          name = binary_part(text, at, len),
-          {_, _, body} <-
+  defp expand_line({line, n} = entry, code, lines, index, anchors, budget) do
+    matches =
+      for [_, {at, len}] <- Regex.scan(@alias, code, return: :index),
+          node_start?(code, at),
+          name = binary_part(code, at, len),
+          {_, _, node} <-
             anchors |> Enum.filter(fn {a, m, _} -> a == name and m < n end) |> Enum.take(-1),
-          reduce: {[], budget} do
-        {copies, budget} when budget <= 0 ->
-          {copies, budget}
+          do: {at, len, node}
 
-        {copies, budget} ->
-          target =
-            if Regex.match?(@merge_key, text),
-              do: indent_of(text),
-              else: String.length(binary_part(text, 0, at - 1))
+    # The alias that ends the line is the whole value of its key or item.
+    {value, in_flow} =
+      case List.last(matches) do
+        {at, len, _} = last ->
+          if String.trim(binary_part(code, at + len, byte_size(code) - at - len)) == "",
+            do: {last, Enum.drop(matches, -1)},
+            else: {nil, matches}
 
-          {body, budget} = expand_aliases(body, anchors, budget - length(body))
-          {copies ++ Enum.map(reindent(body, target), fn {copy, _} -> {copy, n} end), budget}
+        nil ->
+          {nil, []}
       end
 
-    {[entry | copies], budget}
+    {flow_copies, budget} =
+      Enum.flat_map_reduce(in_flow, budget, fn {at, _, {inline, block}}, budget ->
+        indent = indent_of(code)
+        inline_lines = if inline == "", do: [], else: [{indent_spaces(indent + 2) <> inline, n}]
+        {copy, budget} = anchored_block(inline, inline_lines ++ block, anchors, budget)
+        {renumber(reindent(copy, column(code, at - 1)), n), budget}
+      end)
+
+    case value do
+      nil ->
+        {[entry | flow_copies], budget}
+
+      {at, _, {inline, block}} ->
+        text = strip_yaml_comment(line)
+        head = String.trim_trailing(binary_part(text, 0, at - 1) <> inline)
+        {block, budget} = anchored_block(inline, block, anchors, budget - 1)
+
+        block =
+          case Regex.run(@merge_key, code) do
+            [_, prefix] ->
+              merge_column = String.length(prefix)
+
+              block
+              |> reindent(merge_column)
+              |> drop_entries(merge_column, sibling_keys(lines, index, merge_column))
+
+            nil ->
+              reindent(block, column(code, at - 1))
+          end
+
+        # The inline part may hold aliases of its own (`&a [*b, *c]`).
+        {head_lines, budget} =
+          if inline == "" or Regex.match?(@block_scalar_header, inline),
+            do: {[{head, n}], budget},
+            else: expand_line({head, n}, yaml_code(head), [{head, n}], 0, anchors, budget)
+
+        {head_lines ++ renumber(block, n) ++ flow_copies, budget}
+    end
   end
 
-  # The lines an anchor names: what follows it on its own line, then every
-  # line indented deeper than that line.
-  defp anchored_lines(lines, index, text, after_name) do
-    {_, n} = Enum.at(lines, index)
-    indent = indent_of(text)
-    inline = text |> binary_part(after_name, byte_size(text) - after_name) |> String.trim()
+  # An anchor's indented lines, their own aliases expanded. Under a block
+  # scalar's header they are text and are copied as they are.
+  defp anchored_block(inline, block, anchors, budget) do
+    if Regex.match?(@block_scalar_header, inline),
+      do: {block, budget - length(block)},
+      else: expand_aliases(block, anchors, budget - length(block))
+  end
 
-    inline_lines =
-      if inline == "", do: [], else: [{String.duplicate(" ", indent + 2) <> inline, n}]
+  # The node an anchor names: what follows the anchor on its own line, and
+  # every line indented deeper than that line.
+  defp anchored(lines, index, text, after_name) do
+    inline = text |> binary_part(after_name, byte_size(text) - after_name) |> String.trim()
+    indent = indent_of(text)
 
     block =
       lines
       |> Enum.drop(index + 1)
       |> Enum.take_while(fn {line, _} -> String.trim(line) == "" or indent_of(line) > indent end)
 
-    inline_lines ++ block
+    {inline, block}
   end
+
+  # The keys the mapping holding line `index` sets at `column` itself.
+  defp sibling_keys(lines, index, column) do
+    {before, [_ | after_line]} = Enum.split(lines, index)
+
+    in_mapping = fn ls ->
+      Enum.take_while(ls, fn {line, _} -> String.trim(line) == "" or indent_of(line) >= column end)
+    end
+
+    (in_mapping.(Enum.reverse(before)) ++ in_mapping.(after_line))
+    |> Enum.filter(fn {line, _} -> indent_of(line) == column end)
+    |> Enum.flat_map(fn {line, _} -> mapping_key(line) end)
+    |> Enum.reject(&(&1 == "<<"))
+  end
+
+  # Merged entries, less those whose key the destination mapping sets.
+  defp drop_entries(lines, column, keys) do
+    lines
+    |> Enum.chunk_while(
+      [],
+      fn {line, _} = entry, acc ->
+        if indent_of(line) == column and String.trim(line) != "" and acc != [],
+          do: {:cont, Enum.reverse(acc), [entry]},
+          else: {:cont, [entry | acc]}
+      end,
+      fn
+        [] -> {:cont, []}
+        acc -> {:cont, Enum.reverse(acc), []}
+      end
+    )
+    |> Enum.reject(fn [{first, _} | _] -> Enum.any?(mapping_key(first), &(&1 in keys)) end)
+    |> Enum.concat()
+  end
+
+  defp mapping_key(line) do
+    case Regex.run(@mapping_key, strip_yaml_comment(line)) do
+      nil -> []
+      captures -> captures |> tl() |> Enum.reject(&(&1 == "")) |> Enum.take(1)
+    end
+  end
+
+  # Each line's YAML structure, for finding anchors and aliases: the line
+  # without its comment and with quoted scalars blanked, byte offsets kept;
+  # nil for a line of block-scalar text.
+  defp yaml_codes(lines) do
+    {codes, _} =
+      Enum.map_reduce(lines, nil, fn {line, _}, scalar_indent ->
+        if scalar_indent && (String.trim(line) == "" or indent_of(line) > scalar_indent) do
+          {nil, scalar_indent}
+        else
+          code = yaml_code(line)
+          {code, if(Regex.match?(@block_scalar_start, code), do: indent_of(line))}
+        end
+      end)
+
+    codes
+  end
+
+  defp yaml_code(line), do: strip_yaml_comment(line, true)
+
+  # A `,` separates nodes only inside a flow collection; in a plain scalar
+  # (`run: echo a, *b`) it is text. The name starts at `at`, after `*` or `&`.
+  defp node_start?(code, at) do
+    before = code |> binary_part(0, at - 1) |> String.trim_trailing()
+    not String.ends_with?(before, ",") or nesting_at(code, at) > 0
+  end
+
+  defp column(text, byte_offset), do: String.length(binary_part(text, 0, byte_offset))
+  defp indent_spaces(n), do: String.duplicate(" ", n)
+  defp renumber(lines, n), do: Enum.map(lines, fn {line, _} -> {line, n} end)
 
   defp reindent(lines, target) do
     base =
@@ -523,8 +665,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     Enum.map(lines, fn {line, n} ->
       if String.trim(line) == "",
         do: {"", n},
-        else:
-          {String.duplicate(" ", indent_of(line) - base + target) <> String.trim_leading(line), n}
+        else: {indent_spaces(indent_of(line) - base + target) <> String.trim_leading(line), n}
     end)
   end
 
@@ -798,8 +939,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
         key_column = String.length(prefix)
 
+        # A block scalar, its header after any anchor (`run: &script |`).
         body =
-          if Regex.match?(~r/^[>|][0-9+-]*\s*(?:#.*)?$/, value) do
+          if Regex.match?(~r/^(?:&[A-Za-z0-9_-]+\s+)?[>|][0-9+-]*\s*(?:#.*)?$/, value) do
             rest
             |> Enum.take_while(fn {line, _} ->
               String.trim(line) == "" or indent_of(line) > key_column
@@ -1182,22 +1324,26 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # A line without its YAML comment: a `#` at the start or after whitespace,
   # outside a quoted scalar. A quote opens a scalar only where one can start
   # (after whitespace or a flow indicator), so the apostrophe in `it's` does not.
-  defp strip_yaml_comment(line) do
+  # With `blank_quoted`, each quoted scalar's text becomes spaces of the same
+  # byte length, so what remains is structure at its original offsets.
+  defp strip_yaml_comment(line, blank_quoted \\ false) do
+    text = fn c -> if blank_quoted, do: String.duplicate(" ", byte_size(c)), else: c end
+
     line
     |> String.graphemes()
     |> Enum.reduce_while({[], nil, " ", false}, fn c, {acc, quote, prev, escaped} ->
       cond do
         quote == "\"" and escaped ->
-          {:cont, {[c | acc], quote, c, false}}
+          {:cont, {[text.(c) | acc], quote, c, false}}
 
         quote == "\"" and c == "\\" ->
-          {:cont, {[c | acc], quote, c, true}}
+          {:cont, {[text.(c) | acc], quote, c, true}}
 
         quote != nil and c == quote ->
           {:cont, {[c | acc], nil, c, false}}
 
         quote != nil ->
-          {:cont, {[c | acc], quote, c, false}}
+          {:cont, {[text.(c) | acc], quote, c, false}}
 
         c == "#" and String.trim(prev) == "" ->
           {:halt, {acc, nil, c, false}}
@@ -1225,7 +1371,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
     )
   end
 
-  defp block_scalar?(line), do: Regex.match?(~r/:\s*[>|][0-9+-]*\s*(?:#.*)?$/, line)
+  defp block_scalar?(line),
+    do: Regex.match?(~r/:\s*(?:&[A-Za-z0-9_-]+\s+)?[>|][0-9+-]*\s*(?:#.*)?$/, line)
 
   # Follow block-style jobs by indentation, retaining physical source lines.
   # As with the other research rules, this is a local static text analysis.

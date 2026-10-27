@@ -36,8 +36,10 @@ to declare egress instead of adopting harden-runner everywhere. RE001 now:
   `toJSON(secrets)`) is its own finding, since no declaration can list it;
 * reads the workflow as YAML does in two more ways: a quoted key (`"env":`,
   `'runs-on':`) is the same key, and an alias (`env: *common`, `<<: *defaults`,
-  `deploy: *build`) brings its anchor's lines into the job that uses it, within
-  a budget of copied lines that stops a "billion laughs" file;
+  `run: *script`, `deploy: *build`) brings its anchor's node into the job that
+  uses it, a merge never overriding a key the job sets itself, within a budget
+  of copied lines that stops a "billion laughs" file; an alias is read only
+  where a YAML node starts, never inside a quoted or block scalar;
 * keeps #966's exposure model as the severity layer: an undeclared job is
   `:high` when the credential shares a step with fetched or untrusted code,
   and otherwise `:warn`, with or without an exposure (owner ruling

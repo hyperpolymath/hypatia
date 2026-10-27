@@ -1282,6 +1282,109 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a key the job sets itself wins over the same key from a merge" do
+      # The anchor's steps install harden-runner; the job's own steps do not.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            build: &defaults
+              runs-on: ubuntu-24.04
+              env:
+                HIDDEN: ${{ secrets.HIDDEN }}
+              steps:
+                - uses: step-security/harden-runner@v2
+                  with:
+                    egress-policy: block
+                - run: make
+            deploy:
+              <<: *defaults
+              env:
+                OTHER: x
+              steps:
+                - run: send ${{ secrets.VISIBLE }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(repo, "")
+
+      # deploy holds VISIBLE only (its env: replaces the merged one) and has
+      # no hardener (its steps: replace the merged ones).
+      assert [%{line: 16, detail: %{fix: fix}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert fix =~ ~s|:job "deploy" :secrets ("VISIBLE")|
+      File.rm_rf!(repo)
+    end
+
+    test "alias-like text inside a scalar is text, not an alias" do
+      for step <- [
+            ~s|      - run: echo "x *common"|,
+            ~s|      - run: echo x *common|,
+            ~s|      - run: echo a, *common|,
+            ~s|      - run: \|\n          ls *common|
+          ] do
+        repo =
+          create_repo_with_workflow(
+            """
+            jobs:
+              build:
+                runs-on: ubuntu-24.04
+                env: &common
+                  HIDDEN: ${{ secrets.HIDDEN }}
+                steps:
+                  - run: make
+              deploy:
+                runs-on: ubuntu-24.04
+                steps:
+                  - run: send ${{ secrets.VISIBLE }}
+            #{step}
+            """,
+            "notify.yml"
+          )
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "build" | <>
+            ~s|:secrets ("HIDDEN") :endpoints () :enforcement none) | <>
+            ~s|(job :workflow ".github/workflows/notify.yml" :job "deploy" | <>
+            ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+        )
+
+        assert ResearchExtensions.re001_missing_harden_runner(repo) == [], step
+        File.rm_rf!(repo)
+      end
+    end
+
+    test "a block-scalar alias keeps its script, and the script its exposure" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            build:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: &script |
+                    npm install
+                    deploy --token=${{ secrets.TOKEN }}
+            deploy:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: *script
+          """,
+          "notify.yml"
+        )
+
+      write_deed(repo, "")
+
+      # npm install runs in the step that holds TOKEN, in both jobs.
+      assert [%{severity: :high, line: 7}, %{severity: :high, line: 11}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      File.rm_rf!(repo)
+    end
+
     test "nested anchors that multiply (the billion-laughs file) are expanded within a budget" do
       anchors =
         for i <- 1..9 do
