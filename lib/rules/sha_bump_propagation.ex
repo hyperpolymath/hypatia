@@ -60,25 +60,36 @@ defmodule Hypatia.Rules.ShaBumpPropagation do
   # Estate reusable-workflow registry. Sourced from hypatia#418 issue body.
   # Each entry: `{repo, workflow_path}` — matches against `event.source_repo`
   # and any file in `event.files_changed`.
-  @known_reusables [
-    {"hyperpolymath/standards", ".github/workflows/governance-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/rust-ci-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/deno-ci-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/elixir-ci-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/scorecard-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/secret-scanner-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/codeql-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/hypatia-scan-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/mirror-reusable.yml"},
-    {"hyperpolymath/standards", ".github/workflows/changelog-reusable.yml"},
-    # hyperpolymath/cicd-suite (cicd-suite#54): the estate audit and the four
-    # language gates, consumed as thin callers at a full cicd-suite SHA.
-    {"hyperpolymath/cicd-suite", ".github/workflows/main-estate-audit.yml"},
-    {"hyperpolymath/cicd-suite", ".github/workflows/rust-ci.yml"},
-    {"hyperpolymath/cicd-suite", ".github/workflows/creusot-gate.yml"},
-    {"hyperpolymath/cicd-suite", ".github/workflows/spark-gate.yml"},
-    {"hyperpolymath/cicd-suite", ".github/workflows/kanren-gate.yml"}
+  @standards_reusables [
+    ".github/workflows/governance-reusable.yml",
+    ".github/workflows/rust-ci-reusable.yml",
+    ".github/workflows/deno-ci-reusable.yml",
+    ".github/workflows/elixir-ci-reusable.yml",
+    ".github/workflows/scorecard-reusable.yml",
+    ".github/workflows/secret-scanner-reusable.yml",
+    ".github/workflows/codeql-reusable.yml",
+    ".github/workflows/hypatia-scan-reusable.yml",
+    ".github/workflows/mirror-reusable.yml",
+    ".github/workflows/changelog-reusable.yml"
   ]
+
+  # The standards reusables under every name of the repository: merge events
+  # from it now carry `metadatastician/standards`, and the estate still holds
+  # pins under the former name (Hypatia.Rules.StandardsRepo).
+  @known_reusables for(
+                     repo <- Hypatia.Rules.StandardsRepo.names(),
+                     path <- @standards_reusables,
+                     do: {repo, path}
+                   ) ++
+                     [
+                       # hyperpolymath/cicd-suite (cicd-suite#54): the estate audit and the four
+                       # language gates, consumed as thin callers at a full cicd-suite SHA.
+                       {"hyperpolymath/cicd-suite", ".github/workflows/main-estate-audit.yml"},
+                       {"hyperpolymath/cicd-suite", ".github/workflows/rust-ci.yml"},
+                       {"hyperpolymath/cicd-suite", ".github/workflows/creusot-gate.yml"},
+                       {"hyperpolymath/cicd-suite", ".github/workflows/spark-gate.yml"},
+                       {"hyperpolymath/cicd-suite", ".github/workflows/kanren-gate.yml"}
+                     ]
 
   # Composite actions (referenced via `uses: <owner>/<repo>@<SHA>`) also flow
   # through this rule — the workflow_path is the conventional `action.yml`

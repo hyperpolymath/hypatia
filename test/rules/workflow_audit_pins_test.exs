@@ -1117,15 +1117,13 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
     end
 
     test "an alias name runs to whitespace or a flow indicator" do
-      wf =
-        "x: &e/x \"\"\n" <> @rust_step <> "        with:\n          toolchain: *e/x\n"
+      wf = "x: &e/x \"\"\n" <> @rust_step <> "        with:\n          toolchain: *e/x\n"
 
       assert [%{line: 5, auto_fixable: true}] = wf026(wf)
     end
 
     test "an anchor directly after a quoted key's colon in a flow mapping is the anchor" do
-      wf =
-        "x: {\"e\":&e \"\"}\n" <> @rust_step <> "        with:\n          toolchain: *e\n"
+      wf = "x: {\"e\":&e \"\"}\n" <> @rust_step <> "        with:\n          toolchain: *e\n"
 
       # The anchor is read, so the empty value it holds routes to the fixer
       # rather than to review as an alias of no anchor.
@@ -1333,6 +1331,23 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert f.auto_fixable
       assert f.fix_script == "fix-stale-reusable-pin.sh"
       assert f.reason =~ "standards#439"
+    end
+
+    test "fires on the same call under the repository's current name" do
+      new_name = String.replace_prefix(@rust_ci, "hyperpolymath/", "metadatastician/")
+      wf = "jobs:\n  rust-ci:\n    uses: #{new_name}@#{@broken_standards}\n"
+      [f] = WorkflowAudit.check_known_broken_reusable_revision(%{"rust-ci.yml" => wf})
+      assert f.rule == "WF027"
+      assert f.current_sha == @broken_standards
+    end
+
+    test "WF016 fires on an orphan pin under the repository's current name" do
+      wf =
+        "jobs:\n  scan:\n    uses: metadatastician/standards/.github/workflows/" <>
+          "hypatia-scan-reusable.yml@97df76210d966e0e1a89d5e5e9bcf66e16cea5e8\n"
+
+      assert [%{rule: "WF016"}] =
+               WorkflowAudit.check_orphan_standards_reusable_pin(%{"scan.yml" => wf})
     end
 
     test "silent at the replacement revision" do

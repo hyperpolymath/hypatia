@@ -156,11 +156,31 @@ defmodule Hypatia.Rules.ShaBumpPropagationTest do
     end
   end
 
+  describe "check/1 — the standards repository under its current name" do
+    test "fires on a merge event from metadatastician/standards" do
+      [finding] = ShaBumpPropagation.check(event(%{source_repo: "metadatastician/standards"}))
+
+      assert finding.source_repo == "metadatastician/standards"
+      assert finding.source_workflow == ".github/workflows/governance-reusable.yml"
+    end
+
+    test "every standards reusable is registered under both names" do
+      registered = ShaBumpPropagation.known_reusables()
+
+      for {"hyperpolymath/standards", path} <- registered do
+        assert {"metadatastician/standards", path} in registered
+      end
+    end
+  end
+
   describe "known_reusables/0 — registry hygiene" do
     test "registry entries are well-formed" do
       for {repo, path} <- ShaBumpPropagation.known_reusables() do
         assert is_binary(repo)
-        assert String.starts_with?(repo, "hyperpolymath/")
+
+        assert String.starts_with?(repo, "hyperpolymath/") or
+                 String.starts_with?(repo, "metadatastician/")
+
         assert String.ends_with?(path, ".yml") or String.ends_with?(path, ".yaml")
       end
     end
