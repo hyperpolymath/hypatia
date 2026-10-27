@@ -23,7 +23,9 @@ to declare egress instead of adopting harden-runner everywhere. RE001 now:
   (`<repo>_chora.deed`) with exactly the secrets the job reads, as an
   alternative to harden-runner;
 * reports drift (the declaration and the workflow disagree on secrets) and stale
-  declarations (the job is gone, runs elsewhere, or reads no real secret);
+  declarations (the job is gone, runs elsewhere, or reads no real secret), and
+  checks a declaration even when harden-runner satisfies the job, including a
+  claimed `:enforcement harden-runner-*` on a job that no longer installs it;
 * names the job and gives the exact `(job …)` entry in its fix text;
 * reads every `${{ … }}` expression whole, even one a folded scalar splits
   across lines, and counts only the top-level `secrets` context (matched

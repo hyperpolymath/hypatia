@@ -956,10 +956,52 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
           "notify.yml"
         )
 
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+
+      # A declaration is still an attestation: listing the wrong secrets is
+      # drift, at :warn because harden-runner contains the job.
       write_deed(repo, "(egress #{smtp_job(~s|"SMTP_HOST"|)})")
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, reason: reason}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert reason =~ ~s|reads undeclared "SMTP_PASS"|
       File.rm_rf!(repo)
+    end
+
+    test "a declared harden-runner enforcement must still be installed" do
+      workflow = fn hardener ->
+        """
+        jobs:
+          notify:
+            runs-on: ubuntu-24.04
+            steps:
+        #{hardener}      - run: send --pass=${{ secrets.SMTP_PASS }}
+        """
+      end
+
+      entry =
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+
+      hardened =
+        create_repo_with_workflow(
+          workflow.("      - uses: step-security/harden-runner@v2\n"),
+          "notify.yml"
+        )
+
+      write_deed(hardened, entry)
+      assert ResearchExtensions.re001_missing_harden_runner(hardened) == []
+
+      # The hardener was removed, but the deed still claims block enforcement.
+      bare = create_repo_with_workflow(workflow.(""), "notify.yml")
+      write_deed(bare, entry)
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(bare)
+      assert finding.reason =~ ":enforcement harden-runner-block"
+      assert finding.reason =~ "does not install"
+
+      File.rm_rf!(hardened)
+      File.rm_rf!(bare)
     end
 
     test "a quoted job key matches its declaration" do

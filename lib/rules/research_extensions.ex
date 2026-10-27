@@ -269,7 +269,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   def re001_missing_harden_runner(repo_path) do
     {deed_file, declared, deed_note} =
       case Hypatia.Deed.egress_declarations(repo_path) do
-        {:ok, file, jobs} -> {file, Map.new(jobs, &{{&1.workflow, &1.job}, &1.secrets}), nil}
+        {:ok, file, jobs} -> {file, Map.new(jobs, &{{&1.workflow, &1.job}, &1}), nil}
         :none -> {nil, %{}, nil}
         {:error, file, reason} -> {file, %{}, "the repo deed declares nothing (#{reason})"}
       end
@@ -282,21 +282,34 @@ defmodule Hypatia.Rules.ResearchExtensions do
     job_findings =
       Enum.flat_map(jobs, fn job ->
         case Map.fetch(declared, {job.workflow, job.id}) do
-          _ when job.hardened? ->
-            []
-
-          # A key computed at run time cannot be listed, so no declaration covers it.
-          found when job.dynamic_line != nil ->
-            [re001_dynamic(job, deed_file, match?({:ok, _}, found))]
-
-          {:ok, secrets} when secrets == job.secrets ->
-            []
-
-          {:ok, secrets} ->
-            [re001_drift(job, deed_file, secrets)]
-
           :error ->
-            [re001_undeclared(job, deed_file, deed_note)]
+            cond do
+              job.hardened? -> []
+              # A key computed at run time cannot be listed, so no declaration covers it.
+              job.dynamic_line -> [re001_dynamic(job, deed_file, false)]
+              true -> [re001_undeclared(job, deed_file, deed_note)]
+            end
+
+          # A declaration is an attestation, checked even when harden-runner
+          # already satisfies the rule: what it lists, and the enforcement it
+          # claims, must still be true.
+          {:ok, decl} ->
+            dynamic =
+              if job.dynamic_line && not job.hardened?,
+                do: [re001_dynamic(job, deed_file, true)],
+                else: []
+
+            drift =
+              if job.dynamic_line == nil and decl.secrets != job.secrets,
+                do: [re001_drift(job, deed_file, decl.secrets)],
+                else: []
+
+            enforcement =
+              if decl.enforcement != "none" and not job.hardened?,
+                do: [re001_enforcement(job, deed_file, decl.enforcement)],
+                else: []
+
+            dynamic ++ drift ++ enforcement
         end
       end)
 
@@ -451,7 +464,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
       if(job.shared?, do: " in the same step", else: "")
   end
 
-  defp re001_severity(job), do: if(job.shared?, do: :high, else: :warn)
+  # Harden-runner contains a job, so a finding about its attestation is :warn.
+  defp re001_severity(job), do: if(job.shared? and not job.hardened?, do: :high, else: :warn)
 
   defp re001_undeclared(job, deed_file, deed_note) do
     declare =
@@ -540,6 +554,27 @@ defmodule Hypatia.Rules.ResearchExtensions do
           "Make :secrets of (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in " <>
             "#{deed_file} equal the secrets the job reads: (#{quoted_list(job.secrets)}), " <>
             "and review :endpoints for the change."
+      }
+    }
+  end
+
+  defp re001_enforcement(job, deed_file, enforcement) do
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: re001_severity(job),
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} is declared in #{deed_file} with " <>
+          ":enforcement #{enforcement}, but does not install `step-security/harden-runner`" <>
+          exposure_note(job),
+      action: :report,
+      detail: %{
+        exposures: job.exposures,
+        fix:
+          "Restore harden-runner as the first step of this job, or set :enforcement none " <>
+            "on (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in #{deed_file} " <>
+            "if nothing holds the job to its :endpoints."
       }
     }
   end

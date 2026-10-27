@@ -87,8 +87,8 @@ defmodule Hypatia.Deed do
   The jobs declared in the repo deed's `(egress …)` clause.
 
   Returns `{:ok, deed_file, jobs}` where each job is
-  `%{workflow: path, job: id, secrets: MapSet}`, `:none` when the repo has no
-  deed, or `{:error, deed_file, reason}` when the deed or the clause cannot be
+  `%{workflow: path, job: id, secrets: MapSet, enforcement: name}`, `:none` when
+  the repo has no deed, or `{:error, deed_file, reason}` when the deed or the clause cannot be
   read. A deed without the clause declares nothing: `{:ok, deed_file, []}`.
   """
   def egress_declarations(repo_path) do
@@ -206,7 +206,7 @@ defmodule Hypatia.Deed do
              true <- Enum.all?(endpoints, &valid_endpoint?(&1, secrets)),
              {:symbol, enf} when enf in @enforcement <- by_key["enforcement"],
              true <- reason_ok?(by_key["reason"]) do
-          job = %{workflow: workflow, job: job, secrets: MapSet.new(secrets)}
+          job = %{workflow: workflow, job: job, secrets: MapSet.new(secrets), enforcement: enf}
           {:cont, {:ok, [job | jobs]}}
         else
           _ ->

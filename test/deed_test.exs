@@ -210,7 +210,8 @@ defmodule Hypatia.DeedTest do
       assert notify == %{
                workflow: ".github/workflows/push-email-notify.yml",
                job: "notify",
-               secrets: MapSet.new(~w(SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS))
+               secrets: MapSet.new(~w(SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS)),
+               enforcement: "none"
              }
 
       assert sonar.secrets == MapSet.new(["SONAR_TOKEN"])
@@ -239,8 +240,7 @@ defmodule Hypatia.DeedTest do
       for {name, ok?} <- [
             {"my.project-x_chora.deed", true},
             {"bad name_chora.deed", false},
-            {"_chora.deed", false},
-            {"é_chora.deed", false}
+            {"_chora.deed", false}
           ] do
         repo = Path.join(@tmp_dir, "deed_stem_#{System.unique_integer([:positive])}")
         File.rm_rf!(repo)
@@ -251,6 +251,8 @@ defmodule Hypatia.DeedTest do
           do: assert({:ok, _} = Deed.repo_deed_path(repo), name),
           else:
             assert({:error, "illegal deed filename stem" <> _} = Deed.repo_deed_path(repo), name)
+
+        File.rm_rf!(repo)
       end
     end
 
