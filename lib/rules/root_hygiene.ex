@@ -303,7 +303,7 @@ defmodule Hypatia.Rules.RootHygiene do
   def scan(root_files, repo_path) when is_list(root_files) and is_binary(repo_path) do
     banned = scan_banned(root_files)
     stale = scan_stale(root_files, repo_path)
-    missing = scan_required_missing(root_files)
+    missing = scan_required_missing(root_files, repo_path |> Path.expand() |> Path.basename())
 
     %{
       findings: banned ++ stale ++ missing,
@@ -430,8 +430,11 @@ defmodule Hypatia.Rules.RootHygiene do
 
   @doc """
   Check for required files that are missing.
+
+  `repo_name` names the expected `<repo>_chora.deed` in the finding. The
+  filename-only callers pass nothing and get the placeholder `repo`.
   """
-  def scan_required_missing(root_files) do
+  def scan_required_missing(root_files, repo_name \\ "repo") do
     # NB: SECURITY.md is intentionally NOT listed here. It is a community-health
     # file that GitHub recognises in root, `.github/`, or `docs/`, and is owned
     # by Hypatia.Rules.CicdRules.check_repo_requirements/1 (which checks all
@@ -440,26 +443,33 @@ defmodule Hypatia.Rules.RootHygiene do
     required = [
       %{file: "LICENSE", alternatives: ["LICENSE.txt"], severity: :critical},
       %{file: ".editorconfig", alternatives: [], severity: :medium},
-      # `.deed` is the DEED-manifest spelling of the same gatekeeper file
-      # (panoply ships it and `Validate DEED manifests` checks it); it is the
-      # manifest, not a missing one.
+      # The AI manifest. A2ML is retired (D312): the repo's facts now live in
+      # one `<repo>_chora.deed` at the root, and the estate template ships no
+      # 0-AI-MANIFEST at all. Any `*_chora.deed` satisfies this, because the
+      # deed is named for the repo, not for the checkout directory. The legacy
+      # spellings still satisfy it until their repos migrate; `.deed` is the
+      # DEED-manifest spelling panoply ships.
       %{
-        file: "0-AI-MANIFEST.a2ml",
-        alternatives: ["0-AI-MANIFEST.deed", "AI.a2ml"],
+        file: "#{repo_name}_chora.deed",
+        alternatives: ["0-AI-MANIFEST.deed", "0-AI-MANIFEST.a2ml", "AI.a2ml"],
+        pattern: ~r/\A[^\/]+_chora\.deed\z/,
+        reason: "Required file missing: the repo deed `<repo>_chora.deed` (D312)",
         severity: :high
       }
     ]
 
     Enum.flat_map(required, fn req ->
       all_options = [req.file | req.alternatives]
+      pattern = Map.get(req, :pattern)
 
-      if Enum.any?(all_options, &(&1 in root_files)) do
+      if Enum.any?(all_options, &(&1 in root_files)) or
+           (pattern != nil and Enum.any?(root_files, &Regex.match?(pattern, &1))) do
         []
       else
         [
           %{
             file: req.file,
-            reason: "Required file missing",
+            reason: Map.get(req, :reason, "Required file missing"),
             severity: req.severity,
             action: :create,
             type: :missing
