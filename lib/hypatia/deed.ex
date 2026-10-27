@@ -4,7 +4,7 @@
 defmodule Hypatia.Deed do
   @moduledoc """
   Reader for DEED documents (`metadatastician/standards`
-  `1-formats/deed/spec/abnf/deed.abnf` v1.2.0) and for the `(egress …)` clause
+  `1-formats/deed/spec/abnf/deed.abnf` v1.2.1) and for the `(egress …)` clause
   profile (`1-formats/deed/spec/abnf/clauses/egress.abnf` v1.0.0, ADR-009).
 
   This is a *reader*, not the conformance gate. `deed_lint.js` in standards is
@@ -20,8 +20,9 @@ defmodule Hypatia.Deed do
   `deed.abnf`, plus the gate's semantic checks (one string `:schema-version`,
   a non-blank SPDX payload, a `#u8` domain). Where the two differ, the
   stricter reading wins, so a deed the reader refuses only ever declares
-  nothing. It reports the reason. The one departure, a separator before a
-  list's first value, is noted at `list_open/1`.
+  nothing. It reports the reason. v1.2.1 (metadatastician/standards#1359)
+  made the grammar and the gate agree; an apg-js run of `deed.abnf` and this
+  reader agree on 20,043 mutated deeds, semantic checks apart.
   """
 
   @doc "Parse deed source text into `{:ok, {head, items}}` or `{:error, reason}`."
@@ -376,10 +377,9 @@ defmodule Hypatia.Deed do
 
   defp uuid8(err), do: err
 
-  # list = "(" [value *(token-sep value)] [token-sep] ")". One departure from
-  # deed.abnf: a separator may come before the first value, as the gate allows
-  # and the estate's worked-model deed (rsr-template-repo) writes every
-  # multi-line list. It cannot change what a value is.
+  # list = "(" [token-sep] [value *(token-sep value)] [token-sep] ")", as
+  # v1.2.1 has it: a multi-line list may start on the line after "(", as the
+  # estate template writes them.
   defp list_open(text) do
     case skip(text) do
       ")" <> rest -> {:ok, {:list, []}, rest}

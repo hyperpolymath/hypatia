@@ -117,9 +117,8 @@ defmodule Hypatia.DeedTest do
       assert {:error, _} = Deed.parse(";; SPDX-License-Identifier: MPL-2.0" <> form)
     end
 
-    test "a list may open with a separator, as the gate and the template allow" do
-      # deed.abnf has no separator before a list's first value; deed_lint and
-      # rsr-template-repo_chora.deed (`:purpose (` then a newline) do.
+    test "a list may open with a separator (deed.abnf v1.2.1)" do
+      # As rsr-template-repo_chora.deed writes them: `:purpose (` then a newline.
       hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1\" "
       assert {:ok, _} = Deed.parse(hdr <> ~s|:a () :b ( ) :c ("x" ) :d ("x"\n"y"))|)
       assert {:ok, _} = Deed.parse(hdr <> ~s|:secrets (\n  "DEPLOY_KEY"\n  ; c\n  "X"))|)

@@ -24,11 +24,15 @@ to declare egress instead of adopting harden-runner everywhere. RE001 now:
   alternative to harden-runner;
 * reports drift (the declaration and the workflow disagree on secrets) and stale
   declarations (the job is gone, runs elsewhere, or reads no real secret);
-* names the job and gives the exact `(job …)` entry in its fix text.
+* names the job and gives the exact `(job …)` entry in its fix text;
+* reads every `${{ … }}` expression whole, even one a folded scalar splits
+  across lines, and counts only the top-level `secrets` context, in property
+  or index form, outside string literals.
 
-`Hypatia.Deed` is a new reader for DEED documents and the `(egress …)` clause
-profile. `test/deed_test.exs` checks it against the standards fixtures, so it
-accepts and rejects exactly what `deed_lint.js --egress` does.
+`Hypatia.Deed` is a new reader for DEED documents (`deed.abnf` v1.2.1) and the
+`(egress …)` clause profile. `test/deed_test.exs` checks it against the
+standards fixtures and the template's live deed. An apg-js run of the grammar
+and the reader agree on 20,043 mutated deeds, semantic checks apart.
 
 === Fixed
 
