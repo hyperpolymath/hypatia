@@ -10,6 +10,26 @@ https://semver.org/[Semantic Versioning].
 
 == [Unreleased]
 
+=== Changed
+
+==== RE001 accepts a deed egress declaration; the job token no longer counts (2026-10-27)
+
+The estate-wide decision on `step-security/harden-runner` (standards ADR-009) is
+to declare egress instead of adopting harden-runner everywhere. RE001 now:
+
+* ignores `secrets.GITHUB_TOKEN`, the same token as `github.token`, which it
+  never counted;
+* accepts a job listed in the `(egress …)` clause of the repo deed
+  (`<repo>_chora.deed`) with exactly the secrets the job reads, as an
+  alternative to harden-runner;
+* reports drift (the declaration and the workflow disagree on secrets) and stale
+  declarations (the job is gone, runs elsewhere, or reads no real secret);
+* names the job and gives the exact `(job …)` entry in its fix text.
+
+`Hypatia.Deed` is a new reader for DEED documents and the `(egress …)` clause
+profile. `test/deed_test.exs` checks it against the standards fixtures, so it
+accepts and rejects exactly what `deed_egress.js` does.
+
 === Fixed
 
 ==== `mix compile` was impossible: invalid guard-as-pattern in `ActionsLock` (2026-10-25)
