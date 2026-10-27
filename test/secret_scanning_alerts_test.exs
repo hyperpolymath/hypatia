@@ -116,6 +116,106 @@ defmodule Hypatia.Rules.SecretScanningAlertsTest do
     end
   end
 
+  describe "parse_page/1" do
+    test "reads the alerts and the next page from curl -i output" do
+      output =
+        "HTTP/2 200\r\n" <>
+          "content-type: application/json\r\n" <>
+          ~s(link: <https://api.github.com/repositories/1/secret-scanning/alerts?page=2>; rel="next", ) <>
+          ~s(<https://api.github.com/repositories/1/secret-scanning/alerts?page=3>; rel="last"\r\n) <>
+          "\r\n" <> ~s([{"number":1}]) <> "\n200"
+
+      assert {:ok, [%{"number" => 1}],
+              "https://api.github.com/repositories/1/secret-scanning/alerts?page=2"} =
+               SecretScanningAlerts.parse_page(output)
+    end
+
+    test "the last page has no next link" do
+      output = "HTTP/2 200\r\ncontent-type: application/json\r\n\r\n[]\n200"
+      assert {:ok, [], nil} = SecretScanningAlerts.parse_page(output)
+    end
+
+    test "skips an HTTPS proxy's own header block" do
+      output =
+        "HTTP/1.1 200 Connection established\r\n\r\n" <>
+          "HTTP/2 200\r\ncontent-type: application/json\r\n\r\n" <>
+          ~s([{"number":7}]) <> "\n200"
+
+      assert {:ok, [%{"number" => 7}], nil} = SecretScanningAlerts.parse_page(output)
+    end
+
+    test "an error page is an error" do
+      output =
+        "HTTP/2 404\r\ncontent-type: application/json\r\n\r\n" <>
+          ~s({"message":"Secret scanning is disabled on this repository."}) <> "\n404"
+
+      assert {:error, "GitHub API 404: Secret scanning is disabled on this repository."} =
+               SecretScanningAlerts.parse_page(output)
+    end
+  end
+
+  describe "collect_pages/2" do
+    @base "https://api.github.com/repos/acme/demo/secret-scanning/alerts?per_page=100"
+
+    defp page(alerts, next) do
+      link = if next, do: ~s(link: <#{next}>; rel="next"\r\n), else: ""
+      "HTTP/2 200\r\n" <> link <> "\r\n" <> alerts <> "\n200"
+    end
+
+    test "follows next links and returns every page's alerts" do
+      second = "https://api.github.com/repositories/1/secret-scanning/alerts?page=2"
+
+      request = fn
+        @base -> {:ok, page(~s([{"number":1},{"number":2}]), second)}
+        ^second -> {:ok, page(~s([{"number":3}]), nil)}
+      end
+
+      assert {:ok, alerts} = SecretScanningAlerts.collect_pages(@base, request)
+      assert Enum.map(alerts, & &1["number"]) == [1, 2, 3]
+    end
+
+    test "never sends the token to a next link off the API host" do
+      request = fn @base -> {:ok, page("[]", "https://evil.example.com/steal")} end
+
+      assert {:error, "refusing to follow a pagination link off https://api.github.com"} =
+               SecretScanningAlerts.collect_pages(@base, request)
+    end
+
+    test "a failed later page fails the whole fetch" do
+      second = "https://api.github.com/repositories/1/secret-scanning/alerts?page=2"
+
+      request = fn
+        @base -> {:ok, page(~s([{"number":1}]), second)}
+        ^second -> {:error, "GitHub API request timed out after 30s"}
+      end
+
+      assert {:error, "GitHub API request timed out after 30s"} =
+               SecretScanningAlerts.collect_pages(@base, request)
+    end
+
+    test "past the page cap it is an error, never a truncated list" do
+      request = fn _ -> flunk("must not request past the cap") end
+
+      assert {:error, "more than 5000 alerts" <> _} =
+               SecretScanningAlerts.collect_pages(@base, request, [], 51)
+    end
+
+    test "stops after exactly 50 requests when every page has a next link" do
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+      next = "https://api.github.com/repositories/1/secret-scanning/alerts?page=n"
+
+      request = fn _url ->
+        Agent.update(counter, &(&1 + 1))
+        {:ok, page("[]", next)}
+      end
+
+      assert {:error, "more than 5000 alerts" <> _} =
+               SecretScanningAlerts.collect_pages(@base, request)
+
+      assert Agent.get(counter, & &1) == 50
+    end
+  end
+
   describe "findings_from_alerts/3" do
     defp days_ago(n), do: DateTime.utc_now() |> DateTime.add(-n * 86_400) |> DateTime.to_iso8601()
 

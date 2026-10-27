@@ -425,11 +425,14 @@ defmodule Hypatia.ScorecardIngestor do
       Path.join(repo_path, "LICENSE"),
       Path.join(repo_path, "LICENSE.txt"),
       Path.join(repo_path, "LICENSE.md"),
+      Path.join(repo_path, "LICENSE.adoc"),
       Path.join(repo_path, "LICENCE"),
       Path.join(repo_path, "COPYING")
     ]
 
-    unless Enum.any?(license_paths, &File.exists?/1) do
+    # Same REUSE rule as root hygiene, so the two never disagree.
+    unless Enum.any?(license_paths, &File.exists?/1) or
+             Hypatia.Rules.RootHygiene.reuse_licenses?(repo_path) do
       make_pattern("SC-010", "License", repo_name, "No LICENSE file found in #{repo_name}")
     end
   end
