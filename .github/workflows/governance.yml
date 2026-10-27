@@ -17,13 +17,14 @@ permissions:
 jobs:
   governance:
     uses: metadatastician/standards/.github/workflows/governance-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
-    # Scanner pin, overriding the reusable's default (51ab649, which rejects the
-    # v0.0.3 actions.lock that gh actions-lock now writes). This is hypatia main
-    # with #938 (v0.0.3 lock), #942 (WH013 per-job credentials) and #947
-    # (RE005 trap handlers). Drop this input once the standards callers are
-    # re-pinned to a default that includes them.
+    # Scanner pin: hypatia scans itself with its own main branch. On a PR that
+    # is the base commit; on push, schedule or dispatch it is the commit being
+    # run. It is never the PR head, so a PR cannot weaken the rules that gate
+    # it. Each merged rule fix reaches this gate with no hand bump. If main
+    # ships a broken rule, the PR that fixes it can pin a known-good 40-hex
+    # SHA here temporarily. Other repos keep the reusable's vetted default.
     with:
-      hypatia-ref: 23dc74de05fb34fe0e6f8d204fb65bf0625673a0
+      hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}
     permissions:
       actions: read
       contents: read
