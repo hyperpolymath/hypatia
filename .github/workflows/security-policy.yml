@@ -302,7 +302,10 @@ jobs:
         uses: gitleaks/gitleaks-action@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          # No GITLEAKS_LICENSE: gitleaks-action requires one only for an
+          # organization owner, and logs "[hyperpolymath] is an individual
+          # user. No license key is required." The secret was never set (the
+          # step's env showed it empty). Restore it if the repo moves to an org.
 
   secret-trufflehog:
     name: Secret Detection (TruffleHog)

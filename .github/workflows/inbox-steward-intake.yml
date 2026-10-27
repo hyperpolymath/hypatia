@@ -52,6 +52,15 @@ jobs:
       merged_count: ${{ steps.record.outputs.merged_count }}
     
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # git and gh against GitHub only.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
       - name: Checkout hypatia
         uses: actions/checkout@v7.0.1
         with:
@@ -126,11 +135,22 @@ jobs:
       rule_updates: ${{ steps.analyze.outputs.rule_updates }}
     
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # git and gh against GitHub only.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
+      # Read-only: nothing is pushed from this job, so the checkout needs no
+      # PAT and keeps none in .git/config.
       - name: Checkout hypatia
         uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-          token: ${{ secrets.FARM_PAT }}
+          persist-credentials: false
 
       - name: Analyze merged PR patterns
         id: analyze
@@ -226,6 +246,15 @@ jobs:
     if: needs.analyze-patterns.result == 'success' && inputs.dry_run != 'true'
     
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # git and gh against GitHub only.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
       - name: Checkout hypatia
         uses: actions/checkout@v7.0.1
         with:
@@ -279,8 +308,13 @@ jobs:
     if: always() && needs.record-report.result == 'success'
     
     steps:
-      - name: Checkout hypatia
-        uses: actions/checkout@v7.0.1
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # One gh api call: the dispatch to .git-private-farm.
+          allowed-endpoints: >
+            api.github.com:443
 
       - name: Send dispatch to .git-private-farm
         env:

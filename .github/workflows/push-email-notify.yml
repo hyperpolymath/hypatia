@@ -40,6 +40,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # The action downloads its pinned binary from its GitHub release, then
+          # speaks SMTP to the org mail host. The host is itself a secret, so it
+          # is allowed from the secret, and stays masked in the log.
+          allowed-endpoints: >
+            github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            ${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT || '465' }}
+
       - name: Send push notification email
         uses: hyperpolymath/smtp-notify-action@v0.5.0
         with:
