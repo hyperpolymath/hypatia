@@ -28,7 +28,7 @@ to declare egress instead of adopting harden-runner everywhere. RE001 now:
 
 `Hypatia.Deed` is a new reader for DEED documents and the `(egress …)` clause
 profile. `test/deed_test.exs` checks it against the standards fixtures, so it
-accepts and rejects exactly what `deed_egress.js` does.
+accepts and rejects exactly what `deed_lint.js --egress` does.
 
 === Fixed
 
