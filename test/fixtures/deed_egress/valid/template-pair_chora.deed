@@ -1,0 +1,18 @@
+;; SPDX-License-Identifier: CC-BY-SA-4.0
+(repo-deed :schema-version "1.0.0" :canonical-name "x" :repo-uuid #u5"github.com/o/x" :beholding-chora #u5"estate/chora"
+  (egress
+    :policy "standards ADR-009"
+    ; A secret-held endpoint and a public one, both without a run-time enforcer.
+    (job
+      :workflow ".github/workflows/push-email-notify.yml"
+      :job "notify"
+      :secrets ("SMTP_HOST" "SMTP_PORT" "SMTP_USER" "SMTP_PASS")
+      :endpoints ("secret:SMTP_HOST")
+      :enforcement none
+      :reason "Sends the push notification over SMTP submission.")
+    (job
+      :workflow ".github/workflows/sonarqube.yml"
+      :job "sonarqube"
+      :secrets ("SONAR_TOKEN")
+      :endpoints ("sonarcloud.io" "*.sonarcloud.io:443")
+      :enforcement harden-runner-block)))

@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+defmodule Hypatia.DeedTest do
+  use ExUnit.Case, async: true
+
+  alias Hypatia.Deed
+
+  @fixtures Path.expand("fixtures/deed_egress", __DIR__)
+  @tmp_dir System.tmp_dir!()
+
+  defp repo_with_deed(name, text) do
+    repo = Path.join(@tmp_dir, "deed_test_#{System.unique_integer([:positive])}")
+    # unique_integer restarts with each VM, so clear what an earlier run left.
+    File.rm_rf!(repo)
+    File.mkdir_p!(repo)
+    File.write!(Path.join(repo, name), text)
+    repo
+  end
+
+  defp repo_with_fixture(sub, name) do
+    repo_with_deed(name, File.read!(Path.join([@fixtures, sub, name])))
+  end
+
+  describe "parse/1" do
+    test "reads fields, clauses and every value form" do
+      text = """
+      ;; SPDX-License-Identifier: CC-BY-SA-4.0
+      ; a comment
+      (repo-deed :schema-version "1.0.0" :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x" :beholding-chora #u8"estate:chora"
+        (status :present #t :ended #f :count -7 :tags ('a "b" (c)) :phase active
+          :note "say \\"hi\\"\\n"))
+      """
+
+      assert {:ok, {"repo-deed", items}} = Deed.parse(text)
+      assert {:field, "repo-uuid", {:uuid5, "github.com/o/x"}} in items
+      assert {:field, "beholding-chora", {:uuid8, "estate:chora"}} in items
+      assert {:clause, "status", status} = List.last(items)
+
+      assert status == [
+               {:field, "present", {:boolean, true}},
+               {:field, "ended", {:boolean, false}},
+               {:field, "count", {:integer, -7}},
+               {:field, "tags",
+                {:list, [{:quoted, {:symbol, "a"}}, {:string, "b"}, {:list, [{:symbol, "c"}]}]}},
+               {:field, "phase", {:symbol, "active"}},
+               {:field, "note", {:string, "say \"hi\"\n"}}
+             ]
+    end
+
+    test "rejects what it cannot read" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n"
+      assert {:error, _} = Deed.parse("(repo-deed :schema-version \"1.0.0\")")
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed :schema-version \"1.0.0\"")
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed :x \"\\r\")")
+      assert {:error, _} = Deed.parse(hdr <> "(widget-deed :schema-version \"1.0.0\")")
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed :x \"1\") (repo-deed :x \"2\")")
+    end
+
+    test "reads the estate template's real deed" do
+      # Copied from standards 1-formats/deed/tools/fixtures/valid/, where deed_lint passes it.
+      text = File.read!(Path.join(@fixtures, "rsr-template-repo_chora.deed"))
+      assert {:ok, {"repo-deed", items}} = Deed.parse(text)
+      assert {:field, "canonical-name", {:string, "rsr-template-repo"}} in items
+    end
+  end
+
+  describe "egress_declarations/1 against the standards fixtures" do
+    for name <- File.ls!(Path.expand("fixtures/deed_egress/valid", __DIR__)) do
+      @name name
+      test "accepts valid/#{name}" do
+        repo = repo_with_fixture("valid", @name)
+        assert {:ok, @name, jobs} = Deed.egress_declarations(repo)
+        assert is_list(jobs)
+      end
+    end
+
+    for name <- File.ls!(Path.expand("fixtures/deed_egress/invalid", __DIR__)) do
+      @name name
+      test "rejects invalid/#{name}" do
+        repo = repo_with_fixture("invalid", @name)
+        assert {:error, @name, reason} = Deed.egress_declarations(repo)
+        assert is_binary(reason)
+      end
+    end
+
+    test "returns the declared jobs with their secrets" do
+      repo = repo_with_fixture("valid", "template-pair_chora.deed")
+
+      assert {:ok, _, [notify, sonar]} = Deed.egress_declarations(repo)
+
+      assert notify == %{
+               workflow: ".github/workflows/push-email-notify.yml",
+               job: "notify",
+               secrets: MapSet.new(~w(SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS))
+             }
+
+      assert sonar.secrets == MapSet.new(["SONAR_TOKEN"])
+    end
+  end
+
+  describe "repo_deed_path/1" do
+    test "no deed, one deed, two deeds" do
+      repo = Path.join(@tmp_dir, "deed_none_#{System.unique_integer([:positive])}")
+      File.rm_rf!(repo)
+      File.mkdir_p!(repo)
+      assert Deed.repo_deed_path(repo) == :none
+      assert Deed.egress_declarations(repo) == :none
+
+      File.write!(Path.join(repo, "estate_chora.deed"), "")
+      assert Deed.repo_deed_path(repo) == :none
+
+      File.write!(Path.join(repo, "a_chora.deed"), "")
+      assert {:ok, _} = Deed.repo_deed_path(repo)
+
+      File.write!(Path.join(repo, "b_chora.deed"), "")
+      assert {:error, _} = Deed.repo_deed_path(repo)
+    end
+  end
+end

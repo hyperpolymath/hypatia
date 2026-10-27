@@ -21,11 +21,13 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   Each rule cites its upstream source (tool name and/or paper).
 
-  - **RE001** — Workflow accesses `secrets.*` but does not install
-    `step-security/harden-runner`. StepSecurity's Harden-Runner
+  - **RE001** — Workflow job reads a real secret (anything but
+    `GITHUB_TOKEN`) with neither `step-security/harden-runner` nor an
+    egress declaration in the repo deed. StepSecurity's Harden-Runner
     provides outbound-egress monitoring/blocking for workflows; its
     absence on a secrets-touching workflow leaves a clear telemetry
-    gap. From StepSecurity Harden-Runner deployment guide.
+    gap. From StepSecurity Harden-Runner deployment guide. The deed's
+    `(egress …)` clause is the estate's alternative (standards ADR-009).
   - **RE002** — Harden-Runner is installed but configured with
     `egress-policy: audit` (telemetry-only, never blocks). On a
     protected-branch workflow this provides no actual containment.
@@ -158,13 +160,38 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # ─── RE001: Harden-Runner absent on secrets-touching workflow ─────────
 
   @doc """
-  RE001: Reports each locally executed workflow job that references
-  `${{ secrets.* }}` without a `step-security/harden-runner@...` step in the
-  same job. Full-line comments and reusable-workflow jobs without a direct
-  `runs-on` field are ignored.
+  RE001: Reports each locally executed workflow job that references a real
+  secret, `${{ secrets.X }}` for any X but `GITHUB_TOKEN`, with neither a
+  `step-security/harden-runner@...` step in the same job nor an egress
+  declaration for the job in the repo deed. Full-line comments and
+  reusable-workflow jobs without a direct `runs-on` field are ignored.
 
-  Each finding points to the first matching secret reference in the job.
-  Provenance: StepSecurity Harden-Runner deployment guide.
+  Each finding points to the first real secret reference in the job.
+  Provenance: StepSecurity Harden-Runner deployment guide; the declaration is
+  standards ADR-009.
+
+  ## The job token is not a secret here
+
+  `secrets.GITHUB_TOKEN` is the job token, the same one as `github.token`, which
+  this rule never counted. What it can reach is bounded by `permissions:`, which
+  other rules check. Counting it made the finding depend on which spelling a
+  workflow used.
+
+  ## The egress declaration (standards ADR-009)
+
+  A repo deed (`<repo>_chora.deed`) may attest, in its `(egress …)` clause, the
+  secrets and endpoints of each secret-bearing job
+  (`1-formats/deed/spec/EGRESS-CLAUSE-SPEC.adoc` in standards). A job listed
+  there with *exactly* the secrets it references satisfies the rule. An
+  attestation that has stopped being true is reported, not trusted:
+
+    * a listed job whose `:secrets` differ from its references (drift);
+    * a listed job that no longer exists, runs elsewhere, or reads no real
+      secret (stale), reported against the deed.
+
+  An unreadable deed or clause declares nothing, and the finding says why.
+  `:endpoints` are not compared with the workflow: that needs run-time
+  observation or a model of what each action reaches.
 
   ## Why this is structural, not a regex
 
@@ -192,59 +219,167 @@ defmodule Hypatia.Rules.ResearchExtensions do
   Severity: `:warn`. Action: `:report`.
   """
   def re001_missing_harden_runner(repo_path) do
-    repo_path
-    |> workflow_files()
-    |> Enum.flat_map(fn path ->
-      content = read_workflow(path)
-      rel = Path.relative_to(path, repo_path)
+    {deed_file, declared, deed_note} =
+      case Hypatia.Deed.egress_declarations(repo_path) do
+        {:ok, file, jobs} -> {file, Map.new(jobs, &{{&1.workflow, &1.job}, &1.secrets}), nil}
+        :none -> {nil, %{}, nil}
+        {:error, file, reason} -> {file, %{}, "the repo deed declares nothing (#{reason})"}
+      end
 
-      # Comments are not runner configuration. Preserve physical line numbers
-      # so existing findings are not reported against a newly added line-1 header.
-      active_lines =
-        content
-        |> String.split("\n")
-        |> Enum.with_index(1)
-        |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+    jobs =
+      repo_path
+      |> workflow_files()
+      |> Enum.flat_map(fn path -> re001_jobs(path, Path.relative_to(path, repo_path)) end)
 
-      active_lines
-      |> workflow_job_lines()
-      |> Enum.flat_map(fn job_lines ->
-        secret_line =
-          Enum.find(job_lines, fn {line, _} ->
-            Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, line)
-          end)
+    job_findings =
+      Enum.flat_map(jobs, fn job ->
+        case Map.fetch(declared, {job.workflow, job.id}) do
+          _ when job.hardened? ->
+            []
 
-        # Reusable jobs delegate their runtime to the source workflow. A sibling's
-        # runner or hardener cannot establish this job's execution policy.
-        local_runner? = direct_job_field?(job_lines, "runs-on")
-        installs_harden? = harden_runner_step?(job_lines)
+          {:ok, secrets} when secrets == job.secrets ->
+            []
 
-        if not is_nil(secret_line) and local_runner? and not installs_harden? do
-          {_source, line} = secret_line
+          {:ok, secrets} ->
+            [re001_drift(job, deed_file, secrets)]
 
-          [
-            %{
-              rule: "RE001",
-              file: rel,
-              severity: :warn,
-              line: line,
-              reason:
-                "job in #{rel} references `secrets.*` but does not install " <>
-                  "`step-security/harden-runner` — review outbound-egress monitoring",
-              action: :report,
-              detail: %{
-                fix:
-                  "Add harden-runner as the first step of this job, with egress-policy: block " <>
-                    "and an allowlist derived from the job's actual required endpoints."
-              }
-            }
-          ]
-        else
-          []
+          :error ->
+            [re001_undeclared(job, deed_file, deed_note)]
         end
       end)
+
+    # Every declaration must still describe a local job that reads a real secret.
+    live = MapSet.new(jobs, &{&1.workflow, &1.id})
+
+    stale_findings =
+      declared
+      |> Map.keys()
+      |> Enum.reject(&MapSet.member?(live, &1))
+      |> Enum.sort()
+      |> Enum.map(&re001_stale(&1, deed_file))
+
+    job_findings ++ stale_findings
+  end
+
+  # The locally executed jobs of one workflow that read a real secret.
+  defp re001_jobs(path, rel) do
+    # Comments are not runner configuration. Preserve physical line numbers
+    # so existing findings are not reported against a newly added line-1 header.
+    path
+    |> read_workflow()
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+    |> workflow_job_lines()
+    # Reusable jobs delegate their runtime to the source workflow. A sibling's
+    # runner or hardener cannot establish this job's execution policy.
+    |> Enum.filter(&direct_job_field?(&1, "runs-on"))
+    |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
+      refs =
+        for {line, n} <- job_lines,
+            [_, name] <- Regex.scan(~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/, line),
+            name != "GITHUB_TOKEN",
+            do: {name, n}
+
+      case refs do
+        [] ->
+          []
+
+        [{_, first_line} | _] ->
+          [
+            %{
+              workflow: rel,
+              id: job_id(header),
+              line: first_line,
+              secrets: MapSet.new(refs, &elem(&1, 0)),
+              hardened?: harden_runner_step?(job_lines)
+            }
+          ]
+      end
     end)
   end
+
+  defp job_id(header) do
+    [_, id] = Regex.run(~r/^\s+("[^"]+"|'[^']+'|[A-Za-z0-9_-]+):/, header)
+    String.trim(id, "\"") |> String.trim("'")
+  end
+
+  defp re001_undeclared(job, deed_file, deed_note) do
+    declare =
+      "or declare the job in the `(egress …)` clause of " <>
+        "#{deed_file || "the repo deed (<repo>_chora.deed)"}: " <>
+        "(job :workflow \"#{job.workflow}\" :job \"#{job.id}\" " <>
+        ":secrets (#{quoted_list(job.secrets)}) :endpoints (…) :enforcement none) " <>
+        "— standards ADR-009."
+
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: :warn,
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} references `secrets.*` but does not install " <>
+          "`step-security/harden-runner` or declare its egress — review outbound-egress monitoring" <>
+          if(deed_note, do: "; #{deed_note}", else: ""),
+      action: :report,
+      detail: %{
+        fix:
+          "Add harden-runner as the first step of this job, with egress-policy: block " <>
+            "and an allowlist derived from the job's actual required endpoints, " <> declare
+      }
+    }
+  end
+
+  defp re001_drift(job, deed_file, declared) do
+    unlisted = MapSet.difference(job.secrets, declared)
+    unused = MapSet.difference(declared, job.secrets)
+
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: :warn,
+      line: job.line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} no longer matches its egress declaration in " <>
+          "#{deed_file}: " <>
+          Enum.join(
+            Enum.reject(
+              [
+                if(MapSet.size(unlisted) > 0, do: "reads undeclared #{quoted_list(unlisted)}"),
+                if(MapSet.size(unused) > 0, do: "declares unread #{quoted_list(unused)}")
+              ],
+              &is_nil/1
+            ),
+            "; "
+          ),
+      action: :report,
+      detail: %{
+        fix:
+          "Make :secrets of (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in " <>
+            "#{deed_file} equal the secrets the job reads: (#{quoted_list(job.secrets)}), " <>
+            "and review :endpoints for the change."
+      }
+    }
+  end
+
+  defp re001_stale({workflow, id}, deed_file) do
+    %{
+      rule: "RE001",
+      file: deed_file,
+      severity: :warn,
+      reason:
+        "#{deed_file} declares egress for job `#{id}` in #{workflow}, but no locally run " <>
+          "job there reads a real secret — the attestation is stale",
+      action: :report,
+      detail: %{
+        fix:
+          "Remove (job :workflow \"#{workflow}\" :job \"#{id}\") from the `(egress …)` clause, " <>
+            "or correct its :workflow / :job."
+      }
+    }
+  end
+
+  defp quoted_list(names), do: names |> Enum.sort() |> Enum.map_join(" ", &"\"#{&1}\"")
 
   defp direct_job_field?(job_lines, field) do
     case job_field_indent(job_lines) do

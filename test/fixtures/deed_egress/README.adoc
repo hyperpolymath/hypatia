@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Egress clause fixtures
+
+Copied verbatim from `metadatastician/standards`: `valid/` and `invalid/` from
+`1-formats/deed/tools/fixtures/egress/` (ADR-009), and `rsr-template-repo_chora.deed`
+from `fixtures/valid/` there. `test/deed_test.exs`
+asserts that `Hypatia.Deed` accepts and rejects exactly what the standards
+checker `deed_egress.js` does. Re-copy them when that directory changes;
+do not edit them here.
