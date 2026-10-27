@@ -234,6 +234,26 @@ defmodule Hypatia.Rules.RootHygieneTest do
       end
     end
 
+    test "scan/2 does not count non-licence files in LICENSES/" do
+      dir = Path.join(System.tmp_dir!(), "reuse-#{System.unique_integer([:positive])}")
+      repo = Path.join(dir, "demo")
+      licenses = Path.join(repo, "LICENSES")
+      File.mkdir_p!(licenses)
+
+      try do
+        # None of these is a REUSE licence text.
+        File.write!(Path.join(licenses, ".gitkeep"), "")
+        File.write!(Path.join(licenses, "README.md"), "see the licence texts")
+        File.write!(Path.join(licenses, "MPL-2.0.txt"), "")
+        File.write!(Path.join(licenses, "NOTES"), "no extension")
+
+        result = RootHygiene.scan([".editorconfig", "demo_chora.deed"], repo)
+        assert [%{file: "LICENSE", severity: :critical}] = result.findings
+      after
+        File.rm_rf!(dir)
+      end
+    end
+
     test "does not flag SECURITY.md — owned by CicdRules.check_repo_requirements/1" do
       # SECURITY.md is a community-health file GitHub recognises in root,
       # .github/, or docs/; requiring it here double-reported and

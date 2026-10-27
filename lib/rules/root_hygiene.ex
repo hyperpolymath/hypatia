@@ -497,14 +497,26 @@ defmodule Hypatia.Rules.RootHygiene do
     end)
   end
 
-  # A REUSE `LICENSES/` directory counts only if it holds at least one file.
+  # A REUSE `LICENSES/` directory counts only if it holds a licence text: a
+  # non-empty `<SPDX-ID>.<ext>` file, per the REUSE spec. Dotfiles (such as
+  # `.gitkeep`) and READMEs do not count.
   defp reuse_licenses?(repo_path) do
     dir = Path.join(repo_path, "LICENSES")
 
     case File.ls(dir) do
-      {:ok, entries} -> Enum.any?(entries, &File.regular?(Path.join(dir, &1)))
+      {:ok, entries} -> Enum.any?(entries, &reuse_licence_text?(dir, &1))
       _ -> false
     end
+  end
+
+  defp reuse_licence_text?(dir, name) do
+    path = Path.join(dir, name)
+
+    not String.starts_with?(name, ".") and
+      not String.starts_with?(String.downcase(name), "readme") and
+      Path.extname(name) != "" and
+      File.regular?(path) and
+      match?({:ok, %File.Stat{size: size}} when size > 0, File.stat(path))
   end
 
   @doc """
