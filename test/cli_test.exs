@@ -32,6 +32,33 @@ defmodule Hypatia.CLITest do
     end
   end
 
+  describe "secret-alerts" do
+    test "a successful fetch is one JSON line and exit 0, findings or not" do
+      sweep = fn "acme", "demo" ->
+        {:ok, %{findings: [], total: 0, by_severity: %{}}}
+      end
+
+      assert {line, 0} = Hypatia.CLI.secret_alerts_output("acme", "demo", sweep)
+      assert {:ok, %{"status" => "ok", "repo" => "demo", "total" => 0}} = Jason.decode(line)
+    end
+
+    test "a failed fetch is reported as an error with exit 3, never as clean" do
+      sweep = fn _, _ -> {:error, "GitHub API 404: Secret scanning is disabled"} end
+
+      assert {line, 3} = Hypatia.CLI.secret_alerts_output("acme", "demo", sweep)
+
+      assert {:ok, %{"status" => "error", "error" => "GitHub API 404: " <> _}} =
+               Jason.decode(line)
+    end
+
+    test "help documents the command and its token" do
+      help = capture_io(fn -> Hypatia.CLI.main(["help"]) end)
+
+      assert help =~ "secret-alerts"
+      assert help =~ "HYPATIA_SECRET_ALERTS_TOKEN"
+    end
+  end
+
   describe "help output" do
     test "documents --exit-zero, HYPATIA_EXIT_ZERO, and exit codes" do
       help = capture_io(fn -> Hypatia.CLI.main(["help"]) end)
