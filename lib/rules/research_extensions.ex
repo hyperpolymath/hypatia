@@ -237,6 +237,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
           _ when job.hardened? ->
             []
 
+          # A key computed at run time cannot be listed, so no declaration covers it.
+          found when job.dynamic_line != nil ->
+            [re001_dynamic(job, deed_file, match?({:ok, _}, found))]
+
           {:ok, secrets} when secrets == job.secrets ->
             []
 
@@ -287,7 +291,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
               workflow: rel,
               id: job_id(header),
               line: first_line,
-              secrets: MapSet.new(refs, &elem(&1, 0)),
+              secrets: MapSet.new(for {name, _} <- refs, is_binary(name), do: name),
+              dynamic_line: Enum.find_value(refs, fn {name, n} -> name == :dynamic && n end),
               hardened?: harden_runner_step?(job_lines)
             }
           ]
@@ -309,9 +314,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # text inside one is never read: an expression ends at the first }} outside
   # a literal (format('{{x}}', …) escapes braces that way), and
   # ${{ 'secrets.X' }} reads nothing. Only the top-level secrets context
-  # counts, not a property named secrets (github.event.x.secrets.Y).
+  # counts, not a property named secrets (github.event.x.secrets.Y), and its
+  # name matches without regard to case, as GitHub's does (SECRETS.X reads X).
+  #
+  # Any other use of the context reads secrets whose names are not in the text
+  # (secrets[env.NAME], toJSON(secrets), secrets.*): it is reported as
+  # {:dynamic, line}, which no declaration can cover.
   @expression ~r/\$\{\{((?:'(?:[^']|'')*'|[^'}]|\}(?!\}))*)\}\}/
-  @secret_ref ~r/(?<![\w.-])secrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\])|'(?:[^']|'')*'|"[^"]*"/
+  @secret_ref ~r/(?<![\w.-])(?i:secrets)(?:\.([A-Za-z_][A-Za-z0-9_]*)\b(?![.\[-])|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\]|(?![\w-]))|'(?:[^']|'')*'|"[^"]*"/
   defp secret_refs(job_lines) do
     text = Enum.map_join(job_lines, "\n", &elem(&1, 0))
 
@@ -319,14 +329,20 @@ defmodule Hypatia.Rules.ResearchExtensions do
     {starts, _} =
       Enum.map_reduce(job_lines, 0, fn {line, n}, at -> {{at, n}, at + byte_size(line) + 1} end)
 
-    for [_, {body_at, body_len}] <- Regex.scan(@expression, text, return: :index),
-        [_ | groups] <-
-          Regex.scan(@secret_ref, binary_part(text, body_at, body_len), return: :index),
-        {at, len} = Enum.find(groups, {-1, 0}, fn {at, _} -> at >= 0 end),
-        at >= 0 do
-      at = body_at + at
+    line_of = fn at ->
       {_, n} = starts |> Enum.take_while(fn {start, _} -> start <= at end) |> List.last()
-      {String.upcase(binary_part(text, at, len)), n}
+      n
+    end
+
+    for [_, {body_at, body_len}] <- Regex.scan(@expression, text, return: :index),
+        [{m_at, _} | groups] <-
+          Regex.scan(@secret_ref, binary_part(text, body_at, body_len), return: :index),
+        # A match that opens with a quote is a string literal, read past.
+        binary_part(text, body_at + m_at, 1) not in ["'", "\""] do
+      case Enum.find(groups, fn {at, _} -> at >= 0 end) do
+        {at, len} -> {String.upcase(binary_part(text, body_at + at, len)), line_of.(body_at + at)}
+        nil -> {:dynamic, line_of.(body_at + m_at)}
+      end
     end
   end
 
@@ -357,6 +373,26 @@ defmodule Hypatia.Rules.ResearchExtensions do
         fix:
           "Add harden-runner as the first step of this job, with egress-policy: block " <>
             "and an allowlist derived from the job's actual required endpoints, " <> declare
+      }
+    }
+  end
+
+  defp re001_dynamic(job, deed_file, declared?) do
+    %{
+      rule: "RE001",
+      file: job.workflow,
+      severity: :warn,
+      line: job.dynamic_line,
+      reason:
+        "job `#{job.id}` in #{job.workflow} reads secrets by a key computed at run time " <>
+          "(secrets[…], toJSON(secrets) or similar), which no egress declaration can list" <>
+          if(declared?, do: "; its entry in #{deed_file} does not cover it", else: ""),
+      action: :report,
+      detail: %{
+        fix:
+          "Read each secret by its literal name (secrets.NAME) and declare the set, " <>
+            "or add harden-runner as the first step of this job with egress-policy: block — " <>
+            "standards ADR-009."
       }
     }
   end

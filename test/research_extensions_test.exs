@@ -566,6 +566,83 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "the secrets context matches without regard to case" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets.VISIBLE }} ${{ SECRETS.HIDDEN }} ${{ Secrets['LATER'] }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN" "LATER"|
+      File.rm_rf!(repo)
+    end
+
+    test "a key computed at run time cannot be declared" do
+      for expr <- [
+            "secrets[env.SECRET_NAME]",
+            "toJSON(secrets)",
+            "secrets.*",
+            "fromJSON(SECRETS)[inputs.k]"
+          ] do
+        repo =
+          create_repo_with_workflow(
+            """
+            jobs:
+              notify:
+                runs-on: ubuntu-24.04
+                steps:
+                  - run: echo ${{ secrets.VISIBLE }}
+                  - run: echo ${{ #{expr} }}
+            """,
+            "notify.yml"
+          )
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+            ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+        )
+
+        assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo), expr
+        assert finding.reason =~ "computed at run time", expr
+        assert finding.reason =~ "does not cover it", expr
+        assert finding.line == 6, expr
+        File.rm_rf!(repo)
+      end
+    end
+
+    test "a job reading secrets only by a computed key is still a finding" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets[matrix.key] }}
+          """,
+          "notify.yml"
+        )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "computed at run time"
+      refute finding.reason =~ "does not cover it"
+      File.rm_rf!(repo)
+    end
+
     test "a property named secrets is not the secrets context" do
       repo =
         create_repo_with_workflow(
