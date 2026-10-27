@@ -24,11 +24,26 @@ defmodule Hypatia.Deed do
   def parse(text) when is_binary(text) do
     with {:ok, rest} <- header(text),
          {:ok, {head, items}, rest} <- form(skip(rest)),
-         "" <- skip(rest) do
+         "" <- skip(rest),
+         :ok <- schema_version(items) do
       {:ok, {head, items}}
     else
       {:error, _} = err -> err
       rest when is_binary(rest) -> {:error, "trailing content after the form"}
+    end
+  end
+
+  # form: exactly one :schema-version field, with a string value.
+  defp schema_version(items) do
+    case for({:field, "schema-version", v} <- items, do: v) do
+      [{:string, _}] ->
+        :ok
+
+      [_] ->
+        {:error, ":schema-version must be a string"}
+
+      found ->
+        {:error, "the form must carry exactly one :schema-version (found #{length(found)})"}
     end
   end
 
@@ -244,7 +259,7 @@ defmodule Hypatia.Deed do
   defp form("(" <> rest) do
     with {:ok, head, rest} <- symbol(rest),
          true <- head in ~w(estate-deed repo-deed estate-atlas-deed praxis-deed) || :bad_head,
-         {:ok, items, rest} <- items(skip(rest), []) do
+         {:ok, items, rest} <- items(rest, []) do
       {:ok, {head, items}, rest}
     else
       :bad_head -> {:error, "invalid doc-head"}
@@ -254,24 +269,41 @@ defmodule Hypatia.Deed do
 
   defp form(_), do: {:error, "a deed form must start with '('"}
 
-  defp items(")" <> rest, acc), do: {:ok, Enum.reverse(acc), rest}
-  defp items("", _acc), do: {:error, "unbalanced parens"}
+  # *(token-sep (field / clause)) [token-sep] ")" — every item is preceded by
+  # a separator; only the closing paren may follow without one.
+  defp items(text, acc) do
+    case skip(text) do
+      ")" <> rest -> {:ok, Enum.reverse(acc), rest}
+      "" -> {:error, "unbalanced parens"}
+      ^text -> {:error, "expected a separator before the next field or clause"}
+      next -> with {:ok, item, rest} <- item(next), do: items(rest, [item | acc])
+    end
+  end
 
-  defp items(":" <> rest, acc) do
+  # field = keyword token-sep value
+  defp item(":" <> rest) do
     with {:ok, kw, rest} <- symbol(rest),
-         {:ok, value, rest} <- value(skip(rest)) do
-      items(skip(rest), [{:field, kw, value} | acc])
+         {:ok, rest} <- separator(rest, ":#{kw}"),
+         {:ok, value, rest} <- value(rest) do
+      {:ok, {:field, kw, value}, rest}
     end
   end
 
-  defp items("(" <> rest, acc) do
+  defp item("(" <> rest) do
     with {:ok, head, rest} <- symbol(rest),
-         {:ok, inner, rest} <- items(skip(rest), []) do
-      items(skip(rest), [{:clause, head, inner} | acc])
+         {:ok, inner, rest} <- items(rest, []) do
+      {:ok, {:clause, head, inner}, rest}
     end
   end
 
-  defp items(_, _acc), do: {:error, "expected a field or a clause"}
+  defp item(_), do: {:error, "expected a field or a clause"}
+
+  defp separator(text, after_what) do
+    case skip(text) do
+      ^text -> {:error, "#{after_what} must be followed by a separator"}
+      rest -> {:ok, rest}
+    end
+  end
 
   defp value("\"" <> rest), do: string(rest, [])
   defp value("#u5\"" <> rest), do: tagged(:uuid5, string(rest, []))
@@ -303,12 +335,17 @@ defmodule Hypatia.Deed do
   defp tagged(tag, {:ok, {:string, s}, rest}), do: {:ok, {tag, s}, rest}
   defp tagged(_tag, err), do: err
 
+  # list = "(" [value *(token-sep value)] [token-sep] ")"
   defp list(")" <> rest, acc), do: {:ok, {:list, Enum.reverse(acc)}, rest}
   defp list("", _acc), do: {:error, "unbalanced parens in a list"}
 
   defp list(text, acc) do
     with {:ok, v, rest} <- value(text) do
-      list(skip(rest), [v | acc])
+      case skip(rest) do
+        ")" <> after_list -> {:ok, {:list, Enum.reverse([v | acc])}, after_list}
+        ^rest -> {:error, "list values must be separated"}
+        next -> list(next, [v | acc])
+      end
     end
   end
 

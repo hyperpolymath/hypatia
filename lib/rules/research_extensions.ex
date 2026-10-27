@@ -277,10 +277,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
       refs =
         for {line, n} <- job_lines,
-            [_, ref] <- Regex.scan(~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/, line),
-            # GitHub matches secret names without regard to case and stores
-            # them uppercase; the deed declares that stored form.
-            name = String.upcase(ref),
+            name <- secret_refs(line),
             name != "GITHUB_TOKEN",
             do: {name, n}
 
@@ -302,6 +299,19 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end)
   end
 
+  # Every secret a line reads inside ${{ … }}: the property form secrets.NAME
+  # and the index form secrets['NAME'] / secrets["NAME"], anywhere in the
+  # expression (${{ vars.X || secrets.Y }} reads Y). GitHub matches secret names
+  # without regard to case and stores them uppercase; the deed declares that
+  # stored form, so names are uppercased here.
+  @secret_ref ~r/\bsecrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\])/
+  defp secret_refs(line) do
+    for [_, expr] <- Regex.scan(~r/\$\{\{(.*?)\}\}/, line),
+        match <- Regex.scan(@secret_ref, expr),
+        name = match |> Enum.drop(1) |> Enum.find(&(&1 != "")),
+        do: String.upcase(name)
+  end
+
   defp job_id(header) do
     [_, id] = Regex.run(~r/^\s+("[^"]+"|'[^']+'|[A-Za-z0-9_-]+):/, header)
     String.trim(id, "\"") |> String.trim("'")
@@ -312,8 +322,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
       "or declare the job in the `(egress …)` clause of " <>
         "#{deed_file || "the repo deed (<repo>_chora.deed)"}: " <>
         "(job :workflow \"#{job.workflow}\" :job \"#{job.id}\" " <>
-        ":secrets (#{quoted_list(job.secrets)}) :endpoints (…) :enforcement none) " <>
-        "— standards ADR-009."
+        ":secrets (#{quoted_list(job.secrets)}) :endpoints () :enforcement none), " <>
+        "listing in :endpoints every host outside GitHub the job reaches — standards ADR-009."
 
     %{
       rule: "RE001",

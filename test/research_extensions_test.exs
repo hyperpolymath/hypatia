@@ -437,6 +437,59 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert finding.reason =~ "(egress …) nested inside another clause"
       File.rm_rf!(repo)
     end
+
+    test "the index form and a reference later in an expression are secrets too" do
+      # A declaration listing only VISIBLE must not cover a job that also reads
+      # secrets['HIDDEN'] or a secret after another operand.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: send ${{ secrets.VISIBLE }} ${{ secrets['HIDDEN'] }}
+                - run: other ${{ vars.URL || secrets["LATER"] }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN" "LATER"|
+      File.rm_rf!(repo)
+    end
+
+    test "a malformed deed declares nothing" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+
+      # No :schema-version and no separators: not a deed, whatever it says.
+      File.write!(Path.join(repo, "x_chora.deed"), """
+      ;; SPDX-License-Identifier: CC-BY-SA-4.0
+      (repo-deed(egress(job :workflow ".github/workflows/notify.yml" :job "notify" :secrets("SMTP_HOST" "SMTP_PASS") :endpoints() :enforcement none)))
+      """)
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "the repo deed declares nothing"
+      File.rm_rf!(repo)
+    end
+
+    test "the suggested (job …) entry is a valid deed clause" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "")
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      [entry] = Regex.run(~r/\(job .*?:enforcement none\)/, finding.detail.fix)
+      write_deed(repo, "(egress #{entry})")
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
   end
 
   # ─── RE002 ──────────────────────────────────────────────────────────

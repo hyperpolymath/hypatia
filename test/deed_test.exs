@@ -58,6 +58,32 @@ defmodule Hypatia.DeedTest do
       assert {:error, _} = Deed.parse(hdr <> "(repo-deed :x \"1\") (repo-deed :x \"2\")")
     end
 
+    test "enforces :schema-version exactly once, as a string" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n"
+      assert {:error, msg} = Deed.parse(hdr <> "(repo-deed :canonical-name \"x\")")
+      assert msg =~ "found 0"
+      assert {:error, _} = Deed.parse(hdr <> "(repo-deed :schema-version 1)")
+
+      assert {:error, msg} =
+               Deed.parse(hdr <> "(repo-deed :schema-version \"1\" :schema-version \"2\")")
+
+      assert msg =~ "found 2"
+    end
+
+    test "requires the separators the grammar requires" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n"
+      ok = ~s|(repo-deed :schema-version "1.0.0" (egress (job :secrets ("A" "B"))))|
+      assert {:ok, _} = Deed.parse(hdr <> ok)
+      # Codex's example: no separators anywhere, and no :schema-version.
+      assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed(egress(job :secrets("X"))))|)
+      # Each missing separator on its own.
+      assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed:schema-version "1.0.0")|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed :schema-version"1.0.0")|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed :schema-version "1.0.0"(egress))|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed :schema-version "1.0.0" :a ("A""B"))|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed :schema-version "1.0.0" :a #tx)|)
+    end
+
     test "reads the estate template's real deed" do
       # Copied from standards 1-formats/deed/tools/fixtures/valid/, where deed_lint passes it.
       text = File.read!(Path.join(@fixtures, "rsr-template-repo_chora.deed"))
