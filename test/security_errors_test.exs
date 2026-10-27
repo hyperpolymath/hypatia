@@ -78,6 +78,14 @@ defmodule Hypatia.Rules.SecurityErrorsTest do
       assert SecurityErrors.pin_exemption_reason(ref) =~ "provenance"
     end
 
+    test "own-org standards reusables are exempt under either name of the repository" do
+      for owner <- ["hyperpolymath", "metadatastician"] do
+        ref = "#{owner}/standards/.github/workflows/governance-reusable.yml@main"
+        assert SecurityErrors.pin_exempt?(ref)
+        assert SecurityErrors.pin_exemption_reason(ref) =~ "wrapper pattern"
+      end
+    end
+
     test "pin_action returns :exempt (never a SHA fix) for exempt actions" do
       assert {:exempt, reason} =
                SecurityErrors.pin_action("slsa-framework/slsa-github-generator@v2.1.0")
