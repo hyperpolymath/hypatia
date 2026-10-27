@@ -49,6 +49,8 @@ completion-claim-requires-behavioural-tests = true
 #          (detected in block YAML and KYAML/flow style alike, Y-3; repaired in block style only —
 #          a KYAML, flow-step, anchored or aliased finding carries auto_fixable: false and routes to review)
 #   WF027  workflow_audit.ex  caller pinned at a reusable revision MEASURED dead (table)     -> fleet fix-stale-reusable-pin.sh (Window A)
+#   WF028  workflow_audit.ex  job calls a reusable by a MOVED repository's former name     -> NO fleet fixer yet (auto_fixable: false;
+#          (table: StandardsRepo.former/0 -> current; one row per transfer, appended when it lands)  owner re-point is gitbot-fleet's to build)
 #   PIN-003 pr-automerge-policy.json  standards revisions whose own actions.lock GitHub
 #          rejects at job setup (545 commits, 2026-08-19..2026-10-19; PI001/PA001 fire)    -> fleet fix-stale-reusable-pin.sh (Window B)
 #   known_reusables (sha_bump_propagation.ex) now include hyperpolymath/cicd-suite's gates

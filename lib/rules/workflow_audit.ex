@@ -95,6 +95,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
     secret_history = check_secret_history_coverage(workflow_contents)
     toolchain_input_missing = check_sha_pinned_toolchain_without_input(workflow_contents)
     broken_reusable_revisions = check_known_broken_reusable_revision(workflow_contents)
+    moved_reusable_calls = check_reusable_call_to_moved_repository(workflow_contents)
 
     %{
       # `flawed_regexes` was computed at the top of this function and
@@ -133,7 +134,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
           flawed_regexes ++
           secret_history ++
           toolchain_input_missing ++
-          broken_reusable_revisions,
+          broken_reusable_revisions ++
+          moved_reusable_calls,
       missing_count: length(missing),
       secret_history_count: length(secret_history),
       unpinned_count: length(unpinned),
@@ -159,6 +161,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
       d_burn_issues_count: length(d_burn_issues),
       toolchain_input_missing_count: length(toolchain_input_missing),
       broken_reusable_revision_count: length(broken_reusable_revisions),
+      moved_reusable_call_count: length(moved_reusable_calls),
       workflow_count: length(workflow_files),
       standard_coverage: coverage_percentage(workflow_files)
     }
@@ -3020,6 +3023,129 @@ defmodule Hypatia.Rules.WorkflowAudit do
       " The call is made by a job given as an alias of a mapping anchored outside " <>
         "`jobs:`; the repair script rewrites the keys of `jobs:` only, so this one " <>
         "routes to review."
+
+  # ─── WF028: Reusable-workflow call into a moved repository ────────────
+
+  # Repositories that moved to another owner (transfer or rename). GitHub
+  # redirects git and the REST API for the old name, but does not follow the
+  # redirect for a reusable workflow's `uses:`: the caller ends in
+  # `startup_failure` ("workflow was not found") before any job is created.
+  # Measured for standards on 2026-10-26 (hypatia governance runs
+  # 40424594888, 40424740139, before and after #958 re-pointed it).
+  #
+  # One row per move. A transfer into the org (standards D97) is a row, not
+  # a rule: append it when the move lands, never before.
+  @moved_repositories Enum.map(Hypatia.Rules.StandardsRepo.former(), fn former ->
+                        %{
+                          former: former,
+                          current: Hypatia.Rules.StandardsRepo.current(),
+                          moved: "2026-10-25"
+                        }
+                      end)
+
+  @doc "The (former, current) table WF028 fires on."
+  def moved_repositories, do: @moved_repositories
+
+  @doc """
+  WF028: a job calls a reusable workflow by a repository name that has
+  moved to another owner.
+
+  Every such call is a certain `startup_failure`: the redirect GitHub keeps
+  for the old name is not followed when a reusable is resolved. Re-pointing
+  the owner keeps the pinned revision, since a move keeps the history.
+
+  The call is found where WF027 finds it — a `uses:` key of a job under
+  `jobs:`, in block or flow style, continued below its key, or made through
+  a job alias — so a path inside a `run:` script, an `env:` value or a
+  comment never fires. A step's `uses:` (an action, not a reusable) is out
+  of scope: the redirect is unmeasured there.
+
+  No fleet script rewrites the owner yet, so the finding carries
+  `auto_fixable: false`. It is `advisory: true` with severity low, as WF026
+  and WF027: reported and routed, never a blocking gate (AGENTIC
+  `must-not-promote-to-blocking`).
+  """
+  def check_reusable_call_to_moved_repository(workflow_contents) do
+    Enum.flat_map(workflow_contents, fn {filename, content} ->
+      lines = String.split(content, "\n")
+      continued = wf_continued_uses(lines)
+      flow = wf_flow_lines(content)
+
+      aliased =
+        for %{key_line: n} <- Hypatia.Rules.PinSites.node_alias_sites(content),
+            into: MapSet.new(),
+            do: n
+
+      Enum.flat_map(@moved_repositories, fn move ->
+        repo =
+          "(?i:#{Regex.escape(move.former)})/(\\.github/workflows/[^@\\s\"'#,}\\]]+)@([^\\s\"'#,}\\]]+)"
+
+        ref_re =
+          Regex.compile!(
+            "^\\s*(?:-\\s+)?[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*[\"']?" <> repo
+          )
+
+        inline_re =
+          Regex.compile!("[{,]\\s*[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*[\"']?" <> repo)
+
+        lines
+        |> Enum.with_index(1)
+        |> Enum.flat_map(fn {line, number} ->
+          line =
+            case Map.fetch(continued, number) do
+              {:ok, {joined, _how}} -> joined
+              :error -> line
+            end
+
+          live? = number in aliased
+
+          calls =
+            case Regex.run(ref_re, line) do
+              [_full, path, ref] ->
+                if wf027_job_key(lines, flow, number) != nil or live?,
+                  do: [{path, ref}],
+                  else: []
+
+              nil ->
+                inline_re
+                |> Regex.scan(line, return: :index)
+                |> Enum.flat_map(fn [{at, _}, {p_at, p_len}, {r_at, r_len}] ->
+                  if wf027_inline_job?(lines, flow, line, number, at + 1) or live?,
+                    do: [{binary_part(line, p_at, p_len), binary_part(line, r_at, r_len)}],
+                    else: []
+                end)
+            end
+
+          Enum.map(calls, fn {path, ref} -> wf028_finding(filename, number, path, ref, move) end)
+        end)
+      end)
+    end)
+  end
+
+  defp wf028_finding(filename, number, path, ref, move) do
+    %{
+      rule: "WF028",
+      type: :reusable_call_to_moved_repository,
+      file: filename,
+      line: number,
+      reusable: move.former <> "/" <> path,
+      current_sha: ref,
+      replacement: move.current <> "/" <> path <> "@" <> ref,
+      # Advisory, as WF026/WF027: reported and routed, never a blocking finding.
+      severity: :low,
+      advisory: true,
+      auto_fixable: false,
+      fix_script: nil,
+      reason:
+        "`#{move.former}` moved to `#{move.current}` on #{move.moved}. GitHub does not " <>
+          "follow the redirect for a reusable workflow's `uses:`, so this call ends in " <>
+          "`startup_failure` (\"workflow was not found\") before any job runs. Re-point " <>
+          "it to `#{move.current}/#{path}@#{ref}` (same revision), regenerate " <>
+          "`actions.lock` with its tool, and make sure the repository's Actions " <>
+          "allow-list admits the new owner.",
+      action: :repoint_moved_reusable
+    }
+  end
 
   # ─── WF017: Secret-consuming action without secret-presence gate ──────
 
