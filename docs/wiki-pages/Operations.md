@@ -62,7 +62,7 @@ The supervision tree starts Bandit on port 9090 (9099 under `MIX_ENV=test`):
 | `HYPATIA_ALERT_WEBHOOK_URL` | Webhook for watcher alerts |
 | `HYPATIA_ALERT_LOG_FILE` | File sink for watcher alerts |
 | `HYPATIA_EXIT_ZERO` | Make the CLI exit 0 even when findings are present |
-| `HYPATIA_ADVISORY` | Also report advisory findings (WF026, WF027) below the severity threshold; they never set the exit code |
+| `HYPATIA_ADVISORY` | Also report advisory findings (WF026, WF027, WF028) below the severity threshold; they never set the exit code |
 
 ## CLI
 
