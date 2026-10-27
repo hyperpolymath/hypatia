@@ -305,9 +305,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
                 else: []
 
             enforcement =
-              if decl.enforcement != "none" and not job.hardened?,
-                do: [re001_enforcement(job, deed_file, decl.enforcement)],
-                else: []
+              cond do
+                decl.enforcement != "none" and not job.hardened? ->
+                  [re001_enforcement(job, deed_file, decl.enforcement)]
+
+                # Claiming block while the hardener only audits is a false attestation too.
+                decl.enforcement == "harden-runner-block" and job.harden_policy != "block" ->
+                  [re001_enforcement(job, deed_file, decl.enforcement)]
+
+                true ->
+                  []
+              end
 
             dynamic ++ drift ++ enforcement
         end
@@ -397,6 +405,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
               secrets: MapSet.new(for {name, _} <- refs, is_binary(name), do: name),
               dynamic_line: Enum.find_value(refs, fn {name, n} -> name == :dynamic && n end),
               hardened?: harden_runner_step?(job_lines),
+              harden_policy: harden_runner_policy(steps),
               exposures: re001_exposures(steps, job_untrusted_events),
               shared?: shared_line != nil
             }
@@ -566,15 +575,24 @@ defmodule Hypatia.Rules.ResearchExtensions do
       line: job.line,
       reason:
         "job `#{job.id}` in #{job.workflow} is declared in #{deed_file} with " <>
-          ":enforcement #{enforcement}, but does not install `step-security/harden-runner`" <>
-          exposure_note(job),
+          ":enforcement #{enforcement}, but " <>
+          if(job.hardened?,
+            do: "its harden-runner step runs `egress-policy: #{job.harden_policy}`",
+            else: "does not install `step-security/harden-runner`"
+          ) <> exposure_note(job),
       action: :report,
       detail: %{
         exposures: job.exposures,
         fix:
-          "Restore harden-runner as the first step of this job, or set :enforcement none " <>
-            "on (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in #{deed_file} " <>
-            "if nothing holds the job to its :endpoints."
+          if job.hardened? do
+            "Set `egress-policy: block` on this job's harden-runner step, or declare " <>
+              ":enforcement harden-runner-audit on (job :workflow \"#{job.workflow}\" " <>
+              ":job \"#{job.id}\") in #{deed_file}."
+          else
+            "Restore harden-runner as the first step of this job, or set :enforcement none " <>
+              "on (job :workflow \"#{job.workflow}\" :job \"#{job.id}\") in #{deed_file} " <>
+              "if nothing holds the job to its :endpoints."
+          end
       }
     }
   end
@@ -946,6 +964,25 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end)
     |> Enum.map(fn {line, _} -> indent_of(line) end)
     |> Enum.min(fn -> nil end)
+  end
+
+  # The egress-policy of the job's harden-runner step, block or flow `with:`;
+  # harden-runner defaults to audit when none is set. nil without the step.
+  defp harden_runner_policy(steps) do
+    case Enum.find(steps, fn step ->
+           Enum.any?(step, fn {line, _} -> harden_runner_uses?(line) end)
+         end) do
+      nil ->
+        nil
+
+      step ->
+        Enum.find_value(step, "audit", fn {line, _} ->
+          case Regex.run(~r/(?:^|[\s{,])egress-policy:\s*["']?([A-Za-z-]+)/, line) do
+            [_, policy] -> policy
+            nil -> nil
+          end
+        end)
+    end
   end
 
   # GitHub resolves an action's owner/repo without regard to case

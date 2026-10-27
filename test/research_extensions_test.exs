@@ -986,7 +986,10 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
 
       hardened =
         create_repo_with_workflow(
-          workflow.("      - uses: step-security/harden-runner@v2\n"),
+          workflow.(
+            "      - uses: step-security/harden-runner@v2\n" <>
+              "        with:\n          egress-policy: block\n"
+          ),
           "notify.yml"
         )
 
@@ -1002,6 +1005,43 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
 
       File.rm_rf!(hardened)
       File.rm_rf!(bare)
+    end
+
+    test "a declared block enforcement needs egress-policy: block, not audit or the default" do
+      check = fn with_lines ->
+        repo =
+          create_repo_with_workflow(
+            """
+            jobs:
+              notify:
+                runs-on: ubuntu-24.04
+                steps:
+                  - uses: step-security/harden-runner@v2
+            #{with_lines}      - run: send --pass=${{ secrets.SMTP_PASS }}
+            """,
+            "notify.yml"
+          )
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+            ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+        )
+
+        findings = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        findings
+      end
+
+      assert check.("        with:\n          egress-policy: block\n") == []
+      assert check.("        with: {egress-policy: block}\n") == []
+
+      assert [%{reason: audit}] = check.("        with:\n          egress-policy: audit\n")
+      assert audit =~ "runs `egress-policy: audit`"
+
+      # harden-runner audits when no egress-policy is set.
+      assert [%{reason: default}] = check.("")
+      assert default =~ "runs `egress-policy: audit`"
     end
 
     test "a quoted job key matches its declaration" do
