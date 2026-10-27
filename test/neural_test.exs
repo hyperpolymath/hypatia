@@ -86,6 +86,58 @@ defmodule Hypatia.NeuralTest do
       assert EchoStateNetwork.detect_drift(esn) == :insufficient_data
     end
 
+    # A constant series must be forecast as itself. The old readout had no bias
+    # and squashed its linear fit through a sigmoid, so it forecast ~0.6 here.
+    test "trained ESN forecasts a constant series as that constant" do
+      esn = EchoStateNetwork.init(reservoir_size: 20, seed: 1)
+      trained = EchoStateNetwork.train(esn, List.duplicate(0.3, 100))
+
+      {_, ran} =
+        Enum.reduce(1..20, {nil, trained}, fn _, {_, e} -> EchoStateNetwork.step(e, 0.3) end)
+
+      {prediction, _} = EchoStateNetwork.step(ran, 0.3)
+      assert_in_delta prediction, 0.3, 1.0e-3
+    end
+
+    # One-step forecasts on held-out data must beat "next = current", the
+    # baseline any forecaster has to clear. The old SGD readout lost to it by
+    # about 40x on this series and did no better than the series mean.
+    test "trained ESN beats the persistence baseline on held-out data" do
+      series = for t <- 1..300, do: 0.5 + 0.25 * :math.sin(t / 9) + 0.1 * :math.sin(t / 3.1)
+      {train, _} = Enum.split(series, 200)
+
+      trained =
+        EchoStateNetwork.init(reservoir_size: 20, seed: 1) |> EchoStateNetwork.train(train)
+
+      {_, ran} =
+        Enum.reduce(series, {nil, trained}, fn u, {_, e} -> EchoStateNetwork.step(e, u) end)
+
+      %{mse: esn_mse, samples: n} = EchoStateNetwork.accuracy_report(ran)
+      held_out = Enum.take(series, -(n + 1))
+
+      persistence_mse =
+        held_out
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.map(fn [a, b] -> (a - b) * (a - b) end)
+        |> Enum.sum()
+        |> Kernel./(n)
+
+      assert esn_mse < persistence_mse / 2,
+             "esn_mse=#{esn_mse} persistence_mse=#{persistence_mse}"
+    end
+
+    test "trained ESN forecasts stay inside [0, 1]" do
+      series = for t <- 1..120, do: if(rem(t, 10) < 5, do: 0.0, else: 1.0)
+
+      trained =
+        EchoStateNetwork.init(reservoir_size: 20, seed: 2) |> EchoStateNetwork.train(series)
+
+      {_, ran} =
+        Enum.reduce(series, {nil, trained}, fn u, {_, e} -> EchoStateNetwork.step(e, u) end)
+
+      assert Enum.all?(ran.predictions, fn p -> p.prediction >= 0.0 and p.prediction <= 1.0 end)
+    end
+
     test "detect_drift/1 with trained network returns drift status" do
       esn = EchoStateNetwork.init(reservoir_size: 20)
       time_series = for i <- 1..100, do: :math.sin(i * 0.1) * 0.5 + 0.5
