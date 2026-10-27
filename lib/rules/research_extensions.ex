@@ -179,9 +179,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # Where naming that head means fetching its code: a checkout's `ref:` or
   # `repository:`, or a git checkout/fetch/switch in a `run:` script. A head
   # SHA in `env:`, an `if:` or a `concurrency:` group only names it.
-  # Block (`ref: …`) or flow (`with: {ref: …}`) form.
-  @re001_checkout_key ~r/(?:^|[\s{,])(?:ref|repository)\s*:/
-  @re001_checkout_action ~r/^\s*(?:-\s+)?uses:\s*["']?actions\/checkout@/
+  # Block (`ref: …`) or flow (`with: {ref: …}`) form, the key plain or quoted.
+  @re001_checkout_key ~r/(?:^|[\s{,])["']?(?:ref|repository)["']?\s*:/
+  @re001_checkout_action ~r/^\s*(?:-\s+)?["']?uses["']?\s*:\s*["']?actions\/checkout@/
   # One git command naming the head: no `;`, `&` or `|` between them. `\s`
   # spans the line break of a folded `run: >-`.
   @re001_git_head_fetch ~r/\bgit\s+(?:checkout|fetch|switch)\b[^;&|]*?(?:github\.event\.pull_request\.head\.|github\.event\.workflow_run\.head(?:\.|_(?:sha|branch|repository)\b)|github\.head_ref)/
@@ -239,7 +239,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
   observation or a model of what each action reaches.
 
   Full-line comments and reusable-workflow jobs without a direct `runs-on`
-  field are ignored. Provenance: StepSecurity Harden-Runner deployment guide.
+  field are ignored. Keys are matched plain or quoted, as YAML reads them, and
+  YAML aliases are expanded before jobs are read (`expand_aliases/1`).
+  Provenance: StepSecurity Harden-Runner deployment guide.
 
   ## Why this is structural, not a regex
 
@@ -294,8 +296,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
           # already satisfies the rule: what it lists, and the enforcement it
           # claims, must still be true.
           {:ok, decl} ->
+            # A fixed list cannot describe a key computed at run time, hardened or not.
             dynamic =
-              if job.dynamic_line && not job.hardened?,
+              if job.dynamic_line,
                 do: [re001_dynamic(job, deed_file, true)],
                 else: []
 
@@ -345,6 +348,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       |> String.split("\n")
       |> Enum.with_index(1)
       |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+      |> expand_aliases()
 
     untrusted_events =
       active_lines
@@ -411,6 +415,116 @@ defmodule Hypatia.Rules.ResearchExtensions do
             }
           ]
       end
+    end)
+  end
+
+  # YAML anchors and aliases, which GitHub expands in workflows: `*name`
+  # repeats the node anchored `&name`, so `env: *common`, `<<: *defaults` or
+  # `deploy: *build` brings the anchored lines into the job that holds the
+  # alias. Each alias is expanded in place before any job is read: the
+  # anchored lines are copied in after it, re-indented and carrying the
+  # alias's line number, so a finding points at the alias. A `<<:` merge puts
+  # its lines into the mapping that holds the key, at the key's indent; any
+  # other alias's lines go at the column of its `*`, under the node it stands
+  # for. The anchor is the nearest one of that name above the alias.
+  @anchor ~r/(?:^|[\s\[{,])&([A-Za-z0-9_-]+)/
+  @alias ~r/(?:^|[\s\[{,])\*([A-Za-z0-9_-]+)/
+  @merge_key ~r/^\s*(?:-\s+)?(?:<<|"<<"|'<<')\s*:/
+  # Nested anchors can multiply copies exponentially (the "billion laughs"
+  # file), so expansion stops after this many copied lines per workflow.
+  @alias_budget 5_000
+  defp expand_aliases(lines) do
+    anchors =
+      for {{line, n}, index} <- Enum.with_index(lines),
+          text = strip_yaml_comment(line),
+          [_, {at, len}] <- Regex.scan(@anchor, text, return: :index) do
+        {binary_part(text, at, len), n, anchored_lines(lines, index, text, at + len)}
+      end
+
+    # Only what jobs read is expanded in place: the jobs and the top-level
+    # env:. An anchor kept elsewhere is expanded where a job uses it.
+    {expanded, _} =
+      Enum.flat_map_reduce(lines, {nil, @alias_budget}, fn {line, _} = entry, {section, budget} ->
+        section =
+          case Regex.run(~r/^["']?([^\s"':]+)["']?\s*:/, line) do
+            [_, key] -> key
+            nil -> section
+          end
+
+        if section in ["jobs", "env"] do
+          {copies, budget} = expand_line(entry, anchors, budget)
+          {copies, {section, budget}}
+        else
+          {[entry], {section, budget}}
+        end
+      end)
+
+    expanded
+  end
+
+  defp expand_aliases(lines, anchors, budget) do
+    Enum.flat_map_reduce(lines, budget, &expand_line(&1, anchors, &2))
+  end
+
+  # One line followed by copies of the anchors its aliases name.
+  defp expand_line(entry, _anchors, budget) when budget <= 0, do: {[entry], budget}
+
+  defp expand_line({line, n} = entry, anchors, budget) do
+    text = strip_yaml_comment(line)
+
+    {copies, budget} =
+      for [_, {at, len}] <- Regex.scan(@alias, text, return: :index),
+          name = binary_part(text, at, len),
+          {_, _, body} <-
+            anchors |> Enum.filter(fn {a, m, _} -> a == name and m < n end) |> Enum.take(-1),
+          reduce: {[], budget} do
+        {copies, budget} when budget <= 0 ->
+          {copies, budget}
+
+        {copies, budget} ->
+          target =
+            if Regex.match?(@merge_key, text),
+              do: indent_of(text),
+              else: String.length(binary_part(text, 0, at - 1))
+
+          {body, budget} = expand_aliases(body, anchors, budget - length(body))
+          {copies ++ Enum.map(reindent(body, target), fn {copy, _} -> {copy, n} end), budget}
+      end
+
+    {[entry | copies], budget}
+  end
+
+  # The lines an anchor names: what follows it on its own line, then every
+  # line indented deeper than that line.
+  defp anchored_lines(lines, index, text, after_name) do
+    {_, n} = Enum.at(lines, index)
+    indent = indent_of(text)
+    inline = text |> binary_part(after_name, byte_size(text) - after_name) |> String.trim()
+
+    inline_lines =
+      if inline == "", do: [], else: [{String.duplicate(" ", indent + 2) <> inline, n}]
+
+    block =
+      lines
+      |> Enum.drop(index + 1)
+      |> Enum.take_while(fn {line, _} -> String.trim(line) == "" or indent_of(line) > indent end)
+
+    inline_lines ++ block
+  end
+
+  defp reindent(lines, target) do
+    base =
+      lines
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.reject(&(String.trim(&1) == ""))
+      |> Enum.map(&indent_of/1)
+      |> Enum.min(fn -> 0 end)
+
+    Enum.map(lines, fn {line, n} ->
+      if String.trim(line) == "",
+        do: {"", n},
+        else:
+          {String.duplicate(" ", indent_of(line) - base + target) <> String.trim_leading(line), n}
     end)
   end
 
@@ -525,9 +639,16 @@ defmodule Hypatia.Rules.ResearchExtensions do
       detail: %{
         exposures: job.exposures,
         fix:
-          "Read each secret by its literal name (secrets.NAME) and declare the set, " <>
-            "or add harden-runner as the first step of this job with egress-policy: block — " <>
-            "standards ADR-009."
+          if(job.hardened?,
+            do:
+              "Read each secret by its literal name (secrets.NAME) and declare the set, " <>
+                "or remove the job's entry from #{deed_file}: its harden-runner step " <>
+                "already satisfies RE001 — standards ADR-009.",
+            else:
+              "Read each secret by its literal name (secrets.NAME) and declare the set, " <>
+                "or add harden-runner as the first step of this job with egress-policy: block — " <>
+                "standards ADR-009."
+          )
       }
     }
   end
@@ -661,7 +782,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     # Only the step's own `run:` property: an `env:` variable named `run` is a
     # nested key, deeper than the step's properties.
     case Enum.split_while(step, fn {line, _} ->
-           case Regex.run(~r/^(\s*(?:-\s+)?)run:/, line) do
+           case Regex.run(~r/^(\s*(?:-\s+)?)(?:run|"run"|'run')\s*:/, line) do
              [_, prefix] -> String.length(prefix) != key_column
              _ -> true
            end
@@ -671,7 +792,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
       {_, [{run_line, _} | rest]} ->
         [prefix, value] =
-          Regex.run(~r/^(\s*(?:-\s+)?)run:\s*(.*)$/, run_line, capture: :all_but_first)
+          Regex.run(~r/^(\s*(?:-\s+)?)(?:run|"run"|'run')\s*:\s*(.*)$/, run_line,
+            capture: :all_but_first
+          )
 
         key_column = String.length(prefix)
 
@@ -718,11 +841,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  # The lines under the job's own `env:` key.
   # The workflow's top-level `env:` (key at column 0) with its indented body.
   # Every job, and every step in it, inherits these variables.
   defp workflow_env_lines(active_lines) do
-    case Enum.drop_while(active_lines, fn {line, _} -> not Regex.match?(~r/^env:/, line) end) do
+    case Enum.drop_while(active_lines, fn {line, _} ->
+           not (indent_of(line) == 0 and key_line?(line, "env"))
+         end) do
       [env_line | rest] ->
         body = Enum.take_while(rest, fn {line, _} -> line == "" or indent_of(line) > 0 end)
         [env_line | body]
@@ -732,12 +856,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
+  # The lines under the job's own `env:` key.
   defp job_env_lines(job_lines) do
     with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
          index when is_integer(index) <-
            Enum.find_index(job_lines, fn {line, _} ->
-             indent_of(line) == field_indent and
-               String.starts_with?(String.trim_leading(line), "env:")
+             indent_of(line) == field_indent and key_line?(line, "env")
            end) do
       job_lines
       |> Enum.drop(index)
@@ -757,10 +881,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
     with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
          {line, _} <-
            Enum.find(job_lines, fn {line, _} ->
-             indent_of(line) == field_indent and
-               String.starts_with?(String.trim_leading(line), "if:")
+             indent_of(line) == field_indent and key_line?(line, "if")
            end),
-         [_, condition] <- Regex.run(~r/^\s*if:\s*(.*?)\s*$/, line),
+         [_, condition] <- Regex.run(~r/^\s*["']?if["']?\s*:\s*(.*?)\s*$/, line),
          condition = condition |> String.replace(~r/^\$\{\{\s*|\s*\}\}$/, ""),
          test = ~S"github\.event_name\s*==\s*'([a-z_]+)'",
          true <- Regex.match?(~r/^\s*#{test}(?:\s*\|\|\s*#{test})*\s*$/, condition) do
@@ -882,10 +1005,16 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
       field_indent ->
         Enum.any?(job_lines, fn {line, _} ->
-          indent_of(line) == field_indent and
-            String.starts_with?(String.trim_leading(line), "#{field}:")
+          indent_of(line) == field_indent and key_line?(line, field)
         end)
     end
+  end
+
+  # A line that opens the mapping key `key`: YAML reads `env:`, `"env":` and
+  # `'env':` as the same key, and so does GitHub.
+  defp key_line?(line, key) do
+    key = Regex.escape(key)
+    Regex.match?(~r/^\s*(?:#{key}|"#{key}"|'#{key}')\s*:(?:\s|$)/, line)
   end
 
   defp harden_runner_step?(job_lines) do
@@ -942,8 +1071,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   defp lines_in_steps(job_lines, field_indent) do
     case Enum.find_index(job_lines, fn {line, _} ->
-           indent_of(line) == field_indent and
-             String.starts_with?(String.trim_leading(line), "steps:")
+           indent_of(line) == field_indent and key_line?(line, "steps")
          end) do
       nil ->
         []
@@ -966,30 +1094,135 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> Enum.min(fn -> nil end)
   end
 
-  # The egress-policy of the job's harden-runner step, block or flow `with:`;
-  # harden-runner defaults to audit when none is set. nil without the step.
+  # The egress-policy input of the job's harden-runner step; harden-runner
+  # defaults to audit when none is set. nil without the step.
   defp harden_runner_policy(steps) do
     case Enum.find(steps, fn step ->
            Enum.any?(step, fn {line, _} -> harden_runner_uses?(line) end)
          end) do
-      nil ->
-        nil
-
-      step ->
-        Enum.find_value(step, "audit", fn {line, _} ->
-          case Regex.run(~r/(?:^|[\s{,])egress-policy:\s*["']?([A-Za-z-]+)/, line) do
-            [_, policy] -> policy
-            nil -> nil
-          end
-        end)
+      nil -> nil
+      step -> step |> step_inputs() |> Map.get("egress-policy", "audit")
     end
+  end
+
+  # One step's `with:` inputs as %{name => value}, from a block mapping under
+  # the key or a flow mapping on its line. A YAML comment sets no input, so
+  # comments are stripped first: `uses: …@v2 # egress-policy: block` leaves
+  # the policy at its default.
+  @with_key ~r/^(\s*(?:-\s+)?)(?:with|"with"|'with')\s*:(?:\s(.*))?$/
+  @block_input ~r/^\s*["']?([A-Za-z0-9_-]+)["']?\s*:(?:\s+(.*))?$/
+  @flow_input ~r/[{,]\s*["']?([A-Za-z0-9_-]+)["']?\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,}]*)/
+  defp step_inputs(step) do
+    lines = Enum.map(step, fn {line, _} -> strip_yaml_comment(line) end)
+
+    case Enum.find_index(lines, &Regex.match?(@with_key, &1)) do
+      nil ->
+        %{}
+
+      index ->
+        [with_line | rest] = Enum.drop(lines, index)
+        [lead, inline] = with_key_parts(with_line)
+
+        if String.starts_with?(inline, "{") do
+          # A flow mapping may continue past the `with:` line.
+          rest
+          |> Enum.reduce_while(inline, fn line, acc ->
+            if nesting_at(acc, byte_size(acc)) > 0,
+              do: {:cont, acc <> " " <> String.trim(line)},
+              else: {:halt, acc}
+          end)
+          |> then(&Regex.scan(@flow_input, &1, capture: :all_but_first))
+          |> Map.new(fn [name, value] -> {name, scalar_value(value)} end)
+        else
+          column = String.length(lead)
+          body = Enum.take_while(rest, &(String.trim(&1) == "" or indent_of(&1) > column))
+
+          child_indent =
+            body
+            |> Enum.reject(&(String.trim(&1) == ""))
+            |> Enum.map(&indent_of/1)
+            |> Enum.min(fn -> nil end)
+
+          for line <- body,
+              indent_of(line) == child_indent,
+              [_ | captures] <- [Regex.run(@block_input, line)],
+              into: %{} do
+            case captures do
+              [name, value] -> {name, scalar_value(value)}
+              [name] -> {name, ""}
+            end
+          end
+        end
+    end
+  end
+
+  defp with_key_parts(line) do
+    case Regex.run(@with_key, line) do
+      [_, lead, inline] -> [lead, String.trim(inline)]
+      [_, lead] -> [lead, ""]
+    end
+  end
+
+  # A plain or quoted scalar's text.
+  defp scalar_value(value) do
+    value = String.trim(value)
+
+    cond do
+      Regex.match?(~r/^"(?:[^"\\]|\\.)*"$/, value) ->
+        String.slice(value, 1..-2//1)
+
+      Regex.match?(~r/^'(?:[^']|'')*'$/, value) ->
+        value |> String.slice(1..-2//1) |> String.replace("''", "'")
+
+      true ->
+        value
+    end
+  end
+
+  # A line without its YAML comment: a `#` at the start or after whitespace,
+  # outside a quoted scalar. A quote opens a scalar only where one can start
+  # (after whitespace or a flow indicator), so the apostrophe in `it's` does not.
+  defp strip_yaml_comment(line) do
+    line
+    |> String.graphemes()
+    |> Enum.reduce_while({[], nil, " ", false}, fn c, {acc, quote, prev, escaped} ->
+      cond do
+        quote == "\"" and escaped ->
+          {:cont, {[c | acc], quote, c, false}}
+
+        quote == "\"" and c == "\\" ->
+          {:cont, {[c | acc], quote, c, true}}
+
+        quote != nil and c == quote ->
+          {:cont, {[c | acc], nil, c, false}}
+
+        quote != nil ->
+          {:cont, {[c | acc], quote, c, false}}
+
+        c == "#" and String.trim(prev) == "" ->
+          {:halt, {acc, nil, c, false}}
+
+        c in ["'", "\""] and (String.trim(prev) == "" or prev in ["{", "[", ","]) ->
+          {:cont, {[c | acc], c, c, false}}
+
+        true ->
+          {:cont, {[c | acc], nil, c, false}}
+      end
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+    |> Enum.join()
+    |> String.trim_trailing()
   end
 
   # GitHub resolves an action's owner/repo without regard to case
   # (Step-Security/Harden-Runner@v2 installs the same action); the `uses:`
   # key itself is case-sensitive YAML.
   defp harden_runner_uses?(line) do
-    Regex.match?(~r/^\s*(?:-\s+)?uses:\s*["']?(?i:step-security\/harden-runner)@/, line)
+    Regex.match?(
+      ~r/^\s*(?:-\s+)?(?:uses|"uses"|'uses')\s*:\s*["']?(?i:step-security\/harden-runner)@/,
+      line
+    )
   end
 
   defp block_scalar?(line), do: Regex.match?(~r/:\s*[>|][0-9+-]*\s*(?:#.*)?$/, line)
@@ -1000,7 +1233,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     {_in_jobs, _indent, groups} =
       Enum.reduce(lines, {false, nil, []}, fn {line, _} = entry, {in_jobs, indent, groups} ->
         cond do
-          Regex.match?(~r/^jobs:\s*(?:#.*)?$/, line) ->
+          Regex.match?(~r/^(?:jobs|"jobs"|'jobs')\s*:\s*(?:#.*)?$/, line) ->
             {true, nil, groups}
 
           not in_jobs ->
