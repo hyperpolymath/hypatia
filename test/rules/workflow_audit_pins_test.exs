@@ -1759,6 +1759,35 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
                wf028("jobs:\n  g:\n    uses:\n      hyperpolymath/standards/#{@gov}@#{@pin}\n")
     end
 
+    test "keeps a block-style branch ref whole, punctuation included" do
+      wf = "jobs:\n  g:\n    uses: hyperpolymath/standards/#{@gov}@release,one]\n"
+      [f] = wf028(wf)
+      assert f.current_sha == "release,one]"
+      assert f.replacement == "metadatastician/standards/#{@gov}@release,one]"
+    end
+
+    test "reports a flow sibling on the line a leading uses: opens" do
+      ref = "hyperpolymath/standards/#{@gov}"
+      wf = "jobs: {\n  a: {\n    uses: #{ref}@x }, b: { uses: #{ref}@y\n  }\n}\n"
+      assert ["x", "y"] == wf |> wf028() |> Enum.map(& &1.current_sha) |> Enum.sort()
+    end
+
+    test "is silent on an anchored mapping reused only as a step" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+
+      wf =
+        "x-shared: &shared\n  uses: #{ref}\njobs:\n  b:\n    runs-on: ubuntu-latest\n" <>
+          "    steps:\n      - *shared\n"
+
+      assert [] == wf028(wf)
+    end
+
+    test "fires on an anchored mapping a job is given whole" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+      wf = "x-shared: &shared\n  uses: #{ref}\njobs:\n  g: *shared\n"
+      assert [%{line: 2}] = wf028(wf)
+    end
+
     test "is silent on the current name" do
       assert [] == wf028("jobs:\n  g:\n    uses: metadatastician/standards/#{@gov}@#{@pin}\n")
     end

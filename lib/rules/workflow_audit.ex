@@ -3071,22 +3071,26 @@ defmodule Hypatia.Rules.WorkflowAudit do
       continued = wf_continued_uses(lines)
       flow = wf_flow_lines(content)
 
+      # Only an alias given as a job's value (`rust: *job`, `jobs: { a: *j }`)
+      # makes a reusable call; `- *step` and `steps: [ *step ]` are steps.
       aliased =
-        for %{key_line: n} <- Hypatia.Rules.PinSites.node_alias_sites(content),
+        for %{key_line: n, line: at} <- Hypatia.Rules.PinSites.node_alias_sites(content),
+            wf028_job_alias_line?(Enum.at(lines, at - 1, "")),
             into: MapSet.new(),
             do: n
 
       Enum.flat_map(@moved_repositories, fn move ->
-        repo =
-          "(?i:#{Regex.escape(move.former)})/(\\.github/workflows/[^@\\s\"'#,}\\]]+)@([^\\s\"'#,}\\]]+)"
+        former = "(?i:#{Regex.escape(move.former)})"
+        key = "[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*[\"']?"
+        # A block scalar ends at whitespace or its closing quote; a branch or
+        # tag may hold `,`, `}`, `]` or `#`. Inside a flow collection those
+        # end the entry.
+        block_repo = former <> "/(\\.github/workflows/[^@\\s\"']+)@([^\\s\"']+)"
+        flow_repo = former <> "/(\\.github/workflows/[^@\\s\"'#,}\\]]+)@([^\\s\"'#,}\\]]+)"
 
-        ref_re =
-          Regex.compile!(
-            "^\\s*(?:-\\s+)?[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*[\"']?" <> repo
-          )
-
-        inline_re =
-          Regex.compile!("[{,]\\s*[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*[\"']?" <> repo)
+        block_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> block_repo)
+        leading_flow_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> flow_repo)
+        inline_re = Regex.compile!("[{,]\\s*" <> key <> flow_repo)
 
         lines
         |> Enum.with_index(1)
@@ -3098,28 +3102,41 @@ defmodule Hypatia.Rules.WorkflowAudit do
             end
 
           live? = number in aliased
+          leading_re = if wf_in_flow?(flow, number), do: leading_flow_re, else: block_re
 
-          calls =
-            case Regex.run(ref_re, line) do
+          # The `uses:` the line opens with, and every one a later flow entry
+          # on the same line opens (`uses: a@x }, b: { uses: a@y`).
+          leading =
+            case Regex.run(leading_re, line) do
               [_full, path, ref] ->
                 if wf027_job_key(lines, flow, number) != nil or live?,
                   do: [{path, ref}],
                   else: []
 
               nil ->
-                inline_re
-                |> Regex.scan(line, return: :index)
-                |> Enum.flat_map(fn [{at, _}, {p_at, p_len}, {r_at, r_len}] ->
-                  if wf027_inline_job?(lines, flow, line, number, at + 1) or live?,
-                    do: [{binary_part(line, p_at, p_len), binary_part(line, r_at, r_len)}],
-                    else: []
-                end)
+                []
             end
 
-          Enum.map(calls, fn {path, ref} -> wf028_finding(filename, number, path, ref, move) end)
+          inline =
+            inline_re
+            |> Regex.scan(line, return: :index)
+            |> Enum.flat_map(fn [{at, _}, {p_at, p_len}, {r_at, r_len}] ->
+              if wf027_inline_job?(lines, flow, line, number, at + 1) or live?,
+                do: [{binary_part(line, p_at, p_len), binary_part(line, r_at, r_len)}],
+                else: []
+            end)
+
+          Enum.map(leading ++ inline, fn {path, ref} ->
+            wf028_finding(filename, number, path, ref, move)
+          end)
         end)
       end)
     end)
+  end
+
+  defp wf028_job_alias_line?(line) do
+    Regex.match?(~r/["']?[\w.-]+["']?\s*:\s+\*[^\s,\[\]{}]+/, line) and
+      not Regex.match?(~r/^\s*-\s+\*/, line)
   end
 
   defp wf028_finding(filename, number, path, ref, move) do
