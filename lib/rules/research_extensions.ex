@@ -303,12 +303,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # and the index form secrets['NAME'] / secrets["NAME"], anywhere in the
   # expression (${{ vars.X || secrets.Y }} reads Y). GitHub matches secret names
   # without regard to case and stores them uppercase; the deed declares that
-  # stored form, so names are uppercased here. The scan runs left to right and
-  # consumes each string literal whole, so text inside one, such as
-  # ${{ 'secrets.X' }}, is not read as a reference.
-  @secret_ref ~r/\bsecrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\])|'(?:[^']|'')*'|"[^"]*"/
+  # stored form, so names are uppercased here.
+  #
+  # Both scans step over string literals ('…', with '' for a quote) whole, so
+  # text inside one is never read: an expression ends at the first }} outside
+  # a literal (format('{{x}}', …) escapes braces that way), and
+  # ${{ 'secrets.X' }} reads nothing. Only the top-level secrets context
+  # counts, not a property named secrets (github.event.x.secrets.Y).
+  @expression ~r/\$\{\{((?:'(?:[^']|'')*'|[^'}]|\}(?!\}))*)\}\}/
+  @secret_ref ~r/(?<![\w.-])secrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)")\s*\])|'(?:[^']|'')*'|"[^"]*"/
   defp secret_refs(line) do
-    for [_, expr] <- Regex.scan(~r/\$\{\{(.*?)\}\}/, line),
+    for [_, expr] <- Regex.scan(@expression, line),
         match <- Regex.scan(@secret_ref, expr),
         name = match |> Enum.drop(1) |> Enum.find(&(&1 != "")),
         name != nil,

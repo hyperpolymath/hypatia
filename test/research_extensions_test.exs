@@ -490,6 +490,56 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "}} inside a literal does not end the expression" do
+      # format() escapes literal braces as {{ }}; HIDDEN is still read.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets.VISIBLE }}
+                - run: echo ${{ format('{{Hello {0}!}}', secrets.HIDDEN) }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN"|
+      File.rm_rf!(repo)
+    end
+
+    test "a property named secrets is not the secrets context" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ github.event.client_payload.secrets.NOT_A_SECRET }}
+                - run: echo ${{ steps.my-secrets.outputs.x }} ${{ secrets.REAL }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("REAL") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
     test "a malformed deed declares nothing" do
       repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
 

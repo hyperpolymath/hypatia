@@ -84,6 +84,15 @@ defmodule Hypatia.DeedTest do
       assert {:error, _} = Deed.parse(hdr <> ~s|(repo-deed :schema-version "1.0.0" :a #tx)|)
     end
 
+    test "quotes only a symbol or a list, with nothing between" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1.0.0\" "
+      assert {:ok, _} = Deed.parse(hdr <> ~s|:a 'sym :b '("x" y))|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:note '"text")|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:n '7)|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:t '#t)|)
+      assert {:error, _} = Deed.parse(hdr <> ~s|:a ' sym)|)
+    end
+
     test "reads the estate template's real deed" do
       # Copied from standards 1-formats/deed/tools/fixtures/valid/, where deed_lint passes it.
       text = File.read!(Path.join(@fixtures, "rsr-template-repo_chora.deed"))

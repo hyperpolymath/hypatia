@@ -318,9 +318,13 @@ defmodule Hypatia.Deed do
   defp value("#f" <> rest), do: {:ok, {:boolean, false}, rest}
   defp value("(" <> rest), do: list(skip(rest), [])
 
+  # quoted = "'" ( symbol / list ): no separator after the quote, and nothing
+  # else may be quoted.
   defp value("'" <> rest) do
-    with {:ok, v, rest} <- value(skip(rest)) do
-      {:ok, {:quoted, v}, rest}
+    case value(rest) do
+      {:ok, {kind, _} = v, rest} when kind in [:symbol, :list] -> {:ok, {:quoted, v}, rest}
+      {:ok, _, _} -> {:error, "only a symbol or a list may be quoted"}
+      err -> err
     end
   end
 
