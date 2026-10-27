@@ -25,8 +25,9 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
 
   @tmp_dir System.tmp_dir!()
 
-  # Trips RE001 (touches `secrets.*` with no harden-runner; :warn, source line)
-  # and RE004 (`docker://` pinned by tag; :warn, line nested under :detail).
+  # Trips RE001 (a credential next to fetched code, no harden-runner; :warn,
+  # source line) and RE004 (`docker://` pinned by tag; :warn, line nested
+  # under :detail).
   @tripwire """
   name: Deploy
   on: [push]
@@ -36,6 +37,7 @@ defmodule Hypatia.Rules.ResearchExtensionsWiringTest do
       steps:
         - uses: docker://alpine:3.21
         - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        - run: npm ci
   """
 
   defp tripwire_repo do

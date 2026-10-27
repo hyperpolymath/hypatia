@@ -37,6 +37,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
             runs-on: ubuntu-latest
             steps:
               - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+              - run: npm ci
         """)
 
       findings = ResearchExtensions.re001_missing_harden_runner(repo)
@@ -72,6 +73,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
             runs-on: ubuntu-latest
             steps:
               - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+              - run: npm ci
         """)
 
       [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
@@ -91,6 +93,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                 with:
                   egress-policy: block
               - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+              - run: npm ci
         """)
 
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
@@ -106,11 +109,13 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
             steps:
               - uses: "step-security/harden-runner@main"
               - run: deploy --token=${{ secrets.DOUBLE_QUOTED_KEY }}
+              - run: npm ci
           single-quoted:
             runs-on: ubuntu-latest
             steps:
               - uses: 'step-security/harden-runner@main'
               - run: deploy --token=${{ secrets.SINGLE_QUOTED_KEY }}
+              - run: npm ci
         """)
 
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
@@ -135,6 +140,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                   runs-on: ubuntu-latest
                   - uses: step-security/harden-runner@main
                   deploy --token=${{ secrets.EXPOSED }}
+              - run: npm ci
         """)
 
       [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
@@ -165,14 +171,16 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
           steps:
             - uses: step-security/harden-runner@main
             - run: deploy --token=${{ secrets.ONE }}
+            - run: npm ci
         exposed:
           runs-on: ubuntu-latest
           steps:
             - run: deploy --token=${{ secrets.TWO }}
+            - run: npm ci
       """)
 
       [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
-      assert finding.line == 10
+      assert finding.line == 11
       assert finding.severity == :warn
       File.rm_rf!(repo)
     end
@@ -187,6 +195,216 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
         """)
 
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    # RE001 v2: a finding needs a real credential AND an exposure.
+
+    test "the ambient GITHUB_TOKEN alone is not a credential, even next to fetched code" do
+      repo =
+        create_repo_with_workflow("""
+        on: [pull_request_target]
+        jobs:
+          label:
+            runs-on: ubuntu-latest
+            steps:
+              - run: npm ci && gh label create x
+                env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a credential next to only pinned actions and the repo's own scripts is not reported" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          sweep:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7.0.1
+              - name: cargo build (label only)
+                run: ./scripts/sweep.sh
+                env:
+                  GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "an untrusted-input trigger in block form is an exposure" do
+      repo =
+        create_repo_with_workflow("""
+        on:
+          pull_request_target:
+            types: [opened]
+        jobs:
+          comment:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./scripts/comment.sh
+                env:
+                  TOKEN: ${{ secrets.BOT_PAT }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :warn
+      assert finding.line == 10
+      assert finding.reason =~ "untrusted-input trigger (pull_request_target)"
+      File.rm_rf!(repo)
+    end
+
+    test "an untrusted-input trigger in an inline list is an exposure" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push, issue_comment]
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: `issues:` under top-level permissions is not an issues trigger" do
+      repo =
+        create_repo_with_workflow("""
+        on:
+          push:
+        permissions:
+          issues: write
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./sync.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a pull-request head checkout is an exposure" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7.0.1
+                with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+              - run: ./upload.sh
+                env:
+                  PAT: ${{ secrets.SCAN_PAT }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :warn
+      assert finding.detail.exposures == ["a pull-request or triggering-run head checkout"]
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: naming the head SHA in env, if or concurrency is not a checkout" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push] # issues are triaged elsewhere
+        jobs:
+          report:
+            if: ${{ startsWith(github.head_ref, 'dependabot/') }}
+            concurrency:
+              group: report-${{ github.head_ref }}
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./report.sh
+                env:
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PAT: ${{ secrets.REPORT_PAT }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a git fetch of the head is a checkout" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          report:
+            runs-on: ubuntu-latest
+            steps:
+              - run: git fetch origin ${{ github.head_ref }} && ./report.sh
+              - run: ./upload.sh ${{ secrets.REPORT_PAT }}
+        """)
+
+      assert [%{severity: :warn, line: 7}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a piped installer is an exposure" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - run: curl -fsSL https://example.invalid/install.sh | bash
+              - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        """)
+
+      assert [%{severity: :warn, line: 7}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a credential in the same step as a dependency build is :high, at that step's reference" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          integration:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./setup.sh ${{ secrets.SETUP_KEY }}
+              - name: Run integration tests
+                run: cargo test --workspace
+                env:
+                  TEST_TOKEN: ${{ secrets.TEST_TOKEN }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :high
+      assert finding.line == 10
+      assert finding.reason =~ "in the same step"
+      File.rm_rf!(repo)
+    end
+
+    test "a job naming GITHUB_TOKEN and a real credential is judged on the credential" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          release:
+            runs-on: ubuntu-latest
+            steps:
+              - run: mix deps.get
+              - run: ./publish.sh
+                env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        """)
+
+      assert [%{severity: :warn, line: 10}] = ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
   end

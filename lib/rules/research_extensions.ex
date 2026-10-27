@@ -21,11 +21,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   Each rule cites its upstream source (tool name and/or paper).
 
-  - **RE001** — Workflow accesses `secrets.*` but does not install
+  - **RE001** — A job holds a real credential (any `secrets.*` other
+    than the ambient `GITHUB_TOKEN`) alongside code it cannot vouch for
+    (an untrusted-input trigger, a PR-head checkout, `curl | sh`, or a
+    dependency install/build), and does not install
     `step-security/harden-runner`. StepSecurity's Harden-Runner
-    provides outbound-egress monitoring/blocking for workflows; its
-    absence on a secrets-touching workflow leaves a clear telemetry
-    gap. From StepSecurity Harden-Runner deployment guide.
+    provides outbound-egress monitoring/blocking; without it, nothing
+    watches the path by which that code would exfiltrate the
+    credential. From StepSecurity Harden-Runner deployment guide.
   - **RE002** — Harden-Runner is installed but configured with
     `egress-policy: audit` (telemetry-only, never blocks). On a
     protected-branch workflow this provides no actual containment.
@@ -155,15 +158,63 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  # ─── RE001: Harden-Runner absent on secrets-touching workflow ─────────
+  # ─── RE001: credential exposed to unvetted code, no Harden-Runner ─────
+
+  # Events whose payload carries text or code authored by people without
+  # write access to the repository.
+  @re001_untrusted_events ~w(pull_request_target issue_comment issues discussion
+                             discussion_comment pull_request_review
+                             pull_request_review_comment workflow_run)
+
+  # The secret every job already holds as `github.token`. Naming it adds no
+  # credential the job did not have, so it is not an exposure on its own.
+  @re001_ambient_secrets ["GITHUB_TOKEN"]
+
+  # The head of a pull request or of the run that triggered this one.
+  @re001_head_ref ~r/github\.event\.(?:pull_request|workflow_run)\.head\.|github\.head_ref/
+
+  # Where naming that head means fetching its code: a checkout's `ref:` or
+  # `repository:`, or a git checkout/fetch/switch. A head SHA in `env:`, an
+  # `if:` or a `concurrency:` group only names it.
+  @re001_head_fetch ~r/^\s*(?:-\s+)?(?:ref|repository):|\bgit\s+(?:checkout|fetch|switch)\b/
+
+  # Code fetched at run time: piped installers, package installs, and builds
+  # or test runs that execute dependencies' build scripts.
+  @re001_fetched_code ~r/(?:curl|wget)\b[^\n|]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b|\b(?:npm|pnpm|yarn)\s+(?:i|install|ci)\b|\bnpx\s|\bpip3?\s+install\b|\b(?:pipx|uvx)\s|\bcargo\s+(?:install|build|test|run)\b|\bgo\s+(?:install|build|test|run)\b|\bgem\s+install\b|\bbundle\s+install\b|\bmix\s+(?:deps\.get|compile|test)\b|\bdeno\s+(?:run|install)\b|\bbun\s+(?:i|install|run)\b|\bopam\s+install\b|\bcabal\s+(?:install|build|test)\b|\bstack\s+(?:build|test)\b/
 
   @doc """
-  RE001: Reports each locally executed workflow job that references
-  `${{ secrets.* }}` without a `step-security/harden-runner@...` step in the
-  same job. Full-line comments and reusable-workflow jobs without a direct
-  `runs-on` field are ignored.
+  RE001: Reports each locally executed workflow job that holds a real
+  credential next to code it cannot vouch for, without a
+  `step-security/harden-runner@...` step in the same job.
 
-  Each finding points to the first matching secret reference in the job.
+  A job is reported when all of these hold:
+
+    * it references `${{ secrets.X }}` for some `X` other than
+      `GITHUB_TOKEN`. That one is the ambient `github.token` every job holds
+      anyway, so a job naming only it exposes nothing new;
+    * it has at least one **exposure**: the workflow runs on an
+      untrusted-input event (`pull_request_target`, `issue_comment`,
+      `issues`, `workflow_run`, …), the job checks out or fetches the head of
+      a pull request or triggering run (a `ref:`/`repository:` or a git
+      checkout/fetch/switch naming it; merely naming the head SHA in `env:`
+      or `if:` is not an exposure), or a step pipes a download into a
+      shell or installs or builds dependencies (`npm ci`, `cargo build`,
+      `mix deps.get`, …);
+    * it does not install harden-runner.
+
+  Severity is `:high` when the credential and a code exposure share one
+  step. That code has the credential in its own environment, so nothing
+  has to be smuggled across steps. Otherwise it is `:warn`: code in one step
+  can still poison the workspace or tools a later credentialed step uses.
+
+  A credential in a job that runs only pinned actions and its own scripts
+  is not reported. Pinning is `actions.lock`'s job, and harden-runner adds
+  little there. Known gap: code fetched by other means, such as `git clone`
+  followed by running the clone, is not recognised.
+
+  Full-line comments and reusable-workflow jobs without a direct `runs-on`
+  field are ignored. Each finding points to the credential reference: the
+  one in the exposed step when there is one, else the first in the job.
   Provenance: StepSecurity Harden-Runner deployment guide.
 
   ## Why this is structural, not a regex
@@ -189,7 +240,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         indent closes, because treating it as a step raises a **false
         negative** that suppresses a genuine finding.
 
-  Severity: `:warn`. Action: `:report`.
+  Severity: `:high` or `:warn`, as above. Action: `:report`.
   """
   def re001_missing_harden_runner(repo_path) do
     repo_path
@@ -206,44 +257,166 @@ defmodule Hypatia.Rules.ResearchExtensions do
         |> Enum.with_index(1)
         |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
 
+      untrusted_events =
+        active_lines
+        |> workflow_events()
+        |> Enum.filter(&(&1 in @re001_untrusted_events))
+
       active_lines
       |> workflow_job_lines()
       |> Enum.flat_map(fn job_lines ->
-        secret_line =
-          Enum.find(job_lines, fn {line, _} ->
-            Regex.match?(~r/\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*/, line)
-          end)
+        credential_lines = Enum.filter(job_lines, &credential_line?/1)
 
         # Reusable jobs delegate their runtime to the source workflow. A sibling's
         # runner or hardener cannot establish this job's execution policy.
         local_runner? = direct_job_field?(job_lines, "runs-on")
-        installs_harden? = harden_runner_step?(job_lines)
 
-        if not is_nil(secret_line) and local_runner? and not installs_harden? do
-          {_source, line} = secret_line
+        with [first_credential | _] <- credential_lines,
+             true <- local_runner?,
+             exposures when exposures != [] <- re001_exposures(job_lines, untrusted_events),
+             false <- harden_runner_step?(job_lines) do
+          # A step that both holds the credential and runs fetched or head code
+          # hands the credential straight to that code.
+          shared_step =
+            job_lines
+            |> job_steps()
+            |> Enum.find(fn step ->
+              Enum.any?(step, &credential_line?/1) and Enum.any?(step, &code_exposure_line?/1)
+            end)
+
+          {severity, {_source, line}} =
+            case shared_step do
+              nil -> {:warn, first_credential}
+              step -> {:high, Enum.find(step, &credential_line?/1)}
+            end
 
           [
             %{
               rule: "RE001",
               file: rel,
-              severity: :warn,
+              severity: severity,
               line: line,
               reason:
-                "job in #{rel} references `secrets.*` but does not install " <>
-                  "`step-security/harden-runner` — review outbound-egress monitoring",
+                "job in #{rel} holds a credential (`secrets.*` other than GITHUB_TOKEN) " <>
+                  "next to #{Enum.join(exposures, ", ")}" <>
+                  if(shared_step, do: " in the same step", else: "") <>
+                  ", but does not install `step-security/harden-runner` — " <>
+                  "review outbound-egress monitoring",
               action: :report,
               detail: %{
+                exposures: exposures,
                 fix:
-                  "Add harden-runner as the first step of this job, with egress-policy: block " <>
-                    "and an allowlist derived from the job's actual required endpoints."
+                  "Move the credential into a job that runs no fetched or untrusted code " <>
+                    "(pass data between jobs as artifacts), or add harden-runner as the " <>
+                    "first step of this job, with egress-policy: block and an allowlist " <>
+                    "derived from the job's actual required endpoints."
               }
             }
           ]
         else
-          []
+          _ -> []
         end
       end)
     end)
+  end
+
+  # A reference to a secret other than the ambient GITHUB_TOKEN.
+  defp credential_line?({line, _}) do
+    ~r/\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)/
+    |> Regex.scan(line, capture: :all_but_first)
+    |> Enum.any?(fn [name] -> name not in @re001_ambient_secrets end)
+  end
+
+  # A line that checks out or runs head code, or fetches and runs code. Step
+  # names are labels, not commands, so `name: cargo build` is not one.
+  defp code_exposure_line?({line, _}) do
+    not Regex.match?(~r/^\s*(?:-\s+)?name:/, line) and
+      (head_fetch_line?(line) or Regex.match?(@re001_fetched_code, line))
+  end
+
+  defp head_fetch_line?(line) do
+    Regex.match?(@re001_head_ref, line) and Regex.match?(@re001_head_fetch, line)
+  end
+
+  defp re001_exposures(job_lines, untrusted_events) do
+    code_lines = Enum.filter(job_lines, &code_exposure_line?/1)
+
+    [
+      untrusted_events != [] &&
+        "an untrusted-input trigger (#{Enum.join(untrusted_events, ", ")})",
+      Enum.any?(code_lines, fn {line, _} -> head_fetch_line?(line) end) &&
+        "a pull-request or triggering-run head checkout",
+      Enum.any?(code_lines, fn {line, _} -> Regex.match?(@re001_fetched_code, line) end) &&
+        "fetched code (a piped installer or a dependency install/build)"
+    ]
+    |> Enum.filter(&is_binary/1)
+  end
+
+  # The job's steps, each as its own physical lines.
+  defp job_steps(job_lines) do
+    with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
+         step_lines when step_lines != [] <- lines_in_steps(job_lines, field_indent),
+         step_indent when is_integer(step_indent) <- step_indent(step_lines, field_indent) do
+      step_lines
+      |> Enum.chunk_while(
+        [],
+        fn {line, _} = entry, acc ->
+          if indent_of(line) == step_indent and Regex.match?(~r/^\s*-(?:\s|$)/, line) and
+               acc != [] do
+            {:cont, Enum.reverse(acc), [entry]}
+          else
+            {:cont, [entry | acc]}
+          end
+        end,
+        fn
+          [] -> {:cont, []}
+          acc -> {:cont, Enum.reverse(acc), []}
+        end
+      )
+    else
+      _ -> []
+    end
+  end
+
+  # The event names under the workflow's top-level `on:`, in any of its forms:
+  # `on: push`, `on: [push, issues]`, or a block of event keys or list items.
+  defp workflow_events(lines) do
+    case Enum.split_while(lines, fn {line, _} ->
+           not Regex.match?(~r/^["']?on["']?:/, line)
+         end) do
+      {_, []} ->
+        []
+
+      {_, [{on_line, _} | rest]} ->
+        inline =
+          on_line
+          |> String.split(":", parts: 2)
+          |> List.last()
+          |> String.replace(~r/\s+#.*$/, "")
+          |> String.trim()
+
+        if inline != "" do
+          Regex.scan(~r/[A-Za-z_]+/, inline) |> List.flatten()
+        else
+          block =
+            Enum.take_while(rest, fn {line, _} ->
+              String.trim(line) == "" or indent_of(line) > 0
+            end)
+            |> Enum.reject(fn {line, _} -> String.trim(line) == "" end)
+
+          event_indent =
+            block |> Enum.map(fn {line, _} -> indent_of(line) end) |> Enum.min(fn -> nil end)
+
+          block
+          |> Enum.filter(fn {line, _} -> indent_of(line) == event_indent end)
+          |> Enum.flat_map(fn {line, _} ->
+            case Regex.run(~r/^\s*(?:-\s+)?["']?([A-Za-z_]+)["']?\s*:?/, line) do
+              [_, event] -> [event]
+              _ -> []
+            end
+          end)
+        end
+    end
   end
 
   defp direct_job_field?(job_lines, field) do
