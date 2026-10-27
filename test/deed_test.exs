@@ -111,6 +111,20 @@ defmodule Hypatia.DeedTest do
       end
     end
 
+    test "takes :policy at most once, before or after the jobs" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1.0.0\" "
+
+      job =
+        ~s|(job :workflow ".github/workflows/a.yml" :job "a" | <>
+          ~s|:secrets ("A") :endpoints () :enforcement none)|
+
+      repo = repo_with_deed("x_chora.deed", hdr <> ~s|(egress #{job} :policy "a"))|)
+      assert {:ok, _, [_]} = Deed.egress_declarations(repo)
+
+      repo = repo_with_deed("x_chora.deed", hdr <> ~s|(egress :policy "a" :policy "b" #{job}))|)
+      assert {:error, _, "(egress …) repeats :policy"} = Deed.egress_declarations(repo)
+    end
+
     test "returns the declared jobs with their secrets" do
       repo = repo_with_fixture("valid", "template-pair_chora.deed")
 

@@ -465,6 +465,31 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "text inside a string literal is not a secret reference" do
+      # Only secrets.REAL is read; the literals merely contain secret-like text.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ 'secrets.NOT_A_REFERENCE' }}
+                - run: echo ${{ format('{0} secrets[''X''] {1}', "secrets.Y", secrets.REAL) }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("REAL") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
     test "a malformed deed declares nothing" do
       repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
 

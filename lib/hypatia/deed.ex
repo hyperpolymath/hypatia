@@ -136,6 +136,12 @@ defmodule Hypatia.Deed do
   defp egress_below?(_), do: false
 
   defp egress_members(members) do
+    if Enum.count(members, &match?({:field, "policy", _}, &1)) > 1,
+      do: {:error, "(egress …) repeats :policy"},
+      else: egress_jobs_of(members)
+  end
+
+  defp egress_jobs_of(members) do
     members
     |> Enum.reduce_while({:ok, []}, fn
       {:field, "policy", {:string, _}}, acc -> {:cont, acc}
