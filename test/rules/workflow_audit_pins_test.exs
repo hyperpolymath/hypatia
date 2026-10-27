@@ -1726,4 +1726,136 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert result.broken_reusable_revision_count == 1
     end
   end
+
+  describe "check_reusable_call_to_moved_repository/1 (WF028)" do
+    @gov ".github/workflows/governance-reusable.yml"
+    @pin "333b06a01db1874ffedb2de1bfabb195640927c7"
+
+    defp wf028(wf), do: WorkflowAudit.check_reusable_call_to_moved_repository(%{"g.yml" => wf})
+
+    test "fires on a job calling a standards reusable by its former owner" do
+      wf = "on: push\njobs:\n  governance:\n    uses: hyperpolymath/standards/#{@gov}@#{@pin}\n"
+      [f] = wf028(wf)
+      assert f.rule == "WF028"
+      assert f.line == 4
+      assert f.severity == :low
+      assert f.advisory == true
+      assert f.auto_fixable == false
+      assert f.fix_script == nil
+      assert f.current_sha == @pin
+      assert f.replacement == "metadatastician/standards/#{@gov}@#{@pin}"
+      assert f.reason =~ "startup_failure"
+    end
+
+    test "matches the owner and repository in any case, quoted or not" do
+      wf = "jobs:\n  g:\n    uses: \"Hyperpolymath/Standards/#{@gov}@#{@pin}\"\n"
+      assert [%{rule: "WF028"}] = wf028(wf)
+    end
+
+    test "fires on a flow-style job and on a value continued below its key" do
+      assert [_] = wf028("jobs:\n  g: { uses: hyperpolymath/standards/#{@gov}@#{@pin} }\n")
+
+      assert [_] =
+               wf028("jobs:\n  g:\n    uses:\n      hyperpolymath/standards/#{@gov}@#{@pin}\n")
+    end
+
+    test "keeps a block-style branch ref whole, punctuation included" do
+      wf = "jobs:\n  g:\n    uses: hyperpolymath/standards/#{@gov}@release,one]\n"
+      [f] = wf028(wf)
+      assert f.current_sha == "release,one]"
+      assert f.replacement == "metadatastician/standards/#{@gov}@release,one]"
+    end
+
+    test "splits path from ref at the workflow's extension" do
+      wf =
+        "jobs:\n  g:\n    uses: hyperpolymath/standards/.github/workflows/build@nightly.yml@release\n"
+
+      [f] = wf028(wf)
+      assert f.reusable == "hyperpolymath/standards/.github/workflows/build@nightly.yml"
+      assert f.current_sha == "release"
+    end
+
+    test "reads a quoted flow value through its closing quote" do
+      wf = "jobs: { g: { uses: \"hyperpolymath/standards/#{@gov}@release,one\" } }\n"
+      [f] = wf028(wf)
+      assert f.current_sha == "release,one"
+      assert f.replacement == "metadatastician/standards/#{@gov}@release,one"
+    end
+
+    test "judges each alias where it stands, not by its line" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+
+      wf =
+        "x-job: &job\n  uses: metadatastician/standards/#{@gov}@#{@pin}\n" <>
+          "x-step: &step\n  uses: #{ref}\n" <>
+          "jobs: { a: *job, b: { runs-on: ubuntu-latest, steps: [*step] } }\n"
+
+      assert [] == wf028(wf)
+    end
+
+    test "reports a flow sibling on the line a leading uses: opens" do
+      ref = "hyperpolymath/standards/#{@gov}"
+      wf = "jobs: {\n  a: {\n    uses: #{ref}@x }, b: { uses: #{ref}@y\n  }\n}\n"
+      assert ["x", "y"] == wf |> wf028() |> Enum.map(& &1.current_sha) |> Enum.sort()
+    end
+
+    test "is silent on an anchored mapping reused only as a step" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+
+      wf =
+        "x-shared: &shared\n  uses: #{ref}\njobs:\n  b:\n    runs-on: ubuntu-latest\n" <>
+          "    steps:\n      - *shared\n"
+
+      assert [] == wf028(wf)
+    end
+
+    test "fires on an anchored mapping a job is given whole" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+      wf = "x-shared: &shared\n  uses: #{ref}\njobs:\n  g: *shared\n"
+      assert [%{line: 2}] = wf028(wf)
+    end
+
+    test "is silent on the current name" do
+      assert [] == wf028("jobs:\n  g:\n    uses: metadatastician/standards/#{@gov}@#{@pin}\n")
+    end
+
+    test "is silent where the path is not a job's reusable call" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+
+      wf =
+        "env:\n  REF: #{ref}\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+          "      # uses: #{ref}\n      - run: echo uses: #{ref}\n"
+
+      assert [] == wf028(wf)
+    end
+
+    test "is silent on a step's uses: and on a uses: line inside a run: script" do
+      ref = "hyperpolymath/standards/#{@gov}@#{@pin}"
+      step = "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: #{ref}\n"
+      script = "jobs:\n  b:\n    steps:\n      - run: |\n          uses: #{ref}\n"
+      assert [] == wf028(step)
+      assert [] == wf028(script)
+    end
+
+    test "is silent on another owner's repository of the same name" do
+      assert [] == wf028("jobs:\n  g:\n    uses: someone/standards/#{@gov}@#{@pin}\n")
+    end
+
+    test "is reported by audit/3" do
+      wf = "jobs:\n  g:\n    uses: hyperpolymath/standards/#{@gov}@#{@pin}\n"
+      result = WorkflowAudit.audit(["g.yml"], %{"g.yml" => wf})
+      assert result.moved_reusable_call_count == 1
+      assert Enum.any?(result.findings, &(&1[:rule] == "WF028"))
+    end
+
+    test "hypatia's own workflows call no moved repository" do
+      contents =
+        for path <- Path.wildcard(".github/workflows/*.yml"),
+            into: %{},
+            do: {Path.basename(path), File.read!(path)}
+
+      assert map_size(contents) > 0
+      assert [] == WorkflowAudit.check_reusable_call_to_moved_repository(contents)
+    end
+  end
 end
