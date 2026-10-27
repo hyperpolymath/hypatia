@@ -11,12 +11,15 @@ defmodule Hypatia.Neural.LiquidStateMachine do
 
   Architecture:
   - Input layer: encodes events as spike trains (binary temporal patterns)
-  - Reservoir: randomly-connected recurrent network with leaky integrate-and-fire neurons
+  - Reservoir: randomly-connected recurrent network of leaky tanh units
   - Readout: trained linear layer mapping reservoir state to predictions
 
   Key properties:
   - Separation property: different inputs produce different reservoir states
-  - Fading memory: recent events weighted more heavily (exponential decay)
+  - Fading memory: recent events weighted more heavily (exponential decay).
+    The reservoir is scaled so its induced infinity-norm (largest absolute row
+    sum) is 0.9, which makes each update a contraction in the sup norm with
+    modulus `1 - leak + leak * 0.9` and bounds the spectral radius by 0.9
   - No backpropagation through reservoir (only readout is trained)
 
   This enables:
@@ -29,8 +32,9 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   require Logger
 
   @reservoir_size 100
-  # Edge of chaos for maximum computation
-  @spectral_radius 0.9
+  # Induced infinity-norm of the reservoir (largest absolute row sum). Must stay
+  # < 1: it bounds the spectral radius and makes the state update a contraction.
+  @reservoir_norm 0.9
   # Neuron leakiness (fading memory speed)
   @leak_rate 0.3
   @input_scaling 0.5
@@ -152,7 +156,6 @@ defmodule Hypatia.Neural.LiquidStateMachine do
   # --- Reservoir Internals ---
 
   defp generate_reservoir(size) do
-    # Sparse random matrix scaled to spectral radius
     matrix =
       for _i <- 1..size do
         for _j <- 1..size do
@@ -164,14 +167,16 @@ defmodule Hypatia.Neural.LiquidStateMachine do
         end
       end
 
-    # Approximate spectral radius scaling
-    max_abs =
+    # Scale the induced infinity-norm (largest absolute row sum) to
+    # @reservoir_norm. Scaling the largest single entry instead, as this used
+    # to, left the row sums at roughly 8-10 for the default 100-node reservoir:
+    # the spectral radius came out near 1.7 and fading memory failed.
+    max_row_sum =
       matrix
-      |> List.flatten()
-      |> Enum.map(&abs/1)
+      |> Enum.map(fn row -> row |> Enum.map(&abs/1) |> Enum.sum() end)
       |> Enum.max(fn -> 1.0 end)
 
-    scale = @spectral_radius / max(max_abs, 0.001)
+    scale = @reservoir_norm / max(max_row_sum, 0.001)
     Enum.map(matrix, fn row -> Enum.map(row, fn v -> v * scale end) end)
   end
 
