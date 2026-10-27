@@ -26,8 +26,14 @@ to declare egress instead of adopting harden-runner everywhere. RE001 now:
   declarations (the job is gone, runs elsewhere, or reads no real secret);
 * names the job and gives the exact `(job …)` entry in its fix text;
 * reads every `${{ … }}` expression whole, even one a folded scalar splits
-  across lines, and counts only the top-level `secrets` context, in property
-  or index form, outside string literals.
+  across lines, and counts only the top-level `secrets` context (matched
+  without regard to case), in property or index form, outside string
+  literals; a read by a key computed at run time (`secrets[env.X]`,
+  `toJSON(secrets)`) is its own finding, since no declaration can list it;
+* keeps #966's exposure model as the severity layer: an undeclared job is
+  `:high` when the credential shares a step with fetched or untrusted code,
+  and otherwise `:warn`, with or without an exposure (owner ruling
+  2026-10-27: ADR-009 asks every secret-bearing job to declare).
 
 `Hypatia.Deed` is a new reader for DEED documents (`deed.abnf` v1.2.1) and the
 `(egress …)` clause profile. `test/deed_test.exs` checks it against the
