@@ -100,7 +100,8 @@ defmodule Hypatia.CLITest do
     end
 
     test "an advisory finding alone never decides exit 1" do
-      assert {[@advisory], []} = Hypatia.CLI.report_sets([@advisory], %{@base | advisory: true})
+      assert {[@advisory], []} =
+               Hypatia.CLI.report_sets([@advisory], %{@base | advisory: true})
     end
 
     test "at --severity low it is shown, a plain low finding blocks, it does not" do
@@ -134,7 +135,8 @@ defmodule Hypatia.CLITest do
         |> Hypatia.CLI.collect_findings([:workflow_audit])
         |> Enum.filter(&(&1.type == "known_broken_reusable_revision"))
 
-      assert [%{advisory: true, severity: "low", fix_script: "fix-stale-reusable-pin.sh"}] = wf027
+      assert [%{advisory: true, severity: "low", fix_script: "fix-stale-reusable-pin.sh"}] =
+               wf027
 
       assert {[], []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: false})
       assert {^wf027, []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: true})
