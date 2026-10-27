@@ -17,6 +17,8 @@ defmodule Hypatia.CLI do
       hypatia pr-eligibility --owner X         Query AM010 admin-merge eligibility for a PR
                              --repo Y
                              --pr N
+      hypatia secret-alerts --owner X          Secret-scanning alerts for one repo, as one JSON line
+                            --repo Y         (exit 3 if they cannot be fetched)
       hypatia version                          Print version and exit
       hypatia help                             Print usage and exit
 
@@ -155,6 +157,9 @@ defmodule Hypatia.CLI do
       ["pr-eligibility" | _] ->
         run_pr_eligibility(opts[:owner], opts[:repo], opts[:pr])
 
+      ["secret-alerts" | _] ->
+        run_secret_alerts(opts[:owner], opts[:repo])
+
       ["version"] ->
         IO.puts("hypatia #{@version}")
 
@@ -282,6 +287,50 @@ defmodule Hypatia.CLI do
     IO.puts(:stderr, "Error: pr-eligibility requires --owner, --repo, and --pr.")
     IO.puts(:stderr, "Usage: hypatia pr-eligibility --owner OWNER --repo REPO --pr NUMBER")
     System.halt(2)
+  end
+
+  # ─── Secret-scanning alerts for one repo (estate sweep) ──────────────
+
+  @doc false
+  def run_secret_alerts(owner, repo) when is_binary(owner) and is_binary(repo) do
+    {line, exit_code} = secret_alerts_output(owner, repo)
+    IO.puts(line)
+    if exit_code != 0, do: System.halt(exit_code)
+  end
+
+  def run_secret_alerts(_, _) do
+    IO.puts(:stderr, "Error: secret-alerts requires --owner and --repo.")
+    IO.puts(:stderr, "Usage: hypatia secret-alerts --owner OWNER --repo REPO")
+    System.halt(2)
+  end
+
+  @doc false
+  # One JSON line, and the exit code to return: 0 when the alerts were read
+  # (with or without findings), 3 when they could not be. A sweep must be
+  # able to tell "no alerts" from "could not look", so a refused token or a
+  # repo with secret scanning disabled is never reported as clean.
+  def secret_alerts_output(
+        owner,
+        repo,
+        sweep \\ &Hypatia.Rules.SecretScanningAlerts.sweep/2
+      ) do
+    case sweep.(owner, repo) do
+      {:ok, result} ->
+        line =
+          Jason.encode!(%{
+            owner: owner,
+            repo: repo,
+            status: "ok",
+            total: result.total,
+            by_severity: result.by_severity,
+            findings: result.findings
+          })
+
+        {line, 0}
+
+      {:error, reason} ->
+        {Jason.encode!(%{owner: owner, repo: repo, status: "error", error: reason}), 3}
+    end
   end
 
   # ─── Diagnostic summary ──────────────────────────────────────────────
@@ -523,9 +572,10 @@ defmodule Hypatia.CLI do
               # structural_drift normalizer's `Map.take` above. Before this,
               # 7 `fix_recipe:` and 7 `recipe_id:` declarations in
               # workflow_audit.ex were read by nothing at all.
-              # WF026/WF027 anchor to a line and name their repair script and
-              # the SHAs involved; keep those so SARIF points at the line and
-              # the fleet receives the advertised script and replacement.
+              # WF026/WF027/WF028 anchor to a line and name their repair script
+              # and the SHAs or re-pointed reference involved; keep those so
+              # SARIF points at the line and the fleet receives the advertised
+              # script and replacement.
               |> Map.merge(
                 Map.take(f, [
                   :fix_recipe,
@@ -536,6 +586,7 @@ defmodule Hypatia.CLI do
                   :fix_script,
                   :current_sha,
                   :replacement_sha,
+                  :replacement,
                   :reusable,
                   :advisory
                 ])
@@ -1576,6 +1627,11 @@ defmodule Hypatia.CLI do
           --owner OWNER                  GitHub owner (org or user)
           --repo REPO                    Repository name
           --pr NUMBER                    PR number
+        secret-alerts                    Secret-scanning alerts for one repo (one JSON line)
+          --owner OWNER                  GitHub owner (org or user)
+          --repo REPO                    Repository name
+                                         Token: HYPATIA_SECRET_ALERTS_TOKEN, else GITHUB_TOKEN.
+                                         Exit 3 when the alerts cannot be fetched.
         version                          Show version
         help                             Show this help
 
