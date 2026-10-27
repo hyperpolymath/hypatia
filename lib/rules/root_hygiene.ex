@@ -497,10 +497,16 @@ defmodule Hypatia.Rules.RootHygiene do
     end)
   end
 
-  # A REUSE `LICENSES/` directory counts only if it holds a licence text: a
-  # non-empty `<SPDX-ID>.<ext>` file, per the REUSE spec. Dotfiles (such as
-  # `.gitkeep`) and READMEs do not count.
-  defp reuse_licenses?(repo_path) do
+  @doc """
+  Whether `repo_path` has a REUSE `LICENSES/` directory holding a licence
+  text: a non-empty `<SPDX-ID>.<ext>` file, per the REUSE spec. The stem must
+  be an identifier on the vendored SPDX License List or a `LicenseRef-`
+  (`Hypatia.SPDX.licence_id?/1`), so `notes.txt`, READMEs and dotfiles such
+  as `.gitkeep` do not count.
+
+  Shared with `Hypatia.ScorecardIngestor`, so both licence checks agree.
+  """
+  def reuse_licenses?(repo_path) do
     dir = Path.join(repo_path, "LICENSES")
 
     case File.ls(dir) do
@@ -512,9 +518,8 @@ defmodule Hypatia.Rules.RootHygiene do
   defp reuse_licence_text?(dir, name) do
     path = Path.join(dir, name)
 
-    not String.starts_with?(name, ".") and
-      not String.starts_with?(String.downcase(name), "readme") and
-      Path.extname(name) != "" and
+    Path.extname(name) != "" and
+      Hypatia.SPDX.licence_id?(Path.rootname(name)) and
       File.regular?(path) and
       match?({:ok, %File.Stat{size: size}} when size > 0, File.stat(path))
   end
