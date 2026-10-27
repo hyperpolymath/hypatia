@@ -36,7 +36,7 @@ defmodule Hypatia.Rules.KyamlWorkflowTest do
           steps: [
     #{hardener}        {
               name: "deploy",
-              run: "deploy --token=${{ secrets.DEPLOY_KEY }}\\n",
+              run: "npm ci\\ndeploy --token=${{ secrets.DEPLOY_KEY }}\\n",
             },
           ],
         },
