@@ -22,9 +22,9 @@ permissions:
 jobs:
   hypatia:
     uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
-    # Scanner pin: see governance.yml. Drop once `uses:` is re-pinned.
+    # Scanner pin: hypatia's own main branch, never the PR head. See governance.yml.
     with:
-      hypatia-ref: 23dc74de05fb34fe0e6f8d204fb65bf0625673a0
+      hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}
     # Only the one secret the callee declares (standards#1108 §6b).
     secrets:
       HYPATIA_SCAN_PAT: ${{ secrets.HYPATIA_SCAN_PAT }}
