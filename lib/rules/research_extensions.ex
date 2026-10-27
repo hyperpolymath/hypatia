@@ -330,6 +330,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
       |> workflow_events()
       |> Enum.filter(&(&1 in @re001_untrusted_events))
 
+    # Secrets in the workflow's top-level `env:` are inherited by every job,
+    # so each job reads them too, and a declaration must list them.
+    workflow_env = workflow_env_lines(active_lines)
+    workflow_refs = secret_refs(workflow_env)
+
     active_lines
     |> workflow_job_lines()
     # Reusable jobs delegate their runtime to the source workflow. A sibling's
@@ -337,7 +342,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
     |> Enum.filter(&direct_job_field?(&1, "runs-on"))
     |> Enum.flat_map(fn [{header, _} | _] = job_lines ->
       refs =
-        for {name, n} <- secret_refs(job_lines), name not in @re001_ambient_secrets, do: {name, n}
+        for {name, n} <- secret_refs(job_lines) ++ workflow_refs,
+            name not in @re001_ambient_secrets,
+            do: {name, n}
 
       case refs do
         [] ->
@@ -348,8 +355,9 @@ defmodule Hypatia.Rules.ResearchExtensions do
           credential_lines = MapSet.new(refs, &elem(&1, 1))
           credential? = fn {_, n} -> MapSet.member?(credential_lines, n) end
           steps = job_steps(job_lines)
-          # A credential in the job's own `env:` is in every step's environment.
-          job_env_credentials = job_env_lines(job_lines) |> Enum.filter(credential?)
+          # A credential in the job's or the workflow's `env:` is in every step's
+          # environment.
+          job_env_credentials = Enum.filter(job_env_lines(job_lines) ++ workflow_env, credential?)
 
           job_untrusted_events =
             case job_event_gate(job_lines) do
@@ -658,6 +666,19 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   # The lines under the job's own `env:` key.
+  # The workflow's top-level `env:` (key at column 0) with its indented body.
+  # Every job, and every step in it, inherits these variables.
+  defp workflow_env_lines(active_lines) do
+    case Enum.drop_while(active_lines, fn {line, _} -> not Regex.match?(~r/^env:/, line) end) do
+      [env_line | rest] ->
+        body = Enum.take_while(rest, fn {line, _} -> line == "" or indent_of(line) > 0 end)
+        [env_line | body]
+
+      [] ->
+        []
+    end
+  end
+
   defp job_env_lines(job_lines) do
     with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
          index when is_integer(index) <-

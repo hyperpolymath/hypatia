@@ -1189,6 +1189,46 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a secret in the workflow's top-level env is read by every job" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          env:
+            HIDDEN: ${{ secrets.HIDDEN }}
+
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: deploy ${{ secrets.VISIBLE }}
+            other:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo hi
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [drift, other] =
+               repo
+               |> ResearchExtensions.re001_missing_harden_runner()
+               |> Enum.sort_by(& &1.reason)
+
+      assert drift.reason =~ ~s|job `notify`|
+      assert drift.reason =~ ~s|reads undeclared "HIDDEN"|
+      # A job with no secret of its own still inherits HIDDEN.
+      assert other.reason =~ ~s|job `other`|
+      assert other.line == 3
+      File.rm_rf!(repo)
+    end
+
     test "harden-runner's owner/repo matches without regard to case" do
       repo =
         create_repo_with_workflow("""
