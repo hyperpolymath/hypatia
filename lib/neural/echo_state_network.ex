@@ -17,7 +17,10 @@ defmodule Hypatia.Neural.EchoStateNetwork do
 
   Key properties:
   - Echo state property: reservoir state is uniquely determined by input history
-  - Spectral radius < 1 ensures stability and fading memory
+  - The reservoir is scaled so its induced infinity-norm (largest absolute row sum)
+    is 0.95. That makes the leaky-tanh update a contraction in the sup norm
+    (modulus `1 - leak + leak * 0.95`), which gives the echo state property and
+    fading memory, and it bounds the spectral radius by the same value
   - Teacher forcing during training for faster convergence
   - Washout period discards initial transients
 
@@ -31,7 +34,9 @@ defmodule Hypatia.Neural.EchoStateNetwork do
   require Logger
 
   @reservoir_size 80
-  @spectral_radius 0.95
+  # Induced infinity-norm of the reservoir (largest absolute row sum). Must stay < 1:
+  # it bounds the spectral radius and makes the state update a contraction.
+  @reservoir_norm 0.95
   @input_scaling 0.3
   @teacher_scaling 0.2
   @leak_rate 0.2
@@ -211,9 +216,16 @@ defmodule Hypatia.Neural.EchoStateNetwork do
         end
       end
 
-    # Scale to spectral radius
-    max_abs = matrix |> List.flatten() |> Enum.map(&abs/1) |> Enum.max(fn -> 1.0 end)
-    scale = @spectral_radius / max(max_abs, 0.001)
+    # Scale the induced infinity-norm (largest absolute row sum) to @reservoir_norm.
+    # Scaling the largest single entry instead, as this used to, left the row
+    # sums at roughly 10-12 for the default 80-node reservoir: the spectral
+    # radius came out near 2 and the echo state property failed.
+    max_row_sum =
+      matrix
+      |> Enum.map(fn row -> row |> Enum.map(&abs/1) |> Enum.sum() end)
+      |> Enum.max(fn -> 1.0 end)
+
+    scale = @reservoir_norm / max(max_row_sum, 0.001)
     Enum.map(matrix, fn row -> Enum.map(row, fn v -> v * scale end) end)
   end
 

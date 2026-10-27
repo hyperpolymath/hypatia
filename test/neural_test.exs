@@ -43,6 +43,44 @@ defmodule Hypatia.NeuralTest do
       assert result.trained == false
     end
 
+    test "reservoir's largest absolute row sum is 0.95 for any size and seed" do
+      for size <- [10, 20, 80], seed <- 1..5 do
+        esn = EchoStateNetwork.init(reservoir_size: size, seed: seed)
+
+        max_row_sum =
+          esn.reservoir
+          |> Enum.map(fn row -> row |> Enum.map(&abs/1) |> Enum.sum() end)
+          |> Enum.max()
+
+        assert_in_delta max_row_sum, 0.95, 1.0e-9, "size=#{size} seed=#{seed}"
+      end
+    end
+
+    # Echo state property: with an infinity-norm of 0.95 and leak 0.2, each step
+    # shrinks the gap between two states by at least 1 - 0.2 + 0.2 * 0.95 = 0.99.
+    # Under the old max-entry scaling the gap stayed above 0.5 after 300 steps.
+    test "two different initial states converge under the same inputs" do
+      for seed <- 1..3 do
+        esn = EchoStateNetwork.init(seed: seed)
+        a = %{esn | state: Enum.map(esn.state, fn _ -> 0.9 end)}
+        b = %{esn | state: Enum.map(esn.state, fn _ -> -0.9 end)}
+        steps = 300
+        inputs = for t <- 1..steps, do: 0.5 + 0.3 * :math.sin(t / 7)
+
+        {a, b} =
+          Enum.reduce(inputs, {a, b}, fn u, {a, b} ->
+            {elem(EchoStateNetwork.step(a, u), 1), elem(EchoStateNetwork.step(b, u), 1)}
+          end)
+
+        gap =
+          Enum.zip(a.state, b.state)
+          |> Enum.map(fn {x, y} -> abs(x - y) end)
+          |> Enum.max()
+
+        assert gap <= 1.8 * :math.pow(0.99, steps), "seed=#{seed} gap=#{gap}"
+      end
+    end
+
     test "detect_drift/1 with insufficient data returns :insufficient_data" do
       esn = EchoStateNetwork.init()
       assert EchoStateNetwork.detect_drift(esn) == :insufficient_data
@@ -164,6 +202,51 @@ defmodule Hypatia.NeuralTest do
       lsm = LiquidStateMachine.init(reservoir_size: 100)
       assert lsm.trained == false
       assert lsm.reservoir_weights != nil
+    end
+
+    test "reservoir's largest absolute row sum is 0.9 for any size and seed" do
+      for size <- [10, 20, 100], seed <- 1..5 do
+        lsm = LiquidStateMachine.init(reservoir_size: size, seed: seed)
+
+        max_row_sum =
+          lsm.reservoir_weights
+          |> Enum.map(fn row -> row |> Enum.map(&abs/1) |> Enum.sum() end)
+          |> Enum.max()
+
+        assert_in_delta max_row_sum, 0.9, 1.0e-9, "size=#{size} seed=#{seed}"
+      end
+    end
+
+    # Fading memory: with an infinity-norm of 0.9 and leak 0.3, each event
+    # shrinks the gap between two states by at least 1 - 0.3 + 0.3 * 0.9 = 0.97.
+    # Under the old max-entry scaling the gap was still 0.06-2.0 after 300 events.
+    test "two different initial states converge under the same events" do
+      events =
+        for i <- 1..300 do
+          %{
+            "severity" => Enum.at(~w(low medium high critical), rem(i, 4)),
+            "outcome" => Enum.at(~w(success failure false_positive), rem(i, 3)),
+            "type" => Enum.at(~w(scan dispatch outcome), rem(i * 7, 3))
+          }
+        end
+
+      for seed <- 1..3 do
+        lsm = LiquidStateMachine.init(seed: seed)
+        a = %{lsm | state: Enum.map(lsm.state, fn _ -> 0.9 end)}
+        b = %{lsm | state: Enum.map(lsm.state, fn _ -> -0.9 end)}
+
+        {a, b} =
+          Enum.reduce(events, {a, b}, fn e, {a, b} ->
+            {LiquidStateMachine.process_event(a, e), LiquidStateMachine.process_event(b, e)}
+          end)
+
+        gap =
+          Enum.zip(a.state, b.state)
+          |> Enum.map(fn {x, y} -> abs(x - y) end)
+          |> Enum.max()
+
+        assert gap <= 1.8 * :math.pow(0.97, length(events)), "seed=#{seed} gap=#{gap}"
+      end
     end
 
     test "detect_anomalies/1 with short history returns empty" do
