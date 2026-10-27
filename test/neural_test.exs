@@ -101,19 +101,27 @@ defmodule Hypatia.NeuralTest do
 
     # One-step forecasts on held-out data must beat "next = current", the
     # baseline any forecaster has to clear. The old SGD readout lost to it by
-    # about 40x on this series and did no better than the series mean.
+    # about 47x on these held-out points.
     test "trained ESN beats the persistence baseline on held-out data" do
       series = for t <- 1..300, do: 0.5 + 0.25 * :math.sin(t / 9) + 0.1 * :math.sin(t / 3.1)
-      {train, _} = Enum.split(series, 200)
+      {train, held_out} = Enum.split(series, 200)
 
       trained =
         EchoStateNetwork.init(reservoir_size: 20, seed: 1) |> EchoStateNetwork.train(train)
 
+      # Warm the reservoir on the training series, then score only forecasts
+      # made on held-out inputs: accuracy_report/1 keeps the last 200
+      # predictions, which would otherwise include training points.
+      {_, warmed} =
+        Enum.reduce(train, {nil, trained}, fn u, {_, e} -> EchoStateNetwork.step(e, u) end)
+
       {_, ran} =
-        Enum.reduce(series, {nil, trained}, fn u, {_, e} -> EchoStateNetwork.step(e, u) end)
+        Enum.reduce(held_out, {nil, %{warmed | predictions: []}}, fn u, {_, e} ->
+          EchoStateNetwork.step(e, u)
+        end)
 
       %{mse: esn_mse, samples: n} = EchoStateNetwork.accuracy_report(ran)
-      held_out = Enum.take(series, -(n + 1))
+      assert n == length(held_out) - 1
 
       persistence_mse =
         held_out
