@@ -166,6 +166,7 @@ defmodule Hypatia.Deed do
   end
 
   defp valid_endpoint?("secret:" <> name, secrets), do: name in secrets
+  defp valid_endpoint?("var:" <> name, _secrets), do: Regex.match?(@secret, name)
 
   defp valid_endpoint?(endpoint, _secrets) do
     case Regex.named_captures(@host_port, endpoint) do
