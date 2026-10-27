@@ -178,7 +178,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # Where naming that head means fetching its code: a checkout's `ref:` or
   # `repository:`, or a git checkout/fetch/switch in a `run:` script. A head
   # SHA in `env:`, an `if:` or a `concurrency:` group only names it.
-  @re001_checkout_key ~r/^\s*(?:-\s+)?(?:ref|repository):/
+  # Block (`ref: …`) or flow (`with: {ref: …}`) form.
+  @re001_checkout_key ~r/(?:^|[\s{,])(?:ref|repository)\s*:/
   @re001_checkout_action ~r/^\s*(?:-\s+)?uses:\s*["']?actions\/checkout@/
   # One git command naming the head: no `;`, `&` or `|` between them. `\s`
   # spans the line break of a folded `run: >-`.
@@ -186,7 +187,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   # Code fetched at run time: piped installers, package installs, and builds
   # or test runs that execute dependencies' build scripts.
-  @re001_fetched_code ~r/(?:curl|wget)\b[^\n|]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b|\b(?:npm|pnpm|yarn)\s+(?:i|install|ci)\b|\bnpx\s|\bpip3?\s+install\b|\b(?:pipx|uvx)\s|\bcargo\s+(?:install|build|test|run)\b|\bgo\s+(?:install|build|test|run)\b|\bgem\s+install\b|\bbundle\s+install\b|\bmix\s+(?:deps\.get|compile|test)\b|\bdeno\s+(?:run|install)\b|\bbun\s+(?:i|install|run)\b|\bopam\s+install\b|\bcabal\s+(?:install|build|test)\b|\bstack\s+(?:build|test)\b/
+  @re001_fetched_code ~r/(?:curl|wget)\b[^|;&]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b|\b(?:npm|pnpm|yarn)\s+(?:i|install|ci)\b|\bnpx\s|\bpip3?\s+install\b|\b(?:pipx|uvx)\s|\bcargo\s+(?:install|build|test|run)\b|\bgo\s+(?:install|build|test|run)\b|\bgem\s+install\b|\bbundle\s+install\b|\bmix\s+(?:deps\.get|compile|test)\b|\bdeno\s+(?:run|install)\b|\bbun\s+(?:i|install|run)\b|\bopam\s+install\b|\bcabal\s+(?:install|build|test)\b|\bstack\s+(?:build|test)\b/
 
   @doc """
   RE001: Reports each locally executed workflow job that holds a real
@@ -386,8 +387,15 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # The script of a step's `run:`, inline or as a block scalar, with comments
   # removed (YAML and shell agree that `#` after whitespace starts one).
   defp step_run_lines(step) do
+    key_column = step_key_column(step)
+
+    # Only the step's own `run:` property: an `env:` variable named `run` is a
+    # nested key, deeper than the step's properties.
     case Enum.split_while(step, fn {line, _} ->
-           not Regex.match?(~r/^\s*(?:-\s+)?run:/, line)
+           case Regex.run(~r/^(\s*(?:-\s+)?)run:/, line) do
+             [_, prefix] -> String.length(prefix) != key_column
+             _ -> true
+           end
          end) do
       {_, []} ->
         []
@@ -412,6 +420,22 @@ defmodule Hypatia.Rules.ResearchExtensions do
         Enum.map(body, &String.replace(&1, ~r/(?:^|\s)#.*$/, ""))
     end
   end
+
+  # The column of a step's own properties: just past `- ` on its opening line,
+  # or the indent of the first property under a bare `-`.
+  defp step_key_column([{first, _} | rest]) do
+    case Regex.run(~r/^(\s*-\s+)\S/, first) do
+      [_, prefix] ->
+        String.length(prefix)
+
+      _ ->
+        Enum.find_value(rest, indent_of(first) + 2, fn {line, _} ->
+          String.trim(line) != "" && indent_of(line)
+        end)
+    end
+  end
+
+  defp step_key_column([]), do: 0
 
   # True when the step sets the same variable as the job-level `env:` line,
   # so the step-level value replaces the inherited credential.
@@ -512,7 +536,16 @@ defmodule Hypatia.Rules.ResearchExtensions do
           |> String.trim()
 
         if inline != "" do
-          inline_events(inline)
+          # A flow collection may continue past the `on:` line: read on until
+          # its brackets balance.
+          rest
+          |> Enum.map(&elem(&1, 0))
+          |> Enum.reduce_while(inline, fn line, acc ->
+            if nesting_at(acc, byte_size(acc)) > 0,
+              do: {:cont, acc <> " " <> String.trim(line)},
+              else: {:halt, acc}
+          end)
+          |> inline_events()
         else
           block =
             Enum.take_while(rest, fn {line, _} ->

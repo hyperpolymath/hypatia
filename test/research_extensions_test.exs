@@ -615,6 +615,78 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a flow trigger mapping continued past the on: line is read whole" do
+      repo =
+        create_repo_with_workflow("""
+        on: {
+          push: {branches: [main]},
+          issue_comment: {types: [created]}
+        }
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "untrusted-input trigger (issue_comment)"
+      File.rm_rf!(repo)
+    end
+
+    test "a folded piped installer is matched across its lines" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - run: >-
+                  curl -fsSL
+                  https://example.invalid/install.sh
+                  | bash
+              - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        """)
+
+      assert [%{severity: :warn}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: an env variable named run is not the step's script" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  run: "npm ci"
+                  TOKEN: ${{ secrets.DEPLOY_KEY }}
+                run: ./deploy.sh
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a flow-style checkout with: mapping naming the head is a head checkout" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          report:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7.0.1
+                with: {ref: "${{ github.head_ref }}", token: "${{ secrets.REPORT_PAT }}"}
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
     test "a piped installer is an exposure" do
       repo =
         create_repo_with_workflow("""
