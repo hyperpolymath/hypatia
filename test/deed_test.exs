@@ -134,6 +134,16 @@ defmodule Hypatia.DeedTest do
       assert {:error, _} = Deed.parse(hdr <> ~s|:id #u8"dé:x")|)
     end
 
+    test "a field's value is never a boolean spelled as a word, as the gate rules" do
+      hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1\" "
+      assert {:ok, _} = Deed.parse(hdr <> ":a #t :b truthy :c (true no))")
+
+      for word <- ~w(true false yes no) do
+        assert {:error, msg} = Deed.parse(hdr <> ":enabled #{word})")
+        assert msg =~ "write #t or #f"
+      end
+    end
+
     test "quotes only a symbol or a list, with nothing between" do
       hdr = ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(repo-deed :schema-version \"1.0.0\" "
       assert {:ok, _} = Deed.parse(hdr <> ~s|:a 'sym :b '("x" y))|)
@@ -223,6 +233,35 @@ defmodule Hypatia.DeedTest do
 
       File.write!(Path.join(repo, "b_chora.deed"), "")
       assert {:error, _} = Deed.repo_deed_path(repo)
+    end
+
+    test "the stem is deed.abnf's: letters, digits, '-', '.', '_', at least one" do
+      for {name, ok?} <- [
+            {"my.project-x_chora.deed", true},
+            {"bad name_chora.deed", false},
+            {"_chora.deed", false},
+            {"é_chora.deed", false}
+          ] do
+        repo = Path.join(@tmp_dir, "deed_stem_#{System.unique_integer([:positive])}")
+        File.rm_rf!(repo)
+        File.mkdir_p!(repo)
+        File.write!(Path.join(repo, name), "")
+
+        if ok?,
+          do: assert({:ok, _} = Deed.repo_deed_path(repo), name),
+          else:
+            assert({:error, "illegal deed filename stem" <> _} = Deed.repo_deed_path(repo), name)
+      end
+    end
+
+    test "a <stem>_chora.deed must be a repo-deed" do
+      repo =
+        repo_with_deed(
+          "x_chora.deed",
+          ";; SPDX-License-Identifier: CC-BY-SA-4.0\n(praxis-deed :schema-version \"1\")\n"
+        )
+
+      assert {:error, _, "doc-head/filename mismatch" <> _} = Deed.egress_declarations(repo)
     end
   end
 end

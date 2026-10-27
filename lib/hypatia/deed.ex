@@ -65,9 +65,17 @@ defmodule Hypatia.Deed do
         |> Enum.filter(&(String.ends_with?(&1, "_chora.deed") and &1 != "estate_chora.deed"))
         |> Enum.sort()
         |> case do
-          [] -> :none
-          [one] -> {:ok, Path.join(repo_path, one)}
-          many -> {:error, "more than one repo deed: #{Enum.join(many, ", ")}"}
+          [] ->
+            :none
+
+          [one] ->
+            # stem = 1*( ALPHA / DIGIT / "-" / "." / "_" ), as deed.abnf has it.
+            if Regex.match?(~r/\A[A-Za-z0-9._-]+_chora\.deed\z/, one),
+              do: {:ok, Path.join(repo_path, one)},
+              else: {:error, "illegal deed filename stem: #{one}"}
+
+          many ->
+            {:error, "more than one repo deed: #{Enum.join(many, ", ")}"}
         end
 
       {:error, _} ->
@@ -96,6 +104,10 @@ defmodule Hypatia.Deed do
 
         with {:ok, text} <- File.read(path),
              {:ok, {head, items}} <- parse(text),
+             # Filename dispatch: <stem>_chora.deed parses as a repo-deed.
+             true <-
+               head == "repo-deed" ||
+                 {:error, "doc-head/filename mismatch: #{rel} must be a repo-deed, not #{head}"},
              {:ok, jobs} <- egress_jobs(head, items) do
           {:ok, rel, jobs}
         else
@@ -308,12 +320,19 @@ defmodule Hypatia.Deed do
     end
   end
 
-  # field = keyword token-sep value
+  # field = keyword token-sep value. As the gate does, a field's value may not
+  # be a boolean spelled as a word: booleans are #t and #f.
   defp item(":" <> rest) do
     with {:ok, kw, rest} <- symbol(rest),
          {:ok, rest} <- separator(rest, ":#{kw}"),
          {:ok, value, rest} <- value(rest) do
-      {:ok, {:field, kw, value}, rest}
+      case value do
+        {:symbol, word} when word in ~w(true false yes no) ->
+          {:error, ":#{kw} #{word} is not a boolean: write #t or #f"}
+
+        _ ->
+          {:ok, {:field, kw, value}, rest}
+      end
     end
   end
 
