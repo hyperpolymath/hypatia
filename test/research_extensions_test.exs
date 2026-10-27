@@ -545,6 +545,26 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "overriding one job-level secret leaves the step holding the others" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            env:
+              NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+              REGISTRY_KEY: ${{ secrets.REGISTRY_KEY }}
+            steps:
+              - run: npm ci
+                env:
+                  NPM_TOKEN: ""
+        """)
+
+      assert [%{severity: :high, line: 7}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
     test "decoy: a head repository passed to a non-checkout action is not a checkout" do
       repo =
         create_repo_with_workflow("""

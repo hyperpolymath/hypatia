@@ -279,7 +279,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         local_runner? = direct_job_field?(job_lines, "runs-on")
         steps = job_steps(job_lines)
         # A credential in the job's own `env:` is in every step's environment.
-        job_env_credential = job_env_lines(job_lines) |> Enum.find(&credential_line?/1)
+        job_env_credentials = job_env_lines(job_lines) |> Enum.filter(&credential_line?/1)
 
         job_untrusted_events =
           case job_event_gate(job_lines) do
@@ -297,8 +297,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
             Enum.find_value(steps, fn step ->
               credential =
                 Enum.find(step, &credential_line?/1) ||
-                  (job_env_credential && not overrides_env?(step, job_env_credential) &&
-                     job_env_credential)
+                  Enum.find(job_env_credentials, &(not overrides_env?(step, &1)))
 
               credential && step_code_exposures(step) != [] && credential
             end)
