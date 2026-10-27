@@ -64,25 +64,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  rescan:
-    name: Rescan estate with panic-attack
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
+  # The credential and the scanner never share a job.
+  #
+  # `scan` builds panic-attack and runs it over ~300 repositories' worth of
+  # third-party content. Until this split it ran in the same job as
+  # HYPATIA_DISPATCH_PAT, and `Checkout verisimdb-data` left that PAT in the
+  # clone's .git/config, readable by every later step, the freshly built
+  # scanner included. Now `scan` holds no credential and hands its output to
+  # `publish` as an artifact; the two jobs that hold the PAT run no fetched
+  # code and install harden-runner with an egress allow-list.
 
+  # Fail in seconds, not in twenty minutes.
+  #
+  # The write to verisimdb-data is the LAST thing this workflow does, after a
+  # ~300-repo scan. So every time the token was wrong, the run burned the
+  # entire scan and then died at the final step. That is how a hard
+  # permission wall stayed unnoticed for 26 days: the failure was
+  # expensive to reach and looked like a flaky tail-end push.
+  #
+  # This probe is the same differential test that finally identified the
+  # fault: create a ref and delete it again. It touches no content, makes
+  # no commit, and takes about a second.
+  preflight:
+    name: Preflight — can we actually write to verisimdb-data?
+    if: inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      # Fail in seconds, not in twenty minutes.
-      #
-      # The write to verisimdb-data is the LAST thing this job does, after a
-      # ~300-repo scan. So every time the token was wrong, the run burned the
-      # entire scan and then died at the final step. That is how a hard
-      # permission wall stayed unnoticed for 26 days: the failure was
-      # expensive to reach and looked like a flaky tail-end push.
-      #
-      # This probe is the same differential test that finally identified the
-      # fault: create a ref and delete it again. It touches no content, makes
-      # no commit, and takes about a second.
-      - name: Preflight — can we actually write to verisimdb-data?
-        if: inputs.dry_run != 'true'
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+
+      - name: Create and delete a probe branch
         env:
           GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
         run: |
@@ -99,10 +115,21 @@ jobs:
           gh api -X DELETE "repos/${R}/git/refs/heads/${PROBE}" >/dev/null
           echo "verisimdb-data is writable — proceeding with the scan."
 
-      - name: Resolve panic-attack version
-        id: pa_ref
-        run: echo "sha=$(git ls-remote https://github.com/hyperpolymath/panic-attack.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+  scan:
+    name: Rescan estate with panic-attack
+    needs: preflight
+    # A dry run skips the preflight; anything else must pass it first.
+    if: ${{ !cancelled() && (needs.preflight.result == 'success' || needs.preflight.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    outputs:
+      scanned: ${{ steps.scan.outputs.scanned }}
+    env:
+      # Pinned, not HEAD: this job runs whatever it builds over the whole
+      # estate. Bump deliberately, after reviewing panic-attack's changes.
+      PA_SHA: ac68bbaeaeca515700bb400f1a0703a37b59a48f
 
+    steps:
       - name: Cache built panic-attack
         id: pa_cache
         uses: actions/cache@v6.1.0
@@ -110,12 +137,10 @@ jobs:
           path: ~/panic-attack-bin
           # Exact-SHA key, no restore-keys: a partial hit would scan with
           # stale rules (same reasoning as the hypatia-scan build cache).
-          key: panic-attack-${{ runner.os }}-${{ steps.pa_ref.outputs.sha }}
+          key: panic-attack-${{ runner.os }}-${{ env.PA_SHA }}
 
       - name: Build panic-attack (if needed)
         if: steps.pa_cache.outputs.cache-hit != 'true'
-        env:
-          PA_SHA: ${{ steps.pa_ref.outputs.sha }}
         run: |
           set -euo pipefail
           git clone --depth 1 https://github.com/hyperpolymath/panic-attack.git "$RUNNER_TEMP/panic-attack"
@@ -128,7 +153,9 @@ jobs:
       - name: Resolve repo list
         id: repos
         env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          # Public metadata only: the ambient token is enough, and this job
+          # must hold no credential (see the header of `scan`).
+          GH_TOKEN: ${{ github.token }}
           INPUT_REPOS: ${{ inputs.repos }}
           PAYLOAD_REPOS: ${{ github.event.client_payload.repos }}
         run: |
@@ -164,19 +191,13 @@ jobs:
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "Rescanning $COUNT repos"
 
-      - name: Checkout verisimdb-data
-        env:
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
-        run: |
-          set -euo pipefail
-          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/hyperpolymath/verisimdb-data.git" "$RUNNER_TEMP/verisimdb-data"
-
       - name: Scan repos
         id: scan
         run: |
           set -uo pipefail
           PA="$HOME/panic-attack-bin/panic-attack"
-          DATA="$RUNNER_TEMP/verisimdb-data"
+          OUT="$RUNNER_TEMP/scans"
+          mkdir -p "$OUT"
           FAILED=0
           SCANNED=0
           while IFS= read -r name; do
@@ -192,7 +213,7 @@ jobs:
               # meaningless to consumers and leaked local paths were one of
               # the defects of the manual-scan era (`/var$REPOS_DIR/...`).
               jq --arg name "$name" '.program_path = $name' \
-                "$RUNNER_TEMP/scan-raw.json" > "$DATA/scans/$name.json"
+                "$RUNNER_TEMP/scan-raw.json" > "$OUT/$name.json"
               SCANNED=$((SCANNED+1))
             else
               echo "::warning::scan failed: $name"
@@ -204,17 +225,75 @@ jobs:
           echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
           echo "Scanned $SCANNED repos ($FAILED failures)"
 
+      # Nothing scanned (e.g. a targeted request naming only ineligible
+      # repos) is a no-op, as it was before the split: no artifact, no publish.
+      - name: Hand the scans to the publish job
+        if: steps.scan.outputs.scanned != '0'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: estate-scans
+          path: ${{ runner.temp }}/scans/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Job summary
+        env:
+          COUNT: ${{ steps.repos.outputs.count }}
+          SCANNED: ${{ steps.scan.outputs.scanned }}
+          FAILED: ${{ steps.scan.outputs.failed }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          {
+            echo "## Estate Rescan"
+            echo "- Repos targeted: $COUNT"
+            echo "- Scanned OK: $SCANNED"
+            echo "- Failures: $FAILED"
+            echo "- Dry run: ${DRY:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish scans to verisimdb-data
+    needs: scan
+    if: inputs.dry_run != 'true' && needs.scan.outputs.scanned != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.22.2
+        with:
+          egress-policy: block
+          # git and gh against GitHub, plus the artifact service and its
+          # blob storage for the download.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - name: Fetch the scans
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: estate-scans
+          path: ${{ runner.temp }}/scans
+
+      - name: Checkout verisimdb-data
+        env:
+          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/hyperpolymath/verisimdb-data.git" "$RUNNER_TEMP/verisimdb-data"
+
       - name: Commit refreshed scans
         id: commit_scans
-        if: inputs.dry_run != 'true'
         env:
-          SCANNED: ${{ steps.scan.outputs.scanned }}
+          SCANNED: ${{ needs.scan.outputs.scanned }}
         run: |
           set -euo pipefail
           DATA="$RUNNER_TEMP/verisimdb-data"
           cd "$DATA"
           git config user.name "hypatia-estate-rescan"
           git config user.email "hypatia-bot@users.noreply.github.com"
+          cp "$RUNNER_TEMP/scans/"*.json scans/
           git add scans/
           if git diff --cached --quiet; then
             echo "No scan changes to push."
@@ -225,7 +304,7 @@ jobs:
           git commit -m "scan: estate rescan ($SCANNED repos, panic-attack refresh)"
 
       - name: Publish to verisimdb-data (two signed, squash-merged PRs)
-        if: inputs.dry_run != 'true' && steps.commit_scans.outputs.changed == 'true'
+        if: steps.commit_scans.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
           RUN_ID: ${{ github.run_id }}
@@ -320,18 +399,3 @@ jobs:
 
           # ---- PR 2: index only, touching no file under scans/ --------------
           publish "index" "index: regen after estate rescan (run ${RUN_ID})"
-
-      - name: Job summary
-        env:
-          COUNT: ${{ steps.repos.outputs.count }}
-          SCANNED: ${{ steps.scan.outputs.scanned }}
-          FAILED: ${{ steps.scan.outputs.failed }}
-          DRY: ${{ inputs.dry_run }}
-        run: |
-          {
-            echo "## Estate Rescan"
-            echo "- Repos targeted: $COUNT"
-            echo "- Scanned OK: $SCANNED"
-            echo "- Failures: $FAILED"
-            echo "- Dry run: ${DRY:-false}"
-          } >> "$GITHUB_STEP_SUMMARY"
