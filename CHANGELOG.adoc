@@ -10,6 +10,38 @@ https://semver.org/[Semantic Versioning].
 
 == [Unreleased]
 
+=== Changed
+
+==== RE001 accepts a deed egress declaration; the job token no longer counts (2026-10-27)
+
+The estate-wide decision on `step-security/harden-runner` (standards ADR-009) is
+to declare egress instead of adopting harden-runner everywhere. RE001 now:
+
+* ignores `secrets.GITHUB_TOKEN`, the same token as `github.token`, which it
+  never counted;
+* accepts a job listed in the `(egress …)` clause of the repo deed
+  (`<repo>_chora.deed`) with exactly the secrets the job reads, as an
+  alternative to harden-runner;
+* reports drift (the declaration and the workflow disagree on secrets) and stale
+  declarations (the job is gone, runs elsewhere, or reads no real secret), and
+  checks a declaration even when harden-runner satisfies the job, including a
+  claimed `:enforcement harden-runner-*` on a job that no longer installs it;
+* names the job and gives the exact `(job …)` entry in its fix text;
+* reads every `${{ … }}` expression whole, even one a folded scalar splits
+  across lines, and counts only the top-level `secrets` context (matched
+  without regard to case), in property or index form, outside string
+  literals; a read by a key computed at run time (`secrets[env.X]`,
+  `toJSON(secrets)`) is its own finding, since no declaration can list it;
+* keeps #966's exposure model as the severity layer: an undeclared job is
+  `:high` when the credential shares a step with fetched or untrusted code,
+  and otherwise `:warn`, with or without an exposure (owner ruling
+  2026-10-27: ADR-009 asks every secret-bearing job to declare).
+
+`Hypatia.Deed` is a new reader for DEED documents (`deed.abnf` v1.2.1) and the
+`(egress …)` clause profile. `test/deed_test.exs` checks it against the
+standards fixtures and the template's live deed. An apg-js run of the grammar
+and the reader agree on 20,043 mutated deeds, semantic checks apart.
+
 === Fixed
 
 ==== `mix compile` was impossible: invalid guard-as-pattern in `ActionsLock` (2026-10-25)

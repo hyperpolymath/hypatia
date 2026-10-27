@@ -353,7 +353,9 @@ jobs:
           mix test \
             test/rules/actions_lock_test.exs \
             test/rules/actions_lock_closure_corpus_test.exs \
-            test/rules/rsr_conformance_test.exs
+            test/rules/rsr_conformance_test.exs \
+            test/research_extensions_test.exs \
+            test/deed_test.exs
 
       # The consumers' invocation, verbatim: the oracle is called with an
       # EXPLICIT --ssot. The default SSOT resolution is deliberately not

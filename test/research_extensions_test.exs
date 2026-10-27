@@ -10,6 +10,8 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
 
   defp create_repo_with_workflow(yaml_content, filename \\ "test.yml") do
     repo = Path.join(@tmp_dir, "re_test_#{System.unique_integer([:positive])}")
+    # unique_integer restarts with each VM, so clear what an earlier run left.
+    File.rm_rf!(repo)
     wf = Path.join([repo, ".github", "workflows"])
     File.mkdir_p!(wf)
     File.write!(Path.join(wf, filename), yaml_content)
@@ -217,7 +219,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
-    test "a credential next to only pinned actions and the repo's own scripts is not reported" do
+    test "a credential next to only pinned actions and the repo's own scripts is :warn, with no exposure" do
       repo =
         create_repo_with_workflow("""
         on: [push]
@@ -232,7 +234,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                   GH_TOKEN: ${{ secrets.DISPATCH_PAT }}
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -287,7 +291,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               - run: ./sync.sh ${{ secrets.BOT_PAT }}
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -330,7 +336,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                   PAT: ${{ secrets.REPORT_PAT }}
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -378,7 +386,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               - run: ./sync.sh ${{ secrets.BOT_PAT }}
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -415,7 +425,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                   ./publish.sh
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -477,9 +489,14 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               - run: ./other.sh ${{ secrets.OTHER_PAT }}
         """)
 
-      # `deploy` is gated to push; `reply` admits issue_comment; a condition
-      # that is not a plain event_name test is not interpreted.
-      assert [%{line: 12}, %{line: 17}] =
+      # `deploy` is gated to push, so it has no exposure but is still an
+      # undeclared secret-bearing job (ADR-009); `reply` admits issue_comment;
+      # a condition that is not a plain event_name test is not interpreted.
+      assert [
+               %{line: 7, severity: :warn, detail: %{exposures: []}},
+               %{line: 12, detail: %{exposures: ["an untrusted-input trigger (issue_comment)"]}},
+               %{line: 17, detail: %{exposures: ["an untrusted-input trigger (issue_comment)"]}}
+             ] =
                repo |> ResearchExtensions.re001_missing_harden_runner() |> Enum.sort_by(& &1.line)
 
       File.rm_rf!(repo)
@@ -579,7 +596,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                   token: ${{ secrets.REPORT_PAT }}
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -613,7 +632,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               - run: ./upload.sh ${{ secrets.REPORT_PAT }}
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -687,7 +708,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                 run: ./deploy.sh
         """)
 
-      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
       File.rm_rf!(repo)
     end
 
@@ -762,6 +785,671 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
 
       assert [%{severity: :warn, line: 10}] = ResearchExtensions.re001_missing_harden_runner(repo)
 
+      File.rm_rf!(repo)
+    end
+
+    test "does not count the job token, under either spelling" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          labels:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  ALSO: ${{ github.token }}
+                run: gh label list
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "points past the job token to the first real secret" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          mixed:
+            runs-on: ubuntu-latest
+            steps:
+              - run: gh api --token=${{ secrets.GITHUB_TOKEN }}
+              - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        """)
+
+      assert [%{line: 6, reason: reason}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert reason =~ "job `mixed`"
+      File.rm_rf!(repo)
+    end
+  end
+
+  # ─── RE001 with an egress declaration (standards ADR-009) ──────────
+
+  describe "re001_missing_harden_runner/1 with a repo deed" do
+    @smtp_workflow """
+    jobs:
+      notify:
+        runs-on: ubuntu-24.04
+        steps:
+          - uses: hyperpolymath/smtp-notify-action@v0.5.0
+            with:
+              server_address: ${{ secrets.SMTP_HOST }}
+              password: ${{ secrets.SMTP_PASS }}
+    """
+
+    defp write_deed(repo, egress) do
+      File.write!(Path.join(repo, "x_chora.deed"), """
+      ;; SPDX-License-Identifier: CC-BY-SA-4.0
+      (repo-deed :schema-version "1.0.0" :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x" :beholding-chora #u5"estate/chora"
+        #{egress})
+      """)
+    end
+
+    defp smtp_job(secrets) do
+      ~s|(job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+        ~s|:secrets (#{secrets}) :endpoints ("secret:SMTP_HOST") :enforcement none)|
+    end
+
+    test "an exact declaration satisfies the rule" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+
+      write_deed(
+        repo,
+        ~s|(egress :policy "standards ADR-009" #{smtp_job(~s|"SMTP_PASS" "SMTP_HOST"|)})|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "without a declaration the fix names the deed and the exact entry" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "")
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 7
+      assert finding.detail.fix =~ "x_chora.deed"
+      assert finding.detail.fix =~ ~s|:job "notify" :secrets ("SMTP_HOST" "SMTP_PASS")|
+      File.rm_rf!(repo)
+    end
+
+    test "a secret the declaration misses is drift" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "(egress #{smtp_job(~s|"SMTP_HOST"|)})")
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.file == ".github/workflows/notify.yml"
+      assert finding.reason =~ ~s|reads undeclared "SMTP_PASS"|
+      File.rm_rf!(repo)
+    end
+
+    test "a declared secret the job no longer reads is drift" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "(egress #{smtp_job(~s|"SMTP_HOST" "SMTP_PASS" "SMTP_USER"|)})")
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|declares unread "SMTP_USER"|
+      refute finding.reason =~ "reads undeclared"
+      File.rm_rf!(repo)
+    end
+
+    test "a declaration for a job that reads no real secret is stale" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: gh api --token=${{ secrets.GITHUB_TOKEN }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(repo, "(egress #{smtp_job(~s|"SMTP_HOST"|)})")
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.file == "x_chora.deed"
+      assert finding.reason =~ "stale"
+      File.rm_rf!(repo)
+    end
+
+    test "a declaration for a reusable-workflow job is stale" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              uses: org/repo/.github/workflows/mail.yml@v1
+              secrets:
+                host: ${{ secrets.SMTP_HOST }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(repo, "(egress #{smtp_job(~s|"SMTP_HOST"|)})")
+
+      assert [%{file: "x_chora.deed"}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "an unreadable clause declares nothing, and the finding says why" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify"))|)
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "the repo deed declares nothing ((job …) is missing :secrets)"
+      File.rm_rf!(repo)
+    end
+
+    test "harden-runner still satisfies the rule, declared or not" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - uses: step-security/harden-runner@v2
+                - run: send --pass=${{ secrets.SMTP_PASS }}
+          """,
+          "notify.yml"
+        )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+
+      # A declaration is still an attestation: listing the wrong secrets is
+      # drift, at :warn because harden-runner contains the job.
+      write_deed(repo, "(egress #{smtp_job(~s|"SMTP_HOST"|)})")
+
+      assert [%{severity: :warn, reason: reason}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert reason =~ ~s|reads undeclared "SMTP_PASS"|
+      File.rm_rf!(repo)
+    end
+
+    test "a declared harden-runner enforcement must still be installed" do
+      workflow = fn hardener ->
+        """
+        jobs:
+          notify:
+            runs-on: ubuntu-24.04
+            steps:
+        #{hardener}      - run: send --pass=${{ secrets.SMTP_PASS }}
+        """
+      end
+
+      entry =
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+
+      hardened =
+        create_repo_with_workflow(
+          workflow.(
+            "      - uses: step-security/harden-runner@v2\n" <>
+              "        with:\n          egress-policy: block\n"
+          ),
+          "notify.yml"
+        )
+
+      write_deed(hardened, entry)
+      assert ResearchExtensions.re001_missing_harden_runner(hardened) == []
+
+      # The hardener was removed, but the deed still claims block enforcement.
+      bare = create_repo_with_workflow(workflow.(""), "notify.yml")
+      write_deed(bare, entry)
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(bare)
+      assert finding.reason =~ ":enforcement harden-runner-block"
+      assert finding.reason =~ "does not install"
+
+      File.rm_rf!(hardened)
+      File.rm_rf!(bare)
+    end
+
+    test "a declared block enforcement needs egress-policy: block, not audit or the default" do
+      check = fn with_lines ->
+        repo =
+          create_repo_with_workflow(
+            """
+            jobs:
+              notify:
+                runs-on: ubuntu-24.04
+                steps:
+                  - uses: step-security/harden-runner@v2
+            #{with_lines}      - run: send --pass=${{ secrets.SMTP_PASS }}
+            """,
+            "notify.yml"
+          )
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+            ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+        )
+
+        findings = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        findings
+      end
+
+      assert check.("        with:\n          egress-policy: block\n") == []
+      assert check.("        with: {egress-policy: block}\n") == []
+
+      assert [%{reason: audit}] = check.("        with:\n          egress-policy: audit\n")
+      assert audit =~ "runs `egress-policy: audit`"
+
+      # harden-runner audits when no egress-policy is set.
+      assert [%{reason: default}] = check.("")
+      assert default =~ "runs `egress-policy: audit`"
+    end
+
+    test "a quoted job key matches its declaration" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            "notify":
+              runs-on: ubuntu-24.04
+              steps:
+                - run: send --pass=${{ secrets.SMTP_PASS }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "references match the uppercase declaration, and github_token is the job token" do
+      # GitHub matches secret names without regard to case and stores them
+      # uppercase, so secrets.smtp_pass is SMTP_PASS and secrets.github_token
+      # is the job token.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: send --pass=${{ secrets.smtp_pass }} --gh=${{ secrets.github_token }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a lowercase job-token reference alone does not count" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          labels:
+            runs-on: ubuntu-latest
+            steps:
+              - run: gh label list --token=${{ secrets.github_token }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "an egress clause nested in another clause declares nothing and says so" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "(meta (egress #{smtp_job(~s|"SMTP_HOST" "SMTP_PASS"|)}))")
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "(egress …) nested inside another clause"
+      File.rm_rf!(repo)
+    end
+
+    test "the index form and a reference later in an expression are secrets too" do
+      # A declaration listing only VISIBLE must not cover a job that also reads
+      # secrets['HIDDEN'] or a secret after another operand.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: send ${{ secrets.VISIBLE }} ${{ secrets['HIDDEN'] }}
+                - run: other ${{ vars.URL || secrets["LATER"] }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN" "LATER"|
+      File.rm_rf!(repo)
+    end
+
+    test "text inside a string literal is not a secret reference" do
+      # Only secrets.REAL is read; the literals merely contain secret-like text.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ 'secrets.NOT_A_REFERENCE' }}
+                - run: echo ${{ format('{0} secrets[''X''] {1}', "secrets.Y", secrets.REAL) }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("REAL") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "}} inside a literal does not end the expression" do
+      # format() escapes literal braces as {{ }}; HIDDEN is still read.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets.VISIBLE }}
+                - run: echo ${{ format('{{Hello {0}!}}', secrets.HIDDEN) }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN"|
+      File.rm_rf!(repo)
+    end
+
+    test "an expression folded across lines is read whole" do
+      # GitHub folds the scalar and evaluates the whole expression.
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets.VISIBLE }}
+                - run: >-
+                    echo ${{
+                    secrets.HIDDEN
+                    }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN"|
+      File.rm_rf!(repo)
+    end
+
+    test "a finding points at the line of the first secret it reads" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo start
+                - run: >-
+                    echo ${{
+                    secrets.FIRST }} ${{ secrets.SECOND }}
+          """,
+          "notify.yml"
+        )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.line == 8
+      File.rm_rf!(repo)
+    end
+
+    test "drift keeps the job's :high when the credential shares a step with fetched code" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: npm ci && deploy ${{ secrets.VISIBLE }} ${{ secrets.HIDDEN }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :high
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN"|
+      assert finding.reason =~ "in the same step"
+      assert finding.detail.exposures != []
+      File.rm_rf!(repo)
+    end
+
+    test "a secret in the workflow's top-level env is read by every job" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          env:
+            HIDDEN: ${{ secrets.HIDDEN }}
+
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: deploy ${{ secrets.VISIBLE }}
+            other:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo hi
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [drift, other] =
+               repo
+               |> ResearchExtensions.re001_missing_harden_runner()
+               |> Enum.sort_by(& &1.reason)
+
+      assert drift.reason =~ ~s|job `notify`|
+      assert drift.reason =~ ~s|reads undeclared "HIDDEN"|
+      # A job with no secret of its own still inherits HIDDEN.
+      assert other.reason =~ ~s|job `other`|
+      assert other.line == 3
+      File.rm_rf!(repo)
+    end
+
+    test "harden-runner's owner/repo matches without regard to case" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          deploy:
+            runs-on: ubuntu-24.04
+            steps:
+              - uses: Step-Security/Harden-Runner@0000000000000000000000000000000000000000
+              - run: deploy ${{ secrets.KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "the secrets context matches without regard to case" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets.VISIBLE }} ${{ SECRETS.HIDDEN }} ${{ Secrets['LATER'] }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|reads undeclared "HIDDEN" "LATER"|
+      File.rm_rf!(repo)
+    end
+
+    test "a key computed at run time cannot be declared" do
+      for expr <- [
+            "secrets[env.SECRET_NAME]",
+            "toJSON(secrets)",
+            "secrets.*",
+            "fromJSON(SECRETS)[inputs.k]"
+          ] do
+        repo =
+          create_repo_with_workflow(
+            """
+            jobs:
+              notify:
+                runs-on: ubuntu-24.04
+                steps:
+                  - run: echo ${{ secrets.VISIBLE }}
+                  - run: echo ${{ #{expr} }}
+            """,
+            "notify.yml"
+          )
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+            ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+        )
+
+        assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo), expr
+        assert finding.reason =~ "computed at run time", expr
+        assert finding.reason =~ "does not cover it", expr
+        assert finding.line == 6, expr
+        File.rm_rf!(repo)
+      end
+    end
+
+    test "a job reading secrets only by a computed key is still a finding" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ secrets[matrix.key] }}
+          """,
+          "notify.yml"
+        )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "computed at run time"
+      refute finding.reason =~ "does not cover it"
+      File.rm_rf!(repo)
+    end
+
+    test "a property named secrets is not the secrets context" do
+      repo =
+        create_repo_with_workflow(
+          """
+          jobs:
+            notify:
+              runs-on: ubuntu-24.04
+              steps:
+                - run: echo ${{ github.event.client_payload.secrets.NOT_A_SECRET }}
+                - run: echo ${{ steps.my-secrets.outputs.x }} ${{ secrets.REAL }}
+          """,
+          "notify.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
+          ~s|:secrets ("REAL") :endpoints () :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a malformed deed declares nothing" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+
+      # No :schema-version and no separators: not a deed, whatever it says.
+      File.write!(Path.join(repo, "x_chora.deed"), """
+      ;; SPDX-License-Identifier: CC-BY-SA-4.0
+      (repo-deed(egress(job :workflow ".github/workflows/notify.yml" :job "notify" :secrets("SMTP_HOST" "SMTP_PASS") :endpoints() :enforcement none)))
+      """)
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ "the repo deed declares nothing"
+      File.rm_rf!(repo)
+    end
+
+    test "the suggested (job …) entry is a valid deed clause" do
+      repo = create_repo_with_workflow(@smtp_workflow, "notify.yml")
+      write_deed(repo, "")
+
+      [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      [entry] = Regex.run(~r/\(job .*?:enforcement none\)/, finding.detail.fix)
+      write_deed(repo, "(egress #{entry})")
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
       File.rm_rf!(repo)
     end
   end
