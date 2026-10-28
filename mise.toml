@@ -1,5 +1,8 @@
 [tools]
 # Language runtimes
+# Match the OTP 27 / Elixir 1.17 test lane in .github/workflows/tests.yml.
+erlang = "27.3.4.4"
+elixir = "1.17.3-otp-27"
 node = "latest"
 rust = "latest"   # provides cargo, rustfmt and clippy
 go = "latest"     # provides gofmt
