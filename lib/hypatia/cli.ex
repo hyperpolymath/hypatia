@@ -588,7 +588,10 @@ defmodule Hypatia.CLI do
                   :replacement_sha,
                   :replacement,
                   :reusable,
-                  :advisory
+                  :advisory,
+                  :certainty,
+                  :impact,
+                  :gate_effect
                 ])
               )
             end)

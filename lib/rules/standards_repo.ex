@@ -13,8 +13,11 @@ defmodule Hypatia.Rules.StandardsRepo do
   both names. The current name comes first.
   """
 
-  @current "metadatastician/standards"
-  @former ["hyperpolymath/standards"]
+  @standards_move Enum.find(Hypatia.Rules.MovedRepositories.entries(), fn entry ->
+                    entry.repo_id == 1_116_521_501
+                  end)
+  @current @standards_move.current
+  @former [@standards_move.former]
 
   @doc "The repository's current name."
   def current, do: @current

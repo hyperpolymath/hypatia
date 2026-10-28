@@ -98,6 +98,27 @@ just build-all             # Elixir + Rust + Zig FFI + Idris2 ABI
 
 `just --list` shows all 39 recipes; `CONTRIBUTING.md` treats `just` as the canonical entry point.
 
+=== Elixir development
+
+`mise.toml` pins Erlang/OTP and an Elixir build for that OTP, matching the
+OTP 27 / Elixir 1.17 test lane. With mise installed and activated, install and
+bootstrap the Elixir dependencies from the repository root:
+
+[source,bash]
+----
+mise install erlang elixir
+mix local.hex --force
+mix local.rebar --force
+mix deps.get --check-locked
+mix test
+----
+
+Installing the toolchain and Hex does not vendor project dependencies:
+`mix deps.get` needs network access to the configured Hex repository (normally
+`repo.hex.pm`). In a restricted environment, use an approved Hex mirror or a
+pre-populated dependency cache. Do not interpret a failed fetch as a successful
+or clean test run.
+
 == Usage
 
 The escript exposes five commands:
