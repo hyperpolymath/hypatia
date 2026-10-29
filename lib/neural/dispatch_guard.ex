@@ -18,9 +18,24 @@ defmodule Hypatia.Neural.DispatchGuard do
   @doc """
   Apply the neural dispatch safety ceiling to an already routed action.
 
-  `:unavailable` (including a failed coordinator call) permits at most a
-  human-reviewed elimination. `:report_only` and novel findings become
-  control-tier advisories. Unrecognised replies are treated as unavailable.
+  Accepts `{:eliminate, recipe, pattern}`, `{:substitute, recipe, pattern}`
+  or `{:control, pattern}`, with maps for recipes and patterns. Recommendations
+  use atom keys; pass `:unavailable` when the coordinator call fails.
+
+  `%{is_novel: true}` takes precedence over strategy. Novel findings and
+  `%{strategy: :report_only}` return `{:control, pattern}`, discarding any
+  recipe. Otherwise, `%{strategy: :auto_execute}` returns the action unchanged.
+
+  `:unavailable`, `%{strategy: :review}` and unrecognised replies preserve
+  the tier but cap elimination confidence at `0.94`. Lower numeric confidence
+  is preserved; missing or non-numeric confidence becomes `0.0`. The prior
+  value (default `0.0`) is recorded in `"neural_prior_confidence"` on the
+  recipe. Substitution confidence is unchanged.
+
+  Restricted actions record the reason in `"neural_dispatch_guard"` on the
+  pattern and any retained recipe. Unsupported action shapes raise
+  `FunctionClauseError` when a restriction applies; non-map recipes or
+  patterns raise `BadMapError` when accessed.
   """
   def enforce(action, :unavailable), do: review_ceiling(action, "unavailable")
 
