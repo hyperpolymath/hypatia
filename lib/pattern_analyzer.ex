@@ -21,6 +21,7 @@ defmodule Hypatia.PatternAnalyzer do
   alias Hypatia.DispatchManifest
   alias Hypatia.HistoricalTrends
   alias Hypatia.Neural.Coordinator, as: NeuralCoordinator
+  alias Hypatia.Neural.DispatchGuard
   alias Hypatia.ScorecardIngestor
 
   require Logger
@@ -280,11 +281,13 @@ defmodule Hypatia.PatternAnalyzer do
 
       case neural_recommendation(pattern) do
         {:ok, rec} ->
-          apply_neural_recommendation(action, rec)
+          action
+          |> apply_neural_recommendation(rec)
+          |> DispatchGuard.enforce(rec)
 
         :unavailable ->
-          # Neural coordinator not running -- pass through unchanged
-          action
+          # Missing neural checks must not leave auto-execution eligible.
+          DispatchGuard.enforce(action, :unavailable)
       end
     end)
   end
