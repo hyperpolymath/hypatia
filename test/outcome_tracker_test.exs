@@ -55,6 +55,20 @@ defmodule Hypatia.OutcomeTrackerTest do
                %{successes: 1, failures: 1, false_positives: 1, ignored: 4}
     end
 
+    test "import provenance survives in the append-only destination" do
+      source_id = "fleet-replay-test-" <> Integer.to_string(System.unique_integer([:positive]))
+      refute MapSet.member?(OutcomeTracker.imported_fleet_ids(), source_id)
+
+      assert {:ok, record} =
+               OutcomeTracker.record_fleet_outcome(
+                 "recipe-fleet-replay-test", "replay-repo", ".", :failure, source_id, "failed"
+               )
+
+      assert record["fleet_import_id"] == source_id
+      assert record["origin"] == "gitbot-fleet"
+      assert MapSet.member?(OutcomeTracker.imported_fleet_ids(), source_id)
+    end
+
     test "fleet import insists on predicate evidence and matching exit-status outcomes" do
       row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
 
