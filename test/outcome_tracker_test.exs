@@ -57,7 +57,8 @@ defmodule Hypatia.OutcomeTrackerTest do
 
     test "import provenance survives in the append-only destination" do
       source_id = "fleet-replay-test-" <> Integer.to_string(System.unique_integer([:positive]))
-      refute MapSet.member?(OutcomeTracker.imported_fleet_ids(), source_id)
+      assert {:ok, existing_ids} = OutcomeTracker.imported_fleet_ids()
+      refute MapSet.member?(existing_ids, source_id)
 
       assert {:ok, record} =
                OutcomeTracker.record_fleet_outcome(
@@ -66,7 +67,56 @@ defmodule Hypatia.OutcomeTrackerTest do
 
       assert record["fleet_import_id"] == source_id
       assert record["origin"] == "gitbot-fleet"
-      assert MapSet.member?(OutcomeTracker.imported_fleet_ids(), source_id)
+      assert {:ok, imported_ids} = OutcomeTracker.imported_fleet_ids()
+      assert MapSet.member?(imported_ids, source_id)
+    end
+
+    test "distinct identical fleet attempts retain distinct append-only row identities" do
+      payload = ~s({"verdict":"verified","before_hits":2,"after_hits":0,"outcome":"success"})
+
+      first = Hypatia.LearningScheduler.fleet_source_id(payload, 1)
+      second = Hypatia.LearningScheduler.fleet_source_id(payload, 2)
+
+      assert first != second
+      assert first == Hypatia.LearningScheduler.fleet_source_id(payload, 1)
+    end
+
+    test "only postcondition-qualified events may advance learning" do
+      refute OutcomeTracker.qualified_outcome?(%{
+               "outcome" => "success",
+               "verification" => "scan_failed"
+             })
+
+      refute OutcomeTracker.qualified_outcome?(%{
+               "outcome" => "success",
+               "verification" => "unverified"
+             })
+
+      assert OutcomeTracker.qualified_outcome?(%{
+               "outcome" => "success",
+               "verification" => "verified"
+             })
+
+      assert OutcomeTracker.qualified_outcome?(%{
+               "outcome" => "failure",
+               "verification" => "failed"
+             })
+    end
+
+    test "locally observed failed fixer is qualified negative evidence" do
+      recipe_id = "recipe-failed-fixer-" <> Integer.to_string(System.unique_integer([:positive]))
+
+      assert {:ok, record, :not_verified} =
+               OutcomeTracker.record_and_verify(
+                 recipe_id,
+                 "test-repo",
+                 "src/main.rs",
+                 :failure,
+                 verify: false
+               )
+
+      assert record["verification"] == "failed"
+      assert OutcomeTracker.qualified_outcome?(record)
     end
 
     test "fleet import insists on predicate evidence and matching exit-status outcomes" do
