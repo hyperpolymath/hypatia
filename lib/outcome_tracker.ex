@@ -49,6 +49,61 @@ defmodule Hypatia.OutcomeTracker do
               timestamp, bot) are not overwritten by metadata.
   """
   def record_outcome(recipe_id, repo, file, outcome, metadata \\ %{}) do
+    persist_outcome(recipe_id, repo, file, outcome, metadata, true)
+  end
+
+  @doc """
+  Import a postcondition-verified fleet attempt without echoing it into the
+  source fleet log. The provenance id makes repeat imports detectable.
+  """
+  def record_fleet_outcome(recipe_id, repo, file, outcome, source_id, verification) do
+    persist_outcome(
+      recipe_id,
+      repo,
+      file,
+      outcome,
+      %{
+        "fleet_import_id" => source_id,
+        "origin" => "gitbot-fleet",
+        "verification" => verification
+      },
+      false
+    )
+  end
+
+  @doc """
+  IDs already imported from fleet, read from the append-only destination so
+  a scheduler restart cannot turn one attempt into repeated training examples.
+  """
+  def imported_fleet_ids do
+    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+
+    case File.ls(outcomes_dir) do
+      {:ok, files} ->
+        files
+        |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+        |> Enum.flat_map(fn filename ->
+          case File.read(Path.join(outcomes_dir, filename)) do
+            {:ok, data} ->
+              data
+              |> String.split("\n", trim: true)
+              |> Enum.flat_map(fn line ->
+                case Jason.decode(line) do
+                  {:ok, %{"fleet_import_id" => id}} when is_binary(id) -> [id]
+                  _ -> []
+                end
+              end)
+
+            {:error, _} -> []
+          end
+        end)
+        |> MapSet.new()
+
+      {:error, _} -> MapSet.new()
+    end
+  end
+
+  defp persist_outcome(recipe_id, repo, file, outcome, metadata, publish_to_fleet?) do
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     outcome_str = Atom.to_string(outcome)
 
@@ -69,8 +124,8 @@ defmodule Hypatia.OutcomeTracker do
     # Write to verisim-data outcomes (append-only JSONL per month)
     write_outcome_log(record)
 
-    # Write to fleet learning pipeline
-    write_fleet_outcome(record)
+    # Imported fleet evidence must not be copied back to its own input.
+    if publish_to_fleet?, do: write_fleet_outcome(record)
 
     # Update annealing state for this recipe
     update_annealing_state(recipe_id, outcome)
@@ -292,20 +347,30 @@ defmodule Hypatia.OutcomeTracker do
     if Enum.empty?(outcomes) do
       :no_outcomes
     else
-      successes = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "success" end)
-      failures = Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "failure" end)
-
-      false_positives =
-        Enum.count(outcomes, fn o -> Map.get(o, "outcome") == "false_positive" end)
+      counts = qualified_outcome_counts(outcomes)
+      successes = counts.successes
+      failures = counts.failures
+      false_positives = counts.false_positives
 
       recipe_path = find_recipe_file(recipe_id)
 
-      if recipe_path do
+      cond do
+        counts.successes + counts.failures + counts.false_positives == 0 ->
+          :no_verified_outcomes
+
+        recipe_path == nil ->
+          Logger.warning("No recipe file found for #{recipe_id}")
+          :recipe_not_found
+
+        true ->
         case File.read(recipe_path) do
           {:ok, content} ->
             case Jason.decode(content) do
               {:ok, recipe} ->
-                base_confidence = Map.get(recipe, "confidence", 0.5)
+                # Keep a fixed prior: re-evaluation must not treat the previous
+                # posterior as a fresh prior and amplify the same evidence.
+                base_confidence =
+                  Map.get(recipe, "confidence_prior", Map.get(recipe, "confidence", 0.5))
 
                 raw_confidence =
                   bayesian_update(
@@ -323,12 +388,14 @@ defmodule Hypatia.OutcomeTracker do
 
                 updated_recipe =
                   recipe
+                  |> Map.put("confidence_prior", base_confidence)
                   |> Map.put("confidence", Float.round(new_confidence, 4))
                   |> Map.put("confidence_raw", Float.round(raw_confidence, 4))
                   |> Map.put("successful_fixes", successes)
                   |> Map.put("failed_fixes", failures)
                   |> Map.put("false_positives", false_positives)
                   |> Map.put("total_attempts", length(outcomes))
+                  |> Map.put("unqualified_attempts", counts.ignored)
                   |> Map.put("annealing", annealing_summary)
 
                 case Jason.encode(updated_recipe, pretty: true) do
@@ -355,11 +422,27 @@ defmodule Hypatia.OutcomeTracker do
             Logger.error("Failed to read recipe file: #{inspect(reason)}")
             {:error, reason}
         end
-      else
-        Logger.warning("No recipe file found for #{recipe_id}")
-        :recipe_not_found
       end
     end
+  end
+
+  @doc false
+  def qualified_outcome_counts(outcomes) when is_list(outcomes) do
+    Enum.reduce(outcomes, %{successes: 0, failures: 0, false_positives: 0, ignored: 0}, fn row, acc ->
+      case row do
+        %{"outcome" => "success", "verification" => "verified"} ->
+          %{acc | successes: acc.successes + 1}
+
+        %{"outcome" => "failure", "verification" => v} when v in ["failed", "incomplete", "verified"] ->
+          %{acc | failures: acc.failures + 1}
+
+        %{"outcome" => "false_positive", "verification" => v} when v in ["still_present", "verified"] ->
+          %{acc | false_positives: acc.false_positives + 1}
+
+        _ ->
+          %{acc | ignored: acc.ignored + 1}
+      end
+    end)
   end
 
   @doc """
