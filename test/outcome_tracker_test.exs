@@ -39,6 +39,48 @@ defmodule Hypatia.OutcomeTrackerTest do
     end
   end
 
+  describe "trusted fleet evidence" do
+    test "unverified or contradictory successes cannot increase recipe confidence" do
+      rows = [
+        %{"outcome" => "success"},
+        %{"outcome" => "success", "verification" => "unverified"},
+        %{"outcome" => "success", "verification" => "scan_failed"},
+        %{"outcome" => "success", "verification" => "still_present"},
+        %{"outcome" => "success", "verification" => "verified"},
+        %{"outcome" => "failure", "verification" => "incomplete"},
+        %{"outcome" => "false_positive", "verification" => "still_present"}
+      ]
+
+      assert OutcomeTracker.qualified_outcome_counts(rows) ==
+               %{successes: 1, failures: 1, false_positives: 1, ignored: 4}
+    end
+
+    test "fleet import insists on predicate evidence and matching exit-status outcomes" do
+      row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
+
+      assert Hypatia.LearningScheduler.classify_fleet_record(row) == :skip
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "verified", "before_hits" => 2, "after_hits" => 0})
+             ) == {:ok, "recipe-a", "example", ".", :success, "verified"}
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "verified", "before_hits" => 0, "after_hits" => 0})
+             ) == :skip
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.put(row, "verdict", "no_op")
+             ) == :skip
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "failed", "exit_code" => 1, "outcome" => "failure"})
+             ) == {:ok, "recipe-a", "example", ".", :failure, "failed"}
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "incomplete", "after_hits" => 2, "outcome" => "failure"})
+             ) == {:ok, "recipe-a", "example", ".", :failure, "incomplete"}
+      assert Hypatia.LearningScheduler.classify_fleet_record(
+               Map.merge(row, %{"verdict" => "verified", "before_hits" => 1, "after_hits" => 0,
+                                 "bot" => "hypatia"})
+             ) == :skip
+    end
+  end
+
   describe "confidence_trend/1" do
     test "returns insufficient_data for recipe with few outcomes" do
       assert OutcomeTracker.confidence_trend("recipe-nonexistent") == :insufficient_data
