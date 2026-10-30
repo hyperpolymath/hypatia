@@ -363,65 +363,65 @@ defmodule Hypatia.OutcomeTracker do
           :recipe_not_found
 
         true ->
-        case File.read(recipe_path) do
-          {:ok, content} ->
-            case Jason.decode(content) do
-              {:ok, recipe} ->
-                # Keep a fixed prior: re-evaluation must not treat the previous
-                # posterior as a fresh prior and amplify the same evidence.
-                base_confidence =
-                  Map.get(recipe, "confidence_prior", Map.get(recipe, "confidence", 0.5))
+          case File.read(recipe_path) do
+            {:ok, content} ->
+              case Jason.decode(content) do
+                {:ok, recipe} ->
+                  # Keep a fixed prior: re-evaluation must not treat the previous
+                  # posterior as a fresh prior and amplify the same evidence.
+                  base_confidence =
+                    Map.get(recipe, "confidence_prior", Map.get(recipe, "confidence", 0.5))
 
-                raw_confidence =
-                  bayesian_update(
-                    base_confidence,
-                    successes,
-                    failures + false_positives
-                  )
-
-                # Apply temperature-based annealing to the raw confidence.
-                # This flattens confidence toward 0.5 when the recipe has
-                # few outcomes, and lets it sharpen as evidence accumulates.
-                annealing_state = load_annealing_state(recipe_id)
-                new_confidence = ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
-                annealing_summary = ConfidenceAnnealing.summary(annealing_state)
-
-                updated_recipe =
-                  recipe
-                  |> Map.put("confidence_prior", base_confidence)
-                  |> Map.put("confidence", Float.round(new_confidence, 4))
-                  |> Map.put("confidence_raw", Float.round(raw_confidence, 4))
-                  |> Map.put("successful_fixes", successes)
-                  |> Map.put("failed_fixes", failures)
-                  |> Map.put("false_positives", false_positives)
-                  |> Map.put("total_attempts", length(outcomes))
-                  |> Map.put("unqualified_attempts", counts.ignored)
-                  |> Map.put("annealing", annealing_summary)
-
-                case Jason.encode(updated_recipe, pretty: true) do
-                  {:ok, json} ->
-                    File.write!(recipe_path, json <> "\n")
-
-                    Logger.info(
-                      "Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}"
+                  raw_confidence =
+                    bayesian_update(
+                      base_confidence,
+                      successes,
+                      failures + false_positives
                     )
 
-                    {:ok, new_confidence}
+                  # Apply temperature-based annealing to the raw confidence.
+                  # This flattens confidence toward 0.5 when the recipe has
+                  # few outcomes, and lets it sharpen as evidence accumulates.
+                  annealing_state = load_annealing_state(recipe_id)
+                  new_confidence = ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
+                  annealing_summary = ConfidenceAnnealing.summary(annealing_state)
 
-                  {:error, reason} ->
-                    Logger.error("Failed to encode recipe: #{inspect(reason)}")
-                    {:error, reason}
-                end
+                  updated_recipe =
+                    recipe
+                    |> Map.put("confidence_prior", base_confidence)
+                    |> Map.put("confidence", Float.round(new_confidence, 4))
+                    |> Map.put("confidence_raw", Float.round(raw_confidence, 4))
+                    |> Map.put("successful_fixes", successes)
+                    |> Map.put("failed_fixes", failures)
+                    |> Map.put("false_positives", false_positives)
+                    |> Map.put("total_attempts", length(outcomes))
+                    |> Map.put("unqualified_attempts", counts.ignored)
+                    |> Map.put("annealing", annealing_summary)
 
-              {:error, reason} ->
-                Logger.error("Failed to decode recipe: #{inspect(reason)}")
-                {:error, reason}
-            end
+                  case Jason.encode(updated_recipe, pretty: true) do
+                    {:ok, json} ->
+                      File.write!(recipe_path, json <> "\n")
 
-          {:error, reason} ->
-            Logger.error("Failed to read recipe file: #{inspect(reason)}")
-            {:error, reason}
-        end
+                      Logger.info(
+                        "Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}"
+                      )
+
+                      {:ok, new_confidence}
+
+                    {:error, reason} ->
+                      Logger.error("Failed to encode recipe: #{inspect(reason)}")
+                      {:error, reason}
+                  end
+
+                {:error, reason} ->
+                  Logger.error("Failed to decode recipe: #{inspect(reason)}")
+                  {:error, reason}
+              end
+
+            {:error, reason} ->
+              Logger.error("Failed to read recipe file: #{inspect(reason)}")
+              {:error, reason}
+          end
       end
     end
   end
