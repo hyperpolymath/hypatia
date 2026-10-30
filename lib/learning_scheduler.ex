@@ -576,7 +576,7 @@ defmodule Hypatia.LearningScheduler do
     file = if is_binary(file) and file != "", do: file, else: "."
 
     # A legacy "outcome: success" means only that the fixer exited zero.
-    # Require the postcondition verdict AND its independent numeric evidence.
+    # Require the postcondition verdict AND supporting numeric evidence.
     verdict = Map.get(record, "verdict")
     exit_code = Map.get(record, "exit_code")
     before_hits = Map.get(record, "before_hits")
