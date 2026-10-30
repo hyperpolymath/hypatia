@@ -352,7 +352,9 @@ defmodule Hypatia.OutcomeTracker do
       # tell the difference between "verification wasn't attempted" and
       # "verification was attempted and failed".
       {:ok, record} =
-        record_outcome(recipe_id, repo, file, outcome, %{"verification" => "unverified"})
+        record_outcome(recipe_id, repo, file, outcome, %{
+          "verification" => if(outcome == :failure, do: "failed", else: "unverified")
+        })
 
       {:ok, record, :not_verified}
     end
@@ -376,8 +378,6 @@ defmodule Hypatia.OutcomeTracker do
       recipe_path = find_recipe_file(recipe_id)
 
       cond do
-        counts.successes + counts.failures + counts.false_positives == 0 ->
-          :no_verified_outcomes
 
         recipe_path == nil ->
           Logger.warning("No recipe file found for #{recipe_id}")
@@ -393,18 +393,25 @@ defmodule Hypatia.OutcomeTracker do
                   base_confidence =
                     Map.get(recipe, "confidence_prior", Map.get(recipe, "confidence", 0.5))
 
+                  qualified_total = successes + failures + false_positives
+
                   raw_confidence =
-                    bayesian_update(
-                      base_confidence,
-                      successes,
-                      failures + false_positives
-                    )
+                    if qualified_total == 0 do
+                      base_confidence
+                    else
+                      bayesian_update(base_confidence, successes, failures + false_positives)
+                    end
 
                   # Apply temperature-based annealing to the raw confidence.
                   # This flattens confidence toward 0.5 when the recipe has
                   # few outcomes, and lets it sharpen as evidence accumulates.
                   annealing_state = load_annealing_state(recipe_id)
-                  new_confidence = ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
+                  new_confidence =
+                    if qualified_total == 0 do
+                      base_confidence
+                    else
+                      ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
+                    end
                   annealing_summary = ConfidenceAnnealing.summary(annealing_state)
 
                   updated_recipe =
