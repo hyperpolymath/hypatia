@@ -277,13 +277,15 @@ defmodule Hypatia.PatternAnalyzer do
   # static confidence when the neural prediction is lower (conservative adjustment).
   defp enhance_with_neural(routed_actions) do
     Enum.map(routed_actions, fn action ->
-      pattern = extract_pattern(action)
+      pattern = neural_context(action)
 
       case neural_recommendation(pattern) do
         {:ok, rec} ->
+          # Guard the original action first so its original recipe confidence
+          # survives in the audit trail, before a conservative neural adjustment.
           action
-          |> apply_neural_recommendation(rec)
           |> DispatchGuard.enforce(rec)
+          |> apply_neural_recommendation(rec)
 
         :unavailable ->
           # Missing neural checks must not leave auto-execution eligible.
@@ -322,8 +324,10 @@ defmodule Hypatia.PatternAnalyzer do
   defp apply_neural_recommendation(
          {:eliminate, recipe, pattern},
          %{confidence: neural_conf} = rec
-       ) do
+       )
+       when is_number(neural_conf) and neural_conf >= 0.0 and neural_conf <= 1.0 do
     recipe_conf = Map.get(recipe, "confidence", 0.0)
+    prior_conf = Map.get(recipe, "neural_prior_confidence", recipe_conf)
 
     # Only let neural confidence override if it's meaningfully trained.
     # Untrained MoE returns sigmoid(1.0) ~= 0.73 -- don't let that drag down
@@ -335,6 +339,7 @@ defmodule Hypatia.PatternAnalyzer do
     updated_recipe =
       recipe
       |> Map.put("confidence", effective_conf)
+      |> Map.put("neural_prior_confidence", prior_conf)
       |> Map.put("neural_confidence", neural_conf)
       |> Map.put("preferred_bots", Map.get(rec, :preferred_bots, []))
 
@@ -354,6 +359,21 @@ defmodule Hypatia.PatternAnalyzer do
   end
 
   defp apply_neural_recommendation(action, _rec), do: action
+
+  # The matched recipe, not just the registry pattern, owns the recipe ID
+  # used for annealing. Registry patterns can contain a nil recipe_id.
+  defp neural_context({tier, recipe, pattern})
+       when tier in [:eliminate, :substitute] and is_map(recipe) and is_map(pattern) do
+    case Map.get(recipe, "id") do
+      id when is_binary(id) and byte_size(id) > 0 ->
+        Map.put(pattern, "recipe_id", id)
+
+      _ ->
+        pattern
+    end
+  end
+
+  defp neural_context(action), do: extract_pattern(action)
 
   defp extract_pattern({:eliminate, _recipe, pattern}), do: pattern
   defp extract_pattern({:substitute, _recipe, pattern}), do: pattern
