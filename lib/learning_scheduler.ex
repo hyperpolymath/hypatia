@@ -542,14 +542,18 @@ defmodule Hypatia.LearningScheduler do
                       end
                     end)
                     |> Enum.reject(&is_nil/1)
+                   # Imported fleet entries are already handled by the source
+                   # poll. Do not account for them again on the next local poll.
+                   local_records =
+                     Enum.reject(new_records, &(Map.get(&1, "origin") == "gitbot-fleet"))
 
-                  new_recipe_ids =
-                    new_records
-                    |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
+                   new_recipe_ids =
+                     local_records
+                     |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
                     |> Enum.reject(&is_nil/1)
                     |> MapSet.new()
 
-                  {Map.put(positions, file, size), count + length(new_records),
+                  {Map.put(positions, file, size), count + length(local_records),
                    MapSet.union(recipes, new_recipe_ids)}
 
                 {:error, _} ->
@@ -605,6 +609,14 @@ defmodule Hypatia.LearningScheduler do
 
   def classify_fleet_record(_record), do: :skip
 
+  @doc false
+  def fleet_source_id(line, line_number) when is_binary(line) and is_integer(line_number) do
+    # Append-only line identity disambiguates distinct identical attempts.
+    # A future producer event_id will supersede this provisional locator.
+    :crypto.hash(:sha256, "fleet-jsonl-v1:" <> Integer.to_string(line_number) <> ":" <> line)
+    |> Base.encode16(case: :lower)
+  end
+
   defp ingest_fleet_outcomes(previous_signature) do
     fleet_file =
       Path.join([
@@ -619,49 +631,71 @@ defmodule Hypatia.LearningScheduler do
         if signature == previous_signature do
           {0, signature}
         else
-          # The canonical destination log is the de-duplication ledger. Loading
-          # IDs again after a restart prevents re-importing already recorded
-          # attempts even if we crashed before advancing this in-memory cursor.
-          known_ids = Hypatia.OutcomeTracker.imported_fleet_ids()
-
-          {_seen, imported} =
-            content
-            |> String.split("\n", trim: true)
-            |> Enum.reduce({known_ids, 0}, fn line, {seen, count} ->
-              case Jason.decode(line) do
-                {:ok, record} ->
-                  case classify_fleet_record(record) do
-                    {:ok, recipe_id, repo, file, outcome, verification} ->
-                      source_id =
-                        :crypto.hash(:sha256, Jason.encode!(record))
-                        |> Base.encode16(case: :lower)
-
-                      if MapSet.member?(seen, source_id) do
-                        {seen, count}
-                      else
-                        {:ok, _} =
-                          Hypatia.OutcomeTracker.record_fleet_outcome(
-                            recipe_id, repo, file, outcome, source_id, verification
-                          )
-
-                        {MapSet.put(seen, source_id), count + 1}
-                      end
-
-                    :skip ->
-                      {seen, count}
-                  end
+          case Hypatia.OutcomeTracker.imported_fleet_ids() do
+            {:ok, known_ids} ->
+              case import_fleet_lines(content, known_ids) do
+                {:ok, imported} -> {imported, signature}
 
                 {:error, reason} ->
-                  Logger.warning("LearningScheduler: invalid fleet JSONL row: #{inspect(reason)}")
-                  {seen, count}
+                  Logger.warning("LearningScheduler: fleet import not acknowledged: #{inspect(reason)}")
+                  {0, previous_signature}
               end
-            end)
 
-          {imported, signature}
+            {:error, reason} ->
+              Logger.warning("LearningScheduler: cannot read imported IDs: #{inspect(reason)}")
+              {0, previous_signature}
+          end
         end
 
-      {:error, _} ->
+      {:error, :enoent} ->
         {0, previous_signature}
+
+      {:error, reason} ->
+        Logger.warning("LearningScheduler: cannot read fleet file: #{inspect(reason)}")
+        {0, previous_signature}
+    end
+  end
+
+  defp import_fleet_lines(content, known_ids) do
+    content
+    |> String.split("\n", trim: false)
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, known_ids, 0}, fn {line, line_number}, {:ok, seen, count} ->
+      if String.trim(line) == "" do
+        {:cont, {:ok, seen, count}}
+      else
+        case Jason.decode(line) do
+          {:ok, record} ->
+            case classify_fleet_record(record) do
+              {:ok, recipe_id, repo, file, outcome, verification} ->
+                id = fleet_source_id(line, line_number)
+
+                if MapSet.member?(seen, id) do
+                  {:cont, {:ok, seen, count}}
+                else
+                  case Hypatia.OutcomeTracker.record_fleet_outcome(
+                         recipe_id, repo, file, outcome, id, verification
+                       ) do
+                    {:ok, _record} ->
+                      {:cont, {:ok, MapSet.put(seen, id), count + 1}}
+
+                    {:error, reason} ->
+                      {:halt, {:error, {:write_failed, line_number, reason}}}
+                  end
+                end
+
+              :skip ->
+                {:cont, {:ok, seen, count}}
+            end
+
+          {:error, reason} ->
+            {:halt, {:error, {:invalid_fleet_jsonl, line_number, reason}}}
+        end
+      end
+    end)
+    |> case do
+      {:ok, _seen, count} -> {:ok, count}
+      error -> error
     end
   end
 
