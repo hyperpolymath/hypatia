@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 #
-# Independent CI/CD steward canary. The hard chains job fails closed on
-# cycles, dead upstreams, and tool errors; the optional fight report is
-# advisory only, never --apply or an override of a required check.
-# This checks the repo on PRs, pushes, and periodically for upstream drift.
+# Independent squabbler canary: use the same-owner, commit-pinned action.
+# Cross-owner reusable startup is blocked in this caller's effective Actions
+# policy; this avoids silently equating a zero-job startup_failure to green.
+# No administration token, no --apply, and no write permissions.
 name: CICD Squabbler
 
 on:
@@ -21,16 +21,52 @@ concurrency:
 
 permissions:
   contents: read
+  attestations: read
 
 jobs:
-  squabbler:
-    name: Squabbler gate and advisory
-    permissions:
-      contents: read
-      pull-requests: read
-      attestations: read
-    uses: metadatastician/standards/.github/workflows/cicd-squabbler-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
-    with:
-      pr-number: ${{ github.event.pull_request.number && format('{0}', github.event.pull_request.number) || '' }}
-    secrets:
-      ADMINISTRATION_READ_TOKEN: ${{ secrets.HYPATIA_SCAN_PAT }}
+  chains:
+    name: Squabble chains (hard gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository at the event SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned and attested squabble
+        id: squabble
+        uses: hyperpolymath/cicd-squabbler/.github/actions/squabble@1ab1507a424c9edfe6cb53dea4e33a2f3cc558e3
+        with:
+          args: ""
+
+      - name: Audit dependency chains (fail closed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SQUABBLE_BIN: ${{ steps.squabble.outputs.path }}
+        run: |
+          set -uo pipefail
+          if [ ! -x "$SQUABBLE_BIN" ]; then
+            echo "::error::Pinned squabble did not install"
+            exit 1
+          fi
+          rc=0
+          "$SQUABBLE_BIN" chains ".=$REPO" --follow 1 | tee "$RUNNER_TEMP/squabble-chains.txt" || rc=$?
+          {
+            echo "### Squabble chains"
+            echo
+            echo '~~~'
+            cat "$RUNNER_TEMP/squabble-chains.txt"
+            echo '~~~'
+            echo
+            echo "Exit code: $rc; no remediation was applied."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -eq 4 ]; then
+            echo "::error::Cycle or dead upstream blocked the CI dependency graph"
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Squabble could not establish the CI dependency graph (exit $rc)"
+            exit 1
+          fi
