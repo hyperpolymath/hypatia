@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
+#
+# Independent CI/CD steward canary. The hard chains job fails closed on
+# cycles, dead upstreams, and tool errors; the optional fight report is
+# advisory only, never --apply or an override of a required check.
+# This checks the repo on PRs, pushes, and periodically for upstream drift.
+name: CICD Squabbler
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: squabbler-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  squabbler:
+    name: Squabbler gate and advisory
+    permissions:
+      contents: read
+      pull-requests: read
+      attestations: read
+    uses: metadatastician/standards/.github/workflows/cicd-squabbler-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
+    with:
+      pr-number: ${{ github.event.pull_request.number && format('{0}', github.event.pull_request.number) || '' }}
+    secrets:
+      ADMINISTRATION_READ_TOKEN: ${{ secrets.HYPATIA_SCAN_PAT }}
