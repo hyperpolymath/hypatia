@@ -66,6 +66,7 @@ defmodule Hypatia.LearningScheduler do
       last_run: nil,
       # filename => byte offset of last read
       last_outcome_positions: %{},
+      pending_confidence_recipes: MapSet.new(),
       # A restarted scheduler rechecks persisted source IDs, not just this cache.
       last_fleet_signature: nil,
       total_outcomes_processed: 0,
@@ -118,7 +119,8 @@ defmodule Hypatia.LearningScheduler do
     {fleet_outcomes_count, fleet_signature} =
       ingest_fleet_outcomes(state.last_fleet_signature)
 
-    confidence_updates = update_affected_recipes(recipe_ids)
+    {confidence_updates, pending_confidence_recipes} =
+      update_affected_recipes(MapSet.union(recipe_ids, state.pending_confidence_recipes))
 
     report_confidence_drift()
 
@@ -198,6 +200,7 @@ defmodule Hypatia.LearningScheduler do
       state
       | last_run: now,
         last_outcome_positions: new_positions,
+        pending_confidence_recipes: pending_confidence_recipes,
         last_fleet_signature: fleet_signature,
         total_outcomes_processed: state.total_outcomes_processed + total,
         total_confidence_updates: state.total_confidence_updates + confidence_updates,
@@ -548,7 +551,7 @@ defmodule Hypatia.LearningScheduler do
                      Enum.reject(new_records, &(Map.get(&1, "origin") == "gitbot-fleet"))
 
                    new_recipe_ids =
-                     local_records
+                     new_records
                      |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
                     |> Enum.reject(&is_nil/1)
                     |> MapSet.new()
@@ -712,15 +715,19 @@ defmodule Hypatia.LearningScheduler do
   # --- Update confidence for all affected recipes ---
 
   defp update_affected_recipes(recipe_ids) do
-    recipe_ids
-    |> MapSet.to_list()
-    |> Enum.map(fn recipe_id ->
+    Enum.reduce(recipe_ids, {0, MapSet.new()}, fn recipe_id, {count, pending} ->
       case Hypatia.OutcomeTracker.update_recipe_confidence(recipe_id) do
-        {:ok, _confidence} -> 1
-        _ -> 0
+        {:ok, _confidence} ->
+          {count + 1, pending}
+
+        :no_outcomes ->
+          {count, pending}
+
+        error ->
+          Logger.warning("LearningScheduler: confidence update deferred for #{recipe_id}: #{inspect(error)}")
+          {count, MapSet.put(pending, recipe_id)}
       end
     end)
-    |> Enum.sum()
   end
 
   # --- Report any recipes with concerning confidence drift ---
