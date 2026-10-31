@@ -133,6 +133,9 @@ defmodule Hypatia.CrossRepoLearning do
 
   # --- Public API ---
 
+  @doc false
+  def qualified_rows(rows) when is_list(rows), do: Enum.filter(rows, &Hypatia.OutcomeTracker.qualified_outcome?/1)
+
   @doc """
   Get blended confidence for a recipe in a specific repo.
 
@@ -146,7 +149,7 @@ defmodule Hypatia.CrossRepoLearning do
   @spec repo_confidence(String.t(), String.t(), drift_policy()) :: repo_confidence()
   def repo_confidence(recipe_id, repo, policy \\ :moderate) do
     # Load local outcomes for this recipe in this repo
-    local_outcomes = load_repo_outcomes(recipe_id, repo)
+    local_outcomes = load_repo_outcomes(recipe_id, repo) |> qualified_rows()
     local_count = length(local_outcomes)
 
     local_confidence =
@@ -188,7 +191,7 @@ defmodule Hypatia.CrossRepoLearning do
   """
   @spec repos_with_fix(String.t()) :: [{String.t(), non_neg_integer(), non_neg_integer()}]
   def repos_with_fix(recipe_id) do
-    all_outcomes = load_all_outcomes_for_recipe(recipe_id)
+    all_outcomes = load_all_outcomes_for_recipe(recipe_id) |> qualified_rows()
 
     all_outcomes
     |> Enum.group_by(&Map.get(&1, "repo"))
@@ -212,7 +215,7 @@ defmodule Hypatia.CrossRepoLearning do
   """
   @spec detect_ecosystem_anomalies() :: [map()]
   def detect_ecosystem_anomalies do
-    recent_outcomes = load_recent_outcomes(@anomaly_time_window_hours)
+    recent_outcomes = load_recent_outcomes(@anomaly_time_window_hours) |> qualified_rows()
 
     recipe_anomalies = detect_recipe_anomalies(recent_outcomes)
     language_anomalies = detect_language_anomalies(recent_outcomes)
@@ -256,7 +259,8 @@ defmodule Hypatia.CrossRepoLearning do
               end
             end)
             |> Stream.reject(&is_nil/1)
-            |> Enum.reduce(acc, fn record, idx ->
+            |> Stream.filter(&Hypatia.OutcomeTracker.qualified_outcome?/1)
+             |> Enum.reduce(acc, fn record, idx ->
               repo = Map.get(record, "repo", "unknown")
               recipe = Map.get(record, "recipe_id", Map.get(record, "pattern", "unknown"))
               outcome = Map.get(record, "outcome", "unknown")
