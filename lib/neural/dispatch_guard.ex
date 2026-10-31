@@ -16,8 +16,12 @@ defmodule Hypatia.Neural.DispatchGuard do
   @review_ceiling 0.94
 
   @doc """
-  Build the coordinator input from a routed action. The matched recipe's ID
-  is authoritative for annealing when the registry pattern has none.
+  Build the coordinator input from a routed action.
+
+  For elimination and substitution actions, a non-empty binary recipe ID
+  replaces the pattern's `"recipe_id"`; otherwise the pattern is unchanged.
+  Control actions return their pattern unchanged. Unsupported action shapes
+  raise `FunctionClauseError`.
   """
   def recommendation_context({tier, recipe, pattern})
       when tier in [:eliminate, :substitute] and is_map(recipe) and is_map(pattern) do
@@ -39,15 +43,21 @@ defmodule Hypatia.Neural.DispatchGuard do
   or `{:control, pattern}`, with maps for recipes and patterns. Recommendations
   use atom keys; pass `:unavailable` when the coordinator call fails.
 
-  `%{strategy: :auto_execute}` only passes unchanged when it also provides\n  bounded confidence, an explicit non-novel flag and blackboard/annealing\n  metadata. Missing fields fail to the review ceiling.\n\n  `%{is_novel: true}` takes precedence over strategy. Novel findings and
+  `%{is_novel: true}` takes precedence over strategy. Novel findings and
   `%{strategy: :report_only}` return `{:control, pattern}`, discarding any
-  recipe. Otherwise, `%{strategy: :auto_execute}` returns the action unchanged.
+  recipe. An `:auto_execute` recommendation passes the action unchanged only
+  when its confidence is between `0.95` and `1.0` inclusive, `is_novel` is
+  false, `architecture` is `:blackboard`, `networks_consulted` is a positive
+  integer and `annealing_clamped` is false. Elimination also requires numeric
+  recipe confidence between `0.0` and `1.0` inclusive.
 
-  `:unavailable`, `%{strategy: :review}` and unrecognised replies preserve
-  the tier but cap elimination confidence at `0.94`. Lower numeric confidence
-  is preserved; missing or non-numeric confidence becomes `0.0`. The prior
-  value (default `0.0`) is recorded in `"neural_prior_confidence"` on the
-  recipe. Substitution confidence is unchanged.
+  `:unavailable`, `%{strategy: :review}`, invalid auto-execute recommendations
+  and unrecognised replies preserve the tier but cap elimination confidence at
+  `0.94`. The same ceiling applies when an otherwise valid auto-execute
+  recommendation has invalid elimination recipe confidence. Lower numeric
+  confidence is preserved; missing or non-numeric
+  confidence becomes `0.0`. The prior value (default `0.0`) is recorded in
+  `"neural_prior_confidence"` on the recipe. Substitution confidence is unchanged.
 
   Restricted actions record the reason in `"neural_dispatch_guard"` on the
   pattern and any retained recipe. Unsupported action shapes raise
