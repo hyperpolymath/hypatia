@@ -47,7 +47,7 @@ jobs:
       WINDOW_MIN: ${{ inputs.window_min || '45' }}   # look-back window (> cron interval for overlap)
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           # The App token mint and every gh call go to the GitHub API.
