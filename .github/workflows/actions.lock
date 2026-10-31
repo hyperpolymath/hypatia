@@ -15,6 +15,9 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'dtolnay/rust-toolchain@v1'
         - 'taiki-e/install-action@v2.88.0'
+    '.github/workflows/cicd-squabbler.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'hyperpolymath/cicd-squabbler@1ab1507a424c9edfe6cb53dea4e33a2f3cc558e3'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
         - 'step-security/harden-runner@v2.22.3'
