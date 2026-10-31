@@ -16,6 +16,27 @@ defmodule Hypatia.Neural.DispatchGuard do
   @review_ceiling 0.94
 
   @doc """
+  Build the coordinator input from a routed action.
+
+  For elimination and substitution actions, a non-empty binary recipe ID
+  replaces the pattern's `"recipe_id"`; otherwise the pattern is unchanged.
+  Control actions return their pattern unchanged. Unsupported action shapes
+  raise `FunctionClauseError`.
+  """
+  def recommendation_context({tier, recipe, pattern})
+      when tier in [:eliminate, :substitute] and is_map(recipe) and is_map(pattern) do
+    case Map.get(recipe, "id") do
+      id when is_binary(id) and byte_size(id) > 0 ->
+        Map.put(pattern, "recipe_id", id)
+
+      _ ->
+        pattern
+    end
+  end
+
+  def recommendation_context({:control, pattern}), do: pattern
+
+  @doc """
   Apply the neural dispatch safety ceiling to an already routed action.
 
   Accepts `{:eliminate, recipe, pattern}`, `{:substitute, recipe, pattern}`
@@ -24,13 +45,19 @@ defmodule Hypatia.Neural.DispatchGuard do
 
   `%{is_novel: true}` takes precedence over strategy. Novel findings and
   `%{strategy: :report_only}` return `{:control, pattern}`, discarding any
-  recipe. Otherwise, `%{strategy: :auto_execute}` returns the action unchanged.
+  recipe. An `:auto_execute` recommendation passes the action unchanged only
+  when its confidence is between `0.95` and `1.0` inclusive, `is_novel` is
+  false, `architecture` is `:blackboard`, `networks_consulted` is a positive
+  integer and `annealing_clamped` is false. Elimination also requires numeric
+  recipe confidence between `0.0` and `1.0` inclusive.
 
-  `:unavailable`, `%{strategy: :review}` and unrecognised replies preserve
-  the tier but cap elimination confidence at `0.94`. Lower numeric confidence
-  is preserved; missing or non-numeric confidence becomes `0.0`. The prior
-  value (default `0.0`) is recorded in `"neural_prior_confidence"` on the
-  recipe. Substitution confidence is unchanged.
+  `:unavailable`, `%{strategy: :review}`, invalid auto-execute recommendations
+  and unrecognised replies preserve the tier but cap elimination confidence at
+  `0.94`. The same ceiling applies when an otherwise valid auto-execute
+  recommendation has invalid elimination recipe confidence. Lower numeric
+  confidence is preserved; missing or non-numeric
+  confidence becomes `0.0`. The prior value (default `0.0`) is recorded in
+  `"neural_prior_confidence"` on the recipe. Substitution confidence is unchanged.
 
   Restricted actions record the reason in `"neural_dispatch_guard"` on the
   pattern and any retained recipe. Unsupported action shapes raise
@@ -42,7 +69,48 @@ defmodule Hypatia.Neural.DispatchGuard do
   def enforce(action, %{is_novel: true}), do: control(action, "novel")
   def enforce(action, %{strategy: :report_only}), do: control(action, "report_only")
   def enforce(action, %{strategy: :review}), do: review_ceiling(action, "review")
-  def enforce(action, %{strategy: :auto_execute}), do: action
+  # A high-confidence coordinator verdict is only structurally valid when it
+  # carries the complete routing context. This does not yet attest that its
+  # neural models have been evaluated; a separate readiness gate is required.
+  def enforce(
+        {:eliminate, recipe, _pattern} = action,
+        %{
+          strategy: :auto_execute,
+          confidence: confidence,
+          is_novel: false,
+          architecture: :blackboard,
+          networks_consulted: networks,
+          annealing_clamped: false
+        }
+      )
+      when is_number(confidence) and confidence >= 0.95 and confidence <= 1.0 and
+             is_integer(networks) and networks > 0 do
+    case Map.get(recipe, "confidence") do
+      value when is_number(value) and value >= 0.0 and value <= 1.0 ->
+        action
+
+      _ ->
+        review_ceiling(action, "invalid_recipe_confidence")
+    end
+  end
+
+  def enforce(
+        action,
+        %{
+          strategy: :auto_execute,
+          confidence: confidence,
+          is_novel: false,
+          architecture: :blackboard,
+          networks_consulted: networks,
+          annealing_clamped: false
+        }
+      )
+      when is_number(confidence) and confidence >= 0.95 and confidence <= 1.0 and
+             is_integer(networks) and networks > 0,
+      do: action
+
+  def enforce(action, %{strategy: :auto_execute}),
+    do: review_ceiling(action, "invalid_recommendation")
   def enforce(action, _unexpected), do: review_ceiling(action, "invalid_recommendation")
 
   defp review_ceiling({:eliminate, recipe, pattern}, reason) do
