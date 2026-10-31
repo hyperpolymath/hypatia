@@ -55,6 +55,33 @@ fixture "$TMP/prhead"
 sed -i 's@hypatia-ref:.*@hypatia-ref: ${{ github.event.pull_request.head.sha }}@' "$TMP/prhead/.github/workflows/hypatia-scan.yml"
 expect_outcome pr-head-scanner 1 fail --root "$TMP/prhead"
 
+# Negative 5: a 40-hex string in a comment must not disguise a floating
+# scanner value (github.sha on pull_request is the PR merge commit).
+fixture "$TMP/comment-sha"
+sed -i 's@hypatia-ref:.*@hypatia-ref: ${{ github.sha }} # 0000000000000000000000000000000000000000@' "$TMP/comment-sha/.github/workflows/hypatia-scan.yml"
+expect_outcome comment-disguised-scanner 1 fail --root "$TMP/comment-sha"
+
+# Negative 6: a second standards reusable job in one caller, pinned to a
+# different revision, must not hide behind the first job's pin.
+fixture "$TMP/second-job"
+cat >> "$TMP/second-job/.github/workflows/governance.yml" <<'YAML'
+  second:
+    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@1111111111111111111111111111111111111111
+YAML
+expect_outcome second-job-divergent 1 fail --root "$TMP/second-job"
+
+# Negative 7: dangling transitive lock record — a nested uses: with no
+# exact top-level dependency entry (the PR #992 download-artifact case).
+fixture "$TMP/dangling"
+sed -i "s|            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'|            - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'\n            - 'acme/missing@2222222222222222222222222222222222222222'|" \
+  "$TMP/dangling/.github/workflows/actions.lock"
+expect_outcome dangling-transitive 1 fail --root "$TMP/dangling"
+
+# Positive 2: an inline comment after a valid pin is not part of the ref.
+fixture "$TMP/inline-comment"
+sed -i -E 's|(uses:.*@[0-9a-f]{40})$|\1 # pinned standards revision|' "$TMP/inline-comment/.github/workflows/scorecard.yml"
+expect_outcome inline-comment-pin 0 pass --root "$TMP/inline-comment"
+
 # Unavailable tool: remote verification requested but gh absent from PATH.
 # Build a PATH with only the checker's offline tools — no gh. The checker
 # must say unavailable (exit 3), never pass.
@@ -73,5 +100,19 @@ if printf '%s' "$out" | grep -q 'outcome=pass'; then
   exit 1
 fi
 echo "ok(unavailable-tool): rc=$rc $out"
+
+# Unavailable tool 2: an offline core tool (sort) missing must also be
+# exit 3 / unavailable, not misreported as divergent pins (exit 1).
+mkdir -p "$TMP/nosort"
+for t in bash grep sed awk head env; do
+  src=$(command -v "$t" || true); [ -n "$src" ] && ln -s "$src" "$TMP/nosort/$t"
+done
+rc=0
+out=$(PATH="$TMP/nosort" "$TMP/nosort/bash" "$CHECK" --root "$ROOT" 2>&1) || rc=$?
+if [ "$rc" != "3" ] || ! printf '%s' "$out" | grep -q 'outcome=unavailable'; then
+  echo "FAIL(unavailable-sort): want rc=3 outcome=unavailable, got rc=$rc: $out" >&2
+  exit 1
+fi
+echo "ok(unavailable-sort): rc=$rc $out"
 
 echo "PASS: standards-integration positive, negative and unavailable-tool cases"

@@ -129,7 +129,12 @@ vetted default SHA (`adb2f41…`) unless a caller canaries `HEAD`, and
 stage their policy helpers from `job.workflow_sha` — the exact commit
 the caller pinned.
 
-Consumer snippet (all five callers move together):
+Hypatia-specific example (other consumers should omit `hypatia-ref` and use
+the reusable's vetted default Hypatia revision; the expression below resolves
+in this repository, not in arbitrary consumer repositories). All five
+Hypatia callers move together. Caller-specific permissions are checked in
+`.github/workflows/{governance,hypatia-scan,mirror,scorecard,secret-scanner}.yml`;
+the examples below are not a universal permission block.
 
 [source,yaml]
 ----
@@ -151,6 +156,34 @@ jobs:
     secrets:   # only the declared secret; never `secrets: inherit`
       HYPATIA_SCAN_PAT: ${{ secrets.HYPATIA_SCAN_PAT }}
 ----
+
+These two snippets do not imply shared permissions across the five callers.
+The checked-in permission contracts differ intentionally:
+
+[cols="1,2",options="header"]
+|===
+| Caller | Reusable-job permissions
+
+| `governance.yml`
+| `actions: read`, `contents: read`, `security-events: write`
+
+| `hypatia-scan.yml`
+| `actions: read`, `contents: read`, `security-events: write`
+
+| `mirror.yml`
+| `actions: read`, `contents: read`, `security-events: write` (as declared on the reusable job)
+
+| `scorecard.yml`
+| `actions: read`, `contents: read`, `security-events: write`, `id-token: write`
+
+| `secret-scanner.yml`
+| `security-events: write`, `contents: read`, `pull-requests: write`, `actions: read`
+|===
+
+Use the actual caller workflow as the authority when adopting only one lane;
+do not copy a permission set from another caller. `hypatia-scan.yml` passes
+only the declared optional `HYPATIA_SCAN_PAT`; `mirror.yml` passes only its
+seven per-forge keys. The other three declare no secrets.
 
 Then regenerate `.github/workflows/actions.lock` with
 `gh actions-lock` in the same PR (never hand-edit it) and run:

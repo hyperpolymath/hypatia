@@ -42,6 +42,8 @@ jobs:
           git checkout -q FETCH_HEAD
 
       - name: Run integration contract tests (positive, negative, unavailable-tool)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           rc=0
@@ -54,4 +56,14 @@ jobs:
             echo "::error::Standards-integration contract failed (exit $rc, category=config)"
             exit 1
           fi
-          echo "outcome=pass category=findings-channel-ready (contract only; not a scan result)" >> "$GITHUB_STEP_SUMMARY"
+          rc=0
+          bash scripts/standards-integration/check-standards-integration.sh --root . --verify-remote || rc=$?
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::Published pin could not be verified (exit 3) — not a pass"
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Standards integration contract failed remote verification (exit $rc)"
+            exit 1
+          fi
+          echo "outcome=pass category=findings-channel-ready (contract + published pin verified; not a scan result)" >> "$GITHUB_STEP_SUMMARY"
