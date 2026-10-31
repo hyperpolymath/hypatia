@@ -27,6 +27,9 @@ defmodule Hypatia.OutcomeTracker do
   @prior_strength 10
   @confidence_cap 0.99
   @confidence_floor 0.10
+  # Bump when the admissible-evidence definition changes. Legacy states
+  # without this marker are NOT trusted even if the counts happen to match.
+  @annealing_evidence_version 1
 
   # Path for persisted annealing states (per-recipe temperature tracking)
   @annealing_state_path Application.compile_env(
@@ -1048,8 +1051,11 @@ defmodule Hypatia.OutcomeTracker do
     case File.read(annealing_state_path(recipe_id)) do
       {:ok, content} ->
         case Jason.decode(content) do
-          {:ok, data} -> deserialize_annealing_state(data)
-          {:error, _} -> nil
+          {:ok, %{"qualification_version" => @annealing_evidence_version} = data} ->
+            deserialize_annealing_state(data)
+
+          _ ->
+            nil
         end
 
       {:error, _} -> nil
@@ -1063,6 +1069,7 @@ defmodule Hypatia.OutcomeTracker do
     File.mkdir_p!(dir)
 
     serialized = %{
+      "qualification_version" => @annealing_evidence_version,
       "temperature" => state.temperature,
       "outcome_count" => state.outcome_count,
       "stage" => Atom.to_string(state.stage),
