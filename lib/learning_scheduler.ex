@@ -657,8 +657,10 @@ defmodule Hypatia.LearningScheduler do
   end
 
   defp import_fleet_lines(content, known_ids) do
-    content
-    |> String.split("\n", trim: false)
+    lines = String.split(content, "\n", trim: false)
+    final_line = length(lines)
+
+    lines
     |> Enum.with_index(1)
     |> Enum.reduce_while({:ok, known_ids, 0}, fn {line, line_number}, {:ok, seen, count} ->
       if String.trim(line) == "" do
@@ -689,7 +691,15 @@ defmodule Hypatia.LearningScheduler do
             end
 
           {:error, reason} ->
-            {:halt, {:error, {:invalid_fleet_jsonl, line_number, reason}}}
+            if line_number == final_line and not String.ends_with?(content, "\n") do
+              # The producer may still be writing the last record. Retry it.
+              {:halt, {:error, {:incomplete_fleet_tail, line_number, reason}}}
+            else
+              # A permanently malformed historical row must not starve later
+              # valid events. It remains in the append-only source as evidence.
+              Logger.warning("LearningScheduler: quarantined malformed fleet row #{line_number}: #{inspect(reason)}")
+              {:cont, {:ok, seen, count}}
+            end
         end
       end
     end)
