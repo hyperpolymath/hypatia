@@ -16,6 +16,23 @@ defmodule Hypatia.Neural.DispatchGuard do
   @review_ceiling 0.94
 
   @doc """
+  Build the coordinator input from a routed action. The matched recipe's ID
+  is authoritative for annealing when the registry pattern has none.
+  """
+  def recommendation_context({tier, recipe, pattern})
+      when tier in [:eliminate, :substitute] and is_map(recipe) and is_map(pattern) do
+    case Map.get(recipe, "id") do
+      id when is_binary(id) and byte_size(id) > 0 ->
+        Map.put(pattern, "recipe_id", id)
+
+      _ ->
+        pattern
+    end
+  end
+
+  def recommendation_context({:control, pattern}), do: pattern
+
+  @doc """
   Apply the neural dispatch safety ceiling to an already routed action.
 
   Accepts `{:eliminate, recipe, pattern}`, `{:substitute, recipe, pattern}`
@@ -37,23 +54,6 @@ defmodule Hypatia.Neural.DispatchGuard do
   `FunctionClauseError` when a restriction applies; non-map recipes or
   patterns raise `BadMapError` when accessed.
   """
-  @doc """
-  Build the coordinator input from a routed action. The matched recipe's ID
-  is authoritative for annealing when the registry pattern has none.
-  """
-  def recommendation_context({tier, recipe, pattern})
-      when tier in [:eliminate, :substitute] and is_map(recipe) and is_map(pattern) do
-    case Map.get(recipe, "id") do
-      id when is_binary(id) and byte_size(id) > 0 ->
-        Map.put(pattern, "recipe_id", id)
-
-      _ ->
-        pattern
-    end
-  end
-
-  def recommendation_context({:control, pattern}), do: pattern
-
   def enforce(action, :unavailable), do: review_ceiling(action, "unavailable")
 
   def enforce(action, %{is_novel: true}), do: control(action, "novel")

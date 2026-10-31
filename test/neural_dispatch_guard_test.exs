@@ -61,7 +61,13 @@ defmodule Hypatia.Neural.DispatchGuardTest do
 
   test "neural auto_execute never raises a symbolic recipe confidence" do
     original = {:eliminate, %{"confidence" => 0.80}, @pattern}
-    assert ^original = DispatchGuard.enforce(original, %{strategy: :auto_execute})
+    assert {:eliminate, recipe, pattern} =
+             DispatchGuard.enforce(original, %{strategy: :auto_execute})
+
+    assert recipe["confidence"] == 0.80
+    assert recipe["neural_prior_confidence"] == 0.80
+    assert recipe["neural_dispatch_guard"] == "invalid_recommendation"
+    assert pattern["neural_dispatch_guard"] == "invalid_recommendation"
   end
 
   test "substitutions remain review-only when the coordinator is missing" do
