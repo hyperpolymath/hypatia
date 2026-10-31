@@ -61,7 +61,12 @@ defmodule Hypatia.Safety.BatchRollback do
           recipe_id,
           Map.get(outcome, "repo", "unknown"),
           Map.get(outcome, "file", ""),
-          :false_positive
+          :false_positive,
+          %{
+            "verification" => "rollback_requested",
+            "caused_by" => "batch_rollback",
+            "batch_id" => batch_id
+          }
         )
       end
     end)
