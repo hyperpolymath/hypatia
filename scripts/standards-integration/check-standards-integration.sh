@@ -31,7 +31,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Report a configuration failure with the supplied detail on stdout and exit 1.
 fail() { echo "outcome=fail category=config severity=high detail=$1"; exit 1; }
+
+# Report an unavailable check with the supplied detail on stdout and exit 3.
 unavailable() { echo "outcome=unavailable category=tool-unavailable severity=error detail=$1"; exit 3; }
 
 # Every external command invoked below is preflighted, so missing
@@ -45,8 +48,9 @@ WF="$ROOT/.github/workflows"
 LOCK="$WF/actions.lock"
 CALLERS=(governance.yml hypatia-scan.yml mirror.yml scorecard.yml secret-scanner.yml)
 
-# Parse actual YAML `uses:` lines only. Strip inline comments first so
-# comment text cannot create a phantom reusable ref or disguise its value.
+# Print matching standards `uses:` lines from the supplied workflow file,
+# stripping inline comments first. No matches produce no output; pipeline
+# failures are suppressed in the exit status, though diagnostics may reach stderr.
 standards_uses() {
   sed -E 's/[[:space:]]+#.*$//' "$1" \
     | grep -E '^[[:space:]]*uses:[[:space:]]*metadatastician/standards/\.github/workflows/' || true
@@ -112,6 +116,7 @@ grep -A2 -F "'metadatastician/standards@$PIN':" "$LOCK" | grep -qF "commit: 'sha
 # actions/download-artifact@9000827… record on PR #992). Normalisation
 # mirrors ActionsLock.normalise_ref/1: owner/repo lower-cased, ref kept.
 closure=$(awk '
+  # Normalise a lock reference; without @, lower-case the whole value.
   function norm(r,   n, parts, a) {
     n = split(r, a, "@")
     if (n < 2) return tolower(r)
