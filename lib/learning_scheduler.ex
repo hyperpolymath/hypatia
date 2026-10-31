@@ -545,14 +545,16 @@ defmodule Hypatia.LearningScheduler do
                       end
                     end)
                     |> Enum.reject(&is_nil/1)
-                   # Imported fleet entries are already handled by the source
-                   # poll. Do not account for them again on the next local poll.
-                   local_records =
-                     Enum.reject(new_records, &(Map.get(&1, "origin") == "gitbot-fleet"))
+                  # Imported fleet entries are already handled by the source
+                  # poll. Do not account for them again on the next local poll.
+                  local_records =
+                    Enum.reject(new_records, &(Map.get(&1, "origin") == "gitbot-fleet"))
 
-                   new_recipe_ids =
-                     new_records
-                     |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
+                  # Fleet IDs still need a retry if a derived recipe update
+                  # could not be written. Only the outcome COUNT excludes them.
+                  new_recipe_ids =
+                    new_records
+                    |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
                     |> Enum.reject(&is_nil/1)
                     |> MapSet.new()
 
