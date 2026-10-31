@@ -457,7 +457,9 @@ defmodule Hypatia.Neural.Coordinator do
     # Annealing gate: clamp strategy based on recipe's outcome maturity.
     # A recipe with only 3 outcomes cannot reach :auto_execute regardless
     # of neural confidence -- it must accumulate evidence first.
-    recipe_id = Map.get(finding, "recipe_id", Map.get(finding, "pattern_id", ""))
+    recipe_id =
+      [Map.get(finding, "recipe_id"), Map.get(finding, "pattern_id"), Map.get(finding, "id")]
+      |> Enum.find("unknown", fn id -> is_binary(id) and byte_size(id) > 0 end)
     strategy = Hypatia.OutcomeTracker.annealed_strategy(recipe_id, raw_strategy)
 
     recommendation = %{

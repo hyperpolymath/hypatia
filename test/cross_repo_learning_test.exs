@@ -62,6 +62,30 @@ defmodule Hypatia.CrossRepoLearningTest do
     end
   end
 
+  describe "verified-evidence qualification" do
+    test "unverified successes cannot become local or transferable confidence" do
+      rows = [
+        %{"outcome" => "success"},
+        %{"outcome" => "success", "verification" => "scan_failed"},
+        %{"outcome" => "success", "verification" => "verified"},
+        %{"outcome" => "failure", "verification" => "failed"},
+        %{"outcome" => "false_positive", "verification" => "still_present"}
+      ]
+
+      qualified = CrossRepoLearning.qualified_rows(rows)
+
+      assert length(qualified) == 3
+      assert Hypatia.OutcomeTracker.qualified_outcome_counts(qualified) ==
+               %{successes: 1, failures: 1, false_positives: 1, ignored: 0}
+    end
+
+    test "three legacy successes do not satisfy the transfer evidence minimum" do
+      legacy = List.duplicate(%{"outcome" => "success"}, 3)
+
+      assert CrossRepoLearning.qualified_rows(legacy) == []
+    end
+  end
+
   describe "repos_with_fix/1" do
     test "returns empty list for nonexistent recipe" do
       result = CrossRepoLearning.repos_with_fix("recipe-does-not-exist-xyzzy")

@@ -66,6 +66,9 @@ defmodule Hypatia.LearningScheduler do
       last_run: nil,
       # filename => byte offset of last read
       last_outcome_positions: %{},
+      pending_confidence_recipes: MapSet.new(),
+      # A restarted scheduler rechecks persisted source IDs, not just this cache.
+      last_fleet_signature: nil,
       total_outcomes_processed: 0,
       total_confidence_updates: 0,
       total_annealing_reheats: 0,
@@ -113,9 +116,11 @@ defmodule Hypatia.LearningScheduler do
     {new_positions, outcomes_count, recipe_ids} =
       ingest_new_outcomes(state.last_outcome_positions)
 
-    fleet_outcomes_count = ingest_fleet_outcomes()
+    {fleet_outcomes_count, fleet_signature} =
+      ingest_fleet_outcomes(state.last_fleet_signature)
 
-    confidence_updates = update_affected_recipes(recipe_ids)
+    {confidence_updates, pending_confidence_recipes} =
+      update_affected_recipes(MapSet.union(recipe_ids, state.pending_confidence_recipes))
 
     report_confidence_drift()
 
@@ -195,6 +200,8 @@ defmodule Hypatia.LearningScheduler do
       state
       | last_run: now,
         last_outcome_positions: new_positions,
+        pending_confidence_recipes: pending_confidence_recipes,
+        last_fleet_signature: fleet_signature,
         total_outcomes_processed: state.total_outcomes_processed + total,
         total_confidence_updates: state.total_confidence_updates + confidence_updates,
         total_annealing_reheats: state.total_annealing_reheats + annealing_report.reheated,
@@ -538,14 +545,20 @@ defmodule Hypatia.LearningScheduler do
                       end
                     end)
                     |> Enum.reject(&is_nil/1)
+                  # Imported fleet entries are already handled by the source
+                  # poll. Do not account for them again on the next local poll.
+                  local_records =
+                    Enum.reject(new_records, &(Map.get(&1, "origin") == "gitbot-fleet"))
 
+                  # Fleet IDs still need a retry if a derived recipe update
+                  # could not be written. Only the outcome COUNT excludes them.
                   new_recipe_ids =
                     new_records
                     |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
                     |> Enum.reject(&is_nil/1)
                     |> MapSet.new()
 
-                  {Map.put(positions, file, size), count + length(new_records),
+                  {Map.put(positions, file, size), count + length(local_records),
                    MapSet.union(recipes, new_recipe_ids)}
 
                 {:error, _} ->
@@ -562,9 +575,54 @@ defmodule Hypatia.LearningScheduler do
     end
   end
 
-  # --- Ingest outcomes from fleet fix-outcomes.jsonl ---
+  # --- Fleet outcomes: verified evidence only, restart-safe replay ---
 
-  defp ingest_fleet_outcomes do
+  @doc false
+  def classify_fleet_record(record) when is_map(record) do
+    recipe_id = Map.get(record, "recipe_id") || Map.get(record, "pattern")
+    repo = Map.get(record, "repo")
+    file = Map.get(record, "file")
+    file = if is_binary(file) and file != "", do: file, else: "."
+
+    # A legacy "outcome: success" means only that the fixer exited zero.
+    # Require the postcondition verdict AND supporting numeric evidence.
+    verdict = Map.get(record, "verdict")
+    exit_code = Map.get(record, "exit_code")
+    before_hits = Map.get(record, "before_hits")
+    after_hits = Map.get(record, "after_hits")
+
+    classified =
+      case {verdict, Map.get(record, "outcome")} do
+        {"verified", "success"} when is_integer(before_hits) and before_hits > 0 and
+                                      after_hits == 0 -> {:success, "verified"}
+        {"failed", "failure"} when is_integer(exit_code) and exit_code != 0 ->
+          {:failure, "failed"}
+        {"incomplete", "failure"} when is_integer(after_hits) and after_hits > 0 ->
+          {:failure, "incomplete"}
+        _ -> :unqualified
+      end
+
+    cond do
+      Map.get(record, "bot") == "hypatia" -> :skip
+      not (is_binary(recipe_id) and recipe_id != "" and is_binary(repo) and repo != "") -> :skip
+      classified == :unqualified -> :skip
+      true ->
+        {outcome, verification} = classified
+        {:ok, recipe_id, repo, file, outcome, verification}
+    end
+  end
+
+  def classify_fleet_record(_record), do: :skip
+
+  @doc false
+  def fleet_source_id(line, line_number) when is_binary(line) and is_integer(line_number) do
+    # Append-only line identity disambiguates distinct identical attempts.
+    # A future producer event_id will supersede this provisional locator.
+    :crypto.hash(:sha256, "fleet-jsonl-v1:" <> Integer.to_string(line_number) <> ":" <> line)
+    |> Base.encode16(case: :lower)
+  end
+
+  defp ingest_fleet_outcomes(previous_signature) do
     fleet_file =
       Path.join([
         Path.expand(@fleet_path),
@@ -573,59 +631,105 @@ defmodule Hypatia.LearningScheduler do
 
     case File.read(fleet_file) do
       {:ok, content} ->
-        records =
-          content
-          |> String.split("\n", trim: true)
-          |> Enum.map(fn line ->
-            case Jason.decode(line) do
-              {:ok, record} -> record
-              {:error, _} -> nil
+        signature = :crypto.hash(:sha256, content)
+
+        if signature == previous_signature do
+          {0, signature}
+        else
+          case Hypatia.OutcomeTracker.imported_fleet_ids() do
+            {:ok, known_ids} ->
+              case import_fleet_lines(content, known_ids) do
+                {:ok, imported} -> {imported, signature}
+
+                {:error, reason} ->
+                  Logger.warning("LearningScheduler: fleet import not acknowledged: #{inspect(reason)}")
+                  {0, previous_signature}
+              end
+
+            {:error, reason} ->
+              Logger.warning("LearningScheduler: cannot read imported IDs: #{inspect(reason)}")
+              {0, previous_signature}
+          end
+        end
+
+      {:error, :enoent} ->
+        {0, previous_signature}
+
+      {:error, reason} ->
+        Logger.warning("LearningScheduler: cannot read fleet file: #{inspect(reason)}")
+        {0, previous_signature}
+    end
+  end
+
+  defp import_fleet_lines(content, known_ids) do
+    lines = String.split(content, "\n", trim: false)
+    final_line = length(lines)
+
+    lines
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, known_ids, 0}, fn {line, line_number}, {:ok, seen, count} ->
+      if String.trim(line) == "" do
+        {:cont, {:ok, seen, count}}
+      else
+        case Jason.decode(line) do
+          {:ok, record} ->
+            case classify_fleet_record(record) do
+              {:ok, recipe_id, repo, file, outcome, verification} ->
+                id = fleet_source_id(line, line_number)
+
+                if MapSet.member?(seen, id) do
+                  {:cont, {:ok, seen, count}}
+                else
+                  case Hypatia.OutcomeTracker.record_fleet_outcome(
+                         recipe_id, repo, file, outcome, id, verification
+                       ) do
+                    {:ok, _record} ->
+                      {:cont, {:ok, MapSet.put(seen, id), count + 1}}
+
+                    {:error, reason} ->
+                      {:halt, {:error, {:write_failed, line_number, reason}}}
+                  end
+                end
+
+              :skip ->
+                {:cont, {:ok, seen, count}}
             end
-          end)
-          |> Enum.reject(&is_nil/1)
 
-        # Process any fleet outcomes that don't have hypatia as the source
-        fleet_only =
-          Enum.filter(records, fn r ->
-            Map.get(r, "bot") != "hypatia"
-          end)
-
-        # Record each fleet outcome into hypatia's tracker
-        Enum.each(fleet_only, fn outcome ->
-          recipe_id = Map.get(outcome, "pattern", "unknown")
-          repo = Map.get(outcome, "repo", "unknown")
-          file = Map.get(outcome, "file", "unknown")
-
-          outcome_atom =
-            case Map.get(outcome, "outcome", "failure") do
-              "success" -> :success
-              "failure" -> :failure
-              "false_positive" -> :false_positive
-              _ -> :failure
+          {:error, reason} ->
+            if line_number == final_line and not String.ends_with?(content, "\n") do
+              # The producer may still be writing the last record. Retry it.
+              {:halt, {:error, {:incomplete_fleet_tail, line_number, reason}}}
+            else
+              # A permanently malformed historical row must not starve later
+              # valid events. It remains in the append-only source as evidence.
+              Logger.warning("LearningScheduler: quarantined malformed fleet row #{line_number}: #{inspect(reason)}")
+              {:cont, {:ok, seen, count}}
             end
-
-          Hypatia.OutcomeTracker.record_outcome(recipe_id, repo, file, outcome_atom)
-        end)
-
-        length(fleet_only)
-
-      {:error, _} ->
-        0
+        end
+      end
+    end)
+    |> case do
+      {:ok, _seen, count} -> {:ok, count}
+      error -> error
     end
   end
 
   # --- Update confidence for all affected recipes ---
 
   defp update_affected_recipes(recipe_ids) do
-    recipe_ids
-    |> MapSet.to_list()
-    |> Enum.map(fn recipe_id ->
+    Enum.reduce(recipe_ids, {0, MapSet.new()}, fn recipe_id, {count, pending} ->
       case Hypatia.OutcomeTracker.update_recipe_confidence(recipe_id) do
-        {:ok, _confidence} -> 1
-        _ -> 0
+        {:ok, _confidence} ->
+          {count + 1, pending}
+
+        :no_outcomes ->
+          {count, pending}
+
+        error ->
+          Logger.warning("LearningScheduler: confidence update deferred for #{recipe_id}: #{inspect(error)}")
+          {count, MapSet.put(pending, recipe_id)}
       end
     end)
-    |> Enum.sum()
   end
 
   # --- Report any recipes with concerning confidence drift ---
