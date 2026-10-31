@@ -108,6 +108,10 @@ jobs:
       - name: Elixir lint gate
         run: mix compile --warnings-as-errors
 
+      - name: E0 outcome chain and cross-repo evidence regression (Elixir)
+        run: |
+          mix test test/outcome_tracker_test.exs test/cross_repo_learning_test.exs
+
       - name: Run E2E test suite
         run: bash tests/e2e.sh
 
