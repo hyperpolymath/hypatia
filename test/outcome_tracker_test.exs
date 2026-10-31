@@ -119,6 +119,34 @@ defmodule Hypatia.OutcomeTrackerTest do
       assert OutcomeTracker.qualified_outcome?(record)
     end
 
+    test "legacy veteran maturity is invalidated by lack of qualified outcomes" do
+      persisted = Hypatia.ConfidenceAnnealing.from_existing(18_640, 0, 0)
+      counts = %{successes: 0, failures: 0, false_positives: 0}
+
+      repaired = OutcomeTracker.reconcile_annealing_state(persisted, counts)
+      assert repaired.outcome_count == 0
+      assert repaired.stage == :nascent
+      assert Hypatia.ConfidenceAnnealing.max_dispatch_tier(repaired) == :report_only
+
+      qualified = %{successes: 5, failures: 0, false_positives: 0}
+      adolescent = OutcomeTracker.reconcile_annealing_state(persisted, qualified)
+      assert adolescent.outcome_count == 5
+      assert adolescent.stage == :adolescent
+    end
+
+    test "batch rollback requests are negative, never evidence of success" do
+      rollback = %{
+        "outcome" => "false_positive",
+        "verification" => "rollback_requested",
+        "caused_by" => "batch_rollback",
+        "batch_id" => "batch-1"
+      }
+
+      assert OutcomeTracker.qualified_outcome?(rollback)
+      refute OutcomeTracker.qualified_outcome?(Map.delete(rollback, "batch_id"))
+      refute OutcomeTracker.qualified_outcome?(Map.put(rollback, "outcome", "success"))
+    end
+
     test "fleet import insists on predicate evidence and matching exit-status outcomes" do
       row = %{"repo" => "example", "pattern" => "recipe-a", "outcome" => "success"}
 
