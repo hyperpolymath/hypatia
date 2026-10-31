@@ -94,6 +94,24 @@ Hypatia defect. Start from current runs, per repository.
   grid / findings artefact before calling a repository clean.
 |===
 
+Remaining gaps after the bump, individually explained (Governance run
+`41198944467` on PR #992, reproduced offline with the pinned gate):
+the preflight now reports exactly two gaps —
+`google/clusterfuzzlite/actions/build_fuzzers@v1` and
+`google/clusterfuzzlite/actions/run_fuzzers@v1`. Root cause is again
+category 3, upstream: the checker at `1725beb…` matches the complete
+action path, the tree canon
+(`rhodium-standard-repositories/actions-allowlist/allowed-actions.json`)
+carries only `google/clusterfuzzlite@*`, while the live-policy list
+(`config/settings/actions-allowlist.json`) already grants the two
+narrow subpath patterns — the two allowlist copies have drifted.
+Hypatia's `clusterfuzzlite.yml` uses the official actions, gated on
+fuzz targets existing; disabling fuzzing to satisfy the gate would be
+the wrong fix. Filed as `metadatastician/standards#1380`; when a
+standards revision carrying the two narrow patterns is published,
+bump the pin per the checklist below and re-run. Until then
+Governance is *not* genuinely clean and must not be reported as such.
+
 Note also PR #989's body claimed the Governance pin had moved to
 `1725beb…`; the merged tree still pinned `333b06a…` in all five
 callers and in `actions.lock`. This change makes the tree match the
