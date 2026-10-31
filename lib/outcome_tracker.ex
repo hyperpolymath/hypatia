@@ -464,6 +464,11 @@ defmodule Hypatia.OutcomeTracker do
         %{"outcome" => "failure", "verification" => v} when v in ["failed", "incomplete", "verified"] ->
           %{acc | failures: acc.failures + 1}
 
+        %{"outcome" => "false_positive", "verification" => "rollback_requested",
+          "caused_by" => "batch_rollback", "batch_id" => batch_id}
+        when is_binary(batch_id) and batch_id != "" ->
+          %{acc | false_positives: acc.false_positives + 1}
+
         %{"outcome" => "false_positive", "verification" => v} when v in ["still_present", "verified"] ->
           %{acc | false_positives: acc.false_positives + 1}
 
