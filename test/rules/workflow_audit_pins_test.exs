@@ -1733,6 +1733,14 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
     defp wf028(wf), do: WorkflowAudit.check_reusable_call_to_moved_repository(%{"g.yml" => wf})
 
+    test "the move registry is versioned and has traceable identity and evidence" do
+      assert Hypatia.Rules.MovedRepositories.version() == 1
+      assert [%{former: "hyperpolymath/standards", current: "metadatastician/standards",
+                repo_id: 1_116_521_501, moved: "2026-10-25", evidence: evidence}] =
+               WorkflowAudit.moved_repositories()
+      assert evidence =~ "40424594888"
+    end
+
     test "fires on a job calling a standards reusable by its former owner" do
       wf = "on: push\njobs:\n  governance:\n    uses: hyperpolymath/standards/#{@gov}@#{@pin}\n"
       [f] = wf028(wf)
@@ -1740,6 +1748,9 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       assert f.line == 4
       assert f.severity == :low
       assert f.advisory == true
+      assert f.certainty == :deterministic
+      assert f.impact == :startup_failure
+      assert f.gate_effect == :caller_workflow_linter_blocks
       assert f.auto_fixable == false
       assert f.fix_script == nil
       assert f.current_sha == @pin

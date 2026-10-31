@@ -3035,16 +3035,8 @@ defmodule Hypatia.Rules.WorkflowAudit do
   #
   # One row per move. A transfer into the org (standards D97) is a row, not
   # a rule: append it when the move lands, never before.
-  @moved_repositories Enum.map(Hypatia.Rules.StandardsRepo.former(), fn former ->
-                        %{
-                          former: former,
-                          current: Hypatia.Rules.StandardsRepo.current(),
-                          moved: "2026-10-25"
-                        }
-                      end)
-
-  @doc "The (former, current) table WF028 fires on."
-  def moved_repositories, do: @moved_repositories
+  @doc "The versioned moved-repository records WF028 fires on."
+  def moved_repositories, do: Hypatia.Rules.MovedRepositories.entries()
 
   @doc """
   WF028: a job calls a reusable workflow by a repository name that has
@@ -3079,7 +3071,7 @@ defmodule Hypatia.Rules.WorkflowAudit do
             into: MapSet.new(),
             do: n
 
-      Enum.flat_map(@moved_repositories, fn move ->
+      Enum.flat_map(moved_repositories(), fn move ->
         # The value of a `uses:` key, as YAML reads the scalar: a quoted one
         # runs to its closing quote, whatever it holds; an unquoted one ends
         # at whitespace in block style (a branch or tag may hold `,` `}` `]`
@@ -3162,6 +3154,9 @@ defmodule Hypatia.Rules.WorkflowAudit do
       # Advisory, as WF026/WF027: reported and routed, never a blocking finding.
       severity: :low,
       advisory: true,
+      certainty: :deterministic,
+      impact: :startup_failure,
+      gate_effect: :caller_workflow_linter_blocks,
       auto_fixable: false,
       fix_script: nil,
       reason:
