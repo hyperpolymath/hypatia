@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           # The action downloads its pinned binary from its GitHub release, then
@@ -54,7 +54,7 @@ jobs:
             ${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT || '465' }}
 
       - name: Send push notification email
-        uses: hyperpolymath/smtp-notify-action@v0.5.0
+        uses: hyperpolymath/smtp-notify-action@v0.5.1
         with:
           server_address: ${{ secrets.SMTP_HOST }}
           server_port: ${{ secrets.SMTP_PORT }}

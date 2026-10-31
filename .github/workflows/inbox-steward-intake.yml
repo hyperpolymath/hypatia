@@ -53,7 +53,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           # git and gh against GitHub only.
@@ -136,7 +136,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           # git and gh against GitHub only.
@@ -247,7 +247,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           # git and gh against GitHub only.
@@ -309,7 +309,7 @@ jobs:
     
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           # One gh api call: the dispatch to .git-private-farm.
