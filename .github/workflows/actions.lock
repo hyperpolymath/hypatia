@@ -49,7 +49,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/governance.yml':
-        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
+        - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
     '.github/workflows/hypatia-remediation-sweep.yml':
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.3'
