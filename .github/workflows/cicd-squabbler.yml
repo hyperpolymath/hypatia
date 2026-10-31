@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: MPL-2.0
 # This workflow is managed by gh actions-lock.
 #
-# Independent squabbler canary: use the same-owner, commit-pinned action.
-# Cross-owner reusable startup is blocked in this caller's effective Actions
-# policy; this avoids silently equating a zero-job startup_failure to green.
-# No administration token, no --apply, and no write permissions.
+# Independent squabbler canary, with zero third-party actions. Cross-owner
+# reusables AND the same-owner composite each produced startup_failure.
+# The standalone binary is pinned by sha256 and build-provenance attestation.
 name: CICD Squabbler
 
 on:
@@ -29,44 +28,75 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out repository at the event SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - name: Check out exact event commit without external action
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git init -q .
+          git remote add origin "https://github.com/$REPO.git"
+          git -c http.extraheader="$AUTH" fetch -q --depth 1 origin "$SHA"
+          git checkout -q FETCH_HEAD
 
-      - name: Install pinned and attested squabble
-        id: squabble
-        uses: hyperpolymath/cicd-squabbler/.github/actions/squabble@1ab1507a424c9edfe6cb53dea4e33a2f3cc558e3
-        with:
-          args: ""
+      - name: Install pinned and attested squabble binary
+        id: install
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          work="$(mktemp -d "$RUNNER_TEMP/squabble.XXXXXX")"
+          gh release download v0.1.0 --repo hyperpolymath/cicd-squabbler \
+            --pattern squabble-x86_64-linux-musl --dir "$work"
+          asset="$work/squabble-x86_64-linux-musl"
+          printf '%s  %s\n' \
+            '6cbeb4577d83ccf2dea3405a3afb0d34b7fee422af73f2113d413ea7edba026c' \
+            "$asset" | sha256sum --check --strict
+          gh attestation verify "$asset" \
+            --repo hyperpolymath/cicd-squabbler \
+            --signer-workflow hyperpolymath/cicd-squabbler/.github/workflows/release.yml \
+            --source-ref refs/tags/v0.1.0 \
+            --source-digest b854d17abc0dce296719a349ebe856ff945cf03e \
+            --predicate-type https://slsa.dev/provenance/v1 \
+            --deny-self-hosted-runners --format json > "$work/attestation.json"
+          jq -e --arg name squabble-x86_64-linux-musl \
+            --arg sha 6cbeb4577d83ccf2dea3405a3afb0d34b7fee422af73f2113d413ea7edba026c \
+            'type == "array" and length > 0 and all(.[]; 
+               [.verificationResult.statement.subject[]? | select(.name == $name) | .digest.sha256] as $d
+               | ($d | length) > 0 and all($d[]; . == $sha))' \
+            "$work/attestation.json" >/dev/null
+          chmod 0755 "$asset"
+          test "$("$asset" --version)" = 'squabble 0.1.0'
+          echo "path=$asset" >> "$GITHUB_OUTPUT"
 
       - name: Audit dependency chains (fail closed)
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SQUABBLE_BIN: ${{ steps.squabble.outputs.path }}
+          SQUABBLE_BIN: ${{ steps.install.outputs.path }}
         run: |
           set -uo pipefail
-          if [ ! -x "$SQUABBLE_BIN" ]; then
-            echo "::error::Pinned squabble did not install"
-            exit 1
-          fi
+          test -x "$SQUABBLE_BIN" || { echo "::error::Missing verified squabble binary"; exit 1; }
           rc=0
-          "$SQUABBLE_BIN" chains ".=$REPO" --follow 1 | tee "$RUNNER_TEMP/squabble-chains.txt" || rc=$?
+          "$SQUABBLE_BIN" chains ".=$REPO" --follow 1 | tee "$RUNNER_TEMP/chains.txt" || rc=$?
           {
             echo "### Squabble chains"
             echo
             echo '~~~'
-            cat "$RUNNER_TEMP/squabble-chains.txt"
+            cat "$RUNNER_TEMP/chains.txt"
             echo '~~~'
             echo
-            echo "Exit code: $rc; no remediation was applied."
+            echo "Exit code: $rc; this gate never applies repairs or bypasses."
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$rc" -eq 4 ]; then
-            echo "::error::Cycle or dead upstream blocked the CI dependency graph"
+            echo "::error::Dead upstream or dependency cycle"
             exit 1
           fi
           if [ "$rc" -ne 0 ]; then
-            echo "::error::Squabble could not establish the CI dependency graph (exit $rc)"
+            echo "::error::Squabble could not establish the graph, exit $rc"
             exit 1
           fi
