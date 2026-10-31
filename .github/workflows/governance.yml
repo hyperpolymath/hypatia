@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   governance:
-    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
+    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
     # Scanner pin: hypatia scans itself with its own main branch. On a PR that
     # is the base commit; on push, schedule or dispatch it is the commit being
     # run. It is never the PR head, so a PR cannot weaken the rules that gate
