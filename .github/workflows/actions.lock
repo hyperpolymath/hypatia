@@ -49,12 +49,12 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/governance.yml':
-        - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
+        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
     '.github/workflows/hypatia-remediation-sweep.yml':
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/hypatia-scan.yml':
-        - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
+        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
     '.github/workflows/inbox-steward-intake.yml':
         - 'actions/checkout@v7.0.1'
         - 'step-security/harden-runner@v2.22.3'
@@ -68,7 +68,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/mirror.yml':
-        - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
+        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'
@@ -108,9 +108,10 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/scorecard.yml':
-        - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
+        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
     '.github/workflows/secret-scanner.yml':
-        - 'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7'
+        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
+    '.github/workflows/standards-integration.yml': []
     '.github/workflows/security-policy.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -199,6 +200,11 @@ dependencies:
         commit: 'sha1-368f82528645a54fb793d4d04e342629a3f51346'
         owner_id: 44036562
         repo_id: 438112499
+    'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333':
+        ref: 'v8.0.2'
+        commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
+        owner_id: 44036562
+        repo_id: 192626254
     'actions/download-artifact@v8.0.2':
         ref: 'v8.0.2'
         commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
@@ -367,14 +373,15 @@ dependencies:
         commit: 'sha1-e384daf6167a7a7567642d6a62060106244d2413'
         owner_id: 6759885
         repo_id: 1352485172
-    'metadatastician/standards@333b06a01db1874ffedb2de1bfabb195640927c7':
-        ref: '333b06a01db1874ffedb2de1bfabb195640927c7'
-        commit: 'sha1-333b06a01db1874ffedb2de1bfabb195640927c7'
+    'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85':
+        ref: '1725bebd3773ea25627479f813283abf1c497a85'
+        commit: 'sha1-1725bebd3773ea25627479f813283abf1c497a85'
         owner_id: 297579217
         repo_id: 1116521501
         uses:
             - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
             - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+            - 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
             - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
             - 'denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed'
             - 'dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8'
