@@ -1017,7 +1017,8 @@ defmodule Hypatia.OutcomeTracker do
     saved = read_saved_annealing_state(recipe_id)
     current = reconcile_annealing_state(saved, counts)
 
-    if current != saved, do: save_annealing_state(recipe_id, current)
+    if current != saved and (saved != nil or qualified_count(counts) > 0),
+      do: save_annealing_state(recipe_id, current)
     current
   end
 
@@ -1033,13 +1034,6 @@ defmodule Hypatia.OutcomeTracker do
     end
   end
 
-  # Bootstrap from qualified evidence rather than legacy success strings.
-  defp bootstrap_annealing_state(recipe_id) do
-    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id))
-    state = reconcile_annealing_state(nil, counts)
-    save_annealing_state(recipe_id, state)
-    state
-  end
 
   defp save_annealing_state(recipe_id, state) do
     path = annealing_state_path(recipe_id)
