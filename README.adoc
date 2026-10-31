@@ -185,6 +185,7 @@ by any dispatch path, and the CI blockage currently stopping the Rust lane.
 * link:docs/DEBT-REGISTER.adoc[Debt register] — what is broken and what is not gated
 * link:docs/governance/ACTIONS-PINNING.adoc[Actions pinning decision] — how `uses:` refs are pinned here (actions.lock, not inline SHAs)
 * link:docs/consumers/rsr-oracle.adoc[Consuming the RSR oracle] — the SHA-pinned reusable workflow and the explicit-SSOT contract
+* link:docs/consumers/standards-governance.adoc[Consuming the standards governance integration] — the immutable standards pin, failure-category taxonomy, runtime prerequisites and bump handoff for the five shared reusables
 * https://github.com/hyperpolymath/hypatia/wiki[Wiki] — getting started, architecture, operations, FAQ
 * https://github.com/hyperpolymath/standards/blob/main/PALIMPSEST.adoc[Palimpsest Philosophy] — philosophical underpinnings (lives in hyperpolymath/standards)
 

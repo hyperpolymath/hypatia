@@ -1,0 +1,57 @@
+# This workflow is managed by gh actions-lock.
+# SPDX-License-Identifier: MPL-2.0
+# Standards-integration contract gate, with zero third-party actions
+# (same pattern as cicd-squabbler.yml): reusable/action resolution is
+# itself one of the failure modes under test, so this gate must be able
+# to run — and to fail honestly — when that resolution is broken.
+# Exit semantics: 0 = contract holds; 1 = config failure (category 3);
+# 3 = required tool unavailable. 3 is a failure of this gate, never a
+# pass: skipped or unavailable work is not successful analysis.
+name: Standards Integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: standards-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Standards integration contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact event commit without external action
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git init -q .
+          git remote add origin "https://github.com/$REPO.git"
+          git -c http.extraheader="$AUTH" fetch -q --depth 1 origin "$SHA"
+          git checkout -q FETCH_HEAD
+
+      - name: Run integration contract tests (positive, negative, unavailable-tool)
+        run: |
+          set -uo pipefail
+          rc=0
+          bash test/standards-integration-test.sh || rc=$?
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::Standards-integration tooling unavailable (exit 3) — not a pass"
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Standards-integration contract failed (exit $rc, category=config)"
+            exit 1
+          fi
+          echo "outcome=pass category=findings-channel-ready (contract only; not a scan result)" >> "$GITHUB_STEP_SUMMARY"

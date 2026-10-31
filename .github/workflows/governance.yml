@@ -16,7 +16,17 @@ permissions:
 
 jobs:
   governance:
-    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
+    # Standards pin (immutable, do not float): 1725beb… is the first
+    # standards revision whose actions allowlist contains
+    # `metadatastician/standards/.github/workflows/*@*` and whose mirror
+    # reusable gates SSH-host verification on the key being configured.
+    # The previous pin (333b06a…) lacked that pattern, so Allowlist
+    # Preflight failed on the five canon reusables themselves — a
+    # pinned-policy mismatch (category 3), not five genuine findings.
+    # Bump all five standards callers + actions.lock together; see
+    # docs/consumers/standards-governance.adoc and
+    # test/standards-integration-test.sh.
+    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
     # Scanner pin: hypatia scans itself with its own main branch. On a PR that
     # is the base commit; on push, schedule or dispatch it is the commit being
     # run. It is never the PR head, so a PR cannot weaken the rules that gate

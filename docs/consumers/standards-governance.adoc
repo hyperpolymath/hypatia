@@ -1,0 +1,213 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Consuming the standards shared-governance integration
+:toc: left
+:toclevels: 3
+
+This is the consumer contract for the five reusable workflows this
+repository takes from `metadatastician/standards`, and the evidence that
+fixed the pin. It exists because estate CI sampling kept finding
+Hypatia-related workflows red with zero jobs — and a zero-job run is
+not a Hypatia finding, not a pass, and not one defect.
+
+== The four failure categories (classify before you fix)
+
+[cols="1,2,2,2",options="header"]
+|===
+| # | Category | Signature | Correct response
+
+| 1
+| Admission / source resolution
+| `startup_failure`, zero jobs, ~0s. GitHub never started a job: a
+  `uses:` ref was not allowed, not found, or the actions lockfile
+  disagreed with the workflow.
+| Fix the pin, the allowlist, or `actions.lock`. Never touch scanner
+  rules; no analysis happened.
+
+| 2
+| Runner setup / prerequisites
+| Jobs start; a setup step fails before the tool runs (invalid
+  expression, missing secret/var consumed before its skip guard,
+  lockfile or dependency fetch failure).
+| Name the missing prerequisite, gate setup on it, and report the
+  forge/tool as *skipped — not configured*, never as analysed.
+
+| 3
+| Tool / configuration
+| The tool starts but its policy/config is stale or mismatched (e.g. an
+  allowlist fetched at an old pinned revision that does not cover the
+  reusables actually called).
+| Bump the pinned policy source atomically (all callers + lock).
+  Do not weaken the check to match stale policy.
+
+| 4
+| Actual analysis / security findings
+| The scanner binary demonstrably ran, produced a validated findings
+  artefact (non-empty, schema-checked JSON/SARIF), and reported items.
+| Triage the findings. These are the only reds that may be called
+  findings, and the only greens that may be called clean.
+|===
+
+Historical population observations (many estate `startup_failure`s) are
+evidence for category 1 *as a class*; they never prove a specific
+Hypatia defect. Start from current runs, per repository.
+
+== Evidence on this repository, 2026-10-31
+
+[cols="1,1,3",options="header"]
+|===
+| Run / workflow | Category | Evidence
+
+| Governance `41196057086`
+| 1
+| `startup_failure`, 0s, zero jobs on an intermediate branch revision
+  while the Governance pin was being changed. No job, no analysis.
+
+| Governance `41196138008`, `41196238803` — *Allowlist Preflight*
+| 3
+| Jobs ran; only Allowlist Preflight failed. Callers pinned standards
+  `333b06a…`, whose `actions-allowlist.json` (both
+  `config/settings/` and the rhodium copy) contains *no*
+  `metadatastician/standards/…` pattern, so the five canon reusables
+  the caller itself uses were reported as allowlist gaps. Standards
+  `1725beb…` adds exactly
+  `metadatastician/standards/.github/workflows/*@*`. A pinned-policy
+  mismatch, not five genuine findings — and not a reason to disable
+  the gate: at the new pin the gate still rejects uncovered actions.
+
+| Mirror to Git Forges `41196238787`
+| 2
+| At `333b06a…`, `Verify <forge> SSH host` ran *before* the
+  not-configured skip, so forges whose `*_SSH_KEY` secret is unset
+  failed on SSH host verification and only then printed "Skipped (…
+  not configured)". At `1725beb…` verification is gated on the key
+  being present; unconfigured forges print an explicit skip notice.
+  Owner-side remainder: register the deploy keys, or leave
+  `vars.<FORGE>_MIRROR_ENABLED` unset — the run then says *skipped*,
+  which is legible and is not a mirror.
+
+| Hypatia Security Scan `41196238773` (and predecessors)
+| 4 — channel working
+| One job, *Hypatia Neurosymbolic Analysis*, succeeded. That is the
+  only shape of green that means "the scanner ran". Even then, green
+  means the reusable's own gating rules passed — read its verdict
+  grid / findings artefact before calling a repository clean.
+|===
+
+Note also PR #989's body claimed the Governance pin had moved to
+`1725beb…`; the merged tree still pinned `333b06a…` in all five
+callers and in `actions.lock`. This change makes the tree match the
+claim and adds a contract test so the claim is checked, not trusted.
+
+== The published integration (what consumers copy)
+
+`metadatastician/standards` at commit
+`1725bebd3773ea25627479f813283abf1c497a85` (standards `main` at the
+time of writing; the commit, not the branch, is the contract). Its
+reusables carry their own contract tests upstream
+(`scripts/tests/governance-reusable-contract-test.sh`,
+`scripts/tests/hypatia-scanner-refs-test.sh`), resolve Hypatia to a
+vetted default SHA (`adb2f41…`) unless a caller canaries `HEAD`, and
+stage their policy helpers from `job.workflow_sha` — the exact commit
+the caller pinned.
+
+Consumer snippet (all five callers move together):
+
+[source,yaml]
+----
+jobs:
+  governance:
+    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
+    with:
+      # Scanner source: base commit on PRs, event commit otherwise.
+      # Never the PR head — a PR must not weaken the rules gating it.
+      hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+  hypatia:
+    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
+    with:
+      hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}
+    secrets:   # only the declared secret; never `secrets: inherit`
+      HYPATIA_SCAN_PAT: ${{ secrets.HYPATIA_SCAN_PAT }}
+----
+
+Then regenerate `.github/workflows/actions.lock` with
+`gh actions-lock` in the same PR (never hand-edit it) and run:
+
+[source,bash]
+----
+bash test/standards-integration-test.sh          # offline contract
+bash scripts/standards-integration/check-standards-integration.sh \
+  --root . --verify-remote                       # + published-commit proof
+----
+
+== Runtime prerequisites (explicit)
+
+* Runner: `ubuntu-latest` only. The reusables install their own
+  toolchain (Elixir 1.19.4 / OTP 28.3 via `erlef/setup-beam`) — no
+  consumer-side Elixir, Rust or Zig setup is required for the scan or
+  governance lanes.
+* Repository Actions policy must allow
+  `metadatastician/standards/.github/workflows/*` (selected-actions
+  allowlist). Without it every reusable is a category-1
+  `startup_failure`; that is an owner/administration setting, not a
+  workflow bug.
+* `HYPATIA_SCAN_PAT` (fine-grained, read-only): optional. Without it
+  the scan falls back to `GITHUB_TOKEN` (Dependabot alerts then cannot
+  be read) and the live Actions-policy job reports itself *not
+  evaluated*. Absent credential = advisory rows say so; nothing may
+  report that surface as passed.
+* Mirror lane only: per-forge `vars.<FORGE>_MIRROR_ENABLED=true`,
+  `secrets.<FORGE>_SSH_KEY`, and (for self-hosted Gitea) `vars.GITEA_HOST`
+  plus the pinned SSH fingerprint vars. Any missing piece = that forge
+  is *skipped*, stated in the run — not mirrored, not failed open.
+* Permissions: exactly those in the snippet. `secrets: inherit` is
+  refused by the contract checker.
+
+== Severity / outcome semantics
+
+[cols="1,1,2",options="header"]
+|===
+| Outcome | Meaning | May be reported as
+
+| `outcome=pass` from the contract checker (exit 0)
+| Pins, lock and scanner-source contract hold.
+| "Integration channel ready." Never "scan clean" — no scan ran.
+
+| `outcome=fail, category=config` (exit 1)
+| Floating/divergent pin, lock drift, PR-head scanner, `secrets: inherit`.
+| A category-3 configuration failure. Fix the integration; do not
+  triage as code findings and do not disable Hypatia to silence it.
+
+| `outcome=unavailable, category=tool-unavailable` (exit 3)
+| A required tool (`gh` for remote proof, or core text tools) is absent.
+| "Not verified." In CI this gate fails closed; locally, re-run with
+  the tool installed. Absent tools, skipped jobs and `startup_failure`
+  are never successful analysis.
+
+| Scanner verdict (from the reusable's grid/findings artefact)
+| The only source of genuine findings (category 4) and of "clean".
+| Clean only when the scan job ran, the findings artefact validated,
+  and the gating rows are green. Notify the repository owner
+  (`@hyperpolymath`) at that point — and only at that point.
+|===
+
+== Bumping the pin (handoff checklist)
+
+. Pick a standards commit that is published on `metadatastician/standards`
+  and whose upstream contract tests pass; record why in the PR.
+. Change all five callers (`governance`, `hypatia-scan`, `mirror`,
+  `scorecard`, `secret-scanner`) to that one 40-hex SHA.
+. Regenerate `actions.lock` with `gh actions-lock` in the same PR.
+. Run `bash test/standards-integration-test.sh` and the
+  `--verify-remote` check; paste both outputs in the PR.
+. Confirm on the PR: Governance jobs actually start (not
+  `startup_failure`), Allowlist Preflight passes or every remaining
+  gap is individually explained, Hypatia Security Scan's analysis job
+  ran, and Mirror prints explicit per-forge skip/mirror lines.
+. Only when those checks are genuinely clean, notify `@hyperpolymath`
+  in the PR. A merged PR, a skipped job or a zero-job run is not
+  notification-worthy evidence.

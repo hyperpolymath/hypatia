@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   hypatia:
-    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
+    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@1725bebd3773ea25627479f813283abf1c497a85
     # Scanner pin: hypatia's own main branch, never the PR head. See governance.yml.
     with:
       hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}
