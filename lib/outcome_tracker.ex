@@ -141,7 +141,19 @@ defmodule Hypatia.OutcomeTracker do
       :ok ->
         if publish_to_fleet?, do: write_fleet_outcome(record)
         if qualified_outcome?(record), do: update_annealing_state(recipe_id, outcome)
-        update_recipe_confidence(recipe_id)
+        # The event is committed even when the derived recipe summary is
+        # temporarily unavailable. The LearningScheduler retries that recipe
+        # from the durable log on the next cycle.
+        case update_recipe_confidence(recipe_id) do
+          {:error, reason} ->
+            Logger.warning("Outcome logged; recipe update pending: #{inspect(reason)}")
+
+          :recipe_not_found ->
+            Logger.warning("Outcome logged; recipe not yet registered: #{recipe_id}")
+
+          _ ->
+            :ok
+        end
 
         Hypatia.Telemetry.outcome_recorded(
           recipe_id: recipe_id,
@@ -428,13 +440,18 @@ defmodule Hypatia.OutcomeTracker do
 
                   case Jason.encode(updated_recipe, pretty: true) do
                     {:ok, json} ->
-                      File.write!(recipe_path, json <> "\n")
+                      case File.write(recipe_path, json <> "\n") do
+                        :ok ->
+                          Logger.info(
+                            "Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}"
+                          )
 
-                      Logger.info(
-                        "Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}"
-                      )
+                          {:ok, new_confidence}
 
-                      {:ok, new_confidence}
+                        {:error, reason} ->
+                          Logger.warning("Failed to persist recipe confidence: #{inspect(reason)}")
+                          {:error, reason}
+                      end
 
                     {:error, reason} ->
                       Logger.error("Failed to encode recipe: #{inspect(reason)}")
