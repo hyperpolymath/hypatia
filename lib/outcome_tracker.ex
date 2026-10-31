@@ -970,46 +970,74 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   defp update_annealing_state(recipe_id, outcome) do
-    state = load_annealing_state(recipe_id)
+    # At this point the outcome was already appended to the canonical log.
+    # One additional qualified observation can be incorporated incrementally;
+    # any legacy mismatch is rebuilt from qualified evidence instead.
+    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id))
+    qualified_total = qualified_count(counts)
 
-    outcome_atom =
-      case outcome do
-        :success -> :success
-        :failure -> :failure
-        :false_positive -> :false_positive
-        _ -> :failure
+    state =
+      case read_saved_annealing_state(recipe_id) do
+        %{outcome_count: previous} = prior when previous + 1 == qualified_total ->
+          ConfidenceAnnealing.record_outcome(prior, outcome)
+
+        %{outcome_count: current} = prior when current == qualified_total ->
+          prior
+
+        _ ->
+          ConfidenceAnnealing.from_existing(
+            counts.successes, counts.failures, counts.false_positives
+          )
       end
 
-    new_state = ConfidenceAnnealing.record_outcome(state, outcome_atom)
-    save_annealing_state(recipe_id, new_state)
-    new_state
+    save_annealing_state(recipe_id, state)
+    state
   end
 
-  defp load_annealing_state(recipe_id) do
-    path = annealing_state_path(recipe_id)
+  defp qualified_count(counts),
+    do: counts.successes + counts.failures + counts.false_positives
 
-    case File.read(path) do
-      {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, data} -> deserialize_annealing_state(data)
-          {:error, _} -> bootstrap_annealing_state(recipe_id)
-        end
+  @doc false
+  def reconcile_annealing_state(stored, counts) do
+    expected = qualified_count(counts)
 
-      {:error, _} ->
-        bootstrap_annealing_state(recipe_id)
+    case stored do
+      %{outcome_count: ^expected} -> stored
+      _ ->
+        ConfidenceAnnealing.from_existing(
+          counts.successes, counts.failures, counts.false_positives
+        )
     end
   end
 
-  # Bootstrap annealing state from existing outcome data for recipes
-  # that predate the annealing system.
-  defp bootstrap_annealing_state(recipe_id) do
-    outcomes = load_outcomes_for_recipe(recipe_id)
-    counts = qualified_outcome_counts(outcomes)
-    state = ConfidenceAnnealing.from_existing(
-      counts.successes, counts.failures, counts.false_positives
-    )
+  defp load_annealing_state(recipe_id) do
+    # Read-time check is essential: already-persisted veteran stages may have
+    # been computed from thousands of legacy, unverified "success" rows.
+    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id))
+    saved = read_saved_annealing_state(recipe_id)
+    current = reconcile_annealing_state(saved, counts)
 
-    if outcomes != [], do: save_annealing_state(recipe_id, state)
+    if current != saved, do: save_annealing_state(recipe_id, current)
+    current
+  end
+
+  defp read_saved_annealing_state(recipe_id) do
+    case File.read(annealing_state_path(recipe_id)) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, data} -> deserialize_annealing_state(data)
+          {:error, _} -> nil
+        end
+
+      {:error, _} -> nil
+    end
+  end
+
+  # Bootstrap from qualified evidence rather than legacy success strings.
+  defp bootstrap_annealing_state(recipe_id) do
+    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id))
+    state = reconcile_annealing_state(nil, counts)
+    save_annealing_state(recipe_id, state)
     state
   end
 
