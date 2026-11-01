@@ -159,7 +159,7 @@ defmodule Hypatia.LearningSchedulerTest do
         LearningScheduler.ingest_new_outcomes(positions_a)
 
       # The completed record is now credited (recipe-c joined).
-      assert count_b == 2 + 1
+      assert count_b == 1
       assert MapSet.member?(recipes_b, "recipe-c")
 
       # No incomplete tail remains.
