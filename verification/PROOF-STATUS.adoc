@@ -10,8 +10,28 @@ neurosymbolic CI/CD platform.
 `+Admitted+`
 * All proofs are constructive
 * `+%default total+` in all Idris2 files
-* Idris2 for type-level proofs; Lean 4 for theorem proving where
-convenient
+* Idris2 for cross-language interface and ABI contracts; runtime code
+  obligations follow the estate's Creusot-for-Rust/SPARK-for-Ada mapping
+* For implementation-independent theory, Agda is the primary proof target.
+  Convert an earlier proof where possible; otherwise re-prove the theorem
+  in Agda, then recheck the witness or re-prove the same statement in
+  Rocq/Coq and Lean. A translation alone is not a proof.
+* Every Agda check runs: agda --safe --without-K --cubical-compatible
+  against a pinned toolchain. Capital K is required.
+* For each target recheck, record the statement/assumption correspondence,
+  checker version, exact invocation, receipt and source/witness digest.
+  Missing tools, unchecked transports and unsuccessful checks are not
+  promoted to PROVEN. An unsuccessful translation does not refute or
+  delete the earlier theorem.
+* Canonical estate policy:
+  https://github.com/metadatastician/standards/blob/main/3-practice/PROOF-POLICY.adoc[Proof and Verification Policy].
+  This file is a proof inventory, not an independent alternative policy.
+
+NOTE: This repo currently verifies Idris2, Lean and TLA+ artefacts in CI.
+It does not yet run an Agda + Rocq + Lean reconciliation pipeline.
+The pre-existing Lean files below retain their documented scope; they
+must not be represented as independently rechecking Agda proofs until
+the checked Agda source and correspondence evidence actually exist.
 
 === Proof Inventory
 
