@@ -914,6 +914,6 @@ color = true
 == See Also
 
 - xref:rust-api.adoc[Rust API Documentation]
-- xref:logtalk-api.adoc[Logtalk Predicates]
+- xref:../rules/catalogue.adoc[Rule Catalogue (Elixir rules)]
 - xref:haskell-api.adoc[Haskell Modules]
 - xref:http-api.adoc[HTTP API Reference]

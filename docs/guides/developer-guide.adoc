@@ -127,213 +127,79 @@ cabal test
 . *Learning Feedback*: Outcomes feed back to improve rules
 
 [[writing-rules]]
-== Writing Rules (Logtalk)
+== Writing Rules (Elixir)
 
-=== Logtalk Basics
+Rules are pure-Elixir modules under `+lib/rules/*.ex+` in the
+`+Hypatia.Rules+` namespace. There is no Logtalk engine, loader, or
+output format (ADR-001, 2026-04-14). The clause-by-clause transcription
+of the retired Logtalk semantics — and the JSON contracts that replaced
+Logtalk facts — is `+docs/rules/logtalk-migration.adoc+`. Do not add
+`+.lgt+`/`+.logtalk+` files or Logtalk output settings:
+`+scripts/check-no-active-logtalk.sh+` rejects them, and
+`+Hypatia.Rules.SecurityErrors.language_replacement("logtalk")+`
+answers `+"elixir"+` for scanned repositories.
 
-Logtalk extends Prolog with objects, protocols, and categories. Rules are defined as predicates within objects.
+=== Shape of a rule module
 
-=== Rule Object Structure
+Follow the nearest existing module for the exact function shapes — the
+estate deliberately does not impose one signature on every checker —
+but keep to these invariants:
 
-[source,prolog]
-----
-%% SPDX-License-Identifier: CC-BY-SA-4.0
-%% Custom rules for my-project
+* SPDX header and an `@moduledoc` whose first non-empty line summarises
+  the module (the generated catalogue extracts it).
+* Checks are pure functions over explicit evidence (file lists, file
+  contents, alert/score/review facts) wherever possible, so they are
+  testable without a checkout or network. `+AuditPrevention+` is the
+  worked example for evidence-shaped checks.
+* Findings are maps naming at least the rule, its severity, and a
+  human-readable description (match the neighbouring module's field
+  names; `+BuildSystemRules+` is a small example).
+* Stable rule IDs. If the module emits prefixed IDs, keep them as
+  `+rule:+`/`+id:+` literals so the catalogue generator can see them.
 
-:- object(my_project_rules).
+=== Where shared semantics live
 
-    :- info([
-        version is 1:'0':'0',
-        author is 'Your Name',
-        date is 2026-01-18,
-        comment is 'Custom CI/CD rules for my-project'
-    ]).
+Do not fork shared tables into a new module:
 
-    %% Public predicates
-    :- public([
-        repo_must_have/2,
-        block_commit_if/2,
-        auto_fix/2,
-        classify_severity/2,
-        suggest_fix/2
-    ]).
+* Alert categories, severities, fixes, prevention workflows, SHA pins,
+  CWE mappings, and the language policy: `+Hypatia.Rules.SecurityErrors+`
+  (extend its tables and `+validate_alert/1+` rather than re-deriving
+  them; alert semantics changes belong there).
+* Code-pattern detection: `+Hypatia.Rules.CodeSafety+`; workflow
+  checks: `+Hypatia.Rules.WorkflowAudit+` /
+  `+Hypatia.Rules.WorkflowHardening+`.
+* Learned behaviour and confidence: `+Hypatia.Rules.Learning+`.
+  Observation counts inform confidence; they are never by themselves a
+  soundness claim.
+* Standards-authored rule *data* (`.a2ml`) is loaded via
+  `+Hypatia.Rules.RuleLoader+` — data, never dynamically evaluated code.
 
-    %% --- DECLARATIVE RULES ---
+=== Registering and documenting a rule
 
-    %% All repos must have a README
-    repo_must_have(Repo, 'README.md') :-
-        repo_exists(Repo).
+. Add `+lib/rules/<your_rule>.ex+` and, if it belongs to the facade's
+  documented surface, mention it in `+lib/rules/rules.ex+`.
+. Regenerate the catalogue: `+./scripts/gen-rule-catalogue.sh+`
+  (updates `+docs/rules/catalogue.adoc+`; never hand-edit that file).
+. Findings crossing a process boundary are JSON
+  (`+schema/findings.ncl+`); rulesets exchanged as data follow
+  `+schemas/ruleset.schema.json+`, learned-rule exports
+  `+schemas/learned-security-rules.schema.json+`.
 
-    %% Public repos must have a license
-    repo_must_have(Repo, 'LICENSE') :-
-        repo_is_public(Repo).
-
-    %% --- PREVENTIVE RULES ---
-
-    %% Block commits with large files
-    block_commit_if(Commit, large_file) :-
-        commit_adds_file(Commit, File),
-        file_size(File, Size),
-        Size > 10485760.  % 10MB
-
-    %% Block secrets in code
-    block_commit_if(Commit, secret_detected) :-
-        commit_content_matches(Commit, Pattern),
-        secret_pattern(Pattern).
-
-    %% --- CURATIVE RULES ---
-
-    %% Auto-fix missing .gitignore
-    auto_fix(Repo, missing_gitignore) :-
-        \+ repo_has_file(Repo, '.gitignore'),
-        inject_gitignore(Repo).
-
-    %% --- SEVERITY CLASSIFICATION ---
-
-    classify_severity(large_file, low).
-    classify_severity(secret_detected, critical).
-    classify_severity(missing_gitignore, low).
-
-    %% --- FIX SUGGESTIONS ---
-
-    suggest_fix(large_file, 'Use Git LFS for files >10MB').
-    suggest_fix(secret_detected, 'Remove secrets and rotate credentials').
-    suggest_fix(missing_gitignore, 'Add appropriate .gitignore for your language').
-
-:- end_object.
-----
-
-=== Available Predicates
-
-These predicates are available from the core `cicd_rules` object:
-
-.Repository State Predicates
-[cols="2,3"]
-|===
-| Predicate | Description
-
-| `repo_exists(Repo)`
-| True if repository exists
-
-| `repo_is_public(Repo)`
-| True if repository is public
-
-| `repo_has_file(Repo, Path)`
-| True if file exists in repo
-
-| `repo_uses_dependencies(Repo)`
-| True if repo has dependency files
-
-| `repo_has_workflows(Repo)`
-| True if repo has GitHub Actions
-
-| `repo_languages(Repo, Languages)`
-| Unifies with list of languages
-
-| `repo_has_branch_protection(Repo)`
-| True if branch protection enabled
-|===
-
-.Commit Predicates
-[cols="2,3"]
-|===
-| Predicate | Description
-
-| `commit_adds_file(Commit, File)`
-| True if commit adds file
-
-| `commit_modifies_file(Commit, File)`
-| True if commit modifies file
-
-| `commit_deletes_file(Commit, File)`
-| True if commit deletes file
-
-| `commit_content_matches(Commit, Pattern)`
-| True if content matches regex
-
-| `commit_modifies_workflow(Commit)`
-| True if commit modifies workflows
-|===
-
-.Workflow Predicates
-[cols="2,3"]
-|===
-| Predicate | Description
-
-| `workflow_has_unpinned_action(Commit)`
-| True if workflow has unpinned actions
-
-| `workflow_missing_permissions(Commit)`
-| True if permissions not declared
-
-| `workflow_contains(Workflow, Pattern)`
-| True if workflow contains pattern
-|===
-
-=== Pattern Matching
-
-Use Prolog pattern matching for flexible conditions:
-
-[source,prolog]
-----
-%% Match any JavaScript/TypeScript file
-js_file(File) :-
-    ( file_extension(File, '.js')
-    ; file_extension(File, '.ts')
-    ; file_extension(File, '.jsx')
-    ; file_extension(File, '.tsx')
-    ).
-
-%% Match test files
-is_test_file(File) :-
-    ( atom_concat(_, '_test.go', File)
-    ; atom_concat('test_', _, File)
-    ; atom_concat(_, '.test.js', File)
-    ; atom_concat(_, '.spec.ts', File)
-    ).
-----
-
-=== Calling Learning Module
-
-Integrate with the learning system:
-
-[source,prolog]
-----
-%% Use learned fix if confidence is high
-smart_suggest_fix(Issue, Fix) :-
-    ( learning::get_confidence(Issue, Conf),
-      Conf >= 0.85,
-      learning::recommend_fix(Issue, Fix)
-    -> true
-    ; suggest_fix(Issue, Fix)  % Fallback to static
-    ).
-
-%% Record outcome for learning
-record_outcome(Issue, Fix, success) :-
-    learning::learn_from_fix(Issue, Fix, success).
-----
-
-=== Testing Rules
-
-Test rules with the Logtalk REPL:
+=== Testing rules
 
 [source,bash]
 ----
-# Start SWI-Prolog with Logtalk
-swipl -g "['$LOGTALKUSER/adapters/swi.pl']"
-
-# Load the engine
-?- logtalk_load(loader).
-
-# Test a predicate
-?- cicd_rules::classify_severity(secret_detected, Severity).
-Severity = critical.
-
-# Test with mock data
-?- assertz(repo_has_file(test_repo, 'README.md')),
-   cicd_rules::repo_must_have(test_repo, File).
-File = 'README.md'.
+mix deps.get
+mix compile --warnings-as-errors
+mix test test/rules/<your_rule>_test.exs
 ----
+
+Tests live beside their families (`+test/rules/+` for rule modules,
+`+test/security_errors_test.exs+` for the shared tables). Cover the
+firing case, the nearest non-firing case, and any boundary the rule
+states (for example `+< 8+` versus `+8+`). The CI rule-regression job
+runs a targeted suite — add new rule tests to it when a module becomes
+load-bearing.
 
 == Creating Rulesets (Haskell)
 
@@ -818,13 +684,19 @@ fourmolu -i src/**/*.hs
 hlint src/
 ----
 
-==== Logtalk
+==== Elixir
 
-Follow Logtalk coding guidelines:
+Format and compile cleanly:
 
-* Use snake_case for predicates
-* Document all public predicates with `:- info/1`
-* Keep objects focused and cohesive
+[source,bash]
+----
+mix format
+mix compile --warnings-as-errors
+----
+
+Keep rule modules focused (one concern per module under `+lib/rules/+`),
+document every public function, and prefer pure functions over explicit
+evidence to hidden filesystem/network reads.
 
 === Testing Requirements
 
@@ -893,7 +765,7 @@ make test
 # Run specific test suite
 cargo test -p hypatia-cli
 cabal test registry
-logtalk_tester -d engine/
+mix test test/rules/
 
 # Build release
 make build-release
@@ -914,14 +786,15 @@ cargo doc --workspace --no-deps --open
 # Haskell docs
 cabal haddock --open
 
-# Logtalk docs
-cd engine && logtalk_doclet -f html
+# Rule catalogue (generated from lib/rules/*.ex moduledocs)
+./scripts/gen-rule-catalogue.sh
 ----
 
 == Reference
 
 * <<api-reference.adoc#,API Reference>>
 * <<glossary.adoc#,Glossary>>
-* https://logtalk.org/documentation.html[Logtalk Documentation]
+* https://elixir-lang.org/docs.html[Elixir Documentation]
+* <<../rules/logtalk-migration.adoc#,Logtalk → Elixir Migration Ledger>> (historical semantics and replacement contracts)
 * https://www.haskell.org/documentation/[Haskell Documentation]
 * https://doc.rust-lang.org/book/[The Rust Book]

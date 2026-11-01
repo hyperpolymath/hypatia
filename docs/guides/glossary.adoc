@@ -62,7 +62,7 @@ The category of action a rule performs. There are three effect types: <<preventi
 
 [[engine]]
 Engine::
-The Logtalk/SWI-Prolog component that executes rules and performs inference. The symbolic reasoning core of the platform.
+The Elixir/BEAM rule modules under `+lib/rules/*.ex+` that evaluate checks against repository evidence. The symbolic reasoning core of the platform.
 
 [[forge]]
 Forge::
@@ -82,7 +82,7 @@ A Git hook script installed in a repository that invokes hypatia rules at specif
 
 [[inference]]
 Inference::
-The logical reasoning process by which the Logtalk engine derives conclusions from rules and facts. Enables complex policy evaluation.
+The deterministic reasoning process by which Elixir rule modules derive findings from repository evidence and rule data. Enables complex policy evaluation.
 
 [[learning]]
 Learning::
@@ -130,7 +130,7 @@ A cryptographic signature (GPG, SSH, or Sigstore) that authenticates the author 
 
 [[symbolic-reasoning]]
 Symbolic Reasoning::
-Logic-based reasoning using rules, facts, and inference. Provides deterministic, explainable decisions. Implemented in Logtalk/Prolog.
+Logic-based reasoning using rules, facts, and inference. Provides deterministic, explainable decisions. Implemented in the Elixir modules under `+lib/rules/*.ex+`.
 
 [[verification]]
 Verification::
@@ -216,7 +216,7 @@ A refinement type system for Haskell that enables formal verification of code pr
 
 [[logtalk]]
 Logtalk::
-An object-oriented logic programming language extending Prolog. Used for the rule engine and symbolic reasoning.
+An object-oriented logic programming language extending Prolog. *Historical:* Hypatia's original rule language, retired 2026-04-14 (ADR-001); its surviving semantics were transcribed to Elixir (`+docs/rules/logtalk-migration.adoc+`). Not used anywhere in the current system.
 
 [[prolog]]
 Prolog::

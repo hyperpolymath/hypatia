@@ -566,5 +566,5 @@ Key dependencies used across the workspace:
 == See Also
 
 - xref:cli-reference.adoc[CLI Reference]
-- xref:logtalk-api.adoc[Logtalk Predicates]
+- xref:../rules/catalogue.adoc[Rule Catalogue (Elixir rules)]
 - xref:haskell-api.adoc[Haskell Modules]

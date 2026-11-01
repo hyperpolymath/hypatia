@@ -428,6 +428,21 @@ a Haskell registry that *does not exist*, Julia neural networks (*zero
 README says ArangoDB was ditched. trufflehog is still _executing_ in
 `+security-policy.yml+` despite #675 retiring it.
 
+*Logtalk subset — closed 2026-11-01.* The remaining Logtalk *semantics*
+(ECHIDNA `security_learning.lgt`; Hypatia's embedded audit-training
+rules AP001–AP015) are transcribed to Elixir with a clause-by-clause
+ledger (`docs/rules/logtalk-migration.adoc`); the Logtalk generator is
+replaced by schema'd JSON; active-tense Logtalk documentation
+(developer guide, EXPLAINME, FAQ/glossary, diagrams, quickstarts, man
+page, security/testing/API docs, integration config, INTENT) is
+corrected to the canonical `lib/rules/*.ex` locations or explicitly
+classified historical; and `scripts/check-no-active-logtalk.sh` guards
+against new active `.lgt` files/settings. The two vendored DEED
+fixtures still carrying the retired Logtalk report-format value are upstream-owned
+(standards) and tracked in the migration packet, so they remain until
+standards re-sync. D-2 stays open for its non-Logtalk parts (Haskell
+registry prose, Julia claims, ArangoDB/Dragonfly, trufflehog).
+
 ==== D-3 · HIGH · No rule catalogue exists · UNTRACKED
 
 33 rule modules emit families

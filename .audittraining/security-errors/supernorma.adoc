@@ -104,7 +104,9 @@ runs:
 
 '''''
 
-=== Prevention Rules (Logtalk)
+=== Prevention Rules (historical Logtalk — superseded)
+
+NOTE: Historical source of record only (2025-12-29), retained so the transcription can be audited. These are rules AP012–AP013; the canonical Elixir form is `Hypatia.Rules.AuditPrevention` plus the live checkers named in `docs/rules/logtalk-migration.adoc`. Do not treat the block below as an active rule source.
 
 [source,logtalk]
 ----

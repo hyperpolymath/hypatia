@@ -87,6 +87,19 @@ defmodule Hypatia.Rules.SecurityErrors do
   # ---------------------------------------------------------------------------
   # Issue Severity Classification
   # ---------------------------------------------------------------------------
+  #
+  # Provenance: transcribed from ECHIDNA `rules/security_learning.lgt`
+  # `classify_severity/2` (explicit critical/high/medium membership lists
+  # plus a `low` catch-all), itself derived from
+  # `.audittraining/ERROR-CATALOG.scm`. The catch-all members are spelled
+  # out below as explicit `:low` entries (MaintainedID, FuzzingID,
+  # SASTID, CITestsID, CIIBestPracticesID, unmaintained,
+  # unused-local-variable) so they do not fall through to this module's
+  # `:info` unknown-id default; ERROR-CATALOG.scm grades
+  # fuzzing/sast/ci-tests `medium` instead — that upstream disagreement
+  # is recorded in docs/rules/logtalk-migration.adoc and deliberately
+  # not resolved here, because every executable consumer since the
+  # Logtalk module has used the `low` grading.
 
   @issue_severity %{
     "hard-coded-cryptographic-value" => :critical,
@@ -123,6 +136,9 @@ defmodule Hypatia.Rules.SecurityErrors do
     "unused-local-variable" => :low,
     "MaintainedID" => :low,
     "FuzzingID" => :low,
+    "SASTID" => :low,
+    "CITestsID" => :low,
+    "unmaintained" => :low,
     "CIIBestPracticesID" => :low,
     "deno-lint-include-pattern" => :low,
     "workflow-linter-self-detection" => :low,
@@ -278,6 +294,122 @@ defmodule Hypatia.Rules.SecurityErrors do
   }
 
   def prevention_workflow(issue_type), do: Map.get(@prevention_workflows, issue_type)
+
+  # ---------------------------------------------------------------------------
+  # Alert Categories + Alert Validation (ECHIDNA security_learning)
+  # ---------------------------------------------------------------------------
+  #
+  # Canonical alert-type -> category mapping and the composed
+  # `validate_alert/1` query. Faithfully transcribed 2026-11-01 from
+  # ECHIDNA `rules/security_learning.lgt`:
+  #
+  #   * `alert_category/2` (18 facts)      -> @alert_categories
+  #   * `classify_severity/2`              -> `issue_severity/1` (above)
+  #   * `is_auto_fixable/1` (6 facts)      -> @auto_fixable (above)
+  #   * `suggest_fix/2` (13 facts)         -> @fix_suggestions (above)
+  #   * `get_prevention_workflow/2`        -> @prevention_workflows (above)
+  #   * `cicd_integration::validate_alert/2` -> `validate_alert/1` (below)
+  #
+  # The Logtalk module derived its facts from
+  # `.audittraining/ERROR-CATALOG.scm`; where the two disagree this
+  # module keeps the values every executable consumer has used since
+  # (the Logtalk facts / earlier Elixir transcription) and records the
+  # disagreement in the migration ledger rather than changing live
+  # behaviour as a side effect of transcription:
+  #
+  #   * ERROR-CATALOG.scm splits the `:missing_tests` group into
+  #     missing-fuzzing / missing-sast / missing-tests; the six-group
+  #     form below is canonical because the Logtalk module and
+  #     `Mix.Tasks.Hypatia.BatchSecurityScan` -- the two executable
+  #     consumers -- both used it.
+  #   * `BranchProtectionID` prevention was `branch-protection-enforcer.yml`
+  #     in Logtalk; the Elixir mapping has used `scorecard-enforcer.yml`
+  #     (jointly with SecurityPolicyID/CodeReviewID) since the first
+  #     transcription and stays canonical. Both workflow templates
+  #     still exist under `.audittraining/prevention/`.
+  #   * `TokenPermissionsID` / `missing-workflow-permissions` fix text
+  #     prescribed `permissions: read-all` in Logtalk. That advice is
+  #     superseded ON PURPOSE: current OSSF guidance flags `read-all`
+  #     itself, so the granular-permissions text in @fix_suggestions
+  #     is canonical (see scorecard_compliance/token_permissions).
+  #
+  # Full clause-by-clause ledger: docs/rules/logtalk-migration.adoc.
+
+  @alert_categories %{
+    "TokenPermissionsID" => :workflow_security,
+    "PinnedDependenciesID" => :workflow_security,
+    "missing-workflow-permissions" => :workflow_security,
+    "hard-coded-cryptographic-value" => :code_security,
+    "remote-property-injection" => :code_security,
+    "sql-injection" => :code_security,
+    "unused-local-variable" => :code_quality,
+    "syntax-error" => :code_quality,
+    "VulnerabilitiesID" => :dependency_vuln,
+    "unmaintained" => :dependency_vuln,
+    "SecurityPolicyID" => :process_hygiene,
+    "MaintainedID" => :process_hygiene,
+    "CodeReviewID" => :process_hygiene,
+    "BranchProtectionID" => :process_hygiene,
+    "CIIBestPracticesID" => :process_hygiene,
+    "FuzzingID" => :missing_tests,
+    "SASTID" => :missing_tests,
+    "CITestsID" => :missing_tests
+  }
+
+  @doc """
+  All canonical alert-type -> category mappings (the transcribed
+  ECHIDNA `alert_category/2` facts). Categories are atoms in the
+  snake-case spelling the Logtalk module used; ERROR-CATALOG.scm's
+  kebab-case type names map to them by hyphen -> underscore.
+  """
+  def alert_categories, do: @alert_categories
+
+  @doc """
+  Category for a GitHub code-scanning / Scorecard alert type, or `nil`
+  when the alert type has no transcribed `alert_category/2` fact.
+  """
+  def alert_category(alert_type), do: Map.get(@alert_categories, alert_type)
+
+  @doc """
+  Validate an alert type against the learned security rules.
+
+  Faithful transcription of ECHIDNA `cicd_integration::validate_alert/2`,
+  which composed `classify_severity/2`, `suggest_fix/2` and
+  `is_auto_fixable/1` into `alert_validation(Type, Severity, Fix,
+  AutoFix)`. The category and prevention-workflow lookups the Logtalk
+  caller performed separately are folded in, so this one map is the
+  complete replacement surface for `security_learning.lgt` consumers:
+
+      %{
+        alert_type: "TokenPermissionsID",
+        category: :workflow_security,
+        severity: :high,
+        fix: "Add granular workflow-level permissions ...",
+        auto_fixable: true,
+        prevention_workflow: "workflow-linter.yml"
+      }
+
+  This is deliberately a total-function extension of the Logtalk query:
+  Logtalk `validate_alert/2` fails outright for an alert type with no
+  `suggest_fix/2` clause, whereas this returns the map with `fix: nil`
+  (and `category`/`prevention_workflow` `nil`, `auto_fixable` `false`
+  when those facts are absent too). One further documented difference:
+  the Logtalk severity catch-all returned `low` for wholly unknown
+  types, where `issue_severity/1`'s long-standing unknown-id default
+  is `:info`. Every alert type the Logtalk module knew is now an
+  explicit entry above, so the difference is reachable only for ids
+  neither system has seen.
+  """
+  def validate_alert(alert_type) when is_binary(alert_type) do
+    %{
+      alert_type: alert_type,
+      category: alert_category(alert_type),
+      severity: issue_severity(alert_type),
+      fix: fix_suggestion(alert_type),
+      auto_fixable: auto_fixable?(alert_type),
+      prevention_workflow: prevention_workflow(alert_type)
+    }
+  end
 
   # ---------------------------------------------------------------------------
   # GitHub Action SHA Pins (canonical)
@@ -494,13 +626,20 @@ defmodule Hypatia.Rules.SecurityErrors do
   # estate policy refresh — migration target is AffineScript directly,
   # not through ReScript). affinescript ADDED. typescript replacement
   # corrected from "rescript" → "affinescript".
+  #
+  # Policy refresh 2026-11-01: logtalk REMOVED from allowed and added
+  # to banned (replacement: elixir). Logtalk appears nowhere in the
+  # estate LANGUAGE-POLICY allowlist; Hypatia's rule engine has been
+  # pure Elixir since ADR-001 (2026-04-14), and the estate carries no
+  # active `.lgt` sources. New Logtalk in a scanned repo is drift to
+  # migrate to `lib/rules/*.ex`-style Elixir, not an approved choice.
+  # See docs/rules/logtalk-migration.adoc.
   @allowed_languages MapSet.new([
                        "affinescript",
                        "affine",
                        "rust",
                        "gleam",
                        "julia",
-                       "logtalk",
                        "haskell",
                        "bash",
                        "nickel",
@@ -520,7 +659,8 @@ defmodule Hypatia.Rules.SecurityErrors do
     "python" => "julia",
     "java" => "rust",
     "kotlin" => "rust",
-    "swift" => "tauri"
+    "swift" => "tauri",
+    "logtalk" => "elixir"
   }
 
   def language_allowed?(lang), do: MapSet.member?(@allowed_languages, String.downcase(lang))
@@ -545,6 +685,10 @@ defmodule Hypatia.Rules.SecurityErrors do
     "unwrap_without_check" => {"CWE-754", "Improper Check for Unusual Conditions"},
     "getexn_on_external_data" => {"CWE-754", "Improper Check for Unusual Conditions"},
     "sql_injection" => {"CWE-89", "SQL Injection"},
+    "remote-property-injection" =>
+      {"CWE-915", "Improperly Controlled Modification of Dynamically-Determined Object Attributes"},
+    "remote_property_injection" =>
+      {"CWE-915", "Improperly Controlled Modification of Dynamically-Determined Object Attributes"},
     "stub_crypto" => {"CWE-327", "Use of Broken or Risky Cryptographic Algorithm"},
     "js_eval" => {"CWE-94", "Improper Control of Code Generation"},
     "elixir_code_eval" => {"CWE-94", "Improper Control of Code Generation"},

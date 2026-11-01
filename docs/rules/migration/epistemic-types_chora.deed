@@ -1,0 +1,92 @@
+;; SPDX-License-Identifier: MPL-2.0
+; epistemic-types_chora.deed — proposed repo deed clause set for
+; hyperpolymath/epistemic-types, prepared in Hypatia as the exact
+; replacement for .machine_readable/descriptiles/NEUROSYM.a2ml at
+; epistemic-types@5422cd5. Land at the sibling repository root; if a
+; repo deed has been created there in the meantime, merge the single
+; (neurosym ...) clause into it instead of adding a second deed.
+; Sole intentional semantic change: :report-format "logtalk" ->
+; "json" (Hypatia has had no Logtalk output since ADR-001,
+; 2026-04-14; the value was status drift, not a dependency).
+; Grammar: metadatastician/standards 1-formats/deed/spec/abnf/deed.abnf
+; v1.2.1. Mapping: 1-formats/deed/mappings/
+; agentic-neurosym-playbook-to-repo-deed.adoc family 4, extended for
+; the populated [symbolic-rules] table (see Hypatia
+; docs/rules/logtalk-migration.adoc).
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "epistemic-types"
+  (neurosym
+    :project "epistemic-types"
+    :version "0.1.0"
+    :status "prototype"
+    :last-updated "2026-06-15"
+    :author "Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>"
+    (hypatia
+      :scan-enabled #f
+      :scan-depth standard
+      :report-format "json"
+      :scan-paths ("src/EpistemicTypes")
+      :file-globs ("*.agda"))
+    ; Custom symbolic rules for this repository. Agda has no
+    ; believe_me/unsafeCoerce; the honest analogues to flag are escape
+    ; hatches and library coupling that would weaken the constructive,
+    ; --safe --without-K, no-postulate, no-stdlib discipline here.
+    (symbolic-rules
+      (notes
+        :checker-of-record "agda --no-libraries -i src src/EpistemicTypes/All.agda"
+        :safe-flags "--safe --without-K")
+      (rule
+        :name "no-postulate"
+        :pattern "postulate"
+        :severity "critical"
+        :note "This repo postulates nothing. Any `postulate` is a silent axiom; laws must be fields or proofs.")
+      (rule
+        :name "no-terminating-pragma"
+        :pattern "\\{-# TERMINATING #-\\}"
+        :severity "critical"
+        :note "Bypasses the termination checker; breaks the constructive honesty guarantee.")
+      (rule
+        :name "no-non-terminating-pragma"
+        :pattern "\\{-# NON_TERMINATING #-\\}"
+        :severity "critical"
+        :note "Same escape hatch as TERMINATING; not used here and must not appear.")
+      (rule
+        :name "no-primTrustMe"
+        :pattern "primTrustMe"
+        :severity "critical"
+        :note "Unsound equality witness; equivalent in spirit to believe_me. Must never appear.")
+      (rule
+        :name "no-trustMe"
+        :pattern "trustMe"
+        :severity "critical"
+        :note "Library-level wrapper over primTrustMe; same prohibition.")
+      (rule
+        :name "no-no-positivity-check"
+        :pattern "\\{-# NO_POSITIVITY_CHECK #-\\}"
+        :severity "critical"
+        :note "Disables the positivity checker; would admit non-strictly-positive (unsound) data.")
+      (rule
+        :name "no-no-termination-check"
+        :pattern "\\{-# NO_TERMINATION_CHECK #-\\}"
+        :severity "critical"
+        :note "Legacy termination bypass; forbidden for the same reason as TERMINATING.")
+      (rule
+        :name "no-stdlib-import"
+        :pattern "open import (Data|Relation|Function|Algebra|Category|Codata|Effect|Foreign|IO|Reflection|Tactic|Agda\\.Builtin\\.Reflection)\\b"
+        :severity "high"
+        :note "Repo builds with `agda --no-libraries`; only `Agda.Builtin.*` and `Agda.Primitive` are permitted. A standard-library import would not type-check under `just check` and breaks the self-contained guarantee.")
+      (rule
+        :name "no-unsafe-options"
+        :pattern "\\{-# OPTIONS[^#]*--type-in-type"
+        :severity "critical"
+        :note "`--type-in-type` is inconsistent; the repo target is `--safe --without-K`.")
+      (rule
+        :name "echo-not-collapsed"
+        :pattern "Echo .* = .* E "
+        :severity "medium"
+        :note "Heuristic: Echo C y (certified residue and separately measured bounds) and E kappa A (epistemic availability) are distinct modalities. Their composition is meaningful; their identification is a modelling error. Manual review on hit."))
+    (neural-config
+      :enabled #f)
+    (ci
+      :enabled #f)))

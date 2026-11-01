@@ -320,8 +320,8 @@ source ~/.cargo/env
 # Install GHC (Haskell)
 curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 
-# Install Elixir (rule engine; the Logtalk/SWI-Prolog engine is retired)
-apt-get install -y swi-prolog
+# Install Erlang/Elixir (the rule engine). Use the versions pinned in
+# mise.toml / CI. SWI-Prolog/Logtalk are NOT dependencies.
 # See https://elixir-lang.org/install.html
 ----
 

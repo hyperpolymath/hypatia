@@ -27,12 +27,26 @@ neurosymbolic CI/CD platform.
 * Canonical estate policy:
   https://github.com/metadatastician/standards/blob/main/3-practice/PROOF-POLICY.adoc[Proof and Verification Policy].
   This file is a proof inventory, not an independent alternative policy.
+* Proof *grades* follow hyperpolymath/mathesis,
+  `+estate-mathematical-architecture+` §§5–6: *Grade 3* is an Agda proof
+  formulated and type-checking under the strict profile; *Grade 2*
+  requires translation(s) into independent foundational system(s);
+  *Grade 1* additionally requires those translated witnesses to compile
+  in headless, isolated CI via verified checker APIs. A target grade is
+  not a status. This inventory records exact statuses (Open / Claimed /
+  `+AGDA-PENDING+` / `+AGDA-VERIFIED+` / Grade 3 …) and never flattens
+  them into a confidence percentage.
+* A checked model proves its stated proposition only. In particular it
+  does not prove runtime refinement of Elixir/BEAM code; such claims
+  need their own correspondence evidence and tests.
 
-NOTE: This repo currently verifies Idris2, Lean and TLA+ artefacts in CI.
-It does not yet run an Agda + Rocq + Lean reconciliation pipeline.
-The pre-existing Lean files below retain their documented scope; they
-must not be represented as independently rechecking Agda proofs until
-the checked Agda source and correspondence evidence actually exist.
+NOTE: This repo verifies Idris2, Lean and TLA+ artefacts in CI, and —
+since 2026-11-01 — carries one narrowly scoped Agda artefact
+(`+LogtalkMigration.agda+`, below) gated by the same workflow. It does
+not yet run an Agda + Rocq + Lean reconciliation pipeline. The
+pre-existing Lean files below retain their documented scope; they must
+not be represented as independently rechecking Agda proofs until
+checked Agda sources and correspondence evidence actually exist.
 
 === Proof Inventory
 
@@ -92,11 +106,14 @@ annealing clamp bounds, nascent-never-auto, veteran-unrestricted
 |COMPLETE
 
 |`+verification/proofs/idris2/VerisimdbConnector.idr+` |Idris2
-|Completeness (mandatory fields), Soundness (no "`unknown`" fallbacks),
-Preservation (transit to Logtalk facts — the retired engine's fact
-format; the proof covers the connector's preservation property as
-specified; status retained unchanged when the engine was retired
-2026-03-06) |COMPLETE
+|Completeness (mandatory fields), Soundness (missing fields rejected),
+Preservation of repo/file/category/severity under projection to the
+canonical JSON finding record (`+FindingFact+`). *Statement superseded
+2026-11-01:* the 2026-04-04 target was the retired Logtalk fact format
+(`+LogtalkFact+`); the equality proof term is unchanged, the target is
+now `+FindingFact+`, and the corresponding module is
+`+lib/verisim_connector.ex+`. Runtime refinement is not claimed.
+|COMPLETE (superseded statement; re-checked 2026-11-01 in Verify Proofs run 41328302925, idris2 --check job 124912804086, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331)
 
 |`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
 transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
@@ -146,6 +163,38 @@ log monotonicity (strictly increasing timestamps)# |RETIRED 2026-04-22 —
 downgraded to a runtime assertion in
 `+lib/outcome_tracker.ex:assert_h6_monotone/2+`. Echidnabot audits the
 JSONL for violations. See commit history.
+|===
+
+==== Logtalk → Elixir migration correspondence (2026-11-01)
+
+Finite, implementation-independent table correspondence for the retired
+ECHIDNA `+security_learning.lgt+` alert semantics versus
+`+Hypatia.Rules.SecurityErrors+`. Per the estate verifier mapping this
+is Agda territory; per Mathesis this is now *Grade 3* on the
+strict-profile receipt recorded in the row below (checker version,
+library discipline, exact invocation, result, source digest, and
+verification commit). Fix *strings* and Elixir
+runtime behaviour are outside the model and are pinned by the migration
+ledger and ExUnit tests respectively.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Properties stated |Status
+|`+verification/proofs/agda/LogtalkMigration.agda+` |Agda
+|Exhaustive agreement over the 18 transcribed alert types:
+`+categoriesAgree+`, `+severitiesAgree+`, `+autoFixableAgrees+`,
+`+fixPresenceAgrees+`; prevention agreement on the six unchanged shared
+entries; the two ledgered non-equalities stated exactly
+(`+preventionBranchSource+`, `+preventionBranchTarget+`,
+`+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`); the
+former severity catch-all members explicit (`+catchAllSastLow+`,
+`+catchAllCiTestsLow+`, `+catchAllUnmaintainedLow+`). Source SHA-256
+(at authoring): bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
+|Grade 3 — AGDA-VERIFIED. Receipt: official pinned Agda 2.8.0.2 Linux
+release, builtins only/no stdlib; invocation `agda --safe --without-K
+--cubical-compatible LogtalkMigration.agda`; success in Verify Proofs
+run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. No Grade 2/1,
+reconciliation, or runtime-refinement claim.
 |===
 
 ==== Verdict support (2026-10-14, HYP-01)
@@ -291,10 +340,11 @@ internal types
 * *P4.2* Soundness: ill-formed data (missing fields) is rejected as
 `+Nothing+`
 * *P4.3* Severity Parsing: total mapping for all valid severity levels
-* *P4.4* Data Preservation: conversion to Logtalk facts preserves repo,
-file, category, and severity (Logtalk fact format = the retired engine's;
-proof status unchanged by the 2026-03-06 retirement — recorded here so the
-claim is not silently rewritten)
+* *P4.4* Data Preservation: projection to the canonical finding record
+(`+FindingFact+`, via `+toFact+`) preserves repo, file, category, and
+severity (`+factPreservesData+`). Superseded 2026-11-01 from the retired
+Logtalk-fact target; the proof term is unchanged, the statement's target
+is the JSON finding record, and no runtime-refinement claim is made.
 
 ==== 5. Quarantine Logic (`+Quarantine.idr+`)
 
@@ -325,6 +375,28 @@ list)
 * *P7.5* At-limit rejection: when count = max, next event is always
 rejected
 * *P7.6* Count bounded after any sequence of accepts
+
+==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
+
+Status for all of P8: *Grade 3 — AGDA-VERIFIED* on the strict-profile
+receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
+41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331). This grades the finite
+model only.
+
+* *P8.1* Category correspondence: `+categoriesAgree+`
+* *P8.2* Severity correspondence, including the former catch-all:
+  `+severitiesAgree+`, `+catchAllSastLow+`, `+catchAllCiTestsLow+`,
+  `+catchAllUnmaintainedLow+`
+* *P8.3* Auto-fixability correspondence: `+autoFixableAgrees+`
+* *P8.4* Fix-presence (domain) correspondence: `+fixPresenceAgrees+`
+* *P8.5* Prevention agreement where the target did not deliberately
+  change it: `+preventionAgreesToken+`, `+preventionAgreesPinned+`,
+  `+preventionAgreesMissing+`, `+preventionAgreesHardCoded+`,
+  `+preventionAgreesVulnerabilities+`,
+  `+preventionAgreesSecurityPolicy+`
+* *P8.6* The ledgered prevention non-equalities, exactly:
+  `+preventionBranchSource+`, `+preventionBranchTarget+`,
+  `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
 
 === Dangerous Pattern Audit
 
@@ -372,7 +444,12 @@ rejected
 
 |Batch rollback |`+BatchRollback.idr+` |Full
 
-|VeriSimDB connector |`+VerisimdbConnector.idr+` |Full
+|VeriSimDB connector |`+VerisimdbConnector.idr+` |Full (model; statement
+superseded 2026-11-01)
+
+|Logtalk → Elixir alert-table correspondence
+|`+LogtalkMigration.agda+` |Finite model only — Grade 3 /
+AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)
@@ -396,7 +473,7 @@ that adding a proof does not require editing a third hand-maintained list.
 hypatia/
 ├── src/Hypatia/ABI/        # Idris2 ABI definitions + proofs (normative wire contract)
 ├── verify/src/             # Pipeline state machine proofs
-└── verification/proofs/    # Standalone property proofs (idris2/, lean4/, tlaplus/)
+└── verification/proofs/    # Standalone property proofs (idris2/, lean4/, tlaplus/, agda/)
 ....
 
 === Retired proofs
@@ -407,5 +484,8 @@ property — JSONL outcome log timestamps strictly increasing — is trivial
 enough that a runtime assertion does the job. It now lives in
 `+lib/outcome_tracker.ex+` (`+assert_h6_monotone/2+`) and echidnabot
 audits the logs for any violation. Removing Agda also removes a theorem
-prover from the toolchain: Hypatia now uses Idris2 (compile-time types),
-Lean 4 (universal invariants), and TLA+ (model-checked concurrency).
+prover from the toolchain: at retirement Hypatia used Idris2
+(compile-time types), Lean 4 (universal invariants), and TLA+
+(model-checked concurrency). The 2026-11-01 migration correspondence
+reintroduces exactly one narrowly scoped Agda artefact
+(`+LogtalkMigration.agda+`); it does not revive this retired proof.

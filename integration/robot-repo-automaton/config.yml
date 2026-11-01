@@ -9,13 +9,17 @@ integration:
 
 # Connection to hypatia engine
 engine:
-  # Logtalk rule engine
-  logtalk:
-    loader: engine/loader.lgt
-    rules:
-      - engine/rules/cicd_rules.lgt
-      - engine/rules/rule_distiller.lgt
-      - engine/rules/forge_adapters.lgt
+  # Canonical Elixir rule engine (ADR-001, 2026-04-14). Rules are
+  # compiled Elixir modules in lib/rules/*.ex — there is no loader
+  # file and no Logtalk/Prolog runtime. Migration ledger:
+  # docs/rules/logtalk-migration.adoc.
+  elixir:
+    application: hypatia
+    mix_project: mix.exs
+    rules_glob: lib/rules/*.ex
+    catalogue: docs/rules/catalogue.adoc
+    findings_schema: schema/findings.ncl
+    report_format: json
 
   # Haskell verification registry
   registry:
@@ -113,15 +117,18 @@ learning:
     path: training-data/
     format: scm  # ERROR-CATALOG.scm format
 
-  # Distillation settings
+  # Distillation settings. Learned rules are Elixir modules in
+  # lib/rules/*.ex (see rules.a2ml lifecycle); the machine-readable
+  # export for cross-repo consumers is the learned-security-rules JSON.
   distillation:
     min_occurrences: 3
-    output_path: engine/rules/learned_rules.lgt
+    output_path: .audittraining/echidna-rules.json
 
-  # Export formats
+  # Export formats (replaces the retired Logtalk security_rule/4 file)
   exports:
-    - format: logtalk
-      path: engine/rules/learned_rules.lgt
+    - format: json
+      path: .audittraining/echidna-rules.json
+      schema: schemas/learned-security-rules.schema.json
     - format: haskell
       path: registry/src/CicdHyperA/LearnedRules.hs
 
@@ -179,6 +186,7 @@ rsr_policy:
     - java
     - kotlin
     - swift
+    - logtalk  # retired 2026-04-14 (ADR-001); rules are Elixir
 
   # Allowed languages
   allowed_languages:
@@ -186,7 +194,7 @@ rsr_policy:
     - rust
     - gleam
     - julia
-    - logtalk
+    - elixir
     - haskell
     - bash
     - nickel
