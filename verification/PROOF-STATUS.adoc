@@ -14,8 +14,9 @@ neurosymbolic CI/CD platform.
   obligations follow the estate's Creusot-for-Rust/SPARK-for-Ada mapping
 * For implementation-independent theory, Agda is the primary proof target.
   Convert an earlier proof where possible; otherwise re-prove the theorem
-  in Agda, then recheck the witness or re-prove the same statement in
-  Rocq/Coq and Lean. A translation alone is not a proof.
+  in Agda, then transport the witness to Rocq/Coq and Lean. Re-prove the
+  same statement only when transport is unavailable or unsupported. A
+  translation alone is not a proof.
 * Every Agda check runs: agda --safe --without-K --cubical-compatible
   against a pinned toolchain. Capital K is required.
 * For each target recheck, record the statement/assumption correspondence,
