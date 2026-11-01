@@ -320,7 +320,9 @@ jobs:
           rm -rf "$install_root"
           mkdir -p "$install_root"
           tar -xJf "/tmp/${asset}" -C "$install_root"
-          agda_bin="$(find "$install_root" -type f -path '*/bin/agda' | head -1)"
+          # The official tarball is a flat archive containing ./agda
+          # (see agda/agda .github/workflows/deploy.yml), not bin/agda.
+          agda_bin="$(find "$install_root" -type f -name agda | head -1)"
           [ -n "$agda_bin" ]
           chmod +x "$agda_bin"
           echo "$(dirname "$agda_bin")" >> "$GITHUB_PATH"
