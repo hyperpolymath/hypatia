@@ -113,7 +113,7 @@ canonical JSON finding record (`+FindingFact+`). *Statement superseded
 (`+LogtalkFact+`); the equality proof term is unchanged, the target is
 now `+FindingFact+`, and the corresponding module is
 `+lib/verisim_connector.ex+`. Runtime refinement is not claimed.
-|COMPLETE (superseded statement; branch re-check required)
+|COMPLETE (superseded statement; re-checked 2026-11-01 in Verify Proofs run 41328302925, idris2 --check job 124912804086, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331)
 
 |`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
 transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
@@ -170,10 +170,10 @@ JSONL for violations. See commit history.
 Finite, implementation-independent table correspondence for the retired
 ECHIDNA `+security_learning.lgt+` alert semantics versus
 `+Hypatia.Rules.SecurityErrors+`. Per the estate verifier mapping this
-is Agda territory; per Mathesis it is a *Grade 3 target*. It is not
-Grade 3, `+AGDA-VERIFIED+` or PROVEN until a strict-profile receipt is
-recorded here (checker + library versions, exact invocation, result,
-source/witness digests, verification commit). Fix *strings* and Elixir
+is Agda territory; per Mathesis this is now *Grade 3* on the
+strict-profile receipt recorded in the row below (checker version,
+library discipline, exact invocation, result, source digest, and
+verification commit). Fix *strings* and Elixir
 runtime behaviour are outside the model and are pinned by the migration
 ledger and ExUnit tests respectively.
 
@@ -190,8 +190,11 @@ entries; the two ledgered non-equalities stated exactly
 former severity catch-all members explicit (`+catchAllSastLow+`,
 `+catchAllCiTestsLow+`, `+catchAllUnmaintainedLow+`). Source SHA-256
 (at authoring): bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
-|OPEN — `+AGDA-PENDING+` (Grade 3 target; no receipt yet; no Grade 2/1,
-reconciliation, or runtime-refinement claim)
+|Grade 3 — AGDA-VERIFIED. Receipt: official pinned Agda 2.8.0.2 Linux
+release, builtins only/no stdlib; invocation `agda --safe --without-K
+--cubical-compatible LogtalkMigration.agda`; success in Verify Proofs
+run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. No Grade 2/1,
+reconciliation, or runtime-refinement claim.
 |===
 
 ==== Verdict support (2026-10-14, HYP-01)
@@ -375,9 +378,10 @@ rejected
 
 ==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
 
-Status for all of P8: *OPEN — `+AGDA-PENDING+`* (Mathesis Grade 3
-target). The statements below are formulated; none is promoted until
-the strict Agda receipt described in the inventory row exists.
+Status for all of P8: *Grade 3 — AGDA-VERIFIED* on the strict-profile
+receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
+41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331). This grades the finite
+model only.
 
 * *P8.1* Category correspondence: `+categoriesAgree+`
 * *P8.2* Severity correspondence, including the former catch-all:
@@ -444,8 +448,8 @@ the strict Agda receipt described in the inventory row exists.
 superseded 2026-11-01)
 
 |Logtalk → Elixir alert-table correspondence
-|`+LogtalkMigration.agda+` |Finite model only — `+AGDA-PENDING+`
-(Grade 3 target); fix text and runtime refinement excluded
+|`+LogtalkMigration.agda+` |Finite model only — Grade 3 /
+AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)

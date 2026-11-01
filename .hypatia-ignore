@@ -124,3 +124,14 @@ cicd_rules/banned_language_file:resolve.py
 # "docker" string and flagging the policy itself; this is recursive
 # self-flagging.
 # code_safety/ncl_docker_not_podman:.machine_readable/self-validating/hypatia-metadata.k9.ncl
+
+# ─── 2026-11-01 Logtalk migration coordination packets ─────────────────
+#
+# These two packets quote epistemic-types' OWN `src/EpistemicTypes/`
+# paths and Agda checker command verbatim, because the sibling issue is
+# precisely about that repository's descriptor. SD022 (stale `src/<dir>/`
+# after a rename in THIS tree) cannot distinguish a quoted foreign tree
+# from local rename drift. Exact files only; remove each entry when its
+# packet is deleted after the sibling change lands.
+structural_drift/SD022:docs/rules/migration/epistemic-types-neurosym-deed-issue.md
+structural_drift/SD022:docs/rules/migration/standards-deed-mapping-issue.md

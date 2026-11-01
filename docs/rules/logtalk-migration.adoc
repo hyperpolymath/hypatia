@@ -3,7 +3,7 @@
 :toc: macro
 :toclevels: 3
 
-Status: *transcription complete in source; executable receipts pending CI*
+Status: *transcription complete; Hypatia CI receipts recorded at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331; sibling landings pending*
 Date: 2026-11-01
 Applies to: Hypatia, ECHIDNA `rules/security_learning.lgt`, epistemic-types
 `NEUROSYM.a2ml`, and the Logtalk examples vendored from standards
@@ -19,11 +19,14 @@ rule source or an available output format.
 [WARNING]
 ====
 The authoring sandbox for this change had no `elixir`, `mix`, `Agda`,
-`idris2`, `lean`, or `coqc` binaries. The new/changed Elixir files were
-syntax-parsed, and the repository proof-status/trusted-base scripts were
-run, but BEAM compilation, ExUnit, Idris2 checking, and Agda checking
-remain CI receipts to collect. Nothing below should be read as a local
-runtime or Grade 3 proof receipt until those runs exist.
+`idris2`, `lean`, or `coqc` binaries, and its egress rules blocked the
+official installers. Executable evidence therefore comes from Hypatia
+CI at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331: CI run 41328303014 (Elixir Compile job 124912999773,
+warnings-as-errors + targeted ExUnit including the new rule suites +
+the no-Logtalk guard) and Verify Proofs run 41328302925 (Agda job
+124912804344; Idris2 job 124912804086; Lean, TLA+, proof-status and
+trusted-base jobs also green). Claims below cite those receipts; no
+local-sandbox compilation or proof run is claimed.
 ====
 
 toc::[]
@@ -606,27 +609,32 @@ exactly
 |`verification/proofs/agda/LogtalkMigration.agda`
 (`categoriesAgree`, `severitiesAgree`, `autoFixableAgrees`,
 `fixPresenceAgrees`, `prevention*`, `catchAll*Low`)
-|*OPEN — AGDA-PENDING (Grade 3 target).* Promotion to Grade 3 /
-AGDA-VERIFIED requires a recorded successful run of
-`agda --safe --without-K --cubical-compatible LogtalkMigration.agda`
-with checker version, exact invocation, source/witness digests, and
-verification commit in `verification/PROOF-STATUS.adoc`. The
-`agda-check` CI job added to `verify-proofs.yml` fails hard (never
-skips) to produce exactly that receipt. No Grade 2/1, Rocq/Lean
-reconciliation, or Elixir runtime-refinement claim is made.
+|*Grade 3 — AGDA-VERIFIED.* Receipt recorded in
+`verification/PROOF-STATUS.adoc`: official pinned Agda 2.8.0.2 Linux
+release (builtins only, no stdlib), invocation `agda --safe
+--without-K --cubical-compatible LogtalkMigration.agda`, success in
+Verify Proofs run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331;
+source SHA-256
+bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
+The `agda strict-profile check` job fails hard (never skips) on every
+relevant change. No Grade 2/1, Rocq/Lean reconciliation, or Elixir
+runtime-refinement claim is made.
 
 |VeriSimDB connector field preservation
 |`VerisimdbConnector.idr` (`factPreservesData` over `FindingFact`)
 |Engineering (Idris2) evidence with a *superseded statement*: target
 changed from the retired Logtalk fact format to the canonical JSON
-finding record on 2026-11-01. Branch re-check required; the model
-alone does not prove the Elixir connector refines it.
+finding record on 2026-11-01. Re-checked in Verify Proofs run
+41328302925 (idris2 --check job 124912804086) at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331; the
+model alone does not prove the Elixir connector refines it.
 
 |Elixir runtime behaviour of the transcription
 |`test/security_errors_test.exs`,
 `test/rules/audit_prevention_test.exs`
-|TESTED once CI runs them (authoring sandbox: syntax-level only).
-Tests are evidence about the Elixir code; they are not a substitute
+|TESTED in CI run 41328303014 (Elixir Compile job 124912999773:
+`mix compile --warnings-as-errors`, targeted ExUnit including these
+suites, and the no-Logtalk guard) at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. Tests are
+evidence about the Elixir code; they are not a substitute
 for the Agda statement above, nor vice versa.
 
 |AP001–AP015 check semantics beyond table correspondence
@@ -685,10 +693,10 @@ sibling repositories from this branch):
 * ECHIDNA Logtalk semantics faithfully in Elixir, divergences
   itemised (3 superseded/generalised fix strings, 1 prevention
   supersession + 1 extension, catch-all severity bug fixed,
-  total-function `validate_alert`). ✓ (runtime receipt: CI)
+  total-function `validate_alert`). ✓ (CI receipt recorded above)
 * Hypatia's embedded Logtalk rules AP001–AP015 transcribed to
   `AuditPrevention` or pointed at their pre-existing canonical
-  checkers. ✓ (runtime receipt: CI)
+  checkers. ✓ (CI receipt recorded above)
 * Logtalk-generating code replaced by a schema'd JSON contract. ✓
 * Every consumer that requested Logtalk has an exact replacement
   above. ✓
@@ -698,6 +706,7 @@ sibling repositories from this branch):
   coordinated. ✓ (landing: siblings)
 * Repository guard against new active `.lgt` files / Logtalk output
   settings, exact-path shrink-only allowlist, wired into CI. ✓
-* Proofing graded honestly: finite correspondence modelled in Agda as
-  a Grade 3 target at `AGDA-PENDING`; Idris statement supersession
-  recorded; no claim inflated beyond its evidence. ✓
+* Proofing graded honestly: finite correspondence at Mathesis
+  *Grade 3 / AGDA-VERIFIED* on the recorded strict-profile Agda
+  receipt; Idris statement supersession recorded and re-checked; no
+  claim inflated beyond its evidence. ✓

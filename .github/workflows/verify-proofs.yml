@@ -290,9 +290,9 @@ jobs:
   # Estate PROOF-POLICY / Mathesis Grade 3 gate for the one Agda artefact:
   # a missing or failing checker is a hard failure, never a skip. The file
   # imports only Agda builtins, so no standard-library dependency is
-  # involved. A green run is the receipt material for promoting the
-  # PROOF-STATUS row from AGDA-PENDING to Grade 3 / AGDA-VERIFIED; it does
-  # not by itself claim Grade 2/1 reconciliation or runtime refinement.
+  # involved. A green run is the receipt material for the PROOF-STATUS
+  # Grade 3 / AGDA-VERIFIED row; it does not by itself claim Grade 2/1
+  # reconciliation or runtime refinement.
   agda-check:
     name: agda strict-profile check
     runs-on: ubuntu-latest
