@@ -47,12 +47,12 @@ case "${1:-}" in
   --all) mode="all" ;;
   *) echo "usage: $0 [--all]" >&2; exit 2 ;;
 esac
-if [ $# -gt 1 ]; then
+if (( $# > 1 )); then
   echo "usage: $0 [--all]" >&2
   exit 2
 fi
 
-[ -f "$ALLOWLIST" ] || {
+[[ -f $ALLOWLIST ]] || {
   echo "::error::check-no-active-logtalk: $ALLOWLIST not found" >&2
   exit 2
 }
@@ -64,33 +64,35 @@ active_re='\[source,logtalk\]|:-[[:space:]]*(object|end_object|protocol|category
 codegen_re='\.lgt(["'"'"'[:space:],)\]]|$)|security_rule[[:space:]]*\('
 
 is_comment_line() {
-  local trimmed
-  trimmed="$(printf '%s' "$1" | sed 's/^[[:space:]]*//')"
+  local input_line="$1" trimmed
+  trimmed="$(printf '%s' "$input_line" | sed 's/^[[:space:]]*//')"
   case "$trimmed" in
     '#'*) return 0 ;;
     ';'*) return 0 ;;
     '//'*) return 0 ;;
     '--'*) return 0 ;;
     '%'*) return 0 ;;
+    *) return 1 ;;
   esac
-  return 1
 }
 
 is_codegen_file() {
-  case "$1" in
+  local candidate_path="$1"
+  case "$candidate_path" in
     *.ex|*.exs|*.sh|*.bash|*.yml|*.yaml|*.toml|*.json|*.ncl|*.a2ml|\
     *.deed|*.contractile|*.rs|*.py|*.js|*.ts|*.jl|*.hs|*.erl|*.gleam|\
     *.zig|*.idr|*.agda) return 0 ;;
+    *) return 1 ;;
   esac
-  return 1
 }
 
 # has_candidate <file>: raw (comment-inclusive) presence of a guarded
 # form — used only to detect allowlist entries that have gone stale.
 has_candidate() {
-  grep -IqiE -- "$active_re" "$1" 2>/dev/null && return 0
-  if is_codegen_file "$1"; then
-    grep -IqiE -- "$codegen_re" "$1" 2>/dev/null && return 0
+  local candidate_file="$1"
+  grep -IqiE -- "$active_re" "$candidate_file" 2>/dev/null && return 0
+  if is_codegen_file "$candidate_file"; then
+    grep -IqiE -- "$codegen_re" "$candidate_file" 2>/dev/null && return 0
   fi
   return 1
 }
@@ -101,16 +103,17 @@ has_candidate() {
 declare -A allowed=()
 failures=0
 ln=0
-while IFS= read -r line || [ -n "$line" ]; do
+while IFS= read -r line || [[ -n $line ]]; do
   ln=$((ln + 1))
   case "$line" in
     ''|'#'*) continue ;;
+    *) ;;
   esac
   IFS='|' read -r path class removal extra <<<"$line"
   path="$(printf '%s' "$path" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   class="$(printf '%s' "${class:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   removal="$(printf '%s' "${removal:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  if [ -n "${extra:-}" ] || [ -z "$path" ] || [ -z "$class" ] || [ -z "$removal" ]; then
+  if [[ -n ${extra:-} || -z $path || -z $class || -z $removal ]]; then
     echo "::error::$ALLOWLIST:$ln: expected '<path> | <classification> | <removal condition>'"
     failures=$((failures + 1)); continue
   fi
@@ -118,13 +121,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     *'*'*|*'?'*|*'['*|*']'*|'/'*|*'..'*|*'/')
       echo "::error::$ALLOWLIST:$ln: '$path' is not an exact repository-relative file path (no wildcards, no directories)"
       failures=$((failures + 1)); continue ;;
+    *) ;;
   esac
-  if [ -n "${allowed[$path]:-}" ]; then
+  if [[ -n ${allowed[$path]:-} ]]; then
     echo "::error::$ALLOWLIST:$ln: duplicate entry for '$path'"
     failures=$((failures + 1)); continue
   fi
   allowed["$path"]=1
-  if [ ! -f "$path" ]; then
+  if [[ ! -f $path ]]; then
     echo "::error::$ALLOWLIST:$ln: allowlisted path no longer exists: $path (shrink the list)"
     failures=$((failures + 1)); continue
   fi
@@ -141,7 +145,7 @@ done <"$ALLOWLIST"
 # ---------------------------------------------------------------------------
 # Scan.
 # ---------------------------------------------------------------------------
-if [ "$mode" = "all" ]; then
+if [[ $mode == "all" ]]; then
   mapfile -d '' files < <(git ls-files --cached --others --exclude-standard -z)
 else
   mapfile -d '' files < <(git ls-files -z)
@@ -149,22 +153,23 @@ fi
 
 checked=0
 for f in "${files[@]}"; do
-  [ -n "$f" ] || continue
-  [ -f "$f" ] || continue
+  [[ -n $f ]] || continue
+  [[ -f $f ]] || continue
   checked=$((checked + 1))
 
   lower="$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')"
   case "$lower" in
     *.lgt|*.logtalk)
-      if [ -z "${allowed[$f]:-}" ]; then
+      if [[ -z ${allowed[$f]:-} ]]; then
         echo "::error::$f: active Logtalk source file (Hypatia rules are Elixir in lib/rules/*.ex; see docs/rules/logtalk-migration.adoc)"
         failures=$((failures + 1))
       fi
       continue ;;
+    *) ;;
   esac
 
-  [ "$f" = "$ALLOWLIST" ] && continue
-  [ -n "${allowed[$f]:-}" ] && continue
+  [[ $f == "$ALLOWLIST" ]] && continue
+  [[ -n ${allowed[$f]:-} ]] && continue
 
   patterns="$active_re"
   if is_codegen_file "$f"; then
@@ -172,7 +177,7 @@ for f in "${files[@]}"; do
   fi
 
   while IFS= read -r hit; do
-    [ -n "$hit" ] || continue
+    [[ -n $hit ]] || continue
     lineno="${hit%%:*}"
     text="${hit#*:}"
     is_comment_line "$text" && continue
@@ -182,7 +187,7 @@ for f in "${files[@]}"; do
 done
 
 echo "check-no-active-logtalk: files checked ${checked}, allowlisted ${#allowed[@]}, violations ${failures}"
-if [ "$failures" -gt 0 ]; then
+if (( failures > 0 )); then
   echo "check-no-active-logtalk: FAIL"
   exit 1
 fi

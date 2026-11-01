@@ -314,7 +314,7 @@ jobs:
         run: |
           set -euo pipefail
           asset="Agda-v${AGDA_VERSION}-linux.tar.xz"
-          curl -fL --retry 3 -o "/tmp/${asset}" \
+          curl --proto '=https' --proto-redir '=https' -fL --retry 3 -o "/tmp/${asset}" \
             "https://github.com/agda/agda/releases/download/v${AGDA_VERSION}/${asset}"
           install_root="$HOME/.local/opt/agda-${AGDA_VERSION}"
           rm -rf "$install_root"
