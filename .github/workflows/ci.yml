@@ -354,8 +354,19 @@ jobs:
             test/rules/actions_lock_test.exs \
             test/rules/actions_lock_closure_corpus_test.exs \
             test/rules/rsr_conformance_test.exs \
+            test/rules/audit_prevention_test.exs \
+            test/security_errors_test.exs \
             test/research_extensions_test.exs \
             test/deed_test.exs
+
+      # ADR-001 retirement guard: Hypatia rules are pure Elixir
+      # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source
+      # or a Logtalk output/loader setting re-enters the tree outside
+      # the exact-path, shrink-only .logtalk-allowlist. Proven by
+      # mutant (plant a .lgt + a report_format: logtalk setting -> red;
+      # revert -> green). See docs/rules/logtalk-migration.adoc.
+      - name: No active Logtalk (ADR-001 guard)
+        run: bash scripts/check-no-active-logtalk.sh
 
       # The consumers' invocation, verbatim: the oracle is called with an
       # EXPLICIT --ssot. The default SSOT resolution is deliberately not

@@ -6,14 +6,18 @@ defmodule Hypatia.Rules do
 
   This replaces the need for Logtalk rule evaluation by providing
   all policy rules, security checks, and learning operations directly
-  in Elixir. The Logtalk files in engine/ remain as documentation of
-  the original rule declarations.
+  in Elixir. The canonical active rule system is this directory
+  (`lib/rules/*.ex`); there is no `engine/` tree and no Logtalk output
+  format. The original Logtalk declarations are preserved —
+  clause-by-clause, with every divergence — in
+  `docs/rules/logtalk-migration.adoc`.
 
   ## Submodules
 
-  - `SecurityErrors` -- Error categories, SHA pins, secret detection, CodeQL, CWE mappings
+  - `SecurityErrors` -- Error categories, SHA pins, secret detection, CodeQL, CWE mappings, alert validation
   - `CicdRules` -- Repo requirements, commit blocking, waste detection, license validation
   - `CodeSafety` -- Language-specific dangerous pattern detection
+  - `AuditPrevention` -- AP001–AP015 audit-training prevention rules transcribed from Logtalk
   - `MigrationRules` -- ReScript v12→v13 migration, merge conflict resolution
   - `Learning` -- Fix outcome tracking, confidence, pattern promotion (GenServer)
   - `ForgeAdapters` -- Multi-forge operations with input validation

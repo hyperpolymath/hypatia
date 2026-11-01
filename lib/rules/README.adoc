@@ -1,32 +1,67 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
-= lib/rules/ — Elixir Rules Engine
+= lib/rules/ — the canonical Hypatia rule system
 
-Pattern detection rules applied during the analysis phase.
-Each module provides a set of `check/2` or `generate_findings/2` functions
-that take scan evidence and return typed finding structs.
+This directory is Hypatia's active, canonical rule system: pure-Elixir
+modules compiled into the `hypatia` Mix application. There is no
+`engine/` tree, no Logtalk loader, and no Logtalk output format (ADR-001,
+2026-04-14; semantic migration completed 2026-11-01 — see
+`docs/rules/logtalk-migration.adoc`).
 
-== Rule Modules
+The inventory is intentionally *not* hand-listed here; it drifts. The
+generated catalogue is the reference, and the modules themselves win in
+any disagreement:
+
+[source,bash]
+----
+./scripts/gen-rule-catalogue.sh   # -> docs/rules/catalogue.adoc
+----
+
+== Entry points
+
+* `Hypatia.Rules` (`rules.ex`) — facade over the rule modules.
+* `Hypatia.Rules.RuleLoader` + `Hypatia.Rules.RsrCriteria`
+  — standards-authored rule data (`.a2ml`) loaded as data, never as code.
+* `Hypatia.Rules.Learning` — outcome tracking, confidence, and pattern
+  promotion (the live learning subsystem that replaced the old dynamic
+  Logtalk learning predicates).
+
+== Canonical semantic homes most often needed
 
 [cols="2,3"]
 |===
-|Module |Domain
+|Module |Owns
 
-|`cicd_rules.ex` |CI/CD pipeline integrity checks
-|`code_safety.ex` |Memory safety, unsafe blocks, banned patterns
-|`dependabot_alerts.ex` |Dependency vulnerability detection
-|`dogfooding.ex` |Ecosystem self-application compliance
-|`forge_adapters.ex` |Cross-forge adapter validation
-|`git_state.ex` |Git hygiene: branch protection, signed commits, stale branches
-|`green_web.ex` |Green Web Foundation compliance
-|`honest_completion.ex` |Detects inflated completion claims (believe_me, sorry, stub counts)
-|`learning.ex` |Feedback loop quality and learning signal checks
-|`migration_rules.ex` |Language migration progress tracking
-|`proof_obligation.ex` |Formal verification coverage requirements
-|`proof_strategy_selection.ex` |Selects appropriate proof strategy per finding type
-|`root_hygiene.ex` |Root-level file hygiene (SPDX, licence, README)
-|`scorecard_compliance.ex` |OpenSSF Scorecard check compliance
-|`security_errors.ex` |Common security error patterns (MD5, HTTP, hardcoded secrets)
-|`strategy_drift.ex` |Dispatch strategy drift detection over time
-|`structural_drift.ex` |Repository structure drift from RSR template
-|`workflow_audit.ex` |GitHub Actions workflow security and correctness
+|`security_errors.ex`
+|Shared security knowledge: error categories, the canonical alert
+category/severity/fix/prevention tables and `validate_alert/1`
+(transcribed from ECHIDNA's retired `security_learning.lgt`), SHA pins
+and pin exemptions, secret patterns, CodeQL language support, CWE
+mappings, and the RSR language policy (Logtalk banned → Elixir).
+
+|`audit_prevention.ex`
+|Audit-training prevention rules AP001–AP015, transcribed from the
+historical Logtalk blocks in `.audittraining/security-errors/*.adoc`:
+verbatim rule records (`rules/0`) plus the evidence-shaped checks that
+had no other home. Rules whose checks already existed point at them
+instead of duplicating them.
+
+|`code_safety.ex` / `workflow_audit.ex` / `workflow_hardening.ex`
+|Content-level code and workflow checkers (including the canonical
+homes of AP011, AP014, and AP015).
+
+|`rsr_conformance.ex` / `dogfooding.ex`
+|RSR v2.0 conformance oracle and self-application checks (canonical
+home of AP012).
 |===
+
+== Output contracts
+
+Rules produce findings consumed as JSON (`schema/findings.ncl`), never
+as Logtalk facts. Rulesets exchanged as data follow
+`schemas/ruleset.schema.json`; learned security-rule exports follow
+`schemas/learned-security-rules.schema.json`
+(`Mix.Tasks.Hypatia.BatchSecurityScan`).
+
+New `.lgt`/`.logtalk` sources and Logtalk output settings are blocked
+by `scripts/check-no-active-logtalk.sh` (exact-path exemptions, with
+removal conditions, in `.logtalk-allowlist`).

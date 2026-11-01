@@ -1,0 +1,703 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Logtalk → Elixir Rule Migration Ledger
+:toc: macro
+:toclevels: 3
+
+Status: *transcription complete in source; executable receipts pending CI*
+Date: 2026-11-01
+Applies to: Hypatia, ECHIDNA `rules/security_learning.lgt`, epistemic-types
+`NEUROSYM.a2ml`, and the Logtalk examples vendored from standards
+
+This is the canonical ledger for retiring Logtalk as an active rule and
+report format in the Hypatia estate. It records what the Logtalk sources
+meant, where each meaning now lives in Elixir, every deliberate
+divergence, the exact replacement contracts for consumers, and the proof
+status of the correspondence. Historical Logtalk text may remain where
+this ledger classifies it as a record; it must not be read as an active
+rule source or an available output format.
+
+[WARNING]
+====
+The authoring sandbox for this change had no `elixir`, `mix`, `Agda`,
+`idris2`, `lean`, or `coqc` binaries. The new/changed Elixir files were
+syntax-parsed, and the repository proof-status/trusted-base scripts were
+run, but BEAM compilation, ExUnit, Idris2 checking, and Agda checking
+remain CI receipts to collect. Nothing below should be read as a local
+runtime or Grade 3 proof receipt until those runs exist.
+====
+
+toc::[]
+
+== Decision: the canonical rule system
+
+Hypatia's active, canonical rule system is *pure Elixir*:
+
+* Rule modules: `lib/rules/*.ex` (41 modules at this change), fronted by
+  `lib/rules/rules.ex`.
+* Generated inventory: `docs/rules/catalogue.adoc` and
+  `docs/wiki-pages/Rule-Catalogue.md`, produced by
+  `scripts/gen-rule-catalogue.sh` from the Elixir moduledocs. If the
+  catalogue and the modules disagree, the modules win and the catalogue
+  is regenerated.
+* Scan findings: JSON under `schema/findings.ncl` (the CLI also renders
+  `text`, `github`, and `sarif`; there is no `logtalk` format).
+* Rulesets shared as data: `schemas/ruleset.schema.json`.
+* Learned security-rule exports:
+  `schemas/learned-security-rules.schema.json` (new in this change; see
+  <<learned-rules-json>>).
+
+There is no `engine/` tree, no Logtalk loader, and no tracked `.lgt` or
+`.logtalk` source in this repository. This completes ADR-001
+(2026-04-14, "Hypatia is pure Elixir") at the level of rule semantics:
+ADR-001 removed the runtime; the two residual Logtalk rule sources
+(ECHIDNA's fact module and Hypatia's own audit-training blocks) are
+transcribed below.
+
+== How fidelity is recorded
+
+Each transcribed item carries one disposition:
+
+[cols="1,3",options="header"]
+|===
+|Disposition |Meaning
+
+|Exact
+|Same inputs, same outputs, including failure/absence behaviour over
+the stated domain.
+
+|Operationalised
+|The Logtalk condition named an uninterpreted predicate
+(`crate_type(parser)`, `nearby_pattern/1`, `pr_reviews < 2`, …). The
+Elixir check states the concrete evidence test used in its place; the
+interpretation is written down here and in the module, not hidden.
+
+|Extension
+|The Elixir surface is a superset (more alert types, a total function
+where Logtalk failed, an extra prevention mapping). Shared-domain
+behaviour is unchanged.
+
+|Superseded
+|The Logtalk value was wrong or unsafe under current estate policy and
+was replaced on purpose. The old value is quoted here so the change is
+auditable.
+
+|Dead code
+|The Logtalk clause could never execute as written, or described a
+runtime/dynamic-database mechanism replaced wholesale by an Elixir
+subsystem. No clause-by-clause equivalent is pretended.
+|===
+
+== Consumer inventory and exact replacements
+
+[cols="2,2,3",options="header"]
+|===
+|Consumer / stale claim |Was requesting |Replacement (this change)
+
+|`Mix.Tasks.Hypatia.BatchSecurityScan.generate_echidna_rules/1`
+|Generated `learned_security_rules.lgt` /
+`.audittraining/echidna-rules.lgt` containing
+`security_rule(Type, Category, AutoFix, Count)` facts
+|`generate_learned_rules/1` writes
+`~/repos/echidna/rules/learned_security_rules.json` (when that
+directory exists) or `.audittraining/echidna-rules.json`, conforming to
+`schemas/learned-security-rules.schema.json`. See <<learned-rules-json>>.
+
+|ECHIDNA `security_learning::export_rules/1`,
+`cicd_integration::push_rules_to_cicd/0`
+|Wrote `security_rule(Type, Category, Severity, AutoFix)` facts to
+`~/repos/cicd-hyper-a/.audittraining/echidna-rules.lgt`
+|Same JSON contract. The `.lgt` file itself is transcribed into
+`Hypatia.Rules.SecurityErrors` (<<echidna-ledger>>); ECHIDNA-side
+removal/archival is coordinated in
+`docs/rules/migration/echidna-security-learning-issue.md`.
+
+|ECHIDNA `docs/ECOSYSTEM-INTEGRATION.adoc`;
+`echidna-playground/.machine_readable/descriptiles/NEUROSYM.a2ml`
+|"Auto-generates Logtalk rules after 5+ observations"; a live
+(`scan-enabled = true`) descriptor with `report-format = "logtalk"`
+|Same coordination packet: docs reworded to Elixir rule
+modules / learned-rules JSON, and the descriptor value replaced with
+exactly `report-format = "json"` (full DEED conversion may follow the
+estate descriptile programme separately).
+
+|epistemic-types `.machine_readable/descriptiles/NEUROSYM.a2ml`
+(at `5422cd5`, still on `main`)
+|`report-format = "logtalk"` for a (disabled) Hypatia scan
+|Status drift, not a dependency: Hypatia has had no such output since
+ADR-001. The whole descriptor is re-expressed as a DEED
+(`docs/rules/migration/epistemic-types_chora.deed`) with
+`:report-format "json"`; landing instructions and issue text in
+`docs/rules/migration/epistemic-types-neurosym-deed-issue.md`.
+
+|`integration/robot-repo-automaton/config.yml`
+|`engine/loader.lgt`, `engine/rules/*.lgt`, distillation and export to
+`learned_rules.lgt`, `format: logtalk`, Logtalk in `allowed_languages`
+|Repointed to the Elixir application (`mix.exs`, `lib/rules/*.ex`,
+`schema/findings.ncl`, `report_format: json`), to
+`.audittraining/echidna-rules.json` + the learned-rules schema, and to
+`logtalk` under `banned_languages` with `elixir` allowed. (The file's
+long-dead Haskell-registry and ArangoDB sections are separate drift and
+are not silently rewritten here.)
+
+|`.machine_readable/INTENT.contractile`
+|Three active-tense Logtalk claims (pattern detection, "Logtalk rule
+engine" invariant, Logtalk rules under `data/`)
+|Corrected to the pure-Elixir engine in `lib/rules/*.ex`. Other stale
+contents of that file are untouched by this change.
+
+|`Hypatia.Rules.SecurityErrors` language policy; `hooks/lib/common.sh`
+|"logtalk" in the allowed-language set; hook library detected `.lgt`
+files but never banned them
+|Logtalk moves to banned with replacement `"elixir"`
+(`language_replacement("logtalk") == "elixir"`); `is_banned_language`
+now fires on `logtalk` and `get_language_alternative` answers
+"Elixir (lib/rules/*.ex)". Detection of `.lgt` is retained precisely so
+the ban can trigger. The standards language policies contain no
+Logtalk/Prolog allowlist entry, so this aligns Hypatia with the estate
+canon rather than inventing a new rule.
+
+|`verification/proofs/idris2/VerisimdbConnector.idr`
+|`LogtalkFact`, "transit to Logtalk facts", a fictitious
+`to_logtalk_facts` in a nonexistent `lib/verisimdb_connector.ex`
+|Renamed to `FindingFact` (the canonical JSON finding projection),
+pointed at the real `lib/verisim_connector.ex`, and recorded as a
+*superseded statement* in `verification/PROOF-STATUS.adoc` — see
+<<proofing>>. The proof term is unchanged; its old target no longer
+exists, which is exactly why the supersession is explicit.
+
+|standards DEED mapping/template; Hypatia deed test fixtures
+|The standards `agentic-neurosym-playbook-to-repo-deed` mapping's own
+template still emits `:report-format "logtalk"`, and two fixtures
+vendored into `test/fixtures/deed_egress/` reproduce it
+|Upstream-owned drift. The fixtures stay byte-faithful to standards
+until standards lands the fix (deviating locally would falsify the
+reader's conformance fixtures); they are exact-path exemptions in the
+new guard, and the standards fix is coordinated in
+`docs/rules/migration/standards-deed-mapping-issue.md`.
+
+|Active-tense documentation (developer guide, EXPLAINME, FAQ/glossary,
+quickstarts, man page, API/security/testing docs, rules README, CLI and
+schema docs)
+|Described a live Logtalk engine under a nonexistent `engine/`
+|Corrected to the canonical Elixir locations above. Genuinely
+historical records — ADR-001, STATE/AGENTIC/MUST checkpoints,
+roadmaps, dated audits, provenance/history narratives, and the arXiv
+paper snapshot — are *not* rewritten; they are classified historical in
+the guard allowlist and in `docs/DEBT-REGISTER.adoc` (D-2 closure note).
+|===
+
+No other live consumer of Logtalk output was found: the Hypatia CLI
+accepts `json|text|github|sarif`; `Hypatia.CLI.Formatter`, panic-attack
+integration, VCL, and the neural/dispatch pipeline are all JSON-shaped.
+
+[[learned-rules-json]]
+== The learned-rules JSON contract
+
+There were *two* incompatible `security_rule/4` shapes, which is
+itself sufficient reason the positional format had to die:
+
+* Hypatia's generator: `security_rule(Type, Category, AutoFix, Count)`
+* ECHIDNA's exporter: `security_rule(Type, Category, Severity, AutoFix)`
+
+The replacement is one named-field JSON document,
+`schemas/learned-security-rules.schema.json` ($id
+`https://hyperpolymath.dev/schemas/hypatia/learned-security-rules`,
+format version `1.0.0`), produced by
+`Mix.Tasks.Hypatia.BatchSecurityScan`:
+
+[source,json]
+----
+{
+  "schema": "https://hyperpolymath.dev/schemas/hypatia/learned-security-rules",
+  "version": "1.0.0",
+  "generated_at": "2026-11-01T00:00:00Z",
+  "generator": "mix hypatia.batch_security_scan",
+  "source_alert_count": 1234,
+  "rules": [
+    {
+      "alert_type": "TokenPermissionsID",
+      "category": "workflow_security",
+      "severity": "high",
+      "auto_fixable": true,
+      "observations": 87,
+      "fix": "Add granular workflow-level permissions ...",
+      "prevention_workflow": "workflow-linter.yml"
+    }
+  ]
+}
+----
+
+Field provenance:
+
+[cols="1,2,2",options="header"]
+|===
+|JSON field |Retired Logtalk source |Canonical Elixir source
+
+|`alert_type` |Field 1 of both shapes |GitHub/Scorecard alert id
+|`category` |Field 2 of both shapes; `alert_category/2`
+|`SecurityErrors.alert_category/1` (snake-case string; task-local
+substring grouping only as fallback for ids outside the 18)
+|`severity` |ECHIDNA field 3; `classify_severity/2` (absent from
+Hypatia's generator) |`SecurityErrors.issue_severity/1`
+|`auto_fixable` |Hypatia field 3 / ECHIDNA field 4; `is_auto_fixable/1`
+|`SecurityErrors.auto_fixable?/1`
+|`observations` |Hypatia field 4 (absent from ECHIDNA's export)
+|Alert count in the producing scan. Evidence for belief formation
+only — never a soundness claim (`src/Hypatia/ABI/Verdict.idr`).
+|`fix` |`suggest_fix/2` |`SecurityErrors.fix_suggestion/1` (`null` when none)
+|`prevention_workflow` |`get_prevention_workflow/2`
+|`SecurityErrors.prevention_workflow/1` (`null` when none)
+|===
+
+All per-alert fields except `observations` are exactly
+`Hypatia.Rules.SecurityErrors.validate_alert/1` rendered as JSON.
+
+[[echidna-ledger]]
+== ECHIDNA `security_learning.lgt` — clause-by-clause ledger
+
+Source: `hyperpolymath/echidna:rules/security_learning.lgt` (only
+`.lgt` file in that repository; added 2025-12-29; no loader or other
+Logtalk consumer exists there). Target:
+`Hypatia.Rules.SecurityErrors`, except where stated.
+
+=== `alert_category/2` — 18 facts → `@alert_categories` — *Exact*
+
+New canonical home: `SecurityErrors.alert_categories/0` /
+`alert_category/1` (atoms, snake-case as in the Logtalk):
+
+* `workflow_security`: TokenPermissionsID, PinnedDependenciesID,
+  missing-workflow-permissions
+* `code_security`: hard-coded-cryptographic-value,
+  remote-property-injection, sql-injection
+* `code_quality`: unused-local-variable, syntax-error
+* `dependency_vuln`: VulnerabilitiesID, unmaintained
+* `process_hygiene`: SecurityPolicyID, MaintainedID, CodeReviewID,
+  BranchProtectionID, CIIBestPracticesID
+* `missing_tests`: FuzzingID, SASTID, CITestsID
+
+Outside these 18, `alert_category/1` returns `nil`, mirroring the
+absence of a fact. (The batch-scan task keeps a separate kebab-case
+*display* grouping with substring fallback for unseen ids such as
+`unused-import`; it is not a second semantic source and is commented
+as such.)
+
+=== `classify_severity/2` → `issue_severity/1` — *Exact on the 18; one stated difference outside*
+
+* critical: hard-coded-cryptographic-value, sql-injection,
+  VulnerabilitiesID
+* high: remote-property-injection, TokenPermissionsID,
+  missing-workflow-permissions
+* medium: PinnedDependenciesID, SecurityPolicyID, BranchProtectionID,
+  CodeReviewID, syntax-error
+* low (Logtalk catch-all `classify_severity(_, low)`): the remaining
+  seven — unused-local-variable, unmaintained, MaintainedID,
+  CIIBestPracticesID, FuzzingID, SASTID, CITestsID
+
+Before this change, SASTID, CITestsID, and unmaintained had no
+explicit Elixir entry and fell through to `issue_severity/1`'s `:info`
+default — a silent transcription bug against the Logtalk catch-all.
+They are now explicit `:low` entries. For ids *neither* system has
+seen, Elixir keeps its long-standing `:info` unknown-default rather
+than the Logtalk catch-all's `low`; that is the single deliberate
+difference, unreachable for any of the 18.
+
+=== `is_auto_fixable/1` — 6 facts → `@auto_fixable` — *Exact on the 18 (Elixir set is a superset overall)*
+
+TokenPermissionsID, PinnedDependenciesID, missing-workflow-permissions,
+SecurityPolicyID, BranchProtectionID, unused-local-variable. The
+Elixir set additionally contains later alert ids outside the Logtalk
+domain; on the 18 the two agree exactly.
+
+=== `suggest_fix/2` — 13 facts → `@fix_suggestions`
+
+* *Exact (10), byte-identical strings:* SecurityPolicyID,
+  BranchProtectionID, CodeReviewID, CIIBestPracticesID, FuzzingID,
+  VulnerabilitiesID, hard-coded-cryptographic-value,
+  remote-property-injection, unused-local-variable, syntax-error.
+* *Generalised (1):* PinnedDependenciesID — Logtalk
+  "Replace @v4 with @SHA # v4 format" → Elixir
+  "Replace @vN with @SHA # vN format" (same instruction, version
+  parameterised).
+* *Superseded (2):* TokenPermissionsID and missing-workflow-permissions
+  — Logtalk prescribed `Add "permissions: read-all" at workflow level`.
+  Current OSSF guidance (and Hypatia's own
+  `scorecard_compliance/token_permissions` check) flags `read-all`
+  itself as high severity, so the canonical text prescribes granular
+  least-privilege permissions and explicitly warns against `read-all`.
+  Transcribing the old string would have made Hypatia recommend what
+  Hypatia flags.
+* *No fix in either system (5 of the 18):* sql-injection, unmaintained,
+  MaintainedID, SASTID, CITestsID → `fix_suggestion/1` returns `nil`.
+
+=== `get_prevention_workflow/2` — 7 facts → `@prevention_workflows`
+
+Exact for six: TokenPermissionsID, PinnedDependenciesID,
+missing-workflow-permissions → `workflow-linter.yml`;
+hard-coded-cryptographic-value → `secret-scanner.yml`;
+VulnerabilitiesID → `cargo-audit.yml`; SecurityPolicyID →
+`scorecard-enforcer.yml`.
+
+* *Superseded (pre-existing, now ledgered):* BranchProtectionID —
+  Logtalk `branch-protection-enforcer.yml` → Elixir
+  `scorecard-enforcer.yml`. The Elixir value predates this change (it
+  groups BranchProtection with the other Scorecard process checks) and
+  every executable consumer has used it since; both workflow templates
+  still exist under `.audittraining/prevention/`. Changing it back is
+  a policy decision for a separate change, not a transcription fix.
+* *Extension:* CodeReviewID → `scorecard-enforcer.yml` exists in
+  Elixir with no Logtalk counterpart.
+
+=== `cicd_integration::validate_alert/2` → `validate_alert/1` — *Total-function extension*
+
+Logtalk composed severity + fix + auto-fixability into
+`alert_validation(Type, Severity, Fix, AutoFix)` and *failed* for any
+alert without a `suggest_fix/2` clause. `SecurityErrors.validate_alert/1`
+returns those fields plus the separately-looked-up `category` and
+`prevention_workflow`, and is total: absent facts are `nil`/`false`
+rather than query failure. Consumers that relied on Logtalk failure
+as an "unknown alert" signal should test `category: nil` and
+`fix: nil` in the returned map (or the JSON `null`s).
+
+=== Learning machinery — *Dead code / wholesale replacement*
+
+`load_training_data/1`, `read_training_examples/1`,
+`process_training_term/1`, `learn_rules/0`, the `training_data/3` /
+`learned_rule/4` / `fix_pattern/3` dynamic database, and
+`sync_from_cicd/0` (hard-coded `~/repos/cicd-hyper-a` path, Prolog
+`read/1` over a Guile Scheme module) never formed a runnable pipeline
+and have no clause-level equivalents. Their *purpose* is served by:
+
+* `Hypatia.Rules.Learning` — outcome tracking, confidence, promotion
+  (the live learning subsystem);
+* `Mix.Tasks.Hypatia.BatchSecurityScan` — fleet alert collection and
+  the learned-rules JSON above;
+* `.audittraining/ERROR-CATALOG.scm` — retained as training-data
+  record (Scheme, not Logtalk).
+
+One latent ambiguity is worth recording because the JSON contract
+dissolves it: `process_training_term/1` stored the catalog's second
+field as `Type`, while `learn_rules/0` read the same position as
+`Category`. Named JSON fields make that class of error impossible.
+
+=== Where `.audittraining/ERROR-CATALOG.scm` disagrees with the Logtalk
+
+The Logtalk header says its facts derive from `ERROR-CATALOG.scm`, but
+the two disagree, and this transcription follows the *Logtalk* (the
+values every executable consumer used), recording the Scheme variants
+as open policy questions rather than smuggling them in:
+
+* Categories: the catalog splits fuzzing/SAST/CI-tests into
+  `missing-fuzzing` / `missing-sast` / `missing-tests`; Logtalk and
+  Elixir use one `missing_tests` group.
+* Severities: catalog has VulnerabilitiesID high (Logtalk critical),
+  unmaintained medium (Logtalk low), FuzzingID/SASTID/CITestsID medium
+  (Logtalk low).
+* Auto-fixability: catalog marks CodeReviewID, FuzzingID, SASTID,
+  CITestsID `#t`; Logtalk/Elixir say false.
+* The catalog's extra entries (workflow-linter self-detection,
+  rust-toolchain input, duplicate workflows, …) were never in the
+  Logtalk; most already live in Elixir's extended severity/fix tables.
+
+Adopting the catalog's finer split or medium grading would change
+live severities fleet-wide and needs its own decision.
+
+== Audit-training prevention rules AP001–AP015
+
+Source: the `Prevention Rules (Logtalk)` blocks (2025-12-29) in seven
+`.audittraining/security-errors/*.adoc` files — the last rule-bearing
+Logtalk text inside Hypatia itself. Those blocks are retained in
+place, now headed as historical, and are *not* executable sources.
+Canonical target: `Hypatia.Rules.AuditPrevention`, whose `rules/0`
+preserves every record verbatim as data (id, functor, name, effect,
+description, conditions, action, origin, canonical equivalent).
+
+Common operationalisations:
+
+* The records had effects and actions but no severities. Finding
+  severity derives from the action (`block_merge_with_escalation` →
+  `:critical`; other `block_*` → `:high`; `warn_*`/`alert_*` →
+  `:medium`; `warn_and_log` → `:low`). Alert-id severities remain
+  `SecurityErrors`' business.
+* Checks are pure functions over caller-supplied evidence (file lists,
+  file contents, tag/review/score facts). `check_all/1` runs every
+  implemented check whose evidence is present and is silent otherwise;
+  it never duplicates a check whose canonical home is another module.
+
+[cols="1,2,3,3",options="header"]
+|===
+|ID |Logtalk rule |Canonical Elixir |Disposition / operationalisation
+
+|AP001 |`parser_rule(input_limits)` (bunsenite)
+|`AuditPrevention.check_parser_input_limits/1`
+|Implemented. `crate_type(parser)` is inferred from a Cargo description
+naming a parser; the negated size-limit pattern is searched over the
+supplied contents.
+
+|AP002 |`wasm_rule(memory_limits)` (bunsenite)
+|`AuditPrevention.check_wasm_memory_limits/1`
+|Implemented. `feature("wasm")` is inferred from Cargo wasm
+features/dependencies; memory-limit markers searched likewise.
+
+|AP003 |`rust_rule(missing_audit)` (czech-file-knife)
+|`AuditPrevention.check_missing_cargo_audit/2`
+|Implemented exactly over evidence: `Cargo.toml` present and no
+*workflow* content running `cargo audit` (a README mention is not CI).
+
+|AP004 |`rust_rule(workspace_vuln)` (czech-file-knife)
+|`AuditPrevention.check_workspace_vuln/2`
+|Implemented as the stated conjunction; `any_member_has_vuln` is
+caller-supplied vulnerability evidence (this check does not itself
+audit members — that is the scanner's/cargo-audit's job).
+
+|AP005 |`project_rule(missing_ci_tests)` (gitvisor)
+|`AuditPrevention.check_missing_ci_tests/1`
+|Implemented. The literal glob was `*test*.yml`; `.yaml` test
+workflows are accepted as the same semantic object (recorded here
+because the glob, read literally, would false-positive on them).
+`has_source_code` uses the module's source-extension list.
+
+|AP006 |`project_rule(missing_sast)` (gitvisor)
+|`AuditPrevention.check_missing_sast/2`
+|Implemented; `codeql.yaml` accepted alongside the literal
+`codeql.yml`, same reasoning as AP005. SecurityErrors' CodeQL language
+matrix validation is the related pre-existing surface.
+
+|AP007 |`security_rule(property_injection)` (polyglot-i18n)
+|`AuditPrevention.check_property_injection/1`
+|Implemented. Both Logtalk access patterns are used verbatim;
+`nearby_pattern(allowlist)` is operationalised as *same file*. CWE-915
+added to `SecurityErrors` for `remote-property-injection` /
+`remote_property_injection` (previously unmapped).
+
+|AP008 |`code_quality_rule(unused_vars)` (polyglot-i18n)
+|`SecurityErrors` metadata for `unused-local-variable`
+|Metadata only, deliberately: the Logtalk condition is a compiler
+diagnostic string ("is declared but its value is never read"), so the
+detector of record stays the language compiler/linter. Severity
+(`:low`), fix, category (`:code_quality`), and auto-fixability are
+canonical in `SecurityErrors`.
+
+|AP009 |`crypto_rule(enhanced_review)` (proof-of-work)
+|`AuditPrevention.check_crypto_enhanced_review/2`
+|Implemented. `pr_reviews < 2` is read as the *required approving
+review count* from branch protection; unknown (`nil`) never fires.
+
+|AP010 |`crypto_rule(require_fuzzing)` (proof-of-work)
+|`AuditPrevention.check_crypto_require_fuzzing/2`
+|Implemented: cryptography tag + no `fuzz/` path in the file list.
+
+|AP011 |`crypto_rule(no_panic)` (proof-of-work)
+|`CodeSafety.scan_content/2` (`:panic_macro`, `:unwrap_without_check`,
+`:expect_in_hot_path`)
+|Already canonical — and a superset: the Elixir patterns fire in every
+Rust repo, not only cryptography-tagged ones. Not duplicated.
+
+|AP012 |`meta_rule(rsr_self_compliance)` (supernorma)
+|`RsrConformance` + `Dogfooding`
+|Already canonical, generalised: the Logtalk hard-coded
+`repo_name(supernorma)` becomes "any RSR-tooling repo, including
+Hypatia itself" via the conformance oracle and dogfooding checks.
+
+|AP013 |`template_rule(exemplary_standards)` (supernorma)
+|`AuditPrevention.check_exemplary_standards/2`
+|Implemented exactly: tooling purpose + Scorecard score < 8;
+boundary value 8 passes, mirroring `<`.
+
+|AP014 |`workflow_rule(missing_permissions)` (ubicity)
+|`WorkflowAudit.check_permissions/1`,
+`WorkflowHardening.wh002_excessive_permissions/1`
+|Already canonical (and stricter: excessive grants are flagged, not
+only absence). Not duplicated; `check_all/1` excludes it.
+
+|AP015 |`workflow_rule(unpinned_action)` (ubicity)
+|`WorkflowHardening.wh004_unpinned_uses/1`,
+`WorkflowAudit.check_unpinned_actions/1`
+|Already canonical with one supersession: Logtalk excused a tag ref
+with a trailing `# vN` comment; the Elixir checks require the
+40-hex SHA form (comment or not). A comment beside a mutable tag is
+not a pin.
+|===
+
+== epistemic-types `NEUROSYM.a2ml` → DEED
+
+Artifact: `docs/rules/migration/epistemic-types_chora.deed`, to land
+at the epistemic-types repository root under that exact filename
+(DEED v1.2.1 dispatches the `repo-deed` head by the
+`<stem>_chora.deed` filename). If that repository has acquired a repo
+deed in the meantime, the single `(neurosym …)` clause merges into it
+instead — a repo has one deed, not two.
+
+Grammar authority: standards `1-formats/deed/spec/abnf/deed.abnf`
+(v1.2.1); mapping authority: standards
+`1-formats/deed/mappings/agentic-neurosym-playbook-to-repo-deed.adoc`
+family 4. The transcription:
+
+* `[metadata]` → `(neurosym :project :version :status :last-updated
+  :author …)`, strings preserved.
+* `[hypatia-config]` → `(hypatia :scan-enabled #f :scan-depth
+  standard :report-format "json" :scan-paths ("src/EpistemicTypes")
+  :file-globs ("*.agda"))`. Per the mapping: `scan-enabled` is a DEED
+  boolean (`#f`, never the word), `scan-depth` a symbol, paths/globs
+  lists of strings, DOIs would be strings (none here).
+* `[neural-config] enabled=false` and `[ci] enabled=false` map
+  directly to `(neural-config :enabled #f)` / `(ci :enabled #f)`.
+* The one intentional semantic change in the entire file:
+  `report-format` `"logtalk"` → `"json"`.
+
+*Proposed mapping extension (needs a standards row):* family 4
+currently fails closed on a populated `[symbolic-rules]` table.
+epistemic-types has ten real rules, so the artifact transcribes them
+as `(symbolic-rules (notes :checker-of-record … :safe-flags …) (rule
+:name … :pattern … :severity … :note …) …)` — syntactically valid
+under the ABNF (clauses are generic), semantically a row standards
+should ratify; see the standards coordination issue. The same applies
+to the extra `[metadata]` fields carried as `:status` /
+`:last-updated` / `:author` strings. Pattern strings were converted
+escape-for-escape so their parsed values are identical to the A2ML
+(arbitrary-precision string escapes in DEED are only `\"`, `\\`, `\n`,
+`\t`). The A2ML's prose comments survive as DEED comments/notes where
+they carry meaning.
+
+Two deliberate non-changes: the repo's checker-of-record and
+`--safe --without-K` flags are transcribed as-is — bringing that
+repo's own proof profile to the estate's current strict invocation
+(which adds `--cubical-compatible`) is a sibling proof-policy
+reconciliation, not something to smuggle into a format migration;
+and Hypatia's *own* `NEUROSYM.a2ml` is not deed-translated here,
+because its populated neural configuration contains values DEED v1
+cannot yet express losslessly (the mapping's fail-closed gap). It
+already declares JSON.
+
+Before landing in epistemic-types: run the standards gate —
+`bun /path/to/standards/1-formats/deed/tools/deed_lint.js epistemic-types_chora.deed`
+(expected exit 0) — and keep the receipt with the sibling PR. In this
+change the artifact was validated against the ABNF subset it uses
+(header, balanced single root form, exactly one string
+`:schema-version`, boolean spelling, escape discipline, and
+field-by-field equality with the `5422cd5` source) — that is authoring
+evidence, not a standards-gate receipt.
+
+[[proofing]]
+== Proofing: policy, grades, and exact statuses
+
+Proofing follows hyperpolymath/mathesis'
+`estate-mathematical-architecture` (§§5–6) for grades and
+metadatastician/standards `3-practice/PROOF-POLICY.adoc` for evidence
+discipline; everything else follows the standards repo. In Mathesis'
+ladder, *Grade 3* means the statement is formulated in Agda and
+type-checks under the strict profile; Grade 2 additionally requires
+translation into independent foundational system(s); Grade 1
+additionally requires those witnesses to compile in headless isolated
+CI through verified checker APIs. Statuses are recorded exactly
+(Open / Claimed / AGDA-PENDING / Grade 3 / …), never as a percentage,
+and a checked model never silently becomes a runtime-refinement or
+reconciliation claim.
+
+Applied here:
+
+[cols="2,2,2",options="header"]
+|===
+|Claim |Artefact |Status at this change
+
+|Finite correspondence of the 18-alert category / severity /
+auto-fixability / fix-presence tables, prevention agreement on the
+six unchanged entries, and the two prevention non-equalities stated
+exactly
+|`verification/proofs/agda/LogtalkMigration.agda`
+(`categoriesAgree`, `severitiesAgree`, `autoFixableAgrees`,
+`fixPresenceAgrees`, `prevention*`, `catchAll*Low`)
+|*OPEN — AGDA-PENDING (Grade 3 target).* Promotion to Grade 3 /
+AGDA-VERIFIED requires a recorded successful run of
+`agda --safe --without-K --cubical-compatible LogtalkMigration.agda`
+with checker version, exact invocation, source/witness digests, and
+verification commit in `verification/PROOF-STATUS.adoc`. The
+`agda-check` CI job added to `verify-proofs.yml` fails hard (never
+skips) to produce exactly that receipt. No Grade 2/1, Rocq/Lean
+reconciliation, or Elixir runtime-refinement claim is made.
+
+|VeriSimDB connector field preservation
+|`VerisimdbConnector.idr` (`factPreservesData` over `FindingFact`)
+|Engineering (Idris2) evidence with a *superseded statement*: target
+changed from the retired Logtalk fact format to the canonical JSON
+finding record on 2026-11-01. Branch re-check required; the model
+alone does not prove the Elixir connector refines it.
+
+|Elixir runtime behaviour of the transcription
+|`test/security_errors_test.exs`,
+`test/rules/audit_prevention_test.exs`
+|TESTED once CI runs them (authoring sandbox: syntax-level only).
+Tests are evidence about the Elixir code; they are not a substitute
+for the Agda statement above, nor vice versa.
+
+|AP001–AP015 check semantics beyond table correspondence
+|`AuditPrevention` + canonical checkers
+|No formal claim. The regex/evidence semantics are specified in code
++ tests; formalising them is future theory work and would enter at
+Open/Claimed, not by inheriting the alert-table status.
+|===
+
+== Guard: keeping Logtalk out
+
+`scripts/check-no-active-logtalk.sh` (wired into CI) enforces, over
+tracked files:
+
+* no `*.lgt` / `*.logtalk` files outside the allowlist;
+* no active configuration requesting Logtalk — loader paths,
+`format: logtalk`, `report-format` set to `logtalk` in A2ML/DEED
+form, or generated `.lgt` outputs — outside the allowlist.
+
+Exemptions live in `.logtalk-allowlist` as *exact paths only*
+(following the `.hypatia-ignore` precedent: no wildcards, no directory
+blankets), each with a classification and removal condition. The list
+is shrink-only: adding an entry requires the same review as adding a
+rule, and the script fails if an allowlisted path no longer exists
+(the classic stale-exemption rot). Historical prose mentioning
+Logtalk is not banned — the guard targets executable/config forms,
+and this ledger, the migration packet, the proof model, and the
+seven audit-training originals are its initially allowlisted records.
+Estate rollout (other repos have their own trees) is proposed through
+the standards coordination issue rather than pretend-enforced from
+here.
+
+== Sibling coordination
+
+Prepared, ready-to-file packets (Hypatia cannot land changes in
+sibling repositories from this branch):
+
+* `docs/rules/migration/echidna-security-learning-issue.md` — remove
+  `rules/security_learning.lgt` from ECHIDNA's active tree (preferred:
+  delete, pointing at this ledger as the transcription of record;
+  acceptable fallback: move under an explicit archive path), and fix
+  any ECHIDNA docs still presenting Logtalk generation as live.
+* `docs/rules/migration/epistemic-types-neurosym-deed-issue.md` +
+  `epistemic-types_chora.deed` — land the deed, run `deed_lint`,
+  then delete `.machine_readable/descriptiles/NEUROSYM.a2ml`.
+* `docs/rules/migration/standards-deed-mapping-issue.md` — fix the
+  `"logtalk"` literal in the standards DEED mapping/template (the
+  upstream source of Hypatia's two vendored fixtures), ratify the
+  populated-`[symbolic-rules]` mapping row proposed above, and
+  consider the no-active-Logtalk guard for estate-wide adoption.
+
+== Acceptance summary
+
+* Canonical active rules: `lib/rules/*.ex`, documented here and in
+  `lib/rules/README.adoc` / the generated catalogue. ✓
+* ECHIDNA Logtalk semantics faithfully in Elixir, divergences
+  itemised (3 superseded/generalised fix strings, 1 prevention
+  supersession + 1 extension, catch-all severity bug fixed,
+  total-function `validate_alert`). ✓ (runtime receipt: CI)
+* Hypatia's embedded Logtalk rules AP001–AP015 transcribed to
+  `AuditPrevention` or pointed at their pre-existing canonical
+  checkers. ✓ (runtime receipt: CI)
+* Logtalk-generating code replaced by a schema'd JSON contract. ✓
+* Every consumer that requested Logtalk has an exact replacement
+  above. ✓
+* epistemic-types descriptor re-expressed as an ABNF-conformant DEED
+  with `report-format "json"`. ✓ (landing + lint receipt: sibling)
+* ECHIDNA `.lgt` removal/archival coordinated; standards drift
+  coordinated. ✓ (landing: siblings)
+* Repository guard against new active `.lgt` files / Logtalk output
+  settings, exact-path shrink-only allowlist, wired into CI. ✓
+* Proofing graded honestly: finite correspondence modelled in Agda as
+  a Grade 3 target at `AGDA-PENDING`; Idris statement supersession
+  recorded; no claim inflated beyond its evidence. ✓

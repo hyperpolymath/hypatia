@@ -3,7 +3,7 @@
 === Architecture
 
 Hypatia is an Elixir OTP application with a Rust workspace, Idris2 ABI,
-Zig FFI, and Logtalk rule engine.
+Zig FFI, and a pure-Elixir rule engine in `lib/rules/*.ex` (no Logtalk: ADR-001).
 
 ==== Elixir Pipeline (lib/)
 
