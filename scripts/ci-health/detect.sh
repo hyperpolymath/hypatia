@@ -47,6 +47,7 @@ fi
 # mechanism and supports a precise recommendation.
 billing_seen=false
 lockfile_seen=false
+tracker_token_seen=false
 mapfile -t fail_ids < <(api "repos/$O/$R/actions/runs?status=failure&per_page=5" --jq '.workflow_runs[].id' || true)
 for fail_id in "${fail_ids[@]}"; do
   [ -n "${fail_id:-}" ] || continue
@@ -54,6 +55,10 @@ for fail_id in "${fail_ids[@]}"; do
   for job_id in "${job_ids[@]}"; do
     [ -n "${job_id:-}" ] || continue
     msg=$(api "repos/$O/$R/check-runs/$job_id/annotations?per_page=100" --jq '.[].message // empty' || true)
+    if [ "$tracker_token_seen" = false ] && [[ "$msg" == *"Stale cicd-suite pins detected. AUTOMATION_TOKEN is required"* || "$msg" == *"AUTOMATION_TOKEN is not set. This job edits files under .github/workflows/"* ]]; then
+      emit B-TRACKER-TOKEN HIGH "Pin updater reports missing write credential (run $fail_id) → compare pins read-only before provisioning repository-scoped write access"
+      tracker_token_seen=true
+    fi
     if [ "$billing_seen" = false ] && printf '%s' "$msg" | grep -qiE 'payments have failed|spending limit'; then
       emit A-BILLING CRITICAL "Actions billing/spending-limit wall blocks all billable jobs → OWNER: GitHub Settings -> Billing & plans"
       billing_seen=true
