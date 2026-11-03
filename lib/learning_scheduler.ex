@@ -514,7 +514,36 @@ defmodule Hypatia.LearningScheduler do
 
   # --- Ingest new outcomes from verisim-data/outcomes/*.jsonl ---
 
-  defp ingest_new_outcomes(last_positions) do
+  # E0 repair (#984, #995): the local JSONL reader must not acknowledge
+  # incomplete records, must quarantine malformed complete rows, must
+  # detect file truncation/rotation, and must use a stable event identity
+  # so the same event on replay credits once while two distinct attempts
+  # with identical payloads credit twice.
+
+  @doc false
+  def local_source_id(file, line_number) when is_binary(file) and is_integer(line_number) do
+    # Append-only line identity: disambiguates distinct identical attempts
+    # (same recipe_id, same outcome bytes) while making replay of the same
+    # delivery detectable. A future producer event_id supersedes this.
+    :crypto.hash(:sha256, "local-jsonl-v1:" <> file <> ":" <> Integer.to_string(line_number))
+    |> Base.encode16(case: :lower)
+  end
+
+  # Normalise a persisted position entry. Pre-E0 positions were bare
+  # integers (byte offsets). Post-E0 positions are
+  # `%{offset: int, incomplete_tail: binary}`. Anything else resets.
+  @doc false
+  def normalise_position(pos) when is_integer(pos) and pos >= 0,
+    do: %{offset: pos, incomplete_tail: ""}
+
+  def normalise_position(%{offset: o, incomplete_tail: t})
+      when is_integer(o) and o >= 0 and is_binary(t),
+      do: %{offset: o, incomplete_tail: t}
+
+  def normalise_position(_), do: %{offset: 0, incomplete_tail: ""}
+
+  @doc false
+  def ingest_new_outcomes(last_positions) do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
 
     case File.ls(outcomes_dir) do
@@ -524,54 +553,189 @@ defmodule Hypatia.LearningScheduler do
         Enum.reduce(jsonl_files, {last_positions, 0, MapSet.new()}, fn file,
                                                                        {positions, count, recipes} ->
           path = Path.join(outcomes_dir, file)
-          last_offset = Map.get(positions, file, 0)
+          pos = normalise_position(Map.get(positions, file, 0))
 
           case File.stat(path) do
-            {:ok, %{size: size}} when size > last_offset ->
+            {:ok, %{size: size}} when size < pos.offset ->
+              # File truncated or rotated — reset to zero and re-scan.
+              Logger.warning(
+                "LearningScheduler: outcome file #{file} truncated " <>
+                  "(size #{size} < offset #{pos.offset}), resetting"
+              )
+
+              {Map.put(positions, file, %{offset: 0, incomplete_tail: ""}), count, recipes}
+
+            {:ok, %{size: size}} when size == pos.offset and pos.incomplete_tail == "" ->
+              # No new bytes and nothing buffered — nothing to do.
+              {positions, count, recipes}
+
+            {:ok, _stat} ->
               case File.open(path, [:read, :binary]) do
                 {:ok, fd} ->
-                  :file.position(fd, last_offset)
-                  new_data = IO.read(fd, :eof)
+                  :file.position(fd, pos.offset)
+                  raw = IO.read(fd, :eof)
                   File.close(fd)
 
-                  new_records =
-                    new_data
-                    |> to_string()
-                    |> String.split("\n", trim: true)
-                    |> Enum.map(fn line ->
-                      case Jason.decode(line) do
-                        {:ok, record} -> record
-                        {:error, _} -> nil
-                      end
-                    end)
-                    |> Enum.reject(&is_nil/1)
-                  # Imported fleet entries are already handled by the source
-                  # poll. Do not account for them again on the next local poll.
-                  local_records =
-                    Enum.reject(new_records, &(Map.get(&1, "origin") == "gitbot-fleet"))
+                  # Prepend any previously buffered incomplete tail so a
+                  # producer that finishes writing between polls is read
+                  # as one complete record, not a suffix fragment.
+                  full_data = pos.incomplete_tail <> to_string(raw)
 
-                  # Fleet IDs still need a retry if a derived recipe update
-                  # could not be written. Only the outcome COUNT excludes them.
-                  new_recipe_ids =
-                    new_records
-                    |> Enum.map(fn r -> Map.get(r, "recipe_id") end)
-                    |> Enum.reject(&is_nil/1)
-                    |> MapSet.new()
+                  # Split with trim: false — the last element after
+                  # splitting "a\nb\n" is "", and after "a\nb" is "b"
+                  # (the incomplete tail we must not yet acknowledge).
+                  lines = String.split(full_data, "\n", trim: false)
 
-                  {Map.put(positions, file, size), count + length(local_records),
-                   MapSet.union(recipes, new_recipe_ids)}
+                  {complete_lines, incomplete_tail} =
+                    case List.last(lines) do
+                      nil -> {[], ""}
+                      "" -> {Enum.drop(lines, -1), ""}
+                      tail -> {Enum.drop(lines, -1), tail}
+                    end
 
-                {:error, _} ->
+                  # Advance past every complete line. The incomplete tail
+                  # stays at the old offset so it is re-read next poll.
+                  new_offset = pos.offset + byte_size(full_data) - byte_size(incomplete_tail)
+
+                  {new_count, new_recipes, quarantined} =
+                    process_local_complete_lines(complete_lines, file, pos.offset, pos.incomplete_tail)
+
+                  if quarantined > 0 do
+                    Logger.warning(
+                      "LearningScheduler: quarantined #{quarantined} malformed outcome row(s) in #{file}"
+                    )
+                  end
+
+                  {Map.put(positions, file, %{offset: new_offset, incomplete_tail: incomplete_tail}),
+                   count + new_count, MapSet.union(recipes, new_recipes)}
+
+                {:error, reason} ->
+                  Logger.warning(
+                    "LearningScheduler: cannot read outcome file #{file}: #{inspect(reason)}"
+                  )
+
                   {positions, count, recipes}
               end
 
-            _ ->
+            {:error, reason} ->
+              Logger.warning(
+                "LearningScheduler: cannot stat outcome file #{file}: #{inspect(reason)}"
+              )
+
               {positions, count, recipes}
           end
         end)
 
-      {:error, _} ->
+      {:error, :enoent} ->
+        # Outcomes directory does not exist yet — nothing to ingest.
         {last_positions, 0, MapSet.new()}
+
+      {:error, reason} ->
+        Logger.warning(
+          "LearningScheduler: cannot list outcomes directory: #{inspect(reason)}"
+        )
+
+        {last_positions, 0, MapSet.new()}
+    end
+  end
+
+  # Process a batch of complete JSONL lines from a local outcome file.
+  # `base_offset` is the byte offset of the first line in the batch
+  # (after prepending any buffered incomplete tail); `base_tail` is the
+  # text prepended so line-number accounting matches the physical file.
+  # Returns `{local_count, recipe_ids, quarantined_count}`.
+  defp process_local_complete_lines(complete_lines, file, base_offset, base_tail) do
+    # The physical line number of the first line in this batch. We count
+    # newlines before base_offset to derive it, but only when the base
+    # offset is zero (cold start) or the buffer is empty. For mid-file
+    # batches we use a monotone counter seeded from the prior run.
+    start_line = local_line_start(file, base_offset, base_tail)
+
+    complete_lines
+    |> Enum.with_index(start_line)
+    |> Enum.reduce({0, MapSet.new(), 0}, fn {line, line_number}, {count, recipes, quarantined} ->
+      if line == "" do
+        # Empty line between records — skip without counting.
+        {count, recipes, quarantined}
+      else
+        case Jason.decode(line) do
+          {:ok, record} when is_map(record) ->
+            # Imported fleet entries are already handled by the fleet
+            # poll. Do not re-count them on the local poll.
+            if Map.get(record, "origin") == "gitbot-fleet" do
+              {count, recipes, quarantined}
+            else
+              recipe_ids =
+                record
+                |> Map.get("recipe_id")
+                |> List.wrap()
+                |> Enum.reject(&is_nil/1)
+
+              {count + 1, MapSet.union(recipes, MapSet.new(recipe_ids)), quarantined}
+            end
+
+          {:ok, _not_a_map} ->
+            Logger.warning(
+              "LearningScheduler: quarantined non-map JSON row #{line_number} in #{file}"
+            )
+
+            {count, recipes, quarantined + 1}
+
+          {:error, reason} ->
+            Logger.warning(
+              "LearningScheduler: quarantined malformed outcome row #{line_number} in #{file}: #{inspect(reason)}"
+            )
+
+            {count, recipes, quarantined + 1}
+        end
+      end
+    end)
+  end
+
+  # Compute the physical line number for a batch starting at
+  # `base_offset`. On a cold start (offset 0, no buffered tail) this is 1.
+  # Otherwise count newlines in the file prefix to find the first line
+  # that begins at `base_offset`.
+  defp local_line_start(_file, 0, ""), do: 1
+
+  defp local_line_start(file, base_offset, base_tail) do
+    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    path = Path.join(outcomes_dir, file)
+
+    case File.open(path, [:read, :binary]) do
+      {:ok, fd} ->
+        prefix =
+          if base_offset > 0 do
+            :file.position(fd, 0)
+            IO.read(fd, base_offset)
+          else
+            ""
+          end
+
+        File.close(fd)
+        # Every newline in the prefix starts a new line; the batch begins
+        # on the line after the last newline at or before base_offset.
+        prefix_newlines =
+          prefix
+          |> to_string()
+          |> String.split("\n")
+          |> length()
+          |> Kernel.-(1)
+          |> max(0)
+
+        # The buffered tail may also contain embedded newlines from a
+        # prior incomplete read that has since grown.
+        tail_newlines =
+          base_tail
+          |> String.split("\n")
+          |> length()
+          |> Kernel.-(1)
+          |> max(0)
+
+        prefix_newlines + tail_newlines + 1
+
+      {:error, _} ->
+        1
     end
   end
 

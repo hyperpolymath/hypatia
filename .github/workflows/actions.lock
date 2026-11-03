@@ -32,7 +32,8 @@ workflows:
         - 'taiki-e/install-action@v2.88.0'
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
-        - 'google/clusterfuzzlite@v1'
+        - 'google/clusterfuzzlite/actions/build_fuzzers@v1'
+        - 'google/clusterfuzzlite/actions/run_fuzzers@v1'
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
         - 'github/codeql-action@v4.38.2'
@@ -338,7 +339,12 @@ dependencies:
         commit: 'sha1-e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e'
         owner_id: 90395851
         repo_id: 242854909
-    'google/clusterfuzzlite@v1':
+    'google/clusterfuzzlite/actions/build_fuzzers@v1':
+        ref: 'v1'
+        commit: 'sha1-884713a6c30a92e5e8544c39945cd7cb630abcd1'
+        owner_id: 1342004
+        repo_id: 400046858
+    'google/clusterfuzzlite/actions/run_fuzzers@v1':
         ref: 'v1'
         commit: 'sha1-884713a6c30a92e5e8544c39945cd7cb630abcd1'
         owner_id: 1342004
