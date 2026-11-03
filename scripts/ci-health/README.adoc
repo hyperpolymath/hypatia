@@ -47,6 +47,10 @@ matches its ref. This is an exact diagnosis within that bounded run horizon.
 | **Report only** — in a checkout, run `gh actions-lock --verify`, repair the
 reported dependency with the authoritative tool, and commit `actions.lock`.
 
+| `B-TRACKER-TOKEN`
+| HIGH. The pin updater explicitly reports a missing write credential.
+| **Report only** — compare pins read-only. If an update is needed, provision the repository-scoped updater credential.
+
 | `B-STARTUPFAIL`
 | One or more `startup_failure` conclusions among the latest API page of at
 most 30 workflow runs. The report includes both numerator and denominator and

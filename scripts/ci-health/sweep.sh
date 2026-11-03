@@ -49,14 +49,14 @@ rep=$(mktemp)
   grep -qP '\tA-BILLING\t' "$findings" || echo "- _none_"
   echo ""
   echo "### 🟠 B — allow-list / lockfile / bounded startup_failure observations"
-  grep -P '\tB-(ALLOWLIST|LOCKFILE|STARTUPFAIL)\t' "$findings" | awk -F'\t' '{print "- "$1" ("$2"): "$4}' || true
+  grep -P '\tB-(ALLOWLIST|LOCKFILE|STARTUPFAIL|TRACKER-TOKEN)\t' "$findings" | awk -F'\t' '{print "- "$1" ("$2"): "$4}' || true
   grep -qP '\tB-' "$findings" || echo "- _none_"
   echo ""
   echo "### 🟡 D-BURN — push/PR double-trigger"
   grep -P '\tD-BURN\t' "$findings" | awk -F'\t' '{print "- "$1": "$4}' || true
   grep -qP '\tD-BURN\t' "$findings" || echo "- _none_"
   echo ""
-  echo "> Auto-remediation: B-ALLOWLIST is applied in place and verified; D-BURN opens PRs (cap $MAXPR/run). B-LOCKFILE and B-STARTUPFAIL are report-only; A-BILLING is owner-only. See \`scripts/ci-health/README.adoc\`."
+  echo "> Auto-remediation: B-ALLOWLIST is applied in place and verified; D-BURN opens PRs (cap $MAXPR/run). B-LOCKFILE, B-TRACKER-TOKEN and B-STARTUPFAIL are report-only; A-BILLING is owner-only. See \`scripts/ci-health/README.adoc\`."
 } >"$rep"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$rep" >>"$GITHUB_STEP_SUMMARY"
 
