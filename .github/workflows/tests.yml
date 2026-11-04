@@ -110,7 +110,12 @@ jobs:
 
       - name: E0 outcome chain and cross-repo evidence regression (Elixir)
         run: |
-          mix test test/outcome_tracker_test.exs test/cross_repo_learning_test.exs
+          mix test --trace \
+            test/outcome_tracker_test.exs \
+            test/cross_repo_learning_test.exs \
+            test/outcome_tracker_runtime_store_test.exs \
+            test/merge_orchestration/sensor_test.exs \
+            test/merge_orchestration/loop_test.exs
 
       - name: Run E2E test suite
         run: bash tests/e2e.sh
