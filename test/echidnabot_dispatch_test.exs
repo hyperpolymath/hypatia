@@ -31,6 +31,7 @@ defmodule Hypatia.EchidnabotDispatchTest do
 
     on_exit(fn ->
       System.delete_env("HYPATIA_ECHIDNABOT_URL")
+      System.delete_env("HYPATIA_ECHIDNABOT_TOKEN")
       System.delete_env("HYPATIA_FLEET_URL")
       Application.put_env(:hypatia, :verisimdb_data_path, original_path)
       File.rm_rf!(data_path)
@@ -53,6 +54,7 @@ defmodule Hypatia.EchidnabotDispatchTest do
       [request_line | header_lines] = String.split(head, "\r\n")
       body = recv_body(sock, body_start, content_length(header_lines))
       send(test_pid, {:captured, request_line, body})
+      send(test_pid, {:captured_headers, header_lines})
 
       :gen_tcp.send(
         sock,
@@ -107,6 +109,20 @@ defmodule Hypatia.EchidnabotDispatchTest do
     {request_line, Jason.decode!(body)}
   end
 
+  # The captured request's headers as a map of lower-cased name => value.
+  # Call after captured!/0.
+  defp captured_headers! do
+    assert_receive {:captured_headers, header_lines}, 5_000
+
+    Map.new(header_lines, fn line ->
+      [name, value] = String.split(line, ":", parts: 2)
+      {String.downcase(String.trim(name)), String.trim(value)}
+    end)
+  end
+
+  # Test-only credential (the `test-` prefix marks it for the secret scanner).
+  @token "test-route-credential-0123456789abcdef"
+
   # A :proof_obligation finding carrying the hostile claim, with `overrides` merged in.
   defp obligation(overrides) do
     Map.merge(
@@ -154,19 +170,52 @@ defmodule Hypatia.EchidnabotDispatchTest do
       refute Map.has_key?(envelope["variables"]["input"], "prover")
     end
 
-    test "records the variables in the manifest line next to the static query", %{
+    test "records only a digest of the variables in the manifest line", %{
       manifest: manifest
     } do
       System.put_env("HYPATIA_ECHIDNABOT_URL", capturing_server(200, @accepted))
 
       assert {:ok, :dispatched} = FleetDispatcher.dispatch_finding(obligation(%{}))
-      _ = captured!()
+      {_request_line, envelope} = captured!()
 
       [line] = manifest |> File.read!() |> String.split("\n", trim: true)
       record = Jason.decode!(line)
       assert record["bot"] == "echidnabot"
       assert record["query"] == Hypatia.EchidnabotObligation.mutation()
-      assert record["variables"]["input"]["claim"] == @hostile_claim
+      refute Map.has_key?(record, "variables")
+      refute line =~ "line one"
+      refute line =~ "across lines"
+
+      assert record["variables_sha256"] ==
+               Hypatia.EchidnabotObligation.variables_digest(envelope["variables"])
+    end
+
+    test "sends the route credential on the per-bot echidnabot path" do
+      System.put_env("HYPATIA_ECHIDNABOT_TOKEN", "  " <> @token <> "\n")
+      System.put_env("HYPATIA_ECHIDNABOT_URL", capturing_server(200, @accepted))
+
+      assert {:ok, :dispatched} = FleetDispatcher.dispatch_finding(obligation(%{}))
+      _ = captured!()
+      assert captured_headers!()["authorization"] == "Bearer " <> @token
+    end
+
+    test "sends no authorization header when HYPATIA_ECHIDNABOT_TOKEN is blank" do
+      System.put_env("HYPATIA_ECHIDNABOT_TOKEN", "   ")
+      System.put_env("HYPATIA_ECHIDNABOT_URL", capturing_server(200, @accepted))
+
+      assert {:ok, :dispatched} = FleetDispatcher.dispatch_finding(obligation(%{}))
+      _ = captured!()
+      refute Map.has_key?(captured_headers!(), "authorization")
+    end
+
+    test "never sends the echidnabot credential to the fleet coordinator" do
+      System.put_env("HYPATIA_ECHIDNABOT_TOKEN", @token)
+      System.put_env("HYPATIA_FLEET_URL", capturing_server(200, "{}"))
+
+      assert {:ok, :dispatched} = FleetDispatcher.dispatch_finding(obligation(%{}))
+      {request_line, _envelope} = captured!()
+      assert request_line =~ ~r{^POST /dispatch/echidnabot HTTP/1\.[01]$}
+      refute Map.has_key?(captured_headers!(), "authorization")
     end
 
     test "sends the JSON envelope, variables included, on the fleet-coordinator path" do
@@ -260,6 +309,15 @@ defmodule Hypatia.EchidnabotDispatchTest do
       {_request_line, envelope} = captured!()
       refute Map.has_key?(envelope["variables"]["input"], "prover")
       refute inspect(envelope) =~ "LEAN4"
+    end
+
+    test "sends the route credential with each re-queue" do
+      System.put_env("HYPATIA_ECHIDNABOT_TOKEN", @token)
+      System.put_env("HYPATIA_ECHIDNABOT_URL", capturing_server(200, @accepted))
+
+      assert :ok = LearningScheduler.requeue_candidates("cls", "coq", ["att-3"])
+      _ = captured!()
+      assert captured_headers!()["authorization"] == "Bearer " <> @token
     end
   end
 end

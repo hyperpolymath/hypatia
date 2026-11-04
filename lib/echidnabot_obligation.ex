@@ -97,6 +97,45 @@ defmodule Hypatia.EchidnabotObligation do
   @spec graphql_url(String.t()) :: String.t()
   def graphql_url(base_url) when is_binary(base_url), do: base_url <> "/graphql"
 
+  @token_env "HYPATIA_ECHIDNABOT_TOKEN"
+
+  @doc """
+  The `:httpc` request headers that authenticate hypatia to echidnabot.
+
+  echidnabot's GraphQL API needs a bearer credential. Hypatia holds the
+  *route* credential, which may only call `submitProofObligation`, for the
+  repositories echidnabot's `[api] route_repos` lists. It is read from
+  `HYPATIA_ECHIDNABOT_TOKEN`, with surrounding whitespace removed; when that
+  is unset or blank no header is sent and echidnabot answers 401.
+
+  Send these headers only to `HYPATIA_ECHIDNABOT_URL`, never to another
+  service. The credential never appears in a log line or a manifest.
+  """
+  @spec auth_headers() :: [{charlist(), charlist()}]
+  def auth_headers do
+    case System.get_env(@token_env) do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> []
+          token -> [{~c"authorization", String.to_charlist("Bearer " <> token)}]
+        end
+
+      nil ->
+        []
+    end
+  end
+
+  @doc """
+  The manifest form of an obligation's GraphQL variables: a SHA-256 digest of
+  their JSON encoding, so a manifest line can be matched to a request without
+  holding the claim or context text. Claim and context can quote unpublished
+  code, and the manifest lives in a git-backed tree.
+  """
+  @spec variables_digest(map()) :: String.t()
+  def variables_digest(variables) when is_map(variables) do
+    :crypto.hash(:sha256, Jason.encode!(variables)) |> Base.encode16(case: :lower)
+  end
+
   # Add the optional `prover` field when there is a ProverKind for it.
   defp put_prover(input, nil), do: input
   defp put_prover(input, kind), do: Map.put(input, "prover", kind)

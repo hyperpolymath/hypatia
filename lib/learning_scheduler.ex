@@ -494,8 +494,9 @@ defmodule Hypatia.LearningScheduler do
 
     case :httpc.request(
            :post,
-           {String.to_charlist(url), [{~c"accept", ~c"application/json"}], ~c"application/json",
-            body},
+           {String.to_charlist(url),
+            [{~c"accept", ~c"application/json"} | EchidnabotObligation.auth_headers()],
+            ~c"application/json", body},
            [{:timeout, timeout_ms}],
            []
          ) do
