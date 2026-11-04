@@ -148,4 +148,57 @@ defmodule Hypatia.Neural.GraphOfTrustQualificationTest do
                {"repo-b-fixture", "repo-a-fixture", 1.0}
              ])
   end
+
+  test "recipe inventory and unqualified-only histories remain neutral" do
+    for rows <- [
+          [],
+          [observation("repo-a-fixture", "recipe-shared-fixture", "success", "unverified")]
+        ] do
+      result = graph(rows)
+      assert result.edges == []
+
+      for recipe <- @recipes do
+        assert GraphOfTrust.trust_score(result, recipe["id"]) == 0.5
+      end
+
+      assert Enum.all?(GraphOfTrust.trusted_recipes(result), fn {_id, score} -> score == 0.5 end)
+    end
+  end
+
+  test "a qualified negative-only graph cannot award positive trust" do
+    for {outcome, verification} <- [{"failure", "failed"}, {"false_positive", "still_present"}] do
+      result =
+        graph([observation("negative-only-repo", "recipe-shared-fixture", outcome, verification)])
+
+      assert result.edges == []
+      assert result.nodes["negative-only-repo"] == :repo
+      assert Enum.all?(result.trust_scores, fn {_id, score} -> score == 0.5 end)
+    end
+  end
+
+  test "neutral recipe inventory and negative-only nodes cannot perturb supported ranking" do
+    supported = [verified("repo-a-fixture")]
+    baseline = GraphOfTrust.build(supported, [%{"id" => "recipe-shared-fixture"}])
+    assert baseline.trust_scores["recipe-shared-fixture"] > 0.5
+    extra_recipes = for n <- 1..500, do: %{"id" => "unsupported-#{n}"}
+
+    negatives = [
+      observation("negative-only-repo", "unused-negative-recipe", "failure", "failed")
+      |> Map.put("bot", "negative-only-bot")
+    ]
+
+    expanded =
+      GraphOfTrust.build(supported ++ negatives, [
+        %{"id" => "recipe-shared-fixture"} | extra_recipes
+      ])
+
+    for {id, score} <- baseline.trust_scores do
+      assert expanded.trust_scores[id] == score
+    end
+
+    assert expanded.trust_scores["negative-only-repo"] == 0.5
+    assert expanded.trust_scores["negative-only-bot"] == 0.5
+    assert Enum.all?(extra_recipes, fn recipe -> expanded.trust_scores[recipe["id"]] == 0.5 end)
+    assert GraphOfTrust.trust_score(expanded, "unknown-entity") == 0.5
+  end
 end

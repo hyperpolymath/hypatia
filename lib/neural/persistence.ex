@@ -17,13 +17,12 @@ defmodule Hypatia.Neural.Persistence do
 
   On startup:
   1. Load saved state from flat files
-  2. Initialize networks with saved weights (or defaults)
+  2. Initialize learned networks with saved weights (or defaults)
+  3. Rebuild trust from current qualified outcomes; its snapshots are diagnostic
+     records and are never restored as authoritative scores
   """
 
   require Logger
-
-  @state_dir Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
-             |> Path.join("neural-states")
 
   @doc "Save all neural network states"
   def save_all(coordinator_state) do
@@ -65,6 +64,9 @@ defmodule Hypatia.Neural.Persistence do
 
   defp save_trust_graph(graph) do
     data = %{
+      "schema_version" => 2,
+      "score_basis" => "qualified_positive_support_subgraph",
+      "restore_policy" => "recompute_from_current_qualified_outcomes",
       "nodes" =>
         Enum.map(graph.nodes, fn {id, type} -> %{"id" => id, "type" => to_string(type)} end),
       "edges" =>
@@ -174,7 +176,7 @@ defmodule Hypatia.Neural.Persistence do
   # --- Generic Save/Load ---
 
   defp save_state(network, data) do
-    path = Path.join(Path.expand(@state_dir), "#{network}.json")
+    path = Path.join(Hypatia.Paths.neural_states() |> Path.expand(), "#{network}.json")
 
     case Jason.encode(data, pretty: true) do
       {:ok, json} -> File.write(path, json)
@@ -183,7 +185,7 @@ defmodule Hypatia.Neural.Persistence do
   end
 
   defp load_state(network) do
-    path = Path.join(Path.expand(@state_dir), "#{network}.json")
+    path = Path.join(Hypatia.Paths.neural_states() |> Path.expand(), "#{network}.json")
 
     case File.read(path) do
       {:ok, content} ->
@@ -198,7 +200,7 @@ defmodule Hypatia.Neural.Persistence do
   end
 
   defp ensure_state_dir do
-    dir = Path.expand(@state_dir)
+    dir = Hypatia.Paths.neural_states() |> Path.expand()
     File.mkdir_p(dir)
   end
 end

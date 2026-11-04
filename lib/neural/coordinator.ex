@@ -90,7 +90,9 @@ defmodule Hypatia.Neural.Coordinator do
     persisted = safe_load_persisted()
     rbf = hydrate_rbf(RadialNeuralNetwork.init(), persisted)
     moe = hydrate_moe(MixtureOfExperts.init(), persisted)
-    trust_graph = hydrate_trust_graph(GraphOfTrust.build(), persisted)
+    # Trust is derived from today's qualified source, not a learned weight
+    # cache. A persisted score can outlive both its evidence and its model.
+    trust_graph = GraphOfTrust.build()
 
     # M17 — restore GNN / VAE / Seq via their GenServer restore APIs.
     # These networks are siblings under the same supervisor; they're
@@ -114,7 +116,7 @@ defmodule Hypatia.Neural.Coordinator do
     notes = [
       rbf_restore_note(rbf),
       moe_restore_note(moe, persisted),
-      trust_restore_note(persisted),
+      trust_rebuild_note(persisted),
       new_networks_restore_note(persisted)
     ]
 
@@ -173,11 +175,9 @@ defmodule Hypatia.Neural.Coordinator do
       %{}
   end
 
-  # RBF is the only network restored at init: it is genuinely learned,
-  # plainly serialisable (Persistence.save_rbf/1 is a 1:1 of the struct),
-  # and otherwise unusable until a full training cycle runs. trust is
-  # rebuilt from source every cycle; MoE/ESN/LSM are continuously /
-  # per-cycle trained (ESN/LSM persistence is summary-only by design).
+  # RBF and MoE have explicit learned-state restoration below. Trust is
+  # rebuilt from current qualified source at startup and every cycle;
+  # ESN/LSM persistence remains summary-only by design.
   defp hydrate_rbf(default_rbf, %{rbf: {:ok, data}}) when is_map(data) do
     centers = Map.get(data, "centers", [])
     weights = Map.get(data, "output_weights", [])
@@ -292,33 +292,14 @@ defmodule Hypatia.Neural.Coordinator do
 
   defp moe_restore_note(_moe, _), do: ""
 
-  # Trust graph hydration — replays nodes + edges from the persisted
-  # snapshot. Trust scores are kept as the last computed values. If
-  # the persisted form is unparseable, the freshly built graph (from
-  # GraphOfTrust.build/0) is used unchanged.
-  defp hydrate_trust_graph(default_graph, %{trust: {:ok, data}}) when is_map(data) do
-    persisted_scores = Map.get(data, "trust_scores", %{})
+  # Every trust snapshot is diagnostic-only, including current-version
+  # snapshots. A version label cannot authenticate old scores or bind them
+  # to the current source. Invalidating all cached scores also prevents a
+  # rollback to the legacy model from being reintroduced on restart.
+  defp trust_rebuild_note(%{trust: {:ok, _data}}),
+    do: " (persisted trust scores ignored; rebuilt from current qualified outcomes)"
 
-    if is_map(persisted_scores) and map_size(persisted_scores) > 0 do
-      %{default_graph | trust_scores: persisted_scores}
-    else
-      default_graph
-    end
-  rescue
-    _ -> default_graph
-  end
-
-  defp hydrate_trust_graph(default_graph, _), do: default_graph
-
-  defp trust_restore_note(%{trust: {:ok, data}}) do
-    scores = Map.get(data, "trust_scores", %{})
-
-    if is_map(scores) and map_size(scores) > 0,
-      do: " (trust scores restored for #{map_size(scores)} node(s))",
-      else: ""
-  end
-
-  defp trust_restore_note(_), do: ""
+  defp trust_rebuild_note(_), do: ""
 
   # Convert "domain_string" back to :domain_atom safely. Returns nil
   # if the atom doesn't already exist in the VM — defensive against
@@ -460,6 +441,7 @@ defmodule Hypatia.Neural.Coordinator do
     recipe_id =
       [Map.get(finding, "recipe_id"), Map.get(finding, "pattern_id"), Map.get(finding, "id")]
       |> Enum.find("unknown", fn id -> is_binary(id) and byte_size(id) > 0 end)
+
     strategy = Hypatia.OutcomeTracker.annealed_strategy(recipe_id, raw_strategy)
 
     recommendation = %{

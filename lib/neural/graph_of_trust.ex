@@ -12,10 +12,12 @@ defmodule Hypatia.Neural.GraphOfTrust do
   - Contributors: trust score based on fix quality
 
   Trust propagation uses a PageRank-style iterative algorithm:
-  - Successful fixes propagate trust forward
-  - Failures reduce trust
-  - False positives reduce trust more heavily
-  - Trust decays over time (recency weighting)
+  - Qualified successful fixes propagate positive support
+  - Inventory-only and negative-only entities remain neutral (0.5)
+  - Negative outcomes remain visible but do not create positive edges
+
+  Scores are relative graph rankings, not calibrated success probabilities or
+  authenticated proof. Negative penalties and time decay are not implemented.
 
   The graph enables:
   - Routing dispatches to trusted bots
@@ -28,7 +30,6 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   alias Hypatia.OutcomeTracker
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @damping_factor 0.85
   @convergence_threshold 0.001
   @max_iterations 50
@@ -168,11 +169,37 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   defp compute_trust(%__MODULE__{nodes: nodes, edges: edges} = graph) do
-    n = map_size(nodes)
+    # Cataloguing a recipe, or observing only failures, is not positive
+    # evidence. PageRank's teleportation mass must not promote such nodes to
+    # 1.0 through maximum-score normalization or perturb supported rankings.
+    neutral_scores = Map.new(nodes, fn {id, _type} -> {id, 0.5} end)
 
-    # Initialize all nodes to 1/n
+    supported_edges =
+      Enum.filter(edges, fn {source, target, weight} ->
+        is_number(weight) and weight > 0 and Map.has_key?(nodes, source) and
+          Map.has_key?(nodes, target)
+      end)
+
+    supported_nodes =
+      supported_edges
+      |> Enum.flat_map(fn {source, target, _weight} -> [source, target] end)
+      |> MapSet.new()
+
+    supported_scores = compute_supported_trust(supported_nodes, supported_edges)
+
+    %{
+      graph
+      | trust_scores: Map.merge(neutral_scores, supported_scores),
+        last_computed: DateTime.utc_now()
+    }
+  end
+
+  defp compute_supported_trust(supported_nodes, edges) do
+    n = MapSet.size(supported_nodes)
+
+    # Only the qualified positive-support subgraph receives ranking mass.
     initial_score = 1.0 / max(n, 1)
-    scores = Map.new(Map.keys(nodes), fn id -> {id, initial_score} end)
+    scores = Map.new(supported_nodes, fn id -> {id, initial_score} end)
 
     # Build adjacency: source -> [{target, weight}]
     adjacency =
@@ -181,9 +208,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
       end)
 
     # Iterative convergence
-    final_scores = iterate_trust(scores, adjacency, n, 0)
-
-    %{graph | trust_scores: final_scores, last_computed: DateTime.utc_now()}
+    if n == 0, do: %{}, else: iterate_trust(scores, adjacency, n, 0)
   end
 
   defp iterate_trust(scores, _adjacency, _n, iteration) when iteration >= @max_iterations do
@@ -367,7 +392,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # Detect primary language for a repo from scan data
   defp detect_repo_language(repo) do
-    scan_path = Path.join([Path.expand(@verisimdb_data_path), "scans", "#{repo}.json"])
+    scan_path = Path.join(Hypatia.Paths.scans() |> Path.expand(), "#{repo}.json")
 
     case File.read(scan_path) do
       {:ok, content} ->
@@ -386,7 +411,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   defp load_all_outcomes do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    outcomes_dir = Hypatia.Paths.outcomes() |> Path.expand()
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -415,7 +440,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   defp load_all_recipes do
-    recipes_dir = Path.join(Path.expand(@verisimdb_data_path), "recipes")
+    recipes_dir = Hypatia.Paths.recipes() |> Path.expand()
 
     case File.ls(recipes_dir) do
       {:ok, files} ->
