@@ -86,16 +86,9 @@ defmodule Hypatia.Diagnostics.Monitor do
   defp do_health_check(state) do
     try do
       components = check_all_components()
-      failures = detect_failures(components)
-
+      observed = record_observations(state, components)
       schedule_checks()
-
-      if failures != [] do
-        notify_failures(failures)
-        attempt_recoveries(failures, state)
-      else
-        %{state | components: components, failures: [], last_check: DateTime.utc_now()}
-      end
+      finish_observations(observed, &notify_failures/1, &attempt_recoveries/2)
     rescue
       error ->
         Logger.error("Diagnostics monitor error: #{inspect(error)}")
@@ -154,20 +147,32 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   # Probe the neural coordinator without treating a long-running training
   # cycle as a crash. Other exits and exceptions report a failed health check.
-  defp check_neural() do
+  @doc false
+  def check_neural(server \\ Hypatia.Neural.Coordinator, timeout \\ 1000) do
     try do
-      case GenServer.call(Hypatia.Neural.Coordinator, :status, 1000) do
-        nil -> {:error, :neural_unresponsive}
-        status -> {:ok, {:neural, status}}
-      end
+      source = Hypatia.Neural.SourceStore.current()
+      status = GenServer.call(server, {:status, source}, timeout)
+      classify_neural_status(status)
     rescue
       _ -> {:error, :neural_crashed}
     catch
-      # Training cycles can take minutes -- a timeout means busy, not crashed
-      :exit, {:timeout, _} -> {:ok, {:neural, :training_in_progress}}
+      # A busy process has not supplied a current-source health receipt.
+      # Report uncertainty without granting automatic restart authority.
+      :exit, {:timeout, _} -> {:error, {:neural_source_unavailable, :busy_or_unverified}}
       :exit, _ -> {:error, :neural_crashed}
     end
   end
+
+  @doc false
+  def classify_neural_status({:ok, status}) do
+    if Hypatia.Neural.SourceStore.ready_report?(status) and Map.get(status, :status) == :running do
+      {:ok, {:neural, status}}
+    else
+      {:error, {:neural_source_unavailable, status}}
+    end
+  end
+
+  def classify_neural_status(other), do: {:error, {:neural_source_unavailable, other}}
 
   defp check_kin() do
     try do
@@ -188,30 +193,68 @@ defmodule Hypatia.Diagnostics.Monitor do
   # Failure Detection
   # ====================================================================
 
-  defp detect_failures(components) do
-    Enum.filter(components, fn
+  @doc false
+  def detect_failures(components) do
+    Enum.flat_map(components, fn
       # Hard failures
       {:error, reason} ->
-        {:failure, reason}
+        [{:failure, reason}]
 
       # Performance issues
       {:ok, {_, metrics}} when is_map(metrics) ->
         cond do
           Map.get(metrics, :dropped, 0) > Map.get(metrics, :dispatched, 1) * @error_rate_threshold ->
-            {:failure, :high_error_rate}
+            [{:failure, :high_error_rate}]
 
           Map.get(metrics, :buffered, 0) >
               Map.get(metrics, :max_buffer, 1) * @buffer_warning_threshold ->
-            {:failure, :buffer_overflow}
+            [{:failure, :buffer_overflow}]
 
           true ->
-            nil
+            []
         end
 
       _ ->
-        nil
+        []
     end)
   end
+
+  @doc false
+  def record_observations(state, components) do
+    %{state | components: components, failures: detect_failures(components), last_check: DateTime.utc_now()}
+  end
+
+  # Callbacks are explicit so regression tests can exercise notification
+  # failure without contacting channels or invoking any recovery action.
+  @doc false
+  def finish_observations(observed, notify, recover) do
+    if observed.failures == [] do
+      observed
+    else
+      try do
+        notify.(observed.failures)
+
+        recoverable =
+          Enum.reject(observed.failures, fn {:failure, reason} ->
+            source_lifecycle_failure?(reason)
+          end)
+
+        if recoverable == [], do: observed, else: recover.(recoverable, observed)
+      rescue
+        error ->
+          Logger.error("Diagnostics notification/recovery failed: #{inspect(error)}")
+          observed
+      catch
+        :exit, reason ->
+          Logger.error("Diagnostics notification/recovery exited: #{inspect(reason)}")
+          observed
+      end
+    end
+  end
+
+  @doc false
+  def source_lifecycle_failure?({:neural_source_unavailable, _}), do: true
+  def source_lifecycle_failure?(_), do: false
 
   # ====================================================================
   # Failure Notification
@@ -225,8 +268,8 @@ defmodule Hypatia.Diagnostics.Monitor do
       # Log for persistence
       Logger.error("DIAGNOSTICS ALERT: #{inspect(reason)}")
 
-      # Attempt recovery
-      attempt_recovery(reason)
+      # Source changes need an operator decision; notification is not restart authority.
+      unless source_lifecycle_failure?(reason), do: attempt_recovery(reason)
     end)
   end
 
@@ -350,14 +393,17 @@ defmodule Hypatia.Diagnostics.Monitor do
     Logger.info("Attempting neural coordinator recovery...")
 
     try do
-      case GenServer.call(Hypatia.Neural.Coordinator, :health_report, 2000) do
-        %{} ->
-          Logger.info("Neural coordinator responding -- healthy")
-          :ok
+      source = Hypatia.Neural.SourceStore.current()
+      report = GenServer.call(Hypatia.Neural.Coordinator, {:health_report, source}, 2000)
 
-        _ ->
-          Logger.warning("Neural coordinator returned unexpected status")
-          :ok
+      if Hypatia.Neural.SourceStore.ready_report?(report) do
+        Logger.info("Neural coordinator responding with its current source")
+        :ok
+      else
+        # A lifecycle refusal requires an explicit operator decision. Do not
+        # restart or relabel the cohort to turn that refusal into availability.
+        Logger.warning("Neural recovery refused; inspect source lifecycle: #{inspect(report)}")
+        :error
       end
     catch
       :exit, _ ->
@@ -385,18 +431,22 @@ defmodule Hypatia.Diagnostics.Monitor do
 
   defp attempt_recoveries(failures, state) do
     Enum.reduce(failures, state, fn {:failure, reason}, acc ->
-      _recovery_result = attempt_recovery(reason)
+      if source_lifecycle_failure?(reason) do
+        acc
+      else
+        _recovery_result = attempt_recovery(reason)
 
-      # Track recovery attempts
-      attempt_count = Map.get(acc.recovery_attempts, reason, 0) + 1
-      attempts = Map.put(acc.recovery_attempts, reason, attempt_count)
+        # Preserve the existing recovery authority and accounting for other
+        # failure types; source lifecycle refusals never enter this branch.
+        attempt_count = Map.get(acc.recovery_attempts, reason, 0) + 1
+        attempts = Map.put(acc.recovery_attempts, reason, attempt_count)
 
-      # Give up after max attempts
-      if attempt_count >= @max_recovery_attempts do
-        Logger.warning("Max recovery attempts reached for: #{inspect(reason)}")
+        if attempt_count >= @max_recovery_attempts do
+          Logger.warning("Max recovery attempts reached for: #{inspect(reason)}")
+        end
+
+        %{acc | recovery_attempts: attempts}
       end
-
-      %{acc | recovery_attempts: attempts}
     end)
   end
 end

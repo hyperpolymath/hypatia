@@ -899,8 +899,8 @@ defmodule Hypatia.OutcomeTracker do
     end
   end
 
-  defp load_outcomes_for_recipe(recipe_id) do
-    outcomes_dir = Path.expand(Paths.outcomes())
+  defp load_outcomes_for_recipe(recipe_id, data_root \\ Paths.verisimdb_data()) do
+    outcomes_dir = Path.join(Path.expand(data_root), "outcomes")
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -975,6 +975,26 @@ defmodule Hypatia.OutcomeTracker do
   """
   def annealed_strategy(recipe_id, raw_strategy) do
     state = load_annealing_state(recipe_id)
+    ConfidenceAnnealing.clamp_strategy(raw_strategy, state)
+  end
+
+  @doc """
+  Clamp a neural recommendation using qualified outcomes from its captured store.
+
+  This read-only path derives the existing maturity stage from qualified counts.
+  It neither trusts a persisted stage nor reads/writes a runtime annealing
+  override. Temperature and reheats do not determine the existing strategy cap.
+  """
+  def annealed_strategy_from_store(recipe_id, raw_strategy, data_root) do
+    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id, data_root))
+
+    state =
+      ConfidenceAnnealing.from_existing(
+        counts.successes,
+        counts.failures,
+        counts.false_positives
+      )
+
     ConfidenceAnnealing.clamp_strategy(raw_strategy, state)
   end
 

@@ -311,18 +311,27 @@ defmodule Hypatia.LearningScheduler do
   # runs inside the Coordinator process); we only confirm the process is
   # alive. Non-fatal: the scheduler must keep running even if the neural
   # layer is down.
-  defp trigger_neural_cycle do
-    case Process.whereis(Hypatia.Neural.Coordinator) do
-      nil ->
+  @doc false
+  def trigger_neural_cycle(server \\ Hypatia.Neural.Coordinator) do
+    case Hypatia.Neural.Coordinator.force_cycle(server) do
+      :ok ->
+        true
+
+      {:error, reason} ->
+        Logger.warning("LearningScheduler: neural cycle not queued: #{inspect(reason)}")
         false
 
-      _pid ->
-        Hypatia.Neural.Coordinator.force_cycle()
-        true
+      other ->
+        Logger.warning("LearningScheduler: unexpected neural queue reply: #{inspect(other)}")
+        false
     end
   rescue
     e ->
       Logger.warning("LearningScheduler: neural cycle trigger failed: #{inspect(e)}")
+      false
+  catch
+    :exit, reason ->
+      Logger.warning("LearningScheduler: neural coordinator unavailable: #{inspect(reason)}")
       false
   end
 

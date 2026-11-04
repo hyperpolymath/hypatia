@@ -1,0 +1,144 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Neural source-store lifecycle
+
+== Boundary and reason
+
+Runtime path resolution alone does not bind an existing learned model to the
+directory that supplied its observations. Previously a running Coordinator
+could retain A's trained ESN/RBF when B had insufficient inputs, and the
+persistence destination would be resolved again as B. Separately supervised
+GNN/VAE/Sequence processes and the shared Blackboard had no source label.
+
+The lifecycle now captures the expanded configured data-root pathname at
+initialization. Entry and exit checks bind operations to that identity.
+Training, trust graph inputs and language context, recommendation maturity
+counts, and persistence use the captured directory. An observed root change
+or incompatible peer cohort blocks that lifecycle. Switching the configuration
+back does not clear the refusal. An operator must inspect the source and make
+an explicit decision before starting a fresh matching cohort.
+
+This is a pathname/lifecycle contract. It does not authenticate the directory,
+detect an in-place replacement, attest a snapshot, prove training adequacy,
+or establish calibrated model performance. A change A-to-B-to-A wholly between
+observations is not a recorded configuration history; pinned reads still use A.
+CrossRepoLearning's independent index/transfer subsystem is outside this
+lifecycle and has not acquired a deployment assurance claim.
+
+== Cohort and persistence
+
+The Coordinator checks the actual named GNN, VAE and Sequence processes and
+the source-bound Blackboard, including when those servers are isolated PIDs.
+Each peer retains its own initialization source. A restarted Coordinator cannot
+silently relabel older peers to its newly selected root.
+
+Queue submission captures the source. Queue admission and execution each check
+the lifecycle; an admitted request can still be refused before execution if the
+configuration changes. Old unbound casts are refused. Parallel phase errors are
+returned to the guard instead of being discarded from an accepted trace.
+
+Persistence first collects all three matching peer snapshots, serializes every
+document, then checks the Coordinator source again before writing. A missing
+peer, mismatched snapshot, or encoding error prevents the first bundle write.
+All writes target the captured directory. Filesystem I/O is not an atomic
+multi-file transaction: a write error can leave a partial bundle and is returned
+as an error, never as successful persistence.
+
+Snapshots carry source_schema=1, source_store, and source_status. Startup only
+hydrates supported matching ready model snapshots. Legacy, foreign, and future
+labels are returned by raw diagnostic reads, are not deleted on startup, and
+are not model restore authority. Existing persistence still replaces current
+snapshot files when a later successful cycle writes new state. Trust scores
+are always rebuilt from current qualified observations, including when a
+matching current-format trust snapshot exists.
+
+== Public result contracts and callers
+
+[cols="2,3,3",options="header"]
+|===
+| Entry point | Successful result | Refusal and caller handling
+
+| Coordinator.analyze/1, dispatch_recommendation/1
+| Source-labelled analysis/recommendation map; optional server argument supports
+an isolated actual cohort.
+| {:error, reason}. Kin holds auto-execute for human review; manual tiers retain
+their existing route. PatternAnalyzer already treats non-map replies as
+unavailable and applies DispatchGuard's ceiling.
+
+| Coordinator.force_cycle/0, record_outcome/2
+| :ok means admitted to the source-bound queue, not completed training.
+| {:error, reason}; later execution failures appear in lifecycle diagnostics.
+LearningScheduler reports a trigger only after admission. FleetDispatcher's
+neural notification returns :queued or an explicit error; its independent raw
+observation log is not evidence of completed neural learning.
+
+| Coordinator.status/0 and health_report/0
+| {:ok, status} and a health map respectively, labelled with the current ready
+source. A cold model may be available without being trained.
+| {:error, {:neural_source_unavailable, details}}. Diagnostics records a failure;
+the watcher does not use blocked/old-source drift as corroboration. Busy probes
+remain unverified and do not authorize a restart.
+
+| Named-network state/0, restore/1 and analysis calls
+| state/0 remains a labelled diagnostic snapshot. Restore and analysis check
+both the process source and request source.
+| Diagnostic snapshots expose blocked status. Restore refuses unbound/foreign
+maps; a ready label is not a cryptographic provenance certificate.
+
+| Persistence.save_all/1 and load_all/0
+| :ok only after the checked bundle write; load_all returns raw diagnostic
+snapshots, optionally from an explicitly selected directory.
+| {:error, reason} from save_all; no fallback to another directory. Diagnostic
+read success is not hydration authority.
+
+| Blackboard source-qualified calls
+| Calls go through the owning process and require matching source/round
+entries. Raw ETS helpers remain diagnostics.
+| Unbound or foreign entries cannot enter the neural trace. An old A task
+cannot write into a newly initialized B board.
+|===
+
+Diagnostics now collects canonical failure tuples and stores observed component
+and failure state before notification. Notification failures retain that
+observation. Source-lifecycle failures are excluded from automatic recovery,
+including the existing restart path; this does not broaden recovery authority
+for other failures. Kin.Watchdog's process-liveness report remains a liveness
+report, not a source/model-readiness receipt.
+
+== Trust graph evidence identities
+
+A qualified outcome verdict alone is insufficient to identify graph subjects.
+Outcome-derived nodes and all direct/cross-repo edges require nonblank string
+repo, bot and recipe identities. Canonical pattern is an explicit alternate
+recipe identity when recipe_id is nil or false, matching the training reader;
+a present blank or malformed recipe_id cannot be hidden by pattern.
+
+Rejected rows remain in the audit log. The guard is local to GraphOfTrust and
+does not widen or redefine OutcomeTracker's global evidence predicate.
+Inventory-only recipes and qualified negative-only entities retain the neutral
+score policy. Valid supported rows continue to create positive edges.
+
+== Qualification scope
+
+The regression source uses actual isolated Coordinator, Blackboard and named
+network processes. It does not invoke live dispatch, a real bot, an actuator,
+or automatic recovery. Small real reservoirs bound training cost. Controls
+cover running A-to-B, empty B, matching B, queued/in-flight changes, peer
+availability, all-before-write collection, raw versus qualified snapshots,
+pinned reads, malformed graph subjects and refusal propagation through callers.
+
+Relevant suites:
+
+* test/neural_source_store_lifecycle_test.exs
+* test/learning_runtime_store_test.exs
+* test/neural_trust_restart_test.exs
+* test/graph_of_trust_qualification_test.exs
+* test/graph_of_trust_convergence_test.exs
+* test/neural_training_qualification_test.exs
+* test/neural_dispatch_guard_test.exs
+* test/blackboard_test.exs and test/kin_test.exs
+
+These controls must pass on the exact published source with the repository's
+normal compilation and full test gates before the change is qualified.
+The earlier runtime-path repair's receipts do not qualify this new lifecycle
+boundary. Source review and authored tests alone are not execution receipts.

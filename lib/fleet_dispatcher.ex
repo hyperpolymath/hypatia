@@ -654,6 +654,27 @@ defmodule Hypatia.FleetDispatcher do
     execute_graphql(mutation, "robot-repo-automaton")
   end
 
+  @doc false
+  def record_neural_outcome(finding, outcome, server \\ Hypatia.Neural.Coordinator) do
+    case Hypatia.Neural.Coordinator.record_outcome(finding, outcome, server) do
+      :ok -> :queued
+      {:error, reason} = error ->
+        Logger.warning("Neural outcome not queued: #{inspect(reason)}")
+        error
+      other ->
+        Logger.warning("Unexpected neural outcome queue reply: #{inspect(other)}")
+        {:error, :unexpected_neural_reply}
+    end
+  rescue
+    error ->
+      Logger.warning("Neural outcome queue failed: #{Exception.message(error)}")
+      {:error, :neural_unavailable}
+  catch
+    :exit, reason ->
+      Logger.warning("Neural coordinator unavailable for outcome recording: #{inspect(reason)}")
+      {:error, :neural_unavailable}
+  end
+
   defp ingest_fix_outcome(finding) do
     pattern = finding_field(finding, :pattern, "unknown")
     success = finding_field(finding, :success, false)
@@ -668,11 +689,7 @@ defmodule Hypatia.FleetDispatcher do
     # The coordinator updates MoE, LSM, and ESN networks with this data.
     outcome_str = if success, do: "success", else: "failure"
 
-    try do
-      Hypatia.Neural.Coordinator.record_outcome(finding, outcome_str)
-    catch
-      :exit, _ -> Logger.warning("Neural coordinator unavailable for outcome recording")
-    end
+    record_neural_outcome(finding, outcome_str)
 
     observation = %{
       type: pattern,

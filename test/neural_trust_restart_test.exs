@@ -48,7 +48,7 @@ defmodule Hypatia.Neural.TrustRestartTest do
 
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          assert {:ok, state} = Coordinator.init([])
+          assert {:ok, state} = Coordinator.init(isolated_cohort())
           assert state.trust_graph.nodes["restart-qualification-fixture"] == :recipe
 
           assert GraphOfTrust.trust_score(state.trust_graph, "restart-qualification-fixture") ==
@@ -78,10 +78,11 @@ defmodule Hypatia.Neural.TrustRestartTest do
 
     on_exit(fn -> File.rm_rf!(replacement) end)
     Application.put_env(:hypatia, :verisimdb_data_path, replacement)
-    assert {:ok, state} = Coordinator.init([])
+    assert {:ok, state} = Coordinator.init(isolated_cohort())
     assert state.trust_graph.nodes == %{"replacement-only-recipe" => :recipe}
     assert state.trust_graph.trust_scores == %{"replacement-only-recipe" => 0.5}
-    Persistence.save_all(state)
+    assert state.source_status == :ready
+    assert :ok = Persistence.save_all(state)
     new_snapshot = Path.join([replacement, "neural-states", "trust.json"])
     decoded = new_snapshot |> File.read!() |> Jason.decode!()
     assert decoded["schema_version"] == 2
@@ -95,7 +96,7 @@ defmodule Hypatia.Neural.TrustRestartTest do
     # Even an apparently current snapshot can be altered or outlive its
     # source. The writer's version is metadata, not restore authority.
     File.write!(new_snapshot, Jason.encode!(Map.put(decoded, "trust_scores", %{"poison" => 1.0})))
-    assert {:ok, restarted} = Coordinator.init([])
+    assert {:ok, restarted} = Coordinator.init(isolated_cohort())
     assert restarted.trust_graph.trust_scores == state.trust_graph.trust_scores
 
     # A fresh qualified success must still contribute after restart. Keeping
@@ -113,8 +114,24 @@ defmodule Hypatia.Neural.TrustRestartTest do
       }) <> "\n"
     )
 
-    assert {:ok, supported} = Coordinator.init([])
+    assert {:ok, supported} = Coordinator.init(isolated_cohort())
     assert GraphOfTrust.trust_score(supported.trust_graph, "replacement-only-recipe") > 0.5
     refute Map.has_key?(supported.trust_graph.trust_scores, "poison")
+  end
+
+  defp isolated_cohort do
+    networks =
+      Map.new(Persistence.default_networks(), fn {name, module} ->
+        pid = start_supervised!(%{id: make_ref(), start: {GenServer, :start_link, [module, [], []]}})
+        {name, pid}
+      end)
+
+    board =
+      start_supervised!(%{
+        id: make_ref(),
+        start: {GenServer, :start_link, [Hypatia.Neural.Blackboard, [isolated: true], []]}
+      })
+
+    [named_networks: networks, blackboard: board]
   end
 end

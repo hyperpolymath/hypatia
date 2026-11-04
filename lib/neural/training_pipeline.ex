@@ -44,8 +44,11 @@ defmodule Hypatia.Neural.TrainingPipeline do
   JSON lines and unreadable files are ignored; if the directory cannot be
   listed or no recipe meets the threshold, returns an empty list.
   """
-  def build_esn_training_data do
-    outcomes_dir = Path.expand(Paths.outcomes())
+  def build_esn_training_data, do: build_esn_training_data(Paths.verisimdb_data())
+
+  @doc false
+  def build_esn_training_data(data_root) when is_binary(data_root) do
+    outcomes_dir = Path.join(Path.expand(data_root), "outcomes")
 
     outcomes =
       case File.ls(outcomes_dir) do
@@ -79,7 +82,6 @@ defmodule Hypatia.Neural.TrainingPipeline do
     build_esn_training_data(outcomes)
   end
 
-  @doc false
   def build_esn_training_data(outcomes) when is_list(outcomes) do
     # Use the same evidence qualification as Bayesian and cross-repo learning.
     # Exit-zero-only, incomplete scans and contradictory successes remain audit
@@ -147,7 +149,8 @@ defmodule Hypatia.Neural.TrainingPipeline do
       (e.g. `[rate: 0.05, dip_depth: 0.4, seed: 42]`).
   """
   def train_esn(esn, opts \\ []) do
-    training_data = build_esn_training_data()
+    data_root = Keyword.get(opts, :data_path, Paths.verisimdb_data())
+    training_data = build_esn_training_data(data_root)
 
     if training_data == [] do
       Logger.warning("TrainingPipeline: no ESN training data available")
@@ -177,7 +180,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
                   "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (corpus dips)"
                 )
 
-                data_path = Keyword.get(rebalance_opts, :data_path, Paths.verisimdb_data())
+                data_path = Keyword.get(rebalance_opts, :data_path, data_root)
                 templates = Rebalancer.load_failure_templates(data_path)
 
                 if templates == [] do
@@ -241,8 +244,8 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Returns {vectors, targets} where vectors is a list of 8-element
   lists and targets is a list of floats.
   """
-  def build_rbf_training_data do
-    registry_path = Path.join(Path.expand(Paths.patterns()), "registry.json")
+  def build_rbf_training_data(data_root \\ Paths.verisimdb_data()) do
+    registry_path = Path.join([Path.expand(data_root), "patterns", "registry.json"])
 
     patterns =
       case File.read(registry_path) do
@@ -305,7 +308,8 @@ defmodule Hypatia.Neural.TrainingPipeline do
       (e.g. `[count: 30, seed: 42]`).
   """
   def train_rbf(rbf, opts \\ []) do
-    {real_vectors, real_targets} = build_rbf_training_data()
+    data_root = Keyword.get(opts, :data_path, Paths.verisimdb_data())
+    {real_vectors, real_targets} = build_rbf_training_data(data_root)
 
     {vectors, targets} =
       if Keyword.get(opts, :rebalance, true) and real_vectors != [] do
@@ -343,6 +347,8 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Initializes fresh network instances, trains both on available data
   from verisim-data, and returns a map with `:esn` and `:rbf` keys.
 
+  `:data_path` captures the source for training reads. An explicit
+  `:rebalance_opts` data path remains a deliberate Strategy C corpus override.
   Options are forwarded to `train_esn/2` and `train_rbf/2` — see those
   functions for the `:rebalance` and `:rebalance_opts` knobs.
   """

@@ -7,7 +7,7 @@
 # architecture (8 networks, 6 phases, shared ETS state).
 #
 # Each phase reads from the blackboard, computes, and writes results back.
-# Parallel phases run concurrently via Task.async_stream.
+# Parallel phases return source-bound failures to the coordinator.
 
 defmodule Hypatia.Neural.Coordinator do
   @moduledoc """
@@ -56,9 +56,8 @@ defmodule Hypatia.Neural.Coordinator do
     LiquidStateMachine,
     EchoStateNetwork,
     RadialNeuralNetwork,
-    GraphNeuralNetwork,
-    VariationalAutoencoder,
-    SequenceModel
+    Persistence,
+    SourceStore
   }
 
   defstruct [
@@ -73,7 +72,12 @@ defmodule Hypatia.Neural.Coordinator do
     last_cycle: nil,
     # Blackboard architecture metadata
     total_rounds: 0,
-    last_round_trace: nil
+    last_round_trace: nil,
+    source_store: nil,
+    source_status: :ready,
+    source_error: nil,
+    named_networks: %{},
+    blackboard: Blackboard
   ]
 
   @network_count 8
@@ -86,64 +90,94 @@ defmodule Hypatia.Neural.Coordinator do
   end
 
   @impl true
-  def init(_opts) do
-    persisted = safe_load_persisted()
-    rbf = hydrate_rbf(RadialNeuralNetwork.init(), persisted)
-    moe = hydrate_moe(MixtureOfExperts.init(), persisted)
-    # Trust is derived from today's qualified source, not a learned weight
-    # cache. A persisted score can outlive both its evidence and its model.
-    trust_graph = GraphOfTrust.build()
-
-    # M17 — restore GNN / VAE / Seq via their GenServer restore APIs.
-    # These networks are siblings under the same supervisor; they're
-    # already started by the time the Coordinator init runs (the
-    # Application supervision order in lib/application.ex puts them
-    # before this module). Restore is best-effort and asynchronous
-    # in spirit — a missing PID or restore failure leaves the network
-    # at its fresh-init defaults rather than crashing the supervisor.
-    restore_named_network(GraphNeuralNetwork, get_in(persisted, [:gnn]))
-    restore_named_network(VariationalAutoencoder, get_in(persisted, [:vae]))
-    restore_named_network(SequenceModel, get_in(persisted, [:sequence]))
+  def init(opts) do
+    source = SourceStore.current()
+    raw_persisted = safe_load_persisted(source)
+    persisted = qualified_snapshots(raw_persisted, source)
 
     state = %__MODULE__{
-      trust_graph: trust_graph,
-      moe: moe,
+      source_store: source,
+      named_networks: Keyword.get(opts, :named_networks, Persistence.default_networks()),
+      blackboard: Keyword.get(opts, :blackboard, Blackboard),
+      trust_graph: GraphOfTrust.build_from_store(source),
+      moe: hydrate_moe(MixtureOfExperts.init(), persisted),
       lsm: LiquidStateMachine.init(),
       esn: EchoStateNetwork.init(),
-      rbf: rbf
+      rbf: hydrate_rbf(RadialNeuralNetwork.init(), persisted)
     }
 
+    # Sibling processes retain their own source identity. Validate the actual
+    # cohort before attempting hydration; never relabel an existing A model B.
+    state =
+      case SourceStore.transact(state, source, fn ->
+             ensure_cohort!(state)
+             restore_named_networks!(state, persisted)
+             ensure_cohort!(state)
+             {:ok, state}
+           end) do
+        {:ok, :ok, ready} -> ready
+        {:error, reason, blocked} ->
+          Logger.warning("Neural initialization refused: #{inspect(reason)}")
+          blocked
+      end
+
     notes = [
-      rbf_restore_note(rbf),
-      moe_restore_note(moe, persisted),
-      trust_rebuild_note(persisted),
+      rbf_restore_note(state.rbf),
+      moe_restore_note(state.moe, persisted),
+      trust_rebuild_note(raw_persisted),
       new_networks_restore_note(persisted)
     ]
 
     Logger.info(
-      "Neural Coordinator initialised: blackboard architecture, " <>
-        "#{@network_count} networks, #{@phase_count} phases" <>
+      "Neural Coordinator initialized: #{@network_count} networks, #{@phase_count} phases; " <>
+        "source #{inspect(state.source_store)} is #{state.source_status}" <>
         Enum.join(notes, "")
     )
 
     {:ok, state}
   end
 
-  defp restore_named_network(module, {:ok, data}) when is_map(data) do
-    if Process.whereis(module) do
-      try do
-        module.restore(data)
-      rescue
-        _ -> :ok
-      catch
-        _, _ -> :ok
+  # Raw snapshots remain on disk for diagnosis. Only the captured store's
+  # explicitly bound model snapshots may be hydrated. Trust is always rebuilt.
+  defp qualified_snapshots(raw, source) do
+    Map.new(raw, fn {name, snapshot} ->
+      qualified =
+        case snapshot do
+          {:ok, data} ->
+            if SourceStore.snapshot_matches?(data, source), do: snapshot, else: :not_found
+
+          _ ->
+            :not_found
+        end
+
+      {name, qualified}
+    end)
+  end
+
+  defp restore_named_networks!(state, persisted) do
+    Enum.each([:gnn, :vae, :sequence], fn name ->
+      case Map.get(persisted, name) do
+        {:ok, data} ->
+          SourceStore.call!(Map.fetch!(state.named_networks, name), {:restore, state.source_store, data})
+
+        _ ->
+          :ok
       end
+    end)
+  end
+
+  defp ensure_cohort!(state) do
+    SourceStore.accept!(SourceStore.check(state, state.source_store))
+    SourceStore.accept!(Persistence.collect_named(state.source_store, state.named_networks))
+    identity = SourceStore.accept!(Blackboard.identity_source(state.source_store, state.blackboard))
+
+    unless SourceStore.snapshot_matches?(identity, state.source_store) do
+      raise SourceStore.Refusal,
+        reason: {:cohort_source_mismatch, :blackboard, :unqualified_identity}
     end
 
     :ok
   end
-
-  defp restore_named_network(_module, _other), do: :ok
 
   defp new_networks_restore_note(persisted) do
     restored =
@@ -164,8 +198,8 @@ defmodule Hypatia.Neural.Coordinator do
   # Best-effort load of persisted neural state. Never raises: a missing or
   # malformed store must not crash the supervisor -- networks fall back to
   # init-defaults and are retrained by the first LearningScheduler cycle.
-  defp safe_load_persisted do
-    Hypatia.Neural.Persistence.load_all()
+  defp safe_load_persisted(source) do
+    Persistence.load_all(source)
   rescue
     e ->
       Logger.warning(
@@ -326,35 +360,47 @@ defmodule Hypatia.Neural.Coordinator do
   5. VAE interpretation clustering
   6. Sequence model choreography prediction
 
-  Returns the complete reasoning trace from the blackboard.
+  Returns the complete reasoning trace from the blackboard, labelled with
+  its source, or {:error, reason} when the lifecycle cannot serve this source.
   """
-  def analyze(finding) do
-    GenServer.call(__MODULE__, {:analyze, finding}, 30_000)
+  def analyze(finding, server \\ __MODULE__) do
+    GenServer.call(server, {:analyze, SourceStore.current(), finding}, 30_000)
   end
 
-  @doc "Record an outcome and update all networks."
-  def record_outcome(finding, outcome) do
-    GenServer.cast(__MODULE__, {:outcome, finding, outcome})
+  @doc """
+  Queue an outcome for this source-bound lifecycle.
+
+  :ok acknowledges queue admission, not completed learning. Refused admission
+  returns {:error, reason}; a later execution refusal remains visible in status.
+  """
+  def record_outcome(finding, outcome, server \\ __MODULE__) do
+    GenServer.call(server, {:queue, SourceStore.current(), {:outcome, finding, outcome}})
   end
 
   @doc """
   Get dispatch recommendation using blackboard-derived confidence.
 
   Unlike the old fixed-weight aggregation, confidence is derived from
-  the complete reasoning trace across all 8 networks.
+  the complete reasoning trace across all 8 networks. Source refusals return
+  {:error, reason}; they are not confidence or strategy recommendations.
   """
-  def dispatch_recommendation(finding) do
-    GenServer.call(__MODULE__, {:dispatch_rec, finding}, 30_000)
+  def dispatch_recommendation(finding, server \\ __MODULE__) do
+    GenServer.call(server, {:dispatch_rec, SourceStore.current(), finding}, 30_000)
   end
 
-  @doc "Get system-wide neural health report for all 8 networks."
-  def health_report do
-    GenServer.call(__MODULE__, :health_report)
+  @doc "Return a current-source health map, or an explicit lifecycle refusal."
+  def health_report(server \\ __MODULE__) do
+    GenServer.call(server, {:health_report, SourceStore.current()})
   end
 
-  @doc "Force a learning cycle across all networks."
-  def force_cycle do
-    GenServer.cast(__MODULE__, :force_cycle)
+  @doc "Return current-source status or an explicit lifecycle refusal."
+  def status(server \\ __MODULE__) do
+    GenServer.call(server, {:status, SourceStore.current()})
+  end
+
+  @doc "Queue a learning cycle; :ok acknowledges admission, not completion."
+  def force_cycle(server \\ __MODULE__) do
+    GenServer.call(server, {:queue, SourceStore.current(), :force_cycle})
   end
 
   @doc "Get the number of networks in the coordinator."
@@ -366,7 +412,115 @@ defmodule Hypatia.Neural.Coordinator do
   # ── GenServer Callbacks ─────────────────────────────────
 
   @impl true
-  def handle_call(:status, _from, state) do
+  def handle_call({:status, source}, _from, state) do
+    diagnostic_reply(state, source, fn -> {:ok, status_map(state)} end)
+  end
+
+  # Compatibility for existing diagnostic probes. New callers bind the
+  # request when submitted; this probe still refuses a mismatched cohort.
+  def handle_call(:status, from, state),
+    do: handle_call({:status, SourceStore.current()}, from, state)
+
+  @impl true
+  def handle_call({:analyze, source, finding}, _from, state) do
+    SourceStore.reply(state, source, fn ->
+      ensure_cohort!(state)
+      {trace, updated_state} = run_phased_analysis(finding, state)
+
+      analysis = %{
+        # Legacy fields for backward compatibility
+        moe: trace_field(trace, :moe, :domain_confidence),
+        rbf: trace_field(trace, :rbf, :novelty_result),
+        lsm: trace_field(trace, :lsm, :temporal_result),
+        esn: trace_field(trace, :esn, :trajectory_result),
+        # New blackboard fields
+        gnn: trace_field(trace, :gnn, :graph_metrics),
+        vae: trace_field(trace, :vae, :interpretation),
+        sequence: trace_field(trace, :sequence, :prediction),
+        # Derived confidence from full reasoning trace
+        aggregated_confidence: derive_confidence(trace),
+        is_novel: is_novel?(trace),
+        # Blackboard metadata
+        round: trace.round,
+        phase_count: @phase_count,
+        network_count: @network_count,
+        architecture: :blackboard
+      }
+
+      {Map.merge(analysis, SourceStore.diagnostic(updated_state)), updated_state}
+    end)
+  end
+
+  @impl true
+  def handle_call({:dispatch_rec, source, finding}, _from, state) do
+    SourceStore.reply(state, source, fn ->
+      ensure_cohort!(state)
+      {trace, updated_state} = run_phased_analysis(finding, state)
+
+      confidence = derive_confidence(trace)
+      novel = is_novel?(trace)
+
+      # Trust graph: find best bots
+      trusted_bots = GraphOfTrust.trusted_bots(state.trust_graph)
+      trusted_recipes = GraphOfTrust.trusted_recipes(state.trust_graph)
+
+      raw_strategy =
+        cond do
+          novel -> :report_only
+          confidence >= 0.95 -> :auto_execute
+          confidence >= 0.85 -> :review
+          true -> :report_only
+        end
+
+      # Annealing gate: clamp strategy based on recipe's outcome maturity.
+      # A recipe with only 3 outcomes cannot reach :auto_execute regardless
+      # of neural confidence -- it must accumulate evidence first.
+      recipe_id =
+        [Map.get(finding, "recipe_id"), Map.get(finding, "pattern_id"), Map.get(finding, "id")]
+        |> Enum.find("unknown", fn id -> is_binary(id) and byte_size(id) > 0 end)
+
+      strategy = Hypatia.OutcomeTracker.annealed_strategy_from_store(recipe_id, raw_strategy, source)
+
+      recommendation = %{
+        strategy: strategy,
+        raw_strategy: raw_strategy,
+        confidence: confidence,
+        preferred_bots: Enum.take(trusted_bots, 3),
+        preferred_recipes: Enum.take(trusted_recipes, 5),
+        is_novel: novel,
+        reason: dispatch_reason(strategy, confidence, novel),
+        annealing_clamped: strategy != raw_strategy,
+        architecture: :blackboard,
+        networks_consulted: @network_count
+      }
+
+      {Map.merge(recommendation, SourceStore.diagnostic(updated_state)), updated_state}
+    end)
+  end
+
+  @impl true
+  def handle_call({:health_report, source}, _from, state) do
+    diagnostic_reply(state, source, fn -> health_map(state) end)
+  end
+
+  def handle_call(:health_report, from, state),
+    do: handle_call({:health_report, SourceStore.current()}, from, state)
+
+  def handle_call({:queue, source, event}, _from, state)
+      when event == :force_cycle or
+             (is_tuple(event) and tuple_size(event) == 3 and elem(event, 0) == :outcome) do
+    SourceStore.reply(state, source, fn ->
+      ensure_cohort!(state)
+      send(self(), {:source_bound, source, event})
+      {:ok, state}
+    end)
+  end
+
+  def handle_call(_unbound_request, _from, state) do
+    {:reply, {:error, :unbound_request}, SourceStore.refuse(state, :unbound_request)}
+  end
+
+  defp status_map(state) do
     status = %{
       networks: [
         :radial_neural_network,
@@ -386,82 +540,22 @@ defmodule Hypatia.Neural.Coordinator do
       total_rounds: state.total_rounds
     }
 
-    {:reply, {:ok, status}, state}
+    Map.merge(status, SourceStore.diagnostic(state))
   end
 
-  @impl true
-  def handle_call({:analyze, finding}, _from, state) do
-    {trace, updated_state} = run_phased_analysis(finding, state)
-
-    analysis = %{
-      # Legacy fields for backward compatibility
-      moe: trace_field(trace, :moe, :domain_confidence),
-      rbf: trace_field(trace, :rbf, :novelty_result),
-      lsm: trace_field(trace, :lsm, :temporal_result),
-      esn: trace_field(trace, :esn, :trajectory_result),
-      # New blackboard fields
-      gnn: trace_field(trace, :gnn, :graph_metrics),
-      vae: trace_field(trace, :vae, :interpretation),
-      sequence: trace_field(trace, :sequence, :prediction),
-      # Derived confidence from full reasoning trace
-      aggregated_confidence: derive_confidence(trace),
-      is_novel: is_novel?(trace),
-      # Blackboard metadata
-      round: trace.round,
-      phase_count: @phase_count,
-      network_count: @network_count,
-      architecture: :blackboard
-    }
-
-    {:reply, analysis, updated_state}
+  defp diagnostic_reply(state, source, report) do
+    case SourceStore.transact(state, source, fn ->
+           ensure_cohort!(state)
+           {report.(), state}
+         end) do
+      {:ok, result, ready} -> {:reply, result, ready}
+      {:error, reason, refused} ->
+        details = Map.merge(SourceStore.diagnostic(refused), %{reason: reason, cycle_count: state.cycle_count})
+        {:reply, {:error, {:neural_source_unavailable, details}}, refused}
+    end
   end
 
-  @impl true
-  def handle_call({:dispatch_rec, finding}, _from, state) do
-    {trace, updated_state} = run_phased_analysis(finding, state)
-
-    confidence = derive_confidence(trace)
-    novel = is_novel?(trace)
-
-    # Trust graph: find best bots
-    trusted_bots = GraphOfTrust.trusted_bots(state.trust_graph)
-    trusted_recipes = GraphOfTrust.trusted_recipes(state.trust_graph)
-
-    raw_strategy =
-      cond do
-        novel -> :report_only
-        confidence >= 0.95 -> :auto_execute
-        confidence >= 0.85 -> :review
-        true -> :report_only
-      end
-
-    # Annealing gate: clamp strategy based on recipe's outcome maturity.
-    # A recipe with only 3 outcomes cannot reach :auto_execute regardless
-    # of neural confidence -- it must accumulate evidence first.
-    recipe_id =
-      [Map.get(finding, "recipe_id"), Map.get(finding, "pattern_id"), Map.get(finding, "id")]
-      |> Enum.find("unknown", fn id -> is_binary(id) and byte_size(id) > 0 end)
-
-    strategy = Hypatia.OutcomeTracker.annealed_strategy(recipe_id, raw_strategy)
-
-    recommendation = %{
-      strategy: strategy,
-      raw_strategy: raw_strategy,
-      confidence: confidence,
-      preferred_bots: Enum.take(trusted_bots, 3),
-      preferred_recipes: Enum.take(trusted_recipes, 5),
-      is_novel: novel,
-      reason: dispatch_reason(strategy, confidence, novel),
-      annealing_clamped: strategy != raw_strategy,
-      architecture: :blackboard,
-      networks_consulted: @network_count
-    }
-
-    {:reply, recommendation, updated_state}
-  end
-
-  @impl true
-  def handle_call(:health_report, _from, state) do
+  defp health_map(state) do
     report = %{
       architecture: :blackboard,
       network_count: @network_count,
@@ -486,23 +580,43 @@ defmodule Hypatia.Neural.Coordinator do
         trained: state.rbf.trained,
         training_stats: state.rbf.training_stats
       },
-      # New 3 networks (GenServer, status via process alive check)
-      gnn: %{alive: process_alive?(GraphNeuralNetwork)},
-      vae: %{alive: process_alive?(VariationalAutoencoder)},
-      sequence_model: %{alive: process_alive?(SequenceModel)},
+      # Actual cohort identity has already passed ensure_cohort!/1.
+      gnn: %{alive: process_alive?(state.named_networks.gnn)},
+      vae: %{alive: process_alive?(state.named_networks.vae)},
+      sequence_model: %{alive: process_alive?(state.named_networks.sequence)},
       # Blackboard health
-      blackboard: %{alive: Blackboard.alive?()},
+      blackboard: %{alive: process_alive?(state.blackboard)},
       # Lifecycle
       cycle_count: state.cycle_count,
       last_cycle: state.last_cycle,
       total_rounds: state.total_rounds
     }
 
-    {:reply, report, state}
+    Map.merge(report, SourceStore.diagnostic(state))
   end
 
   @impl true
-  def handle_cast({:outcome, finding, outcome}, state) do
+  def handle_info({:source_bound, source, event}, state) do
+    SourceStore.noreply(state, source, fn ->
+      ensure_cohort!(state)
+      updated = apply_event(event, state)
+      ensure_cohort!(updated)
+      {:ok, updated}
+    end)
+  end
+
+  def handle_info(_unbound_message, state) do
+    Logger.warning("Neural coordinator refused an unbound message")
+    {:noreply, SourceStore.refuse(state, :unbound_request)}
+  end
+
+  @impl true
+  def handle_cast(_unbound_message, state) do
+    Logger.warning("Neural coordinator refused an unbound cast")
+    {:noreply, SourceStore.refuse(state, :unbound_request)}
+  end
+
+  defp apply_event({:outcome, finding, outcome}, state) do
     # Update MoE
     atom_outcome =
       case outcome do
@@ -523,18 +637,20 @@ defmodule Hypatia.Neural.Coordinator do
     {_pred, updated_esn} = EchoStateNetwork.step(state.esn, confidence)
 
     # Feed decision to sequence model for trace learning
-    SequenceModel.observe(%{finding: finding, outcome: outcome, confidence: confidence})
+    SourceStore.call!(state.named_networks.sequence, {
+      :observe, state.source_store,
+      %{finding: finding, outcome: outcome, confidence: confidence}
+    })
 
-    {:noreply, %{state | moe: updated_moe, lsm: updated_lsm, esn: updated_esn}}
+    %{state | moe: updated_moe, lsm: updated_lsm, esn: updated_esn}
   end
 
-  @impl true
-  def handle_cast(:force_cycle, state) do
+  defp apply_event(:force_cycle, state) do
     cycle = state.cycle_count + 1
     Logger.info("Neural Coordinator: forcing learning cycle ##{cycle}")
 
     # Rebuild trust graph from latest data
-    updated_graph = GraphOfTrust.build()
+    updated_graph = GraphOfTrust.build_from_store(state.source_store)
 
     # M9 — Strategy selection for ESN rebalancing. Three operational
     # modes, configurable via :hypatia, :neural_rebalance_strategy:
@@ -554,11 +670,12 @@ defmodule Hypatia.Neural.Coordinator do
     trained_esn =
       Hypatia.Neural.TrainingPipeline.train_esn(
         state.esn,
-        rebalance_strategy: rebalance_strategy
+        rebalance_strategy: rebalance_strategy,
+        data_path: state.source_store
       )
 
     # Train RBF on pattern registry data
-    trained_rbf = Hypatia.Neural.TrainingPipeline.train_rbf(state.rbf)
+    trained_rbf = Hypatia.Neural.TrainingPipeline.train_rbf(state.rbf, data_path: state.source_store)
 
     updated_state = %{
       state
@@ -570,9 +687,9 @@ defmodule Hypatia.Neural.Coordinator do
     }
 
     # Persist all neural states to flat files
-    Hypatia.Neural.Persistence.save_all(updated_state)
+    SourceStore.accept!(Persistence.save_all(updated_state))
 
-    {:noreply, updated_state}
+    updated_state
   end
 
   # ── Phased Blackboard Execution ─────────────────────────
@@ -580,10 +697,10 @@ defmodule Hypatia.Neural.Coordinator do
   @doc false
   defp run_phased_analysis(finding, state) do
     # Start a new blackboard round
-    {:ok, _round} = Blackboard.start_round()
+    SourceStore.accept!(Blackboard.start_round_source(state.source_store, state.blackboard))
 
     # Write the input finding to the blackboard
-    Blackboard.write(:input, :finding, finding)
+    write_board!(state, :input, :finding, finding)
 
     # Phase 1: RBF (novelty detection) -- sequential, everything depends on this
     state = run_phase_1_rbf(finding, state)
@@ -598,13 +715,13 @@ defmodule Hypatia.Neural.Coordinator do
     state = run_phase_4_temporal(finding, state)
 
     # Phase 5: VAE (interpretation clustering) -- reads everything
-    run_phase_5_vae(finding)
+    run_phase_5_vae(finding, state)
 
     # Phase 6: Sequence model (choreography) -- reads everything
-    run_phase_6_sequence(finding)
+    run_phase_6_sequence(finding, state)
 
     # End the round and capture the reasoning trace
-    {:ok, trace} = Blackboard.end_round()
+    trace = SourceStore.accept!(Blackboard.end_round_source(state.source_store, state.blackboard))
 
     updated_state = %{state | total_rounds: state.total_rounds + 1, last_round_trace: trace}
     {trace, updated_state}
@@ -623,8 +740,8 @@ defmodule Hypatia.Neural.Coordinator do
       is_novel: match?({:novel, _}, novelty)
     }
 
-    Blackboard.write(:rbf, :novelty_result, result)
-    Blackboard.write(:rbf, :novelty, %{score: rbf_confidence, status: novelty_status(novelty)})
+    write_board!(state, :rbf, :novelty_result, result)
+    write_board!(state, :rbf, :novelty, %{score: rbf_confidence, status: novelty_status(novelty)})
 
     state
   end
@@ -632,7 +749,7 @@ defmodule Hypatia.Neural.Coordinator do
   # Phase 2: PageRank + GNN (parallel)
   defp run_phase_2_graph(finding, state) do
     tasks = [
-      Task.async(fn ->
+      guarded_task(fn ->
         # PageRank: trust-weighted routing
         trusted_bots = GraphOfTrust.trusted_bots(state.trust_graph)
         trusted_recipes = GraphOfTrust.trusted_recipes(state.trust_graph)
@@ -643,16 +760,16 @@ defmodule Hypatia.Neural.Coordinator do
           repos_needing_attention: length(GraphOfTrust.repos_needing_attention(state.trust_graph))
         }
 
-        Blackboard.write(:pagerank, :trust_result, trust_result)
+        write_board!(state, :pagerank, :trust_result, trust_result)
       end),
-      Task.async(fn ->
+      guarded_task(fn ->
         # GNN: agent interaction patterns (calls the GNN GenServer)
-        GraphNeuralNetwork.analyse(finding)
+        SourceStore.call!(state.named_networks.gnn, {:analyse, state.source_store, finding, state.blackboard})
       end)
     ]
 
     # Await both parallel tasks (5s timeout each)
-    Task.await_many(tasks, 5_000)
+    tasks |> Task.await_many(5_000) |> Enum.each(&SourceStore.accept!/1)
     :ok
   end
 
@@ -666,7 +783,7 @@ defmodule Hypatia.Neural.Coordinator do
       top_domain: List.first(experts)
     }
 
-    Blackboard.write(:moe, :domain_confidence, domain_result)
+    write_board!(state, :moe, :domain_confidence, domain_result)
     state
   end
 
@@ -674,14 +791,15 @@ defmodule Hypatia.Neural.Coordinator do
   defp run_phase_4_temporal(finding, state) do
     # Read MoE confidence from blackboard for ESN input
     moe_confidence =
-      case Blackboard.read(:moe, :domain_confidence) do
+      case Blackboard.read_source(state.source_store, :moe, :domain_confidence, state.blackboard) do
         {:ok, %{confidence: c}} -> c
-        _ -> 0.5
+        :not_found -> 0.5
+        error -> SourceStore.accept!(error)
       end
 
     # Run ESN and LSM in parallel, but we need the updated state back
     esn_task =
-      Task.async(fn ->
+      guarded_task(fn ->
         {esn_pred, updated_esn} = EchoStateNetwork.step(state.esn, moe_confidence)
         drift = EchoStateNetwork.detect_drift(updated_esn)
 
@@ -691,12 +809,12 @@ defmodule Hypatia.Neural.Coordinator do
           input_confidence: moe_confidence
         }
 
-        Blackboard.write(:esn, :trajectory_result, trajectory_result)
+        write_board!(state, :esn, :trajectory_result, trajectory_result)
         updated_esn
       end)
 
     lsm_task =
-      Task.async(fn ->
+      guarded_task(fn ->
         updated_lsm = LiquidStateMachine.process_event(state.lsm, finding)
         {lsm_score, lsm_status} = LiquidStateMachine.predict(updated_lsm)
         anomalies = LiquidStateMachine.detect_anomalies(updated_lsm)
@@ -707,28 +825,44 @@ defmodule Hypatia.Neural.Coordinator do
           anomaly_count: length(anomalies)
         }
 
-        Blackboard.write(:lsm, :temporal_result, temporal_result)
+        write_board!(state, :lsm, :temporal_result, temporal_result)
         updated_lsm
       end)
 
-    updated_esn = Task.await(esn_task, 5_000)
-    updated_lsm = Task.await(lsm_task, 5_000)
+    updated_esn = SourceStore.accept!(Task.await(esn_task, 5_000))
+    updated_lsm = SourceStore.accept!(Task.await(lsm_task, 5_000))
 
     %{state | esn: updated_esn, lsm: updated_lsm}
   end
 
-  # Phase 5: VAE interpretation clustering
-  defp run_phase_5_vae(finding) do
-    # VAE is a GenServer -- calls it to cluster the finding
-    VariationalAutoencoder.cluster(finding)
-    :ok
+  # Named models receive both the captured source and this cohort's board.
+  defp run_phase_5_vae(finding, state) do
+    SourceStore.call!(state.named_networks.vae, {:cluster, state.source_store, finding, state.blackboard})
   end
 
-  # Phase 6: Sequence model choreography prediction
-  defp run_phase_6_sequence(finding) do
-    # Sequence model is a GenServer -- calls it to predict next step
-    SequenceModel.predict(finding)
-    :ok
+  defp run_phase_6_sequence(finding, state) do
+    SourceStore.call!(state.named_networks.sequence, {:predict, state.source_store, finding, state.blackboard})
+  end
+
+  defp write_board!(state, network, key, value) do
+    SourceStore.accept!(
+      Blackboard.write_source(state.source_store, network, key, value, state.blackboard)
+    )
+  end
+
+  # Preserve parallel phases while returning task failures to the lifecycle
+  # guard. A failed peer must not disappear from an otherwise accepted trace.
+  defp guarded_task(operation) do
+    Task.async(fn ->
+      try do
+        {:ok, operation.()}
+      rescue
+        error in SourceStore.Refusal -> {:error, error.reason}
+        error -> {:error, {:neural_task_failed, Exception.message(error)}}
+      catch
+        :exit, reason -> {:error, {:neural_task_unavailable, reason}}
+      end
+    end)
   end
 
   # ── Confidence Derivation ───────────────────────────────

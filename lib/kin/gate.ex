@@ -13,7 +13,7 @@ defmodule Hypatia.Kin.Gate do
   - **Conflict detection**: blocks fixes that contradict pending fixes
   - **Confidence floor**: enforces minimum confidence for auto-execute tier
   - **Rate guard**: prevents flood of PRs to a single repo
-  - **Neural consensus**: if available, checks neural network agreement on severity
+  - **Neural consensus**: auto-execute requires a current-source neural assessment
 
   ## Decision outcomes
 
@@ -427,55 +427,43 @@ defmodule Hypatia.Kin.Gate do
     end
   end
 
-  # Check 6: If neural networks are available, check consensus
-  defp check_neural_consensus(action, _state) do
+  # Check 6: unavailable or refused predictions cannot count as agreement.
+  defp check_neural_consensus(action, _state), do: neural_consensus(action)
+
+  @doc false
+  def neural_consensus(action, predictor \\ &Hypatia.Neural.Coordinator.dispatch_recommendation/1) do
     if action.dispatch_tier == :auto_execute do
-      case check_neural_available() do
-        # neural layer not available, don't block
-        false ->
-          :pass
+      try do
+        finding = %{"id" => action.pattern_id, "category" => "unknown"}
 
-        true ->
-          # Ask the neural coordinator for a confidence assessment
-          case neural_agrees?(action) do
-            true ->
-              :pass
+        case predictor.(finding) do
+          %{confidence: neural_conf} = recommendation when is_number(neural_conf) ->
+            cond do
+              not Hypatia.Neural.SourceStore.ready_report?(recommendation) ->
+                neural_unavailable_hold()
 
-            false ->
-              {:hold,
-               "neural network disagrees with dispatch confidence -- human review recommended"}
-          end
+              abs(neural_conf - Map.get(action, :confidence, 0.0)) < 0.15 ->
+                :pass
+
+              true ->
+                {:hold, "neural network disagrees with dispatch confidence -- human review recommended"}
+            end
+
+          _ ->
+            neural_unavailable_hold()
+        end
+      rescue
+        _ -> neural_unavailable_hold()
+      catch
+        :exit, _ -> neural_unavailable_hold()
       end
     else
       :pass
     end
   end
 
-  defp check_neural_available do
-    case Process.whereis(Hypatia.Neural.Coordinator) do
-      nil -> false
-      pid -> Process.alive?(pid)
-    end
-  end
-
-  defp neural_agrees?(action) do
-    try do
-      finding = %{"id" => action.pattern_id, "category" => "unknown"}
-
-      case Hypatia.Neural.Coordinator.dispatch_recommendation(finding) do
-        %{confidence: neural_conf} ->
-          # Neural agrees if its confidence is within 0.15 of the recipe confidence
-          abs(neural_conf - Map.get(action, :confidence, 0.0)) < 0.15
-
-        # if prediction fails, don't block
-        _ ->
-          true
-      end
-    rescue
-      _ -> true
-    catch
-      :exit, _ -> true
-    end
+  defp neural_unavailable_hold do
+    {:hold, "current-source neural assessment unavailable -- human review required"}
   end
 
   # --- Helpers ---

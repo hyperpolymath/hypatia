@@ -13,7 +13,8 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     Persistence,
     RadialNeuralNetwork,
     Rebalancer,
-    TrainingPipeline
+    TrainingPipeline,
+    SourceStore
   }
 
   alias Hypatia.VCL.{Client, FileExecutor}
@@ -200,7 +201,8 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     [first_pattern] = Map.values(first_registry["patterns"])
     assert first_pattern["triangle_tier"] == "control"
     assert first_pattern["repos_affected_list"] == ["first"]
-    assert {[first_vector], [0.0]} = TrainingPipeline.build_rbf_training_data()
+    assert {[first_vector], first_targets} = TrainingPipeline.build_rbf_training_data()
+    assert first_targets == [0.0]
     assert length(first_vector) == 8
     first_bytes = directory_bytes(Path.join(ctx.first, "patterns"))
 
@@ -220,7 +222,8 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.first)
     assert PatternRegistry.get_pattern(second_pattern["id"]) == nil
     assert PatternRegistry.all_patterns() == [first_pattern]
-    assert {[^first_vector], [0.0]} = TrainingPipeline.build_rbf_training_data()
+    assert {[^first_vector], restored_targets} = TrainingPipeline.build_rbf_training_data()
+    assert restored_targets == [0.0]
   end
 
   test "corpus templates follow runtime defaults and retain an explicit store override", ctx do
@@ -384,7 +387,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     write_json(Path.join([ctx.second, "recipes", "recipe-second.json"]), %{"id" => "recipe-second"})
 
     first_state = neural_state("first")
-    Persistence.save_all(first_state)
+    assert :ok = Persistence.save_all(first_state)
     assert %{trust: {:ok, first_trust}, rbf: {:ok, first_rbf}} = Persistence.load_all()
     assert first_trust["restore_policy"] == "recompute_from_current_qualified_outcomes"
     assert first_trust["trust_scores"] == %{"recipe-first" => 0.5}
@@ -394,7 +397,7 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
     assert %{trust: :not_found, rbf: :not_found} = Persistence.load_all()
     second_state = neural_state("second")
-    Persistence.save_all(second_state)
+    assert :ok = Persistence.save_all(second_state)
     assert %{trust: {:ok, second_trust}, rbf: {:ok, second_rbf}} = Persistence.load_all()
     assert second_trust["trust_scores"] == %{"recipe-second" => 0.5}
     assert second_rbf["training_stats"] == %{"fixture_store" => "second"}
@@ -512,13 +515,21 @@ defmodule Hypatia.LearningRuntimeStoreTest do
   end
 
   defp neural_state(marker) do
+    networks =
+      Map.new(Persistence.default_networks(), fn {name, module} ->
+        pid = start_supervised!(%{id: make_ref(), start: {GenServer, :start_link, [module, [], []]}})
+        {name, pid}
+      end)
+
     %{
       trust_graph: GraphOfTrust.build(),
       moe: MixtureOfExperts.init(),
       lsm: LiquidStateMachine.init(reservoir_size: 4, seed: 17),
       esn: EchoStateNetwork.init(reservoir_size: 4, seed: 17),
       rbf: %{RadialNeuralNetwork.init() | training_stats: %{"fixture_store" => marker}},
-      cycle_count: 0
+      cycle_count: 0,
+      named_networks: networks
     }
+    |> Map.merge(SourceStore.fields())
   end
 end
