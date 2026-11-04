@@ -1856,5 +1856,72 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
         assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
       end
     end
+
+    test "bare-dash upload steps use the body's key column" do
+      for marker <- ["-", "-   ", "- # literal upload"],
+          named? <- [false, true],
+          report <- ["out.sarif", "unrelated.sarif"] do
+        name = if named?, do: "        name: Upload report\n", else: ""
+
+        workflow =
+          "jobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+            "      - run: |\n" <>
+            "          scanner > findings.json || true\n" <>
+            "          jq '.' findings.json > out.sarif\n" <>
+            "      #{marker}\n" <>
+            "        # The first real mapping entry establishes indentation.\n" <>
+            name <>
+            "        uses: github/codeql-action/upload-sarif@v4\n" <>
+            "        with:\n          sarif_file: #{report}\n"
+
+        repo = create_repo_with_workflow(workflow)
+        on_exit(fn -> File.rm_rf!(repo) end)
+        findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
+        assert (findings != []) == (report == "out.sarif")
+      end
+    end
+
+    test "bare-dash scalar content cannot masquerade as upload mapping keys" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              -
+                run: |
+                  scanner > findings.json || true
+                  jq '.' findings.json > out.sarif
+                  uses: github/codeql-action/upload-sarif@v4
+                  with:
+                    sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "masked direct SARIF output reaches its literal upload" do
+      for script <- [
+            "scanner --format sarif > out.sarif || true",
+            "scanner --format sarif > out.sarif 2>&1 || true"
+          ] do
+        repo = wh014_repo(script)
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "direct SARIF masks retain unrelated-output and overwrite boundaries" do
+      for script <- [
+            "metadata > unrelated.sarif || true\nscanner > out.sarif",
+            "scanner > out.sarif || true\nscanner > out.sarif",
+            "scanner > out.sarif\nfalse || true"
+          ] do
+        repo = wh014_repo(script)
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
   end
 end

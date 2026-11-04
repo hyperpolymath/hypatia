@@ -1617,13 +1617,26 @@ defmodule Hypatia.Rules.WorkflowHardening do
   defp wh014_step_lines(step) do
     [item | rest] = String.split(step, "\n")
 
-    case Regex.run(~r/^([ \t]*-[ \t]+)(.*)$/, item) do
-      [_, prefix, value] ->
-        column = String.length(prefix)
-        {column, [String.duplicate(" ", column) <> value | rest]}
+    if Regex.match?(~r/^[ \t]*-[ \t]*(?:#.*)?$/, item) do
+      # A bare sequence marker has no key column. Read it from the first
+      # real mapping entry, keeping nested scalar text at its own indentation.
+      case Enum.reject(rest, &blank_or_comment?/1) do
+        [first | _] ->
+          column = indent_of(first)
+          if column > indent_of(item), do: {column, rest}, else: {nil, []}
 
-      _ ->
-        {nil, []}
+        [] ->
+          {nil, []}
+      end
+    else
+      case Regex.run(~r/^([ \t]*-[ \t]+)(.*)$/, item) do
+        [_, prefix, value] ->
+          column = String.length(prefix)
+          {column, [String.duplicate(" ", column) <> value | rest]}
+
+        _ ->
+          {nil, []}
+      end
     end
   end
 
@@ -1924,8 +1937,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       paths =
         Enum.reduce(outputs, paths, fn {kind, path}, acc ->
-          masked_json? = output_mask? and String.ends_with?(path, ".json")
-          if inherited? or masked_json? or (kind == :append and MapSet.member?(acc, path)),
+          # Outputs have already passed the JSON/SARIF literal-path boundary.
+          if inherited? or output_mask? or (kind == :append and MapSet.member?(acc, path)),
             do: MapSet.put(acc, path),
             else: MapSet.delete(acc, path)
         end)
@@ -2019,7 +2032,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   carrying **84** findings on 09-11 was followed by six green runs uploading
   **0** results, closing all 84.
 
-  The rule reports a masked JSON-producing invocation or count (`|| true`,
+  The rule reports a masked JSON/SARIF-producing invocation or count (`|| true`,
   `|| echo 0`) only when a visible literal-path chain carries that report
   to the named `sarif_file` of a later code-scanning upload in the same job.
   A masked count of unrelated optional metadata does not establish that
@@ -2066,7 +2079,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
             file: rel,
             severity: :high,
             reason:
-              "workflow #{rel} has a literal report path from a masked JSON-producing " <>
+              "workflow #{rel} has a literal report path from a masked JSON/SARIF-producing " <>
                 "command or findings count (`|| true` / `|| echo 0`) to a SARIF upload. A failed or " <>
                 "incomplete scan can become an empty SARIF upload that closes existing " <>
                 "alerts. An unrelated assertion or non-empty findings array does not " <>
