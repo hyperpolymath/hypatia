@@ -9,11 +9,14 @@
 // result = {"file": FILE, "docs": [node, ...]} | {"file": FILE, "error": [code, line, col, path]}
 // Aliases are seen through. A document over kyq's node budget is ["budget"].
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const [kyq, ...files] = process.argv.slice(2);
-const { parseKyaml, NODE_BUDGET } = await import(join(kyq, "conformance/src/kyaml.js"));
-const { assertNodeBudget } = await import(join(kyq, "conformance/src/bridge.js"));
+// Through a file URL, so a relative checkout path (`.kyq`) is not read as a package name.
+const kyqModule = (path) => import(pathToFileURL(resolve(kyq, path)).href);
+const { parseKyaml, NODE_BUDGET } = await kyqModule("conformance/src/kyaml.js");
+const { assertNodeBudget } = await kyqModule("conformance/src/bridge.js");
 
 const dump = (n) =>
   n.kind === "map"

@@ -94,6 +94,22 @@ defmodule Hypatia.KyamlTest do
       assert Kyaml.get(Kyaml.get(doc, "meta"), "a").value == "1"
     end
 
+    test "a raw control character is refused in a plain or block scalar, as in a quoted one" do
+      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 4}} =
+               Kyaml.parse("a: x\u0001y\n")
+
+      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 1}} =
+               Kyaml.parse("a\u0001: 1\n")
+
+      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 5}} =
+               Kyaml.parse("a: [x\u0001y]\n")
+
+      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 4}} =
+               Kyaml.parse("a: |\n  x\u0001y\n")
+
+      assert {:ok, _} = Kyaml.parse("a: |\n  tab\tok\n")
+    end
+
     test "whole-input diagnostics count columns in code points" do
       assert {:error, %{code: "INVALID_NEWLINE", line: 1, column: 5}} =
                Kyaml.parse("x: 🟠\ry: 1\n")

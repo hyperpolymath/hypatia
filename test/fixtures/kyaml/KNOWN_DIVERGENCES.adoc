@@ -37,6 +37,12 @@ lists the fixture it reads differently (`@accepted_divergences`).
   directive says "trailing commas OK". kyq's refusal made it refuse canonical
   KYAML: `test/kyaml_workflow_test.exs`, whose fixtures are yq's literal output,
   could not be read. kyq's `invalid/flow-trailing-comma.yaml` becomes valid.
+
+| A raw C0 control character (not a tab) in a plain or block scalar
+| Accepted, though it is not printable YAML. kyq refuses one only in a quoted
+  scalar (`CONTROL_CHARACTER`).
+| Refused with the same code, at the scalar. Found by Codex review of
+  hyperpolymath/hypatia#1008; fixed upstream on the same local kyq branch.
 |===
 
 None of these occurs in the estate's block-style workflows, so the

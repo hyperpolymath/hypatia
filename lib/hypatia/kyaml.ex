@@ -57,6 +57,8 @@ defmodule Hypatia.Kyaml do
   @true_words ["true", "True", "TRUE"]
   @false_words ["false", "False", "FALSE"]
   @core_tags ["!!str", "!!int", "!!float", "!!bool", "!!null", "!!map", "!!seq", "!"]
+  # The kind each scalar core tag requires (a fixed table, never built from input).
+  @tag_kinds %{"!!int" => :int, "!!float" => :float, "!!bool" => :bool, "!!null" => :null}
 
   # kyq's anchor budget for alias expansion (bridge.js NODE_BUDGET, SEC-1).
   @node_budget 100_000
@@ -919,7 +921,7 @@ defmodule Hypatia.Kyaml do
       %{node | kind: :string, value: node.raw}
     else
       {kind, value} = resolve_plain(node.raw)
-      expected = String.to_atom(binary_part(tag, 2, byte_size(tag) - 2))
+      expected = Map.fetch!(@tag_kinds, tag)
 
       if kind != expected,
         do:
@@ -975,6 +977,7 @@ defmodule Hypatia.Kyaml do
   end
 
   defp scalar_from_raw(raw, at, style) do
+    assert_no_control(raw, at, "plain")
     {kind, value} = resolve_plain(raw)
     if kind == :string, do: assert_ijson_string(value, at)
     %{kind: kind, value: value, raw: raw, loc: at, style: style, segments: []}
@@ -1092,6 +1095,25 @@ defmodule Hypatia.Kyaml do
     end
   end
 
+  # A raw C0 control character other than a tab (or a block scalar's line
+  # breaks) is not printable YAML in any scalar; kyq refuses it only in a
+  # quoted one (see KNOWN_DIVERGENCES).
+  defp assert_no_control(text, at, style) do
+    case Enum.find(String.to_charlist(text), &(&1 < 0x20 and &1 not in [0x09, 0x0A])) do
+      nil ->
+        :ok
+
+      c ->
+        hex = c |> Integer.to_string(16) |> String.pad_leading(4, "0")
+
+        throw_error(
+          "CONTROL_CHARACTER",
+          "raw control character U+#{hex} in a #{style} scalar",
+          at
+        )
+    end
+  end
+
   # I-JSON (RFC 7493 §2.1) as ijson-jcs applies it: no noncharacters. (A
   # lone surrogate cannot reach here: Elixir strings are valid UTF-8, and the
   # escape parser refuses one.)
@@ -1160,6 +1182,7 @@ defmodule Hypatia.Kyaml do
         :keep -> body <> String.duplicate("\n", length(trailing))
       end
 
+    assert_no_control(body, at, "block")
     assert_ijson_string(body, at)
     {%{kind: :string, value: body, raw: body, loc: at, style: :block, segments: segments}, s}
   end
