@@ -3075,11 +3075,13 @@ defmodule Hypatia.Rules.WorkflowAudit do
         # The value of a `uses:` key, as YAML reads the scalar: a quoted one
         # runs to its closing quote, whatever it holds; an unquoted one ends
         # at whitespace in block style (a branch or tag may hold `,` `}` `]`
-        # `#`) and, inside a flow collection, at the delimiters too.
+        # `#`) and, inside a flow collection, at the flow indicators `,` `}`
+        # `]` too. `#` opens a comment only after whitespace, which already
+        # ends the scalar, so `@release#one` is one value in either style.
         key = "[\"']?uses[\"']?\\s*:\\s*(?:[&!]\\S*\\s+)*"
         quoted = "\"([^\"]*)\"|'([^']*)'"
         block_value = "(?:" <> quoted <> "|([^\\s\"']+))"
-        flow_value = "(?:" <> quoted <> "|([^\\s\"'#,}\\]]+))"
+        flow_value = "(?:" <> quoted <> "|([^\\s\"',}\\]]+))"
 
         block_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> block_value)
         leading_flow_re = Regex.compile!("^\\s*(?:-\\s+)?" <> key <> flow_value)
