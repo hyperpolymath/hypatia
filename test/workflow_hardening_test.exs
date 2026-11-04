@@ -1818,5 +1818,43 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       on_exit(fn -> File.rm_rf!(repo) end)
       assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
     end
+
+    test "fd duplication preserves scanner and count fallback association" do
+      for redirect <- ["2>&1", ">&2", "<&0"],
+          mask <- [:scanner, :count] do
+        command =
+          case mask do
+            :scanner ->
+              "hypatia scan . > findings.json #{redirect} || true"
+
+            :count ->
+              "hypatia scan . > findings.json\n" <>
+                "COUNT=$(jq 'length' findings.json #{redirect} || echo 0)"
+          end
+
+        repo =
+          wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "fd duplication does not absorb a real background or separate command" do
+      for command <- [
+            "hypatia scan . > findings.json 2>&1 & false || true",
+            "hypatia scan . > findings.json 2>&1; false || true",
+            "hypatia scan . > findings.json\n" <>
+              "jq 'length' findings.json 2>&1 & false || echo 0",
+            "hypatia scan . > findings.json\n" <>
+              "jq 'length' findings.json <&0\nfalse || echo 0"
+          ] do
+        repo =
+          wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
   end
 end

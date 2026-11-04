@@ -1820,6 +1820,18 @@ defmodule Hypatia.Rules.WorkflowHardening do
   defp wh014_lex(<<"|", rest::binary>>, :plain, word, tokens, nested),
     do: wh014_lex(rest, :plain, nil, [:pipe | wh014_flush(tokens, word)], nested)
 
+  # Descriptor duplication is part of this command, not a background '&'.
+  # Preserve the boundary without inferring a dynamic descriptor-to-file flow.
+  defp wh014_lex(<<redirect, ?&, rest::binary>>, :plain, word, tokens, nested)
+       when redirect in [?<, ?>] do
+    words =
+      if is_binary(word) and Regex.match?(~r/\A[0-9]+\z/, word),
+        do: tokens,
+        else: wh014_flush(tokens, word)
+
+    wh014_lex(rest, :plain, nil, [:fd_duplicate | words], nested)
+  end
+
   defp wh014_lex(<<">", rest::binary>>, :plain, word, tokens, nested) do
     {kind, rest} =
       if String.starts_with?(rest, ">"),
@@ -1928,6 +1940,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
   defp wh014_command_parts([{kind, descriptor}, {:word, path} | rest], words, redirects)
        when kind in [:out, :append],
        do: wh014_command_parts(rest, words, [{kind, descriptor, path} | redirects])
+
+  # The target of >& / <& is a descriptor, not an input/output filename.
+  defp wh014_command_parts([:fd_duplicate, {:word, _descriptor} | rest], words, redirects),
+    do: wh014_command_parts(rest, words, redirects)
 
   defp wh014_command_parts([:input, {:word, path} | rest], words, redirects),
     do: wh014_command_parts(rest, words, [{:input, "0", path} | redirects])
