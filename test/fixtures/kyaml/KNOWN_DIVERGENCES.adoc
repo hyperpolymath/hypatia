@@ -3,7 +3,7 @@
 
 `Hypatia.Kyaml` differs from kyq's reference parser (`conformance/src/kyaml.js`
 at `4d1071df04d93e089500d58d0b6ba37bfcc75248`) only where kyq has a bug. Each one has a
-fix for kyq, with conformance fixtures; kyq's suite passes 324 of 324 with it.
+fix for kyq, with conformance fixtures; kyq's suite passes 350 of 350 with it.
 Delete a row when kyq carries the fix, and move `KYQ_REF` in
 `.github/workflows/ci.yml` past it. The differential test lists the one
 divergence its corpus run can meet (`@known_divergences`); the corpus test
@@ -43,12 +43,30 @@ lists the fixture it reads differently (`@accepted_divergences`).
   scalar (`CONTROL_CHARACTER`).
 | Refused with the same code, at the scalar. Found by Codex review of
   hyperpolymath/hypatia#1008; fixed upstream on the same local kyq branch.
+
+| Thirteen YAML 1.2 rules, found by CodeRabbit review of hyperpolymath/hypatia#1008:
+  a second anchor or tag on one node; a decorated alias in flow context; a
+  property on a mapping key (`!!str a: 1`); a plain scalar starting with `@`,
+  `` ` `` or `%`; an empty flow entry (`[1,,2]`, `[,]`); an alias to an earlier
+  document's anchor; a comment after `%YAML 1.2`; `|2-` header order;
+  `!!float 1`; a tab before `#`; spaces past an explicit indentation on a blank
+  line; a block scalar ending at end of input without a break; a whole-input
+  column after a leading BOM
+| Each read otherwise than YAML 1.2 reads it (the first six accepted, the next
+  three refused, the last four misread).
+| As YAML 1.2, with the codes `DUPLICATE_PROPERTY`, `ALIAS_DECORATED`,
+  `KEY_PROPERTY`, `RESERVED_INDICATOR`, `EMPTY_VALUE` and `UNKNOWN_ANCHOR`.
+  `test/kyaml_test.exs` holds each case to the result of kyq's bridge vector
+  of the same name on the kyq fix.
 |===
+
+The port also carried one bug kyq does not have: a float literal that
+overflows with a negative exponent (`999…9e-1`, 400 digits) read as 0.0, where
+kyq gives Infinity. It now gives `:infinity` too.
 
 None of these occurs in the estate's block-style workflows, so the
 pinned-commit differential agrees on every file but kyq's own
-`flow-trailing-comma.yaml`, which it lists. The kyq fix is three commits on
-`metadatastician/kyq` (`conformance: accept a leading BOM and a comment after
-a block scalar header`; `conformance: whole-input diagnostics count columns in
-code points`; `KYAML: accept a trailing comma in a flow collection`), still to
-be opened there.
+`flow-trailing-comma.yaml`, which it lists. The kyq fix is five commits on `metadatastician/kyq` branch
+`fix/bom-and-block-scalar-comment` (the leading BOM and block-header comment,
+code-point columns, the trailing comma, control characters, and the thirteen
+rules above), still to be opened there.

@@ -152,6 +152,9 @@ defmodule Hypatia.Kyaml do
   defp canon(%{kind: :float, loc: {l, c}, raw: raw}), do: ["float", l, c, raw]
   defp canon(%{kind: kind, loc: {l, c}, value: v}), do: [Atom.to_string(kind), l, c, v]
 
+  # The Core Schema's tag:yaml.org,2002:float pattern (finite values).
+  @float_text ~r/\A[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?\z/
+
   @doc """
   Resolve a plain scalar with the YAML 1.2 Core Schema: `{kind, value}`.
   `yes`/`no`/`on`/`off` are strings, as in YAML 1.2 (unlike 1.1).
@@ -176,7 +179,7 @@ defmodule Hypatia.Kyaml do
       Regex.match?(~r/\A0x[0-9a-fA-F]+\z/, text) ->
         {:int, String.to_integer(binary_part(text, 2, byte_size(text) - 2), 16)}
 
-      Regex.match?(~r/\A[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?\z/, text) ->
+      Regex.match?(@float_text, text) ->
         {:float, to_float(text)}
 
       Regex.match?(~r/\A[-+]?\.(?:inf|Inf|INF)\z/, text) ->
@@ -206,15 +209,12 @@ defmodule Hypatia.Kyaml do
 
     exponent = if exponent == "", do: "0", else: exponent
 
+    # OTP raises only on overflow (an underflow returns ±0.0), so a raise is
+    # always ±Infinity, whatever the exponent's sign: `999…9e-1` overflows.
     try do
       :erlang.binary_to_float(if(sign == "-", do: "-", else: "") <> mantissa <> "e" <> exponent)
     rescue
-      ArgumentError ->
-        cond do
-          String.to_integer(exponent) < 0 -> if sign == "-", do: -0.0, else: 0.0
-          sign == "-" -> :neg_infinity
-          true -> :infinity
-        end
+      ArgumentError -> if sign == "-", do: :neg_infinity, else: :infinity
     end
   end
 
@@ -265,7 +265,8 @@ defmodule Hypatia.Kyaml do
         stream(s |> consume_marker() |> skip_gap(), docs, saw_directive)
 
       at_marker?(s, "---") ->
-        s = s |> consume_marker() |> skip_gap()
+        # Anchors are scoped to one document (YAML 1.2 §7.1), so each starts with none.
+        s = %{s | anchors: %{}} |> consume_marker() |> skip_gap()
 
         cond do
           # A final `---` with no content: a trailing empty document is dropped.
@@ -327,8 +328,11 @@ defmodule Hypatia.Kyaml do
   defp char_at(_, _), do: nil
   defp loc(s), do: {s.line, s.col}
 
+  # A leading BOM is zero-width, as parse_stream/1 treats it.
   defp location_of(t, offset) do
-    Enum.reduce(0..(offset - 1)//1, {1, 1}, fn j, {line, col} ->
+    first = if offset > 0 and elem(t, 0) == 0xFEFF, do: 1, else: 0
+
+    Enum.reduce(first..(offset - 1)//1, {1, 1}, fn j, {line, col} ->
       if elem(t, j) == ?\n, do: {line + 1, 1}, else: {line, col + 1}
     end)
   end
@@ -501,6 +505,8 @@ defmodule Hypatia.Kyaml do
     {chars, s} = take_line(s, [])
     line = List.to_string(chars)
     [name | args] = String.split(String.trim(line), ~r/\s+/u)
+    # A comment may follow a directive's arguments (`%YAML 1.2 # note`).
+    args = Enum.take_while(args, &(not String.starts_with?(&1, "#")))
 
     if name == "%YAML" do
       if args != ["1.2"],
@@ -563,7 +569,10 @@ defmodule Hypatia.Kyaml do
     c = peek(s)
 
     cond do
-      c == nil or c in ~c"{[&*!|>" ->
+      c in ~c"&*!" ->
+        if property_key?(s), do: throw_key_property(loc(s)), else: false
+
+      c == nil or c in ~c"{[|>" ->
         false
 
       c == ?? and (peek(s, 1) || ?\n) in [?\s, ?\t, ?\n] ->
@@ -590,6 +599,49 @@ defmodule Hypatia.Kyaml do
 
   defp skip_blank_at(s, j),
     do: if(char_at(s, j) in [?\s, ?\t], do: skip_blank_at(s, j + 1), else: j)
+
+  # Whether a line that opens with an anchor, tag or alias is a mapping entry,
+  # so that the property would fall on its key (`&a b: 1`, `!!str b: 1`,
+  # `*a : 1`). A key with properties is outside the KYAML subset: read as a
+  # plain key, `!!str a` would be a different key from `a`.
+  defp property_key?(s) do
+    j = skip_properties(s, s.i)
+
+    case char_at(s, j) do
+      ?* ->
+        k = skip_blank_at(s, skip_token(s, j + 1))
+        char_at(s, k) == ?: and separator_after?(s, k + 1)
+
+      c when c in [nil, ?\n, ?#] ->
+        false
+
+      _ ->
+        map_entry?(%{s | i: j})
+    end
+  end
+
+  defp skip_properties(s, j) do
+    if char_at(s, j) in [?&, ?!],
+      do: skip_properties(s, skip_blank_at(s, skip_token(s, j + 1))),
+      else: j
+  end
+
+  # The end of an anchor, tag or alias name: kyq's /[^\s,[\]{}]+/.
+  defp skip_token(s, j) do
+    c = char_at(s, j)
+
+    if c == nil or js_space?(c) or c in ~c",[]{}",
+      do: j,
+      else: skip_token(s, j + 1)
+  end
+
+  defp throw_key_property(at),
+    do:
+      throw_error(
+        "KEY_PROPERTY",
+        "an anchor, tag or alias on a mapping key is outside the KYAML subset",
+        at
+      )
 
   defp scan_key_colon(s, j) do
     c = char_at(s, j)
@@ -639,14 +691,15 @@ defmodule Hypatia.Kyaml do
     seen = check_duplicate(seen, key, key_loc, path)
     entries = [%{key: key, value: value, loc: key_loc} | entries]
     s = skip_gap(s)
-    done = {%{kind: :map, entries: Enum.reverse(entries), loc: map_loc}, s}
+    # Built only when the mapping closes, so n entries cost O(n), not O(n²).
+    done = fn -> {%{kind: :map, entries: Enum.reverse(entries), loc: map_loc}, s} end
 
     cond do
       eof?(s) or at_marker?(s, "---") or at_marker?(s, "...") ->
-        done
+        done.()
 
       s.col - 1 < indent ->
-        done
+        done.()
 
       s.col - 1 > indent ->
         throw_error(
@@ -667,11 +720,12 @@ defmodule Hypatia.Kyaml do
     end
   end
 
-  defp parse_seq(s, indent, path), do: seq_items(s, indent, path, loc(s), [])
+  defp parse_seq(s, indent, path), do: seq_items(s, indent, path, loc(s), [], 0)
 
-  defp seq_items(s, indent, path, seq_loc, items) do
+  # `n` counts the items so far: the next item's index, without length/1.
+  defp seq_items(s, indent, path, seq_loc, items, n) do
     s = s |> bump!() |> skip_blanks()
-    item_path = join_path(path, Integer.to_string(length(items)))
+    item_path = join_path(path, Integer.to_string(n))
 
     {item, s} =
       if eof?(s) or peek(s) in [?\n, ?#] do
@@ -692,14 +746,14 @@ defmodule Hypatia.Kyaml do
 
     items = [item | items]
     s = skip_gap(s)
-    done = {%{kind: :seq, items: Enum.reverse(items), loc: seq_loc}, s}
+    done = fn -> {%{kind: :seq, items: Enum.reverse(items), loc: seq_loc}, s} end
 
     cond do
       eof?(s) or at_marker?(s, "---") or at_marker?(s, "...") ->
-        done
+        done.()
 
       s.col - 1 < indent ->
-        done
+        done.()
 
       s.col - 1 > indent ->
         throw_error(
@@ -710,10 +764,10 @@ defmodule Hypatia.Kyaml do
 
       # The sequence ended; the parent resumes at the same indentation.
       not seq_entry?(s) ->
-        done
+        done.()
 
       true ->
-        seq_items(s, indent, path, seq_loc, items)
+        seq_items(s, indent, path, seq_loc, items, n + 1)
     end
   end
 
@@ -742,6 +796,8 @@ defmodule Hypatia.Kyaml do
   defp parse_key(s) do
     at = loc(s)
 
+    if peek(s) in ~c"&*!" and property_key?(s), do: throw_key_property(at)
+
     if peek(s) in [?', ?"] do
       {node, s} = parse_quoted(s, at)
       {node, skip_blanks(s)}
@@ -762,7 +818,7 @@ defmodule Hypatia.Kyaml do
       eof?(s) -> {List.to_string(Enum.reverse(acc)), s}
       c == ?: and separator_after?(s, s.i + 1) -> {List.to_string(Enum.reverse(acc)), s}
       c == ?\n -> {List.to_string(Enum.reverse(acc)), s}
-      c == ?# and match?([?\s | _], acc) -> {List.to_string(Enum.reverse(acc)), s}
+      c == ?# and List.first(acc) in [?\s, ?\t] -> {List.to_string(Enum.reverse(acc)), s}
       true -> plain_key_chars(bump!(s), [c | acc])
     end
   end
@@ -820,13 +876,17 @@ defmodule Hypatia.Kyaml do
 
   defp node_properties(s, at, anchor, tag, skip) do
     case peek(s) do
+      # A node has at most one anchor and one tag (YAML 1.2 §6.9); a second
+      # would silently replace the first.
       ?& ->
+        if anchor, do: throw_duplicate_property("anchor", loc(s))
         s = bump!(s)
         {name, s} = take_name(s)
         if name == "", do: throw_error("BAD_ANCHOR", "anchor name is missing", at)
         node_properties(skip.(s), at, name, tag, skip)
 
       ?! ->
+        if tag, do: throw_duplicate_property("tag", loc(s))
         {tag, s} = parse_tag(s)
         node_properties(skip.(s), at, anchor, tag, skip)
 
@@ -834,6 +894,9 @@ defmodule Hypatia.Kyaml do
         {anchor, tag, s}
     end
   end
+
+  defp throw_duplicate_property(what, at),
+    do: throw_error("DUPLICATE_PROPERTY", "a node may carry only one #{what}", at)
 
   # An anchor or alias name: kyq's /[^\s,[\]{}]+/.
   defp take_name(s, acc \\ []) do
@@ -920,8 +983,20 @@ defmodule Hypatia.Kyaml do
     if tag == "!!str" do
       %{node | kind: :string, value: node.raw}
     else
-      {kind, value} = resolve_plain(node.raw)
       expected = Map.fetch!(@tag_kinds, tag)
+
+      # The Core Schema's float pattern also matches a decimal integer, so
+      # `!!float 1` is the float 1.0.
+      {kind, value} =
+        case resolve_plain(node.raw) do
+          {:int, _} when expected == :float ->
+            if Regex.match?(@float_text, node.raw),
+              do: {:float, to_float(node.raw)},
+              else: {:int, nil}
+
+          resolved ->
+            resolved
+        end
 
       if kind != expected,
         do:
@@ -946,7 +1021,8 @@ defmodule Hypatia.Kyaml do
 
   defp plain_value_chars(s, acc, path, context) do
     c = peek(s)
-    ends_space = match?([?\s | _], acc)
+    # A comment is separated by white space: a space or a tab (YAML 1.2 §6.6).
+    ends_space = List.first(acc) in [?\s, ?\t]
 
     cond do
       eof?(s) or c == ?\n ->
@@ -978,6 +1054,17 @@ defmodule Hypatia.Kyaml do
 
   defp scalar_from_raw(raw, at, style) do
     assert_no_control(raw, at, "plain")
+
+    # `@`, `` ` `` and `%` are indicators a plain scalar may not start with
+    # (YAML 1.2 ns-plain-first); `@` and `` ` `` are reserved for future use.
+    if String.first(raw) in ["@", "`", "%"],
+      do:
+        throw_error(
+          "RESERVED_INDICATOR",
+          "a plain scalar cannot start with `#{String.first(raw)}`; quote it",
+          at
+        )
+
     {kind, value} = resolve_plain(raw)
     if kind == :string, do: assert_ijson_string(value, at)
     %{kind: kind, value: value, raw: raw, loc: at, style: style, segments: []}
@@ -1139,14 +1226,10 @@ defmodule Hypatia.Kyaml do
     {indicator, s} = bump(s)
     style = if indicator == ?|, do: :literal, else: :folded
 
-    {chomp, s} =
-      case peek(s) do
-        ?+ -> {:keep, bump!(s)}
-        ?- -> {:strip, bump!(s)}
-        _ -> {:clip, s}
-      end
-
-    {explicit, s} = if peek(s) in ?1..?9, do: {peek(s) - ?0, bump!(s)}, else: {nil, s}
+    # The chomping and indentation indicators may come in either order
+    # (YAML 1.2 §8.1.1: `|2-` and `|-2`).
+    {chomp, explicit, s} = block_header(s, nil, nil)
+    chomp = chomp || :clip
 
     s = skip_blanks(s)
 
@@ -1175,16 +1258,42 @@ defmodule Hypatia.Kyaml do
     lines = Enum.reverse(lines)
     {body, segments} = if style == :literal, do: literal_body(lines), else: folded_body(lines)
 
+    # The last content line's break is content only if the source has one: a
+    # value that ends at the end of input has no final line feed to clip or
+    # keep (YAML 1.2 b-chomped-last). Likewise only blank lines that end in a
+    # break add one under keep.
+    final_break? = lines != [] and List.last(lines).eol
+    stripped = String.replace(body, ~r/\n+\z/, "")
+
     body =
       case chomp do
-        :strip -> String.replace(body, ~r/\n+\z/, "")
-        :clip -> String.replace(body, ~r/\n+\z/, "") <> if(lines != [], do: "\n", else: "")
-        :keep -> body <> String.duplicate("\n", length(trailing))
+        :strip ->
+          stripped
+
+        :clip ->
+          stripped <> if(final_break?, do: "\n", else: "")
+
+        # With no content lines, keep is the blank lines' breaks alone.
+        :keep when final_break? or lines == [] ->
+          kept = Enum.count(trailing, & &1.eol) + if(final_break?, do: 1, else: 0)
+          stripped <> String.duplicate("\n", kept)
+
+        :keep ->
+          stripped
       end
 
     assert_no_control(body, at, "block")
     assert_ijson_string(body, at)
     {%{kind: :string, value: body, raw: body, loc: at, style: :block, segments: segments}, s}
+  end
+
+  defp block_header(s, chomp, explicit) do
+    case peek(s) do
+      ?+ when chomp == nil -> block_header(bump!(s), :keep, explicit)
+      ?- when chomp == nil -> block_header(bump!(s), :strip, explicit)
+      c when c in ?1..?9 and explicit == nil -> block_header(bump!(s), chomp, c - ?0)
+      _ -> {chomp, explicit, s}
+    end
   end
 
   defp block_lines(s, parent_indent, content_indent, acc) do
@@ -1208,11 +1317,28 @@ defmodule Hypatia.Kyaml do
             throw_error("TAB_INDENT", "a tab may not be used as block scalar indentation", loc(s))
 
         cond do
+          # Spaces past an explicit or detected content indentation are
+          # content, even on an otherwise empty line (YAML 1.2 §8.1.3).
+          (peek(s) == ?\n or eof?(s)) and content_indent != nil and spaces > content_indent ->
+            eol = not eof?(s)
+            s = if eol, do: bump!(s), else: s
+
+            line = %{
+              text: String.duplicate(" ", spaces - content_indent),
+              more: true,
+              blank: false,
+              eol: eol,
+              line: elem(start, 1)
+            }
+
+            block_lines(s, parent_indent, content_indent, [line | acc])
+
           peek(s) == ?\n or eof?(s) ->
-            s = if eof?(s), do: s, else: bump!(s)
+            eol = not eof?(s)
+            s = if eol, do: bump!(s), else: s
 
             block_lines(s, parent_indent, content_indent, [
-              %{text: "", more: false, blank: true, line: elem(start, 1)} | acc
+              %{text: "", more: false, blank: true, eol: eol, line: elem(start, 1)} | acc
             ])
 
           content_indent == nil and spaces <= parent_indent ->
@@ -1224,13 +1350,15 @@ defmodule Hypatia.Kyaml do
           true ->
             content_indent = content_indent || spaces
             {chars, s} = take_line(s, [])
-            s = if eof?(s), do: s, else: bump!(s)
+            eol = not eof?(s)
+            s = if eol, do: bump!(s), else: s
             text = String.duplicate(" ", spaces - content_indent) <> List.to_string(chars)
 
             line = %{
               text: text,
               more: spaces > content_indent,
               blank: false,
+              eol: eol,
               line: elem(start, 1)
             }
 
@@ -1285,13 +1413,13 @@ defmodule Hypatia.Kyaml do
     at = loc(s)
 
     if peek(s) == ?[ do
-      flow_seq(bump!(s), path, at, [])
+      flow_seq(bump!(s), path, at, [], 0)
     else
       flow_map(bump!(s), path, at, [], %{})
     end
   end
 
-  defp flow_seq(s, path, at, items) do
+  defp flow_seq(s, path, at, items, n) do
     s = skip_flow_gap(s)
 
     cond do
@@ -1301,8 +1429,12 @@ defmodule Hypatia.Kyaml do
       eof?(s) ->
         throw_error("UNTERMINATED_FLOW", "unterminated flow sequence", at, path)
 
+      # A `,` must follow an entry: `[1,,2]` and `[,]` have an empty one.
+      peek(s) == ?, ->
+        throw_error("EMPTY_VALUE", "empty flow sequence entry", loc(s), path)
+
       true ->
-        {item, s} = parse_flow_item(s, join_path(path, Integer.to_string(length(items))))
+        {item, s} = parse_flow_item(s, join_path(path, Integer.to_string(n)))
         items = [item | items]
         s = skip_flow_gap(s)
 
@@ -1310,7 +1442,7 @@ defmodule Hypatia.Kyaml do
           # YAML 1.2 allows a final `,`, and KYAML (KEP-5295) writes one after
           # every entry. (kyq refuses it; see KNOWN_DIVERGENCES.)
           peek(s) == ?, ->
-            flow_seq(s |> bump!() |> skip_flow_gap(), path, at, items)
+            flow_seq(s |> bump!() |> skip_flow_gap(), path, at, items, n + 1)
 
           peek(s) == ?] ->
             {%{kind: :seq, items: Enum.reverse(items), loc: at}, bump!(s)}
@@ -1387,8 +1519,11 @@ defmodule Hypatia.Kyaml do
     at = loc(s)
     {anchor, tag, s} = node_properties(s, at, nil, nil, &skip_flow_gap/1)
 
-    # kyq does not refuse a decorated alias inside a flow collection.
+    # An alias carries no properties (YAML 1.2 §7.1), in flow as in block.
     if peek(s) == ?* do
+      if anchor != nil or tag != nil,
+        do: throw_error("ALIAS_DECORATED", "an alias may not carry an anchor or a tag", at)
+
       parse_alias(s, at, path)
     else
       {node, s} =
@@ -1419,15 +1554,24 @@ defmodule Hypatia.Kyaml do
     c = peek(s)
 
     cond do
-      eof?(s) or c in ~c",]}\n" -> {List.to_string(Enum.reverse(acc)), s}
-      c == ?: and separator_after?(s, s.i + 1) -> {List.to_string(Enum.reverse(acc)), s}
-      c == ?# and (acc == [] or match?([?\s | _], acc)) -> {List.to_string(Enum.reverse(acc)), s}
-      true -> flow_plain_chars(bump!(s), [c | acc])
+      eof?(s) or c in ~c",]}\n" ->
+        {List.to_string(Enum.reverse(acc)), s}
+
+      c == ?: and separator_after?(s, s.i + 1) ->
+        {List.to_string(Enum.reverse(acc)), s}
+
+      c == ?# and (acc == [] or List.first(acc) in [?\s, ?\t]) ->
+        {List.to_string(Enum.reverse(acc)), s}
+
+      true ->
+        flow_plain_chars(bump!(s), [c | acc])
     end
   end
 
   defp parse_flow_key(s) do
     at = loc(s)
+
+    if peek(s) in ~c"&*!", do: throw_key_property(at)
 
     if peek(s) in [?', ?"] do
       parse_quoted(s, at)

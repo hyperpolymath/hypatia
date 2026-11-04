@@ -63,6 +63,13 @@ defmodule Hypatia.KyamlTest do
     assert run.segments == [{0, 2}, {7, 3}]
   end
 
+  test "within_budget?/2 includes the limit itself" do
+    doc = doc!("a: 1\n")
+    # A mapping and its one value: two nodes (kyq does not count keys).
+    assert Kyaml.within_budget?(doc, 2)
+    refute Kyaml.within_budget?(doc, 1)
+  end
+
   test "within_budget?/2 stops counting at the limit (the billion-laughs document)" do
     anchors =
       for i <- 1..9 do
@@ -90,8 +97,87 @@ defmodule Hypatia.KyamlTest do
 
     test "a trailing comma in a flow collection, as KYAML (KEP-5295) writes it" do
       doc = doc!("{\n  ports: [80, 443,],\n  meta: {a: \"1\",},\n}\n")
-      assert %{kind: :seq, items: [_, _]} = Kyaml.get(doc, "ports")
+      assert %{kind: :seq, items: items} = Kyaml.get(doc, "ports")
+      assert Enum.map(items, & &1.value) == [80, 443]
       assert Kyaml.get(Kyaml.get(doc, "meta"), "a").value == "1"
+    end
+
+    # The same inputs as kyq's bridge vectors of the same names
+    # (conformance/fixtures/bridge/vectors.json on the kyq fix), found by
+    # CodeRabbit's review of hyperpolymath/hypatia#1008.
+    @yaml_1_2_cases [
+      {"bom-after-leading-bom", "﻿a﻿\n", {:error, "BOM_MIDSTREAM", 1, 2, ""}},
+      {"anchor-scoped-to-document", "---\na: &x 1\n---\nb: *x\n",
+       {:error, "UNKNOWN_ANCHOR", 4, 4, "b"}},
+      {"directive-trailing-comment", "%YAML 1.2 # version\n---\na: 1\n", {:ok, %{"a" => 1}}},
+      {"second-tag-refused", "x: !!int !!str true\n", {:error, "DUPLICATE_PROPERTY", 1, 10, ""}},
+      {"second-anchor-refused", "x: &a &b 1\n", {:error, "DUPLICATE_PROPERTY", 1, 7, ""}},
+      {"float-tag-on-integer", "x: !!float 1\n", {:ok, %{"x" => 1.0}}},
+      {"reserved-indicator-at", "x: @foo\n", {:error, "RESERVED_INDICATOR", 1, 4, ""}},
+      {"reserved-indicator-backtick", "x: `foo\n", {:error, "RESERVED_INDICATOR", 1, 4, ""}},
+      {"reserved-indicator-percent", "x: %foo\n", {:error, "RESERVED_INDICATOR", 1, 4, ""}},
+      {"tab-before-comment", "x: value\t# comment\n", {:ok, %{"x" => "value"}}},
+      {"block-header-indent-then-chomp", "x: |2-\n  a\n", {:ok, %{"x" => "a"}}},
+      {"block-header-chomp-then-indent", "x: >-2\n  a\n", {:ok, %{"x" => "a"}}},
+      {"block-whitespace-line-is-content", "x: |2\n  a\n    \n  b\n",
+       {:ok, %{"x" => "a\n  \nb\n"}}},
+      {"block-clip-at-end-of-input", "x: |\n  a", {:ok, %{"x" => "a"}}},
+      {"block-keep-at-end-of-input", "x: |+\n  a", {:ok, %{"x" => "a"}}},
+      {"block-keep-only-blank-lines", "x: |+\n\n\n", {:ok, %{"x" => "\n\n"}}},
+      {"flow-empty-entry", "x: [1,,2]\n", {:error, "EMPTY_VALUE", 1, 7, "x"}},
+      {"flow-lone-comma", "x: [,]\n", {:error, "EMPTY_VALUE", 1, 5, "x"}},
+      {"tagged-key-refused", "a: 1\n!!str a: 2\n", {:error, "KEY_PROPERTY", 2, 1, ""}},
+      {"anchored-first-key-refused", "&k a: 1\n", {:error, "KEY_PROPERTY", 1, 1, ""}},
+      {"flow-tagged-key-refused", "x: {!!str a: 1}\n", {:error, "KEY_PROPERTY", 1, 5, ""}},
+      {"flow-alias-decorated", "a: &a 1\nb: [!!int *a]\n", {:error, "ALIAS_DECORATED", 2, 5, ""}}
+    ]
+
+    defp plain(node) do
+      case Kyaml.deref(node) do
+        %{kind: :map, entries: es} -> Map.new(es, &{&1.key.value, plain(&1.value)})
+        %{kind: :seq, items: items} -> Enum.map(items, &plain/1)
+        %{value: value} -> value
+      end
+    end
+
+    for {name, yaml, expected} <- @yaml_1_2_cases do
+      test "YAML 1.2: #{name}" do
+        yaml = unquote(yaml)
+
+        case unquote(Macro.escape(expected)) do
+          {:ok, value} ->
+            assert {:ok, [doc | _]} = Kyaml.parse(yaml)
+            assert plain(doc) == value
+
+          {:error, code, line, column, path} ->
+            assert {:error, %{code: ^code, line: ^line, column: ^column, path: ^path}} =
+                     Kyaml.parse(yaml)
+        end
+      end
+    end
+
+    # Four times the entries must cost well under sixteen times the time: the
+    # collections used to be rebuilt per entry (20,000 block mapping entries
+    # took 4.8 s, now 0.5 s).
+    test "flat collections parse in linear time" do
+      shapes = [
+        fn n -> Enum.map_join(1..n, &"k#{&1}: #{&1}\n") end,
+        fn n -> Enum.map_join(1..n, &"- #{&1}\n") end,
+        fn n -> "[" <> Enum.map_join(1..n, ", ", &Integer.to_string/1) <> "]\n" end
+      ]
+
+      for shape <- shapes do
+        [small, large] =
+          for n <- [5_000, 20_000] do
+            text = shape.(n)
+            # The best of three, to keep a scheduler hiccup out of the ratio.
+            Enum.min(
+              for _ <- 1..3, do: elem(:timer.tc(fn -> {:ok, _} = Kyaml.parse(text) end), 0)
+            )
+          end
+
+        assert large / max(small, 1) < 10
+      end
     end
 
     test "a raw control character is refused in a plain or block scalar, as in a quoted one" do
