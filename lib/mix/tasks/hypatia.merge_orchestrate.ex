@@ -50,16 +50,14 @@ defmodule Mix.Tasks.Hypatia.MergeOrchestrate do
   defp require_backend!(:manifest), do: :ok
 
   defp require_backend!(mode) when mode in [:baton, :both] do
-    case BatonEmitter.availability() do
-      :ok ->
-        :ok
+    # Availability currently has only this explicit refusal result. A future
+    # qualified executor must update this preflight and its argv controls.
+    {:error, reason} = BatonEmitter.availability()
 
-      {:error, reason} ->
-        Mix.raise(
-          "--actuation #{mode} unavailable: #{reason}; no cycle started, " <>
-            "no Baton submitted and no manifest written. Use --actuation manifest."
-        )
-    end
+    Mix.raise(
+      "--actuation #{mode} unavailable: #{reason}; no cycle started, " <>
+        "no Baton submitted and no manifest written. Use --actuation manifest."
+    )
   end
 
   defp put_actuation(cycle_opts, nil), do: cycle_opts
