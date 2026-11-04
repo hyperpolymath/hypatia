@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: MPL-2.0
+= KYAML conformance fixtures
+
+`Hypatia.Kyaml` (`lib/hypatia/kyaml.ex`) is an Elixir port of kyq's
+reference KYAML parser, `metadatastician/kyq` `conformance/src/kyaml.js`.
+kyq is the canonical reader; these files hold the port to it.
+
+`corpus/`::
+  kyq's conformance corpus (`conformance/fixtures/kyaml/`, `cases.json`), copied
+  from kyq `4d1071df04d93e089500d58d0b6ba37bfcc75248` plus the three fixtures of the kyq
+  fix listed in `KNOWN_DIVERGENCES.adoc`. `test/kyaml_conformance_test.exs`
+  holds every case to its pinned outcome: a valid fixture parses into the
+  pinned number of documents, and an invalid one fails with the pinned code,
+  line, column and pointer path. Refresh it by copying kyq's directory over
+  this one, and update the commit above.
+
+`kyq_dump.mjs`::
+  Prints kyq's parse of each file in the canonical form `Hypatia.Kyaml.canonical/1`
+  gives: every node's kind, line, column and value, aliases seen through. It is
+  kyq's side of the differential.
+
+== The differential
+
+The `kyaml-conformance` job in `.github/workflows/ci.yml` checks out kyq at
+`KYQ_REF`, dumps kyq's own fixtures and every workflow in this repository,
+and runs `test/kyaml_differential_test.exs`. Locally:
+
+[source,bash]
+----
+bun test/fixtures/kyaml/kyq_dump.mjs ../kyq ../kyq/conformance/fixtures/kyaml/*/*.yaml .github/workflows/*.yml > /tmp/kyq.jsonl
+KYQ_DUMP=/tmp/kyq.jsonl mix test --only kyq_differential
+----
+
+Measured when the port landed:
+
+* kyq's corpus and the 185 workflows of hypatia, standards, rsr-template-repo,
+  choreographic-types and kyq: 231 of 231 files agree;
+* 10,000 mutated files (two seeds, up to four edits each, over kyq's valid
+  fixtures and estate workflows; 27 distinct error codes exercised): all agree
+  once kyq's three bugs below are fixed. Before that, the mutations found the
+  third one.

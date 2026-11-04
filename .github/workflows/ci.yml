@@ -357,7 +357,9 @@ jobs:
             test/rules/audit_prevention_test.exs \
             test/security_errors_test.exs \
             test/research_extensions_test.exs \
-            test/deed_test.exs
+            test/deed_test.exs \
+            test/kyaml_test.exs \
+            test/kyaml_conformance_test.exs
 
       # ADR-001 retirement guard: Hypatia rules are pure Elixir
       # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source
@@ -379,6 +381,68 @@ jobs:
             --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
 
   # ============================================================================
+  # KYAML conformance: Hypatia.Kyaml against kyq's reference parser
+  # ============================================================================
+  # Hypatia.Kyaml (lib/hypatia/kyaml.ex) ports metadatastician/kyq
+  # conformance/src/kyaml.js. This job parses kyq's own fixtures and every
+  # workflow in this repository with both, at a pinned kyq commit, and fails on
+  # any difference in documents (kind, location, value) or errors (code, line,
+  # column, path). Move KYQ_REF with test/fixtures/kyaml/KNOWN_DIVERGENCES.adoc.
+  kyaml-conformance:
+    name: KYAML conformance (Hypatia.Kyaml against kyq)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      KYQ_REF: 4d1071df04d93e089500d58d0b6ba37bfcc75248
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout kyq at the pinned commit
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: metadatastician/kyq
+          ref: ${{ env.KYQ_REF }}
+          path: .kyq
+          persist-credentials: false
+
+      - name: Setup Elixir/OTP (identical to the dogfood gate)
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '28.3'
+
+      - name: Restore Mix cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            deps
+            _build
+          key: mix-dogfood-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-dogfood-${{ runner.os }}-
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      - name: Dump kyq's parse of its fixtures and this repository's workflows
+        run: |
+          bun test/fixtures/kyaml/kyq_dump.mjs .kyq \
+            .kyq/conformance/fixtures/kyaml/valid/*.yaml \
+            .kyq/conformance/fixtures/kyaml/invalid/*.yaml \
+            .github/workflows/*.yml > "$RUNNER_TEMP/kyq.jsonl"
+          echo "kyq dumped $(wc -l < "$RUNNER_TEMP/kyq.jsonl") files"
+
+      - name: Compare with Hypatia.Kyaml
+        run: KYQ_DUMP="$RUNNER_TEMP/kyq.jsonl" mix test --only kyq_differential
+
+  # ============================================================================
   # Combined Status Check
   # ============================================================================
   ci-status:
@@ -394,6 +458,7 @@ jobs:
       - haskell-lint
       - k9iser-validate
       - elixir-compile
+      - kyaml-conformance
     if: always()
     steps:
       - name: Check all jobs status
@@ -404,7 +469,8 @@ jobs:
              [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
              [[ "${{ needs.k9iser-validate.result }}" == "failure" ]] || \
-             [[ "${{ needs.elixir-compile.result }}" == "failure" ]]; then
+             [[ "${{ needs.elixir-compile.result }}" == "failure" ]] || \
+             [[ "${{ needs.kyaml-conformance.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi

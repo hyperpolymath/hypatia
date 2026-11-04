@@ -1,0 +1,7 @@
+flowSeq: [1, 2, 3]
+flowMap: {a: 1, b: [true, null, "x"]}
+nested: [{name: one, ports: [80, 443]}, {name: two}]
+multiline: [
+  1,
+  2
+]

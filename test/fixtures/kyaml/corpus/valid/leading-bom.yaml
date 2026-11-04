@@ -1,0 +1,2 @@
+﻿# A single leading byte order mark is legal (spec 4.1).
+name: bom

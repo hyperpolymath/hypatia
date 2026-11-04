@@ -1,0 +1,5 @@
+base: &base
+  a: 1
+copy:
+  <<: *base
+  b: 2

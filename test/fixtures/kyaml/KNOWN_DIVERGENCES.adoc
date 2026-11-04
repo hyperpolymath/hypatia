@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: MPL-2.0
+= Where Hypatia.Kyaml differs from kyq, and why
+
+`Hypatia.Kyaml` differs from kyq's reference parser (`conformance/src/kyaml.js`
+at `4d1071df04d93e089500d58d0b6ba37bfcc75248`) only where kyq has a bug. Each one has a
+fix for kyq, with conformance fixtures; kyq's suite passes 323 of 323 with it.
+The fixtures are already in `corpus/`. Delete a row when kyq carries the fix,
+and move `KYQ_REF` in `.github/workflows/ci.yml` past it.
+
+[cols="2,3,2",options="header"]
+|===
+| Case | kyq at the pinned commit | Hypatia.Kyaml (and the kyq fix)
+
+| A stream that starts with a byte order mark
+| Refused: `BOM_MIDSTREAM` at 1:1. The leading BOM is skipped, then found again
+  by `text.includes("﻿")`.
+| Accepted. A BOM after the first character is still `BOM_MIDSTREAM`.
+  Fixtures `valid/leading-bom.yaml`, `invalid/bom-midstream.yaml`.
+
+| A comment after a block scalar header: `run: \| # note`
+| Refused: `BAD_BLOCK_SCALAR` at 2:2. The comment consumes the header line
+  break, then one more character is consumed.
+| Accepted (YAML 1.2 §8.1.1). Fixture `valid/block-scalar-header-comment.yaml`.
+
+| The column of `INVALID_NEWLINE` or `BOM_MIDSTREAM` after a character outside
+  the BMP
+| One too far: `locationOf` walks UTF-16 code units.
+| Code points, as every other kyq location. Fixture
+  `invalid/bare-cr-after-astral.yaml` (1:5).
+|===
+
+None of the three occurs in the estate's workflows, so the pinned-commit
+differential in CI agrees on every file. The kyq fix is two commits on
+`metadatastician/kyq` (`conformance: accept a leading BOM and a comment after
+a block scalar header`; `conformance: whole-input diagnostics count columns
+in code points`), still to be opened there.
