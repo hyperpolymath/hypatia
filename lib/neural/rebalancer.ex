@@ -33,6 +33,8 @@ defmodule Hypatia.Neural.Rebalancer do
   `:erlang.system_time(:millisecond)` so every training run varies.
   """
 
+  alias Hypatia.{OutcomeTracker, Paths}
+
   @doc """
   Inject synthetic regression events into a confidence time series.
 
@@ -194,8 +196,8 @@ defmodule Hypatia.Neural.Rebalancer do
   Strategy C: build failure templates from real outcome records and inject
   them into a confidence time series.
 
-  Reads all `outcomes/*.jsonl` files from `data_path` (defaults to
-  `data/verisim`). For each real failure record, derives a dip template:
+  Reads all `outcomes/*.jsonl` files from `data_path` (defaults to the
+  runtime verisim data store). For each qualified failure record, derives a dip template:
   depth is drawn from the empirical distribution of failure frequencies
   per recipe, and duration is mapped from the failure reason.
 
@@ -204,7 +206,7 @@ defmodule Hypatia.Neural.Rebalancer do
   Options:
 
     * `:data_path` — path to the verisim data directory
-                     (default `"data/verisim"`)
+                     (default: the runtime verisim data store)
     * `:max_events` — cap on injected events (default `5`)
     * `:seed`       — integer seed for reproducibility
   """
@@ -232,10 +234,12 @@ defmodule Hypatia.Neural.Rebalancer do
   Build failure templates from the real outcome corpus.
 
   Returns a (possibly empty) list of `%{depth: float, duration: integer}`
-  maps, one per failure record found in `data_path/outcomes/*.jsonl`.
+  maps, one per failure or false-positive record qualified by OutcomeTracker
+  in `data_path/outcomes/*.jsonl`. An explicit data_path overrides the runtime
+  store. Unqualified historical rows remain audit data, not training evidence.
   Pass this list to `corpus_esn_series/3`.
   """
-  def load_failure_templates(data_path \\ "data/verisim") do
+  def load_failure_templates(data_path \\ Paths.verisimdb_data()) do
     outcomes_dir = Path.join(Path.expand(data_path), "outcomes")
 
     case File.ls(outcomes_dir) do
@@ -253,7 +257,11 @@ defmodule Hypatia.Neural.Rebalancer do
                 case Jason.decode(line) do
                   {:ok, %{"outcome" => outcome} = record}
                   when outcome in ["failure", "false_positive"] ->
-                    [failure_template(record)]
+                    if OutcomeTracker.qualified_outcome?(record) do
+                      [failure_template(record)]
+                    else
+                      []
+                    end
 
                   _ ->
                     []
