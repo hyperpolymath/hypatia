@@ -1218,6 +1218,35 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    test "a quoted top-level `jobs` key still bounds the workflow preamble" do
+      # One job's PAT must not make the other job's GITHUB_TOKEN push look
+      # credentialed just because the `jobs` key is quoted.
+      for key <- [~s("jobs"), "'jobs'"] do
+        repo =
+          create_repo_with_workflow("""
+          name: Release
+          permissions:
+            contents: read
+          #{key}:
+            notes:
+              runs-on: ubuntu-latest
+              steps:
+                - env:
+                    GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                  run: gh release create v1 dist/*
+            publish:
+              runs-on: ubuntu-latest
+              steps:
+                - run: git push origin HEAD
+          """)
+
+        assert [%{severity: :high, fix_recipe: "grant-contents-write-to-writing-job"}] =
+                 WorkflowHardening.wh013_permission_starved_write(repo)
+
+        File.rm_rf!(repo)
+      end
+    end
+
     # The three step shapes Codex reported on #950 (YAML allows all three).
 
     test "a `steps:` line inside an earlier step's run script does not hide the real steps" do

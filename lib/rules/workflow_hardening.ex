@@ -1142,8 +1142,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
   defp lines_text(lines), do: Enum.map_join(lines, "\n", &elem(&1, 0))
 
   # Everything above the top-level `jobs:` key (name, on, permissions, env).
+  # The key may be quoted (`"jobs":`, `'jobs':`), as WorkflowYaml reads it.
   defp workflow_preamble(content) do
-    content |> String.split(~r/^jobs:/m, parts: 2) |> hd()
+    content |> String.split(~r/^(?:jobs|"jobs"|'jobs')\s*:/m, parts: 2) |> hd()
   end
 
   # `token:` / `GH_TOKEN:` / `GITHUB_TOKEN:` set to a secret other than
