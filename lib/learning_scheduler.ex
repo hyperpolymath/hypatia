@@ -30,7 +30,6 @@ defmodule Hypatia.LearningScheduler do
   # pins.
   @action_sha_verify_interval_seconds 24 * 60 * 60
   @action_sha_cache_path "data/verified-action-shas.json"
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @fleet_path Application.compile_env(
                 :hypatia,
                 :fleet_path,
@@ -64,7 +63,7 @@ defmodule Hypatia.LearningScheduler do
   def init(_opts) do
     state = %{
       last_run: nil,
-      # filename => byte offset of last read
+      # filename => source-qualified position of the last complete read
       last_outcome_positions: %{},
       pending_confidence_recipes: MapSet.new(),
       # A restarted scheduler rechecks persisted source IDs, not just this cache.
@@ -529,9 +528,9 @@ defmodule Hypatia.LearningScheduler do
     |> Base.encode16(case: :lower)
   end
 
-  # Normalise a persisted position entry. Pre-E0 positions were bare
-  # integers (byte offsets). Post-E0 positions are
-  # `%{offset: int, incomplete_tail: binary}`. Anything else resets.
+  # Normalise the offset/tail view of a position entry. Legacy entries
+  # may be bare integers or maps without a source_path; ingestion must
+  # separately qualify their source before reusing an offset.
   @doc false
   def normalise_position(pos) when is_integer(pos) and pos >= 0,
     do: %{offset: pos, incomplete_tail: ""}
@@ -542,9 +541,18 @@ defmodule Hypatia.LearningScheduler do
 
   def normalise_position(_), do: %{offset: 0, incomplete_tail: ""}
 
+  # Keep filename keys compatible with existing state, but never reuse
+  # an offset from another runtime store. Source-less legacy cursors
+  # conservatively replay once rather than skip an unidentified source.
+  defp position_for_source(%{source_path: source_path} = position, path)
+       when source_path == path,
+       do: normalise_position(position)
+
+  defp position_for_source(_position, _path), do: normalise_position(0)
+
   @doc false
   def ingest_new_outcomes(last_positions) do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    outcomes_dir = Hypatia.Paths.outcomes() |> Path.expand()
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -553,7 +561,7 @@ defmodule Hypatia.LearningScheduler do
         Enum.reduce(jsonl_files, {last_positions, 0, MapSet.new()}, fn file,
                                                                        {positions, count, recipes} ->
           path = Path.join(outcomes_dir, file)
-          pos = normalise_position(Map.get(positions, file, 0))
+          pos = position_for_source(Map.get(positions, file), path)
 
           case File.stat(path) do
             {:ok, %{size: size}} when size < pos.offset ->
@@ -563,59 +571,19 @@ defmodule Hypatia.LearningScheduler do
                   "(size #{size} < offset #{pos.offset}), resetting"
               )
 
-              {Map.put(positions, file, %{offset: 0, incomplete_tail: ""}), count, recipes}
+              ingest_local_outcome_file(
+                path,
+                file,
+                normalise_position(0),
+                {positions, count, recipes}
+              )
 
             {:ok, %{size: size}} when size == pos.offset and pos.incomplete_tail == "" ->
               # No new bytes and nothing buffered — nothing to do.
               {positions, count, recipes}
 
             {:ok, _stat} ->
-              case File.open(path, [:read, :binary]) do
-                {:ok, fd} ->
-                  :file.position(fd, pos.offset)
-                  raw = IO.read(fd, :eof)
-                  File.close(fd)
-
-                  # Prepend any previously buffered incomplete tail so a
-                  # producer that finishes writing between polls is read
-                  # as one complete record, not a suffix fragment.
-                  full_data = pos.incomplete_tail <> to_string(raw)
-
-                  # Split with trim: false — the last element after
-                  # splitting "a\nb\n" is "", and after "a\nb" is "b"
-                  # (the incomplete tail we must not yet acknowledge).
-                  lines = String.split(full_data, "\n", trim: false)
-
-                  {complete_lines, incomplete_tail} =
-                    case List.last(lines) do
-                      nil -> {[], ""}
-                      "" -> {Enum.drop(lines, -1), ""}
-                      tail -> {Enum.drop(lines, -1), tail}
-                    end
-
-                  # Advance past every complete line. The incomplete tail
-                  # stays at the old offset so it is re-read next poll.
-                  new_offset = pos.offset + byte_size(full_data) - byte_size(incomplete_tail)
-
-                  {new_count, new_recipes, quarantined} =
-                    process_local_complete_lines(complete_lines, file, pos.offset, pos.incomplete_tail)
-
-                  if quarantined > 0 do
-                    Logger.warning(
-                      "LearningScheduler: quarantined #{quarantined} malformed outcome row(s) in #{file}"
-                    )
-                  end
-
-                  {Map.put(positions, file, %{offset: new_offset, incomplete_tail: incomplete_tail}),
-                   count + new_count, MapSet.union(recipes, new_recipes)}
-
-                {:error, reason} ->
-                  Logger.warning(
-                    "LearningScheduler: cannot read outcome file #{file}: #{inspect(reason)}"
-                  )
-
-                  {positions, count, recipes}
-              end
+              ingest_local_outcome_file(path, file, pos, {positions, count, recipes})
 
             {:error, reason} ->
               Logger.warning(
@@ -631,25 +599,72 @@ defmodule Hypatia.LearningScheduler do
         {last_positions, 0, MapSet.new()}
 
       {:error, reason} ->
-        Logger.warning(
-          "LearningScheduler: cannot list outcomes directory: #{inspect(reason)}"
-        )
+        Logger.warning("LearningScheduler: cannot list outcomes directory: #{inspect(reason)}")
 
         {last_positions, 0, MapSet.new()}
     end
   end
 
+  defp ingest_local_outcome_file(path, file, pos, {positions, count, recipes} = acc) do
+    read_result =
+      File.open(path, [:read, :binary], fn fd ->
+        with {:ok, _offset} <- :file.position(fd, pos.offset) do
+          IO.binread(fd, :eof)
+        end
+      end)
+
+    case read_result do
+      {:ok, raw} when is_binary(raw) or raw == :eof ->
+        # The offset is the start of the incomplete tail, not the end of
+        # the previous read. Re-read those bytes from the file exactly once;
+        # prepending the saved tail would duplicate a partially written row.
+        full_data = if raw == :eof, do: "", else: raw
+        lines = String.split(full_data, "\n", trim: false)
+        incomplete_tail = List.last(lines)
+        complete_lines = Enum.drop(lines, -1)
+
+        # Acknowledge only newline-terminated bytes. Retain the trailing
+        # fragment as diagnostic state without moving the read position.
+        new_offset = pos.offset + byte_size(full_data) - byte_size(incomplete_tail)
+
+        {new_count, new_recipes, quarantined} =
+          process_local_complete_lines(complete_lines, path, file, pos.offset)
+
+        if quarantined > 0 do
+          Logger.warning(
+            "LearningScheduler: quarantined #{quarantined} malformed outcome row(s) in #{file}"
+          )
+        end
+
+        new_position = %{
+          offset: new_offset,
+          incomplete_tail: incomplete_tail,
+          source_path: path
+        }
+
+        {Map.put(positions, file, new_position), count + new_count,
+         MapSet.union(recipes, new_recipes)}
+
+      {:ok, {:error, reason}} ->
+        local_read_failed(file, reason, acc)
+
+      {:error, reason} ->
+        local_read_failed(file, reason, acc)
+    end
+  end
+
+  defp local_read_failed(file, reason, acc) do
+    Logger.warning("LearningScheduler: cannot read outcome file #{file}: #{inspect(reason)}")
+    acc
+  end
+
   # Process a batch of complete JSONL lines from a local outcome file.
-  # `base_offset` is the byte offset of the first line in the batch
-  # (after prepending any buffered incomplete tail); `base_tail` is the
-  # text prepended so line-number accounting matches the physical file.
+  # `base_offset` is the byte offset of the first line in the batch.
   # Returns `{local_count, recipe_ids, quarantined_count}`.
-  defp process_local_complete_lines(complete_lines, file, base_offset, base_tail) do
-    # The physical line number of the first line in this batch. We count
-    # newlines before base_offset to derive it, but only when the base
-    # offset is zero (cold start) or the buffer is empty. For mid-file
-    # batches we use a monotone counter seeded from the prior run.
-    start_line = local_line_start(file, base_offset, base_tail)
+  defp process_local_complete_lines(complete_lines, path, file, base_offset) do
+    # Use the same resolved file as the read, including after a runtime
+    # data-directory change, so diagnostic line numbers refer to that file.
+    start_line = local_line_start(path, base_offset)
 
     complete_lines
     |> Enum.with_index(start_line)
@@ -693,15 +708,12 @@ defmodule Hypatia.LearningScheduler do
   end
 
   # Compute the physical line number for a batch starting at
-  # `base_offset`. On a cold start (offset 0, no buffered tail) this is 1.
+  # `base_offset`. On a cold start (offset 0) this is 1.
   # Otherwise count newlines in the file prefix to find the first line
   # that begins at `base_offset`.
-  defp local_line_start(_file, 0, ""), do: 1
+  defp local_line_start(_path, 0), do: 1
 
-  defp local_line_start(file, base_offset, base_tail) do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
-    path = Path.join(outcomes_dir, file)
-
+  defp local_line_start(path, base_offset) do
     case File.open(path, [:read, :binary]) do
       {:ok, fd} ->
         prefix =
@@ -723,16 +735,7 @@ defmodule Hypatia.LearningScheduler do
           |> Kernel.-(1)
           |> max(0)
 
-        # The buffered tail may also contain embedded newlines from a
-        # prior incomplete read that has since grown.
-        tail_newlines =
-          base_tail
-          |> String.split("\n")
-          |> length()
-          |> Kernel.-(1)
-          |> max(0)
-
-        prefix_newlines + tail_newlines + 1
+        prefix_newlines + 1
 
       {:error, _} ->
         1
@@ -757,19 +760,31 @@ defmodule Hypatia.LearningScheduler do
 
     classified =
       case {verdict, Map.get(record, "outcome")} do
-        {"verified", "success"} when is_integer(before_hits) and before_hits > 0 and
-                                      after_hits == 0 -> {:success, "verified"}
+        {"verified", "success"}
+        when is_integer(before_hits) and before_hits > 0 and
+               after_hits == 0 ->
+          {:success, "verified"}
+
         {"failed", "failure"} when is_integer(exit_code) and exit_code != 0 ->
           {:failure, "failed"}
+
         {"incomplete", "failure"} when is_integer(after_hits) and after_hits > 0 ->
           {:failure, "incomplete"}
-        _ -> :unqualified
+
+        _ ->
+          :unqualified
       end
 
     cond do
-      Map.get(record, "bot") == "hypatia" -> :skip
-      not (is_binary(recipe_id) and recipe_id != "" and is_binary(repo) and repo != "") -> :skip
-      classified == :unqualified -> :skip
+      Map.get(record, "bot") == "hypatia" ->
+        :skip
+
+      not (is_binary(recipe_id) and recipe_id != "" and is_binary(repo) and repo != "") ->
+        :skip
+
+      classified == :unqualified ->
+        :skip
+
       true ->
         {outcome, verification} = classified
         {:ok, recipe_id, repo, file, outcome, verification}
@@ -803,10 +818,14 @@ defmodule Hypatia.LearningScheduler do
           case Hypatia.OutcomeTracker.imported_fleet_ids() do
             {:ok, known_ids} ->
               case import_fleet_lines(content, known_ids) do
-                {:ok, imported} -> {imported, signature}
+                {:ok, imported} ->
+                  {imported, signature}
 
                 {:error, reason} ->
-                  Logger.warning("LearningScheduler: fleet import not acknowledged: #{inspect(reason)}")
+                  Logger.warning(
+                    "LearningScheduler: fleet import not acknowledged: #{inspect(reason)}"
+                  )
+
                   {0, previous_signature}
               end
 
@@ -845,7 +864,12 @@ defmodule Hypatia.LearningScheduler do
                   {:cont, {:ok, seen, count}}
                 else
                   case Hypatia.OutcomeTracker.record_fleet_outcome(
-                         recipe_id, repo, file, outcome, id, verification
+                         recipe_id,
+                         repo,
+                         file,
+                         outcome,
+                         id,
+                         verification
                        ) do
                     {:ok, _record} ->
                       {:cont, {:ok, MapSet.put(seen, id), count + 1}}
@@ -866,7 +890,10 @@ defmodule Hypatia.LearningScheduler do
             else
               # A permanently malformed historical row must not starve later
               # valid events. It remains in the append-only source as evidence.
-              Logger.warning("LearningScheduler: quarantined malformed fleet row #{line_number}: #{inspect(reason)}")
+              Logger.warning(
+                "LearningScheduler: quarantined malformed fleet row #{line_number}: #{inspect(reason)}"
+              )
+
               {:cont, {:ok, seen, count}}
             end
         end
@@ -890,7 +917,10 @@ defmodule Hypatia.LearningScheduler do
           {count, pending}
 
         error ->
-          Logger.warning("LearningScheduler: confidence update deferred for #{recipe_id}: #{inspect(error)}")
+          Logger.warning(
+            "LearningScheduler: confidence update deferred for #{recipe_id}: #{inspect(error)}"
+          )
+
           {count, MapSet.put(pending, recipe_id)}
       end
     end)
@@ -899,7 +929,7 @@ defmodule Hypatia.LearningScheduler do
   # --- Report any recipes with concerning confidence drift ---
 
   defp report_confidence_drift do
-    recipes_dir = Path.join(Path.expand(@verisimdb_data_path), "recipes")
+    recipes_dir = Hypatia.Paths.recipes() |> Path.expand()
 
     case File.ls(recipes_dir) do
       {:ok, files} ->
