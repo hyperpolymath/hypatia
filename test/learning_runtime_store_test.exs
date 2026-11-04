@@ -33,6 +33,24 @@ defmodule Hypatia.LearningRuntimeStoreTest do
       File.mkdir_p!(Path.join(store, part))
     end
 
+    for module <- [LearningScheduler, Hypatia.Watcher.AnomalyDetector] do
+      pid = Process.whereis(module)
+      assert is_pid(pid)
+      :ok = :sys.suspend(pid)
+
+      on_exit(fn ->
+        # Restore every overridden path before a queued timer may run.
+        for {key, value} <- original do
+          case value do
+            {:ok, previous} -> Application.put_env(:hypatia, key, previous)
+            :error -> Application.delete_env(:hypatia, key)
+          end
+        end
+
+        if Process.alive?(pid), do: :sys.resume(pid)
+      end)
+    end
+
     Application.put_env(:hypatia, :verisimdb_data_path, first)
     Application.delete_env(:hypatia, :annealing_state_path)
     Application.put_env(:hypatia, :fleet_path, fleet)
@@ -413,6 +431,50 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert PatternRegistry.all_patterns() == [first_pattern]
     assert {[^first_vector], restored_targets} = TrainingPipeline.build_rbf_training_data()
     assert restored_targets == [0.0]
+  end
+
+  test "registry synchronization refuses an observed root change without overwriting either store", ctx do
+    write_substitution(ctx.first, "control")
+    write_substitution(ctx.second, "eliminate")
+    assert {:ok, _} = PatternRegistry.sync_from_scans([scan("first-original", "Low")])
+    Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
+    assert {:ok, _} = PatternRegistry.sync_from_scans([scan("second-original", "High")])
+    first_before = directory_bytes(Path.join(ctx.first, "patterns"))
+    second_before = directory_bytes(Path.join(ctx.second, "patterns"))
+    Application.put_env(:hypatia, :verisimdb_data_path, ctx.first)
+
+    scans =
+      Stream.map([scan("late-first", "High")], fn entry ->
+        Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
+        entry
+      end)
+
+    assert {:error, {:pattern_store_changed, first, second}} =
+             PatternRegistry.sync_from_scans(scans)
+    assert {first, second} == {ctx.first, ctx.second}
+    assert directory_bytes(Path.join(ctx.first, "patterns")) == first_before
+    assert directory_bytes(Path.join(ctx.second, "patterns")) == second_before
+  end
+
+  test "registry encoding and filesystem failures cannot return synchronized success", ctx do
+    assert {:ok, _} = PatternRegistry.sync_from_scans([scan("original", "Low")])
+    path = Path.join([ctx.first, "patterns", "registry.json"])
+    before = File.read!(path)
+    malformed =
+      put_in(scan("unencodable", "High"), [:scan, "weak_points", Access.at(0), "description"],
+        fn -> :not_json end)
+
+    assert {:error, {:registry_encoding_failed, _}} =
+             PatternRegistry.sync_from_scans([malformed])
+    assert File.read!(path) == before
+
+    File.rm!(path)
+    File.mkdir!(path)
+    assert {:error, {:registry_write_failed, _}} =
+             PatternRegistry.sync_from_scans([scan("unwritable", "High")])
+    assert File.dir?(path)
+    assert File.ls!(path) == []
+    refute File.exists?(Path.join([ctx.second, "patterns", "registry.json"]))
   end
 
   test "corpus templates follow runtime defaults and retain an explicit store override", ctx do

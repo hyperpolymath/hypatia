@@ -17,6 +17,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     LiquidStateMachine,
     Persistence,
     SourceStore,
+    SequenceModel,
     TrainingPipeline
   }
 
@@ -39,6 +40,19 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       File.mkdir_p!(Path.join(store, part))
     end
 
+    # Both timers can call the application-owned Coordinator. Suspend them
+    # before any global-root override, and restore the root before resuming.
+    for module <- [LearningScheduler, AnomalyDetector] do
+      pid = Process.whereis(module)
+      assert is_pid(pid)
+      :ok = :sys.suspend(pid)
+
+      on_exit(fn ->
+        Application.put_env(:hypatia, :verisimdb_data_path, original)
+        if Process.alive?(pid), do: :sys.resume(pid)
+      end)
+    end
+
     Application.put_env(:hypatia, :verisimdb_data_path, first)
 
     on_exit(fn ->
@@ -46,7 +60,7 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       File.rm_rf!(root)
     end)
 
-    %{root: root, first: first, second: second}
+    %{root: root, first: first, second: second, original: original}
   end
 
   test "source identity is an expanded pathname and never a content attestation", ctx do
@@ -127,7 +141,9 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert {:error, _} = Coordinator.analyze(@finding, server)
     assert {:error, _} = Coordinator.dispatch_recommendation(@finding, server)
     assert {:error, _} = Coordinator.force_cycle(server)
-    assert {:error, _} = Coordinator.record_outcome(@finding, "success", server)
+    # Submission cannot certify a busy lifecycle; the following status barrier
+    # observes the actual execution refusal before checking model preservation.
+    assert :ok = Coordinator.record_outcome(@finding, "success", server)
     assert {:error, {:neural_source_unavailable, details}} = Coordinator.status(server)
     assert details.source_store == ctx.first
     assert details.current_store == ctx.second
@@ -231,16 +247,79 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     end
   end
 
-  test "all named snapshots must be available before the first persistence write", ctx do
-    {server, cohort} = coordinator()
-    state = :sys.get_state(server)
-    sequence = Keyword.fetch!(cohort, :named_networks).sequence
+  test "a temporary peer outage refuses the operation but permits a matching retry", ctx do
+    name = __MODULE__.RecoverableSequence
+    sequence = named_sequence(name)
+    cohort = isolated_cohort(%{sequence: name})
+    server = start_coordinator(cohort)
+    before = :sys.get_state(server)
     GenServer.stop(sequence)
 
-    assert {:error, {:cohort_source_mismatch, :sequence, _}} = Persistence.save_all(state)
+    assert {:error, {:cohort_source_mismatch, :sequence, {:process_unavailable, _}}} =
+             Persistence.save_all(before)
     refute File.exists?(Path.join(ctx.first, "neural-states"))
+
+    assert {:error, {:neural_source_unavailable, details}} = Coordinator.status(server)
+    assert details.source_status == :ready
+    refute details.restart_required
+    refused = :sys.get_state(server)
+    assert refused.moe == before.moe
+    assert refused.esn == before.esn
+    assert refused.rbf == before.rbf
+
+    named_sequence(name)
+    assert {:ok, %{source_status: :ready}} = Coordinator.status(server)
+    assert :sys.get_state(server).source_error == nil
+    assert :ok = Persistence.save_all(:sys.get_state(server))
+    assert map_size(snapshot_bytes(ctx.first)) == 8
+    refute File.exists?(Path.join(ctx.second, "neural-states"))
+  end
+
+  test "an unavailable peer during initialization stays blocked after the peer returns", ctx do
+    name = __MODULE__.RecoverableSequence
+    sequence = named_sequence(name)
+    cohort = isolated_cohort(%{sequence: name})
+    GenServer.stop(sequence)
+    server = start_coordinator(cohort)
+
+    assert %{source_status: :blocked, source_error: {:source_initialization_incomplete, _}} =
+             :sys.get_state(server)
+
+    named_sequence(name)
+    networks = Keyword.fetch!(cohort, :named_networks)
+    assert {:ok, _} = Persistence.collect_named(ctx.first, networks)
     assert {:error, _} = Coordinator.status(server)
+    assert {:error, _} = Coordinator.force_cycle(server)
     assert :sys.get_state(server).source_status == :blocked
+    refute File.exists?(Path.join(ctx.first, "neural-states"))
+
+    fresh = start_coordinator(cohort)
+    assert {:ok, %{source_status: :ready}} = Coordinator.status(fresh)
+  end
+
+  test "partial peer hydration cannot become ready after a generic restore failure", ctx do
+    cohort = isolated_cohort()
+    networks = Keyword.fetch!(cohort, :named_networks)
+    assert {:ok, gnn} = GenServer.call(networks.gnn, {:snapshot, ctx.first})
+    assert {:ok, vae} = GenServer.call(networks.vae, {:snapshot, ctx.first})
+    embeddings = %{"fixture-agent" => [0.25]}
+    write_json(Path.join([ctx.first, "neural-states", "gnn.json"]),
+      Map.put(gnn, "node_embeddings", embeddings))
+    write_json(Path.join([ctx.first, "neural-states", "vae.json"]),
+      Map.put(vae, "cluster_labels", 42))
+    before_files = snapshot_bytes(ctx.first)
+    server = start_coordinator(cohort)
+
+    assert %{source_status: :blocked,
+             source_error: {:source_initialization_incomplete, {:neural_operation_failed, _}}} =
+             :sys.get_state(server)
+    assert {:ok, partially_restored} = GenServer.call(networks.gnn, {:snapshot, ctx.first})
+    assert partially_restored["node_embeddings"] == embeddings
+    assert {:ok, _} = Persistence.collect_named(ctx.first, networks)
+    assert {:error, _} = Coordinator.analyze(@finding, server)
+    assert {:error, _} = Coordinator.status(server)
+    assert snapshot_bytes(ctx.first) == before_files
+    refute File.exists?(Path.join(ctx.second, "neural-states"))
   end
 
   test "encoding failure cannot leave a partially collected bundle reported as saved", ctx do
@@ -490,7 +569,83 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     assert {:error, :neural_crashed} = Monitor.check_neural({:invalid_server, :fixture})
   end
 
-  test "Scheduler and dispatcher distinguish queue admission from refusal without actuation", ctx do
+  test "outcomes submit without waiting for a busy Coordinator and execute once", ctx do
+    {server, cohort} = coordinator()
+    before = :sys.get_state(server)
+
+    assert {:queued, {:ok, %{source_status: :ready}}} =
+             submit_while_suspended(server, ctx.first, fn -> :ok end)
+
+    after_event = :sys.get_state(server)
+    refute after_event.moe == before.moe
+    assert length(after_event.lsm.history) == length(before.lsm.history) + 1
+    sequence = Keyword.fetch!(cohort, :named_networks).sequence
+    assert {:ok, snapshot} = GenServer.call(sequence, {:snapshot, ctx.first})
+    assert [%{finding: @finding, outcome: "failure", confidence: confidence}] =
+             snapshot["sequence_buffer"]
+    assert is_number(confidence)
+    refute File.exists?(Path.join(ctx.first, "neural-states"))
+  end
+
+  test "a submitted outcome rechecks its captured source before learning", ctx do
+    {server, cohort} = coordinator()
+    before = :sys.get_state(server)
+    sequence = Keyword.fetch!(cohort, :named_networks).sequence
+    sequence_before = :sys.get_state(sequence)
+
+    assert {:queued, {:error, {:neural_source_unavailable, _}}} =
+             submit_while_suspended(server, ctx.first, fn ->
+               Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
+             end)
+
+    refused = :sys.get_state(server)
+    assert refused.source_status == :blocked
+    assert refused.source_store == ctx.first
+    assert refused.moe == before.moe
+    assert refused.lsm == before.lsm
+    assert refused.esn == before.esn
+    assert :sys.get_state(sequence) == sequence_before
+    refute File.exists?(Path.join(ctx.first, "neural-states"))
+    refute File.exists?(Path.join(ctx.second, "neural-states"))
+  end
+
+  test "Kin's default predictor holds before its outer review deadline", ctx do
+    # Exercise the actual default named-server route, with the application's
+    # original source restored so its queued call cannot observe a test root.
+    Application.put_env(:hypatia, :verisimdb_data_path, ctx.original)
+    server = Process.whereis(Coordinator)
+    assert is_pid(server)
+    :ok = :sys.suspend(server)
+    action = %{pattern_id: "recipe-source-fixture", dispatch_tier: :auto_execute, confidence: 0.99}
+    task = Task.async(fn -> Gate.neural_consensus(action) end)
+
+    result =
+      try do
+        Task.yield(task, 7_000)
+      after
+        if Process.alive?(task.pid), do: Task.shutdown(task, :brutal_kill)
+        :sys.resume(server)
+      end
+
+    assert {:ok, {:hold, reason}} = result
+    assert reason =~ "assessment unavailable"
+  end
+
+  test "the supported recommendation API honors an explicit shorter wait", ctx do
+    {server, _cohort} = coordinator()
+    :ok = :sys.suspend(server)
+
+    try do
+      assert {:timeout, {GenServer, :call, _}} =
+               catch_exit(Coordinator.dispatch_recommendation(@finding, server, 1))
+    after
+      :sys.resume(server)
+    end
+
+    assert {:ok, %{source_status: :ready}} = barrier(server, ctx.first)
+  end
+
+  test "Scheduler admission and asynchronous outcomes retain execution refusals", ctx do
     {server, _cohort} = coordinator()
     assert LearningScheduler.trigger_neural_cycle(server)
     assert {:ok, %{cycle_count: 1}} = barrier(server, ctx.first)
@@ -500,7 +655,8 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
 
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
     refute LearningScheduler.trigger_neural_cycle(server)
-    assert {:error, _} = FleetDispatcher.record_neural_outcome(@finding, "success", server)
+    assert :queued = FleetDispatcher.record_neural_outcome(@finding, "success", server)
+    assert {:error, _} = barrier(server, ctx.second)
     assert :sys.get_state(server).moe == before.moe
     assert :sys.get_state(server).cycle_count == before.cycle_count
     refute File.exists?(Path.join(ctx.second, "neural-states"))
@@ -553,13 +709,49 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
     end
   end
 
-  defp isolated_cohort do
+  defp isolated_cohort(overrides \\ %{}) do
     networks =
       Map.new(Persistence.default_networks(), fn {name, module} ->
-        {name, isolated_process(module, [])}
+        {name, Map.get_lazy(overrides, name, fn -> isolated_process(module, []) end)}
       end)
 
     [named_networks: networks, blackboard: isolated_process(Blackboard, [isolated: true])]
+  end
+
+  defp named_sequence(name) do
+    start_supervised!(%{
+      id: make_ref(),
+      start: {GenServer, :start_link, [SequenceModel, [], [name: name]]},
+      restart: :temporary
+    })
+  end
+
+  defp submit_while_suspended(server, source, after_submission) do
+    :ok = :sys.suspend(server)
+    observer = self()
+    reference = make_ref()
+
+    task =
+      Task.async(fn ->
+        submitted = FleetDispatcher.record_neural_outcome(@finding, "failure", server)
+        send(observer, {reference, submitted})
+        # Same sender as the submitted event: this reply is an execution
+        # barrier, not merely a read from another process that could race it.
+        {submitted, barrier(server, source)}
+      end)
+
+    try do
+      try do
+        assert_receive {^reference, :queued}, 2_000
+        after_submission.()
+      after
+        :sys.resume(server)
+      end
+
+      Task.await(task, 30_000)
+    after
+      if Process.alive?(task.pid), do: Task.shutdown(task, :brutal_kill)
+    end
   end
 
   defp coordinator do

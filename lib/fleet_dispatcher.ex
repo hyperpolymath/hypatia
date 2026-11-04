@@ -654,6 +654,7 @@ defmodule Hypatia.FleetDispatcher do
     execute_graphql(mutation, "robot-repo-automaton")
   end
 
+  # :queued records a volatile source-bound submission, never completed learning.
   @doc false
   def record_neural_outcome(finding, outcome, server \\ Hypatia.Neural.Coordinator) do
     case Hypatia.Neural.Coordinator.record_outcome(finding, outcome, server) do

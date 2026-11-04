@@ -102,11 +102,14 @@ defmodule Hypatia.PatternRegistry do
 
   Takes a list of scan results (from VerisimConnector.fetch_all_scans/0)
   and rebuilds the per-repo pattern state for every repo in the batch.
-  See the moduledoc for the full sync semantics.
+  See the moduledoc for the full sync semantics. One expanded data root is
+  captured for every read and write. An observed root change or write failure
+  returns {:error, reason}; synchronization never redirects into a new store.
   """
   def sync_from_scans(scans) do
-    registry = load_registry()
-    substitutions = load_substitutions()
+    source = current_source()
+    registry = load_registry(source)
+    substitutions = load_substitutions(source)
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
     scanned_repos = MapSet.new(scans, & &1.repo)
@@ -125,13 +128,15 @@ defmodule Hypatia.PatternRegistry do
       |> Map.put("patterns", patterns)
       |> Map.put("last_updated", now)
 
-    save_registry(updated_registry)
+    with :ok <- check_source(source),
+         :ok <- save_registry(updated_registry, source),
+         :ok <- check_source(source) do
+      active = Enum.count(Map.values(patterns), &(Map.get(&1, "occurrences", 0) > 0))
+      resolved = map_size(patterns) - active
+      Logger.info("Pattern registry synced: #{active} active, #{resolved} resolved patterns")
 
-    active = Enum.count(Map.values(patterns), &(Map.get(&1, "occurrences", 0) > 0))
-    resolved = map_size(patterns) - active
-    Logger.info("Pattern registry synced: #{active} active, #{resolved} resolved patterns")
-
-    {:ok, updated_registry}
+      {:ok, updated_registry}
+    end
   end
 
   @doc "Get a single pattern by ID."
@@ -310,16 +315,24 @@ defmodule Hypatia.PatternRegistry do
     end
   end
 
-  defp registry_path do
-    Path.join(Path.expand(Paths.patterns()), "registry.json")
+  defp current_source, do: Paths.verisimdb_data() |> Path.expand()
+
+  defp check_source(source) do
+    current = current_source()
+
+    if current == source,
+      do: :ok,
+      else: {:error, {:pattern_store_changed, source, current}}
   end
 
-  defp substitutions_path do
-    Path.join(Path.expand(Paths.recipes()), "proven-substitutions.json")
+  defp registry_path(source), do: Path.join([source, "patterns", "registry.json"])
+
+  defp substitutions_path(source) do
+    Path.join([source, "recipes", "proven-substitutions.json"])
   end
 
-  defp load_registry do
-    case File.read(registry_path()) do
+  defp load_registry(source \\ current_source()) do
+    case File.read(registry_path(source)) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, data} -> data
@@ -331,15 +344,21 @@ defmodule Hypatia.PatternRegistry do
     end
   end
 
-  defp save_registry(registry) do
+  defp save_registry(registry, source) do
     case Jason.encode(registry, pretty: true) do
-      {:ok, json} -> File.write!(registry_path(), json <> "\n")
-      {:error, reason} -> Logger.error("Failed to save registry: #{inspect(reason)}")
+      {:ok, json} ->
+        case File.write(registry_path(source), json <> "\n") do
+          :ok -> :ok
+          {:error, reason} -> {:error, {:registry_write_failed, reason}}
+        end
+
+      {:error, reason} ->
+        {:error, {:registry_encoding_failed, reason}}
     end
   end
 
-  defp load_substitutions do
-    case File.read(substitutions_path()) do
+  defp load_substitutions(source) do
+    case File.read(substitutions_path(source)) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, data} -> Map.get(data, "substitutions", [])

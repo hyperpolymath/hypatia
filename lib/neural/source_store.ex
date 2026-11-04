@@ -9,6 +9,8 @@ defmodule Hypatia.Neural.SourceStore do
   content digest, an attestation, or an identity for an in-place replacement
   of that directory. A process keeps the identity captured at initialization.
   An observed root change blocks that lifecycle until the process is restarted.
+  A runtime peer process outage refuses the operation without qualifying a
+  mismatched source or permanently blocking an already initialized lifecycle.
 
   Snapshot labels preserve this binding; they do not authenticate filesystem
   contents or promote diagnostic trust-score snapshots to model authority.
@@ -67,6 +69,9 @@ defmodule Hypatia.Neural.SourceStore do
 
   defp lifecycle_error?(:unbound_source_store), do: true
   defp lifecycle_error?({:source_store_changed, _, _}), do: true
+  # A live lifecycle may retry after a peer restarts or its call times out.
+  # This exception does not qualify a foreign, unbound or malformed snapshot.
+  defp lifecycle_error?({:cohort_source_mismatch, _, {:process_unavailable, _}}), do: false
   defp lifecycle_error?({:cohort_source_mismatch, _, _}), do: true
   defp lifecycle_error?({:source_identity_changed, _, _}), do: true
   defp lifecycle_error?({:source_lifecycle_blocked, _}), do: true

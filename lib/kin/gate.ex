@@ -39,6 +39,7 @@ defmodule Hypatia.Kin.Gate do
   @lock_timeout_ms 30 * 60 * 1_000
   @stale_scan_threshold_hours 48
   @min_auto_execute_confidence 0.95
+  @neural_consensus_timeout_ms 5_000
   @max_prs_per_repo_per_hour 3
   @held_file "held.jsonl"
   @rejected_file "rejected.jsonl"
@@ -427,11 +428,21 @@ defmodule Hypatia.Kin.Gate do
     end
   end
 
+  # Keep the default predictor's wait below review/1's caller deadline.
+  # This bounds waiting; it does not cancel work already executing in the Coordinator.
+  defp bounded_recommendation(finding) do
+    Hypatia.Neural.Coordinator.dispatch_recommendation(
+      finding,
+      Hypatia.Neural.Coordinator,
+      @neural_consensus_timeout_ms
+    )
+  end
+
   # Check 6: unavailable or refused predictions cannot count as agreement.
   defp check_neural_consensus(action, _state), do: neural_consensus(action)
 
   @doc false
-  def neural_consensus(action, predictor \\ &Hypatia.Neural.Coordinator.dispatch_recommendation/1) do
+  def neural_consensus(action, predictor \\ &bounded_recommendation/1) do
     if action.dispatch_tier == :auto_execute do
       try do
         finding = %{"id" => action.pattern_id, "category" => "unknown"}

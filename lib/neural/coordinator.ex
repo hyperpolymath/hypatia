@@ -116,9 +116,15 @@ defmodule Hypatia.Neural.Coordinator do
              {:ok, state}
            end) do
         {:ok, :ok, ready} -> ready
-        {:error, reason, blocked} ->
+        {:error, reason, incomplete} ->
           Logger.warning("Neural initialization refused: #{inspect(reason)}")
-          blocked
+          # Even a retryable runtime outage cannot qualify a startup whose
+          # complete peer hydration and final cohort check never finished.
+          %{
+            incomplete
+            | source_status: :blocked,
+              source_error: {:source_initialization_incomplete, reason}
+          }
       end
 
     notes = [
@@ -368,13 +374,30 @@ defmodule Hypatia.Neural.Coordinator do
   end
 
   @doc """
-  Queue an outcome for this source-bound lifecycle.
+  Submit an outcome without waiting behind synchronous training.
 
-  :ok acknowledges queue admission, not completed learning. Refused admission
-  returns {:error, reason}; a later execution refusal remains visible in status.
+  Captures the source and the currently observed local Coordinator PID. :ok
+  means a volatile mailbox submission, not source admission, durable delivery
+  or completed learning. Missing/dead/nonlocal targets return {:error, reason}.
+  The captured source and actual peer cohort are checked when the event runs;
+  execution refusal remains visible in status. A process exit can lose queued
+  work, and this API does not claim a durable acknowledgement.
   """
   def record_outcome(finding, outcome, server \\ __MODULE__) do
-    GenServer.call(server, {:queue, SourceStore.current(), {:outcome, finding, outcome}})
+    source = SourceStore.current()
+
+    case GenServer.whereis(server) do
+      pid when is_pid(pid) and node(pid) == node() ->
+        if Process.alive?(pid) do
+          send(pid, {:source_bound, source, {:outcome, finding, outcome}})
+          :ok
+        else
+          {:error, :neural_unavailable}
+        end
+
+      _ ->
+        {:error, :neural_unavailable}
+    end
   end
 
   @doc """
@@ -383,9 +406,11 @@ defmodule Hypatia.Neural.Coordinator do
   Unlike the old fixed-weight aggregation, confidence is derived from
   the complete reasoning trace across all 8 networks. Source refusals return
   {:error, reason}; they are not confidence or strategy recommendations.
+  An optional third argument bounds the caller's wait in milliseconds; it
+  does not cancel an analysis already executing in the Coordinator.
   """
-  def dispatch_recommendation(finding, server \\ __MODULE__) do
-    GenServer.call(server, {:dispatch_rec, SourceStore.current(), finding}, 30_000)
+  def dispatch_recommendation(finding, server \\ __MODULE__, timeout \\ 30_000) do
+    GenServer.call(server, {:dispatch_rec, SourceStore.current(), finding}, timeout)
   end
 
   @doc "Return a current-source health map, or an explicit lifecycle refusal."
