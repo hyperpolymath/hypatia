@@ -15,6 +15,8 @@ defmodule Hypatia.Neural.TrainingPipeline do
 
   require Logger
 
+  alias Hypatia.OutcomeTracker
+
   alias Hypatia.Neural.{
     EchoStateNetwork,
     RadialNeuralNetwork,
@@ -29,8 +31,9 @@ defmodule Hypatia.Neural.TrainingPipeline do
   Build ESN training data from outcome JSONL files.
 
   Reads all .jsonl files from the outcomes/ directory, parses each line
-  as a JSON object, groups by recipe_id, and builds a running confidence
-  time series (cumulative success rate) for each recipe.
+  as a JSON object, retains outcomes qualified by OutcomeTracker with a
+  non-empty recipe identity, and builds a running confidence time series
+  (cumulative success rate) for each recipe.
 
   Returns a list of maps sorted by series length (longest first), each
   containing :recipe_id, :series (list of floats 0.0-1.0), and :count.
@@ -68,6 +71,14 @@ defmodule Hypatia.Neural.TrainingPipeline do
           []
       end
 
+    build_esn_training_data(outcomes)
+  end
+
+  @doc false
+  def build_esn_training_data(outcomes) when is_list(outcomes) do
+    # Use the same evidence qualification as Bayesian and cross-repo learning.
+    # Exit-zero-only, incomplete scans and contradictory successes remain audit
+    # records, but must not become positive neural training observations.
     # Group by recipe_id, build running confidence series (cumulative success rate).
     # The canonical outcome schema keys on "pattern" + "fixed_at" (~96% of the
     # corpus); only the small fleet-import slice carries "recipe_id"/"timestamp".
@@ -75,7 +86,11 @@ defmodule Hypatia.Neural.TrainingPipeline do
     # 6682/6964 outcomes collapse into a single nil-keyed, unordered blob and the
     # ESN forecaster trains on one meaningless blended trajectory.
     outcomes
-    |> Enum.group_by(&(Map.get(&1, "recipe_id") || Map.get(&1, "pattern")))
+    |> Enum.filter(fn outcome ->
+      is_map(outcome) and OutcomeTracker.qualified_outcome?(outcome) and
+        not is_nil(recipe_identity(outcome))
+    end)
+    |> Enum.group_by(&recipe_identity/1)
     |> Enum.map(fn {recipe_id, recipe_outcomes} ->
       # Sort by timestamp for temporal ordering (fixed_at is the canonical field)
       sorted =
@@ -102,6 +117,13 @@ defmodule Hypatia.Neural.TrainingPipeline do
     end)
     |> Enum.filter(fn entry -> entry.count >= 10 end)
     |> Enum.sort_by(& &1.count, :desc)
+  end
+
+  defp recipe_identity(outcome) do
+    case Map.get(outcome, "recipe_id") || Map.get(outcome, "pattern") do
+      id when is_binary(id) -> if String.trim(id) == "", do: nil, else: id
+      _ -> nil
+    end
   end
 
   @doc """
