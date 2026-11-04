@@ -12,14 +12,7 @@ defmodule Hypatia.OutcomeTracker do
 
   require Logger
 
-  alias Hypatia.ConfidenceAnnealing
-
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
-  @fleet_path Application.compile_env(
-                :hypatia,
-                :fleet_path,
-                "~/Documents/hyperpolymath-repos/gitbot-fleet"
-              )
+  alias Hypatia.{ConfidenceAnnealing, Paths}
 
   # Bayesian confidence updating via Beta distribution
   # Prior strength controls how much weight initial confidence carries
@@ -30,13 +23,6 @@ defmodule Hypatia.OutcomeTracker do
   # Bump when the admissible-evidence definition changes. Legacy states
   # without this marker are NOT trusted even if the counts happen to match.
   @annealing_evidence_version 1
-
-  # Path for persisted annealing states (per-recipe temperature tracking)
-  @annealing_state_path Application.compile_env(
-                          :hypatia,
-                          :annealing_state_path,
-                          "data/verisim/annealing-states"
-                        )
 
   @doc """
   Record an outcome from a fix attempt.
@@ -79,7 +65,7 @@ defmodule Hypatia.OutcomeTracker do
   a scheduler restart cannot turn one attempt into repeated training examples.
   """
   def imported_fleet_ids do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    outcomes_dir = Path.expand(Paths.outcomes())
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -101,8 +87,11 @@ defmodule Hypatia.OutcomeTracker do
           end
         end)
 
-      {:error, :enoent} -> {:ok, MapSet.new()}
-      {:error, reason} -> {:error, {:outcomes_directory, reason}}
+      {:error, :enoent} ->
+        {:ok, MapSet.new()}
+
+      {:error, reason} ->
+        {:error, {:outcomes_directory, reason}}
     end
   end
 
@@ -393,7 +382,6 @@ defmodule Hypatia.OutcomeTracker do
       recipe_path = find_recipe_file(recipe_id)
 
       cond do
-
         recipe_path == nil ->
           Logger.warning("No recipe file found for #{recipe_id}")
           :recipe_not_found
@@ -421,12 +409,14 @@ defmodule Hypatia.OutcomeTracker do
                   # This flattens confidence toward 0.5 when the recipe has
                   # few outcomes, and lets it sharpen as evidence accumulates.
                   annealing_state = load_annealing_state(recipe_id)
+
                   new_confidence =
                     if qualified_total == 0 do
                       base_confidence
                     else
                       ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
                     end
+
                   annealing_summary = ConfidenceAnnealing.summary(annealing_state)
 
                   updated_recipe =
@@ -452,7 +442,10 @@ defmodule Hypatia.OutcomeTracker do
                           {:ok, new_confidence}
 
                         {:error, reason} ->
-                          Logger.warning("Failed to persist recipe confidence: #{inspect(reason)}")
+                          Logger.warning(
+                            "Failed to persist recipe confidence: #{inspect(reason)}"
+                          )
+
                           {:error, reason}
                       end
 
@@ -476,20 +469,27 @@ defmodule Hypatia.OutcomeTracker do
 
   @doc false
   def qualified_outcome_counts(outcomes) when is_list(outcomes) do
-    Enum.reduce(outcomes, %{successes: 0, failures: 0, false_positives: 0, ignored: 0}, fn row, acc ->
+    Enum.reduce(outcomes, %{successes: 0, failures: 0, false_positives: 0, ignored: 0}, fn row,
+                                                                                           acc ->
       case row do
         %{"outcome" => "success", "verification" => "verified"} ->
           %{acc | successes: acc.successes + 1}
 
-        %{"outcome" => "failure", "verification" => v} when v in ["failed", "incomplete", "verified"] ->
+        %{"outcome" => "failure", "verification" => v}
+        when v in ["failed", "incomplete", "verified"] ->
           %{acc | failures: acc.failures + 1}
 
-        %{"outcome" => "false_positive", "verification" => "rollback_requested",
-          "caused_by" => "batch_rollback", "batch_id" => batch_id}
+        %{
+          "outcome" => "false_positive",
+          "verification" => "rollback_requested",
+          "caused_by" => "batch_rollback",
+          "batch_id" => batch_id
+        }
         when is_binary(batch_id) and batch_id != "" ->
           %{acc | false_positives: acc.false_positives + 1}
 
-        %{"outcome" => "false_positive", "verification" => v} when v in ["still_present", "verified"] ->
+        %{"outcome" => "false_positive", "verification" => v}
+        when v in ["still_present", "verified"] ->
           %{acc | false_positives: acc.false_positives + 1}
 
         _ ->
@@ -796,7 +796,7 @@ defmodule Hypatia.OutcomeTracker do
   # --- Private ---
 
   defp all_recipe_ids_with_outcomes do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    outcomes_dir = Path.expand(Paths.outcomes())
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -826,7 +826,7 @@ defmodule Hypatia.OutcomeTracker do
   defp write_outcome_log(record) do
     now = Date.utc_today()
     month_str = String.pad_leading("#{now.month}", 2, "0")
-    path = Path.join([Path.expand(@verisimdb_data_path), "outcomes", "#{now.year}-#{month_str}.jsonl"])
+    path = Path.join(Path.expand(Paths.outcomes()), "#{now.year}-#{month_str}.jsonl")
 
     with :ok <- File.mkdir_p(Path.dirname(path)),
          {:ok, json} <- Jason.encode(record) do
@@ -870,7 +870,7 @@ defmodule Hypatia.OutcomeTracker do
   defp write_fleet_outcome(record) do
     path =
       Path.join([
-        Path.expand(@fleet_path),
+        Path.expand(Paths.fleet()),
         "shared-context/learning/fix-outcomes.jsonl"
       ])
 
@@ -900,7 +900,7 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   defp load_outcomes_for_recipe(recipe_id) do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    outcomes_dir = Path.expand(Paths.outcomes())
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -935,7 +935,7 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   defp find_recipe_file(recipe_id) do
-    recipes_dir = Path.join(Path.expand(@verisimdb_data_path), "recipes")
+    recipes_dir = Path.expand(Paths.recipes())
 
     case File.ls(recipes_dir) do
       {:ok, files} ->
@@ -1011,7 +1011,9 @@ defmodule Hypatia.OutcomeTracker do
 
         _ ->
           ConfidenceAnnealing.from_existing(
-            counts.successes, counts.failures, counts.false_positives
+            counts.successes,
+            counts.failures,
+            counts.false_positives
           )
       end
 
@@ -1027,10 +1029,14 @@ defmodule Hypatia.OutcomeTracker do
     expected = qualified_count(counts)
 
     case stored do
-      %{outcome_count: ^expected} -> stored
+      %{outcome_count: ^expected} ->
+        stored
+
       _ ->
         ConfidenceAnnealing.from_existing(
-          counts.successes, counts.failures, counts.false_positives
+          counts.successes,
+          counts.failures,
+          counts.false_positives
         )
     end
   end
@@ -1044,6 +1050,7 @@ defmodule Hypatia.OutcomeTracker do
 
     if current != saved and (saved != nil or qualified_count(counts) > 0),
       do: save_annealing_state(recipe_id, current)
+
     current
   end
 
@@ -1058,10 +1065,10 @@ defmodule Hypatia.OutcomeTracker do
             nil
         end
 
-      {:error, _} -> nil
+      {:error, _} ->
+        nil
     end
   end
-
 
   defp save_annealing_state(recipe_id, state) do
     path = annealing_state_path(recipe_id)
@@ -1116,6 +1123,14 @@ defmodule Hypatia.OutcomeTracker do
   defp annealing_state_path(recipe_id) do
     # Sanitise recipe_id for filesystem safety
     safe_id = String.replace(recipe_id, ~r/[^a-zA-Z0-9_\-]/, "_")
-    Path.join(Path.expand(@annealing_state_path), "#{safe_id}.json")
+
+    directory =
+      Application.get_env(
+        :hypatia,
+        :annealing_state_path,
+        Path.join(Paths.verisimdb_data(), "annealing-states")
+      )
+
+    Path.join(Path.expand(directory), "#{safe_id}.json")
   end
 end

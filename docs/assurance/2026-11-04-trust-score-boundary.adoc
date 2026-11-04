@@ -32,6 +32,11 @@ network restoration outside the trust graph retains its existing behavior.
 Both graph loading and neural snapshot persistence use `Hypatia.Paths` to
 resolve the current runtime store. Changing that configured store therefore
 changes the source read by the next rebuild and the destination of new snapshots.
+Outcome recording, replay identity lookup and recipe confidence updates resolve
+that same runtime store. Fleet output uses the runtime fleet setting. An explicit
+annealing-directory override remains supported; without one, annealing state
+lives under the selected data store. This does not claim atomic reconfiguration
+in the middle of a running learning cycle.
 
 == Qualification controls
 
