@@ -625,6 +625,9 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
       after
         if Process.alive?(task.pid), do: Task.shutdown(task, :brutal_kill)
         :sys.resume(server)
+        # Drain the ordinary dispatch request while the original root is
+        # still selected; a system-state query would bypass this mailbox.
+        assert {:ok, %{source_status: :ready}} = barrier(server, ctx.original)
       end
 
     assert {:ok, {:hold, reason}} = result
