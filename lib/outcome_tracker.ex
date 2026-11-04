@@ -114,6 +114,7 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   defp persist_outcome(recipe_id, repo, file, outcome, metadata, publish_to_fleet?) do
+    store = capture_outcome_store()
     now = DateTime.utc_now() |> DateTime.to_iso8601()
     outcome_str = Atom.to_string(outcome)
 
@@ -129,14 +130,24 @@ defmodule Hypatia.OutcomeTracker do
 
     record = Map.merge(metadata, base)
 
-    case write_outcome_log(record) do
+    case write_outcome_log(record, store) do
       :ok ->
         if publish_to_fleet?, do: write_fleet_outcome(record)
-        if qualified_outcome?(record), do: update_annealing_state(recipe_id, outcome)
+
+        if qualified_outcome?(record) do
+          case do_update_annealing_state(recipe_id, outcome, store, fn -> :ok end) do
+            {:ok, _state} ->
+              :ok
+
+            {:error, reason} ->
+              Logger.warning("Outcome logged; annealing update pending: #{inspect(reason)}")
+          end
+        end
+
         # The event is committed even when the derived recipe summary is
         # temporarily unavailable. The LearningScheduler retries that recipe
         # from the durable log on the next cycle.
-        case update_recipe_confidence(recipe_id) do
+        case do_update_recipe_confidence(recipe_id, store, fn -> :ok end) do
           {:error, reason} ->
             Logger.warning("Outcome logged; recipe update pending: #{inspect(reason)}")
 
@@ -367,103 +378,107 @@ defmodule Hypatia.OutcomeTracker do
   @doc """
   Recalculate confidence for a recipe based on all recorded outcomes.
   Updates the recipe JSON file in verisim-data/recipes/.
+
+  Captures the data root and explicit annealing override once. All evidence and
+  write paths remain bound to those directories. An observed configuration
+  change returns {:error, {:outcome_store_changed, captured, current}}.
+  Write failures remain errors. The annealing and recipe writes are not an
+  atomic multi-file transaction; a later refusal can leave an earlier A write,
+  but cannot redirect that operation to B.
   """
   def update_recipe_confidence(recipe_id) do
-    outcomes = load_outcomes_for_recipe(recipe_id)
+    update_recipe_confidence(recipe_id, fn -> :ok end)
+  end
 
-    if Enum.empty?(outcomes) do
-      :no_outcomes
-    else
+  # The barrier is a deterministic control seam; production uses the same
+  # transaction with a no-op barrier. It runs after evidence/encoding and before
+  # the first write, and cannot bypass the captured-source checks.
+  @doc false
+  def update_recipe_confidence(recipe_id, before_persist) when is_function(before_persist, 0) do
+    do_update_recipe_confidence(recipe_id, capture_outcome_store(), before_persist)
+  end
+
+  defp do_update_recipe_confidence(recipe_id, store, before_persist) do
+    with :ok <- ensure_outcome_store(store) do
+      outcomes = load_outcomes_for_recipe(recipe_id, store.data_root)
+
+      if Enum.empty?(outcomes) do
+        :no_outcomes
+      else
+        case find_recipe_file(recipe_id, store.data_root) do
+          nil ->
+            Logger.warning("No recipe file found for #{recipe_id}")
+            :recipe_not_found
+
+          recipe_path ->
+            update_confidence_file(recipe_id, recipe_path, outcomes, store, before_persist)
+        end
+      end
+    end
+  end
+
+  defp update_confidence_file(recipe_id, recipe_path, outcomes, store, before_persist) do
+    with {:ok, content} <- File.read(recipe_path),
+         {:ok, recipe} when is_map(recipe) <- Jason.decode(content) do
       counts = qualified_outcome_counts(outcomes)
       successes = counts.successes
       failures = counts.failures
       false_positives = counts.false_positives
+      qualified_total = qualified_count(counts)
 
-      recipe_path = find_recipe_file(recipe_id)
+      # Re-evaluation keeps the fixed prior and the same qualified evidence
+      # snapshot for both confidence and annealing.
+      base_confidence = Map.get(recipe, "confidence_prior", Map.get(recipe, "confidence", 0.5))
 
-      cond do
-        recipe_path == nil ->
-          Logger.warning("No recipe file found for #{recipe_id}")
-          :recipe_not_found
+      raw_confidence =
+        if qualified_total == 0 do
+          base_confidence
+        else
+          bayesian_update(base_confidence, successes, failures + false_positives)
+        end
 
-        true ->
-          case File.read(recipe_path) do
-            {:ok, content} ->
-              case Jason.decode(content) do
-                {:ok, recipe} ->
-                  # Keep a fixed prior: re-evaluation must not treat the previous
-                  # posterior as a fresh prior and amplify the same evidence.
-                  base_confidence =
-                    Map.get(recipe, "confidence_prior", Map.get(recipe, "confidence", 0.5))
+      saved = read_saved_annealing_state(recipe_id, store)
+      annealing_state = reconcile_annealing_state(saved, counts)
 
-                  qualified_total = successes + failures + false_positives
+      new_confidence =
+        if qualified_total == 0 do
+          base_confidence
+        else
+          ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
+        end
 
-                  raw_confidence =
-                    if qualified_total == 0 do
-                      base_confidence
-                    else
-                      bayesian_update(base_confidence, successes, failures + false_positives)
-                    end
+      updated_recipe =
+        recipe
+        |> Map.put("confidence_prior", base_confidence)
+        |> Map.put("confidence", Float.round(new_confidence, 4))
+        |> Map.put("confidence_raw", Float.round(raw_confidence, 4))
+        |> Map.put("successful_fixes", successes)
+        |> Map.put("failed_fixes", failures)
+        |> Map.put("false_positives", false_positives)
+        |> Map.put("total_attempts", length(outcomes))
+        |> Map.put("unqualified_attempts", counts.ignored)
+        |> Map.put("annealing", ConfidenceAnnealing.summary(annealing_state))
 
-                  # Apply temperature-based annealing to the raw confidence.
-                  # This flattens confidence toward 0.5 when the recipe has
-                  # few outcomes, and lets it sharpen as evidence accumulates.
-                  annealing_state = load_annealing_state(recipe_id)
-
-                  new_confidence =
-                    if qualified_total == 0 do
-                      base_confidence
-                    else
-                      ConfidenceAnnealing.anneal(raw_confidence, annealing_state)
-                    end
-
-                  annealing_summary = ConfidenceAnnealing.summary(annealing_state)
-
-                  updated_recipe =
-                    recipe
-                    |> Map.put("confidence_prior", base_confidence)
-                    |> Map.put("confidence", Float.round(new_confidence, 4))
-                    |> Map.put("confidence_raw", Float.round(raw_confidence, 4))
-                    |> Map.put("successful_fixes", successes)
-                    |> Map.put("failed_fixes", failures)
-                    |> Map.put("false_positives", false_positives)
-                    |> Map.put("total_attempts", length(outcomes))
-                    |> Map.put("unqualified_attempts", counts.ignored)
-                    |> Map.put("annealing", annealing_summary)
-
-                  case Jason.encode(updated_recipe, pretty: true) do
-                    {:ok, json} ->
-                      case File.write(recipe_path, json <> "\n") do
-                        :ok ->
-                          Logger.info(
-                            "Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}"
-                          )
-
-                          {:ok, new_confidence}
-
-                        {:error, reason} ->
-                          Logger.warning(
-                            "Failed to persist recipe confidence: #{inspect(reason)}"
-                          )
-
-                          {:error, reason}
-                      end
-
-                    {:error, reason} ->
-                      Logger.error("Failed to encode recipe: #{inspect(reason)}")
-                      {:error, reason}
-                  end
-
-                {:error, reason} ->
-                  Logger.error("Failed to decode recipe: #{inspect(reason)}")
-                  {:error, reason}
-              end
-
-            {:error, reason} ->
-              Logger.error("Failed to read recipe file: #{inspect(reason)}")
-              {:error, reason}
-          end
+      with {:ok, json} <- Jason.encode(updated_recipe, pretty: true),
+           :ok <- before_store_persist(store, before_persist),
+           :ok <- persist_reconciled_annealing(recipe_id, saved, annealing_state, counts, store),
+           :ok <- ensure_outcome_store(store),
+           :ok <- File.write(recipe_path, json <> "\n"),
+           :ok <- ensure_outcome_store(store) do
+        Logger.info("Updated #{recipe_id} confidence: #{base_confidence} -> #{new_confidence}")
+        {:ok, new_confidence}
+      else
+        {:error, reason} = error ->
+          Logger.warning("Failed to persist recipe confidence: #{inspect(reason)}")
+          error
       end
+    else
+      {:ok, _non_object} ->
+        {:error, :invalid_recipe_object}
+
+      {:error, reason} = error ->
+        Logger.error("Failed to read recipe confidence input: #{inspect(reason)}")
+        error
     end
   end
 
@@ -823,13 +838,15 @@ defmodule Hypatia.OutcomeTracker do
     end
   end
 
-  defp write_outcome_log(record) do
+  defp write_outcome_log(record, store) do
     now = Date.utc_today()
     month_str = String.pad_leading("#{now.month}", 2, "0")
-    path = Path.join(Path.expand(Paths.outcomes()), "#{now.year}-#{month_str}.jsonl")
+    path = Path.join([store.data_root, "outcomes", "#{now.year}-#{month_str}.jsonl"])
 
-    with :ok <- File.mkdir_p(Path.dirname(path)),
-         {:ok, json} <- Jason.encode(record) do
+    with :ok <- ensure_outcome_store(store),
+         :ok <- File.mkdir_p(Path.dirname(path)),
+         {:ok, json} <- Jason.encode(record),
+         :ok <- ensure_outcome_store(store) do
       assert_h6_monotone(path, Map.get(record, "timestamp"))
       File.write(path, json <> "\n", [:append, :utf8])
     end
@@ -885,7 +902,7 @@ defmodule Hypatia.OutcomeTracker do
 
     case Jason.encode(fleet_record) do
       {:ok, json} ->
-        # Same silent-drop class as write_outcome_log/1: File.write with :append
+        # Same silent-drop class as write_outcome_log/2: File.write with :append
         # fails :enoent on a missing dir, dropping the fleet learning signal.
         File.mkdir_p!(Path.dirname(path))
 
@@ -934,8 +951,8 @@ defmodule Hypatia.OutcomeTracker do
     end
   end
 
-  defp find_recipe_file(recipe_id) do
-    recipes_dir = Path.expand(Paths.recipes())
+  defp find_recipe_file(recipe_id, data_root \\ Paths.verisimdb_data()) do
+    recipes_dir = Path.join(Path.expand(data_root), "recipes")
 
     case File.ls(recipes_dir) do
       {:ok, files} ->
@@ -970,8 +987,8 @@ defmodule Hypatia.OutcomeTracker do
   @doc """
   Get the annealing state for a recipe, computing the max dispatch tier.
 
-  Returns {:ok, strategy} where strategy is the annealing-clamped
-  dispatch tier for the given raw strategy.
+  Returns the annealing-clamped dispatch-tier atom for the given raw strategy.
+  Reconciliation is read-only; explicit update transactions persist state.
   """
   def annealed_strategy(recipe_id, raw_strategy) do
     state = load_annealing_state(recipe_id)
@@ -1014,31 +1031,41 @@ defmodule Hypatia.OutcomeTracker do
     load_annealing_state(recipe_id)
   end
 
-  defp update_annealing_state(recipe_id, outcome) do
-    # At this point the outcome was already appended to the canonical log.
-    # One additional qualified observation can be incorporated incrementally;
-    # any legacy mismatch is rebuilt from qualified evidence instead.
-    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id))
-    qualified_total = qualified_count(counts)
+  # Exercise the actual incremental transaction against a canonical log that
+  # already contains the observation. Production calls it with the store
+  # captured before appending that same observation.
+  @doc false
+  def update_annealing_state(recipe_id, outcome, before_persist)
+      when is_function(before_persist, 0) do
+    do_update_annealing_state(recipe_id, outcome, capture_outcome_store(), before_persist)
+  end
 
-    state =
-      case read_saved_annealing_state(recipe_id) do
-        %{outcome_count: previous} = prior when previous + 1 == qualified_total ->
-          ConfidenceAnnealing.record_outcome(prior, outcome)
+  defp do_update_annealing_state(recipe_id, outcome, store, before_persist) do
+    with :ok <- ensure_outcome_store(store) do
+      counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id, store.data_root))
+      qualified_total = qualified_count(counts)
 
-        %{outcome_count: current} = prior when current == qualified_total ->
-          prior
+      state =
+        case read_saved_annealing_state(recipe_id, store) do
+          %{outcome_count: previous} = prior when previous + 1 == qualified_total ->
+            ConfidenceAnnealing.record_outcome(prior, outcome)
 
-        _ ->
-          ConfidenceAnnealing.from_existing(
-            counts.successes,
-            counts.failures,
-            counts.false_positives
-          )
+          %{outcome_count: current} = prior when current == qualified_total ->
+            prior
+
+          _ ->
+            ConfidenceAnnealing.from_existing(
+              counts.successes,
+              counts.failures,
+              counts.false_positives
+            )
+        end
+
+      with :ok <- before_store_persist(store, before_persist),
+           :ok <- save_annealing_state(recipe_id, state, store) do
+        {:ok, state}
       end
-
-    save_annealing_state(recipe_id, state)
-    state
+    end
   end
 
   defp qualified_count(counts),
@@ -1062,20 +1089,25 @@ defmodule Hypatia.OutcomeTracker do
   end
 
   defp load_annealing_state(recipe_id) do
-    # Read-time check is essential: already-persisted veteran stages may have
-    # been computed from thousands of legacy, unverified "success" rows.
-    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id))
-    saved = read_saved_annealing_state(recipe_id)
-    current = reconcile_annealing_state(saved, counts)
-
-    if current != saved and (saved != nil or qualified_count(counts) > 0),
-      do: save_annealing_state(recipe_id, current)
-
-    current
+    # Diagnostics and numeric/strategy callers reconcile in memory. They do not
+    # acquire a hidden persistence transaction or depend on a disk-write result.
+    # Only the explicit confidence/incremental transactions persist this state.
+    store = capture_outcome_store()
+    counts = qualified_outcome_counts(load_outcomes_for_recipe(recipe_id, store.data_root))
+    saved = read_saved_annealing_state(recipe_id, store)
+    reconcile_annealing_state(saved, counts)
   end
 
-  defp read_saved_annealing_state(recipe_id) do
-    case File.read(annealing_state_path(recipe_id)) do
+  defp persist_reconciled_annealing(recipe_id, saved, current, counts, store) do
+    if current != saved and (saved != nil or qualified_count(counts) > 0) do
+      save_annealing_state(recipe_id, current, store)
+    else
+      :ok
+    end
+  end
+
+  defp read_saved_annealing_state(recipe_id, store) do
+    case File.read(annealing_state_path(recipe_id, store)) do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, %{"qualification_version" => @annealing_evidence_version} = data} ->
@@ -1090,10 +1122,8 @@ defmodule Hypatia.OutcomeTracker do
     end
   end
 
-  defp save_annealing_state(recipe_id, state) do
-    path = annealing_state_path(recipe_id)
-    dir = Path.dirname(path)
-    File.mkdir_p!(dir)
+  defp save_annealing_state(recipe_id, state, store) do
+    path = annealing_state_path(recipe_id, store)
 
     serialized = %{
       "qualification_version" => @annealing_evidence_version,
@@ -1106,9 +1136,48 @@ defmodule Hypatia.OutcomeTracker do
       "updated_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
 
-    case Jason.encode(serialized, pretty: true) do
-      {:ok, json} -> File.write!(path, json <> "\n")
-      {:error, reason} -> Logger.error("Failed to save annealing state: #{inspect(reason)}")
+    with {:ok, json} <- Jason.encode(serialized, pretty: true),
+         :ok <- ensure_outcome_store(store),
+         :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- ensure_outcome_store(store),
+         :ok <- File.write(path, json <> "\n"),
+         :ok <- ensure_outcome_store(store) do
+      :ok
+    else
+      {:error, {:outcome_store_changed, _captured, _current}} = error ->
+        error
+
+      {:error, reason} ->
+        {:error, {:annealing_state_write, path, reason}}
+    end
+  end
+
+  defp capture_outcome_store do
+    data_root = Path.expand(Paths.verisimdb_data())
+
+    # Resolve the default from the captured root, not a second runtime read.
+    annealing_dir =
+      Application.get_env(:hypatia, :annealing_state_path, Path.join(data_root, "annealing-states"))
+      |> Path.expand()
+
+    %{data_root: data_root, annealing_dir: annealing_dir}
+  end
+
+  defp ensure_outcome_store(captured) do
+    current = capture_outcome_store()
+
+    if current == captured do
+      :ok
+    else
+      {:error, {:outcome_store_changed, captured, current}}
+    end
+  end
+
+  defp before_store_persist(store, before_persist) do
+    case before_persist.() do
+      :ok -> ensure_outcome_store(store)
+      {:error, _reason} = error -> error
+      other -> {:error, {:invalid_store_barrier_result, other}}
     end
   end
 
@@ -1140,10 +1209,10 @@ defmodule Hypatia.OutcomeTracker do
     }
   end
 
-  defp annealing_state_path(recipe_id) do
+  defp annealing_state_path(recipe_id, store) do
     # Sanitise recipe_id for filesystem safety
     safe_id = String.replace(recipe_id, ~r/[^a-zA-Z0-9_\-]/, "_")
 
-    Path.join(Path.expand(Paths.annealing_states()), "#{safe_id}.json")
+    Path.join(store.annealing_dir, "#{safe_id}.json")
   end
 end

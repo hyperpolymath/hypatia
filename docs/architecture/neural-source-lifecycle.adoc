@@ -122,6 +122,46 @@ does not widen or redefine OutcomeTracker's global evidence predicate.
 Inventory-only recipes and qualified negative-only entities retain the neutral
 score policy. Valid supported rows continue to create positive edges.
 
+== Outcome confidence and annealing persistence
+
+OutcomeTracker captures the expanded data root and effective annealing-state
+directory once at each explicit update entry. The default annealing directory
+is derived from that captured root; an explicit runtime override remains
+supported. A raw append, its incremental annealing update and its recipe
+summary reuse the same captured directories. Standalone confidence updates
+also reuse one qualified-count snapshot for confidence and maturity.
+
+The update checks the captured identity before writes and after derived
+writes. An observed source change returns
+{:error, {:outcome_store_changed, captured, current}}; write errors remain
+errors. Even a switch after a check cannot redirect a write to the new store,
+because its path is already captured. These checks do not observe an A-to-B-to-A
+change wholly between checks and do not make multiple file writes atomic.
+A later write or source failure may leave an earlier derived write in A.
+No rollback or complete configuration-history claim is made.
+
+The explicit persistence entrypoints are update_recipe_confidence/1 and the
+incremental update called after a qualified canonical outcome append.
+record_outcome/5 and record_fleet_outcome/6 return a committed raw event even
+when a derived update fails; they log that pending update for the scheduler.
+That return is not a claim that every derived file was updated. A failed raw
+append remains an error.
+
+get_annealing_state/1, annealed_strategy/2 and cross_repo_confidence/2 now
+reconcile saved maturity against captured qualified evidence in memory, without
+a hidden disk write. Their map, strategy and numeric return contracts remain.
+CrossRepoLearning consumes the returned map for arithmetic and does not
+depend on a disk rewrite; the Coordinator already uses the separate
+annealed_strategy_from_store/3 read-only route. The scheduler's disk report
+observes the last successful explicit update, not a diagnostic read.
+
+The runtime-store controls include actual fixture-file A-to-B changes after
+evidence collection, explicit override changes, stable updates, I/O refusal,
+raw-event durability and read-only reconciliation. A deterministic barrier
+invokes the same update implementation immediately before persistence; it
+cannot bypass the source guard. These new controls require hosted execution
+on the published candidate before qualification.
+
 == Qualification scope
 
 The regression source uses actual isolated Coordinator, Blackboard and named

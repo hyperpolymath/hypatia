@@ -154,6 +154,195 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     assert LearningScheduler.report_annealing_state() == stage_report(1, 0, 0)
   end
 
+  test "confidence persists one qualified evidence snapshot without touching the other store", ctx do
+    recipe = "recipe-confidence-stable"
+    paths = confidence_fixture(ctx, recipe)
+    second_before = store_tree_bytes(ctx.second)
+    outcomes_before = directory_bytes(Path.join(ctx.first, "outcomes"))
+
+    assert {:ok, confidence} = OutcomeTracker.update_recipe_confidence(recipe)
+    assert is_float(confidence)
+
+    updated = Jason.decode!(File.read!(paths.recipe))
+    assert updated["confidence_prior"] == 0.8
+    assert updated["successful_fixes"] == 0
+    assert updated["failed_fixes"] == 1
+    assert updated["total_attempts"] == 2
+    assert updated["unqualified_attempts"] == 1
+    assert updated["confidence"] == Float.round(confidence, 4)
+    assert Jason.decode!(File.read!(paths.annealing))["outcome_count"] == 1
+    assert store_tree_bytes(ctx.second) == second_before
+    assert directory_bytes(Path.join(ctx.first, "outcomes")) == outcomes_before
+  end
+
+  test "confidence refuses an A-to-B switch after evidence and before either write", ctx do
+    recipe = "recipe-confidence-switch"
+    confidence_fixture(ctx, recipe)
+    before = store_tree_bytes(ctx.root)
+
+    assert {:error, {:outcome_store_changed, captured, current}} =
+             OutcomeTracker.update_recipe_confidence(recipe, fn ->
+               send(self(), :confidence_evidence_collected)
+               Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
+             end)
+
+    assert_received :confidence_evidence_collected
+    assert captured.data_root == ctx.first
+    assert current.data_root == ctx.second
+    assert captured.annealing_dir == Path.join(ctx.first, "annealing-states")
+    assert current.annealing_dir == Path.join(ctx.second, "annealing-states")
+    assert store_tree_bytes(ctx.root) == before
+  end
+
+  test "both explicit transactions refuse an annealing override change without redirecting writes",
+       ctx do
+    recipe = "recipe-confidence-override"
+    confidence_fixture(ctx, recipe)
+    first_override = Path.join(ctx.root, "override-first")
+    second_override = Path.join(ctx.root, "override-second")
+
+    for transaction <- [:confidence, :annealing] do
+      Application.put_env(:hypatia, :annealing_state_path, first_override)
+      before = store_tree_bytes(ctx.root)
+      barrier = fn -> Application.put_env(:hypatia, :annealing_state_path, second_override) end
+
+      result =
+        case transaction do
+          :confidence -> OutcomeTracker.update_recipe_confidence(recipe, barrier)
+          :annealing -> OutcomeTracker.update_annealing_state(recipe, :failure, barrier)
+        end
+
+      assert {:error, {:outcome_store_changed, captured, current}} = result
+      assert captured.data_root == ctx.first
+      assert current.data_root == ctx.first
+      assert captured.annealing_dir == first_override
+      assert current.annealing_dir == second_override
+      assert store_tree_bytes(ctx.root) == before
+      refute File.exists?(first_override)
+      refute File.exists?(second_override)
+    end
+  end
+
+  test "incremental annealing advances A but refuses a later switch before persistence", ctx do
+    recipe = "recipe-incremental-switch"
+    paths = confidence_fixture(ctx, recipe)
+    second_before = store_tree_bytes(ctx.second)
+
+    assert {:ok, first} = OutcomeTracker.update_annealing_state(recipe, :failure, fn -> :ok end)
+    assert first.outcome_count == 1
+
+    write_rows(ctx.first, List.duplicate(outcome(recipe, "failure", "failed"), 2))
+    assert {:ok, second} = OutcomeTracker.update_annealing_state(recipe, :failure, fn -> :ok end)
+    assert second.outcome_count == 2
+    assert :failure in second.recent_outcomes
+    assert Jason.decode!(File.read!(paths.annealing))["outcome_count"] == 2
+    assert store_tree_bytes(ctx.second) == second_before
+
+    write_rows(ctx.first, List.duplicate(outcome(recipe, "failure", "failed"), 3))
+    before = store_tree_bytes(ctx.root)
+
+    assert {:error, {:outcome_store_changed, captured, current}} =
+             OutcomeTracker.update_annealing_state(recipe, :failure, fn ->
+               send(self(), :incremental_evidence_collected)
+               Application.put_env(:hypatia, :verisimdb_data_path, ctx.second)
+             end)
+
+    assert_received :incremental_evidence_collected
+    assert captured.data_root == ctx.first
+    assert current.data_root == ctx.second
+    assert store_tree_bytes(ctx.root) == before
+  end
+
+  test "a stable explicit override receives the state and leaves the default absent", ctx do
+    recipe = "recipe-confidence-stable-override"
+    paths = confidence_fixture(ctx, recipe)
+    override = Path.join(ctx.root, "override-stable")
+    Application.put_env(:hypatia, :annealing_state_path, override)
+    second_before = store_tree_bytes(ctx.second)
+
+    assert {:ok, _confidence} = OutcomeTracker.update_recipe_confidence(recipe)
+    state_path = Path.join(override, recipe <> ".json")
+    assert Jason.decode!(File.read!(state_path))["outcome_count"] == 1
+    refute File.exists?(paths.annealing)
+    assert store_tree_bytes(ctx.second) == second_before
+  end
+
+  test "annealing I/O refusal is returned before the recipe summary is written", ctx do
+    recipe = "recipe-confidence-io"
+    confidence_fixture(ctx, recipe)
+    blocker = Path.join(ctx.root, "not-a-directory")
+    File.write!(blocker, "synthetic I/O refusal")
+    override = Path.join(blocker, "states")
+    Application.put_env(:hypatia, :annealing_state_path, override)
+    before = store_tree_bytes(ctx.root)
+
+    assert {:error, {:annealing_state_write, path, reason}} =
+             OutcomeTracker.update_recipe_confidence(recipe)
+
+    assert path == Path.join(override, recipe <> ".json")
+    assert reason in [:enotdir, :eexist]
+    assert store_tree_bytes(ctx.root) == before
+
+    assert {:error, {:annealing_state_write, ^path, second_reason}} =
+             OutcomeTracker.update_annealing_state(recipe, :failure, fn -> :ok end)
+
+    assert second_reason in [:enotdir, :eexist]
+    assert store_tree_bytes(ctx.root) == before
+  end
+
+  test "diagnostic and numeric annealing reads reconcile without a hidden disk write", ctx do
+    recipe = "recipe-read-only-reconcile"
+    paths = confidence_fixture(ctx, recipe)
+
+    write_json(paths.annealing, %{
+      "qualification_version" => 1,
+      "temperature" => 0.1,
+      "outcome_count" => 1000,
+      "stage" => "veteran",
+      "recent_outcomes" => ["success"],
+      "last_reheat" => nil,
+      "created_at" => "2026-11-04T00:00:00Z",
+      "updated_at" => "2026-11-04T00:00:00Z"
+    })
+
+    before = store_tree_bytes(ctx.root)
+    state = OutcomeTracker.get_annealing_state(recipe)
+    assert state.outcome_count == 1
+    assert state.stage == :nascent
+    assert OutcomeTracker.annealed_strategy(recipe, :auto_execute) == :report_only
+    assert is_float(OutcomeTracker.cross_repo_confidence(recipe, 0.9))
+    assert OutcomeTracker.get_annealing_state("recipe-absent").outcome_count == 0
+    assert store_tree_bytes(ctx.root) == before
+    refute File.exists?(Path.join([ctx.first, "annealing-states", "recipe-absent.json"]))
+  end
+
+  test "a durable raw outcome remains committed when derived persistence is refused", ctx do
+    recipe = "recipe-durable-derived-refusal"
+    paths = confidence_fixture(ctx, recipe)
+    recipe_before = File.read!(paths.recipe)
+    second_before = store_tree_bytes(ctx.second)
+    blocker = Path.join(ctx.root, "derived-write-blocker")
+    File.write!(blocker, "synthetic I/O refusal")
+    Application.put_env(:hypatia, :annealing_state_path, Path.join(blocker, "states"))
+
+    assert {:ok, record} =
+             OutcomeTracker.record_fleet_outcome(
+               recipe,
+               "synthetic",
+               ".",
+               :failure,
+               "durable-derived-refusal",
+               "failed"
+             )
+
+    assert record["fleet_import_id"] == "durable-derived-refusal"
+    assert {:ok, ids} = OutcomeTracker.imported_fleet_ids()
+    assert MapSet.member?(ids, "durable-derived-refusal")
+    assert File.read!(paths.recipe) == recipe_before
+    assert store_tree_bytes(ctx.second) == second_before
+    refute File.exists?(paths.annealing)
+  end
+
   test "ESN input switches outcomes without promoting historical successes", ctx do
     first = outcome("recipe-first-series", "failure", "failed")
     second = outcome("recipe-second-series", "success", "verified")
@@ -406,6 +595,35 @@ defmodule Hypatia.LearningRuntimeStoreTest do
     Application.put_env(:hypatia, :verisimdb_data_path, ctx.first)
     assert %{trust: {:ok, ^first_trust}, rbf: {:ok, ^first_rbf}} = Persistence.load_all()
     assert GraphOfTrust.build().trust_scores == %{"recipe-first" => 0.5}
+  end
+
+  defp confidence_fixture(ctx, recipe) do
+    for {root, confidence} <- [{ctx.first, 0.8}, {ctx.second, 0.2}] do
+      write_json(Path.join([root, "recipes", recipe <> ".json"]), %{
+        "id" => recipe,
+        "confidence" => confidence
+      })
+    end
+
+    write_rows(ctx.first, [
+      outcome(recipe, "failure", "failed"),
+      outcome(recipe, "success", "unverified")
+    ])
+
+    write_rows(ctx.second, List.duplicate(outcome(recipe, "success", "verified"), 5))
+
+    %{
+      recipe: Path.join([ctx.first, "recipes", recipe <> ".json"]),
+      annealing: Path.join([ctx.first, "annealing-states", recipe <> ".json"])
+    }
+  end
+
+  defp store_tree_bytes(root) do
+    root
+    |> Path.join("**/*")
+    |> Path.wildcard(match_dot: true)
+    |> Enum.filter(&File.regular?/1)
+    |> Map.new(fn path -> {Path.relative_to(path, root), File.read!(path)} end)
   end
 
   defp write_json(path, value) do
