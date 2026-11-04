@@ -268,8 +268,8 @@ defmodule Hypatia.Diagnostics.Monitor do
       # Log for persistence
       Logger.error("DIAGNOSTICS ALERT: #{inspect(reason)}")
 
-      # Source changes need an operator decision; notification is not restart authority.
-      unless source_lifecycle_failure?(reason), do: attempt_recovery(reason)
+      # Notification has no recovery side effect. finish_observations filters
+      # source refusals before the sole attempt_recoveries path.
     end)
   end
 

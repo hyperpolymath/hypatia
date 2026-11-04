@@ -337,7 +337,13 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
 
   test "Kin requires a ready source assessment and preserves manual-review tiers", ctx do
     action = %{pattern_id: "recipe-source-fixture", dispatch_tier: :auto_execute, confidence: 0.99}
-    ready = %{source_store: ctx.first, source_status: :ready, confidence: 0.99}
+    ready = %{
+      source_store: ctx.first,
+      source_status: :ready,
+      confidence: 0.99,
+      strategy: :auto_execute,
+      is_novel: false
+    }
     assert :pass = Gate.neural_consensus(action, fn _ -> ready end)
 
     for result <- [
@@ -346,7 +352,19 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
           %{confidence: 0.99},
           %{ready | source_store: ctx.second},
           %{ready | source_status: :blocked},
-          %{ready | confidence: 0.5}
+          %{ready | confidence: 0.5},
+          %{ready | confidence: -0.01},
+          %{ready | confidence: 1.01},
+          %{ready | confidence: "0.99"},
+          %{ready | strategy: :review},
+          %{ready | strategy: :report_only},
+          %{ready | strategy: "auto_execute"},
+          %{ready | strategy: nil},
+          Map.delete(ready, :strategy),
+          %{ready | is_novel: true},
+          %{ready | is_novel: "false"},
+          %{ready | is_novel: nil},
+          Map.delete(ready, :is_novel)
         ] do
       assert {:hold, _} = Gate.neural_consensus(action, fn _ -> result end)
     end
@@ -427,10 +445,29 @@ defmodule Hypatia.Neural.SourceStoreLifecycleTest do
              end) == observed
     end
 
-    assert Monitor.finish_observations(observed, fn _ -> :ok end, fn _, _ ->
-             flunk("a source refusal must remain manual-only")
-           end) == observed
+    observer = self()
+    notify = fn failures -> send(observer, {:fixture_notification, failures}) end
+
+    recover = fn failures, snapshot ->
+      send(observer, {:fixture_recovery_pass, failures})
+      snapshot
+    end
+
+    assert Monitor.finish_observations(observed, notify, recover) == observed
+    assert_receive {:fixture_notification, [{:failure, ^reason}]}
+    refute_received {:fixture_notification, _}
+    refute_received {:fixture_recovery_pass, _}
     assert observed.recovery_attempts == %{}
+
+    mixed = Monitor.record_observations(state, components ++ [{:error, :pipeline_crashed}])
+    assert Monitor.finish_observations(mixed, notify, recover) == mixed
+
+    assert_receive {:fixture_notification,
+                    [{:failure, ^reason}, {:failure, :pipeline_crashed}]}
+
+    assert_receive {:fixture_recovery_pass, [{:failure, :pipeline_crashed}]}
+    refute_received {:fixture_notification, _}
+    refute_received {:fixture_recovery_pass, _}
   end
 
   test "a busy or unavailable actual coordinator is not reported as healthy", ctx do

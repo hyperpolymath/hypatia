@@ -437,10 +437,15 @@ defmodule Hypatia.Kin.Gate do
         finding = %{"id" => action.pattern_id, "category" => "unknown"}
 
         case predictor.(finding) do
-          %{confidence: neural_conf} = recommendation when is_number(neural_conf) ->
+          %{confidence: neural_conf} = recommendation
+          when is_number(neural_conf) and neural_conf >= 0.0 and neural_conf <= 1.0 ->
             cond do
               not Hypatia.Neural.SourceStore.ready_report?(recommendation) ->
                 neural_unavailable_hold()
+
+              Map.get(recommendation, :strategy) != :auto_execute or
+                  Map.get(recommendation, :is_novel) != false ->
+                {:hold, "neural assessment requires manual review -- automation cap retained"}
 
               abs(neural_conf - Map.get(action, :confidence, 0.0)) < 0.15 ->
                 :pass

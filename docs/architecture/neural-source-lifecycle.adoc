@@ -61,8 +61,10 @@ matching current-format trust snapshot exists.
 | Coordinator.analyze/1, dispatch_recommendation/1
 | Source-labelled analysis/recommendation map; optional server argument supports
 an isolated actual cohort.
-| {:error, reason}. Kin holds auto-execute for human review; manual tiers retain
-their existing route. PatternAnalyzer already treats non-map replies as
+| {:error, reason}. Kin holds auto-execute for human review unless the ready
+recommendation explicitly permits :auto_execute, is_novel is false, and bounded
+confidence agrees. A maturity cap is retained even at high confidence; manual
+tiers keep their existing route. PatternAnalyzer already treats non-map replies as
 unavailable and applies DispatchGuard's ceiling.
 
 | Coordinator.force_cycle/0, record_outcome/2
@@ -100,7 +102,9 @@ cannot write into a newly initialized B board.
 
 Diagnostics now collects canonical failure tuples and stores observed component
 and failure state before notification. Notification failures retain that
-observation. Source-lifecycle failures are excluded from automatic recovery,
+observation. Notification has no recovery side effect; the filtered recovery
+pass is the sole recovery call path for the observation. Source-lifecycle
+failures are excluded from automatic recovery,
 including the existing restart path; this does not broaden recovery authority
 for other failures. Kin.Watchdog's process-liveness report remains a liveness
 report, not a source/model-readiness receipt.
