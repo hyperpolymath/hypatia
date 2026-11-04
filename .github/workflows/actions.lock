@@ -14,7 +14,7 @@ workflows:
         - 'actions/setup-node@v7.1.0'
         - 'actions/upload-artifact@v7.0.2'
         - 'dtolnay/rust-toolchain@v1'
-        - 'taiki-e/install-action@v2.88.0'
+        - 'taiki-e/install-action@v2.89.0'
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
         - 'step-security/harden-runner@v2.22.3'
@@ -28,7 +28,7 @@ workflows:
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.1'
         - 'swatinem/rust-cache@v2.9.3'
-        - 'taiki-e/install-action@v2.88.0'
+        - 'taiki-e/install-action@v2.89.0'
     '.github/workflows/cicd-squabbler.yml': []
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
@@ -83,7 +83,7 @@ workflows:
         - 'actions/upload-pages-artifact@v5.0.0'
         - 'dtolnay/rust-toolchain@v1'
         - 'editorconfig-checker/action-editorconfig-checker@v3.0.0'
-        - 'ruby/setup-ruby@v1.335.0'
+        - 'ruby/setup-ruby@v1.336.0'
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/checkout@v7.0.1'
@@ -119,7 +119,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'github/codeql-action@v4.38.2'
         - 'gitleaks/gitleaks-action@v3.0.0'
-        - 'taiki-e/install-action@v2.88.0'
+        - 'taiki-e/install-action@v2.89.0'
         - 'trufflesecurity/trufflehog@v3.99.7'
     '.github/workflows/standards-integration.yml': []
     '.github/workflows/tests.yml':
@@ -132,7 +132,7 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'erlef/setup-beam@v1.24.1'
         - 'swatinem/rust-cache@v2.9.3'
-        - 'taiki-e/install-action@v2.88.0'
+        - 'taiki-e/install-action@v2.89.0'
     '.github/workflows/verify-proofs.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -401,9 +401,9 @@ dependencies:
         commit: 'sha1-0c5077e51419868618aeaa5fe8019c62421857d6'
         owner_id: 108928776
         repo_id: 512644635
-    'ruby/setup-ruby@v1.335.0':
-        ref: 'v1.335.0'
-        commit: 'sha1-7f797815d8adceb1c412e7abefdd1ab4abc47a5f'
+    'ruby/setup-ruby@v1.336.0':
+        ref: 'v1.336.0'
+        commit: 'sha1-de492cf36cbab201753d720ce4f4e336cd688c94'
         owner_id: 210414
         repo_id: 231208785
     'softprops/action-gh-release@v3.0.3':
@@ -421,9 +421,9 @@ dependencies:
         commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
         owner_id: 580492
         repo_id: 298565987
-    'taiki-e/install-action@v2.88.0':
-        ref: 'v2.88.0'
-        commit: 'sha1-86f7a0ffb25f40114606501a311ebcfaf882ea32'
+    'taiki-e/install-action@v2.89.0':
+        ref: 'v2.89.0'
+        commit: 'sha1-1919c4a95903d2c33e4a221102edca87309fc14b'
         owner_id: 43724913
         repo_id: 442947557
     'trufflesecurity/trufflehog@v3.99.7':
