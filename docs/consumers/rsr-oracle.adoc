@@ -14,7 +14,7 @@ jobs:
   rsr-score:
     uses: hyperpolymath/hypatia/.github/workflows/rsr-oracle.yml@<40-char SHA>
     with:
-      standards-ref: <40-char SHA of hyperpolymath/standards>
+      standards-ref: <40-char SHA of metadatastician/standards>
       # fail-under: gold      # optional; omit to publish only
 ----
 
@@ -46,7 +46,7 @@ Release tags (`v*`) are cut from tags by `.github/workflows/release.yml`; a tag
 is an acceptable pin for consumers that want a human-readable version, and the
 workflow resolves it to the commit it names. A full SHA is the strongest pin and
 the one used by
-`hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml`.
+`metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml`.
 
 The workflow enforces this rather than trusting the comment: it reads the ref
 you wrote (from `job.workflow_ref`) and **fails** on `refs/heads/*`, `main`,
@@ -90,7 +90,11 @@ must never be scored against a catalogue picked by accident.
 branch", which is what the generated gate does today. Pin it if you want your
 canon frozen as well — a pinned oracle scored against an unpinned canon is only
 half a contract. When set, it must be an immutable ref (commit SHA or release
-tag): a branch is refused, and the repository must be `hyperpolymath/standards`.
+tag): a branch is refused. The repository must be the estate standards
+repository: `metadatastician/standards`, or its former name
+`hyperpolymath/standards`, which is accepted and checked out under the current
+name (the repository moved on 2026-10-25, and a reusable workflow does not
+follow GitHub's redirect).
 The canon is what you are scored against; a caller-supplied canon would let a
 repository award itself any score it liked.
 
