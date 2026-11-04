@@ -571,11 +571,17 @@ defmodule Hypatia.LearningScheduler do
                   "(size #{size} < offset #{pos.offset}), resetting"
               )
 
+              # The stat already invalidated the old cursor. Persist the
+              # path-bound reset in the accumulator before attempting I/O,
+              # so a failed read cannot restore that cursor and skip a
+              # replacement prefix once the file grows beyond its old size.
+              reset = %{offset: 0, incomplete_tail: "", source_path: path}
+
               ingest_local_outcome_file(
                 path,
                 file,
-                normalise_position(0),
-                {positions, count, recipes}
+                reset,
+                {Map.put(positions, file, reset), count, recipes}
               )
 
             {:ok, %{size: size}} when size == pos.offset and pos.incomplete_tail == "" ->

@@ -372,6 +372,59 @@ defmodule Hypatia.LearningSchedulerTest do
       assert recipes == MapSet.new(["new-recipe"])
       assert completed["rotated.jsonl"].offset == byte_size(new_row)
     end
+
+    test "a detected truncation keeps its path-bound reset when the immediate read fails", %{
+      tmp: tmp
+    } do
+      path = Path.join(outcomes_dir(tmp), "retry.jsonl")
+      # A directory gives a deterministic successful stat followed by an
+      # actual read error, including when the suite runs as root. The stale
+      # cursor is larger than that stat, so this exercises the reset branch.
+      File.mkdir!(path)
+      previous_offset = File.stat!(path).size + 100
+
+      positions = %{
+        "retry.jsonl" => %{
+          offset: previous_offset,
+          incomplete_tail: "fragment from the previous file",
+          source_path: path
+        }
+      }
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {reset, 0, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+          assert recipes == MapSet.new()
+
+          assert reset["retry.jsonl"] == %{
+                   offset: 0,
+                   incomplete_tail: "",
+                   source_path: path
+                 }
+
+          # Before the next poll, the replacement grows past the old offset.
+          # Keeping the old cursor would skip the first complete event.
+          File.rmdir!(path)
+
+          first =
+            record("replacement-first", "failure", %{
+              "detail" => String.duplicate("x", previous_offset + 100)
+            }) <> "\n"
+
+          second = record("replacement-second", "failure") <> "\n"
+          File.write!(path, first <> second)
+          assert byte_size(first <> second) > previous_offset
+
+          assert {completed, 2, ingested} = LearningScheduler.ingest_new_outcomes(reset)
+          assert ingested == MapSet.new(["replacement-first", "replacement-second"])
+          assert completed["retry.jsonl"].offset == byte_size(first <> second)
+          assert completed["retry.jsonl"].source_path == path
+          assert {^completed, 0, _} = LearningScheduler.ingest_new_outcomes(completed)
+        end)
+
+      assert log =~ "outcome file retry.jsonl truncated"
+      assert log =~ "cannot read outcome file retry.jsonl"
+    end
   end
 
   # ── Missing / unreadable files ──────────────────────────────────────
