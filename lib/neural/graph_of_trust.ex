@@ -26,6 +26,8 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   require Logger
 
+  alias Hypatia.OutcomeTracker
+
   @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
   @damping_factor 0.85
   @convergence_threshold 0.001
@@ -41,10 +43,26 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # --- Public API ---
 
-  @doc "Build the trust graph from outcome data, including cross-repo edges."
+  @doc """
+  Build the trust graph from qualified outcome data, including cross-repo edges.
+
+  Unqualified observations remain in the outcome log but contribute neither
+  outcome-derived nodes nor edges to the graph. Qualified negative evidence
+  retains the existing graph policy: it does not create positive edges.
+  """
   def build do
-    outcomes = load_all_outcomes()
-    recipes = load_all_recipes()
+    build(load_all_outcomes(), load_all_recipes())
+  end
+
+  @doc false
+  def build(outcomes, recipes) when is_list(outcomes) and is_list(recipes) do
+    # Qualify once before every graph consumer. Filtering only cross-repo
+    # edges would still let unsupported observations affect direct edges and
+    # trust normalization through extra nodes.
+    outcomes =
+      Enum.filter(outcomes, fn outcome ->
+        is_map(outcome) and OutcomeTracker.qualified_outcome?(outcome)
+      end)
 
     nodes = build_nodes(outcomes, recipes)
     edges = build_edges(outcomes)

@@ -1364,7 +1364,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
-    test "does not fire when the findings artefact is asserted non-empty" do
+    test "a non-empty findings assertion cannot certify a masked scan completed" do
       repo =
         create_repo_with_workflow("""
         name: Scan
@@ -1381,8 +1381,98 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
                   sarif_file: hypatia.sarif
         """)
 
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an unrelated jq assertion cannot hide malformed findings becoming zero" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  printf 'not-json' > findings.json
+                  COUNT=$(jq '. | length' findings.json 2>/dev/null || echo 0)
+                  jq -e '.enabled' unrelated-settings.json
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an empty array from a failed scan stays unsafe even when its shape validates" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  (printf '[]'; exit 2) > findings.json || true
+                  jq -e 'type == "array"' findings.json
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "valid complete empty and non-empty reports do not require a minimum finding count" do
+      for report <- ["[]", ~s([{"rule_id":"real-finding-fixture"}])] do
+        repo =
+          create_repo_with_workflow("""
+          name: Scan
+          jobs:
+            scan:
+              runs-on: ubuntu-latest
+              steps:
+                - run: |
+                    set -euo pipefail
+                    printf '%s' '#{report}' > findings.json
+                    jq -e 'type == "array"' findings.json
+                - uses: github/codeql-action/upload-sarif@v4.32.6
+                  with:
+                    sarif_file: out.sarif
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "explicit findings exit handling preserves results while rejecting scan errors" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  set -euo pipefail
+                  scan_status=0
+                  hypatia scan . > findings.json || scan_status=$?
+                  case "$scan_status" in
+                    0|1) ;;
+                    *) exit "$scan_status" ;;
+                  esac
+                  jq -e 'type == "array"' findings.json
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
       assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
-      File.rm_rf!(repo)
     end
 
     test "does not fire once the mask is removed" do

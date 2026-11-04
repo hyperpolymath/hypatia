@@ -1569,45 +1569,38 @@ defmodule Hypatia.Rules.WorkflowHardening do
   @masked_scan_re ~r/>\s*[^\s|;&]*\.json\s*(?:2>[^\s|;&]*\s*)?\|\|\s*true/
   # A count that manufactures a zero when the artefact is unparseable.
   @masked_count_re ~r/\|\|\s*echo\s+0\b/
-  # An assertion that the findings artefact is a NON-EMPTY array. `jq -e` sets a
-  # non-zero exit on false/null, and `length > 0` is the estate's canonical form
-  # (standards/.github/workflows/hypatia-scan-reusable.yml).
-  @findings_assertion_re ~r/length\s*>\s*0|jq\s+-e/
-
   @doc """
-  WH014 — a scanner whose failure is masked, feeding an upload to GitHub code
-  scanning, with nothing asserting the findings artefact is non-empty.
+  WH014 — a scanner or findings-count failure is masked in a workflow that
+  uploads SARIF to GitHub code scanning.
 
-  This is not merely a permissive gate. It **deletes security alerts**.
-
-  GitHub reconciles each code-scanning upload against the previous analysis
-  carrying the same tool name and category: any alert absent from the new
-  analysis is AUTO-CLOSED. So when a scanner crashes and its failure is
-  swallowed:
+  A failed or incomplete scan must not become a complete empty analysis.
+  GitHub reconciles code-scanning uploads against previous analyses for the
+  same tool and category, so an empty analysis can close existing alerts.
+  For example:
 
       hypatia-cli.sh scan . --exit-zero > hypatia-findings.json || true
       FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
 
-  the workflow proceeds with a count of zero, renders a syntactically valid
-  SARIF containing **zero results**, uploads it, and every previously-open
-  alert for that category is closed. The job is green at every step. Nothing
-  in `statusCheckRollup`, the run conclusion, or the check rollup shows that
-  anything went wrong — the only visible trace is `results_count` falling to 0
-  in `code-scanning/analyses`.
+  can proceed with a manufactured zero, render a valid SARIF with no results,
+  and upload it despite the scanner having failed.
 
   Measured on 2026-09-14 in `hyperpolymath/academic-workflow-suite`: an analysis
   carrying **84** findings on 09-11 was followed by six green runs uploading
   **0** results, closing all 84.
 
-  The rule fires only when all three hold, which keeps it conservative:
+  The rule reports workflows containing both:
 
-    1. the workflow uploads SARIF to code scanning;
-    2. a scanner invocation or its count is masked (`|| true`, `|| echo 0`);
-    3. nothing asserts the findings artefact is a non-empty array.
+    1. a SARIF upload to code scanning;
+    2. a masked JSON-producing invocation or count (`|| true`, `|| echo 0`).
 
-  Condition 3 is what exempts a correctly-written caller. The estate's
-  `hypatia-scan-reusable.yml` performs exactly that assertion
-  (`type == "array" and length > 0`, `exit 2` otherwise) and so never fires.
+  Neither `jq -e` nor a non-empty array establishes scanner completion: the
+  assertion may inspect unrelated data, or a failed scan may leave partial
+  valid findings. Conversely, a complete clean scan may legitimately produce
+  an empty array. Preserve the scanner's exit status and findings, reject
+  execution or coverage errors, then validate the expected report shape.
+
+  This report-only rule matches workflow text; it does not trace job or data
+  dependencies or attest that a scan actually completed.
   """
   def wh014_masked_scanner_upload(repo_path) do
     repo_path
@@ -1618,29 +1611,29 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       uploads? = Regex.match?(@sarif_upload_re, content)
       masked? = Regex.match?(@masked_scan_re, content) or Regex.match?(@masked_count_re, content)
-      asserts? = Regex.match?(@findings_assertion_re, content)
 
-      if uploads? and masked? and not asserts? do
+      if uploads? and masked? do
         [
           %{
             rule: "WH014",
             file: rel,
             severity: :high,
             reason:
-              "workflow #{rel} uploads SARIF to code scanning but masks the scanner's " <>
-                "failure (`|| true` / `|| echo 0`) and never asserts the findings " <>
-                "artefact is a non-empty array. When the scanner fails, this uploads a " <>
-                "SARIF with zero results, and GitHub AUTO-CLOSES every previously-open " <>
-                "alert for that category — silently, with the job green.",
+              "workflow #{rel} uploads SARIF to code scanning but masks a scanner " <>
+                "or findings-count failure (`|| true` / `|| echo 0`). A failed or " <>
+                "incomplete scan can become an empty SARIF upload that closes existing " <>
+                "alerts. An unrelated assertion or non-empty findings array does not " <>
+                "establish scanner completion.",
             action: :report,
             fix_recipe: "assert-findings-before-sarif-upload",
             detail: %{
               fix:
-                "Remove the `|| true` and the `|| echo 0` fallback, then validate before " <>
-                  "uploading: `jq -e 'type == \"array\" and length > 0' findings.json` and " <>
-                  "exit non-zero if it fails. Prefer calling " <>
-                  "hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml, " <>
-                  "which already performs this assertion."
+                "Preserve the scanner exit status and reject execution or coverage " <>
+                  "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
+                  "exit 1 carries findings, and exit 2 is an error; retain real findings. " <>
+                  "Then validate `jq -e 'type == \"array\"' findings.json`, allowing an " <>
+                  "empty array from a complete scan. Remove `|| true` / `|| echo 0`; " <>
+                  "never turn a scanner or parsing failure into zero findings."
             }
           }
         ]
