@@ -3,9 +3,11 @@
 
 `Hypatia.Kyaml` differs from kyq's reference parser (`conformance/src/kyaml.js`
 at `4d1071df04d93e089500d58d0b6ba37bfcc75248`) only where kyq has a bug. Each one has a
-fix for kyq, with conformance fixtures; kyq's suite passes 323 of 323 with it.
-The fixtures are already in `corpus/`. Delete a row when kyq carries the fix,
-and move `KYQ_REF` in `.github/workflows/ci.yml` past it.
+fix for kyq, with conformance fixtures; kyq's suite passes 324 of 324 with it.
+Delete a row when kyq carries the fix, and move `KYQ_REF` in
+`.github/workflows/ci.yml` past it. The differential test lists the one
+divergence its corpus run can meet (`@known_divergences`); the corpus test
+lists the fixture it reads differently (`@accepted_divergences`).
 
 [cols="2,3,2",options="header"]
 |===
@@ -27,10 +29,20 @@ and move `KYQ_REF` in `.github/workflows/ci.yml` past it.
 | One too far: `locationOf` walks UTF-16 code units.
 | Code points, as every other kyq location. Fixture
   `invalid/bare-cr-after-astral.yaml` (1:5).
+
+| A trailing comma in a flow collection: `ports: [80, 443,]`
+| Refused: `FLOW_TRAILING_COMMA`, by kyq's spec (KYAML_SPEC §4).
+| Accepted. YAML 1.2 allows it, KYAML as Kubernetes writes it (KEP-5295,
+  `kubectl`/`yq -o kyaml`) ends every entry with one, and the estate's KYAML
+  directive says "trailing commas OK". kyq's refusal made it refuse canonical
+  KYAML: `test/kyaml_workflow_test.exs`, whose fixtures are yq's literal output,
+  could not be read. kyq's `invalid/flow-trailing-comma.yaml` becomes valid.
 |===
 
-None of the three occurs in the estate's workflows, so the pinned-commit
-differential in CI agrees on every file. The kyq fix is two commits on
+None of these occurs in the estate's block-style workflows, so the
+pinned-commit differential agrees on every file but kyq's own
+`flow-trailing-comma.yaml`, which it lists. The kyq fix is three commits on
 `metadatastician/kyq` (`conformance: accept a leading BOM and a comment after
-a block scalar header`; `conformance: whole-input diagnostics count columns
-in code points`), still to be opened there.
+a block scalar header`; `conformance: whole-input diagnostics count columns in
+code points`; `KYAML: accept a trailing comma in a flow collection`), still to
+be opened there.

@@ -88,6 +88,12 @@ defmodule Hypatia.KyamlTest do
       assert Kyaml.get(doc, "run").value == "echo one\necho two\n"
     end
 
+    test "a trailing comma in a flow collection, as KYAML (KEP-5295) writes it" do
+      doc = doc!("{\n  ports: [80, 443,],\n  meta: {a: \"1\",},\n}\n")
+      assert %{kind: :seq, items: [_, _]} = Kyaml.get(doc, "ports")
+      assert Kyaml.get(Kyaml.get(doc, "meta"), "a").value == "1"
+    end
+
     test "whole-input diagnostics count columns in code points" do
       assert {:error, %{code: "INVALID_NEWLINE", line: 1, column: 5}} =
                Kyaml.parse("x: 🟠\ry: 1\n")

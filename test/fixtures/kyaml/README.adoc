@@ -7,8 +7,9 @@ kyq is the canonical reader; these files hold the port to it.
 
 `corpus/`::
   kyq's conformance corpus (`conformance/fixtures/kyaml/`, `cases.json`), copied
-  from kyq `4d1071df04d93e089500d58d0b6ba37bfcc75248` plus the three fixtures of the kyq
-  fix listed in `KNOWN_DIVERGENCES.adoc`. `test/kyaml_conformance_test.exs`
+  from kyq `4d1071df04d93e089500d58d0b6ba37bfcc75248` plus three fixtures from the kyq
+  fix listed in `KNOWN_DIVERGENCES.adoc` (`flow-trailing-comma.yaml` stays as kyq
+  has it, and the test lists it as read differently). `test/kyaml_conformance_test.exs`
   holds every case to its pinned outcome: a valid fixture parses into the
   pinned number of documents, and an invalid one fails with the pinned code,
   line, column and pointer path. Refresh it by copying kyq's directory over

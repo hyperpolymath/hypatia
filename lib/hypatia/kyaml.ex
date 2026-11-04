@@ -19,8 +19,8 @@ defmodule Hypatia.Kyaml do
   Everything outside the subset is a located error, never a guess: duplicate
   keys (on the resolved key), complex keys, the YAML 1.1 `<<` merge key,
   non-core tags, directives other than `%YAML 1.2`, multi-line plain and
-  quoted scalars, trailing commas in flow collections, tabs as indentation.
-  Plain scalars resolve with the YAML 1.2 Core Schema (`yes` and `on` are
+  quoted scalars, tabs as indentation. A trailing comma in a flow collection
+  is accepted, as YAML 1.2 and KYAML (KEP-5295) write it. Plain scalars resolve with the YAML 1.2 Core Schema (`yes` and `on` are
   strings).
 
   ## Nodes
@@ -1284,18 +1284,10 @@ defmodule Hypatia.Kyaml do
         s = skip_flow_gap(s)
 
         cond do
+          # YAML 1.2 allows a final `,`, and KYAML (KEP-5295) writes one after
+          # every entry. (kyq refuses it; see KNOWN_DIVERGENCES.)
           peek(s) == ?, ->
-            s = s |> bump!() |> skip_flow_gap()
-
-            if peek(s) == ?],
-              do:
-                throw_error(
-                  "FLOW_TRAILING_COMMA",
-                  "a trailing comma in a flow collection is outside the KYAML subset",
-                  loc(s)
-                )
-
-            flow_seq(s, path, at, items)
+            flow_seq(s |> bump!() |> skip_flow_gap(), path, at, items)
 
           peek(s) == ?] ->
             {%{kind: :seq, items: Enum.reverse(items), loc: at}, bump!(s)}
@@ -1340,17 +1332,7 @@ defmodule Hypatia.Kyaml do
 
         cond do
           peek(s) == ?, ->
-            s = s |> bump!() |> skip_flow_gap()
-
-            if peek(s) == ?},
-              do:
-                throw_error(
-                  "FLOW_TRAILING_COMMA",
-                  "a trailing comma in a flow collection is outside the KYAML subset",
-                  loc(s)
-                )
-
-            flow_map(s, path, at, entries, seen)
+            flow_map(s |> bump!() |> skip_flow_gap(), path, at, entries, seen)
 
           peek(s) == ?} ->
             {%{kind: :map, entries: Enum.reverse(entries), loc: at}, bump!(s)}

@@ -19,6 +19,10 @@ defmodule Hypatia.KyamlConformanceTest do
 
   @corpus Path.expand("fixtures/kyaml/corpus", __DIR__)
   @bridge_codes ["NON_STRING_KEY", "UNSAFE_INTEGER", "NON_FINITE_NUMBER"]
+
+  # Cases where kyq has a bug and Hypatia.Kyaml follows YAML 1.2 and KYAML
+  # (test/fixtures/kyaml/KNOWN_DIVERGENCES.adoc): the port accepts these.
+  @accepted_divergences ["invalid/flow-trailing-comma.yaml"]
   @cases (@corpus <> "/cases.json") |> File.read!() |> Jason.decode!() |> Map.fetch!("cases")
 
   test "the corpus is not vacuous and every file has exactly one case" do
@@ -36,6 +40,7 @@ defmodule Hypatia.KyamlConformanceTest do
     @case c
     test "#{file}" do
       bytes = File.read!(Path.join(@corpus, @case["file"]))
+      accepted_divergence? = @case["file"] in @accepted_divergences
 
       case {@case["expect"], @case["code"]} do
         {"valid", _} ->
@@ -43,6 +48,9 @@ defmodule Hypatia.KyamlConformanceTest do
           assert length(docs) == @case["documents"]
 
         {"invalid", code} when code in @bridge_codes ->
+          assert {:ok, _} = Kyaml.parse(bytes)
+
+        {"invalid", _} when accepted_divergence? ->
           assert {:ok, _} = Kyaml.parse(bytes)
 
         {"invalid", code} ->
