@@ -153,6 +153,23 @@ defmodule Hypatia.MergeOrchestration.LoopTest do
     refute File.exists?(Path.join(store, "merge-decisions.jsonl"))
   end
 
+  test "a newline-suffixed digest is malformed before observation comparison" do
+    store = Evidence.seed()
+    cleanup(store)
+    receipt_path = Evidence.receipt_path(store)
+    receipt = receipt_path |> File.read!() |> Jason.decode!()
+
+    changed = update_in(receipt, ["observations", Access.at(0), "sha256"], &(&1 <> "\n"))
+
+    File.write!(receipt_path, Jason.encode!(changed))
+
+    assert_raise ArgumentError, ~r/missing, incomplete or malformed receipt/, fn ->
+      Loop.run(store: store)
+    end
+
+    refute File.exists?(Path.join(store, "merge-decisions.jsonl"))
+  end
+
   test "file tampering, missing members and symlinks cannot satisfy a complete receipt" do
     for action <- [:tamper, :missing, :symlink] do
       store = Evidence.seed()

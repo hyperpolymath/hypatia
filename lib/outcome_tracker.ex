@@ -1124,13 +1124,6 @@ defmodule Hypatia.OutcomeTracker do
     # Sanitise recipe_id for filesystem safety
     safe_id = String.replace(recipe_id, ~r/[^a-zA-Z0-9_\-]/, "_")
 
-    directory =
-      Application.get_env(
-        :hypatia,
-        :annealing_state_path,
-        Path.join(Paths.verisimdb_data(), "annealing-states")
-      )
-
-    Path.join(Path.expand(directory), "#{safe_id}.json")
+    Path.join(Path.expand(Paths.annealing_states()), "#{safe_id}.json")
   end
 end

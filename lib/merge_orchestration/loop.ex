@@ -271,7 +271,7 @@ defmodule Hypatia.MergeOrchestration.Loop do
        ) do
     Sensor.valid_subject?(repo, number, head) and repo in repos and
       file == String.replace(repo, "/", "__") <> "__" <> to_string(number) <> ".json" and
-      is_binary(digest) and Regex.match?(~r/^[0-9a-f]{64}$/, digest)
+      is_binary(digest) and Regex.match?(~r/\A[0-9a-f]{64}\z/, digest)
   end
 
   defp valid_batch_entry?(_, _), do: false

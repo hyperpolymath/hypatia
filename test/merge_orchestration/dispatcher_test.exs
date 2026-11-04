@@ -12,6 +12,7 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
         head_sha: String.duplicate("a", 40),
         event_id: "test:policy:1",
         observation_complete: true,
+        execution_cap: :arm_auto,
         change_class: :chore,
         change_level: :object,
         pool: :p2,
@@ -30,6 +31,42 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
     assert m["event_id"] == "test:policy:1"
     assert m["merge"]["head_sha"] == String.duplicate("a", 40)
     assert m["merge"]["pool"] == "P2"
+  end
+
+  test "direct public decision and manifest APIs default a missing execution cap to review" do
+    context = ctx(%{}) |> Map.delete(:execution_cap)
+    {decision, entry, _lease} = Dispatcher.dispatch(context)
+    assert decision.safety == :review
+    assert entry["strategy"] == "review"
+
+    batch = Dispatcher.decide_all([context])
+    assert batch.stats == %{total: 1, auto_execute: 0, review: 1, report_only: 0}
+    assert Enum.all?(batch.entries, &(&1["strategy"] == "review"))
+
+    dir = Path.join(System.tmp_dir!(), "moj-default-cap-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    assert {:ok, path, stats} =
+             Dispatcher.write_manifest([context],
+               dir: dir,
+               encode: fn item -> "STRATEGY=" <> item["strategy"] end
+             )
+
+    assert stats == batch.stats
+    assert File.read!(path) == "STRATEGY=review\n"
+  end
+
+  test "newline-suffixed subjects and events cannot serialize an explicit model arm" do
+    for overrides <- [
+          %{head_sha: String.duplicate("a", 40) <> "\n"},
+          %{event_id: "test:policy:1\n"}
+        ] do
+      {decision, entry, _lease} = Dispatcher.dispatch(ctx(overrides))
+      assert decision.safety == :arm_auto
+      assert entry["strategy"] == "review"
+      assert entry["merge"]["safety"] == "review"
+      assert entry["merge"]["rationale"] =~ "unqualified-observation"
+    end
   end
 
   test "legacy model arm without an assessed revision/event is review-only at serialization" do

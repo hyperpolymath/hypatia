@@ -46,7 +46,7 @@ defmodule Hypatia.PatternRegistry do
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
+  alias Hypatia.Paths
 
   @pa_rule_map %{
     "UncheckedAllocation" => "PA001",
@@ -311,11 +311,11 @@ defmodule Hypatia.PatternRegistry do
   end
 
   defp registry_path do
-    Path.join(Path.expand(@verisimdb_data_path), "patterns/registry.json")
+    Path.join(Path.expand(Paths.patterns()), "registry.json")
   end
 
   defp substitutions_path do
-    Path.join(Path.expand(@verisimdb_data_path), "recipes/proven-substitutions.json")
+    Path.join(Path.expand(Paths.recipes()), "proven-substitutions.json")
   end
 
   defp load_registry do

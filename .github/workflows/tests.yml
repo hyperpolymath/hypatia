@@ -116,6 +116,12 @@ jobs:
             test/outcome_tracker_runtime_store_test.exs \
             test/merge_orchestration/sensor_test.exs \
             test/merge_orchestration/loop_test.exs \
+            test/learning_runtime_store_test.exs \
+            test/merge_orchestration/strategist_test.exs \
+            test/merge_orchestration/dispatcher_test.exs \
+            test/merge_orchestration/baton_emitter_test.exs \
+            test/merge_orchestration/kin_competence_test.exs \
+            test/merge_orchestration/merge_orchestrate_task_test.exs \
             test/workflow_hardening_test.exs
 
       - name: Run E2E test suite

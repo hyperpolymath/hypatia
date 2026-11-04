@@ -11,7 +11,10 @@ found that the previous emitter's verifier map did not execute the farm gate
 or establish the downstream verifier/ledger contract. `BatonEmitter` now
 explicitly refuses mutation. The sketch below is retained as a proposal, not an
 operational guarantee. See link:06-observation-and-actuation-provenance.adoc[the
-current observation and execution boundary].
+current observation and execution boundary]. The Mix command rejects
+`--actuation baton` and `--actuation both` before starting a cycle or writing a
+manifest, including empty cycles. Use `--actuation manifest` for the available
+decision-artifact path; a manifest does not establish a completed merge.
 ====
 
 toc::[]

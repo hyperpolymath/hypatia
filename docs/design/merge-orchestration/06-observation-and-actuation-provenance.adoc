@@ -8,8 +8,10 @@ and a document containing a signature are not execution authorization. The
 production Sensor has no qualified signature/trust verifier. All Sensor-fed
 approvals are therefore capped at `review`; incomplete observations are
 non-executable. Monotone veto, meta, license, hold, draft and pool restrictions
-remain at least as conservative. Raw Strategist policy tests are models with
-explicit assumptions, not receipts from a live verified bot.
+remain at least as conservative. Direct Strategist and Dispatcher callers also
+default to review when `execution_cap` is absent or malformed. Tests of an
+uncapped policy model must supply `execution_cap: :arm_auto` explicitly; that
+input is an assumption, not a receipt from a live verified bot.
 
 The old Baton spec directly emitted `gh pr merge` and carried a descriptive
 `verifier` map. Nothing in this producer called the named farm gate, enforced
@@ -19,6 +21,14 @@ contract. `BatonEmitter.to_spec/2` now returns
 never calls a submission function. No alternate backend silently bypasses the
 farm. This is containment, not a claim that the proposed mesh integration is
 qualified or that signature verification has been implemented.
+
+`BatonEmitter.availability/0` reports the same unavailable executor error. The
+Mix command checks availability before starting a cycle: `--actuation baton`
+and `--actuation both` fail with a nonzero error even when there are no armed
+candidates. They submit nothing and leave an existing manifest unchanged;
+`both` cannot claim partial completion by writing a manifest first.
+`--actuation manifest` remains available. The pure Loop API's refusal records
+are descriptive results and do not establish execution or a successful merge.
 
 == Qualified observation batches
 
@@ -58,7 +68,9 @@ retained in the council input and its authenticity remains explicitly
 
 Sensor, Strategist and Dispatcher preserve the observed `head_sha` and
 `event_id`. The dispatcher independently downgrades a model arm without complete
-observation provenance to review. Pool strings use the farm's canonical
+observation provenance to review. SHA, event and batch-digest validators match
+the entire string; a final newline is not part of an admissible identifier.
+Pool strings use the farm's canonical
 `P0`/`P1`/`P2`/`P3`/`mass_squash` vocabulary rather than serializing lower-case
 Elixir atom names. This adapter does not fetch or substitute a newer head.
 
@@ -83,8 +95,12 @@ Focused tests exercise exact-head attestation selection, malformed/legacy
 observations, forged verification claims, complete/failed/changed receipts,
 digest and subject contradictions, missing and symlinked members, stable
 metadata across serialization, stronger veto/meta guards, and refusal to submit
-a Baton. Policy-model threshold tests and the independent KinGate tests remain
-separate from production authenticity claims.
+a Baton. Additional controls exercise missing/invalid execution caps, trailing
+newline identifiers, all three direct Dispatcher APIs, and the actual Mix task
+argument path for manifest output and refused Baton modes. Policy-model
+threshold tests and the independent KinGate tests remain separate from
+production authenticity claims. Test source is not an execution receipt;
+qualification results must identify the tested revision.
 
 No live GitHub merge, store publication, credential repair, scheduler enablement
 or signature/trust implementation is established by these offline tests.

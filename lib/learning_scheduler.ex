@@ -30,11 +30,6 @@ defmodule Hypatia.LearningScheduler do
   # pins.
   @action_sha_verify_interval_seconds 24 * 60 * 60
   @action_sha_cache_path "data/verified-action-shas.json"
-  @annealing_state_path Application.compile_env(
-                          :hypatia,
-                          :annealing_state_path,
-                          "data/verisim/annealing-states"
-                        )
 
   # --- Client API ---
 
@@ -812,7 +807,18 @@ defmodule Hypatia.LearningScheduler do
 
     case File.read(fleet_file) do
       {:ok, content} ->
-        signature = :crypto.hash(:sha256, content)
+        # Identical source bytes still need importing into a newly selected
+        # destination. Persisted source IDs, not this cache, prevent replay.
+        signature =
+          :crypto.hash(
+            :sha256,
+            :erlang.term_to_binary({
+              :fleet_import_cache_v2,
+              fleet_file,
+              Path.expand(Hypatia.Paths.outcomes()),
+              :crypto.hash(:sha256, content)
+            })
+          )
 
         if signature == previous_signature do
           {0, signature}
@@ -972,8 +978,9 @@ defmodule Hypatia.LearningScheduler do
 
   # Scans all persisted annealing state files and produces a summary
   # of stage distribution and drift/reheat counts.
-  defp report_annealing_state do
-    annealing_dir = Path.expand(@annealing_state_path)
+  @doc false
+  def report_annealing_state do
+    annealing_dir = Path.expand(Hypatia.Paths.annealing_states())
 
     stage_counts = %{nascent: 0, adolescent: 0, mature: 0, veteran: 0}
     reheated = 0

@@ -15,15 +15,13 @@ defmodule Hypatia.Neural.TrainingPipeline do
 
   require Logger
 
-  alias Hypatia.OutcomeTracker
+  alias Hypatia.{OutcomeTracker, Paths}
 
   alias Hypatia.Neural.{
     EchoStateNetwork,
     RadialNeuralNetwork,
     Rebalancer
   }
-
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   # --- ESN Training ---
 
@@ -47,7 +45,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
   listed or no recipe meets the threshold, returns an empty list.
   """
   def build_esn_training_data do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+    outcomes_dir = Path.expand(Paths.outcomes())
 
     outcomes =
       case File.ls(outcomes_dir) do
@@ -179,7 +177,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
                   "TrainingPipeline: rebalancing ESN series for #{primary.recipe_id} (corpus dips)"
                 )
 
-                data_path = Keyword.get(rebalance_opts, :data_path, "data/verisim")
+                data_path = Keyword.get(rebalance_opts, :data_path, Paths.verisimdb_data())
                 templates = Rebalancer.load_failure_templates(data_path)
 
                 if templates == [] do
@@ -244,7 +242,7 @@ defmodule Hypatia.Neural.TrainingPipeline do
   lists and targets is a list of floats.
   """
   def build_rbf_training_data do
-    registry_path = Path.join(Path.expand(@verisimdb_data_path), "patterns/registry.json")
+    registry_path = Path.join(Path.expand(Paths.patterns()), "registry.json")
 
     patterns =
       case File.read(registry_path) do

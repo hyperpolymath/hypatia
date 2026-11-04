@@ -15,24 +15,23 @@ defmodule Mix.Tasks.Hypatia.MergeOrchestrate do
 
   `--actuation` selects the actuation backend (default `manifest`):
 
-    * `manifest` — write `merge-decisions.jsonl`; the `.git-private-farm`
-      actuator (a separate, token-bearing process) polls and performs the merges.
-    * `baton` — submit one Bag-of-Actions Baton per armed decision. Each carries
-      `required_cap: "secret_access"`, which only the token-bearing
-      `mesh-github-runner` node holds — so the merge migrates off the (token-free)
-      brain to the runner, off GitHub Actions minutes.
-    * `both` — manifest as the durable record/fallback, Batons as the live path.
+    * `manifest` — write `merge-decisions.jsonl` for separate, explicitly
+      authorized farm actuation. Writing the manifest does not merge a PR.
+    * `baton` and `both` — currently unavailable: no qualified merge executor
+      exists. The task raises before starting a cycle, even with zero armed
+      decisions. It submits no Baton and writes no partial manifest.
+
+  Use `manifest` for the available decision-artifact path. The pure policy model
+  and descriptive refusal records do not establish an operational Baton backend.
   """
   use Mix.Task
 
-  alias Hypatia.MergeOrchestration.Scheduler
+  alias Hypatia.MergeOrchestration.{BatonEmitter, Scheduler}
 
   @actuations ~w(manifest baton both)
 
   @impl Mix.Task
   def run(argv) do
-    Mix.Task.run("app.start")
-
     {opts, _, _} =
       OptionParser.parse(argv, strict: [store: :string, holder: :string, actuation: :string])
 
@@ -41,17 +40,26 @@ defmodule Mix.Tasks.Hypatia.MergeOrchestrate do
       |> Keyword.take([:store, :holder])
       |> put_actuation(opts[:actuation])
 
+    require_backend!(Keyword.get(cycle_opts, :actuation, :manifest))
+    Mix.Task.run("app.start")
     result = Scheduler.cycle(cycle_opts)
 
-    summary =
-      [
-        result[:manifest_path],
-        result[:batons] && "#{length(result[:batons])} baton(s)"
-      ]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.join(" + ")
+    Mix.shell().info("[merge-orchestration] #{inspect(result.stats)} -> #{result.manifest_path}")
+  end
 
-    Mix.shell().info("[merge-orchestration] #{inspect(result.stats)} -> #{summary}")
+  defp require_backend!(:manifest), do: :ok
+
+  defp require_backend!(mode) when mode in [:baton, :both] do
+    case BatonEmitter.availability() do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Mix.raise(
+          "--actuation #{mode} unavailable: #{reason}; no cycle started, " <>
+            "no Baton submitted and no manifest written. Use --actuation manifest."
+        )
+    end
   end
 
   defp put_actuation(cycle_opts, nil), do: cycle_opts

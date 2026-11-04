@@ -15,7 +15,9 @@ defmodule Hypatia.MergeOrchestration.Strategist do
   attestations (artifact 3); a license/SPDX touch adds a symbolic owner-only
   veto. No I/O — this is a policy model, not a signature verifier. Runtime Sensor
   contexts carry an execution cap because their attestation authenticity is
-  unverified; model confidence cannot remove that cap.
+  unverified; model confidence cannot remove that cap. Direct callers also
+  default to review when the cap is missing or invalid. An explicit
+  `execution_cap: :arm_auto` is a policy-model assumption, not verification.
   """
 
   alias Hypatia.MergeOrchestration.KinCouncil
@@ -67,13 +69,20 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
       true ->
         {base, reason} = confidence |> confidence_to_safety() |> clamp_to_pool(ctx.pool)
-        capped = min_safety(base, Map.get(ctx, :execution_cap, :arm_auto))
+        capped = min_safety(base, execution_cap(ctx))
 
         {capped,
          if(capped != base,
            do: Map.get(ctx, :execution_blocker, "runtime-execution-cap"),
            else: reason
          )}
+    end
+  end
+
+  defp execution_cap(ctx) do
+    case Map.get(ctx, :execution_cap, :review) do
+      cap when cap in [:flag, :review, :arm_auto] -> cap
+      _ -> :review
     end
   end
 

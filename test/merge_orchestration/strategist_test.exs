@@ -11,13 +11,43 @@ defmodule Hypatia.MergeOrchestration.StrategistTest do
         change_class: :chore,
         change_level: :object,
         pool: :p2,
+        # Explicit policy-model assumption; this is not authenticated runtime evidence.
+        execution_cap: :arm_auto,
         attestations: [%{bot: "ci", verdict: :approve, confidence: 0.99}]
       },
       overrides
     )
   end
 
-  test "green chore in P2 -> squash + arm_auto, unclamped" do
+  test "missing or invalid execution caps cannot promote high confidence into an arm" do
+    for cap <- [:missing, nil, :unknown, "arm_auto"] do
+      context =
+        case cap do
+          :missing -> Map.delete(ctx(%{}), :execution_cap)
+          value -> ctx(%{execution_cap: value})
+        end
+
+      decision = Strategist.decide(context)
+      assert decision.confidence == 0.99
+      assert decision.safety == :review
+      assert decision.clamped_by == "runtime-execution-cap"
+    end
+  end
+
+  test "the default review cap cannot weaken veto, meta or pool restrictions" do
+    for overrides <- [
+          %{pool: :p0},
+          %{change_level: :meta},
+          %{attestations: [%{bot: "ci", verdict: :veto, rationale: "hold"}]}
+        ] do
+      decision = overrides |> ctx() |> Map.delete(:execution_cap) |> Strategist.decide()
+      assert decision.safety == :flag
+    end
+
+    assert Strategist.decide(ctx(%{execution_cap: :flag})).safety == :flag
+  end
+
+  test "green chore in P2 with an explicit model cap -> squash + arm_auto, unclamped" do
     d = Strategist.decide(ctx(%{}))
     assert d.method == :squash
     assert d.safety == :arm_auto

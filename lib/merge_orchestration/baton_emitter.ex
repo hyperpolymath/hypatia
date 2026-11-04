@@ -15,8 +15,11 @@ defmodule Hypatia.MergeOrchestration.BatonEmitter do
   alternate executor can silently bypass its checks.
   """
 
+  @doc "Whether a qualified merge executor is available; performs no submission."
+  def availability, do: {:error, :qualified_merge_executor_unavailable}
+
   @doc "No mutating spec can be constructed without a qualified merge executor."
-  def to_spec(_decision, _lease \\ %{}), do: {:error, :qualified_merge_executor_unavailable}
+  def to_spec(_decision, _lease \\ %{}), do: availability()
 
   @doc "Return explicit refusals for armed candidates; never submit a mutation."
   def emit(%{results: results}, _opts \\ []) do

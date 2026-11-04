@@ -132,11 +132,11 @@ defmodule Hypatia.MergeOrchestration.Sensor do
   end
 
   @doc false
-  def valid_sha?(sha), do: is_binary(sha) and Regex.match?(~r/^[0-9a-f]{40}$/, sha)
+  def valid_sha?(sha), do: is_binary(sha) and Regex.match?(~r/\A[0-9a-f]{40}\z/, sha)
 
   @doc false
   def valid_event?(event),
-    do: is_binary(event) and Regex.match?(~r/^[A-Za-z0-9][A-Za-z0-9_.:\/-]{0,255}$/, event)
+    do: is_binary(event) and Regex.match?(~r/\A[A-Za-z0-9][A-Za-z0-9_.:\/-]{0,255}\z/, event)
 
   defp strings?(xs), do: is_list(xs) and Enum.all?(xs, &(is_binary(&1) and &1 != ""))
   defp strings_or_empty(xs) when is_list(xs), do: Enum.filter(xs, &is_binary/1)

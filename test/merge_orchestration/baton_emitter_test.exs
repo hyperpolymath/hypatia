@@ -15,6 +15,8 @@ defmodule Hypatia.MergeOrchestration.BatonEmitterTest do
       route: %{authority_bot: "ci"}
     }
 
+    assert BatonEmitter.availability() == {:error, :qualified_merge_executor_unavailable}
+
     assert {:error, :qualified_merge_executor_unavailable} =
              BatonEmitter.to_spec(decision, %{"lease_id" => "L1"})
 

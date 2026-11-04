@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 defmodule Hypatia.MergeOrchestration.SensorTest do
   use ExUnit.Case, async: true
-  alias Hypatia.MergeOrchestration.Sensor
+  alias Hypatia.MergeOrchestration.{Dispatcher, Sensor}
   alias Hypatia.MergeOrchestration.TestObservationStore, as: Evidence
 
   defp obs(o), do: Map.merge(%{"repo" => "hyperpolymath/panll", "number" => 1, "files" => []}, o)
@@ -105,6 +105,35 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
 
     for {number, head} <- [{0, Evidence.head()}, {1, "abc"}, {"1", Evidence.head()}] do
       refute Sensor.valid_subject?("metadatastician/standards", number, head)
+    end
+  end
+
+  test "SHA and event identifiers must match the complete string" do
+    assert Sensor.valid_sha?(Evidence.head())
+    assert Sensor.valid_event?(Evidence.event())
+
+    for suffix <- ["\n", "\r\n", " "] do
+      refute Sensor.valid_sha?(Evidence.head() <> suffix)
+      refute Sensor.valid_event?(Evidence.event() <> suffix)
+    end
+
+    refute Sensor.valid_sha?("\n" <> Evidence.head())
+    refute Sensor.valid_event?("\n" <> Evidence.event())
+    refute Sensor.valid_subject?("hyperpolymath/a", 1, Evidence.head() <> "\n")
+  end
+
+  test "newline metadata cannot qualify an observation or become executable" do
+    for field <- ["head_sha", "base_sha", "event_id"] do
+      observation = Evidence.observation()
+      changed = Map.update!(observation, field, &(&1 <> "\n"))
+      refute Sensor.valid_observation?(changed)
+
+      context = Sensor.to_context(changed, "P3", [Evidence.attestation(changed)])
+      refute context.observation_complete
+      assert context.execution_cap == :flag
+      {decision, entry, _lease} = Dispatcher.dispatch(context)
+      assert decision.safety == :flag
+      assert entry["strategy"] == "report_only"
     end
   end
 

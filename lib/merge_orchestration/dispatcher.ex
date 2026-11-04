@@ -12,7 +12,8 @@ defmodule Hypatia.MergeOrchestration.Dispatcher do
   coordination lease (artifact 5) for the PR's territory.
 
   `dispatch/1` and `decide_all/1` are pure (data in, data out). `write_manifest/2`
-  is the thin operational glue that emits the merge-decision JSONL.
+  is the thin operational glue that emits the merge-decision JSONL. All three
+  use the Strategist's review cap when a caller omits an execution cap.
   """
 
   alias Hypatia.MergeOrchestration.{Sensor, Strategist}
