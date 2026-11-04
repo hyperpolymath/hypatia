@@ -1055,13 +1055,15 @@ defmodule Hypatia.Kyaml do
   defp scalar_from_raw(raw, at, style) do
     assert_no_control(raw, at, "plain")
 
-    # `@`, `` ` `` and `%` are indicators a plain scalar may not start with
-    # (YAML 1.2 ns-plain-first); `@` and `` ` `` are reserved for future use.
-    if String.first(raw) in ["@", "`", "%"],
+    # A plain scalar may not start with an indicator (YAML 1.2 ns-plain-first):
+    # `@`, `` ` `` and `%` ever, and `-`, `?` or `:` unless a safe character
+    # follows, so `a: - item` is not the string "- item" (`-1` and `-x` are
+    # plain scalars).
+    if plain_indicator_start?(raw),
       do:
         throw_error(
-          "RESERVED_INDICATOR",
-          "a plain scalar cannot start with `#{String.first(raw)}`; quote it",
+          "PLAIN_INDICATOR",
+          "a plain scalar cannot start with `#{String.first(raw)}` here; quote it",
           at
         )
 
@@ -1069,6 +1071,13 @@ defmodule Hypatia.Kyaml do
     if kind == :string, do: assert_ijson_string(value, at)
     %{kind: kind, value: value, raw: raw, loc: at, style: style, segments: []}
   end
+
+  defp plain_indicator_start?(<<c, _::binary>>) when c in [?@, ?`, ?%], do: true
+
+  defp plain_indicator_start?(<<c, rest::binary>>) when c in [?-, ??, ?:],
+    do: rest == "" or String.first(rest) in [" ", "\t"]
+
+  defp plain_indicator_start?(_), do: false
 
   defp parse_quoted(s, at) do
     {quote, s} = bump(s)
@@ -1572,6 +1581,14 @@ defmodule Hypatia.Kyaml do
     at = loc(s)
 
     if peek(s) in ~c"&*!", do: throw_key_property(at)
+
+    if peek(s) == ?? and peek(s, 1) in [?\s, ?\t, ?\n, nil],
+      do:
+        throw_error(
+          "UNSUPPORTED_COMPLEX_KEY",
+          "complex mapping keys (`? `) are outside the KYAML subset",
+          at
+        )
 
     if peek(s) in [?', ?"] do
       parse_quoted(s, at)
