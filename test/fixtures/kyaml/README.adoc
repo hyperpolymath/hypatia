@@ -28,7 +28,8 @@ and runs `test/kyaml_differential_test.exs`. Locally:
 
 [source,bash]
 ----
-bun test/fixtures/kyaml/kyq_dump.mjs ../kyq ../kyq/conformance/fixtures/kyaml/*/*.yaml .github/workflows/*.yml > /tmp/kyq.jsonl
+ln -s ../kyq .kyq    # the dumper reads kyq from .kyq, as CI checks it out
+bun test/fixtures/kyaml/kyq_dump.mjs .kyq/conformance/fixtures/kyaml/*/*.yaml .github/workflows/*.yml > /tmp/kyq.jsonl
 KYQ_DUMP=/tmp/kyq.jsonl mix test --only kyq_differential
 ----
 

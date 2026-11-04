@@ -433,7 +433,7 @@ jobs:
 
       - name: Dump kyq's parse of its fixtures and this repository's workflows
         run: |
-          bun test/fixtures/kyaml/kyq_dump.mjs .kyq \
+          bun test/fixtures/kyaml/kyq_dump.mjs \
             .kyq/conformance/fixtures/kyaml/valid/*.yaml \
             .kyq/conformance/fixtures/kyaml/invalid/*.yaml \
             .github/workflows/*.yml > "$RUNNER_TEMP/kyq.jsonl"
