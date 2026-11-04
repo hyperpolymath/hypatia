@@ -30,14 +30,21 @@ defmodule Hypatia.Neural.TrainingPipeline do
   @doc """
   Build ESN training data from outcome JSONL files.
 
-  Reads all .jsonl files from the outcomes/ directory, parses each line
-  as a JSON object, retains outcomes qualified by OutcomeTracker with a
-  non-empty recipe identity, and builds a running confidence time series
-  (cumulative success rate) for each recipe.
+  Reads `.jsonl` files from the configured outcomes directory and retains
+  objects qualified by `OutcomeTracker` with a non-blank string identity.
+  It uses `recipe_id`, falling back to `pattern` when `recipe_id` is nil or
+  false. A blank or invalid `recipe_id` does not fall back to `pattern`.
+
+  Each recipe's observations are sorted by `timestamp`, falling back to
+  `fixed_at` and then an empty string when the preceding value is nil or
+  false. The series is the cumulative success rate in that order; qualified
+  failures and false positives count as non-successes.
 
   Returns a list of maps sorted by series length (longest first), each
   containing :recipe_id, :series (list of floats 0.0-1.0), and :count.
-  Only recipes with >= 10 data points are included.
+  Only recipes with at least 10 qualified observations are included. Invalid
+  JSON lines and unreadable files are ignored; if the directory cannot be
+  listed or no recipe meets the threshold, returns an empty list.
   """
   def build_esn_training_data do
     outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
