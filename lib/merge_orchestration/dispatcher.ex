@@ -12,10 +12,11 @@ defmodule Hypatia.MergeOrchestration.Dispatcher do
   coordination lease (artifact 5) for the PR's territory.
 
   `dispatch/1` and `decide_all/1` are pure (data in, data out). `write_manifest/2`
-  is the thin operational glue that emits the merge-decision JSONL.
+  is the thin operational glue that emits the merge-decision JSONL. All three
+  use the Strategist's review cap when a caller omits an execution cap.
   """
 
-  alias Hypatia.MergeOrchestration.Strategist
+  alias Hypatia.MergeOrchestration.{Sensor, Strategist}
 
   @doc "Decide, then return `{decision, manifest_entry, lease}`."
   def dispatch(ctx) do
@@ -61,26 +62,53 @@ defmodule Hypatia.MergeOrchestration.Dispatcher do
 
   @doc "Map a decision onto the existing DispatchManifest entry shape, plus a `merge` extension."
   def to_manifest_entry(decision) do
+    # A pure policy-model arm without an observed subject/event is review-only.
+    # This adapter never manufactures a revision from the repository's live head.
+    decision = qualify_for_manifest(decision)
+
     %{
       "tier" => tier(decision.safety),
       "strategy" => strategy(decision.safety),
       "repo" => decision.pr.repo,
+      "event_id" => Map.get(decision, :event_id),
       "confidence" => decision.confidence,
       "severity" => "Info",
       "timestamp" => now(),
       "merge" => %{
         "pr_number" => decision.pr.number,
+        "head_sha" => Map.get(decision, :head_sha),
+        "observation_complete" => Map.get(decision, :observation_complete, false),
+        "evidence_authenticity" =>
+          to_string(Map.get(decision, :evidence_authenticity, :unspecified)),
         "method" => to_string(decision.method),
         "safety" => to_string(decision.safety),
         "route" => decision.route,
         "vetoes" => decision.vetoes,
         "change_class" => to_string(decision.change_class),
         "change_level" => to_string(decision.change_level),
-        "pool" => to_string(decision.pool),
+        "pool" => pool_name(decision.pool),
         "rationale" => decision.rationale
       }
     }
   end
+
+  defp qualify_for_manifest(%{safety: :arm_auto} = decision) do
+    if Sensor.valid_subject?(decision.pr.repo, decision.pr.number, Map.get(decision, :head_sha)) and
+         Sensor.valid_event?(Map.get(decision, :event_id)) and
+         Map.get(decision, :observation_complete, false) do
+      decision
+    else
+      %{decision | safety: :review, rationale: decision.rationale <> " [unqualified-observation]"}
+    end
+  end
+
+  defp qualify_for_manifest(decision), do: decision
+
+  defp pool_name(:p0), do: "P0"
+  defp pool_name(:p1), do: "P1"
+  defp pool_name(:p2), do: "P2"
+  defp pool_name(:p3), do: "P3"
+  defp pool_name(:mass_squash), do: "mass_squash"
 
   @doc "Mint the Kin.Gate coordination lease (artifact-5 schema) for this decision's territory."
   def lease_for(ctx, decision) do

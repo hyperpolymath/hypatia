@@ -41,6 +41,20 @@ defmodule Hypatia.Paths do
   @doc "Returns the dispatch subdirectory within verisimdb data."
   def dispatch, do: Path.join(verisimdb_data(), "dispatch")
 
+  @doc """
+  Returns the runtime annealing-state directory.
+
+  An explicit :annealing_state_path overrides the directory within the
+  currently selected verisimdb data store.
+  """
+  def annealing_states do
+    Application.get_env(
+      :hypatia,
+      :annealing_state_path,
+      Path.join(verisimdb_data(), "annealing-states")
+    )
+  end
+
   @doc "Returns the neural-states subdirectory within verisimdb data."
   def neural_states, do: Path.join(verisimdb_data(), "neural-states")
 

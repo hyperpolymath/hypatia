@@ -32,7 +32,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
+  alias Hypatia.Paths
 
   @store_map %{
     "scans" => "scans",
@@ -65,6 +65,9 @@ defmodule Hypatia.VCL.FileExecutor do
   cloned path as the data root.
   """
   def execute(ast, opts \\ []) do
+    # Resolve once per query. Remote clones replace this explicit local root.
+    opts = Keyword.put(opts, :data_path_override, expand_path(opts))
+
     case ast.source do
       {:store, store_id} ->
         execute_store_query(store_id, ast, opts)
@@ -87,13 +90,13 @@ defmodule Hypatia.VCL.FileExecutor do
   # Store Queries
   # ---------------------------------------------------------------------------
 
-  defp execute_store_query(store_id, ast, _opts) do
+  defp execute_store_query(store_id, ast, opts) do
     case Map.get(@store_map, store_id) do
       nil ->
         {:error, "Unknown store: #{store_id}"}
 
       dir ->
-        base_path = Path.join(expand_path(), dir)
+        base_path = Path.join(expand_path(opts), dir)
 
         results =
           case store_id do
@@ -118,7 +121,7 @@ defmodule Hypatia.VCL.FileExecutor do
   # Federation Queries (cross-store)
   # ---------------------------------------------------------------------------
 
-  defp execute_federation_query(pattern, drift_policy, ast, _opts) do
+  defp execute_federation_query(pattern, drift_policy, ast, opts) do
     # Federation patterns like /scans/*, /recipes/*, etc.
     store_name =
       pattern
@@ -131,11 +134,11 @@ defmodule Hypatia.VCL.FileExecutor do
         # Query across ALL stores
         results =
           Enum.flat_map(["scans", "patterns", "recipes", "outcomes"], fn store ->
-            base_path = Path.join(expand_path(), store)
+            base_path = Path.join(expand_path(opts), store)
 
             case store do
               "scans" -> load_json_directory(base_path, ".json")
-              "patterns" -> load_single_json(Path.join(expand_path(), "patterns/registry.json"))
+              "patterns" -> load_single_json(Path.join(expand_path(opts), "patterns/registry.json"))
               "recipes" -> load_json_directory(base_path, ".json", "recipe-")
               "outcomes" -> load_jsonl_directory(base_path)
               _ -> []
@@ -143,12 +146,12 @@ defmodule Hypatia.VCL.FileExecutor do
           end)
 
         filtered = apply_where(results, ast.where)
-        drifted = apply_drift_policy(filtered, drift_policy)
+        drifted = apply_drift_policy(filtered, drift_policy, opts)
         paginated = apply_pagination(drifted, ast.limit, ast.offset)
         {:ok, paginated}
 
       dir ->
-        base_path = Path.join(expand_path(), dir)
+        base_path = Path.join(expand_path(opts), dir)
 
         results =
           cond do
@@ -158,7 +161,7 @@ defmodule Hypatia.VCL.FileExecutor do
           end
 
         filtered = apply_where(results, ast.where)
-        drifted = apply_drift_policy(filtered, drift_policy)
+        drifted = apply_drift_policy(filtered, drift_policy, opts)
         paginated = apply_pagination(drifted, ast.limit, ast.offset)
         {:ok, paginated}
     end
@@ -205,7 +208,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
   # Execute a query with an explicit data path override. Dispatches to the
   # same store/federation/hexad logic but resolves paths against the override
-  # directory instead of the default @verisimdb_data_path.
+  # directory instead of the current local verisim data store.
   defp execute_with_path(ast, opts) do
     case ast.source do
       {:store, store_id} ->
@@ -221,7 +224,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
   # Store query against an arbitrary base path (used for remote clones).
   defp execute_store_query_at(store_id, ast, opts) do
-    base = Keyword.get(opts, :data_path_override, expand_path())
+    base = expand_path(opts)
 
     case Map.get(@store_map, store_id) do
       nil ->
@@ -251,7 +254,7 @@ defmodule Hypatia.VCL.FileExecutor do
 
   # Federation query against an arbitrary base path (used for remote clones).
   defp execute_federation_query_at(pattern, drift_policy, ast, opts) do
-    base = Keyword.get(opts, :data_path_override, expand_path())
+    base = expand_path(opts)
 
     store_name =
       pattern
@@ -276,7 +279,7 @@ defmodule Hypatia.VCL.FileExecutor do
           end)
 
         filtered = apply_where(results, ast.where)
-        drifted = apply_drift_policy(filtered, drift_policy)
+        drifted = apply_drift_policy(filtered, drift_policy, opts)
         paginated = apply_pagination(drifted, ast.limit, ast.offset)
         {:ok, paginated}
 
@@ -291,7 +294,7 @@ defmodule Hypatia.VCL.FileExecutor do
           end
 
         filtered = apply_where(results, ast.where)
-        drifted = apply_drift_policy(filtered, drift_policy)
+        drifted = apply_drift_policy(filtered, drift_policy, opts)
         paginated = apply_pagination(drifted, ast.limit, ast.offset)
         {:ok, paginated}
     end
@@ -301,21 +304,21 @@ defmodule Hypatia.VCL.FileExecutor do
   # Hexad Queries (single entity by ID)
   # ---------------------------------------------------------------------------
 
-  defp execute_hexad_query(entity_id, ast, _opts) do
+  defp execute_hexad_query(entity_id, ast, opts) do
     # Entity ID could be a repo name, pattern ID, or recipe ID
     result =
       cond do
         # Try as scan (repo name)
-        File.exists?(scan_path(entity_id)) ->
-          load_single_json(scan_path(entity_id))
+        File.exists?(scan_path(entity_id, opts)) ->
+          load_single_json(scan_path(entity_id, opts))
 
         # Try as recipe
-        File.exists?(recipe_path(entity_id)) ->
-          load_single_json(recipe_path(entity_id))
+        File.exists?(recipe_path(entity_id, opts)) ->
+          load_single_json(recipe_path(entity_id, opts))
 
         # Try as pattern ID in registry
         true ->
-          case load_single_json(Path.join(expand_path(), "patterns/registry.json")) do
+          case load_single_json(Path.join(expand_path(opts), "patterns/registry.json")) do
             [%{"patterns" => patterns}] ->
               case Map.get(patterns, entity_id) do
                 nil -> []
@@ -471,10 +474,10 @@ defmodule Hypatia.VCL.FileExecutor do
   # | "aggressive"    | No discount (trust cross-repo equally)              |
   # | "language_aware"| Full within language family, 70% discount otherwise |
 
-  defp apply_drift_policy(results, nil), do: results
-  defp apply_drift_policy(results, ""), do: results
+  defp apply_drift_policy(results, nil, _opts), do: results
+  defp apply_drift_policy(results, "", _opts), do: results
 
-  defp apply_drift_policy(results, policy_str) when is_binary(policy_str) do
+  defp apply_drift_policy(results, policy_str, opts) when is_binary(policy_str) do
     policy = parse_drift_policy(policy_str)
 
     case policy do
@@ -489,14 +492,14 @@ defmodule Hypatia.VCL.FileExecutor do
         apply_confidence_discount(results, 0.75)
 
       :language_aware ->
-        apply_language_aware_discount(results)
+        apply_language_aware_discount(results, opts)
 
       _ ->
         results
     end
   end
 
-  defp apply_drift_policy(results, _), do: results
+  defp apply_drift_policy(results, _, _opts), do: results
 
   defp parse_drift_policy(str) do
     case String.downcase(String.trim(str)) do
@@ -540,12 +543,12 @@ defmodule Hypatia.VCL.FileExecutor do
   # For language-aware policy, group results by repo language family
   # and apply full confidence within-family, discounted cross-family.
   # Results without a detectable repo get moderate discount.
-  defp apply_language_aware_discount(results) do
+  defp apply_language_aware_discount(results, opts) do
     language_families = Hypatia.CrossRepoLearning.language_families()
 
     Enum.map(results, fn item ->
       repo = Map.get(item, "repo", "")
-      lang = detect_item_language(item, repo)
+      lang = detect_item_language(item, repo, opts)
       family = Map.get(language_families, lang, :unknown)
 
       # Tag each result with its language family for downstream use
@@ -559,15 +562,15 @@ defmodule Hypatia.VCL.FileExecutor do
   end
 
   # Try to determine language from the item itself or from scan data
-  defp detect_item_language(item, repo) do
+  defp detect_item_language(item, repo, opts) do
     cond do
       Map.has_key?(item, "primary_language") ->
         String.downcase(Map.get(item, "primary_language", "unknown"))
 
       repo != "" ->
-        Hypatia.CrossRepoLearning.drift_discount(:language_aware, repo, repo)
-        # We just need the language, not the discount -- detect via scan
-        scan_path = Path.join([expand_path(), "scans", "#{repo}.json"])
+        # Use the same selected source as the queried outcomes, including
+        # an explicit remote-clone root. No second local-store lookup.
+        scan_path = Path.join([expand_path(opts), "scans", "#{repo}.json"])
 
         case File.read(scan_path) do
           {:ok, content} ->
@@ -718,13 +721,17 @@ defmodule Hypatia.VCL.FileExecutor do
   # Path Helpers
   # ---------------------------------------------------------------------------
 
-  defp expand_path, do: Path.expand(@verisimdb_data_path)
-
-  defp scan_path(repo_name) do
-    Path.join([expand_path(), "scans", "#{repo_name}.json"])
+  defp expand_path(opts) do
+    opts
+    |> Keyword.get(:data_path_override, Paths.verisimdb_data())
+    |> Path.expand()
   end
 
-  defp recipe_path(recipe_id) do
-    Path.join([expand_path(), "recipes", "#{recipe_id}.json"])
+  defp scan_path(repo_name, opts) do
+    Path.join([expand_path(opts), "scans", "#{repo_name}.json"])
+  end
+
+  defp recipe_path(recipe_id, opts) do
+    Path.join([expand_path(opts), "recipes", "#{recipe_id}.json"])
   end
 end

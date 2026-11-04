@@ -332,6 +332,92 @@ defmodule Hypatia.Rules.CodeSafetyTest do
       assert Enum.any?(findings, &(&1.rule == :agda_postulate))
     end
 
+    test "Agda identifiers containing postulate are not declaration keywords" do
+      for name <- [
+            "no-unconditional-postulate-promotion",
+            "postulate-proof",
+            "proof-postulate",
+            "postulate?",
+            "postulate'",
+            "postulate₁",
+            "⊢postulate"
+          ] do
+        code = "#{name} : Set₁\n#{name} = Set\n"
+        findings = CodeSafety.scan_content(code, "agda")
+        refute Enum.any?(findings, &(&1.rule == :agda_postulate)), name
+      end
+    end
+
+    test "Agda postulate declarations retain critical severity across layout forms" do
+      for code <- [
+            "postulate A : Set\n",
+            "postulate\n  A : Set\n",
+            "private postulate A : Set\n",
+            "module M where postulate A : Set\n",
+            "f : Set₁\nf = A\n  where\n    postulate A : Set₁\n",
+            "postulate{- declaration separator -} A : Set\n",
+            "\uFEFFpostulate A : Set\n"
+          ] do
+        assert [%{rule: :agda_postulate, severity: :critical, occurrences: 1}] =
+                 CodeSafety.scan_content(code, "agda")
+      end
+    end
+
+    test "Agda inline and nested block comments are not declarations" do
+      code = """
+      module M where
+      harmless : Set₁ -- postulate A : Set
+      harmless = Set
+      {- outer comment
+         {- inner comment -} postulate B : Set
+      -}
+      """
+
+      refute Enum.any?(CodeSafety.scan_content(code, "agda"), &(&1.rule == :agda_postulate))
+    end
+
+    test "Agda strings cannot create a postulate finding or start comments" do
+      code = ~S"""
+      text = "postulate A : Set -- {- text -}"
+      escaped = "\" postulate B : Set \""
+      """
+
+      refute Enum.any?(CodeSafety.scan_content(code, "agda"), &(&1.rule == :agda_postulate))
+    end
+
+    test "Agda comments and strings preserve the line of a real postulate" do
+      code = ~S"""
+      {- outer
+         {- nested -} postulate not-code : Set
+      -}
+      text = "{- postulate also-not-code : Set"
+      postulate A : Set
+      """
+
+      assert [%{rule: :agda_postulate, severity: :critical, occurrences: 1, lines: [5]}] =
+               CodeSafety.scan_content(code, "agda")
+    end
+
+    test "Agda double-quote character literals cannot hide later declarations" do
+      for literal <- [~S('"'), ~S('\"')] do
+        code = "quote = #{literal}\npostulate A : Set\n"
+
+        assert [%{rule: :agda_postulate, severity: :critical, occurrences: 1, lines: [2]}] =
+                 CodeSafety.scan_content(code, "agda")
+      end
+    end
+
+    test "Agda real postulates remain visible beside the original safe identifier" do
+      code = """
+      no-unconditional-postulate-promotion : Set₁
+      no-unconditional-postulate-promotion = Set
+      postulate A : Set
+      """
+
+      assert [%{rule: :agda_postulate, severity: :critical, occurrences: 1, lines: [3]}] =
+               CodeSafety.scan_content(code, "agda")
+    end
+
     test "Idris2 `||` boolean OR is NOT a docstring (regex requires 3+ pipes)" do
       code = """
       andThen : Bool -> Bool -> Bool

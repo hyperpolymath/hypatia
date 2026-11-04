@@ -177,7 +177,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
-          curl -fsSL -o "$HOME/.local/bin/nickel" \
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --connect-timeout 20 --max-time 60 \
+            --retry 3 --retry-delay 2 --retry-max-time 180 \
+            -o "$HOME/.local/bin/nickel" \
             "https://github.com/tweag/nickel/releases/download/${NICKEL_VERSION}/nickel-x86_64-linux"
           echo "${NICKEL_SHA256}  $HOME/.local/bin/nickel" | sha256sum -c -
           chmod +x "$HOME/.local/bin/nickel"

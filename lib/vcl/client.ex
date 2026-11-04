@@ -96,8 +96,15 @@ defmodule Hypatia.VCL.Client do
 
   @impl true
   def handle_call({:query, query_string, opts}, _from, state) do
-    # Check cache first
-    cache_key = :erlang.phash2({query_string, opts})
+    # Cache and execute against the same selected root. A runtime store
+    # change must not return a still-live cache entry from the old store.
+    data_path =
+      opts
+      |> Keyword.get(:data_path_override, Hypatia.Paths.verisimdb_data())
+      |> Path.expand()
+
+    opts = Keyword.put(opts, :data_path_override, data_path)
+    cache_key = {query_string, opts}
     now = System.monotonic_time(:millisecond)
 
     case Map.get(state.cache, cache_key) do
