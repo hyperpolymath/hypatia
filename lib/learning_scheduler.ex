@@ -30,11 +30,6 @@ defmodule Hypatia.LearningScheduler do
   # pins.
   @action_sha_verify_interval_seconds 24 * 60 * 60
   @action_sha_cache_path "data/verified-action-shas.json"
-  @fleet_path Application.compile_env(
-                :hypatia,
-                :fleet_path,
-                "~/Documents/hyperpolymath-repos/gitbot-fleet"
-              )
   @annealing_state_path Application.compile_env(
                           :hypatia,
                           :annealing_state_path,
@@ -807,10 +802,11 @@ defmodule Hypatia.LearningScheduler do
     |> Base.encode16(case: :lower)
   end
 
-  defp ingest_fleet_outcomes(previous_signature) do
+  @doc false
+  def ingest_fleet_outcomes(previous_signature) do
     fleet_file =
       Path.join([
-        Path.expand(@fleet_path),
+        Path.expand(Hypatia.Paths.fleet()),
         "shared-context/learning/fix-outcomes.jsonl"
       ])
 

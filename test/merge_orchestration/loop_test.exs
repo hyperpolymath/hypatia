@@ -65,6 +65,26 @@ defmodule Hypatia.MergeOrchestration.LoopTest do
     assert File.ls!(Path.join(store, "leases")) == []
   end
 
+  test "a complete batch includes canonical standards without lifting review or meta guards" do
+    observations = [
+      Evidence.observation(),
+      Evidence.observation(%{"repo" => "metadatastician/standards", "number" => 2}),
+      Evidence.observation(%{
+        "repo" => "metadatastician/standards",
+        "number" => 3,
+        "files" => ["rulesets/main.json"]
+      })
+    ]
+
+    store = Evidence.seed(observations: observations)
+    cleanup(store)
+    result = Loop.run(store: store, acquire: &no_acquire/1)
+    assert result.stats == %{total: 3, armed: 0, deferred: 0, blocked: 0, review: 2, flagged: 1}
+    assert result.leases == []
+    assert File.ls!(Path.join(store, "leases")) == []
+    assert File.read!(result.manifest_path) =~ "metadatastician/standards"
+  end
+
   test "unlisted historical records are retained without becoming current observations" do
     store = Evidence.seed()
     cleanup(store)

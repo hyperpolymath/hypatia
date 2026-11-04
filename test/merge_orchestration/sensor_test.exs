@@ -72,6 +72,42 @@ defmodule Hypatia.MergeOrchestration.SensorTest do
     end
   end
 
+  test "canonical standards subjects qualify without trusting renamed or stale attestations" do
+    for repo <- ["metadatastician/standards", "Metadatastician/Standards"] do
+      observation = Evidence.observation(%{"repo" => repo, "files" => ["Cargo.lock"]})
+      matching = Evidence.attestation(observation)
+      former = Evidence.attestation(%{observation | "repo" => "hyperpolymath/standards"})
+      stale = Evidence.attestation(%{observation | "head_sha" => String.duplicate("b", 40)})
+
+      assert Sensor.valid_subject?(repo, 1, Evidence.head())
+      assert Sensor.valid_observation?(observation)
+      context = Sensor.to_context(observation, "P2", [matching, former, stale])
+      assert context.observation_complete
+      assert context.execution_cap == :review
+      assert context.evidence_authenticity == :unverified
+      assert [%{subject: subject}] = context.attestations
+      assert subject == Map.take(observation, ["repo", "number", "head_sha"])
+    end
+  end
+
+  test "the standards mapping does not admit unrelated owners or malformed subjects" do
+    for repo <- [
+          "metadatastician/unrelated",
+          "other/standards",
+          "metadatastician/standards-extra",
+          "metadatastician/standards/extra",
+          "metadatastician/../standards",
+          "metadatastician/standards\n",
+          "hyperpolymath/panll\n"
+        ] do
+      refute Sensor.valid_subject?(repo, 1, Evidence.head())
+    end
+
+    for {number, head} <- [{0, Evidence.head()}, {1, "abc"}, {"1", Evidence.head()}] do
+      refute Sensor.valid_subject?("metadatastician/standards", number, head)
+    end
+  end
+
   test "ordinary library code is object-level" do
     assert {_, :object, _} = Sensor.classify(obs(%{"files" => ["lib/x.ex", "lib/y.ex"]}))
   end

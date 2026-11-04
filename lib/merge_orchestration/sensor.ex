@@ -125,7 +125,9 @@ defmodule Hypatia.MergeOrchestration.Sensor do
 
   @doc false
   def valid_subject?(repo, number, head) do
-    is_binary(repo) and Regex.match?(~r/^hyperpolymath\/[A-Za-z0-9_.-]+$/, repo) and
+    is_binary(repo) and
+      (Regex.match?(~r/\Ahyperpolymath\/[A-Za-z0-9_.-]+\z/, repo) or
+         Hypatia.Rules.StandardsRepo.name?(repo)) and
       not String.contains?(repo, "..") and is_integer(number) and number > 0 and valid_sha?(head)
   end
 
