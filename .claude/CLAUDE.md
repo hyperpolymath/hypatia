@@ -8,12 +8,12 @@ Hypatia is the neurosymbolic CI/CD intelligence layer for the hyperpolymath ecos
 > against the tree on 2026-08-07. If you change the shape of the system, re-measure
 > (`ls lib/**/*.ex | wc -l`, `grep -c "export fn" ffi/zig/src/main.zig`, the child list in
 > `lib/application.ex`) rather than editing a number by eye. Known-stale claims and the
-> full audit live in `docs/DEBT-REGISTER.md`.
+> full audit live in `docs/DEBT-REGISTER.adoc`.
 
 ## Architecture
 
 ```
-Hypatia                       # 149 Elixir modules total (`shopt -s globstar; ls lib/**/*.ex | wc -l`)
+Hypatia                       # 150 Elixir source files under lib/ (recursive tree count, 2026-11-04)
 ├── Elixir pipeline          # core: pattern analysis, dispatch, learning
 ├── Merge orchestration       # 12 modules — leases, ledger, ticker (largest subsystem)
 ├── Kin subsystem             # 6 modules — contingency, arbiter, gate, watchdog
@@ -152,7 +152,8 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 | `sequence_model.ex` | Sequence | Sequential dispatch modelling |
 | `blackboard.ex` | ETS | Shared board all 8 networks read/write, six phases |
 | `coordinator.ex` | GenServer | Orchestrates all 8 networks over the blackboard |
-| `persistence.ex` | — | Warm-restart state for all 8 networks |
+| `persistence.ex` | — | Matching source snapshots; ESN/LSM summaries; trust rebuilt |
+| `source_store.ex` | — | Captured root identity and explicit lifecycle refusal |
 | `rebalancer.ex` | — | Training-data rebalancing, strategies A/B/C |
 | `prover_recommender.ex` | — | Recommends a prover for a proof obligation |
 
@@ -162,7 +163,7 @@ OutcomeTracker.record_outcome()         -- Feedback loop
 |--------|---------|
 | `training_pipeline.ex` | ESN/RBF training from real verisim-data outcomes + pattern vectors |
 
-Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and patterns/registry.json for RBF (8-D feature vectors). Coordinator's `:force_cycle` triggers training automatically.
+Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and patterns/registry.json for RBF (8-D feature vectors). `Coordinator.force_cycle/0` admits a source-bound queued request; `:ok` does not claim completed training. Status and health calls refuse mismatched or blocked lifecycles. See `docs/architecture/neural-source-lifecycle.adoc` for the return contracts and qualification boundary.
 
 ### Idris2 ABI (src/Hypatia/ABI/)
 
@@ -297,7 +298,7 @@ into redoing finished work.
 9. **Zig FFI is ungated** — 18 exports and 16 connectors, no `zig build` in any workflow.
 
 The full evidence-backed audit, including CI/CD, licence, proof and metadata debt, is
-`docs/DEBT-REGISTER.md`. Read it before trusting any count in an older document.
+`docs/DEBT-REGISTER.adoc`. Read it before trusting any count in an older document.
 
 ## Code Style
 

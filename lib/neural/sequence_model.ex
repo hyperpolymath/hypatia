@@ -21,6 +21,8 @@ defmodule Hypatia.Neural.SequenceModel do
 
   use GenServer
 
+  alias Hypatia.Neural.{Blackboard, SourceStore}
+
   defstruct [
     # current hidden state
     :hidden_state,
@@ -31,7 +33,10 @@ defmodule Hypatia.Neural.SequenceModel do
     # maximum sequence length
     :max_sequence,
     # trained weights (nil until trained)
-    :weights
+    :weights,
+    source_store: nil,
+    source_status: :ready,
+    source_error: nil
   ]
 
   def start_link(opts \\ []) do
@@ -41,6 +46,7 @@ defmodule Hypatia.Neural.SequenceModel do
   @impl true
   def init(_opts) do
     state = %__MODULE__{
+      source_store: SourceStore.current(),
       hidden_state: nil,
       hidden_dim: 32,
       sequence_buffer: [],
@@ -53,12 +59,12 @@ defmodule Hypatia.Neural.SequenceModel do
 
   @doc "Predict the next decision based on trace history."
   def predict(finding) do
-    GenServer.call(__MODULE__, {:predict, finding})
+    GenServer.call(__MODULE__, {:predict, SourceStore.current(), finding, Blackboard})
   end
 
   @doc "Append a decision to the sequence buffer (for training)."
   def observe(decision) do
-    GenServer.cast(__MODULE__, {:observe, decision})
+    GenServer.call(__MODULE__, {:observe, SourceStore.current(), decision})
   end
 
   @doc """
@@ -72,40 +78,84 @@ defmodule Hypatia.Neural.SequenceModel do
 
   @doc """
   Restore network state from a previously snapshotted map. Fields
-  not present in the map keep their fresh-init defaults. Silently
-  ignored if no data is provided.
+  not present in the map keep their fresh-init defaults. Unbound or
+  foreign-source maps are refused and remain available through raw diagnostics.
   """
   def restore(map) when is_map(map) do
-    GenServer.call(__MODULE__, {:restore, map})
+    GenServer.call(__MODULE__, {:restore, SourceStore.current(), map})
   end
 
-  def restore(_), do: :ok
+  def restore(_), do: {:error, :unbound_snapshot}
 
   @impl true
-  def handle_call({:predict, _finding}, _from, state) do
-    # Read full blackboard context
-    _blackboard = Hypatia.Neural.Blackboard.snapshot()
+  def handle_call({:predict, source, _finding, blackboard}, _from, state) do
+    SourceStore.reply(state, source, fn ->
+      # Read full blackboard context
+      _context = SourceStore.accept!(Blackboard.snapshot_source(source, blackboard))
 
-    # Predict from sequence buffer (placeholder -- needs training)
-    prediction =
-      case state.sequence_buffer do
-        [] -> %{next_step: "unknown", confidence: 0.0}
-        [last | _] -> %{next_step: last, confidence: 0.3}
-      end
+      # Predict from sequence buffer (placeholder -- needs training)
+      prediction =
+        case state.sequence_buffer do
+          [] -> %{next_step: "unknown", confidence: 0.0}
+          [last | _] -> %{next_step: last, confidence: 0.3}
+        end
 
-    result = %{
-      predicted_next: prediction.next_step,
-      confidence: prediction.confidence,
-      sequence_length: length(state.sequence_buffer),
-      model_trained: state.weights != nil
-    }
+      result = %{
+        predicted_next: prediction.next_step,
+        confidence: prediction.confidence,
+        sequence_length: length(state.sequence_buffer),
+        model_trained: state.weights != nil
+      }
 
-    Hypatia.Neural.Blackboard.write(:sequence, :prediction, result)
+      SourceStore.accept!(Blackboard.write_source(source, :sequence, :prediction, result, blackboard))
 
-    {:reply, result, state}
+      {result, state}
+    end)
   end
 
   def handle_call(:get_state, _from, state) do
+    state = SourceStore.observe(state)
+    {:reply, snapshot(state), state}
+  end
+
+  def handle_call({:snapshot, source}, _from, state) do
+    SourceStore.reply(state, source, fn -> {{:ok, snapshot(state)}, state} end)
+  end
+
+  def handle_call({:restore, source, map}, _from, state) do
+    SourceStore.reply(state, source, fn ->
+      unless SourceStore.snapshot_matches?(map, source),
+        do: raise(SourceStore.Refusal, reason: :unbound_or_foreign_snapshot)
+
+      restored = %{
+        state
+        | hidden_dim: Map.get(map, "hidden_dim", state.hidden_dim),
+          max_sequence: Map.get(map, "max_sequence", state.max_sequence),
+          sequence_buffer: Map.get(map, "sequence_buffer", state.sequence_buffer),
+          weights: Map.get(map, "weights", state.weights)
+      }
+
+      {:ok, restored}
+    end)
+  end
+
+  def handle_call({:observe, source, decision}, _from, state) do
+    SourceStore.reply(state, source, fn ->
+      buffer = [decision | state.sequence_buffer] |> Enum.take(state.max_sequence)
+      {:ok, %{state | sequence_buffer: buffer}}
+    end)
+  end
+
+  def handle_call(_unbound_request, _from, state) do
+    {:reply, {:error, :unbound_request}, SourceStore.refuse(state, :unbound_request)}
+  end
+
+  @impl true
+  def handle_cast(_unbound_request, state) do
+    {:noreply, SourceStore.refuse(state, :unbound_request)}
+  end
+
+  defp snapshot(state) do
     snap = %{
       "hidden_dim" => state.hidden_dim,
       "max_sequence" => state.max_sequence,
@@ -114,27 +164,7 @@ defmodule Hypatia.Neural.SequenceModel do
       "trained" => state.weights != nil
     }
 
-    {:reply, snap, state}
+    SourceStore.tag(snap, state)
   end
 
-  def handle_call({:restore, map}, _from, state) do
-    restored = %{
-      state
-      | hidden_dim: Map.get(map, "hidden_dim", state.hidden_dim),
-        max_sequence: Map.get(map, "max_sequence", state.max_sequence),
-        sequence_buffer: Map.get(map, "sequence_buffer", state.sequence_buffer),
-        weights: Map.get(map, "weights", state.weights)
-    }
-
-    {:reply, :ok, restored}
-  end
-
-  @impl true
-  def handle_cast({:observe, decision}, state) do
-    buffer =
-      [decision | state.sequence_buffer]
-      |> Enum.take(state.max_sequence)
-
-    {:noreply, %{state | sequence_buffer: buffer}}
-  end
 end

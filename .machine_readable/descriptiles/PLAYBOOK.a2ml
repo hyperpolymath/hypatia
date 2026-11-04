@@ -54,7 +54,8 @@ steps = [
 [maintenance-operations]
 baseline-audit = "mix test && cargo test && just validate"
 hard-pass-gate = "mix test 0 failures (233 :verisim_data excluded by design)"
-neural-retrain = "GenServer.call(Hypatia.Neural.Coordinator, :force_cycle)"
+neural-retrain = "Hypatia.Neural.Coordinator.force_cycle() — :ok means queued; inspect Coordinator.status() for source refusal and cycle completion"
+neural-source-lifecycle = "docs/architecture/neural-source-lifecycle.adoc — an observed data-root change requires an explicit decision and fresh matching cohort; no automatic relabel/restart"
 scan-estate = "just scan (runs panic-attack assail across estate, writes to verisim-data)"
 dispatch-run = "just dispatch (runs dispatch-runner.sh against pending.jsonl)"
 crg-check = "Review STATE.a2ml [project-context] crg-grade vs crg-grade-target"

@@ -298,3 +298,13 @@ actions = [
 #             Benchmarks confirmed real in fixer/benches/hypatia_bench.rs (7 benches, not stubs).
 # 2026-04-03: Added 3 new rules: WF013 (permissions typo detection), GS007 (stale branch detection),
 #             SD013 (gitignore path-scope detection). 279 lines of new rule code, 13 tests.
+
+[neural-source-lifecycle]
+status = "authored-pending-hosted-qualification"
+checkpoint-date = "2026-11-04"
+contract = "docs/architecture/neural-source-lifecycle.adoc"
+source-identity = "expanded configured data-root pathname; not content authentication"
+new-regression-source = "test/neural_source_store_lifecycle_test.exs"
+authored-new-test-functions = 22
+qualification = "No execution receipt for this new lifecycle candidate. Existing runtime-path test receipts do not qualify it. Exact-source compile, focused and normal full gates remain required."
+authority = "No automatic restart, dispatch, or deployment promotion from a source refusal."

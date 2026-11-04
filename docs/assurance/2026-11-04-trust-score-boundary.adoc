@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Qualified support and trust snapshots
+
+The graph ranks the subgraph supported by outcomes accepted by
+`OutcomeTracker.qualified_outcome?/1` and carrying a positive success edge.
+Recipe inventory alone is not successful evidence. A node with no such edge,
+including an entity observed only in qualified failures or false positives,
+keeps the existing neutral score of `0.5`. It contributes no PageRank mass and
+does not change normalization of the supported subgraph.
+
+These are relative ranking scores, not calibrated success probabilities,
+cryptographic attestations or authority to dispatch. Negative outcomes remain
+in the graph's observations/nodes but do not create positive edges. A separate
+negative penalty and time decay are still unimplemented; this change does not
+claim that mixed success/failure histories have a calibrated risk score.
+
+== Startup and persistence
+
+The coordinator rebuilds the graph from the currently selected runtime data
+store at startup and every learning cycle. It never overlays saved trust
+scores. Legacy, current-labelled, malformed and future-version snapshots have
+no restore authority. This is necessary even for structurally valid snapshots:
+their outcomes may have been removed, invalidated or requalified since saving.
+
+New trust snapshots use `schema_version: 2` and
+`restore_policy: recompute_from_current_qualified_outcomes`. Their scores and
+edges remain useful diagnostic history. The label does not authenticate them
+or enable hydration. Old files are retained until ordinary persistence replaces
+them; no migration deletes or edits the historical outcome corpus. Learned
+network restoration outside the trust graph retains its existing behavior.
+
+Both graph loading and neural snapshot persistence use `Hypatia.Paths` to
+resolve the current runtime store. Changing that configured store therefore
+changes the source read by the next rebuild and the destination of new snapshots.
+Outcome recording, replay identity lookup and recipe confidence updates resolve
+that same runtime store. Fleet output uses the runtime fleet setting. An explicit
+annealing-directory override remains supported; without one, annealing state
+lives under the selected data store. This does not claim atomic reconfiguration
+in the middle of a running learning cycle.
+
+== Qualification controls
+
+`test/graph_of_trust_qualification_test.exs` exercises empty and unqualified
+histories, failure-only and false-positive-only histories, and an expansion by
+500 unsupported recipes. The positive-support ranking must survive unchanged
+while all unsupported nodes remain neutral.
+
+`test/neural_trust_restart_test.exs` calls the actual coordinator initializer
+against synthetic poisoned snapshots and a replacement runtime store. It checks
+that an old score cannot return under a current schema label, that persistence
+writes the diagnostic version, and that a new qualified success still affects
+the rebuilt graph. Fixtures live only in the disposable test store.
+
+These tests qualify these source-level boundaries. They do not authenticate
+the historical outcome corpus or establish a live dispatch/training deployment.

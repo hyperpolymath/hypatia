@@ -36,7 +36,7 @@ defmodule Hypatia.MergeOrchestration.Ticker do
   @doc "Run a cycle now (manual / test trigger), out of band of the interval."
   def run_now(server \\ __MODULE__), do: GenServer.cast(server, :tick_now)
 
-  @doc "Current ticker state (last_run, runs, last_stats, errors)."
+  @doc "Current ticker state; last_stats is nil after a failed attempt, never stale success."
   def status(server \\ __MODULE__), do: GenServer.call(server, :status)
 
   # --- GenServer callbacks ---
@@ -49,6 +49,7 @@ defmodule Hypatia.MergeOrchestration.Ticker do
       last_run: nil,
       runs: 0,
       last_stats: nil,
+      last_outcome: :never_run,
       errors: []
     }
 
@@ -76,11 +77,23 @@ defmodule Hypatia.MergeOrchestration.Ticker do
   def do_cycle(state) do
     result = Scheduler.cycle(state.cycle_opts)
     Logger.info("MergeOrchestration.Ticker: cycle #{inspect(result.stats)}")
-    %{state | last_run: DateTime.utc_now(), runs: state.runs + 1, last_stats: result.stats}
+
+    Map.merge(state, %{
+      last_run: DateTime.utc_now(),
+      runs: state.runs + 1,
+      last_stats: result.stats,
+      last_outcome: :completed
+    })
   rescue
     e ->
       Logger.warning("MergeOrchestration.Ticker: cycle failed #{inspect(e)}")
-      %{state | last_run: DateTime.utc_now(), errors: [inspect(e) | state.errors]}
+
+      Map.merge(state, %{
+        last_run: DateTime.utc_now(),
+        last_stats: nil,
+        last_outcome: :failed,
+        errors: [inspect(e) | state.errors]
+      })
   end
 
   defp config(key, default) do

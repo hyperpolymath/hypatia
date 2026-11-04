@@ -124,11 +124,7 @@ defmodule Hypatia.VCL.Query do
 
   @doc "Fetch proven substitutions."
   def fetch_substitutions do
-    path =
-      Path.join(
-        Application.get_env(:hypatia, :verisimdb_data_path, "data/verisim"),
-        "recipes/proven-substitutions.json"
-      )
+    path = Path.join(Path.expand(Hypatia.Paths.recipes()), "proven-substitutions.json")
 
     case File.read(path) do
       {:ok, content} ->

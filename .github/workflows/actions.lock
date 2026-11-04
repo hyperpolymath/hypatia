@@ -15,7 +15,6 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'dtolnay/rust-toolchain@v1'
         - 'taiki-e/install-action@v2.88.0'
-    '.github/workflows/cicd-squabbler.yml': []
     '.github/workflows/ci-health-sweep.yml':
         - 'actions/checkout@v7.0.1'
         - 'step-security/harden-runner@v2.22.3'
@@ -30,6 +29,7 @@ workflows:
         - 'haskell-actions/setup@v2.12.1'
         - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2.88.0'
+    '.github/workflows/cicd-squabbler.yml': []
     '.github/workflows/clusterfuzzlite.yml':
         - 'actions/checkout@v7.0.1'
         - 'google/clusterfuzzlite@v1'
@@ -49,12 +49,12 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/governance.yml':
-        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
+        - 'metadatastician/standards@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
     '.github/workflows/hypatia-remediation-sweep.yml':
         - 'actions/upload-artifact@v7.0.2'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/hypatia-scan.yml':
-        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
+        - 'metadatastician/standards@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
     '.github/workflows/inbox-steward-intake.yml':
         - 'actions/checkout@v7.0.1'
         - 'step-security/harden-runner@v2.22.3'
@@ -68,7 +68,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/mirror.yml':
-        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
+        - 'metadatastician/standards@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'
@@ -108,10 +108,9 @@ workflows:
         - 'dtolnay/rust-toolchain@v1'
         - 'swatinem/rust-cache@v2.9.3'
     '.github/workflows/scorecard.yml':
-        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
+        - 'metadatastician/standards@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
     '.github/workflows/secret-scanner.yml':
-        - 'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85'
-    '.github/workflows/standards-integration.yml': []
+        - 'metadatastician/standards@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
     '.github/workflows/security-policy.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -122,6 +121,7 @@ workflows:
         - 'gitleaks/gitleaks-action@v3.0.0'
         - 'taiki-e/install-action@v2.88.0'
         - 'trufflesecurity/trufflehog@v3.99.7'
+    '.github/workflows/standards-integration.yml': []
     '.github/workflows/tests.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
@@ -373,9 +373,9 @@ dependencies:
         commit: 'sha1-e384daf6167a7a7567642d6a62060106244d2413'
         owner_id: 6759885
         repo_id: 1352485172
-    'metadatastician/standards@1725bebd3773ea25627479f813283abf1c497a85':
-        ref: '1725bebd3773ea25627479f813283abf1c497a85'
-        commit: 'sha1-1725bebd3773ea25627479f813283abf1c497a85'
+    'metadatastician/standards@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12':
+        ref: 'a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
+        commit: 'sha1-a797d308c0517d4e2d21cc7f1cb08d41f82b1a12'
         owner_id: 297579217
         repo_id: 1116521501
         uses:
