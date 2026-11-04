@@ -13,7 +13,9 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
   Confidence and bot-vetoes come from `KinCouncil.aggregate/2` over the PR's
   attestations (artifact 3); a license/SPDX touch adds a symbolic owner-only
-  veto. No I/O — the brain decides; it never executes.
+  veto. No I/O — this is a policy model, not a signature verifier. Runtime Sensor
+  contexts carry an execution cap because their attestation authenticity is
+  unverified; model confidence cannot remove that cap.
   """
 
   alias Hypatia.MergeOrchestration.KinCouncil
@@ -36,6 +38,10 @@ defmodule Hypatia.MergeOrchestration.Strategist do
 
     %{
       pr: ctx.pr,
+      head_sha: Map.get(ctx, :head_sha),
+      event_id: Map.get(ctx, :event_id),
+      observation_complete: Map.get(ctx, :observation_complete, false),
+      evidence_authenticity: Map.get(ctx, :evidence_authenticity, :unspecified),
       change_class: ctx.change_class,
       change_level: ctx.change_level,
       route: decide_route(ctx),
@@ -53,9 +59,21 @@ defmodule Hypatia.MergeOrchestration.Strategist do
   # --- Safety axis: confidence + veto + meta, clamped by pool (monotone) ---
   defp decide_safety(ctx, confidence, vetoes) do
     cond do
-      vetoes != [] -> {:flag, "veto:" <> first_reason(vetoes)}
-      ctx.change_level == :meta -> {:flag, "meta"}
-      true -> confidence |> confidence_to_safety() |> clamp_to_pool(ctx.pool)
+      vetoes != [] ->
+        {:flag, "veto:" <> first_reason(vetoes)}
+
+      ctx.change_level == :meta ->
+        {:flag, "meta"}
+
+      true ->
+        {base, reason} = confidence |> confidence_to_safety() |> clamp_to_pool(ctx.pool)
+        capped = min_safety(base, Map.get(ctx, :execution_cap, :arm_auto))
+
+        {capped,
+         if(capped != base,
+           do: Map.get(ctx, :execution_blocker, "runtime-execution-cap"),
+           else: reason
+         )}
     end
   end
 

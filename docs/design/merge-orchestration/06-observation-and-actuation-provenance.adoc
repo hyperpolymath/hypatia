@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Observation provenance and the execution boundary
+
+== Current boundary
+
+The merge model computes policy choices. Its confidence, per-repository lease,
+and a document containing a signature are not execution authorization. The
+production Sensor has no qualified signature/trust verifier. All Sensor-fed
+approvals are therefore capped at `review`; incomplete observations are
+non-executable. Monotone veto, meta, license, hold, draft and pool restrictions
+remain at least as conservative. Raw Strategist policy tests are models with
+explicit assumptions, not receipts from a live verified bot.
+
+The old Baton spec directly emitted `gh pr merge` and carried a descriptive
+`verifier` map. Nothing in this producer called the named farm gate, enforced
+its durable ledger, or established the downstream executor's verification
+contract. `BatonEmitter.to_spec/2` now returns
+`{:error, :qualified_merge_executor_unavailable}`; `emit/2` reports refusals and
+never calls a submission function. No alternate backend silently bypasses the
+farm. This is containment, not a claim that the proposed mesh integration is
+qualified or that signature verification has been implemented.
+
+== Qualified observation batches
+
+The paired `.git-private-farm` producer paginates PRs and files, compares file
+counts against `changed_files`, and checks the PR/head population around the
+collection. An observation includes a full head and base SHA, explicit event,
+timestamp, state, file paths, labels and a complete collection marker. Renamed
+files retain both paths so moving a workflow or licence does not hide it.
+
+The producer publishes `observations/.observation-batch.json` with schema version
+1, status, event, timestamp, requested repository scope and exact members. Each
+member binds filename, repository, PR number, head and SHA-256 of the record.
+`collecting` precedes any record replacement; `complete` is published last.
+Failure leaves the batch unqualified. Unlisted records remain historical.
+
+`Loop.run/1` requires the complete receipt. It checks the scope, safe member
+names, hashes, full subject identities and matching event/timestamp; it reads the
+receipt again after the files. Missing, malformed, failed, partial, changed or
+symlinked inputs cannot become a successful empty cycle. No new manifest is
+published on that error. A complete empty batch is accepted only for a nonempty
+qualified scope. Manifest replacement is atomic after successful collection.
+
+Old standalone observations and abbreviated-head fixtures are retained for
+manual examination and negative controls. They are never upgraded by guessing
+the current live head. The change requires producer/reader rollout together;
+older stores without a batch receipt fail qualification until the authorized
+observer publishes one.
+
+== Subject and event continuity
+
+The store attestation resolver accepts `(repo, PR number, full head SHA)`.
+`Sensor.to_context/3` independently applies the same check even to an injected
+resolver. An approval for an old revision, an unbound document, a different PR
+or a different repository cannot support the current decision. The subject is
+retained in the council input and its authenticity remains explicitly
+`unverified`; an embedded `seal` or `verified` field cannot promote it.
+
+Sensor, Strategist and Dispatcher preserve the observed `head_sha` and
+`event_id`. The dispatcher independently downgrades a model arm without complete
+observation provenance to review. Pool strings use the farm's canonical
+`P0`/`P1`/`P2`/`P3`/`mass_squash` vocabulary rather than serializing lower-case
+Elixir atom names. This adapter does not fetch or substitute a newer head.
+
+The paired farm actuator remains unwired and dry-run by default. An explicitly
+authorized future write would require matching live identity/head, real required
+checks and owner-held pool gates. It holds the durable-ledger lock across checks,
+an fsynced intent, the request and reconciliation. Unknown or queued effects
+are not retried blindly; read-only reconciliation records `observed_merged`,
+not a newly applied effect. Missing/corrupt/legacy ledger state is a blocker,
+not permission to create a fresh history. See the farm's
+`docs/operations/merge-provenance.adoc` for the matching effect contract.
+
+== Status and qualification
+
+A completed decision cycle is not a merge and is not a learning outcome. The
+merge ticker records `last_outcome: :failed` and clears `last_stats` when a later
+read fails, so prior successful statistics cannot appear to describe that failed
+attempt. The learning subsystem must still demand actual repository/revision/
+recipe/run-bound effect evidence; this change does not write learning records.
+
+Focused tests exercise exact-head attestation selection, malformed/legacy
+observations, forged verification claims, complete/failed/changed receipts,
+digest and subject contradictions, missing and symlinked members, stable
+metadata across serialization, stronger veto/meta guards, and refusal to submit
+a Baton. Policy-model threshold tests and the independent KinGate tests remain
+separate from production authenticity claims.
+
+No live GitHub merge, store publication, credential repair, scheduler enablement
+or signature/trust implementation is established by these offline tests.

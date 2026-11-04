@@ -20,16 +20,17 @@ defmodule Hypatia.MergeOrchestration.Loop do
       defence in depth behind the Strategist's own meta⇒flag guard.
 
   The brain stays token-free: the loop only *reads* the store (observations the
-  farm producer deposited, the bots' signed attestations, the repos' pool
+  farm producer deposited, the bots' attestation documents, the repos' pool
   policies) and *writes* the decision manifest + lease records. The actuator
   (`.git-private-farm`) is a separate process that reads the manifest and merges;
   the loop never calls it.
 
   Store layout (all under `opts[:store]`):
 
-    * `observations/*.json`        — per-PR observations (from `observe.sh`)
+    * `observations/.observation-batch.json` — complete batch membership + digests
+    * `observations/*.json`        — per-PR observations named by that receipt
     * `pools/<owner__name>.json`   — `RepoPoolPolicy` per repo
-    * `attestations/*.json`        — signed bot attestations
+    * `attestations/*.json`        — bot documents; signatures are not verified here
     * `leases/<owner__name>.json`  — `KinGate` leases (written here)
     * `merge-decisions.jsonl`      — the output manifest (written here)
 
@@ -51,15 +52,13 @@ defmodule Hypatia.MergeOrchestration.Loop do
 
     * `:manifest` (default) — write `merge-decisions.jsonl`; the `.git-private-farm`
       actuator polls it. Returns the plan summary plus `:manifest_path`.
-    * `:baton` — submit one Bag-of-Actions Baton per armed entry via
-      `BatonEmitter.emit/2` (capability-routed actuation, off GitHub minutes).
-      Returns the plan summary plus `:batons`; no manifest is written.
-    * `:both` — do both (manifest as the durable record/fallback, Batons as the
-      live path). Returns the plan summary plus `:manifest_path` *and* `:batons`.
+    * `:baton` — report explicit Baton refusals for any armed entries. Mutation
+      is unavailable until an actual verifier/executor contract is qualified;
+      descriptive metadata does not execute the farm's re-verification.
+    * `:both` — write the manifest and report those refusals.
 
-  For the Baton backends the `Bag.Mesh` call is late-bound (`apply/3`) so this
-  module stays compile-decoupled from `bag-of-actions`; inject `:submit` (a
-  `spec -> result` fn) in tests, and `:budget` (a `Bag.Budget`) in production.
+  Sensor-fed evidence is currently capped at review because no production
+  signature verifier is present. Neither backend bypasses that cap.
   """
   def run(opts) do
     store = Keyword.fetch!(opts, :store)
@@ -69,6 +68,10 @@ defmodule Hypatia.MergeOrchestration.Loop do
     now = Keyword.get(opts, :now, DateTime.utc_now())
     trust = Keyword.get(opts, :trust, %{})
     actuation = Keyword.get(opts, :actuation, :manifest)
+
+    unless actuation in [:manifest, :baton, :both],
+      do: raise(ArgumentError, "unknown actuation backend")
+
     leases_dir = Path.join(store, "leases")
 
     acquire =
@@ -92,21 +95,10 @@ defmodule Hypatia.MergeOrchestration.Loop do
   defp actuate_manifest(result, _store, _encode, _actuation), do: result
 
   defp actuate_batons(result, opts, actuation) when actuation in [:baton, :both] do
-    # lazy: an injected `:submit` (tests) means `default_submit/1` — and thus any
-    # reference to `Bag.*` — is never built.
-    submit = Keyword.get_lazy(opts, :submit, fn -> default_submit(opts) end)
-    Map.put(result, :batons, BatonEmitter.emit(result, submit: submit))
+    Map.put(result, :batons, BatonEmitter.emit(result, opts))
   end
 
   defp actuate_batons(result, _opts, _actuation), do: result
-
-  # The live `Bag.Mesh.submit_planned(spec, budget)` call, late-bound via `apply/3`
-  # so an unconfigured `:manifest`-only run never references `bag-of-actions`. The
-  # default budget is also late-bound (`Bag.Budget.unlimited/0`).
-  defp default_submit(opts) do
-    budget = Keyword.get_lazy(opts, :budget, fn -> apply(Bag.Budget, :unlimited, []) end)
-    fn spec -> apply(Bag.Mesh, :submit_planned, [spec, budget]) end
-  end
 
   @doc """
   The pure planning core: sense → (weight) → decide → gate, over already-loaded
@@ -221,23 +213,91 @@ defmodule Hypatia.MergeOrchestration.Loop do
 
   defp read_observations(store, decode) do
     dir = Path.join(store, "observations")
+    receipt_path = Path.join(dir, ".observation-batch.json")
+    receipt_body = read_regular!(receipt_path)
+    receipt = decode.(receipt_body)
 
-    case File.ls(dir) do
-      {:ok, names} ->
-        names
-        |> Enum.filter(&String.ends_with?(&1, ".json"))
-        |> Enum.sort()
-        |> Enum.map(&decode.(File.read!(Path.join(dir, &1))))
+    unless valid_batch?(receipt),
+      do: unqualified_batch!("missing, incomplete or malformed receipt")
 
-      _ ->
-        []
+    observations =
+      Enum.map(receipt["observations"], fn entry ->
+        body = read_regular!(Path.join(dir, entry["file"]))
+        digest = :crypto.hash(:sha256, body) |> Base.encode16(case: :lower)
+        obs = decode.(body)
+
+        unless digest == entry["sha256"] and Sensor.valid_observation?(obs) and
+                 obs["repo"] == entry["repo"] and obs["number"] == entry["number"] and
+                 obs["head_sha"] == entry["head_sha"] and obs["event_id"] == receipt["event_id"] and
+                 obs["observed_at"] == receipt["observed_at"] do
+          unqualified_batch!("observation digest, subject or event mismatch")
+        end
+
+        obs
+      end)
+
+    # A producer publishes `collecting` before changing files and `complete`
+    # last. Re-read after the files so a concurrent collection cannot be mixed.
+    unless read_regular!(receipt_path) == receipt_body,
+      do: unqualified_batch!("receipt changed while reading")
+
+    observations
+  end
+
+  defp valid_batch?(%{} = receipt) do
+    repos = receipt["repos"]
+    entries = receipt["observations"]
+
+    receipt["schema_version"] == 1 and receipt["status"] == "complete" and
+      Sensor.valid_event?(receipt["event_id"]) and is_binary(receipt["observed_at"]) and
+      match?({:ok, _, _}, DateTime.from_iso8601(receipt["observed_at"])) and
+      is_list(repos) and repos != [] and Enum.uniq(repos) == repos and
+      Enum.all?(repos, &Sensor.valid_subject?(&1, 1, String.duplicate("0", 40))) and
+      is_list(entries) and Enum.all?(entries, &valid_batch_entry?(&1, repos)) and
+      Enum.uniq_by(entries, & &1["file"]) == entries
+  end
+
+  defp valid_batch?(_), do: false
+
+  defp valid_batch_entry?(
+         %{
+           "repo" => repo,
+           "number" => number,
+           "head_sha" => head,
+           "file" => file,
+           "sha256" => digest
+         },
+         repos
+       ) do
+    Sensor.valid_subject?(repo, number, head) and repo in repos and
+      file == String.replace(repo, "/", "__") <> "__" <> to_string(number) <> ".json" and
+      is_binary(digest) and Regex.match?(~r/^[0-9a-f]{64}$/, digest)
+  end
+
+  defp valid_batch_entry?(_, _), do: false
+
+  defp read_regular!(path) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :regular}} -> File.read!(path)
+      _ -> unqualified_batch!("receipt/observation unavailable or not a regular file")
     end
   end
+
+  defp unqualified_batch!(reason),
+    do: raise(ArgumentError, "unqualified observation batch: #{reason}; no new manifest written")
 
   defp write_manifest(store, entries, encode) do
     path = Path.join(store, "merge-decisions.jsonl")
     body = Enum.map_join(entries, "\n", encode)
-    File.write!(path, if(body == "", do: "", else: body <> "\n"))
+    temporary = path <> ".tmp-" <> to_string(System.unique_integer([:positive]))
+
+    try do
+      File.write!(temporary, if(body == "", do: "", else: body <> "\n"), [:exclusive])
+      File.rename!(temporary, path)
+    after
+      File.rm(temporary)
+    end
+
     path
   end
 

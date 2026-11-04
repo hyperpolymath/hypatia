@@ -6,10 +6,12 @@
 
 [NOTE]
 ====
-*Status: DESIGN ONLY.* `hyperpolymath/bag-of-actions` is not yet in this
-work's session scope, so its exact Baton format / `Bag.Mesh` API could not be
-read first-hand. This doc records the mapping and the integration sketch so the
-build is ready the moment the repo is in scope. Nothing here is wired.
+*Status: unqualified design; mutation contained.* The 2026-11-04 source review
+found that the previous emitter's verifier map did not execute the farm gate
+or establish the downstream verifier/ledger contract. `BatonEmitter` now
+explicitly refuses mutation. The sketch below is retained as a proposal, not an
+operational guarantee. See link:06-observation-and-actuation-provenance.adoc[the
+current observation and execution boundary].
 ====
 
 toc::[]
@@ -18,13 +20,16 @@ toc::[]
 
 The cron + tick (artifact-7) make the merge-orchestration loop *runnable on a
 schedule* — a GenServer tick in the brain, or an hourly GitHub Actions cron.
-Both write the decision manifest (`merge-decisions.jsonl`) that the
-`.git-private-farm` actuator polls and executes.
+Both can write a decision manifest (`merge-decisions.jsonl`). The
+`.git-private-farm` actuator remains deliberately unwired and dry-run by default;
+this document does not authorize polling, merging or enabling a scheduler.
 
 That JSONL+poll seam is the weakest link: it is a *passive* hand-off (the farm
 must poll), the "no double-merge" guarantee is a `MapSet` + a file lock rather
-than a type, and it runs on GitHub-hosted Actions minutes (the farm's billing
-is currently the blocker on scheduled actuation).
+than a type, and a hosted deployment would use GitHub Actions minutes. The
+farm's September billing incident is historical: its 2026-11-03 inventory
+included successful and failed jobs, so there is no current blanket billing
+block claim here.
 
 *Bag-of-Actions* (BoA) is the owner-flagged alternative: a "distributed OS for
 mobile continuations". It is a near-exact structural fit for what the
@@ -67,7 +72,7 @@ attested merge actions — and it dissolves all three weaknesses above.
 | *Freeze / Thaw* migration
 | the decided Baton *freezes* on the brain and *thaws* on the token-bearing farm node — replacing "write JSONL, farm polls" with a real continuation hand-off
 
-| the cron/tick + the dead farm Actions billing
+| the cron/tick and the historical farm billing incident
 | self-hosted *BEAM mesh + Guix builds*
 | runs the loop *off* GitHub-hosted minutes — which is why it bears on the billing question
 |===
@@ -119,23 +124,24 @@ Bag.Mesh.submit(%{
   this is the token-free-brain invariant expressed as a capability fact, proved
   in `Bag.Estate`).
 
-== What it buys over JSONL + poll
+== Proposed benefits and obligations
 
-* *Type-level no-double-merge* (Ephapax) instead of a lock + a `MapSet`.
+* *Linear resource handling* (Ephapax) is a proposed local guarantee. It does not
+  by itself prove that an external GitHub effect occurred exactly once.
 * *Capability-routed actuation* — no hard-coded "the farm polls a file"; the
   Baton finds the token-holder.
-* *Resumable* — a crashed actuation thaws and retries on another capable node.
-* *Self-hosted* — runs on the BEAM mesh, off GitHub Actions minutes; this is the
-  path that makes the farm billing fix *moot* rather than a workaround. (Owner
-  has deferred the billing fix itself; this is the longer arc it sits on.)
+* *Resumable* — migration after a crash would require durable intent and
+  read-only reconciliation of uncertain remote effects before any retry.
+* *Self-hosted* — a qualified mesh could use capacity outside GitHub-hosted
+  minutes. That changes deployment costs, not the authorization/evidence gates.
 
 == Honest caveats
 
 * BoA is research-grade (Milestones 1–4, no release artifacts). This is a
   *direction*, not a drop-in.
-* The integration is *additive*: the `merge-decisions.jsonl` manifest remains
-  the record and the fallback; the actuator's independent re-verification stays
-  exactly as-is (defense in depth holds whether delivery is poll or Baton).
+* A future integration must preserve the complete decision subject, event,
+  independent re-verification and durable ledger. The former prototype did not
+  establish those properties; the current emitter refuses mutation.
 * Building it needs: (a) BoA added to session scope to read the real Baton
   format + `Bag.Mesh` surface; (b) `BatonEmitter` on the hypatia side; (c) the
   `merge_pr` action + capability facts on the BoA side.

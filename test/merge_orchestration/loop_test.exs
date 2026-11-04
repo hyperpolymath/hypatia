@@ -2,290 +2,251 @@
 # Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 defmodule Hypatia.MergeOrchestration.LoopTest do
   use ExUnit.Case, async: true
-  alias Hypatia.MergeOrchestration.Loop
-  alias Hypatia.MergeOrchestration.KinGate.FileStore
+  alias Hypatia.MergeOrchestration.{Loop, TestObservationStore}
+  alias TestObservationStore, as: Evidence
 
-  @now ~U[2026-06-14 12:00:00Z]
+  defp cleanup(store), do: on_exit(fn -> File.rm_rf!(store) end)
+  defp no_acquire(_), do: flunk("unverified evidence must never acquire an execution lease")
+  defp pool_p2(_), do: "P2"
 
-  # a faithful round-trip codec that needs no JSON dep
-  defp enc, do: fn t -> t |> :erlang.term_to_binary() |> Base.encode64() end
-  defp dec, do: fn b -> b |> Base.decode64!() |> :erlang.binary_to_term() end
+  defp approval(repo, number, head),
+    do: [Evidence.attestation(%{"repo" => repo, "number" => number, "head_sha" => head})]
 
-  defp tmp(prefix),
-    do: Path.join(System.tmp_dir!(), "#{prefix}-#{System.unique_integer([:positive])}")
-
-  defp file_acquire(dir),
-    do: fn req -> FileStore.acquire(dir, req, now: @now, encode: enc(), decode: dec()) end
-
-  defp bump(repo, n),
-    do: %{
-      "repo" => repo,
-      "number" => n,
-      "branch" => "dependabot/cargo/x#{n}",
-      "files" => ["Cargo.lock"]
-    }
-
-  defp pool_p2, do: fn _repo -> "P2" end
-
-  defp approve_ci,
-    do: fn _repo, _n -> [%{"bot" => "ci", "verdict" => "approve", "confidence" => 0.99}] end
-
-  # a store with exactly one armable PR (cargo bump, P2, CI-approved) — the same
-  # shape the run/1 manifest test arms, reused by the actuation-backend tests.
-  defp armed_store do
-    store = tmp("loop-actuation")
-
-    for sub <- ~w(observations pools attestations leases),
-        do: File.mkdir_p!(Path.join(store, sub))
-
-    e = enc()
-
-    File.write!(
-      Path.join([store, "observations", "hyperpolymath__a__1.json"]),
-      e.(bump("hyperpolymath/a", 1))
-    )
-
-    File.write!(Path.join([store, "pools", "hyperpolymath__a.json"]), e.(%{"pool" => "P2"}))
-
-    File.write!(
-      Path.join([store, "attestations", "ci.json"]),
-      e.(%{
-        "subject" => %{"repo" => "hyperpolymath/a", "number" => 1},
-        "bot" => "ci",
-        "verdict" => "approve",
-        "confidence" => 0.99
-      })
-    )
-
-    store
+  test "two high-confidence Sensor decisions remain reviews and never acquire a lease" do
+    observations = [Evidence.observation(), Evidence.observation(%{"number" => 2})]
+    result = Loop.plan(observations, &pool_p2/1, &approval/3, %{}, "hypatia", &no_acquire/1)
+    assert result.stats.armed == 0
+    assert result.stats.review == 2
+    assert result.leases == []
+    assert Enum.all?(result.entries, &(&1["strategy"] == "review"))
   end
 
-  # ── the gate bites: in-cycle one-arm-per-repo ────────────────────────────────
-
-  test "two armed PRs for the same repo in one cycle: first arms, second is deferred to report_only" do
-    leases = tmp("loop-incycle")
-
-    r =
-      Loop.plan(
-        [bump("hyperpolymath/a", 1), bump("hyperpolymath/a", 2)],
-        pool_p2(),
-        approve_ci(),
-        %{},
-        "hypatia",
-        file_acquire(leases)
-      )
-
-    assert r.stats.armed == 1
-    assert r.stats.deferred == 1
-    [e1, e2] = r.entries
-    assert e1["strategy"] == "auto_execute"
-    assert e2["strategy"] == "report_only"
-    assert e2["merge"]["rationale"] =~ "same-repo-this-cycle"
-    File.rm_rf!(leases)
-  end
-
-  # ── the gate bites: cross-agent persistent lease ─────────────────────────────
-
-  test "an arm is deferred when another holder already holds the repo lease" do
-    leases = tmp("loop-crossagent")
-    # another agent already holds repo a
-    {:ok, _} =
-      FileStore.acquire(
-        leases,
-        %{
-          repo: "hyperpolymath/a",
-          holder: "robot-repo-automaton",
-          territory: %{branch: "b", paths: [], is_meta: false}
-        },
-        now: @now,
-        encode: enc(),
-        decode: dec()
-      )
-
-    r =
-      Loop.plan(
-        [bump("hyperpolymath/a", 1)],
-        pool_p2(),
-        approve_ci(),
-        %{},
-        "hypatia",
-        file_acquire(leases)
-      )
-
-    assert r.stats.armed == 0
-    assert r.stats.deferred == 1
-    [e1] = r.entries
-    assert e1["strategy"] == "report_only"
-    assert e1["merge"]["rationale"] =~ "lease-held:robot-repo-automaton"
-    File.rm_rf!(leases)
-  end
-
-  # ── a full mixed cycle: arm / arm / review / meta-flag ───────────────────────
-
-  test "a mixed cycle tallies armed / review / flagged, gating only the arms" do
-    leases = tmp("loop-mixed")
-
-    pool = fn
-      "hyperpolymath/c" -> "P1"
-      _ -> "P2"
-    end
-
+  test "meta and veto guards stay stronger than the review cap" do
     observations = [
-      bump("hyperpolymath/a", 1),
-      bump("hyperpolymath/b", 2),
-      %{"repo" => "hyperpolymath/c", "number" => 3, "files" => ["docs/x.adoc"]},
-      %{
-        "repo" => "hyperpolymath/d",
-        "number" => 4,
-        "branch" => "ci/pin",
-        "files" => [".github/workflows/ci.yml"]
-      }
+      Evidence.observation(),
+      Evidence.observation(%{"number" => 2, "files" => [".github/workflows/ci.yml"]}),
+      Evidence.observation(%{"number" => 3, "files" => ["LICENSE"]})
     ]
 
-    r = Loop.plan(observations, pool, approve_ci(), %{}, "hypatia", file_acquire(leases))
-
-    assert r.stats == %{total: 4, armed: 2, deferred: 0, blocked: 0, review: 1, flagged: 1}
-    assert length(r.leases) == 2
-    File.rm_rf!(leases)
+    result = Loop.plan(observations, &pool_p2/1, &approval/3, %{}, "hypatia", &no_acquire/1)
+    assert result.stats == %{total: 3, armed: 0, deferred: 0, blocked: 0, review: 1, flagged: 2}
   end
 
-  # ── the whole thing over a real store of files (codec injected) ──────────────
+  test "legacy incomplete observations remain non-executable without querying a guessed revision" do
+    resolver = fn _, _, _ -> flunk("legacy record cannot resolve revision-bound evidence") end
 
-  test "run/1 reads a store of observation/pool/attestation files, gates, and writes the manifest + leases" do
-    store = tmp("loop-store")
-
-    for sub <- ~w(observations pools attestations leases),
-        do: File.mkdir_p!(Path.join(store, sub))
-
-    e = enc()
-
-    File.write!(
-      Path.join([store, "observations", "hyperpolymath__a__1.json"]),
-      e.(bump("hyperpolymath/a", 1))
-    )
-
-    File.write!(Path.join([store, "pools", "hyperpolymath__a.json"]), e.(%{"pool" => "P2"}))
-
-    File.write!(
-      Path.join([store, "attestations", "ci.json"]),
-      e.(%{
-        "subject" => %{"repo" => "hyperpolymath/a", "number" => 1},
-        "bot" => "ci",
-        "verdict" => "approve",
-        "confidence" => 0.99
-      })
-    )
-
-    r = Loop.run(store: store, holder: "hypatia", now: @now, encode: e, decode: dec())
-
-    assert r.stats.armed == 1
-    assert String.ends_with?(r.manifest_path, "merge-decisions.jsonl")
-
-    lines = r.manifest_path |> File.read!() |> String.trim() |> String.split("\n")
-    assert length(lines) == 1
-    entry = dec().(hd(lines))
-    assert entry["strategy"] == "auto_execute"
-    assert entry["merge"]["method"] == "squash"
-
-    # the lease for repo a was persisted by the gate
-    assert File.exists?(Path.join([store, "leases", "hyperpolymath__a.json"]))
-    File.rm_rf!(store)
-  end
-
-  # ── actuation backends: :manifest (default) | :baton | :both ─────────────────
-
-  test ":actuation :baton submits one Baton per armed entry and writes no manifest" do
-    store = armed_store()
-    # stand in for Bag.Mesh.submit_planned/2 — record what the planner would route
-    submit = fn spec -> {:routed, spec.required_cap, spec.mutating, spec.verifier != nil} end
-
-    r =
-      Loop.run(
-        store: store,
-        holder: "hypatia",
-        now: @now,
-        encode: enc(),
-        decode: dec(),
-        actuation: :baton,
-        submit: submit
+    result =
+      Loop.plan(
+        [%{"repo" => "hyperpolymath/a", "number" => 1, "files" => ["Cargo.lock"]}],
+        &pool_p2/1,
+        resolver,
+        %{},
+        "hypatia",
+        &no_acquire/1
       )
 
-    assert r.stats.armed == 1
-    # token-free brain: no manifest is written in pure :baton mode
-    refute Map.has_key?(r, :manifest_path)
+    assert result.stats.armed == 0
+    assert result.stats.flagged == 1
+    assert hd(result.entries)["strategy"] == "report_only"
+  end
+
+  test "complete receipt round-trips exact subject/event into a review manifest" do
+    store = Evidence.seed()
+    cleanup(store)
+    result = Loop.run(store: store, acquire: &no_acquire/1)
+    assert result.stats.review == 1
+    assert result.stats.armed == 0
+    entry = result.manifest_path |> File.read!() |> Jason.decode!()
+    assert entry["event_id"] == Evidence.event()
+    assert entry["merge"]["head_sha"] == Evidence.head()
+    assert entry["merge"]["pool"] == "P2"
+    assert entry["merge"]["evidence_authenticity"] == "unverified"
+    assert entry["strategy"] == "review"
+    assert File.ls!(Path.join(store, "leases")) == []
+  end
+
+  test "unlisted historical records are retained without becoming current observations" do
+    store = Evidence.seed()
+    cleanup(store)
+    historical = Path.join([store, "observations", "hyperpolymath__a__999.json"])
+    File.write!(historical, "{broken historical input")
+    assert Loop.run(store: store).stats.total == 1
+    assert File.read!(historical) == "{broken historical input"
+  end
+
+  test "a complete empty scoped batch differs from an unreadable or failed batch" do
+    store = Evidence.seed()
+    cleanup(store)
+    Evidence.write_batch(store, [])
+    result = Loop.run(store: store)
+    assert result.stats.total == 0
+    assert File.read!(result.manifest_path) == ""
+    assert File.exists?(Path.join([store, "observations", "hyperpolymath__a__1.json"]))
+  end
+
+  test "missing, failed, collecting, duplicate and contradictory receipts preserve the prior manifest" do
+    transforms = [
+      fn receipt -> %{receipt | "status" => "collecting"} end,
+      fn receipt -> %{receipt | "status" => "failed"} end,
+      fn receipt -> %{receipt | "schema_version" => 999} end,
+      fn receipt -> Map.delete(receipt, "event_id") end,
+      fn receipt -> %{receipt | "repos" => []} end,
+      fn receipt ->
+        %{receipt | "observations" => receipt["observations"] ++ receipt["observations"]}
+      end,
+      fn receipt ->
+        put_in(receipt, ["observations", Access.at(0), "sha256"], String.duplicate("0", 64))
+      end,
+      fn receipt ->
+        put_in(receipt, ["observations", Access.at(0), "head_sha"], String.duplicate("b", 40))
+      end,
+      fn receipt -> put_in(receipt, ["observations", Access.at(0), "file"], "../outside.json") end
+    ]
+
+    for transform <- transforms do
+      store = Evidence.seed()
+      cleanup(store)
+      previous = Path.join(store, "merge-decisions.jsonl")
+      File.write!(previous, "previous review-only manifest")
+      receipt = Evidence.receipt_path(store)
+
+      File.write!(
+        receipt,
+        receipt |> File.read!() |> Jason.decode!() |> transform.() |> Jason.encode!()
+      )
+
+      assert_raise ArgumentError, ~r/unqualified observation batch/, fn ->
+        Loop.run(store: store)
+      end
+
+      assert File.read!(previous) == "previous review-only manifest"
+    end
+
+    store = Evidence.seed()
+    cleanup(store)
+    File.rm!(Evidence.receipt_path(store))
+
+    assert_raise ArgumentError, ~r/unqualified observation batch/, fn ->
+      Loop.run(store: store)
+    end
+
     refute File.exists?(Path.join(store, "merge-decisions.jsonl"))
-
-    # one Baton, routed to the secret_access node, mutating + verifier present
-    assert [%{spec: spec, result: {:routed, "secret_access", true, true}}] = r.batons
-    assert spec.command == ["gh", "pr", "merge", "1", "--repo", "hyperpolymath/a", "--squash"]
-    File.rm_rf!(store)
   end
 
-  test ":actuation :both writes the durable manifest AND submits Batons" do
-    store = armed_store()
+  test "file tampering, missing members and symlinks cannot satisfy a complete receipt" do
+    for action <- [:tamper, :missing, :symlink] do
+      store = Evidence.seed()
+      cleanup(store)
+      member = Path.join([store, "observations", "hyperpolymath__a__1.json"])
 
-    r =
-      Loop.run(
-        store: store,
-        holder: "hypatia",
-        now: @now,
-        encode: enc(),
-        decode: dec(),
-        actuation: :both,
-        submit: fn _spec -> :ok end
-      )
+      case action do
+        :tamper ->
+          File.write!(member, Jason.encode!(Evidence.observation(%{"event_id" => "test:other"})))
 
-    assert String.ends_with?(r.manifest_path, "merge-decisions.jsonl")
-    assert File.exists?(r.manifest_path)
-    assert length(r.batons) == 1
-    File.rm_rf!(store)
+        :missing ->
+          File.rm!(member)
+
+        :symlink ->
+          File.rename!(member, member <> ".saved")
+          File.ln_s!(member <> ".saved", member)
+      end
+
+      assert_raise ArgumentError, ~r/unqualified observation batch/, fn ->
+        Loop.run(store: store)
+      end
+
+      refute File.exists?(Path.join(store, "merge-decisions.jsonl"))
+    end
   end
 
-  test ":actuation defaults to :manifest — no Batons, no Bag.* reference" do
-    store = armed_store()
-    # no :submit / :budget injected and bag-of-actions is not a dependency here;
-    # this must not raise (the Bag.Mesh call is only built in the Baton backends).
-    r = Loop.run(store: store, holder: "hypatia", now: @now, encode: enc(), decode: dec())
+  test "matching bytes with inconsistent record metadata still fail qualification" do
+    for field <- ["head_sha", "event_id", "complete", "files", "changed_file_count"] do
+      store = Evidence.seed()
+      cleanup(store)
 
-    assert String.ends_with?(r.manifest_path, "merge-decisions.jsonl")
-    refute Map.has_key?(r, :batons)
-    File.rm_rf!(store)
+      values = %{
+        "head_sha" => String.duplicate("c", 40),
+        "event_id" => "test:other",
+        "complete" => false,
+        "files" => [],
+        "changed_file_count" => 9
+      }
+
+      member = Path.join([store, "observations", "hyperpolymath__a__1.json"])
+
+      body =
+        member
+        |> File.read!()
+        |> Jason.decode!()
+        |> Map.put(field, values[field])
+        |> Jason.encode!()
+
+      File.write!(member, body)
+      receipt_path = Evidence.receipt_path(store)
+      receipt = receipt_path |> File.read!() |> Jason.decode!()
+
+      receipt =
+        put_in(
+          receipt,
+          ["observations", Access.at(0), "sha256"],
+          :crypto.hash(:sha256, body) |> Base.encode16(case: :lower)
+        )
+
+      File.write!(receipt_path, Jason.encode!(receipt))
+
+      assert_raise ArgumentError, ~r/unqualified observation batch/, fn ->
+        Loop.run(store: store)
+      end
+    end
   end
 
-  # ── real Jason over a real store (CI only) ───────────────────────────────────
+  test "a receipt changed during file decoding cannot publish a mixed batch" do
+    store = Evidence.seed()
+    cleanup(store)
 
-  if Code.ensure_loaded?(Jason) do
-    test "run/1 with the default Jason codec round-trips a store to a JSON manifest" do
-      store = tmp("loop-json")
+    decoder = fn body ->
+      decoded = Jason.decode!(body)
 
-      for sub <- ~w(observations pools attestations leases),
-          do: File.mkdir_p!(Path.join(store, sub))
+      if is_map(decoded) and Map.has_key?(decoded, "head_sha") do
+        path = Evidence.receipt_path(store)
+        receipt = path |> File.read!() |> Jason.decode!() |> Map.put("status", "collecting")
+        File.write!(path, Jason.encode!(receipt))
+      end
 
-      File.write!(
-        Path.join([store, "observations", "hyperpolymath__a__1.json"]),
-        Jason.encode!(bump("hyperpolymath/a", 1))
-      )
+      decoded
+    end
 
-      File.write!(
-        Path.join([store, "pools", "hyperpolymath__a.json"]),
-        Jason.encode!(%{"pool" => "P2"})
-      )
+    assert_raise ArgumentError, ~r/receipt changed while reading/, fn ->
+      Loop.run(store: store, decode: decoder)
+    end
 
-      File.write!(
-        Path.join([store, "attestations", "ci.json"]),
-        Jason.encode!(%{
-          "subject" => %{"repo" => "hyperpolymath/a", "number" => 1},
-          "bot" => "ci",
-          "verdict" => "approve",
-          "confidence" => 0.99
-        })
-      )
+    refute File.exists?(Path.join(store, "merge-decisions.jsonl"))
+  end
 
-      r = Loop.run(store: store, holder: "hypatia", now: @now)
-      assert r.stats.armed == 1
-      entry = r.manifest_path |> File.read!() |> String.trim() |> Jason.decode!()
-      assert entry["strategy"] == "auto_execute"
-      File.rm_rf!(store)
+  test "Baton selections do not invoke a submit function or resolve an unqualified Bag backend" do
+    for mode <- [:baton, :both] do
+      store = Evidence.seed()
+      cleanup(store)
+
+      result =
+        Loop.run(
+          store: store,
+          actuation: mode,
+          submit: fn _ -> flunk("unqualified executor called") end
+        )
+
+      assert result.stats.armed == 0
+      assert result.batons == []
+      assert Map.has_key?(result, :manifest_path) == (mode == :both)
+    end
+  end
+
+  test "unknown backend is an error, not a successful no-op" do
+    store = Evidence.seed()
+    cleanup(store)
+
+    assert_raise ArgumentError, ~r/unknown actuation backend/, fn ->
+      Loop.run(store: store, actuation: :unknown)
     end
   end
 end

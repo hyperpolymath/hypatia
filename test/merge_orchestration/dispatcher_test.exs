@@ -8,6 +8,10 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
     Map.merge(
       %{
         pr: %{repo: "hyperpolymath/panll", number: 412},
+        # Explicit synthetic model inputs; no signature-verification claim.
+        head_sha: String.duplicate("a", 40),
+        event_id: "test:policy:1",
+        observation_complete: true,
         change_class: :chore,
         change_level: :object,
         pool: :p2,
@@ -23,6 +27,25 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
     assert m["tier"] == "eliminate"
     assert m["merge"]["method"] == "squash"
     assert m["repo"] == "hyperpolymath/panll"
+    assert m["event_id"] == "test:policy:1"
+    assert m["merge"]["head_sha"] == String.duplicate("a", 40)
+    assert m["merge"]["pool"] == "P2"
+  end
+
+  test "legacy model arm without an assessed revision/event is review-only at serialization" do
+    for field <- [:head_sha, :event_id, :observation_complete] do
+      {_decision, entry, _lease} = ctx(%{}) |> Map.delete(field) |> Dispatcher.dispatch()
+      assert entry["strategy"] == "review"
+      assert entry["merge"]["safety"] == "review"
+      assert entry["merge"]["rationale"] =~ "unqualified-observation"
+    end
+  end
+
+  test "canonical pool spellings match the independent farm gate" do
+    for {pool, name} <- [p0: "P0", p1: "P1", p2: "P2", p3: "P3", mass_squash: "mass_squash"] do
+      {_decision, entry, _lease} = Dispatcher.dispatch(ctx(%{pool: pool}))
+      assert entry["merge"]["pool"] == name
+    end
   end
 
   test "a veto -> report_only / control, and the veto rides along in the manifest" do
