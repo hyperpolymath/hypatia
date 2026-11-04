@@ -115,7 +115,8 @@ jobs:
             test/cross_repo_learning_test.exs \
             test/outcome_tracker_runtime_store_test.exs \
             test/merge_orchestration/sensor_test.exs \
-            test/merge_orchestration/loop_test.exs
+            test/merge_orchestration/loop_test.exs \
+            test/workflow_hardening_test.exs
 
       - name: Run E2E test suite
         run: bash tests/e2e.sh

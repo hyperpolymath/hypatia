@@ -1560,15 +1560,430 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end)
   end
 
+  # WH014 is a bounded literal-path check, not a shell interpreter. Tokens
+  # keep quoted data separate from control operators. Command substitutions
+  # are analysed as commands; quoted examples and comments are not commands.
+  @wh014_report_path ~r/\A[A-Za-z0-9_.\/-]+\.(?:json|sarif)\z/
+  @wh014_upload ~r/\Agithub\/codeql-action\/upload-sarif@[^ \t]+\z/
+  @wh014_workspace "/__wh014_workspace__"
+
+  defp wh014_masked_upload?(body, inherited_directory) do
+    [preamble | _] = String.split(body, ~r/^[ \t]*steps:/m, parts: 2)
+    directory = wh014_default_directory(preamble, inherited_directory)
+
+    body
+    |> step_bodies()
+    |> Enum.reduce_while(MapSet.new(), fn step, tainted ->
+      upload = wh014_step_value(step, "uses")
+      report = wh014_step_input(step, "sarif_file")
+      report = wh014_path(report, @wh014_workspace)
+
+      if is_binary(upload) and Regex.match?(@wh014_upload, upload) and
+           not is_nil(report) and MapSet.member?(tainted, report) do
+        {:halt, :masked_upload}
+      else
+        step_directory =
+          case wh014_step_value(step, "working-directory") do
+            nil -> directory
+            value -> wh014_directory(value, @wh014_workspace)
+          end
+
+        next =
+          if is_nil(step_directory) do
+            tainted
+          else
+            step
+            |> scan_run_blocks()
+            |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+            |> Enum.sort_by(&elem(&1, 0))
+            |> Enum.reduce(tainted, fn {_line, runs}, paths ->
+              # scan_run_blocks returns the scalar header and its body at
+              # the same line. Use the complete body once, in source order.
+              run = Enum.max_by(runs, &byte_size/1)
+
+              case wh014_run_tokens(run) do
+                {:ok, tokens} -> wh014_follow_commands(tokens, paths, step_directory)
+                :unknown -> paths
+              end
+            end)
+          end
+
+        {:cont, next}
+      end
+    end)
+    |> Kernel.==(:masked_upload)
+  end
+
+  defp wh014_step_lines(step) do
+    [item | rest] = String.split(step, "\n")
+
+    case Regex.run(~r/^([ \t]*-[ \t]+)(.*)$/, item) do
+      [_, prefix, value] ->
+        column = String.length(prefix)
+        {column, [String.duplicate(" ", column) <> value | rest]}
+
+      _ ->
+        {nil, []}
+    end
+  end
+
+  defp wh014_step_value(step, key) do
+    {column, lines} = wh014_step_lines(step)
+    wh014_yaml_value(lines, column, key)
+  end
+
+  defp wh014_step_input(step, key) do
+    {column, lines} = wh014_step_lines(step)
+
+    case Enum.drop_while(lines, fn line ->
+           indent_of(line) != column or not Regex.match?(~r/^[ \t]*with:[ \t]*$/, line)
+         end) do
+      [_with | rest] ->
+        inputs = Enum.take_while(rest, &(blank_or_comment?(&1) or indent_of(&1) > column))
+
+        case Enum.reject(inputs, &blank_or_comment?/1) do
+          [first | _] -> wh014_yaml_value(inputs, indent_of(first), key)
+          [] -> nil
+        end
+
+      [] ->
+        nil
+    end
+  end
+
+  defp wh014_yaml_value(lines, column, key) do
+    pattern = Regex.compile!("^[ \\t]*" <> Regex.escape(key) <> ":[ \\t]*(.*)$")
+
+    Enum.find_value(lines, fn line ->
+      if indent_of(line) == column do
+        case Regex.run(pattern, line) do
+          [_, value] -> wh014_literal_scalar(value)
+          _ -> nil
+        end
+      end
+    end)
+  end
+
+  defp wh014_literal_scalar(value) do
+    case Regex.run(~r/\A(?:"([^"]*)"|'([^']*)'|([^ \t#]+))[ \t]*(?:#.*)?\z/, String.trim(value)) do
+      nil -> nil
+      captures -> captures |> tl() |> Enum.find(&(&1 != ""))
+    end
+  end
+
+  defp wh014_default_directory(content, inherited) do
+    if Regex.match?(~r/^[ \t]*working-directory:/m, content) do
+      case Regex.run(@working_directory, content) do
+        [_, value] -> wh014_directory(value, @wh014_workspace)
+        _ -> nil
+      end
+    else
+      inherited
+    end
+  end
+
+  defp wh014_directory(value, base) do
+    if is_binary(value) and Regex.match?(~r/\A[A-Za-z0-9_.\/-]+\z/, value),
+      do: Path.expand(value, base),
+      else: nil
+  end
+
+  defp wh014_path(value, directory) do
+    if is_binary(value) and Regex.match?(@wh014_report_path, value),
+      do: Path.expand(value, directory),
+      else: nil
+  end
+
+  defp wh014_run_tokens(run) do
+    [header | lines] = String.split(run, "\n")
+
+    with [_, value] <- Regex.run(~r/^[ \t]*(?:-[ \t]+)?run:[ \t]*(.*)$/, header) do
+      script =
+        cond do
+          Regex.match?(~r/\A\|[-+]?[ \t]*(?:#.*)?\z/, value) -> Enum.join(lines, "\n")
+          String.starts_with?(value, [">", "'", "\""]) -> nil
+          true -> value
+        end
+
+      if is_binary(script) do
+        case wh014_lex(script, :plain, nil, [], false) do
+          {:ok, tokens, ""} -> {:ok, tokens}
+          _ -> :unknown
+        end
+      else
+        :unknown
+      end
+    else
+      _ -> :unknown
+    end
+  end
+
+  defp wh014_flush(tokens, nil), do: tokens
+  defp wh014_flush(tokens, word), do: [{:word, word} | tokens]
+
+  defp wh014_lex("", :plain, word, tokens, false),
+    do: {:ok, Enum.reverse(wh014_flush(tokens, word)), ""}
+
+  defp wh014_lex("", _quote, _word, _tokens, _nested), do: :unknown
+
+  defp wh014_lex(<<")", rest::binary>>, :plain, word, tokens, true),
+    do: {:ok, Enum.reverse(wh014_flush(tokens, word)), rest}
+
+  defp wh014_lex(<<"'", rest::binary>>, :single, word, tokens, nested),
+    do: wh014_lex(rest, :plain, word, tokens, nested)
+
+  defp wh014_lex(<<"'", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :single, word || "", tokens, nested)
+
+  defp wh014_lex(<<"\"", rest::binary>>, :double, word, tokens, nested),
+    do: wh014_lex(rest, :plain, word, tokens, nested)
+
+  defp wh014_lex(<<"\"", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :double, word || "", tokens, nested)
+
+  defp wh014_lex(<<"\\\r\n", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double],
+       do: wh014_lex(rest, quote, word, tokens, nested)
+
+  defp wh014_lex(<<"\\\n", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double],
+       do: wh014_lex(rest, quote, word, tokens, nested)
+
+  defp wh014_lex(<<"\\", char::utf8, rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, (word || "") <> <<char::utf8>>, tokens, nested)
+
+  defp wh014_lex(<<"\\", char::utf8, rest::binary>>, :double, word, tokens, nested)
+       when char in [36, 96, 34, 92],
+       do: wh014_lex(rest, :double, (word || "") <> <<char::utf8>>, tokens, nested)
+
+  # $$ expands to the shell PID. Its second dollar is not the start of a
+  # command substitution in printed text such as "$$(jq ... || echo 0)".
+  defp wh014_lex(<<"$$", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double],
+       do: wh014_lex(rest, quote, (word || "") <> "$$", tokens, nested)
+
+  # Arithmetic expansion has different token rules and is outside the
+  # command-substitution grammar. Do not interpret its data as commands.
+  defp wh014_lex(<<"$((", _rest::binary>>, quote, _word, _tokens, _nested)
+       when quote in [:plain, :double],
+       do: :unknown
+
+  defp wh014_lex(<<"$(", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double] do
+    case wh014_lex(rest, :plain, nil, [], true) do
+      {:ok, inner, tail} ->
+        wh014_lex(tail, quote, (word || "") <> "$()", [{:nested, inner} | tokens], nested)
+
+      _ ->
+        :unknown
+    end
+  end
+
+  defp wh014_lex(<<"(", rest::binary>>, :plain, word, tokens, nested) do
+    case wh014_lex(rest, :plain, nil, [], true) do
+      {:ok, inner, tail} ->
+        wh014_lex(tail, :plain, nil, [{:nested, inner} | wh014_flush(tokens, word)], nested)
+
+      _ ->
+        :unknown
+    end
+  end
+
+  # A here-document needs its own grammar. Do not read its data as shell
+  # commands or claim that this run's dynamic flow has been analysed.
+  defp wh014_lex(<<"<<", _rest::binary>>, :plain, _word, _tokens, _nested), do: :unknown
+
+  defp wh014_lex(<<"#", rest::binary>>, :plain, nil, tokens, nested) do
+    case String.split(rest, "\n", parts: 2) do
+      [_comment, tail] -> wh014_lex("\n" <> tail, :plain, nil, tokens, nested)
+      [_comment] -> wh014_lex("", :plain, nil, tokens, nested)
+    end
+  end
+
+  defp wh014_lex(<<char, rest::binary>>, :plain, word, tokens, nested)
+       when char in [?\s, ?\t, ?\r],
+       do: wh014_lex(rest, :plain, nil, wh014_flush(tokens, word), nested)
+
+  defp wh014_lex(<<char, rest::binary>>, :plain, word, tokens, nested)
+       when char in [?\n, ?;],
+       do: wh014_lex(rest, :plain, nil, [:sequence | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"||", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:or | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"&&", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:and | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"&", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:sequence | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"|", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:pipe | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<">", rest::binary>>, :plain, word, tokens, nested) do
+    {kind, rest} =
+      if String.starts_with?(rest, ">"),
+        do: {:append, String.slice(rest, 1..-1//1)},
+        else: {:out, rest}
+
+    {descriptor, words} =
+      if word in ["1", "2"],
+        do: {word, tokens},
+        else: {"1", wh014_flush(tokens, word)}
+
+    wh014_lex(rest, :plain, nil, [{kind, descriptor} | words], nested)
+  end
+
+  defp wh014_lex(<<"<", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:input | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<char::utf8, rest::binary>>, quote, word, tokens, nested),
+    do: wh014_lex(rest, quote, (word || "") <> <<char::utf8>>, tokens, nested)
+
+  defp wh014_segments(tokens) do
+    {segments, current} =
+      Enum.reduce(tokens, {[], []}, fn token, {segments, current} ->
+        if token in [:sequence, :and, :or, :pipe] do
+          if current == [] do
+            {segments, current}
+          else
+            {[{Enum.reverse(current), token} | segments], []}
+          end
+        else
+          {segments, [token | current]}
+        end
+      end)
+
+    Enum.reverse([{Enum.reverse(current), :sequence} | segments])
+    |> Enum.reject(&(elem(&1, 0) == []))
+  end
+
+  defp wh014_follow_commands(tokens, tainted, directory) do
+    segments = wh014_segments(tokens)
+
+    segments
+    |> Enum.with_index()
+    |> Enum.reduce({tainted, []}, fn {{command, separator}, index}, {paths, piped_inputs} ->
+      paths =
+        Enum.reduce(command, paths, fn
+          {:nested, inner}, acc -> wh014_follow_commands(inner, acc, directory)
+          _, acc -> acc
+        end)
+
+      {words, redirects} = wh014_command_parts(command)
+      {inputs, copy_target} = wh014_inputs(words)
+      inputs =
+        if List.first(words) in ["jq", "cat"] do
+          redirected = for {:input, "0", path} <- redirects, do: path
+          inputs ++ redirected
+        else
+          inputs
+        end
+
+      inputs = Enum.map(inputs, &wh014_path(&1, directory)) |> Enum.reject(&is_nil/1)
+      inputs = if List.first(words) in ["jq", "cat"], do: inputs ++ piped_inputs, else: inputs
+
+      outputs =
+        for {kind, "1", value} <- redirects,
+            path = wh014_path(value, directory),
+            not is_nil(path),
+            do: {kind, path}
+
+      outputs =
+        case wh014_path(copy_target, directory) do
+          nil -> outputs
+          path -> [{:out, path} | outputs]
+        end
+
+      next_words =
+        case Enum.at(segments, index + 1) do
+          {next, _} -> next |> wh014_command_parts() |> elem(0)
+          nil -> []
+        end
+
+      count_mask? =
+        List.first(words) == "jq" and separator == :or and next_words == ["echo", "0"]
+
+      paths =
+        if count_mask?, do: Enum.reduce(inputs, paths, &MapSet.put(&2, &1)), else: paths
+
+      inherited? = Enum.any?(inputs, &MapSet.member?(paths, &1))
+      output_mask? = separator == :or and next_words == ["true"]
+
+      paths =
+        Enum.reduce(outputs, paths, fn {kind, path}, acc ->
+          masked_json? = output_mask? and String.ends_with?(path, ".json")
+          if inherited? or masked_json? or (kind == :append and MapSet.member?(acc, path)),
+            do: MapSet.put(acc, path),
+            else: MapSet.delete(acc, path)
+        end)
+
+      {paths, if(separator == :pipe, do: inputs, else: [])}
+    end)
+    |> elem(0)
+  end
+
+  defp wh014_command_parts(tokens), do: wh014_command_parts(tokens, [], [])
+
+  defp wh014_command_parts([{kind, descriptor}, {:word, path} | rest], words, redirects)
+       when kind in [:out, :append],
+       do: wh014_command_parts(rest, words, [{kind, descriptor, path} | redirects])
+
+  defp wh014_command_parts([:input, {:word, path} | rest], words, redirects),
+    do: wh014_command_parts(rest, words, [{:input, "0", path} | redirects])
+
+  defp wh014_command_parts([{:word, word} | rest], words, redirects),
+    do: wh014_command_parts(rest, [word | words], redirects)
+
+  defp wh014_command_parts([_ | rest], words, redirects),
+    do: wh014_command_parts(rest, words, redirects)
+
+  defp wh014_command_parts([], words, redirects),
+    do: {Enum.reverse(words), Enum.reverse(redirects)}
+
+  defp wh014_inputs(["jq" | args]), do: {wh014_jq_inputs(args, false, []), nil}
+  defp wh014_inputs(["cat" | args]),
+    do: {Enum.reject(args, &String.starts_with?(&1, "-")), nil}
+
+  defp wh014_inputs([command | args]) when command in ["cp", "mv"] do
+    case Enum.reject(args, &(&1 in ["-f", "-v", "--"])) do
+      [source, target] -> {[source], target}
+      _ -> {[], nil}
+    end
+  end
+
+  defp wh014_inputs(_), do: {[], nil}
+
+  defp wh014_jq_inputs([option, _name, path | rest], filter?, inputs)
+       when option in ["--slurpfile", "--rawfile"],
+       do: wh014_jq_inputs(rest, filter?, [path | inputs])
+
+  defp wh014_jq_inputs([option, _name, _value | rest], filter?, inputs)
+       when option in ["--arg", "--argjson"],
+       do: wh014_jq_inputs(rest, filter?, inputs)
+
+  defp wh014_jq_inputs([option, _program | rest], _filter?, inputs)
+       when option in ["-f", "--from-file"],
+       do: wh014_jq_inputs(rest, true, inputs)
+
+  defp wh014_jq_inputs([option | _], _filter?, _inputs)
+       when option in ["--args", "--jsonargs"],
+       do: []
+
+  defp wh014_jq_inputs([arg | rest], filter?, inputs) do
+    cond do
+      String.starts_with?(arg, "-") -> wh014_jq_inputs(rest, filter?, inputs)
+      not filter? -> wh014_jq_inputs(rest, true, inputs)
+      true -> wh014_jq_inputs(rest, true, [arg | inputs])
+    end
+  end
+
+  defp wh014_jq_inputs([], _filter?, inputs), do: Enum.reverse(inputs)
+
   # ── WH014 ───────────────────────────────────────────────────────────────
   # Measured 2026-09-14: this shape DELETED 84 real code-scanning alerts from
   # hyperpolymath/academic-workflow-suite while every run reported success.
 
-  @sarif_upload_re ~r{codeql-action/upload-sarif}
-  # A scanner invocation whose failure is swallowed: `… > something.json || true`
-  @masked_scan_re ~r/>\s*[^\s|;&]*\.json\s*(?:2>[^\s|;&]*\s*)?\|\|\s*true/
-  # A count that manufactures a zero when the artefact is unparseable.
-  @masked_count_re ~r/\bjq\b[^\n]*\|\|\s*echo\s+0\b/
   @doc """
   WH014 — a scanner or findings-count failure is masked in a workflow that
   uploads SARIF to GitHub code scanning.
@@ -1588,10 +2003,11 @@ defmodule Hypatia.Rules.WorkflowHardening do
   carrying **84** findings on 09-11 was followed by six green runs uploading
   **0** results, closing all 84.
 
-  The rule reports jobs containing both:
-
-    1. a SARIF upload to code scanning;
-    2. a masked JSON-producing invocation or count (`|| true`, `|| echo 0`).
+  The rule reports a masked JSON-producing invocation or count (`|| true`,
+  `|| echo 0`) only when a visible literal-path chain carries that report
+  to the named `sarif_file` of a later code-scanning upload in the same job.
+  A masked count of unrelated optional metadata does not establish that
+  relationship. Neither does an external converter's name alone.
 
   Neither `jq -e` nor a non-empty array establishes scanner completion: the
   assertion may inspect unrelated data, or a failed scan may leave partial
@@ -1599,10 +2015,18 @@ defmodule Hypatia.Rules.WorkflowHardening do
   an empty array. Preserve the scanner's exit status and findings, reject
   execution or coverage errors, then validate the expected report shape.
 
-  This report-only rule correlates masks with uploads within the same extracted
-  job. Diagnostic non-JSON counts do not qualify as findings parsing. It does
-  not trace cross-job artefact or variable dependencies, parse shell control
-  flow, or attest that a scan actually completed.
+  This report-only rule follows literal JSON/SARIF paths through `jq`, `cat`,
+  `cp`, `mv` and shell redirections, in extracted step order. It recognises
+  `$(...)` command substitutions and backslash-newline continuations, keeps
+  independent commands separate, and ignores mask text inside comments or quoted data.
+  A known overwrite replaces the earlier path relationship. Literal working
+  directories are resolved relative to the workspace.
+
+  This is deliberately bounded: dynamic paths, external script internals,
+  cross-job artefacts, arithmetic expansions, here-documents, folded or quoted
+  YAML run scalars and general shell control flow are not analysed. Missing literal-flow evidence
+  means this rule cannot establish its pattern; it is never a scan-completion
+  or safety verdict. Do not treat absence of WH014 as assurance.
   """
   def wh014_masked_scanner_upload(repo_path) do
     repo_path
@@ -1615,8 +2039,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
         content
         |> extract_job_blocks()
         |> Enum.filter(fn {_job, _line, body} ->
-          Regex.match?(@sarif_upload_re, body) and
-            (Regex.match?(@masked_scan_re, body) or Regex.match?(@masked_count_re, body))
+          directory = wh014_default_directory(workflow_preamble(content), @wh014_workspace)
+          wh014_masked_upload?(body, directory)
         end)
 
       if affected_jobs != [] do
@@ -1626,8 +2050,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
             file: rel,
             severity: :high,
             reason:
-              "workflow #{rel} has a job that uploads SARIF to code scanning but masks a scanner " <>
-                "or findings-count failure (`|| true` / `|| echo 0`). A failed or " <>
+              "workflow #{rel} has a literal report path from a masked JSON-producing " <>
+                "command or findings count (`|| true` / `|| echo 0`) to a SARIF upload. A failed or " <>
                 "incomplete scan can become an empty SARIF upload that closes existing " <>
                 "alerts. An unrelated assertion or non-empty findings array does not " <>
                 "establish scanner completion.",
@@ -1635,6 +2059,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
             fix_recipe: "assert-findings-before-sarif-upload",
             detail: %{
               jobs: Enum.map(affected_jobs, fn {job, _line, _body} -> job end),
+              analysis_scope: "literal report paths in the same job; not scan-completion evidence",
               fix:
                 "Preserve the scanner exit status and reject execution or coverage " <>
                   "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
