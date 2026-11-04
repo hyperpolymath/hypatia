@@ -1392,8 +1392,8 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   # Regression floor for the alert-DELETION shape measured 2026-09-14 on
   # hyperpolymath/academic-workflow-suite: a masked scanner plus an
   # unconditional SARIF upload auto-closed 84 real code-scanning alerts
-  # while every run reported success. The arms below mirror the four-arm
-  # planted-positive control run against the real files.
+  # while every run reported success. Positive fixtures below expose the
+  # report conversion path; they do not infer an external script's I/O.
 
   describe "standards#943 precision — mirror pushes and reusable callers" do
     test "WH013 is silent when every push targets a foreign-forge remote" do
@@ -1464,8 +1464,82 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
     end
   end
 
+  defp wh014_repo(script) do
+    body = script |> String.split("\n") |> Enum.map_join("\n", &("          " <> &1))
+
+    create_repo_with_workflow(
+      "jobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n" <>
+        body <>
+        "\n      - uses: github/codeql-action/upload-sarif@v4\n" <>
+        "        with:\n          sarif_file: out.sarif\n"
+    )
+  end
+
   describe "wh014_masked_scanner_upload/1" do
-    test "fires on mask + upload with no findings assertion (the measured shape)" do
+    test "a diagnostic count in another job cannot qualify a SARIF mask" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          diagnostics:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+                  test "$COUNT" -gt 0
+          security:
+            runs-on: ubuntu-latest
+            steps:
+              - run: trivy fs --format sarif --output results.sarif .
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: results.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a same-job diagnostic git count is not a masked JSON findings count" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          security:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+                  test "$COUNT" -gt 0
+                  trivy fs --format sarif --output results.sarif .
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: results.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an unrelated masked JSON job does not acquire another job's SARIF upload" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          diagnostics:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(jq '. | length' statistics.json || echo 0)
+          security:
+            runs-on: ubuntu-latest
+            steps:
+              - run: trivy fs --format sarif --output results.sarif .
+              - uses: github/codeql-action/upload-sarif@v4
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "fires on mask plus a visible conversion and upload with no findings assertion" do
       repo =
         create_repo_with_workflow("""
         name: Scan
@@ -1477,7 +1551,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
               - run: |
                   hypatia scan . --exit-zero > hypatia-findings.json || true
                   COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
-                  node write-sarif.cjs
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' hypatia-findings.json > hypatia.sarif
               - uses: github/codeql-action/upload-sarif@v4.32.6
                 with:
                   sarif_file: hypatia.sarif
@@ -1491,7 +1565,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
-    test "does not fire when the findings artefact is asserted non-empty" do
+    test "a non-empty findings assertion cannot certify a masked scan completed" do
       repo =
         create_repo_with_workflow("""
         name: Scan
@@ -1503,13 +1577,108 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
               - run: |
                   hypatia scan . --exit-zero > hypatia-findings.json || true
                   jq -e 'type == "array" and length > 0' hypatia-findings.json
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' hypatia-findings.json > hypatia.sarif
               - uses: github/codeql-action/upload-sarif@v4.32.6
                 with:
                   sarif_file: hypatia.sarif
         """)
 
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an unrelated jq assertion cannot hide malformed findings becoming zero" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  printf 'not-json' > findings.json
+                  COUNT=$(jq '. | length' findings.json 2>/dev/null || echo 0)
+                  jq -e '.enabled' unrelated-settings.json
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' findings.json > out.sarif
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an empty array from a failed scan stays unsafe even when its shape validates" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  (printf '[]'; exit 2) > findings.json || true
+                  jq -e 'type == "array"' findings.json
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' findings.json > out.sarif
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "unmasked empty and non-empty inputs do not require a minimum finding count" do
+      for report <- ["[]", ~s([{"rule_id":"real-finding-fixture"}])] do
+        repo =
+          create_repo_with_workflow("""
+          name: Scan
+          jobs:
+            scan:
+              runs-on: ubuntu-latest
+              steps:
+                - run: |
+                    set -euo pipefail
+                    printf '%s' '#{report}' > findings.json
+                    jq -e 'type == "array"' findings.json
+                    jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' findings.json > out.sarif
+                - uses: github/codeql-action/upload-sarif@v4.32.6
+                  with:
+                    sarif_file: out.sarif
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "explicit findings exit handling preserves results while rejecting scan errors" do
+      repo =
+        create_repo_with_workflow("""
+        name: Scan
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  set -euo pipefail
+                  scan_status=0
+                  hypatia scan . > findings.json || scan_status=$?
+                  case "$scan_status" in
+                    0|1) ;;
+                    *) exit "$scan_status" ;;
+                  esac
+                  jq -e 'type == "array"' findings.json
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' findings.json > out.sarif
+              - uses: github/codeql-action/upload-sarif@v4.32.6
+                with:
+                  sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
       assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
-      File.rm_rf!(repo)
     end
 
     test "does not fire once the mask is removed" do
@@ -1524,7 +1693,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
               - run: |
                   set -euo pipefail
                   hypatia scan . --exit-zero > hypatia-findings.json
-                  node write-sarif.cjs
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' hypatia-findings.json > hypatia.sarif
               - uses: github/codeql-action/upload-sarif@v4.32.6
                 with:
                   sarif_file: hypatia.sarif
@@ -1563,6 +1732,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
             steps:
               - run: |
                   COUNT=$(jq '. | length' findings.json 2>/dev/null || echo 0)
+                  jq '{version: "2.1.0", runs: [{tool: {driver: {name: "fixture"}}, results: .}]}' findings.json > out.sarif
               - uses: github/codeql-action/upload-sarif@v4.32.6
                 with:
                   sarif_file: out.sarif
@@ -1570,6 +1740,315 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
 
       assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
       File.rm_rf!(repo)
+    end
+
+    test "unrelated same-job JSON masks do not qualify another report's upload" do
+      for mask <- [
+            "COUNT=$(jq 'length' optional-metadata.json || echo 0)",
+            "optional-tool > optional-metadata.json || true"
+          ] do
+        repo =
+          wh014_repo(
+            mask <>
+              "\njq '.' optional-metadata.json > optional-normalized.json" <>
+              "\ncp optional-normalized.json optional-copy.json" <>
+              "\nhypatia scan . > findings.json" <>
+              "\njq '.' findings.json > normalized.json" <>
+              "\njq '{runs: [{results: .}]}' normalized.json > out.sarif"
+          )
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "continued jq commands and substitutions retain their zero fallback" do
+      for script <- [
+            ~S"""
+            hypatia scan . > findings.json
+            COUNT=$(jq \
+              'length' findings.json 2>/dev/null ||
+              echo 0)
+            jq '{runs: [{results: .}]}' findings.json > out.sarif
+            """,
+            ~S"""
+            hypatia scan . > findings.json
+            COUNT="$(jq 'length' \
+              findings.json || echo 0)"
+            jq '{runs: [{results: .}]}' findings.json > out.sarif
+            """,
+            ~S"""
+            hypatia scan . > findings.json
+            COUNT=$(cat findings.json | jq 'length' || echo 0)
+            jq '{runs: [{results: .}]}' findings.json > out.sarif
+            """,
+            ~S"""
+            hypatia scan . > findings.json
+            COUNT=$(jq 'length' < findings.json || echo 0)
+            jq '{runs: [{results: .}]}' findings.json > out.sarif
+            """
+          ] do
+        repo = wh014_repo(script)
+        on_exit(fn -> File.rm_rf!(repo) end)
+
+        assert [%{rule: "WH014", action: :report, detail: %{jobs: ["scan"]}}] =
+                 WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "quoted and commented mask examples are data, including quoted jq arguments" do
+      repo =
+        wh014_repo(~S"""
+        hypatia scan . > findings.json
+        echo "jq 'length' findings.json || echo 0"
+        printf '%s\n' "$$(jq 'length' findings.json || echo 0)"
+        printf '%s\n' 'hypatia scan . > findings.json || true'
+        # COUNT=$(jq 'length' findings.json || echo 0)
+        jq -e 'type == "array"' findings.json # || echo 0
+        jq --arg note '|| echo 0' '.' findings.json > normalized.json
+        jq '{runs: [{results: .}]}' normalized.json > out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "independent commands do not acquire an earlier jq command's fallback" do
+      for separator <- ["\n", "; ", " & "] do
+        repo =
+          wh014_repo(
+            "hypatia scan . > findings.json\njq 'length' findings.json" <>
+              separator <>
+              "false || echo 0\njq '{runs: [{results: .}]}' findings.json > out.sarif"
+          )
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "literal report flow crosses conversions, pipes, copies and later steps" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  hypatia scan . > ./findings.json || true
+                  jq '.' findings.json > normalized.json
+              - run: |
+                  cat normalized.json | jq '{runs: [{results: .}]}' > generated.sarif
+                  cp generated.sarif copied.sarif
+                  mv copied.sarif out.sarif
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: "./out.sarif"
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a slurpfile conversion exposes its literal report input" do
+      repo =
+        wh014_repo(~S"""
+        COUNT=$(jq 'length' findings.json || echo 0)
+        jq -n --slurpfile data findings.json '{runs: [{results: $data[0]}]}' > out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a known overwrite replaces the earlier report relationship" do
+      repo =
+        wh014_repo(~S"""
+        hypatia scan . > findings.json || true
+        jq '{runs: [{results: .}]}' findings.json > out.sarif
+        other-scanner > fresh.json
+        jq '{runs: [{results: .}]}' fresh.json > out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a mask after the upload cannot qualify an earlier upload" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: out.sarif
+              - run: |
+                  hypatia scan . > findings.json || true
+                  jq '{runs: [{results: .}]}' findings.json > out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "literal working directories distinguish same-named report files" do
+      for {input, expected?} <- [{"findings.json", false}, {"../scanner/findings.json", true}] do
+        repo =
+          create_repo_with_workflow("""
+          jobs:
+            scan:
+              runs-on: ubuntu-latest
+              steps:
+                - working-directory: scanner
+                  run: hypatia scan . > findings.json || true
+                - working-directory: render
+                  run: jq '{runs: [{results: .}]}' #{input} > ../out.sarif
+                - uses: github/codeql-action/upload-sarif@v4
+                  with:
+                    sarif_file: out.sarif
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
+        assert (findings != []) == expected?
+      end
+    end
+
+    test "an implicit external converter is unanalysed, not completion evidence" do
+      repo =
+        wh014_repo(~S"""
+        hypatia scan . > findings.json || true
+        COUNT=$(jq 'length' findings.json || echo 0)
+        node write-sarif.cjs
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a printed upload action is not an upload step" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  hypatia scan . > findings.json || true
+                  jq '{runs: [{results: .}]}' findings.json > out.sarif
+                  echo 'uses: github/codeql-action/upload-sarif@v4'
+                  echo 'sarif_file: out.sarif'
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "fd duplication preserves scanner and count fallback association" do
+      for redirect <- ["2>&1", ">&2", "<&0"],
+          mask <- [:scanner, :count] do
+        command =
+          case mask do
+            :scanner ->
+              "hypatia scan . > findings.json #{redirect} || true"
+
+            :count ->
+              "hypatia scan . > findings.json\n" <>
+                "COUNT=$(jq 'length' findings.json #{redirect} || echo 0)"
+          end
+
+        repo =
+          wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "fd duplication does not absorb a real background or separate command" do
+      for command <- [
+            "hypatia scan . > findings.json 2>&1 & false || true",
+            "hypatia scan . > findings.json 2>&1; false || true",
+            "hypatia scan . > findings.json\n" <>
+              "jq 'length' findings.json 2>&1 & false || echo 0",
+            "hypatia scan . > findings.json\n" <>
+              "jq 'length' findings.json <&0\nfalse || echo 0"
+          ] do
+        repo =
+          wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "bare-dash upload steps use the body's key column" do
+      for marker <- ["-", "-   ", "- # literal upload"],
+          named? <- [false, true],
+          report <- ["out.sarif", "unrelated.sarif"] do
+        name = if named?, do: "        name: Upload report\n", else: ""
+
+        workflow =
+          "jobs:\n  scan:\n    runs-on: ubuntu-latest\n    steps:\n" <>
+            "      - run: |\n" <>
+            "          scanner > findings.json || true\n" <>
+            "          jq '.' findings.json > out.sarif\n" <>
+            "      #{marker}\n" <>
+            "        # The first real mapping entry establishes indentation.\n" <>
+            name <>
+            "        uses: github/codeql-action/upload-sarif@v4\n" <>
+            "        with:\n          sarif_file: #{report}\n"
+
+        repo = create_repo_with_workflow(workflow)
+        on_exit(fn -> File.rm_rf!(repo) end)
+        findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
+        assert (findings != []) == (report == "out.sarif")
+      end
+    end
+
+    test "bare-dash scalar content cannot masquerade as upload mapping keys" do
+      repo =
+        create_repo_with_workflow(~S"""
+        jobs:
+          scan:
+            runs-on: ubuntu-latest
+            steps:
+              -
+                run: |
+                  scanner > findings.json || true
+                  jq '.' findings.json > out.sarif
+                  uses: github/codeql-action/upload-sarif@v4
+                  with:
+                    sarif_file: out.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "masked direct SARIF output reaches its literal upload" do
+      for script <- [
+            "scanner --format sarif > out.sarif || true",
+            "scanner --format sarif > out.sarif 2>&1 || true"
+          ] do
+        repo = wh014_repo(script)
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
+    end
+
+    test "direct SARIF masks retain unrelated-output and overwrite boundaries" do
+      for script <- [
+            "metadata > unrelated.sarif || true\nscanner > out.sarif",
+            "scanner > out.sarif || true\nscanner > out.sarif",
+            "scanner > out.sarif\nfalse || true"
+          ] do
+        repo = wh014_repo(script)
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+      end
     end
   end
 end

@@ -8,7 +8,7 @@
 #   - does not double-credit the same event on replay
 #   - credits two distinct attempts with identical payloads separately
 #   - handles missing / unreadable files without silent success
-#   - normalises legacy integer offsets to the new position map
+#   - binds offsets to their runtime source and replays legacy cursors safely
 
 defmodule Hypatia.LearningSchedulerTest do
   use ExUnit.Case, async: false
@@ -18,7 +18,7 @@ defmodule Hypatia.LearningSchedulerTest do
   @moduletag timeout: 120_000
 
   # Each test creates an isolated temp directory and overrides the
-  # @verisimdb_data_path via Application.put_env so ingest_new_outcomes/1
+  # :verisimdb_data_path via Application.put_env so ingest_new_outcomes/1
   # reads from it. We restore the original on exit.
   setup do
     orig = Application.get_env(:hypatia, :verisimdb_data_path)
@@ -117,6 +117,35 @@ defmodule Hypatia.LearningSchedulerTest do
 
   # ── Two-poll incomplete-tail scenario ───────────────────────────────
 
+  test "runtime store changes do not reuse the prior store's filename cursor", %{tmp: tmp} do
+    other_store = Path.join(tmp, "other-store")
+    timestamp = %{"timestamp" => "2026-11-04T00:00:00Z"}
+    first_row = record("store-a", "failure", timestamp) <> "\n"
+    second_row = record("store-b", "failure", timestamp) <> "\n"
+    assert byte_size(first_row) == byte_size(second_row)
+    write_jsonl(tmp, "outcomes.jsonl", first_row)
+    write_jsonl(other_store, "outcomes.jsonl", second_row)
+
+    assert {first_positions, 1, first_recipes} = LearningScheduler.ingest_new_outcomes(%{})
+    assert first_recipes == MapSet.new(["store-a"])
+
+    Application.put_env(:hypatia, :verisimdb_data_path, other_store)
+
+    assert {second_positions, 1, second_recipes} =
+             LearningScheduler.ingest_new_outcomes(first_positions)
+
+    assert second_recipes == MapSet.new(["store-b"])
+
+    assert second_positions["outcomes.jsonl"].source_path ==
+             Path.join(outcomes_dir(other_store), "outcomes.jsonl")
+
+    assert {^second_positions, 0, _} = LearningScheduler.ingest_new_outcomes(second_positions)
+
+    append_jsonl(other_store, "outcomes.jsonl", record("store-c", "failure", timestamp) <> "\n")
+    assert {_, 1, appended_recipes} = LearningScheduler.ingest_new_outcomes(second_positions)
+    assert appended_recipes == MapSet.new(["store-c"])
+  end
+
   describe "incomplete-tail handling (two-poll fixture)" do
     test "poll A with incomplete final record does not advance past it", %{tmp: tmp} do
       # Write two complete records + one incomplete record (no trailing \n).
@@ -155,6 +184,7 @@ defmodule Hypatia.LearningSchedulerTest do
 
       # Poll B: producer finishes the record.
       append_jsonl(tmp, "2026-11.jsonl", completion <> "\n")
+
       {positions_b, count_b, recipes_b} =
         LearningScheduler.ingest_new_outcomes(positions_a)
 
@@ -165,6 +195,59 @@ defmodule Hypatia.LearningSchedulerTest do
       # No incomplete tail remains.
       pos_b = Map.get(positions_b, "2026-11.jsonl")
       assert pos_b.incomplete_tail == ""
+    end
+
+    test "unchanged partial writes retain their bytes and offset across polls", %{tmp: tmp} do
+      complete = record("recipe-a", "success", %{"verification" => "verified"}) <> "\n"
+      partial = ~s({"recipe_id":"recipe-b","outcome":"suc)
+      completion = ~s(cess","verification":"verified"}) <> "\n"
+      write_jsonl(tmp, "partial.jsonl", complete <> partial)
+
+      assert {positions, 1, _} = LearningScheduler.ingest_new_outcomes(%{})
+
+      assert positions["partial.jsonl"] == %{
+               offset: byte_size(complete),
+               incomplete_tail: partial,
+               source_path: Path.join(outcomes_dir(tmp), "partial.jsonl")
+             }
+
+      for _ <- 1..3 do
+        assert {^positions, 0, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+        assert recipes == MapSet.new()
+      end
+
+      append_jsonl(tmp, "partial.jsonl", completion)
+      assert {completed, 1, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+      assert recipes == MapSet.new(["recipe-b"])
+      assert completed["partial.jsonl"].offset == byte_size(complete <> partial <> completion)
+      assert completed["partial.jsonl"].incomplete_tail == ""
+      assert {^completed, 0, _} = LearningScheduler.ingest_new_outcomes(completed)
+    end
+
+    test "a sole unterminated record stays unacknowledged until its newline arrives", %{tmp: tmp} do
+      row = record("recipe-a", "failure")
+      write_jsonl(tmp, "partial.jsonl", row)
+
+      assert {positions, 0, recipes} = LearningScheduler.ingest_new_outcomes(%{})
+      assert recipes == MapSet.new()
+
+      assert positions["partial.jsonl"] == %{
+               offset: 0,
+               incomplete_tail: row,
+               source_path: Path.join(outcomes_dir(tmp), "partial.jsonl")
+             }
+
+      assert {^positions, 0, _} = LearningScheduler.ingest_new_outcomes(positions)
+
+      append_jsonl(tmp, "partial.jsonl", "\n")
+      assert {completed, 1, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+      assert recipes == MapSet.new(["recipe-a"])
+
+      assert completed["partial.jsonl"] == %{
+               offset: byte_size(row) + 1,
+               incomplete_tail: "",
+               source_path: Path.join(outcomes_dir(tmp), "partial.jsonl")
+             }
     end
   end
 
@@ -265,15 +348,89 @@ defmodule Hypatia.LearningSchedulerTest do
 
       {_, count_b, recipes_b} = LearningScheduler.ingest_new_outcomes(positions_a)
       # File was truncated, so offset reset and the new content is read.
-      assert count_b >= 1
+      assert count_b == 1
       assert MapSet.member?(recipes_b, "recipe-c")
+    end
+
+    test "rotation to an empty file resets the position without inventing a row", %{tmp: tmp} do
+      write_jsonl(tmp, "rotated.jsonl", record("old-recipe", "failure") <> "\n")
+      assert {positions, 1, _} = LearningScheduler.ingest_new_outcomes(%{})
+
+      write_jsonl(tmp, "rotated.jsonl", "")
+      assert {reset, 0, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+      assert recipes == MapSet.new()
+
+      assert reset["rotated.jsonl"] == %{
+               offset: 0,
+               incomplete_tail: "",
+               source_path: Path.join(outcomes_dir(tmp), "rotated.jsonl")
+             }
+
+      new_row = record("new-recipe", "failure") <> "\n"
+      append_jsonl(tmp, "rotated.jsonl", new_row)
+      assert {completed, 1, recipes} = LearningScheduler.ingest_new_outcomes(reset)
+      assert recipes == MapSet.new(["new-recipe"])
+      assert completed["rotated.jsonl"].offset == byte_size(new_row)
+    end
+
+    test "a detected truncation keeps its path-bound reset when the immediate read fails", %{
+      tmp: tmp
+    } do
+      path = Path.join(outcomes_dir(tmp), "retry.jsonl")
+      # A directory gives a deterministic successful stat followed by an
+      # actual read error, including when the suite runs as root. The stale
+      # cursor is larger than that stat, so this exercises the reset branch.
+      File.mkdir!(path)
+      previous_offset = File.stat!(path).size + 100
+
+      positions = %{
+        "retry.jsonl" => %{
+          offset: previous_offset,
+          incomplete_tail: "fragment from the previous file",
+          source_path: path
+        }
+      }
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {reset, 0, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+          assert recipes == MapSet.new()
+
+          assert reset["retry.jsonl"] == %{
+                   offset: 0,
+                   incomplete_tail: "",
+                   source_path: path
+                 }
+
+          # Before the next poll, the replacement grows past the old offset.
+          # Keeping the old cursor would skip the first complete event.
+          File.rmdir!(path)
+
+          first =
+            record("replacement-first", "failure", %{
+              "detail" => String.duplicate("x", previous_offset + 100)
+            }) <> "\n"
+
+          second = record("replacement-second", "failure") <> "\n"
+          File.write!(path, first <> second)
+          assert byte_size(first <> second) > previous_offset
+
+          assert {completed, 2, ingested} = LearningScheduler.ingest_new_outcomes(reset)
+          assert ingested == MapSet.new(["replacement-first", "replacement-second"])
+          assert completed["retry.jsonl"].offset == byte_size(first <> second)
+          assert completed["retry.jsonl"].source_path == path
+          assert {^completed, 0, _} = LearningScheduler.ingest_new_outcomes(completed)
+        end)
+
+      assert log =~ "outcome file retry.jsonl truncated"
+      assert log =~ "cannot read outcome file retry.jsonl"
     end
   end
 
   # ── Missing / unreadable files ──────────────────────────────────────
 
   describe "missing and unreadable files" do
-    test "empty outcomes directory returns zero", %{tmp: tmp} do
+    test "empty outcomes directory returns zero" do
       # No JSONL files exist.
       {positions, count, recipes} = LearningScheduler.ingest_new_outcomes(%{})
       assert count == 0
@@ -289,6 +446,19 @@ defmodule Hypatia.LearningSchedulerTest do
       assert count == 0
       assert MapSet.size(recipes) == 0
       assert positions == %{}
+    end
+
+    test "a read error preserves the position and is reported", %{tmp: tmp} do
+      File.mkdir_p!(Path.join(outcomes_dir(tmp), "unreadable.jsonl"))
+      positions = %{"unreadable.jsonl" => %{offset: 0, incomplete_tail: "pending"}}
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {^positions, 0, recipes} = LearningScheduler.ingest_new_outcomes(positions)
+          assert recipes == MapSet.new()
+        end)
+
+      assert log =~ "cannot read outcome file unreadable.jsonl"
     end
   end
 
@@ -351,6 +521,23 @@ defmodule Hypatia.LearningSchedulerTest do
   # ── Backward compatibility ──────────────────────────────────────────
 
   describe "backward compatibility with legacy integer positions" do
+    test "source-less nonzero cursors replay conservatively before being qualified", %{tmp: tmp} do
+      first = record("recipe-a", "failure") <> "\n"
+      second = record("recipe-b", "failure") <> "\n"
+      path = write_jsonl(tmp, "legacy.jsonl", first <> second)
+
+      for legacy <- [byte_size(first), %{offset: byte_size(first), incomplete_tail: "old-store"}] do
+        assert {positions, 2, recipes} =
+                 LearningScheduler.ingest_new_outcomes(%{"legacy.jsonl" => legacy})
+
+        assert recipes == MapSet.new(["recipe-a", "recipe-b"])
+        assert positions["legacy.jsonl"].source_path == path
+        assert positions["legacy.jsonl"].offset == byte_size(first <> second)
+        assert positions["legacy.jsonl"].incomplete_tail == ""
+        assert {^positions, 0, _} = LearningScheduler.ingest_new_outcomes(positions)
+      end
+    end
+
     test "legacy integer offset is normalised and advanced correctly", %{tmp: tmp} do
       line1 = record("recipe-a", "success", %{"verification" => "verified"})
       write_jsonl(tmp, "2026-11.jsonl", line1 <> "\n")

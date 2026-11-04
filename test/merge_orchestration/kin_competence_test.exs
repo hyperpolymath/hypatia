@@ -56,11 +56,13 @@ defmodule Hypatia.MergeOrchestration.KinCompetenceTest do
       change_class: :proof,
       change_level: :object,
       pool: :p2,
-      attestations: [%{bot: "spammy", verdict: :approve, confidence: 0.99}]
+      attestations: [%{bot: "spammy", verdict: :approve, confidence: 0.99}],
+      execution_cap: :arm_auto
     }
 
-    # uniform council would arm on the 0.99
+    # The explicit policy-model cap permits the uniform council's 0.99 arm.
     assert Strategist.decide(ctx).confidence == 0.99
+    assert Strategist.decide(ctx).safety == :arm_auto
 
     # competence-aware: spammy has zero trust → recuses → no approvals → flag
     weighted = KinCompetence.attach_weight(ctx, %{"spammy" => 0.0})

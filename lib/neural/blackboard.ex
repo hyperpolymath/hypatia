@@ -16,12 +16,14 @@ defmodule Hypatia.Neural.Blackboard do
 
   Uses ETS for lock-free concurrent reads across network GenServers.
   The GenServer process owns the ETS table and manages round lifecycle;
-  reads and writes go directly to ETS for performance.
+  raw diagnostic reads and writes go directly to ETS. The neural execution
+  path uses source-qualified calls through the owner so an old task cannot
+  insert an A result into a newly initialized B board.
 
   Each analysis round:
-  1. `start_round/0` -- clears the blackboard, increments round counter
+  1. `start_round_source/2` -- clears this board and increments its round counter
   2. Networks execute in phased order, reading/writing the blackboard
-  3. `end_round/0` -- freezes the round, returns the complete reasoning trace
+  3. `end_round_source/2` -- returns the source-checked reasoning trace
 
   Phase order (6 phases, 8 networks):
     1. RBF (novelty) -- everything benefits from knowing novel vs known
@@ -34,6 +36,8 @@ defmodule Hypatia.Neural.Blackboard do
 
   use GenServer
   require Logger
+
+  alias Hypatia.Neural.SourceStore
 
   @table_name :hypatia_blackboard
   @meta_table :hypatia_blackboard_meta
@@ -97,7 +101,8 @@ defmodule Hypatia.Neural.Blackboard do
       key: key,
       value: value,
       round: current_round(),
-      timestamp: System.os_time(:millisecond)
+      timestamp: System.os_time(:millisecond),
+      source_store: nil
     }
 
     :ets.insert(@table_name, {{network, key}, entry})
@@ -200,36 +205,46 @@ defmodule Hypatia.Neural.Blackboard do
     end
   end
 
+  @doc "Start a round only in the board's captured source lifecycle."
+  def start_round_source(source, server \\ __MODULE__),
+    do: GenServer.call(server, {:source, source, :start_round})
+
+  def end_round_source(source, server \\ __MODULE__),
+    do: GenServer.call(server, {:source, source, :end_round})
+
+  def write_source(source, network, key, value, server \\ __MODULE__),
+    do: GenServer.call(server, {:source, source, {:write, network, key, value}})
+
+  def read_source(source, network, key, server \\ __MODULE__),
+    do: GenServer.call(server, {:source, source, {:read, network, key}})
+
+  def snapshot_source(source, server \\ __MODULE__),
+    do: GenServer.call(server, {:source, source, :snapshot})
+
+  def identity_source(source, server \\ __MODULE__),
+    do: GenServer.call(server, {:source, source, :identity})
+
   # ── GenServer Callbacks ────────────────────────────────
 
   @impl true
-  def init(_opts) do
-    # Create ETS tables. :public allows direct read/write from any process.
-    # The GenServer owns the tables (they die with this process).
+  def init(opts) do
+    # Isolated actual boards use unnamed tables for lifecycle tests. The
+    # production instance retains its existing named diagnostic tables.
+    naming = if Keyword.get(opts, :isolated, false), do: [], else: [:named_table]
+
     table =
-      :ets.new(@table_name, [
-        :named_table,
-        :public,
-        :set,
-        read_concurrency: true,
-        write_concurrency: true
-      ])
+      :ets.new(
+        @table_name,
+        naming ++ [:public, :set, read_concurrency: true, write_concurrency: true]
+      )
 
-    meta =
-      :ets.new(@meta_table, [
-        :named_table,
-        :public,
-        :set,
-        read_concurrency: true
-      ])
-
-    # Initialise round metadata
-    :ets.insert(@meta_table, {:round, 0})
-    :ets.insert(@meta_table, {:round_started_at, nil})
-    :ets.insert(@meta_table, {:round_ended_at, nil})
+    meta = :ets.new(@meta_table, naming ++ [:public, :set, read_concurrency: true])
+    :ets.insert(meta, {:round, 0})
+    :ets.insert(meta, {:round_started_at, nil})
+    :ets.insert(meta, {:round_ended_at, nil})
 
     Logger.info("Blackboard initialised (ETS tables: #{inspect(table)}, #{inspect(meta)})")
-    {:ok, %{table: table, meta: meta}}
+    {:ok, Map.merge(%{table: table, meta: meta}, SourceStore.fields())}
   end
 
   @impl true
@@ -275,6 +290,86 @@ defmodule Hypatia.Neural.Blackboard do
     }
 
     {:reply, stats, state}
+  end
+
+  def handle_call({:source, source, operation}, _from, state) do
+    SourceStore.reply(state, source, fn ->
+      {source_operation(state, source, operation), state}
+    end)
+  end
+
+  defp source_operation(state, _source, :identity),
+    do: {:ok, SourceStore.tag(%{}, state)}
+
+  defp source_operation(state, _source, :start_round) do
+    :ets.delete_all_objects(state.table)
+    round = (table_meta(state.meta, :round) || 0) + 1
+    :ets.insert(state.meta, {:round, round})
+    :ets.insert(state.meta, {:round_started_at, System.os_time(:millisecond)})
+    :ets.insert(state.meta, {:round_ended_at, nil})
+    {:ok, round}
+  end
+
+  defp source_operation(state, source, :end_round) do
+    result = source_snapshot(state, source)
+    :ets.insert(state.meta, {:round_ended_at, System.os_time(:millisecond)})
+    result
+  end
+
+  defp source_operation(state, source, :snapshot), do: source_snapshot(state, source)
+
+  defp source_operation(state, source, {:write, network, key, value}) do
+    entry = %{
+      network: network,
+      key: key,
+      value: value,
+      source_store: source,
+      round: table_meta(state.meta, :round),
+      timestamp: System.os_time(:millisecond)
+    }
+
+    :ets.insert(state.table, {{network, key}, entry})
+    :ok
+  end
+
+  defp source_operation(state, source, {:read, network, key}) do
+    case :ets.lookup(state.table, {network, key}) do
+      [{_, entry}] ->
+        if Map.get(entry, :source_store) == source and
+             entry.round == table_meta(state.meta, :round) do
+          {:ok, entry.value}
+        else
+          {:error, :foreign_blackboard_entry}
+        end
+
+      [] ->
+        :not_found
+    end
+  end
+
+  defp source_snapshot(state, source) do
+    entries = :ets.tab2list(state.table) |> Enum.map(&elem(&1, 1))
+    round = table_meta(state.meta, :round)
+
+    if Enum.all?(entries, &(Map.get(&1, :source_store) == source and &1.round == round)) do
+      {:ok,
+       %{
+         source_store: source,
+         round: round,
+         networks: Enum.group_by(entries, & &1.network),
+         entry_count: length(entries),
+         timestamp: System.os_time(:millisecond)
+       }}
+    else
+      {:error, :foreign_blackboard_entry}
+    end
+  end
+
+  defp table_meta(table, key) do
+    case :ets.lookup(table, key) do
+      [{^key, value}] -> value
+      [] -> nil
+    end
   end
 
   # ── Private Helpers ─────────────────────────────────────

@@ -9,38 +9,7 @@ defmodule Hypatia.MergeOrchestration.TickerTest do
   defp enc, do: fn t -> t |> :erlang.term_to_binary() |> Base.encode64() end
   defp dec, do: fn b -> b |> Base.decode64!() |> :erlang.binary_to_term() end
 
-  defp seed_store do
-    store = Path.join(System.tmp_dir!(), "tick-#{System.unique_integer([:positive])}")
-
-    for sub <- ~w(observations pools attestations leases),
-        do: File.mkdir_p!(Path.join(store, sub))
-
-    e = enc()
-
-    File.write!(
-      Path.join([store, "observations", "hyperpolymath__a__1.json"]),
-      e.(%{
-        "repo" => "hyperpolymath/a",
-        "number" => 1,
-        "branch" => "dependabot/cargo/x",
-        "files" => ["Cargo.lock"]
-      })
-    )
-
-    File.write!(Path.join([store, "pools", "hyperpolymath__a.json"]), e.(%{"pool" => "P2"}))
-
-    File.write!(
-      Path.join([store, "attestations", "ci.json"]),
-      e.(%{
-        "subject" => %{"repo" => "hyperpolymath/a", "number" => 1},
-        "bot" => "ci",
-        "verdict" => "approve",
-        "confidence" => 0.99
-      })
-    )
-
-    store
-  end
+  defp seed_store, do: Hypatia.MergeOrchestration.TestObservationStore.seed(encode: enc())
 
   defp state(cycle_opts),
     do: %{
@@ -57,9 +26,28 @@ defmodule Hypatia.MergeOrchestration.TickerTest do
     s = Ticker.do_cycle(state(store: store, got: nil, now: @now, encode: enc(), decode: dec()))
 
     assert s.runs == 1
-    assert s.last_stats.armed == 1
+    assert s.last_stats.armed == 0
     assert s.errors == []
+    assert s.last_outcome == :completed
+    assert s.last_stats.review == 1
     assert %DateTime{} = s.last_run
+    File.rm_rf!(store)
+  end
+
+  test "a failed later observation cannot expose prior successful stats as current" do
+    store = seed_store()
+
+    first =
+      Ticker.do_cycle(state(store: store, got: nil, now: @now, encode: enc(), decode: dec()))
+
+    assert first.last_outcome == :completed
+    File.rm!(Hypatia.MergeOrchestration.TestObservationStore.receipt_path(store))
+    failed = Ticker.do_cycle(first)
+    assert failed.last_outcome == :failed
+    assert failed.last_stats == nil
+    assert failed.runs == first.runs
+    assert [message | _] = failed.errors
+    assert message =~ "unqualified observation batch"
     File.rm_rf!(store)
   end
 
@@ -92,7 +80,7 @@ defmodule Hypatia.MergeOrchestration.TickerTest do
     status = Ticker.status(pid)
 
     assert status.runs == 1
-    assert status.last_stats.armed == 1
+    assert status.last_stats.armed == 0
 
     GenServer.stop(pid)
     File.rm_rf!(store)

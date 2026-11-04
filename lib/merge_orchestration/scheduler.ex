@@ -36,7 +36,8 @@ defmodule Hypatia.MergeOrchestration.Scheduler do
   Run one merge-orchestration cycle. Returns the `Loop.run/1` summary.
 
   `:actuation` (`:manifest` default | `:baton` | `:both`) selects the actuation
-  backend; `:budget`/`:submit` tune the Baton backends (see `Loop.run/1`). The
+  backend. Baton mutation is currently refused; `:submit` cannot bypass the
+  missing qualified executor (see `Loop.run/1`). The
   result carries `:manifest_path` and/or `:batons` according to the backend.
   """
   def cycle(opts \\ []) do
@@ -55,13 +56,13 @@ defmodule Hypatia.MergeOrchestration.Scheduler do
     result
   end
 
-  # Describe what the cycle actuated, whichever backend(s) ran.
+  # These are decision artifacts/refusals, never proof that a merge happened.
   defp actuation_summary(result) do
     [
       result[:manifest_path],
       case result[:batons] do
         nil -> nil
-        batons -> "#{length(batons)} baton(s)"
+        batons -> "#{length(batons)} refused Baton candidate(s)"
       end
     ]
     |> Enum.reject(&is_nil/1)
