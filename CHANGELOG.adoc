@@ -27,8 +27,9 @@ finds the step in three valid shapes it used to miss (reported by Codex on
 
 The reader fixes the last two for RE001 as well: an indentless `steps:`
 sequence is read (its harden-runner step counts), and a step opened by `-` and
-a comment keeps its `run:`. On the hypatia, echidna and standards trees, WH013
-and RE001 report exactly what they did before.
+a comment keeps its `run:`. WH014 reads each job's steps through the same
+reader. On the hypatia, echidna and standards trees, WH013, WH014 and RE001
+report exactly what they did before.
 
 ==== RE001 accepts a deed egress declaration; the job token no longer counts (2026-10-27)
 

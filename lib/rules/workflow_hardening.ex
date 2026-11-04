@@ -1141,6 +1141,23 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   defp lines_text(lines), do: Enum.map_join(lines, "\n", &elem(&1, 0))
 
+  # The text of each step of one job body (header line first, as the job
+  # extractor gives it), read by the shared reader: only the items of the
+  # job's own `steps:` key, comment lines dropped.
+  defp job_step_texts(body) do
+    body
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+    |> WorkflowYaml.job_steps()
+    |> Enum.map(&lines_text/1)
+  end
+
+  defp blank_or_comment?(line) do
+    trimmed = String.trim(line)
+    trimmed == "" or String.starts_with?(trimmed, "#")
+  end
+
   # Everything above the top-level `jobs:` key (name, on, permissions, env).
   # The key may be quoted (`"jobs":`, `'jobs':`), as WorkflowYaml reads it.
   defp workflow_preamble(content) do
@@ -1549,7 +1566,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
     directory = wh014_default_directory(preamble, inherited_directory)
 
     body
-    |> step_bodies()
+    |> job_step_texts()
     |> Enum.reduce_while(MapSet.new(), fn step, tainted ->
       upload = wh014_step_value(step, "uses")
       report = wh014_step_input(step, "sarif_file")
@@ -1874,6 +1891,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       {words, redirects} = wh014_command_parts(command)
       {inputs, copy_target} = wh014_inputs(words)
+
       inputs =
         if List.first(words) in ["jq", "cat"] do
           redirected = for {:input, "0", path} <- redirects, do: path
@@ -1903,11 +1921,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
           nil -> []
         end
 
-      count_mask? =
-        List.first(words) == "jq" and separator == :or and next_words == ["echo", "0"]
+      count_mask? = List.first(words) == "jq" and separator == :or and next_words == ["echo", "0"]
 
-      paths =
-        if count_mask?, do: Enum.reduce(inputs, paths, &MapSet.put(&2, &1)), else: paths
+      paths = if count_mask?, do: Enum.reduce(inputs, paths, &MapSet.put(&2, &1)), else: paths
 
       inherited? = Enum.any?(inputs, &MapSet.member?(paths, &1))
       output_mask? = separator == :or and next_words == ["true"]
@@ -1948,6 +1964,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
     do: {Enum.reverse(words), Enum.reverse(redirects)}
 
   defp wh014_inputs(["jq" | args]), do: {wh014_jq_inputs(args, false, []), nil}
+
   defp wh014_inputs(["cat" | args]),
     do: {Enum.reject(args, &String.starts_with?(&1, "-")), nil}
 
@@ -2065,7 +2082,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
             fix_recipe: "assert-findings-before-sarif-upload",
             detail: %{
               jobs: Enum.map(affected_jobs, fn {job, _line, _body} -> job end),
-              analysis_scope: "literal report paths in the same job; not scan-completion evidence",
+              analysis_scope:
+                "literal report paths in the same job; not scan-completion evidence",
               fix:
                 "Preserve the scanner exit status and reject execution or coverage " <>
                   "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
