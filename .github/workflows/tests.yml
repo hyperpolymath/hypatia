@@ -117,6 +117,7 @@ jobs:
             test/merge_orchestration/sensor_test.exs \
             test/merge_orchestration/loop_test.exs \
             test/learning_runtime_store_test.exs \
+            test/neural_source_store_lifecycle_test.exs \
             test/merge_orchestration/strategist_test.exs \
             test/merge_orchestration/dispatcher_test.exs \
             test/merge_orchestration/baton_emitter_test.exs \
