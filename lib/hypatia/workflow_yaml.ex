@@ -293,9 +293,11 @@ defmodule Hypatia.WorkflowYaml do
   end
 
   # The column of a step's own properties: just past `- ` on its opening line,
-  # or the indent of the first property under a bare `-`.
+  # or the indent of the first property under a bare `-`. A `-` followed only
+  # by a comment (`-   # publish`) is a bare `-`: YAML ignores the comment, so
+  # the step's keys start on the next line.
   def step_key_column([{first, _} | rest]) do
-    case Regex.run(~r/^(\s*-\s+)\S/, first) do
+    case Regex.run(~r/^(\s*-\s+)[^\s#]/, first) do
       [_, prefix] ->
         String.length(prefix)
 
@@ -374,6 +376,9 @@ defmodule Hypatia.WorkflowYaml do
 
   def job_field_indent([]), do: nil
 
+  # The lines of the job's `steps:` value. Its items may sit deeper than the
+  # key or, as an indentless sequence YAML also allows, at the key's own
+  # column: `steps:` then `- run: …` directly beneath it.
   def lines_in_steps(job_lines, field_indent) do
     case Enum.find_index(job_lines, fn {line, _} ->
            indent_of(line) == field_indent and key_line?(line, "steps")
@@ -385,19 +390,24 @@ defmodule Hypatia.WorkflowYaml do
         job_lines
         |> Enum.drop(index + 1)
         |> Enum.take_while(fn {line, _} ->
-          String.trim(line) == "" or indent_of(line) > field_indent
+          String.trim(line) == "" or indent_of(line) > field_indent or
+            (indent_of(line) == field_indent and sequence_item?(line))
         end)
     end
   end
 
+  # The column of the step items: the shallowest `-` in the steps value, which
+  # is the key's own column for an indentless sequence.
   def step_indent(step_lines, field_indent) do
     step_lines
     |> Enum.filter(fn {line, _} ->
-      indent_of(line) > field_indent and Regex.match?(~r/^\s*-(?:\s|$)/, line)
+      indent_of(line) >= field_indent and sequence_item?(line)
     end)
     |> Enum.map(fn {line, _} -> indent_of(line) end)
     |> Enum.min(fn -> nil end)
   end
+
+  defp sequence_item?(line), do: Regex.match?(~r/^\s*-(?:\s|$)/, line)
 
   # A line without its YAML comment: a `#` at the start or after whitespace,
   # outside a quoted scalar. A quote opens a scalar only where one can start

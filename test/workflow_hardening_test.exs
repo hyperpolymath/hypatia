@@ -1218,6 +1218,104 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    # The three step shapes Codex reported on #950 (YAML allows all three).
+
+    test "a `steps:` line inside an earlier step's run script does not hide the real steps" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  cat > generated.yml <<'YML'
+                  jobs:
+                    x:
+                      steps:
+                        - run: echo hi
+                  YML
+              - continue-on-error: true
+                env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 generated.yml
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "continue-on-error on an indentless steps: item counts as masked" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+            - continue-on-error: true
+              env:
+                GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+              run: gh release create v1 dist/*
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "in an indentless steps: sequence, a sibling's continue-on-error still does not mask" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+            - name: optional lint
+              continue-on-error: true
+              run: make lint
+            - env:
+                GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+              run: gh release create v1 dist/*
+        """)
+
+      assert [] = WorkflowHardening.wh013_permission_starved_write(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "continue-on-error on a step opened by `-` and a comment counts as masked" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs:
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              -     # publication step
+                continue-on-error: true
+                env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                run: gh release create v1 dist/*
+        """)
+
+      assert [%{fix_recipe: "unmask-credentialed-write"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+
     test "a job-level continue-on-error is a deliberate setting, not a mask" do
       repo =
         create_repo_with_workflow("""
