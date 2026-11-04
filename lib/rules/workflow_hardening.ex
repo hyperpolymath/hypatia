@@ -1568,7 +1568,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # A scanner invocation whose failure is swallowed: `… > something.json || true`
   @masked_scan_re ~r/>\s*[^\s|;&]*\.json\s*(?:2>[^\s|;&]*\s*)?\|\|\s*true/
   # A count that manufactures a zero when the artefact is unparseable.
-  @masked_count_re ~r/\|\|\s*echo\s+0\b/
+  @masked_count_re ~r/\bjq\b[^\n]*\|\|\s*echo\s+0\b/
   @doc """
   WH014 — a scanner or findings-count failure is masked in a workflow that
   uploads SARIF to GitHub code scanning.
@@ -1588,7 +1588,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
   carrying **84** findings on 09-11 was followed by six green runs uploading
   **0** results, closing all 84.
 
-  The rule reports workflows containing both:
+  The rule reports jobs containing both:
 
     1. a SARIF upload to code scanning;
     2. a masked JSON-producing invocation or count (`|| true`, `|| echo 0`).
@@ -1599,8 +1599,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
   an empty array. Preserve the scanner's exit status and findings, reject
   execution or coverage errors, then validate the expected report shape.
 
-  This report-only rule matches workflow text; it does not trace job or data
-  dependencies or attest that a scan actually completed.
+  This report-only rule correlates masks with uploads within the same extracted
+  job. Diagnostic non-JSON counts do not qualify as findings parsing. It does
+  not trace cross-job artefact or variable dependencies, parse shell control
+  flow, or attest that a scan actually completed.
   """
   def wh014_masked_scanner_upload(repo_path) do
     repo_path
@@ -1609,17 +1611,22 @@ defmodule Hypatia.Rules.WorkflowHardening do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      uploads? = Regex.match?(@sarif_upload_re, content)
-      masked? = Regex.match?(@masked_scan_re, content) or Regex.match?(@masked_count_re, content)
+      affected_jobs =
+        content
+        |> extract_job_blocks()
+        |> Enum.filter(fn {_job, _line, body} ->
+          Regex.match?(@sarif_upload_re, body) and
+            (Regex.match?(@masked_scan_re, body) or Regex.match?(@masked_count_re, body))
+        end)
 
-      if uploads? and masked? do
+      if affected_jobs != [] do
         [
           %{
             rule: "WH014",
             file: rel,
             severity: :high,
             reason:
-              "workflow #{rel} uploads SARIF to code scanning but masks a scanner " <>
+              "workflow #{rel} has a job that uploads SARIF to code scanning but masks a scanner " <>
                 "or findings-count failure (`|| true` / `|| echo 0`). A failed or " <>
                 "incomplete scan can become an empty SARIF upload that closes existing " <>
                 "alerts. An unrelated assertion or non-empty findings array does not " <>
@@ -1627,6 +1634,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
             action: :report,
             fix_recipe: "assert-findings-before-sarif-upload",
             detail: %{
+              jobs: Enum.map(affected_jobs, fn {job, _line, _body} -> job end),
               fix:
                 "Preserve the scanner exit status and reject execution or coverage " <>
                   "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>

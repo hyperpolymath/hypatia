@@ -1338,6 +1338,69 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   end
 
   describe "wh014_masked_scanner_upload/1" do
+    test "a diagnostic count in another job cannot qualify a SARIF mask" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          diagnostics:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+                  test "$COUNT" -gt 0
+          security:
+            runs-on: ubuntu-latest
+            steps:
+              - run: trivy fs --format sarif --output results.sarif .
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: results.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "a same-job diagnostic git count is not a masked JSON findings count" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          security:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+                  test "$COUNT" -gt 0
+                  trivy fs --format sarif --output results.sarif .
+              - uses: github/codeql-action/upload-sarif@v4
+                with:
+                  sarif_file: results.sarif
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
+    test "an unrelated masked JSON job does not acquire another job's SARIF upload" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          diagnostics:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  COUNT=$(jq '. | length' statistics.json || echo 0)
+          security:
+            runs-on: ubuntu-latest
+            steps:
+              - run: trivy fs --format sarif --output results.sarif .
+              - uses: github/codeql-action/upload-sarif@v4
+        """)
+
+      on_exit(fn -> File.rm_rf!(repo) end)
+      assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
+    end
+
     test "fires on mask + upload with no findings assertion (the measured shape)" do
       repo =
         create_repo_with_workflow("""
