@@ -252,6 +252,7 @@ defmodule Hypatia.Kyaml do
         )
     end
 
+    assert_printable(t)
     stream(skip_gap(s), [], false)
   end
 
@@ -475,24 +476,13 @@ defmodule Hypatia.Kyaml do
     end
   end
 
-  # Skip a comment to the end of its line. Comment text is still YAML text, so
-  # a raw C0 control character (other than a tab) in it is refused too.
+  # Skip a comment to the end of its line. (Its text was checked to be
+  # printable with the rest of the stream.)
   defp skip_to_eol(s) do
-    c = peek(s)
-
     cond do
-      eof?(s) ->
-        %{s | at_content: false}
-
-      c == ?\n ->
-        %{bump!(s) | at_content: false}
-
-      c < 0x20 and c != ?\t ->
-        hex = c |> Integer.to_string(16) |> String.pad_leading(4, "0")
-        throw_error("CONTROL_CHARACTER", "raw control character U+#{hex} in a comment", loc(s))
-
-      true ->
-        s |> bump!() |> skip_to_eol()
+      eof?(s) -> %{s | at_content: false}
+      peek(s) == ?\n -> %{bump!(s) | at_content: false}
+      true -> s |> bump!() |> skip_to_eol()
     end
   end
 
@@ -962,16 +952,29 @@ defmodule Hypatia.Kyaml do
         s = bump!(s)
         {name, s} = take_name(s)
         if name == "", do: throw_error("BAD_ANCHOR", "anchor name is missing", at)
-        node_properties(skip.(s), at, name, tag, skip)
+        node_properties(skip.(property_end(s)), at, name, tag, skip)
 
       ?! ->
         if tag, do: throw_duplicate_property("tag", loc(s))
         {tag, s} = parse_tag(s)
-        node_properties(skip.(s), at, anchor, tag, skip)
+        node_properties(skip.(property_end(s)), at, anchor, tag, skip)
 
       _ ->
         {anchor, tag, s}
     end
+  end
+
+  # A property is separated from the node it decorates (YAML 1.2
+  # c-ns-properties, s-separate): `&a[1]` and `!!map{}` are refused.
+  defp property_end(s) do
+    if peek(s) in [?[, ?{],
+      do:
+        throw_error(
+          "PROPERTY_SEPARATION",
+          "an anchor or tag must be followed by white space before its node",
+          loc(s)
+        ),
+      else: s
   end
 
   defp throw_duplicate_property(what, at),
@@ -1132,8 +1135,6 @@ defmodule Hypatia.Kyaml do
   end
 
   defp scalar_from_raw(raw, at, style) do
-    assert_no_control(raw, at, "plain")
-
     # A plain scalar may not start with an indicator (YAML 1.2 ns-plain-first):
     # `@`, `` ` `` and `%` ever, and `-`, `?` or `:` unless a safe character
     # follows, so `a: - item` is not the string "- item" (`-1` and `-x` are
@@ -1189,10 +1190,6 @@ defmodule Hypatia.Kyaml do
       quote == ?" and c == ?\\ ->
         {cp, s} = parse_escape(s)
         quoted_chars(s, quote, at, [cp | acc])
-
-      c < 0x20 and c != 0x09 ->
-        hex = c |> Integer.to_string(16) |> String.pad_leading(4, "0")
-        throw_error("CONTROL_CHARACTER", "raw control character U+#{hex} in a quoted scalar", at)
 
       true ->
         quoted_chars(s, quote, at, [c | acc])
@@ -1273,19 +1270,32 @@ defmodule Hypatia.Kyaml do
   # A raw C0 control character other than a tab (or a block scalar's line
   # breaks) is not printable YAML in any scalar; kyq refuses it only in a
   # quoted one (see KNOWN_DIVERGENCES).
-  defp assert_no_control(text, at, style) do
-    case Enum.find(String.to_charlist(text), &(&1 < 0x20 and &1 not in [0x09, 0x0A])) do
-      nil ->
-        :ok
+  # YAML text is c-printable (YAML 1.2 §5.1): no C0 control but tab and line
+  # breaks, no DEL, no C1 control but NEL, and no U+FFFE/U+FFFF. Checked once
+  # over the whole input, so comments, directives and anchor names are covered
+  # as well as scalars. (A lone CR was refused by normalise_newlines/1.)
+  defp assert_printable(t) do
+    bad =
+      Enum.find(0..(tuple_size(t) - 1)//1, fn j ->
+        c = elem(t, j)
 
-      c ->
-        hex = c |> Integer.to_string(16) |> String.pad_leading(4, "0")
+        (c < 0x20 and c not in [?\t, ?\n]) or c == 0x7F or (c >= 0x80 and c <= 0x9F and c != 0x85) or
+          c in [0xFFFE, 0xFFFF]
+      end)
 
-        throw_error(
-          "CONTROL_CHARACTER",
-          "raw control character U+#{hex} in a #{style} scalar",
-          at
-        )
+    if bad do
+      c = elem(t, bad)
+      hex = c |> Integer.to_string(16) |> String.pad_leading(4, "0")
+
+      if c in [0xFFFE, 0xFFFF],
+        do:
+          throw_error("NONCHARACTER", "noncharacter U+#{hex} in the stream", location_of(t, bad)),
+        else:
+          throw_error(
+            "CONTROL_CHARACTER",
+            "raw control character U+#{hex} is not printable YAML",
+            location_of(t, bad)
+          )
     end
   end
 
@@ -1338,7 +1348,10 @@ defmodule Hypatia.Kyaml do
           s
       end
 
-    content_indent = if explicit, do: parent_indent + explicit, else: nil
+    # An explicit indicator counts from the scalar's indentation, and from
+    # column 0 at the document root (indentation -1), as libyaml does: a root
+    # `|2` has its content at two spaces.
+    content_indent = if explicit, do: max(parent_indent, 0) + explicit, else: nil
     {lines, s} = block_lines(s, parent_indent, content_indent, [])
 
     # Trailing blank lines are chomping's to keep or drop.
@@ -1365,7 +1378,6 @@ defmodule Hypatia.Kyaml do
           stripped <> String.duplicate("\n", kept)
       end
 
-    assert_no_control(body, at, "block")
     assert_ijson_string(body, at)
     {%{kind: :string, value: body, raw: body, loc: at, style: :block, segments: segments}, s}
   end
@@ -1730,7 +1742,7 @@ defmodule Hypatia.Kyaml do
       parse_quoted(s, at)
     else
       {raw, s} = flow_key_chars(s, [])
-      raw = String.trim(raw)
+      raw = trim_blanks_right(raw)
       if raw == "", do: throw_error("EMPTY_KEY", "empty flow mapping key", at)
       {scalar_from_raw(raw, at, :plain), s}
     end
@@ -1742,9 +1754,10 @@ defmodule Hypatia.Kyaml do
   defp flow_key_chars(s, acc) do
     c = peek(s)
 
-    if eof?(s) or c in ~c",[]{}\n" or (c == ?: and flow_separator_after?(s, s.i + 1)),
-      do: {List.to_string(Enum.reverse(acc)), s},
-      else: flow_key_chars(bump!(s), [c | acc])
+    if eof?(s) or c in ~c",[]{}\n" or (c == ?: and flow_separator_after?(s, s.i + 1)) or
+         (c == ?# and List.first(acc) in [?\s, ?\t]),
+       do: {List.to_string(Enum.reverse(acc)), s},
+       else: flow_key_chars(bump!(s), [c | acc])
   end
 
   defp flow_separator_after?(s, j), do: char_at(s, j) in [nil, ?\s, ?\t, ?\n | ~c",[]{}"]

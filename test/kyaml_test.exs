@@ -166,7 +166,32 @@ defmodule Hypatia.KyamlTest do
       {"tagged-key-refused", "a: 1\n!!str a: 2\n", {:error, "KEY_PROPERTY", 2, 1, ""}},
       {"anchored-first-key-refused", "&k a: 1\n", {:error, "KEY_PROPERTY", 1, 1, ""}},
       {"flow-tagged-key-refused", "x: {!!str a: 1}\n", {:error, "KEY_PROPERTY", 1, 5, ""}},
-      {"flow-alias-decorated", "a: &a 1\nb: [!!int *a]\n", {:error, "ALIAS_DECORATED", 2, 5, ""}}
+      {"flow-alias-decorated", "a: &a 1\nb: [!!int *a]\n", {:error, "ALIAS_DECORATED", 2, 5, ""}},
+      # The printable set (YAML 1.2 c-printable) is checked over the whole
+      # stream, so the error stands at the character, wherever it is.
+      {"control-character-in-plain", "a: x\u0001y\n", {:error, "CONTROL_CHARACTER", 1, 5, ""}},
+      {"control-character-in-key", "a\u0001: 1\n", {:error, "CONTROL_CHARACTER", 1, 2, ""}},
+      {"control-character-in-flow", "a: [x\u0001y]\n", {:error, "CONTROL_CHARACTER", 1, 6, ""}},
+      {"control-character-in-block", "a: |\n  x\u0001y\n",
+       {:error, "CONTROL_CHARACTER", 2, 4, ""}},
+      {"control-character-in-quoted", "a: \"x\u0001\"\n",
+       {:error, "CONTROL_CHARACTER", 1, 6, ""}},
+      {"control-character-in-directive-comment", "%YAML 1.2 # c\u0001\n---\na: 1\n",
+       {:error, "CONTROL_CHARACTER", 1, 14, ""}},
+      {"control-character-in-anchor", "a: &x\u0001 1\n", {:error, "CONTROL_CHARACTER", 1, 6, ""}},
+      {"delete-character", "a: 'x\u007F'\n", {:error, "CONTROL_CHARACTER", 1, 6, ""}},
+      {"c1-control-in-comment", "a: 1 # \u0085ok \u0090\n",
+       {:error, "CONTROL_CHARACTER", 1, 12, ""}},
+      {"noncharacter", "a: x￾\n", {:error, "NONCHARACTER", 1, 5, ""}},
+      {"next-line-is-printable", "a: \"x\u0085y\"\n", {:ok, %{"a" => "x\u0085y"}}},
+      {"tab-in-block-is-printable", "a: |\n  tab\tok\n", {:ok, %{"a" => "tab\tok\n"}}},
+      {"anchor-needs-separation", "a: &x[1]\n", {:error, "PROPERTY_SEPARATION", 1, 6, ""}},
+      {"tag-needs-separation", "a: !!seq{}\n", {:error, "PROPERTY_SEPARATION", 1, 9, ""}},
+      {"anchor-separated", "a: &x [1]\n", {:ok, %{"a" => [1]}}},
+      {"flow-key-keeps-nbsp", "x: { a : 1}\n", {:ok, %{"x" => %{" a " => 1}}}},
+      {"flow-key-stops-at-comment", "x: {a #c\n  : 1}\n", {:error, "MULTILINE_KEY", 1, 5, "x"}},
+      {"root-explicit-indent", "|2\n  text\n", {:ok, "text\n"}},
+      {"root-explicit-indent-one", "|1\n  text\n", {:ok, " text\n"}}
     ]
 
     defp plain(node) do
@@ -219,22 +244,6 @@ defmodule Hypatia.KyamlTest do
 
         assert large / max(small, 1) < 10
       end
-    end
-
-    test "a raw control character is refused in a plain or block scalar, as in a quoted one" do
-      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 4}} =
-               Kyaml.parse("a: x\u0001y\n")
-
-      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 1}} =
-               Kyaml.parse("a\u0001: 1\n")
-
-      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 5}} =
-               Kyaml.parse("a: [x\u0001y]\n")
-
-      assert {:error, %{code: "CONTROL_CHARACTER", line: 1, column: 4}} =
-               Kyaml.parse("a: |\n  x\u0001y\n")
-
-      assert {:ok, _} = Kyaml.parse("a: |\n  tab\tok\n")
     end
 
     test "whole-input diagnostics count columns in code points" do

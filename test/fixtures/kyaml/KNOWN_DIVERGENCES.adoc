@@ -41,8 +41,9 @@ lists the fixture it reads differently (`@accepted_divergences`).
 | A raw C0 control character (not a tab) in a plain or block scalar
 | Accepted, though it is not printable YAML. kyq refuses one only in a quoted
   scalar (`CONTROL_CHARACTER`).
-| Refused with the same code, at the scalar. Found by Codex review of
+| Refused with the same code. Found by Codex review of
   hyperpolymath/hypatia#1008; fixed upstream on the same local kyq branch.
+  Superseded by the printable-set row below, which checks the whole stream.
 
 | Thirteen YAML 1.2 rules, found by CodeRabbit and Codex review of
   hyperpolymath/hypatia#1008: a second anchor or tag on one node; a decorated
@@ -81,6 +82,21 @@ lists the fixture it reads differently (`@accepted_divergences`).
   `FLOW_SEPARATOR` and `PLAIN_INDICATOR`. `test/kyaml_yaml_test_suite_test.exs`
   holds the port to the suite in CI, so a case this table misses still fails
   the build.
+
+| Five rules from Codex review of 6c5d4d0 (hyperpolymath/hypatia#1008): a
+  character outside YAML's printable set (`c-printable`) anywhere, not only in
+  a scalar or comment, as a directive comment, an anchor name, DEL or a C1
+  control; an anchor or tag run into its node (`&a[1]`); a no-break space
+  trimmed from a flow key; a `#` after white space inside a flow key; an
+  explicit indentation indicator at the document root (`|2`)
+| The first four accepted or misread; the last read `"  text"` one column
+  short after the document root moved to indentation -1.
+| Refused or read as YAML 1.2: one up-front check gives `CONTROL_CHARACTER`
+  (or `NONCHARACTER` for U+FFFE, U+FFFF) at the character itself, replacing
+  the per-scalar and per-comment checks; `PROPERTY_SEPARATION` is new; a flow
+  key trims only space and tab and stops at a separated `#`; a root indicator
+  counts from column 0. Signed hexadecimal and octal (`-0xFF`) stay strings:
+  the Core Schema gives a sign to decimal integers only.
 |===
 
 End of input ends the last line as a line break would: `x: |\n  a` is
@@ -93,8 +109,8 @@ kyq gives Infinity. It now gives `:infinity` too.
 
 None of these occurs in the estate's block-style workflows, so the
 pinned-commit differential agrees on every file but kyq's own
-`flow-trailing-comma.yaml`, which it lists. The kyq fix is seven commits on
+`flow-trailing-comma.yaml`, which it lists. The kyq fix is eight commits on
 `metadatastician/kyq` branch
 `fix/bom-and-block-scalar-comment` (the leading BOM and block-header comment,
 code-point columns, the trailing comma, control characters, the thirteen
-rules, and the test-suite rules), still to be opened there.
+rules, the test-suite rules, and the printable set), still to be opened there.
