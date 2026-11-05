@@ -1735,9 +1735,17 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
 
     test "the move registry is versioned and has traceable identity and evidence" do
       assert Hypatia.Rules.MovedRepositories.version() == 1
-      assert [%{former: "hyperpolymath/standards", current: "metadatastician/standards",
-                repo_id: 1_116_521_501, moved: "2026-10-25", evidence: evidence}] =
-               WorkflowAudit.moved_repositories()
+
+      assert [
+               %{
+                 former: "hyperpolymath/standards",
+                 current: "metadatastician/standards",
+                 repo_id: 1_116_521_501,
+                 moved: "2026-10-25",
+                 evidence: evidence
+               }
+             ] = WorkflowAudit.moved_repositories()
+
       assert evidence =~ "40424594888"
     end
 
@@ -1784,6 +1792,14 @@ defmodule Hypatia.Rules.WorkflowAuditPinsTest do
       [f] = wf028(wf)
       assert f.reusable == "hyperpolymath/standards/.github/workflows/build@nightly.yml"
       assert f.current_sha == "release"
+    end
+
+    test "keeps a `#` inside an unquoted flow ref, and drops a spaced comment" do
+      ref = "hyperpolymath/standards/#{@gov}"
+      [f] = wf028("jobs: { g: { uses: #{ref}@release#one } }\n")
+      assert f.current_sha == "release#one"
+      [g] = wf028("jobs: { g: { uses: #{ref}@#{@pin} } } # note\n")
+      assert g.current_sha == @pin
     end
 
     test "reads a quoted flow value through its closing quote" do
