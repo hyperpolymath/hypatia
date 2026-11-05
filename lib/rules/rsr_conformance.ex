@@ -357,9 +357,9 @@ defmodule Hypatia.Rules.RsrConformance do
       "3.1.2" => descriptile("STATE"),
       "3.1.3" => descriptile("META"),
       "3.1.4" => descriptile("ECOSYSTEM"),
-      "3.1.5" => descriptile("AGENTIC"),
-      "3.1.6" => descriptile("NEUROSYM"),
-      "3.1.7" => descriptile("PLAYBOOK"),
+      "3.1.5" => descriptile("AGENTIC", "agentic"),
+      "3.1.6" => descriptile("NEUROSYM", "neurosym"),
+      "3.1.7" => descriptile("PLAYBOOK", "playbook"),
       "3.1.8" => any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"]),
       "3.1.9" => descriptile("CLADE"),
       "3.2.1" => &descriptiles_parse/1,
@@ -424,6 +424,36 @@ defmodule Hypatia.Rules.RsrConformance do
 
   defp descriptile(name),
     do: present_mr(Path.join(["descriptiles", name <> ".a2ml"]))
+
+  # A descriptile whose family has a ruled mapping spec into the repo deed
+  # (metadatastician/standards 1-formats/deed/mappings/, AGENTIC / NEUROSYM /
+  # PLAYBOOK -> (agentic) (neurosym) (playbook), ruled 2026-10-27) is satisfied
+  # by either carrier: the legacy .a2ml, or that clause at the top level of the
+  # repo's one `<repo>_chora.deed`. A2ML is retired, so the deed is the
+  # successor and the .a2ml the transition form; 2.3.1 accepts its two
+  # carriers the same way. The deed must parse (Hypatia.Deed is the reader
+  # that agrees with the standards gate): a deed that does not parse declares
+  # nothing, and a clause nested inside another clause is not the descriptile.
+  defp descriptile(name, clause) do
+    a2ml = descriptile(name)
+
+    fn repo ->
+      case a2ml.(repo) do
+        :pass -> :pass
+        _ -> if deed_clause?(repo, clause), do: :pass, else: :fail
+      end
+    end
+  end
+
+  defp deed_clause?(repo, clause) do
+    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
+         {:ok, text} <- File.read(path),
+         {:ok, {"repo-deed", items}} <- Hypatia.Deed.parse(text) do
+      Enum.any?(items, &match?({:clause, ^clause, _}, &1))
+    else
+      _ -> false
+    end
+  end
 
   # 3.2.1: every RECORD-DIALECT .a2ml under the substrate parses. Markup-dialect
   # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`
