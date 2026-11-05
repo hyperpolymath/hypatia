@@ -1,0 +1,339 @@
+{
+  "schema": "kyq-conformance-corpus-v1",
+  "kind": "kyaml-cases",
+  "note": "Every case is a committed fixture; `test/corpus.test.js` asserts each file appears exactly once, so adding a fixture without an expectation (or an expectation without a fixture) fails the gate.",
+  "cases": [
+    {
+      "file": "valid/anchors.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/block-scalars.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/canonical.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/comments.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/deployment.yaml",
+      "expect": "valid",
+      "documents": 2
+    },
+    {
+      "file": "valid/empty-docs.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/empty.yaml",
+      "expect": "valid",
+      "documents": 0
+    },
+    {
+      "file": "valid/flow.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/multidoc.yaml",
+      "expect": "valid",
+      "documents": 2
+    },
+    {
+      "file": "valid/scalars.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/leading-bom.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "valid/block-scalar-header-comment.yaml",
+      "expect": "valid",
+      "documents": 1
+    },
+    {
+      "file": "invalid/bare-cr-after-astral.yaml",
+      "expect": "invalid",
+      "code": "INVALID_NEWLINE",
+      "line": 1,
+      "column": 5,
+      "path": ""
+    },
+    {
+      "file": "invalid/bom-midstream.yaml",
+      "expect": "invalid",
+      "code": "BOM_MIDSTREAM",
+      "line": 2,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/alias-cycle.yaml",
+      "expect": "invalid",
+      "code": "UNKNOWN_ANCHOR",
+      "line": 2,
+      "column": 9,
+      "path": "node/self"
+    },
+    {
+      "file": "invalid/alias-unknown.yaml",
+      "expect": "invalid",
+      "code": "UNKNOWN_ANCHOR",
+      "line": 1,
+      "column": 10,
+      "path": "primary"
+    },
+    {
+      "file": "invalid/bad-indent.yaml",
+      "expect": "invalid",
+      "code": "UNEXPECTED_INDENT",
+      "line": 3,
+      "column": 4,
+      "path": ""
+    },
+    {
+      "file": "invalid/bad-version.yaml",
+      "expect": "invalid",
+      "code": "UNSUPPORTED_VERSION",
+      "line": 1,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/bool-key.yaml",
+      "expect": "invalid",
+      "code": "NON_STRING_KEY",
+      "line": 1,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/complex-key.yaml",
+      "expect": "invalid",
+      "code": "UNSUPPORTED_COMPLEX_KEY",
+      "line": 1,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/directive.yaml",
+      "expect": "invalid",
+      "code": "UNSUPPORTED_DIRECTIVE",
+      "line": 1,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/doc-marker-content.yaml",
+      "expect": "invalid",
+      "code": "DOC_MARKER_CONTENT",
+      "line": 1,
+      "column": 5,
+      "path": ""
+    },
+    {
+      "file": "invalid/duplicate-anchor-order.yaml",
+      "expect": "invalid",
+      "code": "UNKNOWN_ANCHOR",
+      "line": 1,
+      "column": 8,
+      "path": "first"
+    },
+    {
+      "file": "invalid/duplicate-key-flow.yaml",
+      "expect": "invalid",
+      "code": "DUPLICATE_KEY",
+      "line": 1,
+      "column": 22,
+      "path": "labels/app"
+    },
+    {
+      "file": "invalid/duplicate-key-quoted.yaml",
+      "expect": "invalid",
+      "code": "DUPLICATE_KEY",
+      "line": 2,
+      "column": 1,
+      "path": "a"
+    },
+    {
+      "file": "invalid/duplicate-key-resolved.yaml",
+      "expect": "invalid",
+      "code": "DUPLICATE_KEY",
+      "line": 2,
+      "column": 1,
+      "path": "on"
+    },
+    {
+      "file": "invalid/duplicate-key.yaml",
+      "expect": "invalid",
+      "code": "DUPLICATE_KEY",
+      "line": 5,
+      "column": 3,
+      "path": "metadata/name"
+    },
+    {
+      "file": "invalid/flow-trailing-comma.yaml",
+      "expect": "invalid",
+      "code": "FLOW_TRAILING_COMMA",
+      "line": 1,
+      "column": 17,
+      "path": ""
+    },
+    {
+      "file": "invalid/huge-integer.yaml",
+      "expect": "invalid",
+      "code": "UNSAFE_INTEGER",
+      "line": 1,
+      "column": 6,
+      "path": "uid"
+    },
+    {
+      "file": "invalid/lone-surrogate.yaml",
+      "expect": "invalid",
+      "code": "LONE_SURROGATE",
+      "line": 1,
+      "column": 10,
+      "path": ""
+    },
+    {
+      "file": "invalid/mapping-in-value.yaml",
+      "expect": "invalid",
+      "code": "MAPPING_IN_VALUE",
+      "line": 1,
+      "column": 15,
+      "path": "metadata"
+    },
+    {
+      "file": "invalid/merge-key.yaml",
+      "expect": "invalid",
+      "code": "UNSUPPORTED_MERGE_KEY",
+      "line": 4,
+      "column": 3,
+      "path": "copy"
+    },
+    {
+      "file": "invalid/missing-colon.yaml",
+      "expect": "invalid",
+      "code": "MISSING_COLON",
+      "line": 2,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/mixed-collection.yaml",
+      "expect": "invalid",
+      "code": "MIXED_COLLECTION",
+      "line": 3,
+      "column": 3,
+      "path": ""
+    },
+    {
+      "file": "invalid/multiline-plain.yaml",
+      "expect": "invalid",
+      "code": "UNEXPECTED_INDENT",
+      "line": 2,
+      "column": 3,
+      "path": ""
+    },
+    {
+      "file": "invalid/multiline-quoted.yaml",
+      "expect": "invalid",
+      "code": "UNTERMINATED_QUOTE",
+      "line": 1,
+      "column": 14,
+      "path": ""
+    },
+    {
+      "file": "invalid/non-finite.yaml",
+      "expect": "invalid",
+      "code": "NON_FINITE_NUMBER",
+      "line": 1,
+      "column": 8,
+      "path": "limit"
+    },
+    {
+      "file": "invalid/non-string-key.yaml",
+      "expect": "invalid",
+      "code": "NON_STRING_KEY",
+      "line": 1,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/noncharacter.yaml",
+      "expect": "invalid",
+      "code": "NONCHARACTER",
+      "line": 1,
+      "column": 8,
+      "path": ""
+    },
+    {
+      "file": "invalid/tab-indent.yaml",
+      "expect": "invalid",
+      "code": "TAB_INDENT",
+      "line": 2,
+      "column": 1,
+      "path": ""
+    },
+    {
+      "file": "invalid/tag-kind-mismatch.yaml",
+      "expect": "invalid",
+      "code": "TAG_KIND_MISMATCH",
+      "line": 1,
+      "column": 7,
+      "path": "spec"
+    },
+    {
+      "file": "invalid/tag-value-mismatch.yaml",
+      "expect": "invalid",
+      "code": "TAG_VALUE_MISMATCH",
+      "line": 1,
+      "column": 11,
+      "path": "replicas"
+    },
+    {
+      "file": "invalid/timestamp-tag.yaml",
+      "expect": "invalid",
+      "code": "UNSUPPORTED_TAG",
+      "line": 1,
+      "column": 10,
+      "path": ""
+    },
+    {
+      "file": "invalid/unknown-tag.yaml",
+      "expect": "invalid",
+      "code": "UNSUPPORTED_TAG",
+      "line": 1,
+      "column": 8,
+      "path": ""
+    },
+    {
+      "file": "invalid/unsafe-integer.yaml",
+      "expect": "invalid",
+      "code": "UNSAFE_INTEGER",
+      "line": 1,
+      "column": 6,
+      "path": "uid"
+    },
+    {
+      "file": "invalid/unterminated-flow.yaml",
+      "expect": "invalid",
+      "code": "UNTERMINATED_FLOW",
+      "line": 1,
+      "column": 7,
+      "path": "args"
+    }
+  ]
+}

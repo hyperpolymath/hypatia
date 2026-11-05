@@ -1,0 +1,7 @@
+# A comment may follow a block scalar header (YAML 1.2 8.1.1).
+run: | # the script
+  echo one
+  echo two
+note: > # folded
+  a
+  b

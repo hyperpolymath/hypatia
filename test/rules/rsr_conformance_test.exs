@@ -391,6 +391,40 @@ defmodule Hypatia.Rules.RsrConformanceTest do
 
       assert agentic_verdicts(tmp) == %{"3.1.5" => :fail, "3.1.6" => :fail, "3.1.7" => :fail}
     end
+
+    # 3.1.9 is the ESTATE clade (registers into gv-clade-index), which the
+    # chora deed's (clade) clause carries. In-repo clade organisation (the
+    # subtrees a repo groups its own content into, e.g. boj-server's
+    # cartridges) is a different use of the word and never satisfies it.
+    # 3.1.9 is gated on governance-tier, so each case declares it; without a
+    # profile the criterion is :na and every assertion would pass vacuously.
+    defp clade_verdict(tmp) do
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["governance-tier"]
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      sc.results |> Enum.find(&(&1.id == "3.1.9")) |> Map.fetch!(:verdict)
+    end
+
+    test "a top-level (clade) clause satisfies 3.1.9 with no CLADE.a2ml", %{tmp_dir: tmp} do
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (clade :primary rm :secondary (gv)))\n")
+      assert clade_verdict(tmp) == :pass
+    end
+
+    test "the legacy descriptiles/CLADE.a2ml still satisfies 3.1.9", %{tmp_dir: tmp} do
+      mk!(tmp, ".machine_readable/descriptiles/CLADE.a2ml", "[clade]\nprimary = \"rm\"\n")
+      assert clade_verdict(tmp) == :pass
+    end
+
+    test "in-repo clade organisation is not the estate clade", %{tmp_dir: tmp} do
+      # a nested (clade) clause and a CLADE.a2ml inside a content subtree
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (notes (clade :primary rm)))\n")
+      mk!(tmp, "cartridges/sample/.machine_readable/descriptiles/CLADE.a2ml", "[clade]\n")
+      assert clade_verdict(tmp) == :fail
+    end
   end
 
   describe "scorecard serialization" do
