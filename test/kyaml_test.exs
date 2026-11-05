@@ -86,8 +86,10 @@ defmodule Hypatia.KyamlTest do
 
   describe "fixed ahead of kyq (test/fixtures/kyaml/KNOWN_DIVERGENCES.adoc)" do
     test "a single leading BOM is legal; a second one is not" do
-      assert {:ok, [_]} = Kyaml.parse("﻿a: 1\n")
-      assert {:error, %{code: "BOM_MIDSTREAM", line: 2, column: 1}} = Kyaml.parse("a: 1\n﻿b: 2\n")
+      assert {:ok, [_]} = Kyaml.parse("\uFEFFa: 1\n")
+
+      assert {:error, %{code: "BOM_MIDSTREAM", line: 2, column: 1}} =
+               Kyaml.parse("a: 1\n\uFEFFb: 2\n")
     end
 
     test "a comment may follow a block scalar header" do
@@ -106,7 +108,7 @@ defmodule Hypatia.KyamlTest do
     # (conformance/fixtures/bridge/vectors.json on the kyq fix), found by
     # CodeRabbit's review of hyperpolymath/hypatia#1008.
     @yaml_1_2_cases [
-      {"bom-after-leading-bom", "﻿a﻿\n", {:error, "BOM_MIDSTREAM", 1, 2, ""}},
+      {"bom-after-leading-bom", "\uFEFFa\uFEFF\n", {:error, "BOM_MIDSTREAM", 1, 2, ""}},
       {"anchor-scoped-to-document", "---\na: &x 1\n---\nb: *x\n",
        {:error, "UNKNOWN_ANCHOR", 4, 4, "b"}},
       {"directive-trailing-comment", "%YAML 1.2 # version\n---\na: 1\n", {:ok, %{"a" => 1}}},
@@ -228,7 +230,17 @@ defmodule Hypatia.KyamlTest do
       {"root-anchor-continued-refused", "&x\n&y v\n", {:error, "DUPLICATE_PROPERTY", 2, 1, ""}},
       # The document root sits at indentation -1, so its block scalar's
       # content may start at column 1 (yaml-test-suite W4TN, FP8R, DK3J).
-      {"root-block-scalar-at-column-one", "|\ntext\n", {:ok, "text\n"}}
+      {"root-block-scalar-at-column-one", "|\ntext\n", {:ok, "text\n"}},
+      # A bare property's value on the next line stays inside the node: a
+      # line that belongs to the enclosing collection makes the node null.
+      {"seq-anchor-then-sibling", "- &a\n- b\n", {:ok, [nil, "b"]}},
+      {"seq-tag-then-sibling", "- !!str\n- b\n", {:ok, ["", "b"]}},
+      {"nested-anchor-then-sibling-key", "a:\n  &x\nb: 1\n", {:ok, %{"a" => nil, "b" => 1}}},
+      {"seq-anchor-then-map-refused", "- &a\nkey: v\n", {:error, "UNEXPECTED_CONTENT", 2, 1, ""}},
+      {"seq-anchor-then-nested-seq", "- &a\n - b\n", {:ok, [["b"]]}},
+      {"nested-anchor-then-own-map", "a:\n  &x\n  b: 1\n", {:ok, %{"a" => %{"b" => 1}}}},
+      # A map value may be a compact sequence at the map's own indentation.
+      {"anchor-then-compact-seq", "seq:\n &anchor\n- a\n- b\n", {:ok, %{"seq" => ["a", "b"]}}}
     ]
 
     defp plain(node) do

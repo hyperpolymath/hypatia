@@ -59,7 +59,9 @@ Locally:
 
 [source,bash]
 ----
-git clone --depth 1 --branch data https://github.com/yaml/yaml-test-suite .yts
+# The commit CI pins (YAML_TEST_SUITE_REF in .github/workflows/ci.yml).
+git clone --branch data https://github.com/yaml/yaml-test-suite .yts
+git -C .yts checkout 6ad3d2c62885d82fc349026c136ef560838fdf3d
 YAML_TEST_SUITE=.yts mix test --only yaml_test_suite
 ----
 

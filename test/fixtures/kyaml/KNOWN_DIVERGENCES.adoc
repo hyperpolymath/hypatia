@@ -15,7 +15,7 @@ lists the fixture it reads differently (`@accepted_divergences`).
 
 | A stream that starts with a byte order mark
 | Refused: `BOM_MIDSTREAM` at 1:1. The leading BOM is skipped, then found again
-  by `text.includes("﻿")`.
+  by `text.includes("\uFEFF")`.
 | Accepted. A BOM after the first character is still `BOM_MIDSTREAM`.
   Fixtures `valid/leading-bom.yaml`, `invalid/bom-midstream.yaml`.
 
@@ -119,6 +119,17 @@ lists the fixture it reads differently (`@accepted_divergences`).
   through the one-anchor, one-tag check (`DUPLICATE_PROPERTY`); an anchor and
   a tag may still be split across lines. A root block scalar's content may
   start at column 1 (suite cases W4TN, FP8R, DK3J), so that stays accepted.
+
+| From CodeRabbit review of 2ec4633: a bare anchor or tag on a sequence entry
+  or nested value took the next line as its value even when that line
+  belonged to the enclosing collection
+| `- &a` then `- b` read as `[["b"]]`; `a:` then `  &x` then `b: 1` read as
+  `{a: {b: 1}}`; `- &a` then `key: v` accepted. Silent misreads: the suite
+  gate never compared them, as PW8X, which starts that way, is refused later.
+| A line left of the node and not past the enclosing line leaves the node
+  null: `[null, "b"]`, `{a: null, b: 1}`, and the third refused. A mapping
+  value's compact sequence at the mapping's own indentation stays the
+  node's (suite case SKE5), so suite coverage is unchanged.
 |===
 
 End of input ends the last line as a line break would: `x: |\n  a` is
@@ -131,9 +142,10 @@ kyq gives Infinity. It now gives `:infinity` too.
 
 None of these occurs in the estate's block-style workflows, so the
 pinned-commit differential agrees on every file but kyq's own
-`flow-trailing-comma.yaml`, which it lists. The kyq fix is ten commits on
+`flow-trailing-comma.yaml`, which it lists. The kyq fix is eleven commits on
 `metadatastician/kyq` branch
 `fix/bom-and-block-scalar-comment` (the leading BOM and block-header comment,
 code-point columns, the trailing comma, control characters, the thirteen
 rules, the test-suite rules, the printable set, YAML white space with the key
-limit, and markers and continued properties), still to be opened there.
+limit, markers and continued properties, and a bare property's value), still
+to be opened there.

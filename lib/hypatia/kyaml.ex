@@ -595,14 +595,17 @@ defmodule Hypatia.Kyaml do
     {node, s}
   end
 
-  defp parse_block(s, indent, path, line_indent \\ nil) do
+  # `seq_at` is the indentation of the mapping whose value this is, when a
+  # block sequence may sit at that same indentation (YAML 1.2 compact
+  # sequence under a mapping key); otherwise nil.
+  defp parse_block(s, indent, path, line_indent \\ nil, seq_at \\ nil) do
     line_indent = line_indent || indent
 
     cond do
       eof?(s) -> {null_node(loc(s)), s}
       seq_entry?(s) -> parse_seq(s, indent, path)
       map_entry?(s) -> parse_map(s, indent, path)
-      true -> parse_inline_node(s, indent, path, :root, line_indent)
+      true -> parse_inline_node(s, indent, path, :root, line_indent, {nil, nil}, seq_at)
     end
   end
 
@@ -835,7 +838,8 @@ defmodule Hypatia.Kyaml do
         {null_node(loc(s)), s}
 
       s.col - 1 > parent_indent ->
-        parse_block(s, s.col - 1, path)
+        seq_at = if allow_same_indent_seq, do: parent_indent, else: nil
+        parse_block(s, s.col - 1, path, nil, seq_at)
 
       allow_same_indent_seq and s.col - 1 == parent_indent and seq_entry?(s) ->
         parse_seq(s, parent_indent, path)
@@ -896,14 +900,26 @@ defmodule Hypatia.Kyaml do
 
   # A node that may carry an anchor and a tag: a scalar, a flow collection, a
   # block scalar, an alias, or (on the next lines) a block collection.
-  defp parse_inline_node(s, indent, path, context, line_indent, props \\ {nil, nil}) do
+  defp parse_inline_node(
+         s,
+         indent,
+         path,
+         context,
+         line_indent,
+         props \\ {nil, nil},
+         seq_at \\ nil
+       ) do
     at = loc(s)
     {anchor0, tag0} = props
     {anchor, tag, s} = node_properties(s, at, anchor0, tag0, &skip_blanks/1)
+    bounds = {indent, line_indent, seq_at}
 
-    case continued_properties(s, anchor, tag, indent, context) do
-      {:continue, s} -> parse_inline_node(s, indent, path, context, line_indent, {anchor, tag})
-      :none -> parse_inline_content(s, at, anchor, tag, indent, path, context, line_indent)
+    case continued_properties(s, anchor, tag, context, bounds) do
+      {:continue, s} ->
+        parse_inline_node(s, indent, path, context, line_indent, {anchor, tag}, seq_at)
+
+      :none ->
+        parse_inline_content(s, at, anchor, tag, path, context, bounds)
     end
   end
 
@@ -911,20 +927,37 @@ defmodule Hypatia.Kyaml do
   # properties on the next line (`a: &x` then `  !!str v`): they are the same
   # node's, so they go through the same one-anchor, one-tag check rather than
   # starting a fresh node that the outer properties would then overwrite.
-  defp continued_properties(s, anchor, tag, indent, context) do
+  defp continued_properties(s, anchor, tag, context, {indent, _, _} = bounds) do
     if (anchor != nil or tag != nil) and (eof?(s) or peek(s) in [?\n, ?#]) do
       next = skip_gap(s)
 
-      if not eof?(next) and peek(next) in [?&, ?!] and not property_key?(next) and
-           (context == :root or next.col - 1 > indent),
-         do: {:continue, next},
-         else: :none
+      inside? =
+        if context == :root,
+          do: not enclosing_line?(next, bounds),
+          else: next.col - 1 > indent
+
+      if not eof?(next) and peek(next) in [?&, ?!] and not property_key?(next) and inside?,
+        do: {:continue, next},
+        else: :none
     else
       :none
     end
   end
 
-  defp parse_inline_content(s, at, anchor, tag, indent, path, context, line_indent) do
+  # Whether the line at the cursor belongs to an enclosing collection rather
+  # than to the node at `indent`: left of the node and not past the enclosing
+  # line (`- &a` then `- b` is two entries, the first null). At the document
+  # root `line_indent` is -1, so every line belongs to the node. A sequence
+  # entry at `seq_at` is the node's own compact sequence (`k:` then `  &a`
+  # then `- x`, yaml-test-suite SKE5).
+  defp enclosing_line?(s, {indent, line_indent, seq_at}) do
+    s.col - 1 < indent and s.col - 1 <= line_indent and
+      not (seq_at == s.col - 1 and seq_entry?(s))
+  end
+
+  defp parse_inline_content(s, at, anchor, tag, path, context, bounds) do
+    {indent, line_indent, _} = bounds
+
     if peek(s) == ?* do
       if anchor != nil or tag != nil,
         do: throw_error("ALIAS_DECORATED", "an alias may not carry an anchor or a tag", at)
@@ -940,9 +973,10 @@ defmodule Hypatia.Kyaml do
             if context == :root do
               s = skip_gap(s)
 
-              if eof?(s) or at_marker?(s, "---") or at_marker?(s, "..."),
-                do: {null_node(loc(s)), s},
-                else: parse_block(s, s.col - 1, path)
+              if eof?(s) or at_marker?(s, "---") or at_marker?(s, "...") or
+                   enclosing_line?(s, bounds),
+                 do: {null_node(loc(s)), s},
+                 else: parse_block(s, s.col - 1, path)
             else
               parse_nested_value(s, indent, context == :map_value, path)
             end
