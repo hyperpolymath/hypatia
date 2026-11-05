@@ -1,0 +1,7 @@
+# A stream may start with comment lines only.
+apiVersion: v1 # trailing comment
+kind: Namespace
+metadata:
+  # indented comment
+  name: demo   # comment after spaces
+  labels: {}

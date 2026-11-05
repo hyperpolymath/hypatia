@@ -1,0 +1,2 @@
+first: *later
+later: &later 1
