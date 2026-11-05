@@ -218,6 +218,70 @@ defmodule Hypatia.Rules.RsrConformanceTest do
     end
   end
 
+  describe "descriptiles carried by the repo deed (3.1.5-3.1.7)" do
+    @describetag :tmp_dir
+
+    @deed_head """
+    ;; SPDX-License-Identifier: MPL-2.0
+    (repo-deed
+      :schema-version "1.0.0"
+      :canonical-name "x"
+      :repo-uuid #u5"github.com/o/x"
+      :beholding-chora #u5"estate/chora"
+    """
+
+    defp agentic_verdicts(tmp) do
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      sc.results |> Map.new(&{&1.id, &1.verdict}) |> Map.take(~w(3.1.5 3.1.6 3.1.7))
+    end
+
+    test "top-level (agentic) (neurosym) (playbook) clauses satisfy them with no .a2ml", %{
+      tmp_dir: tmp
+    } do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @deed_head <>
+          """
+            (agentic :version "0.1.0")
+            (neurosym :version "0.1.0")
+            (playbook :version "0.1.0" (deployment)))
+          """
+      )
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :pass, "3.1.6" => :pass, "3.1.7" => :pass}
+    end
+
+    test "the legacy .a2ml still satisfies them without a deed", %{tmp_dir: tmp} do
+      for d <- ~w(AGENTIC NEUROSYM PLAYBOOK) do
+        mk!(tmp, ".machine_readable/descriptiles/#{d}.a2ml", "[metadata]\nversion = \"0.1.0\"\n")
+      end
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :pass, "3.1.6" => :pass, "3.1.7" => :pass}
+    end
+
+    test "a deed without the clauses, or with them nested, does not", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @deed_head <>
+          """
+            (notes (agentic :version "0.1.0") (neurosym) (playbook)))
+          """
+      )
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :fail, "3.1.6" => :fail, "3.1.7" => :fail}
+    end
+
+    test "a deed that does not parse declares nothing", %{tmp_dir: tmp} do
+      # unbalanced: the closing paren is inside the comment
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (agentic) (neurosym) (playbook) ; )\n")
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :fail, "3.1.6" => :fail, "3.1.7" => :fail}
+    end
+  end
+
   describe "scorecard serialization" do
     @describetag :tmp_dir
 
