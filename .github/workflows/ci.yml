@@ -478,15 +478,22 @@ jobs:
     if: always()
     steps:
       - name: Check all jobs status
+        env:
+          # The KYAML gate counts only when it ran to success: a cancelled or
+          # skipped run proved nothing, so it fails the rollup too.
+          KYAML_CONFORMANCE: ${{ needs.kyaml-conformance.result }}
         run: |
+          if [[ "$KYAML_CONFORMANCE" != "success" ]]; then
+            echo "::error::kyaml-conformance did not succeed (result: $KYAML_CONFORMANCE)"
+            exit 1
+          fi
           if [[ "${{ needs.rust-check.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-test.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-build.result }}" == "failure" ]] || \
              [[ "${{ needs.haskell-lint.result }}" == "failure" ]] || \
              [[ "${{ needs.k9iser-validate.result }}" == "failure" ]] || \
-             [[ "${{ needs.elixir-compile.result }}" == "failure" ]] || \
-             [[ "${{ needs.kyaml-conformance.result }}" == "failure" ]]; then
+             [[ "${{ needs.elixir-compile.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi
