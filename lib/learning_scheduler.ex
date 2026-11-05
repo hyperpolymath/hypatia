@@ -494,9 +494,12 @@ defmodule Hypatia.LearningScheduler do
 
     case :httpc.request(
            :post,
-           {String.to_charlist(url), [{~c"accept", ~c"application/json"}], ~c"application/json",
-            body},
-           [{:timeout, timeout_ms}],
+           {String.to_charlist(url),
+            [{~c"accept", ~c"application/json"} | EchidnabotObligation.auth_headers()],
+            ~c"application/json", body},
+           # Never follow a redirect with the credential and the obligation
+           # body: a 3xx is reported as {:error, {:http_status, 3xx}}.
+           [{:timeout, timeout_ms}, {:autoredirect, false}],
            []
          ) do
       {:ok, {{_, status, _}, _headers, resp_body}} when status in 200..299 ->
