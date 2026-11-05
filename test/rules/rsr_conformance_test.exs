@@ -259,6 +259,36 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert sc.profile_present == true
     end
 
+    # 3.2.2 must agree with the capability reader: a clause the reader rejects
+    # declares nothing, so it neither passes 3.2.2 nor falls back to an .a2ml.
+    test "3.2.2 fails on a duplicated or list-less (rsr-profile …) clause", %{tmp_dir: tmp} do
+      head = """
+      ;; SPDX-License-Identifier: MPL-2.0
+      (repo-deed
+        :schema-version "1.0.0"
+        :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x"
+        :beholding-chora #u5"estate/chora"
+      """
+
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["bash"]
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+
+      for body <- [
+            ~s|  (rsr-profile :capabilities ("bash"))\n  (rsr-profile :capabilities ("rust")))\n|,
+            ~s|  (rsr-profile :version "1.0.0"))\n|
+          ] do
+        File.write!(Path.join(tmp, "x_chora.deed"), head <> body)
+        {:ok, sc} = RsrConformance.score(catalogue, tmp)
+        assert sc.profile_present == false
+        assert Enum.find(sc.results, &(&1.id == "3.2.2")).verdict == :fail
+      end
+    end
+
     test "a malformed descriptile fails 3.2.1 (parse gate, not just presence)", %{
       tmp_dir: tmp
     } do

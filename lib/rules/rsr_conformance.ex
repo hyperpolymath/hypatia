@@ -482,14 +482,21 @@ defmodule Hypatia.Rules.RsrConformance do
     end
   end
 
-  # 3.2.2: the repo declares a profile. Either carrier counts, as for the
-  # capability reader above: a top-level (rsr-profile …) clause of the repo
-  # deed, or the legacy <machine tree>/rsr-profile.a2ml.
+  # 3.2.2: the repo declares a profile. Either carrier counts, with the same
+  # precedence and validation as the capability reader above: when the repo
+  # deed carries a top-level (rsr-profile …) clause it decides, and it passes
+  # only if the reader accepts it (exactly one clause, with a `:capabilities`
+  # list). A duplicated or list-less clause fails, as it declares nothing.
+  # With no such clause, the legacy <machine tree>/rsr-profile.a2ml counts.
   defp profile_present do
     a2ml = present_mr("rsr-profile.a2ml")
 
     fn repo ->
-      if deed_clause?(repo, "rsr-profile"), do: :pass, else: a2ml.(repo)
+      case deed_profile_capabilities(repo) do
+        :absent -> a2ml.(repo)
+        :none -> :fail
+        _caps -> :pass
+      end
     end
   end
 
