@@ -59,6 +59,7 @@ acceptance criteria for closing the underlying roadmap item.
 * link:operations/prover-wars-integration.adoc[`prover-wars-integration.adoc`] — v8.0 epic scope.
 * link:operations/nx-exla-neural-backend.adoc[`nx-exla-neural-backend.adoc`] — conditional migration plan.
 * link:operations/containerfiles-chainguard-gap.adoc[`containerfiles-chainguard-gap.adoc`] — estate Chainguard base-image audit.
+* link:operations/standards-move-estate-rollout.adoc[`standards-move-estate-rollout.adoc`] — the standards repository's move to `metadatastician`: decision, pilot evidence, owed actions.
 
 == Consuming hypatia
 
