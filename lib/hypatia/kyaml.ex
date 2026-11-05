@@ -514,8 +514,7 @@ defmodule Hypatia.Kyaml do
   defp marker_at?(s, j, marker) do
     three = for k <- 0..2, do: char_at(s, j + k)
 
-    Enum.all?(three, &(&1 in [?., ?-])) and
-      (marker == nil or List.to_string(three) == marker) and
+    three in [~c"---", ~c"..."] and (marker == nil or three == String.to_charlist(marker)) and
       char_at(s, j + 3) in [nil, ?\s, ?\t, ?\n, ?#]
   end
 
@@ -897,10 +896,35 @@ defmodule Hypatia.Kyaml do
 
   # A node that may carry an anchor and a tag: a scalar, a flow collection, a
   # block scalar, an alias, or (on the next lines) a block collection.
-  defp parse_inline_node(s, indent, path, context, line_indent) do
+  defp parse_inline_node(s, indent, path, context, line_indent, props \\ {nil, nil}) do
     at = loc(s)
-    {anchor, tag, s} = node_properties(s, at, nil, nil, &skip_blanks/1)
+    {anchor0, tag0} = props
+    {anchor, tag, s} = node_properties(s, at, anchor0, tag0, &skip_blanks/1)
 
+    case continued_properties(s, anchor, tag, indent, context) do
+      {:continue, s} -> parse_inline_node(s, indent, path, context, line_indent, {anchor, tag})
+      :none -> parse_inline_content(s, at, anchor, tag, indent, path, context, line_indent)
+    end
+  end
+
+  # A bare anchor or tag at the end of a line may be followed by more
+  # properties on the next line (`a: &x` then `  !!str v`): they are the same
+  # node's, so they go through the same one-anchor, one-tag check rather than
+  # starting a fresh node that the outer properties would then overwrite.
+  defp continued_properties(s, anchor, tag, indent, context) do
+    if (anchor != nil or tag != nil) and (eof?(s) or peek(s) in [?\n, ?#]) do
+      next = skip_gap(s)
+
+      if not eof?(next) and peek(next) in [?&, ?!] and not property_key?(next) and
+           (context == :root or next.col - 1 > indent),
+         do: {:continue, next},
+         else: :none
+    else
+      :none
+    end
+  end
+
+  defp parse_inline_content(s, at, anchor, tag, indent, path, context, line_indent) do
     if peek(s) == ?* do
       if anchor != nil or tag != nil,
         do: throw_error("ALIAS_DECORATED", "an alias may not carry an anchor or a tag", at)

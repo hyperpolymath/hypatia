@@ -108,6 +108,17 @@ lists the fixture it reads differently (`@accepted_divergences`).
 | Separation is space, tab and line break only; an implicit key over 1024
   characters (code points, over the key itself) is `KEY_TOO_LONG`, in block
   and flow. A `...` with no document open stays legal (suite case HWV9).
+
+| Two rules from Codex review of 0a4426f: any three of `.` and `-` taken as a
+  document marker; properties continued on the line after a bare property
+  read as a fresh node
+| `[` + `--.` + `]` refused as `UNTERMINATED_FLOW`; `a: &one` then
+  `&two value`, or `!!str` then `!!int 1`, accepted with the outer property
+  silently replacing the inner one.
+| Only `---` and `...` are markers. Properties continued on the next line go
+  through the one-anchor, one-tag check (`DUPLICATE_PROPERTY`); an anchor and
+  a tag may still be split across lines. A root block scalar's content may
+  start at column 1 (suite cases W4TN, FP8R, DK3J), so that stays accepted.
 |===
 
 End of input ends the last line as a line break would: `x: |\n  a` is
@@ -120,9 +131,9 @@ kyq gives Infinity. It now gives `:infinity` too.
 
 None of these occurs in the estate's block-style workflows, so the
 pinned-commit differential agrees on every file but kyq's own
-`flow-trailing-comma.yaml`, which it lists. The kyq fix is nine commits on
+`flow-trailing-comma.yaml`, which it lists. The kyq fix is ten commits on
 `metadatastician/kyq` branch
 `fix/bom-and-block-scalar-comment` (the leading BOM and block-header comment,
 code-point columns, the trailing comma, control characters, the thirteen
-rules, the test-suite rules, the printable set, and YAML white space with the
-key limit), still to be opened there.
+rules, the test-suite rules, the printable set, YAML white space with the key
+limit, and markers and continued properties), still to be opened there.

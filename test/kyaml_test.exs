@@ -213,7 +213,22 @@ defmodule Hypatia.KyamlTest do
       {"quoted-key-over-limit", "\"" <> String.duplicate("q", 1023) <> "\": 1\n",
        {:error, "KEY_TOO_LONG", 1, 1, ""}},
       # `...` with no open document is legal (YAML test suite HWV9).
-      {"document-end-alone", "...\n", {:ok_docs, []}}
+      {"document-end-alone", "...\n", {:ok_docs, []}},
+      # Only `---` and `...` are document markers.
+      {"flow-dashes-and-dot-are-a-scalar", "[\n--. ,\n]\n", {:ok, ["--."]}},
+      {"flow-dash-dot-dash-is-a-scalar", "[\n-.- ,\n]\n", {:ok, ["-.-"]}},
+      {"flow-document-marker-refused", "[\n--- ,\n]\n", {:error, "UNTERMINATED_FLOW", 2, 1, ""}},
+      # Properties continued on the next line belong to the same node.
+      {"anchor-continued-on-next-line-refused", "a: &one\n  &two value\n",
+       {:error, "DUPLICATE_PROPERTY", 2, 3, ""}},
+      {"tag-continued-on-next-line-refused", "a: !!str\n  !!int 1\n",
+       {:error, "DUPLICATE_PROPERTY", 2, 3, ""}},
+      {"anchor-then-tag-on-next-line", "a: &one\n  !!str 1\nb: *one\n",
+       {:ok, %{"a" => "1", "b" => "1"}}},
+      {"root-anchor-continued-refused", "&x\n&y v\n", {:error, "DUPLICATE_PROPERTY", 2, 1, ""}},
+      # The document root sits at indentation -1, so its block scalar's
+      # content may start at column 1 (yaml-test-suite W4TN, FP8R, DK3J).
+      {"root-block-scalar-at-column-one", "|\ntext\n", {:ok, "text\n"}}
     ]
 
     defp plain(node) do
