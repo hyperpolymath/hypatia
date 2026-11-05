@@ -540,6 +540,59 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a step opened by `-` and a comment is still a step, with its own run:" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              -     # install dependencies
+                run: npm ci
+                env:
+                  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "an indentless steps: sequence is read: its harden-runner step counts" do
+      repo =
+        create_repo_with_workflow("""
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+            - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+              with:
+                egress-policy: block
+            - run: deploy --token=${{ secrets.DEPLOY_KEY }}
+        """)
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "an indentless steps: sequence is read: a credential beside an install is :high" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            steps:
+            - run: npm ci
+              env:
+                NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+            timeout-minutes: 10
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+    end
+
     test "a step that overrides the job-level secret variable does not hold it" do
       repo =
         create_repo_with_workflow("""
