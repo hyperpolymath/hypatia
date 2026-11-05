@@ -92,6 +92,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   require Logger
 
+  alias Hypatia.WorkflowYaml
+
   # ─── Workflow-file discovery ────────────────────────────────────────
 
   @doc false
@@ -1094,19 +1096,16 @@ defmodule Hypatia.Rules.WorkflowHardening do
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
-      content = File.read!(path)
+      content = WorkflowYaml.read_workflow(path)
       rel = Path.relative_to(path, repo_path)
 
       {credentialed, token_writes} =
         content
-        |> writing_job_bodies()
-        |> Enum.split_with(fn {_body, credentialed?} -> credentialed? end)
-
-      credentialed = Enum.map(credentialed, &elem(&1, 0))
-      token_writes = Enum.map(token_writes, &elem(&1, 0))
+        |> writing_jobs()
+        |> Enum.split_with(& &1.credentialed?)
 
       masked_credentialed =
-        if Enum.any?(credentialed, &masked_write?/1),
+        if Enum.any?(credentialed, &masked_job?/1),
           do: [wh013_masked_credentialed_finding(rel)],
           else: []
 
@@ -1114,27 +1113,55 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end)
   end
 
-  # `{body, credentialed?}` for each job that performs a write. A job is
-  # credentialed by its own body or by a workflow-level `env:` it inherits.
-  # A file whose jobs the extractor cannot split is judged as one body and is
-  # never credentialed: one job's PAT must not excuse another job's write.
-  defp writing_job_bodies(content) do
-    case extract_job_blocks(content) do
+  # Each job that performs a write, as `%{text, steps, credentialed?}`, read
+  # by the shared workflow reader: comment lines dropped, aliases expanded,
+  # steps only under the job's own `steps:` key. A job is credentialed by its
+  # own text or by a workflow-level `env:` it inherits. A file whose jobs the
+  # reader cannot split is judged as one body and is never credentialed: one
+  # job's PAT must not excuse another job's write.
+  defp writing_jobs(content) do
+    case content |> WorkflowYaml.active_lines() |> WorkflowYaml.workflow_job_lines() do
       [] ->
-        if performs_contents_write?(content), do: [{content, false}], else: []
+        if performs_contents_write?(content),
+          do: [%{text: content, steps: [], credentialed?: false}],
+          else: []
 
       jobs ->
         inherited? = own_credential_job?(workflow_preamble(content))
 
-        for {_id, _no, body} <- jobs, performs_contents_write?(body) do
-          {body, inherited? or own_credential_job?(body)}
+        for job <- jobs, text = lines_text(job), performs_contents_write?(text) do
+          %{
+            text: text,
+            steps: WorkflowYaml.job_steps(job),
+            credentialed?: inherited? or own_credential_job?(text)
+          }
         end
     end
   end
 
+  defp lines_text(lines), do: Enum.map_join(lines, "\n", &elem(&1, 0))
+
+  # The text of each step of one job body (header line first, as the job
+  # extractor gives it), read by the shared reader: only the items of the
+  # job's own `steps:` key, comment lines dropped.
+  defp job_step_texts(body) do
+    body
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+    |> WorkflowYaml.job_steps()
+    |> Enum.map(&lines_text/1)
+  end
+
+  defp blank_or_comment?(line) do
+    trimmed = String.trim(line)
+    trimmed == "" or String.starts_with?(trimmed, "#")
+  end
+
   # Everything above the top-level `jobs:` key (name, on, permissions, env).
+  # The key may be quoted (`"jobs":`, `'jobs':`), as WorkflowYaml reads it.
   defp workflow_preamble(content) do
-    content |> String.split(~r/^jobs:/m, parts: 2) |> hd()
+    content |> String.split(~r/^(?:jobs|"jobs"|'jobs')\s*:/m, parts: 2) |> hd()
   end
 
   # `token:` / `GH_TOKEN:` / `GITHUB_TOKEN:` set to a secret other than
@@ -1181,8 +1208,6 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # The grant is judged file-wide (`content`); starvation and masking only
   # over the jobs whose writes ride on GITHUB_TOKEN (`token_writes`).
   defp wh013_starved_findings(rel, content, token_writes) do
-    token_text = Enum.join(token_writes, "\n")
-
     cond do
       token_writes == [] ->
         []
@@ -1194,7 +1219,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
         []
 
       # No grant anywhere, and the write is masked so it can never go red.
-      masked_write?(token_text) ->
+      Enum.any?(token_writes, &masked_job?/1) ->
         [
           %{
             rule: "WH013",
@@ -1261,8 +1286,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
     ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*echo/
   ]
 
-  @steps_key ~r/^[ \t]*steps:[ \t]*(?:#.*)?$/
-  @step_continue_on_error ~r/^[ \t]*(?:-[ \t]+)?continue-on-error:[ \t]*true\b/m
+  # `continue-on-error: true` as a key of the step, quoted or not. The prefix
+  # (indent, plus `- ` on the step's opening line) is captured so the key's
+  # column can be compared with the step's own key column.
+  @step_continue_on_error ~r/^(\s*(?:-\s+)?)(?:continue-on-error|"continue-on-error"|'continue-on-error')\s*:\s*true\b/
 
   @doc """
   Return true when a write operation's failure is masked, so a denied write
@@ -1271,76 +1298,43 @@ defmodule Hypatia.Rules.WorkflowHardening do
   on a sibling step does not mask this write, and a job-level
   `continue-on-error` is not counted: it is a deliberate, visible job setting
   (standards' github-backup-mirror-reusable.yml documents and surfaces it).
+
+  `content` is a workflow (or a fragment of one). Its steps are read with
+  `Hypatia.WorkflowYaml`, so only the items of each job's own `steps:` count;
+  a fragment without `jobs:` is judged by its shell masks alone.
   """
   def masked_write?(content) when is_binary(content) do
-    Enum.any?(@write_masks, &Regex.match?(&1, content)) or
+    shell_masked_write?(content) or
       content
-      |> step_bodies()
-      |> Enum.any?(&(step_continue_on_error?(&1) and performs_contents_write?(&1)))
+      |> WorkflowYaml.active_lines()
+      |> WorkflowYaml.workflow_job_lines()
+      |> Enum.flat_map(&WorkflowYaml.job_steps/1)
+      |> Enum.any?(&masked_step?/1)
   end
 
-  # `continue-on-error: true` as a key of the step itself: on its `- ` line or
-  # at the step's key column. Deeper text (a `run: |` script that writes a
-  # workflow file, a `with:` value) is not the step's flag.
+  defp masked_job?(%{text: text, steps: steps}) do
+    shell_masked_write?(text) or Enum.any?(steps, &masked_step?/1)
+  end
+
+  defp shell_masked_write?(text), do: Enum.any?(@write_masks, &Regex.match?(&1, text))
+
+  defp masked_step?(step) do
+    step_continue_on_error?(step) and performs_contents_write?(lines_text(step))
+  end
+
+  # `continue-on-error: true` at the step's own key column. Deeper text (a
+  # `run: |` script that writes a workflow file, a `with:` value) is not the
+  # step's flag.
   defp step_continue_on_error?(step) do
-    [item | rest] = String.split(step, "\n")
-    keys = Enum.reject(rest, &blank_or_comment?/1)
+    key_column = WorkflowYaml.step_key_column(step)
 
-    key_col =
-      case Regex.run(~r/^([ \t]*-[ \t]+)\S/, item) do
-        [_, prefix] -> String.length(prefix)
-        nil -> keys |> List.first("") |> indent_of()
+    Enum.any?(step, fn {line, _} ->
+      case Regex.run(@step_continue_on_error, line) do
+        [_, prefix] -> String.length(prefix) == key_column
+        nil -> false
       end
-
-    Regex.match?(@step_continue_on_error, item) or
-      Enum.any?(keys, &(indent_of(&1) == key_col and Regex.match?(@step_continue_on_error, &1)))
+    end)
   end
-
-  defp blank_or_comment?(line) do
-    trimmed = String.trim(line)
-    trimmed == "" or String.starts_with?(trimmed, "#")
-  end
-
-  # The text of each `- ` (or bare `-`) item under every `steps:` key. An item
-  # runs until the next item at the same indent or a line back at (or above)
-  # the `steps:` indent; blank and comment lines never end one.
-  defp step_bodies(content) do
-    {acc, current, _state} =
-      content
-      |> String.split("\n")
-      |> Enum.reduce({[], nil, nil}, fn line, {acc, current, state} ->
-        trimmed = String.trim_leading(line)
-
-        cond do
-          Regex.match?(@steps_key, line) ->
-            {flush_step(acc, current), nil, {indent_of(line), nil}}
-
-          is_nil(state) ->
-            {acc, nil, nil}
-
-          trimmed == "" or String.starts_with?(trimmed, "#") ->
-            {acc, append_step(current, line), state}
-
-          indent_of(line) <= elem(state, 0) ->
-            {flush_step(acc, current), nil, nil}
-
-          (String.trim(line) == "-" or String.starts_with?(trimmed, "- ")) and
-              elem(state, 1) in [nil, indent_of(line)] ->
-            {flush_step(acc, current), [line], {elem(state, 0), indent_of(line)}}
-
-          true ->
-            {acc, append_step(current, line), state}
-        end
-      end)
-
-    acc |> flush_step(current) |> Enum.reverse()
-  end
-
-  defp append_step(nil, _line), do: nil
-  defp append_step(lines, line), do: [line | lines]
-
-  defp flush_step(acc, nil), do: acc
-  defp flush_step(acc, lines), do: [lines |> Enum.reverse() |> Enum.join("\n") | acc]
 
   # ─── Internals ──────────────────────────────────────────────────────
 
@@ -1568,11 +1562,13 @@ defmodule Hypatia.Rules.WorkflowHardening do
   @wh014_workspace "/__wh014_workspace__"
 
   defp wh014_masked_upload?(body, inherited_directory) do
-    [preamble | _] = String.split(body, ~r/^[ \t]*steps:/m, parts: 2)
+    # The job's keys above its `steps` key, quoted or not, as the shared
+    # reader recognises it.
+    [preamble | _] = String.split(body, ~r/^[ \t]*(?:steps|"steps"|'steps')[ \t]*:/m, parts: 2)
     directory = wh014_default_directory(preamble, inherited_directory)
 
     body
-    |> step_bodies()
+    |> job_step_texts()
     |> Enum.reduce_while(MapSet.new(), fn step, tainted ->
       upload = wh014_step_value(step, "uses")
       report = wh014_step_input(step, "sarif_file")
@@ -1897,6 +1893,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
       {words, redirects} = wh014_command_parts(command)
       {inputs, copy_target} = wh014_inputs(words)
+
       inputs =
         if List.first(words) in ["jq", "cat"] do
           redirected = for {:input, "0", path} <- redirects, do: path
@@ -1926,11 +1923,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
           nil -> []
         end
 
-      count_mask? =
-        List.first(words) == "jq" and separator == :or and next_words == ["echo", "0"]
+      count_mask? = List.first(words) == "jq" and separator == :or and next_words == ["echo", "0"]
 
-      paths =
-        if count_mask?, do: Enum.reduce(inputs, paths, &MapSet.put(&2, &1)), else: paths
+      paths = if count_mask?, do: Enum.reduce(inputs, paths, &MapSet.put(&2, &1)), else: paths
 
       inherited? = Enum.any?(inputs, &MapSet.member?(paths, &1))
       output_mask? = separator == :or and next_words == ["true"]
@@ -1971,6 +1966,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
     do: {Enum.reverse(words), Enum.reverse(redirects)}
 
   defp wh014_inputs(["jq" | args]), do: {wh014_jq_inputs(args, false, []), nil}
+
   defp wh014_inputs(["cat" | args]),
     do: {Enum.reject(args, &String.starts_with?(&1, "-")), nil}
 
@@ -2088,7 +2084,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
             fix_recipe: "assert-findings-before-sarif-upload",
             detail: %{
               jobs: Enum.map(affected_jobs, fn {job, _line, _body} -> job end),
-              analysis_scope: "literal report paths in the same job; not scan-completion evidence",
+              analysis_scope:
+                "literal report paths in the same job; not scan-completion evidence",
               fix:
                 "Preserve the scanner exit status and reject execution or coverage " <>
                   "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
