@@ -285,7 +285,14 @@ defmodule Hypatia.Rules.RsrConformanceTest do
     # chora deed's (clade) clause carries. In-repo clade organisation (the
     # subtrees a repo groups its own content into, e.g. boj-server's
     # cartridges) is a different use of the word and never satisfies it.
+    # 3.1.9 is gated on governance-tier, so each case declares it; without a
+    # profile the criterion is :na and every assertion would pass vacuously.
     defp clade_verdict(tmp) do
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["governance-tier"]
+      """)
+
       {:ok, catalogue} = RsrCriteria.load(@ssot)
       {:ok, sc} = RsrConformance.score(catalogue, tmp)
       sc.results |> Enum.find(&(&1.id == "3.1.9")) |> Map.fetch!(:verdict)
