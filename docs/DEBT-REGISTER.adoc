@@ -175,6 +175,20 @@ set. Fixing CI-1 unblocks all four at once.
 Not necessarily wrong — but `+pages.yml+` is the only consumer of the
 Idris `+Ddraig.idr+` build, so that path is unexercised.
 
+==== CI-9 · HIGH · Estate callers still name the moved standards repository · OPEN 2026-11-04
+
+`+hyperpolymath/standards+` moved to `+metadatastician/standards+` on
+2026-10-25, and Actions does not follow the redirect for a reusable's
+`+uses:+`. Hypatia itself is fixed: Governance passed on `+main+` at
+`+6bd66a7+` (run 41932503298). The estate is not: code search found
+about 764 workflow files under `+hyperpolymath+` still calling the old
+owner. The CI-health sweep that would apply the allow-list stopgap
+cannot run, because `+HYPATIA_DISPATCH_PAT+` returns `+HTTP 401+`
+(e.g. run 41574487070). WF028 detects the calls (#965).
+
+Decision, evidence and owed actions:
+`+docs/operations/standards-move-estate-rollout.adoc+`.
+
 '''''
 
 === 2. Test debt

@@ -1,0 +1,190 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= The standards move: estate rollout after `hyperpolymath/standards` became `metadatastician/standards`
+:author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+:date: 2026-11-04
+
+== Why this document exists
+
+`hyperpolymath/standards` moved to `metadatastician/standards` on
+2026-10-25. GitHub redirects git and the REST API for the old name, but
+it does *not* follow the redirect when it resolves a reusable workflow's
+`uses:`. Every estate caller pinned at `hyperpolymath/standards/...@<sha>`
+therefore ends in `startup_failure` ("workflow was not found") before any
+job runs.
+
+Re-pointing alone is not enough. Each repository's Actions policy
+(`allowed_actions: selected`) admits only `hyperpolymath/*` plus a curated
+third-party set, so a re-pointed caller is refused too, until the new
+owner's paths are allowed.
+
+This page records what was decided, what is proven, and what is still
+owed. The consumer contract for hypatia itself is
+link:../consumers/standards-governance.adoc[standards-governance.adoc];
+this page is the estate view.
+
+== Decision (owner, 2026-10-27)
+
+[cols="1,3",options="header"]
+|===
+| Item | Ruling
+
+| End state
+| *D: move estate repositories into the `metadatastician` organization*,
+  with one org-level Actions policy replacing per-repository allow-lists.
+  This is standards ruling D97 ("transfer more repos to the org … census,
+  then decide", A4 on standards#1234) applied to this incident.
+
+| Stopgap until D lands
+| *Narrow per-repository allow-list PUT*: `remediate.sh` B-ALLOWLIST adds
+  the exact `metadatastician/standards/.github/workflows/*-reusable.yml@*`
+  paths from `scripts/ci-health/action-superset.txt`. No owner-wide
+  `metadatastician/*` pattern.
+
+| D pilot
+| *A leaf repository*, one that no other repository calls via `uses:`,
+  not hypatia. Hypatia hosts estate reusables (`rsr-oracle.yml`), so
+  moving it first would break every inbound caller.
+
+| Not chosen
+| *B*, recreating `hyperpolymath/standards` as a mirror: two copies to keep
+  in sync, and GitHub may block reuse of a retired name (untested).
+  *C*, a wide `metadatastician/*` allow-list: broader trust, and no faster,
+  because a personal account has no owner-wide Actions policy (see below).
+|===
+
+== Facts that shape the rollout
+
+* *`hyperpolymath` is a personal account; `metadatastician` is an
+  organization.* A personal account has no account-wide Actions
+  allow-list, so until D every repository needs its own policy change.
+  That is why the stopgap is a per-repository PUT, and why D replaces
+  it with one org policy.
+* *A transfer resets the allow-list.* When `gossamer` moved to
+  `metadatastician` on 2026-07-11, `patterns_allowed` was emptied and 16 of
+  25 `uses:` refs hit `startup_failure`
+  (`metadatastician/standards/rhodium-standard-repositories/actions-allowlist/README.adoc`).
+  *Set the org's Actions policy before the first D transfer.*
+* *D causes the same redirect break in reverse.* Moving a repository
+  breaks every inbound `uses: hyperpolymath/<repo>/...` call to it. Move
+  leaf repositories first and reusable hosts last, and re-point each
+  repository's callers in the same batch as its transfer.
+* *Re-pointing also needs the lock.* `actions.lock` records each `uses:`
+  by owner. A caller re-pointed without regenerating the lock with
+  `gh actions-lock` fails lock verification at startup, as hypatia's did
+  after #958. Never hand-edit the lock.
+
+== Pilot: hypatia (done)
+
+Hypatia's five callers now point at `metadatastician/standards`, pinned at
+`a797d308c0517d4e2d21cc7f1cb08d41f82b1a12`, with a tool-generated lock.
+On `main` at `6bd66a7` (2026-11-04), Governance (run 41932503298), Secret
+Scanner and Hypatia Security Scan all *ran and passed*.
+
+Mirror to Git Forges also started (run 41932503492), so its startup is
+fixed too. Four of its nine jobs fail inside the job (Bitbucket, Disroot,
+SourceHut, Gitea), and the contract says a missing forge credential is a
+skip, not a failure. That is a separate per-forge problem, not the move.
+
+== Detection (done)
+
+*WF028* (`check_reusable_call_to_moved_repository/1`,
+`lib/rules/workflow_audit.ex`, #965) flags a job that calls a reusable
+by a moved repository's former name, and names the re-pointed reference
+at the same revision.
+
+* The table lives in `Hypatia.Rules.MovedRepositories`, so each D transfer
+  is one row, not a new rule.
+* WF028 is advisory and severity low, like WF026 and WF027 (AGENTIC
+  `must-not-promote-to-blocking`). No fleet fixer rewrites the owner yet,
+  so it carries `auto_fixable: false`.
+
+`rsr-oracle.yml` accepts the standards canon under either name and always
+checks out the current one (#1004).
+
+== Still owed
+
+[cols="2,1,3",options="header"]
+|===
+| Item | Owner | Evidence / next step
+
+| Rotate `HYPATIA_DISPATCH_PAT`
+| *Repository owner*
+| Every `ci-health-sweep` run from 2026-10-22 to 2026-11-03 died with
+  `HTTP 401: Bad credentials` at `repos to scan: 0` (e.g. runs 40266651942
+  and 41574487070). `hypatia-remediation-sweep` fails the same way. The
+  run on 2026-11-04 (41769485545) ended in `startup_failure` on
+  `13bcc3e`, before the lock repairs on `main`; re-check the next
+  scheduled run. Until this is fixed, the stopgap PUT and the census
+  cannot run from CI. After rotating, run one `workflow_dispatch` with
+  `dry_run: true` first. It also confirms the harden-runner egress
+  allow-list added in #974.
+
+| Census of old-owner callers
+| Sweep, after the rotation
+| Code search found about 764 workflow files under `hyperpolymath` still
+  naming `hyperpolymath/standards/.github/workflows`, echidna among them.
+  Code search caps at 1,000 results and its index lags, so the census of
+  record is WF028 run per repository by the sweep.
+
+| Org Actions policy for `metadatastician`
+| *Repository owner*
+| Must admit the estate superset before the first D transfer. Not
+  readable from a session without an org-admin token.
+
+| Test whether `hyperpolymath/standards` can be recreated
+| *Repository owner*
+| Settles option B as a fallback only. No result yet.
+
+| D transfer order (A4 on standards#1234)
+| standards
+| Record leaf-first order and the "org policy first" precondition.
+
+| Owner re-point fixer
+| gitbot-fleet
+| Would make WF028 `auto_fixable: true`. Also:
+  `fix-stale-reusable-pin.sh` and `stale-reusable-pins.tsv` still key on
+  the old path.
+
+| `zz-one-off-lock-regen.yml`
+| Repository owner
+| A one-off from #958, wired to a now-finished repair branch. It still
+  clones `hyperpolymath/standards`, which works through the redirect.
+  Delete it rather than maintain it.
+|===
+
+== WF028 limits, accepted on #965
+
+These cases are not detected; each one was weighed on the PR and left:
+
+* a `uses:` value written below its key, unindented, inside a flow job
+  (lives in `wf_continued_uses/1`, which WF027 shares);
+* a job alias written on the line below its key (lives in
+  `PinSites.node_aliases/4`, which WF027, PinIntegrity and the merge
+  policy share);
+* two anchored mappings on one physical line, one used as a job and one
+  as a step;
+* a YAML-escaped owner (`"\x68yperpolymath/..."`), which only deliberate
+  evasion would write.
+
+They share one root cause: hand-written YAML parsing. A parsed workflow
+model (tracked in #971 for RE001) would close all of them at once, for
+WF027 and WF028 as well.
+
+== Acceptance criteria (closes CI-9)
+
+. Governance, Scorecard, Hypatia Security Scan, Secret Scanner and Mirror
+  run past startup on the default branch of every estate repository.
+  Check this from run conclusions, not from a PUT response.
+. The sweep's WF028 census shows zero old-owner callers, or each
+  remaining one is a documented exception.
+. The `metadatastician` org Actions policy covers the estate superset
+  before the first D transfer, and each transfer batch is verified the
+  same way as point 1.
+
+== When to update this memo
+
+* When `HYPATIA_DISPATCH_PAT` is rotated, or the sweep's first dry run
+  reports its results.
+* When a D transfer batch lands: add its rows to
+  `Hypatia.Rules.MovedRepositories`, and record the batch here.
+* When the standards pin in hypatia's callers moves past `a797d30`.
