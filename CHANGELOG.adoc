@@ -12,6 +12,25 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== WH013 reads steps with RE001's workflow reader (2026-11-04)
+
+RE001's reader is now its own module, `Hypatia.WorkflowYaml`, and WH013 reads
+jobs and steps through it instead of its own line approximation. WH013's
+masked-write check (`continue-on-error: true` on the step that writes) now
+finds the step in three valid shapes it used to miss (reported by Codex on
+#950):
+
+* a later step, after an earlier step's `run: |` script that contains a
+  `steps:` line (a heredoc that writes a workflow);
+* an indentless sequence, `steps:` with its `- ` items at the key's own column;
+* a step opened by `-` followed only by a comment.
+
+The reader fixes the last two for RE001 as well: an indentless `steps:`
+sequence is read (its harden-runner step counts), and a step opened by `-` and
+a comment keeps its `run:`. WH014 reads each job's steps through the same
+reader. On the hypatia, echidna and standards trees, WH013, WH014 and RE001
+report exactly what they did before.
+
 ==== RE001 accepts a deed egress declaration; the job token no longer counts (2026-10-27)
 
 The estate-wide decision on `step-security/harden-runner` (standards ADR-009) is
