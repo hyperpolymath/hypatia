@@ -159,3 +159,5 @@ dist/
 
 # kyq checkout read by test/fixtures/kyaml/kyq_dump.mjs (kyaml-conformance)
 /.kyq
+# yaml-test-suite checkout read by test/kyaml_yaml_test_suite_test.exs
+/.yts

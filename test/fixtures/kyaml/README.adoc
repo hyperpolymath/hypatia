@@ -43,3 +43,28 @@ Measured when the port landed:
   fixtures and estate workflows; 27 distinct error codes exercised): all agree
   once kyq's three bugs below are fixed. Before that, the mutations found the
   third one.
+
+== The YAML test suite
+
+kyq is the canonical reader, but agreeing with it only shows the port has
+kyq's behaviour, gaps included. The same job therefore also checks out
+yaml/yaml-test-suite (`data` branch, pinned by `YAML_TEST_SUITE_REF`) and runs
+`test/kyaml_yaml_test_suite_test.exs`:
+
+* no case the suite marks invalid may parse;
+* every valid case that parses must give the suite's `in.json`;
+* refusing a valid case is allowed: that is the KYAML subset.
+
+Locally:
+
+[source,bash]
+----
+git clone --depth 1 --branch data https://github.com/yaml/yaml-test-suite .yts
+YAML_TEST_SUITE=.yts mix test --only yaml_test_suite
+----
+
+Measured when the gate landed, over 402 cases: the port and the fixed kyq agree
+on every one; 94 invalid cases refused and none accepted; 143 valid cases read
+exactly as `in.json` and none read otherwise; 164 valid cases refused (subset).
+Before the fix both readers accepted 17 invalid cases and misread 6 valid ones;
+kyq at `KYQ_REF` accepts 21 and misreads 11.

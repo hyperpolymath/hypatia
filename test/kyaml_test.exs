@@ -124,13 +124,42 @@ defmodule Hypatia.KyamlTest do
        {:ok, %{"a" => "-x", "b" => -1, "c" => "?x", "d" => ":x"}}},
       {"flow-complex-key-refused", "x: {? a: 1}\n",
        {:error, "UNSUPPORTED_COMPLEX_KEY", 1, 5, ""}},
+      # Found by running the YAML test suite (yaml/yaml-test-suite) against
+      # both readers; the same names are kyq bridge vectors.
+      {"comment-needs-space-after-quoted", "a: \"x\"#c\n", {:error, "BAD_COMMENT", 1, 7, ""}},
+      {"comment-needs-space-after-flow", "a: [1, 2]#c\n", {:error, "BAD_COMMENT", 1, 10, ""}},
+      {"comment-needs-space-after-block-header", "a: >#c\n  x\n",
+       {:error, "BAD_COMMENT", 1, 5, ""}},
+      {"control-character-in-comment", "a: 1 # bad\u0001\n",
+       {:error, "CONTROL_CHARACTER", 1, 11, ""}},
+      {"leading-blank-line-past-content", "x: |\n    \n  a\n",
+       {:error, "BAD_BLOCK_SCALAR", 3, 3, ""}},
+      {"folded-tab-line-is-spaced", "x: >\n  foo\n  \tbar\n", {:ok, %{"x" => "foo\n\tbar\n"}}},
+      {"directive-per-document", "%YAML 1.2\n---\na: 1\n...\n%YAML 1.2\n---\nb: 2\n",
+       {:ok_docs, [%{"a" => 1}, %{"b" => 2}]}},
+      {"directive-without-document", "%YAML 1.2\n", {:error, "MISSING_DOC_START", 2, 1, ""}},
+      {"duplicate-yaml-directive", "%YAML 1.2\n%YAML 1.2\n---\na: 1\n",
+       {:error, "DUPLICATE_DIRECTIVE", 2, 1, ""}},
+      {"trailing-document-start-is-null", "a: b\n---\n", {:ok_docs, [%{"a" => "b"}, nil]}},
+      {"flow-line-not-indented", "x: [a,\nb]\n", {:error, "BAD_INDENT", 2, 1, ""}},
+      {"flow-closer-at-parent-column", "x: [\n  a,\n]\n", {:ok, %{"x" => ["a"]}}},
+      {"root-flow-closes-at-column-one", "{\n  a: 1,\n}\n", {:ok, %{"a" => 1}}},
+      {"flow-tab-indentation", "x: [\n\t1\n]\n", {:error, "TAB_INDENT", 2, 1, ""}},
+      {"flow-tab-after-indentation", "x: [\n \t1\n]\n", {:ok, %{"x" => [1]}}},
+      {"document-marker-in-flow", "[\n---\n]\n", {:error, "UNTERMINATED_FLOW", 2, 1, ""}},
+      {"flow-key-on-two-lines", "x: {\n  a\n  : 1}\n", {:error, "MULTILINE_KEY", 2, 3, "x"}},
+      {"flow-key-holds-url-colon", "x: {http://example.com: ok}\n",
+       {:ok, %{"x" => %{"http://example.com" => "ok"}}}},
+      {"flow-plain-cannot-hold-bracket", "x: [a[b]\n", {:error, "FLOW_SEPARATOR", 1, 6, "x"}},
+      {"plain-indicator-comma-after-tag", "- !!str, x\n", {:error, "PLAIN_INDICATOR", 1, 8, ""}},
+      {"tab-indents-nested-sequence", "-\t- a\n", {:error, "TAB_INDENT", 1, 3, ""}},
       {"tab-before-comment", "x: value\t# comment\n", {:ok, %{"x" => "value"}}},
       {"block-header-indent-then-chomp", "x: |2-\n  a\n", {:ok, %{"x" => "a"}}},
       {"block-header-chomp-then-indent", "x: >-2\n  a\n", {:ok, %{"x" => "a"}}},
       {"block-whitespace-line-is-content", "x: |2\n  a\n    \n  b\n",
        {:ok, %{"x" => "a\n  \nb\n"}}},
-      {"block-clip-at-end-of-input", "x: |\n  a", {:ok, %{"x" => "a"}}},
-      {"block-keep-at-end-of-input", "x: |+\n  a", {:ok, %{"x" => "a"}}},
+      {"block-clip-at-end-of-input", "x: |\n  a", {:ok, %{"x" => "a\n"}}},
+      {"block-keep-at-end-of-input", "x: |+\n  a", {:ok, %{"x" => "a\n"}}},
       {"block-keep-only-blank-lines", "x: |+\n\n\n", {:ok, %{"x" => "\n\n"}}},
       {"flow-empty-entry", "x: [1,,2]\n", {:error, "EMPTY_VALUE", 1, 7, "x"}},
       {"flow-lone-comma", "x: [,]\n", {:error, "EMPTY_VALUE", 1, 5, "x"}},
@@ -156,6 +185,10 @@ defmodule Hypatia.KyamlTest do
           {:ok, value} ->
             assert {:ok, [doc | _]} = Kyaml.parse(yaml)
             assert plain(doc) == value
+
+          {:ok_docs, values} ->
+            assert {:ok, docs} = Kyaml.parse(yaml)
+            assert Enum.map(docs, &plain/1) == values
 
           {:error, code, line, column, path} ->
             assert {:error, %{code: ^code, line: ^line, column: ^column, path: ^path}} =

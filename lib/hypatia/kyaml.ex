@@ -223,7 +223,17 @@ defmodule Hypatia.Kyaml do
   defp parse_stream(bytes) do
     text = normalise_newlines(bytes)
     t = text |> String.to_charlist() |> List.to_tuple()
-    s = %{t: t, n: tuple_size(t), i: 0, line: 1, col: 1, at_content: false, anchors: %{}}
+
+    s = %{
+      t: t,
+      n: tuple_size(t),
+      i: 0,
+      line: 1,
+      col: 1,
+      at_content: false,
+      anchors: %{},
+      flow_min: nil
+    }
 
     # A single leading BOM is legal and does not move the first column. Any
     # BOM after it is smuggled in mid-stream. (kyq refused a leading BOM too;
@@ -245,40 +255,51 @@ defmodule Hypatia.Kyaml do
     stream(skip_gap(s), [], false)
   end
 
-  defp stream(s, docs, saw_directive) do
+  # `ended?` is whether the stream is between documents: at its start or after
+  # a `...` marker, where directives for the next document may appear (YAML
+  # 1.2 §9.1.4). A directive needs a `---` after it.
+  defp stream(s, docs, saw_directive, ended? \\ true) do
     cond do
       eof?(s) ->
+        if saw_directive, do: throw_missing_doc_start(s)
         Enum.reverse(docs)
 
       at_directive?(s) ->
-        if docs != [],
-          do:
+        cond do
+          not ended? ->
             throw_error(
               "UNSUPPORTED_DIRECTIVE",
-              "a directive is only allowed before the first document",
+              "a directive must come before a document, after `...` if one precedes it",
               loc(s)
             )
 
-        stream(s |> parse_directive() |> skip_gap(), docs, true)
+          saw_directive and directive_named?(s, "%YAML") ->
+            throw_error("DUPLICATE_DIRECTIVE", "a document has at most one `%YAML`", loc(s))
+
+          true ->
+            stream(s |> parse_directive() |> skip_gap(), docs, true, true)
+        end
 
       at_marker?(s, "...") ->
-        stream(s |> consume_marker() |> skip_gap(), docs, saw_directive)
+        if saw_directive, do: throw_missing_doc_start(s)
+        stream(s |> consume_marker() |> skip_gap(), docs, false, true)
 
       at_marker?(s, "---") ->
         # Anchors are scoped to one document (YAML 1.2 §7.1), so each starts with none.
         s = %{s | anchors: %{}} |> consume_marker() |> skip_gap()
 
         cond do
-          # A final `---` with no content: a trailing empty document is dropped.
+          # A final `---` with no content starts an empty document: null, as
+          # YAML reads it (the YAML test suite's 6XDY, PUW8).
           eof?(s) ->
-            Enum.reverse(docs)
+            Enum.reverse([null_node(loc(s)) | docs])
 
           at_marker?(s, "---") or at_marker?(s, "...") ->
-            stream(s, [null_node(loc(s)) | docs], false)
+            stream(s, [null_node(loc(s)) | docs], false, false)
 
           true ->
             {doc, s} = parse_content_document(s)
-            stream(s, [doc | docs], false)
+            stream(s, [doc | docs], false, false)
         end
 
       saw_directive ->
@@ -293,8 +314,23 @@ defmodule Hypatia.Kyaml do
 
       true ->
         {doc, s} = parse_content_document(s)
-        stream(s, [doc | docs], false)
+        stream(s, [doc | docs], false, false)
     end
+  end
+
+  defp throw_missing_doc_start(s),
+    do:
+      throw_error(
+        "MISSING_DOC_START",
+        "a `---` document start marker is required after a directive",
+        loc(s)
+      )
+
+  defp directive_named?(s, name) do
+    size = String.length(name)
+
+    List.to_string(for k <- 0..(size - 1), do: peek(s, k) || 0) == name and
+      peek(s, size) in [nil, ?\s, ?\t, ?\n]
   end
 
   # YAML line breaks are LF, CRLF and CR. CRLF is normalised to LF; a lone CR
@@ -415,7 +451,7 @@ defmodule Hypatia.Kyaml do
             s |> bump!() |> skip_gap()
 
           peek(s) == ?# ->
-            s |> skip_to_eol() |> skip_gap()
+            s |> skip_comment() |> skip_gap()
 
           true ->
             %{s | at_content: true}
@@ -427,7 +463,7 @@ defmodule Hypatia.Kyaml do
             s |> bump!() |> skip_gap()
 
           ?# ->
-            s |> skip_to_eol() |> skip_gap()
+            s |> skip_comment() |> skip_gap()
 
           c ->
             throw_error(
@@ -439,12 +475,42 @@ defmodule Hypatia.Kyaml do
     end
   end
 
+  # Skip a comment to the end of its line. Comment text is still YAML text, so
+  # a raw C0 control character (other than a tab) in it is refused too.
   defp skip_to_eol(s) do
+    c = peek(s)
+
     cond do
-      eof?(s) -> %{s | at_content: false}
-      peek(s) == ?\n -> %{bump!(s) | at_content: false}
-      true -> s |> bump!() |> skip_to_eol()
+      eof?(s) ->
+        %{s | at_content: false}
+
+      c == ?\n ->
+        %{bump!(s) | at_content: false}
+
+      c < 0x20 and c != ?\t ->
+        hex = c |> Integer.to_string(16) |> String.pad_leading(4, "0")
+        throw_error("CONTROL_CHARACTER", "raw control character U+#{hex} in a comment", loc(s))
+
+      true ->
+        s |> bump!() |> skip_to_eol()
     end
+  end
+
+  # A `#` starts a comment only at the start of a line or after white space
+  # (YAML 1.2 §6.6): `"x"#y` and `[1]#y` are not commented.
+  defp comment_at?(s) do
+    peek(s) == ?# and (s.col == 1 or char_at(s, s.i - 1) in [?\s, ?\t, ?\n])
+  end
+
+  defp skip_comment(s) do
+    if comment_at?(s),
+      do: skip_to_eol(s),
+      else:
+        throw_error(
+          "BAD_COMMENT",
+          "a comment must be separated from what precedes it by white space",
+          loc(s)
+        )
   end
 
   defp expect_end_of_line(s) do
@@ -452,7 +518,7 @@ defmodule Hypatia.Kyaml do
 
     cond do
       peek(s) == ?# ->
-        skip_to_eol(s)
+        skip_comment(s)
 
       eof?(s) or peek(s) == ?\n ->
         s
@@ -484,7 +550,7 @@ defmodule Hypatia.Kyaml do
 
     cond do
       peek(s) == ?# ->
-        skip_to_eol(s)
+        skip_comment(s)
 
       not eof?(s) and peek(s) != ?\n ->
         throw_error(
@@ -535,7 +601,10 @@ defmodule Hypatia.Kyaml do
   # ── block structure ───────────────────────────────────────────────────────
 
   defp parse_content_document(s) do
-    {node, s} = parse_block(s, s.col - 1, "")
+    # The document root is a block node at indentation -1 (YAML 1.2 §9.2): a
+    # root flow collection may close at column 1, and a root block scalar's
+    # content may start there.
+    {node, s} = parse_block(s, s.col - 1, "", -1)
     s = skip_gap(s)
 
     if not eof?(s) and not at_marker?(s, "---") and not at_marker?(s, "...") do
@@ -724,7 +793,10 @@ defmodule Hypatia.Kyaml do
 
   # `n` counts the items so far: the next item's index, without length/1.
   defp seq_items(s, indent, path, seq_loc, items, n) do
-    s = s |> bump!() |> skip_blanks()
+    s = bump!(s)
+    after_dash = s.i
+    s = skip_blanks(s)
+    tabbed? = Enum.any?(after_dash..(s.i - 1)//1, &(char_at(s, &1) == ?\t))
     item_path = join_path(path, Integer.to_string(n))
 
     {item, s} =
@@ -740,6 +812,11 @@ defmodule Hypatia.Kyaml do
               "a sequence entry value must be indented past the `-`",
               loc(s)
             )
+
+        # A compact nested collection is indented by its `- `: with spaces
+        # only, since a tab there is indentation (YAML 1.2 s-indent).
+        if tabbed? and (seq_entry?(s) or map_entry?(s)),
+          do: throw_error("TAB_INDENT", "a tab may not indent a nested collection", loc(s))
 
         parse_block(s, item_indent, item_path, indent)
       end
@@ -855,9 +932,11 @@ defmodule Hypatia.Kyaml do
           peek(s) in [?|, ?>] ->
             parse_block_scalar(s, line_indent, at)
 
+          # Each line of a flow collection must be indented past the block
+          # node that holds it (YAML 1.2 s-flow-line-prefix).
           peek(s) in [?{, ?[] ->
-            {node, s} = parse_flow_node(s, path)
-            {node, expect_end_of_line(s)}
+            {node, s} = parse_flow_node(%{s | flow_min: line_indent + 1}, path)
+            {node, expect_end_of_line(%{s | flow_min: nil})}
 
           peek(s) in [?', ?"] ->
             {node, s} = parse_quoted(s, at)
@@ -1072,7 +1151,7 @@ defmodule Hypatia.Kyaml do
     %{kind: kind, value: value, raw: raw, loc: at, style: style, segments: []}
   end
 
-  defp plain_indicator_start?(<<c, _::binary>>) when c in [?@, ?`, ?%], do: true
+  defp plain_indicator_start?(<<c, _::binary>>) when c in [?@, ?`, ?%, ?,, ?], ?}], do: true
 
   defp plain_indicator_start?(<<c, rest::binary>>) when c in [?-, ??, ?:],
     do: rest == "" or String.first(rest) in [" ", "\t"]
@@ -1247,7 +1326,7 @@ defmodule Hypatia.Kyaml do
         # The comment runs to, and consumes, the header line break. (kyq
         # consumed one more character; fixed upstream, see KNOWN_DIVERGENCES.)
         peek(s) == ?# ->
-          skip_to_eol(s)
+          skip_comment(s)
 
         not eof?(s) and peek(s) != ?\n ->
           throw_error("BAD_BLOCK_SCALAR", "unexpected character in a block scalar header", at)
@@ -1267,11 +1346,9 @@ defmodule Hypatia.Kyaml do
     lines = Enum.reverse(lines)
     {body, segments} = if style == :literal, do: literal_body(lines), else: folded_body(lines)
 
-    # The last content line's break is content only if the source has one: a
-    # value that ends at the end of input has no final line feed to clip or
-    # keep (YAML 1.2 b-chomped-last). Likewise only blank lines that end in a
-    # break add one under keep.
-    final_break? = lines != [] and List.last(lines).eol
+    # The end of input ends the last line as a line break would: the YAML test
+    # suite reads `x: |\n  a` as "a\n" (L24T/01, JEF9/02).
+    final_break? = lines != []
     stripped = String.replace(body, ~r/\n+\z/, "")
 
     body =
@@ -1283,12 +1360,9 @@ defmodule Hypatia.Kyaml do
           stripped <> if(final_break?, do: "\n", else: "")
 
         # With no content lines, keep is the blank lines' breaks alone.
-        :keep when final_break? or lines == [] ->
-          kept = Enum.count(trailing, & &1.eol) + if(final_break?, do: 1, else: 0)
-          stripped <> String.duplicate("\n", kept)
-
         :keep ->
-          stripped
+          kept = length(trailing) + if(final_break?, do: 1, else: 0)
+          stripped <> String.duplicate("\n", kept)
       end
 
     assert_no_control(body, at, "block")
@@ -1329,25 +1403,22 @@ defmodule Hypatia.Kyaml do
           # Spaces past an explicit or detected content indentation are
           # content, even on an otherwise empty line (YAML 1.2 §8.1.3).
           (peek(s) == ?\n or eof?(s)) and content_indent != nil and spaces > content_indent ->
-            eol = not eof?(s)
-            s = if eol, do: bump!(s), else: s
+            s = if eof?(s), do: s, else: bump!(s)
 
             line = %{
               text: String.duplicate(" ", spaces - content_indent),
               more: true,
               blank: false,
-              eol: eol,
               line: elem(start, 1)
             }
 
             block_lines(s, parent_indent, content_indent, [line | acc])
 
           peek(s) == ?\n or eof?(s) ->
-            eol = not eof?(s)
-            s = if eol, do: bump!(s), else: s
+            s = if eof?(s), do: s, else: bump!(s)
 
             block_lines(s, parent_indent, content_indent, [
-              %{text: "", more: false, blank: true, eol: eol, line: elem(start, 1)} | acc
+              %{text: "", more: false, blank: true, spaces: spaces, line: elem(start, 1)} | acc
             ])
 
           content_indent == nil and spaces <= parent_indent ->
@@ -1357,17 +1428,28 @@ defmodule Hypatia.Kyaml do
             {Enum.reverse(acc), rewind(s, start)}
 
           true ->
+            # A detected indentation must cover the leading blank lines: one
+            # with more spaces than the first content line is an error (YAML
+            # 1.2 §8.1.1.1), not silently dropped spaces.
+            if content_indent == nil and Enum.any?(acc, &(&1.blank and &1.spaces > spaces)),
+              do:
+                throw_error(
+                  "BAD_BLOCK_SCALAR",
+                  "a leading blank line is indented past the block scalar's content",
+                  loc(s)
+                )
+
             content_indent = content_indent || spaces
             {chars, s} = take_line(s, [])
-            eol = not eof?(s)
-            s = if eol, do: bump!(s), else: s
+            s = if eof?(s), do: s, else: bump!(s)
             text = String.duplicate(" ", spaces - content_indent) <> List.to_string(chars)
 
+            # A line that starts with white space after the indentation, a tab
+            # included, is "spaced" and is not folded (YAML 1.2 §8.1.3).
             line = %{
               text: text,
-              more: spaces > content_indent,
+              more: spaces > content_indent or String.starts_with?(text, "\t"),
               blank: false,
-              eol: eol,
               line: elem(start, 1)
             }
 
@@ -1392,27 +1474,29 @@ defmodule Hypatia.Kyaml do
   # a space; breaks next to a blank or more-indented line are kept, and N
   # consecutive breaks become N−1 newlines.
   defp folded_body(lines) do
-    {body, segments, _pending, first, _prev_more} =
-      Enum.reduce(lines, {"", [], 0, true, false}, fn line,
-                                                      {body, segments, pending, first, prev_more} ->
-        cond do
-          line.blank ->
-            {body, segments, pending + 1, first, prev_more}
+    # Parts accumulate as iodata and `size` tracks the byte offset, so a long
+    # scalar folds in linear time rather than copying the body per line.
+    {parts, segments, _pending, first, _prev_more, _size} =
+      Enum.reduce(lines, {[], [], 0, true, false, 0}, fn
+        %{blank: true}, {parts, segments, pending, first, prev_more, size} ->
+          {parts, segments, pending + 1, first, prev_more, size}
 
-          true ->
-            sep =
-              cond do
-                first -> String.duplicate("\n", pending)
-                line.more or prev_more -> String.duplicate("\n", pending + 1)
-                pending > 0 -> String.duplicate("\n", pending)
-                true -> " "
-              end
+        line, {parts, segments, pending, first, prev_more, size} ->
+          sep =
+            cond do
+              first -> String.duplicate("\n", pending)
+              line.more or prev_more -> String.duplicate("\n", pending + 1)
+              pending > 0 -> String.duplicate("\n", pending)
+              true -> " "
+            end
 
-            body = body <> sep
-            {body <> line.text, [{byte_size(body), line.line} | segments], 0, false, line.more}
-        end
+          at = size + byte_size(sep)
+
+          {[line.text, sep | parts], [{at, line.line} | segments], 0, false, line.more,
+           at + byte_size(line.text)}
       end)
 
+    body = parts |> Enum.reverse() |> IO.iodata_to_binary()
     body = if lines != [] and not first, do: body <> "\n", else: body
     {body, Enum.reverse(segments)}
   end
@@ -1483,7 +1567,18 @@ defmodule Hypatia.Kyaml do
       true ->
         key_loc = loc(s)
         {key, s} = parse_flow_key(s)
+        key_line = s.line
         s = skip_flow_gap(s)
+
+        # An implicit key is on one line (YAML 1.2 §7.4.2).
+        if s.line != key_line and peek(s) == ?:,
+          do:
+            throw_error(
+              "MULTILINE_KEY",
+              "a flow mapping key must end on the line it starts",
+              key_loc,
+              path
+            )
 
         if peek(s) != ?:,
           do: throw_error("FLOW_SEPARATOR", "expected `:` after a flow mapping key", loc(s), path)
@@ -1517,11 +1612,51 @@ defmodule Hypatia.Kyaml do
 
   defp skip_flow_gap(s) do
     case peek(s) do
-      c when c in [?\s, ?\t, ?\n] -> s |> bump!() |> skip_flow_gap()
-      ?# -> s |> skip_to_eol() |> skip_flow_gap()
+      ?\n -> s |> bump!() |> flow_line_start()
+      c when c in [?\s, ?\t] -> s |> bump!() |> skip_flow_gap()
+      ?# -> s |> skip_comment() |> flow_line_start()
       _ -> s
     end
   end
+
+  # A new line inside a flow collection: its content must be indented past
+  # the enclosing block node, with spaces (a tab there is indentation), and it
+  # cannot be a document marker.
+  defp flow_line_start(%{col: 1} = s) do
+    if marker_at?(s, s.i, nil),
+      do:
+        throw_error(
+          "UNTERMINATED_FLOW",
+          "a document marker cannot appear inside a flow collection",
+          loc(s)
+        )
+
+    s = skip_spaces(s)
+    spaces = s.col - 1
+    need = s.flow_min || 0
+
+    cond do
+      peek(s) == ?\t and spaces < need ->
+        throw_error("TAB_INDENT", "a tab may not be used as indentation; use spaces", loc(s))
+
+      eof?(s) or peek(s) in [?\n, ?#, ?\t] ->
+        skip_flow_gap(s)
+
+      # A line that only closes the collection may sit at the holding block's
+      # own column (`key: [` … `]`), as kyq's corpus has it; content may not.
+      spaces < need and not (peek(s) in [?], ?}] and spaces >= need - 1) ->
+        throw_error(
+          "BAD_INDENT",
+          "a flow collection's lines must be indented past the block that holds it",
+          loc(s)
+        )
+
+      true ->
+        s
+    end
+  end
+
+  defp flow_line_start(s), do: skip_flow_gap(s)
 
   defp parse_flow_item(s, path) do
     s = skip_flow_gap(s)
@@ -1563,10 +1698,11 @@ defmodule Hypatia.Kyaml do
     c = peek(s)
 
     cond do
-      eof?(s) or c in ~c",]}\n" ->
+      # `[` and `{` are flow indicators too: `[a[b]` has no plain scalar `a[b`.
+      eof?(s) or c in ~c",[]{}\n" ->
         {List.to_string(Enum.reverse(acc)), s}
 
-      c == ?: and separator_after?(s, s.i + 1) ->
+      c == ?: and flow_separator_after?(s, s.i + 1) ->
         {List.to_string(Enum.reverse(acc)), s}
 
       c == ?# and (acc == [] or List.first(acc) in [?\s, ?\t]) ->
@@ -1600,13 +1736,18 @@ defmodule Hypatia.Kyaml do
     end
   end
 
+  # A plain flow key ends at a `:` that indicates a value, at a flow indicator
+  # or at the end of the line. `{http://x: 1}` keeps `http://x`: a `:` before
+  # a safe character is part of the scalar (YAML 1.2 ns-plain-char).
   defp flow_key_chars(s, acc) do
     c = peek(s)
 
-    if eof?(s) or c == ?: or c in ~c",]}\n",
+    if eof?(s) or c in ~c",[]{}\n" or (c == ?: and flow_separator_after?(s, s.i + 1)),
       do: {List.to_string(Enum.reverse(acc)), s},
       else: flow_key_chars(bump!(s), [c | acc])
   end
+
+  defp flow_separator_after?(s, j), do: char_at(s, j) in [nil, ?\s, ?\t, ?\n | ~c",[]{}"]
 
   # ── small helpers ─────────────────────────────────────────────────────────
 

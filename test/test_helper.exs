@@ -29,4 +29,7 @@ ExUnit.start()
 # Tests tagged :kyq_differential compare Hypatia.Kyaml with kyq's reference
 # parser; they need its dump (KYQ_DUMP), which the kyaml-conformance CI job
 # makes. Run with: mix test --only kyq_differential (see test/fixtures/kyaml/).
-ExUnit.configure(exclude: [:verisim_data, :kyq_differential], seed: 0)
+# Tests tagged :yaml_test_suite hold Hypatia.Kyaml to the YAML test suite; they
+# need a yaml-test-suite `data` checkout at YAML_TEST_SUITE, which the same job
+# pins. Run with: YAML_TEST_SUITE=... mix test --only yaml_test_suite.
+ExUnit.configure(exclude: [:verisim_data, :kyq_differential, :yaml_test_suite], seed: 0)
