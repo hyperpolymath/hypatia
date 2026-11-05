@@ -69,6 +69,33 @@ defmodule Hypatia.EchidnabotDispatchTest do
     "http://127.0.0.1:#{port}"
   end
 
+  # Answer exactly one request with `status` and `location`, then send
+  # `:redirect_served` to the test process. Returns the base URL.
+  defp redirecting_server(status, location) do
+    test_pid = self()
+    {:ok, listen} = :gen_tcp.listen(0, [:binary, packet: :raw, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listen)
+
+    spawn_link(fn ->
+      {:ok, sock} = :gen_tcp.accept(listen)
+      {head, body_start} = recv_head(sock, "")
+      [_request_line | header_lines] = String.split(head, "\r\n")
+      _ = recv_body(sock, body_start, content_length(header_lines))
+
+      :gen_tcp.send(
+        sock,
+        "HTTP/1.1 #{status} X\r\nlocation: #{location}\r\n" <>
+          "content-length: 0\r\nconnection: close\r\n\r\n"
+      )
+
+      send(test_pid, :redirect_served)
+      :gen_tcp.close(sock)
+      :gen_tcp.close(listen)
+    end)
+
+    "http://127.0.0.1:#{port}"
+  end
+
   # Read until the end of the HTTP header block; returns {head, body_so_far}.
   defp recv_head(sock, acc) do
     case :binary.split(acc, "\r\n\r\n") do
@@ -186,8 +213,23 @@ defmodule Hypatia.EchidnabotDispatchTest do
       refute line =~ "line one"
       refute line =~ "across lines"
 
-      assert record["variables_sha256"] ==
-               Hypatia.EchidnabotObligation.variables_digest(envelope["variables"])
+      # Computed here, not with variables_digest/1, so a wrong digest fails.
+      expected =
+        :crypto.hash(:sha256, Jason.encode!(envelope["variables"]))
+        |> Base.encode16(case: :lower)
+
+      assert record["variables_sha256"] == expected
+    end
+
+    test "does not follow a redirect with the credential and the obligation" do
+      System.put_env("HYPATIA_ECHIDNABOT_TOKEN", @token)
+      elsewhere = capturing_server(200, @accepted)
+      System.put_env("HYPATIA_ECHIDNABOT_URL", redirecting_server(307, elsewhere <> "/graphql"))
+
+      FleetDispatcher.dispatch_finding(obligation(%{}))
+
+      assert_receive :redirect_served, 5_000
+      refute_receive {:captured, _, _}, 1_000
     end
 
     test "sends the route credential on the per-bot echidnabot path" do
@@ -318,6 +360,17 @@ defmodule Hypatia.EchidnabotDispatchTest do
       assert :ok = LearningScheduler.requeue_candidates("cls", "coq", ["att-3"])
       _ = captured!()
       assert captured_headers!()["authorization"] == "Bearer " <> @token
+    end
+
+    test "does not follow a redirect with the credential" do
+      System.put_env("HYPATIA_ECHIDNABOT_TOKEN", @token)
+      elsewhere = capturing_server(200, @accepted)
+      System.put_env("HYPATIA_ECHIDNABOT_URL", redirecting_server(308, elsewhere <> "/graphql"))
+
+      LearningScheduler.requeue_candidates("cls", "coq", ["att-4"])
+
+      assert_receive :redirect_served, 5_000
+      refute_receive {:captured, _, _}, 1_000
     end
   end
 end

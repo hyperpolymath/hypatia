@@ -925,13 +925,18 @@ defmodule Hypatia.FleetDispatcher do
   # POST a JSON body with `headers` added. Returns `{:ok, status, body}` for a
   # 2xx response, `{:error, {:http_status, status}}` for any other status, or
   # the :httpc error.
+  #
+  # Redirects are not followed. :httpc would otherwise re-send the body (and,
+  # on some OTP releases, the authorization header) to whatever host the
+  # Location names, and report that host's 2xx as a delivered dispatch. A
+  # redirect is reported as `{:error, {:http_status, 3xx}}`.
   defp http_post(url, body, headers) do
     # Attempt HTTP POST -- works if :httpc is available (OTP built-in)
     case :httpc.request(
            :post,
            {String.to_charlist(url), [{~c"content-type", ~c"application/json"} | headers],
             ~c"application/json", String.to_charlist(body)},
-           [{:timeout, 10_000}],
+           [{:timeout, 10_000}, {:autoredirect, false}],
            []
          ) do
       {:ok, {{_, status, _}, _, response_body}} when status in 200..299 ->
