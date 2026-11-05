@@ -361,7 +361,7 @@ defmodule Hypatia.Rules.RsrConformance do
       "3.1.6" => descriptile("NEUROSYM", "neurosym"),
       "3.1.7" => descriptile("PLAYBOOK", "playbook"),
       "3.1.8" => any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"]),
-      "3.1.9" => descriptile("CLADE"),
+      "3.1.9" => descriptile("CLADE", "clade"),
       "3.2.1" => &descriptiles_parse/1,
       "3.2.2" => present_mr("rsr-profile.a2ml"),
       "6.1.1" => &workflows_present/1,
@@ -426,8 +426,9 @@ defmodule Hypatia.Rules.RsrConformance do
     do: present_mr(Path.join(["descriptiles", name <> ".a2ml"]))
 
   # A descriptile whose family has a ruled mapping spec into the repo deed
-  # (metadatastician/standards 1-formats/deed/mappings/, AGENTIC / NEUROSYM /
-  # PLAYBOOK -> (agentic) (neurosym) (playbook), ruled 2026-10-27) is satisfied
+  # (metadatastician/standards 1-formats/deed/mappings/, ruled 2026-10-27:
+  # AGENTIC / NEUROSYM / PLAYBOOK -> (agentic) (neurosym) (playbook), and
+  # CLADE -> (clade), the estate clade the chora deed carries) is satisfied
   # by either carrier: the legacy .a2ml, or that clause at the top level of the
   # repo's one `<repo>_chora.deed`. A2ML is retired, so the deed is the
   # successor and the .a2ml the transition form; 2.3.1 accepts its two
