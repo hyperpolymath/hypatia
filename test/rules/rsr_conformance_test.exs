@@ -117,6 +117,70 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert sc.automatable_coverage < 1.0
       assert sc.provisional == true
     end
+
+    @profile_deed_head """
+    ;; SPDX-License-Identifier: MPL-2.0
+    (repo-deed
+      :schema-version "1.0.0"
+      :canonical-name "x"
+      :repo-uuid #u5"github.com/o/x"
+      :beholding-chora #u5"estate/chora"
+    """
+
+    test "a deed-era repo declares its capabilities in (rsr-profile …)", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @profile_deed_head <>
+          ~s|  (rsr-profile :version "1.0.0" :capabilities ("container" rust)))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+
+      assert sc.profile_present == true
+      assert sc.capabilities == ["container", "rust"]
+      assert verdicts["1.2.3"] == :unverified
+    end
+
+    test "the deed clause wins over a legacy .a2ml beside it", %{tmp_dir: tmp} do
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["container"]
+      """)
+
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @profile_deed_head <> ~s|  (rsr-profile :version "1.0.0" :capabilities ("bash")))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+
+      assert sc.capabilities == ["bash"]
+      assert verdicts["1.2.3"] == :na
+    end
+
+    test "two (rsr-profile …) clauses, or one nested, declare nothing", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @profile_deed_head <>
+          ~s|  (rsr-profile :capabilities ("container"))\n  (rsr-profile :capabilities ("rust")))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      assert sc.profile_present == false
+
+      File.write!(
+        Path.join(tmp, "x_chora.deed"),
+        @profile_deed_head <> ~s|  (notes (rsr-profile :capabilities ("container"))))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      assert sc.profile_present == false
+    end
   end
 
   describe "scoring against the real RSR v2.0 SSOT" do
@@ -176,6 +240,53 @@ defmodule Hypatia.Rules.RsrConformanceTest do
 
       assert sc.score > 50.0
       assert sc.provisional == true
+    end
+
+    test "3.2.2 is satisfied by the repo deed's (rsr-profile …) clause", %{tmp_dir: tmp} do
+      mk!(tmp, "x_chora.deed", """
+      ;; SPDX-License-Identifier: MPL-2.0
+      (repo-deed
+        :schema-version "1.0.0"
+        :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x"
+        :beholding-chora #u5"estate/chora"
+        (rsr-profile :version "1.0.0" :capabilities ("bash")))
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      assert Enum.find(sc.results, &(&1.id == "3.2.2")).verdict == :pass
+      assert sc.profile_present == true
+    end
+
+    # 3.2.2 must agree with the capability reader: a clause the reader rejects
+    # declares nothing, so it neither passes 3.2.2 nor falls back to an .a2ml.
+    test "3.2.2 fails on a duplicated or list-less (rsr-profile …) clause", %{tmp_dir: tmp} do
+      head = """
+      ;; SPDX-License-Identifier: MPL-2.0
+      (repo-deed
+        :schema-version "1.0.0"
+        :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x"
+        :beholding-chora #u5"estate/chora"
+      """
+
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["bash"]
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+
+      for body <- [
+            ~s|  (rsr-profile :capabilities ("bash"))\n  (rsr-profile :capabilities ("rust")))\n|,
+            ~s|  (rsr-profile :version "1.0.0"))\n|
+          ] do
+        File.write!(Path.join(tmp, "x_chora.deed"), head <> body)
+        {:ok, sc} = RsrConformance.score(catalogue, tmp)
+        assert sc.profile_present == false
+        assert Enum.find(sc.results, &(&1.id == "3.2.2")).verdict == :fail
+      end
     end
 
     test "a malformed descriptile fails 3.2.1 (parse gate, not just presence)", %{
