@@ -97,6 +97,17 @@ lists the fixture it reads differently (`@accepted_divergences`).
   key trims only space and tab and stops at a separated `#`; a root indicator
   counts from column 0. Signed hexadecimal and octal (`-0xFF`) stay strings:
   the Core Schema gives a sign to decimal integers only.
+
+| Three rules from Codex review of 45fafc4: separation by JavaScript's `\s`
+  (a no-break space or other Unicode space taken as YAML white space in
+  directive fields, before `#`, and in anchor and alias names); no limit on
+  an implicit key's length
+| `%YAML` + U+00A0 + `1.2` read as `%YAML 1.2`; `a` + U+00A0 + `#b: 1` read
+  as a root string; `&x` + U+00A0 read as the anchor `x`; a key of 1025
+  characters accepted.
+| Separation is space, tab and line break only; an implicit key over 1024
+  characters (code points, over the key itself) is `KEY_TOO_LONG`, in block
+  and flow. A `...` with no document open stays legal (suite case HWV9).
 |===
 
 End of input ends the last line as a line break would: `x: |\n  a` is
@@ -109,8 +120,9 @@ kyq gives Infinity. It now gives `:infinity` too.
 
 None of these occurs in the estate's block-style workflows, so the
 pinned-commit differential agrees on every file but kyq's own
-`flow-trailing-comma.yaml`, which it lists. The kyq fix is eight commits on
+`flow-trailing-comma.yaml`, which it lists. The kyq fix is nine commits on
 `metadatastician/kyq` branch
 `fix/bom-and-block-scalar-comment` (the leading BOM and block-header comment,
 code-point columns, the trailing comma, control characters, the thirteen
-rules, the test-suite rules, and the printable set), still to be opened there.
+rules, the test-suite rules, the printable set, and YAML white space with the
+key limit), still to be opened there.

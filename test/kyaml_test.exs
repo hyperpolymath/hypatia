@@ -182,16 +182,38 @@ defmodule Hypatia.KyamlTest do
       {"delete-character", "a: 'x\u007F'\n", {:error, "CONTROL_CHARACTER", 1, 6, ""}},
       {"c1-control-in-comment", "a: 1 # \u0085ok \u0090\n",
        {:error, "CONTROL_CHARACTER", 1, 12, ""}},
-      {"noncharacter", "a: x￾\n", {:error, "NONCHARACTER", 1, 5, ""}},
+      {"noncharacter", "a: x\uFFFE\n", {:error, "NONCHARACTER", 1, 5, ""}},
       {"next-line-is-printable", "a: \"x\u0085y\"\n", {:ok, %{"a" => "x\u0085y"}}},
       {"tab-in-block-is-printable", "a: |\n  tab\tok\n", {:ok, %{"a" => "tab\tok\n"}}},
       {"anchor-needs-separation", "a: &x[1]\n", {:error, "PROPERTY_SEPARATION", 1, 6, ""}},
       {"tag-needs-separation", "a: !!seq{}\n", {:error, "PROPERTY_SEPARATION", 1, 9, ""}},
       {"anchor-separated", "a: &x [1]\n", {:ok, %{"a" => [1]}}},
-      {"flow-key-keeps-nbsp", "x: { a : 1}\n", {:ok, %{"x" => %{" a " => 1}}}},
+      {"flow-key-keeps-nbsp", "x: {\u00A0a\u00A0: 1}\n",
+       {:ok, %{"x" => %{"\u00A0a\u00A0" => 1}}}},
       {"flow-key-stops-at-comment", "x: {a #c\n  : 1}\n", {:error, "MULTILINE_KEY", 1, 5, "x"}},
       {"root-explicit-indent", "|2\n  text\n", {:ok, "text\n"}},
-      {"root-explicit-indent-one", "|1\n  text\n", {:ok, " text\n"}}
+      {"root-explicit-indent-one", "|1\n  text\n", {:ok, " text\n"}},
+      # YAML white space is space and tab: a no-break space is content.
+      {"directive-nbsp-separator", "%YAML\u00A01.2\n---\na: 1\n",
+       {:error, "UNSUPPORTED_DIRECTIVE", 1, 1, ""}},
+      {"nbsp-before-hash-is-key-text", "a\u00A0#b: 1\n", {:ok, %{"a\u00A0#b" => 1}}},
+      {"nbsp-is-part-of-anchor-name", "a: &x\u00A0 1\nb: *x\u00A0\n",
+       {:ok, %{"a" => 1, "b" => 1}}},
+      {"nbsp-anchor-is-not-the-short-name", "a: &x\u00A0 1\nb: *x\n",
+       {:error, "UNKNOWN_ANCHOR", 2, 4, "b"}},
+      # An implicit key is at most 1024 characters (YAML 1.2 §7.4.2).
+      {"implicit-key-at-limit", String.duplicate("k", 1024) <> ": 1\n",
+       {:ok, %{String.duplicate("k", 1024) => 1}}},
+      {"implicit-key-over-limit", String.duplicate("k", 1025) <> ": 1\n",
+       {:error, "KEY_TOO_LONG", 1, 1, ""}},
+      {"flow-key-over-limit", "x: {" <> String.duplicate("k", 1025) <> ": 1}\n",
+       {:error, "KEY_TOO_LONG", 1, 5, ""}},
+      {"astral-key-at-limit", String.duplicate("\u{1F600}", 1024) <> ": 1\n",
+       {:ok, %{String.duplicate("\u{1F600}", 1024) => 1}}},
+      {"quoted-key-over-limit", "\"" <> String.duplicate("q", 1023) <> "\": 1\n",
+       {:error, "KEY_TOO_LONG", 1, 1, ""}},
+      # `...` with no open document is legal (YAML test suite HWV9).
+      {"document-end-alone", "...\n", {:ok_docs, []}}
     ]
 
     defp plain(node) do

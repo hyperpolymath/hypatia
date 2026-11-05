@@ -406,24 +406,9 @@ defmodule Hypatia.Kyaml do
   end
 
   # JavaScript's \s, which kyq's anchor, alias and key scans use.
-  defp js_space?(c),
-    do:
-      c in [
-        ?\s,
-        ?\t,
-        ?\n,
-        ?\v,
-        ?\f,
-        ?\r,
-        0xA0,
-        0x1680,
-        0x2028,
-        0x2029,
-        0x202F,
-        0x205F,
-        0x3000,
-        0xFEFF
-      ] or (c != nil and c >= 0x2000 and c <= 0x200A)
+  # YAML separation is space and tab (s-white), plus a line break; a no-break
+  # space or other Unicode space is content (ns-char).
+  defp yaml_space?(c), do: c in [?\s, ?\t, ?\n]
 
   defp show(nil), do: "end of input"
   defp show(c), do: inspect(<<c::utf8>>)
@@ -560,7 +545,10 @@ defmodule Hypatia.Kyaml do
     at = loc(s)
     {chars, s} = take_line(s, [])
     line = List.to_string(chars)
-    [name | args] = String.split(String.trim(line), ~r/\s+/u)
+    # YAML separates directive fields with spaces and tabs only (s-separate-
+    # in-line): `%YAML` + U+00A0 + `1.2` is one unknown directive name.
+    fields = String.replace(line, ~r/\A[ \t]+|[ \t]+\z/, "")
+    [name | args] = String.split(fields, ~r/[ \t]+/)
     # A comment may follow a directive's arguments (`%YAML 1.2 # note`).
     args = Enum.take_while(args, &(not String.starts_with?(&1, "#")))
 
@@ -569,7 +557,7 @@ defmodule Hypatia.Kyaml do
         do:
           throw_error(
             "UNSUPPORTED_VERSION",
-            "only `%YAML 1.2` is supported, got `#{String.trim(line)}`",
+            "only `%YAML 1.2` is supported, got `#{fields}`",
             at
           )
 
@@ -685,11 +673,11 @@ defmodule Hypatia.Kyaml do
       else: j
   end
 
-  # The end of an anchor, tag or alias name: kyq's /[^\s,[\]{}]+/.
+  # The end of an anchor, tag or alias name: space, tab, line break or a flow indicator.
   defp skip_token(s, j) do
     c = char_at(s, j)
 
-    if c == nil or js_space?(c) or c in ~c",[]{}",
+    if c == nil or yaml_space?(c) or c in ~c",[]{}",
       do: j,
       else: skip_token(s, j + 1)
   end
@@ -707,7 +695,7 @@ defmodule Hypatia.Kyaml do
 
     cond do
       c == nil or c == ?\n -> false
-      c == ?# and (j == s.i or js_space?(char_at(s, j - 1))) -> false
+      c == ?# and (j == s.i or yaml_space?(char_at(s, j - 1))) -> false
       c == ?: and separator_after?(s, j + 1) -> j > s.i
       true -> scan_key_colon(s, j + 1)
     end
@@ -866,15 +854,32 @@ defmodule Hypatia.Kyaml do
     if peek(s) in ~c"&*!" and property_key?(s), do: throw_key_property(at)
 
     if peek(s) in [?', ?"] do
+      start = s.i
       {node, s} = parse_quoted(s, at)
+      check_key_length(s.i - start, at)
       {node, skip_blanks(s)}
     else
       {raw, s} = plain_key_chars(s, [])
       raw = trim_blanks_right(raw)
       if raw == "", do: throw_error("EMPTY_KEY", "empty mapping key", at)
+      check_key_length(String.length(raw), at)
       {scalar_from_raw(raw, at, :plain), s}
     end
   end
+
+  # An implicit key is at most 1024 characters (YAML 1.2 §7.4.2, §8.2.2),
+  # counted over the key itself: a plain key without its trailing blanks, or
+  # a quoted key with its quotes.
+  @max_implicit_key 1024
+  defp check_key_length(length, at) when length > @max_implicit_key,
+    do:
+      throw_error(
+        "KEY_TOO_LONG",
+        "an implicit mapping key is limited to #{@max_implicit_key} characters, this one has #{length}",
+        at
+      )
+
+  defp check_key_length(_, _), do: :ok
 
   defp trim_blanks_right(text), do: String.replace(text, ~r/[ \t]+\z/, "")
 
@@ -980,11 +985,11 @@ defmodule Hypatia.Kyaml do
   defp throw_duplicate_property(what, at),
     do: throw_error("DUPLICATE_PROPERTY", "a node may carry only one #{what}", at)
 
-  # An anchor or alias name: kyq's /[^\s,[\]{}]+/.
+  # An anchor or alias name: space, tab, line break or a flow indicator.
   defp take_name(s, acc \\ []) do
     c = peek(s)
 
-    if c == nil or js_space?(c) or c in ~c",[]{}",
+    if c == nil or yaml_space?(c) or c in ~c",[]{}",
       do: {List.to_string(Enum.reverse(acc)), s},
       else: take_name(bump!(s), [c | acc])
   end
@@ -1034,7 +1039,7 @@ defmodule Hypatia.Kyaml do
   defp take_tag(s, acc) do
     c = peek(s)
 
-    if c == nil or js_space?(c) or c in ~c",[]{}",
+    if c == nil or yaml_space?(c) or c in ~c",[]{}",
       do: {List.to_string(Enum.reverse(acc)), s},
       else: take_tag(bump!(s), [c | acc])
   end
@@ -1739,11 +1744,15 @@ defmodule Hypatia.Kyaml do
         )
 
     if peek(s) in [?', ?"] do
-      parse_quoted(s, at)
+      start = s.i
+      {node, s} = parse_quoted(s, at)
+      check_key_length(s.i - start, at)
+      {node, s}
     else
       {raw, s} = flow_key_chars(s, [])
       raw = trim_blanks_right(raw)
       if raw == "", do: throw_error("EMPTY_KEY", "empty flow mapping key", at)
+      check_key_length(String.length(raw), at)
       {scalar_from_raw(raw, at, :plain), s}
     end
   end
