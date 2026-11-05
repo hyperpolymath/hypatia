@@ -449,13 +449,17 @@ defmodule Hypatia.WorkflowYaml do
     |> String.trim_trailing()
   end
 
+  # The top-level `jobs:` key, quoted or not, optionally carrying YAML node
+  # properties (an anchor `&all_jobs`, a tag `!!map`) before its block value.
+  @jobs_key ~r/^(?:jobs|"jobs"|'jobs')\s*:\s*(?:(?:&[A-Za-z0-9_-]+|![^\s#]*)\s*)*(?:#.*)?$/
+
   # Follow block-style jobs by indentation, retaining physical source lines.
   # As with the other research rules, this is a local static text analysis.
   def workflow_job_lines(lines) do
     {_in_jobs, _indent, groups} =
       Enum.reduce(lines, {false, nil, []}, fn {line, _} = entry, {in_jobs, indent, groups} ->
         cond do
-          Regex.match?(~r/^(?:jobs|"jobs"|'jobs')\s*:\s*(?:#.*)?$/, line) ->
+          Regex.match?(@jobs_key, line) ->
             {true, nil, groups}
 
           not in_jobs ->

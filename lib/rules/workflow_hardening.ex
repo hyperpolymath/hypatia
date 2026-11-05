@@ -1562,7 +1562,9 @@ defmodule Hypatia.Rules.WorkflowHardening do
   @wh014_workspace "/__wh014_workspace__"
 
   defp wh014_masked_upload?(body, inherited_directory) do
-    [preamble | _] = String.split(body, ~r/^[ \t]*steps:/m, parts: 2)
+    # The job's keys above its `steps` key, quoted or not, as the shared
+    # reader recognises it.
+    [preamble | _] = String.split(body, ~r/^[ \t]*(?:steps|"steps"|'steps')[ \t]*:/m, parts: 2)
     directory = wh014_default_directory(preamble, inherited_directory)
 
     body

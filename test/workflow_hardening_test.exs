@@ -1218,6 +1218,26 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       File.rm_rf!(repo)
     end
 
+    test "an anchor on the `jobs` key does not hide a step's continue-on-error" do
+      repo =
+        create_repo_with_workflow("""
+        name: Release
+        permissions:
+          contents: read
+        jobs: &all_jobs
+          publish:
+            runs-on: ubuntu-latest
+            steps:
+              - continue-on-error: true
+                run: git push origin HEAD
+        """)
+
+      assert [%{fix_recipe: "grant-contents-write-to-writing-job-and-unmask"}] =
+               WorkflowHardening.wh013_permission_starved_write(repo)
+
+      File.rm_rf!(repo)
+    end
+
     test "a quoted top-level `jobs` key still bounds the workflow preamble" do
       # One job's PAT must not make the other job's GITHUB_TOKEN push look
       # credentialed just because the `jobs` key is quoted.
@@ -1893,6 +1913,32 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
       assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
     end
 
+    test "a quoted `steps` key bounds the job preamble, as an unquoted one does" do
+      # A step-level working-directory must not be read as the job default
+      # just because the job's `steps` key is quoted.
+      for key <- ["steps", ~s("steps"), "'steps'"] do
+        repo =
+          create_repo_with_workflow("""
+          jobs:
+            scan:
+              runs-on: ubuntu-latest
+              #{key}:
+                - name: prepare
+                  working-directory: docs
+                  run: echo prepare
+                - run: |
+                    hypatia scan . > findings.json || true
+                    jq '{runs: [{results: .}]}' findings.json > out.sarif
+                - uses: github/codeql-action/upload-sarif@v4
+                  with:
+                    sarif_file: out.sarif
+          """)
+
+        on_exit(fn -> File.rm_rf!(repo) end)
+        assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo), key
+      end
+    end
+
     test "literal working directories distinguish same-named report files" do
       for {input, expected?} <- [{"findings.json", false}, {"../scanner/findings.json", true}] do
         repo =
@@ -1912,7 +1958,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
 
         on_exit(fn -> File.rm_rf!(repo) end)
         findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
-        assert (findings != []) == expected?
+        assert findings != [] == expected?
       end
     end
 
@@ -1959,8 +2005,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
                 "COUNT=$(jq 'length' findings.json #{redirect} || echo 0)"
           end
 
-        repo =
-          wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
+        repo = wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
 
         on_exit(fn -> File.rm_rf!(repo) end)
         assert [%{rule: "WH014"}] = WorkflowHardening.wh014_masked_scanner_upload(repo)
@@ -1976,8 +2021,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
             "hypatia scan . > findings.json\n" <>
               "jq 'length' findings.json <&0\nfalse || echo 0"
           ] do
-        repo =
-          wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
+        repo = wh014_repo(command <> "\njq '{runs: [{results: .}]}' findings.json > out.sarif")
 
         on_exit(fn -> File.rm_rf!(repo) end)
         assert [] = WorkflowHardening.wh014_masked_scanner_upload(repo)
@@ -2004,7 +2048,7 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
         repo = create_repo_with_workflow(workflow)
         on_exit(fn -> File.rm_rf!(repo) end)
         findings = WorkflowHardening.wh014_masked_scanner_upload(repo)
-        assert (findings != []) == (report == "out.sarif")
+        assert findings != [] == (report == "out.sarif")
       end
     end
 
