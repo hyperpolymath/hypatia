@@ -1,0 +1,28 @@
+nulls:
+  - null
+  - ~
+  - NULL
+bools:
+  - true
+  - False
+  - on
+  - yes
+ints:
+  - 0
+  - -17
+  - +42
+  - 0x1f
+  - 0o17
+floats:
+  - 1.5
+  - -0.0
+  - 1e3
+  - 2E-3
+strings:
+  - hello
+  - "3"
+  - '4'
+  - "with: colon"
+  - "yes"
+  - 3 pods
+  - 2026-10-25

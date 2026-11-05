@@ -27,6 +27,7 @@ workflows:
         - 'haskell-actions/hlint-run@v2.4.10'
         - 'haskell-actions/hlint-setup@v2.4.10'
         - 'haskell-actions/setup@v2.12.1'
+        - 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6'
         - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2.88.0'
     '.github/workflows/cicd-squabbler.yml': []
