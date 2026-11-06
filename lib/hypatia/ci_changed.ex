@@ -188,14 +188,14 @@ defmodule Hypatia.CiChanged do
     end
   end
 
-  defp secret_context?(value) when is_binary(value),
-    do: Regex.match?(~r/\$\{\{[^}]*\bsecrets\b/is, value)
+  defp hosted_context?(value) when is_binary(value),
+    do: Regex.match?(~r/\$\{\{/, value)
 
-  defp secret_context?(value) when is_map(value),
-    do: Enum.any?(value, fn {key, val} -> secret_context?(key) or secret_context?(val) end)
+  defp hosted_context?(value) when is_map(value),
+    do: Enum.any?(value, fn {key, val} -> hosted_context?(key) or hosted_context?(val) end)
 
-  defp secret_context?(value) when is_list(value), do: Enum.any?(value, &secret_context?/1)
-  defp secret_context?(_), do: false
+  defp hosted_context?(value) when is_list(value), do: Enum.any?(value, &hosted_context?/1)
+  defp hosted_context?(_), do: false
 
   defp job_plan(file, id, old, new, event) do
     blocker =
@@ -269,11 +269,17 @@ defmodule Hypatia.CiChanged do
           Enum.any?(Map.get(job, "steps", []), &Map.get(&1, "continue-on-error", false)) ->
         "tolerated failures need a hosted receipt"
 
-      secret_context?([Map.delete(new, "jobs"), job]) ->
-        "credential-dependent execution needs a hosted receipt"
+      job["strategy"] ->
+        "matrix execution needs a hosted receipt for every member"
+
+      hosted_context?([Map.delete(new, "jobs"), job]) ->
+        "credential, repository-variable or hosted-expression-dependent execution needs a hosted receipt"
 
       job["container"] || job["services"] ->
         "custom containers need a hosted receipt"
+
+      checkout_steps(job) == [] ->
+        "checkout-less jobs need a hosted receipt; act copies local source"
 
       true ->
         nil

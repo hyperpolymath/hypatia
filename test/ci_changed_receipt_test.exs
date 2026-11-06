@@ -68,7 +68,7 @@ defmodule Hypatia.CiChangedReceiptTest do
     repo = repo()
 
     workflow =
-      "on: workflow_dispatch\npermissions: read-all\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bash scripts/input.sh\n"
+      "on: workflow_dispatch\npermissions: read-all\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - run: bash scripts/input.sh\n"
 
     File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
     File.mkdir_p!(Path.join(repo, "scripts"))
@@ -107,7 +107,7 @@ defmodule Hypatia.CiChangedReceiptTest do
           "steps: [{uses: actions/checkout@v7, with: {fetch-depth: 1}}]"
         ] do
       workflow =
-        "on: push\npermissions: read-all\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    needs: setup\n    steps: []\n  build:\n    needs: middle\n    steps: [{run: echo before}]\n"
+        "on: push\npermissions: read-all\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    needs: setup\n    steps: [{uses: actions/checkout@v7}]\n  build:\n    needs: middle\n    steps: [{uses: actions/checkout@v7}, {run: echo before}]\n"
 
       File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
       commit(repo)
@@ -143,6 +143,33 @@ defmodule Hypatia.CiChangedReceiptTest do
     assert Enum.any?(findings, &(&1.type == "RE006" and &1.file == "action.yml"))
   end
 
+  test "checkout-less jobs, repository variables and matrices require hosted validation" do
+    repo = repo()
+    commit(repo)
+
+    for {body, reason} <- [
+          {"steps: [{run: echo ok}]", "checkout-less"},
+          {"env: {FULL_TESTS: '${{ vars.FULL_TESTS }}'}\n    steps: []", "repository-variable"},
+          {"env: {FULL_TESTS: '${{ inputs.full_tests }}'}\n    steps: []", "hosted-expression"},
+          {"env: {EVENT: '${{ github.event_name }}'}\n    steps: []", "hosted-expression"},
+          {"strategy: {matrix: {os: [ubuntu-latest, windows-latest]}}\n    runs-on: '${{ matrix.os }}'\n    steps: []",
+           "matrix"}
+        ] do
+      File.write!(
+        Path.join(repo, ".github/workflows/ci.yml"),
+        "on: push\npermissions: read-all\njobs:\n  build:\n    #{body}\n"
+      )
+
+      assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+      assert blocker =~ reason
+
+      assert [%{outcome: :requires_hosted_receipt}] =
+               CiChanged.execute_jobs(repo, CiChanged.plan(repo, "HEAD").jobs, fn _, _, _ ->
+                 flunk("must not certify an incomplete local simulation")
+               end)
+    end
+  end
+
   test "changed prerequisites select their transitive consumers" do
     workflow =
       "on: push\njobs: {build: {steps: [{run: before}]}, test: {needs: build, steps: []}, deploy: {needs: test, steps: []}, unrelated: {steps: []}}\n"
@@ -164,7 +191,7 @@ defmodule Hypatia.CiChangedReceiptTest do
 
     File.write!(
       Path.join(repo, ".github/workflows/caller.yml"),
-      "on: push\npermissions: read-all\njobs: {call: {uses: './.github/workflows/reusable.yml'}, consumer: {needs: call, steps: []}}\n"
+      "on: push\npermissions: read-all\njobs: {call: {uses: './.github/workflows/reusable.yml'}, consumer: {needs: call, steps: [{uses: actions/checkout@v7}]}}\n"
     )
 
     commit(repo)
@@ -267,7 +294,8 @@ defmodule Hypatia.CiChangedReceiptTest do
       "on: push\npermissions: read-all\njobs: {build: {env: {3: value}, steps: []}}\n"
     )
 
-    assert [%{local_blocker: nil}] = CiChanged.plan(repo, "HEAD").jobs
+    assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+    assert blocker =~ "checkout-less"
   end
 
   test "deleting prerequisites and cyclic needs are rejected even when no surviving job changed" do
