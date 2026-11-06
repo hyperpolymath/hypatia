@@ -68,6 +68,11 @@ defmodule Hypatia.CiChanged do
     graph =
       Map.new(jobs, fn {id, job} ->
         unless is_map(job), do: raise(ArgumentError, "job #{id} must be a mapping")
+        steps = Map.get(job, "steps", [])
+
+        unless is_list(steps) and Enum.all?(steps, &is_map/1),
+          do: raise(ArgumentError, "job #{id} steps must be a sequence of mappings")
+
         needs = List.wrap(Map.get(job, "needs", []))
 
         unless Enum.all?(needs, &(is_binary(&1) and Map.has_key?(jobs, &1))),
@@ -170,12 +175,27 @@ defmodule Hypatia.CiChanged do
     event || raise ArgumentError, "workflow has no supported event"
   end
 
-  defp checkout_steps(job),
-    do:
-      Enum.filter(Enum.with_index(Map.get(job || %{}, "steps", [])), fn {step, _index} ->
-        is_map(step) and is_binary(step["uses"]) and
-          String.starts_with?(String.downcase(step["uses"]), "actions/checkout@")
-      end)
+  defp checkout_steps(job) do
+    case Map.get(job || %{}, "steps", []) do
+      steps when is_list(steps) ->
+        Enum.filter(Enum.with_index(steps), fn {step, _index} ->
+          is_map(step) and is_binary(step["uses"]) and
+            String.starts_with?(String.downcase(step["uses"]), "actions/checkout@")
+        end)
+
+      _ ->
+        [:invalid_base_steps]
+    end
+  end
+
+  defp secret_context?(value) when is_binary(value),
+    do: Regex.match?(~r/\$\{\{[^}]*\bsecrets\b/is, value)
+
+  defp secret_context?(value) when is_map(value),
+    do: Enum.any?(value, fn {key, val} -> secret_context?(key) or secret_context?(val) end)
+
+  defp secret_context?(value) when is_list(value), do: Enum.any?(value, &secret_context?/1)
+  defp secret_context?(_), do: false
 
   defp job_plan(file, id, old, new, event) do
     blocker =
@@ -249,7 +269,7 @@ defmodule Hypatia.CiChanged do
           Enum.any?(Map.get(job, "steps", []), &Map.get(&1, "continue-on-error", false)) ->
         "tolerated failures need a hosted receipt"
 
-      Regex.match?(~r/\bsecrets\s*[.\[]/i, Jason.encode!([Map.delete(new, "jobs"), job])) ->
+      secret_context?([Map.delete(new, "jobs"), job]) ->
         "credential-dependent execution needs a hosted receipt"
 
       job["container"] || job["services"] ->
@@ -367,7 +387,21 @@ defmodule Hypatia.CiChanged do
       System.get_env()
       |> Map.new(fn {key, _} -> {key, nil} end)
       |> Map.merge(
-        Map.take(System.get_env(), ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "PATHEXT"])
+        Map.take(System.get_env(), [
+          "PATH",
+          "Path",
+          "SystemRoot",
+          "SYSTEMROOT",
+          "PATHEXT",
+          "DOCKER_HOST",
+          "DOCKER_CONTEXT",
+          "DOCKER_TLS_VERIFY",
+          "DOCKER_CERT_PATH"
+        ])
+      )
+      |> Map.put(
+        "DOCKER_CONFIG",
+        System.get_env("DOCKER_CONFIG") || Path.join(System.user_home!(), ".docker")
       )
       |> Map.merge(%{
         "HOME" => scratch,

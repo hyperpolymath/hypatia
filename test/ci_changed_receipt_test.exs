@@ -235,6 +235,41 @@ defmodule Hypatia.CiChangedReceiptTest do
     end
   end
 
+  test "malformed current steps fail clearly and a corrected malformed base can be planned" do
+    repo = repo()
+    base = "on: push\npermissions: read-all\njobs: {build: {steps: null}}\n"
+    File.write!(Path.join(repo, ".github/workflows/ci.yml"), base)
+    commit(repo)
+
+    assert_raise ArgumentError, ~r/steps must be a sequence/, fn ->
+      CiChanged.plan(repo, "HEAD")
+    end
+
+    File.write!(Path.join(repo, ".github/workflows/ci.yml"), String.replace(base, "null", "[]"))
+    assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+    assert blocker =~ "checkout"
+  end
+
+  test "whole secrets contexts and non-string scalar map keys are handled without JSON encoding" do
+    repo = repo()
+    commit(repo)
+
+    File.write!(
+      Path.join(repo, ".github/workflows/ci.yml"),
+      "on: push\npermissions: read-all\njobs: {build: {env: {TOKEN: '${{ toJSON(secrets) }}'}, steps: []}}\n"
+    )
+
+    assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+    assert blocker =~ "credential"
+
+    File.write!(
+      Path.join(repo, ".github/workflows/ci.yml"),
+      "on: push\npermissions: read-all\njobs: {build: {env: {3: value}, steps: []}}\n"
+    )
+
+    assert [%{local_blocker: nil}] = CiChanged.plan(repo, "HEAD").jobs
+  end
+
   test "deleting prerequisites and cyclic needs are rejected even when no surviving job changed" do
     before = "on: push\npermissions: read-all\njobs: {a: {steps: []}, b: {needs: a, steps: []}}\n"
     after_text = "on: push\npermissions: read-all\njobs: {b: {needs: a, steps: []}}\n"

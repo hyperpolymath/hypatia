@@ -140,7 +140,10 @@ hosted validation. Missing or unresolved permissions, conditional steps, tolerat
 failures, custom containers and secret-dependent execution cannot earn a local
 receipt. The runner uses empty input/environment/secret files, an explicitly empty
 GitHub token, an isolated configuration home and a cleared parent environment;
-project `.actrc` files require hosted validation. These restrictions deliberately
+project `.actrc` files require hosted validation. Docker daemon/context and client
+configuration remain available to act for container transport, without mounting
+the daemon socket into job containers or loading workflow secrets from them.
+These restrictions deliberately
 limit local parity rather than treating simulated success as hosted evidence.
 Hosted CI remains authoritative for platform-specific actions, context,
 unobserved matrix expansion and permissions. A plan or mocked executor test
