@@ -6,7 +6,7 @@
     "file": "lib/rules/cicd_rules.ex",
     "severity_override": "advisory",
     "expires_at": "2027-02-04",
-    "tracking_issue": "https://github.com/hyperpolymath/hypatia/issues/971",
+    "tracking_issue": "hyperpolymath/hypatia#971",
     "note": "Standing SF001 heuristic inventory at 0083453e. Preserve visible advisory status during canonical workflow-reader migration and candidate assessment under #971; no wildcard or new-file exemption."
   },
   {
@@ -16,7 +16,7 @@
     "file": "lib/rules/workflow_hardening.ex",
     "severity_override": "advisory",
     "expires_at": "2027-02-04",
-    "tracking_issue": "https://github.com/hyperpolymath/hypatia/issues/971",
+    "tracking_issue": "hyperpolymath/hypatia#971",
     "note": "Standing SF001 heuristic inventory at 0083453e. Preserve visible advisory status during canonical workflow-reader migration and candidate assessment under #971; no wildcard or new-file exemption."
   },
   {
@@ -26,7 +26,7 @@
     "file": "lib/rules/supply_chain.ex",
     "severity_override": "advisory",
     "expires_at": "2027-02-04",
-    "tracking_issue": "https://github.com/hyperpolymath/hypatia/issues/971",
+    "tracking_issue": "hyperpolymath/hypatia#971",
     "note": "Standing SF001 heuristic inventory at 0083453e. Preserve visible advisory status during canonical workflow-reader migration and candidate assessment under #971; no wildcard or new-file exemption."
   },
   {
@@ -36,7 +36,7 @@
     "file": "lib/rules/workflow_audit.ex",
     "severity_override": "advisory",
     "expires_at": "2027-02-04",
-    "tracking_issue": "https://github.com/hyperpolymath/hypatia/issues/971",
+    "tracking_issue": "hyperpolymath/hypatia#971",
     "note": "Standing SF001 heuristic inventory at 0083453e. Preserve visible advisory status during canonical workflow-reader migration and candidate assessment under #971; no wildcard or new-file exemption."
   },
   {
@@ -46,7 +46,7 @@
     "file": "lib/rules/rules.ex",
     "severity_override": "advisory",
     "expires_at": "2027-02-04",
-    "tracking_issue": "https://github.com/hyperpolymath/hypatia/issues/971",
+    "tracking_issue": "hyperpolymath/hypatia#971",
     "note": "Standing SF001 heuristic inventory at 0083453e. Preserve visible advisory status during canonical workflow-reader migration and candidate assessment under #971; no wildcard or new-file exemption."
   },
 {
