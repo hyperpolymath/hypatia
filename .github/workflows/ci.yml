@@ -361,8 +361,19 @@ jobs:
             test/kyaml_test.exs \
             test/kyaml_conformance_test.exs
 
+      - name: Checkout the governance-pinned baseline helper
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: metadatastician/standards
+          ref: a797d308c0517d4e2d21cc7f1cb08d41f82b1a12
+          path: .standards
+          sparse-checkout: scripts/apply-baseline.sh
+          persist-credentials: false
+
       - name: Review-gap prevention regressions (1009)
-        run: mix test --no-start test/ci_changed_test.exs test/kyaml_spec_mutation_test.exs test/structured_format_test.exs
+        env:
+          HYPATIA_BASELINE_HELPER: .standards/scripts/apply-baseline.sh
+        run: mix test --no-start --include baseline_helper test/ci_changed_test.exs test/ci_changed_receipt_test.exs test/kyaml_spec_mutation_test.exs test/structured_format_test.exs
 
       # ADR-001 retirement guard: Hypatia rules are pure Elixir
       # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source

@@ -47,7 +47,7 @@ The local branch described in the issue was not available in this checkout;
 its reported test counts are historical evidence, not a reproduced receipt.
 |7 |Copilot emitted a COMMENTED review containing insufficient quota, #39
 |Review absent |Display head-bound reviewer coverage separately from verdicts
-|Companion metadatastician/standards#1417 adds an advisory coverage snapshot after the
+|Companion metadatastician/standards#1417, corrected by #1418, adds an advisory coverage snapshot after the
 existing grids. Quota COMMENTED reviews are NO REVIEW, stale/pending/dismissed
 reviews do not cover a new head, and unavailable evidence is indeterminate.
 No fourth lane or automatic approval is introduced. Consumers need to adopt
@@ -93,18 +93,36 @@ Run `just ci-changed BASE` (default `origin/main`) before pushing; use
 `just ci-changed-plan BASE` to inspect selection. Both committed differences
 and uncommitted/untracked files are included. A shallow checkout must contain
 the base commit; a missing base is an error, never an empty successful diff.
-New/changed job definitions are selected by parsed semantics, including alias
-changes. Moving comments/line numbers does not select an otherwise unchanged
-job. Global environment/event changes conservatively select all remaining
-jobs. Deleted jobs have nothing left to run.
+For workflow-only changes, job definitions are selected by parsed semantics,
+including aliases; moving comments/line numbers does not select an otherwise
+unchanged job. Any non-workflow input change conservatively selects all current
+workflows, since a script or fixture can affect an unchanged job. Global
+environment/event changes also select all remaining jobs. The current needs
+graph is validated even when deletion would otherwise select no surviving job;
+missing dependencies and cycles are errors.
 
-The scan uses existing offline code-safety and workflow rules, with existing
-suppressions, and grades changed files at medium or higher; SF001 is advisory.
-`act` needs a supported container engine, runner images and any legitimately
-required event/context/secrets. Never provide production credentials merely
-to simulate a PR. Hosted GitHub CI remains authoritative for platform-specific
-actions and conditional jobs. Inspect act logs for skipped conditions; a
-selection plan and mocked executor test are not hosted parity receipts.
+The scan retains directory-scoped absence findings when a changed file is
+below that directory. It applies the canonical governance baseline helper
+before grading, including expiry checks, acknowledgements and overrides. Set
+`HYPATIA_BASELINE_HELPER` to `scripts/apply-baseline.sh` from the same standards
+revision as `governance.yml` (`a797d308c0517d4e2d21cc7f1cb08d41f82b1a12` here),
+or provision it under `.standards/scripts/`. A missing helper with an active
+baseline is an error. CI fetches that exact helper and explicitly includes its
+integration test; other test runs exclude the provisioned-helper tag.
+
+Existing suppressions remain active; changed files are graded at medium or
+higher and SF001 remains advisory. Each job gets a supported workflow event;
+`mix hypatia.ci_changed --event EVENT` can select another declared event.
+Execution requests act JSON/debug logs and requires non-dry-run `jobResult`
+success for the selected job. Skips, failures and absent receipts cannot count
+as completion. Matrix members observed as skipped or failed invalidate the
+receipt. New/changed checkout configuration, reusable jobs and write-capable
+jobs require hosted validation and cause the local task to refuse a receipt.
+For other jobs, act's unchanged checkout simulation is a declared local limit;
+the task does not bind a writable host workspace into the container.
+Hosted CI remains authoritative for platform-specific actions, context,
+unobserved matrix expansion and permissions. A plan or mocked executor test
+is not a hosted execution receipt.
 
 The recipe is not silently installed as a Git hook in this repository or the
 estate. Fleet rollout, canonical workflow-reader migration (#971) and upstream

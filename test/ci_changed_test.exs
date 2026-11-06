@@ -74,16 +74,19 @@ defmodule Hypatia.CiChangedTest do
   end
 
   test "executor preserves exact job argv and propagates failure" do
-    jobs = [%{workflow: ".github/workflows/ci.yml", job: "new-job"}]
+    jobs = [
+      %{workflow: ".github/workflows/ci.yml", job: "new-job", event: "push", local_blocker: nil}
+    ]
 
     runner = fn "act", argv, opts ->
       assert argv == [
-               "pull_request",
+               "push",
                "-W",
                ".github/workflows/ci.yml",
                "-j",
                "new-job",
-               "--bind",
+               "--json",
+               "--verbose",
                "--container-options",
                "--cap-drop=ALL"
              ]
