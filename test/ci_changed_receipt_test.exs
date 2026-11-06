@@ -82,6 +82,67 @@ defmodule Hypatia.CiChangedReceiptTest do
     assert_raise ArgumentError, fn -> CiChanged.plan(repo, "HEAD", "pull_request") end
   end
 
+  test "executor refuses every incomplete receipt outcome" do
+    jobs = [%{workflow: "ci.yml", job: "build", event: "push", local_blocker: nil}]
+
+    for {output, exit, expected} <- [
+          {row("success"), 1, :failed},
+          {"", 0, :unobserved},
+          {row("failure"), 0, :failed},
+          {row("skipped"), 0, :skipped},
+          {row("success", %{"dryrun" => true}), 0, :unobserved},
+          {row("success"), 0, :completed}
+        ] do
+      assert [%{outcome: ^expected}] =
+               CiChanged.execute_jobs("/repo", jobs, fn _, _, _ -> {output, exit} end)
+    end
+  end
+
+  test "transitive prerequisites retain hosted validation blockers" do
+    repo = repo()
+
+    for ancestor <- [
+          "permissions: {contents: write}\n    steps: []",
+          "uses: owner/repo/.github/workflows/reuse.yml@main",
+          "steps: [{uses: actions/checkout@v7, with: {fetch-depth: 1}}]"
+        ] do
+      workflow =
+        "on: push\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    needs: setup\n    steps: []\n  build:\n    needs: middle\n    steps: [{run: echo before}]\n"
+
+      File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
+      commit(repo)
+
+      File.write!(
+        Path.join(repo, ".github/workflows/ci.yml"),
+        workflow
+        |> String.replace("echo before", "echo after")
+        |> String.replace("fetch-depth: 1", "fetch-depth: 0")
+      )
+
+      plan = CiChanged.plan(repo, "HEAD")
+      selected = Enum.filter(plan.jobs, &(&1.job == "build"))
+      assert [%{local_blocker: blocker}] = selected
+      assert blocker =~ "prerequisite setup"
+
+      assert [%{outcome: :requires_hosted_receipt}] =
+               CiChanged.execute_jobs(repo, selected, fn _, _, _ ->
+                 flunk("must not run prerequisites")
+               end)
+    end
+  end
+
+  test "root composite action findings retain their actual path" do
+    repo = repo()
+
+    File.write!(
+      Path.join(repo, "action.yml"),
+      "runs:\n  using: composite\n  steps:\n    - uses: owner/action@main\n"
+    )
+
+    findings = CiChanged.scan(repo, ["action.yml"])
+    assert Enum.any?(findings, &(&1.type == "RE006" and &1.file == "action.yml"))
+  end
+
   test "deleting prerequisites and cyclic needs are rejected even when no surviving job changed" do
     before = "on: push\njobs: {a: {steps: []}, b: {needs: a, steps: []}}\n"
     after_text = "on: push\njobs: {b: {needs: a, steps: []}}\n"

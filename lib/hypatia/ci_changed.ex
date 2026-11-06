@@ -138,6 +138,36 @@ defmodule Hypatia.CiChanged do
       end)
 
   defp job_plan(file, id, old, new, event) do
+    blocker =
+      [id | prerequisites(id, new["jobs"])]
+      |> Enum.find_value(fn candidate ->
+        case direct_blocker(candidate, old, new) do
+          nil -> nil
+          reason when candidate == id -> reason
+          reason -> "prerequisite #{candidate}: #{reason}"
+        end
+      end)
+
+    %{workflow: file, job: id, event: event!(new, event), local_blocker: blocker}
+  end
+
+  defp prerequisites(id, jobs),
+    do: walk_needs(List.wrap(Map.get(jobs[id], "needs", [])), jobs, MapSet.new())
+
+  defp walk_needs([], _jobs, seen), do: seen |> MapSet.to_list() |> Enum.sort()
+
+  defp walk_needs([id | rest], jobs, seen) do
+    if MapSet.member?(seen, id),
+      do: walk_needs(rest, jobs, seen),
+      else:
+        walk_needs(
+          List.wrap(Map.get(jobs[id], "needs", [])) ++ rest,
+          jobs,
+          MapSet.put(seen, id)
+        )
+  end
+
+  defp direct_blocker(id, old, new) do
     job = new["jobs"][id]
     old_job = get_in(old, ["jobs", id])
 
@@ -154,15 +184,12 @@ defmodule Hypatia.CiChanged do
     writes =
       permissions == "write-all" or (is_map(permissions) and "write" in Map.values(permissions))
 
-    blocker =
-      cond do
-        job["uses"] -> "reusable workflow needs a hosted receipt"
-        writes -> "write-capable job needs a hosted receipt"
-        checkout_changed -> "changed checkout inputs need a hosted receipt; act skips checkout"
-        true -> nil
-      end
-
-    %{workflow: file, job: id, event: event!(new, event), local_blocker: blocker}
+    cond do
+      job["uses"] -> "reusable workflow needs a hosted receipt"
+      writes -> "write-capable job needs a hosted receipt"
+      checkout_changed -> "changed checkout inputs need a hosted receipt; act skips checkout"
+      true -> nil
+    end
   end
 
   defp previous(repo, base, path) do
@@ -191,11 +218,6 @@ defmodule Hypatia.CiChanged do
     ])
     |> Enum.map(fn finding ->
       file = Map.get(finding, :file, ".")
-
-      file =
-        if Path.dirname(file) == "." and Path.extname(file) in [".yml", ".yaml"],
-          do: Path.join(".github/workflows", file),
-          else: file
 
       Map.put(finding, :file, file |> Path.expand(repo) |> Path.relative_to(repo))
     end)

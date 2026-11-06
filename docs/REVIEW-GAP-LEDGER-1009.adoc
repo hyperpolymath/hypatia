@@ -129,6 +129,9 @@ success for the selected job. Skips, failures and absent receipts cannot count
 as completion. Matrix members observed as skipped or failed invalidate the
 receipt. New/changed checkout configuration, reusable jobs and write-capable
 jobs require hosted validation and cause the local task to refuse a receipt.
+The same blockers apply across the transitive `needs` graph before act can
+run any prerequisite. Composite-action findings retain their actual root
+or nested action path; workflow paths are qualified by their producer.
 For other jobs, act's unchanged checkout simulation is a declared local limit;
 the task does not bind a writable host workspace into the container.
 Hosted CI remains authoritative for platform-specific actions, context,
