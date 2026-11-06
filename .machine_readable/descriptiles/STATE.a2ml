@@ -308,3 +308,8 @@ new-regression-source = "test/neural_source_store_lifecycle_test.exs"
 authored-new-test-functions = 22
 qualification = "No execution receipt for this new lifecycle candidate. Existing runtime-path test receipts do not qualify it. Exact-source compile, focused and normal full gates remain required."
 authority = "No automatic restart, dispatch, or deployment promotion from a source refusal."
+
+[bridge-report-contract-2026-11-06]
+status = "candidate; not merged or deployed"
+change = "Validate schema 0.3.0 and vulnerability-data availability before interpreting native lowercase B1 verdicts"
+validation = "29 local executable contract cases passed; workflow YAML and embedded shell parsed; upstream TOML dependency fix in panic-attack PR 265 still awaits qualified CI"
