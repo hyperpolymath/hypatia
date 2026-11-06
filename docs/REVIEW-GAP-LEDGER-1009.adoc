@@ -92,6 +92,8 @@ Orchestrate 42201913539 failed. This is not a claim all main workflows pass.
 The newly exposed standing SF001 inventory contains 15 advisory candidates
 in five existing rule files. The baseline retains them as visible advisory
 debt, with five exact-path entries tied to #971 and expiry 2027-02-04.
+The commit and pull-request body declare this specific ledger growth using
+the exemption ratchet's required `Ratchet-exception` record.
 It does not use a wildcard or exempt new files. The canonical baseline gate
 grades every finding at info or higher regardless of the scanner's advisory
 flag, so this explicit, temporary classification is necessary to preserve
