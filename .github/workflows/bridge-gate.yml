@@ -26,7 +26,17 @@ on:
 permissions:
   contents: read
 jobs:
+  bridge-contract:
+    name: Bridge report contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Reject blocking, malformed and unavailable assessments
+        run: bash scripts/ci/test-bridge-report.sh
+
   bridge-gate:
+    needs: bridge-contract
     if: ${{ startsWith(github.head_ref, 'dependabot/') || startsWith(github.head_ref, 'renovate/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -51,12 +61,5 @@ jobs:
       - name: Bridge triage (queries OSV) -> BridgeReport
         run: panic-attack bridge triage . --output bridge-report.json
 
-      - name: Apply B1 verdict -- reachable unmitigable CVE -> flag
-        run: |
-          blockers=$(jq '[.cves[]? | select(.classification=="Unmitigable" and .reachability.status=="Reachable")] | length' bridge-report.json)
-          if [ "$blockers" -gt 0 ]; then
-            echo "::error::B1: $blockers reachable unmitigable CVE(s) -> safety=flag (auto-merge blocked)"
-            jq -r '.cves[]? | select(.classification=="Unmitigable" and .reachability.status=="Reachable") | "  - \(.vulnerability.cve // .vulnerability.id): \(.rationale)"' bridge-report.json
-            exit 1
-          fi
-          echo "B1 PASS: no reachable unmitigable CVEs -> arm-eligible (pool-gated)."
+      - name: Apply B1 verdict -- validate data and reject blockers
+        run: bash scripts/ci/check-bridge-report.sh bridge-report.json
