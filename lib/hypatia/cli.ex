@@ -1200,7 +1200,18 @@ defmodule Hypatia.CLI do
       |> list_all_files()
       |> Enum.flat_map(&scan_file_for_secrets(&1, repo_path))
 
-    language_findings ++ secret_findings
+    parser_debt =
+      find_files_by_ext(repo_path, ".ex")
+      |> Enum.flat_map(fn file ->
+        case File.read(file) do
+          {:ok, content} ->
+            Hypatia.Rules.StructuredFormat.scan_content(content)
+            |> Enum.map(&Map.put(&1, :file, file))
+          _ -> []
+        end
+      end)
+
+    language_findings ++ secret_findings ++ parser_debt
   end
 
   # Downgrade `unwrap*` / `panic_macro` / `expect_in_hot_path` etc. when

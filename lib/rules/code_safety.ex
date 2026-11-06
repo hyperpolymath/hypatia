@@ -494,7 +494,7 @@ defmodule Hypatia.Rules.CodeSafety do
       pattern: ~r/String\.to_atom\(/,
       cwe: "CWE-400",
       description:
-        "String.to_existing_atom with user input exhausts atom table -- use to_existing_atom"
+        "String.to_atom with user input exhausts atom table -- use to_existing_atom"
     },
     %{
       id: :elixir_wildcard_plug_cors,

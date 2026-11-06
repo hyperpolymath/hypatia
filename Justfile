@@ -390,3 +390,10 @@ crg-badge:
       D) color="orange" ;; E) color="red" ;; F) color="critical" ;; \
       *) color="lightgrey" ;; esac; \
     echo "[![CRG $grade](https://img.shields.io/badge/CRG-$grade-$color?style=flat-square)](https://github.com/hyperpolymath/standards/tree/main/component-readiness-grades)"
+
+# Before push; --plan never counts as execution. Requires act + a container engine.
+ci-changed base="origin/main":
+    mix hypatia.ci_changed --base {{quote(base)}}
+
+ci-changed-plan base="origin/main":
+    mix hypatia.ci_changed --base {{quote(base)}} --plan

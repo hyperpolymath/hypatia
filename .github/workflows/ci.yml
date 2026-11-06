@@ -361,6 +361,9 @@ jobs:
             test/kyaml_test.exs \
             test/kyaml_conformance_test.exs
 
+      - name: Review-gap prevention regressions (1009)
+        run: mix test --no-start test/ci_changed_test.exs test/kyaml_spec_mutation_test.exs test/structured_format_test.exs
+
       # ADR-001 retirement guard: Hypatia rules are pure Elixir
       # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source
       # or a Logtalk output/loader setting re-enters the tree outside
