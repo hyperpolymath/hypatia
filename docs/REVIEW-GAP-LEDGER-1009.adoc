@@ -89,6 +89,15 @@ Orchestrate 42201913539 failed. This is not a claim all main workflows pass.
 
 == Local use and limits
 
+The newly exposed standing SF001 inventory contains 15 advisory candidates
+in five existing rule files. The baseline retains them as visible advisory
+debt, with five exact-path entries tied to #971 and expiry 2027-02-04.
+It does not use a wildcard or exempt new files. The canonical baseline gate
+grades every finding at info or higher regardless of the scanner's advisory
+flag, so this explicit, temporary classification is necessary to preserve
+SF001's declared advisory meaning. It is not a claim that each regex is a
+confirmed vulnerability or that the reader migration is complete.
+
 Run `just ci-changed BASE` (default `origin/main`) before pushing; use
 `just ci-changed-plan BASE` to inspect selection. Both committed differences
 and uncommitted/untracked files are included. A shallow checkout must contain
