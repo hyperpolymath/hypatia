@@ -68,7 +68,7 @@ defmodule Hypatia.CiChangedReceiptTest do
     repo = repo()
 
     workflow =
-      "on: workflow_dispatch\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bash scripts/input.sh\n"
+      "on: workflow_dispatch\npermissions: read-all\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bash scripts/input.sh\n"
 
     File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
     File.mkdir_p!(Path.join(repo, "scripts"))
@@ -107,7 +107,7 @@ defmodule Hypatia.CiChangedReceiptTest do
           "steps: [{uses: actions/checkout@v7, with: {fetch-depth: 1}}]"
         ] do
       workflow =
-        "on: push\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    needs: setup\n    steps: []\n  build:\n    needs: middle\n    steps: [{run: echo before}]\n"
+        "on: push\npermissions: read-all\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    needs: setup\n    steps: []\n  build:\n    needs: middle\n    steps: [{run: echo before}]\n"
 
       File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
       commit(repo)
@@ -143,13 +143,108 @@ defmodule Hypatia.CiChangedReceiptTest do
     assert Enum.any?(findings, &(&1.type == "RE006" and &1.file == "action.yml"))
   end
 
+  test "changed prerequisites select their transitive consumers" do
+    workflow =
+      "on: push\njobs: {build: {steps: [{run: before}]}, test: {needs: build, steps: []}, deploy: {needs: test, steps: []}, unrelated: {steps: []}}\n"
+
+    assert CiChanged.changed_jobs(workflow, String.replace(workflow, "before", "after")) == [
+             "build",
+             "deploy",
+             "test"
+           ]
+  end
+
+  test "changed reusable contracts select unchanged local callers" do
+    repo = repo()
+
+    reusable =
+      "on: workflow_call\npermissions: read-all\njobs: {build: {steps: [{run: before}]}}\n"
+
+    File.write!(Path.join(repo, ".github/workflows/reusable.yml"), reusable)
+
+    File.write!(
+      Path.join(repo, ".github/workflows/caller.yml"),
+      "on: push\npermissions: read-all\njobs: {call: {uses: './.github/workflows/reusable.yml'}, consumer: {needs: call, steps: []}}\n"
+    )
+
+    commit(repo)
+
+    File.write!(
+      Path.join(repo, ".github/workflows/reusable.yml"),
+      String.replace(reusable, "before", "after")
+    )
+
+    jobs = CiChanged.plan(repo, "HEAD").jobs
+
+    assert Enum.any?(
+             jobs,
+             &(&1.workflow == ".github/workflows/caller.yml" and &1.job == "call" and
+                 &1.local_blocker =~ "reusable")
+           )
+
+    assert Enum.any?(jobs, &(&1.job == "consumer" and &1.local_blocker =~ "prerequisite call"))
+  end
+
+  test "inherited permissions, conditions and secrets cannot earn local receipts" do
+    repo = repo()
+    commit(repo)
+
+    for {permissions, body, expected} <- [
+          {"", "steps: []", "inherited"},
+          {"permissions: read-all\n", "steps: [{run: echo ok, if: false}]", "conditional"},
+          {"permissions: read-all\n", "if: false\n    steps: []", "conditional"},
+          {"permissions: read-all\n", "env: {TOKEN: '${{ secrets.TOKEN }}'}\n    steps: []",
+           "credential"},
+          {"permissions: read-all\n", "steps: [{run: echo ok, continue-on-error: true}]",
+           "tolerated"}
+        ] do
+      File.write!(
+        Path.join(repo, ".github/workflows/ci.yml"),
+        "on: push\n#{permissions}jobs:\n  build:\n    #{body}\n"
+      )
+
+      assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+      assert blocker =~ expected
+    end
+  end
+
+  test "removed and repositioned checkouts require hosted validation" do
+    repo = repo()
+
+    workflow =
+      "on: push\npermissions: read-all\njobs: {build: {steps: [{uses: actions/checkout@v7}, {run: echo ok}]}}\n"
+
+    File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
+    commit(repo)
+
+    for replacement <- [
+          "steps: [{run: echo ok}]",
+          "steps: [{run: echo ok}, {uses: actions/checkout@v7}]"
+        ] do
+      File.write!(
+        Path.join(repo, ".github/workflows/ci.yml"),
+        String.replace(
+          workflow,
+          "steps: [{uses: actions/checkout@v7}, {run: echo ok}]",
+          replacement
+        )
+      )
+
+      assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+      assert blocker =~ "checkout"
+    end
+  end
+
   test "deleting prerequisites and cyclic needs are rejected even when no surviving job changed" do
-    before = "on: push\njobs: {a: {steps: []}, b: {needs: a, steps: []}}\n"
-    after_text = "on: push\njobs: {b: {needs: a, steps: []}}\n"
+    before = "on: push\npermissions: read-all\njobs: {a: {steps: []}, b: {needs: a, steps: []}}\n"
+    after_text = "on: push\npermissions: read-all\njobs: {b: {needs: a, steps: []}}\n"
     assert_raise ArgumentError, fn -> CiChanged.changed_jobs(before, after_text) end
 
     assert_raise ArgumentError, fn ->
-      CiChanged.changed_jobs(nil, "on: push\njobs: {a: {needs: b}, b: {needs: a}}\n")
+      CiChanged.changed_jobs(
+        nil,
+        "on: push\npermissions: read-all\njobs: {a: {needs: b}, b: {needs: a}}\n"
+      )
     end
   end
 
@@ -157,7 +252,7 @@ defmodule Hypatia.CiChangedReceiptTest do
     repo = repo()
 
     workflow =
-      "on: push\njobs:\n  build:\n    steps:\n      - uses: actions/checkout@v7\n        with: {fetch-depth: 1}\n      - run: echo ok\n"
+      "on: push\npermissions: read-all\njobs:\n  build:\n    steps:\n      - uses: actions/checkout@v7\n        with: {fetch-depth: 1}\n      - run: echo ok\n"
 
     File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
     commit(repo)
@@ -182,7 +277,7 @@ defmodule Hypatia.CiChangedReceiptTest do
 
     File.write!(
       Path.join(repo, ".github/workflows/ci.yml"),
-      "on: push\njobs: {build: {steps: [{run: echo ok}]}}\n"
+      "on: push\npermissions: read-all\njobs: {build: {steps: [{run: echo ok}]}}\n"
     )
 
     findings = CiChanged.scan(repo, [".github/workflows/ci.yml"])

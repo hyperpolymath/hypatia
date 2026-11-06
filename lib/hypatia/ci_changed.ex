@@ -13,7 +13,22 @@ defmodule Hypatia.CiChanged do
     new = workflow!(after_text)
     validate_graph!(Map.fetch!(new, "jobs"))
     globals_changed = Map.delete(old, "jobs") !== Map.delete(new, "jobs")
-    for {id, job} <- new["jobs"], globals_changed or get_in(old, ["jobs", id]) !== job, do: id
+
+    selected =
+      for {id, job} <- new["jobs"], globals_changed or get_in(old, ["jobs", id]) !== job, do: id
+
+    downstream(new["jobs"], MapSet.new(selected)) |> MapSet.to_list() |> Enum.sort()
+  end
+
+  defp downstream(jobs, selected) do
+    expanded =
+      Enum.reduce(jobs, selected, fn {id, job}, affected ->
+        if Enum.any?(List.wrap(Map.get(job, "needs", [])), &MapSet.member?(selected, &1)),
+          do: MapSet.put(affected, id),
+          else: affected
+      end)
+
+    if expanded == selected, do: selected, else: downstream(jobs, expanded)
   end
 
   defp workflow!(nil), do: %{"jobs" => %{}}
@@ -85,24 +100,49 @@ defmodule Hypatia.CiChanged do
     inputs_changed = Enum.any?(files, &(not workflow_file?(&1)))
 
     workflows =
-      if inputs_changed,
-        do:
-          Path.wildcard(Path.join(repo, ".github/workflows/*"))
-          |> Enum.map(&Path.relative_to(&1, repo)),
-        else: files
+      Path.wildcard(Path.join(repo, ".github/workflows/*"))
+      |> Enum.map(&Path.relative_to(&1, repo))
+      |> Enum.filter(&workflow_file?/1)
+      |> Map.new(fn file -> {file, File.read!(Path.join(repo, file))} end)
+
+    callers = affected_callers(workflows, MapSet.new(Enum.filter(files, &workflow_file?/1)))
 
     jobs =
-      for file <- workflows,
-          workflow_file?(file),
-          File.regular?(Path.join(repo, file)),
-          current = File.read!(Path.join(repo, file)),
+      for {file, current} <- workflows,
           old <- [previous(repo, base, file)],
           selected = changed_jobs(old, current),
           new = workflow!(current),
-          id <- if(inputs_changed, do: Map.keys(new["jobs"]), else: selected),
+          id <-
+            if(inputs_changed or MapSet.member?(callers, file),
+              do: Map.keys(new["jobs"]),
+              else: selected
+            ),
           do: job_plan(file, id, workflow!(old), new, requested_event)
 
     %{base: base, files: files, jobs: Enum.sort_by(jobs, &{&1.workflow, &1.job})}
+  end
+
+  defp affected_callers(workflows, changed, callers \\ MapSet.new()) do
+    affected_workflows = MapSet.union(changed, callers)
+
+    expanded =
+      Enum.reduce(workflows, callers, fn {file, text}, affected ->
+        calls_changed =
+          workflow!(text)["jobs"]
+          |> Enum.any?(fn {_id, job} ->
+            case job["uses"] do
+              "./.github/workflows/" <> _ = reference ->
+                MapSet.member?(affected_workflows, String.trim_leading(reference, "./"))
+
+              _ ->
+                false
+            end
+          end)
+
+        if calls_changed, do: MapSet.put(affected, file), else: affected
+      end)
+
+    if expanded == callers, do: callers, else: affected_callers(workflows, changed, expanded)
   end
 
   defp workflow_file?(file),
@@ -132,7 +172,7 @@ defmodule Hypatia.CiChanged do
 
   defp checkout_steps(job),
     do:
-      Enum.filter(Map.get(job || %{}, "steps", []), fn step ->
+      Enum.filter(Enum.with_index(Map.get(job || %{}, "steps", [])), fn {step, _index} ->
         is_map(step) and is_binary(step["uses"]) and
           String.starts_with?(String.downcase(step["uses"]), "actions/checkout@")
       end)
@@ -176,19 +216,47 @@ defmodule Hypatia.CiChanged do
         Map.drop(old_job || %{}, ["steps"]) !== Map.drop(job, ["steps"])
 
     checkout_changed =
-      checkout_steps(job) != [] and
-        (checkout_context_changed or checkout_steps(old_job) !== checkout_steps(job))
+      checkout_steps(old_job) !== checkout_steps(job) or
+        (checkout_steps(job) != [] and checkout_context_changed)
 
-    permissions = Map.get(job, "permissions", Map.get(new, "permissions", %{}))
+    permissions = Map.get(job, "permissions", Map.get(new, "permissions"))
 
     writes =
       permissions == "write-all" or (is_map(permissions) and "write" in Map.values(permissions))
 
     cond do
-      job["uses"] -> "reusable workflow needs a hosted receipt"
-      writes -> "write-capable job needs a hosted receipt"
-      checkout_changed -> "changed checkout inputs need a hosted receipt; act skips checkout"
-      true -> nil
+      job["uses"] ->
+        "reusable workflow needs a hosted receipt"
+
+      is_nil(permissions) ->
+        "inherited permissions need a hosted receipt"
+
+      writes ->
+        "write-capable job needs a hosted receipt"
+
+      not (permissions == "read-all" or
+               (is_map(permissions) and
+                  Enum.all?(Map.values(permissions), &(&1 in ["read", "none"])))) ->
+        "unresolved permissions need a hosted receipt"
+
+      checkout_changed ->
+        "changed checkout inputs need a hosted receipt; act skips checkout"
+
+      Map.has_key?(job, "if") || Enum.any?(Map.get(job, "steps", []), &Map.has_key?(&1, "if")) ->
+        "conditional execution needs a hosted receipt"
+
+      job["continue-on-error"] ||
+          Enum.any?(Map.get(job, "steps", []), &Map.get(&1, "continue-on-error", false)) ->
+        "tolerated failures need a hosted receipt"
+
+      Regex.match?(~r/\bsecrets\s*[.\[]/i, Jason.encode!([Map.delete(new, "jobs"), job])) ->
+        "credential-dependent execution needs a hosted receipt"
+
+      job["container"] || job["services"] ->
+        "custom containers need a hosted receipt"
+
+      true ->
+        nil
     end
   end
 
@@ -288,37 +356,89 @@ defmodule Hypatia.CiChanged do
 
   @doc "Run eligible jobs with JSON receipts; skipped, dry-run and absent results are not completion."
   def execute_jobs(repo, jobs, runner \\ &System.cmd/3) do
-    Enum.map(jobs, fn %{workflow: file, job: id, event: event, local_blocker: blocker} ->
-      if blocker do
-        %{workflow: file, job: id, exit: nil, outcome: :requires_hosted_receipt, output: blocker}
-      else
-        {output, status} =
-          runner.(
-            "act",
-            [
-              event,
-              "-W",
-              file,
-              "-j",
-              id,
-              "--json",
-              "--verbose",
-              "--container-options",
-              "--cap-drop=ALL"
-            ],
-            cd: repo,
-            stderr_to_stdout: true
-          )
+    scratch =
+      Path.join(System.tmp_dir!(), "hypatia-act-#{System.pid()}-#{System.os_time(:nanosecond)}")
 
-        %{
-          workflow: file,
-          job: id,
-          exit: status,
-          outcome: receipt(output, id, status),
-          output: output
-        }
-      end
-    end)
+    File.mkdir_p!(scratch)
+    empty = Path.join(scratch, "empty")
+    File.write!(empty, "", [:exclusive])
+
+    env =
+      System.get_env()
+      |> Map.new(fn {key, _} -> {key, nil} end)
+      |> Map.merge(
+        Map.take(System.get_env(), ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "PATHEXT"])
+      )
+      |> Map.merge(%{
+        "HOME" => scratch,
+        "USERPROFILE" => scratch,
+        "XDG_CONFIG_HOME" => scratch,
+        "TMPDIR" => scratch,
+        "TEMP" => scratch,
+        "TMP" => scratch
+      })
+      |> Map.to_list()
+
+    try do
+      Enum.map(jobs, fn %{workflow: file, job: id, event: event, local_blocker: blocker} ->
+        blocker =
+          blocker ||
+            if(File.exists?(Path.join(repo, ".actrc")),
+              do: "project act configuration needs a hosted receipt"
+            )
+
+        if blocker do
+          %{
+            workflow: file,
+            job: id,
+            exit: nil,
+            outcome: :requires_hosted_receipt,
+            output: blocker
+          }
+        else
+          {output, status} =
+            runner.(
+              "act",
+              [
+                event,
+                "-W",
+                file,
+                "-j",
+                id,
+                "--json",
+                "--verbose",
+                "--secret-file",
+                empty,
+                "--env-file",
+                empty,
+                "--var-file",
+                empty,
+                "--input-file",
+                empty,
+                "--secret",
+                "GITHUB_TOKEN=",
+                "--container-daemon-socket",
+                "-",
+                "--container-options",
+                "--cap-drop=ALL"
+              ],
+              cd: repo,
+              env: env,
+              stderr_to_stdout: true
+            )
+
+          %{
+            workflow: file,
+            job: id,
+            exit: status,
+            outcome: receipt(output, id, status),
+            output: output
+          }
+        end
+      end)
+    after
+      File.rm_rf!(scratch)
+    end
   end
 
   @doc "Read act jobResult fields for the exact job and every observed matrix member."

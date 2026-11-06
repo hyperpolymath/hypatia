@@ -134,6 +134,14 @@ run any prerequisite. Composite-action findings retain their actual root
 or nested action path; workflow paths are qualified by their producer.
 For other jobs, act's unchanged checkout simulation is a declared local limit;
 the task does not bind a writable host workspace into the container.
+Changed prerequisites select downstream consumers, and changed local reusable
+contracts select their callers. Removed or repositioned checkouts also require
+hosted validation. Missing or unresolved permissions, conditional steps, tolerated
+failures, custom containers and secret-dependent execution cannot earn a local
+receipt. The runner uses empty input/environment/secret files, an explicitly empty
+GitHub token, an isolated configuration home and a cleared parent environment;
+project `.actrc` files require hosted validation. These restrictions deliberately
+limit local parity rather than treating simulated success as hosted evidence.
 Hosted CI remains authoritative for platform-specific actions, context,
 unobserved matrix expansion and permissions. A plan or mocked executor test
 is not a hosted execution receipt.
