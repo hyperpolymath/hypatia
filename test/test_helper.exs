@@ -32,4 +32,7 @@ ExUnit.start()
 # Tests tagged :yaml_test_suite hold Hypatia.Kyaml to the YAML test suite; they
 # need a yaml-test-suite `data` checkout at YAML_TEST_SUITE, which the same job
 # pins. Run with: YAML_TEST_SUITE=... mix test --only yaml_test_suite.
-ExUnit.configure(exclude: [:verisim_data, :kyq_differential, :yaml_test_suite], seed: 0)
+ExUnit.configure(
+  exclude: [:verisim_data, :kyq_differential, :yaml_test_suite, :baseline_helper],
+  seed: 0
+)

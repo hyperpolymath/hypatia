@@ -47,7 +47,7 @@ The local branch described in the issue was not available in this checkout;
 its reported test counts are historical evidence, not a reproduced receipt.
 |7 |Copilot emitted a COMMENTED review containing insufficient quota, #39
 |Review absent |Display head-bound reviewer coverage separately from verdicts
-|Companion metadatastician/standards#1417 adds an advisory coverage snapshot after the
+|Companion metadatastician/standards#1417, corrected by #1418, adds an advisory coverage snapshot after the
 existing grids. Quota COMMENTED reviews are NO REVIEW, stale/pending/dismissed
 reviews do not cover a new head, and unavailable evidence is indeterminate.
 No fourth lane or automatic approval is introduced. Consumers need to adopt
@@ -89,22 +89,75 @@ Orchestrate 42201913539 failed. This is not a claim all main workflows pass.
 
 == Local use and limits
 
+The newly exposed standing SF001 inventory contains 15 advisory candidates
+in five existing rule files. The baseline retains them as visible advisory
+debt, with five exact-path entries tied to #971 and expiry 2027-02-04.
+The commit and pull-request body declare this specific ledger growth using
+the exemption ratchet's required `Ratchet-exception` record.
+It does not use a wildcard or exempt new files. The canonical baseline gate
+grades every finding at info or higher regardless of the scanner's advisory
+flag, so this explicit, temporary classification is necessary to preserve
+SF001's declared advisory meaning. It is not a claim that each regex is a
+confirmed vulnerability or that the reader migration is complete.
+
 Run `just ci-changed BASE` (default `origin/main`) before pushing; use
 `just ci-changed-plan BASE` to inspect selection. Both committed differences
 and uncommitted/untracked files are included. A shallow checkout must contain
 the base commit; a missing base is an error, never an empty successful diff.
-New/changed job definitions are selected by parsed semantics, including alias
-changes. Moving comments/line numbers does not select an otherwise unchanged
-job. Global environment/event changes conservatively select all remaining
-jobs. Deleted jobs have nothing left to run.
+For workflow-only changes, job definitions are selected by parsed semantics,
+including aliases; moving comments/line numbers does not select an otherwise
+unchanged job. Any non-workflow input change conservatively selects all current
+workflows, since a script or fixture can affect an unchanged job. Global
+environment/event changes also select all remaining jobs. The current needs
+graph is validated even when deletion would otherwise select no surviving job;
+missing dependencies and cycles are errors.
 
-The scan uses existing offline code-safety and workflow rules, with existing
-suppressions, and grades changed files at medium or higher; SF001 is advisory.
-`act` needs a supported container engine, runner images and any legitimately
-required event/context/secrets. Never provide production credentials merely
-to simulate a PR. Hosted GitHub CI remains authoritative for platform-specific
-actions and conditional jobs. Inspect act logs for skipped conditions; a
-selection plan and mocked executor test are not hosted parity receipts.
+The scan retains directory-scoped absence findings when a changed file is
+below that directory. It applies the canonical governance baseline helper
+before grading, including expiry checks, acknowledgements and overrides. Set
+`HYPATIA_BASELINE_HELPER` to `scripts/apply-baseline.sh` from the same standards
+revision as `governance.yml` (`a797d308c0517d4e2d21cc7f1cb08d41f82b1a12` here),
+or provision it under `.standards/scripts/`. A missing helper with an active
+baseline is an error. CI fetches that exact helper and explicitly includes its
+integration test; other test runs exclude the provisioned-helper tag.
+
+Existing suppressions remain active; changed files are graded at medium or
+higher and SF001 remains advisory. Each job gets a supported workflow event;
+`mix hypatia.ci_changed --event EVENT` can select another declared event.
+Execution requests act JSON/debug logs and requires non-dry-run `jobResult`
+success for the selected job. Skips, failures and absent receipts cannot count
+as completion. Matrix members observed as skipped or failed invalidate the
+receipt. New/changed checkout configuration, reusable jobs and write-capable
+jobs require hosted validation and cause the local task to refuse a receipt.
+The same blockers apply across the transitive `needs` graph before act can
+run any prerequisite. Composite-action findings retain their actual root
+or nested action path; workflow paths are qualified by their producer.
+For other jobs, act's unchanged checkout simulation is a declared local limit;
+the task does not bind a writable host workspace into the container.
+Changed prerequisites select downstream consumers, and changed local reusable
+contracts select their callers. Removed or repositioned checkouts also require
+hosted validation. Missing or unresolved permissions, conditional steps, tolerated
+failures, custom containers and secret-dependent execution cannot earn a local
+receipt. The runner uses empty input/environment/secret files, an explicitly empty
+GitHub token, an isolated configuration home and a cleared parent environment;
+project `.actrc` files require hosted validation. Docker daemon/context and client
+configuration remain available to act for container transport, without mounting
+the daemon socket into job containers or loading workflow secrets from them.
+The trusted act process can read registry credentials from `DOCKER_CONFIG`
+and endpoint credentials from `DOCKER_CERT_PATH`; preserving the chosen daemon
+connection is a separate trust boundary from credentials inside job containers.
+Selected jobs without checkout, jobs using GitHub expression contexts (including
+repository variables and event/input data), and matrix jobs also require hosted
+validation. A nonempty subset of successful matrix rows cannot certify the
+unobserved members. Static, explicitly read-only jobs with an unchanged checkout
+remain eligible for the bounded local receipt.
+Eligibility also requires `contents: read`, a supported Ubuntu container runner,
+and no opaque/composite actions or direct `GITHUB_EVENT_PATH` consumption.
+These restrictions deliberately
+limit local parity rather than treating simulated success as hosted evidence.
+Hosted CI remains authoritative for platform-specific actions, context,
+unobserved matrix expansion and permissions. A plan or mocked executor test
+is not a hosted execution receipt.
 
 The recipe is not silently installed as a Git hook in this repository or the
 estate. Fleet rollout, canonical workflow-reader migration (#971) and upstream

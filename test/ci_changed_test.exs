@@ -74,21 +74,42 @@ defmodule Hypatia.CiChangedTest do
   end
 
   test "executor preserves exact job argv and propagates failure" do
-    jobs = [%{workflow: ".github/workflows/ci.yml", job: "new-job"}]
+    jobs = [
+      %{workflow: ".github/workflows/ci.yml", job: "new-job", event: "push", local_blocker: nil}
+    ]
 
     runner = fn "act", argv, opts ->
-      assert argv == [
-               "pull_request",
+      assert [
+               "push",
                "-W",
                ".github/workflows/ci.yml",
                "-j",
                "new-job",
-               "--bind",
+               "--json",
+               "--verbose",
+               "--secret-file",
+               empty,
+               "--env-file",
+               empty,
+               "--var-file",
+               empty,
+               "--input-file",
+               empty,
+               "--secret",
+               "GITHUB_TOKEN=",
+               "--container-daemon-socket",
+               "-",
                "--container-options",
                "--cap-drop=ALL"
-             ]
+             ] = argv
 
       assert opts[:cd] == "/repo"
+      assert File.read!(empty) == ""
+      env = Map.new(opts[:env])
+      assert env["GH_TOKEN"] == nil
+      assert env["GITHUB_TOKEN"] == nil
+      assert Path.dirname(empty) == env["HOME"]
+      assert File.dir?(env["HOME"])
       {"real job failed", 1}
     end
 
