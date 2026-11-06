@@ -107,7 +107,7 @@ defmodule Hypatia.CiChangedReceiptTest do
           "steps: [{uses: actions/checkout@v7, with: {fetch-depth: 1}}]"
         ] do
       workflow =
-        "on: push\npermissions: read-all\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    needs: setup\n    steps: [{uses: actions/checkout@v7}]\n  build:\n    needs: middle\n    steps: [{uses: actions/checkout@v7}, {run: echo before}]\n"
+        "on: push\npermissions: read-all\njobs:\n  setup:\n    #{ancestor}\n  middle:\n    runs-on: ubuntu-latest\n    needs: setup\n    steps: [{uses: actions/checkout@v7}]\n  build:\n    runs-on: ubuntu-latest\n    needs: middle\n    steps: [{uses: actions/checkout@v7}, {run: echo before}]\n"
 
       File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
       commit(repo)
@@ -141,6 +141,62 @@ defmodule Hypatia.CiChangedReceiptTest do
 
     findings = CiChanged.scan(repo, ["action.yml"])
     assert Enum.any?(findings, &(&1.type == "RE006" and &1.file == "action.yml"))
+  end
+
+  test "new checkout jobs and unreadable checkouts require hosted validation" do
+    repo = repo()
+    commit(repo)
+
+    workflow =
+      "on: push\npermissions: read-all\njobs: {build: {runs-on: ubuntu-latest, steps: [{uses: actions/checkout@v7}, {run: echo ok}]}}\n"
+
+    File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
+    assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+    assert blocker =~ "checkout"
+
+    for permissions <- ["{}", "{contents: none}"] do
+      File.write!(
+        Path.join(repo, ".github/workflows/ci.yml"),
+        String.replace(workflow, "read-all", permissions)
+      )
+
+      assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+      assert blocker =~ "contents: read"
+    end
+  end
+
+  test "composite actions and direct event-file consumers cannot be locally certified" do
+    repo = repo()
+
+    workflow =
+      "on: push\npermissions: read-all\njobs: {build: {runs-on: ubuntu-latest, steps: [{uses: actions/checkout@v7}, {run: echo before}]}}\n"
+
+    File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
+    commit(repo)
+
+    for {step, expected} <- [
+          {"uses: ./action", "composite"},
+          {"run: cat $GITHUB_EVENT_PATH", "hosted-expression"}
+        ] do
+      File.write!(
+        Path.join(repo, ".github/workflows/ci.yml"),
+        String.replace(workflow, "run: echo before", step)
+      )
+
+      assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+      assert blocker =~ expected
+    end
+
+    File.write!(
+      Path.join(repo, ".github/workflows/ci.yml"),
+      String.replace(workflow, "ubuntu-latest", "self-hosted")
+    )
+
+    commit(repo)
+    File.write!(Path.join(repo, "input.txt"), "changed input\n")
+
+    assert [%{local_blocker: blocker}] = CiChanged.plan(repo, "HEAD").jobs
+    assert blocker =~ "host-native"
   end
 
   test "checkout-less jobs, repository variables and matrices require hosted validation" do
@@ -191,7 +247,7 @@ defmodule Hypatia.CiChangedReceiptTest do
 
     File.write!(
       Path.join(repo, ".github/workflows/caller.yml"),
-      "on: push\npermissions: read-all\njobs: {call: {uses: './.github/workflows/reusable.yml'}, consumer: {needs: call, steps: [{uses: actions/checkout@v7}]}}\n"
+      "on: push\npermissions: read-all\njobs: {call: {uses: './.github/workflows/reusable.yml'}, consumer: {runs-on: ubuntu-latest, needs: call, steps: [{uses: actions/checkout@v7}]}}\n"
     )
 
     commit(repo)

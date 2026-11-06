@@ -189,7 +189,7 @@ defmodule Hypatia.CiChanged do
   end
 
   defp hosted_context?(value) when is_binary(value),
-    do: Regex.match?(~r/\$\{\{/, value)
+    do: Regex.match?(~r/\$\{\{|\bGITHUB_EVENT_PATH\b/, value)
 
   defp hosted_context?(value) when is_map(value),
     do: Enum.any?(value, fn {key, val} -> hosted_context?(key) or hosted_context?(val) end)
@@ -259,6 +259,15 @@ defmodule Hypatia.CiChanged do
                   Enum.all?(Map.values(permissions), &(&1 in ["read", "none"])))) ->
         "unresolved permissions need a hosted receipt"
 
+      is_map(permissions) and permissions["contents"] != "read" ->
+        "checkout needs contents: read or a hosted receipt"
+
+      Enum.any?(Map.get(job, "steps", []), fn step ->
+        is_binary(step["uses"]) and
+            not String.starts_with?(String.downcase(step["uses"]), "actions/checkout@")
+      end) ->
+        "opaque or composite actions need a hosted receipt"
+
       checkout_changed ->
         "changed checkout inputs need a hosted receipt; act skips checkout"
 
@@ -280,6 +289,9 @@ defmodule Hypatia.CiChanged do
 
       checkout_steps(job) == [] ->
         "checkout-less jobs need a hosted receipt; act copies local source"
+
+      job["runs-on"] not in ["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "ubuntu-20.04"] ->
+        "unsupported or host-native runners need a hosted receipt"
 
       true ->
         nil
@@ -407,7 +419,7 @@ defmodule Hypatia.CiChanged do
       )
       |> Map.put(
         "DOCKER_CONFIG",
-        System.get_env("DOCKER_CONFIG") || Path.join(System.user_home!(), ".docker")
+        System.get_env("DOCKER_CONFIG") || Path.join(System.user_home() || scratch, ".docker")
       )
       |> Map.merge(%{
         "HOME" => scratch,
