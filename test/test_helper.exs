@@ -33,6 +33,12 @@ ExUnit.start()
 # need a yaml-test-suite `data` checkout at YAML_TEST_SUITE, which the same job
 # pins. Run with: YAML_TEST_SUITE=... mix test --only yaml_test_suite.
 ExUnit.configure(
-  exclude: [:verisim_data, :kyq_differential, :yaml_test_suite, :baseline_helper],
+  exclude: [
+    :verisim_data,
+    :kyq_differential,
+    :yaml_test_suite,
+    :baseline_helper,
+    :act_integration
+  ],
   seed: 0
 )

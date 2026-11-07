@@ -7,6 +7,20 @@ defmodule Hypatia.CiChanged do
   """
   alias Hypatia.Kyaml
 
+  # Local container execution is not a receipt for a GitHub-hosted runner.
+  # Immutable multi-architecture image digests, resolved 2026-11-07. In
+  # particular, ubuntu-latest means the local 24.04 image in this contract.
+  @runner_images %{
+    "ubuntu-latest" =>
+      "ghcr.io/catthehacker/ubuntu@sha256:62d572b92f9f32d3427b6d220ad1f9dca9c7b6ffad37d295425037dbff78abaf",
+    "ubuntu-24.04" =>
+      "ghcr.io/catthehacker/ubuntu@sha256:62d572b92f9f32d3427b6d220ad1f9dca9c7b6ffad37d295425037dbff78abaf",
+    "ubuntu-22.04" =>
+      "ghcr.io/catthehacker/ubuntu@sha256:f5f5c29208c4fd541704fe7b8df33d3bf620ce4ac46f36853b7abeb0159705c4",
+    "ubuntu-20.04" =>
+      "ghcr.io/catthehacker/ubuntu@sha256:48f10e978f6cc7b4034a6958fe03de2dad322502d4792033457586ba08cbea12"
+  }
+
   @doc "Select changed job semantics and reject dangling or cyclic needs."
   def changed_jobs(before, after_text) do
     old = workflow!(before)
@@ -254,6 +268,16 @@ defmodule Hypatia.CiChanged do
       writes ->
         "write-capable job needs a hosted receipt"
 
+      Map.has_key?(job, "environment") ->
+        "environment protection needs a hosted receipt"
+
+      Map.has_key?(job, "timeout-minutes") ||
+          Enum.any?(Map.get(job, "steps", []), &Map.has_key?(&1, "timeout-minutes")) ->
+        "execution timeouts need a hosted receipt"
+
+      Map.has_key?(new, "concurrency") || Map.has_key?(job, "concurrency") ->
+        "concurrency controls need a hosted receipt"
+
       not (permissions == "read-all" or
                (is_map(permissions) and
                   Enum.all?(Map.values(permissions), &(&1 in ["read", "none"])))) ->
@@ -290,7 +314,7 @@ defmodule Hypatia.CiChanged do
       checkout_steps(job) == [] ->
         "checkout-less jobs need a hosted receipt; act copies local source"
 
-      job["runs-on"] not in ["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "ubuntu-20.04"] ->
+      not Map.has_key?(@runner_images, job["runs-on"]) ->
         "unsupported or host-native runners need a hosted receipt"
 
       true ->
@@ -473,7 +497,10 @@ defmodule Hypatia.CiChanged do
                 "-",
                 "--container-options",
                 "--cap-drop=ALL"
-              ],
+              ] ++
+                (@runner_images
+                 |> Enum.sort()
+                 |> Enum.flat_map(fn {label, image} -> ["--platform", "#{label}=#{image}"] end)),
               cd: repo,
               env: env,
               stderr_to_stdout: true
