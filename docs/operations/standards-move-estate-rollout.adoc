@@ -115,9 +115,14 @@ checks out the current one (#1004).
   run on 2026-11-04 (41769485545) ended in `startup_failure` on
   `13bcc3e`, before the lock repairs on `main`; re-check the next
   scheduled run. Until this is fixed, the stopgap PUT and the census
-  cannot run from CI. After rotating, run one `workflow_dispatch` with
-  `dry_run: true` first. It also confirms the harden-runner egress
-  allow-list added in #974.
+  cannot run from CI. After replacing either secret, run
+  `credential-read-check.yml` to authenticate the scanner and dispatch
+  credentials separately. A remediation-sweep `dry_run: true` now reads
+  `HYPATIA_SCAN_PAT` and skips dispatch; it cannot validate a rotated
+  `HYPATIA_DISPATCH_PAT`. The credential read check proves only the reads
+  named in its summary. Validate the intended write/dispatch operation and
+  its egress policy separately before claiming rotation complete. See
+  xref:credential-roles.adoc[credential roles and validation limits].
 
 | Census of old-owner callers
 | Sweep, after the rotation
