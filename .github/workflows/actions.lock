@@ -38,7 +38,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'github/codeql-action@v4.38.2'
     '.github/workflows/credential-read-check.yml':
-        - 'step-security/harden-runner@v2.22.3'
+        - 'step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
@@ -414,6 +414,11 @@ dependencies:
         commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
         owner_id: 2242
         repo_id: 204253808
+    'step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43':
+        ref: 'v2.22.3'
+        commit: 'sha1-46b06cea07f9e64621fdf066ba77ac6915163d43'
+        owner_id: 88700172
+        repo_id: 422287306
     'step-security/harden-runner@v2.22.3':
         ref: 'v2.22.3'
         commit: 'sha1-46b06cea07f9e64621fdf066ba77ac6915163d43'
