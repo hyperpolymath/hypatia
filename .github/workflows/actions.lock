@@ -37,6 +37,8 @@ workflows:
     '.github/workflows/codeql.yml':
         - 'actions/checkout@v7.0.1'
         - 'github/codeql-action@v4.38.2'
+    '.github/workflows/credential-read-check.yml':
+        - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/dependabot-automerge.yml':
         - 'dependabot/fetch-metadata@v3.1.0'
     '.github/workflows/dogfood-gate.yml':
