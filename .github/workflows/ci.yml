@@ -381,7 +381,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/hypatia-act"
           cd "$RUNNER_TEMP/hypatia-act"
-          curl --fail --location --silent --show-error \
+          curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
             https://github.com/nektos/act/releases/download/v0.2.97/act_Linux_x86_64.tar.gz \
             --output act.tar.gz
           echo '67b4976a56f33ea7870b798912e738ec44eef38e7578ae7b532f2def1c73a5ad  act.tar.gz' | sha256sum --check --strict
