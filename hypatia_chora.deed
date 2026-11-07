@@ -78,10 +78,24 @@
     (job
       :workflow ".github/workflows/hypatia-remediation-sweep.yml"
       :job "sweep"
-      :secrets ("HYPATIA_DISPATCH_PAT")
+      :secrets ("HYPATIA_SCAN_PAT" "HYPATIA_DISPATCH_PAT")
       :endpoints ("api.github.com:443" "results-receiver.actions.githubusercontent.com:443" "*.blob.core.windows.net:443")
       :enforcement harden-runner-block
-      :reason "Queries vulnerability alerts and sends repository dispatches through the GitHub API, then uploads the target list as an artifact.")
+      :reason "Reads vulnerability alerts with the read-only scanner credential, sends repository dispatches with the separate dispatch credential, then uploads the target list as an artifact.")
+    (job
+      :workflow ".github/workflows/credential-read-check.yml"
+      :job "scanner"
+      :secrets ("HYPATIA_SCAN_PAT")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks token identity and reads one repository's Dependabot alert endpoint without checking out code or printing API bodies.")
+    (job
+      :workflow ".github/workflows/credential-read-check.yml"
+      :job "dispatch"
+      :secrets ("HYPATIA_DISPATCH_PAT")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks token identity and reads the observation-store main ref; does not validate dispatch or write permissions.")
     (job
       :workflow ".github/workflows/inbox-steward-intake.yml"
       :job "record-report"
