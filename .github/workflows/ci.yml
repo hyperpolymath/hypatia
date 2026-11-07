@@ -365,7 +365,7 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: metadatastician/standards
-          ref: a797d308c0517d4e2d21cc7f1cb08d41f82b1a12
+          ref: 7641c7fdb01420696b5420ab85d88f599f32f609
           path: .standards
           sparse-checkout: scripts/apply-baseline.sh
           sparse-checkout-cone-mode: false

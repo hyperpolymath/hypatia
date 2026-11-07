@@ -116,7 +116,7 @@ The scan retains directory-scoped absence findings when a changed file is
 below that directory. It applies the canonical governance baseline helper
 before grading, including expiry checks, acknowledgements and overrides. Set
 `HYPATIA_BASELINE_HELPER` to `scripts/apply-baseline.sh` from the same standards
-revision as `governance.yml` (`a797d308c0517d4e2d21cc7f1cb08d41f82b1a12` here),
+revision as `governance.yml` (`7641c7fdb01420696b5420ab85d88f599f32f609` here),
 or provision it under `.standards/scripts/`. A missing helper with an active
 baseline is an error. CI fetches that exact helper and explicitly includes its
 integration test; other test runs exclude the provisioned-helper tag.

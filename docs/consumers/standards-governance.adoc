@@ -129,10 +129,27 @@ the verified official recovery runner for the exact updated subject,
 and the resulting hosted checks must pass before this consumer is
 called qualified.
 
+== Reviewer coverage adoption (2026-11-07)
+
+All five callers, the CI baseline helper and the security-policy baseline
+checkout now use `7641c7fdb01420696b5420ab85d88f599f32f609`, the published
+standards #1418 correction. This supersedes the earlier #1394 consumer pin
+without erasing its historical validation evidence. The same-repository
+governance reusable stages policy from its own `job.workflow_sha`; this
+repository has no separate fork-governance caller or `canon-ref` override.
+
+At that exact standards revision, fresh local validation passed 32 coverage
+controls, 40 renderer controls, and both governance-reusable and scanner-ref
+contracts. The official `gh actions-lock` v0.2.0 and the canonical repair chain
+(`relock-sha-keys`, `complete-job-refs`, `close-lock`, `prune-stale`) regenerated
+the lock. Canonical verification and the remote integration check passed.
+This establishes a reviewable consumer change; actual hosted summaries still
+need to run on this revision before adoption is called deployed.
+
 == The published integration (what consumers copy)
 
 `metadatastician/standards` at commit
-`a797d308c0517d4e2d21cc7f1cb08d41f82b1a12` (standards `main` at the
+`7641c7fdb01420696b5420ab85d88f599f32f609` (published standards #1418 at the
 qualified rollout; the commit, not the branch, is the contract). Its
 reusables carry their own contract tests upstream
 (`scripts/tests/governance-reusable-contract-test.sh`,
@@ -153,7 +170,7 @@ the examples below are not a universal permission block.
 ----
 jobs:
   governance:
-    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12
+    uses: metadatastician/standards/.github/workflows/governance-reusable.yml@7641c7fdb01420696b5420ab85d88f599f32f609
     with:
       # Scanner source: base commit on PRs, event commit otherwise.
       # Never the PR head — a PR must not weaken the rules gating it.
@@ -163,7 +180,7 @@ jobs:
       contents: read
       security-events: write
   hypatia:
-    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@a797d308c0517d4e2d21cc7f1cb08d41f82b1a12
+    uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@7641c7fdb01420696b5420ab85d88f599f32f609
     with:
       hypatia-ref: ${{ github.event.pull_request.base.sha || github.sha }}
     secrets:   # only the declared secret; never `secrets: inherit`
