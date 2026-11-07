@@ -100,8 +100,10 @@ defmodule Hypatia.CiChangedTest do
                "--container-daemon-socket",
                "-",
                "--container-options",
-               "--cap-drop=ALL"
+               "--cap-drop=ALL" | platforms
              ] = argv
+
+      assert ["--platform", _ | _] = platforms
 
       assert opts[:cd] == "/repo"
       assert File.read!(empty) == ""

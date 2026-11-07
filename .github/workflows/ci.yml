@@ -376,6 +376,21 @@ jobs:
           HYPATIA_BASELINE_HELPER: .standards/scripts/apply-baseline.sh
         run: mix test --no-start --include baseline_helper test/ci_changed_test.exs test/ci_changed_receipt_test.exs test/kyaml_spec_mutation_test.exs test/structured_format_test.exs
 
+      - name: Install checksum-pinned act for real execution regression
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hypatia-act"
+          cd "$RUNNER_TEMP/hypatia-act"
+          curl --fail --location --silent --show-error \
+            https://github.com/nektos/act/releases/download/v0.2.97/act_Linux_x86_64.tar.gz \
+            --output act.tar.gz
+          echo '67b4976a56f33ea7870b798912e738ec44eef38e7578ae7b532f2def1c73a5ad  act.tar.gz' | sha256sum --check --strict
+          tar -xzf act.tar.gz act
+          echo "$RUNNER_TEMP/hypatia-act" >> "$GITHUB_PATH"
+
+      - name: Real noninteractive changed-job execution (1009)
+        run: mix test --no-start test/ci_changed_act_test.exs --only act_integration
+
       # ADR-001 retirement guard: Hypatia rules are pure Elixir
       # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source
       # or a Logtalk output/loader setting re-enters the tree outside

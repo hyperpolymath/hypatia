@@ -89,6 +89,32 @@ Orchestrate 42201913539 failed. This is not a claim all main workflows pass.
 
 == Local use and limits
 
+=== Bounded local receipt contract (2026-11-07 follow-up)
+
+A `completed` receipt establishes that act observed successful, non-dry-run
+execution of the selected job's steps against the local source snapshot in
+the explicitly mapped container. It is not hosted Actions parity, environment
+approval, runner-image parity, a wall-clock guarantee, or evidence of a merge.
+Jobs declaring environments, job/step timeouts, or workflow/job concurrency
+require hosted receipts. These restrictions propagate through every transitive
+prerequisite, as do the existing credential, permission, checkout and expression
+restrictions. Declaration presence is enough to block; malformed or empty values
+are not treated as permission to simulate these semantics.
+
+Every accepted runner label has an explicit `--platform` argument using an
+immutable image digest from `ghcr.io/catthehacker/ubuntu`. The pinned local
+images correspond to Ubuntu 20.04, 22.04 and 24.04; `ubuntu-latest` maps to
+the pinned local 24.04 image, not a promise about GitHub's moving default.
+The isolated act configuration therefore needs no interactive image survey.
+Changing these pins requires a new real-run receipt. The opt-in
+`test/ci_changed_act_test.exs` executes changed shell input through real act
+with noninteractive stdin and checks both a successful job and a failing job.
+Run it with `mix test test/ci_changed_act_test.exs --only act_integration`
+after provisioning act and a container daemon. Unit tests with an injected
+runner do not satisfy this integration requirement.
+
+=== Selection, scanning and isolation
+
 The newly exposed standing SF001 inventory contains 15 advisory candidates
 in five existing rule files. The baseline retains them as visible advisory
 debt, with five exact-path entries tied to #971 and expiry 2027-02-04.
