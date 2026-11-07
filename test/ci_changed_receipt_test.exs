@@ -131,6 +131,101 @@ defmodule Hypatia.CiChangedReceiptTest do
     end
   end
 
+  test "hosted scheduling and deadlines block both direct jobs and transitive consumers" do
+    repo = repo()
+
+    for {global, job_fields, step_fields, expected} <- [
+          {"", "environment: production", "", "environment"},
+          {"", "environment: {name: production}", "", "environment"},
+          {"", "timeout-minutes: 1", "", "timeouts"},
+          {"", "", ", timeout-minutes: 1", "timeouts"},
+          {"", "concurrency: {group: deploy, cancel-in-progress: true}", "", "concurrency"},
+          {"concurrency: deploy\n", "", "", "concurrency"}
+        ] do
+      workflow = """
+      on: push
+      permissions: read-all
+      #{global}jobs:
+        setup:
+          runs-on: ubuntu-24.04
+          #{job_fields}
+          steps: [{uses: actions/checkout@v7}, {run: echo setup#{step_fields}}]
+        middle:
+          runs-on: ubuntu-24.04
+          needs: setup
+          steps: [{uses: actions/checkout@v7}, {run: echo middle}]
+        build:
+          runs-on: ubuntu-24.04
+          needs: middle
+          steps: [{uses: actions/checkout@v7}, {run: echo build}]
+      """
+
+      File.write!(Path.join(repo, ".github/workflows/ci.yml"), workflow)
+      commit(repo)
+      File.write!(Path.join(repo, "input.txt"), expected)
+      jobs = CiChanged.plan(repo, "HEAD").jobs
+      assert length(jobs) == 3
+      assert Enum.all?(jobs, &String.contains?(&1.local_blocker, expected))
+
+      if global == "" do
+        assert Enum.find(jobs, &(&1.job == "build")).local_blocker =~ "prerequisite setup"
+      end
+
+      assert Enum.all?(
+               CiChanged.execute_jobs(repo, jobs, fn _, _, _ -> flunk("hosted-only job ran") end),
+               &(&1.outcome == :requires_hosted_receipt)
+             )
+
+      File.rm!(Path.join(repo, "input.txt"))
+    end
+  end
+
+  test "every accepted runner has an explicit immutable noninteractive platform mapping" do
+    repo = repo()
+
+    for label <- ["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "ubuntu-20.04"] do
+      File.write!(Path.join(repo, ".github/workflows/ci.yml"), """
+      on: push
+      permissions: read-all
+      jobs:
+        build:
+          runs-on: #{label}
+          steps: [{uses: actions/checkout@v7}, {run: echo ok}]
+      """)
+
+      commit(repo)
+      File.write!(Path.join(repo, "input.txt"), label)
+      assert [%{local_blocker: nil}] = jobs = CiChanged.plan(repo, "HEAD").jobs
+
+      assert [%{outcome: :completed}] =
+               CiChanged.execute_jobs(repo, jobs, fn "act", args, options ->
+                 mappings =
+                   for ["--platform", mapping] <- Enum.chunk_every(args, 2, 1, :discard),
+                       do: mapping
+
+                 assert length(mappings) == 4
+
+                 assert Enum.any?(
+                          mappings,
+                          &String.starts_with?(
+                            &1,
+                            label <> "=ghcr.io/catthehacker/ubuntu@sha256:"
+                          )
+                        )
+
+                 assert Enum.all?(mappings, &Regex.match?(~r/@sha256:[0-9a-f]{64}$/, &1))
+
+                 isolated_home =
+                   options |> Keyword.fetch!(:env) |> Map.new() |> Map.fetch!("HOME")
+
+                 assert File.ls!(isolated_home) == ["empty"]
+                 {row("success"), 0}
+               end)
+
+      File.rm!(Path.join(repo, "input.txt"))
+    end
+  end
+
   test "root composite action findings retain their actual path" do
     repo = repo()
 
