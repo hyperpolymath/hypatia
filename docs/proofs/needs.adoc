@@ -22,7 +22,10 @@ only `+OutcomeLog.agda+` (see `+verification/PROOF-STATUS.adoc+`,
 file.
 * All of the above is gated by `+.github/workflows/verify-proofs.yml+`.
 
-=== Completed Proofs
+=== Completed Proofs and Tested Models
+
+Each row is a kernel-checked proof except H8, which is a bounded TLC
+model check: `+TESTED+`, not `+PROVEN+` (PROOF-POLICY §4).
 
 [width="100%",cols="24%,30%,46%",options="header",]
 |===
@@ -50,7 +53,8 @@ timestamp monotonicity — runtime assertion + echidnabot audit |H6
 monotone in successes/failures, zero-obs identity |H7 ✅
 
 |`+verification/proofs/tlaplus/KinGate.tla+` |Kin-gate atomicity /
-mutual exclusion (TLC: 1.78M states, no errors) |H8 ✅
+mutual exclusion (TLC: 3 bots × 2 repos × 4 requests, 1.78M states, no
+errors) |H8 `+TESTED+` (bounded model check, not a proof)
 
 |`+verification/proofs/idris2/NeuralConsensus.idr+` |Uniform-mean
 aggregation in [0,1], bounded below by n·min |H9 ✅
@@ -99,5 +103,6 @@ as `+TESTED+`).
 
 === Priority
 
-*MEDIUM* — H1–H9 are complete (H6 as a runtime assertion). The remaining
+*MEDIUM* — H1–H5, H7 and H9 are proved, H6 is a runtime assertion and H8
+is `+TESTED+` by a bounded model check. The remaining
 work is the two neural-convergence theorems, T-RC and T-PR.
