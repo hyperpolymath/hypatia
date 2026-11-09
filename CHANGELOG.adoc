@@ -30,6 +30,7 @@ sequence is read (its harden-runner step counts), and a step opened by `-` and
 a comment keeps its `run:`. WH014 reads each job's steps through the same
 reader. On the hypatia, echidna and standards trees, WH013, WH014 and RE001
 report exactly what they did before.
+
 ==== One parsed workflow model; RE001 and RE002 read it (#971) (2026-11-09)
 
 `Hypatia.Workflow` is #971's model: each workflow is parsed once by
