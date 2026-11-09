@@ -277,6 +277,119 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    # An inline `on:` list may continue past its first line. Only whole-line
+    # comments are dropped before the rule reads it, so a continuation line
+    # can still carry a trailing comment.
+    test "an untrusted-input trigger on a continuation line of the `on:` list is an exposure" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push,
+          issue_comment]  # replies to [bot] mentions
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert exposure =~ "issue_comment"
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: an event named in a comment on a continuation line is not a trigger" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push,
+          workflow_dispatch]  # was pull_request_target until #12
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./sync.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: an open bracket in a continuation comment does not swallow the workflow" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push,
+          workflow_dispatch]  # see [ops notes
+        jobs:
+          sync:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./issue_comment.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: []}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      File.rm_rf!(repo)
+    end
+
+    test "decoy: a bracket inside a quoted scalar of an `on:` map does not hide its events" do
+      repo =
+        create_repo_with_workflow("""
+        on: {push: {tags: ["v1.0]"]}, issue_comment: {types: [created]}}
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert exposure =~ "issue_comment"
+      File.rm_rf!(repo)
+    end
+
+    test "a quoted scalar spanning lines keeps its quotes: a ` #` inside it is not a comment" do
+      repo =
+        create_repo_with_workflow("""
+        on: {workflow_dispatch: {inputs: {why: {description: "first line
+          foo #hi"}}}, issue_comment: {}}
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert exposure =~ "issue_comment"
+      File.rm_rf!(repo)
+    end
+
+    test "an apostrophe inside a plain scalar does not open a quote" do
+      repo =
+        create_repo_with_workflow("""
+        on: {workflow_dispatch: {inputs: {why: {description: Say 'hi}}}, issue_comment: {}}
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert exposure =~ "issue_comment"
+      File.rm_rf!(repo)
+    end
+
     test "decoy: `issues:` under top-level permissions is not an issues trigger" do
       repo =
         create_repo_with_workflow("""
