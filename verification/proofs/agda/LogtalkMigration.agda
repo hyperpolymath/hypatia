@@ -25,9 +25,13 @@
 --     docs/rules/logtalk-migration.adoc. Elixir runtime behaviour is
 --     pinned by ExUnit tests, not by this file.
 --
--- Intended Mathesis grade: Grade 3 target. It becomes Grade 3 only when
--- the strict command in verification/PROOF-STATUS.adoc has a recorded
--- successful receipt; until then its status is AGDA-PENDING.
+-- Status and grade (standards PROOF-POLICY §5 and §8): the target is
+-- `PROVEN`, `PWG-3`, which holds only while the strict command in
+-- verification/PROOF-STATUS.adoc has a recorded successful receipt. The
+-- current status and the receipt are recorded there, not here. The grade
+-- covers this finite model only: there is no Rocq or Lean leg, so no
+-- recheck correspondence state (§2.2) applies, and no runtime-refinement
+-- claim is made.
 -- No postulates, no unsafe options, no standard-library dependency.
 
 module LogtalkMigration where
