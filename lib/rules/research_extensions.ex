@@ -461,7 +461,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
         hardened?: harden_step != nil,
         harden_policy: harden_step && harden_runner_policy(harden_step),
         allowed_endpoints: harden_step && harden_runner_allowed(harden_step),
-        named_hosts: Enum.flat_map(steps, &named_hosts/1),
+        # A literal endpoint in the job's or the workflow's `env:` reaches every
+        # step (`$UPLOAD_URL`), so it is named as surely as one in a step.
+        named_hosts:
+          Enum.flat_map([workflow.env, job.env | Enum.map(steps, & &1.node)], &named_hosts/1),
         exposures: re001_exposures(steps, job_untrusted_events),
         shared?: shared_line != nil
       }
@@ -771,8 +774,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   }
 
   # The hosts outside GitHub one step names literally, as {host, port, line}.
-  defp named_hosts(step) do
-    for {text, line_of} <- Workflow.strings(step.node),
+  defp named_hosts(node) do
+    for {text, line_of} <- Workflow.strings(node),
         {host, port, at} <- url_hosts(text) ++ scp_hosts(text),
         not in_shell_comment?(text, at),
         host = String.downcase(host),

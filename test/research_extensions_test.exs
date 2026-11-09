@@ -2153,6 +2153,37 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert finding.reason =~ ~s|"up.example.com:443"|
       refute finding.reason =~ "c.example.org"
     end
+
+    test "a host in the job's or the workflow's env is named by every step" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          env:
+            MIRROR: git@mirror.example.org:o/x.git
+          jobs:
+            ship:
+              runs-on: ubuntu-latest
+              env:
+                UPLOAD_URL: https://upload.example.com/v1
+              steps:
+                - run: |
+                  curl -H "t: ${{ secrets.TOKEN }}" "$UPLOAD_URL" && git push "$MIRROR"
+          """,
+          "ship.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+          ~s|:secrets ("TOKEN") :endpoints () :enforcement none))|
+      )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ~s|"upload.example.com:443"|
+      assert finding.reason =~ ~s|"mirror.example.org:22"|
+      File.rm_rf!(repo)
+    end
   end
 
   # What is read through an alias is reported at the alias (the old line
