@@ -598,14 +598,19 @@ defmodule Hypatia.Kyaml do
   # `seq_at` is the indentation of the mapping whose value this is, when a
   # block sequence may sit at that same indentation (YAML 1.2 compact
   # sequence under a mapping key); otherwise nil.
-  defp parse_block(s, indent, path, line_indent \\ nil, seq_at \\ nil) do
+  #
+  # `floor` is the indentation of the block node that holds this one: a flow
+  # collection's lines and a block scalar's content are indented past it
+  # (YAML 1.2 s-flow-line-prefix, s-indent). It defaults to `line_indent`.
+  defp parse_block(s, indent, path, line_indent \\ nil, seq_at \\ nil, floor \\ nil) do
     line_indent = line_indent || indent
+    floor = floor || line_indent
 
     cond do
       eof?(s) -> {null_node(loc(s)), s}
       seq_entry?(s) -> parse_seq(s, indent, path)
       map_entry?(s) -> parse_map(s, indent, path)
-      true -> parse_inline_node(s, indent, path, :root, line_indent, {nil, nil}, seq_at)
+      true -> parse_inline_node(s, indent, path, :root, line_indent, {nil, nil}, seq_at, floor)
     end
   end
 
@@ -839,7 +844,9 @@ defmodule Hypatia.Kyaml do
 
       s.col - 1 > parent_indent ->
         seq_at = if allow_same_indent_seq, do: parent_indent, else: nil
-        parse_block(s, s.col - 1, path, nil, seq_at)
+        # A value on the following line is measured from its parent, not from
+        # its own column, as it would be on the key's line.
+        parse_block(s, s.col - 1, path, nil, seq_at, parent_indent)
 
       allow_same_indent_seq and s.col - 1 == parent_indent and seq_entry?(s) ->
         parse_seq(s, parent_indent, path)
@@ -907,16 +914,18 @@ defmodule Hypatia.Kyaml do
          context,
          line_indent,
          props \\ {nil, nil},
-         seq_at \\ nil
+         seq_at \\ nil,
+         floor \\ nil
        ) do
+    floor = floor || line_indent
     at = loc(s)
     {anchor0, tag0} = props
     {anchor, tag, s} = node_properties(s, at, anchor0, tag0, &skip_blanks/1)
-    bounds = {indent, line_indent, seq_at}
+    bounds = {indent, line_indent, seq_at, floor}
 
     case continued_properties(s, at, anchor, tag, context, bounds) do
       {:continue, s} ->
-        parse_inline_node(s, indent, path, context, line_indent, {anchor, tag}, seq_at)
+        parse_inline_node(s, indent, path, context, line_indent, {anchor, tag}, seq_at, floor)
 
       :none ->
         parse_inline_content(s, at, anchor, tag, path, context, bounds)
@@ -932,7 +941,7 @@ defmodule Hypatia.Kyaml do
   # it carries the anchor or tag as surely as `a: &b *c` does, and is
   # refused the same way. Left alone it would register `b` as an alias of
   # `c`, and chains of such aliases cost the node budget nothing per link.
-  defp continued_properties(s, at, anchor, tag, context, {indent, _, _} = bounds) do
+  defp continued_properties(s, at, anchor, tag, context, {indent, _, _, _} = bounds) do
     if (anchor != nil or tag != nil) and (eof?(s) or peek(s) in [?\n, ?#]) do
       next = skip_gap(s)
 
@@ -960,13 +969,13 @@ defmodule Hypatia.Kyaml do
   # root `line_indent` is -1, so every line belongs to the node. A sequence
   # entry at `seq_at` is the node's own compact sequence (`k:` then `  &a`
   # then `- x`, yaml-test-suite SKE5).
-  defp enclosing_line?(s, {indent, line_indent, seq_at}) do
+  defp enclosing_line?(s, {indent, line_indent, seq_at, _floor}) do
     s.col - 1 < indent and s.col - 1 <= line_indent and
       not (seq_at == s.col - 1 and seq_entry?(s))
   end
 
   defp parse_inline_content(s, at, anchor, tag, path, context, bounds) do
-    {indent, line_indent, _} = bounds
+    {indent, _line_indent, _, floor} = bounds
 
     if peek(s) == ?* do
       if anchor != nil or tag != nil,
@@ -991,14 +1000,14 @@ defmodule Hypatia.Kyaml do
               parse_nested_value(s, indent, context == :map_value, path)
             end
 
-          # Content must be indented past the line that carries the indicator.
+          # Content must be indented past the block node holding the scalar.
           peek(s) in [?|, ?>] ->
-            parse_block_scalar(s, line_indent, at)
+            parse_block_scalar(s, floor, at)
 
           # Each line of a flow collection must be indented past the block
           # node that holds it (YAML 1.2 s-flow-line-prefix).
           peek(s) in [?{, ?[] ->
-            {node, s} = parse_flow_node(%{s | flow_min: line_indent + 1}, path)
+            {node, s} = parse_flow_node(%{s | flow_min: floor + 1}, path)
             {node, expect_end_of_line(%{s | flow_min: nil})}
 
           peek(s) in [?', ?"] ->
@@ -1209,9 +1218,11 @@ defmodule Hypatia.Kyaml do
 
   defp scalar_from_raw(raw, at, style) do
     # A plain scalar may not start with an indicator (YAML 1.2 ns-plain-first):
-    # `@`, `` ` `` and `%` ever, and `-`, `?` or `:` unless a safe character
-    # follows, so `a: - item` is not the string "- item" (`-1` and `-x` are
-    # plain scalars).
+    # `@`, `` ` ``, `%`, `[`, `{`, `|`, `>`, `,`, `]` and `}` ever, and `-`,
+    # `?` or `:` unless a safe character follows, so `a: - item` is not the
+    # string "- item" (`-1` and `-x` are plain scalars). A later mapping key
+    # such as `[b]` or `|b` reaches here as text, and YAML does not read it
+    # as that string.
     if plain_indicator_start?(raw),
       do:
         throw_error(
@@ -1225,7 +1236,9 @@ defmodule Hypatia.Kyaml do
     %{kind: kind, value: value, raw: raw, loc: at, style: style, segments: []}
   end
 
-  defp plain_indicator_start?(<<c, _::binary>>) when c in [?@, ?`, ?%, ?,, ?], ?}], do: true
+  defp plain_indicator_start?(<<c, _::binary>>)
+       when c in [?@, ?`, ?%, ?,, ?[, ?], ?{, ?}, ?|, ?>],
+       do: true
 
   defp plain_indicator_start?(<<c, rest::binary>>) when c in [?-, ??, ?:],
     do: rest == "" or String.first(rest) in [" ", "\t"]

@@ -215,6 +215,17 @@ defmodule Hypatia.KyamlTest do
       {"alias-tagged-next-line", "a: &a x\nb: !!str\n  *a\n",
        {:error, "ALIAS_DECORATED", 2, 4, ""}},
       {"root-alias-decorated-next-line", "&b\n*a\n", {:error, "ALIAS_DECORATED", 1, 1, ""}},
+      # A flow collection or block scalar on the line after its key is
+      # measured from the key's block, not from its own column.
+      {"next-line-flow-continues-at-own-column", "a:\n  [x,\n  y]\n",
+       {:ok, %{"a" => ["x", "y"]}}},
+      {"next-line-flow-under-parent-refused", "a:\n  [x,\ny]\n",
+       {:error, "BAD_INDENT", 3, 1, ""}},
+      {"next-line-block-scalar-at-own-column", "a:\n  |\n  x\n", {:ok, %{"a" => "x\n"}}},
+      # ns-plain-first: a later key starting with an indicator is not that string.
+      {"indicator-flow-key-refused", "a: 1\n[b]: 2\n", {:error, "PLAIN_INDICATOR", 2, 1, ""}},
+      {"indicator-block-key-refused", "a: 1\n|b: 1\n", {:error, "PLAIN_INDICATOR", 2, 1, ""}},
+      {"indicator-in-flow-refused", "x: [>a]\n", {:error, "PLAIN_INDICATOR", 1, 5, ""}},
       {"bare-anchor-then-sibling-alias", "a: &a x\nb: &b\nc: *a\n",
        {:ok, %{"a" => "x", "b" => nil, "c" => "x"}}},
       # The printable set (YAML 1.2 c-printable) is checked over the whole
