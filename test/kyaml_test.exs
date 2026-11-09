@@ -207,6 +207,16 @@ defmodule Hypatia.KyamlTest do
       {"anchored-first-key-refused", "&k a: 1\n", {:error, "KEY_PROPERTY", 1, 1, ""}},
       {"flow-tagged-key-refused", "x: {!!str a: 1}\n", {:error, "KEY_PROPERTY", 1, 5, ""}},
       {"flow-alias-decorated", "a: &a 1\nb: [!!int *a]\n", {:error, "ALIAS_DECORATED", 2, 5, ""}},
+      # A bare property's value on the next line is the node itself: an alias
+      # there carries the property as surely as on the same line, and would
+      # otherwise chain aliases past the node budget's per-step count.
+      {"alias-decorated-next-line", "a: &a [x]\nb: &b\n  *a\n",
+       {:error, "ALIAS_DECORATED", 2, 4, ""}},
+      {"alias-tagged-next-line", "a: &a x\nb: !!str\n  *a\n",
+       {:error, "ALIAS_DECORATED", 2, 4, ""}},
+      {"root-alias-decorated-next-line", "&b\n*a\n", {:error, "ALIAS_DECORATED", 1, 1, ""}},
+      {"bare-anchor-then-sibling-alias", "a: &a x\nb: &b\nc: *a\n",
+       {:ok, %{"a" => "x", "b" => nil, "c" => "x"}}},
       # The printable set (YAML 1.2 c-printable) is checked over the whole
       # stream, so the error stands at the character, wherever it is.
       {"control-character-in-plain", "a: x\u0001y\n", {:error, "CONTROL_CHARACTER", 1, 5, ""}},

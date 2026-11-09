@@ -914,7 +914,7 @@ defmodule Hypatia.Kyaml do
     {anchor, tag, s} = node_properties(s, at, anchor0, tag0, &skip_blanks/1)
     bounds = {indent, line_indent, seq_at}
 
-    case continued_properties(s, anchor, tag, context, bounds) do
+    case continued_properties(s, at, anchor, tag, context, bounds) do
       {:continue, s} ->
         parse_inline_node(s, indent, path, context, line_indent, {anchor, tag}, seq_at)
 
@@ -927,16 +927,26 @@ defmodule Hypatia.Kyaml do
   # properties on the next line (`a: &x` then `  !!str v`): they are the same
   # node's, so they go through the same one-anchor, one-tag check rather than
   # starting a fresh node that the outer properties would then overwrite.
-  defp continued_properties(s, anchor, tag, context, {indent, _, _} = bounds) do
+  #
+  # An alias on that next line is the node itself (`a: &b` then `  *c`), so
+  # it carries the anchor or tag as surely as `a: &b *c` does, and is
+  # refused the same way. Left alone it would register `b` as an alias of
+  # `c`, and chains of such aliases cost the node budget nothing per link.
+  defp continued_properties(s, at, anchor, tag, context, {indent, _, _} = bounds) do
     if (anchor != nil or tag != nil) and (eof?(s) or peek(s) in [?\n, ?#]) do
       next = skip_gap(s)
 
       inside? =
-        if context == :root,
-          do: not enclosing_line?(next, bounds),
-          else: next.col - 1 > indent
+        not eof?(next) and
+          if(context == :root,
+            do: not enclosing_line?(next, bounds),
+            else: next.col - 1 > indent
+          )
 
-      if not eof?(next) and peek(next) in [?&, ?!] and not property_key?(next) and inside?,
+      if inside? and peek(next) == ?*,
+        do: throw_error("ALIAS_DECORATED", "an alias may not carry an anchor or a tag", at)
+
+      if inside? and peek(next) in [?&, ?!] and not property_key?(next),
         do: {:continue, next},
         else: :none
     else
