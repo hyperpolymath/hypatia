@@ -84,7 +84,7 @@ link:lib/fleet_dispatcher.ex[] line 267.
 
 Caveat::
 That recipe quarantine is not `Hypatia.Safety.Quarantine`, which nothing
-calls (<<known-gaps>>). The Lean model of the update uses natural-number
+calls (<<known-gaps>>). The Idris2 model of the update uses natural-number
 pseudo-counts, not Elixir floats.
 
 === Machine-checked proofs
@@ -92,20 +92,22 @@ pseudo-counts, not Elixir floats.
 [quote, README.adoc]
 ____
 *Machine-checked proofs* — Idris2 proofs of the ABI and the decision logic (confidence bounds,
-  safety-triangle routing, dispatch thresholds, quarantine, rollback), Lean 4 proofs of the Bayesian
-  update and rate-limiting properties, one Agda model of the Logtalk-to-Elixir migration, and a TLA+
+  safety-triangle routing, dispatch thresholds, quarantine, rollback, the Bayesian update and rate
+  limiting), one Agda model of the Logtalk-to-Elixir migration, and a TLA+
   model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
-  the code, not the Elixir runtime itself. Proof ledger: 18 proven of 42; 4 proven-with-postulates,
+  the code, not the Elixir runtime itself. Proof ledger: 22 proven of 42; 0 proven-with-postulates,
   11 tested-only, 2 argued, 7 open
 ____
 
 How this is implemented::
 See <<proof-ledger>>. link:.github/workflows/verify-proofs.yml[] runs
-`idris2 --check` per proof file, `idris2 --build` of both ipkgs, `lake
-build`, Agda in its strict profile and TLC.
+`idris2 --check` per proof file, `idris2 --build` of both ipkgs, Agda in
+its strict profile and TLC; Lean runs only for the HYP-01 control.
 
 Caveat::
-Four of the five Lean rows rest on `propext` (two also on `Quot.sound`).
+The Bayesian-update, rate-limiting, parser and neural-precondition proofs moved
+from Lean to Idris2 on 2026-11-09, which removed the Lean kernel axioms
+(`propext`, `Quot.sound`) four of them rested on.
 The TLA+ row is `tested-only`: one bounded instance. The modelled rate
 limiter is not called by any dispatch path. The census matches the ledger.
 
@@ -268,7 +270,7 @@ workflow (debt register T-1).
 | `lib/outcome_tracker.ex` | Beta update; re-scan with `panic-attack assail`
 | `lib/application.ex` | What is supervised
 | `.github/workflows/zig.yml` | FFI tests run; exactly 18 `hypatia_*` exports
-| `.github/workflows/verify-proofs.yml` | Idris2, Lean, Agda and TLC in CI
+| `.github/workflows/verify-proofs.yml` | Idris2, Agda and TLC in CI; Lean for the HYP-01 control
 | `docs/DEBT-REGISTER.adoc` | What is broken, ungated or stale
 |===
 
@@ -284,7 +286,7 @@ Census, from `scripts/proof-ledger.sh check`:
 
 [source,text]
 ----
-18 proven of 42; 4 proven-with-postulates, 11 tested-only, 2 argued, 7 open.
+22 proven of 42; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open.
 ----
 
 Of the three theory rows, `logtalk-migration` is `PWG-3`;

@@ -25,10 +25,10 @@ It combines:
 * *Bayesian confidence* — every recipe carries a Beta-distributed confidence updated from real
   outcomes, which gates whether a fix is applied automatically, proposed as a PR, or merely reported
 * *Machine-checked proofs* — Idris2 proofs of the ABI and the decision logic (confidence bounds,
-  safety-triangle routing, dispatch thresholds, quarantine, rollback), Lean 4 proofs of the Bayesian
-  update and rate-limiting properties, one Agda model of the Logtalk-to-Elixir migration, and a TLA+
+  safety-triangle routing, dispatch thresholds, quarantine, rollback, the Bayesian update and rate
+  limiting), one Agda model of the Logtalk-to-Elixir migration, and a TLA+
   model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
-  the code, not the Elixir runtime itself. Proof ledger: 18 proven of 42; 4 proven-with-postulates,
+  the code, not the Elixir runtime itself. Proof ledger: 22 proven of 42; 0 proven-with-postulates,
   11 tested-only, 2 argued, 7 open (link:EXPLAINME.adoc#proof-ledger[details])
 
 === Core philosophy
@@ -80,7 +80,7 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 | `src/Hypatia/ABI/` | Idris2 ABI — Types, GraphQL, gRPC, REST, FFI, RuleEngine
 | `ffi/zig/` | Zig C ABI bridge — 18 exports + 16 protocol connectors
 | `adapters/ cli/ data/ fixer/ integration/` | Rust workspace
-| `verification/` | Proof ledger and proofs: Idris2, Lean 4, Agda, TLA+
+| `verification/` | Proof ledger and proofs: Idris2, Agda, TLA+
 |===
 
 See link:docs/architecture/topology.md[docs/architecture/topology.md] for the full map.

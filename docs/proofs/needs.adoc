@@ -20,9 +20,9 @@ Plans:
 * Neural convergence (rows `+pagerank-convergence+` and `+esn-echo-state+`):
   `+docs/proofs/HANDOVER-neural-convergence.adoc+`. Agda first, over
   constructive reals, then the Rocq and Lean legs.
-* Lean engineering proofs (rows `+lean-*+`): moving to Idris2 (PROOF-POLICY
-  §3; owner decision 2026-11-09). The move also removes the Lean kernel
-  axioms (`+propext+`, `+Quot.sound+`) that four of them rest on.
+* The Lean engineering proofs moved to Idris2 on 2026-11-09 (PROOF-POLICY §3;
+  owner decision), which removed the Lean kernel axioms (`+propext+`,
+  `+Quot.sound+`) four of them rested on.
 
 Prover mapping and statuses: the estate PROOF-POLICY
 (`+metadatastician/standards/3-practice/PROOF-POLICY.adoc+`).
