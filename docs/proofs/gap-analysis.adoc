@@ -264,7 +264,8 @@ parser-adjacent proofs. *✅ Landed 2026-04-22 via
 assurance over the neural layer, only after PR 2. *⚠ Partially landed
 2026-04-22 via `+claude/lean-proofs-parser-pagerank+` — preconditions
 only (non-negativity, column-stochastic scaling premises) in
-`+PageRankInvariants.lean+`. The convergence theorem (T-PR) is theory: Agda,
+`+PageRankInvariants.lean+`. The contraction theorem (T-PR: two runs approach
+each other; fixed-point existence is separate and needs completeness) is theory: Agda,
 rechecked in Rocq and Lean without Mathlib (PROOF-POLICY §§1–2); still open,
 see `+docs/proofs/HANDOVER-neural-convergence.adoc+`.*
 

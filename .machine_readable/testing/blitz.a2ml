@@ -371,5 +371,5 @@ items = [
   "external-user-feedback (can't be manufactured)",
   "formal WCAG/GDPR audit (needs external domain expert)",
   "energy profiling (tooling gap for BEAM+Rust hybrid)",
-  "full PageRank convergence proof (T-PR, docs/proofs/HANDOVER-neural-convergence.adoc — Agda, rechecked in Rocq and Lean)",
+  "PageRank contraction proof (T-PR, docs/proofs/HANDOVER-neural-convergence.adoc — Agda, rechecked in Rocq and Lean; fixed-point existence is a separate, unplanned theorem)",
 ]

@@ -582,8 +582,8 @@ the proved properties
 superseded 2026-11-01)
 
 |Logtalk → Elixir alert-table correspondence
-|`+LogtalkMigration.agda+` |Finite model only — Grade 3 /
-AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
+|`+LogtalkMigration.agda+` |Finite model only — PWG-3, AGDA-VERIFIED
+(receipt above); fix text and runtime refinement excluded
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)
