@@ -322,31 +322,30 @@ and fail 3.2.2, for every a2ml state (`+duplicateDeclaresNothing+`,
 `+scorecardProfilePresent+` whenever the deed decides
 (`+deedDecidedAgrees+`, the bffd76a fix) or the a2ml is not present-but-
 declaring-nothing (`+a2mlDecidedAgrees+`); they disagree in exactly that
-case (`+disagreementIsExactly+`) |OPEN — awaiting the `idris2 --check`
-job on its pull request
+case (`+disagreementIsExactly+`) |PROVEN — Verify Proofs run 42634000625, idris2 --check job 129217248108, at commit 34c7bc7cff0cf54b1b5707a497d9f8abf826e844 (Idris2 v0.7.0, ABI package build)
 
 |`+tests/accept/RsrProfileResolution.idr+` |Idris2 |Positive control:
 the profile-reader cases of test/rules/rsr_conformance_test.exs stated
 against the model and accepted by evaluation (`+deedEraDeclares+`,
 `+deedWins+`, `+dupDeclaresNothing+`, `+dupFails+`,
 `+listlessNothing+`, `+listlessFails+`, `+nestedFallsBack+`,
-`+a2mlOnly+`, `+dupAgrees+`) |OPEN — awaiting the same job
+`+a2mlOnly+`, `+dupAgrees+`) |TESTED — accepted in the same job
 
 |`+tests/reject/DuplicatedClauseIsAProfile.idr+` |Idris2 |Expected
 rejection: a duplicated clause counted as a present profile is refused at
-`+invalid+` |OPEN — awaiting the same job
+`+invalid+` |TESTED — refused at `invalid` in the same job
 
 |`+tests/reject/DuplicatedClausePassesProfileCriterion.idr+` |Idris2
 |Expected rejection: a duplicated clause passing 3.2.2 is refused at
-`+invalid+` |OPEN — awaiting the same job
+`+invalid+` |TESTED — refused at `invalid` in the same job
 
 |`+tests/reject/ListlessClauseFallsBack.idr+` |Idris2 |Expected
 rejection: a list-less clause falling back to the a2ml is refused at
-`+invalid+` |OPEN — awaiting the same job
+`+invalid+` |TESTED — refused at `invalid` in the same job
 
 |`+tests/reject/A2mlOverridesDeed.idr+` |Idris2 |Expected rejection: the
-a2ml overriding a well-formed deed clause is refused at `+invalid+` |OPEN
-— awaiting the same job
+a2ml overriding a well-formed deed clause is refused at `+invalid+` |TESTED
+— refused at `invalid` in the same job
 
 |Correspondence, lib/rules/rsr_conformance.ex |Elixir |The model's
 functions behave as the Elixir functions their header names. Argued by
