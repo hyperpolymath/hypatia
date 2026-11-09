@@ -70,6 +70,44 @@ defmodule Hypatia.KyamlTest do
     refute Kyaml.within_budget?(doc, 1)
   end
 
+  # verification/proofs/idris2/KyamlBudget.idr proves, of a model of this
+  # count, that a total within the limit is the expanded size and that a
+  # document within the limit is passed. This holds the Elixir count to that
+  # model's `size` on every tree of a small domain: scalars, sequences,
+  # mappings, and aliases (to a non-alias, as the reader allows) sharing a
+  # subtree.
+  test "within_budget?/2 passes exactly the trees whose expanded size is within the limit" do
+    leaf = %{kind: :string, value: "x"}
+    seq = &%{kind: :seq, items: &1}
+    map = fn values -> %{kind: :map, entries: Enum.map(values, &%{key: leaf, value: &1})} end
+    ali = &%{kind: :alias, target: &1}
+
+    size = fn
+      size, %{kind: :alias, target: t} -> size.(size, t)
+      size, %{kind: :seq, items: items} -> 1 + Enum.sum(Enum.map(items, &size.(size, &1)))
+      size, %{kind: :map, entries: es} -> 1 + Enum.sum(Enum.map(es, &size.(size, &1.value)))
+      _, _ -> 1
+    end
+
+    grow = fn trees ->
+      non_alias = Enum.reject(trees, &(&1.kind == :alias))
+      lists = [[]] ++ for(a <- trees, do: [a]) ++ for(a <- trees, b <- trees, do: [a, b])
+      trees ++ Enum.map(non_alias, ali) ++ Enum.map(lists, seq) ++ Enum.map(lists, map)
+    end
+
+    trees = [leaf] |> grow.() |> grow.() |> Enum.uniq()
+    assert length(trees) > 150
+
+    mismatches =
+      for t <- trees,
+          n = size.(size, t),
+          limit <- 0..(n + 1),
+          Kyaml.within_budget?(t, limit) != n <= limit,
+          do: {t, limit}
+
+    assert mismatches == []
+  end
+
   test "within_budget?/2 stops counting at the limit (the billion-laughs document)" do
     anchors =
       for i <- 1..9 do

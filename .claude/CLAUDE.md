@@ -177,6 +177,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `RuleEngine.idr` | Rule-evaluation types |
 | `Verdict.idr` | Verdict records (HYP-01): support = Pattern / Observed n / Mechanical re-check; `Sound` only from a confirming re-check. Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
 | `Retraction.idr` | Quarantine as retraction (HYP-01): a token survives iff its support thins into what remains; a finding survives through one of its tokens. Transcribed from residual-evidence-types `Revision.agda` @ 97244f5 |
+| `Egress.idr` | RE001's decision on egress declarations (standards ADR-009): `Clean` is decidable (`decClean`); an audit hardener never passes a block claim; a declaration lists exactly the secrets read; a run-time key is never declared. Mirror: `test/egress_decision_mirror_test.exs` |
 
 **Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
 The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** — that is the

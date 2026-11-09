@@ -81,6 +81,26 @@ there and are fixed with tests: an `allowed-endpoints` entry written with an
 expression crashed it (hypatia's own `push-email-notify.yml`), and a deed
 listing GitHub hosts drew 12 false findings on hypatia.
 
+The decision and the alias budget are proved, and the code is held to the
+proofs (verification/PROOF-STATUS.adoc, "Egress declarations and the KYAML
+reader"):
+
+* `src/Hypatia/ABI/Egress.idr` models RE001's acceptance of a job as a
+  decidable type and proves that an audit hardener never satisfies a block
+  claim, that a declaration lists exactly the secrets read, and that a key
+  computed at run time is never declared. Three expected rejections and a
+  positive control run in `scripts/check-verdicts.sh`.
+  `test/egress_decision_mirror_test.exs` runs RE001 on all 240 cases of a
+  small domain and requires it to agree with the proved decision.
+* `verification/proofs/idris2/KyamlBudget.idr` models `within_budget?/2`
+  and proves that it passes exactly the documents whose expanded size is
+  within the limit, in at most 2 · (limit + 1) + 2 steps however far the
+  aliases expand. `test/kyaml_test.exs` holds the Elixir count to the
+  model on 154 trees at every limit.
+
+The reader as a whole is tested, not proved, and endpoints are not
+modelled; both are recorded as such.
+
 ==== RE001 accepts a deed egress declaration; the job token no longer counts (2026-10-27)
 
 The estate-wide decision on `step-security/harden-runner` (standards ADR-009) is

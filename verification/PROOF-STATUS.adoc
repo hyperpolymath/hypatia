@@ -294,6 +294,87 @@ the Signalbox criterion has no Signalbox repository to apply to |TESTED
 (Signalbox: OPEN)
 |===
 
+==== Egress declarations and the KYAML reader (2026-11-09, standards ADR-009, #971)
+
+RE001 accepts a secret-bearing job that runs harden-runner or that the repo
+deed declares truthfully. The decision is modelled and proved in Idris2,
+and the Elixir rule is held to the model case by case. The workflow reader
+under it (`+Hypatia.Kyaml+`, kyq's KYAML reader ported) has its alias
+budget modelled and proved; the reader as a whole is tested, not proved.
+Gates: `+scripts/check-verdicts.sh+` (the ABI package and the fixtures),
+the `+idris2 --check+` loop over `+verification/proofs/idris2/+`, and the
+Elixir suite.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Claim |Status
+|`+src/Hypatia/ABI/Egress.idr+` |Idris2 |`+Clean+` is RE001's
+acceptance of a job with a declaration or none, and it is decidable
+(`+decClean+`). An audit-mode hardener never satisfies a block claim
+(`+auditNeverBlock+`); a declaration lists exactly the secrets read
+(`+readSecretDeclared+`, `+declaredSecretRead+`); a key computed at run
+time is never declared (`+dynamicNeverDeclared+`); a job with neither a
+hardener nor a declaration fails (`+bareJobFails+`); a claimed
+enforcement needs a hardener (`+claimNeedsHardener+`). Endpoints are
+outside the model |PROVEN
+
+|`+tests/reject/AuditPassesAsBlock.idr+` |Idris2 |Expected rejection: a
+job whose hardener audits is refused as `+Clean+` under a block claim,
+at `+invalid+` |TESTED
+
+|`+tests/reject/UndeclaredSecretPasses.idr+` |Idris2 |Expected
+rejection: a declaration that omits a secret the job reads is refused,
+at `+invalid+` |TESTED
+
+|`+tests/reject/DynamicKeyDeclared.idr+` |Idris2 |Expected rejection: a
+job reading a key computed at run time is refused as declared, at
+`+invalid+` |TESTED
+
+|`+tests/accept/DeclaredJobIsClean.idr+` |Idris2 |Positive control: a
+truthful declaration is `+Clean+` (`+clean+`), the decision procedure
+says so by evaluation (`+decides+`), and refuses the same declaration
+for an auditing job (`+refusesAudit+`) |TESTED
+
+|Runtime mirror, lib/rules/research_extensions.ex |Elixir |RE001 reports
+a job exactly when `decClean` refuses it, on all 240 cases of a small
+domain (one or two secrets, a run-time key or none, four hardener
+settings, no declaration or nine): test/egress_decision_mirror_test.exs,
+with the deed parse asserted per case and three mutants killed (two in
+the transcription, one in RE001's block check) |TESTED
+
+|Endpoint comparison, lib/rules/research_extensions.ex |Elixir |Declared
+endpoints agree with the hosts a job names and with its hardener's
+`allowed-endpoints`: test/research_extensions_test.exs. Not modelled
+|OPEN
+
+|`+verification/proofs/idris2/KyamlBudget.idr+` |Idris2 |A model of
+`within_budget?/2` step for step (`+count+`, `+stepCount+`). A total
+within the limit is the document's exact size with every alias read
+through (`+countSound+`, `+withinBudgetSound+`); a document within the
+limit is passed (`+countAtMost+`, `+withinBudgetComplete+`); with no
+alias naming an alias, the count answers within 2 · (limit + 1) + 2
+steps however far the aliases expand (`+countBounded+`) |PROVEN
+
+|Runtime mirror, lib/hypatia/kyaml.ex |Elixir |`within_budget?/2` passes
+exactly the trees whose expanded size is within the limit, on 154 trees
+(scalars, sequences, mappings, shared aliases) at every limit from 0 to
+size + 1: test/kyaml_test.exs, with a mutant that stops expanding aliases
+killed; the billion-laughs document is refused in under 5 s |TESTED
+
+|Refusal, not guessing, lib/hypatia/kyaml.ex |Elixir |`parse/1` returns
+`{:ok, docs}` or a located `{:error, %Error{}}`: on kyq's 46-case
+conformance corpus (test/kyaml_conformance_test.exs), against kyq's own
+parse of its fixtures and this repository's workflows (`kyq_differential`,
+at the pinned `KYQ_REF`), and on the YAML test suite, where no invalid
+stream is accepted and every valid stream read matches its `in.json`
+(test/kyaml_yaml_test_suite_test.exs). Bounded by those corpora; no
+totality proof |TESTED
+
+|lib/hypatia/workflow.ex |Elixir |GitHub Actions reads a workflow file as
+YAML 1.2 Core reads it, for the shapes KYAML admits. GitHub's parser is
+third-party and is not re-proved |ASSUMED
+|===
+
 === Properties Proven
 
 ==== 1. Confidence Bounds (`+ConfidenceBounds.idr+`)
@@ -453,6 +534,12 @@ AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)
+
+|RE001 egress decision (ADR-009) |`+Egress.idr+` |Decision proved;
+Elixir held to it on a small domain; endpoints not modelled
+
+|KYAML alias budget |`+KyamlBudget.idr+` |Model proved; Elixir held to
+it on a small domain; the reader as a whole is tested, not proved
 
 |VCL parser totality |`+ParserTotality.lean+` |Full (FROM-clause subset)
 
