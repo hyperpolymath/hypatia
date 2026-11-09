@@ -306,7 +306,7 @@ Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice
 |-
 |Not stated in any prover. Agda statement first (PROOF-POLICY section 2), over constructive reals, then Rocq and Lean legs; no Mathlib. The runtime scales by the induced infinity-norm, not the spectral radius
 
-|The Elixir runtime follows the Idris2, Lean and TLA+ models above
+|The Elixir runtime follows the Idris2 and TLA+ models above
 |open
 |-
 |-

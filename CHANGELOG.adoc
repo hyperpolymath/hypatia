@@ -25,7 +25,8 @@ https://semver.org/[Semantic Versioning].
 * `tla2tools.jar` is pinned to v1.7.4 (TLC 2.19) and its SHA-256 is
   verified. CI used to fetch `releases/latest` under a cache key named
   `v1.8.0`, and that tag is a rolling nightly.
-* The exunit rows' test files now run in `ci.yml` on every pull request.
+* The exunit rows' test files now run in `ci.yml` on pull requests targeting
+  `main` or `develop`.
   `retraction_test.exs` and `dispatch_manifest_test.exs` used to run only
   inside the full integration suite.
 
