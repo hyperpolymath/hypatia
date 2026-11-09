@@ -293,13 +293,13 @@ ledger disagree, the ledger wins and this table is regenerated.
 |open, ungraded
 |-
 |-
-|Not stated in any prover. Agda statement first (PROOF-POLICY section 2), then Rocq and Lean legs; no Mathlib
+|Not stated in any prover. Agda statement first (PROOF-POLICY section 2), over constructive reals, then Rocq and Lean legs; no Mathlib
 
-|The spectrally scaled reservoir has the echo-state property
+|With leak rate 0 < a <= 1 and the reservoir scaled to infinity-norm at most 0.95, two state trajectories under the same input converge geometrically (echo-state property), and [-1,1]^n is invariant
 |open, ungraded
 |-
 |-
-|Not stated in any prover. Agda statement first (PROOF-POLICY section 2), then Rocq and Lean legs; no Mathlib
+|Not stated in any prover. Agda statement first (PROOF-POLICY section 2), over constructive reals, then Rocq and Lean legs; no Mathlib. The runtime scales by the induced infinity-norm, not the spectral radius
 
 |The Elixir runtime follows the Idris2, Lean and TLA+ models above
 |open
