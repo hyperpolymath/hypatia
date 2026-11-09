@@ -226,8 +226,11 @@ empty.
 
 The five corpus rows are evaluated as equations
 (`+rowClosedV00x+`, `+rowClosedCaseVariant+`, `+rowDanglingNested+`,
-`+rowDanglingWorkflowRef+`). So the file stops type-checking if the model
-and `+expected.tsv+` disagree.
+`+rowDanglingWorkflowRef+`). The transcription is bound to its sources by
+`+test/rules/actions_lock_closure_corpus_test.exs+`, which checks every
+fixture's edges and every `+expected.tsv+` row against the model's
+`+-- corpus:+` rows and ref table. A drift on either side turns that test or
+this file's type check red.
 |OPEN until the first `+idris2 --check+` receipt from Verify Proofs is
 recorded here.
 

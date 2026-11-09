@@ -13,10 +13,13 @@
 --      lock and has no record.
 --   3. `danglingComplete`: every named ref without a record is reported.
 --   4. `decClosed`: closure is decidable, by the dangling list.
---   5. The five rows of the shared closure corpus are evaluated here: the
---      verdict and the exact dangling refs of each row are equations the type
---      checker reduces, so this file fails to check if the model and
---      test/fixtures/actions_lock/closure/expected.tsv ever disagree.
+--   5. The five rows of the shared closure corpus are transcribed here, and
+--      the verdict and exact dangling refs of each are equations the type
+--      checker reduces. The transcription is bound to its sources by
+--      test/rules/actions_lock_closure_corpus_test.exs. That test reads the
+--      ref table and the `-- corpus:` lines below and checks every fixture's
+--      edges and every expected.tsv row against them. So if the fixtures,
+--      the table and this model ever disagree, one of the two checks fails.
 --
 -- Corresponds to: lib/rules/actions_lock.ex (validate_workflow_dependencies,
 -- validate_transitive_dependencies) and, in hyperpolymath/standards,
@@ -71,8 +74,11 @@ Closed l = All (\r => Elem r (keys l)) (edges l)
 -- Section 2: The dangling list
 ------------------------------------------------------------------------
 
-||| The refs in `rs` that are not in `ks`, in order. This is what
-||| `close-lock.sh --check` prints and what Hypatia's error payload carries.
+||| The refs in `rs` that are not in `ks`, in order: the set that
+||| `close-lock.sh --check` prints. Hypatia checks in two phases, workflow
+||| refs first and then nested `uses:`, and reports `(source, ref)` pairs from
+||| the first phase that fails. For a lock missing refs of both kinds it
+||| therefore reports only the workflow ones, a subset of this list.
 public export
 dangling : DecEq a => List a -> List a -> List a
 dangling ks [] = []
@@ -165,22 +171,27 @@ decClosed l = case decEq (danglingOf l) [] of
 -- edges, so they are not modelled. An empty workflow (`empty.yml: []`)
 -- contributes no edge.
 
+-- corpus: closed-v0.0.2.lock closedV00x
+-- corpus: closed-v0.0.3.lock closedV00x
 ||| closed-v0.0.2.lock and closed-v0.0.3.lock (the same edges; v0.0.3 adds a
 ||| hostname, which carries no edge).
 public export
 closedV00x : Lock Nat
 closedV00x = MkLock [1] [(1, [2]), (2, [])]
 
+-- corpus: closed-case-variant.lock closedCaseVariant
 ||| closed-case-variant.lock, after the fold.
 public export
 closedCaseVariant : Lock Nat
 closedCaseVariant = MkLock [6] [(6, [])]
 
+-- corpus: dangling-nested.lock danglingNested
 ||| dangling-nested.lock: the standards#963 shape.
 public export
 danglingNested : Lock Nat
 danglingNested = MkLock [3] [(3, [4])]
 
+-- corpus: dangling-workflow-ref.lock danglingWorkflowRef
 ||| dangling-workflow-ref.lock.
 public export
 danglingWorkflowRef : Lock Nat
