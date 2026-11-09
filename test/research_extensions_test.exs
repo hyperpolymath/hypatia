@@ -2025,12 +2025,14 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       end
 
       agree = steps.("api.github.com:443 hex.pm:443 repo.hex.pm:443")
-      assert endpoint_findings(agree, ~s|"hex.pm" "*.hex.pm:443"|) == []
+      assert endpoint_findings(agree, ~s|"hex.pm:443" "*.hex.pm:443"|) == []
 
-      assert [finding] = endpoint_findings(agree, ~s|"hex.pm"|)
+      assert [finding] = endpoint_findings(agree, ~s|"hex.pm:443"|)
       assert finding.reason =~ ~s|lets out undeclared "repo.hex.pm:443"|
 
-      assert [finding] = endpoint_findings(steps.("hex.pm:443"), ~s|"hex.pm" "cdn.example.com"|)
+      assert [finding] =
+               endpoint_findings(steps.("hex.pm:443"), ~s|"hex.pm:443" "cdn.example.com"|)
+
       assert finding.reason =~ ~s|does not allow declared "cdn.example.com"|
     end
 
@@ -2182,6 +2184,127 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
       assert finding.reason =~ ~s|"upload.example.com:443"|
       assert finding.reason =~ ~s|"mirror.example.org:22"|
+      File.rm_rf!(repo)
+    end
+
+    test "a workflow env value the job overrides is not the job's" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          env:
+            UPLOAD_URL: https://old.example.com/v1
+          jobs:
+            ship:
+              runs-on: ubuntu-latest
+              env:
+                UPLOAD_URL: https://new.example.com/v1
+              steps:
+                - run: |
+                    curl -H "t: ${{ secrets.TOKEN }}" "$UPLOAD_URL"
+          """,
+          "ship.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+          ~s|:secrets ("TOKEN") :endpoints ("new.example.com:443") :enforcement none))|
+      )
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "a step's name, id and condition name no endpoint" do
+      steps = """
+            - name: Read https://docs.example.com before deploying
+              id: deploy
+              if: ${{ !contains(github.event.head_commit.message, 'https://skip.example.com') }}
+              run: ./deploy --token ${{ secrets.TOKEN }}
+      """
+
+      assert endpoint_findings(steps, "") == []
+    end
+
+    test "a database or broker URL names its host, at the scheme's default port" do
+      steps = """
+            - run: |
+                psql postgres://db.example.com/app
+                redis-cli -u rediss://cache.example.com:6380
+                mongosh "mongodb+srv://cluster0.example.net/app"
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"db.example.com:5432"|
+      assert finding.reason =~ ~s|"cache.example.com:6380"|
+      # An SRV record names the port, so any declared port of the host covers it.
+      assert finding.reason =~ ~s|"cluster0.example.net"|
+
+      assert endpoint_findings(
+               steps,
+               ~s|"db.example.com:5432" "cache.example.com:6380" "cluster0.example.net:27017"|
+             ) == []
+    end
+
+    test "a # after a shell control operator opens a comment" do
+      steps = """
+            - run: |
+                echo done;# curl https://comment.example.com
+                make&&#curl https://comment2.example.com
+                echo 'a;# b' https://up.example.com
+              env:
+                K: ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"up.example.com:443"|
+      refute finding.reason =~ "comment"
+    end
+
+    test "a declaration without a port claims every port, so one allowed port blocks it" do
+      steps = """
+            - uses: step-security/harden-runner@v2
+              with:
+                egress-policy: block
+                allowed-endpoints: api.example.com:443
+            - run: deploy --token ${{ secrets.TOKEN }}
+      """
+
+      assert [finding] = endpoint_findings(steps, ~s|"api.example.com"|)
+      assert finding.reason =~ ~s|does not allow declared "api.example.com"|
+      assert endpoint_findings(steps, ~s|"api.example.com:443"|) == []
+    end
+  end
+
+  describe "scan/2" do
+    test "gives RE001 and RE002 exactly as their own entry points do" do
+      repo =
+        create_repo_with_workflow(
+          """
+          on: push
+          jobs:
+            ship:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: step-security/harden-runner@v2
+                  with:
+                    egress-policy: audit
+                - run: npm ci && deploy --token ${{ secrets.TOKEN }}
+          """,
+          "ship.yml"
+        )
+
+      findings = ResearchExtensions.scan(repo).findings
+      re00x = Enum.filter(findings, &(&1.rule in ["RE001", "RE002"]))
+
+      assert re00x ==
+               ResearchExtensions.re001_missing_harden_runner(repo) ++
+                 ResearchExtensions.re002_harden_runner_audit_mode(repo)
+
+      assert Enum.any?(re00x, &(&1.rule == "RE002"))
       File.rm_rf!(repo)
     end
   end

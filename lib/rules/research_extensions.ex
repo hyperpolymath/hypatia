@@ -284,7 +284,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   Severity: `:high` or `:warn`, as above (`:warn` for an unreadable
   workflow). Action: `:report`.
   """
-  def re001_missing_harden_runner(repo_path) do
+  def re001_missing_harden_runner(repo_path),
+    do: re001_findings(repo_path, re001_workflows(repo_path))
+
+  # RE001 over workflows already read, so that scan/2 reads each once for
+  # RE001 and RE002.
+  defp re001_findings(repo_path, workflows) do
     {deed_file, declared, deed_note} =
       case Hypatia.Deed.egress_declarations(repo_path) do
         {:ok, file, jobs} -> {file, Map.new(jobs, &{{&1.workflow, &1.job}, &1}), nil}
@@ -292,7 +297,6 @@ defmodule Hypatia.Rules.ResearchExtensions do
         {:error, file, reason} -> {file, %{}, "the repo deed declares nothing (#{reason})"}
       end
 
-    workflows = re001_workflows(repo_path)
     jobs = for {:ok, rel, doc} <- workflows, job <- re001_jobs(rel, doc), do: job
 
     # A workflow that names secrets but cannot be read is reported. Its
@@ -462,9 +466,13 @@ defmodule Hypatia.Rules.ResearchExtensions do
         harden_policy: harden_step && harden_runner_policy(harden_step),
         allowed_endpoints: harden_step && harden_runner_allowed(harden_step),
         # A literal endpoint in the job's or the workflow's `env:` reaches every
-        # step (`$UPLOAD_URL`), so it is named as surely as one in a step.
+        # step (`$UPLOAD_URL`), so it is named as surely as one in a step,
+        # unless the job sets the same variable itself.
         named_hosts:
-          Enum.flat_map([workflow.env, job.env | Enum.map(steps, & &1.node)], &named_hosts/1),
+          Enum.flat_map(
+            job_env_entries(workflow.env, job.env) ++ Enum.flat_map(steps, &step_entries/1),
+            &named_hosts(&1.value)
+          ),
         exposures: re001_exposures(steps, job_untrusted_events),
         shared?: shared_line != nil
       }
@@ -757,7 +765,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
   @host ~S"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}(?![\w-]|\.\w)"
   # A URL's scheme (in any case, as clients read it), host, and port: digits,
   # or an expression (`:${{ vars.PORT }}`), whose value is known only at run time.
-  @url_host ~r<\b(https?|wss?|ssh|git|ftps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
+  # The schemes are the web's, and the databases' and brokers' a job reaches.
+  @url_host ~r<\b(https?|wss?|ssh|s?ftp|ftps|git|postgres(?:ql)?|mysql|mariadb|rediss?|mongodb(?:\+srv)?|amqps?|mqtts?|ldaps?|smtps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
   # A `user@host:path` remote. The path is not blank (`a@example.com: failed`
   # is prose) and not a port (`user:pass@host:5432/db` is a URL's userinfo),
   # though it may start with a digit (`git@gitlab.com:123team/x.git`).
@@ -770,10 +779,41 @@ defmodule Hypatia.Rules.ResearchExtensions do
     "ssh" => 22,
     "git" => 9418,
     "ftp" => 21,
-    "ftps" => 990
+    "ftps" => 990,
+    "sftp" => 22,
+    "postgres" => 5432,
+    "postgresql" => 5432,
+    "mysql" => 3306,
+    "mariadb" => 3306,
+    "redis" => 6379,
+    "rediss" => 6379,
+    "mongodb" => 27017,
+    # mongodb+srv: the SRV record names the port, so it is unknown (nil).
+    "amqp" => 5672,
+    "amqps" => 5671,
+    "mqtt" => 1883,
+    "mqtts" => 8883,
+    "ldap" => 389,
+    "ldaps" => 636,
+    "smtp" => 25,
+    "smtps" => 465
   }
 
-  # The hosts outside GitHub one step names literally, as {host, port, line}.
+  # The `env:` entries a job's steps see: the job's own, and the workflow's
+  # that the job does not set again.
+  defp job_env_entries(workflow_env, job_env) do
+    own = Workflow.entries(job_env)
+    keys = MapSet.new(own, &Workflow.text(&1.key))
+    Enum.reject(Workflow.entries(workflow_env), &(Workflow.text(&1.key) in keys)) ++ own
+  end
+
+  # A step's entries that can reach the network: not its label (`name`, `id`)
+  # or its condition (`if`), which the runner never connects to.
+  @step_labels ~w(name id if)
+  defp step_entries(step),
+    do: Enum.reject(Workflow.entries(step.node), &(Workflow.text(&1.key) in @step_labels))
+
+  # The hosts outside GitHub a node names literally, as {host, port, line}.
   defp named_hosts(node) do
     for {text, line_of} <- Workflow.strings(node),
         {host, port, at} <- url_hosts(text) ++ scp_hosts(text),
@@ -786,9 +826,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   defp loopback?(host), do: Regex.match?(~r/\A(?:127\.|0\.0\.0\.0\z)/, host)
 
-  # Is offset `at` inside a `#` comment: after a `#` that starts the line or
-  # follows a blank, outside quotes? (A URL fragment, `/#x`, is not one, nor
-  # is the `#` of `git commit -m "fix #12"`.)
+  # Is offset `at` inside a `#` comment: after a `#` that starts a word (at
+  # the start of the line, or after a blank or a control or redirection
+  # operator: `; & | ( ) < >`), outside quotes? (A URL fragment, `/#x`, is
+  # not one, nor is the `#` of `git commit -m "fix #12"`.)
   defp in_shell_comment?(text, at) do
     line_start =
       case :binary.matches(binary_part(text, 0, at), "\n") do
@@ -802,6 +843,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # Walks one line: `quote` is the open quote character or nil, `word_start?`
   # whether the next character starts a word. A backslash escapes the next
   # character outside single quotes, as the shell reads it.
+  @word_breaks [?\s, ?\t, ?;, ?&, ?|, ?(, ?), ?<, ?>]
   defp comment_opens?(<<>>, _quote, _word_start?), do: false
   defp comment_opens?(<<?#, _::binary>>, nil, true), do: true
 
@@ -814,7 +856,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp comment_opens?(<<c, rest::binary>>, c, _), do: comment_opens?(rest, nil, false)
 
   defp comment_opens?(<<c, rest::binary>>, quote, _),
-    do: comment_opens?(rest, quote, quote == nil and c in [?\s, ?\t])
+    do: comment_opens?(rest, quote, quote == nil and c in @word_breaks)
 
   # A port written as an expression is unknown (nil), not the scheme's default.
   defp url_hosts(text) do
@@ -920,10 +962,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
     # them, and the hardener's list is not held to them.
     undeclared = Enum.reject(allowed, fn {h, p} -> Enum.any?(declared, &covers?(&1, h, p)) end)
 
+    # A declared endpoint without a port claims every port, so only an
+    # allowed entry without a port lets it out.
     blocked =
       Enum.reject(declared, fn {h, p} ->
         String.starts_with?(h, "*.") or Regex.match?(@github_hosts, h) or
-          Enum.any?(allowed, &covers?(&1, h, p))
+          Enum.any?(allowed, &covers?(&1, h, p || :any))
       end)
 
     if undeclared == [] and blocked == [] do
@@ -1035,9 +1079,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   Severity: `:high` (`:warn` for an unreadable workflow). Action: `:report`.
   """
-  def re002_harden_runner_audit_mode(repo_path) do
-    workflows = re001_workflows(repo_path)
+  def re002_harden_runner_audit_mode(repo_path),
+    do: re002_findings(re001_workflows(repo_path))
 
+  defp re002_findings(workflows) do
     unreadable =
       for {:unreadable, rel, error, bytes} <- workflows,
           Regex.match?(~r/harden-runner/i, bytes),
@@ -1706,9 +1751,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
   standard scan-result map.
   """
   def scan(repo_path, _opts \\ []) do
+    # RE001 and RE002 read the same parsed workflows.
+    workflows = re001_workflows(repo_path)
+
     findings =
-      re001_missing_harden_runner(repo_path) ++
-        re002_harden_runner_audit_mode(repo_path) ++
+      re001_findings(repo_path, workflows) ++
+        re002_findings(workflows) ++
         re003_cache_key_poisoning(repo_path) ++
         re004_container_tag_pin(repo_path) ++
         re005_test_swallows_exit(repo_path) ++

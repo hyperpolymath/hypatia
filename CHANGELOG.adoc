@@ -81,7 +81,14 @@ model instead of scanning lines (WH013 and WH014 follow, and
   (`git commit -m "fix #12" && git push …`) when looking for comments;
   keeps the literal host of an allowed entry whose port is an expression;
   and holds an allowed entry with no port (every port) to a declaration
-  with none. RE002 skips a job whose `if:` admits only events other than
+  with none, and a declaration with no port to an allowed entry with none.
+  Hosts are now also read from the job's and the workflow's `env:` (a
+  workflow value the job sets again is not the job's), but not from a
+  step's `name`, `id` or `if`; database and broker URLs
+  (`postgres://`, `rediss://`, `mongodb+srv://`, AMQP, MQTT, LDAP, SMTP,
+  SFTP) are read at their scheme's default port; and a `#` after a shell
+  control operator (`done;# …`) opens a comment. `scan/2` parses each
+  workflow once for RE001 and RE002. RE002 skips a job whose `if:` admits only events other than
   `push` and `release`, and reports a workflow the reader refuses if it
   names harden-runner (the line reader used to find its `audit` there).
   A job or step read through an alias is reported at the alias again, not
