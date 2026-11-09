@@ -11,9 +11,12 @@
 (`+idris2 --check+`).
 * *verification/proofs/lean4/*: 5 Lean files (`+lake build+`).
 * *verification/proofs/tlaplus/*: `+KinGate.tla+` (TLC model-check).
-* *Toolchain*: Idris2 `+v0.7.0+`, Lean `+v4.30.0+` (both pinned), TLA+
-tla2tools 2.19. Agda was retired 2026-04-22 (see PROOF-STATUS.md
-"`Retired proofs`").
+* *verification/proofs/agda/*: `+LogtalkMigration.agda+` (since
+2026-11-01; `+agda --safe --without-K --cubical-compatible+`, `+PWG-3+`).
+* *Toolchain*: Idris2 `+v0.7.0+`, Lean `+v4.30.0+`, Agda `+2.8.0.2+` (all
+pinned), TLA+ tla2tools 2.19. The 2026-04-22 retirement of Agda covered
+only `+OutcomeLog.agda+` (see `+verification/PROOF-STATUS.adoc+`,
+"`Retired proofs`"); Agda is the estate's theory prover (PROOF-POLICY §1).
 * *Escape hatches*: 0 — no `+believe_me+` / `+assert_total+` /
 `+postulate+` / `+sorry+` / `+Admitted+` / `+unsafeCoerce+` in any proof
 file.
@@ -64,33 +67,37 @@ parser totality + round-trip |—
 
 === What Still Needs Proving
 
-These are the *only* open proof obligations. Both currently prove ℕ
-_structural preconditions_ over the natural-number model; the full
-analytical theorems require Mathlib and are in progress.
+Two *theory* obligations are open. The Lean files below prove only ℕ
+_structural preconditions_; the theorems themselves are stated, with the
+route and the definition of done, in
+`+docs/proofs/HANDOVER-neural-convergence.adoc+` and inventoried in the
+`+neural-convergence+` section of `+verification/PROOF-STATUS.adoc+`.
 
 [width="100%",cols="24%,28%,32%,16%",options="header",]
 |===
 |Component |Proven today |Target theorem |Prover
-|PageRank power-iteration convergence (`+PageRankInvariants.lean+`)
-|non-negativity, column-stochastic normalisation preconditions
-|Banach-contraction convergence of the damped Google matrix (α < 1)
-|Lean 4 + Mathlib
+|PageRank (`+lib/neural/graph_of_trust.ex+`; preconditions in
+`+PageRankInvariants.lean+`) |non-negativity, normalisation preconditions
+|T-PR: the damped map with a column-substochastic `+P+` is an ℓ¹
+contraction with modulus `+d+` |Agda, rechecked in Rocq and Lean (no
+Mathlib)
 
-|ESN echo-state stability (`+ESNSpectralScaling.lean+`) |floor-clamped
-denominator is positive (scaling well-defined) |operator-norm
-contraction ⇒ bounded trajectory + exponential forgetting |Lean 4 +
-Mathlib
+|ESN and LSM reservoirs (preconditions in `+ESNSpectralScaling.lean+`)
+|floor-clamped denominator is positive (scaling well-defined); the row-sum
+bound and runtime forgetting are `+TESTED+` |T-RC: the leaky update with
+absolute row sums ≤ `+ρ+` is a sup-norm contraction with modulus
+`+(1 − a) + a·ρ+` |Agda, rechecked in Rocq and Lean (no Mathlib)
 |===
 
 === Recommended Prover
 
-*Idris2* for ABI / type-level invariants. *Lean 4* for algorithmic and
-numerical properties (*+ Mathlib* for the analytic convergence results).
-*TLA+* for model-checked concurrency. (Agda is no longer in the
-toolchain.)
+Per https://github.com/metadatastician/standards/blob/9bdf864cc7f2c8e24b4df84bf00d04158eee3ad5/3-practice/PROOF-POLICY.adoc[PROOF-POLICY]
+§1: *Idris2* for APIs, ABIs and engineering properties of hypatia's own
+code; *Agda* for theory, rechecked in *Rocq* and *Lean* without Mathlib;
+*TLA+* as a recorded §4 exception for model-checked concurrency (reported
+as `+TESTED+`).
 
 === Priority
 
 *MEDIUM* — H1–H9 are complete (H6 as a runtime assertion). The remaining
-work is the two neural-convergence theorems, which require pulling in
-Mathlib.
+work is the two neural-convergence theorems, T-RC and T-PR.

@@ -371,5 +371,5 @@ items = [
   "external-user-feedback (can't be manufactured)",
   "formal WCAG/GDPR audit (needs external domain expert)",
   "energy profiling (tooling gap for BEAM+Rust hybrid)",
-  "full PageRank convergence proof (tracked in PROOFS-GAP.md PR 4 — needs Mathlib)",
+  "full PageRank convergence proof (T-PR, docs/proofs/HANDOVER-neural-convergence.adoc — Agda, rechecked in Rocq and Lean)",
 ]

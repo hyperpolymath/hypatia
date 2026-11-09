@@ -3,7 +3,7 @@
 defmodule Hypatia.Neural.GraphOfTrustConvergenceTest do
   @moduledoc """
   Regression test for the PageRank stochastic-matrix fix
-  (`PROOFS-GAP.md` — "graph_of_trust normalisation").
+  (`docs/proofs/gap-analysis.adoc` — PR 2, "graph_of_trust normalisation").
 
   Before the fix:
     * `build_edges/1` emitted negative weights for failure

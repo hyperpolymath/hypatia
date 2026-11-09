@@ -27,15 +27,26 @@ neurosymbolic CI/CD platform.
 * Canonical estate policy:
   https://github.com/metadatastician/standards/blob/main/3-practice/PROOF-POLICY.adoc[Proof and Verification Policy].
   This file is a proof inventory, not an independent alternative policy.
-* Proof *grades* follow hyperpolymath/mathesis,
-  `+estate-mathematical-architecture+` §§5–6: *Grade 3* is an Agda proof
-  formulated and type-checking under the strict profile; *Grade 2*
-  requires translation(s) into independent foundational system(s);
-  *Grade 1* additionally requires those translated witnesses to compile
-  in headless, isolated CI via verified checker APIs. A target grade is
-  not a status. This inventory records exact statuses (Open / Claimed /
-  `+AGDA-PENDING+` / `+AGDA-VERIFIED+` / Grade 3 …) and never flattens
-  them into a confidence percentage.
+* Theory theorems carry a *Proof Witness Grade* as defined in
+  https://github.com/metadatastician/standards/blob/9bdf864cc7f2c8e24b4df84bf00d04158eee3ad5/3-practice/PROOF-POLICY.adoc#proof-witness-grades[PROOF-POLICY §8]
+  (pinned at `+9bdf864cc7f2c8e24b4df84bf00d04158eee3ad5+`):
+  `+PWG-3+` is an Agda source checked under the §2.1 invocation;
+  `+PWG-2i+` adds one counted recheck leg (Rocq or Lean, kernel-checked
+  *and* `+RECONCILED+`); `+PWG-2ii+` adds both legs; `+PWG-1+` adds a
+  current pinned-checker receipt for every witness at the exact source
+  commit. A theory theorem below `+PWG-3+` is `+ungraded+`. The grade
+  ladder first proposed in hyperpolymath/mathesis
+  `+docs/proposals/estate-mathematical-architecture.adoc+` §§5–6 is
+  provenance only; §8 supersedes it.
+* Each record keeps three separate fields and never writes one into
+  another: the §5 status token (`+PROVEN+` / `+PROVEN-WITH-AXIOMS+` /
+  `+TESTED+` / `+ASSUMED+` / `+OPEN+`), the §2.2 correspondence state
+  (`+AGDA-PENDING+`, `+AGDA-VERIFIED+`, `+LEAN-CHECKED+`,
+  `+BRIDGE-PENDING+`, `+RECONCILED+` …) and the PWG. Engineering proofs
+  (Idris2, Lean or TLA+ models of hypatia's own code) carry the status
+  token only. Grades are never flattened into a percentage.
+* No Mathlib (PROOF-POLICY §2). A missing Lean lemma is re-proved in the
+  core library.
 * A checked model proves its stated proposition only. In particular it
   does not prove runtime refinement of Elixir/BEAM code; such claims
   need their own correspondence evidence and tests.
@@ -47,6 +58,21 @@ not yet run an Agda + Rocq + Lean reconciliation pipeline. The
 pre-existing Lean files below retain their documented scope; they must
 not be represented as independently rechecking Agda proofs until
 checked Agda sources and correspondence evidence actually exist.
+
+NOTE: Until 2026-11-09 the Status columns below used `+COMPLETE+` and
+`+PARTIAL+`, which are not PROOF-POLICY §5 tokens. Every `+COMPLETE+` row
+names a file that a `+Verify Proofs+` job kernel-checks on every change
+(`+idris2 --check+` over `+verification/proofs/idris2/*.idr+`, the ABI and
+verify packages, `+lake build+`), so it now reads `+PROVEN+`. The two
+`+PARTIAL+` rows were split into what is proved and what is `+OPEN+`, and
+the TLA+ row is `+TESTED+` with its bounds, as PROOF-POLICY §4 requires of
+a finite model check.
+
+The Lean files `+BayesianUpdate+`, `+RateLimiting+`, `+ParserTotality+`,
+`+PageRankInvariants+` and `+ESNSpectralScaling+` state properties of
+hypatia's own functions, which makes them *engineering* proofs
+(PROOF-POLICY §1). Under §3 each moves to Idris2 when it is next touched;
+until then it stays here, labelled Lean.
 
 === Proof Inventory
 
@@ -64,26 +90,26 @@ that happened to land within two lines; the column was still not worth keeping.)
 |`+src/Hypatia/ABI/Types.idr+` |Idris2 |Confidence refined type
 (`+So (value >= 0.0 && value <= 1.0)+` auto-proof), core data types,
 and the wire-contract pin `+connectorCount : length allConnectors = 16+`
-|COMPLETE
+|PROVEN
 
 |`+src/Hypatia/ABI/RuleEngine.idr+` |Idris2 |Safety triangle ordering,
 route totality, dispatch correctness, Bayesian monotonicity, annealing
-caps, end-to-end composition |COMPLETE
+caps, end-to-end composition |PROVEN
 
 |`+src/Hypatia/ABI/GraphQL.idr+` |Idris2 |Query/Mutation/Subscription
-type safety |COMPLETE
+type safety |PROVEN
 
 |`+src/Hypatia/ABI/GRPC.idr+` |Idris2 |gRPC service type definitions
-|COMPLETE
+|PROVEN
 
 |`+src/Hypatia/ABI/REST.idr+` |Idris2 |REST endpoint type definitions
-|COMPLETE
+|PROVEN
 
 |`+src/Hypatia/ABI/FFI.idr+` |Idris2 |GADT constructors,
-`+ffiReturnsApiResponse+` proof |COMPLETE
+`+ffiReturnsApiResponse+` proof |PROVEN
 
 |`+verify/src/PipelineState.idr+` |Idris2 |Pipeline state machine
-(ValidTransition GADT), terminal/active classification |COMPLETE
+(ValidTransition GADT), terminal/active classification |PROVEN
 |===
 
 ==== New Proofs (2026-04-04)
@@ -93,17 +119,17 @@ type safety |COMPLETE
 |File |Language |Properties Proven |Status
 |`+verification/proofs/idris2/ConfidenceBounds.idr+` |Idris2
 |[0,1] bounds preserved by construction, Bayesian update,
-success/failure monotonicity, clamping, weighted average |COMPLETE
+success/failure monotonicity, clamping, weighted average |PROVEN
 
 |`+verification/proofs/idris2/SafetyTriangle.idr+` |Idris2 |Strict
 total order (irreflexive, asymmetric, transitive), trichotomy, routing
 respects hierarchy, optimality (highest available), completeness (all
-tiers reachable) |COMPLETE
+tiers reachable) |PROVEN
 
 |`+verification/proofs/idris2/DispatchStrategy.idr+` |Idris2
 |Confidence-to-strategy monotonicity, boundary proofs (high/mid/low),
 annealing clamp bounds, nascent-never-auto, veteran-unrestricted
-|COMPLETE
+|PROVEN
 
 |`+verification/proofs/idris2/VerisimdbConnector.idr+` |Idris2
 |Completeness (mandatory fields), Soundness (missing fields rejected),
@@ -113,46 +139,49 @@ canonical JSON finding record (`+FindingFact+`). *Statement superseded
 (`+LogtalkFact+`); the equality proof term is unchanged, the target is
 now `+FindingFact+`, and the corresponding module is
 `+lib/verisim_connector.ex+`. Runtime refinement is not claimed.
-|COMPLETE (superseded statement; re-checked 2026-11-01 in Verify Proofs run 41328302925, idris2 --check job 124912804086, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331)
+|PROVEN (superseded statement; re-checked 2026-11-01 in Verify Proofs run 41328302925, idris2 --check job 124912804086, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331)
 
 |`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
 transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
-restoration, Routing blockage |COMPLETE
+restoration, Routing blockage |PROVEN
 
 |`+verification/proofs/idris2/BatchRollback.idr+` |Idris2
 |Transactionality (all-or-nothing), Reversibility (snapshot
-restoration), Fault tolerance (failure handling) |COMPLETE
+restoration), Fault tolerance (failure handling) |PROVEN
 
 |`+verification/proofs/lean4/RateLimiting.lean+` |Lean 4 |Counter
 never exceeds configured bound, tryAccept preserves invariant, prune
 preserves invariant, inductive sequence processing, rejection guarantee,
-concrete configs (per-bot/global/burst) |COMPLETE
+concrete configs (per-bot/global/burst) |PROVEN
 
 |`+verification/proofs/lean4/BayesianUpdate.lean+` |Lean 4 |H7:
 posterior in (0,1), monotone in successes/failures, zero-observation
-identity, floor/cap clamp |COMPLETE
+identity, floor/cap clamp |PROVEN
 
 |`+verification/proofs/lean4/ParserTotality.lean+` |Lean 4 |VCL
 `+FROM+`-clause parser totality, determinism, round-trip,
-malformed-input rejection |COMPLETE
+malformed-input rejection |PROVEN
 
 |`+verification/proofs/lean4/PageRankInvariants.lean+` |Lean 4
-|PageRank preconditions (edge-weight / out-degree non-negativity).
-*Convergence theorem in progress (Mathlib).* |PARTIAL
+|PageRank preconditions (edge-weight / out-degree non-negativity). The
+convergence theorem is not here: it is theory, see
+<<neural-convergence>> |PROVEN (preconditions only)
 
 |`+verification/proofs/lean4/ESNSpectralScaling.lean+` |Lean 4
-|ESN scaling preconditions (floor-clamped denominator positive).
-*Echo-state stability in progress (Mathlib).* |PARTIAL
+|ESN scaling preconditions over ℕ (floor-clamped denominator positive).
+The file's header still plans the stability proof in Mathlib; that plan
+is withdrawn, see <<neural-convergence>> |PROVEN (preconditions only)
 
 |`+verification/proofs/idris2/NeuralConsensus.idr+` |Idris2 |H9:
 uniform-mean aggregation of Vect n Prediction is in [0,1], bounded below
 by n * min(inputs), denominator > 0 for non-empty ensembles, 8-network
-specialization |COMPLETE
+specialization |PROVEN
 
 |`+verification/proofs/tlaplus/KinGate.tla+` |TLA+ |H8: Kin gate
 atomicity. Acquire/Release/Expire transitions + MutualExclusionByType +
 MutualExclusionBotView + ViewCoherentWithLocks + NoOrphanView +
-GrantsAreWellBracketed + EveryRequestProcessed (liveness) |COMPLETE —
+GrantsAreWellBracketed + EveryRequestProcessed (liveness) |TESTED
+(PROOF-POLICY §4 exception; a finite model check, not a proof) —
 TLC model-check 2026-04-17 passed on 3 bots × 2 repos × MaxRequests=4:
 1,778,860 distinct states, depth 13, no errors in 51s (Eclipse Temurin
 21 JRE, tla2tools 2.19)
@@ -170,10 +199,11 @@ JSONL for violations. See commit history.
 Finite, implementation-independent table correspondence for the retired
 ECHIDNA `+security_learning.lgt+` alert semantics versus
 `+Hypatia.Rules.SecurityErrors+`. Per the estate verifier mapping this
-is Agda territory; per Mathesis this is now *Grade 3* on the
+is Agda territory. It is `+PWG-3+` (PROOF-POLICY §8) on the
 strict-profile receipt recorded in the row below (checker version,
 library discipline, exact invocation, result, source digest, and
-verification commit). Fix *strings* and Elixir
+verification commit). Its import cone is Agda's builtins only: no
+standard library, `+--safe+` in force, zero postulates. Fix *strings* and Elixir
 runtime behaviour are outside the model and are pinned by the migration
 ledger and ExUnit tests respectively.
 
@@ -190,11 +220,13 @@ entries; the two ledgered non-equalities stated exactly
 former severity catch-all members explicit (`+catchAllSastLow+`,
 `+catchAllCiTestsLow+`, `+catchAllUnmaintainedLow+`). Source SHA-256
 (at authoring): bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
-|Grade 3 — AGDA-VERIFIED. Receipt: official pinned Agda 2.8.0.2 Linux
-release, builtins only/no stdlib; invocation `agda --safe --without-K
+|Status `+PROVEN+`; correspondence `+AGDA-VERIFIED+`; `+PWG-3+`, no
+axioms. Receipt: official pinned Agda 2.8.0.2 Linux release, builtins
+only/no stdlib; invocation `agda --safe --without-K
 --cubical-compatible LogtalkMigration.agda`; success in Verify Proofs
-run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. No Grade 2/1,
-reconciliation, or runtime-refinement claim.
+run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331.
+Rocq and Lean legs `+OPEN+` (none written), so no `+PWG-2i+`/`+PWG-2ii+`/`+PWG-1+`,
+reconciliation or runtime-refinement claim.
 |===
 
 ==== Verdict support (2026-10-14, HYP-01)
@@ -294,6 +326,93 @@ the Signalbox criterion has no Signalbox repository to apply to |TESTED
 (Signalbox: OPEN)
 |===
 
+[[neural-convergence]]
+==== Neural convergence: reservoir and PageRank contraction (2026-11-09)
+
+The ESN, the LSM and the Graph of Trust each iterate a map, and each is
+meant to forget where it started. Whether a map of that shape contracts
+is true of *any* implementation, so it is *theory* (PROOF-POLICY §1): the
+source of truth is Agda under the §2.1 invocation, rechecked in Rocq and
+in Lean (core library, no Mathlib). How hypatia's code meets the
+theorem's premises is *engineering* and is recorded separately. The full
+plan is `+docs/proofs/HANDOVER-neural-convergence.adoc+`.
+
+Statements, over an abstract ordered commutative ring (so that no real
+analysis and no postulate is needed; the activation and the matrix enter
+as hypotheses):
+
+* *T-RC (reservoir contraction).* For `+0 ≤ a ≤ 1+`, an `+n × n+` matrix
+  `+W+` whose absolute row sums are all at most `+ρ+`, and any `+σ+` with
+  `+|σ s − σ t| ≤ |s − t|+`: if `+|x_j − y_j| ≤ δ+` for every `+j+`, then
+  for every `+i+` and input `+u+`,
+  `+|F_u(x)_i − F_u(y)_i| ≤ ((1 − a) + a·ρ)·δ+`, where
+  `+F_u(x)_i = (1 − a)·x_i + a·σ(Σ_j W_ij·x_j + b_i·u)+`. Corollary:
+  under the same input sequence, two trajectories approach each other by
+  the factor `+(1 − a) + a·ρ+` per step.
+* *T-PR (damped PageRank contraction).* For `+0 ≤ d ≤ 1+` and an
+  `+n × n+` matrix `+P+` with non-negative entries and every column sum
+  at most 1 (column-*sub*stochastic, as hypatia's dangling nodes make
+  it), the map `+G(x) = c + d·P·x+` satisfies
+  `+Σ_i |G(x)_i − G(y)_i| ≤ d·Σ_j |x_j − y_j|+`. Corollary: iterates from
+  any two starts approach each other by `+d+` per step. Existence of a
+  fixed point needs completeness, which an ordered ring does not have;
+  it is out of scope.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|Artefact |Language |Claim |Status
+|T-RC Agda source (planned `+verification/proofs/agda/ReservoirContraction.agda+`)
+|Agda |The T-RC statement above |`+OPEN+`; `+AGDA-PENDING+`; `+ungraded+`
+
+|T-RC Rocq and Lean legs |Rocq, Lean 4 |Re-proofs of the same statement
+|`+OPEN+` (both)
+
+|T-PR Agda source (planned `+verification/proofs/agda/PageRankContraction.agda+`)
+|Agda |The T-PR statement above |`+OPEN+`; `+AGDA-PENDING+`; `+ungraded+`
+
+|T-PR Rocq and Lean legs |Rocq, Lean 4 |Re-proofs of the same statement
+|`+OPEN+` (both)
+
+|Reservoir scaling, `+lib/neural/echo_state_network.ex+`,
+`+lib/neural/liquid_state_machine.ex+` |Elixir |After scaling, the largest
+absolute row sum is `+@reservoir_norm+` (ESN 0.95, LSM 0.9), i.e. T-RC's
+`+ρ+`: `+test/neural_test.exs+` "reservoir's largest absolute row sum
+is 0.95 / 0.9 for any size and seed" (ESN sizes 10/20/80, LSM 10/20/100,
+seeds 1–5) |`+TESTED+`
+
+|Reservoir forgetting at runtime |Elixir |Two runs from different
+initial states converge within the T-RC bound, whose factor is
+`+(1 − a) + a·ρ+` = 0.99 for the ESN (`+a+` 0.2, `+ρ+` 0.95) and 0.97 for
+the LSM (`+a+` 0.3, `+ρ+` 0.9): `+test/neural_test.exs+` "two different
+initial states converge under the same inputs / events" (300 steps or
+events, seeds 1–3) |`+TESTED+`
+
+|T-RC premises for the runtime |— |`+:math.tanh/1+` is 1-Lipschitz, and
+IEEE-754 doubles stand in for the ring (rounding is not modelled)
+|`+ASSUMED+`
+
+|T-PR premises for the runtime: edge weights, `+lib/neural/graph_of_trust.ex+`
+|Elixir |Every edge weight is a non-negative number:
+`+test/graph_of_trust_convergence_test.exs+` "every edge has a non-negative
+numeric weight" |`+TESTED+`
+
+|T-PR premises for the runtime: the map |— |The iteration is `+G+` with
+`+c_i = (1 − d)/n+`, `+d = 0.85+`, and
+`+P_ij = w_ji / Σ_k max(w_jk, 0)+` over positive edges, so column sums
+are at most 1 (a transcription of `+iterate_trust/4+`; no test pins the
+column sums) |`+ASSUMED+`
+|===
+
+==== Toolchain deviations (PROOF-POLICY §6)
+
+`+verify-proofs.yml+` installs Lean through elan, Idris2 from source, Agda
+from the upstream release archive and TLC from the tla2tools jar, none of
+them through a Guix manifest or the container. §6 requires a `+deviation+`
+record for each (leg, tool, asserted version, digest of what was
+installed, why Guix or the container was not used, state). Those records
+have not been written, and the jobs do not yet record installer digests:
+`+OPEN+`.
+
 === Properties Proven
 
 ==== 1. Confidence Bounds (`+ConfidenceBounds.idr+`)
@@ -378,8 +497,8 @@ rejected
 
 ==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
 
-Status for all of P8: *Grade 3 — AGDA-VERIFIED* on the strict-profile
-receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
+Status for all of P8: `+PROVEN+`, correspondence `+AGDA-VERIFIED+`,
+`+PWG-3+`, on the strict-profile receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
 41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331). This grades the finite
 model only.
 
@@ -459,8 +578,9 @@ min-lower-bound)
 |VCL query correctness |- |Partial
 
 |Neural network convergence |`+PageRankInvariants.lean+`,
-`+ESNSpectralScaling.lean+` |Preconditions proven; full
-convergence/stability in progress (Lean + Mathlib)
+`+ESNSpectralScaling.lean+`, `+test/neural_test.exs+` |Preconditions
+`+PROVEN+`; runtime scaling and convergence `+TESTED+`; the two theory
+theorems `+OPEN+` and `+ungraded+` (<<neural-convergence>>)
 |===
 
 === File Locations
