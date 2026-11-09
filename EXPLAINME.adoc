@@ -17,7 +17,8 @@ or `mix hypatia.watch`.
 
 [quote, README.adoc]
 ____
-*Symbolic reasoning* — 42 Elixir rule modules producing fast, deterministic findings
+*Symbolic reasoning* — Elixir rules producing fast, deterministic findings, in
+42 source files under `lib/rules/`
 ____
 
 [quote, README.adoc]
@@ -178,8 +179,9 @@ ____
 ____
 Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
 `/metrics` endpoint and an `/api/*` on port 9090. With
-`HYPATIA_API_BEARER_TOKEN` set, every `/api/*` request needs that bearer token. Without it,
-only loopback clients are answered unless `HYPATIA_API_ALLOW_NONLOCAL=true`.
+`HYPATIA_API_BEARER_TOKEN` set and not empty, every `/api/*` request needs that bearer
+token. Without one, only loopback clients are answered unless
+`HYPATIA_API_ALLOW_NONLOCAL=true`.
 ____
 
 How this is implemented::

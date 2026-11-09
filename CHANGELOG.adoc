@@ -33,6 +33,7 @@ https://semver.org/[Semantic Versioning].
 ** 17 `.md` → `.adoc` links in `docs/README.adoc`.
 * `scripts/check-readme-claims.sh` measures the counts the README quotes,
   and resolves every local link in the README, EXPLAINME and the docs index.
+  Fragments are checked too: a link to `#id` needs that anchor in its target.
   It runs in the Validate Documentation job and fails on drift, where the
   older link step only warned. `tests/readme-claims-test.sh` plants each kind
   of drift.

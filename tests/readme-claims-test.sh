@@ -44,13 +44,21 @@ copy; printf '\nplanted-recipe:\n    true\n' >> "$work/tree/Justfile"
 expect_msg "a recipe the README does not count is refused" 1 "Just recipes is" \
   env README_CLAIMS_ROOT="$work/tree" bash "$script"
 
+copy; sed -i '/^\[\[proof-ledger\]\]$/d' "$work/tree/EXPLAINME.adoc"
+expect_msg "a link to an anchor the target no longer defines is refused" 1 "defines no anchor proof-ledger" \
+  env README_CLAIMS_ROOT="$work/tree" bash "$script"
+
 copy; touch "$work/tree/lib/mix/tasks/hypatia.planted.ex"
 expect_msg "a Mix task the README does not count is refused" 1 "Mix tasks" \
   env README_CLAIMS_ROOT="$work/tree" bash "$script"
 
-if command -v just >/dev/null 2>&1; then
+# The recipe count must be the same with just and with the grep fallback, so
+# a Justfile shape the fallback misreads cannot pass. CI installs just for this.
+if ! command -v just >/dev/null 2>&1; then
+  fail=$((fail + 1)); echo "  FAIL just is not on PATH, so the recipe-count parity check cannot run" >&2
+else
   nojust="$work/nojust"; mkdir -p "$nojust"
-  for t in bash env find grep sed wc sort dirname cat mktemp rm mkdir cp git xargs sh touch printf; do
+  for t in bash env find grep sed wc sort tr dirname cat mktemp rm mkdir cp git xargs sh touch printf; do
     p=$(command -v "$t") && ln -sf "$p" "$nojust/$t"
   done
   expect_msg "without just the grep count gives the same recipes" 0 "match the tree" \

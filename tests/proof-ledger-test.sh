@@ -112,7 +112,7 @@ jq -cS 'select(.lane != "none") | {lane, file, result: "pass"}
         + (if .lane == "tlc" then {distinct_states: (.bounds | capture("(?<n>[0-9]+) distinct states").n),
                                    depth: (.bounds | capture("depth (?<d>[0-9]+)").d)} else {} end)' \
   verification/proof-ledger.jsonl | sort -u > "$all_pass"
-lanes=idris2,verdicts,agda,tlc,exunit
+lanes=idris2,verdicts,leanhole,agda,tlc,exunit
 expect "derive: every row agrees with an all-pass run" 0 bash "$script" derive "$lanes" "$all_pass"
 
 jq -cS 'if .file == "verification/proofs/idris2/SafetyTriangle.idr" then .result = "fail" else . end' "$all_pass" > "$work/r-fail.jsonl"
@@ -147,6 +147,57 @@ expect_msg "a line that is not JSON is named, and the run stops there" 1 "line 1
 
 grep -v '^// END GENERATED: proof ledger$' verification/PROOF-STATUS.adoc > "$work/no-marker.adoc"
 expect_msg "render --check with a marker missing says to restore it (exit 2)" 2 "lacks the generated-block markers" env PROOF_STATUS_DOC="$work/no-marker.adoc" bash "$script" render --check
+
+{ echo '[]'; tail -n +2 verification/proof-ledger.jsonl; } > "$work/array-row.jsonl"
+expect_msg "a line that is JSON but not an object is refused" 1 "line 1 is not a JSON object" env PROOF_LEDGER="$work/array-row.jsonl" bash "$script" check
+
+mutate empty-checker '.checker = ""' abi-types
+expect_msg "a proven row with an empty checker is refused" 1 "are not empty" env PROOF_LEDGER="$work/empty-checker.jsonl" bash "$script" check
+
+mutate control-char '.obligation += "\n|open"' abi-types
+expect_msg "a control character in a field is refused" 1 "control character" env PROOF_LEDGER="$work/control-char.jsonl" bash "$script" check
+
+mutate number-leg '.legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven","receipt":1}]' logtalk-migration
+expect_msg "a number anywhere in a row is refused (jq -cS is JCS only without numbers)" 1 "holds no numbers" env PROOF_LEDGER="$work/number-leg.jsonl" bash "$script" check
+
+mutate asserted-leg '.pwg = "1" | .legs = [{"counts":true}]' logtalk-migration
+expect_msg "a leg that only asserts it counts is refused" 1 "unknown leg field(s) counts" env PROOF_LEDGER="$work/asserted-leg.jsonl" bash "$script" check
+
+mutate pending-leg '.pwg = "2i" | .legs = [{"axioms":[],"correspondence":"pending","prover":"rocq","route":"transported","status":"proven"}]' logtalk-migration
+expect_msg "a leg whose statement is not reconciled does not count" 1 "the legs support PWG-3" env PROOF_LEDGER="$work/pending-leg.jsonl" bash "$script" check
+
+mutate counted-leg '.pwg = "2i" | .legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"}]' logtalk-migration
+expect "a reconciled, proven Rocq leg supports PWG-2i" 0 env PROOF_LEDGER="$work/counted-leg.jsonl" bash "$script" check
+
+mutate understated '.legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"},{"axioms":[],"correspondence":"reconciled","prover":"lean","route":"re-proved","status":"proven"}]' logtalk-migration
+expect_msg "a grade below what the legs support is refused too (computed, not asserted)" 1 "the legs support PWG-2ii" env PROOF_LEDGER="$work/understated.jsonl" bash "$script" check
+
+mutate pwg-one '.pwg = "1" | .legs = [{"axioms":[],"correspondence":"reconciled","prover":"rocq","route":"re-proved","status":"proven"},{"axioms":[],"correspondence":"reconciled","prover":"lean","route":"re-proved","status":"proven"}]' logtalk-migration
+expect_msg "PWG-1 is refused while the ledger records no per-commit receipts" 1 "PWG-1 needs a current per-commit receipt" env PROOF_LEDGER="$work/pwg-one.jsonl" bash "$script" check
+
+mutate diverse-claim '.foundation_diverse = true' logtalk-migration
+expect_msg "+foundation-diverse without a counted other-foundation leg is refused" 1 "foundation_diverse is true exactly when" env PROOF_LEDGER="$work/diverse-claim.jsonl" bash "$script" check
+
+expect_msg "a missing PROOF-POLICY pin is refused (section 7)" 1 "pin is missing or malformed" env PROOF_POLICY_PIN="" bash "$script" check
+expect_msg "a pin without a full commit is refused" 1 "pin is missing or malformed" env PROOF_POLICY_PIN="metadatastician/standards 3-practice/PROOF-POLICY.adoc main" bash "$script" check
+
+{ cat verification/PROOF-STATUS.adoc; bash "$script" render; } > "$work/two-blocks.adoc"
+expect_msg "render --check refuses a second generated block" 2 "more than one pair" env PROOF_STATUS_DOC="$work/two-blocks.adoc" bash "$script" render --check
+
+expect_msg "claims: a claim document that does not exist is refused" 1 "does not exist" env PROOF_CLAIM_DOCS="$work/no-such-doc.adoc" bash "$script" claims
+
+printf 'This document no longer quotes the census.\n' > "$work/silent.adoc"
+expect_msg "claims: a claim document that quotes no census is refused" 1 "quotes no census" env PROOF_CLAIM_DOCS="$work/silent.adoc" bash "$script" claims
+
+demoted=$(jq -r 'select(.file == "test/security_errors_test.exs") | .id' verification/proof-ledger.jsonl)
+mutate demoted '.status = "open" | .lane = "none" | .checker = "-" | .bounds = ""' "$demoted"
+expect_msg "derive: a row demoted to lane none cannot dodge the underclaim gate" 1 "passes in lane exunit, and the row records no lane" env PROOF_LEDGER="$work/demoted.jsonl" bash "$script" derive "$lanes" "$all_pass"
+
+jq -cS 'if .lane == "tlc" then .distinct_states = (.distinct_states | tostring | .[1:]) else . end' "$all_pass" > "$work/r-suffix.jsonl"
+expect_msg "derive: a TLC count that is only a suffix of the bound is refused (exact compare)" 1 "bounds say" bash "$script" derive "$lanes" "$work/r-suffix.jsonl"
+
+jq -cS 'if .lane == "leanhole" then .result = "fail" else . end' "$all_pass" > "$work/r-lean.jsonl"
+expect_msg "derive: the Lean-hole control is not tested-only when its Lean re-check fails" 1 "verdict-accept-lean-hole" bash "$script" derive "$lanes" "$work/r-lean.jsonl"
 
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -50,7 +50,11 @@ java -cp /path/to/tla2tools.jar tlc2.TLC -config KinGate.cfg KinGate.tla
 The default config bounds the model to 3 bots, 2 repos, `MaxRequests=4`
 (bounds both queue depth and total lifetime requests -- the latter is
 what gives `EveryRequestProcessed` a meaningful termination point).
-State space: 1,778,860 distinct states at depth 13, ~51s on 8 cores.
+State space: 444,715 distinct states at depth 13 (TLC 2.19, `tla2tools.jar` v1.7.4;
+the count the proof ledger records for `kin-gate`). An older note here gave
+1,778,860: that is the size of the graph TLC builds to check the temporal
+properties (444,715 states across 4 branches), not the distinct states the
+model reaches.
 
 == Installing TLA+
 

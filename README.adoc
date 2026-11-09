@@ -19,7 +19,8 @@ toc::[]
 *Hypatia* is the CI/CD governance scanner for the hyperpolymath estate (~400 repositories).
 It combines:
 
-* *Symbolic reasoning* — 42 Elixir rule modules producing fast, deterministic findings
+* *Symbolic reasoning* — Elixir rules producing fast, deterministic findings, in
+  42 source files under `lib/rules/`
   (link:docs/rules/catalogue.adoc[full rule catalogue])
 * *Neural learning* — 8 networks on a shared blackboard, learning which fixes actually stick
 * *Bayesian confidence* — every recipe carries a Beta-distributed confidence updated from real
@@ -76,7 +77,7 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 [cols="1,3"]
 |===
 | `lib/` | 154 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
-| `lib/rules/` | 42 rule modules; see link:docs/rules/catalogue.adoc[the catalogue]
+| `lib/rules/` | 42 source files: rule modules and their helpers; see link:docs/rules/catalogue.adoc[the catalogue]
 | `lib/neural/` | 8 networks + blackboard, coordinator, persistence, rebalancer
 | `lib/vcl/` | VCL query layer over verisim-data: parser, file executor, cache, federation
 | `lib/merge_orchestration/` | 12 modules — leases, ledger, ticker
@@ -92,8 +93,9 @@ See link:docs/architecture/topology.adoc[docs/architecture/topology.adoc] for th
 == Installation
 
 Guix is the estate's reproducible-build path; Nix was retired estate-wide on 2026-06-05.
-This repository does not track a `guix.scm` yet. Until it does, `mise.toml` pins the
-toolchain and `deploy/Containerfile` builds the image. Podman, not Docker, is the
+This repository does not track a `guix.scm` yet. Until it does, `mise.toml` pins
+Erlang/OTP, Elixir and Zig (its other tools float at `latest`), and
+`deploy/Containerfile` builds the image. Podman, not Docker, is the
 container tool.
 
 [source,bash]
@@ -150,8 +152,9 @@ https://github.com/hyperpolymath/hypatia/wiki/Operations[Operations wiki page].
 
 Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
 `/metrics` endpoint and an `/api/*` on port 9090. With
-`HYPATIA_API_BEARER_TOKEN` set, every `/api/*` request needs that bearer token. Without it,
-only loopback clients are answered unless `HYPATIA_API_ALLOW_NONLOCAL=true`.
+`HYPATIA_API_BEARER_TOKEN` set and not empty, every `/api/*` request needs that bearer
+token. Without one, only loopback clients are answered unless
+`HYPATIA_API_ALLOW_NONLOCAL=true`.
 
 === Consuming the RSR oracle from another repository
 

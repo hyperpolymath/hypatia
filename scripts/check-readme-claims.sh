@@ -38,8 +38,8 @@ expect() {
 }
 
 rules=$(find lib/rules -maxdepth 1 -name '*.ex' | wc -l)
-expect "lib/rules" "$rules" "*Symbolic reasoning* — N Elixir rule modules"
-expect "lib/rules" "$rules" '| `lib/rules/` | N rule modules'
+expect "lib/rules" "$rules" 'N source files under `lib/rules/`'
+expect "lib/rules" "$rules" '| `lib/rules/` | N source files: rule modules and their helpers'
 expect "lib/" "$(find lib -name '*.ex' | wc -l)" '| `lib/` | N Elixir source files'
 expect "Just recipes" "$(recipes)" '`just --list` shows all N recipes'
 
@@ -60,7 +60,16 @@ else
   say "CLI commands: $commands"
 fi
 
-# Every local link: target resolves, relative to the document that names it.
+# The ids an AsciiDoc file defines: explicit [[id]], [[id,label]], [#id],
+# anchor:id[], and the default section ids (_title_in_lower_case).
+anchors() {
+  { grep -oE '\[\[[A-Za-z0-9_:.-]+|\[#[A-Za-z0-9_:-]+|anchor:[A-Za-z0-9_:.-]+\[' "$1" | sed -E 's/^(\[\[|\[#|anchor:)//; s/\[$//'
+    sed -nE 's/^=+ +(.*)$/\1/p' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/_/g; s/_+$//; s/^/_/'
+  } | sort -u
+}
+
+# Every local link: target resolves, relative to the document that names it,
+# and so does its #fragment when the target is AsciiDoc.
 for doc in "$readme" EXPLAINME.adoc docs/README.adoc; do
   [ -f "$doc" ] || continue
   dir=$(dirname "$doc")
@@ -68,7 +77,11 @@ for doc in "$readme" EXPLAINME.adoc docs/README.adoc; do
     case "$target" in http://*|https://*|mailto:*|"") continue ;; esac
     path=${target%%#*}
     [ -z "$path" ] && continue
-    [ -e "$dir/$path" ] || say "$doc links $target, which does not exist"
+    if [ ! -e "$dir/$path" ]; then say "$doc links $target, which does not exist"; continue; fi
+    if [ "$target" != "$path" ] && [[ "$path" == *.adoc ]]; then
+      frag=${target#*#}
+      anchors "$dir/$path" | grep -qxF -- "$frag" || say "$doc links $target, and $path defines no anchor $frag"
+    fi
   done < <(grep -oE 'link:[^[ ]+\[' "$doc" | sed -E 's/^link:(.*)\[$/\1/')
 done
 
