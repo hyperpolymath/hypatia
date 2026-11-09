@@ -9,7 +9,11 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
   @tmp_dir System.tmp_dir!()
 
   defp create_repo_with_workflow(yaml_content, filename \\ "test.yml") do
-    repo = Path.join(@tmp_dir, "wh_test_#{System.unique_integer([:positive])}")
+    repo = Path.join(@tmp_dir, "wh_test_#{System.pid()}_#{System.unique_integer([:positive])}")
+    # The OS pid keeps two concurrent VMs apart; unique_integer restarts with
+    # each VM, so a reused pid can meet what an earlier run left. Clear it:
+    # a workflow from a crashed run would otherwise be scanned with this one.
+    File.rm_rf!(repo)
     wf = Path.join([repo, ".github", "workflows"])
     File.mkdir_p!(wf)
     File.write!(Path.join(wf, filename), yaml_content)
@@ -549,7 +553,8 @@ defmodule Hypatia.Rules.WorkflowHardeningTest do
     end
 
     test "returns [] on a repo without .github/workflows/" do
-      repo = Path.join(@tmp_dir, "wh_empty_#{System.unique_integer([:positive])}")
+      repo = Path.join(@tmp_dir, "wh_empty_#{System.pid()}_#{System.unique_integer([:positive])}")
+      File.rm_rf!(repo)
       File.mkdir_p!(repo)
       assert WorkflowHardening.scan(repo).total == 0
       File.rm_rf!(repo)
