@@ -98,8 +98,10 @@ and the wire-contract pin `+connectorCount : length allConnectors = 16+`
 route totality, dispatch correctness, Bayesian monotonicity, annealing
 caps, end-to-end composition |PROVEN
 
-|`+src/Hypatia/ABI/GraphQL.idr+` |Idris2 |Query/Mutation/Subscription
-type safety |PROVEN
+|`+src/Hypatia/ABI/GraphQL.idr+` |Idris2 |Every query and every mutation
+returns an ApiResponse-wrapped type (queryReturnsApiResponse,
+mutationReturnsApiResponse). Subscriptions are declared, with no proof
+about them |PROVEN (queries and mutations)
 
 |`+src/Hypatia/ABI/GRPC.idr+` |Idris2 |gRPC service type definitions
 |Not a proof: the module type-checks in the ABI package build, but it
@@ -113,8 +115,10 @@ applies
 |`+src/Hypatia/ABI/FFI.idr+` |Idris2 |GADT constructors,
 `+ffiReturnsApiResponse+` proof |PROVEN
 
-|`+verify/src/PipelineState.idr+` |Idris2 |Pipeline state machine
-(ValidTransition GADT), terminal/active classification |PROVEN
+|`+verify/src/PipelineState.idr+` |Idris2 |Pipeline state machine: only the
+transitions listed in the ValidTransition GADT can be constructed (by
+construction). The terminal/active classification is defined, not proved
+|PROVEN (transitions by construction)
 |===
 
 ==== New Proofs (2026-04-04)
