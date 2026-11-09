@@ -233,7 +233,7 @@ fixture's edges and every `+expected.tsv+` row against the model's
 this file's type check red.
 |PROVEN (model only; runtime refinement not claimed). Receipt: Idris 2
 0.7.0 built from source on Chez Scheme 10.0.0+dfsg-5build1;
-invocation `+idris2 --check ActionsLockClosure.idr+` under
+invocation `+idris2 --check+` on this file, under
 `+%default total+`, with no `+believe_me+`, `+assert_total+` or
 `+postulate+`; success in Verify Proofs run 42623006244, job
 129179628830. The source was commit
