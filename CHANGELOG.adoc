@@ -83,7 +83,8 @@ model instead of scanning lines (WH013 and WH014 follow, and
   and holds an allowed entry with no port (every port) to a declaration
   with none, and a declaration with no port to an allowed entry with none.
   Hosts are now also read from the job's and the workflow's `env:` (a
-  workflow value the job sets again is not the job's), but not from a
+  value is not counted where the job or the step sets the same
+  variable again), but not from a
   step's `name`, `id` or `if`; database and broker URLs
   (`postgres://`, `rediss://`, `mongodb+srv://`, AMQP, MQTT, LDAP, SMTP,
   SFTP) are read at their scheme's default port; and a `#` after a shell

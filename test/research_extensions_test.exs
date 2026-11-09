@@ -2216,6 +2216,48 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a job env value every step sets again reaches no step" do
+      job = fn second_step ->
+        """
+        on: push
+        jobs:
+          ship:
+            runs-on: ubuntu-latest
+            env:
+              UPLOAD_URL: https://old.example.com/v1
+            steps:
+              - run: |
+                  curl -H "t: ${{ secrets.TOKEN }}" "$UPLOAD_URL"
+                env:
+                  UPLOAD_URL: https://new.example.com/v1
+        #{second_step}
+        """
+      end
+
+      findings = fn yaml ->
+        repo = create_repo_with_workflow(yaml, "ship.yml")
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+            ~s|:secrets ("TOKEN") :endpoints ("new.example.com:443") :enforcement none))|
+        )
+
+        result = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        result
+      end
+
+      overridden =
+        "      - run: echo done\n        env:\n          UPLOAD_URL: https://new.example.com/v2"
+
+      assert findings.(job.(overridden)) == []
+
+      # One step that does not set it sees the job's value.
+      assert [finding] = findings.(job.("      - run: echo done"))
+      assert finding.reason =~ ~s|"old.example.com:443"|
+    end
+
     test "a step's name, id and condition name no endpoint" do
       steps = """
             - name: Read https://docs.example.com before deploying

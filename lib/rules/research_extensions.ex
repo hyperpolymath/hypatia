@@ -465,14 +465,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
         hardened?: harden_step != nil,
         harden_policy: harden_step && harden_runner_policy(harden_step),
         allowed_endpoints: harden_step && harden_runner_allowed(harden_step),
-        # A literal endpoint in the job's or the workflow's `env:` reaches every
-        # step (`$UPLOAD_URL`), so it is named as surely as one in a step,
-        # unless the job sets the same variable itself.
-        named_hosts:
-          Enum.flat_map(
-            job_env_entries(workflow.env, job.env) ++ Enum.flat_map(steps, &step_entries/1),
-            &named_hosts(&1.value)
-          ),
+        # A literal endpoint in the job's or the workflow's `env:` reaches a
+        # step (`$UPLOAD_URL`) that does not set the same variable itself, so
+        # it is named as surely as one in that step.
+        named_hosts: job_named_hosts(workflow, job, steps),
         exposures: re001_exposures(steps, job_untrusted_events),
         shared?: shared_line != nil
       }
@@ -799,8 +795,22 @@ defmodule Hypatia.Rules.ResearchExtensions do
     "smtps" => 465
   }
 
-  # The `env:` entries a job's steps see: the job's own, and the workflow's
-  # that the job does not set again.
+  # The hosts a job's steps name: in each step's own entries, and in the
+  # inherited `env:` entries the step does not set again.
+  defp job_named_hosts(workflow, job, steps) do
+    inherited = job_env_entries(workflow.env, job.env)
+
+    steps
+    |> Enum.flat_map(fn step ->
+      own = MapSet.new(Workflow.entries(step.env), &Workflow.text(&1.key))
+      Enum.reject(inherited, &(Workflow.text(&1.key) in own)) ++ step_entries(step)
+    end)
+    |> Enum.uniq()
+    |> Enum.flat_map(&named_hosts(&1.value))
+  end
+
+  # The `env:` entries a job passes to its steps: its own, and the
+  # workflow's that the job does not set again.
   defp job_env_entries(workflow_env, job_env) do
     own = Workflow.entries(job_env)
     keys = MapSet.new(own, &Workflow.text(&1.key))
