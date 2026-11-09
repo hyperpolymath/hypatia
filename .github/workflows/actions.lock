@@ -72,6 +72,11 @@ workflows:
         - 'erlef/setup-beam@v1.24.1'
     '.github/workflows/mirror.yml':
         - 'metadatastician/standards@7641c7fdb01420696b5420ab85d88f599f32f609'
+    '.github/workflows/oracle-segfault-diag.yml':
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+        - 'erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124'
     '.github/workflows/pages.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'

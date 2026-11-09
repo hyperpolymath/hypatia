@@ -1,0 +1,197 @@
+# This workflow is managed by gh actions-lock.
+# SPDX-License-Identifier: MPL-2.0
+#
+# TEMPORARY, DO NOT MERGE. Diagnostic only: this file lives on a draft PR that
+# is closed unmerged once the matrix has answered its question. It must never
+# reach main.
+#
+# Question: `mix hypatia.rsr_score` segfaults (exit 139) deterministically when
+# scoring hyperpolymath/rsr-template-repo at 2ba9126 against standards e064539,
+# with Hypatia be98f74 on Elixir 1.19.4 / OTP 28.3 (erts 16.2.2): 30/30 runs on
+# each of 3 runners, and 0/30 on tree 0c9dc42. gdb puts the crashing scheduler
+# in sweep_off_heap (erl_gc.c) <- minor_collection <- gc_test <-
+# beam_jit_bs_init_bits, i.e. heap corruption from earlier. Is it one OTP
+# release (range), all of them, and does Hypatia's current code still hit it?
+#
+# Method: OTP x Hypatia-ref matrix. Each job scores the same subject RUNS
+# times with the default emulator, once with `+JMsingle true`, and once on the
+# interpreter flavour (`-emu_flavor emu`) when the install ships it. A crash
+# leaves a core; gdb prints `bt 40` of the crashing thread into the log. The
+# job never fails on a crash: the counts and backtraces are the result.
+name: "Oracle segfault diagnosis (temporary, DO NOT MERGE)"
+
+on:
+  pull_request:
+    paths: ['.github/workflows/oracle-segfault-diag.yml']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    name: "OTP ${{ matrix.otp }} / hypatia ${{ matrix.hypatia == 'head' && 'PR' || 'be98f74' }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        otp: ['27.3', '28.0', '28.1', '28.2', '28.3', '28']
+        # be98f74 = the oracle pin that crashed; 'head' = this PR's merge ref
+        # (main plus this workflow file), i.e. Hypatia's current code.
+        hypatia: ['be98f74ce93df200752f3798efa1305bfa3e0e10', 'head']
+    env:
+      SUBJECT: 2ba912697e7f5f1abe0d8c51d9af436700acddd0
+      STANDARDS: e064539116c2dcfdf282a4749dbd58c69961c7e6
+    steps:
+      - name: Checkout the subject (rsr-template-repo @ 2ba9126)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: hyperpolymath/rsr-template-repo
+          ref: ${{ env.SUBJECT }}
+          path: subject
+          persist-credentials: false
+
+      - name: Checkout standards (SSOT @ e064539)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: metadatastician/standards
+          ref: ${{ env.STANDARDS }}
+          path: _standards
+          persist-credentials: false
+
+      - name: Checkout hypatia (the oracle) at the matrix ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.hypatia == 'head' && github.sha || matrix.hypatia }}
+          path: _hypatia
+          persist-credentials: false
+
+      - name: Setup Elixir 1.19.4 / OTP ${{ matrix.otp }}
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: ${{ matrix.otp }}
+
+      - name: Restore Mix cache (per OTP and ref)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _hypatia/deps
+            _hypatia/_build
+          key: oracle-diag-${{ runner.os }}-otp${{ matrix.otp }}-${{ matrix.hypatia == 'head' && github.sha || matrix.hypatia }}-${{ hashFiles('_hypatia/mix.lock') }}
+
+      - name: Compile the oracle
+        working-directory: _hypatia
+        run: mix local.hex --force && mix local.rebar --force && mix deps.get && mix compile
+
+      - name: Install gdb
+        run: |
+          sudo apt-get install -y -qq gdb >/dev/null 2>&1 \
+            || { sudo apt-get update -qq && sudo apt-get install -y -qq gdb >/dev/null; }
+          gdb --version | head -1
+
+      - name: Score the subject repeatedly, with crash backtraces
+        working-directory: _hypatia
+        env:
+          RUNS: '5'
+          LABEL: otp-${{ matrix.otp }}-${{ matrix.hypatia == 'head' && 'pr' || 'be98f74' }}
+        run: |
+          set -u
+          out="$RUNNER_TEMP/diag"
+          mkdir -p "$out/cores"
+          sudo sysctl -q -w kernel.core_pattern="$out/cores/core.%p"
+          ulimit -c unlimited
+          ssot=../_standards/0-canon/rsr/rsr-criteria-v2.a2ml
+          root="$(erl -noshell -eval 'io:format("~s",[code:root_dir()]),halt().')"
+          vinfo() {
+            erl -noshell -eval 'io:format("otp_release=~s erts=~s emu_flavor=~p~n",[erlang:system_info(otp_release),erlang:system_info(version),erlang:system_info(emu_flavor)]),halt().' 2>&1 | tail -n 1
+          }
+
+          # score NAME: one scorer run; on a crash, a gdb backtrace of the
+          # crashing thread lands in bt-NAME.txt. Callers set ERL_FLAGS /
+          # ERL_AFLAGS in the environment of the call.
+          score() {
+            local name="$1" rc=0 c exe
+            rm -f "$out"/cores/core.*
+            mix hypatia.rsr_score ../subject --ssot "$ssot" > "$out/run-$name.txt" 2>&1 || rc=$?
+            echo "$name rc=$rc" | tee -a "$out/runs.txt"
+            for c in "$out"/cores/core.*; do
+              [ -f "$c" ] || continue
+              exe="$(file "$c" | sed -n "s/.*execfn: '\([^']*\)'.*/\1/p")"
+              [ -x "$exe" ] || exe="$(find "$root" -name beam.smp -type f -print -quit)"
+              gdb -batch -q -ex 'bt 40' "$exe" "$c" 2>&1 \
+                | grep -v -e 'JITed symbol file' -e '^\[New LWP' -e '^\[Thread debugging' -e '^warning: ' \
+                > "$out/bt-$name.txt"
+              rm -f "$c"
+            done
+            last_rc=$rc
+          }
+          top() { # first frames of a backtrace file, one line
+            [ -f "$1" ] || { echo "-"; return; }
+            grep -E '^#[0-9]+ ' "$1" | head -n 3 \
+              | sed -E 's/^#[0-9]+ +(0x[0-9a-f]+ in )?//; s/ \(.*\) at / at /; s/ \(.*$//' | paste -sd '<' -
+          }
+
+          {
+            echo "label=$LABEL subject=$(git -C ../subject rev-parse HEAD) standards=$(git -C ../_standards rev-parse HEAD) hypatia=$(git rev-parse HEAD)"
+            echo "otp_version_file=$(cat "$root"/releases/*/OTP_VERSION 2>/dev/null | head -n 1)"
+            echo "default: $(vinfo)"
+            echo "elixir=$(elixir --short-version 2>/dev/null)"
+            echo "cpu=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
+            echo "kernel=$(uname -r)"
+            echo "emulators: $(find "$root"/erts-*/bin -maxdepth 1 -name 'beam*' -printf '%f ')"
+          } | tee "$out/runner.txt"
+
+          crashes=0
+          for i in $(seq 1 "$RUNS"); do
+            score "default-$i"
+            [ "$last_rc" -ge 128 ] && crashes=$((crashes + 1))
+          done
+          first_bt="$(find "$out" -maxdepth 1 -name 'bt-default-*.txt' | sort | head -n 1)"
+
+          echo "jmsingle probe: $(ERL_FLAGS='+JMsingle true' vinfo)" | tee -a "$out/runner.txt"
+          ERL_FLAGS='+JMsingle true' score jmsingle
+          jm_rc=$last_rc
+
+          emu_info="$(ERL_AFLAGS='-emu_flavor emu' erl -noshell -eval 'io:format("emu_flavor=~p~n",[erlang:system_info(emu_flavor)]),halt().' 2>&1 | head -n 3 | paste -sd ' ' -)"
+          echo "emu flavour probe: $emu_info" | tee -a "$out/runner.txt"
+          case "$emu_info" in
+            *emu_flavor=emu*) ERL_AFLAGS='-emu_flavor emu' score emu; emu_rc="$last_rc" ;;
+            *) emu_rc="unavailable" ;;
+          esac
+
+          result="RESULT label=$LABEL $(grep '^default:' "$out/runner.txt" | cut -d' ' -f2-) otp_version=$(grep '^otp_version_file=' "$out/runner.txt" | cut -d= -f2) crashes=$crashes/$RUNS jmsingle_rc=$jm_rc emu_rc=$emu_rc top=$(top "${first_bt:-/nonexistent}") jm_top=$(top "$out/bt-jmsingle.txt") emu_top=$(top "$out/bt-emu.txt")"
+          echo "$result" | tee "$out/result.txt"
+
+          echo "--- rc of every run ---"; cat "$out/runs.txt"
+          # One default-run backtrace (the rest are in the artifact), plus the
+          # +JMsingle and emu-flavour runs' if they crashed.
+          for b in "${first_bt:-}" "$out/bt-jmsingle.txt" "$out/bt-emu.txt"; do
+            if [ -z "$b" ] || [ ! -f "$b" ]; then continue; fi
+            echo "--- crashing thread backtrace: $(basename "$b") ---"
+            head -n 60 "$b"
+          done
+          echo "--- default-1 output (tail) ---"; tail -n 25 "$out/run-default-1.txt" || true
+          echo "--- jmsingle output (tail) ---"; tail -n 8 "$out/run-jmsingle.txt" || true
+          {
+            echo "### $LABEL"
+            echo '```'
+            cat "$out/runner.txt"
+            cat "$out/runs.txt"
+            echo "$result"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Upload the evidence (backtraces, outputs; no raw cores)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oracle-diag-otp-${{ matrix.otp }}-${{ matrix.hypatia == 'head' && 'pr' || 'be98f74' }}
+          path: ${{ runner.temp }}/diag
+          retention-days: 7
+          if-no-files-found: warn
