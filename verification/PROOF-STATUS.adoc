@@ -231,8 +231,15 @@ The five corpus rows are evaluated as equations
 fixture's edges and every `+expected.tsv+` row against the model's
 `+-- corpus:+` rows and ref table. A drift on either side turns that test or
 this file's type check red.
-|OPEN until the first `+idris2 --check+` receipt from Verify Proofs is
-recorded here.
+|PROVEN (model only; runtime refinement not claimed). Receipt: Idris 2
+0.7.0 built from source on Chez Scheme 10.0.0+dfsg-5build1;
+invocation `+idris2 --check ActionsLockClosure.idr+` under
+`+%default total+`, with no `+believe_me+`, `+assert_total+` or
+`+postulate+`; success in Verify Proofs run 42623006244, job
+129179628830. The source was commit
+71d116024954a0ef314c1e1910cbd11102fb1646, checked as the PR merge commit
+8db0f43fbe8bd0b4a195b5d40736012c4f8d2a4b on main
+c639c465e9bbbd01522f1eae12ac98a071afac13.
 
 |Elixir `+ActionsLock.parse/1+` and Bash `+close-lock.sh --check+`
 against the model |ExUnit, Bash |Each implementation reproduces
