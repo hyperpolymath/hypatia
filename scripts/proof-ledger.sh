@@ -39,7 +39,7 @@ AGDA_PROFILE='--safe --without-K --cubical-compatible'
 need_ledger() { [ -f "$LEDGER" ] || { echo "::error::proof-ledger: $LEDGER not found"; exit 2; }; }
 
 check() {
-  local fails=0 n=0 line id
+  local fails=0 n=0 line id unparsed=0
   # Byte profile: every line is its own `jq -cS` rendering, ASCII only, and
   # the file ends in exactly one LF.
   if LC_ALL=C grep -nP '[^\x00-\x7F]' "$LEDGER" >/dev/null; then
@@ -50,21 +50,33 @@ check() {
   fi
   while IFS= read -r line; do
     n=$((n + 1))
-    if ! canon=$(jq -cS . <<<"$line" 2>/dev/null) || [ "$canon" != "$line" ]; then
+    if ! canon=$(jq -cS . <<<"$line" 2>/dev/null); then
+      echo "::error::proof-ledger: line $n is not JSON"; fails=$((fails + 1)); unparsed=1
+    elif [ "$canon" != "$line" ]; then
       echo "::error::proof-ledger: line $n is not in canonical (jq -cS / JCS) form"; fails=$((fails + 1))
     fi
   done < "$LEDGER"
   [ "$n" -gt 0 ] || { echo "::error::proof-ledger: $LEDGER has no rows"; exit 1; }
+  # The schema pass reads the file as JSON; a line that is not JSON would
+  # abort it, so stop here with the lines named.
+  if [ "$unparsed" -eq 1 ]; then
+    echo "proof-ledger: INVALID ($fails problem(s)) in $LEDGER"
+    return 1
+  fi
 
   # Schema and status rules, one message per broken rule.
   local errs
   errs=$(jq -r --arg agda "$AGDA_PROFILE" '
     def need(k; t): if (has(k) and (.[k] | type) == t) then empty else "\(.id // "?"): field \(k) must be a \(t)" end;
+    # Field types first: a row with a missing or mistyped field gets only
+    # those messages, since the rules below assume the types.
     . as $r
-    | ( need("id"; "string"), need("kind"; "string"), need("obligation"; "string"),
+    | [ need("id"; "string"), need("kind"; "string"), need("obligation"; "string"),
         need("status"; "string"), need("checker"; "string"), need("file"; "string"),
         need("names"; "array"), need("axioms"; "array"), need("bounds"; "string"),
-        need("trust_boundary"; "string"), need("lane"; "string") ),
+        need("trust_boundary"; "string"), need("lane"; "string"),
+        (if any(.names[]?, .axioms[]?; type != "string") then "\(.id // "?"): names and axioms hold strings" else empty end) ] as $te
+    | if ($te | length) > 0 then $te[] else
       ( [keys[] | select(IN("id","kind","obligation","status","checker","file","names","axioms","bounds","trust_boundary","lane","pwg","foundation_diverse","legs") | not)]
         | if length > 0 then "\($r.id): unknown field(s) \(join(", "))" else empty end ),
       # The lane is the CI job whose receipt decides the status (`derive`):
@@ -83,7 +95,6 @@ check() {
       ( if IN(.kind; "engineering", "theory") then empty else "\(.id): kind must be engineering or theory" end ),
       ( if IN(.status; "proven", "proven-with-postulates", "argued", "tested-only", "open") then empty
         else "\(.id): status \(.status) is outside the closed vocabulary" end ),
-      ( if any(.names[], .axioms[]; type != "string") then "\(.id): names and axioms hold strings" else empty end ),
       ( if (.status == "proven" or .status == "proven-with-postulates") and .checker == "-" then "\(.id): a proven row names its checker" else empty end ),
       ( if .status == "proven" and (.axioms | length) > 0 then "\(.id): proven rests on no axioms; with \(.axioms | join(", ")) it is proven-with-postulates" else empty end ),
       ( if .status == "proven-with-postulates" and (.axioms | length) == 0 then "\(.id): proven-with-postulates lists its axioms" else empty end ),
@@ -105,6 +116,7 @@ check() {
         else
           ( if has("pwg") or has("legs") or has("foundation_diverse") then "\(.id): pwg, legs and foundation_diverse belong to theory rows" else empty end )
         end )
+      end
   ' "$LEDGER")
   if [ -n "$errs" ]; then
     while IFS= read -r e; do echo "::error::proof-ledger: $e"; done <<<"$errs"
@@ -124,7 +136,7 @@ check() {
     if [ -n "$name" ] && ! grep -qwF -- "$name" "$file"; then
       echo "::error::proof-ledger: $id says $file holds '$name', and it does not (renamed or removed?)"; fails=$((fails + 1))
     fi
-  done < <(jq -r 'select(.file != "-") | .id as $i | .file as $f | if (.names | length) == 0 then [$i, $f, ""] else (.names[] | [$i, $f, .]) end | @tsv' "$LEDGER")
+  done < <(jq -r 'select(.file != "-" and (.names | type) == "array" and (.file | type) == "string") | .id as $i | .file as $f | if (.names | length) == 0 then [$i, $f, ""] else (.names[] | [$i, $f, .]) end | @tsv' "$LEDGER")
 
   if [ "$fails" -gt 0 ]; then
     echo "proof-ledger: INVALID ($fails problem(s)) in $LEDGER"
@@ -308,6 +320,9 @@ case "${1:-}" in
       "") render ;;
       --check)
         [ -f "$DOC" ] || { echo "::error::proof-ledger: $DOC not found"; exit 2; }
+        if ! grep -qxF -- "$BEGIN_MARK" "$DOC" || ! grep -qxF -- "$END_MARK" "$DOC"; then
+          echo "::error::proof-ledger: $DOC lacks the generated-block markers; restore them (render --write needs them too)"; exit 2
+        fi
         if ! diff -u <(doc_block) <(render); then
           echo "::error::proof-ledger: the Proof Ledger block in $DOC is not the rendering of $LEDGER; run scripts/proof-ledger.sh render --write"
           exit 1
