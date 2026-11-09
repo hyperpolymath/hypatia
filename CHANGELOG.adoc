@@ -12,6 +12,20 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== Proof claims follow the machine proof ledger (2026-11-09)
+
+* `EXPLAINME.adoc` is back at the repository root, as README-EXPLAINME
+  requires, and every claim in it was re-checked against the tree. It gains
+  a `#proof-ledger` section that cites `verification/proof-ledger.jsonl`. The
+  README's own overclaims are listed under its known gaps.
+* README, AFFIRMATION and EXPLAINME quote the ledger's census, and
+  `scripts/proof-ledger.sh claims` fails CI when a quoted census and the
+  ledger disagree.
+* The neural-convergence handover is rewritten: Agda first, over
+  constructive reals, with no Mathlib, which PROOF-POLICY forbids.
+  `docs/proofs/needs.adoc` now points at the ledger instead of keeping a
+  list of its own.
+
 ==== WH013 reads steps with RE001's workflow reader (2026-11-04)
 
 RE001's reader is now its own module, `Hypatia.WorkflowYaml`, and WH013 reads

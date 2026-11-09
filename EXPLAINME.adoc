@@ -1,0 +1,290 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Hypatia — EXPLAINME
+:toc: preamble
+:icons: font
+
+This file backs each README claim with a code path and an honest caveat; read
+it after the README if you want to know what is real.
+
+Counts were taken from the tree on 2026-11-09 with the command shown.
+Volatile figures (repositories, outcomes, dispatches) are not quoted; generate
+them with `mix hypatia.recipe_health`, `mix hypatia.strategy_effectiveness`
+or `mix hypatia.watch`.
+
+== Claim-to-implementation map
+
+=== Symbolic rules, distilled from learning
+
+[quote, README.adoc]
+____
+*Symbolic reasoning* — 35 Elixir rule modules producing fast, deterministic findings
+____
+
+[quote, README.adoc]
+____
+The system learns complex patterns through neural analysis, then *distils* them into simple,
+fast declarative rules that can be pre-emptively injected into new repositories, applied as
+cures to existing ones, and executed without ML inference overhead.
+____
+
+How this is implemented::
+Pure-Elixir modules in link:lib/rules/[] behind `Hypatia.Rules`
+(link:lib/rules/rules.ex[]). The escript runs them with no OTP tree and no
+neural process (`app: nil` in link:mix.exs[]).
+
+Caveat::
+`find lib/rules -maxdepth 1 -name '*.ex' | wc -l` gives 42, not 35; the
+generated link:docs/rules/catalogue.adoc[] says 41 and lacks
+`structured_format`. No code path distils learned patterns into rules:
+`learn_from_fix/3` and `promote_patterns/0` in link:lib/rules/learning.ex[]
+have no outside callers, and `git grep RecipeGenerator` finds no caller.
+The rules are hand-written.
+
+=== Neural learning
+
+[quote, README.adoc]
+____
+*Neural learning* — 8 networks on a shared blackboard, learning which fixes actually stick
+____
+
+How this is implemented::
+Eight networks in link:lib/neural/[] (trust graph, mixture of experts,
+liquid state machine, echo state, radial basis, GNN, VAE, sequence model)
+run in six phases over the ETS blackboard under
+link:lib/neural/coordinator.ex[], which calls the GNN, VAE and sequence
+GenServers at lines 792, 865 and 869. All are plain Elixir (no Nx in
+link:mix.exs[]). In link:lib/pattern_analyzer.ex[] the result can only
+lower a recipe's confidence (`min/2`) or demote the finding.
+
+Caveat::
+PageRank convergence and the echo-state property are `open` ledger rows.
+A comment in `pattern_analyzer.ex` still says "all 5 networks".
+
+=== Bayesian confidence and outcome feedback
+
+[quote, README.adoc]
+____
+*Bayesian confidence* — every recipe carries a Beta-distributed confidence updated from real
+  outcomes, which gates whether a fix is applied automatically, proposed as a PR, or merely reported
+____
+
+[quote, README.adoc]
+____
+Outcomes flow back through
+`mix hypatia.record_outcome`, which drives the Bayesian update and, when a recipe degrades,
+auto-quarantine.
+____
+
+How this is implemented::
+link:lib/outcome_tracker.ex[] lines 20–22 (prior strength 10, cap 0.99,
+floor 0.10). Tiers 0.95 and 0.85 are in link:lib/triangle_router.ex[]
+lines 24–25. `OutcomeTracker.quarantined?/2` (re-scan verification rate
+below 0.30) downgrades `auto_execute` to review in
+link:lib/fleet_dispatcher.ex[] line 267.
+
+Caveat::
+That recipe quarantine is not `Hypatia.Safety.Quarantine`, which nothing
+calls (<<known-gaps>>). The Lean model of the update uses natural-number
+pseudo-counts, not Elixir floats.
+
+=== Machine-checked proofs
+
+[quote, README.adoc]
+____
+*Machine-checked proofs* — Idris2 proofs of the ABI and the decision logic (confidence bounds,
+  safety-triangle routing, dispatch thresholds, quarantine, rollback), Lean 4 proofs of the Bayesian
+  update and rate-limiting properties, one Agda model of the Logtalk-to-Elixir migration, and a TLA+
+  model of the Kin gate that is model-checked on a bounded instance. The proofs are about models of
+  the code, not the Elixir runtime itself. Proof ledger: 18 proven of 42; 4 proven-with-postulates,
+  11 tested-only, 2 argued, 7 open
+____
+
+How this is implemented::
+See <<proof-ledger>>. link:.github/workflows/verify-proofs.yml[] runs
+`idris2 --check` per proof file, `idris2 --build` of both ipkgs, `lake
+build`, Agda in its strict profile and TLC.
+
+Caveat::
+Four of the five Lean rows rest on `propext` (two also on `Quot.sound`).
+The TLA+ row is `tested-only`: one bounded instance. The modelled rate
+limiter is not called by any dispatch path. The census matches the ledger.
+
+=== The safety triangle and novelty gating
+
+[quote, README.adoc]
+____
+Every finding is routed *Eliminate > Substitute > Control*, in that order — remove the hazard
+if you can, replace it if you cannot, and only then add a control around it.
+____
+
+[quote, README.adoc]
+____
+Unknown findings are forced to `report_only` regardless of score (novelty gating).
+____
+
+How this is implemented::
+link:lib/pattern_analyzer.ex[] chains `VerisimConnector`, `PatternRegistry`
+and `TriangleRouter`; link:lib/dispatch_manifest.ex[] writes
+`pending.jsonl`. Eliminate dispatch passes the Kin gate
+(link:lib/fleet_dispatcher.ex[] lines 235, 972–983). A novel finding goes to
+Control in link:lib/neural/dispatch_guard.ex[] line 69.
+
+Caveat::
+The ordering is proved over models (`safety-triangle`, `abi-rule-engine`,
+`dispatch-strategy`), not over the Elixir router. With the coordinator down,
+an action is capped at review, not report-only (line 67).
+
+=== Architecture table
+
+[quote, README.adoc]
+____
+133 Elixir modules — pipeline, rules, VCL, neural, safety, web, merge orchestration
+____
+
+How this is implemented::
+Each README row, measured:
++
+[cols="1,2", options="header"]
+|===
+| README row | Tree
+| `lib/`: 133 | 154 `.ex` files (`+ls lib/**/*.ex \| wc -l+`), 180 `defmodule`
+| `lib/rules/`: 35 | 42, as above
+| `lib/neural/`, `lib/vcl/` | Correct
+| `lib/merge_orchestration/`: 12 | Correct (one file in `kin_gate/`)
+| `lib/hypatia/web/` | SARIF is link:lib/hypatia/sarif.ex[], outside `web/`
+| `src/Hypatia/ABI/` | Also `Verdict`, `Retraction`; `Gen.idr` is a generator
+| `ffi/zig/`: 18, 16 | Correct; pinned by link:.github/workflows/zig.yml[]
+| Rust workspace | 7 members in link:Cargo.toml[]
+|===
+
+Caveat::
+The README links `docs/architecture/topology.md`; the file is
+link:docs/architecture/topology.adoc[].
+
+=== Installation, usage and the operational surface
+
+[quote, README.adoc]
+____
+`just --list` shows all 39 recipes; `CONTRIBUTING.md` treats `just` as the canonical entry point.
+____
+
+[quote, README.adoc]
+____
+Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
+`/metrics` endpoint and a bearer-authenticated `/api/*` on port 9090.
+____
+
+How this is implemented::
+link:Justfile[] (with `contractile.just`), link:lib/hypatia/cli.ex[],
+link:lib/mix/tasks/[]; link:mise.toml[] pins Erlang 27.3.4.4 and Elixir
+1.17.3. link:lib/application.ex[] supervises 24 children (two more when
+configured); link:lib/hypatia/web/router.ex[] serves `/`, `/metrics`, `/api`.
+
+Caveat::
+The Justfiles hold 43 recipes. `just build-all` builds Rust and Elixir only.
+The CLI has six commands, not five (`secret-alerts`); there are 16 Mix
+tasks, not 15. No `guix.scm` is tracked. `CONTRIBUTING.md` is in `.github/`.
+`/api/*` needs a bearer token only when `HYPATIA_API_BEARER_TOKEN` is set;
+otherwise it is loopback-only.
+
+=== Project status and licence
+
+[quote, README.adoc]
+____
+242 tests that are excluded from every run, the safety systems that are built but not yet invoked
+by any dispatch path, and the CI blockage currently stopping the Rust lane.
+____
+
+[quote, README.adoc]
+____
+Source files declare `MPL-2.0` and
+documentation declares `CC-BY-SA-4.0`, both via per-file SPDX headers
+____
+
+How this is implemented::
+link:test/test_helper.exs[] excludes `:verisim_data`; nine test files carry
+that tag. The safety modules are in link:lib/safety/[]. Every tracked
+`+lib/**/*.ex+` file carries `MPL-2.0`; link:LICENSES/[] holds both texts.
+
+Caveat::
+The nine files hold 224 literal `test` blocks; 242 needs a `mix test` run
+this audit did not make. The Rust blockage is stale: entry CI-1 of
+link:docs/DEBT-REGISTER.adoc[] records the fix, visible in
+link:integration/Cargo.toml[] lines 48–55. `docs/DEBT-REGISTER.md` is dead.
+45 of 152 tracked `.adoc` files have no SPDX header (recorded for the owner,
+not a licence change).
+
+== Dogfooded across the account
+
+[cols="1,2,2", options="header"]
+|===
+| Technology / pattern | Used here | Also used in
+| Idris2 ABI plus Zig C ABI | link:src/Hypatia/ABI/[], link:ffi/zig/[]
+| link:https://github.com/hyperpolymath/echidna[echidna]
+| Hypatia as estate scanner | link:.github/workflows/hypatia-scan.yml[]
+| `hypatia-scan-reusable.yml` in
+  link:https://github.com/metadatastician/standards[standards], called by
+  echidna and gitbot-fleet
+| JSONL dispatch manifests | link:lib/dispatch_manifest.ex[]
+| link:https://github.com/hyperpolymath/gitbot-fleet[gitbot-fleet]
+  `scripts/dispatch-runner.sh`
+| Machine proof ledger | link:verification/proof-ledger.jsonl[]
+| README-EXPLAINME standard §5 in
+  link:https://github.com/metadatastician/standards[standards]
+|===
+
+[[known-gaps]]
+== Known gaps
+
+[CAUTION]
+====
+Safety systems are built but not wired. `Safety.RateLimiter` and
+`Safety.Quarantine` have no caller in `lib/`. `BatchRollback.rollback/2` is
+reached only through `Kin.Contingency.rollback_wave/2`, which nothing calls.
+`SelfDiagnostics.record_dispatch_failure/0` and `record_dispatch_success/0`
+have no callers, so its circuit breaker never opens. The moduledoc of
+`lib/fleet_dispatcher.ex` (line 47) still names the rate limiter.
+====
+
+[CAUTION]
+====
+README overclaims, each detailed above: learned patterns are not distilled
+into rules (the promotion and recipe-generation code is never invoked); the
+counts of rule modules, `lib/` modules, Just recipes, CLI commands and Mix
+tasks are wrong; `just build-all` is narrower than stated; `guix.scm` is
+absent; two links are dead. Excluded `:verisim_data` tests run in no
+workflow (debt register T-1).
+====
+
+== Evidence index
+
+[cols="2,3", options="header"]
+|===
+| Path | Proves
+| `lib/pattern_analyzer.ex` | Scan, pattern, triangle, neural guard, dispatch
+| `lib/neural/dispatch_guard.ex` | Novel goes to Control; no coordinator caps at review
+| `lib/fleet_dispatcher.ex` | Kin gate review; recipe-quarantine downgrade
+| `lib/outcome_tracker.ex` | Beta update; re-scan with `panic-attack assail`
+| `lib/application.ex` | What is supervised
+| `.github/workflows/zig.yml` | FFI tests run; exactly 18 `hypatia_*` exports
+| `.github/workflows/verify-proofs.yml` | Idris2, Lean, Agda and TLC in CI
+| `docs/DEBT-REGISTER.adoc` | What is broken, ungated or stale
+|===
+
+[[proof-ledger]]
+== Proof ledger
+
+The machine ledger link:verification/proof-ledger.jsonl[] is canonical. It is
+validated by `bash scripts/proof-ledger.sh check`, and its rendered table is
+in link:verification/PROOF-STATUS.adoc#proof-ledger[PROOF-STATUS.adoc]. Where
+this file or the README disagrees with the ledger, the ledger wins.
+
+Census, from `scripts/proof-ledger.sh check`:
+
+[source,text]
+----
+18 proven of 42; 4 proven-with-postulates, 11 tested-only, 2 argued, 7 open.
+----
+
+Of the three theory rows, `logtalk-migration` is `PWG-3`;
+`pagerank-convergence` and `esn-echo-state` are ungraded and `open`.

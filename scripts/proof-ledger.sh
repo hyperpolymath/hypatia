@@ -7,6 +7,7 @@
 # rendered from it (README-EXPLAINME-STANDARD section 5, rule 1).
 #
 #   proof-ledger.sh check          validate the ledger against its rules and the tree
+#   proof-ledger.sh claims         every census README, AFFIRMATION or EXPLAINME quotes is the ledger's
 #   proof-ledger.sh render         print the AsciiDoc block for PROOF-STATUS.adoc
 #   proof-ledger.sh render --check fail if PROOF-STATUS.adoc holds a different block
 #   proof-ledger.sh render --write replace the block in PROOF-STATUS.adoc
@@ -157,12 +158,36 @@ render() {
   printf '%s\n' "$END_MARK"
 }
 
+# Every census a claim document quotes ("N proven of M; ...") must be the
+# ledger's census: README's proof count is derived from the ledger, never
+# typed in (README-EXPLAINME section 5, rule 2). Lines are joined first, so a
+# census wrapped across lines is still read whole.
+CLAIM_DOCS="${PROOF_CLAIM_DOCS:-README.adoc AFFIRMATION.adoc EXPLAINME.adoc}"
+claims() {
+  local want doc found fails=0 seen=0 c
+  want=$(census | sed 's/ Theory rows:.*//')
+  for doc in $CLAIM_DOCS; do
+    [ -f "$doc" ] || continue
+    found=$(tr '\n' ' ' < "$doc" | tr -s ' ' | grep -oE '[0-9]+ proven of [0-9]+(; [0-9]+ proven-with-postulates, [0-9]+ tested-only, [0-9]+ argued, [0-9]+ open\.?)?' || true)
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      seen=$((seen + 1))
+      [ "${c%.}." = "$want" ] && continue
+      echo "::error::proof-ledger: $doc quotes the census '$c'; the ledger's is '$want'"
+      fails=$((fails + 1))
+    done <<<"$found"
+  done
+  if [ "$fails" -gt 0 ]; then return 1; fi
+  echo "proof-ledger: $seen quoted census(es) agree with the ledger"
+}
+
 doc_block() {
   awk -v b="$BEGIN_MARK" -v e="$END_MARK" '$0 == b { on = 1 } on { print } $0 == e { exit }' "$DOC"
 }
 
 case "${1:-}" in
   check) check ;;
+  claims) claims ;;
   render)
     case "${2:-}" in
       "") render ;;
@@ -191,5 +216,5 @@ case "${1:-}" in
         echo "proof-ledger: wrote the block into $DOC" ;;
       *) echo "usage: $0 render [--check|--write]" >&2; exit 2 ;;
     esac ;;
-  *) echo "usage: $0 check | render [--check|--write]" >&2; exit 2 ;;
+  *) echo "usage: $0 check | claims | render [--check|--write]" >&2; exit 2 ;;
 esac

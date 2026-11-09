@@ -69,5 +69,19 @@ cp verification/PROOF-STATUS.adoc "$work/doc.adoc"
 sed -i '0,/^|proven$/s//|proven-with-postulates/' "$work/doc.adoc"
 expect "a hand edit to the rendered table is refused" 1 env PROOF_STATUS_DOC="$work/doc.adoc" bash "$script" render --check
 
+expect "every census the claim documents quote is the ledger's" 0 bash "$script" claims
+
+# Built from the ledger's own census, so the contracts outlive any count.
+census_now=$(bash "$script" check | sed -n 's/^proof-ledger: [0-9]* rows valid; \(.*\) Theory rows:.*/\1/p')
+proven_now=${census_now%% proven of*}
+printf 'Ledger: %s\n' "$((proven_now + 1))${census_now#"$proven_now"}" > "$work/wrong.adoc"
+expect "a census that disagrees with the ledger is refused" 1 env PROOF_CLAIM_DOCS="$work/wrong.adoc" bash "$script" claims
+
+printf 'We have %s so far.\n' "${census_now%%;*}" > "$work/short.adoc"
+expect "a bare count without the rest of the census is refused" 1 env PROOF_CLAIM_DOCS="$work/short.adoc" bash "$script" claims
+
+printf 'Ledger: %s\n' "$census_now" | sed 's/ proven of / proven of\n/; s/, \([0-9]* argued\)/,\n\1/' > "$work/wrapped.adoc"
+expect "a census wrapped across lines is read whole" 0 env PROOF_CLAIM_DOCS="$work/wrapped.adoc" bash "$script" claims
+
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
