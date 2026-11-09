@@ -27,15 +27,19 @@ neurosymbolic CI/CD platform.
 * Canonical estate policy:
   https://github.com/metadatastician/standards/blob/main/3-practice/PROOF-POLICY.adoc[Proof and Verification Policy].
   This file is a proof inventory, not an independent alternative policy.
-* Proof *grades* follow hyperpolymath/mathesis,
-  `+estate-mathematical-architecture+` §§5–6: *Grade 3* is an Agda proof
-  formulated and type-checking under the strict profile; *Grade 2*
-  requires translation(s) into independent foundational system(s);
-  *Grade 1* additionally requires those translated witnesses to compile
-  in headless, isolated CI via verified checker APIs. A target grade is
-  not a status. This inventory records exact statuses (Open / Claimed /
-  `+AGDA-PENDING+` / `+AGDA-VERIFIED+` / Grade 3 …) and never flattens
-  them into a confidence percentage.
+* Proof grades are *Proof Witness Grades*, defined normatively in the
+  estate policy above, §8 (owner ruling 2026-11-04). The Mathesis brief
+  `+estate-mathematical-architecture+` §§5–6, which first proposed the
+  ladder, is provenance only. `+PWG-3+`: the Agda proof checks under the
+  §2.1 profile, with its import cone recorded. `+PWG-2i+` / `+PWG-2ii+`:
+  one or both Rocq/Lean recheck legs count, meaning kernel-checked and
+  `+RECONCILED+`. `+PWG-1+`: every counted witness has a current
+  per-commit receipt. Lower is stronger, and the `+PWG-+` prefix is always
+  written. PWG applies to theory theorems only; engineering proofs carry
+  the §5 tokens alone. A grade is derived from receipts and is not a
+  status. This inventory records statuses (`+AGDA-PENDING+` /
+  `+AGDA-VERIFIED+` …) and grades separately, and never flattens them
+  into a confidence percentage.
 * A checked model proves its stated proposition only. In particular it
   does not prove runtime refinement of Elixir/BEAM code; such claims
   need their own correspondence evidence and tests.
@@ -170,7 +174,7 @@ JSONL for violations. See commit history.
 Finite, implementation-independent table correspondence for the retired
 ECHIDNA `+security_learning.lgt+` alert semantics versus
 `+Hypatia.Rules.SecurityErrors+`. Per the estate verifier mapping this
-is Agda territory; per Mathesis this is now *Grade 3* on the
+is Agda territory; under PROOF-POLICY §8 this is now `+PWG-3+` on the
 strict-profile receipt recorded in the row below (checker version,
 library discipline, exact invocation, result, source digest, and
 verification commit). Fix *strings* and Elixir
@@ -190,10 +194,10 @@ entries; the two ledgered non-equalities stated exactly
 former severity catch-all members explicit (`+catchAllSastLow+`,
 `+catchAllCiTestsLow+`, `+catchAllUnmaintainedLow+`). Source SHA-256
 (at authoring): bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
-|Grade 3 — AGDA-VERIFIED. Receipt: official pinned Agda 2.8.0.2 Linux
+|`+PWG-3+` — AGDA-VERIFIED. Receipt: official pinned Agda 2.8.0.2 Linux
 release, builtins only/no stdlib; invocation `agda --safe --without-K
 --cubical-compatible LogtalkMigration.agda`; success in Verify Proofs
-run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. No Grade 2/1,
+run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331. Import cone: Agda builtins only, zero postulates (`+--safe+`). No `+PWG-2i+`/`+PWG-2ii+`/`+PWG-1+`,
 reconciliation, or runtime-refinement claim.
 |===
 
@@ -424,7 +428,7 @@ rejected
 
 ==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
 
-Status for all of P8: *Grade 3 — AGDA-VERIFIED* on the strict-profile
+Status for all of P8: `+PWG-3+` — AGDA-VERIFIED, on the strict-profile
 receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
 41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331). This grades the finite
 model only.
@@ -494,7 +498,7 @@ model only.
 superseded 2026-11-01)
 
 |Logtalk → Elixir alert-table correspondence
-|`+LogtalkMigration.agda+` |Finite model only — Grade 3 /
+|`+LogtalkMigration.agda+` |Finite model only — `+PWG-3+` /
 AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
 
 |actions.lock closure |`+ActionsLockClosure.idr+` |Model only: decision
