@@ -17,6 +17,9 @@ on:
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
     - scripts/check-proof-status.sh
+    - verification/proof-ledger.jsonl
+    - scripts/proof-ledger.sh
+    - tests/proof-ledger-test.sh
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -42,6 +45,9 @@ on:
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
     - scripts/check-proof-status.sh
+    - verification/proof-ledger.jsonl
+    - scripts/proof-ledger.sh
+    - tests/proof-ledger-test.sh
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -425,6 +431,18 @@ jobs:
 
       - name: PROOF-STATUS.adoc agrees with the tree
         run: bash scripts/check-proof-status.sh
+
+      # The machine ledger is canonical (README-EXPLAINME section 5): it must
+      # obey its rules and the tree, and the Proof Ledger table must be its
+      # rendering. The contracts plant each defect the check exists to catch.
+      - name: Proof ledger is valid and agrees with the tree
+        run: bash scripts/proof-ledger.sh check
+
+      - name: Proof Ledger table is the ledger's rendering
+        run: bash scripts/proof-ledger.sh render --check
+
+      - name: Proof ledger contracts (planted defects)
+        run: bash tests/proof-ledger-test.sh
 
   check-trusted-base:
     name: check-trusted-base
