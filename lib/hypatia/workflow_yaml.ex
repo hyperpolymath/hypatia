@@ -74,11 +74,14 @@ defmodule Hypatia.WorkflowYaml do
 
   @doc """
   Expand YAML anchors and aliases in numbered lines (`{line, line_number}`),
-  as GitHub does: each `*name` is replaced in place by the node anchored
-  `&name` (the nearest one above), a `<<:` merge adds the anchored entries
-  the mapping does not set itself, and every line an alias brings carries
-  the alias's line number. Anchors and aliases count only where a YAML node
-  starts, never inside quoted scalars or block-scalar text. Expansion stops
+  as GitHub does, within what jobs read: the top-level `jobs:` and `env:`
+  sections. There each `*name` is replaced in place by the node anchored
+  `&name` (the nearest one above, wherever it is defined), a `<<:` merge adds
+  the anchored entries the mapping does not set itself, and every line an
+  alias brings carries the alias's line number. An alias in any other
+  top-level section (`on:`, `permissions:`, ...) is returned unchanged.
+  Anchors and aliases count only where a YAML node starts, never inside
+  quoted scalars or block-scalar text. Expansion stops
   after #{@alias_budget} copied lines, so hostile input costs bounded work.
   """
   def expand_aliases(lines) do
@@ -353,6 +356,10 @@ defmodule Hypatia.WorkflowYaml do
   @doc """
   The flow-collection depth (`[`/`{` opened minus `]`/`}` closed) of `text`
   before byte offset `position`; 0 outside any flow collection.
+
+  Every bracket character counts, including one inside a quoted scalar or a
+  comment, so pass text with those already blanked (as the reader's own
+  YAML codes are); on raw YAML the depth can be wrong.
   """
   def nesting_at(text, position) do
     text
