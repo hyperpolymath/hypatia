@@ -197,6 +197,52 @@ run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0
 reconciliation, or runtime-refinement claim.
 |===
 
+==== actions.lock closure (2026-11-09, standards#963 criterion 5)
+
+An engineering property of one wire format (`+actions.lock+`), so Idris2
+under PROOF-POLICY §1. Hypatia is the authority for closure (owner decision on
+standards#963). `+scripts/close-lock.sh --check+` in hyperpolymath/standards
+is a second implementation. The two share a five-row corpus,
+`+test/fixtures/actions_lock/closure/+`, which is byte-identical to standards'
+`+scripts/tests/fixtures/actions-lock-closure/+`. This is an engineering
+proof, so it carries §5 tokens only and no PWG.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Properties stated |Status
+|`+verification/proofs/idris2/ActionsLockClosure.idr+` |Idris2
+|The model is generic over refs with decidable equality, and its
+statements are proved for that model:
+
+* `+closedIffNoDangling+`: closure holds exactly when the dangling list is
+empty.
+* `+danglingSound+`: every reported ref is named and has no record.
+* `+danglingComplete+`: every named ref without a record is reported.
+* `+decClosed+`: closure is decidable.
+
+The five corpus rows are evaluated as equations
+(`+rowClosedV00x+`, `+rowClosedCaseVariant+`, `+rowDanglingNested+`,
+`+rowDanglingWorkflowRef+`). So the file stops type-checking if the model
+and `+expected.tsv+` disagree.
+|OPEN until the first `+idris2 --check+` receipt from Verify Proofs is
+recorded here.
+
+|Elixir `+ActionsLock.parse/1+` and Bash `+close-lock.sh --check+`
+against the model |ExUnit, Bash |Each implementation reproduces
+`+expected.tsv+`: the verdict and the exact dangling refs. The tests are
+`+test/rules/actions_lock_closure_corpus_test.exs+` and standards'
+`+scripts/tests/close-lock-test.sh+`.
+|TESTED. Bounds: 5 locks, 6 distinct refs, lockfile versions v0.0.2 and
+v0.0.3. Each suite has a mutant that fails exactly one row. Runtime
+refinement is not claimed.
+
+|Parse boundary: owner/repo folded to lowercase, ref kept exact
+(`+ActionsLock.normalise_ref/1+`) |- |The model takes refs after the
+fold. Its corpus rows are transcribed with the fold applied.
+|ASSUMED in the model. TESTED in both implementations by
+`+closed-case-variant.lock+`.
+|===
+
 ==== Verdict support (2026-10-14, HYP-01)
 
 A gate verdict names its support: a pattern match, an observation count, or
@@ -450,6 +496,10 @@ superseded 2026-11-01)
 |Logtalk → Elixir alert-table correspondence
 |`+LogtalkMigration.agda+` |Finite model only — Grade 3 /
 AGDA-VERIFIED (receipt above); fix text and runtime refinement excluded
+
+|actions.lock closure |`+ActionsLockClosure.idr+` |Model only: decision
+procedure and the five corpus verdicts; the implementations are TESTED
+against the corpus, and runtime refinement is excluded
 
 |Neural ensemble aggregation |`+NeuralConsensus.idr+` |Full (bounds +
 min-lower-bound)
