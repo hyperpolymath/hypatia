@@ -64,6 +64,7 @@ mutual
   size (Coll cs) = S (sizes cs)
   size (Alias t) = size t
 
+  ||| The sum of expanded node sizes, counting a shared target once per occurrence.
   public export
   sizes : List Node -> Nat
   sizes [] = 0
@@ -87,13 +88,16 @@ mutual
 
 -- ─── What the count reports ────────────────────────────────────────────
 
+||| Extracts equality of values from equality of their `Just` wrappers.
 justInj : Just a = Just b -> a = b
 justInj Refl = Refl
 
+||| Composes two non-strict bounds.
 lteTrans : LTE a b -> LTE b c -> LTE a c
 lteTrans LTEZero _ = LTEZero
 lteTrans (LTESucc x) (LTESucc y) = LTESucc (lteTrans x y)
 
+||| Expanded sizes add when two node stacks are concatenated.
 sizesAppend : (xs, ys : List Node) -> sizes (xs ++ ys) = sizes xs + sizes ys
 sizesAppend [] ys = Refl
 sizesAppend (x :: xs) ys =
@@ -191,6 +195,7 @@ mutual
     Nil  : Each []
     (::) : NoChain x -> Each xs -> Each (x :: xs)
 
+||| Preserves the absence of alias chains when concatenating node lists.
 eachAppend : Each xs -> Each ys -> Each (xs ++ ys)
 eachAppend [] ys = ys
 eachAppend (x :: xs) ys = x :: eachAppend xs ys
@@ -201,12 +206,14 @@ aliasOnTop : List Node -> Nat
 aliasOnTop (Alias _ :: _) = 1
 aliasOnTop _ = 0
 
+||| The extra fuel owed by the top node is at most one.
 aliasOnTopBit : (s : List Node) -> LTE (aliasOnTop s) 1
 aliasOnTopBit (Alias _ :: _) = LTESucc LTEZero
 aliasOnTopBit [] = LTEZero
 aliasOnTopBit (Leaf :: _) = LTEZero
 aliasOnTopBit (Coll _ :: _) = LTEZero
 
+||| A non-alias at the top of the stack owes no alias step.
 notAliasOnTop : NotAlias t -> aliasOnTop (t :: r) = 0
 notAliasOnTop LeafIsNot = Refl
 notAliasOnTop CollIsNot = Refl
@@ -216,6 +223,7 @@ public export
 steps : (m : Nat) -> List Node -> Nat
 steps m stack = S (m + m + aliasOnTop stack)
 
+||| A successor never compares as less than or equal to its predecessor.
 lteSuccFalse : (l : Nat) -> lte (S l) l = False
 lteSuccFalse Z = Refl
 lteSuccFalse (S l) = lteSuccFalse l
@@ -280,6 +288,7 @@ countBounded limit doc ok =
 
 -- ─── Completeness without a premise on the count ───────────────────────
 
+||| Extracts a value and its equality witness from evidence that a result is `Just`.
 isJustValue : (m : Maybe a) -> IsJust m -> (k ** m = Just k)
 isJustValue (Just k) ItIsJust = (k ** Refl)
 

@@ -77,10 +77,12 @@ data Clean : Job -> Maybe Decl -> Type where
 
 -- ─── Decidability: RE001 is a decision procedure ───────────────────────
 
+||| Decides whether every element of `xs` occurs in `ys`; order and multiplicity do not matter.
 public export
 decElems : (xs, ys : List String) -> Dec (All (\x => Elem x ys) xs)
 decElems xs ys = all (\x => isElem x ys) xs
 
+||| Decides mutual secret membership, ignoring order and duplicate occurrences.
 public export
 decSame : (xs, ys : List String) -> Dec (SameSecrets xs ys)
 decSame xs ys with (decElems xs ys)
@@ -89,6 +91,7 @@ decSame xs ys with (decElems xs ys)
     _ | Yes b = Yes (a, b)
     _ | No no = No (\(_, b) => no b)
 
+||| Decides whether the hardener satisfies the claim; `None` holds even without a hardener.
 public export
 decHolds : (e : Enforcement) -> (h : Maybe Policy) -> Dec (Holds e h)
 decHolds None h = Yes ClaimsNothing

@@ -57,13 +57,21 @@ defmodule Hypatia.Workflow do
   @type t :: %__MODULE__{}
 
   @doc """
-  Reads a workflow file. `{:ok, nil}` for an empty stream.
+  Reads a workflow file and returns the result of `parse/2`, with its path
+  stored in the model. Returns `{:ok, nil}` for an empty stream.
+
+  Raises `File.Error` if the file cannot be read.
   """
   def read(path), do: path |> File.read!() |> parse(path)
 
   @doc """
   Parses a workflow's bytes into the model. The first document is the
-  workflow; `{:ok, nil}` for an empty stream.
+  workflow; `{:ok, nil}` for an empty stream. Returns `{:ok, workflow}` on
+  success, storing `path` as supplied without reading it.
+
+  Returns `{:error, %Hypatia.Kyaml.Error{}}` for a KYAML parse error
+  anywhere in the stream or when the first document exceeds the expanded
+  node budget.
   """
   def parse(bytes, path \\ nil) when is_binary(bytes) do
     case Kyaml.parse(bytes) do
@@ -153,7 +161,11 @@ defmodule Hypatia.Workflow do
     end
   end
 
-  @doc "A step input's value (`with: {egress-policy: block}`), or nil."
+  @doc """
+  A step input's scalar text (`with: {egress-policy: block}`), as returned by
+  `text/1`; `nil` if the input is missing or is a collection. The name matches
+  the resolved string key exactly.
+  """
   def input(%Step{with: with}, name), do: with |> Kyaml.get(name) |> text()
 
   @doc """
@@ -191,11 +203,18 @@ defmodule Hypatia.Workflow do
   The string values under a node in document order, each with a function
   from a byte offset in the value to its source line. A block scalar maps
   each of its lines; through an alias, every offset maps to the alias's line.
-  The walk is bounded like the reader: past kyq's node budget a node yields
-  nothing more.
+  Returns `{value, line_of}` pairs. Offsets are zero-based bytes and source
+  lines are one-based. Mapping keys and non-string scalars are omitted.
+  Returns `[]` for `nil` or a node exceeding kyq's expanded node budget;
+  no partial results are returned.
   """
   def strings(node), do: strings(node, nil)
 
+  @doc """
+  Like `strings/1`, with an optional source line override. When `alias_line`
+  is non-nil, every returned offset mapper reports that line, including
+  values reached through nested aliases.
+  """
   def strings(nil, _), do: []
 
   def strings(node, alias_line) do

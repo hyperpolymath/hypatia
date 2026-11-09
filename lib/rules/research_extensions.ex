@@ -210,7 +210,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
       whose `(:workflow, :job)` names the job and whose `:secrets` equal the
       secrets it references.
 
-  An undeclared job is reported. Its **exposures** are the evidence:
+  A declaration is checked even when a hardener is present. Enforcement
+  `none` needs no hardener, `harden-runner-audit` needs a hardener in any
+  mode, and `harden-runner-block` needs its policy to be `block`.
+
+  A job with neither a hardener nor a declaration is reported. Its
+  **exposures** are the evidence:
 
     * the workflow runs on an untrusted-input event (`pull_request_target`,
       `issue_comment`, `issues`, `workflow_run`, …), narrowed by a job `if:`
@@ -283,6 +288,8 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   Severity: `:high` or `:warn`, as above (`:warn` for an unreadable
   workflow). Action: `:report`.
+  Returns a list of findings, or `[]` when none are found.
+  Raises `File.Error` if workflow directory listing or file reading fails.
   """
   def re001_missing_harden_runner(repo_path),
     do: re001_findings(repo_path, re001_workflows(repo_path))
@@ -1087,7 +1094,10 @@ defmodule Hypatia.Rules.ResearchExtensions do
   unreadable (`:warn`): its hardener cannot be checked, and a silent skip
   would read as a pass.
 
+  Returns one finding per workflow with an audit-mode hardener on a
+  qualifying trigger, or `[]` when none are found.
   Severity: `:high` (`:warn` for an unreadable workflow). Action: `:report`.
+  Raises `File.Error` if workflow directory listing or file reading fails.
   """
   def re002_harden_runner_audit_mode(repo_path),
     do: re002_findings(re001_workflows(repo_path))
@@ -1758,7 +1768,12 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   @doc """
   Run every research-extension check on `repo_path` and return the
-  standard scan-result map.
+  scan-result map: `:findings`, `:total`, counts in `:by_severity`, and
+  recommendations in `:dispatch`. Options are currently ignored.
+
+  Raises `File.Error` if workflow directory listing or a scanned file read
+  fails. RE001 and RE002 convert KYAML errors into unreadable-workflow
+  findings when the file names secrets or harden-runner, respectively.
   """
   def scan(repo_path, _opts \\ []) do
     # RE001 and RE002 read the same parsed workflows.
