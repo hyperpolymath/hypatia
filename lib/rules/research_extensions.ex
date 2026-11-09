@@ -120,6 +120,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
       step_indent: 2,
       step_key_column: 1,
       strip_yaml_comment: 1,
+      strip_yaml_comment: 2,
       workflow_job_lines: 1
     ]
 
@@ -796,19 +797,20 @@ defmodule Hypatia.Rules.ResearchExtensions do
           on_line
           |> String.split(":", parts: 2)
           |> List.last()
-          |> String.replace(~r/\s+#.*$/, "")
+          |> strip_yaml_comment()
           # `on: &events` anchors the block mapping that follows.
           |> String.replace(~r/^\s*&[A-Za-z0-9_-]+/, "")
           |> String.trim()
 
         if inline != "" do
           # A flow collection may continue past the `on:` line: read on until
-          # its brackets balance.
+          # its brackets balance. A continuation line can end in a comment,
+          # which names no event and opens no bracket.
           rest
-          |> Enum.map(&elem(&1, 0))
+          |> Enum.map(fn {line, _} -> line |> strip_yaml_comment() |> String.trim() end)
           |> Enum.reduce_while(inline, fn line, acc ->
-            if nesting_at(acc, byte_size(acc)) > 0,
-              do: {:cont, acc <> " " <> String.trim(line)},
+            if open_flow?(acc),
+              do: {:cont, acc <> " " <> line},
               else: {:halt, acc}
           end)
           |> inline_events()
@@ -837,15 +839,29 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # `on: {push: {paths: [issues/**]}}` names one event, push: only the map's
   # top-level keys are events. A scalar or list names each of its words.
   defp inline_events("{" <> _ = map) do
+    # Depth is read from the map with its quoted scalars blanked: a bracket
+    # in `tags: ["v1.0]"]` is text. Blanking keeps every byte offset.
+    code = strip_yaml_comment(map, true)
+
     ~r/["']?([A-Za-z_]+)["']?\s*:/
     |> Regex.scan(map, return: :index)
     |> Enum.flat_map(fn [{start, _}, {from, len}] ->
-      if nesting_at(map, start) == 1, do: [binary_part(map, from, len)], else: []
+      if nesting_at(code, min(start, byte_size(code))) == 1,
+        do: [binary_part(map, from, len)],
+        else: []
     end)
   end
 
   defp inline_events(scalar_or_list) do
     ~r/[A-Za-z_]+/ |> Regex.scan(scalar_or_list) |> List.flatten()
+  end
+
+  # Whether flow text still has an open `{` or `[`. nesting_at/2 counts every
+  # bracket it is given, so quoted scalars are blanked first; the text has no
+  # comments left by the time it is read here.
+  defp open_flow?(flow) do
+    code = strip_yaml_comment(flow, true)
+    nesting_at(code, byte_size(code)) > 0
   end
 
   defp harden_runner_step?(job_lines) do
@@ -923,7 +939,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
           # A flow mapping may continue past the `with:` line.
           rest
           |> Enum.reduce_while(inline, fn line, acc ->
-            if nesting_at(acc, byte_size(acc)) > 0,
+            if open_flow?(acc),
               do: {:cont, acc <> " " <> String.trim(line)},
               else: {:halt, acc}
           end)
