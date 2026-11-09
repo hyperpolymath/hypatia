@@ -7,6 +7,7 @@
 # rendered from it (README-EXPLAINME-STANDARD section 5, rule 1).
 #
 #   proof-ledger.sh check          validate the ledger against its rules and the tree
+#   proof-ledger.sh claims         every census README, AFFIRMATION or EXPLAINME quotes is the ledger's
 #   proof-ledger.sh render         print the AsciiDoc block for PROOF-STATUS.adoc
 #   proof-ledger.sh render --check fail if PROOF-STATUS.adoc holds a different block
 #   proof-ledger.sh render --write replace the block in PROOF-STATUS.adoc
@@ -219,6 +220,37 @@ render() {
   printf '%s\n' "$END_MARK"
 }
 
+# Every census a claim document quotes ("N proven of M; ...") must be the
+# ledger's census: README's proof count is derived from the ledger, never
+# typed in (README-EXPLAINME section 5, rule 2). Lines are joined first, so a
+# census wrapped across lines is still read whole. Each document named must
+# exist and quote at least one census: a renamed file or a census reworded
+# out of the pattern would otherwise pass unread.
+CLAIM_DOCS="${PROOF_CLAIM_DOCS:-README.adoc AFFIRMATION.adoc EXPLAINME.adoc}"
+claims() {
+  local want doc found fails=0 seen=0 c here
+  want=$(census | sed 's/ Theory rows:.*//')
+  for doc in $CLAIM_DOCS; do
+    if [ ! -f "$doc" ]; then
+      echo "::error::proof-ledger: claim document $doc does not exist"; fails=$((fails + 1)); continue
+    fi
+    found=$(tr '\n' ' ' < "$doc" | tr -s ' ' | grep -oE '[0-9]+ proven of [0-9]+(; [0-9]+ proven-with-postulates, [0-9]+ tested-only, [0-9]+ argued, [0-9]+ open\.?)?' || true)
+    here=0
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      seen=$((seen + 1)); here=$((here + 1))
+      [ "${c%.}." = "$want" ] && continue
+      echo "::error::proof-ledger: $doc quotes the census '$c'; the ledger's is '$want'"
+      fails=$((fails + 1))
+    done <<<"$found"
+    if [ "$here" -eq 0 ]; then
+      echo "::error::proof-ledger: $doc quotes no census ('N proven of M; ...'); a claim document states the ledger's"; fails=$((fails + 1))
+    fi
+  done
+  if [ "$fails" -gt 0 ]; then return 1; fi
+  echo "proof-ledger: $seen quoted census(es) agree with the ledger"
+}
+
 # Exactly one BEGIN and one END marker, BEGIN first: a second block (a bad
 # merge, a hand copy) would publish two tables while the first one passed.
 markers_ok() {
@@ -235,6 +267,7 @@ doc_block() {
 
 case "${1:-}" in
   check) check ;;
+  claims) claims ;;
   render)
     case "${2:-}" in
       "") render ;;
@@ -266,5 +299,5 @@ case "${1:-}" in
         echo "proof-ledger: wrote the block into $DOC" ;;
       *) echo "usage: $0 render [--check|--write]" >&2; exit 2 ;;
     esac ;;
-  *) echo "usage: $0 check | render [--check|--write]" >&2; exit 2 ;;
+  *) echo "usage: $0 check | claims | render [--check|--write]" >&2; exit 2 ;;
 esac

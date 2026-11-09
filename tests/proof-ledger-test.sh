@@ -79,6 +79,20 @@ cp verification/PROOF-STATUS.adoc "$work/doc.adoc"
 sed -i '0,/^|proven$/s//|proven-with-postulates/' "$work/doc.adoc"
 expect "a hand edit to the rendered table is refused" 1 env PROOF_STATUS_DOC="$work/doc.adoc" bash "$script" render --check
 
+expect "every census the claim documents quote is the ledger's" 0 bash "$script" claims
+
+# Built from the ledger's own census, so the contracts outlive any count.
+census_now=$(bash "$script" check | sed -n 's/^proof-ledger: [0-9]* rows valid; \(.*\) Theory rows:.*/\1/p')
+proven_now=${census_now%% proven of*}
+printf 'Ledger: %s\n' "$((proven_now + 1))${census_now#"$proven_now"}" > "$work/wrong.adoc"
+expect "a census that disagrees with the ledger is refused" 1 env PROOF_CLAIM_DOCS="$work/wrong.adoc" bash "$script" claims
+
+printf 'We have %s so far.\n' "${census_now%%;*}" > "$work/short.adoc"
+expect "a bare count without the rest of the census is refused" 1 env PROOF_CLAIM_DOCS="$work/short.adoc" bash "$script" claims
+
+printf 'Ledger: %s\n' "$census_now" | sed 's/ proven of / proven of\n/; s/, \([0-9]* argued\)/,\n\1/' > "$work/wrapped.adoc"
+expect "a census wrapped across lines is read whole" 0 env PROOF_CLAIM_DOCS="$work/wrapped.adoc" bash "$script" claims
+
 head -c -1 verification/proof-ledger.jsonl > "$work/no-lf.jsonl"
 expect_msg "a ledger without its final LF is refused" 1 "must end in exactly one LF" env PROOF_LEDGER="$work/no-lf.jsonl" bash "$script" check
 
@@ -130,6 +144,11 @@ expect_msg "a pin without a full commit is refused" 1 "pin is missing or malform
 
 { cat verification/PROOF-STATUS.adoc; bash "$script" render; } > "$work/two-blocks.adoc"
 expect_msg "render --check refuses a second generated block" 2 "more than one pair" env PROOF_STATUS_DOC="$work/two-blocks.adoc" bash "$script" render --check
+
+expect_msg "claims: a claim document that does not exist is refused" 1 "does not exist" env PROOF_CLAIM_DOCS="$work/no-such-doc.adoc" bash "$script" claims
+
+printf 'This document no longer quotes the census.\n' > "$work/silent.adoc"
+expect_msg "claims: a claim document that quotes no census is refused" 1 "quotes no census" env PROOF_CLAIM_DOCS="$work/silent.adoc" bash "$script" claims
 
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

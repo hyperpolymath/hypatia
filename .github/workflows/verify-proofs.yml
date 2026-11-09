@@ -20,6 +20,9 @@ on:
     - verification/proof-ledger.jsonl
     - scripts/proof-ledger.sh
     - tests/proof-ledger-test.sh
+    - README.adoc
+    - AFFIRMATION.adoc
+    - EXPLAINME.adoc
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -48,6 +51,9 @@ on:
     - verification/proof-ledger.jsonl
     - scripts/proof-ledger.sh
     - tests/proof-ledger-test.sh
+    - README.adoc
+    - AFFIRMATION.adoc
+    - EXPLAINME.adoc
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -440,6 +446,9 @@ jobs:
 
       - name: Proof Ledger table is the ledger's rendering
         run: bash scripts/proof-ledger.sh render --check
+
+      - name: Every quoted census is the ledger's
+        run: bash scripts/proof-ledger.sh claims
 
       - name: Proof ledger contracts (planted defects)
         run: bash tests/proof-ledger-test.sh
