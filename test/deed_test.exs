@@ -219,10 +219,12 @@ defmodule Hypatia.DeedTest do
                workflow: ".github/workflows/push-email-notify.yml",
                job: "notify",
                secrets: MapSet.new(~w(SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS)),
+               endpoints: ["secret:SMTP_HOST"],
                enforcement: "none"
              }
 
       assert sonar.secrets == MapSet.new(["SONAR_TOKEN"])
+      assert sonar.endpoints == ["sonarcloud.io", "*.sonarcloud.io:443", "var:SONAR_HOST"]
     end
   end
 

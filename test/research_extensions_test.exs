@@ -1078,7 +1078,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
         write_deed(
           repo,
           ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "notify" | <>
-            ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement harden-runner-block))|
+            ~s|:secrets ("SMTP_PASS") :endpoints ("a.com:443" "b.com:443") :enforcement harden-runner-block))|
         )
 
         findings = ResearchExtensions.re001_missing_harden_runner(repo)
@@ -1281,8 +1281,9 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert plain =~ "`deploy`"
       assert plain =~ "HIDDEN"
 
-      # A merge key, `<<: *common`, inside the job's own env:.
-      assert [%{reason: merged}] =
+      # A merge key, `<<: *common`, is outside YAML 1.2 and GitHub refuses it:
+      # the workflow is reported as unreadable, at the key, not guessed at.
+      assert [%{line: 11, severity: :warn, reason: merged}] =
                check.("""
                  deploy:
                    runs-on: ubuntu-24.04
@@ -1293,7 +1294,7 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
                      - run: send ${{ secrets.VISIBLE }}
                """)
 
-      assert merged =~ "HIDDEN"
+      assert merged =~ "UNSUPPORTED_MERGE_KEY"
 
       # The same declaration, without the alias, is exact.
       assert check.("""
@@ -1314,9 +1315,6 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               steps:
                 - run: send ${{ secrets.SMTP_PASS }}
             deploy: *job
-            release:
-              <<: *job
-              name: release
           """,
           "notify.yml"
         )
@@ -1327,16 +1325,20 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
           ~s|:secrets ("SMTP_PASS") :endpoints () :enforcement none))|
       )
 
-      findings = ResearchExtensions.re001_missing_harden_runner(repo)
-      assert Enum.map(findings, & &1.line) == [6, 8]
-      assert Enum.all?(findings, &(&1.detail.fix =~ ~s|:secrets ("SMTP_PASS")|))
-      assert Enum.any?(findings, &(&1.reason =~ "`deploy`"))
-      assert Enum.any?(findings, &(&1.reason =~ "`release`"))
+      # deploy is build, read through the alias and reported at it.
+      assert [%{line: 6, reason: reason, detail: %{fix: fix}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert reason =~ "`deploy`"
+      assert fix =~ ~s|:secrets ("SMTP_PASS")|
       File.rm_rf!(repo)
     end
 
-    test "a key the job sets itself wins over the same key from a merge" do
-      # The anchor's steps install harden-runner; the job's own steps do not.
+    test "a merge key makes the workflow unreadable: reported, never read in part" do
+      # Read as YAML 1.1, deploy's own steps: would win over the merged,
+      # hardened ones. GitHub reads YAML 1.2, which has no merge key, and so
+      # does RE001: one finding at the key, and the workflow's declarations
+      # are not reported stale, because they cannot be checked.
       repo =
         create_repo_with_workflow(
           """
@@ -1360,14 +1362,17 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
           "notify.yml"
         )
 
-      write_deed(repo, "")
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/notify.yml" :job "deploy" | <>
+          ~s|:secrets ("VISIBLE") :endpoints () :enforcement none))|
+      )
 
-      # deploy holds VISIBLE only (its env: replaces the merged one) and has
-      # no hardener (its steps: replace the merged ones).
-      assert [%{line: 16, detail: %{fix: fix}}] =
+      assert [%{line: 12, severity: :warn, reason: reason, detail: %{fix: fix}}] =
                ResearchExtensions.re001_missing_harden_runner(repo)
 
-      assert fix =~ ~s|:job "deploy" :secrets ("VISIBLE")|
+      assert reason =~ "UNSUPPORTED_MERGE_KEY at line 12, column 5"
+      assert fix =~ "`<<` merge key"
       File.rm_rf!(repo)
     end
 
@@ -1438,10 +1443,10 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
-    test "nested anchors that multiply (the billion-laughs file) are expanded within a budget" do
+    test "nested anchors that multiply (the billion-laughs file) are refused within a budget" do
       anchors =
         for i <- 1..9 do
-          prev = if i == 1, do: "${{ secrets.SMTP_PASS }}", else: "*a#{i - 1}"
+          prev = if i == 1, do: ~s|"${{ secrets.SMTP_PASS }}"|, else: "*a#{i - 1}"
           "  a#{i}: &a#{i} [#{Enum.map_join(1..10, ", ", fn _ -> prev end)}]"
         end
 
@@ -1465,8 +1470,10 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       {micros, findings} =
         :timer.tc(fn -> ResearchExtensions.re001_missing_harden_runner(repo) end)
 
-      assert [%{detail: %{fix: fix}}] = findings
-      assert fix =~ ~s|:secrets ("SMTP_PASS")|
+      # Past kyq's node budget the workflow is refused, as kyq refuses it, and
+      # the refusal is a finding: a job it hides is never a silent pass.
+      assert [%{severity: :warn, reason: reason}] = findings
+      assert reason =~ "NODE_BUDGET_EXCEEDED"
       assert micros < 10_000_000
       File.rm_rf!(repo)
     end
@@ -1879,9 +1886,237 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
       File.rm_rf!(repo)
     end
+
+    # ─── declared endpoints against the workflow ──────────────────────
+
+    defp endpoint_findings(steps, endpoints) do
+      repo =
+        create_repo_with_workflow(
+          "on: push\njobs:\n  ship:\n    runs-on: ubuntu-latest\n    steps:\n" <> steps,
+          "ship.yml"
+        )
+
+      write_deed(
+        repo,
+        ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+          ~s|:secrets ("TOKEN") :endpoints (#{endpoints}) :enforcement none))|
+      )
+
+      findings = ResearchExtensions.re001_missing_harden_runner(repo)
+      File.rm_rf!(repo)
+      findings
+    end
+
+    test "a host a step names literally must be declared" do
+      steps = """
+            - run: |
+                # docs: https://docs.example.org/upload
+                curl -H "t: ${{ secrets.TOKEN }}" https://upload.example.com/v1#frag
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.severity == :warn
+      assert finding.line == 8
+      assert finding.reason =~ ~s|names "upload.example.com:443" literally|
+      refute finding.reason =~ "docs.example.org"
+
+      assert endpoint_findings(steps, ~s|"upload.example.com"|) == []
+      assert endpoint_findings(steps, ~s|"*.example.com"|) == []
+      assert endpoint_findings(steps, ~s|"upload.example.com:443"|) == []
+      assert [_] = endpoint_findings(steps, ~s|"upload.example.com:8443"|)
+      # A wildcard covers subdomains, not the apex; a secret covers no literal host.
+      assert [_] = endpoint_findings(steps, ~s|"*.upload.example.com"|)
+      assert [_] = endpoint_findings(steps, ~s|"secret:TOKEN"|)
+    end
+
+    # hypatia's own push-email-notify.yml lets out
+    # `${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT || '465' }}`: an entry
+    # whose host is known only at run time. It is one unit however it is
+    # spaced, and it is not a literal host to compare (it crashed the
+    # comparison while it was split on its spaces).
+    test "an allowed endpoint written with expressions is not a literal host" do
+      run = fn allowed, endpoints ->
+        workflow =
+          Enum.join(
+            [
+              "on: push",
+              "jobs:",
+              "  ship:",
+              "    runs-on: ubuntu-latest",
+              "    steps:",
+              "      - uses: step-security/harden-runner@v2",
+              "        with:",
+              "          egress-policy: block",
+              "          allowed-endpoints: >"
+            ] ++
+              Enum.map(allowed, &("            " <> &1)) ++
+              [~S|      - run: send --token "${{ secrets.TOKEN }}"|],
+            "\n"
+          ) <> "\n"
+
+        repo = create_repo_with_workflow(workflow, "ship.yml")
+
+        write_deed(
+          repo,
+          ~s|(egress (job :workflow ".github/workflows/ship.yml" :job "ship" | <>
+            ~s|:secrets ("SMTP_HOST" "SMTP_PORT" "TOKEN") :endpoints (#{endpoints}) | <>
+            ~s|:enforcement harden-runner-block))|
+        )
+
+        # The deed must be readable, or a hardened job passes vacuously.
+        assert {:ok, _, [_]} = Hypatia.Deed.egress_declarations(repo)
+        findings = ResearchExtensions.re001_missing_harden_runner(repo)
+        File.rm_rf!(repo)
+        findings
+      end
+
+      smtp = "${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT || '465' }}"
+
+      assert run.(["github.com:443", smtp], ~s|"secret:SMTP_HOST"|) == []
+
+      # A literal host beside the expression is still held to the deed.
+      assert [finding] =
+               run.(["github.com:443", "relay.example.net:587", smtp], ~s|"secret:SMTP_HOST"|)
+
+      assert finding.reason =~ "relay.example.net:587"
+
+      assert run.(
+               ["github.com:443", "relay.example.net:587", smtp],
+               ~s|"secret:SMTP_HOST" "relay.example.net:587"|
+             ) == []
+
+      # GitHub's own hosts are outside the comparison on both sides: a deed
+      # may list them (hypatia_chora.deed does) and is not held to them.
+      assert run.(
+               ["github.com:443", smtp],
+               ~s|"github.com:443" "api.github.com:443" "secret:SMTP_HOST"|
+             ) ==
+               []
+    end
+
+    test "an ssh remote is port 22, and GitHub's own hosts are never declared" do
+      steps = """
+            - run: git push git@gitlab.com:o/x.git && git push https://github.com/o/x
+              env:
+                KEY: ${{ secrets.TOKEN }}
+            - uses: actions/checkout@v4
+              with:
+                repository: https://raw.githubusercontent.com/o/x
+      """
+
+      assert [finding] = endpoint_findings(steps, "")
+      assert finding.reason =~ ~s|"gitlab.com:22"|
+      refute finding.reason =~ "github.com"
+      refute finding.reason =~ "githubusercontent"
+      assert endpoint_findings(steps, ~s|"gitlab.com:22"|) == []
+      assert [_] = endpoint_findings(steps, ~s|"gitlab.com:443"|)
+    end
+
+    test "harden-runner's allowed-endpoints and the declaration must agree" do
+      steps = fn allowed ->
+        """
+              - uses: step-security/harden-runner@v2
+                with:
+                  egress-policy: block
+                  allowed-endpoints: >
+                    #{allowed}
+              - run: deploy --token ${{ secrets.TOKEN }}
+        """
+      end
+
+      agree = steps.("api.github.com:443 hex.pm:443 repo.hex.pm:443")
+      assert endpoint_findings(agree, ~s|"hex.pm" "*.hex.pm:443"|) == []
+
+      assert [finding] = endpoint_findings(agree, ~s|"hex.pm"|)
+      assert finding.reason =~ ~s|lets out undeclared "repo.hex.pm:443"|
+
+      assert [finding] = endpoint_findings(steps.("hex.pm:443"), ~s|"hex.pm" "cdn.example.com"|)
+      assert finding.reason =~ ~s|does not allow declared "cdn.example.com"|
+    end
   end
 
   # ─── RE002 ──────────────────────────────────────────────────────────
+
+  # The three shapes Codex raised on #975 after it merged, each one a line
+  # reader's misreading of YAML. Read from the parsed model they cannot occur.
+  describe "re001_missing_harden_runner/1 on the #975 post-merge shapes" do
+    @sha "1234567890abcdef1234567890abcdef12345678"
+
+    # A hardened job whose harden-runner step carries `hardener_lines` (step
+    # properties, given at the step's own column) and a block declaration.
+    defp hardened_repo(hardener_lines) do
+      workflow =
+        Enum.join(
+          [
+            "jobs:",
+            "  notify:",
+            "    runs-on: ubuntu-24.04",
+            "    steps:",
+            "      - uses: step-security/harden-runner@#{@sha}"
+          ] ++
+            Enum.map(hardener_lines, &("        " <> &1)) ++
+            [~S|      - run: curl -u "$U:${{ secrets.SMTP_PASS }}" https://mail.example.com|],
+          "\n"
+        ) <> "\n"
+
+      repo = create_repo_with_workflow(workflow, "notify.yml")
+
+      write_deed(
+        repo,
+        ~s|(egress :policy "standards ADR-009" (job :workflow ".github/workflows/notify.yml" | <>
+          ~s|:job "notify" :secrets ("SMTP_PASS") :endpoints ("mail.example.com:443") | <>
+          ~s|:enforcement harden-runner-block))|
+      )
+
+      repo
+    end
+
+    test "a `<<: [*defaults]` merge is not guessed at: the workflow is reported unreadable" do
+      repo =
+        create_repo_with_workflow(
+          """
+          x-defaults: &defaults
+            runs-on: ubuntu-24.04
+            env:
+              TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          jobs:
+            deploy:
+              <<: [*defaults]
+              steps:
+                - run: ./deploy.sh
+          """,
+          "deploy.yml"
+        )
+
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.severity == :warn
+      assert finding.line == 7
+      assert finding.reason =~ "UNSUPPORTED_MERGE_KEY"
+      File.rm_rf!(repo)
+    end
+
+    test "text in a block scalar beside the hardener is not its input" do
+      repo = hardened_repo(["name: |", "  with:", "    egress-policy: block"])
+
+      # harden-runner runs its default, audit: the block claim is false.
+      assert [finding] = ResearchExtensions.re001_missing_harden_runner(repo)
+      assert finding.reason =~ ":enforcement harden-runner-block"
+      File.rm_rf!(repo)
+    end
+
+    test "a folded egress-policy is read as its value" do
+      repo =
+        hardened_repo([
+          "with:",
+          "  egress-policy: >-",
+          "    block",
+          "  allowed-endpoints: mail.example.com:443"
+        ])
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
+  end
 
   describe "re002_harden_runner_audit_mode/1" do
     test "flags harden-runner in audit mode on push trigger" do
@@ -1918,6 +2153,64 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
               - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
                 with:
                   egress-policy: block
+        """)
+
+      assert ResearchExtensions.re002_harden_runner_audit_mode(repo) == []
+      File.rm_rf!(repo)
+    end
+
+    test "matches the action owner in any case, as RE001 does" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: Step-Security/Harden-Runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: audit
+        """)
+
+      assert [%{rule: "RE002"}] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      File.rm_rf!(repo)
+    end
+
+    test "a hardener with no egress-policy runs harden-runner's default, audit" do
+      repo =
+        create_repo_with_workflow("""
+        on: {release: {types: [published]}}
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: "step-security/harden-runner@1234567890abcdef1234567890abcdef12345678"
+        """)
+
+      assert [%{reason: reason}] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      assert reason =~ "its default"
+      File.rm_rf!(repo)
+    end
+
+    test "only a real hardener step and a real push or release trigger count" do
+      repo =
+        create_repo_with_workflow("""
+        on:
+          pull_request:
+            branches: [main]
+        jobs:
+          push:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: audit
+          release:
+            runs-on: ubuntu-latest
+            steps:
+              - run: |
+                  echo "uses: step-security/harden-runner@x"
+                  echo "egress-policy: audit"
         """)
 
       assert ResearchExtensions.re002_harden_runner_audit_mode(repo) == []
