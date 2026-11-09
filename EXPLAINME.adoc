@@ -184,8 +184,9 @@ Caveat::
 The Justfiles hold 43 recipes. `just build-all` builds Rust and Elixir only.
 The CLI has six commands, not five (`secret-alerts`); there are 16 Mix
 tasks, not 15. No `guix.scm` is tracked. `CONTRIBUTING.md` is in `.github/`.
-`/api/*` needs a bearer token only when `HYPATIA_API_BEARER_TOKEN` is set;
-otherwise it is loopback-only.
+`/api/*` needs a bearer token when `HYPATIA_API_BEARER_TOKEN` is set and not
+empty. Otherwise only loopback clients are answered, unless
+`HYPATIA_API_ALLOW_NONLOCAL=true` lets non-local clients in without a token.
 
 === Project status and licence
 
