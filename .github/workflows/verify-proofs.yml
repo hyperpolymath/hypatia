@@ -258,6 +258,7 @@ jobs:
       # Pinned (not :stable): tests/accept/LeanHoleRecheckSound.idr records
       # the Lean version whose output it digests.
       LEAN_TOOLCHAIN: leanprover/lean4:v4.30.0
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -288,7 +289,11 @@ jobs:
         run: |
           set -euo pipefail
           lean --version
-          bash scripts/recheck-lean-hole.sh
+          bash scripts/proof-ledger-ci.sh leanhole
+
+      - name: Ledger status agrees with this run (leanhole)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive leanhole "$PROOF_RECEIPTS"
 
       - name: Summary
         if: always()

@@ -112,7 +112,7 @@ jq -cS 'select(.lane != "none") | {lane, file, result: "pass"}
         + (if .lane == "tlc" then {distinct_states: (.bounds | capture("(?<n>[0-9]+) distinct states").n),
                                    depth: (.bounds | capture("depth (?<d>[0-9]+)").d)} else {} end)' \
   verification/proof-ledger.jsonl | sort -u > "$all_pass"
-lanes=idris2,verdicts,agda,tlc,exunit
+lanes=idris2,verdicts,leanhole,agda,tlc,exunit
 expect "derive: every row agrees with an all-pass run" 0 bash "$script" derive "$lanes" "$all_pass"
 
 jq -cS 'if .file == "verification/proofs/idris2/SafetyTriangle.idr" then .result = "fail" else . end' "$all_pass" > "$work/r-fail.jsonl"
@@ -188,6 +188,16 @@ expect_msg "claims: a claim document that does not exist is refused" 1 "does not
 
 printf 'This document no longer quotes the census.\n' > "$work/silent.adoc"
 expect_msg "claims: a claim document that quotes no census is refused" 1 "quotes no census" env PROOF_CLAIM_DOCS="$work/silent.adoc" bash "$script" claims
+
+demoted=$(jq -r 'select(.file == "test/security_errors_test.exs") | .id' verification/proof-ledger.jsonl)
+mutate demoted '.status = "open" | .lane = "none" | .checker = "-" | .bounds = ""' "$demoted"
+expect_msg "derive: a row demoted to lane none cannot dodge the underclaim gate" 1 "passes in lane exunit, and the row records no lane" env PROOF_LEDGER="$work/demoted.jsonl" bash "$script" derive "$lanes" "$all_pass"
+
+jq -cS 'if .lane == "tlc" then .distinct_states = (.distinct_states | tostring | .[1:]) else . end' "$all_pass" > "$work/r-suffix.jsonl"
+expect_msg "derive: a TLC count that is only a suffix of the bound is refused (exact compare)" 1 "bounds say" bash "$script" derive "$lanes" "$work/r-suffix.jsonl"
+
+jq -cS 'if .lane == "leanhole" then .result = "fail" else . end' "$all_pass" > "$work/r-lean.jsonl"
+expect_msg "derive: the Lean-hole control is not tested-only when its Lean re-check fails" 1 "verdict-accept-lean-hole" bash "$script" derive "$lanes" "$work/r-lean.jsonl"
 
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

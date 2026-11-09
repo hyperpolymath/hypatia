@@ -9,6 +9,7 @@
 #
 #   proof-ledger-ci.sh ipkg PKG.ipkg     idris2 --build; one receipt per module
 #   proof-ledger-ci.sh verdicts          scripts/check-verdicts.sh; tests/accept, tests/reject
+#   proof-ledger-ci.sh leanhole          scripts/recheck-lean-hole.sh; the Lean-hole control's fixture
 #   proof-ledger-ci.sh tlc SPEC.tla CFG  TLC; the receipt carries distinct states and depth
 #   proof-ledger-ci.sh exunit FILE...    mix test FILE...; one receipt per file
 #
@@ -31,6 +32,14 @@ case "${1:-}" in
     lane=verdicts
     files=(tests/accept/*.idr tests/reject/*.idr)
     bash scripts/check-verdicts.sh || rc=$?
+    ;;
+  leanhole)
+    # The control's obligation includes digests re-derived from a fresh Lean
+    # run, so its receipt comes from that re-check (the Idris acceptance of
+    # the fixture is the verdicts lane's, and fails that job by itself).
+    lane=leanhole
+    files=(tests/accept/LeanHoleRecheckSound.idr)
+    bash scripts/recheck-lean-hole.sh || rc=$?
     ;;
   tlc)
     spec=${2:?spec} cfg=${3:?cfg} jar=${TLA2TOOLS_JAR:?TLA2TOOLS_JAR}
@@ -63,7 +72,7 @@ case "${1:-}" in
     mix test "${files[@]}" || rc=$?
     ;;
   *)
-    echo "usage: $0 ipkg PKG | verdicts | tlc SPEC CFG | exunit FILE..." >&2
+    echo "usage: $0 ipkg PKG | verdicts | leanhole | tlc SPEC CFG | exunit FILE..." >&2
     exit 2
     ;;
 esac

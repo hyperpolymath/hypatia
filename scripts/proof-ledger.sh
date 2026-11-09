@@ -98,12 +98,12 @@ check() {
       # The lane is the CI job whose receipt decides the status (`derive`):
       # a proof lane can only make a row proven, a test lane tested-only, and
       # a row with no lane is argued or open.
-      ( if IN(.lane; "idris2", "agda", "verdicts", "tlc", "exunit", "none") then empty
-        else "\(.id): lane \(.lane) is not idris2, agda, verdicts, tlc, exunit or none" end ),
+      ( if IN(.lane; "idris2", "agda", "verdicts", "leanhole", "tlc", "exunit", "none") then empty
+        else "\(.id): lane \(.lane) is not idris2, agda, verdicts, leanhole, tlc, exunit or none" end ),
       ( if (.lane == "none") != (.checker == "-") then "\(.id): a row has a checker exactly when it has a lane" else empty end ),
       ( if IN(.lane; "idris2", "agda") and (IN(.status; "proven", "proven-with-postulates") | not)
         then "\(.id): lane \(.lane) is a proof lane; its row is proven or proven-with-postulates" else empty end ),
-      ( if IN(.lane; "verdicts", "tlc", "exunit") and .status != "tested-only"
+      ( if IN(.lane; "verdicts", "leanhole", "tlc", "exunit") and .status != "tested-only"
         then "\(.id): lane \(.lane) is a test lane; its row is tested-only" else empty end ),
       ( if .lane == "none" and (IN(.status; "argued", "open") | not)
         then "\(.id): a row with no lane is argued or open" else empty end ),
@@ -289,6 +289,10 @@ derive() {
   local out
   out=$(jq -rn --arg lanes "$lanes" --slurpfile led "$LEDGER" --slurpfile rec "$file" '
     def rank(s): {"open":0,"argued":1,"tested-only":2,"proven-with-postulates":3,"proven":4}[s];
+    def counts: type == "object" and IN(.status; "proven", "proven-with-postulates") and .correspondence == "reconciled";
+    def legs_grade: [.legs[]? | select(counts) | .prover] as $p
+      | if ($p | index("rocq")) and ($p | index("lean")) then "2ii"
+        elif ($p | index("rocq")) or ($p | index("lean")) then "2i" else "3" end;
     ($lanes | split(",")) as $L
     | ($rec | map(select(.lane as $l | $L | index($l)))) as $R
     | ( $led[] | select(.lane as $l | $L | index($l)) | . as $row
@@ -302,17 +306,34 @@ derive() {
               + (if $r == null then " (no receipt for \($row.file) in lane \($row.lane))"
                  elif $r.result != "pass" then " (\($row.file) failed)" else "" end)
             else empty end ),
-          ( if $row.lane == "tlc" and $r != null and $r.result == "pass"
-               and (($row.bounds | contains("\($r.distinct_states) distinct states")
-                     and contains("depth \($r.depth)")) | not)
-            then "OVERCLAIM\t\($row.id): bounds say \"\($row.bounds)\"; this run found \($r.distinct_states) distinct states, depth \($r.depth)"
+          # TLC bounds: the state count and depth the row states, compared
+          # exactly with what this run found (a substring match would let
+          # 44715 stand for 444715).
+          ( if $row.lane == "tlc" and $r != null and $r.result == "pass" then
+              ([$row.bounds | capture("(?<n>[0-9]+) distinct states")] | first | .n?) as $n
+              | ([$row.bounds | capture("depth (?<d>[0-9]+)")] | first | .d?) as $dep
+              | if $n == ($r.distinct_states | tostring) and $dep == ($r.depth | tostring) then empty
+                else "OVERCLAIM\t\($row.id): bounds say \"\($row.bounds)\"; this run found \($r.distinct_states) distinct states, depth \($r.depth)" end
             else empty end ),
-          ( if $row.kind == "theory" and $d == "proven" and $row.pwg != "3" and ([$row.legs[]? | select(.counts == true)] | length) == 0
-            then "OVERCLAIM\t\($row.id): with no counted leg the receipt supports PWG-3, not \($row.pwg)" else empty end )
+          # The grade this run supports: the Agda receipt and the legs.
+          ( if $row.kind == "theory" then
+              (if $d == "proven" or $d == "proven-with-postulates" then ($row | legs_grade) else "ungraded" end) as $g
+              | if $row.pwg == $g then empty
+                else (if $row.pwg == "ungraded" then "UNDERCLAIM" elif $g == "ungraded" then "OVERCLAIM"
+                      elif ({"3":0,"2i":1,"2ii":2,"1":3}[$row.pwg]) > ({"3":0,"2i":1,"2ii":2}[$g]) then "OVERCLAIM" else "UNDERCLAIM" end)
+                     + "\t\($row.id): pwg is \($row.pwg); this run'"'"'s receipts and the legs support \(if $g == "ungraded" then "ungraded" else "PWG-" + $g end)" end
+            else empty end )
       ),
-      ( $R[] | select(.result == "pass" and IN(.lane; "idris2", "agda")) | . as $r
-        | select([$led[] | select(.lane == $r.lane and .file == $r.file)] | length == 0)
-        | "UNRECORDED\t\($r.file) checks in lane \($r.lane) and no ledger row names it" )
+      # Row identity does not hang on the mutable lane: a file that passes in
+      # a lane where no row names it, while a row with no lane does, is an
+      # underclaim (a demoted row cannot dodge the gate by leaving its lane).
+      ( $R[] | select(.result == "pass") | . as $r
+        | [$led[] | select(.file == $r.file)] as $named
+        | if ($named | map(select(.lane == $r.lane)) | length) > 0 then empty
+          elif ($named | map(select(.lane == "none")) | length) > 0 then
+            "UNDERCLAIM\t\($named | map(select(.lane == "none") | "\(.id) (\(.status))") | join(", ")): \($r.file) passes in lane \($r.lane), and the row records no lane"
+          elif ($named | length) > 0 then empty
+          else "UNRECORDED\t\($r.file) checks in lane \($r.lane) and no ledger row names it" end )
   ')
   local bad=0 kind msg
   while IFS=$'\t' read -r kind msg; do
