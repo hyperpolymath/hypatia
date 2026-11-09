@@ -267,7 +267,7 @@ evidence = [
 
 [aspects.safety]
 status = "strong"
-evidence = ["verification/proofs/tlaplus/", "verification/proofs/idris2/", "verification/proofs/lean4/"]
+evidence = ["verification/proofs/tlaplus/", "verification/proofs/idris2/"]
 banned-patterns-clean = true
 default-total-idris = true
 

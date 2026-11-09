@@ -28,3 +28,10 @@ Comment: Verbatim `gh actions-lock` output, copied byte-for-byte from the
  hyperpolymath/standards .github/workflows/actions.lock at b3ce78e). These
  are tool-owned files: never hand-edit or reformat them; replace them with a
  fresh copy instead.
+
+Files: verification/proof-ledger.jsonl
+Copyright: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+License: MPL-2.0
+Comment: The machine proof ledger: one JCS object per line, so it cannot
+ carry an SPDX comment. Machine-readable specification data, licensed as
+ code.
