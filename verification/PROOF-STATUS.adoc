@@ -286,6 +286,40 @@ untouched-finding negative control and two mutants killed |TESTED
 a scan or dispatch path. It is not, like the rest of the safety systems
 (CLAUDE.md Known Gap 2) |OPEN
 
+|`+src/Hypatia/ABI/SecretAlerts.idr+` |Idris2 |The `hypatia
+secret-alerts` line contract, a cross-language wire format read by the
+bash/jq secret-scanning sweep. The exit code is 0 exactly for an ok line and
+3 for an error line (`+exitZeroIsOk+`, `+errorExitsThree+`,
+`+statusOfExitRoundTrip+`); no non-zero code reads as ok
+(`+nonZeroNotOk+`); an error line is always Unread and never Clean
+(`+errorIsUnread+`, `+errorNeverClean+`, `+unreadIsError+`); a Clean line
+exits 0 (`+cleanExitsZero+`); `total` is the number of findings by
+construction (`+totalIsLength+`); no finding is reported "sound"
+(`+findingNeverSound+`) |PROVEN
+
+|`+tests/accept/SecretAlertsLines.idr+` |Idris2 |Positive control: an ok
+line with one pattern-supported finding and an error line are accepted,
+classify as WithAlerts / Unread, and exit 0 / 3 (`+okHasAlerts+`,
+`+errUnread+`, `+findingIsEpi+`) |TESTED
+
+|`+tests/reject/SecretAlertsErrorIsClean.idr+` |Idris2 |Expected
+rejection: an error line read as Clean is refused at `+invalid+` |TESTED
+
+|`+tests/reject/SecretAlertsTotalDisagrees.idr+` |Idris2 |Expected
+rejection: an ok line whose `total` disagrees with its findings is refused
+at `+invalid+` |TESTED
+
+|`+tests/reject/SecretAlertsEmptyReason.idr+` |Idris2 |Expected
+rejection: an error line with an empty reason is refused at `+invalid+`
+|TESTED
+
+|Producer, lib/hypatia/cli.ex `secret_alerts_output/3` |Elixir |The
+Elixir producer emits the contract's shape: ok with findings and exit 0,
+error and exit 3, and every finding annotated with its HYP-01 verdict
+fields. Checked on sample data by test/cli_test.exs ("secret-alerts"), not
+proved; the Idris2 module is a model of the interface, not a refinement
+proof of the producer (PROOF-POLICY §2.1) |TESTED
+
 |Derived workflow steps, lib/dispatch_manifest.ex |Elixir |Every
 dispatch-manifest step names the verdict it derives from, and a factless
 step refuses the whole manifest before anything is written:
