@@ -263,7 +263,8 @@ parser-adjacent proofs. *✅ Landed 2026-04-22 via
 *PR 4 — Prove PageRank convergence (1 day).* Net-new mathematical
 assurance over the neural layer, only after PR 2. *⚠ Partially landed
 2026-04-22 via `+claude/lean-proofs-parser-pagerank+` — preconditions
-only (non-negativity, column-stochastic scaling premises) in
+only (non-negativity of edge weights and weight sums over ℕ; no
+normalisation or column-sum bound) in
 `+PageRankInvariants.lean+`. The contraction theorem (T-PR: two runs approach
 each other; fixed-point existence is separate and needs completeness) is theory: Agda,
 rechecked in Rocq and Lean without Mathlib (PROOF-POLICY §§1–2); still open,

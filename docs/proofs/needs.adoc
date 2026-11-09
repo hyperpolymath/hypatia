@@ -24,8 +24,9 @@ file.
 
 === Completed Proofs and Tested Models
 
-Each row is a kernel-checked proof except H8, which is a bounded TLC
-model check: `+TESTED+`, not `+PROVEN+` (PROOF-POLICY §4).
+Each row is a kernel-checked proof except two: H6 is a runtime assertion
+with an echidnabot audit (its Agda proof was retired), and H8 is a bounded
+TLC model check, `+TESTED+` rather than `+PROVEN+` (PROOF-POLICY §4).
 
 [width="100%",cols="24%,30%,46%",options="header",]
 |===
@@ -81,7 +82,8 @@ route and the definition of done, in
 |===
 |Component |Proven today |Target theorem |Prover
 |PageRank (`+lib/neural/graph_of_trust.ex+`; preconditions in
-`+PageRankInvariants.lean+`) |non-negativity, normalisation preconditions
+`+PageRankInvariants.lean+`) |non-negativity of edge weights and of in/out
+weight sums over ℕ (no normalisation or column-sum bound)
 |T-PR: the damped map with a column-substochastic `+P+` is an ℓ¹
 contraction with modulus `+d+` |Agda, rechecked in Rocq and Lean (no
 Mathlib)
