@@ -55,6 +55,7 @@ fixture.
 
 Rendered from `+verification/proof-ledger.jsonl+`, which is canonical: where this table and the
 ledger disagree, the ledger wins and this table is regenerated.
+Checked against PROOF-POLICY as pinned by `+metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1+`.
 
 *Census:* 22 proven of 42; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
@@ -281,7 +282,7 @@ ledger disagree, the ledger wins and this table is regenerated.
 |The 18 transcribed alert types agree between security_learning.lgt and Hypatia.Rules.SecurityErrors on category, severity, auto-fixability and fix presence; prevention agrees except the two ledgered non-equalities
 |proven, PWG-3
 |Agda 2.8.0.2, builtins only, --safe --without-K --cubical-compatible
-|`+verification/proofs/agda/LogtalkMigration.agda+`: `+categoriesAgree+`, `+severitiesAgree+`, `+autoFixableAgrees+`, `+fixPresenceAgrees+`, `+preventionBranchSource+`, `+preventionCodeReviewTarget+`
+|`+verification/proofs/agda/LogtalkMigration.agda+`: `+categoriesAgree+`, `+severitiesAgree+`, `+autoFixableAgrees+`, `+fixPresenceAgrees+`, `+preventionAgreesToken+`, `+preventionAgreesPinned+`, `+preventionAgreesMissing+`, `+preventionAgreesHardCoded+`, `+preventionAgreesVulnerabilities+`, `+preventionAgreesSecurityPolicy+`, `+preventionBranchSource+`, `+preventionBranchTarget+`, `+preventionCodeReviewSource+`, `+preventionCodeReviewTarget+`
 |The finite table as transcribed; fix strings and Elixir runtime behaviour are outside the model. No Rocq or Lean leg yet
 
 |Hypatia.Rules.SecurityErrors at runtime follows the table the Agda model states
