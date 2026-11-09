@@ -351,10 +351,14 @@ endpoints agree with the hosts a job names and with its hardener's
 |`+verification/proofs/idris2/KyamlBudget.idr+` |Idris2 |A model of
 `within_budget?/2` step for step (`+count+`, `+stepCount+`). A total
 within the limit is the document's exact size with every alias read
-through (`+countSound+`, `+withinBudgetSound+`); a document within the
-limit is passed (`+countAtMost+`, `+withinBudgetComplete+`); with no
-alias naming an alias, the count answers within 2 · (limit + 1) + 2
-steps however far the aliases expand (`+countBounded+`) |PROVEN
+through (`+countSound+`, `+withinBudgetSound+`); if the count returns, a
+document within the limit is passed (`+countAtMost+`,
+`+withinBudgetComplete+`); with no alias naming an alias, the count
+answers within 2 · (limit + 1) + 2 calls of `count/3` however far the
+aliases expand (`+countBounded+`; the bound counts calls, not the work
+inside one or allocation); composed, such a document within the limit is
+passed with no premise on the count returning (`+withinBudgetPasses+`)
+|PROVEN
 
 |Runtime mirror, lib/hypatia/kyaml.ex |Elixir |`within_budget?/2` passes
 exactly the trees whose expanded size is within the limit, on 154 trees

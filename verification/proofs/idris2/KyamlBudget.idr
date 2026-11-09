@@ -25,12 +25,20 @@
 --   * `withinBudgetSound`: a total within the limit is the exact size of
 --     the document with every alias read through. `within_budget?` never
 --     passes a document that expands past the limit.
---   * `withinBudgetComplete`: a document whose expanded size is within the
---     limit is passed, with that size.
+--   * `withinBudgetComplete`: when the count returns a total, a document
+--     whose expanded size is within the limit is passed, with that size.
+--     It assumes the count returned; it does not show that it does (with
+--     too little fuel it returns `Nothing`).
 --   * `countBounded`: when no alias names another alias (the reader refuses
 --     an anchored alias, ALIAS_DECORATED), the count answers within
---     2 * (limit + 1) + 2 steps, however far the aliases expand. This is the
---     bound on work that makes the anchor bomb cheap to refuse.
+--     2 * (limit + 1) + 2 calls of `count/3`, however far the aliases
+--     expand. That bounds the calls, the work that grows with alias
+--     expansion; it does not bound the work inside a call (copying a
+--     collection's children onto the stack) or allocation.
+--   * `withinBudgetPasses`: the two composed. On a document with no alias
+--     chain, given the calls `countBounded` allows, a document whose
+--     expanded size is within the limit is passed, with that size; nothing
+--     is assumed about the count returning.
 --
 -- This is a model of the algorithm, not a refinement proof of the Elixir
 -- function. The function is held to the model by test/kyaml_test.exs and
@@ -147,8 +155,9 @@ withinBudgetSound : (f, limit : Nat) -> (doc : Node) ->
 withinBudgetSound f limit doc prf within =
   rewrite countSound f limit 0 [doc] prf within in plusZeroRightNeutral (size doc)
 
-||| `within_budget?`: a document that expands to no more than the limit is
-||| passed, and its total is its size.
+||| `within_budget?`: if the count returns a total, a document that expands
+||| to no more than the limit is passed, and its total is its size. The
+||| count returning is a premise here; `withinBudgetPasses` discharges it.
 export
 withinBudgetComplete : (f, limit : Nat) -> (doc : Node) ->
                        LTE (size doc) limit ->
@@ -258,7 +267,9 @@ countFinishes m n limit room stack ok (S f) enough with (lte n limit) proof chec
   countFinishes m n limit room stack ok (S f) enough | False = ItIsJust
 
 ||| `within_budget?` on a document without alias chains answers within
-||| 2 * (limit + 1) + 2 steps, however far its aliases expand.
+||| 2 * (limit + 1) + 2 calls of `count/3` (units of fuel),
+||| however far its aliases expand. The work inside a call is not
+||| counted.
 export
 countBounded : (limit : Nat) -> (doc : Node) -> NoChain doc ->
                IsJust (count (S (S limit + S limit + 1)) limit [doc] 0)
@@ -266,3 +277,22 @@ countBounded limit doc ok =
   countFinishes (S limit) 0 limit Refl [doc] [ok] (S (S limit + S limit + 1))
     (LTESucc (plusLteMonotoneLeft (S limit + S limit) (aliasOnTop [doc]) 1
                 (aliasOnTopBit [doc])))
+
+-- ─── Completeness without a premise on the count ───────────────────────
+
+isJustValue : (m : Maybe a) -> IsJust m -> (k ** m = Just k)
+isJustValue (Just k) ItIsJust = (k ** Refl)
+
+||| `within_budget?` on a document without alias chains, given the steps
+||| `countBounded` allows: a document whose expanded size is within the
+||| limit is passed, and its total is its size. Unlike
+||| `withinBudgetComplete`, nothing is assumed about the count returning:
+||| `countBounded` supplies that.
+export
+withinBudgetPasses : (limit : Nat) -> (doc : Node) -> NoChain doc ->
+                     LTE (size doc) limit ->
+                     count (S (S limit + S limit + 1)) limit [doc] 0 = Just (size doc)
+withinBudgetPasses limit doc ok small with (isJustValue _ (countBounded limit doc ok))
+  withinBudgetPasses limit doc ok small | (k ** prf) =
+    rewrite sym (snd (withinBudgetComplete (S (S limit + S limit + 1))
+                        limit doc small prf)) in prf

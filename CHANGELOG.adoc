@@ -94,10 +94,12 @@ reader"):
   `test/egress_decision_mirror_test.exs` runs RE001 on all 240 cases of a
   small domain and requires it to agree with the proved decision.
 * `verification/proofs/idris2/KyamlBudget.idr` models `within_budget?/2`
-  and proves that it passes exactly the documents whose expanded size is
-  within the limit, in at most 2 · (limit + 1) + 2 steps however far the
-  aliases expand. `test/kyaml_test.exs` holds the Elixir count to the
-  model on 154 trees at every limit.
+  and proves that, on a document in which no alias names another alias
+  (which the reader guarantees), it passes exactly the documents whose
+  expanded size is within the limit, in at most 2 · (limit + 1) + 2 calls
+  of `count/3` however far the aliases expand. The bound counts calls, not
+  the work inside one or allocation. `test/kyaml_test.exs` holds the
+  Elixir count to the model on 154 trees at every limit.
 
 The reader as a whole is tested, not proved, and endpoints are not
 modelled; both are recorded as such.
