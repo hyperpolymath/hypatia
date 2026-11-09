@@ -63,7 +63,9 @@ NOTE: Until 2026-11-09 the Status columns below used `+COMPLETE+` and
 `+PARTIAL+`, which are not PROOF-POLICY §5 tokens. Every `+COMPLETE+` row
 names a file that a `+Verify Proofs+` job kernel-checks on every change
 (`+idris2 --check+` over `+verification/proofs/idris2/*.idr+`, the ABI and
-verify packages, `+lake build+`), so it now reads `+PROVEN+`. The two
+verify packages, `+lake build+`), so it now reads `+PROVEN+`, except
+`+GRPC.idr+` and `+REST.idr+`, which hold declarations and state no
+proposition, so no token applies to them. The two
 `+PARTIAL+` rows were split into what is proved and what is `+OPEN+`, and
 the TLA+ row is `+TESTED+` with its bounds, as PROOF-POLICY §4 requires of
 a finite model check.
@@ -100,10 +102,13 @@ caps, end-to-end composition |PROVEN
 type safety |PROVEN
 
 |`+src/Hypatia/ABI/GRPC.idr+` |Idris2 |gRPC service type definitions
-|PROVEN
+|Not a proof: the module type-checks in the ABI package build, but it
+states no proposition, so no status token applies
 
 |`+src/Hypatia/ABI/REST.idr+` |Idris2 |REST endpoint type definitions
-|PROVEN
+|Not a proof: the module type-checks, but it states no proposition
+(totalEndpointCount is a count, not a theorem), so no status token
+applies
 
 |`+src/Hypatia/ABI/FFI.idr+` |Idris2 |GADT constructors,
 `+ffiReturnsApiResponse+` proof |PROVEN
@@ -341,20 +346,24 @@ Statements, over an abstract ordered commutative ring (so that no real
 analysis and no postulate is needed; the activation and the matrix enter
 as hypotheses):
 
-* *T-RC (reservoir contraction).* For `+0 ≤ a ≤ 1+`, an `+n × n+` matrix
+* *T-RC (reservoir contraction).* For `+0 ≤ a ≤ 1+`, `+ρ ≥ 0+`, an `+n × n+` matrix
   `+W+` whose absolute row sums are all at most `+ρ+`, and any `+σ+` with
   `+|σ s − σ t| ≤ |s − t|+`: if `+|x_j − y_j| ≤ δ+` for every `+j+`, then
   for every `+i+` and input `+u+`,
   `+|F_u(x)_i − F_u(y)_i| ≤ ((1 − a) + a·ρ)·δ+`, where
   `+F_u(x)_i = (1 − a)·x_i + a·σ(Σ_j W_ij·x_j + b_i·u)+`. Corollary:
-  under the same input sequence, two trajectories approach each other by
-  the factor `+(1 − a) + a·ρ+` per step.
+  under the same input sequence, two trajectories stay within
+  `+q^k·δ+` after `+k+` steps, `+q = (1 − a) + a·ρ+`. That is a
+  contraction, and forgetting, only when `+0 < a+` and `+ρ < 1+` (so
+  `+q < 1+`); otherwise it is non-expansive at best.
 * *T-PR (damped PageRank contraction).* For `+0 ≤ d ≤ 1+` and an
   `+n × n+` matrix `+P+` with non-negative entries and every column sum
   at most 1 (column-*sub*stochastic, as hypatia's dangling nodes make
   it), the map `+G(x) = c + d·P·x+` satisfies
   `+Σ_i |G(x)_i − G(y)_i| ≤ d·Σ_j |x_j − y_j|+`. Corollary: iterates from
-  any two starts approach each other by `+d+` per step. Existence of a
+  any two starts approach each other by `+d+` per step, a contraction only
+  when `+d < 1+` (with `+d = 1+` and `+P+` the identity the distance stays
+  fixed). Existence of a
   fixed point needs completeness, which an ordered ring does not have;
   it is out of scope.
 
@@ -377,8 +386,11 @@ verification/proofs/agda/; not yet written)
 
 |Reservoir scaling, `+lib/neural/echo_state_network.ex+`,
 `+lib/neural/liquid_state_machine.ex+` |Elixir |After scaling, the largest
-absolute row sum is `+@reservoir_norm+` (ESN 0.95, LSM 0.9), i.e. T-RC's
-`+ρ+`: `+test/neural_test.exs+` "reservoir's largest absolute row sum
+absolute row sum is at most `+@reservoir_norm+` (ESN 0.95, LSM 0.9), i.e.
+T-RC's `+ρ+`. It equals it unless sparsity leaves the reservoir all zero,
+which is common at `+reservoir_size: 1+` (seeds 1–4 for the ESN, 1–5 for
+the LSM) and still satisfies the bound. Equality for non-degenerate
+reservoirs: `+test/neural_test.exs+` "reservoir's largest absolute row sum
 is 0.95 / 0.9 for any size and seed" (ESN sizes 10/20/80, LSM 10/20/100,
 seeds 1–5) |`+TESTED+`
 
@@ -558,8 +570,9 @@ model only.
 |Annealing stage caps |`+DispatchStrategy.idr+`, `+RuleEngine.idr+`
 |Full
 
-|API type safety |`+Types.idr+`, `+GraphQL.idr+`, `+REST.idr+`,
-`+GRPC.idr+`, `+FFI.idr+` |Full
+|API type safety |`+Types.idr+`, `+GraphQL.idr+`, `+FFI.idr+` (proofs);
+`+REST.idr+`, `+GRPC.idr+` (type-checked declarations only) |Full for
+the proved properties
 
 |Quarantine logic |`+Quarantine.idr+` |Full
 

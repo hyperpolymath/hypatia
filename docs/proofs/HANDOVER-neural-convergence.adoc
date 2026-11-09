@@ -37,7 +37,7 @@ enter only through hypotheses. Use the *bound* form of the sup norm
 
 ==== T-RC — reservoir contraction (ESN and LSM)
 
-Setting: `+0 ≤ a ≤ 1+`; an `+n × n+` matrix `+W+` with
+Setting: `+0 ≤ a ≤ 1+`; `+ρ ≥ 0+`; an `+n × n+` matrix `+W+` with
 `+Σ_j |W_ij| ≤ ρ+` for every row `+i+`; any `+σ+` with
 `+|σ s − σ t| ≤ |s − t|+`; input weights `+b+`. The update is
 
@@ -49,7 +49,12 @@ input `+u+`.
 
 *Corollary (forgetting):* for an input sequence of length `+k+`, the two
 trajectories from `+x+` and `+y+` stay within `+q^k·δ+`, where
-`+q = (1 − a) + a·ρ+`. Prove it by induction on the sequence.
+`+q = (1 − a) + a·ρ+`. Prove it by induction on the sequence. This is
+forgetting only when `+q < 1+`, that is when `+0 < a+` and `+ρ < 1+`; with
+`+a = 0+` or `+ρ ≥ 1+` the bound is non-expansive at best. State the
+contraction claim with those strict premises. Hypatia's values give
+`+q+` = 0.99 for the ESN (`+a+` 0.2, `+ρ+` 0.95) and 0.97 for the LSM
+(`+a+` 0.3, `+ρ+` 0.9).
 
 *Proof outline:* the input term cancels. The recurrent difference is
 `+Σ_j W_ij·(x_j − y_j)+` (distributivity), bounded by
@@ -66,7 +71,10 @@ map is `+G(x) = c + d·P·x+`.
 *Statement:* `+Σ_i |G(x)_i − G(y)_i| ≤ d·Σ_j |x_j − y_j|+`.
 
 *Corollary:* iterates from any two starts approach each other by `+d+` per
-step in ℓ¹.
+step in ℓ¹. That is a contraction only when `+d < 1+`; with `+d = 1+` the
+statement is non-expansiveness (`+P+` the identity keeps the distance
+fixed). State the contraction claim with `+0 ≤ d < 1+`. Hypatia uses
+`+d+` = 0.85.
 
 The premise is column-*sub*stochastic, `+≤ 1+`, not `+= 1+`. The earlier
 handover assumed a column-stochastic `+P+`, which hypatia's code does not
@@ -79,7 +87,9 @@ ordered ring does not provide; they are out of scope.
 [cols="2,3,1",options="header"]
 |===
 |Premise |Where |Status
-|ESN `+ρ+` = 0.95, LSM `+ρ+` = 0.9 (largest absolute row sum after scaling)
+|ESN `+ρ+` = 0.95, LSM `+ρ+` = 0.9: the largest absolute row sum after
+scaling is at most `+ρ+` (exactly `+ρ+` unless sparsity leaves the
+reservoir all zero, which is common at `+reservoir_size: 1+`)
 |`+generate_reservoir/1+` in `+lib/neural/echo_state_network.ex+` and
 `+lib/neural/liquid_state_machine.ex+`; row-sum tests in
 `+test/neural_test.exs+` |`+TESTED+`
