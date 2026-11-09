@@ -117,7 +117,7 @@ countConsLTE e es ws with (inWindow ws e)
   _ | False = lteSuccRight reflexive
 
 ||| After tryAccept the invariant still holds: a rejected event leaves the
-||| state unchanged, and an accepted one was admitted below the maximum.
+||| state unchanged, and an accepted one was let in below the maximum.
 export
 tryAcceptPreservesInvariant : (state : RateLimiterState) -> (e : Event) ->
                               InvariantHolds state e.timestamp ->

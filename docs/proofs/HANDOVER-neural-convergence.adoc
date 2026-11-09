@@ -67,10 +67,17 @@ iterates satisfy `+‖xₖ - x*‖ ≤ cᵏ / (1 - c) · ‖x₁ - x₀‖+`. Th
 modulus of convergence, so the statement is constructive by construction.
 
 M3 — PageRank (`+PageRank.agda+`)::
-`+G(x) = α·P·x + (1 - α)·v+` with `+P+` column-stochastic (non-negative
-rational entries, columns summing to 1) and a rational `+0 ≤ α < 1+`.
-`+G+` is an ℓ¹ contraction with modulus `+α+`, because a column-stochastic
-`+P+` gives `+‖P x‖₁ ≤ ‖x‖₁+`. Then M2. *Ledger:* `+pagerank-convergence+`
+`+G(x) = α·P·x + (1 - α)·v+` with `+P+` column-sub-stochastic (non-negative
+rational entries, each column summing to at most 1) and a rational
+`+0 ≤ α < 1+`. `+G+` is an ℓ¹ contraction with modulus `+α+`, because such a
+`+P+` gives `+‖P x‖₁ ≤ ‖x‖₁+`. Then M2. State it for sub-stochastic `+P+`, not
+only stochastic: the runtime builds sub-stochastic matrices. A node with no
+outgoing edge gives a zero column. `+iterate_trust/4+` in
+`+lib/neural/graph_of_trust.ex+` sums every parallel edge into a source's
+out-weight but takes one of them into each target, so repeated outcomes
+leak mass. The theorem then covers convergence for every runtime input. The
+leak changes what the fixed point means, and is a runtime defect to fix in
+the runtime, not to model. *Ledger:* `+pagerank-convergence+`
 becomes `+proven+` at PWG-3 once this checks in CI.
 
 M4 — ESN (`+EchoState.agda+`)::
@@ -95,8 +102,10 @@ is one stays `+open+`.
 === What the theorems do not cover
 
 * The runtime uses IEEE floats. The theorems are about reals; the link from
-  them to `+lib/neural/*.ex+` is the `+models-runtime-refinement+` row, and
-  `+test/neural_test.exs+` is that row's evidence, which is `+tested-only+`.
+  them to `+lib/neural/*.ex+` is the `+models-runtime-refinement+` row, which is
+  `+open+` and names no evidence yet. `+test/neural_test.exs+` checks the ESN
+  ∞-norm bound and the convergence of two initial states; it is a candidate
+  for that row's evidence, not yet recorded as it.
 * Matrix entries are rational in the model. The runtime's weights are
   floats, every one of which is a rational, so no generality is lost there;
   rounding during iteration is what the model does not see.
