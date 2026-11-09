@@ -14,7 +14,8 @@
 * *verification/proofs/agda/*: `+LogtalkMigration.agda+` (since
 2026-11-01; `+agda --safe --without-K --cubical-compatible+`, `+PWG-3+`).
 * *Toolchain*: Idris2 `+v0.7.0+`, Lean `+v4.30.0+`, Agda `+2.8.0.2+` (all
-pinned), TLA+ tla2tools 2.19. The 2026-04-22 retirement of Agda covered
+pinned); TLA+ tla2tools is *not* pinned (CI fetches the latest release;
+the recorded 2026-04-17 run used 2.19). The 2026-04-22 retirement of Agda covered
 only `+OutcomeLog.agda+` (see `+verification/PROOF-STATUS.adoc+`,
 "`Retired proofs`"); Agda is the estate's theory prover (PROOF-POLICY §1).
 * *Escape hatches*: 0 — no `+believe_me+` / `+assert_total+` /
@@ -67,7 +68,7 @@ completeness / soundness / preservation |—
 transactionality / reversibility |—
 
 |`+verification/proofs/lean4/ParserTotality.lean+` |VCL `+FROM+`-clause
-parser totality + round-trip |—
+parser totality and determinism; round-trip on fixed examples only |—
 |===
 
 === What Still Needs Proving

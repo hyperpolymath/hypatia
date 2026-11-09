@@ -147,8 +147,10 @@ now `+FindingFact+`, and the corresponding module is
 |PROVEN (superseded statement; re-checked 2026-11-01 in Verify Proofs run 41328302925, idris2 --check job 124912804086, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331)
 
 |`+verification/proofs/idris2/Quarantine.idr+` |Idris2 |State
-transitions (ok/soft/hard/permanent), Auto-quarantine triggers, Release
-restoration, Routing blockage |PROVEN
+transitions Ok to Soft and Ok to Hard, idempotence once quarantined,
+Auto-quarantine triggers, Release restoration, Routing blockage
+(including Permanent). No transition into Permanent is modelled, so none
+is proved |PROVEN
 
 |`+verification/proofs/idris2/BatchRollback.idr+` |Idris2
 |Transactionality (all-or-nothing), Reversibility (snapshot
@@ -164,8 +166,9 @@ posterior in (0,1), monotone in successes/failures, zero-observation
 identity, floor/cap clamp |PROVEN
 
 |`+verification/proofs/lean4/ParserTotality.lean+` |Lean 4 |VCL
-`+FROM+`-clause parser totality, determinism, round-trip,
-malformed-input rejection |PROVEN
+`+FROM+`-clause parser totality, determinism, malformed-input rejection.
+Round-trip is checked only on fixed example token lists (STORE, FEDERATION,
+HEXAD), not as a general theorem |PROVEN (round-trip: examples only)
 
 |`+verification/proofs/lean4/PageRankInvariants.lean+` |Lean 4
 |PageRank preconditions (edge-weight / out-degree non-negativity). The
@@ -424,7 +427,11 @@ from the upstream release archive and TLC from the tla2tools jar, none of
 them through a Guix manifest or the container. §6 requires a `+deviation+`
 record for each (leg, tool, asserted version, digest of what was
 installed, why Guix or the container was not used, state). Those records
-have not been written, and the jobs do not yet record installer digests:
+have not been written, and the jobs do not yet record installer digests.
+TLC is not even version-pinned: the job fetches
+`+releases/latest/download/tla2tools.jar+` and caches it under a fixed key,
+so the 2.19 named in the KinGate row is the version of the recorded
+2026-04-17 run, not a guarantee for later runs:
 `+OPEN+`.
 
 === Properties Proven

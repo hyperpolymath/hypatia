@@ -33,7 +33,9 @@ state and commitments. Companion detail:
   the `check-trusted-base` CI job fails if one loses its fixture status or
   an un-annotated marker appears elsewhere. (An earlier revision of this
   sentence claimed "zero escape hatches" unscoped, which the fixture corpus
-  made literally false; see #831.) One theorem obligation remains open —
+  made literally false; see #831.) _Amended 2026-11-09 (#1025), after the
+  `affirmed-at` timestamp above, which does not cover the rest of this
+  item:_ one theorem obligation remains open —
   neural contraction (PageRank, ESN and LSM) — two theory theorems, to be
   proved in Agda and rechecked in Rocq and Lean without Mathlib (estate
   PROOF-POLICY §§1–2); the handover is at
