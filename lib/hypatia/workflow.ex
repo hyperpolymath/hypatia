@@ -100,37 +100,45 @@ defmodule Hypatia.Workflow do
     end
   end
 
+  # A job or step read through an alias (`b: *a`, `- *step`) keeps the alias
+  # around everything read from it (`child/2`, `entries/1`, `items/1`), so a
+  # rule reports what it finds there at the alias, not at the anchor.
   defp job(%{key: key, value: value}) do
-    node = Kyaml.deref(value)
-
     %Job{
       id: key.value,
       line: elem(key.loc, 0),
       node: value,
-      runs_on: Kyaml.get(node, "runs-on"),
-      uses: text(Kyaml.get(node, "uses")),
-      if: text(Kyaml.get(node, "if")),
-      env: Kyaml.get(node, "env"),
-      permissions: Kyaml.get(node, "permissions"),
-      steps: for(item <- items(Kyaml.get(node, "steps")), do: step(item))
+      runs_on: child(value, "runs-on"),
+      uses: text(child(value, "uses")),
+      if: text(child(value, "if")),
+      env: child(value, "env"),
+      permissions: child(value, "permissions"),
+      steps: for(item <- items(child(value, "steps")), do: step(item))
     }
   end
 
   defp step(item) do
-    node = Kyaml.deref(item)
-    run = Kyaml.get(node, "run")
+    run = child(item, "run")
 
     %Step{
       line: elem(item.loc, 0),
-      node: node,
-      uses: text(Kyaml.get(node, "uses")),
+      node: item,
+      uses: text(child(item, "uses")),
       run: text(run),
       run_style: run && Kyaml.deref(run)[:style],
-      with: Kyaml.get(node, "with"),
-      env: Kyaml.get(node, "env"),
-      if: text(Kyaml.get(node, "if"))
+      with: child(item, "with"),
+      env: child(item, "env"),
+      if: text(child(item, "if"))
     }
   end
+
+  # `Kyaml.get/2`, with the value kept under the alias it was read through.
+  defp child(%{kind: :alias} = alias, key), do: under(alias, child(alias.target, key))
+  defp child(node, key), do: Kyaml.get(node, key)
+
+  # `node`, read through `alias`: reported at the alias, as `strings/1` reports it.
+  defp under(_alias, nil), do: nil
+  defp under(alias, node), do: %{alias | target: node}
 
   @doc """
   The events of the workflow's `on:`: `on: push`, a list, or the keys of a
@@ -148,21 +156,23 @@ defmodule Hypatia.Workflow do
   @doc "A step input's value (`with: {egress-policy: block}`), or nil."
   def input(%Step{with: with}, name), do: with |> Kyaml.get(name) |> text()
 
-  @doc "The entries of a mapping node (through an alias); [] for anything else."
-  def entries(node) do
-    case node && Kyaml.deref(node) do
-      %{kind: :map, entries: entries} -> entries
-      _ -> []
-    end
-  end
+  @doc """
+  The entries of a mapping node; [] for anything else. Through an alias,
+  each value stays under the alias, so it is reported at the alias.
+  """
+  def entries(%{kind: :alias} = alias),
+    do: for(entry <- entries(alias.target), do: %{entry | value: under(alias, entry.value)})
 
-  @doc "The items of a sequence node (through an alias); [] for anything else."
-  def items(node) do
-    case node && Kyaml.deref(node) do
-      %{kind: :seq, items: items} -> items
-      _ -> []
-    end
-  end
+  def entries(%{kind: :map, entries: entries}), do: entries
+  def entries(_), do: []
+
+  @doc """
+  The items of a sequence node; [] for anything else. Through an alias,
+  each item stays under the alias, so it is reported at the alias.
+  """
+  def items(%{kind: :alias} = alias), do: for(item <- items(alias.target), do: under(alias, item))
+  def items(%{kind: :seq, items: items}), do: items
+  def items(_), do: []
 
   @doc """
   A scalar's text, whatever it resolved to (`egress-policy: block`, `ref: 1`):

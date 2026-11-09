@@ -337,8 +337,8 @@ says so by evaluation (`+decides+`), and refuses the same declaration
 for an auditing job (`+refusesAudit+`) |TESTED
 
 |Runtime mirror, lib/rules/research_extensions.ex |Elixir |RE001 reports
-a job exactly when `decClean` refuses it, on all 240 cases of a small
-domain (one or two secrets, a run-time key or none, four hardener
+a job exactly when `decClean` refuses it, on all 280 cases of a small
+domain (one or two secrets by name, a run-time key, or both; four hardener
 settings, no declaration or nine): test/egress_decision_mirror_test.exs,
 with the deed parse asserted per case and three mutants killed (two in
 the transcription, one in RE001's block check) |TESTED

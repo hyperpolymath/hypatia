@@ -11,8 +11,8 @@ defmodule Hypatia.EgressDecisionMirrorTest do
   workflow and deed, RE001 is run on it, and RE001 must report nothing exactly
   when `clean?/2` says the job is clean:
 
-    * the job reads one or two secrets, by name, and possibly also by a key
-      computed at run time;
+    * the job reads one or two secrets by name, a key computed at run
+      time, or both;
     * it has no hardener, or harden-runner with `egress-policy` unset,
       `audit` or `block`;
     * it is undeclared, or declared with any non-empty subset of the two
@@ -53,8 +53,9 @@ defmodule Hypatia.EgressDecisionMirrorTest do
 
   defp jobs do
     for secrets <- subsets(@secrets),
-        secrets != [],
         dynamic <- [false, true],
+        # A job that reads only a computed key is in scope too.
+        secrets != [] or dynamic,
         hardener <- [nil, :default, :audit, :block],
         do: %{secrets: secrets, dynamic: dynamic, hardener: hardener}
   end
@@ -144,8 +145,9 @@ defmodule Hypatia.EgressDecisionMirrorTest do
 
   test "RE001 reports a job exactly when Egress.idr's decClean refuses it" do
     cases = for job <- jobs(), decl <- decls(), do: {job, decl}
-    # 3 secret sets x 2 x 4 hardeners, each with no declaration or 3 x 3.
-    assert length(cases) == 24 * 10
+    # (3 secret sets x 2, plus the dynamic-only job) x 4 hardeners, each
+    # with no declaration or 3 x 3.
+    assert length(cases) == 28 * 10
 
     mismatches =
       cases

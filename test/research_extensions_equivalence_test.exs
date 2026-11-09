@@ -65,12 +65,60 @@ defmodule Hypatia.Rules.ResearchExtensionsEquivalenceTest do
     assert {"RE002", :high} in rules
   end
 
+  # The random workflows carry no deed, so the endpoint comparison is held
+  # to the same rule here on one declared job: a host a step names, and a
+  # hardener's allow-list that disagrees with the declaration.
+  test "declared endpoints compare the same however the workflow is written" do
+    hardener =
+      {:map,
+       [
+         {"uses", "step-security/harden-runner@#{@sha}"},
+         {"with",
+          {:map,
+           [{"egress-policy", "block"}, {"allowed-endpoints", "hex.pm:443 repo.hex.pm:443"}]}}
+       ]}
+
+    upload =
+      {:map,
+       [
+         {"run", "curl https://upload.example.com/v1"},
+         {"env", {:map, [{"K", "${{ secrets.API_KEY }}"}]}}
+       ]}
+
+    job = {:map, [{"runs-on", "ubuntu-latest"}, {"steps", {:seq, [hardener, upload]}}]}
+    workflow = {:map, [{"on", {:seq, ["push"]}}, {"jobs", {:map, [{"ship", job}]}}]}
+
+    deed =
+      ~s|(egress (job :workflow ".github/workflows/w.yml" :job "ship" | <>
+        ~s|:secrets ("API_KEY") :endpoints ("hex.pm:443") :enforcement harden-runner-block))|
+
+    [{_, expected} | rest] =
+      for style <- [:block, :flow, :quoted, :literal],
+          do: {style, findings(render(workflow, style), deed)}
+
+    reasons = Enum.map(expected, & &1.reason)
+    # strip_lines/1 drops every `:digits`, ports included.
+    assert Enum.any?(reasons, &(&1 =~ ~s|names "upload.example.com" literally|))
+    assert Enum.any?(reasons, &(&1 =~ ~s|lets out undeclared "repo.hex.pm"|))
+
+    for {style, got} <- rest, do: assert(got == expected, "#{style} differs from block")
+  end
+
   # ─── findings, line-free ────────────────────────────────────────────
 
-  defp findings(yaml) do
+  defp findings(yaml, deed \\ nil) do
     dir = Path.join(System.tmp_dir!(), "hyp-equiv-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(dir, ".github/workflows"))
     File.write!(Path.join(dir, ".github/workflows/w.yml"), yaml)
+
+    if deed do
+      File.write!(Path.join(dir, "x_chora.deed"), """
+      ;; SPDX-License-Identifier: CC-BY-SA-4.0
+      (repo-deed :schema-version "1.0.0" :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x" :beholding-chora #u5"estate/chora"
+        #{deed})
+      """)
+    end
 
     try do
       (ResearchExtensions.re001_missing_harden_runner(dir) ++

@@ -241,13 +241,16 @@ defmodule Hypatia.Rules.ResearchExtensions do
   An unreadable deed or clause declares nothing, and the finding says why.
   `:endpoints` are compared with what the workflow shows, as `:warn` findings:
 
-    * a host outside GitHub that a step names literally (a URL, or a
-      `git@host:` remote; not in a `#` comment) must be covered by a declared
-      endpoint, where `*.x` covers the subdomains of x and an endpoint without a
-      port covers every port;
+    * a host outside GitHub that a step names literally (a domain name or an
+      IPv4 address other than loopback, in a URL or a `git@host:path`
+      remote; not in a `#` comment outside quotes) must be covered by a
+      declared endpoint, where `*.x` covers the subdomains of x and an
+      endpoint without a port covers every port; a port written as an
+      expression is unknown, and any port of the host covers it;
     * when the job's harden-runner step lists `allowed-endpoints`, every host
-      outside GitHub on it must be declared, and every declared literal host
-      must be on it.
+      outside GitHub on it must be declared (an entry without a port lets out
+      every port, so only a declaration without one covers it), and every
+      declared literal host must be on it.
 
   What an action or a variable reaches at run time is not modelled: that
   needs run-time observation.
@@ -294,7 +297,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
     # A workflow that names secrets but cannot be read is reported. Its
     # declarations cannot be checked, so they are not reported stale.
-    unreadable = for {:unreadable, rel, error, true} <- workflows, do: {rel, error}
+    unreadable =
+      for {:unreadable, rel, error, bytes} <- workflows,
+          Regex.match?(~r/secrets/i, bytes),
+          do: {rel, error}
+
     unread = MapSet.new(for {:unreadable, rel, _, _} <- workflows, do: rel)
 
     job_findings =
@@ -358,7 +365,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
   # The workflows of a repo as RE001 reads them: the parsed model
   # (Hypatia.Workflow, over kyq's KYAML reader). A workflow the reader refuses
-  # is {:unreadable, …}, with whether it names secrets at all.
+  # is {:unreadable, rel, error, bytes}.
   defp re001_workflows(repo_path) do
     for path <- workflow_files(repo_path) do
       rel = Path.relative_to(path, repo_path)
@@ -366,7 +373,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
 
       case Workflow.parse(bytes, rel) do
         {:ok, workflow} -> {:ok, rel, workflow}
-        {:error, error} -> {:unreadable, rel, error, Regex.match?(~r/secrets/i, bytes)}
+        {:error, error} -> {:unreadable, rel, error, bytes}
       end
     end
   end
@@ -730,11 +737,21 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # An endpoint held in a secret or variable (`secret:`, `var:`) covers no
   # literal host: a host written in the workflow is declared as itself.
 
-  # GitHub's own endpoints, which :endpoints leaves out (ADR-009).
-  @github_hosts ~r/\A(?:github\.com|[a-z0-9.-]+\.github\.com|[a-z0-9.-]*githubusercontent\.com|ghcr\.io|[a-z0-9.-]+\.githubassets\.com|github\.io|[a-z0-9.-]+\.github\.io)\z/
+  # GitHub's own endpoints, which :endpoints leaves out (ADR-009). Each is a
+  # whole domain or a subdomain of one: `notgithubusercontent.com` is not.
+  @github_hosts ~r/\A(?:github\.com|[a-z0-9.-]+\.github\.com|(?:[a-z0-9.-]+\.)?githubusercontent\.com|ghcr\.io|[a-z0-9.-]+\.githubassets\.com|github\.io|[a-z0-9.-]+\.github\.io)\z/
 
-  @url_host ~r<\b(https?|wss?|ssh|git|ftps?)://(?:[^@/\s"'`]+@)?([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,})(?::(\d{1,5}))?>
-  @scp_host ~r/(?<![\w.\/-])[A-Za-z0-9._-]+@([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}):(?!\d)/
+  # A host a workflow can name: a dotted domain name, or a literal IPv4
+  # address. A single-label name (`localhost`, a service container such as
+  # `postgres`) is not egress and is not compared.
+  @host ~S"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}(?![\w-]|\.\w)"
+  # A URL's scheme (in any case, as clients read it), host, and port: digits,
+  # or an expression (`:${{ vars.PORT }}`), whose value is known only at run time.
+  @url_host ~r<\b(https?|wss?|ssh|git|ftps?)://(?:[^@/\s"'`]+@)?(#{@host})(?::(\d{1,5})|(:\$\{\{))?>i
+  # A `user@host:path` remote. The path is not blank (`a@example.com: failed`
+  # is prose) and not a port (`user:pass@host:5432/db` is a URL's userinfo),
+  # though it may start with a digit (`git@gitlab.com:123team/x.git`).
+  @scp_host ~r/(?<![\w.\/-])[A-Za-z0-9._-]+@(#{@host}):(?!\d++(?![A-Za-z_.-]))(?=[\w~.\/-])/
   @default_port %{
     "http" => 80,
     "ws" => 80,
@@ -753,11 +770,15 @@ defmodule Hypatia.Rules.ResearchExtensions do
         not in_shell_comment?(text, at),
         host = String.downcase(host),
         not Regex.match?(@github_hosts, host),
+        not loopback?(host),
         do: {host, port, line_of.(at)}
   end
 
+  defp loopback?(host), do: Regex.match?(~r/\A(?:127\.|0\.0\.0\.0\z)/, host)
+
   # Is offset `at` inside a `#` comment: after a `#` that starts the line or
-  # follows a blank? (A URL fragment, `/#x`, is not one.)
+  # follows a blank, outside quotes? (A URL fragment, `/#x`, is not one, nor
+  # is the `#` of `git commit -m "fix #12"`.)
   defp in_shell_comment?(text, at) do
     line_start =
       case :binary.matches(binary_part(text, 0, at), "\n") do
@@ -765,21 +786,41 @@ defmodule Hypatia.Rules.ResearchExtensions do
         matches -> matches |> List.last() |> elem(0) |> Kernel.+(1)
       end
 
-    Regex.match?(~r/(?:\A|\s)#/, binary_part(text, line_start, at - line_start))
+    comment_opens?(binary_part(text, line_start, at - line_start), nil, true)
   end
 
+  # Walks one line: `quote` is the open quote character or nil, `word_start?`
+  # whether the next character starts a word. A backslash escapes the next
+  # character outside single quotes, as the shell reads it.
+  defp comment_opens?(<<>>, _quote, _word_start?), do: false
+  defp comment_opens?(<<?#, _::binary>>, nil, true), do: true
+
+  defp comment_opens?(<<c, rest::binary>>, nil, _) when c in [?', ?"],
+    do: comment_opens?(rest, c, false)
+
+  defp comment_opens?(<<?\\, _, rest::binary>>, quote, _) when quote != ?',
+    do: comment_opens?(rest, quote, false)
+
+  defp comment_opens?(<<c, rest::binary>>, c, _), do: comment_opens?(rest, nil, false)
+
+  defp comment_opens?(<<c, rest::binary>>, quote, _),
+    do: comment_opens?(rest, quote, quote == nil and c in [?\s, ?\t])
+
+  # A port written as an expression is unknown (nil), not the scheme's default.
   defp url_hosts(text) do
-    for [{at, _}, {s, sl}, {h, hl}, port] <-
-          Regex.scan(@url_host, text, return: :index, capture: :all) |> Enum.map(&pad_port/1) do
+    for [{at, _}, {s, sl}, {h, hl} | port] <- Regex.scan(@url_host, text, return: :index) do
       scheme = String.downcase(binary_part(text, s, sl))
-      port = if port, do: String.to_integer(binary_part(text, elem(port, 0), elem(port, 1)))
-      {binary_part(text, h, hl), port || @default_port[scheme], at}
+
+      port =
+        case port do
+          [{p, pl} | _] when p >= 0 -> String.to_integer(binary_part(text, p, pl))
+          [_, {e, _}] when e >= 0 -> nil
+          _ -> @default_port[scheme]
+        end
+
+      {binary_part(text, h, hl), port, at}
     end
   end
-
-  defp pad_port([all, scheme, host]), do: [all, scheme, host, nil]
-  defp pad_port([all, scheme, host, {_, 0}]), do: [all, scheme, host, nil]
-  defp pad_port(match), do: match
 
   defp scp_hosts(text) do
     for [{at, _}, {h, hl}] <- Regex.scan(@scp_host, text, return: :index),
@@ -787,11 +828,14 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   # The literal entries of a harden-runner step's `allowed-endpoints` input
-  # (`host:port`, separated by spaces, newlines or commas); nil when the step
-  # sets none. An entry written with an expression
+  # (`host:port`, separated by spaces, newlines or commas) as {host, port};
+  # nil when the step sets none. An entry written without a port lets out
+  # every port (`:any`). An entry whose host is an expression
   # (`${{ secrets.SMTP_HOST }}:${{ secrets.SMTP_PORT }}`) names its host only
   # at run time, as a declared `secret:` or `var:` endpoint does, so it is
-  # not a literal entry. An expression is one unit however it is spaced.
+  # not a literal entry; a literal host with an expression for its port
+  # (`smtp.example.com:${{ vars.PORT }}`) is, with its port unknown (nil).
+  # An expression is one unit however it is spaced.
   defp harden_runner_allowed(step) do
     case Workflow.input(step, "allowed-endpoints") do
       nil ->
@@ -801,9 +845,17 @@ defmodule Hypatia.Rules.ResearchExtensions do
         text
         |> String.replace(@expression, "\0")
         |> String.split(~r/[\s,]+/, trim: true)
-        |> Enum.reject(&String.contains?(&1, "\0"))
+        |> Enum.flat_map(fn entry ->
+          case String.split(entry, ":\0") do
+            [host, ""] -> host |> literal_endpoint() |> List.wrap()
+            _ -> entry |> literal_endpoint() |> List.wrap() |> Enum.map(&any_port/1)
+          end
+        end)
     end
   end
+
+  defp any_port({host, nil}), do: {host, :any}
+  defp any_port(endpoint), do: endpoint
 
   # A literal endpoint as {host pattern, port or nil}: `host` or
   # `host:digits`. Anything else (secret:, var:, an expression) is nil.
@@ -815,9 +867,11 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  # Does a declared {pattern, port} cover a host and port? `*.x` covers the
+  # Does a {pattern, port} cover a host and port? `*.x` covers the
   # subdomains of x (as harden-runner reads it), not x itself; an endpoint
-  # without a port covers every port.
+  # without a port (nil or `:any`) covers every port. A port known only at
+  # run time (nil) is covered by any port of the host; every port (`:any`)
+  # only by an endpoint without a port.
   defp covers?({pattern, want}, host, port) do
     host_ok =
       case pattern do
@@ -825,7 +879,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
         _ -> pattern == host
       end
 
-    host_ok and (want == nil or port == nil or want == port)
+    host_ok and (want in [nil, :any] or port == nil or want == port)
   end
 
   defp re001_endpoint_findings(job, deed_file, decl) do
@@ -847,12 +901,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
   defp allowed_endpoint_findings(%{allowed_endpoints: nil}, _deed_file, _declared), do: []
 
   defp allowed_endpoint_findings(job, deed_file, declared) do
-    allowed =
-      job.allowed_endpoints
-      |> Enum.map(&literal_endpoint/1)
-      |> Enum.reject(fn endpoint ->
-        endpoint == nil or Regex.match?(@github_hosts, elem(endpoint, 0))
-      end)
+    allowed = Enum.reject(job.allowed_endpoints, &Regex.match?(@github_hosts, elem(&1, 0)))
 
     # What the hardener lets out must be declared. A declared literal host
     # must be let out, or block mode stops the job; a declared wildcard is a
@@ -874,7 +923,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  defp endpoint_text({host, nil}), do: "\"#{host}\""
+  defp endpoint_text({host, port}) when port in [nil, :any], do: "\"#{host}\""
   defp endpoint_text({host, port}), do: "\"#{host}:#{port}\""
 
   defp re001_unnamed_endpoints(job, deed_file, uncovered) do
@@ -966,13 +1015,29 @@ defmodule Hypatia.Rules.ResearchExtensions do
   case, as RE001 accepts it), its policy is that step's own
   `with: egress-policy`, and a step with no policy runs harden-runner's
   default, `audit`. The trigger is a `push` or `release` event in the
-  workflow's `on:`. A workflow that cannot be read is RE001's to report.
+  workflow's `on:`, narrowed by a job `if:` that admits only listed events
+  (as RE001 narrows untrusted events): a job that runs only on
+  `pull_request` is not on a protected-branch trigger.
 
-  Severity: `:high`. Action: `:report`.
+  A workflow that cannot be read and names `harden-runner` is reported as
+  unreadable (`:warn`): its hardener cannot be checked, and a silent skip
+  would read as a pass.
+
+  Severity: `:high` (`:warn` for an unreadable workflow). Action: `:report`.
   """
   def re002_harden_runner_audit_mode(repo_path) do
-    for {:ok, rel, %Workflow{} = workflow} <- re001_workflows(repo_path),
-        Enum.any?(workflow.triggers, &(&1 in ["push", "release"])),
+    workflows = re001_workflows(repo_path)
+
+    unreadable =
+      for {:unreadable, rel, error, bytes} <- workflows,
+          Regex.match?(~r/harden-runner/i, bytes),
+          do: re002_unreadable(rel, error)
+
+    unreadable ++ re002_audit_findings(workflows)
+  end
+
+  defp re002_audit_findings(workflows) do
+    for {:ok, rel, %Workflow{} = workflow} <- workflows,
         audit = audit_hardeners(workflow),
         audit != [] do
       defaulted? = Enum.all?(audit, &(&1 == :default))
@@ -995,10 +1060,33 @@ defmodule Hypatia.Rules.ResearchExtensions do
     end
   end
 
-  # The audit-mode harden-runner steps of a workflow's jobs: `:explicit` for
-  # `egress-policy: audit`, `:default` for a step that sets no policy.
-  defp audit_hardeners(%Workflow{jobs: jobs}) do
+  defp re002_unreadable(rel, error) do
+    %{
+      rule: "RE002",
+      file: rel,
+      severity: :warn,
+      line: error.line,
+      reason:
+        "#{rel} could not be read as KYAML (#{error.code} at line #{error.line}, column " <>
+          "#{error.column}: #{error.message}), so RE002 cannot check its harden-runner policy",
+      action: :report,
+      detail: %{
+        fix:
+          "Rewrite the construct the reader names in the KYAML subset (kyq " <>
+            "docs/KYAML_SPEC.adoc; standards YAML-POLICY)."
+      }
+    }
+  end
+
+  # The audit-mode harden-runner steps of the jobs that run on a protected
+  # trigger (`push` or `release`): `:explicit` for `egress-policy: audit`,
+  # `:default` for a step that sets no policy.
+  defp audit_hardeners(%Workflow{jobs: jobs, triggers: triggers}) do
+    protected = Enum.filter(triggers, &(&1 in ["push", "release"]))
+
     for job <- jobs,
+        gate <- [job_event_gate(job)],
+        Enum.any?(protected, &(gate == nil or &1 in gate)),
         step <- job.steps,
         harden_runner_step?(step),
         harden_runner_policy(step) == "audit" do

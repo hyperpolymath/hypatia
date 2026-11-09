@@ -69,6 +69,23 @@ model instead of scanning lines (WH013 and WH014 follow, and
   any case, its own `with: egress-policy`. A step with no policy runs
   harden-runner's default, `audit`, and is now reported. The trigger is a
   `push` or `release` key of `on:`, not a `push:` anywhere in the file.
+* **Review fixes on #1036**, each with a test that fails without it. The
+  endpoint comparison no longer takes `notgithubusercontent.com` for a
+  GitHub host; reads a URL's scheme in any case (`HTTPS://`); compares a
+  literal IPv4 host (loopback aside; a single-label name such as
+  `localhost` or a service container is still not egress); treats a URL
+  port written as an expression as unknown instead of the scheme's default;
+  reads `git@gitlab.com:123team/x.git` as a remote but
+  `owner@example.com: failed` as prose; ignores a `#` inside shell quotes
+  (`git commit -m "fix #12" && git push …`) when looking for comments;
+  keeps the literal host of an allowed entry whose port is an expression;
+  and holds an allowed entry with no port (every port) to a declaration
+  with none. RE002 skips a job whose `if:` admits only events other than
+  `push` and `release`, and reports a workflow the reader refuses if it
+  names harden-runner (the line reader used to find its `audit` there).
+  A job or step read through an alias is reported at the alias again, not
+  at the anchor. On the six repositories above, RE001 and RE002 give the
+  same 6 findings before and after.
 
 The `code_safety/elixir_atom_from_user` description was backwards: it named
 `String.to_existing_atom` as the danger. It now names `String.to_atom`. The
@@ -91,7 +108,7 @@ reader"):
   claim, that a declaration lists exactly the secrets read, and that a key
   computed at run time is never declared. Three expected rejections and a
   positive control run in `scripts/check-verdicts.sh`.
-  `test/egress_decision_mirror_test.exs` runs RE001 on all 240 cases of a
+  `test/egress_decision_mirror_test.exs` runs RE001 on all 280 cases of a
   small domain and requires it to agree with the proved decision.
 * `verification/proofs/idris2/KyamlBudget.idr` models `within_budget?/2`
   and proves that, on a document in which no alias names another alias
