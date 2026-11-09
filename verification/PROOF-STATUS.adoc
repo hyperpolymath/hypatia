@@ -220,12 +220,12 @@ entries; the two ledgered non-equalities stated exactly
 former severity catch-all members explicit (`+catchAllSastLow+`,
 `+catchAllCiTestsLow+`, `+catchAllUnmaintainedLow+`). Source SHA-256
 (at authoring): bbd18e2747c84e2eda7ff5a778a2df7f8960a1ef47b1c253f316b9d97b9902a0.
-|Status `+PROVEN+`; correspondence `+AGDA-VERIFIED+`; `+PWG-3+`, no
+|Status PROVEN; correspondence AGDA-VERIFIED; PWG-3, no
 axioms. Receipt: official pinned Agda 2.8.0.2 Linux release, builtins
 only/no stdlib; invocation `agda --safe --without-K
 --cubical-compatible LogtalkMigration.agda`; success in Verify Proofs
 run 41328302925, job 124912804344, at commit 4018290eaa3265b82209e2a45b6917a4bb0a0331.
-Rocq and Lean legs `+OPEN+` (none written), so no `+PWG-2i+`/`+PWG-2ii+`/`+PWG-1+`,
+Rocq and Lean legs OPEN (none written), so no PWG-2i/PWG-2ii/PWG-1,
 reconciliation or runtime-refinement claim.
 |===
 
@@ -361,13 +361,15 @@ as hypotheses):
 [width="100%",cols="28%,14%,42%,16%",options="header",]
 |===
 |Artefact |Language |Claim |Status
-|T-RC Agda source (planned `+verification/proofs/agda/ReservoirContraction.agda+`)
+|T-RC Agda source (planned as ReservoirContraction in
+verification/proofs/agda/; not yet written)
 |Agda |The T-RC statement above |`+OPEN+`; `+AGDA-PENDING+`; `+ungraded+`
 
 |T-RC Rocq and Lean legs |Rocq, Lean 4 |Re-proofs of the same statement
 |`+OPEN+` (both)
 
-|T-PR Agda source (planned `+verification/proofs/agda/PageRankContraction.agda+`)
+|T-PR Agda source (planned as PageRankContraction in
+verification/proofs/agda/; not yet written)
 |Agda |The T-PR statement above |`+OPEN+`; `+AGDA-PENDING+`; `+ungraded+`
 
 |T-PR Rocq and Lean legs |Rocq, Lean 4 |Re-proofs of the same statement
@@ -497,8 +499,8 @@ rejected
 
 ==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
 
-Status for all of P8: `+PROVEN+`, correspondence `+AGDA-VERIFIED+`,
-`+PWG-3+`, on the strict-profile receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
+Status for all of P8: PROVEN, correspondence AGDA-VERIFIED, PWG-3, on
+the strict-profile receipt in the inventory row above (Agda 2.8.0.2, Verify Proofs run
 41328302925, job 124912804344, commit 4018290eaa3265b82209e2a45b6917a4bb0a0331). This grades the finite
 model only.
 
