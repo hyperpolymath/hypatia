@@ -353,6 +353,43 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       File.rm_rf!(repo)
     end
 
+    test "a quoted scalar spanning lines keeps its quotes: a ` #` inside it is not a comment" do
+      repo =
+        create_repo_with_workflow("""
+        on: {workflow_dispatch: {inputs: {why: {description: "first line
+          foo #hi"}}}, issue_comment: {}}
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert exposure =~ "issue_comment"
+      File.rm_rf!(repo)
+    end
+
+    test "an apostrophe inside a plain scalar does not open a quote" do
+      repo =
+        create_repo_with_workflow("""
+        on: {workflow_dispatch: {inputs: {why: {description: Say 'hi}}}, issue_comment: {}}
+        jobs:
+          reply:
+            runs-on: ubuntu-latest
+            steps:
+              - run: ./reply.sh ${{ secrets.BOT_PAT }}
+        """)
+
+      assert [%{severity: :warn, detail: %{exposures: [exposure]}}] =
+               ResearchExtensions.re001_missing_harden_runner(repo)
+
+      assert exposure =~ "issue_comment"
+      File.rm_rf!(repo)
+    end
+
     test "decoy: `issues:` under top-level permissions is not an issues trigger" do
       repo =
         create_repo_with_workflow("""
