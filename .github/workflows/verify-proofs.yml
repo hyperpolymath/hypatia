@@ -12,7 +12,6 @@ on:
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
-    - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
@@ -43,7 +42,6 @@ on:
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
-    - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
@@ -231,8 +229,11 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-  lake-build:
-    name: lake build
+  # Lean is no longer a proof lane here: the engineering proofs it held moved
+  # to Idris2 (PROOF-POLICY section 3; verification/proofs/idris2/). It stays
+  # for the HYP-01 positive control, which re-runs Lean on a fixture.
+  lean-hole-recheck:
+    name: Lean hole re-check (HYP-01 control)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -240,25 +241,20 @@ jobs:
 
     env:
       ELAN_VERSION: v4.0.0
-      # Pinned (not :stable) so the proofs are checked against the exact Lean
-      # they were verified with. Matches verification/proofs/lean4/lean-toolchain;
-      # bump both together. A moving :stable can break version-sensitive lemmas.
+      # Pinned (not :stable): tests/accept/LeanHoleRecheckSound.idr records
+      # the Lean version whose output it digests.
       LEAN_TOOLCHAIN: leanprover/lean4:v4.30.0
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Cache Lean toolchain and build
+      - name: Cache Lean toolchain
         id: cache-lean
         uses: actions/cache@v6.1.0
         with:
-          path: |
-            ~/.elan
-            verification/proofs/lean4/.lake
-          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-${{ hashFiles('verification/proofs/lean4/lakefile.lean', 'verification/proofs/lean4/*.lean') }}
-          restore-keys: |
-            lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-
+          path: ~/.elan
+          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-toolchain
 
       - name: Install elan + Lean 4
         if: steps.cache-lean.outputs.cache-hit != 'true'
@@ -270,33 +266,23 @@ jobs:
       - name: Put elan on PATH
         run: echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: lake build
-        working-directory: verification/proofs/lean4
-        run: |
-          set -euo pipefail
-          lean --version
-          lake --version
-          lake build
-
       # HYP-01 positive control: the SoundVerdict in
       # tests/accept/LeanHoleRecheckSound.idr records digests of a Lean run.
       # Re-run Lean on the fixture from the repository root (where the
       # control's paths are relative to) and require both digests to match.
       - name: Re-check the Lean proof-hole fixture against the HYP-01 control
-        run: bash scripts/recheck-lean-hole.sh
+        run: |
+          set -euo pipefail
+          lean --version
+          bash scripts/recheck-lean-hole.sh
 
       - name: Summary
         if: always()
         run: |
           {
-            echo "## Lean proof verification"
+            echo "## Lean (HYP-01 positive control)"
             echo ""
             echo "- Toolchain: \`${LEAN_TOOLCHAIN}\` via elan \`${ELAN_VERSION}\`"
-            echo "- Proof files:"
-            for f in verification/proofs/lean4/*.lean; do
-              [ "$(basename "$f")" = "lakefile.lean" ] && continue
-              echo "  - \`$(basename "$f")\`"
-            done
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Estate PROOF-POLICY / Mathesis Grade 3 gate for the one Agda artefact:

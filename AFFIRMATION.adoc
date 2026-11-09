@@ -20,15 +20,15 @@ state and commitments. Companion detail:
   `guix.scm` / guix channels are the sole reproducible-build manifests. No
   `flake.nix` remains; all references reconciled.
 * *The formal-proof corpus checks in CI* across Idris 2 (v0.7.0),
-  Lean 4 (v4.30.0), Agda (2.8.0.2, one artefact) and TLA+ (bounded TLC
+  Agda (2.8.0.2, one artefact) and TLA+ (bounded TLC
   model checking, which is `tested-only`, not a proof). What each artefact
   proves, and how strongly, is the proof ledger
   (`verification/proof-ledger.jsonl`, rendered in
-  `verification/PROOF-STATUS.adoc#proof-ledger`): 18 proven of 42;
-  4 proven-with-postulates, 11 tested-only, 2 argued, 7 open. The four
-  `proven-with-postulates` rows are Lean proofs that rest on the Lean kernel
-  axioms `propext` and `Quot.sound`. A source scan does not see those
-  axioms; `Lean.collectAxioms` does. *Zero escape hatches outside
+  `verification/PROOF-STATUS.adoc#proof-ledger`): 22 proven of 42;
+  0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Four of the
+  Lean proofs rested on the Lean kernel axioms `propext` and `Quot.sound`,
+  which a source scan does not see and `Lean.collectAxioms` does; they moved
+  to Idris2 on 2026-11-09, which has no such axioms. *Zero escape hatches outside
   `test/soundness/fixtures/`* (`believe_me` / `sorry` / `postulate` /
   `assert_total` / `admit` / `native_decide`). Re-measured 2026-09-26 over
   the git-tracked tree by `scripts/check-trusted-base.sh`: outside that

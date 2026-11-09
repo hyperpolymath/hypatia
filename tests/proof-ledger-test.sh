@@ -22,6 +22,11 @@ expect() { # <label> <want-exit> <command...>
 
 # mutate <name> <jq filter applied to the row whose id is $id> <id>
 mutate() {
+  # A mutant whose target row is gone would mutate nothing and pass for the
+  # wrong reason: refuse it.
+  if ! jq -e --arg id "$3" "select(.id == \$id)" verification/proof-ledger.jsonl >/dev/null; then
+    fail=$((fail + 1)); echo "  FAIL mutant $1 targets row $3, which the ledger does not have" >&2
+  fi
   jq -cS --arg id "$3" "if .id == \$id then $2 else . end" verification/proof-ledger.jsonl > "$work/$1.jsonl"
 }
 
@@ -31,10 +36,10 @@ expect "the committed PROOF-STATUS block is the ledger's rendering" 0 bash "$scr
 mutate status-escape '.status = "COMPLETE"' abi-types
 expect "a status outside the closed vocabulary is refused" 1 env PROOF_LEDGER="$work/status-escape.jsonl" bash "$script" check
 
-mutate hidden-axioms '.status = "proven"' lean-rate-limiting
+mutate hidden-axioms '.axioms = ["propext"]' rate-limiting
 expect "proven with axioms listed is refused (it is proven-with-postulates)" 1 env PROOF_LEDGER="$work/hidden-axioms.jsonl" bash "$script" check
 
-mutate unnamed-axioms '.axioms = []' lean-parser-totality
+mutate unnamed-axioms '.status = "proven-with-postulates"' parser-totality
 expect "proven-with-postulates without its axioms is refused" 1 env PROOF_LEDGER="$work/unnamed-axioms.jsonl" bash "$script" check
 
 mutate renamed-proof '.names += ["noSuchTheorem"]' safety-triangle

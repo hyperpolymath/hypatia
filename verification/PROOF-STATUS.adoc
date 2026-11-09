@@ -41,12 +41,13 @@ neurosymbolic CI/CD platform.
   need their own correspondence evidence and tests, and the ledger gives
   them their own rows.
 
-NOTE: This repo verifies Idris2, Lean and TLA+ artefacts in CI, and carries
-one narrowly scoped Agda artefact (`+LogtalkMigration.agda+`) gated by the
-same workflow. It does not yet run an Agda + Rocq + Lean reconciliation
-pipeline. The Lean files state engineering properties; they stay in Lean,
-labelled as such, until they are next touched (PROOF-POLICY §3). They are not
-recheck legs of any Agda proof.
+NOTE: This repo verifies Idris2 and TLA+ artefacts in CI, and carries one
+narrowly scoped Agda artefact (`+LogtalkMigration.agda+`) gated by the same
+workflow. It does not yet run an Agda + Rocq + Lean reconciliation pipeline.
+The engineering proofs that were in Lean (rate limiting, Bayesian update, VCL
+parser, PageRank and ESN preconditions) moved to Idris2 on 2026-11-09
+(PROOF-POLICY §3). Lean still runs in CI, but only for the HYP-01 control
+fixture.
 
 // BEGIN GENERATED: scripts/proof-ledger.sh render (do not edit by hand)
 [[proof-ledger]]
@@ -55,7 +56,7 @@ recheck legs of any Agda proof.
 Rendered from `+verification/proof-ledger.jsonl+`, which is canonical: where this table and the
 ledger disagree, the ledger wins and this table is regenerated.
 
-*Census:* 18 proven of 42; 4 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
+*Census:* 22 proven of 42; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 
 [cols="3,1,2,2,2",options="header"]
 |===
@@ -242,34 +243,34 @@ ledger disagree, the ledger wins and this table is regenerated.
 |There is no Signalbox repository to apply the criterion to
 
 |The rate-limit counter never exceeds its bound: tryAccept, prune and event sequences preserve the invariant, and an at-limit event is rejected (P7)
-|proven-with-postulates (Quot.sound, propext)
-|Lean 4.30.0, lake build; axioms by Lean.collectAxioms
-|`+verification/proofs/lean4/RateLimiting.lean+`: `+tryAccept_preserves_invariant+`, `+prune_preserves_invariant+`, `+processEvents_preserves_invariant+`, `+at_limit_rejects+`, `+count_bounded_after_accepts+`
-|Over Nat counters; lib/safety/rate_limiter.ex is not called by any dispatch path. Interface engineering in Lean: moves to Idris2 when next touched (PROOF-POLICY section 3)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/RateLimiting.idr+`: `+tryAcceptPreservesInvariant+`, `+prunePreservesInvariant+`, `+processEventsPreservesInvariant+`, `+atLimitRejects+`, `+countBoundedAfterAccepts+`
+|Over Nat counters; lib/safety/rate_limiter.ex is not called by any dispatch path. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |The Beta posterior stays in (0,1), rises with successes, falls with failures, is the prior with no observations, and clamps to [floor, cap] (H7)
-|proven-with-postulates (Quot.sound, propext)
-|Lean 4.30.0, lake build; axioms by Lean.collectAxioms
-|`+verification/proofs/lean4/BayesianUpdate.lean+`: `+posterior_lt_one+`, `+posterior_pos+`, `+more_successes_raises+`, `+more_failures_lowers+`, `+clamp_ge_floor+`, `+clamp_le_cap+`, `+bayesian_update_sound+`
-|Over Nat pseudo-counts; Elixir floats are not modelled. Moves to Idris2 when next touched (PROOF-POLICY section 3)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/BayesianUpdate.idr+`: `+posteriorLtOne+`, `+posteriorPos+`, `+moreSuccessesRaises+`, `+moreFailuresLowers+`, `+clampGeFloor+`, `+clampLeCap+`, `+bayesianUpdateSound+`
+|Over Nat pseudo-counts; Elixir floats are not modelled. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |The VCL FROM-clause parser is total and deterministic, passes the remainder on, and rejects malformed input
-|proven-with-postulates (propext)
-|Lean 4.30.0, lake build; axioms by Lean.collectAxioms
-|`+verification/proofs/lean4/ParserTotality.lean+`: `+parseFrom_deterministic+`, `+parseFrom_passes_remainder+`, `+parseFrom_orphan_from+`, `+parseFrom_no_from_keyword+`
-|FROM-clause subset over a token model; lib/vcl/ is not shown to follow it. Moves to Idris2 when next touched (PROOF-POLICY section 3)
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ParserTotality.idr+`: `+parseFromDeterministic+`, `+parseFromPassesRemainder+`, `+parseFromOrphanFrom+`, `+parseFromNoFromKeyword+`
+|FROM-clause subset over a token model; lib/vcl/ is not shown to follow it. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |PageRank inputs are well formed: edge weights and in/out weight sums are non-negative
 |proven
-|Lean 4.30.0, lake build; axioms by Lean.collectAxioms
-|`+verification/proofs/lean4/PageRankInvariants.lean+`: `+edge_weight_nonneg+`, `+outWeightSum_nonneg+`, `+inWeightSum_nonneg+`, `+pagerank_preconditions_sound+`
-|Preconditions only; convergence is row pagerank-convergence
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/PageRankInvariants.idr+`: `+edgeWeightNonneg+`, `+outWeightSumNonneg+`, `+inWeightSumNonneg+`, `+pagerankPreconditionsSound+`
+|Preconditions only; convergence is row pagerank-convergence. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |ESN spectral scaling is well defined: the floor-clamped denominator is positive and bounds both inputs
-|proven-with-postulates (propext)
-|Lean 4.30.0, lake build; axioms by Lean.collectAxioms
-|`+verification/proofs/lean4/ESNSpectralScaling.lean+`: `+denom_pos_when_floor_pos+`, `+denom_ge_maxAbs+`, `+denom_ge_floor+`, `+esn_scaling_preconditions_sound+`
-|Preconditions only; echo-state stability is row esn-echo-state
+|proven
+|Idris2 0.7.0, idris2 --check (--total)
+|`+verification/proofs/idris2/ESNSpectralScaling.idr+`: `+denomPosWhenFloorPos+`, `+denomGeMaxAbs+`, `+denomGeFloor+`, `+esnScalingPreconditionsSound+`
+|Preconditions only; the echo-state property is row esn-echo-state. Moved from Lean 2026-11-09 (PROOF-POLICY section 3)
 
 |Kin-gate atomicity: mutual exclusion by type and in the bot view, view coherent with locks, no orphan view, well-bracketed grants, and every request processed (H8)
 |tested-only
@@ -311,7 +312,7 @@ ledger disagree, the ledger wins and this table is regenerated.
 |open
 |-
 |`+lib/vcl/query.ex+`: `+fetch_scans+`
-|Only FROM-clause parsing is modelled (row lean-parser-totality)
+|Only FROM-clause parsing is modelled (row parser-totality)
 |===
 // END GENERATED: proof ledger
 
@@ -386,7 +387,7 @@ snapshot
 * *P6.3* Fault Tolerance: even partially failed batches are reversible
 to original state
 
-==== 7. Rate Limiting (`+RateLimiting.lean+`)
+==== 7. Rate Limiting (`+RateLimiting.idr+`)
 
 * *P7.1* Empty state satisfies invariant (base case)
 * *P7.2* `+tryAccept+` preserves invariant (inductive step)
@@ -397,9 +398,9 @@ list)
 rejected
 * *P7.6* Count bounded after any sequence of accepts
 
-Status for all of P7: `proven-with-postulates`. The proofs rest on the Lean
-kernel axioms `propext` and `Quot.sound` (`at_limit_rejects` on
-`propext` only), as `Lean.collectAxioms` reports under Lean 4.30.0.
+Status for all of P7: `proven` (Idris2 0.7.0, `%default total`). Moved
+from Lean on 2026-11-09; the Lean proofs rested on the kernel axioms
+`propext` and `Quot.sound`, which Idris2 does not have.
 
 ==== 8. Logtalk Migration Correspondence (`+LogtalkMigration.agda+`)
 
