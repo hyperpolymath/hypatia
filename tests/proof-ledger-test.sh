@@ -20,6 +20,16 @@ expect() { # <label> <want-exit> <command...>
   else fail=$((fail + 1)); echo "  FAIL $label (exit $rc, wanted $want)" >&2; sed 's/^/       /' "$work/out" >&2; fi
 }
 
+
+# expect_msg <label> <want-exit> <pattern> <command...>: as expect, and the
+# output must name the rule (so another rule failing first cannot pass it).
+expect_msg() {
+  local label=$1 want=$2 pattern=$3 rc=0
+  shift 3
+  "$@" >"$work/out" 2>&1 || rc=$?
+  if [ "$rc" -eq "$want" ] && grep -qF -- "$pattern" "$work/out"; then pass=$((pass + 1)); echo "  ok   $label"
+  else fail=$((fail + 1)); echo "  FAIL $label (exit $rc, wanted $want with '$pattern')" >&2; sed 's/^/       /' "$work/out" >&2; fi
+}
 # mutate <name> <jq filter applied to the row whose id is $id> <id>
 mutate() {
   jq -cS --arg id "$3" "if .id == \$id then $2 else . end" verification/proof-ledger.jsonl > "$work/$1.jsonl"
@@ -47,7 +57,7 @@ mutate unbounded-test '.bounds = ""' kin-gate
 expect "tested-only without bounds is refused" 1 env PROOF_LEDGER="$work/unbounded-test.jsonl" bash "$script" check
 
 mutate open-graded '.pwg = "3"' pagerank-convergence
-expect "a PWG on an open theory row is refused" 1 env PROOF_LEDGER="$work/open-graded.jsonl" bash "$script" check
+expect_msg "a PWG on an open theory row is refused" 1 "PWG-3 needs an Agda proof that is proven" env PROOF_LEDGER="$work/open-graded.jsonl" bash "$script" check
 
 mutate grade-without-leg '.pwg = "2i"' logtalk-migration
 expect "PWG-2i with no counted recheck leg is refused" 1 env PROOF_LEDGER="$work/grade-without-leg.jsonl" bash "$script" check
@@ -68,6 +78,22 @@ expect "a duplicate id is refused" 1 env PROOF_LEDGER="$work/dup.jsonl" bash "$s
 cp verification/PROOF-STATUS.adoc "$work/doc.adoc"
 sed -i '0,/^|proven$/s//|proven-with-postulates/' "$work/doc.adoc"
 expect "a hand edit to the rendered table is refused" 1 env PROOF_STATUS_DOC="$work/doc.adoc" bash "$script" render --check
+
+head -c -1 verification/proof-ledger.jsonl > "$work/no-lf.jsonl"
+expect_msg "a ledger without its final LF is refused" 1 "must end in exactly one LF" env PROOF_LEDGER="$work/no-lf.jsonl" bash "$script" check
+
+{ cat verification/proof-ledger.jsonl; echo; } > "$work/extra-lf.jsonl"
+expect_msg "a ledger with an extra final LF is refused" 1 "must end in exactly one LF" env PROOF_LEDGER="$work/extra-lf.jsonl" bash "$script" check
+
+mutate bad-type '.names = "connectorCount"' abi-types
+expect_msg "a mistyped field is reported (exit 1), not a jq crash" 1 "field names must be a array" env PROOF_LEDGER="$work/bad-type.jsonl" bash "$script" check
+if grep -q "jq: error" "$work/out"; then fail=$((fail + 1)); echo "  FAIL the mistyped row crashed jq" >&2; else pass=$((pass + 1)); echo "  ok   the mistyped row does not crash jq"; fi
+
+{ echo '{"id": oops'; cat verification/proof-ledger.jsonl; } > "$work/not-json.jsonl"
+expect_msg "a line that is not JSON is named, and the run stops there" 1 "line 1 is not JSON" env PROOF_LEDGER="$work/not-json.jsonl" bash "$script" check
+
+grep -v '^// END GENERATED: proof ledger$' verification/PROOF-STATUS.adoc > "$work/no-marker.adoc"
+expect_msg "render --check with a marker missing says to restore it (exit 2)" 2 "lacks the generated-block markers" env PROOF_STATUS_DOC="$work/no-marker.adoc" bash "$script" render --check
 
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
