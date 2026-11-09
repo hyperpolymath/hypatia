@@ -2284,9 +2284,41 @@ defmodule Hypatia.Rules.ResearchExtensionsTest do
       assert ResearchExtensions.re001_missing_harden_runner(repo) == []
       File.rm_rf!(repo)
     end
+
+    test "a literal-block egress-policy is read as the action reads it, trimmed" do
+      repo =
+        hardened_repo([
+          "with:",
+          "  egress-policy: |",
+          "    block",
+          "  allowed-endpoints: mail.example.com:443"
+        ])
+
+      assert ResearchExtensions.re001_missing_harden_runner(repo) == []
+      File.rm_rf!(repo)
+    end
   end
 
   describe "re002_harden_runner_audit_mode/1" do
+    test "a literal-block audit policy on push is still audit" do
+      repo =
+        create_repo_with_workflow("""
+        on: [push]
+        jobs:
+          x:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: step-security/harden-runner@1234567890abcdef1234567890abcdef12345678
+                with:
+                  egress-policy: |
+                    audit
+              - run: build
+        """)
+
+      assert [%{severity: :high}] = ResearchExtensions.re002_harden_runner_audit_mode(repo)
+      File.rm_rf!(repo)
+    end
+
     test "flags harden-runner in audit mode on push trigger" do
       repo =
         create_repo_with_workflow("""

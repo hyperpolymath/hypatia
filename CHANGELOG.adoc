@@ -56,7 +56,8 @@ model instead of scanning lines (WH013 and WH014 follow, and
   each with a test that fails on the line reader: `<<: [*defaults]` is
   refused and reported, not misplaced; text in a `name: |` block beside the
   hardener is not its input, so an audit hardener no longer passes for a
-  block one; a folded `egress-policy: >-` is read as its value.
+  block one; a folded `egress-policy: >-` is read as its value, and a
+  literal block is trimmed as the action's `core.getInput` trims it.
 * **Declared endpoints are checked** against the workflow (`:warn`): a host
   outside GitHub that a step names literally (a URL or a `git@host:` remote,
   shell comments aside) must be covered by the job's `:endpoints`, and

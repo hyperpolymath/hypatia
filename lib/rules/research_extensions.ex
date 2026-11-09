@@ -581,8 +581,15 @@ defmodule Hypatia.Rules.ResearchExtensions do
   end
 
   # The egress-policy input of a harden-runner step; harden-runner defaults to
-  # audit when none is set.
-  defp harden_runner_policy(step), do: Workflow.input(step, "egress-policy") || "audit"
+  # audit when none is set. Actions read inputs through core.getInput, which
+  # trims surrounding white space, so a literal block (`egress-policy: |`
+  # then `block`) is the policy `block`, not "block\n".
+  defp harden_runner_policy(step) do
+    case Workflow.input(step, "egress-policy") do
+      nil -> "audit"
+      policy -> String.trim(policy)
+    end
+  end
 
   # What the job runs next to its credential, for a finding's reason.
   defp exposure_note(%{exposures: []}), do: ""
