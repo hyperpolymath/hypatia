@@ -18,6 +18,7 @@ on:
     - scripts/check-proof-status.sh
     - verification/proof-ledger.jsonl
     - scripts/proof-ledger.sh
+    - scripts/proof-ledger-ci.sh
     - tests/proof-ledger-test.sh
     - README.adoc
     - AFFIRMATION.adoc
@@ -48,6 +49,7 @@ on:
     - scripts/check-proof-status.sh
     - verification/proof-ledger.jsonl
     - scripts/proof-ledger.sh
+    - scripts/proof-ledger-ci.sh
     - tests/proof-ledger-test.sh
     - README.adoc
     - AFFIRMATION.adoc
@@ -90,6 +92,9 @@ jobs:
 
     env:
       IDRIS2_VERSION: v0.7.0
+      # Receipts this job writes; the last step derives the ledger's idris2
+      # and verdicts rows from them (scripts/proof-ledger.sh derive).
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -188,8 +193,10 @@ jobs:
             echo "── $f ─────────────────────────────────────────────"
             if idris2 --check "$f"; then
               echo "✓ $f"
+              bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt idris2 pass "verification/proofs/idris2/$f"
             else
               echo "✗ $f"
+              bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt idris2 fail "verification/proofs/idris2/$f"
               failed=$((failed + 1))
             fi
           done
@@ -204,17 +211,24 @@ jobs:
       # live in the ABI and verify *packages*, which the per-file --check loop
       # never builds. Gate them here so they can't silently rot again.
       - name: Build the ABI proof package (Types, GraphQL, gRPC, REST, FFI, RuleEngine)
-        run: idris2 --build src/abi/hypatia-abi.ipkg
+        run: bash scripts/proof-ledger-ci.sh ipkg src/abi/hypatia-abi.ipkg
 
       - name: Build the verify package (PipelineState, Verify.Fuel)
-        run: idris2 --build verify/hypatia-verify.ipkg
+        run: bash scripts/proof-ledger-ci.sh ipkg verify/hypatia-verify.ipkg
 
       # HYP-01: Verdict.idr claims a `Sound` verdict is constructible only
       # from a confirming prover re-check. The typechecker is the falsifier:
       # tests/accept/ must be accepted, and every tests/reject/ module must be
       # refused at `invalid` with the diagnostic its `-- EXPECT:` line names.
       - name: Verdict accept/reject fixtures (HYP-01)
-        run: bash scripts/check-verdicts.sh
+        run: bash scripts/proof-ledger-ci.sh verdicts
+
+      # The ledger is canonical, but its statuses are not typed in: every row
+      # in these lanes must say exactly what this run's receipts make it. An
+      # overclaim and a stale underclaim both fail (owner ruling 2026-11-09).
+      - name: Ledger statuses agree with this run (idris2, verdicts)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive idris2,verdicts "$PROOF_RECEIPTS"
 
       - name: Summary
         if: always()
@@ -303,6 +317,7 @@ jobs:
       # Grade 3 receipt names an exact checker (estate PROOF-POLICY).
       # Deliberately not the runner's APT package, whose version floats.
       AGDA_VERSION: 2.8.0.2
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -332,7 +347,16 @@ jobs:
           set -euo pipefail
           agda --version
           sha256sum LogtalkMigration.agda
-          agda --safe --without-K --cubical-compatible LogtalkMigration.agda
+          if agda --safe --without-K --cubical-compatible LogtalkMigration.agda; then
+            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda pass verification/proofs/agda/LogtalkMigration.agda -- checker="Agda $AGDA_VERSION"
+          else
+            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda fail verification/proofs/agda/LogtalkMigration.agda
+            exit 1
+          fi
+
+      - name: Ledger statuses agree with this run (agda)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive agda "$PROOF_RECEIPTS"
 
       - name: Summary
         if: always()
@@ -353,6 +377,13 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
+    env:
+      # Pinned: `releases/latest` moves, and the v1.8.0 tag is a rolling
+      # nightly. v1.7.4 is TLC 2.19 (rev 5a47802), the checker the ledger's
+      # KinGate bounds were measured with.
+      TLA2TOOLS_TAG: v1.7.4
+      TLA2TOOLS_SHA256: 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -369,32 +400,29 @@ jobs:
         uses: actions/cache@v6.1.0
         with:
           path: ~/.local/share/tla2tools.jar
-          key: tla2tools-v1.8.0
+          key: tla2tools-${{ env.TLA2TOOLS_TAG }}-${{ env.TLA2TOOLS_SHA256 }}
 
       - name: Fetch tla2tools.jar
         if: steps.cache-tla.outputs.cache-hit != 'true'
         run: |
+          set -euo pipefail
           mkdir -p ~/.local/share
-          curl -sSL -o ~/.local/share/tla2tools.jar \
-            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
-          ls -la ~/.local/share/tla2tools.jar
+          curl --proto '=https' -fsSL -o ~/.local/share/tla2tools.jar \
+            "https://github.com/tlaplus/tlaplus/releases/download/${TLA2TOOLS_TAG}/tla2tools.jar"
 
+      - name: Verify the tla2tools.jar digest
+        run: echo "${TLA2TOOLS_SHA256}  $HOME/.local/share/tla2tools.jar" | sha256sum -c -
+
+      # Fails if TLC prints an error or does not declare completion; the
+      # receipt carries the distinct-state count and depth.
       - name: Model-check KinGate (H8)
-        working-directory: verification/proofs/tlaplus
         run: |
-          java -XX:+UseParallelGC \
-            -cp "$HOME/.local/share/tla2tools.jar" tlc2.TLC \
-            -workers auto -config KinGate.cfg KinGate.tla \
-            | tee tlc.log
-          # Fail if TLC printed an error or didn't declare completion.
-          if grep -q "Error:" tlc.log; then
-            echo "::error::TLC found an invariant / property violation"
-            exit 1
-          fi
-          if ! grep -q "Model checking completed. No error has been found." tlc.log; then
-            echo "::error::TLC did not report clean completion"
-            exit 1
-          fi
+          TLA2TOOLS_JAR="$HOME/.local/share/tla2tools.jar" \
+            bash scripts/proof-ledger-ci.sh tlc verification/proofs/tlaplus/KinGate.tla verification/proofs/tlaplus/KinGate.cfg
+
+      - name: Ledger statuses agree with this run (tlc)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive tlc "$PROOF_RECEIPTS"
 
       - name: Upload TLC log on failure
         if: failure()

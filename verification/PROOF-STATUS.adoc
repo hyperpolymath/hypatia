@@ -54,7 +54,10 @@ fixture.
 === Proof Ledger
 
 Rendered from `+verification/proof-ledger.jsonl+`, which is canonical: where this table and the
-ledger disagree, the ledger wins and this table is regenerated.
+ledger disagree, the ledger wins and this table is regenerated. No status
+is typed in unchecked: each checker job derives its rows from that run's
+receipts (`+scripts/proof-ledger.sh derive+`) and fails on an overclaim or
+a stale underclaim.
 
 *Census:* 22 proven of 42; 0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Theory rows: 3 (PWG-1 0, PWG-2ii 0, PWG-2i 0, PWG-3 1, ungraded 2).
 

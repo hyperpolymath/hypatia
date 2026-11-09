@@ -12,6 +12,23 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== Proof-ledger statuses are derived from CI receipts (2026-11-09)
+
+* Every ledger row names its `lane`: the CI job whose receipt decides it
+  (`idris2`, `agda`, `verdicts`, `tlc`, `exunit`, or `none` for argued and
+  open rows). Each checker job writes receipts as it checks
+  (`scripts/proof-ledger-ci.sh`), then runs `scripts/proof-ledger.sh derive`
+  for its lanes. That step fails on an overclaim (the ledger stronger than
+  the run) and on a stale underclaim (weaker), as the owner ruled. TLC's
+  receipt carries its state count and depth, which the row's bounds must
+  match.
+* `tla2tools.jar` is pinned to v1.7.4 (TLC 2.19) and its SHA-256 is
+  verified. CI used to fetch `releases/latest` under a cache key named
+  `v1.8.0`, and that tag is a rolling nightly.
+* The exunit rows' test files now run in `ci.yml` on every pull request.
+  `retraction_test.exs` and `dispatch_manifest_test.exs` used to run only
+  inside the full integration suite.
+
 ==== Lean engineering proofs move to Idris2 (2026-11-09)
 
 * `RateLimiting`, `BayesianUpdate`, `ParserTotality`, `PageRankInvariants`

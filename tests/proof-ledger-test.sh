@@ -88,5 +88,39 @@ expect "a bare count without the rest of the census is refused" 1 env PROOF_CLAI
 printf 'Ledger: %s\n' "$census_now" | sed 's/ proven of / proven of\n/; s/, \([0-9]* argued\)/,\n\1/' > "$work/wrapped.adoc"
 expect "a census wrapped across lines is read whole" 0 env PROOF_CLAIM_DOCS="$work/wrapped.adoc" bash "$script" claims
 
+mutate lane-mismatch '.status = "tested-only" | .bounds = "one run"' quarantine
+expect "a proof-lane row that is not proven is refused" 1 env PROOF_LEDGER="$work/lane-mismatch.jsonl" bash "$script" check
+
+mutate lane-orphan '.lane = "none"' safety-triangle
+expect "a row with a checker but no lane is refused" 1 env PROOF_LEDGER="$work/lane-orphan.jsonl" bash "$script" check
+
+# derive: statuses come from receipts. A synthetic all-pass run is built
+# from the ledger itself (TLC with the bounds the ledger states), then each
+# defect is planted in either the receipts or the ledger.
+all_pass="$work/receipts-pass.jsonl"
+jq -cS 'select(.lane != "none") | {lane, file, result: "pass"}
+        + (if .lane == "tlc" then {distinct_states: (.bounds | capture("(?<n>[0-9]+) distinct states").n),
+                                   depth: (.bounds | capture("depth (?<d>[0-9]+)").d)} else {} end)' \
+  verification/proof-ledger.jsonl | sort -u > "$all_pass"
+lanes=idris2,verdicts,agda,tlc,exunit
+expect "derive: every row agrees with an all-pass run" 0 bash "$script" derive "$lanes" "$all_pass"
+
+jq -cS 'if .file == "verification/proofs/idris2/SafetyTriangle.idr" then .result = "fail" else . end' "$all_pass" > "$work/r-fail.jsonl"
+expect "derive: a failing proof under a proven row is an overclaim" 1 bash "$script" derive "$lanes" "$work/r-fail.jsonl"
+
+grep -v 'Quarantine.idr' "$all_pass" > "$work/r-missing.jsonl"
+expect "derive: a proven row with no receipt is an overclaim" 1 bash "$script" derive "$lanes" "$work/r-missing.jsonl"
+
+jq -cS 'if .lane == "tlc" then .distinct_states = "12" else . end' "$all_pass" > "$work/r-bounds.jsonl"
+expect "derive: TLC bounds the run does not reproduce are refused" 1 bash "$script" derive "$lanes" "$work/r-bounds.jsonl"
+
+mutate under '.status = "open" | .lane = "idris2"' elixir-rules-support
+expect "derive: an open row whose file checks is a stale underclaim" 1 env PROOF_LEDGER="$work/under.jsonl" bash "$script" derive "$lanes" "$all_pass"
+
+mutate pwg-up '.pwg = "2i" | .legs = []' logtalk-migration
+expect "derive: a grade above PWG-3 with no counted leg is an overclaim" 1 env PROOF_LEDGER="$work/pwg-up.jsonl" bash "$script" derive "$lanes" "$all_pass"
+
+expect "derive: no receipts file is a failure, never a pass" 1 bash "$script" derive "$lanes" "$work/no-such-receipts.jsonl"
+
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
