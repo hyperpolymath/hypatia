@@ -12,10 +12,12 @@ defmodule Hypatia.Neural.GraphOfTrust do
   - Contributors: trust score based on fix quality
 
   Trust propagation uses a PageRank-style iterative algorithm:
-  - Successful fixes propagate trust forward
-  - Failures reduce trust
-  - False positives reduce trust more heavily
-  - Trust decays over time (recency weighting)
+  - Qualified successful fixes propagate positive support
+  - Inventory-only and negative-only entities remain neutral (0.5)
+  - Negative outcomes remain visible but do not create positive edges
+
+  Scores are relative graph rankings, not calibrated success probabilities or
+  authenticated proof. Negative penalties and time decay are not implemented.
 
   The graph enables:
   - Routing dispatches to trusted bots
@@ -26,7 +28,8 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   require Logger
 
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
+  alias Hypatia.OutcomeTracker
+
   @damping_factor 0.85
   @convergence_threshold 0.001
   @max_iterations 50
@@ -41,10 +44,40 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # --- Public API ---
 
-  @doc "Build the trust graph from outcome data, including cross-repo edges."
-  def build do
-    outcomes = load_all_outcomes()
-    recipes = load_all_recipes()
+  @doc """
+  Build the trust graph from qualified outcome data, including cross-repo edges.
+
+  Unqualified observations remain in the outcome log but contribute neither
+  outcome-derived nodes nor edges to the graph. Outcome subjects must have
+  nonblank string repo, bot and recipe identity (recipe_id or canonical pattern).
+  Missing and malformed subjects remain audit rows and create no partial edges.
+  Qualified negative evidence
+  retains the existing graph policy: it does not create positive edges.
+  """
+  def build, do: build_from_store(Hypatia.Paths.verisimdb_data())
+
+  @doc "Build trust and language context from one captured source directory."
+  def build_from_store(data_root) do
+    source = Path.expand(data_root)
+    build_qualified(load_all_outcomes(source), load_all_recipes(source), source)
+  end
+
+  @doc false
+  def build(outcomes, recipes) when is_list(outcomes) and is_list(recipes) do
+    build_qualified(outcomes, recipes, Path.expand(Hypatia.Paths.verisimdb_data()))
+  end
+
+  defp build_qualified(outcomes, recipes, source) do
+    # Qualify once before every graph consumer. Filtering only cross-repo
+    # edges would still let unsupported observations affect direct edges and
+    # trust normalization through extra nodes.
+    outcomes =
+      outcomes
+      |> Enum.filter(fn outcome ->
+        is_map(outcome) and OutcomeTracker.qualified_outcome?(outcome) and
+          outcome_identities?(outcome)
+      end)
+      |> Enum.map(fn outcome -> Map.put(outcome, "recipe_id", outcome_recipe_id(outcome)) end)
 
     nodes = build_nodes(outcomes, recipes)
     edges = build_edges(outcomes)
@@ -54,7 +87,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
     cross_repo_edges = build_cross_repo_edges(outcomes)
 
     # Build language clusters: group repos by primary language family
-    language_clusters = build_language_clusters(nodes)
+    language_clusters = build_language_clusters(nodes, source)
 
     graph = %__MODULE__{
       nodes: nodes,
@@ -150,11 +183,37 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   defp compute_trust(%__MODULE__{nodes: nodes, edges: edges} = graph) do
-    n = map_size(nodes)
+    # Cataloguing a recipe, or observing only failures, is not positive
+    # evidence. PageRank's teleportation mass must not promote such nodes to
+    # 1.0 through maximum-score normalization or perturb supported rankings.
+    neutral_scores = Map.new(nodes, fn {id, _type} -> {id, 0.5} end)
 
-    # Initialize all nodes to 1/n
+    supported_edges =
+      Enum.filter(edges, fn {source, target, weight} ->
+        is_number(weight) and weight > 0 and Map.has_key?(nodes, source) and
+          Map.has_key?(nodes, target)
+      end)
+
+    supported_nodes =
+      supported_edges
+      |> Enum.flat_map(fn {source, target, _weight} -> [source, target] end)
+      |> MapSet.new()
+
+    supported_scores = compute_supported_trust(supported_nodes, supported_edges)
+
+    %{
+      graph
+      | trust_scores: Map.merge(neutral_scores, supported_scores),
+        last_computed: DateTime.utc_now()
+    }
+  end
+
+  defp compute_supported_trust(supported_nodes, edges) do
+    n = MapSet.size(supported_nodes)
+
+    # Only the qualified positive-support subgraph receives ranking mass.
     initial_score = 1.0 / max(n, 1)
-    scores = Map.new(Map.keys(nodes), fn id -> {id, initial_score} end)
+    scores = Map.new(supported_nodes, fn id -> {id, initial_score} end)
 
     # Build adjacency: source -> [{target, weight}]
     adjacency =
@@ -163,9 +222,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
       end)
 
     # Iterative convergence
-    final_scores = iterate_trust(scores, adjacency, n, 0)
-
-    %{graph | trust_scores: final_scores, last_computed: DateTime.utc_now()}
+    if n == 0, do: %{}, else: iterate_trust(scores, adjacency, n, 0)
   end
 
   defp iterate_trust(scores, _adjacency, _n, iteration) when iteration >= @max_iterations do
@@ -239,9 +296,22 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # --- Graph Construction ---
 
+  # Evidence must identify each actual graph subject. A qualified verdict
+  # alone cannot authorize a fabricated "unknown" node or partial edge.
+  # Canonical pattern is an explicit recipe identity, not a synthesized default.
+  defp outcome_identities?(outcome) do
+    Enum.all?(
+      [Map.get(outcome, "repo"), Map.get(outcome, "bot"), outcome_recipe_id(outcome)],
+      fn value -> is_binary(value) and String.trim(value) != "" end
+    )
+  end
+
+  defp outcome_recipe_id(outcome),
+    do: Map.get(outcome, "recipe_id") || Map.get(outcome, "pattern")
+
   defp build_nodes(outcomes, recipes) do
-    repo_nodes = outcomes |> Enum.map(fn o -> {Map.get(o, "repo"), :repo} end)
-    bot_nodes = outcomes |> Enum.map(fn o -> {Map.get(o, "bot", "unknown"), :bot} end)
+    repo_nodes = outcomes |> Enum.map(fn o -> {Map.fetch!(o, "repo"), :repo} end)
+    bot_nodes = outcomes |> Enum.map(fn o -> {Map.fetch!(o, "bot"), :bot} end)
     recipe_nodes = recipes |> Enum.map(fn r -> {Map.get(r, "id"), :recipe} end)
 
     (repo_nodes ++ bot_nodes ++ recipe_nodes)
@@ -265,9 +335,9 @@ defmodule Hypatia.Neural.GraphOfTrust do
     Enum.flat_map(outcomes, fn outcome ->
       case Map.get(outcome, "outcome") do
         "success" ->
-          repo = Map.get(outcome, "repo", "unknown")
-          bot = Map.get(outcome, "bot", "unknown")
-          recipe = Map.get(outcome, "recipe_id", Map.get(outcome, "pattern", "unknown"))
+          repo = Map.fetch!(outcome, "repo")
+          bot = Map.fetch!(outcome, "bot")
+          recipe = Map.fetch!(outcome, "recipe_id")
 
           [
             # recipe fixes repo
@@ -294,16 +364,15 @@ defmodule Hypatia.Neural.GraphOfTrust do
     repo_recipes =
       outcomes
       |> Enum.filter(&(Map.get(&1, "outcome") == "success"))
-      |> Enum.group_by(&Map.get(&1, "repo", "unknown"))
+      |> Enum.group_by(&Map.fetch!(&1, "repo"))
       |> Enum.map(fn {repo, repo_outcomes} ->
         recipes =
           repo_outcomes
-          |> Enum.map(&Map.get(&1, "recipe_id", Map.get(&1, "pattern", "unknown")))
+          |> Enum.map(&Map.fetch!(&1, "recipe_id"))
           |> MapSet.new()
 
         {repo, recipes}
       end)
-      |> Enum.reject(fn {repo, _} -> repo == "unknown" end)
 
     # Build pairwise edges based on recipe overlap (Jaccard similarity)
     for {repo_a, recipes_a} <- repo_recipes,
@@ -326,7 +395,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
   # Build language clusters from repo scan data.
   # Groups repos by their detected primary language family.
-  defp build_language_clusters(nodes) do
+  defp build_language_clusters(nodes, source) do
     language_families = Hypatia.CrossRepoLearning.language_families()
 
     repos =
@@ -336,7 +405,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
 
     repos
     |> Enum.reduce(%{}, fn repo, clusters ->
-      lang = detect_repo_language(repo)
+      lang = detect_repo_language(repo, source)
       family = Map.get(language_families, lang, :unknown)
 
       if family != :unknown do
@@ -348,8 +417,8 @@ defmodule Hypatia.Neural.GraphOfTrust do
   end
 
   # Detect primary language for a repo from scan data
-  defp detect_repo_language(repo) do
-    scan_path = Path.join([Path.expand(@verisimdb_data_path), "scans", "#{repo}.json"])
+  defp detect_repo_language(repo, source) do
+    scan_path = Path.join([source, "scans", "#{repo}.json"])
 
     case File.read(scan_path) do
       {:ok, content} ->
@@ -367,8 +436,8 @@ defmodule Hypatia.Neural.GraphOfTrust do
     end
   end
 
-  defp load_all_outcomes do
-    outcomes_dir = Path.join(Path.expand(@verisimdb_data_path), "outcomes")
+  defp load_all_outcomes(source) do
+    outcomes_dir = Path.join(source, "outcomes")
 
     case File.ls(outcomes_dir) do
       {:ok, files} ->
@@ -396,8 +465,8 @@ defmodule Hypatia.Neural.GraphOfTrust do
     end
   end
 
-  defp load_all_recipes do
-    recipes_dir = Path.join(Path.expand(@verisimdb_data_path), "recipes")
+  defp load_all_recipes(source) do
+    recipes_dir = Path.join(source, "recipes")
 
     case File.ls(recipes_dir) do
       {:ok, files} ->

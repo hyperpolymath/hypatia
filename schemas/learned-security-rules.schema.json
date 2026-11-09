@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hyperpolymath.dev/schemas/hypatia/learned-security-rules",
+  "title": "Hypatia Learned Security Rules",
+  "description": "Named-field JSON replacement for two retired, mutually incompatible Logtalk security_rule/4 exports: Hypatia's generated (Type, Category, AutoFix, Count) and ECHIDNA's (Type, Category, Severity, AutoFix). Produced by `mix hypatia.batch_security_scan`; semantics are Hypatia.Rules.SecurityErrors.validate_alert/1 plus the observation count. See docs/rules/logtalk-migration.adoc for the field-by-field mapping.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "generated_at", "generator", "source_alert_count", "rules"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "https://hyperpolymath.dev/schemas/hypatia/learned-security-rules",
+      "description": "Schema identifier for this document shape"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the export format"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC generation timestamp (second precision)"
+    },
+    "generator": {
+      "type": "string",
+      "description": "Producing command"
+    },
+    "source_alert_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total code-scanning alerts the rules were learned from"
+    },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/learnedRule" },
+      "description": "One object per distinct alert type, sorted by observations descending then alert_type"
+    }
+  },
+  "definitions": {
+    "learnedRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alert_type", "category", "severity", "auto_fixable", "observations", "fix", "prevention_workflow"],
+      "properties": {
+        "alert_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub code-scanning / Scorecard alert id (first positional field in both retired Logtalk exports)"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["workflow_security", "code_security", "code_quality", "dependency_vuln", "process_hygiene", "missing_tests", "unknown"],
+          "description": "Canonical alert category (second positional field in both retired exports; snake-case as in the retired ECHIDNA module). ERROR-CATALOG.scm kebab-case names map by hyphen to underscore."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info"],
+          "description": "Classified severity (ECHIDNA export field 3 / Logtalk classify_severity/2; absent from Hypatia's old generator. Canonical source SecurityErrors.issue_severity/1)"
+        },
+        "auto_fixable": {
+          "type": "boolean",
+          "description": "Whether an automated fix exists (Hypatia generator field 3, ECHIDNA export field 4; Logtalk is_auto_fixable/1)"
+        },
+        "observations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Alerts of this type seen in the source scan (Hypatia generator field 4; absent from ECHIDNA's export). An observation count is belief-formation evidence, never a soundness claim: see schema/findings.ncl and src/Hypatia/ABI/Verdict.idr."
+        },
+        "fix": {
+          "type": ["string", "null"],
+          "description": "Suggested fix text (Logtalk suggest_fix/2), or null when none is recorded"
+        },
+        "prevention_workflow": {
+          "type": ["string", "null"],
+          "description": "Prevention workflow template name (Logtalk get_prevention_workflow/2), or null when none is recorded"
+        }
+      }
+    }
+  }
+}

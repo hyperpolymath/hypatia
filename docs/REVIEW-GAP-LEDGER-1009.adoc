@@ -1,0 +1,192 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= External reviewer gaps: evidence and prevention
+:revdate: 2026-11-06
+
+This is the durable analysis for issue #1009. It distinguishes a proposed
+owner from a mechanism actually inspected, and a passing test from deployment.
+It does not claim the fleet has made independent review redundant.
+
+== Defect ledger
+
+[cols="1,3,2,3,4",options="header"]
+|===
+| Gap | Defect and discovery | Timing | Prevention | Current disposition
+|1 |kyq dump imported a package-like `.kyq` path; Codex P1 and CI on #1008
+|After push |Execute new/changed jobs before push
+|`kyq_dump.mjs` already has static relative imports. `just ci-changed` now
+selects jobs through `Hypatia.Kyaml` and invokes their actual workflow through
+`act`. A plan is explicitly not execution; missing act or a failed job is red.
+|2 |Raw control characters accepted in plain/block scalars; Codex P2 on #1008
+|After push |Spec oracle independent of the reference parser
+|The port already checks the whole printable set. New exhaustive mutations
+exercise excluded C0/C1 characters in plain, quoted, literal, folded, comment,
+key and anchor contexts, with valid boundary/escape controls. CI runs them.
+This prevents shared-reference agreement from substituting for the spec.
+|3 |Tag text converted with `String.to_atom`; Hypatia's own rule found it
+|After push |Run existing offline rules before push
+|`ci-changed` scans changed files with the existing CLI rule/suppression path.
+The backwards atom-table diagnostic is corrected and regression-tested.
+A temporary-repository test proves a changed `String.to_atom` is reported.
+|4 |Workflow merge/alias/folded-scalar shapes misread; Codex on #975/#966
+|After merge |Canonical positioned parser; identify remaining ad-hoc readers
+|SF001 inspects Elixir AST regex literals for workflow structure and emits
+located advisory parser-debt findings. It does not pretend to prove a
+vulnerability. Migration of the existing `WorkflowYaml` and remaining rule
+helpers stays under #971. The new job selector uses the canonical parser.
+|5 |DEED grammar permits `#t; note`, gate refused it; grammar differential
+|Before merge |Independent grammar-versus-gate harness
+|Already addressed in metadatastician/standards#1401. Keep the harness as the
+regression gate; no duplicate implementation is introduced here.
+|6 |kyq BOM, block-header-comment, Unicode column and trailing-comma defects;
+independent port comparison
+|Before merge |Pinned differential plus spec mutations
+|Port fixes and the differential are present. Upstream adoption remains open:
+the remote kyq main is still `4d1071df04d93e089500d58d0b6ba37bfcc75248`.
+Do not move `KYQ_REF` or erase divergence rows until the upstream fixes land.
+The local branch described in the issue was not available in this checkout;
+its reported test counts are historical evidence, not a reproduced receipt.
+|7 |Copilot emitted a COMMENTED review containing insufficient quota, #39
+|Review absent |Display head-bound reviewer coverage separately from verdicts
+|Companion metadatastician/standards#1417, corrected by #1418, adds an advisory coverage snapshot after the
+existing grids. Quota COMMENTED reviews are NO REVIEW, stale/pending/dismissed
+reviews do not cover a new head, and unavailable evidence is indeterminate.
+No fourth lane or automatic approval is introduced. Consumers need to adopt
+the merged standards revision; this checkout does not silently repin them.
+|8 |Inherited red E2E/integration/governance base on #1004/#1008
+|Every PR at the time |Maintain a green base; classify current failures
+|Rechecked at Hypatia main `005977679ff96889e8ea46b213830e7a417df24d`:
+CI 42199698002, E2E/integration 42199698001, Governance 42199699348 and Dogfood
+42199698017 succeeded. Mirror run 42199699432 failed; scheduled Merge
+Orchestrate 42201913539 failed. This is not a claim all main workflows pass.
+|===
+
+== Checked fleet responsibilities
+
+* gitbot-fleet, `34908580b98cd354caa3bfc5a000bc7935957fce`:
+  `hooks/pre-push-gate.sh` exists and runs panic-attack/Hypatia, but missing
+  scanners are explicitly skipped and zero scanners permit push. It does not
+  execute each changed workflow job. The gap was not absence of a hook design;
+  it was optional availability plus incomplete workflow parity.
+* proven-tests-and-benches, `eafd9ad85b875e76ffd75ac3803be533364a0452`:
+  `scripts/git-hooks/pre-push.sample` delegates to its owned-compute gate.
+  Its test doctrine and harness/payload split fit the independent-spec corpus;
+  this is not evidence that it already runs the Hypatia/kyq mutation corpus.
+* cicd-squabbler, `79d7dbacc8a02b4a4388b4a36fe46893b5b7ce73`:
+  README and `contracts/squabble`/`contracts/proven-tests` describe read-only
+  execution/startup classification and typed evidence. Failure diagnosis is
+  useful after CI; it is not evidence a new job ran before push.
+* .git-private-farm, `2bba0f3763903532b286d00a9eae53fd93c67fc8`:
+  the README describes mirroring and inter-repository dispatch, and says merge
+  observation is manual with the actuator unwired. It is not the parser
+  conformance oracle. No private configuration or credentials are needed for
+  this responsibility mapping.
+* proven-cicd, `eeb0a327397fe3a89ed8703caec1128260cceadb`:
+  the current README identifies it as the canonical successor
+  of cicd-suite, with 32 composite actions in eight clades. It explicitly
+  records staged migration/canary qualification and an unpromoted GitHub
+  verdict adapter. Its presence is not evidence that its entire catalogue
+  runs on every repository or that a new Hypatia job ran locally.
+
+== Local use and limits
+
+=== Bounded local receipt contract (2026-11-07 follow-up)
+
+A `completed` receipt establishes that act observed successful, non-dry-run
+execution of the selected job's steps against the local source snapshot in
+the explicitly mapped container. It is not hosted Actions parity, environment
+approval, runner-image parity, a wall-clock guarantee, or evidence of a merge.
+Jobs declaring environments, job/step timeouts, or workflow/job concurrency
+require hosted receipts. These restrictions propagate through every transitive
+prerequisite, as do the existing credential, permission, checkout and expression
+restrictions. Declaration presence is enough to block; malformed or empty values
+are not treated as permission to simulate these semantics.
+
+Every accepted runner label has an explicit `--platform` argument using an
+immutable image digest from `ghcr.io/catthehacker/ubuntu`. The pinned local
+images correspond to Ubuntu 20.04, 22.04 and 24.04; `ubuntu-latest` maps to
+the pinned local 24.04 image, not a promise about GitHub's moving default.
+The isolated act configuration therefore needs no interactive image survey.
+Changing these pins requires a new real-run receipt. The opt-in
+`test/ci_changed_act_test.exs` executes changed shell input through real act
+with noninteractive stdin and checks both a successful job and a failing job.
+Run it with `mix test test/ci_changed_act_test.exs --only act_integration`
+after provisioning act and a container daemon. Unit tests with an injected
+runner do not satisfy this integration requirement.
+
+=== Selection, scanning and isolation
+
+The newly exposed standing SF001 inventory contains 15 advisory candidates
+in five existing rule files. The baseline retains them as visible advisory
+debt, with five exact-path entries tied to #971 and expiry 2027-02-04.
+The commit and pull-request body declare this specific ledger growth using
+the exemption ratchet's required `Ratchet-exception` record.
+It does not use a wildcard or exempt new files. The canonical baseline gate
+grades every finding at info or higher regardless of the scanner's advisory
+flag, so this explicit, temporary classification is necessary to preserve
+SF001's declared advisory meaning. It is not a claim that each regex is a
+confirmed vulnerability or that the reader migration is complete.
+
+Run `just ci-changed BASE` (default `origin/main`) before pushing; use
+`just ci-changed-plan BASE` to inspect selection. Both committed differences
+and uncommitted/untracked files are included. A shallow checkout must contain
+the base commit; a missing base is an error, never an empty successful diff.
+For workflow-only changes, job definitions are selected by parsed semantics,
+including aliases; moving comments/line numbers does not select an otherwise
+unchanged job. Any non-workflow input change conservatively selects all current
+workflows, since a script or fixture can affect an unchanged job. Global
+environment/event changes also select all remaining jobs. The current needs
+graph is validated even when deletion would otherwise select no surviving job;
+missing dependencies and cycles are errors.
+
+The scan retains directory-scoped absence findings when a changed file is
+below that directory. It applies the canonical governance baseline helper
+before grading, including expiry checks, acknowledgements and overrides. Set
+`HYPATIA_BASELINE_HELPER` to `scripts/apply-baseline.sh` from the same standards
+revision as `governance.yml` (`7641c7fdb01420696b5420ab85d88f599f32f609` here),
+or provision it under `.standards/scripts/`. A missing helper with an active
+baseline is an error. CI fetches that exact helper and explicitly includes its
+integration test; other test runs exclude the provisioned-helper tag.
+
+Existing suppressions remain active; changed files are graded at medium or
+higher and SF001 remains advisory. Each job gets a supported workflow event;
+`mix hypatia.ci_changed --event EVENT` can select another declared event.
+Execution requests act JSON/debug logs and requires non-dry-run `jobResult`
+success for the selected job. Skips, failures and absent receipts cannot count
+as completion. Matrix members observed as skipped or failed invalidate the
+receipt. New/changed checkout configuration, reusable jobs and write-capable
+jobs require hosted validation and cause the local task to refuse a receipt.
+The same blockers apply across the transitive `needs` graph before act can
+run any prerequisite. Composite-action findings retain their actual root
+or nested action path; workflow paths are qualified by their producer.
+For other jobs, act's unchanged checkout simulation is a declared local limit;
+the task does not bind a writable host workspace into the container.
+Changed prerequisites select downstream consumers, and changed local reusable
+contracts select their callers. Removed or repositioned checkouts also require
+hosted validation. Missing or unresolved permissions, conditional steps, tolerated
+failures, custom containers and secret-dependent execution cannot earn a local
+receipt. The runner uses empty input/environment/secret files, an explicitly empty
+GitHub token, an isolated configuration home and a cleared parent environment;
+project `.actrc` files require hosted validation. Docker daemon/context and client
+configuration remain available to act for container transport, without mounting
+the daemon socket into job containers or loading workflow secrets from them.
+The trusted act process can read registry credentials from `DOCKER_CONFIG`
+and endpoint credentials from `DOCKER_CERT_PATH`; preserving the chosen daemon
+connection is a separate trust boundary from credentials inside job containers.
+Selected jobs without checkout, jobs using GitHub expression contexts (including
+repository variables and event/input data), and matrix jobs also require hosted
+validation. A nonempty subset of successful matrix rows cannot certify the
+unobserved members. Static, explicitly read-only jobs with an unchanged checkout
+remain eligible for the bounded local receipt.
+Eligibility also requires `contents: read`, a supported Ubuntu container runner,
+and no opaque/composite actions or direct `GITHUB_EVENT_PATH` consumption.
+These restrictions deliberately
+limit local parity rather than treating simulated success as hosted evidence.
+Hosted CI remains authoritative for platform-specific actions, context,
+unobserved matrix expansion and permissions. A plan or mocked executor test
+is not a hosted execution receipt.
+
+The recipe is not silently installed as a Git hook in this repository or the
+estate. Fleet rollout, canonical workflow-reader migration (#971) and upstream
+kyq corrections remain explicit adoption work. This analysis is complete
+when its ledger and conversion mechanisms are reviewed; those remaining
+rollouts must not be reported as already deployed.

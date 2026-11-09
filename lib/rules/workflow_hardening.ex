@@ -92,6 +92,8 @@ defmodule Hypatia.Rules.WorkflowHardening do
 
   require Logger
 
+  alias Hypatia.WorkflowYaml
+
   # ─── Workflow-file discovery ────────────────────────────────────────
 
   @doc false
@@ -1094,19 +1096,16 @@ defmodule Hypatia.Rules.WorkflowHardening do
     repo_path
     |> workflow_files()
     |> Enum.flat_map(fn path ->
-      content = File.read!(path)
+      content = WorkflowYaml.read_workflow(path)
       rel = Path.relative_to(path, repo_path)
 
       {credentialed, token_writes} =
         content
-        |> writing_job_bodies()
-        |> Enum.split_with(fn {_body, credentialed?} -> credentialed? end)
-
-      credentialed = Enum.map(credentialed, &elem(&1, 0))
-      token_writes = Enum.map(token_writes, &elem(&1, 0))
+        |> writing_jobs()
+        |> Enum.split_with(& &1.credentialed?)
 
       masked_credentialed =
-        if Enum.any?(credentialed, &masked_write?/1),
+        if Enum.any?(credentialed, &masked_job?/1),
           do: [wh013_masked_credentialed_finding(rel)],
           else: []
 
@@ -1114,27 +1113,55 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end)
   end
 
-  # `{body, credentialed?}` for each job that performs a write. A job is
-  # credentialed by its own body or by a workflow-level `env:` it inherits.
-  # A file whose jobs the extractor cannot split is judged as one body and is
-  # never credentialed: one job's PAT must not excuse another job's write.
-  defp writing_job_bodies(content) do
-    case extract_job_blocks(content) do
+  # Each job that performs a write, as `%{text, steps, credentialed?}`, read
+  # by the shared workflow reader: comment lines dropped, aliases expanded,
+  # steps only under the job's own `steps:` key. A job is credentialed by its
+  # own text or by a workflow-level `env:` it inherits. A file whose jobs the
+  # reader cannot split is judged as one body and is never credentialed: one
+  # job's PAT must not excuse another job's write.
+  defp writing_jobs(content) do
+    case content |> WorkflowYaml.active_lines() |> WorkflowYaml.workflow_job_lines() do
       [] ->
-        if performs_contents_write?(content), do: [{content, false}], else: []
+        if performs_contents_write?(content),
+          do: [%{text: content, steps: [], credentialed?: false}],
+          else: []
 
       jobs ->
         inherited? = own_credential_job?(workflow_preamble(content))
 
-        for {_id, _no, body} <- jobs, performs_contents_write?(body) do
-          {body, inherited? or own_credential_job?(body)}
+        for job <- jobs, text = lines_text(job), performs_contents_write?(text) do
+          %{
+            text: text,
+            steps: WorkflowYaml.job_steps(job),
+            credentialed?: inherited? or own_credential_job?(text)
+          }
         end
     end
   end
 
+  defp lines_text(lines), do: Enum.map_join(lines, "\n", &elem(&1, 0))
+
+  # The text of each step of one job body (header line first, as the job
+  # extractor gives it), read by the shared reader: only the items of the
+  # job's own `steps:` key, comment lines dropped.
+  defp job_step_texts(body) do
+    body
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _} -> String.starts_with?(String.trim_leading(line), "#") end)
+    |> WorkflowYaml.job_steps()
+    |> Enum.map(&lines_text/1)
+  end
+
+  defp blank_or_comment?(line) do
+    trimmed = String.trim(line)
+    trimmed == "" or String.starts_with?(trimmed, "#")
+  end
+
   # Everything above the top-level `jobs:` key (name, on, permissions, env).
+  # The key may be quoted (`"jobs":`, `'jobs':`), as WorkflowYaml reads it.
   defp workflow_preamble(content) do
-    content |> String.split(~r/^jobs:/m, parts: 2) |> hd()
+    content |> String.split(~r/^(?:jobs|"jobs"|'jobs')\s*:/m, parts: 2) |> hd()
   end
 
   # `token:` / `GH_TOKEN:` / `GITHUB_TOKEN:` set to a secret other than
@@ -1181,8 +1208,6 @@ defmodule Hypatia.Rules.WorkflowHardening do
   # The grant is judged file-wide (`content`); starvation and masking only
   # over the jobs whose writes ride on GITHUB_TOKEN (`token_writes`).
   defp wh013_starved_findings(rel, content, token_writes) do
-    token_text = Enum.join(token_writes, "\n")
-
     cond do
       token_writes == [] ->
         []
@@ -1194,7 +1219,7 @@ defmodule Hypatia.Rules.WorkflowHardening do
         []
 
       # No grant anywhere, and the write is masked so it can never go red.
-      masked_write?(token_text) ->
+      Enum.any?(token_writes, &masked_job?/1) ->
         [
           %{
             rule: "WH013",
@@ -1261,8 +1286,10 @@ defmodule Hypatia.Rules.WorkflowHardening do
     ~r/(?:git\s+push|git\s+commit|gh\s+pr\s+(?:create|merge)|gh\s+release\s+(?:create|upload|edit))[^\n]*\|\|\s*echo/
   ]
 
-  @steps_key ~r/^[ \t]*steps:[ \t]*(?:#.*)?$/
-  @step_continue_on_error ~r/^[ \t]*(?:-[ \t]+)?continue-on-error:[ \t]*true\b/m
+  # `continue-on-error: true` as a key of the step, quoted or not. The prefix
+  # (indent, plus `- ` on the step's opening line) is captured so the key's
+  # column can be compared with the step's own key column.
+  @step_continue_on_error ~r/^(\s*(?:-\s+)?)(?:continue-on-error|"continue-on-error"|'continue-on-error')\s*:\s*true\b/
 
   @doc """
   Return true when a write operation's failure is masked, so a denied write
@@ -1271,76 +1298,43 @@ defmodule Hypatia.Rules.WorkflowHardening do
   on a sibling step does not mask this write, and a job-level
   `continue-on-error` is not counted: it is a deliberate, visible job setting
   (standards' github-backup-mirror-reusable.yml documents and surfaces it).
+
+  `content` is a workflow (or a fragment of one). Its steps are read with
+  `Hypatia.WorkflowYaml`, so only the items of each job's own `steps:` count;
+  a fragment without `jobs:` is judged by its shell masks alone.
   """
   def masked_write?(content) when is_binary(content) do
-    Enum.any?(@write_masks, &Regex.match?(&1, content)) or
+    shell_masked_write?(content) or
       content
-      |> step_bodies()
-      |> Enum.any?(&(step_continue_on_error?(&1) and performs_contents_write?(&1)))
+      |> WorkflowYaml.active_lines()
+      |> WorkflowYaml.workflow_job_lines()
+      |> Enum.flat_map(&WorkflowYaml.job_steps/1)
+      |> Enum.any?(&masked_step?/1)
   end
 
-  # `continue-on-error: true` as a key of the step itself: on its `- ` line or
-  # at the step's key column. Deeper text (a `run: |` script that writes a
-  # workflow file, a `with:` value) is not the step's flag.
+  defp masked_job?(%{text: text, steps: steps}) do
+    shell_masked_write?(text) or Enum.any?(steps, &masked_step?/1)
+  end
+
+  defp shell_masked_write?(text), do: Enum.any?(@write_masks, &Regex.match?(&1, text))
+
+  defp masked_step?(step) do
+    step_continue_on_error?(step) and performs_contents_write?(lines_text(step))
+  end
+
+  # `continue-on-error: true` at the step's own key column. Deeper text (a
+  # `run: |` script that writes a workflow file, a `with:` value) is not the
+  # step's flag.
   defp step_continue_on_error?(step) do
-    [item | rest] = String.split(step, "\n")
-    keys = Enum.reject(rest, &blank_or_comment?/1)
+    key_column = WorkflowYaml.step_key_column(step)
 
-    key_col =
-      case Regex.run(~r/^([ \t]*-[ \t]+)\S/, item) do
-        [_, prefix] -> String.length(prefix)
-        nil -> keys |> List.first("") |> indent_of()
+    Enum.any?(step, fn {line, _} ->
+      case Regex.run(@step_continue_on_error, line) do
+        [_, prefix] -> String.length(prefix) == key_column
+        nil -> false
       end
-
-    Regex.match?(@step_continue_on_error, item) or
-      Enum.any?(keys, &(indent_of(&1) == key_col and Regex.match?(@step_continue_on_error, &1)))
+    end)
   end
-
-  defp blank_or_comment?(line) do
-    trimmed = String.trim(line)
-    trimmed == "" or String.starts_with?(trimmed, "#")
-  end
-
-  # The text of each `- ` (or bare `-`) item under every `steps:` key. An item
-  # runs until the next item at the same indent or a line back at (or above)
-  # the `steps:` indent; blank and comment lines never end one.
-  defp step_bodies(content) do
-    {acc, current, _state} =
-      content
-      |> String.split("\n")
-      |> Enum.reduce({[], nil, nil}, fn line, {acc, current, state} ->
-        trimmed = String.trim_leading(line)
-
-        cond do
-          Regex.match?(@steps_key, line) ->
-            {flush_step(acc, current), nil, {indent_of(line), nil}}
-
-          is_nil(state) ->
-            {acc, nil, nil}
-
-          trimmed == "" or String.starts_with?(trimmed, "#") ->
-            {acc, append_step(current, line), state}
-
-          indent_of(line) <= elem(state, 0) ->
-            {flush_step(acc, current), nil, nil}
-
-          (String.trim(line) == "-" or String.starts_with?(trimmed, "- ")) and
-              elem(state, 1) in [nil, indent_of(line)] ->
-            {flush_step(acc, current), [line], {elem(state, 0), indent_of(line)}}
-
-          true ->
-            {acc, append_step(current, line), state}
-        end
-      end)
-
-    acc |> flush_step(current) |> Enum.reverse()
-  end
-
-  defp append_step(nil, _line), do: nil
-  defp append_step(lines, line), do: [line | lines]
-
-  defp flush_step(acc, nil), do: acc
-  defp flush_step(acc, lines), do: [lines |> Enum.reverse() |> Enum.join("\n") | acc]
 
   # ─── Internals ──────────────────────────────────────────────────────
 
@@ -1560,54 +1554,504 @@ defmodule Hypatia.Rules.WorkflowHardening do
     end)
   end
 
+  # WH014 is a bounded literal-path check, not a shell interpreter. Tokens
+  # keep quoted data separate from control operators. Command substitutions
+  # are analysed as commands; quoted examples and comments are not commands.
+  @wh014_report_path ~r/\A[A-Za-z0-9_.\/-]+\.(?:json|sarif)\z/
+  @wh014_upload ~r/\Agithub\/codeql-action\/upload-sarif@[^ \t]+\z/
+  @wh014_workspace "/__wh014_workspace__"
+
+  defp wh014_masked_upload?(body, inherited_directory) do
+    # The job's keys above its `steps` key, quoted or not, as the shared
+    # reader recognises it.
+    [preamble | _] = String.split(body, ~r/^[ \t]*(?:steps|"steps"|'steps')[ \t]*:/m, parts: 2)
+    directory = wh014_default_directory(preamble, inherited_directory)
+
+    body
+    |> job_step_texts()
+    |> Enum.reduce_while(MapSet.new(), fn step, tainted ->
+      upload = wh014_step_value(step, "uses")
+      report = wh014_step_input(step, "sarif_file")
+      report = wh014_path(report, @wh014_workspace)
+
+      if is_binary(upload) and Regex.match?(@wh014_upload, upload) and
+           not is_nil(report) and MapSet.member?(tainted, report) do
+        {:halt, :masked_upload}
+      else
+        step_directory =
+          case wh014_step_value(step, "working-directory") do
+            nil -> directory
+            value -> wh014_directory(value, @wh014_workspace)
+          end
+
+        next =
+          if is_nil(step_directory) do
+            tainted
+          else
+            step
+            |> scan_run_blocks()
+            |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+            |> Enum.sort_by(&elem(&1, 0))
+            |> Enum.reduce(tainted, fn {_line, runs}, paths ->
+              # scan_run_blocks returns the scalar header and its body at
+              # the same line. Use the complete body once, in source order.
+              run = Enum.max_by(runs, &byte_size/1)
+
+              case wh014_run_tokens(run) do
+                {:ok, tokens} -> wh014_follow_commands(tokens, paths, step_directory)
+                :unknown -> paths
+              end
+            end)
+          end
+
+        {:cont, next}
+      end
+    end)
+    |> Kernel.==(:masked_upload)
+  end
+
+  defp wh014_step_lines(step) do
+    [item | rest] = String.split(step, "\n")
+
+    if Regex.match?(~r/^[ \t]*-[ \t]*(?:#.*)?$/, item) do
+      # A bare sequence marker has no key column. Read it from the first
+      # real mapping entry, keeping nested scalar text at its own indentation.
+      case Enum.reject(rest, &blank_or_comment?/1) do
+        [first | _] ->
+          column = indent_of(first)
+          if column > indent_of(item), do: {column, rest}, else: {nil, []}
+
+        [] ->
+          {nil, []}
+      end
+    else
+      case Regex.run(~r/^([ \t]*-[ \t]+)(.*)$/, item) do
+        [_, prefix, value] ->
+          column = String.length(prefix)
+          {column, [String.duplicate(" ", column) <> value | rest]}
+
+        _ ->
+          {nil, []}
+      end
+    end
+  end
+
+  defp wh014_step_value(step, key) do
+    {column, lines} = wh014_step_lines(step)
+    wh014_yaml_value(lines, column, key)
+  end
+
+  defp wh014_step_input(step, key) do
+    {column, lines} = wh014_step_lines(step)
+
+    case Enum.drop_while(lines, fn line ->
+           indent_of(line) != column or not Regex.match?(~r/^[ \t]*with:[ \t]*$/, line)
+         end) do
+      [_with | rest] ->
+        inputs = Enum.take_while(rest, &(blank_or_comment?(&1) or indent_of(&1) > column))
+
+        case Enum.reject(inputs, &blank_or_comment?/1) do
+          [first | _] -> wh014_yaml_value(inputs, indent_of(first), key)
+          [] -> nil
+        end
+
+      [] ->
+        nil
+    end
+  end
+
+  defp wh014_yaml_value(lines, column, key) do
+    pattern = Regex.compile!("^[ \\t]*" <> Regex.escape(key) <> ":[ \\t]*(.*)$")
+
+    Enum.find_value(lines, fn line ->
+      if indent_of(line) == column do
+        case Regex.run(pattern, line) do
+          [_, value] -> wh014_literal_scalar(value)
+          _ -> nil
+        end
+      end
+    end)
+  end
+
+  defp wh014_literal_scalar(value) do
+    case Regex.run(~r/\A(?:"([^"]*)"|'([^']*)'|([^ \t#]+))[ \t]*(?:#.*)?\z/, String.trim(value)) do
+      nil -> nil
+      captures -> captures |> tl() |> Enum.find(&(&1 != ""))
+    end
+  end
+
+  defp wh014_default_directory(content, inherited) do
+    if Regex.match?(~r/^[ \t]*working-directory:/m, content) do
+      case Regex.run(@working_directory, content) do
+        [_, value] -> wh014_directory(value, @wh014_workspace)
+        _ -> nil
+      end
+    else
+      inherited
+    end
+  end
+
+  defp wh014_directory(value, base) do
+    if is_binary(value) and Regex.match?(~r/\A[A-Za-z0-9_.\/-]+\z/, value),
+      do: Path.expand(value, base),
+      else: nil
+  end
+
+  defp wh014_path(value, directory) do
+    if is_binary(value) and Regex.match?(@wh014_report_path, value),
+      do: Path.expand(value, directory),
+      else: nil
+  end
+
+  defp wh014_run_tokens(run) do
+    [header | lines] = String.split(run, "\n")
+
+    with [_, value] <- Regex.run(~r/^[ \t]*(?:-[ \t]+)?run:[ \t]*(.*)$/, header) do
+      script =
+        cond do
+          Regex.match?(~r/\A\|[-+]?[ \t]*(?:#.*)?\z/, value) -> Enum.join(lines, "\n")
+          String.starts_with?(value, [">", "'", "\""]) -> nil
+          true -> value
+        end
+
+      if is_binary(script) do
+        case wh014_lex(script, :plain, nil, [], false) do
+          {:ok, tokens, ""} -> {:ok, tokens}
+          _ -> :unknown
+        end
+      else
+        :unknown
+      end
+    else
+      _ -> :unknown
+    end
+  end
+
+  defp wh014_flush(tokens, nil), do: tokens
+  defp wh014_flush(tokens, word), do: [{:word, word} | tokens]
+
+  defp wh014_lex("", :plain, word, tokens, false),
+    do: {:ok, Enum.reverse(wh014_flush(tokens, word)), ""}
+
+  defp wh014_lex("", _quote, _word, _tokens, _nested), do: :unknown
+
+  defp wh014_lex(<<")", rest::binary>>, :plain, word, tokens, true),
+    do: {:ok, Enum.reverse(wh014_flush(tokens, word)), rest}
+
+  defp wh014_lex(<<"'", rest::binary>>, :single, word, tokens, nested),
+    do: wh014_lex(rest, :plain, word, tokens, nested)
+
+  defp wh014_lex(<<"'", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :single, word || "", tokens, nested)
+
+  defp wh014_lex(<<"\"", rest::binary>>, :double, word, tokens, nested),
+    do: wh014_lex(rest, :plain, word, tokens, nested)
+
+  defp wh014_lex(<<"\"", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :double, word || "", tokens, nested)
+
+  defp wh014_lex(<<"\\\r\n", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double],
+       do: wh014_lex(rest, quote, word, tokens, nested)
+
+  defp wh014_lex(<<"\\\n", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double],
+       do: wh014_lex(rest, quote, word, tokens, nested)
+
+  defp wh014_lex(<<"\\", char::utf8, rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, (word || "") <> <<char::utf8>>, tokens, nested)
+
+  defp wh014_lex(<<"\\", char::utf8, rest::binary>>, :double, word, tokens, nested)
+       when char in [36, 96, 34, 92],
+       do: wh014_lex(rest, :double, (word || "") <> <<char::utf8>>, tokens, nested)
+
+  # $$ expands to the shell PID. Its second dollar is not the start of a
+  # command substitution in printed text such as "$$(jq ... || echo 0)".
+  defp wh014_lex(<<"$$", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double],
+       do: wh014_lex(rest, quote, (word || "") <> "$$", tokens, nested)
+
+  # Arithmetic expansion has different token rules and is outside the
+  # command-substitution grammar. Do not interpret its data as commands.
+  defp wh014_lex(<<"$((", _rest::binary>>, quote, _word, _tokens, _nested)
+       when quote in [:plain, :double],
+       do: :unknown
+
+  defp wh014_lex(<<"$(", rest::binary>>, quote, word, tokens, nested)
+       when quote in [:plain, :double] do
+    case wh014_lex(rest, :plain, nil, [], true) do
+      {:ok, inner, tail} ->
+        wh014_lex(tail, quote, (word || "") <> "$()", [{:nested, inner} | tokens], nested)
+
+      _ ->
+        :unknown
+    end
+  end
+
+  defp wh014_lex(<<"(", rest::binary>>, :plain, word, tokens, nested) do
+    case wh014_lex(rest, :plain, nil, [], true) do
+      {:ok, inner, tail} ->
+        wh014_lex(tail, :plain, nil, [{:nested, inner} | wh014_flush(tokens, word)], nested)
+
+      _ ->
+        :unknown
+    end
+  end
+
+  # A here-document needs its own grammar. Do not read its data as shell
+  # commands or claim that this run's dynamic flow has been analysed.
+  defp wh014_lex(<<"<<", _rest::binary>>, :plain, _word, _tokens, _nested), do: :unknown
+
+  defp wh014_lex(<<"#", rest::binary>>, :plain, nil, tokens, nested) do
+    case String.split(rest, "\n", parts: 2) do
+      [_comment, tail] -> wh014_lex("\n" <> tail, :plain, nil, tokens, nested)
+      [_comment] -> wh014_lex("", :plain, nil, tokens, nested)
+    end
+  end
+
+  defp wh014_lex(<<char, rest::binary>>, :plain, word, tokens, nested)
+       when char in [?\s, ?\t, ?\r],
+       do: wh014_lex(rest, :plain, nil, wh014_flush(tokens, word), nested)
+
+  defp wh014_lex(<<char, rest::binary>>, :plain, word, tokens, nested)
+       when char in [?\n, ?;],
+       do: wh014_lex(rest, :plain, nil, [:sequence | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"||", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:or | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"&&", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:and | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"&", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:sequence | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<"|", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:pipe | wh014_flush(tokens, word)], nested)
+
+  # Descriptor duplication is part of this command, not a background '&'.
+  # Preserve the boundary without inferring a dynamic descriptor-to-file flow.
+  defp wh014_lex(<<redirect, ?&, rest::binary>>, :plain, word, tokens, nested)
+       when redirect in [?<, ?>] do
+    words =
+      if is_binary(word) and Regex.match?(~r/\A[0-9]+\z/, word),
+        do: tokens,
+        else: wh014_flush(tokens, word)
+
+    wh014_lex(rest, :plain, nil, [:fd_duplicate | words], nested)
+  end
+
+  defp wh014_lex(<<">", rest::binary>>, :plain, word, tokens, nested) do
+    {kind, rest} =
+      if String.starts_with?(rest, ">"),
+        do: {:append, String.slice(rest, 1..-1//1)},
+        else: {:out, rest}
+
+    {descriptor, words} =
+      if word in ["1", "2"],
+        do: {word, tokens},
+        else: {"1", wh014_flush(tokens, word)}
+
+    wh014_lex(rest, :plain, nil, [{kind, descriptor} | words], nested)
+  end
+
+  defp wh014_lex(<<"<", rest::binary>>, :plain, word, tokens, nested),
+    do: wh014_lex(rest, :plain, nil, [:input | wh014_flush(tokens, word)], nested)
+
+  defp wh014_lex(<<char::utf8, rest::binary>>, quote, word, tokens, nested),
+    do: wh014_lex(rest, quote, (word || "") <> <<char::utf8>>, tokens, nested)
+
+  defp wh014_segments(tokens) do
+    {segments, current} =
+      Enum.reduce(tokens, {[], []}, fn token, {segments, current} ->
+        if token in [:sequence, :and, :or, :pipe] do
+          if current == [] do
+            {segments, current}
+          else
+            {[{Enum.reverse(current), token} | segments], []}
+          end
+        else
+          {segments, [token | current]}
+        end
+      end)
+
+    Enum.reverse([{Enum.reverse(current), :sequence} | segments])
+    |> Enum.reject(&(elem(&1, 0) == []))
+  end
+
+  defp wh014_follow_commands(tokens, tainted, directory) do
+    segments = wh014_segments(tokens)
+
+    segments
+    |> Enum.with_index()
+    |> Enum.reduce({tainted, []}, fn {{command, separator}, index}, {paths, piped_inputs} ->
+      paths =
+        Enum.reduce(command, paths, fn
+          {:nested, inner}, acc -> wh014_follow_commands(inner, acc, directory)
+          _, acc -> acc
+        end)
+
+      {words, redirects} = wh014_command_parts(command)
+      {inputs, copy_target} = wh014_inputs(words)
+
+      inputs =
+        if List.first(words) in ["jq", "cat"] do
+          redirected = for {:input, "0", path} <- redirects, do: path
+          inputs ++ redirected
+        else
+          inputs
+        end
+
+      inputs = Enum.map(inputs, &wh014_path(&1, directory)) |> Enum.reject(&is_nil/1)
+      inputs = if List.first(words) in ["jq", "cat"], do: inputs ++ piped_inputs, else: inputs
+
+      outputs =
+        for {kind, "1", value} <- redirects,
+            path = wh014_path(value, directory),
+            not is_nil(path),
+            do: {kind, path}
+
+      outputs =
+        case wh014_path(copy_target, directory) do
+          nil -> outputs
+          path -> [{:out, path} | outputs]
+        end
+
+      next_words =
+        case Enum.at(segments, index + 1) do
+          {next, _} -> next |> wh014_command_parts() |> elem(0)
+          nil -> []
+        end
+
+      count_mask? = List.first(words) == "jq" and separator == :or and next_words == ["echo", "0"]
+
+      paths = if count_mask?, do: Enum.reduce(inputs, paths, &MapSet.put(&2, &1)), else: paths
+
+      inherited? = Enum.any?(inputs, &MapSet.member?(paths, &1))
+      output_mask? = separator == :or and next_words == ["true"]
+
+      paths =
+        Enum.reduce(outputs, paths, fn {kind, path}, acc ->
+          # Outputs have already passed the JSON/SARIF literal-path boundary.
+          if inherited? or output_mask? or (kind == :append and MapSet.member?(acc, path)),
+            do: MapSet.put(acc, path),
+            else: MapSet.delete(acc, path)
+        end)
+
+      {paths, if(separator == :pipe, do: inputs, else: [])}
+    end)
+    |> elem(0)
+  end
+
+  defp wh014_command_parts(tokens), do: wh014_command_parts(tokens, [], [])
+
+  defp wh014_command_parts([{kind, descriptor}, {:word, path} | rest], words, redirects)
+       when kind in [:out, :append],
+       do: wh014_command_parts(rest, words, [{kind, descriptor, path} | redirects])
+
+  # The target of >& / <& is a descriptor, not an input/output filename.
+  defp wh014_command_parts([:fd_duplicate, {:word, _descriptor} | rest], words, redirects),
+    do: wh014_command_parts(rest, words, redirects)
+
+  defp wh014_command_parts([:input, {:word, path} | rest], words, redirects),
+    do: wh014_command_parts(rest, words, [{:input, "0", path} | redirects])
+
+  defp wh014_command_parts([{:word, word} | rest], words, redirects),
+    do: wh014_command_parts(rest, [word | words], redirects)
+
+  defp wh014_command_parts([_ | rest], words, redirects),
+    do: wh014_command_parts(rest, words, redirects)
+
+  defp wh014_command_parts([], words, redirects),
+    do: {Enum.reverse(words), Enum.reverse(redirects)}
+
+  defp wh014_inputs(["jq" | args]), do: {wh014_jq_inputs(args, false, []), nil}
+
+  defp wh014_inputs(["cat" | args]),
+    do: {Enum.reject(args, &String.starts_with?(&1, "-")), nil}
+
+  defp wh014_inputs([command | args]) when command in ["cp", "mv"] do
+    case Enum.reject(args, &(&1 in ["-f", "-v", "--"])) do
+      [source, target] -> {[source], target}
+      _ -> {[], nil}
+    end
+  end
+
+  defp wh014_inputs(_), do: {[], nil}
+
+  defp wh014_jq_inputs([option, _name, path | rest], filter?, inputs)
+       when option in ["--slurpfile", "--rawfile"],
+       do: wh014_jq_inputs(rest, filter?, [path | inputs])
+
+  defp wh014_jq_inputs([option, _name, _value | rest], filter?, inputs)
+       when option in ["--arg", "--argjson"],
+       do: wh014_jq_inputs(rest, filter?, inputs)
+
+  defp wh014_jq_inputs([option, _program | rest], _filter?, inputs)
+       when option in ["-f", "--from-file"],
+       do: wh014_jq_inputs(rest, true, inputs)
+
+  defp wh014_jq_inputs([option | _], _filter?, _inputs)
+       when option in ["--args", "--jsonargs"],
+       do: []
+
+  defp wh014_jq_inputs([arg | rest], filter?, inputs) do
+    cond do
+      String.starts_with?(arg, "-") -> wh014_jq_inputs(rest, filter?, inputs)
+      not filter? -> wh014_jq_inputs(rest, true, inputs)
+      true -> wh014_jq_inputs(rest, true, [arg | inputs])
+    end
+  end
+
+  defp wh014_jq_inputs([], _filter?, inputs), do: Enum.reverse(inputs)
+
   # ── WH014 ───────────────────────────────────────────────────────────────
   # Measured 2026-09-14: this shape DELETED 84 real code-scanning alerts from
   # hyperpolymath/academic-workflow-suite while every run reported success.
 
-  @sarif_upload_re ~r{codeql-action/upload-sarif}
-  # A scanner invocation whose failure is swallowed: `… > something.json || true`
-  @masked_scan_re ~r/>\s*[^\s|;&]*\.json\s*(?:2>[^\s|;&]*\s*)?\|\|\s*true/
-  # A count that manufactures a zero when the artefact is unparseable.
-  @masked_count_re ~r/\|\|\s*echo\s+0\b/
-  # An assertion that the findings artefact is a NON-EMPTY array. `jq -e` sets a
-  # non-zero exit on false/null, and `length > 0` is the estate's canonical form
-  # (standards/.github/workflows/hypatia-scan-reusable.yml).
-  @findings_assertion_re ~r/length\s*>\s*0|jq\s+-e/
-
   @doc """
-  WH014 — a scanner whose failure is masked, feeding an upload to GitHub code
-  scanning, with nothing asserting the findings artefact is non-empty.
+  WH014 — a scanner or findings-count failure is masked in a workflow that
+  uploads SARIF to GitHub code scanning.
 
-  This is not merely a permissive gate. It **deletes security alerts**.
-
-  GitHub reconciles each code-scanning upload against the previous analysis
-  carrying the same tool name and category: any alert absent from the new
-  analysis is AUTO-CLOSED. So when a scanner crashes and its failure is
-  swallowed:
+  A failed or incomplete scan must not become a complete empty analysis.
+  GitHub reconciles code-scanning uploads against previous analyses for the
+  same tool and category, so an empty analysis can close existing alerts.
+  For example:
 
       hypatia-cli.sh scan . --exit-zero > hypatia-findings.json || true
       FINDING_COUNT=$(jq '. | length' hypatia-findings.json 2>/dev/null || echo 0)
 
-  the workflow proceeds with a count of zero, renders a syntactically valid
-  SARIF containing **zero results**, uploads it, and every previously-open
-  alert for that category is closed. The job is green at every step. Nothing
-  in `statusCheckRollup`, the run conclusion, or the check rollup shows that
-  anything went wrong — the only visible trace is `results_count` falling to 0
-  in `code-scanning/analyses`.
+  can proceed with a manufactured zero, render a valid SARIF with no results,
+  and upload it despite the scanner having failed.
 
   Measured on 2026-09-14 in `hyperpolymath/academic-workflow-suite`: an analysis
   carrying **84** findings on 09-11 was followed by six green runs uploading
   **0** results, closing all 84.
 
-  The rule fires only when all three hold, which keeps it conservative:
+  The rule reports a masked JSON/SARIF-producing invocation or count (`|| true`,
+  `|| echo 0`) only when a visible literal-path chain carries that report
+  to the named `sarif_file` of a later code-scanning upload in the same job.
+  A masked count of unrelated optional metadata does not establish that
+  relationship. Neither does an external converter's name alone.
 
-    1. the workflow uploads SARIF to code scanning;
-    2. a scanner invocation or its count is masked (`|| true`, `|| echo 0`);
-    3. nothing asserts the findings artefact is a non-empty array.
+  Neither `jq -e` nor a non-empty array establishes scanner completion: the
+  assertion may inspect unrelated data, or a failed scan may leave partial
+  valid findings. Conversely, a complete clean scan may legitimately produce
+  an empty array. Preserve the scanner's exit status and findings, reject
+  execution or coverage errors, then validate the expected report shape.
 
-  Condition 3 is what exempts a correctly-written caller. The estate's
-  `hypatia-scan-reusable.yml` performs exactly that assertion
-  (`type == "array" and length > 0`, `exit 2` otherwise) and so never fires.
+  This report-only rule follows literal JSON/SARIF paths through `jq`, `cat`,
+  `cp`, `mv` and shell redirections, in extracted step order. It recognises
+  `$(...)` command substitutions and backslash-newline continuations, keeps
+  independent commands separate, and ignores mask text inside comments or quoted data.
+  A known overwrite replaces the earlier path relationship. Literal working
+  directories are resolved relative to the workspace.
+
+  This is deliberately bounded: dynamic paths, external script internals,
+  cross-job artefacts, arithmetic expansions, here-documents, folded or quoted
+  YAML run scalars and general shell control flow are not analysed. Missing literal-flow evidence
+  means this rule cannot establish its pattern; it is never a scan-completion
+  or safety verdict. Do not treat absence of WH014 as assurance.
   """
   def wh014_masked_scanner_upload(repo_path) do
     repo_path
@@ -1616,31 +2060,39 @@ defmodule Hypatia.Rules.WorkflowHardening do
       content = File.read!(path)
       rel = Path.relative_to(path, repo_path)
 
-      uploads? = Regex.match?(@sarif_upload_re, content)
-      masked? = Regex.match?(@masked_scan_re, content) or Regex.match?(@masked_count_re, content)
-      asserts? = Regex.match?(@findings_assertion_re, content)
+      affected_jobs =
+        content
+        |> extract_job_blocks()
+        |> Enum.filter(fn {_job, _line, body} ->
+          directory = wh014_default_directory(workflow_preamble(content), @wh014_workspace)
+          wh014_masked_upload?(body, directory)
+        end)
 
-      if uploads? and masked? and not asserts? do
+      if affected_jobs != [] do
         [
           %{
             rule: "WH014",
             file: rel,
             severity: :high,
             reason:
-              "workflow #{rel} uploads SARIF to code scanning but masks the scanner's " <>
-                "failure (`|| true` / `|| echo 0`) and never asserts the findings " <>
-                "artefact is a non-empty array. When the scanner fails, this uploads a " <>
-                "SARIF with zero results, and GitHub AUTO-CLOSES every previously-open " <>
-                "alert for that category — silently, with the job green.",
+              "workflow #{rel} has a literal report path from a masked JSON/SARIF-producing " <>
+                "command or findings count (`|| true` / `|| echo 0`) to a SARIF upload. A failed or " <>
+                "incomplete scan can become an empty SARIF upload that closes existing " <>
+                "alerts. An unrelated assertion or non-empty findings array does not " <>
+                "establish scanner completion.",
             action: :report,
             fix_recipe: "assert-findings-before-sarif-upload",
             detail: %{
+              jobs: Enum.map(affected_jobs, fn {job, _line, _body} -> job end),
+              analysis_scope:
+                "literal report paths in the same job; not scan-completion evidence",
               fix:
-                "Remove the `|| true` and the `|| echo 0` fallback, then validate before " <>
-                  "uploading: `jq -e 'type == \"array\" and length > 0' findings.json` and " <>
-                  "exit non-zero if it fails. Prefer calling " <>
-                  "hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml, " <>
-                  "which already performs this assertion."
+                "Preserve the scanner exit status and reject execution or coverage " <>
+                  "errors before uploading. For Hypatia, exit 0 is a successful scan, " <>
+                  "exit 1 carries findings, and exit 2 is an error; retain real findings. " <>
+                  "Then validate `jq -e 'type == \"array\"' findings.json`, allowing an " <>
+                  "empty array from a complete scan. Remove `|| true` / `|| echo 0`; " <>
+                  "never turn a scanner or parsing failure into zero findings."
             }
           }
         ]

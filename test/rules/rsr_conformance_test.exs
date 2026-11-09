@@ -117,6 +117,70 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert sc.automatable_coverage < 1.0
       assert sc.provisional == true
     end
+
+    @profile_deed_head """
+    ;; SPDX-License-Identifier: MPL-2.0
+    (repo-deed
+      :schema-version "1.0.0"
+      :canonical-name "x"
+      :repo-uuid #u5"github.com/o/x"
+      :beholding-chora #u5"estate/chora"
+    """
+
+    test "a deed-era repo declares its capabilities in (rsr-profile …)", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @profile_deed_head <>
+          ~s|  (rsr-profile :version "1.0.0" :capabilities ("container" rust)))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+
+      assert sc.profile_present == true
+      assert sc.capabilities == ["container", "rust"]
+      assert verdicts["1.2.3"] == :unverified
+    end
+
+    test "the deed clause wins over a legacy .a2ml beside it", %{tmp_dir: tmp} do
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["container"]
+      """)
+
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @profile_deed_head <> ~s|  (rsr-profile :version "1.0.0" :capabilities ("bash")))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
+
+      assert sc.capabilities == ["bash"]
+      assert verdicts["1.2.3"] == :na
+    end
+
+    test "two (rsr-profile …) clauses, or one nested, declare nothing", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @profile_deed_head <>
+          ~s|  (rsr-profile :capabilities ("container"))\n  (rsr-profile :capabilities ("rust")))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      assert sc.profile_present == false
+
+      File.write!(
+        Path.join(tmp, "x_chora.deed"),
+        @profile_deed_head <> ~s|  (notes (rsr-profile :capabilities ("container"))))\n|
+      )
+
+      {:ok, sc} = RsrConformance.score(synthetic_catalogue(), tmp)
+      assert sc.profile_present == false
+    end
   end
 
   describe "scoring against the real RSR v2.0 SSOT" do
@@ -178,6 +242,53 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       assert sc.provisional == true
     end
 
+    test "3.2.2 is satisfied by the repo deed's (rsr-profile …) clause", %{tmp_dir: tmp} do
+      mk!(tmp, "x_chora.deed", """
+      ;; SPDX-License-Identifier: MPL-2.0
+      (repo-deed
+        :schema-version "1.0.0"
+        :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x"
+        :beholding-chora #u5"estate/chora"
+        (rsr-profile :version "1.0.0" :capabilities ("bash")))
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      assert Enum.find(sc.results, &(&1.id == "3.2.2")).verdict == :pass
+      assert sc.profile_present == true
+    end
+
+    # 3.2.2 must agree with the capability reader: a clause the reader rejects
+    # declares nothing, so it neither passes 3.2.2 nor falls back to an .a2ml.
+    test "3.2.2 fails on a duplicated or list-less (rsr-profile …) clause", %{tmp_dir: tmp} do
+      head = """
+      ;; SPDX-License-Identifier: MPL-2.0
+      (repo-deed
+        :schema-version "1.0.0"
+        :canonical-name "x"
+        :repo-uuid #u5"github.com/o/x"
+        :beholding-chora #u5"estate/chora"
+      """
+
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["bash"]
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+
+      for body <- [
+            ~s|  (rsr-profile :capabilities ("bash"))\n  (rsr-profile :capabilities ("rust")))\n|,
+            ~s|  (rsr-profile :version "1.0.0"))\n|
+          ] do
+        File.write!(Path.join(tmp, "x_chora.deed"), head <> body)
+        {:ok, sc} = RsrConformance.score(catalogue, tmp)
+        assert sc.profile_present == false
+        assert Enum.find(sc.results, &(&1.id == "3.2.2")).verdict == :fail
+      end
+    end
+
     test "a malformed descriptile fails 3.2.1 (parse gate, not just presence)", %{
       tmp_dir: tmp
     } do
@@ -215,6 +326,104 @@ defmodule Hypatia.Rules.RsrConformanceTest do
       {:ok, sc} = RsrConformance.score(catalogue, tmp)
       verdicts = Map.new(sc.results, &{&1.id, &1.verdict})
       assert verdicts["3.2.1"] == :pass
+    end
+  end
+
+  describe "descriptiles carried by the repo deed (3.1.5-3.1.7)" do
+    @describetag :tmp_dir
+
+    @deed_head """
+    ;; SPDX-License-Identifier: MPL-2.0
+    (repo-deed
+      :schema-version "1.0.0"
+      :canonical-name "x"
+      :repo-uuid #u5"github.com/o/x"
+      :beholding-chora #u5"estate/chora"
+    """
+
+    defp agentic_verdicts(tmp) do
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      sc.results |> Map.new(&{&1.id, &1.verdict}) |> Map.take(~w(3.1.5 3.1.6 3.1.7))
+    end
+
+    test "top-level (agentic) (neurosym) (playbook) clauses satisfy them with no .a2ml", %{
+      tmp_dir: tmp
+    } do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @deed_head <>
+          """
+            (agentic :version "0.1.0")
+            (neurosym :version "0.1.0")
+            (playbook :version "0.1.0" (deployment)))
+          """
+      )
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :pass, "3.1.6" => :pass, "3.1.7" => :pass}
+    end
+
+    test "the legacy .a2ml still satisfies them without a deed", %{tmp_dir: tmp} do
+      for d <- ~w(AGENTIC NEUROSYM PLAYBOOK) do
+        mk!(tmp, ".machine_readable/descriptiles/#{d}.a2ml", "[metadata]\nversion = \"0.1.0\"\n")
+      end
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :pass, "3.1.6" => :pass, "3.1.7" => :pass}
+    end
+
+    test "a deed without the clauses, or with them nested, does not", %{tmp_dir: tmp} do
+      mk!(
+        tmp,
+        "x_chora.deed",
+        @deed_head <>
+          """
+            (notes (agentic :version "0.1.0") (neurosym) (playbook)))
+          """
+      )
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :fail, "3.1.6" => :fail, "3.1.7" => :fail}
+    end
+
+    test "a deed that does not parse declares nothing", %{tmp_dir: tmp} do
+      # unbalanced: the closing paren is inside the comment
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (agentic) (neurosym) (playbook) ; )\n")
+
+      assert agentic_verdicts(tmp) == %{"3.1.5" => :fail, "3.1.6" => :fail, "3.1.7" => :fail}
+    end
+
+    # 3.1.9 is the ESTATE clade (registers into gv-clade-index), which the
+    # chora deed's (clade) clause carries. In-repo clade organisation (the
+    # subtrees a repo groups its own content into, e.g. boj-server's
+    # cartridges) is a different use of the word and never satisfies it.
+    # 3.1.9 is gated on governance-tier, so each case declares it; without a
+    # profile the criterion is :na and every assertion would pass vacuously.
+    defp clade_verdict(tmp) do
+      mk!(tmp, ".machine_readable/rsr-profile.a2ml", """
+      [rsr-profile]
+      capabilities = ["governance-tier"]
+      """)
+
+      {:ok, catalogue} = RsrCriteria.load(@ssot)
+      {:ok, sc} = RsrConformance.score(catalogue, tmp)
+      sc.results |> Enum.find(&(&1.id == "3.1.9")) |> Map.fetch!(:verdict)
+    end
+
+    test "a top-level (clade) clause satisfies 3.1.9 with no CLADE.a2ml", %{tmp_dir: tmp} do
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (clade :primary rm :secondary (gv)))\n")
+      assert clade_verdict(tmp) == :pass
+    end
+
+    test "the legacy descriptiles/CLADE.a2ml still satisfies 3.1.9", %{tmp_dir: tmp} do
+      mk!(tmp, ".machine_readable/descriptiles/CLADE.a2ml", "[clade]\nprimary = \"rm\"\n")
+      assert clade_verdict(tmp) == :pass
+    end
+
+    test "in-repo clade organisation is not the estate clade", %{tmp_dir: tmp} do
+      # a nested (clade) clause and a CLADE.a2ml inside a content subtree
+      mk!(tmp, "x_chora.deed", @deed_head <> "  (notes (clade :primary rm)))\n")
+      mk!(tmp, "cartridges/sample/.machine_readable/descriptiles/CLADE.a2ml", "[clade]\n")
+      assert clade_verdict(tmp) == :fail
     end
   end
 

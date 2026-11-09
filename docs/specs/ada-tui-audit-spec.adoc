@@ -177,7 +177,7 @@ GitHub Actions workflow validation:
 == Integration Points
 
 === hypatia Integration
-* Export audit results to Logtalk rule engine
+* Export audit results to Hypatia as JSON findings (`schema/findings.ncl`) for evaluation by the Elixir rule modules
 * Feed error patterns to neurosymbolic learning
 * Trigger hook wave propagation on fixes
 

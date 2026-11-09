@@ -86,9 +86,9 @@ jobs:
       - name: Query repos with open vulnerability alerts
         id: query
         env:
-          # FARM_TOKEN_A_INBOUND has the cross-repo `repo` + `security_events`
-          # scopes needed to read vulnerabilityAlerts.
-          GH_TOKEN: ${{ secrets.HYPATIA_DISPATCH_PAT }}
+          # Read-only scanner credential: Contents and Dependabot alerts read.
+          # Dispatch credentials must not be used to read security findings.
+          GH_TOKEN: ${{ secrets.HYPATIA_SCAN_PAT }}
           OWNER: ${{ steps.cfg.outputs.owner }}
         run: |
           set -euo pipefail

@@ -1,0 +1,19 @@
+literal: |
+  line one
+  line two
+literal-strip: |-
+  no trailing newline
+literal-keep: |+
+  keeps the blank line
+
+folded: >
+  folded
+  into one line
+
+  and a paragraph break
+folded-indented: >
+  normal
+    more indented
+  normal again
+explicit-indent: |2
+    two spaces are content

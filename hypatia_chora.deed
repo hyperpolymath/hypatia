@@ -1,0 +1,140 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+;;
+;; The repo deed of hypatia (one deed per repo, standards#837).
+;;
+;; Clauses translated field for field from .machine_readable/CLADE.a2ml under
+;; the mapping spec 1-formats/deed/mappings/clade-to-repo-deed.adoc, the only
+;; authority a family translation may cite: (identity) (clade) (forges)
+;; (lineage) (status). CLADE's [identity] name and project are not in that
+;; table; both repeat canonical-name and are not emitted. :repo-uuid is the
+;; ADR-008 profile C UUIDv8 re-derived from the name (spec section 5, P-1),
+;; not the v5 that CLADE.a2ml still holds.
+;;
+;; AGENTIC, NEUROSYM and PLAYBOOK.a2ml carry sections their mapping table does
+;; not list (agentic: max-automation, sprint-patterns, workflow-pin-detection;
+;; neurosym: proof-integration; playbook: crg-promotion-criteria), so
+;; a2ml_to_deed.py refuses them rather than guess. META and ECOSYSTEM are not
+;; translated either, and STATE.a2ml waits on state-v1-decision.adoc. All of
+;; those stay live and untranslated, as in standards_chora.deed.
+;;
+;; (egress ...) is the standards ADR-009 declaration that RE001 checks: one
+;; entry per job that reads a secret other than GITHUB_TOKEN. Each :endpoints
+;; list is the job's harden-runner allowed-endpoints, byte for byte, so the
+;; two can be compared for equality.
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "hypatia"
+  :repo-uuid #u8"gv-clade-index:github.com/hyperpolymath/hypatia"
+  :beholding-chora #u5"estate/chora"
+  (identity :owner "hyperpolymath" :primary-forge github :prefixed-name "ax-hypatia")
+  (clade
+    :primary ax
+    :secondary (sc)
+    :assigned "2026-03-16"
+    :rationale "")
+  (forges
+    :github "hyperpolymath/hypatia"
+    :gitlab "hyperpolymath/hypatia"
+    :bitbucket "hyperpolymath/hypatia")
+  (lineage
+    :type standalone
+    :parent "Neurosymbolic CI/CD intelligence — rule-based scanning"
+    :born "2026-03-16")
+  (status
+    :phase active
+    :since "2026-03-16"
+    :present #t
+    :aliases ()
+    :merged-into ""
+    :superseded-by ""
+    :successors ()
+    :ended ""
+    (history
+      (entry :phase active :since "2026-03-16" :note "backfilled default — correct if the true phase differs")))
+  (egress
+    :policy "standards ADR-009"
+    (job
+      :workflow ".github/workflows/ci-health-sweep.yml"
+      :job "sweep"
+      :secrets ("HYPATIA_DISPATCH_PAT")
+      :endpoints ("github.com:443" "api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks out this repo, then every call in scripts/ci-health/ is gh against the GitHub API.")
+    (job
+      :workflow ".github/workflows/estate-rescan.yml"
+      :job "preflight"
+      :secrets ("HYPATIA_DISPATCH_PAT")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Creates and deletes a probe branch through the GitHub API to prove the token can write before the scan runs.")
+    (job
+      :workflow ".github/workflows/estate-rescan.yml"
+      :job "publish"
+      :secrets ("HYPATIA_DISPATCH_PAT")
+      :endpoints ("github.com:443" "api.github.com:443" "results-receiver.actions.githubusercontent.com:443" "*.blob.core.windows.net:443")
+      :enforcement harden-runner-block
+      :reason "Downloads the scan artifact from the artifact service and its blob storage, then pushes the results with git and gh.")
+    (job
+      :workflow ".github/workflows/hypatia-remediation-sweep.yml"
+      :job "sweep"
+      :secrets ("HYPATIA_SCAN_PAT" "HYPATIA_DISPATCH_PAT")
+      :endpoints ("api.github.com:443" "results-receiver.actions.githubusercontent.com:443" "*.blob.core.windows.net:443")
+      :enforcement harden-runner-block
+      :reason "Reads vulnerability alerts with the read-only scanner credential, sends repository dispatches with the separate dispatch credential, then uploads the target list as an artifact.")
+    (job
+      :workflow ".github/workflows/credential-read-check.yml"
+      :job "scanner"
+      :secrets ("HYPATIA_SCAN_PAT")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks token identity and reads one repository's Dependabot alert endpoint without checking out code or printing API bodies.")
+    (job
+      :workflow ".github/workflows/credential-read-check.yml"
+      :job "dispatch"
+      :secrets ("HYPATIA_DISPATCH_PAT")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks token identity and reads the observation-store main ref; does not validate dispatch or write permissions.")
+    (job
+      :workflow ".github/workflows/inbox-steward-intake.yml"
+      :job "record-report"
+      :secrets ("FARM_PAT")
+      :endpoints ("github.com:443" "api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks out this repo, pushes the report branch with git and opens its PR with gh.")
+    (job
+      :workflow ".github/workflows/inbox-steward-intake.yml"
+      :job "analyze-patterns"
+      :secrets ("FARM_PAT")
+      :endpoints ("github.com:443" "api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks out this repo without credentials and reads the source repo's merged pull requests through the GitHub API.")
+    (job
+      :workflow ".github/workflows/inbox-steward-intake.yml"
+      :job "update-ruleset"
+      :secrets ("FARM_PAT")
+      :endpoints ("github.com:443" "api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Checks out this repo, pushes the rule-update branch with git and opens its PR with gh.")
+    (job
+      :workflow ".github/workflows/inbox-steward-intake.yml"
+      :job "dispatch-to-farm"
+      :secrets ("FARM_PAT")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Sends one repository dispatch to .git-private-farm through the GitHub API.")
+    (job
+      :workflow ".github/workflows/push-email-notify.yml"
+      :job "notify"
+      :secrets ("SMTP_HOST" "SMTP_PASS" "SMTP_PORT" "SMTP_USER")
+      :endpoints ("github.com:443" "release-assets.githubusercontent.com:443" "objects.githubusercontent.com:443" "secret:SMTP_HOST")
+      :enforcement harden-runner-block
+      :reason "The action downloads its pinned binary from its GitHub release, then sends the mail by SMTP to the org mail host. The host is itself a secret; harden-runner allows it as SMTP_HOST on SMTP_PORT, else 465.")
+    (job
+      :workflow ".github/workflows/roadmap-sync.yml"
+      :job "sync"
+      :secrets ("ROADMAP_SYNC_APP_PRIVATE_KEY")
+      :endpoints ("api.github.com:443")
+      :enforcement harden-runner-block
+      :reason "Mints a GitHub App installation token and syncs the roadmap project; every call goes to the GitHub API.")))

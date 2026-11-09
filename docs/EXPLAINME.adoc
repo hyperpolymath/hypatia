@@ -17,7 +17,7 @@ ____
 *Evidence:* The learning pipeline (CLAUDE.md line 77-101) demonstrates this cycle:
 1. **Learning** — 5 neural networks (Graph of Trust, Mixture of Experts, Liquid State Machine, Echo State Network, Radial Neural Network) analyze verisim-data
 2. **Distillation** — PatternRegistry deduplicates findings into 46 canonical recipes (PA001-PA046 + 20 OpenSSF Scorecard recipes)
-3. **Symbolic** — Recipes execute as fast Logtalk rules (no ML at runtime)
+3. **Symbolic** — Recipes and checks execute as pure-Elixir rules in `lib/rules/*.ex` (no ML needed for the deterministic checks)
 4. **Verification** — Idris2 ABI proofs formally verify recipe correctness
 
 This is proven by the metrics: 1635 dispatched actions (600 auto-execute with 95%+ confidence, 667 review, 368 report), 16,671 outcomes recorded (99% success rate), 46 recipes zero-uncovered (every category has a recipe).
@@ -34,7 +34,7 @@ ____
 *Evidence:* The architecture (lines 49-100) shows all 6 layers implemented:
 - Verification (Haskell Liquid types, property testing, formal proofs)
 - Learning (neural subsystem with 5 networks)
-- Symbolic (Logtalk rules + Prolog inference)
+- Symbolic (Elixir rule modules in `lib/rules/*.ex`)
 - Data (ArangoDB graph, Dragonfly cache, Radicle P2P)
 - Action (robot-repo-automaton, hooks, diagnostics)
 - Forge adapters (6: GitHub, GitLab, Bitbucket, Codeberg, sr.ht, Gitea)
@@ -57,7 +57,7 @@ This is operationalized in TriangleRouter, FleetDispatcher (confidence-gated), a
 | **Elixir 1.16+** | https://elixir-lang.org (8 core modules, OTP GenServers, concurrency)
 | **Rust** | https://www.rust-lang.org (adapters, CLI, data layer, fixer)
 | **Julia 1.10+** | https://julialang.org (5 neural networks, training pipeline)
-| **Logtalk / Prolog** | Declarative rules (error catalog, pattern detection)
+| **Elixir / OTP** | Rule modules (error catalog, pattern detection)
 | **Haskell** | Formal verification (Liquid types, property testing)
 | **Idris2 ABI** | https://www.idris-lang.org (type-safe GraphQL, gRPC, REST with proofs)
 | **Zig FFI** | https://ziglang.org (C ABI bridge for 7 exported functions)

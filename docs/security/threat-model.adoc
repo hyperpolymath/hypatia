@@ -38,7 +38,7 @@ Due to its position in the software supply chain and its access to repository cr
 ┌──────────────────────────────────────┼──────────────────────────────────────┐
 │                            TRUST BOUNDARY                                    │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │   Haskell   │  │   Logtalk   │  │    Rust     │  │    Rust     │        │
+│  │   Haskell   │  │   Elixir    │  │    Rust     │  │    Rust     │        │
 │  │  Registry   │  │   Engine    │  │  Adapters   │  │    CLI      │        │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────┘        │
 │         │                │                │                                  │

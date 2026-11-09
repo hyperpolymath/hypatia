@@ -17,7 +17,7 @@ Frequently asked questions about hypatia, organized by topic.
 hypatia is a neurosymbolic CI/CD intelligence platform that combines:
 
 * *Neural learning* for pattern recognition across thousands of repositories
-* *Symbolic reasoning* (Logtalk/Prolog) for fast, deterministic rule execution
+* *Symbolic reasoning* (pure-Elixir rule modules) for fast, deterministic rule execution
 * *Formal verification* (Haskell/Liquid Haskell) for ruleset correctness proofs
 * *Multi-forge support* for GitHub, GitLab, Bitbucket, and more
 
@@ -169,7 +169,7 @@ There are three effect types:
 
 Rules can be written in:
 
-* *Logtalk* for symbolic rules (recommended for most cases)
+* *Elixir* for symbolic rules — add a module under `lib/rules/*.ex` (the only rule language)
 * *Haskell* for type-safe rules with formal verification
 
 See <<developer-guide.adoc#writing-rules,Writing Rules>> for detailed instructions.

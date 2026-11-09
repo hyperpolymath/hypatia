@@ -21,9 +21,8 @@ defmodule Hypatia.VerisimConnector do
   Direct file reads preserved as fallback for graceful degradation.
   """
 
+  alias Hypatia.Paths
   alias Hypatia.VCL.Query, as: VCL
-
-  @verisimdb_data_path Application.compile_env(:hypatia, :verisimdb_data_path, "data/verisim")
 
   require Logger
 
@@ -185,8 +184,9 @@ defmodule Hypatia.VerisimConnector do
   # Fallback: Direct File I/O (graceful degradation)
   # ====================================================================
 
-  defp fetch_all_scans_fallback do
-    scans_path = Path.join(expand_path(@verisimdb_data_path), "scans")
+  @doc false
+  def fetch_all_scans_fallback do
+    scans_path = Path.expand(Paths.scans())
 
     case File.ls(scans_path) do
       {:ok, files} ->
@@ -202,7 +202,7 @@ defmodule Hypatia.VerisimConnector do
   end
 
   defp load_scan_fallback(filename) do
-    path = Path.join([expand_path(@verisimdb_data_path), "scans", filename])
+    path = Path.join(Path.expand(Paths.scans()), filename)
     repo_name = String.replace(filename, ".json", "")
 
     with {:ok, content} <- File.read(path),
@@ -215,8 +215,9 @@ defmodule Hypatia.VerisimConnector do
     end
   end
 
-  defp fetch_pattern_registry_fallback do
-    path = Path.join(expand_path(@verisimdb_data_path), "patterns/registry.json")
+  @doc false
+  def fetch_pattern_registry_fallback do
+    path = Path.join(Path.expand(Paths.patterns()), "registry.json")
 
     case File.read(path) do
       {:ok, content} ->
@@ -230,8 +231,9 @@ defmodule Hypatia.VerisimConnector do
     end
   end
 
-  defp fetch_all_recipes_fallback do
-    recipes_path = Path.join(expand_path(@verisimdb_data_path), "recipes")
+  @doc false
+  def fetch_all_recipes_fallback do
+    recipes_path = Path.expand(Paths.recipes())
 
     case File.ls(recipes_path) do
       {:ok, files} ->
@@ -248,8 +250,9 @@ defmodule Hypatia.VerisimConnector do
     end
   end
 
-  defp fetch_substitutions_fallback do
-    path = Path.join(expand_path(@verisimdb_data_path), "recipes/proven-substitutions.json")
+  @doc false
+  def fetch_substitutions_fallback do
+    path = Path.join(Path.expand(Paths.recipes()), "proven-substitutions.json")
 
     case load_json(path) do
       nil -> []
@@ -257,8 +260,9 @@ defmodule Hypatia.VerisimConnector do
     end
   end
 
-  defp fetch_index_fallback do
-    path = Path.join(expand_path(@verisimdb_data_path), "index.json")
+  @doc false
+  def fetch_index_fallback do
+    path = Path.join(Path.expand(Paths.verisimdb_data()), "index.json")
 
     case load_json(path) do
       nil -> {:error, :not_found}
@@ -266,8 +270,9 @@ defmodule Hypatia.VerisimConnector do
     end
   end
 
-  defp fetch_all_outcomes_fallback do
-    outcomes_path = Path.join(expand_path(@verisimdb_data_path), "outcomes")
+  @doc false
+  def fetch_all_outcomes_fallback do
+    outcomes_path = Path.expand(Paths.outcomes())
 
     case File.ls(outcomes_path) do
       {:ok, files} ->
@@ -307,9 +312,5 @@ defmodule Hypatia.VerisimConnector do
         Logger.error("Failed to load JSON #{path}: #{inspect(reason)}")
         nil
     end
-  end
-
-  defp expand_path(path) do
-    Path.expand(path)
   end
 end

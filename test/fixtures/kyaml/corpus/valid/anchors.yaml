@@ -1,0 +1,7 @@
+# Anchors are resolved during parsing; an alias may only name a node that has
+# already been completed, so alias cycles cannot be expressed.
+defaults: &defaults
+  retries: 3
+  timeoutSeconds: 30
+primary: *defaults
+secondary: *defaults

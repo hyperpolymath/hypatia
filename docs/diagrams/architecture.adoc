@@ -17,9 +17,9 @@ graph TB
     end
 
     subgraph "Core Engine"
-        Rules[Rule Engine<br/>Logtalk]
-        Learning[Learning Module<br/>Logtalk]
-        Distiller[Rule Distiller<br/>Logtalk]
+        Rules[Rule Engine<br/>Elixir — lib/rules]
+        Learning[Learning Module<br/>Elixir]
+        Distiller[Rule Distiller<br/>Elixir]
     end
 
     subgraph "Registry"
@@ -106,9 +106,9 @@ graph TB
 [cols=",,",options="header",]
 |===
 |Component |Language |Purpose
-|Rule Engine |Logtalk |Declarative rule evaluation
-|Learning Module |Logtalk |Pattern learning and confidence scoring
-|Rule Distiller |Logtalk |Extract rules from training data
+|Rule Engine |Elixir |Pattern-matching rule evaluation (`+lib/rules/*.ex+`)
+|Learning Module |Elixir |Pattern learning and confidence scoring
+|Rule Distiller |Elixir |Propose/promote rules from training data
 |===
 
 ==== Registry
@@ -153,13 +153,13 @@ graph LR
     subgraph "Languages"
         Rust[Rust]
         Haskell[Haskell]
-        Logtalk[Logtalk]
+        Elixir[Elixir]
     end
 
     subgraph "Frameworks"
         Clap[clap]
         Servant[Servant]
-        SWI[SWI-Prolog]
+        BEAM[BEAM/OTP]
     end
 
     subgraph "Databases"
@@ -175,10 +175,10 @@ graph LR
 
     Rust --> Clap
     Haskell --> Servant
-    Logtalk --> SWI
+    Elixir --> BEAM
 
     Rust --> Dragon
-    Logtalk --> Arango
+    Elixir --> Arango
     Haskell --> Arango
 
     Rust --> GH
@@ -203,8 +203,8 @@ graph TB
         end
 
         subgraph "Engine Tier"
-            Engine1[Logtalk Engine 1]
-            Engine2[Logtalk Engine 2]
+            Engine1[Elixir/BEAM Engine 1]
+            Engine2[Elixir/BEAM Engine 2]
         end
     end
 

@@ -47,7 +47,7 @@ VerisimConnector → PatternRegistry → TriangleRouter → DispatchManifest
 pipeline
 
 |*BLD* (Build) |strong |`+ci.yml+` exercises
-`+cargo check/clippy/test+`, Haskell registry, Logtalk engine
+`+cargo check/clippy/test+`, Haskell registry, Elixir rule engine
 
 |*EXE* (Execution) |strong |`+zig_ffi_smoke_test.exs+` (248 LOC),
 `+vcl_client_test.exs+` (582 LOC), `+vcl_file_executor_test.exs+` (642

@@ -105,4 +105,87 @@ defmodule Hypatia.Rules.SecurityErrorsTest do
              )
     end
   end
+
+  describe "ECHIDNA security_learning transcription" do
+    test "alert_categories/0 carries all 18 alert_category/2 facts" do
+      expected = %{
+        "TokenPermissionsID" => :workflow_security,
+        "PinnedDependenciesID" => :workflow_security,
+        "missing-workflow-permissions" => :workflow_security,
+        "hard-coded-cryptographic-value" => :code_security,
+        "remote-property-injection" => :code_security,
+        "sql-injection" => :code_security,
+        "unused-local-variable" => :code_quality,
+        "syntax-error" => :code_quality,
+        "VulnerabilitiesID" => :dependency_vuln,
+        "unmaintained" => :dependency_vuln,
+        "SecurityPolicyID" => :process_hygiene,
+        "MaintainedID" => :process_hygiene,
+        "CodeReviewID" => :process_hygiene,
+        "BranchProtectionID" => :process_hygiene,
+        "CIIBestPracticesID" => :process_hygiene,
+        "FuzzingID" => :missing_tests,
+        "SASTID" => :missing_tests,
+        "CITestsID" => :missing_tests
+      }
+
+      assert SecurityErrors.alert_categories() == expected
+    end
+
+    test "alert_category/1 returns nil outside the transcribed facts" do
+      assert SecurityErrors.alert_category("TokenPermissionsID") == :workflow_security
+      assert SecurityErrors.alert_category("unused-import") == nil
+    end
+
+    test "Logtalk severity catch-all members are explicit :low, not :info" do
+      for alert_type <- ["SASTID", "CITestsID", "unmaintained", "FuzzingID"] do
+        assert SecurityErrors.issue_severity(alert_type) == :low
+      end
+    end
+
+    test "validate_alert/1 composes the transcribed predicates" do
+      validation = SecurityErrors.validate_alert("TokenPermissionsID")
+
+      assert validation.alert_type == "TokenPermissionsID"
+      assert validation.category == :workflow_security
+      assert validation.severity == :high
+      assert validation.auto_fixable == true
+      assert validation.fix =~ "granular workflow-level permissions"
+      assert validation.prevention_workflow == "workflow-linter.yml"
+    end
+
+    test "validate_alert/1 keeps the catch-all members complete" do
+      validation = SecurityErrors.validate_alert("SASTID")
+
+      assert validation.category == :missing_tests
+      assert validation.severity == :low
+      assert validation.auto_fixable == false
+      assert validation.fix == nil
+      assert validation.prevention_workflow == nil
+    end
+
+    test "validate_alert/1 on an unknown type mirrors the failure fields" do
+      validation = SecurityErrors.validate_alert("never-seen-alert")
+
+      assert validation.category == nil
+      assert validation.severity == :info
+      assert validation.auto_fixable == false
+      assert validation.fix == nil
+      assert validation.prevention_workflow == nil
+    end
+
+    test "remote property injection carries its exact CWE" do
+      assert {cwe, _title} = SecurityErrors.cwe_for("remote-property-injection")
+      assert cwe == "CWE-915"
+    end
+  end
+
+  describe "language policy (2026-11-01 refresh)" do
+    test "logtalk is banned with Elixir as the replacement" do
+      refute SecurityErrors.language_allowed?("logtalk")
+      assert SecurityErrors.language_banned?("logtalk")
+      assert SecurityErrors.language_replacement("logtalk") == "elixir"
+      assert SecurityErrors.language_allowed?("elixir")
+    end
+  end
 end

@@ -26,4 +26,19 @@ ExUnit.start()
 # Pinned seed (#643): two CI runs with zero source changes differed by ±6
 # failures from seed alone, making failure-count deltas meaningless as
 # evidence. Pass --seed N explicitly to probe order-dependence.
-ExUnit.configure(exclude: [:verisim_data], seed: 0)
+# Tests tagged :kyq_differential compare Hypatia.Kyaml with kyq's reference
+# parser; they need its dump (KYQ_DUMP), which the kyaml-conformance CI job
+# makes. Run with: mix test --only kyq_differential (see test/fixtures/kyaml/).
+# Tests tagged :yaml_test_suite hold Hypatia.Kyaml to the YAML test suite; they
+# need a yaml-test-suite `data` checkout at YAML_TEST_SUITE, which the same job
+# pins. Run with: YAML_TEST_SUITE=... mix test --only yaml_test_suite.
+ExUnit.configure(
+  exclude: [
+    :verisim_data,
+    :kyq_differential,
+    :yaml_test_suite,
+    :baseline_helper,
+    :act_integration
+  ],
+  seed: 0
+)

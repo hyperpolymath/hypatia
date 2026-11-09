@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 = verification/ — Formal Proofs
 
-Idris2, Lean 4 and TLA+ proof sources for Hypatia's type-level guarantees.
+Idris2, Lean 4, TLA+ and Agda proof sources for Hypatia's type-level guarantees.
 
 == Contents
 
 * `proofs/idris2/` — Idris2 proof files (`.idr`) asserting invariants over the
   normative ABI in `src/Hypatia/ABI/`
 * `proofs/lean4/`, `proofs/tlaplus/` — Lean 4 and TLA+ proofs
+* `proofs/agda/` — Agda correspondence model for the Logtalk → Elixir
+  rule migration (`LogtalkMigration.agda`; Mathesis Grade 3 receipt in
+  `PROOF-STATUS.adoc`)
 * `PROOF-STATUS.adoc` — Current proof completion status
 
 == Building Proofs
@@ -19,6 +22,15 @@ independently, exactly as `.github/workflows/verify-proofs.yml` does it:
 ----
 cd verification/proofs/idris2
 for f in *.idr; do idris2 --check "$f"; done
+----
+
+The Agda artefact is checked under the estate strict profile (capital
+K). A missing `agda` binary is an open proof obligation, never a skip:
+
+[source,bash]
+----
+cd verification/proofs/agda
+agda --safe --without-K --cubical-compatible LogtalkMigration.agda
 ----
 
 The Idris2 *packages* in the repository are built separately:

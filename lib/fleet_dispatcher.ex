@@ -654,6 +654,28 @@ defmodule Hypatia.FleetDispatcher do
     execute_graphql(mutation, "robot-repo-automaton")
   end
 
+  # :queued records a volatile source-bound submission, never completed learning.
+  @doc false
+  def record_neural_outcome(finding, outcome, server \\ Hypatia.Neural.Coordinator) do
+    case Hypatia.Neural.Coordinator.record_outcome(finding, outcome, server) do
+      :ok -> :queued
+      {:error, reason} = error ->
+        Logger.warning("Neural outcome not queued: #{inspect(reason)}")
+        error
+      other ->
+        Logger.warning("Unexpected neural outcome queue reply: #{inspect(other)}")
+        {:error, :unexpected_neural_reply}
+    end
+  rescue
+    error ->
+      Logger.warning("Neural outcome queue failed: #{Exception.message(error)}")
+      {:error, :neural_unavailable}
+  catch
+    :exit, reason ->
+      Logger.warning("Neural coordinator unavailable for outcome recording: #{inspect(reason)}")
+      {:error, :neural_unavailable}
+  end
+
   defp ingest_fix_outcome(finding) do
     pattern = finding_field(finding, :pattern, "unknown")
     success = finding_field(finding, :success, false)
@@ -668,11 +690,7 @@ defmodule Hypatia.FleetDispatcher do
     # The coordinator updates MoE, LSM, and ESN networks with this data.
     outcome_str = if success, do: "success", else: "failure"
 
-    try do
-      Hypatia.Neural.Coordinator.record_outcome(finding, outcome_str)
-    catch
-      :exit, _ -> Logger.warning("Neural coordinator unavailable for outcome recording")
-    end
+    record_neural_outcome(finding, outcome_str)
 
     observation = %{
       type: pattern,
@@ -726,8 +744,13 @@ defmodule Hypatia.FleetDispatcher do
   #
   # `variables` (default nil) is the GraphQL variables map for a document
   # that declares them, as echidnabot's submitProofObligation does. When
-  # given, it is recorded in the manifest line next to `query` and sent in
-  # the request's JSON envelope.
+  # given, it is sent in the request's JSON envelope. The manifest line
+  # records it too, except for echidnabot: an obligation's claim and context
+  # can quote unpublished code and the manifest lives in a git-backed tree, so
+  # that line records only a digest of the variables (`variables_sha256`).
+  #
+  # Only the per-bot echidnabot path (HYPATIA_ECHIDNABOT_URL) carries
+  # echidnabot's bearer credential; the fleet coordinator never sees it.
   defp execute_graphql(query, bot_name, variables \\ nil) do
     # Dual dispatch: file-based (immediate) + HTTP (when fleet API available)
     dispatch_record =
@@ -737,7 +760,7 @@ defmodule Hypatia.FleetDispatcher do
         "dispatched_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
         "status" => "pending"
       }
-      |> maybe_put_variables(variables)
+      |> manifest_variables(bot_name, variables)
 
     # 1. Always write to dispatch manifest (dispatch-runner.sh reads this)
     manifest_result = write_manifest(dispatch_record)
@@ -757,9 +780,14 @@ defmodule Hypatia.FleetDispatcher do
 
     graphql_envelope? = description != :none and String.starts_with?(description, "via per-bot")
 
+    headers =
+      if graphql_envelope? and bot_name == "echidnabot",
+        do: Hypatia.EchidnabotObligation.auth_headers(),
+        else: []
+
     cond do
       target_url ->
-        case live_post(target_url, body, graphql_envelope?) do
+        case live_post(target_url, body, graphql_envelope?, headers) do
           :ok ->
             Logger.info("Live dispatch to #{bot_name} succeeded (#{description})")
             {:ok, :dispatched}
@@ -803,8 +831,8 @@ defmodule Hypatia.FleetDispatcher do
   # a 2xx whose JSON body carries a non-empty `errors` list is a failure, as
   # GraphQL-over-HTTP reports resolver errors with status 200. Exceptions and
   # exits (e.g. :inets not started) become `{:error, _}` instead of crashing.
-  defp live_post(url, body, graphql_envelope?) do
-    case http_post(url, body) do
+  defp live_post(url, body, graphql_envelope?, headers) do
+    case http_post(url, body, headers) do
       {:ok, _status, response_body} when graphql_envelope? ->
         graphql_errors(response_body)
 
@@ -879,15 +907,36 @@ defmodule Hypatia.FleetDispatcher do
   defp maybe_put_variables(map, nil), do: map
   defp maybe_put_variables(map, variables), do: Map.put(map, "variables", variables)
 
-  # POST a JSON body. Returns `{:ok, status, body}` for a 2xx response,
-  # `{:error, {:http_status, status}}` for any other status, or the :httpc error.
-  defp http_post(url, body) do
+  # The variables a manifest line records: a digest for echidnabot (see
+  # execute_graphql/3), the variables themselves for any other bot.
+  defp manifest_variables(record, _bot_name, nil), do: record
+
+  defp manifest_variables(record, "echidnabot", variables),
+    do:
+      Map.put(
+        record,
+        "variables_sha256",
+        Hypatia.EchidnabotObligation.variables_digest(variables)
+      )
+
+  defp manifest_variables(record, _bot_name, variables),
+    do: maybe_put_variables(record, variables)
+
+  # POST a JSON body with `headers` added. Returns `{:ok, status, body}` for a
+  # 2xx response, `{:error, {:http_status, status}}` for any other status, or
+  # the :httpc error.
+  #
+  # Redirects are not followed. :httpc would otherwise re-send the body (and,
+  # on some OTP releases, the authorization header) to whatever host the
+  # Location names, and report that host's 2xx as a delivered dispatch. A
+  # redirect is reported as `{:error, {:http_status, 3xx}}`.
+  defp http_post(url, body, headers) do
     # Attempt HTTP POST -- works if :httpc is available (OTP built-in)
     case :httpc.request(
            :post,
-           {String.to_charlist(url), [{~c"content-type", ~c"application/json"}],
+           {String.to_charlist(url), [{~c"content-type", ~c"application/json"} | headers],
             ~c"application/json", String.to_charlist(body)},
-           [{:timeout, 10_000}],
+           [{:timeout, 10_000}, {:autoredirect, false}],
            []
          ) do
       {:ok, {{_, status, _}, _, response_body}} when status in 200..299 ->

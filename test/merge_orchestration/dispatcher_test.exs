@@ -8,6 +8,11 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
     Map.merge(
       %{
         pr: %{repo: "hyperpolymath/panll", number: 412},
+        # Explicit synthetic model inputs; no signature-verification claim.
+        head_sha: String.duplicate("a", 40),
+        event_id: "test:policy:1",
+        observation_complete: true,
+        execution_cap: :arm_auto,
         change_class: :chore,
         change_level: :object,
         pool: :p2,
@@ -23,6 +28,61 @@ defmodule Hypatia.MergeOrchestration.DispatcherTest do
     assert m["tier"] == "eliminate"
     assert m["merge"]["method"] == "squash"
     assert m["repo"] == "hyperpolymath/panll"
+    assert m["event_id"] == "test:policy:1"
+    assert m["merge"]["head_sha"] == String.duplicate("a", 40)
+    assert m["merge"]["pool"] == "P2"
+  end
+
+  test "direct public decision and manifest APIs default a missing execution cap to review" do
+    context = ctx(%{}) |> Map.delete(:execution_cap)
+    {decision, entry, _lease} = Dispatcher.dispatch(context)
+    assert decision.safety == :review
+    assert entry["strategy"] == "review"
+
+    batch = Dispatcher.decide_all([context])
+    assert batch.stats == %{total: 1, auto_execute: 0, review: 1, report_only: 0}
+    assert Enum.all?(batch.entries, &(&1["strategy"] == "review"))
+
+    dir = Path.join(System.tmp_dir!(), "moj-default-cap-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    assert {:ok, path, stats} =
+             Dispatcher.write_manifest([context],
+               dir: dir,
+               encode: fn item -> "STRATEGY=" <> item["strategy"] end
+             )
+
+    assert stats == batch.stats
+    assert File.read!(path) == "STRATEGY=review\n"
+  end
+
+  test "newline-suffixed subjects and events cannot serialize an explicit model arm" do
+    for overrides <- [
+          %{head_sha: String.duplicate("a", 40) <> "\n"},
+          %{event_id: "test:policy:1\n"}
+        ] do
+      {decision, entry, _lease} = Dispatcher.dispatch(ctx(overrides))
+      assert decision.safety == :arm_auto
+      assert entry["strategy"] == "review"
+      assert entry["merge"]["safety"] == "review"
+      assert entry["merge"]["rationale"] =~ "unqualified-observation"
+    end
+  end
+
+  test "legacy model arm without an assessed revision/event is review-only at serialization" do
+    for field <- [:head_sha, :event_id, :observation_complete] do
+      {_decision, entry, _lease} = ctx(%{}) |> Map.delete(field) |> Dispatcher.dispatch()
+      assert entry["strategy"] == "review"
+      assert entry["merge"]["safety"] == "review"
+      assert entry["merge"]["rationale"] =~ "unqualified-observation"
+    end
+  end
+
+  test "canonical pool spellings match the independent farm gate" do
+    for {pool, name} <- [p0: "P0", p1: "P1", p2: "P2", p3: "P3", mass_squash: "mass_squash"] do
+      {_decision, entry, _lease} = Dispatcher.dispatch(ctx(%{pool: pool}))
+      assert entry["merge"]["pool"] == name
+    end
   end
 
   test "a veto -> report_only / control, and the veto rides along in the manifest" do

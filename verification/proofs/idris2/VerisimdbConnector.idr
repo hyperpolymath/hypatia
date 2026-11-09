@@ -6,9 +6,15 @@
 -- Formal verification of the VeriSimDB connector data integrity:
 --   1. Completeness:  all mandatory fields in the DB map to the ABI types
 --   2. Soundness:  ill-formed data is rejected (no "unknown" fallbacks in the core)
---   3. Preservation:  findings are not corrupted during transit to Logtalk facts
+--   3. Preservation:  cleaned findings keep repo/file/category/severity when
+--      projected to the canonical JSON finding record (schema/findings.ncl)
 --
--- Corresponds to: lib/verisimdb_connector.ex
+-- Corresponds to: lib/verisim_connector.ex (cleaned-finding projection model).
+-- Statement superseded 2026-11-01: the 2026-04-04 target was the retired
+-- Logtalk fact format. The equality proof below is unchanged; its target is
+-- now the JSON finding record. This model does not by itself prove runtime
+-- refinement of the Elixir connector (estate PROOF-POLICY); see
+-- docs/rules/logtalk-migration.adoc and verification/PROOF-STATUS.adoc.
 
 module VerisimdbConnector
 
@@ -142,29 +148,30 @@ cleanFindingSoundness (MkRawFinding (Just _) (Just _) (Just _) (Just sevS) (Just
       Right (Right (Right (Right p))) => absurd p
 
 ------------------------------------------------------------------------
--- Section 3: Transit to Logtalk Facts
+-- Section 3: Projection to the canonical finding record
 ------------------------------------------------------------------------
 
-||| Representation of a Logtalk fact.
+||| The repo/file/category/severity projection of a finding: the fields a
+||| canonical JSON finding (schema/findings.ncl) carries for every result.
+||| (Named LogtalkFact until the 2026-11-01 supersession in the header.)
 public export
-record LogtalkFact where
+record FindingFact where
   constructor MkFact
   repo : String
   file : String
   category : String
   severity : Severity
 
-||| Transform a clean Pattern into a Logtalk fact.
-||| This models the logic in VerisimdbConnector.to_logtalk_facts.
+||| Project a clean Pattern to its canonical finding record.
 public export
-toFact : Pattern -> LogtalkFact
+toFact : Pattern -> FindingFact
 toFact p =
   let r = case p.affectedRepos of
             [] => "unknown"
             (h :: _) => h
   in MkFact r p.file p.description p.severity
 
-||| Proof: data preservation — fields in the Fact match the Pattern exactly.
+||| Proof: data preservation — fields in the record match the Pattern exactly.
 public export
 factPreservesData : (p : Pattern) -> (r : String) -> p.affectedRepos = [r]
                  -> ( (toFact p).repo = r

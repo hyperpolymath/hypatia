@@ -13,11 +13,12 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
   Outputs:
     * `.audittraining/security-errors/<repo>.md` — per-repo audit markdown
     * `.audittraining/security-errors/SUMMARY.md` — org-wide summary
-    * `~/repos/echidna/rules/learned_security_rules.lgt` (if that dir
-      exists) or `.audittraining/echidna-rules.lgt` — Logtalk-format
-      rules for echidnabot. NB: Hypatia retired its own Logtalk engine;
-      this output is purely for consumption by echidnabot in a separate
-      repo.
+    * `~/repos/echidna/rules/learned_security_rules.json` (if that dir
+      exists) or `.audittraining/echidna-rules.json` — learned security
+      rules for echidnabot in the JSON format defined by
+      `schemas/learned-security-rules.schema.json`. This replaces the
+      retired Logtalk `security_rule/4` export; see
+      `docs/rules/logtalk-migration.adoc` for the exact field mapping.
   """
 
   use Mix.Task
@@ -28,6 +29,14 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
   @output_dir ".audittraining/security-errors"
   @echidna_rules_dir "~/repos/echidna/rules"
 
+  # Display grouping for the generated markdown (kebab-case headings).
+  # The canonical alert-type semantics live in
+  # `Hypatia.Rules.SecurityErrors.alert_categories/0` (exact match,
+  # snake-case atoms, transcribed from ECHIDNA's retired
+  # `security_learning.lgt`); this local table is kept only because its
+  # substring matching also buckets alert ids the canonical table has
+  # never seen (for example `unused-import`). The JSON learned-rules
+  # export below reads the canonical table via `validate_alert/1`.
   @alert_categories %{
     "workflow-security" =>
       ~w(TokenPermissionsID PinnedDependenciesID missing-workflow-permissions),
@@ -86,7 +95,7 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     Mix.shell().info("  Total alerts: #{length(all_alerts)}")
 
     generate_summary(all_alerts, length(repos))
-    generate_echidna_rules(all_alerts)
+    generate_learned_rules(all_alerts)
 
     Mix.shell().info("\n✅ Complete! Training data generated in #{@output_dir}")
   end
@@ -244,55 +253,71 @@ defmodule Mix.Tasks.Hypatia.BatchSecurityScan do
     Mix.shell().info("Generated: #{filepath}")
   end
 
-  defp generate_echidna_rules(all_alerts) do
+  # Learned-rules export. This replaces two retired, mutually
+  # incompatible Logtalk `security_rule/4` shapes — Hypatia's generated
+  # `security_rule(Type, Category, AutoFix, Count)` and ECHIDNA's
+  # exported `security_rule(Type, Category, Severity, AutoFix)` — with
+  # one named-field JSON object carrying the union of their data plus
+  # the fix/prevention lookups:
+  #
+  #   {"alert_type", "category", "severity", "auto_fixable",
+  #    "observations", "fix", "prevention_workflow"}
+  #
+  # Schema: schemas/learned-security-rules.schema.json. Semantics come
+  # from the canonical `Hypatia.Rules.SecurityErrors.validate_alert/1`,
+  # not from this task's display grouping.
+  defp generate_learned_rules(all_alerts) do
     by_rule =
       Enum.reduce(all_alerts, %{}, fn a, acc -> Map.update(acc, a.rule_id, 1, &(&1 + 1)) end)
 
     now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
 
-    header = """
-    %% SPDX-License-Identifier: MPL-2.0
-    %% Auto-generated security rules from #{length(all_alerts)} alerts across hyperpolymath org
-    %% Generated: #{now}
-
-    :- object(security_rules).
-
-    :- public([
-        check_workflow/2,
-        check_code/2,
-        check_dependencies/2
-    ]).
-
-    """
-
-    body =
+    rules =
       by_rule
-      |> Enum.sort_by(fn {_r, c} -> -c end)
-      |> Enum.map_join("\n", fn {rule_id, count} ->
-        category = categorize_alert(rule_id)
-        auto_fix = MapSet.member?(@auto_fixable, rule_id)
+      |> Enum.sort_by(fn {rule_id, count} -> {-count, rule_id} end)
+      |> Enum.map(fn {rule_id, count} ->
+        validation = Hypatia.Rules.SecurityErrors.validate_alert(rule_id)
 
-        """
-        %% Rule: #{rule_id} (seen #{count} times)
-        %% Category: #{category}
-        %% Auto-fixable: #{auto_fix}
-        security_rule('#{rule_id}', #{category}, #{auto_fix}, #{count}).
-        """
+        %{
+          "alert_type" => rule_id,
+          "category" => category_string(validation.category, rule_id),
+          "severity" => Atom.to_string(validation.severity),
+          "auto_fixable" => validation.auto_fixable,
+          "observations" => count,
+          "fix" => validation.fix,
+          "prevention_workflow" => validation.prevention_workflow
+        }
       end)
 
-    footer = "\n:- end_object.\n"
+    payload = %{
+      "schema" => "https://hyperpolymath.dev/schemas/hypatia/learned-security-rules",
+      "version" => "1.0.0",
+      "generated_at" => now,
+      "generator" => "mix hypatia.batch_security_scan",
+      "source_alert_count" => length(all_alerts),
+      "rules" => rules
+    }
 
-    rules = header <> body <> footer
     echidna_dir = Path.expand(@echidna_rules_dir)
 
     filepath =
       if File.dir?(echidna_dir) do
-        Path.join(echidna_dir, "learned_security_rules.lgt")
+        Path.join(echidna_dir, "learned_security_rules.json")
       else
-        Path.join(".audittraining", "echidna-rules.lgt")
+        Path.join(".audittraining", "echidna-rules.json")
       end
 
-    File.write!(filepath, rules)
-    Mix.shell().info("Generated echidna rules: #{filepath}")
+    File.write!(filepath, Jason.encode!(payload, pretty: true) <> "\n")
+    Mix.shell().info("Generated learned security rules: #{filepath}")
+  end
+
+  defp category_string(category, _rule_id) when is_atom(category) do
+    Atom.to_string(category)
+  end
+
+  defp category_string(nil, rule_id) do
+    rule_id
+    |> categorize_alert()
+    |> String.replace("-", "_")
   end
 end

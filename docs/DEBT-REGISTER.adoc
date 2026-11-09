@@ -175,6 +175,20 @@ set. Fixing CI-1 unblocks all four at once.
 Not necessarily wrong — but `+pages.yml+` is the only consumer of the
 Idris `+Ddraig.idr+` build, so that path is unexercised.
 
+==== CI-9 · HIGH · Estate callers still name the moved standards repository · OPEN 2026-11-04
+
+`+hyperpolymath/standards+` moved to `+metadatastician/standards+` on
+2026-10-25, and Actions does not follow the redirect for a reusable's
+`+uses:+`. Hypatia itself is fixed: Governance passed on `+main+` at
+`+6bd66a7+` (run 41932503298). The estate is not: code search found
+about 764 workflow files under `+hyperpolymath+` still calling the old
+owner. The CI-health sweep that would apply the allow-list stopgap
+cannot run, because `+HYPATIA_DISPATCH_PAT+` returns `+HTTP 401+`
+(e.g. run 41574487070). WF028 detects the calls (#965).
+
+Decision, evidence and owed actions:
+`+docs/operations/standards-move-estate-rollout.adoc+`.
+
 '''''
 
 === 2. Test debt
@@ -427,6 +441,21 @@ a Haskell registry that *does not exist*, Julia neural networks (*zero
 `+.jl+` files*), and ArangoDB/Dragonfly architecture 37 lines after the
 README says ArangoDB was ditched. trufflehog is still _executing_ in
 `+security-policy.yml+` despite #675 retiring it.
+
+*Logtalk subset — closed 2026-11-01.* The remaining Logtalk *semantics*
+(ECHIDNA `security_learning.lgt`; Hypatia's embedded audit-training
+rules AP001–AP015) are transcribed to Elixir with a clause-by-clause
+ledger (`docs/rules/logtalk-migration.adoc`); the Logtalk generator is
+replaced by schema'd JSON; active-tense Logtalk documentation
+(developer guide, EXPLAINME, FAQ/glossary, diagrams, quickstarts, man
+page, security/testing/API docs, integration config, INTENT) is
+corrected to the canonical `lib/rules/*.ex` locations or explicitly
+classified historical; and `scripts/check-no-active-logtalk.sh` guards
+against new active `.lgt` files/settings. The two vendored DEED
+fixtures still carrying the retired Logtalk report-format value are upstream-owned
+(standards) and tracked in the migration packet, so they remain until
+standards re-sync. D-2 stays open for its non-Logtalk parts (Haskell
+registry prose, Julia claims, ArangoDB/Dragonfly, trufflehog).
 
 ==== D-3 · HIGH · No rule catalogue exists · UNTRACKED
 

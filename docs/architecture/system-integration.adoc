@@ -205,8 +205,9 @@ the Elixir equivalent lives in `+lib/rules/code_safety.ex+`.
 ____
 *Note:* this document still contains residual `+.lgt+` filenames and
 "`learned-rules.lgt`"-style references from the earlier Logtalk-era
-architecture. A full rewrite is tracked separately; the rules engine is
-now 100% Elixir (`+lib/rules/*.ex+`).
+architecture; they are provenance only. The rules engine is 100% Elixir
+(`+lib/rules/*.ex+`); see `+docs/rules/logtalk-migration.adoc+` for the
+semantic transcription and JSON replacement contracts.
 ____
 
 === Current Rules Coverage

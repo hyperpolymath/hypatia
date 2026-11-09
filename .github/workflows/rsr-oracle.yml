@@ -4,7 +4,7 @@
 # rsr-oracle.yml — the RSR v2.0 conformance oracle as a reusable workflow.
 #
 # Consume it PINNED BY FULL COMMIT SHA, the same way consumers already call
-# hyperpolymath/standards/.github/workflows/hypatia-scan-reusable.yml:
+# metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml:
 #
 #     jobs:
 #       rsr-score:
@@ -62,10 +62,13 @@ on:
         required: false
         default: '.'
       standards-repository:
-        description: Repository carrying the RSR criteria SSOT.
+        description: >-
+          Repository carrying the RSR criteria SSOT. Either name of the estate
+          standards repository is accepted (it moved from hyperpolymath to
+          metadatastician on 2026-10-25); the checkout always uses the current one.
         type: string
         required: false
-        default: 'hyperpolymath/standards'
+        default: 'metadatastician/standards'
       standards-ref:
         description: >-
           Immutable ref (full SHA) of the standards tree. Empty means the
@@ -172,16 +175,25 @@ jobs:
       # so "point it at my own fork" is a way to award yourself any score you
       # like. The default (empty ref) is the standards default branch, which is
       # what the generated gate does today; anything else must be immutable.
+      #
+      # The canon moved from hyperpolymath/standards to metadatastician/standards
+      # on 2026-10-25. Both names name the same repository, so both are
+      # accepted (owner/repo is case-insensitive on GitHub). The checkout below
+      # always uses the current name from this step's output, never the input.
       - name: Validate the standards source
+        id: standards_source
         env:
           STANDARDS_REPOSITORY: ${{ inputs.standards-repository }}
           STANDARDS_REF: ${{ inputs.standards-ref }}
         run: |
           set -euo pipefail
-          if [ "$STANDARDS_REPOSITORY" != "hyperpolymath/standards" ]; then
-            echo "::error::refusing standards source '${STANDARDS_REPOSITORY}': the canon is hyperpolymath/standards"
-            exit 1
-          fi
+          case "$(printf '%s' "$STANDARDS_REPOSITORY" | tr '[:upper:]' '[:lower:]')" in
+            metadatastician/standards|hyperpolymath/standards)
+              echo "repository=metadatastician/standards" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::refusing standards source '${STANDARDS_REPOSITORY}': the canon is metadatastician/standards (formerly hyperpolymath/standards)"
+              exit 1 ;;
+          esac
           # Empty = the repository's default branch (documented default).
           # Otherwise: a full/abbreviated commit SHA or a release tag. A branch
           # name is refused — the same reason the oracle itself is pinned.
@@ -204,7 +216,7 @@ jobs:
       - name: Checkout standards (SSOT source)
         uses: actions/checkout@v7.0.1
         with:
-          repository: ${{ inputs.standards-repository }}
+          repository: ${{ steps.standards_source.outputs.repository }}
           ref: ${{ inputs.standards-ref }}
           path: _standards
           persist-credentials: false

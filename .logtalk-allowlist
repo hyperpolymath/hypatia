@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MPL-2.0
+# Exact-path exemptions for scripts/check-no-active-logtalk.sh.
+#
+# Rules for this file (following the .hypatia-ignore precedent):
+#   * exact repository-relative file paths only — no wildcards, no
+#     directory blankets, no globs of any kind;
+#   * every entry names a classification and a removal condition;
+#   * shrink-only: adding an entry is a policy change requiring the
+#     same review as adding a rule; removing one is always welcome;
+#   * the guard fails if an entry points at a missing file or a file
+#     that no longer contains any guarded form (stale exemption).
+#
+# Format: <path> | <classification> | <removal condition>
+#
+# Historical audit-training originals (2025-12-29). The blocks are the
+# source of record against which AuditPrevention was transcribed; they
+# are headed "historical … superseded" in place. Remove an entry only
+# together with deleting/rewriting that file's Logtalk block.
+.audittraining/security-errors/bunsenite.adoc | historical source of record (AP001-AP002) | remove with the block
+.audittraining/security-errors/czech-file-knife.adoc | historical source of record (AP003-AP004) | remove with the block
+.audittraining/security-errors/gitvisor.adoc | historical source of record (AP005-AP006) | remove with the block
+.audittraining/security-errors/polyglot-i18n.adoc | historical source of record (AP007-AP008) | remove with the block
+.audittraining/security-errors/proof-of-work.adoc | historical source of record (AP009-AP011) | remove with the block
+.audittraining/security-errors/supernorma.adoc | historical source of record (AP012-AP013) | remove with the block
+.audittraining/security-errors/ubicity.adoc | historical source of record (AP014-AP015) | remove with the block
+# The migration ledger and sibling-coordination packets must quote the
+# retired forms to specify their replacements.
+docs/rules/logtalk-migration.adoc | migration ledger of record | permanent while it is the ledger; remove only if superseded and rewritten without quoted forms
+docs/rules/migration/echidna-security-learning-issue.md | sibling coordination packet | remove when the ECHIDNA change lands and the packet is deleted
+docs/rules/migration/epistemic-types-neurosym-deed-issue.md | sibling coordination packet | remove when the epistemic-types change lands and the packet is deleted
+docs/rules/migration/standards-deed-mapping-issue.md | sibling coordination packet | remove when the standards change lands and the packet is deleted
+# Vendored standards conformance fixtures: byte-faithful copies whose
+# retired report-format value is upstream-owned drift (see the
+# standards packet above). Never edit these to diverge from standards.
+test/fixtures/deed_egress/rsr-template-repo_chora.deed | vendored upstream fixture | remove when the standards fixture re-sync no longer carries the retired value
+test/fixtures/deed_egress/template-main/rsr-template-repo_chora.deed | vendored upstream fixture | remove when the standards fixture re-sync no longer carries the retired value
+# The guard itself contains the pattern definitions it enforces.
+scripts/check-no-active-logtalk.sh | enforcement definition | remove only with the guard itself

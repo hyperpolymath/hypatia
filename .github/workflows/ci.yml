@@ -354,8 +354,51 @@ jobs:
             test/rules/actions_lock_test.exs \
             test/rules/actions_lock_closure_corpus_test.exs \
             test/rules/rsr_conformance_test.exs \
+            test/rules/audit_prevention_test.exs \
+            test/security_errors_test.exs \
             test/research_extensions_test.exs \
-            test/deed_test.exs
+            test/deed_test.exs \
+            test/kyaml_test.exs \
+            test/kyaml_conformance_test.exs
+
+      - name: Checkout the governance-pinned baseline helper
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: metadatastician/standards
+          ref: 7641c7fdb01420696b5420ab85d88f599f32f609
+          path: .standards
+          sparse-checkout: scripts/apply-baseline.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Review-gap prevention regressions (1009)
+        env:
+          HYPATIA_BASELINE_HELPER: .standards/scripts/apply-baseline.sh
+        run: mix test --no-start --include baseline_helper test/ci_changed_test.exs test/ci_changed_receipt_test.exs test/kyaml_spec_mutation_test.exs test/structured_format_test.exs
+
+      - name: Install checksum-pinned act for real execution regression
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hypatia-act"
+          cd "$RUNNER_TEMP/hypatia-act"
+          curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+            https://github.com/nektos/act/releases/download/v0.2.97/act_Linux_x86_64.tar.gz \
+            --output act.tar.gz
+          echo '67b4976a56f33ea7870b798912e738ec44eef38e7578ae7b532f2def1c73a5ad  act.tar.gz' | sha256sum --check --strict
+          tar -xzf act.tar.gz act
+          echo "$RUNNER_TEMP/hypatia-act" >> "$GITHUB_PATH"
+
+      - name: Real noninteractive changed-job execution (1009)
+        run: mix test --no-start test/ci_changed_act_test.exs --only act_integration
+
+      # ADR-001 retirement guard: Hypatia rules are pure Elixir
+      # (lib/rules/*.ex). This fails if an active .lgt/.logtalk source
+      # or a Logtalk output/loader setting re-enters the tree outside
+      # the exact-path, shrink-only .logtalk-allowlist. Proven by
+      # mutant (plant a .lgt + a report_format: logtalk setting -> red;
+      # revert -> green). See docs/rules/logtalk-migration.adoc.
+      - name: No active Logtalk (ADR-001 guard)
+        run: bash scripts/check-no-active-logtalk.sh
 
       # The consumers' invocation, verbatim: the oracle is called with an
       # EXPLICIT --ssot. The default SSOT resolution is deliberately not
@@ -366,6 +409,84 @@ jobs:
         run: |
           mix hypatia.rsr_score . \
             --ssot test/fixtures/a2ml/rsr-criteria-v2.a2ml
+
+  # ============================================================================
+  # KYAML conformance: Hypatia.Kyaml against kyq's reference parser
+  # ============================================================================
+  # Hypatia.Kyaml (lib/hypatia/kyaml.ex) ports metadatastician/kyq
+  # conformance/src/kyaml.js. This job parses kyq's own fixtures and every
+  # workflow in this repository with both, at a pinned kyq commit, and fails on
+  # any difference in documents (kind, location, value) or errors (code, line,
+  # column, path). Move KYQ_REF with test/fixtures/kyaml/KNOWN_DIVERGENCES.adoc.
+  # It also holds Hypatia.Kyaml to the YAML test suite at a pinned commit: no
+  # case the suite marks invalid may parse, and every valid case that parses
+  # must give the suite's in.json (refusing a valid case is the KYAML subset).
+  kyaml-conformance:
+    name: KYAML conformance (Hypatia.Kyaml against kyq)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      KYQ_REF: 4d1071df04d93e089500d58d0b6ba37bfcc75248
+      # yaml/yaml-test-suite, `data` branch ("Regenerated data from main 45db50ae").
+      YAML_TEST_SUITE_REF: 6ad3d2c62885d82fc349026c136ef560838fdf3d
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout kyq at the pinned commit
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: metadatastician/kyq
+          ref: ${{ env.KYQ_REF }}
+          path: .kyq
+          persist-credentials: false
+
+      - name: Checkout the YAML test suite at the pinned commit
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: yaml/yaml-test-suite
+          ref: ${{ env.YAML_TEST_SUITE_REF }}
+          path: .yts
+          persist-credentials: false
+
+      - name: Setup Elixir/OTP (identical to the dogfood gate)
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          elixir-version: '1.19.4'
+          otp-version: '28.3'
+
+      - name: Restore Mix cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            deps
+            _build
+          key: mix-dogfood-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-dogfood-${{ runner.os }}-
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      - name: Dump kyq's parse of its fixtures and this repository's workflows
+        run: |
+          bun test/fixtures/kyaml/kyq_dump.mjs \
+            .kyq/conformance/fixtures/kyaml/valid/*.yaml \
+            .kyq/conformance/fixtures/kyaml/invalid/*.yaml \
+            .github/workflows/*.yml > "$RUNNER_TEMP/kyq.jsonl"
+          echo "kyq dumped $(wc -l < "$RUNNER_TEMP/kyq.jsonl") files"
+
+      - name: Compare with Hypatia.Kyaml
+        run: KYQ_DUMP="$RUNNER_TEMP/kyq.jsonl" mix test --only kyq_differential
+
+      - name: Hold Hypatia.Kyaml to the YAML test suite
+        run: YAML_TEST_SUITE=.yts mix test --only yaml_test_suite
 
   # ============================================================================
   # Combined Status Check
@@ -383,10 +504,19 @@ jobs:
       - haskell-lint
       - k9iser-validate
       - elixir-compile
+      - kyaml-conformance
     if: always()
     steps:
       - name: Check all jobs status
+        env:
+          # The KYAML gate counts only when it ran to success: a cancelled or
+          # skipped run proved nothing, so it fails the rollup too.
+          KYAML_CONFORMANCE: ${{ needs.kyaml-conformance.result }}
         run: |
+          if [[ "$KYAML_CONFORMANCE" != "success" ]]; then
+            echo "::error::kyaml-conformance did not succeed (result: $KYAML_CONFORMANCE)"
+            exit 1
+          fi
           if [[ "${{ needs.rust-check.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-fmt.result }}" == "failure" ]] || \
              [[ "${{ needs.rust-test.result }}" == "failure" ]] || \

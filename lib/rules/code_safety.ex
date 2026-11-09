@@ -316,7 +316,10 @@ defmodule Hypatia.Rules.CodeSafety do
     %{
       id: :agda_postulate,
       severity: :critical,
-      pattern: ~r/\bpostulate\b/,
+      # Agda names can contain hyphens, apostrophes and Unicode symbols.
+      # A declaration keyword is a complete token, not a regex word inside
+      # e.g. `no-unconditional-postulate-promotion`.
+      pattern: ~r/(?<!\S)postulate(?!\S)/u,
       cwe: "CWE-704",
       description: "Agda postulate assumes without proof -- potential soundness hole"
     },
@@ -491,7 +494,7 @@ defmodule Hypatia.Rules.CodeSafety do
       pattern: ~r/String\.to_atom\(/,
       cwe: "CWE-400",
       description:
-        "String.to_existing_atom with user input exhausts atom table -- use to_existing_atom"
+        "String.to_atom with user input exhausts atom table -- use to_existing_atom"
     },
     %{
       id: :elixir_wildcard_plug_cors,
@@ -829,7 +832,11 @@ defmodule Hypatia.Rules.CodeSafety do
     patterns_for_language(language)
     |> Enum.flat_map(fn rule ->
       subject =
-        if Map.get(rule, :context) == :runtime_path, do: runtime_only, else: scannable
+        cond do
+          rule.id == :agda_postulate -> agda_declaration_subject(content)
+          Map.get(rule, :context) == :runtime_path -> runtime_only
+          true -> scannable
+        end
 
       # Some patterns need line context to distinguish executable code from
       # quoted guidance or comments. Apply the same central suppression oracle
@@ -1147,6 +1154,65 @@ defmodule Hypatia.Rules.CodeSafety do
   end
 
   defp strip_inline_test_blocks(content, _other), do: content
+
+  # Agda's declaration keyword needs lexical boundaries: comments separate
+  # tokens, nest, and can follow code on the same line. String literals can
+  # contain comment markers and the word "postulate" without declaring one.
+  # Mask only non-code text for this rule, preserving every newline for
+  # source locations and inline-suppression checks. Other rules keep their
+  # existing subjects. Reference: Agda manual, language/lexical-structure.html.
+  defp agda_declaration_subject(content) do
+    content
+    |> String.replace_prefix("\uFEFF", "   ")
+    |> mask_agda_noncode(:code, [])
+    |> IO.iodata_to_binary()
+  end
+
+  defp mask_agda_noncode(<<>>, _state, acc), do: Enum.reverse(acc)
+
+  defp mask_agda_noncode("--" <> rest, :code, acc),
+    do: mask_agda_noncode(rest, :line_comment, ["  " | acc])
+
+  defp mask_agda_noncode("{-" <> rest, :code, acc),
+    do: mask_agda_noncode(rest, {:block_comment, 1}, ["  " | acc])
+
+  # A double quote used as a character must not open a string and hide
+  # declarations after it. Other character literals contain no bare quote.
+  defp mask_agda_noncode(<<39, 34, 39, rest::binary>>, :code, acc),
+    do: mask_agda_noncode(rest, :code, ["   " | acc])
+
+  defp mask_agda_noncode(<<39, 92, 34, 39, rest::binary>>, :code, acc),
+    do: mask_agda_noncode(rest, :code, ["    " | acc])
+
+  defp mask_agda_noncode(<<34, rest::binary>>, :code, acc),
+    do: mask_agda_noncode(rest, :string, [" " | acc])
+
+  defp mask_agda_noncode("\n" <> rest, :line_comment, acc),
+    do: mask_agda_noncode(rest, :code, ["\n" | acc])
+
+  defp mask_agda_noncode("{-" <> rest, {:block_comment, depth}, acc),
+    do: mask_agda_noncode(rest, {:block_comment, depth + 1}, ["  " | acc])
+
+  defp mask_agda_noncode("-}" <> rest, {:block_comment, 1}, acc),
+    do: mask_agda_noncode(rest, :code, ["  " | acc])
+
+  defp mask_agda_noncode("-}" <> rest, {:block_comment, depth}, acc),
+    do: mask_agda_noncode(rest, {:block_comment, depth - 1}, ["  " | acc])
+
+  defp mask_agda_noncode(<<92, byte, rest::binary>>, :string, acc),
+    do: mask_agda_noncode(rest, :string, [[" ", agda_mask_byte(byte)] | acc])
+
+  defp mask_agda_noncode(<<34, rest::binary>>, :string, acc),
+    do: mask_agda_noncode(rest, :code, [" " | acc])
+
+  defp mask_agda_noncode(<<byte, rest::binary>>, :code, acc),
+    do: mask_agda_noncode(rest, :code, [<<byte>> | acc])
+
+  defp mask_agda_noncode(<<byte, rest::binary>>, state, acc),
+    do: mask_agda_noncode(rest, state, [agda_mask_byte(byte) | acc])
+
+  defp agda_mask_byte(byte) when byte in [10, 13], do: <<byte>>
+  defp agda_mask_byte(_byte), do: " "
 
   defp strip_after_cfg_test(content) do
     case :binary.match(content, "#[cfg(test)]") do

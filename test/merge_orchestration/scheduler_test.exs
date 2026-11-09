@@ -17,45 +17,14 @@ defmodule Hypatia.MergeOrchestration.SchedulerTest do
   defp dec, do: fn b -> b |> Base.decode64!() |> :erlang.binary_to_term() end
 
   # a store with one council-approved bump (sole approver "ci")
-  defp seed_store do
-    store = Path.join(System.tmp_dir!(), "sched-#{System.unique_integer([:positive])}")
-
-    for sub <- ~w(observations pools attestations leases),
-        do: File.mkdir_p!(Path.join(store, sub))
-
-    e = enc()
-
-    File.write!(
-      Path.join([store, "observations", "hyperpolymath__a__1.json"]),
-      e.(%{
-        "repo" => "hyperpolymath/a",
-        "number" => 1,
-        "branch" => "dependabot/cargo/x",
-        "files" => ["Cargo.lock"]
-      })
-    )
-
-    File.write!(Path.join([store, "pools", "hyperpolymath__a.json"]), e.(%{"pool" => "P2"}))
-
-    File.write!(
-      Path.join([store, "attestations", "ci.json"]),
-      e.(%{
-        "subject" => %{"repo" => "hyperpolymath/a", "number" => 1},
-        "bot" => "ci",
-        "verdict" => "approve",
-        "confidence" => 0.99
-      })
-    )
-
-    store
-  end
+  defp seed_store, do: Hypatia.MergeOrchestration.TestObservationStore.seed(encode: enc())
 
   defp codec, do: [now: @now, encode: enc(), decode: dec()]
 
-  test "a cycle with no trust source runs a uniform council and arms the bump" do
+  test "a cycle with no trust source remains review-only without authenticated approvals" do
     store = seed_store()
     r = Scheduler.cycle([store: store, got: nil] ++ codec())
-    assert r.stats.armed == 1
+    assert r.stats.armed == 0
     File.rm_rf!(store)
   end
 
@@ -77,14 +46,19 @@ defmodule Hypatia.MergeOrchestration.SchedulerTest do
 
     r =
       Scheduler.cycle(
-        [store: store, got: nil, actuation: :baton, submit: fn spec -> {:ok, spec.check_id} end] ++
+        [
+          store: store,
+          got: nil,
+          actuation: :baton,
+          submit: fn _ -> flunk("unqualified Baton executor invoked") end
+        ] ++
           codec()
       )
 
-    assert r.stats.armed == 1
+    assert r.stats.armed == 0
     refute Map.has_key?(r, :manifest_path)
-    assert [%{spec: spec, result: {:ok, _}}] = r.batons
-    assert spec.required_cap == "secret_access"
+    assert r.batons == []
+    assert r.stats.review == 1
     File.rm_rf!(store)
   end
 
@@ -94,7 +68,7 @@ defmodule Hypatia.MergeOrchestration.SchedulerTest do
 
     r = Scheduler.cycle([got: nil] ++ codec())
     assert r.manifest_path == Path.join(store, "merge-decisions.jsonl")
-    assert r.stats.armed == 1
+    assert r.stats.armed == 0
 
     System.delete_env("MERGE_ORCH_STORE")
     File.rm_rf!(store)

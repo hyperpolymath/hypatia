@@ -14,8 +14,9 @@ defmodule Hypatia.Rules.RsrConformance do
   oracle. This module implements the **scoring engine** faithfully:
 
     * applicable set = universal criteria ∪ criteria whose `gate` capability
-      the repo declares in `machine-readable/rsr-profile.a2ml`
-      (legacy `.machine_readable/` also accepted);
+      the repo declares in its deed's `(rsr-profile …)` clause, or in the
+      legacy `machine-readable/rsr-profile.a2ml` (`.machine_readable/` also
+      accepted); the deed wins when both exist;
       non-applicable criteria are `:na` and excluded from the denominator;
     * verdicts `:pass` / `:partial` (half weight) / `:fail`;
     * score = passed weight / applicable **verified** weight;
@@ -178,12 +179,48 @@ defmodule Hypatia.Rules.RsrConformance do
 
   # --- applicability ---------------------------------------------------------
 
-  # Reads `<machine tree>/rsr-profile.a2ml` (record dialect). Accepts the
-  # capability list under `[rsr-profile]` or `[profile]`, key `capabilities`.
-  # Returns `:none` when the file is absent/unreadable — only universal
-  # criteria are then applicable, and criterion 3.2.2 (profile presence,
-  # itself universal) fails, which is exactly the intended signal.
+  # The profile is read from the repo deed's top-level `(rsr-profile …)` clause
+  # when there is one, else from `<machine tree>/rsr-profile.a2ml` (record
+  # dialect, capability list under `[rsr-profile]` or `[profile]`). The deed
+  # wins over a legacy .a2ml beside it, as in metadatastician/standards
+  # scripts/check-rsr-profile.sh. Either way only the `capabilities` list is
+  # read. Returns `:none` when neither carrier declares one, or the deed
+  # carries the clause more than once (it then declares nothing): only
+  # universal criteria are then applicable, and criterion 3.2.2 (profile
+  # presence, itself universal) fails, which is exactly the intended signal.
   defp declared_capabilities(repo_path) do
+    case deed_profile_capabilities(repo_path) do
+      :absent -> a2ml_capabilities(repo_path)
+      caps -> caps
+    end
+  end
+
+  # `:absent` when the repo deed carries no top-level (rsr-profile …) clause
+  # (or there is no parseable deed), so the .a2ml is consulted. One clause:
+  # its `:capabilities` list, strings and symbols alike. Two or more, or a
+  # clause without the list: `:none`.
+  defp deed_profile_capabilities(repo_path) do
+    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo_path),
+         {:ok, text} <- File.read(path),
+         {:ok, {"repo-deed", items}} <- Hypatia.Deed.parse(text) do
+      case for({:clause, "rsr-profile", body} <- items, do: body) do
+        [] -> :absent
+        [body] -> clause_capabilities(body)
+        _ -> :none
+      end
+    else
+      _ -> :absent
+    end
+  end
+
+  defp clause_capabilities(body) do
+    case for({:field, "capabilities", {:list, vs}} <- body, do: vs) do
+      [vs | _] -> for {kind, s} <- vs, kind in [:string, :symbol], do: s
+      [] -> :none
+    end
+  end
+
+  defp a2ml_capabilities(repo_path) do
     path = Hypatia.Paths.machine_tree_join(repo_path, ["rsr-profile.a2ml"])
 
     with {:ok, text} <- File.read(path),
@@ -357,13 +394,13 @@ defmodule Hypatia.Rules.RsrConformance do
       "3.1.2" => descriptile("STATE"),
       "3.1.3" => descriptile("META"),
       "3.1.4" => descriptile("ECOSYSTEM"),
-      "3.1.5" => descriptile("AGENTIC"),
-      "3.1.6" => descriptile("NEUROSYM"),
-      "3.1.7" => descriptile("PLAYBOOK"),
+      "3.1.5" => descriptile("AGENTIC", "agentic"),
+      "3.1.6" => descriptile("NEUROSYM", "neurosym"),
+      "3.1.7" => descriptile("PLAYBOOK", "playbook"),
       "3.1.8" => any_of_mr(["descriptiles/ANCHOR.a2ml", "descriptiles/anchors/ANCHOR.a2ml"]),
-      "3.1.9" => descriptile("CLADE"),
+      "3.1.9" => descriptile("CLADE", "clade"),
       "3.2.1" => &descriptiles_parse/1,
-      "3.2.2" => present_mr("rsr-profile.a2ml"),
+      "3.2.2" => profile_present(),
       "6.1.1" => &workflows_present/1,
       "6.1.2" => present(".github/workflows/hypatia-scan.yml"),
       "6.1.3" => present(".github/workflows/governance.yml"),
@@ -424,6 +461,55 @@ defmodule Hypatia.Rules.RsrConformance do
 
   defp descriptile(name),
     do: present_mr(Path.join(["descriptiles", name <> ".a2ml"]))
+
+  # A descriptile whose family has a ruled mapping spec into the repo deed
+  # (metadatastician/standards 1-formats/deed/mappings/, ruled 2026-10-27:
+  # AGENTIC / NEUROSYM / PLAYBOOK -> (agentic) (neurosym) (playbook), and
+  # CLADE -> (clade), the estate clade the chora deed carries) is satisfied
+  # by either carrier: the legacy .a2ml, or that clause at the top level of the
+  # repo's one `<repo>_chora.deed`. A2ML is retired, so the deed is the
+  # successor and the .a2ml the transition form; 2.3.1 accepts its two
+  # carriers the same way. The deed must parse (Hypatia.Deed is the reader
+  # that agrees with the standards gate): a deed that does not parse declares
+  # nothing, and a clause nested inside another clause is not the descriptile.
+  defp descriptile(name, clause) do
+    a2ml = descriptile(name)
+
+    fn repo ->
+      case a2ml.(repo) do
+        :pass -> :pass
+        _ -> if deed_clause?(repo, clause), do: :pass, else: :fail
+      end
+    end
+  end
+
+  # 3.2.2: the repo declares a profile. Either carrier counts, with the same
+  # precedence and validation as the capability reader above: when the repo
+  # deed carries a top-level (rsr-profile …) clause it decides, and it passes
+  # only if the reader accepts it (exactly one clause, with a `:capabilities`
+  # list). A duplicated or list-less clause fails, as it declares nothing.
+  # With no such clause, the legacy <machine tree>/rsr-profile.a2ml counts.
+  defp profile_present do
+    a2ml = present_mr("rsr-profile.a2ml")
+
+    fn repo ->
+      case deed_profile_capabilities(repo) do
+        :absent -> a2ml.(repo)
+        :none -> :fail
+        _caps -> :pass
+      end
+    end
+  end
+
+  defp deed_clause?(repo, clause) do
+    with {:ok, path} <- Hypatia.Deed.repo_deed_path(repo),
+         {:ok, text} <- File.read(path),
+         {:ok, {"repo-deed", items}} <- Hypatia.Deed.parse(text) do
+      Enum.any?(items, &match?({:clause, ^clause, _}, &1))
+    else
+      _ -> false
+    end
+  end
 
   # 3.2.1: every RECORD-DIALECT .a2ml under the substrate parses. Markup-dialect
   # files (the 0-AI-MANIFEST manifest and friends, which open with `@directive`

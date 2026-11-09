@@ -10,7 +10,7 @@ toc::[]
 
 == Overview
 
-This document provides a comprehensive security audit checklist for the hypatia neurosymbolic CI/CD intelligence platform. It covers all layers of the system: Rust adapters, Haskell verification registry, Logtalk rule engine, data stores (ArangoDB, Dragonfly), container deployments, and API surfaces.
+This document provides a comprehensive security audit checklist for the hypatia neurosymbolic CI/CD intelligence platform. It covers all layers of the system: Rust adapters, Haskell verification registry, Elixir rule engine (`lib/rules/*.ex`), data stores (ArangoDB, Dragonfly), container deployments, and API surfaces.
 
 === Audit Scope
 
@@ -20,7 +20,7 @@ This document provides a comprehensive security audit checklist for the hypatia 
 
 | Forge Adapters | Rust | High
 | Verification Registry | Haskell | Medium
-| Rule Engine | Logtalk/SWI-Prolog | Medium
+| Rule Engine | Elixir/BEAM (`lib/rules/*.ex`) | Medium
 | Graph Database | ArangoDB | High
 | Cache Layer | Dragonfly (Redis-compatible) | Medium
 | Container Runtime | Docker/Kubernetes | High
@@ -81,7 +81,7 @@ This document provides a comprehensive security audit checklist for the hypatia 
 === Ruleset Validation
 
 [%interactive]
-* [ ] *INPUT-RULE-001*: Logtalk/Prolog rules are parsed in a sandboxed environment
+* [ ] *INPUT-RULE-001*: Rules are compiled Elixir modules or validated rule *data* (`RuleLoader`); no untrusted rule code is dynamically evaluated
 * [ ] *INPUT-RULE-002*: Haskell rulesets pass type checking before acceptance
 * [ ] *INPUT-RULE-003*: Rules cannot execute arbitrary shell commands
 * [ ] *INPUT-RULE-004*: Rules cannot access network resources directly

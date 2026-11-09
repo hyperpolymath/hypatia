@@ -1,6 +1,6 @@
 == Hypatia a2ml & K9 Integration
 
-*Status:* ✅ IMPLEMENTED *Date:* 2026-02-06 *Version:* 1.0.0
+*Status:* HISTORICAL DESIGN RECORD — the Logtalk rule-generation workflow below is superseded (2026-11-01): production rules are Elixir modules in `+lib/rules/*.ex+` and learned-rule exports are JSON (`+schemas/learned-security-rules.schema.json+`). See `+docs/rules/logtalk-migration.adoc+`. *Original date:* 2026-02-06 *Version:* 1.0.0
 
 === Overview
 
@@ -54,11 +54,8 @@ hypatia/
 ├── fleet-config.k9.ncl        # K9 fleet configuration
 ├── read-k9-config.sh          # K9 → env var exporter
 ├── hypatia-cli.sh             # Scanner (reads env vars)
-├── approved-rules/            # Production Logtalk rules
-│   ├── technical_debt.lgt
-│   ├── unsafe_without_doc.lgt
-│   ├── eval_usage.lgt
-│   └── DEPLOYMENT-MANIFEST-*.md
+├── lib/rules/                 # Production Elixir rules (canonical)
+│   └── *.ex                   # e.g. code_safety.ex, security_errors.ex
 └── A2ML-K9-INTEGRATION.md     # This file
 ....
 
@@ -156,11 +153,14 @@ The `+rules.a2ml+` file provides structured instructions for AI
 assistants:
 
 *When adding new patterns:* 1. Add detection logic to `+hypatia-cli.sh+`
-2. Deploy to fleet 3. Monitor observations 4. Generate Logtalk rule when
-threshold crossed (5+ obs) 5. Validate with ECHIDNA (90%+ score
-required) 6. Deploy to `+approved-rules/+`
+2. Deploy to fleet 3. Monitor observations 4. When the threshold is
+crossed (5+ obs), propose an Elixir rule under `+lib/rules/*.ex+` via
+the normal PR flow (observations are evidence, not approval) 5.
+Validate with tests — and ECHIDNA where the pattern is in its scope 6.
+Ship with the Hypatia release; there is no `+approved-rules/+` drop
+and no Logtalk artefact
 
-*When modifying rules:* 1. Update both Logtalk rule and bash pattern 2.
+*When modifying rules:* 1. Update both the Elixir rule and any mirrored bash pattern 2.
 Re-validate with ECHIDNA 3. Document changes in deployment manifest
 
 '''''
@@ -367,9 +367,10 @@ source <(./read-k9-config.sh)
 ./hypatia-cli.sh scan /path/to/repo
 ----
 
-*4. When threshold crossed (5 obs), generate rule:* - Create Logtalk
-rule in `+rule-proposals/+` - Validate with ECHIDNA - Deploy to
-`+approved-rules/+`
+*4. When threshold crossed (5 obs), propose rule:* - Open a PR adding
+the Elixir rule under `+lib/rules/*.ex+` (`+Hypatia.Rules.Learning+`
+tracks the evidence/confidence) - Validate with ExUnit (ECHIDNA where
+in scope) - Deploy with the Hypatia release
 
 ==== Disabling a Pattern Temporarily
 
@@ -499,9 +500,9 @@ cat /tmp/echidna-validation-report-*.md
 [arabic]
 . *Dynamic Pattern Loading*
 * Load patterns from K9 config without editing bash script
-* Generate ripgrep patterns from Logtalk rules
+* Generate ripgrep patterns from Elixir rule metadata
 . *Auto-fix Script Generation*
-* Generate fix scripts from Logtalk fix suggestions
+* Generate fix scripts from `+SecurityErrors+` fix suggestions
 * Template-based script creation
 . *Fleet-wide Metrics Dashboard*
 * Real-time observation counts per pattern

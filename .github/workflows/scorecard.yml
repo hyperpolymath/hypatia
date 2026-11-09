@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   scorecard:
-    uses: metadatastician/standards/.github/workflows/scorecard-reusable.yml@333b06a01db1874ffedb2de1bfabb195640927c7
+    uses: metadatastician/standards/.github/workflows/scorecard-reusable.yml@7641c7fdb01420696b5420ab85d88f599f32f609
     permissions:
       actions: read
       contents: read

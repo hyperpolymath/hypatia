@@ -177,12 +177,13 @@ defmodule Hypatia.Watcher.AnomalyDetector do
       _ ->
         try do
           report = Hypatia.Neural.Coordinator.health_report()
+          report = if Hypatia.Neural.SourceStore.ready_report?(report), do: report, else: %{}
           drift = get_in(report, [:esn, :drift])
           trained? = get_in(report, [:esn, :trained])
           accuracy = get_in(report, [:esn, :accuracy])
 
           cond do
-            not trained? ->
+            trained? != true ->
               state
 
             drift in [:rising_drift, :falling_drift] ->
@@ -285,6 +286,16 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
   # ─── ESN signal (optional, soft) ───────────────────────────────────────
 
+  @doc false
+  def source_esn_signal(report) do
+    if Hypatia.Neural.SourceStore.ready_report?(report) and get_in(report, [:esn, :trained]) == true do
+      drift = get_in(report, [:esn, :drift]) || :unavailable
+      {drift, drift in [:rising_drift, :falling_drift]}
+    else
+      {:unavailable, false}
+    end
+  end
+
   defp esn_signal do
     case Process.whereis(Hypatia.Neural.Coordinator) do
       nil ->
@@ -292,9 +303,7 @@ defmodule Hypatia.Watcher.AnomalyDetector do
 
       _ ->
         try do
-          report = Hypatia.Neural.Coordinator.health_report()
-          state = get_in(report, [:esn, :drift]) || :unavailable
-          {state, state in [:rising_drift, :falling_drift]}
+          Hypatia.Neural.Coordinator.health_report() |> source_esn_signal()
         rescue
           _ -> {:unavailable, false}
         catch
