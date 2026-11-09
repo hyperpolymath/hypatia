@@ -270,6 +270,14 @@ jobs:
             done
           done
 
+      # The front-door documents fail on drift rather than warn: the counts the
+      # README quotes are measured from the tree, and every local link in the
+      # README, EXPLAINME and the docs index must resolve.
+      - name: README counts and front-door links match the tree
+        run: |
+          bash tests/readme-claims-test.sh
+          bash scripts/check-readme-claims.sh
+
   # ============================================================================
   # Deploy to GitHub Pages
   # ============================================================================

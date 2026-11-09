@@ -16,9 +16,11 @@ state and commitments. Companion detail:
 
 == We affirm (current normative state — MUST)
 
-* *Guix-only builds.* Nix is retired estate-wide (owner ruling 2026-06-05);
-  `guix.scm` / guix channels are the sole reproducible-build manifests. No
-  `flake.nix` remains; all references reconciled.
+* *Guix-only builds.* Nix is retired estate-wide (owner ruling 2026-06-05).
+  No `flake.nix` remains; all references reconciled. Guix is the only
+  reproducible-build manifest the estate accepts, but this repository does
+  not track a `guix.scm` yet; `mise.toml` and `deploy/Containerfile` stand in
+  until it does.
 * *The formal-proof corpus checks in CI* across Idris 2 (v0.7.0),
   Agda (2.8.0.2, one artefact) and TLA+ (bounded TLC
   model checking, which is `tested-only`, not a proof). What each artefact

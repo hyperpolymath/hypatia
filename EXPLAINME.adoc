@@ -17,28 +17,29 @@ or `mix hypatia.watch`.
 
 [quote, README.adoc]
 ____
-*Symbolic reasoning* — 35 Elixir rule modules producing fast, deterministic findings
+*Symbolic reasoning* — 42 Elixir rule modules producing fast, deterministic findings
 ____
 
 [quote, README.adoc]
 ____
-The system learns complex patterns through neural analysis, then *distils* them into simple,
-fast declarative rules that can be pre-emptively injected into new repositories, applied as
-cures to existing ones, and executed without ML inference overhead.
+That loop is the design, not yet the running code. Today the rules are hand-written, and the
+neural layer can only lower a recipe's confidence or demote a finding.
 ____
 
 How this is implemented::
 Pure-Elixir modules in link:lib/rules/[] behind `Hypatia.Rules`
 (link:lib/rules/rules.ex[]). The escript runs them with no OTP tree and no
-neural process (`app: nil` in link:mix.exs[]).
+neural process (`app: nil` in link:mix.exs[]). The count is
+`find lib/rules -maxdepth 1 -name '*.ex' | wc -l`. link:scripts/check-readme-claims.sh[]
+measures it, with the README's other structural counts, in the Validate Documentation
+job, and fails on drift.
 
 Caveat::
-`find lib/rules -maxdepth 1 -name '*.ex' | wc -l` gives 42, not 35; the
-generated link:docs/rules/catalogue.adoc[] says 41 and lacks
+The generated link:docs/rules/catalogue.adoc[] says 41 and lacks
 `structured_format`. No code path distils learned patterns into rules:
 `learn_from_fix/3` and `promote_patterns/0` in link:lib/rules/learning.ex[]
 have no outside callers, and `git grep RecipeGenerator` finds no caller.
-The rules are hand-written.
+The README states this beside the design sentence.
 
 === Neural learning
 
@@ -140,7 +141,7 @@ an action is capped at review, not report-only (line 67).
 
 [quote, README.adoc]
 ____
-133 Elixir modules — pipeline, rules, VCL, neural, safety, web, merge orchestration
+154 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
 ____
 
 How this is implemented::
@@ -149,8 +150,8 @@ Each README row, measured:
 [cols="1,2", options="header"]
 |===
 | README row | Tree
-| `lib/`: 133 | 154 `.ex` files (`+ls lib/**/*.ex \| wc -l+`), 180 `defmodule`
-| `lib/rules/`: 35 | 42, as above
+| `lib/`: 154 | 154 `.ex` files (`+find lib -name '*.ex' \| wc -l+`), 180 `defmodule`; gated
+| `lib/rules/`: 42 | 42, as above; gated
 | `lib/neural/`, `lib/vcl/` | Correct
 | `lib/merge_orchestration/`: 12 | Correct (one file in `kin_gate/`)
 | `lib/hypatia/web/` | SARIF is link:lib/hypatia/sarif.ex[], outside `web/`
@@ -158,43 +159,50 @@ Each README row, measured:
 | `ffi/zig/`: 18, 16 | Correct; pinned by link:.github/workflows/zig.yml[]
 | Rust workspace | 7 members in link:Cargo.toml[]
 |===
++
+"Gated" means link:scripts/check-readme-claims.sh[] measures the row in CI and
+fails when the README disagrees. The same check fails on a dead local link in
+the README, this file or link:docs/README.adoc[].
 
 Caveat::
-The README links `docs/architecture/topology.md`; the file is
-link:docs/architecture/topology.adoc[].
+The other rows are measured by hand, as of the date above.
 
 === Installation, usage and the operational surface
 
 [quote, README.adoc]
 ____
-`just --list` shows all 39 recipes; `CONTRIBUTING.md` treats `just` as the canonical entry point.
+`just --list` shows all 45 recipes; link:.github/CONTRIBUTING.md[`CONTRIBUTING.md`] treats `just` as the canonical entry point.
 ____
 
 [quote, README.adoc]
 ____
 Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
-`/metrics` endpoint and a bearer-authenticated `/api/*` on port 9090.
+`/metrics` endpoint and an `/api/*` on port 9090. With
+`HYPATIA_API_BEARER_TOKEN` set, every `/api/*` request needs that bearer token. Without it,
+only loopback clients are answered unless `HYPATIA_API_ALLOW_NONLOCAL=true`.
 ____
 
 How this is implemented::
 link:Justfile[] (with `contractile.just`), link:lib/hypatia/cli.ex[],
 link:lib/mix/tasks/[]; link:mise.toml[] pins Erlang 27.3.4.4 and Elixir
 1.17.3. link:lib/application.ex[] supervises 24 children (two more when
-configured); link:lib/hypatia/web/router.ex[] serves `/`, `/metrics`, `/api`.
+configured); link:lib/hypatia/web/router.ex[] serves `/`, `/metrics`, `/api`,
+and `protect/2` in link:lib/hypatia/web/api_router.ex[] applies the bearer
+and loopback policy. The recipe count is `just --summary | wc -w`; the six
+CLI commands and the sixteen Mix tasks the README describes are gated as well.
 
 Caveat::
-The Justfiles hold 43 recipes. `just build-all` builds Rust and Elixir only.
-The CLI has six commands, not five (`secret-alerts`); there are 16 Mix
-tasks, not 15. No `guix.scm` is tracked. `CONTRIBUTING.md` is in `.github/`.
-`/api/*` needs a bearer token only when `HYPATIA_API_BEARER_TOKEN` is set;
-otherwise it is loopback-only.
+`just build-all` builds the Rust workspace and Elixir; the README lists
+`just build-ffi` and `just compile-abi` beside it for the Zig FFI and the
+Idris2 ABI. No `guix.scm` is tracked: the README and AFFIRMATION say so, and
+name `mise.toml` and `deploy/Containerfile` as the stand-ins.
 
 === Project status and licence
 
 [quote, README.adoc]
 ____
-242 tests that are excluded from every run, the safety systems that are built but not yet invoked
-by any dispatch path, and the CI blockage currently stopping the Rust lane.
+That includes the `:verisim_data` tests excluded from every run and the safety systems that are
+built but not yet invoked by any dispatch path.
 ____
 
 [quote, README.adoc]
@@ -209,12 +217,11 @@ that tag. The safety modules are in link:lib/safety/[]. Every tracked
 `+lib/**/*.ex+` file carries `MPL-2.0`; link:LICENSES/[] holds both texts.
 
 Caveat::
-The nine files hold 224 literal `test` blocks; 242 needs a `mix test` run
-this audit did not make. The Rust blockage is stale: entry CI-1 of
-link:docs/DEBT-REGISTER.adoc[] records the fix, visible in
-link:integration/Cargo.toml[] lines 48–55. `docs/DEBT-REGISTER.md` is dead.
-45 of 152 tracked `.adoc` files have no SPDX header (recorded for the owner,
-not a licence change).
+The nine files hold 224 literal `test` blocks; the README no longer quotes
+a count. Entry CI-1 of link:docs/DEBT-REGISTER.adoc[] records the fix for
+the former Rust-lane blockage, visible in link:integration/Cargo.toml[]
+lines 48–55. 45 of 152 tracked `.adoc` files have no SPDX header (recorded
+for the owner, not a licence change).
 
 == Dogfooded across the account
 
@@ -250,12 +257,10 @@ have no callers, so its circuit breaker never opens. The moduledoc of
 
 [CAUTION]
 ====
-README overclaims, each detailed above: learned patterns are not distilled
-into rules (the promotion and recipe-generation code is never invoked); the
-counts of rule modules, `lib/` modules, Just recipes, CLI commands and Mix
-tasks are wrong; `just build-all` is narrower than stated; `guix.scm` is
-absent; two links are dead. Excluded `:verisim_data` tests run in no
-workflow (debt register T-1).
+Learned patterns are not distilled into rules: the promotion and
+recipe-generation code is never invoked. The README now presents the loop as
+the design and says the rules are hand-written. No `guix.scm` is tracked.
+Excluded `:verisim_data` tests run in no workflow (debt register T-1).
 ====
 
 == Evidence index

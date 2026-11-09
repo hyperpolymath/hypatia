@@ -19,7 +19,7 @@ toc::[]
 *Hypatia* is the CI/CD governance scanner for the hyperpolymath estate (~400 repositories).
 It combines:
 
-* *Symbolic reasoning* — 35 Elixir rule modules producing fast, deterministic findings
+* *Symbolic reasoning* — 42 Elixir rule modules producing fast, deterministic findings
   (link:docs/rules/catalogue.adoc[full rule catalogue])
 * *Neural learning* — 8 networks on a shared blackboard, learning which fixes actually stick
 * *Bayesian confidence* — every recipe carries a Beta-distributed confidence updated from real
@@ -39,6 +39,10 @@ It combines:
 The system learns complex patterns through neural analysis, then *distils* them into simple,
 fast declarative rules that can be pre-emptively injected into new repositories, applied as
 cures to existing ones, and executed without ML inference overhead.
+
+That loop is the design, not yet the running code. Today the rules are hand-written, and the
+neural layer can only lower a recipe's confidence or demote a finding. The promotion code in
+`lib/rules/learning.ex` has no caller (link:EXPLAINME.adoc[EXPLAINME]).
 
 == The safety triangle
 
@@ -71,8 +75,8 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 
 [cols="1,3"]
 |===
-| `lib/` | 133 Elixir modules — pipeline, rules, VCL, neural, safety, web, merge orchestration
-| `lib/rules/` | 35 rule modules; see link:docs/rules/catalogue.adoc[the catalogue]
+| `lib/` | 154 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
+| `lib/rules/` | 42 rule modules; see link:docs/rules/catalogue.adoc[the catalogue]
 | `lib/neural/` | 8 networks + blackboard, coordinator, persistence, rebalancer
 | `lib/vcl/` | VCL query layer over verisim-data: parser, file executor, cache, federation
 | `lib/merge_orchestration/` | 12 modules — leases, ledger, ticker
@@ -83,24 +87,27 @@ PatternRegistry ──> TriangleRouter ──> FleetDispatcher ──> DispatchM
 | `verification/` | Proof ledger and proofs: Idris2, Agda, TLA+
 |===
 
-See link:docs/architecture/topology.md[docs/architecture/topology.md] for the full map.
+See link:docs/architecture/topology.adoc[docs/architecture/topology.adoc] for the full map.
 
 == Installation
 
-Guix is the reproducible-build path; Nix was retired estate-wide on 2026-06-05. Podman, not
-Docker, is the container tool.
+Guix is the estate's reproducible-build path; Nix was retired estate-wide on 2026-06-05.
+This repository does not track a `guix.scm` yet. Until it does, `mise.toml` pins the
+toolchain and `deploy/Containerfile` builds the image. Podman, not Docker, is the
+container tool.
 
 [source,bash]
 ----
 git clone https://github.com/hyperpolymath/hypatia.git
 cd hypatia
 
-guix shell -m guix.scm     # reproducible environment (optional)
 just doctor                # toolchain preflight
-just build-all             # Elixir + Rust + Zig FFI + Idris2 ABI
+just build-all             # Rust workspace + Elixir
+just build-ffi             # Zig FFI
+just compile-abi           # Idris2 ABI
 ----
 
-`just --list` shows all 39 recipes; `CONTRIBUTING.md` treats `just` as the canonical entry point.
+`just --list` shows all 45 recipes; link:.github/CONTRIBUTING.md[`CONTRIBUTING.md`] treats `just` as the canonical entry point.
 
 === Elixir development
 
@@ -125,23 +132,26 @@ or clean test run.
 
 == Usage
 
-The escript exposes five commands:
+The escript exposes six commands:
 
 [source,bash]
 ----
 hypatia scan <path> [--format json|text|github|sarif] [--exit-zero] [--advisory]
 hypatia report <path>
 hypatia pr-eligibility --owner <owner> --repo <repo> --pr <n>
+hypatia secret-alerts --owner <owner> --repo <repo>
 hypatia version
 hypatia help
 ----
 
 Mix tasks cover the operational surface — `mix hypatia.rsr_score`, `mix hypatia.recipe_health`,
-`mix hypatia.watch`, `mix hypatia.triage_issues` and eleven more. See the
+`mix hypatia.watch`, `mix hypatia.triage_issues` and twelve more. See the
 https://github.com/hyperpolymath/hypatia/wiki/Operations[Operations wiki page].
 
 Running the supervision tree also serves an HTML dashboard, an SSE event stream, a Prometheus
-`/metrics` endpoint and a bearer-authenticated `/api/*` on port 9090.
+`/metrics` endpoint and an `/api/*` on port 9090. With
+`HYPATIA_API_BEARER_TOKEN` set, every `/api/*` request needs that bearer token. Without it,
+only loopback clients are answered unless `HYPATIA_API_ALLOW_NONLOCAL=true`.
 
 === Consuming the RSR oracle from another repository
 
@@ -177,10 +187,10 @@ Development state, milestones and known gaps live in machine-readable form:
 * `.machine_readable/descriptiles/PLAYBOOK.a2ml` — operational runbook
 * link:ROADMAP.adoc[ROADMAP.adoc] — milestone history
 
-**Before trusting any metric or green board, read link:docs/DEBT-REGISTER.md[docs/DEBT-REGISTER.md].**
-It is the authoritative, evidence-backed account of what is broken, ungated or stale — including
-242 tests that are excluded from every run, the safety systems that are built but not yet invoked
-by any dispatch path, and the CI blockage currently stopping the Rust lane.
+**Before trusting any metric or green board, read link:docs/DEBT-REGISTER.adoc[docs/DEBT-REGISTER.adoc].**
+It is the authoritative, evidence-backed account of what is broken, ungated or stale. That
+includes the `:verisim_data` tests excluded from every run and the safety systems that are
+built but not yet invoked by any dispatch path.
 
 == Documentation
 
