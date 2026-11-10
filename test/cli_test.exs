@@ -42,6 +42,53 @@ defmodule Hypatia.CLITest do
       assert {:ok, %{"status" => "ok", "repo" => "demo", "total" => 0}} = Jason.decode(line)
     end
 
+    test "each finding names its support, evidence and derived level (HYP-01)" do
+      finding = %{
+        rule: "SSA001",
+        file: "github_personal_access_token",
+        severity: :critical,
+        reason: "open alert",
+        action: :escalate,
+        detail: %{alert_number: 1}
+      }
+
+      stale = %{
+        finding
+        | rule: "SSA002",
+          severity: :high,
+          reason: "stale alert",
+          action: :report,
+          detail: %{alert_number: 2}
+      }
+
+      sweep = fn _, _ ->
+        {:ok, %{findings: [finding, stale], total: 2, by_severity: %{critical: 1, high: 1}}}
+      end
+
+      assert {line, 0} = Hypatia.CLI.secret_alerts_output("acme", "demo", sweep)
+      assert {:ok, %{"findings" => [first, second]}} = Jason.decode(line)
+
+      # Every finding is annotated, not only the first, and the rule's own
+      # fields (severity, reason, action) survive the annotation.
+      for {decoded, rule, n, severity, reason, action} <- [
+            {first, "SSA001", 1, "critical", "open alert", "escalate"},
+            {second, "SSA002", 2, "high", "stale alert", "report"}
+          ] do
+        assert %{
+                 "rule" => ^rule,
+                 "detail" => %{"alert_number" => ^n},
+                 "severity" => ^severity,
+                 "reason" => ^reason,
+                 "action" => ^action,
+                 "support" => %{"kind" => "pattern"},
+                 "level" => "epi",
+                 "evidence" => [%{"rule" => evidence_rule}]
+               } = decoded
+
+        assert evidence_rule == "secret_scanning_alerts/" <> rule
+      end
+    end
+
     test "a failed fetch is reported as an error with exit 3, never as clean" do
       sweep = fn _, _ -> {:error, "GitHub API 404: Secret scanning is disabled"} end
 
@@ -140,6 +187,23 @@ defmodule Hypatia.CLITest do
 
       assert {[], []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: false})
       assert {^wf027, []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: true})
+    end
+
+    test "SD004 survives the structural_drift normalizer and never blocks" do
+      dir = Path.join(System.tmp_dir!(), "hyp-sd004-#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".machine_readable/6a2"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+      File.write!(Path.join(dir, ".machine_readable/6a2/STATE.a2ml"), "[metadata]\n")
+
+      sd004 =
+        dir
+        |> Hypatia.CLI.collect_findings([:structural_drift])
+        |> Enum.filter(&(&1.type == "SD004"))
+
+      assert [%{advisory: true, severity: "medium"}] = sd004
+
+      # Shown at the default threshold, but not in the blocking set.
+      assert {^sd004, []} = Hypatia.CLI.report_sets(sd004, @base)
     end
   end
 
