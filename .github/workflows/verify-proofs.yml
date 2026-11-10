@@ -12,11 +12,17 @@ on:
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
-    - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
     - scripts/check-proof-status.sh
+    - verification/proof-ledger.jsonl
+    - scripts/proof-ledger.sh
+    - scripts/proof-ledger-ci.sh
+    - tests/proof-ledger-test.sh
+    - README.adoc
+    - AFFIRMATION.adoc
+    - EXPLAINME.adoc
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -37,11 +43,17 @@ on:
     - Justfile
     - pack.toml
     - verification/proofs/idris2/**
-    - verification/proofs/lean4/**
     - verification/proofs/tlaplus/**
     - verification/proofs/agda/**
     - verification/PROOF-STATUS.adoc
     - scripts/check-proof-status.sh
+    - verification/proof-ledger.jsonl
+    - scripts/proof-ledger.sh
+    - scripts/proof-ledger-ci.sh
+    - tests/proof-ledger-test.sh
+    - README.adoc
+    - AFFIRMATION.adoc
+    - EXPLAINME.adoc
     - scripts/check-trusted-base.sh
     - docs/proof-debt.adoc
     - test/soundness/**
@@ -80,6 +92,9 @@ jobs:
 
     env:
       IDRIS2_VERSION: v0.7.0
+      # Receipts this job writes; the last step derives the ledger's idris2
+      # and verdicts rows from them (scripts/proof-ledger.sh derive).
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -178,8 +193,10 @@ jobs:
             echo "── $f ─────────────────────────────────────────────"
             if idris2 --check "$f"; then
               echo "✓ $f"
+              bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt idris2 pass "verification/proofs/idris2/$f"
             else
               echo "✗ $f"
+              bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt idris2 fail "verification/proofs/idris2/$f"
               failed=$((failed + 1))
             fi
           done
@@ -194,17 +211,26 @@ jobs:
       # live in the ABI and verify *packages*, which the per-file --check loop
       # never builds. Gate them here so they can't silently rot again.
       - name: Build the ABI proof package (Types, GraphQL, gRPC, REST, FFI, RuleEngine)
-        run: idris2 --build src/abi/hypatia-abi.ipkg
+        run: bash scripts/proof-ledger-ci.sh ipkg src/abi/hypatia-abi.ipkg
 
       - name: Build the verify package (PipelineState, Verify.Fuel)
-        run: idris2 --build verify/hypatia-verify.ipkg
+        run: bash scripts/proof-ledger-ci.sh ipkg verify/hypatia-verify.ipkg
 
       # HYP-01: Verdict.idr claims a `Sound` verdict is constructible only
       # from a confirming prover re-check. The typechecker is the falsifier:
       # tests/accept/ must be accepted, and every tests/reject/ module must be
       # refused at `invalid` with the diagnostic its `-- EXPECT:` line names.
-      - name: Verdict accept/reject fixtures (HYP-01)
-        run: bash scripts/check-verdicts.sh
+      # The same fixtures gate RsrProfile.idr, the model of the RSR
+      # capability-profile resolution (lib/rules/rsr_conformance.ex).
+      - name: Verdict + RSR-profile accept/reject fixtures (HYP-01)
+        run: bash scripts/proof-ledger-ci.sh verdicts
+
+      # The ledger is canonical, but its statuses are not typed in: every row
+      # in these lanes must say exactly what this run's receipts make it. An
+      # overclaim and a stale underclaim both fail (owner ruling 2026-11-09).
+      - name: Ledger statuses agree with this run (idris2, verdicts)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive idris2,verdicts "$PROOF_RECEIPTS"
 
       - name: Summary
         if: always()
@@ -219,8 +245,11 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-  lake-build:
-    name: lake build
+  # Lean is no longer a proof lane here: the engineering proofs it held moved
+  # to Idris2 (PROOF-POLICY section 3; verification/proofs/idris2/). It stays
+  # for the HYP-01 positive control, which re-runs Lean on a fixture.
+  lean-hole-recheck:
+    name: Lean hole re-check (HYP-01 control)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -228,25 +257,21 @@ jobs:
 
     env:
       ELAN_VERSION: v4.0.0
-      # Pinned (not :stable) so the proofs are checked against the exact Lean
-      # they were verified with. Matches verification/proofs/lean4/lean-toolchain;
-      # bump both together. A moving :stable can break version-sensitive lemmas.
+      # Pinned (not :stable): tests/accept/LeanHoleRecheckSound.idr records
+      # the Lean version whose output it digests.
       LEAN_TOOLCHAIN: leanprover/lean4:v4.30.0
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
-      - name: Cache Lean toolchain and build
+      - name: Cache Lean toolchain
         id: cache-lean
         uses: actions/cache@v6.1.0
         with:
-          path: |
-            ~/.elan
-            verification/proofs/lean4/.lake
-          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-${{ hashFiles('verification/proofs/lean4/lakefile.lean', 'verification/proofs/lean4/*.lean') }}
-          restore-keys: |
-            lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-
+          path: ~/.elan
+          key: lean-${{ env.ELAN_VERSION }}-${{ env.LEAN_TOOLCHAIN }}-toolchain
 
       - name: Install elan + Lean 4
         if: steps.cache-lean.outputs.cache-hit != 'true'
@@ -258,33 +283,27 @@ jobs:
       - name: Put elan on PATH
         run: echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: lake build
-        working-directory: verification/proofs/lean4
-        run: |
-          set -euo pipefail
-          lean --version
-          lake --version
-          lake build
-
       # HYP-01 positive control: the SoundVerdict in
       # tests/accept/LeanHoleRecheckSound.idr records digests of a Lean run.
       # Re-run Lean on the fixture from the repository root (where the
       # control's paths are relative to) and require both digests to match.
       - name: Re-check the Lean proof-hole fixture against the HYP-01 control
-        run: bash scripts/recheck-lean-hole.sh
+        run: |
+          set -euo pipefail
+          lean --version
+          bash scripts/proof-ledger-ci.sh leanhole
+
+      - name: Ledger status agrees with this run (leanhole)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive leanhole "$PROOF_RECEIPTS"
 
       - name: Summary
         if: always()
         run: |
           {
-            echo "## Lean proof verification"
+            echo "## Lean (HYP-01 positive control)"
             echo ""
             echo "- Toolchain: \`${LEAN_TOOLCHAIN}\` via elan \`${ELAN_VERSION}\`"
-            echo "- Proof files:"
-            for f in verification/proofs/lean4/*.lean; do
-              [ "$(basename "$f")" = "lakefile.lean" ] && continue
-              echo "  - \`$(basename "$f")\`"
-            done
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Estate PROOF-POLICY / Mathesis Grade 3 gate for the one Agda artefact:
@@ -305,6 +324,7 @@ jobs:
       # Grade 3 receipt names an exact checker (estate PROOF-POLICY).
       # Deliberately not the runner's APT package, whose version floats.
       AGDA_VERSION: 2.8.0.2
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -334,7 +354,16 @@ jobs:
           set -euo pipefail
           agda --version
           sha256sum LogtalkMigration.agda
-          agda --safe --without-K --cubical-compatible LogtalkMigration.agda
+          if agda --safe --without-K --cubical-compatible LogtalkMigration.agda; then
+            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda pass verification/proofs/agda/LogtalkMigration.agda -- checker="Agda $AGDA_VERSION"
+          else
+            bash "$GITHUB_WORKSPACE/scripts/proof-ledger.sh" receipt agda fail verification/proofs/agda/LogtalkMigration.agda
+            exit 1
+          fi
+
+      - name: Ledger statuses agree with this run (agda)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive agda "$PROOF_RECEIPTS"
 
       - name: Summary
         if: always()
@@ -355,6 +384,13 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 15
+    env:
+      # Pinned: `releases/latest` moves, and the v1.8.0 tag is a rolling
+      # nightly. v1.7.4 is TLC 2.19 (rev 5a47802), the checker the ledger's
+      # KinGate bounds were measured with.
+      TLA2TOOLS_TAG: v1.7.4
+      TLA2TOOLS_SHA256: 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+      PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
 
     steps:
       - name: Checkout
@@ -371,32 +407,29 @@ jobs:
         uses: actions/cache@v6.1.0
         with:
           path: ~/.local/share/tla2tools.jar
-          key: tla2tools-v1.8.0
+          key: tla2tools-${{ env.TLA2TOOLS_TAG }}-${{ env.TLA2TOOLS_SHA256 }}
 
       - name: Fetch tla2tools.jar
         if: steps.cache-tla.outputs.cache-hit != 'true'
         run: |
+          set -euo pipefail
           mkdir -p ~/.local/share
-          curl -sSL -o ~/.local/share/tla2tools.jar \
-            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
-          ls -la ~/.local/share/tla2tools.jar
+          curl --proto '=https' -fsSL -o ~/.local/share/tla2tools.jar \
+            "https://github.com/tlaplus/tlaplus/releases/download/${TLA2TOOLS_TAG}/tla2tools.jar"
 
+      - name: Verify the tla2tools.jar digest
+        run: echo "${TLA2TOOLS_SHA256}  $HOME/.local/share/tla2tools.jar" | sha256sum -c -
+
+      # Fails if TLC prints an error or does not declare completion; the
+      # receipt carries the distinct-state count and depth.
       - name: Model-check KinGate (H8)
-        working-directory: verification/proofs/tlaplus
         run: |
-          java -XX:+UseParallelGC \
-            -cp "$HOME/.local/share/tla2tools.jar" tlc2.TLC \
-            -workers auto -config KinGate.cfg KinGate.tla \
-            | tee tlc.log
-          # Fail if TLC printed an error or didn't declare completion.
-          if grep -q "Error:" tlc.log; then
-            echo "::error::TLC found an invariant / property violation"
-            exit 1
-          fi
-          if ! grep -q "Model checking completed. No error has been found." tlc.log; then
-            echo "::error::TLC did not report clean completion"
-            exit 1
-          fi
+          TLA2TOOLS_JAR="$HOME/.local/share/tla2tools.jar" \
+            bash scripts/proof-ledger-ci.sh tlc verification/proofs/tlaplus/KinGate.tla verification/proofs/tlaplus/KinGate.cfg
+
+      - name: Ledger statuses agree with this run (tlc)
+        if: always()
+        run: bash scripts/proof-ledger.sh derive tlc "$PROOF_RECEIPTS"
 
       - name: Upload TLC log on failure
         if: failure()
@@ -425,6 +458,21 @@ jobs:
 
       - name: PROOF-STATUS.adoc agrees with the tree
         run: bash scripts/check-proof-status.sh
+
+      # The machine ledger is canonical (README-EXPLAINME section 5): it must
+      # obey its rules and the tree, and the Proof Ledger table must be its
+      # rendering. The contracts plant each defect the check exists to catch.
+      - name: Proof ledger is valid and agrees with the tree
+        run: bash scripts/proof-ledger.sh check
+
+      - name: Proof Ledger table is the ledger's rendering
+        run: bash scripts/proof-ledger.sh render --check
+
+      - name: Every quoted census is the ledger's
+        run: bash scripts/proof-ledger.sh claims
+
+      - name: Proof ledger contracts (planted defects)
+        run: bash tests/proof-ledger-test.sh
 
   check-trusted-base:
     name: check-trusted-base

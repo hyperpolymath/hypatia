@@ -215,9 +215,15 @@ defmodule Hypatia.Neural.GraphOfTrust do
     initial_score = 1.0 / max(n, 1)
     scores = Map.new(supported_nodes, fn id -> {id, initial_score} end)
 
-    # Build adjacency: source -> [{target, weight}]
+    # Build adjacency: source -> [{target, weight}]. build_edges/1 emits one
+    # edge per verified success, so the same evidence recorded twice arrives
+    # as a parallel edge. Rank over the set of edges, as the cross-repo
+    # (Jaccard) edges already do, so that trust depends on what was observed
+    # and not on how many times it was logged.
     adjacency =
-      Enum.reduce(edges, %{}, fn {src, tgt, weight}, acc ->
+      edges
+      |> Enum.uniq()
+      |> Enum.reduce(%{}, fn {src, tgt, weight}, acc ->
         Map.update(acc, src, [{tgt, weight}], fn existing -> [{tgt, weight} | existing] end)
       end)
 
@@ -238,8 +244,9 @@ defmodule Hypatia.Neural.GraphOfTrust do
     # to its neighbours sum to at most the source's score). Dividing by
     # out-degree (count) only achieves this when all edges have equal
     # weight; with mixed weights we divide by the total weight instead
-    # so the per-source contribution is conserved. See PROOFS-GAP.md
-    # for why this premise matters for PageRank convergence.
+    # so the per-source contribution is conserved. See
+    # docs/proofs/HANDOVER-neural-convergence.adoc (M3) for why this
+    # premise matters for PageRank convergence.
     out_weight_sum =
       Map.new(adjacency, fn {src, targets} ->
         total = Enum.reduce(targets, 0.0, fn {_t, w}, acc -> acc + max(w, 0.0) end)
@@ -250,22 +257,25 @@ defmodule Hypatia.Neural.GraphOfTrust do
       Map.new(scores, fn {node_id, _old_score} ->
         incoming =
           Enum.reduce(adjacency, 0.0, fn {src, targets}, acc ->
-            case Enum.find(targets, fn {tgt, _w} -> tgt == node_id end) do
-              {_tgt, weight} when is_number(weight) and weight > 0 ->
-                src_score = Map.get(scores, src, 0.0)
-                total = Map.get(out_weight_sum, src, 0.0)
+            # Credit every edge src -> node_id, as `total` counts every edge
+            # out of src; otherwise the column sums fall below 1 and trust
+            # leaks. (Taking only the first edge lost most of a source's
+            # trust while parallel edges reached this point.) Zero or
+            # negative weights carry no trust: negative edges would break
+            # the non-negative-matrix premise PageRank needs, and they are
+            # filtered at source in `build_edges/1`.
+            weight =
+              Enum.reduce(targets, 0.0, fn
+                {^node_id, w}, sum when is_number(w) and w > 0 -> sum + w
+                _, sum -> sum
+              end)
 
-                if total > 0 do
-                  acc + src_score * weight / total
-                else
-                  acc
-                end
+            total = Map.get(out_weight_sum, src, 0.0)
 
-              _ ->
-                # Zero or negative weights carry no trust — skip them. Negative
-                # edges would break the non-negative-matrix premise PageRank
-                # needs; they are filtered at source in `build_edges/1`.
-                acc
+            if weight > 0 and total > 0 do
+              acc + Map.get(scores, src, 0.0) * weight / total
+            else
+              acc
             end
           end)
 
@@ -331,7 +341,7 @@ defmodule Hypatia.Neural.GraphOfTrust do
     # half of the signal is a post-processing anti-trust subtraction
     # from the converged scores; that change is out of scope for this
     # fix, which is purely about making the math correct. See
-    # PROOFS-GAP.md — Section "Neural / PageRank".
+    # docs/proofs/gap-analysis.adoc (PR 2, graph_of_trust normalisation).
     Enum.flat_map(outcomes, fn outcome ->
       case Map.get(outcome, "outcome") do
         "success" ->

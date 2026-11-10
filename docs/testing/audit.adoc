@@ -303,8 +303,9 @@ items in the aspect table. *Effort: 2 weeks each.*
 
 * *Observability upgrade (OpenTelemetry / Prometheus).* Already tracked
 in CLAUDE.md "`Planned`" — orthogonal to test grading.
-* *Full PageRank convergence proof (Mathlib).* Tracked in
-`+PROOFS-GAP.md+` PR 4.
+* *PageRank convergence proof.* Milestone M3 in
+`+docs/proofs/HANDOVER-neural-convergence.adoc+`, ledger row
+`+pagerank-convergence+`.
 
 === 7. Out of scope
 
