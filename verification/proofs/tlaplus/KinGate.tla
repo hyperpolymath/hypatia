@@ -31,8 +31,9 @@
 \*               checking states and checks that directly, where an Idris2
 \*               proof would take far longer. PROOF-POLICY section 4 names
 \*               this file as its worked example.
-\*   Status:     TESTED, bounded by KinGate.cfg (3 bots x 2 repos x 4
-\*               requests); not PROVEN. Ledger: verification/PROOF-STATUS.adoc.
+\*   Status:     tested-only, bounded by KinGate.cfg (3 bots x 2 repos,
+\*               MaxRequests = 4). Ledger row kin-gate in
+\*               verification/proof-ledger.jsonl.
 
 EXTENDS Naturals, FiniteSets, Sequences, TLC
 
