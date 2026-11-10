@@ -145,7 +145,8 @@ defmodule Hypatia.Rules.StructuralDrift do
   The old .machine_readable/6a2/<file>.a2ml directory is retired.
   Severity: medium. This is layout drift, not a security finding, so it
   must not block a merge: a repository still on the old layout is not
-  unsafe. The current canon keeps the descriptiles as clauses of the repo
+  unsafe. The finding is `advisory: true`, so the CLI never counts it
+  towards exit 1 at any threshold (as WF026, WF027). The current canon keeps the descriptiles as clauses of the repo
   deed, and the A2ML-to-deed conversion is kyX's (standards D312, D313).
   Action: move to .machine_readable/descriptiles/ (unchanged for fixers).
   """
@@ -165,6 +166,7 @@ defmodule Hypatia.Rules.StructuralDrift do
           rule: "SD004",
           file: Path.relative_to(path, repo_path),
           severity: :medium,
+          advisory: true,
           reason:
             "Descriptile in retired location (layout drift, not a security issue); " <>
               "the current canon keeps descriptiles as clauses of the repo deed, " <>
