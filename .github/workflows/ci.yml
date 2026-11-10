@@ -361,6 +361,24 @@ jobs:
             test/kyaml_test.exs \
             test/kyaml_conformance_test.exs
 
+      # The proof ledger's exunit rows are tested-only on these files, and
+      # their status is derived from this run, not typed in. The file list
+      # comes from the ledger, so a new exunit row is run without editing CI.
+      - name: Proof-ledger runtime tests (exunit lane)
+        env:
+          PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
+        run: |
+          # Every test file a row names, whatever that row's lane: a row demoted
+          # to lane none still has its file run, so derive can see the underclaim.
+          mapfile -t files < <(jq -r 'select(.file | test("^test/.*\\.exs$")) | .file' verification/proof-ledger.jsonl | sort -u)
+          bash scripts/proof-ledger-ci.sh exunit "${files[@]}"
+
+      - name: Ledger statuses agree with this run (exunit)
+        if: always()
+        env:
+          PROOF_RECEIPTS: /tmp/proof-receipts.jsonl
+        run: bash scripts/proof-ledger.sh derive exunit "$PROOF_RECEIPTS"
+
       - name: Checkout the governance-pinned baseline helper
         uses: actions/checkout@v7.0.1
         with:

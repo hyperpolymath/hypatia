@@ -8,6 +8,8 @@
 #
 #   proof-ledger.sh check          validate the ledger against its rules and the tree
 #   proof-ledger.sh claims         every census README, AFFIRMATION or EXPLAINME quotes is the ledger's
+#   proof-ledger.sh receipt LANE pass|fail FILE... [-- k=v...]   append receipts ($PROOF_RECEIPTS)
+#   proof-ledger.sh derive LANES [RECEIPTS]  each row in LANES must say what the receipts make it
 #   proof-ledger.sh render         print the AsciiDoc block for PROOF-STATUS.adoc
 #   proof-ledger.sh render --check fail if PROOF-STATUS.adoc holds a different block
 #   proof-ledger.sh render --write replace the block in PROOF-STATUS.adoc
@@ -43,8 +45,11 @@ AGDA_PROFILE='--safe --without-K --cubical-compatible'
 # PROOF-POLICY section 7: repository, path and full 40-character commit.
 POLICY_PIN="${PROOF_POLICY_PIN-metadatastician/standards 3-practice/PROOF-POLICY.adoc b8f60511e76c9015d86990317162dce653c92fe1}"
 
-[ -f "$LEDGER" ] || { echo "::error::proof-ledger: $LEDGER not found"; exit 2; }
+# `receipt` and `ipkg-files` run from proof subdirectories and need no ledger.
+need_ledger() { [ -f "$LEDGER" ] || { echo "::error::proof-ledger: $LEDGER not found"; exit 2; }; }
 
+# Validate ledger serialisation, schema, policy grades and referenced files
+# and names. Return 1 for detected violations; an empty ledger exits 1.
 check() {
   local fails=0 n=0 line id unparsed=0
   if ! [[ "$POLICY_PIN" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\ [^\ ]+\.adoc\ [0-9a-f]{40}$ ]]; then
@@ -87,11 +92,23 @@ check() {
     | [ need("id"; "string"), need("kind"; "string"), need("obligation"; "string"),
         need("status"; "string"), need("checker"; "string"), need("file"; "string"),
         need("names"; "array"), need("axioms"; "array"), need("bounds"; "string"),
-        need("trust_boundary"; "string"),
+        need("trust_boundary"; "string"), need("lane"; "string"),
         (if any(.names[]?, .axioms[]?; type != "string") then "\(.id // "?"): names and axioms hold strings" else empty end) ] as $te
     | if ($te | length) > 0 then $te[] else
-      ( [keys[] | select(IN("id","kind","obligation","status","checker","file","names","axioms","bounds","trust_boundary","pwg","foundation_diverse","legs") | not)]
+      ( [keys[] | select(IN("id","kind","obligation","status","checker","file","names","axioms","bounds","trust_boundary","lane","pwg","foundation_diverse","legs") | not)]
         | if length > 0 then "\($r.id): unknown field(s) \(join(", "))" else empty end ),
+      # The lane is the CI job whose receipt decides the status (`derive`):
+      # a proof lane can only make a row proven, a test lane tested-only, and
+      # a row with no lane is argued or open.
+      ( if IN(.lane; "idris2", "agda", "verdicts", "leanhole", "tlc", "exunit", "none") then empty
+        else "\(.id): lane \(.lane) is not idris2, agda, verdicts, leanhole, tlc, exunit or none" end ),
+      ( if (.lane == "none") != (.checker == "-") then "\(.id): a row has a checker exactly when it has a lane" else empty end ),
+      ( if IN(.lane; "idris2", "agda") and (IN(.status; "proven", "proven-with-postulates") | not)
+        then "\(.id): lane \(.lane) is a proof lane; its row is proven or proven-with-postulates" else empty end ),
+      ( if IN(.lane; "verdicts", "leanhole", "tlc", "exunit") and .status != "tested-only"
+        then "\(.id): lane \(.lane) is a test lane; its row is tested-only" else empty end ),
+      ( if .lane == "none" and (IN(.status; "argued", "open") | not)
+        then "\(.id): a row with no lane is argued or open" else empty end ),
       # The profile in which jq -cS is JCS has no numbers anywhere, and a
       # control character would break the rendered table.
       ( if [.. | numbers] | length > 0 then "\(.id): the ledger profile holds no numbers (write them as strings)" else empty end ),
@@ -187,6 +204,8 @@ census() {
   ' "$LEDGER"
 }
 
+# Write the generated AsciiDoc block, including markers, to standard output;
+# this function does not validate the ledger or update the document.
 render() {
   printf '%s\n' "$BEGIN_MARK"
   printf '%s\n' '[[proof-ledger]]'
@@ -194,7 +213,11 @@ render() {
   printf '\n'
   # shellcheck disable=SC2016  # the backticks are AsciiDoc, printed literally
   printf 'Rendered from `+%s+`, which is canonical: where this table and the\n' "$LEDGER"
-  printf 'ledger disagree, the ledger wins and this table is regenerated.\n'
+  printf 'ledger disagree, the ledger wins and this table is regenerated. No status\n'
+  printf 'is typed in unchecked: each checker job derives its rows from that run'"'"'s\n'
+  # shellcheck disable=SC2016  # AsciiDoc backticks, printed literally
+  printf 'receipts (`+scripts/proof-ledger.sh derive+`) and fails on an overclaim or\n'
+  printf 'a stale underclaim.\n'
   # shellcheck disable=SC2016  # the backticks are AsciiDoc, printed literally
   printf 'Checked against PROOF-POLICY as pinned by `+%s+`.\n' "$POLICY_PIN"
   printf '\n'
@@ -218,6 +241,128 @@ render() {
   ' "$LEDGER"
   printf '%s\n' '|==='
   printf '%s\n' "$END_MARK"
+}
+
+# Receipts: one JCS line per checked file, written by the CI job that checked
+# it, to $PROOF_RECEIPTS. `receipt LANE RESULT FILE... [-- key=value...]`.
+# Extra fields carry what the status depends on (TLC's state count and depth).
+RECEIPTS="${PROOF_RECEIPTS:-proof-receipts.jsonl}"
+# Append one canonical JSON receipt per FILE to RECEIPTS, without checking
+# file existence. Arguments after -- add string fields as key=value pairs;
+# lane, result and file take precedence over extra fields with those names.
+# Exit 2 for a result other than pass or fail; jq and append errors propagate.
+receipt() {
+  local lane=${1:?lane} result=${2:?result} f extra='{}' kv
+  shift 2
+  case "$result" in pass|fail) ;; *) echo "::error::proof-ledger: receipt result must be pass or fail" >&2; exit 2 ;; esac
+  local files=()
+  while [ $# -gt 0 ] && [ "$1" != "--" ]; do files+=("$1"); shift; done
+  [ "${1:-}" = "--" ] && shift
+  for kv in "$@"; do
+    extra=$(jq -cS --arg k "${kv%%=*}" --arg v "${kv#*=}" '. + {($k): $v}' <<<"$extra")
+  done
+  for f in ${files[@]+"${files[@]}"}; do
+    jq -cnS --arg lane "$lane" --arg result "$result" --arg file "$f" --argjson extra "$extra" \
+      '$extra + {lane: $lane, result: $result, file: $file}' >> "$RECEIPTS"
+  done
+}
+
+# The source files an ipkg builds: its `modules`, resolved against its
+# `sourcedir`, as paths from the repository root. A receipt for a package
+# build names every module the build checked.
+ipkg_files() {
+  local ipkg=${1:?ipkg} dir src
+  dir=$(dirname "$ipkg")
+  src=$(sed -nE 's/^sourcedir[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' "$ipkg")
+  awk '/^modules[[:space:]]*=/{on=1; sub(/^modules[[:space:]]*=/, "")}
+       on && /^[[:space:]]*$/{exit}
+       on && /^[A-Za-z]+[[:space:]]*=/{exit}
+       on { gsub(/[,[:space:]]+/, "\n"); printf "%s", $0; print "" }' "$ipkg" \
+    | grep -E '^[A-Z][A-Za-z0-9_.]*$' \
+    | while IFS= read -r m; do
+        realpath --relative-to=. -m "$dir/${src:-.}/${m//.//}.idr"
+      done
+}
+
+# Derive each row's status in LANES from this run's receipts and require the
+# ledger to say exactly that: stronger is an overclaim, weaker a stale
+# underclaim, and both fail. A proof lane's passing receipt makes a row
+# proven (proven-with-postulates when axioms are listed); a test lane's
+# makes it tested-only. Use the last receipt for each lane/file pair. TLC
+# state count and depth must match the ledger exactly; theory grades must
+# agree with the derived status and counted legs. A missing or failing
+# receipt makes the status open. Passing receipts for rows with lane none
+# are underclaims; files with no row produce warnings in any selected lane.
+# LANES is comma-separated; the optional second argument overrides RECEIPTS.
+# Return 1 for missing receipts or disagreements, 0 when only warnings remain.
+# Malformed JSON and other jq failures propagate; the ledger is not modified.
+derive() {
+  local lanes=${1:?comma-separated lanes} file=${2:-$RECEIPTS}
+  [ -f "$file" ] || { echo "::error::proof-ledger: no receipts at $file"; return 1; }
+  local out
+  out=$(jq -rn --arg lanes "$lanes" --slurpfile led "$LEDGER" --slurpfile rec "$file" '
+    def rank(s): {"open":0,"argued":1,"tested-only":2,"proven-with-postulates":3,"proven":4}[s];
+    def counts: type == "object" and IN(.status; "proven", "proven-with-postulates") and .correspondence == "reconciled";
+    def legs_grade: [.legs[]? | select(counts) | .prover] as $p
+      | if ($p | index("rocq")) and ($p | index("lean")) then "2ii"
+        elif ($p | index("rocq")) or ($p | index("lean")) then "2i" else "3" end;
+    ($lanes | split(",")) as $L
+    | ($rec | map(select(.lane as $l | $L | index($l)))) as $R
+    | ( $led[] | select(.lane as $l | $L | index($l)) | . as $row
+        | ([$R[] | select(.lane == $row.lane and .file == $row.file)] | last) as $r
+        | (if $r == null or $r.result != "pass" then "open"
+           elif IN($row.lane; "idris2", "agda") then (if ($row.axioms | length) > 0 then "proven-with-postulates" else "proven" end)
+           else "tested-only" end) as $d
+        | ( if $d != $row.status then
+              (if rank($row.status) > rank($d) then "OVERCLAIM" else "UNDERCLAIM" end)
+              + "\t\($row.id): the ledger says \($row.status); this run'"'"'s receipt makes it \($d)"
+              + (if $r == null then " (no receipt for \($row.file) in lane \($row.lane))"
+                 elif $r.result != "pass" then " (\($row.file) failed)" else "" end)
+            else empty end ),
+          # TLC bounds: the state count and depth the row states, compared
+          # exactly with what this run found (a substring match would let
+          # 44715 stand for 444715).
+          ( if $row.lane == "tlc" and $r != null and $r.result == "pass" then
+              ([$row.bounds | capture("(?<n>[0-9]+) distinct states")] | first | .n?) as $n
+              | ([$row.bounds | capture("depth (?<d>[0-9]+)")] | first | .d?) as $dep
+              | if $n == ($r.distinct_states | tostring) and $dep == ($r.depth | tostring) then empty
+                else "OVERCLAIM\t\($row.id): bounds say \"\($row.bounds)\"; this run found \($r.distinct_states) distinct states, depth \($r.depth)" end
+            else empty end ),
+          # The grade this run supports: the Agda receipt and the legs.
+          ( if $row.kind == "theory" then
+              (if $d == "proven" or $d == "proven-with-postulates" then ($row | legs_grade) else "ungraded" end) as $g
+              | if $row.pwg == $g then empty
+                else (if $row.pwg == "ungraded" then "UNDERCLAIM" elif $g == "ungraded" then "OVERCLAIM"
+                      elif ({"3":0,"2i":1,"2ii":2,"1":3}[$row.pwg]) > ({"3":0,"2i":1,"2ii":2}[$g]) then "OVERCLAIM" else "UNDERCLAIM" end)
+                     + "\t\($row.id): pwg is \($row.pwg); this run'"'"'s receipts and the legs support \(if $g == "ungraded" then "ungraded" else "PWG-" + $g end)" end
+            else empty end )
+      ),
+      # Row identity does not hang on the mutable lane: a file that passes in
+      # a lane where no row names it, while a row with no lane does, is an
+      # underclaim (a demoted row cannot dodge the gate by leaving its lane).
+      ( $R[] | select(.result == "pass") | . as $r
+        | [$led[] | select(.file == $r.file)] as $named
+        | if ($named | map(select(.lane == $r.lane)) | length) > 0 then empty
+          elif ($named | map(select(.lane == "none")) | length) > 0 then
+            "UNDERCLAIM\t\($named | map(select(.lane == "none") | "\(.id) (\(.status))") | join(", ")): \($r.file) passes in lane \($r.lane), and the row records no lane"
+          elif ($named | length) > 0 then empty
+          else "UNRECORDED\t\($r.file) checks in lane \($r.lane) and no ledger row names it" end )
+  ')
+  local bad=0 kind msg
+  while IFS=$'\t' read -r kind msg; do
+    [ -n "$kind" ] || continue
+    case "$kind" in
+      UNRECORDED) echo "::warning::proof-ledger: $msg" ;;
+      *) echo "::error::proof-ledger: $kind $msg"; bad=$((bad + 1)) ;;
+    esac
+  done <<<"$out"
+  local rows
+  rows=$(jq -r --arg lanes "$lanes" 'select(.lane as $l | $lanes | split(",") | index($l)) | .id' "$LEDGER" | wc -l)
+  if [ "$bad" -gt 0 ]; then
+    echo "proof-ledger: derive ($lanes): $bad row(s) disagree with this run's receipts"
+    return 1
+  fi
+  echo "proof-ledger: derive ($lanes): all $rows row(s) agree with this run's receipts"
 }
 
 # Every census a claim document quotes ("N proven of M; ...") must be the
@@ -261,14 +406,20 @@ markers_ok() {
   [ "$(grep -nxF -- "$BEGIN_MARK" "$DOC" | cut -d: -f1)" -lt "$(grep -nxF -- "$END_MARK" "$DOC" | cut -d: -f1)" ]
 }
 
+# Print the document from its first BEGIN marker through its first END
+# marker, inclusive. Call markers_ok first to verify the marker pair.
 doc_block() {
   awk -v b="$BEGIN_MARK" -v e="$END_MARK" '$0 == b { on = 1 } on { print } $0 == e { exit }' "$DOC"
 }
 
 case "${1:-}" in
-  check) check ;;
-  claims) claims ;;
+  check) need_ledger; check ;;
+  claims) need_ledger; claims ;;
+  receipt) shift; receipt "$@" ;;
+  derive) need_ledger; derive "${2:-}" "${3:-}" ;;
+  ipkg-files) ipkg_files "${2:-}" ;;
   render)
+    need_ledger
     case "${2:-}" in
       "") render ;;
       --check)
@@ -299,5 +450,5 @@ case "${1:-}" in
         echo "proof-ledger: wrote the block into $DOC" ;;
       *) echo "usage: $0 render [--check|--write]" >&2; exit 2 ;;
     esac ;;
-  *) echo "usage: $0 check | claims | render [--check|--write]" >&2; exit 2 ;;
+  *) echo "usage: $0 check | claims | receipt LANE pass|fail FILE... [-- k=v...] | derive LANES [RECEIPTS] | render [--check|--write]" >&2; exit 2 ;;
 esac
