@@ -188,6 +188,23 @@ defmodule Hypatia.CLITest do
       assert {[], []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: false})
       assert {^wf027, []} = Hypatia.CLI.report_sets(wf027, %{@base | advisory: true})
     end
+
+    test "SD004 survives the structural_drift normalizer and never blocks" do
+      dir = Path.join(System.tmp_dir!(), "hyp-sd004-#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, ".machine_readable/6a2"))
+      on_exit(fn -> File.rm_rf!(dir) end)
+      File.write!(Path.join(dir, ".machine_readable/6a2/STATE.a2ml"), "[metadata]\n")
+
+      sd004 =
+        dir
+        |> Hypatia.CLI.collect_findings([:structural_drift])
+        |> Enum.filter(&(&1.type == "SD004"))
+
+      assert [%{advisory: true, severity: "medium"}] = sd004
+
+      # Shown at the default threshold, but not in the blocking set.
+      assert {^sd004, []} = Hypatia.CLI.report_sets(sd004, @base)
+    end
   end
 
   # Regression coverage for the placeholder-message defect.
