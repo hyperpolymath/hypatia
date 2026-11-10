@@ -49,6 +49,9 @@ record RateLimiterState where
   events : List Event
 
 ||| Is the event inside a window that starts at `windowStart`?
+||| The model keeps an event at exactly `windowStart`. The deployed limiter
+||| (`lib/safety/rate_limiter.ex`, `now - ts < window`) drops an event that
+||| is exactly one window old, so the two differ at that one boundary.
 public export
 inWindow : (windowStart : Nat) -> Event -> Bool
 inWindow windowStart e = windowStart <= e.timestamp
