@@ -142,7 +142,7 @@ an action is capped at review, not report-only (line 67).
 
 [quote, README.adoc]
 ____
-154 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
+155 Elixir source files — pipeline, rules, VCL, neural, safety, web, merge orchestration
 ____
 
 How this is implemented::
