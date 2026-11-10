@@ -12,6 +12,32 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== Lean engineering proofs move to Idris2 (2026-11-09)
+
+* `RateLimiting`, `BayesianUpdate`, `ParserTotality`, `PageRankInvariants`
+  and `ESNSpectralScaling` are now Idris2 (`verification/proofs/idris2/`,
+  `%default total`), theorem for theorem (PROOF-POLICY §3; owner decision).
+  Four of them had rested on the Lean kernel axioms `propext` and
+  `Quot.sound`; the ledger rows are now `proven`, which makes the census
+  22 proven of 42.
+* `verification/proofs/lean4/` is removed. The `lake build` job becomes
+  `Lean hole re-check (HYP-01 control)`, which keeps the pinned Lean only for
+  the verdict fixture.
+
+==== Proof claims follow the machine proof ledger (2026-11-09)
+
+* `EXPLAINME.adoc` is back at the repository root, as README-EXPLAINME
+  requires, and every claim in it was re-checked against the tree. It gains
+  a `#proof-ledger` section that cites `verification/proof-ledger.jsonl`. The
+  README's own overclaims are listed under its known gaps.
+* README, AFFIRMATION and EXPLAINME quote the ledger's census, and
+  `scripts/proof-ledger.sh claims` fails CI when a quoted census and the
+  ledger disagree.
+* The neural-convergence handover is rewritten: Agda first, over
+  constructive reals, with no Mathlib, which PROOF-POLICY forbids.
+  `docs/proofs/needs.adoc` now points at the ledger instead of keeping a
+  list of its own.
+
 ==== WH013 reads steps with RE001's workflow reader (2026-11-04)
 
 RE001's reader is now its own module, `Hypatia.WorkflowYaml`, and WH013 reads

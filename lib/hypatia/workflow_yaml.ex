@@ -71,6 +71,19 @@ defmodule Hypatia.WorkflowYaml do
   # Nested anchors can multiply copies exponentially (the "billion laughs"
   # file), so expansion stops after this many copied lines per workflow.
   @alias_budget 5_000
+
+  @doc """
+  Expand YAML anchors and aliases in numbered lines (`{line, line_number}`),
+  as GitHub does, within what jobs read: the top-level `jobs:` and `env:`
+  sections. There each `*name` is replaced in place by the node anchored
+  `&name` (the nearest one above, wherever it is defined), a `<<:` merge adds
+  the anchored entries the mapping does not set itself, and every line an
+  alias brings carries the alias's line number. An alias in any other
+  top-level section (`on:`, `permissions:`, ...) is returned unchanged.
+  Anchors and aliases count only where a YAML node starts, never inside
+  quoted scalars or block-scalar text. Expansion stops
+  after #{@alias_budget} copied lines, so hostile input costs bounded work.
+  """
   def expand_aliases(lines) do
     codes = yaml_codes(lines)
 
@@ -292,10 +305,12 @@ defmodule Hypatia.WorkflowYaml do
     end)
   end
 
-  # The column of a step's own properties: just past `- ` on its opening line,
-  # or the indent of the first property under a bare `-`. A `-` followed only
-  # by a comment (`-   # publish`) is a bare `-`: YAML ignores the comment, so
-  # the step's keys start on the next line.
+  @doc """
+  The column of a step's own properties: just past `- ` on its opening line,
+  or the indent of the first property under a bare `-`. A `-` followed only
+  by a comment (`-   # publish`) is a bare `-`: YAML ignores the comment, so
+  the step's keys start on the next line.
+  """
   def step_key_column([{first, _} | rest]) do
     case Regex.run(~r/^(\s*-\s+)[^\s#]/, first) do
       [_, prefix] ->
@@ -310,7 +325,9 @@ defmodule Hypatia.WorkflowYaml do
 
   def step_key_column([]), do: 0
 
-  # The job's steps, each as its own physical lines.
+  @doc """
+  The job's steps, each as its own physical lines.
+  """
   def job_steps(job_lines) do
     with field_indent when is_integer(field_indent) <- job_field_indent(job_lines),
          step_lines when step_lines != [] <- lines_in_steps(job_lines, field_indent),
@@ -336,6 +353,14 @@ defmodule Hypatia.WorkflowYaml do
     end
   end
 
+  @doc """
+  The flow-collection depth (`[`/`{` opened minus `]`/`}` closed) of `text`
+  before byte offset `position`; 0 outside any flow collection.
+
+  Every bracket character counts, including one inside a quoted scalar or a
+  comment, so pass text with those already blanked (as the reader's own
+  YAML codes are); on raw YAML the depth can be wrong.
+  """
   def nesting_at(text, position) do
     text
     |> binary_part(0, position)
@@ -347,6 +372,11 @@ defmodule Hypatia.WorkflowYaml do
     end)
   end
 
+  @doc """
+  True when the job (as `workflow_job_lines/1` gives it, header line first)
+  sets `field` as one of its own keys, at the job's field column, and not as
+  a deeper key of a step or a nested mapping.
+  """
   def direct_job_field?(job_lines, field) do
     case job_field_indent(job_lines) do
       nil ->
@@ -359,13 +389,19 @@ defmodule Hypatia.WorkflowYaml do
     end
   end
 
-  # A line that opens the mapping key `key`: YAML reads `env:`, `"env":` and
-  # `'env':` as the same key, and so does GitHub.
+  @doc """
+  A line that opens the mapping key `key`: YAML reads `env:`, `"env":` and
+  `'env':` as the same key, and so does GitHub.
+  """
   def key_line?(line, key) do
     key = Regex.escape(key)
     Regex.match?(~r/^\s*(?:#{key}|"#{key}"|'#{key}')\s*:(?:\s|$)/, line)
   end
 
+  @doc """
+  The column of a job's own keys: the shallowest indent among its non-blank
+  lines after the header. nil for a job with no body.
+  """
   def job_field_indent([_header | job_lines]) do
     job_lines
     |> Enum.map(&elem(&1, 0))
@@ -376,9 +412,11 @@ defmodule Hypatia.WorkflowYaml do
 
   def job_field_indent([]), do: nil
 
-  # The lines of the job's `steps:` value. Its items may sit deeper than the
-  # key or, as an indentless sequence YAML also allows, at the key's own
-  # column: `steps:` then `- run: …` directly beneath it.
+  @doc """
+  The lines of the job's `steps:` value. Its items may sit deeper than the
+  key or, as an indentless sequence YAML also allows, at the key's own
+  column: `steps:` then `- run: …` directly beneath it.
+  """
   def lines_in_steps(job_lines, field_indent) do
     case Enum.find_index(job_lines, fn {line, _} ->
            indent_of(line) == field_indent and key_line?(line, "steps")
@@ -396,8 +434,10 @@ defmodule Hypatia.WorkflowYaml do
     end
   end
 
-  # The column of the step items: the shallowest `-` in the steps value, which
-  # is the key's own column for an indentless sequence.
+  @doc """
+  The column of the step items: the shallowest `-` in the steps value, which
+  is the key's own column for an indentless sequence.
+  """
   def step_indent(step_lines, field_indent) do
     step_lines
     |> Enum.filter(fn {line, _} ->
@@ -409,11 +449,13 @@ defmodule Hypatia.WorkflowYaml do
 
   defp sequence_item?(line), do: Regex.match?(~r/^\s*-(?:\s|$)/, line)
 
-  # A line without its YAML comment: a `#` at the start or after whitespace,
-  # outside a quoted scalar. A quote opens a scalar only where one can start
-  # (after whitespace or a flow indicator), so the apostrophe in `it's` does not.
-  # With `blank_quoted`, each quoted scalar's text becomes spaces of the same
-  # byte length, so what remains is structure at its original offsets.
+  @doc """
+  A line without its YAML comment: a `#` at the start or after whitespace,
+  outside a quoted scalar. A quote opens a scalar only where one can start
+  (after whitespace or a flow indicator), so the apostrophe in `it's` does not.
+  With `blank_quoted`, each quoted scalar's text becomes spaces of the same
+  byte length, so what remains is structure at its original offsets.
+  """
   def strip_yaml_comment(line, blank_quoted \\ false) do
     text = fn c -> if blank_quoted, do: String.duplicate(" ", byte_size(c)), else: c end
 
@@ -453,8 +495,10 @@ defmodule Hypatia.WorkflowYaml do
   # properties (an anchor `&all_jobs`, a tag `!!map`) before its block value.
   @jobs_key ~r/^(?:jobs|"jobs"|'jobs')\s*:\s*(?:(?:&[A-Za-z0-9_-]+|![^\s#]*)\s*)*(?:#.*)?$/
 
-  # Follow block-style jobs by indentation, retaining physical source lines.
-  # As with the other research rules, this is a local static text analysis.
+  @doc """
+  Follow block-style jobs by indentation, retaining physical source lines.
+  As with the other research rules, this is a local static text analysis.
+  """
   def workflow_job_lines(lines) do
     {_in_jobs, _indent, groups} =
       Enum.reduce(lines, {false, nil, []}, fn {line, _} = entry, {in_jobs, indent, groups} ->
@@ -489,22 +533,24 @@ defmodule Hypatia.WorkflowYaml do
     groups |> Enum.reverse() |> Enum.map(&Enum.reverse/1)
   end
 
-  # Read a workflow for the line- and indent-based rules. A KYAML workflow
-  # (YAML-POLICY Y-3: the estate's base form, `yq -o kyaml`) is rewritten to
-  # the equivalent block layout one line for one line, so physical line
-  # numbers in findings still point at the source. Block YAML is returned
-  # byte-identical.
-  @doc false
+  @doc """
+  Read a workflow for the line- and indent-based rules. A KYAML workflow
+  (YAML-POLICY Y-3: the estate's base form, `yq -o kyaml`) is rewritten to
+  the equivalent block layout one line for one line, so physical line
+  numbers in findings still point at the source. Block YAML is returned
+  byte-identical.
+  """
   def read_workflow(path), do: path |> File.read!() |> flow_to_block()
 
-  # Rewrite a KYAML document to block layout, preserving the line count:
-  # the root `{` and every closer become blank lines, `key: {`/`key: [`
-  # lose their opener, the first key of a `{` sequence item and each scalar
-  # sequence item gain `- `, trailing commas go, and plain double-quoted
-  # scalars are unquoted. Anything whose first significant line is not a
-  # bare `{` is not KYAML and passes through untouched — block YAML's own
-  # `on: [push]` and `permissions: {}` are never rewritten.
-  @doc false
+  @doc """
+  Rewrite a KYAML document to block layout, preserving the line count:
+  the root `{` and every closer become blank lines, `key: {`/`key: [`
+  lose their opener, the first key of a `{` sequence item and each scalar
+  sequence item gain `- `, trailing commas go, and plain double-quoted
+  scalars are unquoted. Anything whose first significant line is not a
+  bare `{` is not KYAML and passes through untouched — block YAML's own
+  `on: [push]` and `permissions: {}` are never rewritten.
+  """
   def flow_to_block(content) when is_binary(content) do
     lines = String.split(content, "\n")
 
@@ -581,6 +627,7 @@ defmodule Hypatia.WorkflowYaml do
     Regex.replace(~r/^((?:[^\s"':]+:\s+)?)"([^"\\]*)"$/, body, "\\1\\2")
   end
 
+  @doc "The number of leading whitespace characters of `line`."
   def indent_of(line) do
     case Regex.run(~r/^(\s*)/, line) do
       [_, ws] -> String.length(ws)
