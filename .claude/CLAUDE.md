@@ -177,6 +177,7 @@ Training pipeline reads outcomes/*.jsonl for ESN (confidence time series) and pa
 | `RuleEngine.idr` | Rule-evaluation types |
 | `Verdict.idr` | Verdict records (HYP-01): support = Pattern / Observed n / Mechanical re-check; `Sound` only from a confirming re-check. Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
 | `Retraction.idr` | Quarantine as retraction (HYP-01): a token survives iff its support thins into what remains; a finding survives through one of its tokens. Transcribed from residual-evidence-types `Revision.agda` @ 97244f5 |
+| `RsrProfile.idr` | RSR capability-profile resolution (engineering model of `lib/rules/rsr_conformance.ex`): deed precedence, fail-closed duplicate/list-less clauses, a2ml fallback, and when criterion 3.2.2 agrees with the scorecard's `profile_present` (and the one case it does not). Gate: `scripts/check-verdicts.sh` (+ `tests/reject/`, `tests/accept/`) |
 
 **Build system:** `src/abi/hypatia-abi.ipkg` (compile), `verify/hypatia-verify.ipkg` (proofs), `pack.toml` (Pack package manager).
 The ipkg sets `sourcedir = ".."`, so **`src/Hypatia/ABI/` is what compiles** — that is the

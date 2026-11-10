@@ -110,7 +110,7 @@ Detailed per-surface references. For the high-level overview see link:guides/api
 
 == Reference
 
-* link:EXPLAINME.adoc[`EXPLAINME.adoc`] — annotated tour of the codebase.
+* link:../EXPLAINME.adoc[`EXPLAINME.adoc`] (repository root) — claims, evidence and the proof ledger.
 
 == History
 
