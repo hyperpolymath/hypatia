@@ -388,6 +388,50 @@ parse or carries no list passes 3.2.2 with no profile present
 (`+residualDivergence+`) |OPEN
 |===
 
+==== secret-alerts line contract (HYP-01, 2026-11-09)
+
+An engineering property of a cross-language wire format (PROOF-POLICY §1:
+Idris2), so it carries the §5 tokens only and no PWG.
+`+scripts/check-verdicts.sh+` (CI: `idris2 --check` job) is the gate.
+
+[width="100%",cols="28%,14%,42%,16%",options="header",]
+|===
+|File |Language |Claim |Status
+|`+src/Hypatia/ABI/SecretAlerts.idr+` |Idris2 |The `hypatia
+secret-alerts` line contract, a cross-language wire format read by the
+bash/jq secret-scanning sweep. The exit code is 0 exactly for an ok line and
+3 for an error line (`+exitZeroIsOk+`, `+errorExitsThree+`,
+`+statusOfExitRoundTrip+`); no non-zero code reads as ok
+(`+nonZeroNotOk+`); an error line is always Unread and never Clean
+(`+errorIsUnread+`, `+errorNeverClean+`, `+unreadIsError+`); a Clean line
+exits 0 (`+cleanExitsZero+`); `total` is the number of findings by
+construction (`+totalIsLength+`); no finding is reported "sound"
+(`+findingNeverSound+`) |PROVEN
+
+|`+tests/accept/SecretAlertsLines.idr+` |Idris2 |Positive control: an ok
+line with one pattern-supported finding and an error line are accepted,
+classify as WithAlerts / Unread, and exit 0 / 3 (`+okHasAlerts+`,
+`+errUnread+`, `+findingIsEpi+`) |TESTED
+
+|`+tests/reject/SecretAlertsErrorIsClean.idr+` |Idris2 |Expected
+rejection: an error line read as Clean is refused at `+invalid+` |TESTED
+
+|`+tests/reject/SecretAlertsTotalDisagrees.idr+` |Idris2 |Expected
+rejection: an ok line whose `total` disagrees with its findings is refused
+at `+invalid+` |TESTED
+
+|`+tests/reject/SecretAlertsEmptyReason.idr+` |Idris2 |Expected
+rejection: an error line with an empty reason is refused at `+invalid+`
+|TESTED
+
+|Producer, lib/hypatia/cli.ex `secret_alerts_output/3` |Elixir |The
+Elixir producer emits the contract's shape: ok with findings and exit 0,
+error and exit 3, and every finding annotated with its HYP-01 verdict
+fields. Checked on sample data by test/cli_test.exs ("secret-alerts"), not
+proved; the Idris2 module is a model of the interface, not a refinement
+proof of the producer (PROOF-POLICY §2.1) |TESTED
+|===
+
 ==== actions.lock closure (2026-11-09, standards#963 criterion 5)
 
 An engineering property of one wire format (`+actions.lock+`), so Idris2

@@ -323,7 +323,7 @@ defmodule Hypatia.CLI do
             status: "ok",
             total: result.total,
             by_severity: result.by_severity,
-            findings: result.findings
+            findings: Enum.map(result.findings, &annotate_secret_alert/1)
           })
 
         {line, 0}
@@ -331,6 +331,16 @@ defmodule Hypatia.CLI do
       {:error, reason} ->
         {Jason.encode!(%{owner: owner, repo: repo, status: "error", error: reason}), 3}
     end
+  end
+
+  # Every finding names its support, evidence and derived level (HYP-01),
+  # as the scan path does. The rule fields the sweep reads are kept as they
+  # are; `rule_module`/`type` give the evidence token its rule name.
+  defp annotate_secret_alert(finding) do
+    finding
+    |> Map.put(:rule_module, "secret_scanning_alerts")
+    |> Map.put(:type, finding.rule)
+    |> Hypatia.Verdict.annotate()
   end
 
   # ─── Diagnostic summary ──────────────────────────────────────────────
