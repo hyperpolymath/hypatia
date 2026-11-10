@@ -267,7 +267,7 @@ evidence = [
 
 [aspects.safety]
 status = "strong"
-evidence = ["verification/proofs/tlaplus/", "verification/proofs/idris2/", "verification/proofs/lean4/"]
+evidence = ["verification/proofs/tlaplus/", "verification/proofs/idris2/"]
 banned-patterns-clean = true
 default-total-idris = true
 
@@ -371,5 +371,5 @@ items = [
   "external-user-feedback (can't be manufactured)",
   "formal WCAG/GDPR audit (needs external domain expert)",
   "energy profiling (tooling gap for BEAM+Rust hybrid)",
-  "PageRank contraction proof (T-PR, docs/proofs/HANDOVER-neural-convergence.adoc — Agda, rechecked in Rocq and Lean; fixed-point existence is a separate, unplanned theorem)",
+  "full PageRank convergence proof (tracked in PROOFS-GAP.md PR 4 — needs Mathlib)",
 ]

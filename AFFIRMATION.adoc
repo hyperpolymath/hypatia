@@ -16,11 +16,22 @@ state and commitments. Companion detail:
 
 == We affirm (current normative state — MUST)
 
-* *Guix-only builds.* Nix is retired estate-wide (owner ruling 2026-06-05);
-  `guix.scm` / guix channels are the sole reproducible-build manifests. No
-  `flake.nix` remains; all references reconciled.
-* *The formal-proof corpus verifies and is CI-gated* across Idris 2 (v0.7.0),
-  Lean 4 (v4.30.0) and TLA+ — *zero escape hatches outside
+* *Guix-only builds.* Nix is retired estate-wide (owner ruling 2026-06-05).
+  No `flake.nix` remains; all references reconciled. Guix is the only
+  reproducible-build manifest the estate accepts, but this repository does
+  not track a `guix.scm` yet; `deploy/Containerfile` builds the image and
+  `mise.toml` pins Erlang/OTP, Elixir and Zig (its other tools float), until
+  it does.
+* *The formal-proof corpus checks in CI* across Idris 2 (v0.7.0),
+  Agda (2.8.0.2, one artefact) and TLA+ (bounded TLC
+  model checking, which is `tested-only`, not a proof). What each artefact
+  proves, and how strongly, is the proof ledger
+  (`verification/proof-ledger.jsonl`, rendered in
+  `verification/PROOF-STATUS.adoc#proof-ledger`): 22 proven of 42;
+  0 proven-with-postulates, 11 tested-only, 2 argued, 7 open. Four of the
+  Lean proofs rested on the Lean kernel axioms `propext` and `Quot.sound`,
+  which a source scan does not see and `Lean.collectAxioms` does; they moved
+  to Idris2 on 2026-11-09, which has no such axioms. *Zero escape hatches outside
   `test/soundness/fixtures/`* (`believe_me` / `sorry` / `postulate` /
   `assert_total` / `admit` / `native_decide`). Re-measured 2026-09-26 over
   the git-tracked tree by `scripts/check-trusted-base.sh`: outside that
@@ -33,16 +44,11 @@ state and commitments. Companion detail:
   the `check-trusted-base` CI job fails if one loses its fixture status or
   an un-annotated marker appears elsewhere. (An earlier revision of this
   sentence claimed "zero escape hatches" unscoped, which the fixture corpus
-  made literally false; see #831.) _Amended 2026-11-09 (#1025), after the
-  `affirmed-at` timestamp above, which does not cover the rest of this
-  item:_ one theorem obligation remains open —
-  neural contraction (PageRank, ESN and LSM) — two theory theorems, to be
-  proved in Agda and rechecked in Rocq and Lean without Mathlib (estate
-  PROOF-POLICY §§1–2); the handover is at
-  `docs/proofs/HANDOVER-neural-convergence.adoc`. Separately, the
-  PROOF-POLICY §6 deviation records for the proof toolchains CI installs
-  outside Guix are not yet written (`verification/PROOF-STATUS.adoc`,
-  "Toolchain deviations").
+  made literally false; see #831.) The neural-convergence theorems (PageRank
+  and ESN) are open theory rows. They are planned in Agda over constructive
+  reals, without Mathlib, which PROOF-POLICY forbids; the plan is
+  `docs/proofs/HANDOVER-neural-convergence.adoc`. (An earlier revision called
+  them "blocked only on Mathlib network access".)
 * *The unified-api-adapter wire contract cannot silently drift.* The Zig enum,
   the Idris2 ABI and the Rust client are pinned to one golden source
   (`ffi/connectors.json`) by `test/unified-api-adapter-contract_test.exs` under

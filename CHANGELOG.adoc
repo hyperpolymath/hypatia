@@ -12,6 +12,93 @@ https://semver.org/[Semantic Versioning].
 
 === Changed
 
+==== README claims match the tree, and a gate keeps them there (2026-11-09)
+
+* Corrected counts in the README:
+** rule modules 35 → 42;
+** `lib/` files 133 → 154;
+** Just recipes 39 → 45;
+** CLI commands five → six (`secret-alerts`);
+** Mix tasks "eleven more" → twelve.
+* `just build-all` is described as what it builds, the Rust workspace and
+  Elixir, with `build-ffi` and `compile-abi` listed beside it.
+* The `guix shell -m guix.scm` step is gone: no `guix.scm` is tracked. The
+  README and AFFIRMATION say so, and name `mise.toml` and
+  `deploy/Containerfile` as the stand-ins.
+* The rule-distillation loop is presented as the design, not the running code.
+* The `/api/*` access policy is stated as `api_router.ex` applies it.
+* Dead links fixed:
+** `topology.md` and `DEBT-REGISTER.md` (both `.adoc`), and
+  `CONTRIBUTING.md` (in `.github/`);
+** 17 `.md` → `.adoc` links in `docs/README.adoc`.
+* `scripts/check-readme-claims.sh` measures the counts the README quotes,
+  and resolves every local link in the README, EXPLAINME and the docs index.
+  Fragments are checked too: a link to `#id` needs that anchor in its target.
+  It runs in the Validate Documentation job and fails on drift, where the
+  older link step only warned. `tests/readme-claims-test.sh` plants each kind
+  of drift.
+
+==== The oracle and CI toolchain move to OTP 28.5.0.8 (2026-11-09)
+
+`rsr-oracle.yml` now defaults to OTP `28.5.0.8`, and the `elixir-compile`
+jobs in `ci.yml` use it as well. An OTP version matrix (#1032) found the
+following:
+
+* Commit `be98f74` crashes with a segfault on every run when it is compiled
+  and run on OTP 28.1, 28.2 or 28.3. The crash is in `sweep_off_heap`
+  under `beam_jit_bs_init_bits`.
+* The same tree is clean on OTP 27.3, 28.0 and 28.5.0.8.
+
+The likely cause is the compiler bug that OTP 28.4 fixed (OTP-19951,
+erlang/otp#10588). This is inferred, not proven.
+
+The Mix cache key now carries the OTP version. A `_build` compiled under one
+OTP release is therefore never restored under another.
+
+==== Proof-ledger statuses are derived from CI receipts (2026-11-09)
+
+* Every ledger row names its `lane`: the CI job whose receipt decides it
+  (`idris2`, `agda`, `verdicts`, `tlc`, `exunit`, or `none` for argued and
+  open rows). Each checker job writes receipts as it checks
+  (`scripts/proof-ledger-ci.sh`), then runs `scripts/proof-ledger.sh derive`
+  for its lanes. That step fails on an overclaim (the ledger stronger than
+  the run) and on a stale underclaim (weaker), as the owner ruled. TLC's
+  receipt carries its state count and depth, which the row's bounds must
+  match.
+* `tla2tools.jar` is pinned to v1.7.4 (TLC 2.19) and its SHA-256 is
+  verified. CI used to fetch `releases/latest` under a cache key named
+  `v1.8.0`, and that tag is a rolling nightly.
+* The exunit rows' test files now run in `ci.yml` on pull requests targeting
+  `main` or `develop`.
+  `retraction_test.exs` and `dispatch_manifest_test.exs` used to run only
+  inside the full integration suite.
+
+==== Lean engineering proofs move to Idris2 (2026-11-09)
+
+* `RateLimiting`, `BayesianUpdate`, `ParserTotality`, `PageRankInvariants`
+  and `ESNSpectralScaling` are now Idris2 (`verification/proofs/idris2/`,
+  `%default total`), theorem for theorem (PROOF-POLICY §3; owner decision).
+  Four of them had rested on the Lean kernel axioms `propext` and
+  `Quot.sound`; the ledger rows are now `proven`, which makes the census
+  22 proven of 42.
+* `verification/proofs/lean4/` is removed. The `lake build` job becomes
+  `Lean hole re-check (HYP-01 control)`, which keeps the pinned Lean only for
+  the verdict fixture.
+
+==== Proof claims follow the machine proof ledger (2026-11-09)
+
+* `EXPLAINME.adoc` is back at the repository root, as README-EXPLAINME
+  requires, and every claim in it was re-checked against the tree. It gains
+  a `#proof-ledger` section that cites `verification/proof-ledger.jsonl`. The
+  README's own overclaims are listed under its known gaps.
+* README, AFFIRMATION and EXPLAINME quote the ledger's census, and
+  `scripts/proof-ledger.sh claims` fails CI when a quoted census and the
+  ledger disagree.
+* The neural-convergence handover is rewritten: Agda first, over
+  constructive reals, with no Mathlib, which PROOF-POLICY forbids.
+  `docs/proofs/needs.adoc` now points at the ledger instead of keeping a
+  list of its own.
+
 ==== WH013 reads steps with RE001's workflow reader (2026-11-04)
 
 RE001's reader is now its own module, `Hypatia.WorkflowYaml`, and WH013 reads

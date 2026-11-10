@@ -1,173 +1,147 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
-== HANDOVER — neural-convergence theorems (Agda, rechecked in Rocq and Lean)
+== HANDOVER — Neural-convergence theorems: Agda first, constructive reals
 
-=== What changed, and why
+=== Mission
 
-Until 2026-11-09 this handover planned the PageRank and ESN convergence
-proofs in Lean 4 *with Mathlib*, in a separate `+lean4-mathlib/+` project.
-That plan is withdrawn. The estate
-https://github.com/metadatastician/standards/blob/9bdf864cc7f2c8e24b4df84bf00d04158eee3ad5/3-practice/PROOF-POLICY.adoc[PROOF-POLICY]
-(owner rulings of 2026-10-26 and 2026-11-04, pinned here at
-`+9bdf864cc7f2c8e24b4df84bf00d04158eee3ad5+`) says:
+Two theory obligations are open in the proof ledger
+(`+verification/proof-ledger.jsonl+`, rows `+pagerank-convergence+` and
+`+esn-echo-state+`; rendered in `+verification/PROOF-STATUS.adoc#proof-ledger+`):
 
-* *§1:* a statement that would be true of any implementation is *theory*.
-  Convergence is the policy's own example. Theory lives in *Agda*, under
-  `+agda --safe --without-K --cubical-compatible+` (§2.1).
-* *§2:* every Agda theory proof is rechecked in *Rocq* and in *Lean*,
-  transported through Dedukti where that works and re-proved by hand
-  where it does not. *No Mathlib*: a missing lemma is re-proved in the
-  core library.
-* *§8:* the result is graded `+PWG-3+` (Agda checked), `+PWG-2i+` (one leg
-  counted), `+PWG-2ii+` (both legs) or `+PWG-1+` (current receipts for
-  every witness). A leg counts only when its kernel accepted it *and* its
-  statement is `+RECONCILED+` with the Agda statement.
+* *PageRank:* the damped power iteration in `+lib/neural/graph_of_trust.ex+`
+  converges to a unique stationary vector.
+* *ESN:* with the reservoir scaled as `+lib/neural/echo_state_network.ex+`
+  scales it, two state trajectories under the same input converge
+  geometrically (the echo-state property), and `+[-1, 1]ⁿ+` is invariant.
 
-The inventory, with each artefact's current status, is the
-`+neural-convergence+` section of `+verification/PROOF-STATUS.adoc+`.
+Both are *theory* (PROOF-POLICY §1): the source of truth is an Agda proof,
+rechecked in Rocq and Lean. The owner chose (2026-11-09) to state them over
+*constructive reals*, so the theorems are the textbook ones and not
+rational approximations of them.
 
-=== The two theorems
+This supersedes the earlier version of this handover, which planned the
+proofs in Lean 4 with Mathlib. PROOF-POLICY forbids Mathlib as a
+dependency (§2) and puts theory in Agda first; that plan is withdrawn. The
+Lean files `+PageRankInvariants.lean+` and `+ESNSpectralScaling.lean+` prove
+natural-number *preconditions* only. Under PROOF-POLICY §3 they are
+engineering evidence, not legs of these theorems.
 
-Both are stated over an *abstract ordered commutative ring*: a record of
-carrier, operations and the order and absolute-value laws the proof uses,
-taken as a module parameter. That is not a postulate, so `+--safe+`
-accepts it. Agda, Rocq and Lean all have no real numbers without a large
-library, and real analysis is not needed: the activation and the matrix
-enter only through hypotheses. Use the *bound* form of the sup norm
-(`+∀ j, |x_j − y_j| ≤ δ+`) rather than defining a maximum.
+=== Constraints
 
-==== T-RC — reservoir contraction (ESN and LSM)
+* Every file checks under the canonical invocation (PROOF-POLICY §2.1):
+  `+agda --safe --without-K --cubical-compatible+`, Agda `+2.8.0.2+`
+  (the version CI pins). No `+postulate+`, no `+--cubical+`, no
+  `+TERMINATING+` or other unsafe pragma.
+* One dependency: agda-stdlib, pinned to a release tag and commit that
+  the receipt records. Feasibility checked 2026-11-09: agda-stdlib `+v2.3+`
+  (commit `+8326c7475af1fa456ca04a0203c168d5d7ff842b+`) loads
+  `+Data.Rational+` under the profile on Agda 2.8.0.2, and a Bishop-real
+  record over it type-checks. The first check builds the library (about two
+  minutes); later checks take seconds.
+* No real-analysis library is assumed. The reals are built here, small and
+  only as far as the two theorems need.
+* Hypotheses the runtime cannot discharge are *module parameters*, never
+  postulates. A theorem proved for every activation that is 1-Lipschitz and
+  bounded by 1 is a theorem; the claim that `+tanh+` is such an activation
+  is its own ledger row.
 
-Setting: `+0 ≤ a ≤ 1+`; `+ρ ≥ 0+`; an `+n × n+` matrix `+W+` with
-`+Σ_j |W_ij| ≤ ρ+` for every row `+i+`; any `+σ+` with
-`+|σ s − σ t| ≤ |s − t|+`; input weights `+b+`. The update is
+=== Construction plan
 
-  F_u(x)_i = (1 − a)·x_i + a·σ(Σ_j W_ij·x_j + b_i·u)
+Files live in `+verification/proofs/agda/NeuralConvergence/+`. Each milestone
+checks on its own and lands as its own stacked PR, with its ledger rows.
 
-*Statement:* if `+|x_j − y_j| ≤ δ+` for every `+j+`, then
-`+|F_u(x)_i − F_u(y)_i| ≤ ((1 − a) + a·ρ)·δ+` for every `+i+` and every
-input `+u+`.
+M0 — reals (`+Reals.agda+`)::
+Bishop regular sequences: `+x : ℕ → ℚ+` with
+`+∣ x m - x n ∣ ≤ 1/(m+1) + 1/(n+1)+`. Equality `+x ≈ y+` iff
+`+∣ x n - y n ∣ ≤ 2/(n+1)+` for all `+n+` (a setoid, not `+_≡_+`). Order,
+`+_+_+`, multiplication by a rational, `+∣_∣+`, `+max+`, the triangle
+inequality. Everything the theorems use carries an explicit modulus.
 
-*Corollary (forgetting):* for an input sequence of length `+k+`, the two
-trajectories from `+x+` and `+y+` stay within `+q^k·δ+`, where
-`+q = (1 − a) + a·ρ+`. Prove it by induction on the sequence. This is
-forgetting only when `+q < 1+`, that is when `+0 < a+` and `+ρ < 1+`; with
-`+a = 0+` or `+ρ ≥ 1+` the bound is non-expansive at best. State the
-contraction claim with those strict premises. Hypatia's values give
-`+q+` = 0.99 for the ESN (`+a+` 0.2, `+ρ+` 0.95) and 0.97 for the LSM
-(`+a+` 0.3, `+ρ+` 0.9).
+M1 — completeness (`+Complete.agda+`)::
+A sequence of reals that is Cauchy with an explicit modulus has a limit
+(the diagonal construction), and the limit is unique up to `+_≈_+`.
 
-*Proof outline:* the input term cancels. The recurrent difference is
-`+Σ_j W_ij·(x_j − y_j)+` (distributivity), bounded by
-`+Σ_j |W_ij|·δ ≤ ρ·δ+` (triangle inequality over a finite sum, `+|xy| = |x||y|+`,
-monotonicity of multiplication by a non-negative). Then
-`+|(1 − a)·d + a·e| ≤ (1 − a)·|d| + a·|e|+` for `+0 ≤ a ≤ 1+`.
+M2 — Banach, constructively (`+Contraction.agda+`)::
+On `+Vec ℝ n+` under a norm with the triangle inequality, a map with a
+rational modulus `+0 ≤ c < 1+` has a fixed point, it is unique, and the
+iterates satisfy `+‖xₖ - x*‖ ≤ cᵏ / (1 - c) · ‖x₁ - x₀‖+`. The rate is the
+modulus of convergence, so the statement is constructive by construction.
 
-==== T-PR — damped PageRank contraction (Graph of Trust)
+M3 — PageRank (`+PageRank.agda+`)::
+`+G(x) = α·P·x + (1 - α)·v+` with `+P+` column-sub-stochastic (non-negative
+rational entries, each column summing to at most 1) and a rational
+`+0 ≤ α < 1+`. `+G+` is an ℓ¹ contraction with modulus `+α+`, because such a
+`+P+` gives `+‖P x‖₁ ≤ ‖x‖₁+`. Then M2. State it for sub-stochastic `+P+`, not
+only stochastic: the runtime builds sub-stochastic matrices. A node with no
+outgoing edge gives a zero column. `+iterate_trust/4+` in
+`+lib/neural/graph_of_trust.ex+` sums every parallel edge into a source's
+out-weight but takes one of them into each target, so repeated outcomes
+leak mass. The theorem then covers convergence for every runtime input. The
+leak changes what the fixed point means, and is a runtime defect to fix in
+the runtime, not to model. *Ledger:* `+pagerank-convergence+`
+becomes `+proven+` at PWG-3 once this checks in CI.
 
-Setting: `+0 ≤ d ≤ 1+`; an `+n × n+` matrix `+P+` with `+P_ij ≥ 0+` and
-`+Σ_i P_ij ≤ 1+` for every column `+j+`; any constant vector `+c+`. The
-map is `+G(x) = c + d·P·x+`.
+M4 — ESN (`+EchoState.agda+`)::
+`+F_u(x) = (1 - a)·x + a·σ(W·x + w·u)+` for a rational leak rate
+`+0 < a ≤ 1+`, `+W+` with rational entries and induced ∞-norm (largest
+absolute row sum) `+‖W‖∞ ≤ ρ < 1+`, and σ a module parameter that is
+1-Lipschitz with `+∣σ t∣ ≤ 1+`. Show
+`+‖F_u(x) - F_u(y)‖∞ ≤ (1 - a + a·ρ)·‖x - y‖∞+` for every input `+u+`.
+Corollaries, by induction on the input sequence: two trajectories approach
+each other geometrically, and `+[-1, 1]ⁿ+` is invariant. Frame it in the
+∞-norm, *not* the spectral radius: the runtime has scaled by the induced
+∞-norm (`+@reservoir_norm+` = 0.95) since 2026-10, and `+test/neural_test.exs+`
+checks both that bound and the convergence of two initial states.
+*Ledger:* `+esn-echo-state+` becomes `+proven+` at PWG-3.
 
-*Statement:* `+Σ_i |G(x)_i − G(y)_i| ≤ d·Σ_j |x_j − y_j|+`.
+M5 — tanh (`+Tanh.agda+`), its own row::
+Construct `+tanh+` on the reals (a convergent series or continued fraction
+with an explicit modulus) and prove it 1-Lipschitz and bounded by 1. Until
+this lands, M4 holds for every such σ, and the row recording that `+tanh+`
+is one stays `+open+`.
 
-*Corollary:* iterates from any two starts approach each other by `+d+` per
-step in ℓ¹. That is a contraction only when `+d < 1+`; with `+d = 1+` the
-statement is non-expansiveness (`+P+` the identity keeps the distance
-fixed). State the contraction claim with `+0 ≤ d < 1+`. Hypatia uses
-`+d+` = 0.85.
+=== What the theorems do not cover
 
-The premise is column-*sub*stochastic, `+≤ 1+`, not `+= 1+`. The earlier
-handover assumed a column-stochastic `+P+`, which hypatia's code does not
-produce: a node with no positive out-edges contributes a zero column.
-Existence and uniqueness of the fixed point need completeness, which an
-ordered ring does not provide; they are out of scope.
+* The runtime uses IEEE floats. The theorems are about reals; the link from
+  them to `+lib/neural/*.ex+` is the `+models-runtime-refinement+` row, which is
+  `+open+` and names no evidence yet. `+test/neural_test.exs+` checks the ESN
+  ∞-norm bound and the convergence of two initial states; it is a candidate
+  for that row's evidence, not yet recorded as it.
+* Matrix entries are rational in the model. The runtime's weights are
+  floats, every one of which is a rational, so no generality is lost there;
+  rounding during iteration is what the model does not see.
 
-=== How hypatia meets the premises (engineering, not graded)
+=== The recheck legs (after PWG-3)
 
-[cols="2,3,1",options="header"]
-|===
-|Premise |Where |Status
-|ESN `+ρ+` = 0.95, LSM `+ρ+` = 0.9: the largest absolute row sum after
-scaling is at most `+ρ+` (exactly `+ρ+` unless sparsity leaves the
-reservoir all zero, which is common at `+reservoir_size: 1+`)
-|`+generate_reservoir/1+` in `+lib/neural/echo_state_network.ex+` and
-`+lib/neural/liquid_state_machine.ex+`; row-sum tests in
-`+test/neural_test.exs+` |`+TESTED+`
-
-|Trajectories converge at the T-RC rate (0.99 ESN, 0.97 LSM)
-|Convergence tests in `+test/neural_test.exs+` |`+TESTED+`
-
-|`+σ = tanh+` is 1-Lipschitz; IEEE-754 doubles behave as the ring
-|Not modelled |`+ASSUMED+`
-
-|Graph of Trust edge weights are non-negative
-|`+test/graph_of_trust_convergence_test.exs+` |`+TESTED+`
-
-|Graph of Trust is `+G+` with `+c_i = (1 − d)/n+`, `+d = 0.85+`,
-`+P_ij = w_ji / Σ_k max(w_jk, 0)+` over positive edges
-|`+iterate_trust/4+` in `+lib/neural/graph_of_trust.ex+` |`+ASSUMED+`
-(a transcription; no test pins the column sums yet)
-|===
-
-The ℕ precondition files `+PageRankInvariants.lean+` and
-`+ESNSpectralScaling.lean+` are engineering proofs in Lean. Under
-PROOF-POLICY §3 they move to Idris2 when they are next touched. Their
-header comments still describe the withdrawn Mathlib plan; correct them
-in that move.
-
-=== Files to write
-
-[cols="2,3",options="header"]
-|===
-|File |Content
-|`+verification/proofs/agda/ReservoirContraction.agda+` |T-RC and its
-corollary. Builtins only (as `+LogtalkMigration.agda+`), or the agda-stdlib
-at a recorded pin if it is used.
-|`+verification/proofs/agda/PageRankContraction.agda+` |T-PR and its
-corollary.
-|Rocq leg for each |Re-proved by hand unless an Agda → Dedukti → Rocq
-transport of the term works; record which.
-|Lean leg for each (`+verification/proofs/lean4/+`, core only) |Re-proved:
-check the pinned Lambdapi release for a Lean exporter first (§2).
-|===
-
-For each leg record, in `+verification/PROOF-STATUS.adoc+`: the exact
-proposition and premises, the route (`+transported+` / `+re-proved+`), how
-the statement was compared with the Agda one, the checker version, the
-invocation, the result, the source commit, and the axioms reported
-(`+#print axioms+` for Lean, `+Print Assumptions+` for Rocq).
+PROOF-POLICY §2: transport each witness through Dedukti first, and re-prove
+in Rocq and in Lean only where transport is unavailable. No Mathlib in the
+Lean leg. A leg counts toward PWG-2i or PWG-2ii only once its statement has
+been compared with the Agda statement and that comparison recorded
+(`+RECONCILED+`, §2.2). Record each leg in the theory row's `+legs+` field.
 
 === CI
 
-* Agda: extend the existing `+agda-check+` job in
-  `+.github/workflows/verify-proofs.yml+` to check the two new modules
-  with the same pinned Agda 2.8.0.2 and the same flags.
-* Lean: add the new modules to `+roots+` in
-  `+verification/proofs/lean4/lakefile.lean+`; the `+lake build+` job
-  already gates them.
-* Rocq: there is no Rocq job yet. Add one with a pinned `+coqc+`/`+rocq+`.
-* Every job that installs a toolchain outside Guix or the container needs
-  a PROOF-POLICY §6 `+deviation+` record. None of the current jobs has
-  one yet.
+Add an `+agda-neural+` job beside the existing `+agda strict-profile check+`
+job in `+.github/workflows/verify-proofs.yml+`. It should pin Agda
+`+2.8.0.2+` and the agda-stdlib tag and commit, cache the stdlib interface
+files keyed on that commit, and check every file in
+`+NeuralConvergence/+` with the §2.1 invocation. A missing or failing checker
+is a failure, never a skip. Its summary records what PWG-3 needs: the checker
+version, the stdlib pin, the flags in force, the import cone and each
+source digest (PROOF-POLICY §8.2).
 
-=== Definition of done
+=== Definition of done (per milestone)
 
-. T-RC and T-PR checked in Agda under the §2.1 invocation: `+PROVEN+`,
-  `+AGDA-VERIFIED+`, `+PWG-3+`.
-. Rocq and Lean legs kernel-checked and `+RECONCILED+`: `+PWG-2ii+`, at
-  which point §2's recheck obligation is discharged.
-. CI receipts for every witness at one source commit: `+PWG-1+`.
-. `+verification/PROOF-STATUS.adoc+` rows updated from the receipts, not by
-  hand.
-. The two Lean precondition files moved to Idris2 with corrected headers.
+. Every file in the milestone checks under the §2.1 invocation, locally and
+  in CI.
+. `+bash scripts/proof-ledger.sh check+` passes with the rows the milestone
+  changes, and `+render --write+` has refreshed `+PROOF-STATUS.adoc+`.
+. The PR body carries the receipt: checker version, stdlib pin, invocation,
+  source digests and the run that checked them.
 
-=== Toolchain notes
+=== Gotchas already met
 
-* Agda: the official 2.8.0.2 Linux release tarball, as the `+agda-check+`
-  job installs it.
-* Lean: v4.30.0 per `+verification/proofs/lean4/lean-toolchain+`. elan's
-  download host may be blocked in agent sandboxes; the GitHub release
-  tarball plus `+elan toolchain link+` works.
-* Lean 4.30 gotchas met in this corpus: `+List.mem_cons_self+` has implicit
-  arguments; use `+induction … generalizing+` when the hypothesis must hold
-  for a changing state.
+* Agda's `+1/_+` in `+Data.Rational+` is the inverse of a rational. For
+  1/(n+1) write `(+ 1) / suc n`, with the integer constructor from
+  `+Data.Integer+` and `+_/_+` from `+Data.Rational+`.
+* Equality of reals is `+_≈_+`; every lemma about reals is up to it.
+  Reaching for `+_≡_+` on reals is the usual first wrong turn.

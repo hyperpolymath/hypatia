@@ -19,6 +19,10 @@ permissions:
   contents: read
   security-events: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hypatia:
     uses: metadatastician/standards/.github/workflows/hypatia-scan-reusable.yml@7641c7fdb01420696b5420ab85d88f599f32f609

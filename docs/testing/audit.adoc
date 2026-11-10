@@ -303,10 +303,9 @@ items in the aspect table. *Effort: 2 weeks each.*
 
 * *Observability upgrade (OpenTelemetry / Prometheus).* Already tracked
 in CLAUDE.md "`Planned`" — orthogonal to test grading.
-* *PageRank contraction proof (T-PR).* Tracked in
-`+docs/proofs/HANDOVER-neural-convergence.adoc+`. T-PR proves that two runs
-approach each other; that the iteration converges to a fixed point needs
-completeness and is a separate theorem, not planned.
+* *PageRank convergence proof.* Milestone M3 in
+`+docs/proofs/HANDOVER-neural-convergence.adoc+`, ledger row
+`+pagerank-convergence+`.
 
 === 7. Out of scope
 

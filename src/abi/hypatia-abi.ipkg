@@ -24,6 +24,8 @@ modules = Hypatia.ABI.Types
         , Hypatia.ABI.RuleEngine
         , Hypatia.ABI.Verdict
         , Hypatia.ABI.Retraction
+        , Hypatia.ABI.SecretAlerts
+        , Hypatia.ABI.RsrProfile
 
 builddir = "../../build/abi"
 
