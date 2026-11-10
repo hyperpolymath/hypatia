@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.4
         with:
           egress-policy: block
           # gh against the GitHub API, plus the artifact service and its blob
