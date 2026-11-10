@@ -49,16 +49,20 @@ record RateLimiterState where
   events : List Event
 
 ||| Is the event inside a window that starts at `windowStart`?
+||| The model keeps an event at exactly `windowStart`. The deployed limiter
+||| (`lib/safety/rate_limiter.ex`, `now - ts < window`) drops an event that
+||| is exactly one window old, so the two differ at that one boundary.
 public export
 inWindow : (windowStart : Nat) -> Event -> Bool
 inWindow windowStart e = windowStart <= e.timestamp
 
-||| Events within [windowStart, now].
+||| Count events at or after windowStart, including future timestamps;
+||| no upper time bound is applied.
 public export
 countEventsInWindow : List Event -> (windowStart : Nat) -> Nat
 countEventsInWindow es windowStart = length (filter (inWindow windowStart) es)
 
-||| The start of the window that ends at `now`.
+||| Subtract the configured window size from `now`, saturating at zero.
 public export
 windowStart : RateLimiterState -> (now : Nat) -> Nat
 windowStart state now = minus now state.config.windowSize
@@ -68,7 +72,9 @@ public export
 currentCount : RateLimiterState -> (now : Nat) -> Nat
 currentCount state now = countEventsInWindow state.events (windowStart state now)
 
-||| Accept the event only if the in-window count is below the maximum.
+||| Accept the event only if the count at its timestamp is below the maximum.
+||| Return the updated state and True on acceptance, or the original state
+||| and False on rejection. Counting includes events with later timestamps.
 public export
 tryAccept : RateLimiterState -> Event -> (RateLimiterState, Bool)
 tryAccept (MkRateLimiterState cfg evs) e
@@ -185,14 +191,17 @@ public export
 burstConfig : RateLimitConfig
 burstConfig = MkRateLimitConfig 10 5 (LTESucc LTEZero)
 
+||| An empty per-bot limiter satisfies the count bound at any timestamp.
 export
 perBotInitialValid : (now : Nat) -> InvariantHolds (MkRateLimiterState RateLimiting.perBotConfig []) now
 perBotInitialValid = emptySatisfiesInvariant perBotConfig
 
+||| An empty global limiter satisfies the count bound at any timestamp.
 export
 globalInitialValid : (now : Nat) -> InvariantHolds (MkRateLimiterState RateLimiting.globalConfig []) now
 globalInitialValid = emptySatisfiesInvariant globalConfig
 
+||| An empty burst limiter satisfies the count bound at any timestamp.
 export
 burstInitialValid : (now : Nat) -> InvariantHolds (MkRateLimiterState RateLimiting.burstConfig []) now
 burstInitialValid = emptySatisfiesInvariant burstConfig

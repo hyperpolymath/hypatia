@@ -44,7 +44,7 @@ jobs:
       - name: Setup Erlang/Elixir
         uses: erlef/setup-beam@v1.24.1
         with:
-          otp-version: '27.0'
+          otp-version: '27.3.4.19'
           elixir-version: '1.17'
 
       - name: Restore Mix cache
@@ -91,7 +91,7 @@ jobs:
       - name: Setup Erlang/Elixir
         uses: erlef/setup-beam@v1.24.1
         with:
-          otp-version: '27.0'
+          otp-version: '27.3.4.19'
           elixir-version: '1.17'
 
       - name: Restore Mix cache
@@ -418,7 +418,7 @@ jobs:
       - name: Setup Erlang/Elixir
         uses: erlef/setup-beam@v1.24.1
         with:
-          otp-version: '27.0'
+          otp-version: '27.3.4.19'
           elixir-version: '1.17'
 
       - name: Install Elixir dependencies
@@ -584,7 +584,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.90.1
+        uses: taiki-e/install-action@v2.90.2
         with:
           tool: cargo-llvm-cov
 

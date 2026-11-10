@@ -48,6 +48,8 @@ POLICY_PIN="${PROOF_POLICY_PIN-metadatastician/standards 3-practice/PROOF-POLICY
 # `receipt` and `ipkg-files` run from proof subdirectories and need no ledger.
 need_ledger() { [ -f "$LEDGER" ] || { echo "::error::proof-ledger: $LEDGER not found"; exit 2; }; }
 
+# Validate ledger serialisation, schema, policy grades and referenced files
+# and names. Return 1 for detected violations; an empty ledger exits 1.
 check() {
   local fails=0 n=0 line id unparsed=0
   if ! [[ "$POLICY_PIN" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\ [^\ ]+\.adoc\ [0-9a-f]{40}$ ]]; then
@@ -202,6 +204,8 @@ census() {
   ' "$LEDGER"
 }
 
+# Write the generated AsciiDoc block, including markers, to standard output;
+# this function does not validate the ledger or update the document.
 render() {
   printf '%s\n' "$BEGIN_MARK"
   printf '%s\n' '[[proof-ledger]]'
@@ -243,6 +247,10 @@ render() {
 # it, to $PROOF_RECEIPTS. `receipt LANE RESULT FILE... [-- key=value...]`.
 # Extra fields carry what the status depends on (TLC's state count and depth).
 RECEIPTS="${PROOF_RECEIPTS:-proof-receipts.jsonl}"
+# Append one canonical JSON receipt per FILE to RECEIPTS, without checking
+# file existence. Arguments after -- add string fields as key=value pairs;
+# lane, result and file take precedence over extra fields with those names.
+# Exit 2 for a result other than pass or fail; jq and append errors propagate.
 receipt() {
   local lane=${1:?lane} result=${2:?result} f extra='{}' kv
   shift 2
@@ -279,10 +287,15 @@ ipkg_files() {
 # Derive each row's status in LANES from this run's receipts and require the
 # ledger to say exactly that: stronger is an overclaim, weaker a stale
 # underclaim, and both fail. A proof lane's passing receipt makes a row
-# proven; a test lane's makes it tested-only (and TLC's must carry the
-# ledger's bounds); a missing or failing receipt makes it open. A checked
-# file in a proof lane that no row names is reported, since an unrecorded
-# proof is a gap in the ledger, not in the proof.
+# proven (proven-with-postulates when axioms are listed); a test lane's
+# makes it tested-only. Use the last receipt for each lane/file pair. TLC
+# state count and depth must match the ledger exactly; theory grades must
+# agree with the derived status and counted legs. A missing or failing
+# receipt makes the status open. Passing receipts for rows with lane none
+# are underclaims; files with no row produce warnings in any selected lane.
+# LANES is comma-separated; the optional second argument overrides RECEIPTS.
+# Return 1 for missing receipts or disagreements, 0 when only warnings remain.
+# Malformed JSON and other jq failures propagate; the ledger is not modified.
 derive() {
   local lanes=${1:?comma-separated lanes} file=${2:-$RECEIPTS}
   [ -f "$file" ] || { echo "::error::proof-ledger: no receipts at $file"; return 1; }
@@ -393,6 +406,8 @@ markers_ok() {
   [ "$(grep -nxF -- "$BEGIN_MARK" "$DOC" | cut -d: -f1)" -lt "$(grep -nxF -- "$END_MARK" "$DOC" | cut -d: -f1)" ]
 }
 
+# Print the document from its first BEGIN marker through its first END
+# marker, inclusive. Call markers_ok first to verify the marker pair.
 doc_block() {
   awk -v b="$BEGIN_MARK" -v e="$END_MARK" '$0 == b { on = 1 } on { print } $0 == e { exit }' "$DOC"
 }

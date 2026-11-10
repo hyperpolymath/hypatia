@@ -37,8 +37,8 @@ public export
 rowSums : Matrix -> List Nat
 rowSums m = map sum m
 
-||| The largest element, or the floor for an empty list
-||| (Enum.max(fn -> 1.0 end)).
+||| The largest of the floor and all list elements; an empty list returns
+||| the floor. The floor also bounds the result for non-empty lists.
 public export
 maxAbsOr : List Nat -> (floor : Nat) -> Nat
 maxAbsOr xs floor = foldl (\acc, x => if x > acc then x else acc) floor xs

@@ -792,25 +792,25 @@ defmodule Hypatia.Rules.ResearchExtensions do
         []
 
       {_, [{on_line, _} | rest]} ->
-        inline =
-          on_line
-          |> String.split(":", parts: 2)
-          |> List.last()
-          |> String.replace(~r/\s+#.*$/, "")
-          # `on: &events` anchors the block mapping that follows.
-          |> String.replace(~r/^\s*&[A-Za-z0-9_-]+/, "")
-          |> String.trim()
+        first = on_line |> String.split(":", parts: 2) |> List.last()
+        # `on: &events` anchors the block mapping that follows.
+        unanchor = &(&1 |> String.replace(~r/^\s*&[A-Za-z0-9_-]+/, "") |> String.trim())
 
-        if inline != "" do
+        if unanchor.(flow_text(first, false)) != "" do
           # A flow collection may continue past the `on:` line: read on until
-          # its brackets balance.
+          # its brackets balance. The lines are read as one text, so a quoted
+          # scalar spanning lines keeps its quotes and a comment ends at its
+          # own line; neither names an event or opens a bracket.
           rest
           |> Enum.map(&elem(&1, 0))
-          |> Enum.reduce_while(inline, fn line, acc ->
-            if nesting_at(acc, byte_size(acc)) > 0,
-              do: {:cont, acc <> " " <> String.trim(line)},
+          |> Enum.reduce_while(first, fn line, acc ->
+            if open_flow?(acc),
+              do: {:cont, acc <> "\n" <> line},
               else: {:halt, acc}
           end)
+          |> flow_text(false)
+          |> String.replace("\n", " ")
+          |> then(unanchor)
           |> inline_events()
         else
           block =
@@ -837,15 +837,89 @@ defmodule Hypatia.Rules.ResearchExtensions do
   # `on: {push: {paths: [issues/**]}}` names one event, push: only the map's
   # top-level keys are events. A scalar or list names each of its words.
   defp inline_events("{" <> _ = map) do
+    # Depth is read from the map with its quoted scalars blanked: a bracket
+    # in `tags: ["v1.0]"]` is text. Blanking keeps every byte offset.
+    code = flow_text(map, true)
+
     ~r/["']?([A-Za-z_]+)["']?\s*:/
     |> Regex.scan(map, return: :index)
     |> Enum.flat_map(fn [{start, _}, {from, len}] ->
-      if nesting_at(map, start) == 1, do: [binary_part(map, from, len)], else: []
+      if nesting_at(code, min(start, byte_size(code))) == 1,
+        do: [binary_part(map, from, len)],
+        else: []
     end)
   end
 
   defp inline_events(scalar_or_list) do
     ~r/[A-Za-z_]+/ |> Regex.scan(scalar_or_list) |> List.flatten()
+  end
+
+  # Whether flow text still has an open `{` or `[`. nesting_at/2 counts every
+  # bracket it is given, so quoted scalars are blanked first; the text has no
+  # comments left by the time it is read here.
+  defp open_flow?(flow) do
+    code = flow_text(flow, true)
+    nesting_at(code, byte_size(code)) > 0
+  end
+
+  # Flow text, possibly spanning lines, with its comments blanked and, when
+  # `blank_quoted`, the insides of its quoted scalars blanked too. Every
+  # byte keeps its offset (a blanked byte becomes a space; newlines stay).
+  #
+  # Unlike strip_yaml_comment/2, which reads one line, this reads the whole
+  # value: a quoted scalar that spans lines keeps its state, so a ` #` inside
+  # it is text. A quote opens a scalar only where a flow node starts (at the
+  # start, or after `{`, `[`, `,` or `:` and optional spaces), so the
+  # apostrophe in the plain scalar `Say 'hi` is text as well.
+  defp flow_text(text, blank_quoted),
+    do: flow_scan(text, blank_quoted, :plain, ?\n, nil, [])
+
+  # state: :plain | :comment | {:quote, ?'} | {:quote, ?"} | :escape
+  # prev: the previous byte; sig: the previous non-space byte outside quotes
+  defp flow_scan(<<>>, _b, _state, _prev, _sig, acc),
+    do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp flow_scan(<<c, rest::binary>>, b, state, prev, sig, acc) do
+    keep = fn byte -> if b and byte != ?\n, do: ?\s, else: byte end
+
+    case state do
+      :comment when c == ?\n ->
+        flow_scan(rest, b, :plain, c, sig, [c | acc])
+
+      :comment ->
+        flow_scan(rest, b, :comment, c, sig, [?\s | acc])
+
+      :escape ->
+        flow_scan(rest, b, {:quote, ?"}, c, sig, [keep.(c) | acc])
+
+      {:quote, ?"} when c == ?\\ ->
+        flow_scan(rest, b, :escape, c, sig, [keep.(c) | acc])
+
+      {:quote, q} when c == q ->
+        case {q, rest} do
+          # '' inside a single-quoted scalar is an escaped quote.
+          {?', <<?', more::binary>>} ->
+            flow_scan(more, b, {:quote, q}, ?', sig, [keep.(?'), keep.(?') | acc])
+
+          _ ->
+            flow_scan(rest, b, :plain, c, c, [c | acc])
+        end
+
+      {:quote, _} ->
+        flow_scan(rest, b, state, c, sig, [keep.(c) | acc])
+
+      :plain when c == ?# and prev in [?\s, ?\t, ?\n] ->
+        flow_scan(rest, b, :comment, c, sig, [?\s | acc])
+
+      :plain when c in [?', ?"] and sig in [nil, ?{, ?[, ?,, ?:] ->
+        flow_scan(rest, b, {:quote, c}, c, c, [c | acc])
+
+      :plain when c in [?\s, ?\t, ?\n, ?\r] ->
+        flow_scan(rest, b, :plain, c, sig, [c | acc])
+
+      :plain ->
+        flow_scan(rest, b, :plain, c, c, [c | acc])
+    end
   end
 
   defp harden_runner_step?(job_lines) do
@@ -923,7 +997,7 @@ defmodule Hypatia.Rules.ResearchExtensions do
           # A flow mapping may continue past the `with:` line.
           rest
           |> Enum.reduce_while(inline, fn line, acc ->
-            if nesting_at(acc, byte_size(acc)) > 0,
+            if open_flow?(acc),
               do: {:cont, acc <> " " <> String.trim(line)},
               else: {:halt, acc}
           end)

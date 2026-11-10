@@ -199,5 +199,7 @@ expect_msg "derive: a TLC count that is only a suffix of the bound is refused (e
 jq -cS 'if .lane == "leanhole" then .result = "fail" else . end' "$all_pass" > "$work/r-lean.jsonl"
 expect_msg "derive: the Lean-hole control is not tested-only when its Lean re-check fails" 1 "verdict-accept-lean-hole" bash "$script" derive "$lanes" "$work/r-lean.jsonl"
 
+expect_msg "ipkg-files resolves the verify package's Fuel module" 0 "verify/src/Verify/Fuel.idr" bash "$script" ipkg-files verify/hypatia-verify.ipkg
+
 echo "proof-ledger-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
