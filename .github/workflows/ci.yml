@@ -330,7 +330,7 @@ jobs:
         uses: erlef/setup-beam@v1.24.1
         with:
           elixir-version: '1.19.4'
-          otp-version: '28.3'
+          otp-version: '28.5.0.8'
 
       - name: Restore Mix cache
         uses: actions/cache@v6.1.0
@@ -338,9 +338,9 @@ jobs:
           path: |
             deps
             _build
-          key: mix-dogfood-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          key: mix-dogfood-${{ runner.os }}-otp28.5.0.8-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            mix-dogfood-${{ runner.os }}-
+            mix-dogfood-${{ runner.os }}-otp28.5.0.8-
 
       - name: Fetch dependencies
         run: mix deps.get
@@ -457,7 +457,7 @@ jobs:
         uses: erlef/setup-beam@v1.24.1
         with:
           elixir-version: '1.19.4'
-          otp-version: '28.3'
+          otp-version: '28.5.0.8'
 
       - name: Restore Mix cache
         uses: actions/cache@v6.1.0
@@ -465,9 +465,9 @@ jobs:
           path: |
             deps
             _build
-          key: mix-dogfood-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          key: mix-dogfood-${{ runner.os }}-otp28.5.0.8-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            mix-dogfood-${{ runner.os }}-
+            mix-dogfood-${{ runner.os }}-otp28.5.0.8-
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
