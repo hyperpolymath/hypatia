@@ -17,8 +17,8 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 * link:quickstart/user.adoc[`user.adoc`] — install + run a scan.
 * link:quickstart/developer.adoc[`developer.adoc`] — clone + extend a rule.
 * link:quickstart/maintainer.adoc[`maintainer.adoc`] — deploy + monitor.
-* link:quickstart/llm-warmup-user.md[`llm-warmup-user.md`] — short context dump for chat-LLM users.
-* link:quickstart/llm-warmup-dev.md[`llm-warmup-dev.md`] — context dump for coding-agent users.
+* link:quickstart/llm-warmup-user.adoc[`llm-warmup-user.adoc`] — short context dump for chat-LLM users.
+* link:quickstart/llm-warmup-dev.adoc[`llm-warmup-dev.adoc`] — context dump for coding-agent users.
 
 == Guides
 
@@ -33,18 +33,18 @@ Pick one based on who you are. Each is a 1-page on-ramp.
 
 == Architecture
 
-* link:architecture/README.md[`README.md`] — architecture overview.
-* link:architecture/NEURAL-ARCHITECTURE.md[`NEURAL-ARCHITECTURE.md`] — 8 neural networks, 6-phase blackboard.
+* link:architecture/README.adoc[`README.adoc`] — architecture overview.
+* link:architecture/NEURAL-ARCHITECTURE.adoc[`NEURAL-ARCHITECTURE.adoc`] — 8 neural networks, 6-phase blackboard.
 * link:architecture/togaf-overview.adoc[`togaf-overview.adoc`] — TOGAF baseline, ADR-001..006.
 * link:architecture/mof-metamodel.adoc[`mof-metamodel.adoc`] — OMG MOF M2 metamodel.
 * link:architecture/boundary-design-options.adoc[`boundary-design-options.adoc`] — VCL / SNIF / verisimdb boundary (issue #294 decision memo).
-* link:architecture/topology.md[`topology.md`] — ecosystem topology.
-* link:architecture/system-integration.md[`system-integration.md`] — how Hypatia integrates with the wider estate.
+* link:architecture/topology.adoc[`topology.adoc`] — ecosystem topology.
+* link:architecture/system-integration.adoc[`system-integration.adoc`] — how Hypatia integrates with the wider estate.
 
 == Design
 
-* link:design/README.md[`README.md`] — design index.
-* link:design/DESIGN-NARRATIVE.md[`DESIGN-NARRATIVE.md`] — narrative design rationale.
+* link:design/README.adoc[`README.adoc`] — design index.
+* link:design/DESIGN-NARRATIVE.adoc[`DESIGN-NARRATIVE.adoc`] — narrative design rationale.
 * link:design/design-decisions.adoc[`design-decisions.adoc`] — atomic decision log.
 
 == Operations — runbooks + design memos
@@ -69,7 +69,7 @@ acceptance criteria for closing the underlying roadmap item.
 
 * link:integration/a2ml.adoc[`a2ml.adoc`] — A2ML machine-readable metadata integration.
 * link:integration/k9.adoc[`k9.adoc`] — K9 coordination service integration.
-* link:integration/a2ml-k9.md[`a2ml-k9.md`] — combined integration notes.
+* link:integration/a2ml-k9.adoc[`a2ml-k9.adoc`] — combined integration notes.
 * link:integration/github-registry.adoc[`github-registry.adoc`] — GitHub registry integration.
 
 == Security
@@ -97,14 +97,14 @@ Detailed per-surface references. For the high-level overview see link:guides/api
 
 == Testing + proofs
 
-* link:testing/needs.md[`testing/needs.md`] — coverage targets.
-* link:testing/audit.md[`testing/audit.md`] — test-suite audit.
-* link:proofs/needs.md[`proofs/needs.md`] — Idris2 proof obligations.
-* link:proofs/gap-analysis.md[`proofs/gap-analysis.md`] — proof-coverage gap analysis.
+* link:testing/needs.adoc[`testing/needs.adoc`] — coverage targets.
+* link:testing/audit.adoc[`testing/audit.adoc`] — test-suite audit.
+* link:proofs/needs.adoc[`proofs/needs.adoc`] — Idris2 proof obligations.
+* link:proofs/gap-analysis.adoc[`proofs/gap-analysis.adoc`] — proof-coverage gap analysis.
 
 == Readiness + reports
 
-* link:readiness.md[`readiness.md`] — CRG declaration + component grades.
+* link:readiness.adoc[`readiness.adoc`] — CRG declaration + component grades.
 * link:reports/audit/[`reports/audit/`] — dated audit reports.
 * link:SESSION-LOG.adoc[`SESSION-LOG.adoc`] — long-running session record.
 
@@ -120,10 +120,10 @@ Detailed per-surface references. For the high-level overview see link:guides/api
 
 == Diagrams
 
-* link:diagrams/architecture.md[`architecture.md`]
-* link:diagrams/bot-orchestration.md[`bot-orchestration.md`]
-* link:diagrams/data-flow.md[`data-flow.md`]
-* link:diagrams/rule-execution.md[`rule-execution.md`]
+* link:diagrams/architecture.adoc[`architecture.adoc`]
+* link:diagrams/bot-orchestration.adoc[`bot-orchestration.adoc`]
+* link:diagrams/data-flow.adoc[`data-flow.adoc`]
+* link:diagrams/rule-execution.adoc[`rule-execution.adoc`]
 
 == Wiki page sources
 
