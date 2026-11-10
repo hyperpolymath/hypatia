@@ -121,6 +121,10 @@ defmodule Hypatia.Rules.StructuralDriftTest do
       assert finding.file == ".machine_readable/6a2/STATE.a2ml"
       assert finding.target == ".machine_readable/descriptiles/STATE.a2ml"
       assert finding.reason =~ "retired location"
+      # Layout drift must not read as a blocking security finding.
+      assert finding.severity == :medium
+      assert finding.reason =~ "not a security issue"
+      assert finding.reason =~ "deed"
     end
 
     test "accepts a descriptile in canonical descriptiles/", %{repo: repo} do
